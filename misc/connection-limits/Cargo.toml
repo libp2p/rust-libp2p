@@ -3,7 +3,7 @@ name = "libp2p-connection-limits"
 edition = "2021"
 rust-version = { workspace = true }
 description = "Connection limits for libp2p."
-version = "0.2.0"
+version = "0.3.0"
 license = "MIT"
 repository = "https://github.com/libp2p/rust-libp2p"
 keywords = ["peer-to-peer", "libp2p", "networking"]
@@ -23,3 +23,6 @@ libp2p-swarm-derive = { path = "../../swarm-derive" }
 libp2p-swarm-test = { path = "../../swarm-test" }
 quickcheck = { workspace = true }
 rand = "0.8.5"
+
+[lints]
+workspace = true

@@ -82,9 +82,9 @@ use handler::Handler;
 use libp2p_core::{ConnectedPoint, Endpoint, Multiaddr};
 use libp2p_identity::PeerId;
 use libp2p_swarm::{
-    behaviour::{AddressChange, ConnectionClosed, ConnectionEstablished, DialFailure, FromSwarm},
+    behaviour::{AddressChange, ConnectionClosed, DialFailure, FromSwarm},
     dial_opts::DialOpts,
-    ConnectionDenied, ConnectionId, NetworkBehaviour, NotifyHandler, PollParameters, THandler,
+    ConnectionDenied, ConnectionHandler, ConnectionId, NetworkBehaviour, NotifyHandler, THandler,
     THandlerInEvent, THandlerOutEvent, ToSwarm,
 };
 use smallvec::SmallVec;
@@ -284,25 +284,17 @@ impl fmt::Display for RequestId {
 #[derive(Debug, Clone)]
 pub struct Config {
     request_timeout: Duration,
-    connection_keep_alive: Duration,
 }
 
 impl Default for Config {
     fn default() -> Self {
         Self {
-            connection_keep_alive: Duration::from_secs(10),
             request_timeout: Duration::from_secs(10),
         }
     }
 }
 
 impl Config {
-    /// Sets the keep-alive timeout of idle connections.
-    pub fn set_connection_keep_alive(&mut self, v: Duration) -> &mut Self {
-        self.connection_keep_alive = v;
-        self
-    }
-
     /// Sets the timeout for inbound and outbound requests.
     pub fn set_request_timeout(&mut self, v: Duration) -> &mut Self {
         self.request_timeout = v;
@@ -334,7 +326,7 @@ where
     /// reachable addresses, if any.
     connected: HashMap<PeerId, SmallVec<[Connection; 2]>>,
     /// Externally managed addresses via `add_address` and `remove_address`.
-    addresses: HashMap<PeerId, SmallVec<[Multiaddr; 6]>>,
+    addresses: HashMap<PeerId, HashSet<Multiaddr>>,
     /// Requests that have not yet been sent and are waiting for a connection
     /// to be established.
     pending_outbound_requests: HashMap<PeerId, SmallVec<[RequestProtocol<TCodec>; 10]>>,
@@ -445,8 +437,11 @@ where
     /// by [`NetworkBehaviour::handle_pending_outbound_connection`].
     ///
     /// Addresses added in this way are only removed by `remove_address`.
-    pub fn add_address(&mut self, peer: &PeerId, address: Multiaddr) {
-        self.addresses.entry(*peer).or_default().push(address);
+    ///
+    /// Returns true if the address was added, false otherwise (i.e. if the
+    /// address is already in the list).
+    pub fn add_address(&mut self, peer: &PeerId, address: Multiaddr) -> bool {
+        self.addresses.entry(*peer).or_default().insert(address)
     }
 
     /// Removes an address of a peer previously added via `add_address`.
@@ -605,36 +600,7 @@ where
             .iter_mut()
             .find(|c| c.id == connection_id)
             .expect("Address change can only happen on an established connection.");
-        connection.address = new_address;
-    }
-
-    fn on_connection_established(
-        &mut self,
-        ConnectionEstablished {
-            peer_id,
-            connection_id,
-            endpoint,
-            other_established,
-            ..
-        }: ConnectionEstablished,
-    ) {
-        let address = match endpoint {
-            ConnectedPoint::Dialer { address, .. } => Some(address.clone()),
-            ConnectedPoint::Listener { .. } => None,
-        };
-        self.connected
-            .entry(peer_id)
-            .or_default()
-            .push(Connection::new(connection_id, address));
-
-        if other_established == 0 {
-            if let Some(pending) = self.pending_outbound_requests.remove(&peer_id) {
-                for request in pending {
-                    let request = self.try_send_request(&peer_id, request);
-                    assert!(request.is_none());
-                }
-            }
-        }
+        connection.remote_address = new_address;
     }
 
     fn on_connection_closed(
@@ -701,6 +667,28 @@ where
             }
         }
     }
+
+    /// Preloads a new [`Handler`] with requests that are waiting to be sent to the newly connected peer.
+    fn preload_new_handler(
+        &mut self,
+        handler: &mut Handler<TCodec>,
+        peer: PeerId,
+        connection_id: ConnectionId,
+        remote_address: Option<Multiaddr>,
+    ) {
+        let mut connection = Connection::new(connection_id, remote_address);
+
+        if let Some(pending_requests) = self.pending_outbound_requests.remove(&peer) {
+            for request in pending_requests {
+                connection
+                    .pending_inbound_responses
+                    .insert(request.request_id);
+                handler.on_behaviour_event(request);
+            }
+        }
+
+        self.connected.entry(peer).or_default().push(connection);
+    }
 }
 
 impl<TCodec> NetworkBehaviour for Behaviour<TCodec>
@@ -712,18 +700,21 @@ where
 
     fn handle_established_inbound_connection(
         &mut self,
-        _: ConnectionId,
-        _: PeerId,
+        connection_id: ConnectionId,
+        peer: PeerId,
         _: &Multiaddr,
         _: &Multiaddr,
     ) -> Result<THandler<Self>, ConnectionDenied> {
-        Ok(Handler::new(
+        let mut handler = Handler::new(
             self.inbound_protocols.clone(),
             self.codec.clone(),
-            self.config.connection_keep_alive,
             self.config.request_timeout,
             self.next_inbound_id.clone(),
-        ))
+        );
+
+        self.preload_new_handler(&mut handler, peer, connection_id, None);
+
+        Ok(handler)
     }
 
     fn handle_pending_outbound_connection(
@@ -740,10 +731,10 @@ where
 
         let mut addresses = Vec::new();
         if let Some(connections) = self.connected.get(&peer) {
-            addresses.extend(connections.iter().filter_map(|c| c.address.clone()))
+            addresses.extend(connections.iter().filter_map(|c| c.remote_address.clone()))
         }
         if let Some(more) = self.addresses.get(&peer) {
-            addresses.extend(more.into_iter().cloned());
+            addresses.extend(more.iter().cloned());
         }
 
         Ok(addresses)
@@ -751,25 +742,31 @@ where
 
     fn handle_established_outbound_connection(
         &mut self,
-        _: ConnectionId,
-        _: PeerId,
-        _: &Multiaddr,
+        connection_id: ConnectionId,
+        peer: PeerId,
+        remote_address: &Multiaddr,
         _: Endpoint,
     ) -> Result<THandler<Self>, ConnectionDenied> {
-        Ok(Handler::new(
+        let mut handler = Handler::new(
             self.inbound_protocols.clone(),
             self.codec.clone(),
-            self.config.connection_keep_alive,
             self.config.request_timeout,
             self.next_inbound_id.clone(),
-        ))
+        );
+
+        self.preload_new_handler(
+            &mut handler,
+            peer,
+            connection_id,
+            Some(remote_address.clone()),
+        );
+
+        Ok(handler)
     }
 
     fn on_swarm_event(&mut self, event: FromSwarm<Self::ConnectionHandler>) {
         match event {
-            FromSwarm::ConnectionEstablished(connection_established) => {
-                self.on_connection_established(connection_established)
-            }
+            FromSwarm::ConnectionEstablished(_) => {}
             FromSwarm::ConnectionClosed(connection_closed) => {
                 self.on_connection_closed(connection_closed)
             }
@@ -900,11 +897,7 @@ where
         }
     }
 
-    fn poll(
-        &mut self,
-        _: &mut Context<'_>,
-        _: &mut impl PollParameters,
-    ) -> Poll<ToSwarm<Self::ToSwarm, THandlerInEvent<Self>>> {
+    fn poll(&mut self, _: &mut Context<'_>) -> Poll<ToSwarm<Self::ToSwarm, THandlerInEvent<Self>>> {
         if let Some(ev) = self.pending_events.pop_front() {
             return Poll::Ready(ev);
         } else if self.pending_events.capacity() > EMPTY_QUEUE_SHRINK_THRESHOLD {
@@ -924,7 +917,7 @@ const EMPTY_QUEUE_SHRINK_THRESHOLD: usize = 100;
 /// Internal information tracked for an established connection.
 struct Connection {
     id: ConnectionId,
-    address: Option<Multiaddr>,
+    remote_address: Option<Multiaddr>,
     /// Pending outbound responses where corresponding inbound requests have
     /// been received on this connection and emitted via `poll` but have not yet
     /// been answered.
@@ -935,10 +928,10 @@ struct Connection {
 }
 
 impl Connection {
-    fn new(id: ConnectionId, address: Option<Multiaddr>) -> Self {
+    fn new(id: ConnectionId, remote_address: Option<Multiaddr>) -> Self {
         Self {
             id,
-            address,
+            remote_address,
             pending_outbound_responses: Default::default(),
             pending_inbound_responses: Default::default(),
         }

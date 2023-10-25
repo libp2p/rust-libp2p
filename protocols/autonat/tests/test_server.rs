@@ -305,7 +305,7 @@ async fn test_dial_multiple_addr() {
                 let dial_errors = concurrent_dial_errors.unwrap();
 
                 // The concurrent dial might not be fast enough to produce a dial error.
-                if let Some((addr, _)) = dial_errors.get(0) {
+                if let Some((addr, _)) = dial_errors.first() {
                     assert_eq!(addr, &dial_addresses[0]);
                 }
 

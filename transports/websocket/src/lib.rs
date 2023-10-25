@@ -24,6 +24,7 @@
 
 pub mod error;
 pub mod framed;
+mod quicksink;
 pub mod tls;
 
 use error::Error;
@@ -74,7 +75,7 @@ use std::{
 /// # #[async_std::main]
 /// # async fn main() {
 ///
-/// let mut transport = websocket::WsConfig::new(dns::DnsConfig::system(
+/// let mut transport = websocket::WsConfig::new(dns::async_std::Transport::system(
 ///     tcp::async_io::Transport::new(tcp::Config::default()),
 /// ).await.unwrap());
 ///

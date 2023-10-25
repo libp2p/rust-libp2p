@@ -1,28 +1,26 @@
-FROM rust:1.67.0 as builder
-
-# Run with access to the target cache to speed up builds
-WORKDIR /workspace
-ADD . .
-
+# syntax=docker/dockerfile:1.5-labs
+FROM rust:1.73.0 as chef
 RUN rustup target add wasm32-unknown-unknown
+RUN wget -q -O- https://github.com/rustwasm/wasm-pack/releases/download/v0.12.1/wasm-pack-v0.12.1-x86_64-unknown-linux-musl.tar.gz | tar -zx -C /usr/local/bin --strip-components 1 --wildcards "wasm-pack-*/wasm-pack"
+RUN wget -q -O- https://github.com/WebAssembly/binaryen/releases/download/version_115/binaryen-version_115-x86_64-linux.tar.gz | tar -zx -C /usr/local/bin --strip-components 2 --wildcards "binaryen-version_*/bin/wasm-opt"
+RUN wget -q -O- https://github.com/LukeMathWalker/cargo-chef/releases/download/v0.1.62/cargo-chef-x86_64-unknown-linux-gnu.tar.gz | tar -zx -C /usr/local/bin
+WORKDIR /app
 
-RUN --mount=type=cache,target=/usr/local/cargo/registry \
-    cargo install wasm-pack@0.11.1 --locked
+FROM chef AS planner
+COPY . .
+RUN cargo chef prepare --recipe-path recipe.json
 
-RUN --mount=type=cache,target=./target \
-    --mount=type=cache,target=/usr/local/cargo/registry \
-    wasm-pack build --target web interop-tests
+FROM chef AS builder
+COPY --from=planner /app/recipe.json recipe.json
+# Build dependencies - this is the caching Docker layer!
+RUN cargo chef cook --release --package interop-tests --target wasm32-unknown-unknown --recipe-path recipe.json
+RUN RUSTFLAGS='-C target-feature=+crt-static' cargo chef cook --release --package interop-tests --target x86_64-unknown-linux-gnu --bin wasm_ping --recipe-path recipe.json
+# Build application
+COPY . .
+RUN wasm-pack build --target web interop-tests
+RUN RUSTFLAGS='-C target-feature=+crt-static' cargo build --release --package interop-tests --target x86_64-unknown-linux-gnu --bin wasm_ping
 
-RUN --mount=type=cache,target=./target \
-    --mount=type=cache,target=/usr/local/cargo/registry \
-    cargo build --release --package interop-tests --bin wasm_ping
-
-RUN --mount=type=cache,target=./target \
-    mv ./target/release/wasm_ping /usr/local/bin/testplan
-
-FROM selenium/standalone-chrome:112.0
-COPY --from=builder /usr/local/bin/testplan /usr/local/bin/testplan
-
+FROM selenium/standalone-chrome:115.0
+COPY --from=builder /app/target/x86_64-unknown-linux-gnu/release/wasm_ping /usr/local/bin/testplan
 ENV RUST_BACKTRACE=1
-
 ENTRYPOINT ["testplan"]

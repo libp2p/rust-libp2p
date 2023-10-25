@@ -24,17 +24,12 @@ use super::*;
 use crate::protocol::ProtocolConfig;
 use crate::subscription_filter::WhitelistSubscriptionFilter;
 use crate::transform::{DataTransform, IdentityTransform};
-use crate::types::FastMessageId;
 use crate::ValidationError;
-use crate::{
-    config::Config, config::ConfigBuilder, IdentTopic as Topic, Message, TopicScoreParams,
-};
+use crate::{config::Config, config::ConfigBuilder, IdentTopic as Topic, TopicScoreParams};
 use async_std::net::Ipv4Addr;
 use byteorder::{BigEndian, ByteOrder};
 use libp2p_core::{ConnectedPoint, Endpoint};
 use rand::Rng;
-use std::collections::hash_map::DefaultHasher;
-use std::hash::{Hash, Hasher};
 use std::thread::sleep;
 use std::time::Duration;
 
@@ -272,7 +267,7 @@ where
         for connection_id in peer_connections.connections.clone() {
             active_connections = active_connections.checked_sub(1).unwrap();
 
-            let dummy_handler = Handler::new(ProtocolConfig::default(), Duration::ZERO);
+            let dummy_handler = Handler::new(ProtocolConfig::default());
 
             gs.on_swarm_event(FromSwarm::ConnectionClosed(ConnectionClosed {
                 peer_id: *peer_id,
@@ -858,7 +853,7 @@ fn test_handle_received_subscriptions() {
     // UNSUBSCRIBE  - Remove topic from peer_topics for peer.
     //              - Remove peer from topic_peers.
 
-    let topics = vec!["topic1", "topic2", "topic3", "topic4"]
+    let topics = ["topic1", "topic2", "topic3", "topic4"]
         .iter()
         .map(|&t| String::from(t))
         .collect();
@@ -1280,7 +1275,7 @@ fn test_handle_graft_is_not_subscribed() {
 #[test]
 // tests multiple topics in a single graft message
 fn test_handle_graft_multiple_topics() {
-    let topics: Vec<String> = vec!["topic1", "topic2", "topic3", "topic4"]
+    let topics: Vec<String> = ["topic1", "topic2", "topic3", "topic4"]
         .iter()
         .map(|&t| String::from(t))
         .collect();
@@ -1418,7 +1413,7 @@ fn test_explicit_peer_reconnects() {
         .gs_config(config)
         .create_network();
 
-    let peer = others.get(0).unwrap();
+    let peer = others.first().unwrap();
 
     //add peer as explicit peer
     gs.add_explicit_peer(peer);
@@ -1469,7 +1464,7 @@ fn test_handle_graft_explicit_peer() {
         .explicit(1)
         .create_network();
 
-    let peer = peers.get(0).unwrap();
+    let peer = peers.first().unwrap();
 
     gs.handle_graft(peer, topic_hashes.clone());
 
@@ -5062,86 +5057,6 @@ fn test_public_api() {
         peers,
         "Expected all_peers to contain all peers."
     );
-}
-
-#[test]
-fn test_msg_id_fn_only_called_once_with_fast_message_ids() {
-    struct Pointers {
-        slow_counter: u32,
-        fast_counter: u32,
-    }
-
-    let mut counters = Pointers {
-        slow_counter: 0,
-        fast_counter: 0,
-    };
-
-    let counters_pointer: *mut Pointers = &mut counters;
-
-    let counters_address = counters_pointer as u64;
-
-    macro_rules! get_counters_pointer {
-        ($m: expr) => {{
-            let mut address_bytes: [u8; 8] = Default::default();
-            address_bytes.copy_from_slice($m.as_slice());
-            let address = u64::from_be_bytes(address_bytes);
-            address as *mut Pointers
-        }};
-    }
-
-    macro_rules! get_counters_and_hash {
-        ($m: expr) => {{
-            let mut hasher = DefaultHasher::new();
-            $m.hash(&mut hasher);
-            let id = hasher.finish().to_be_bytes().into();
-            (id, get_counters_pointer!($m))
-        }};
-    }
-
-    let message_id_fn = |m: &Message| -> MessageId {
-        let (mut id, counters_pointer): (MessageId, *mut Pointers) =
-            get_counters_and_hash!(&m.data);
-        unsafe {
-            (*counters_pointer).slow_counter += 1;
-        }
-        id.0.reverse();
-        id
-    };
-    let fast_message_id_fn = |m: &RawMessage| -> FastMessageId {
-        let (id, counters_pointer) = get_counters_and_hash!(&m.data);
-        unsafe {
-            (*counters_pointer).fast_counter += 1;
-        }
-        id
-    };
-    let config = ConfigBuilder::default()
-        .message_id_fn(message_id_fn)
-        .fast_message_id_fn(fast_message_id_fn)
-        .build()
-        .unwrap();
-    let (mut gs, _, topic_hashes) = inject_nodes1()
-        .peer_no(0)
-        .topics(vec![String::from("topic1")])
-        .to_subscribe(true)
-        .gs_config(config)
-        .create_network();
-
-    let message = RawMessage {
-        source: None,
-        data: counters_address.to_be_bytes().to_vec(),
-        sequence_number: None,
-        topic: topic_hashes[0].clone(),
-        signature: None,
-        key: None,
-        validated: true,
-    };
-
-    for _ in 0..5 {
-        gs.handle_received_message(message.clone(), &PeerId::random());
-    }
-
-    assert_eq!(counters.fast_counter, 5);
-    assert_eq!(counters.slow_counter, 1);
 }
 
 #[test]

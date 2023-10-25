@@ -19,9 +19,9 @@
 // DEALINGS IN THE SOFTWARE.
 
 use futures::io::{AsyncReadExt, AsyncWriteExt};
-use libp2p_core::InboundUpgrade;
+use libp2p_core::upgrade::InboundConnectionUpgrade;
 use libp2p_identity as identity;
-use libp2p_plaintext::PlainText2Config;
+use libp2p_plaintext as plaintext;
 use log::debug;
 use quickcheck::QuickCheck;
 
@@ -34,10 +34,7 @@ fn variable_msg_length() {
         let msg_to_receive = msg;
 
         let server_id = identity::Keypair::generate_ed25519();
-        let server_id_public = server_id.public();
-
         let client_id = identity::Keypair::generate_ed25519();
-        let client_id_public = client_id.public();
 
         let (server, client) = futures_ringbuf::Endpoint::pair(100, 100);
 
@@ -46,14 +43,8 @@ fn variable_msg_length() {
                 (received_client_id, mut server_channel),
                 (received_server_id, mut client_channel),
             ) = futures::future::try_join(
-                PlainText2Config {
-                    local_public_key: server_id_public,
-                }
-                .upgrade_inbound(server, ""),
-                PlainText2Config {
-                    local_public_key: client_id_public,
-                }
-                .upgrade_inbound(client, ""),
+                plaintext::Config::new(&server_id).upgrade_inbound(server, ""),
+                plaintext::Config::new(&client_id).upgrade_inbound(client, ""),
             )
             .await
             .unwrap();

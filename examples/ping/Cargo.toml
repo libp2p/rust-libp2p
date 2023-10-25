@@ -1,0 +1,18 @@
+[package]
+name = "ping-example"
+version = "0.1.0"
+edition = "2021"
+publish = false
+license = "MIT"
+
+[package.metadata.release]
+release = false
+
+[dependencies]
+env_logger = "0.10.0"
+futures = "0.3.28"
+libp2p = { path = "../../libp2p", features = ["noise", "ping", "tcp", "tokio", "yamux"] }
+tokio = { version = "1.33.0", features = ["full"] }
+
+[lints]
+workspace = true

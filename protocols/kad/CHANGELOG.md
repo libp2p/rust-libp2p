@@ -1,4 +1,60 @@
-## 0.44.2 - unreleased
+## 0.45.0 - unreleased
+
+- Remove deprecated `kad::Config::set_connection_idle_timeout` in favor of `SwarmBuilder::idle_connection_timeout`.
+  See [PR 4659](https://github.com/libp2p/rust-libp2p/pull/4659).
+- Emit `ModeChanged` event whenever we automatically reconfigure the mode.
+  See [PR 4503](https://github.com/libp2p/rust-libp2p/pull/4503).
+
+## 0.44.6
+
+- Rename `Kademlia` symbols to follow naming convention.
+  See [PR 4547].
+- Fix a bug where we didn't detect a remote peer moving into client-state.
+  See [PR 4639](https://github.com/libp2p/rust-libp2p/pull/4639).
+- Re-export `NodeStatus`.
+  See [PR 4645].
+- Deprecate `kad::Config::set_connection_idle_timeout` in favor of `SwarmBuilder::idle_connection_timeout`.
+  See [PR 4675].
+
+[PR 4547]: https://github.com/libp2p/rust-libp2p/pull/4547
+[PR 4645]: https://github.com/libp2p/rust-libp2p/pull/4645
+[PR 4675]: https://github.com/libp2p/rust-libp2p/pull/4675
+
+<!-- Internal changes
+
+- Allow deprecated usage of `KeepAlive::Until`
+
+-->
+
+## 0.44.5
+- Migrate to `quick-protobuf-codec` crate for codec logic.
+  See [PR 4501].
+
+[PR 4501]: https://github.com/libp2p/rust-libp2p/pull/4501
+
+## 0.44.4
+
+- Implement common traits on `RoutingUpdate`.
+  See [PR 4270].
+- Reduce noise of "remote supports our protocol" log.
+  See [PR 4278].
+
+[PR 4270]: https://github.com/libp2p/rust-libp2p/pull/4270
+[PR 4278]: https://github.com/libp2p/rust-libp2p/pull/4278
+
+## 0.44.3
+
+- Prevent simultaneous dials to peers.
+  See [PR 4224].
+
+[PR 4224]: https://github.com/libp2p/rust-libp2p/pull/4224
+
+- Rename missed `KademliaEvent::OutboundQueryCompleted` to `KademliaEvent::OutboundQueryProgressed` in documentation.
+  See [PR 4257].
+
+[PR 4257]: https://github.com/libp2p/rust-libp2p/pull/4257
+
+## 0.44.2
 
 - Allow to explicitly set `Mode::{Client,Server}`.
   See [PR 4132]

@@ -98,7 +98,7 @@ fn three_fields() {
     struct Foo {
         ping: ping::Behaviour,
         identify: identify::Behaviour,
-        kad: libp2p_kad::Kademlia<libp2p_kad::record::store::MemoryStore>,
+        kad: libp2p_kad::Behaviour<libp2p_kad::record::store::MemoryStore>,
     }
 
     #[allow(
@@ -115,7 +115,7 @@ fn three_fields() {
                 let _: identify::Event = event;
             }
             FooEvent::Kad(event) => {
-                let _: libp2p_kad::KademliaEvent = event;
+                let _: libp2p_kad::Event = event;
             }
         }
     }
@@ -327,7 +327,7 @@ fn with_either() {
     #[derive(NetworkBehaviour)]
     #[behaviour(prelude = "libp2p_swarm::derive_prelude")]
     struct Foo {
-        kad: libp2p_kad::Kademlia<libp2p_kad::record::store::MemoryStore>,
+        kad: libp2p_kad::Behaviour<libp2p_kad::record::store::MemoryStore>,
         ping_or_identify: Either<ping::Behaviour, identify::Behaviour>,
     }
 
@@ -351,7 +351,7 @@ fn with_generics() {
     fn foo() {
         require_net_behaviour::<
             Foo<
-                libp2p_kad::Kademlia<libp2p_kad::record::store::MemoryStore>,
+                libp2p_kad::Behaviour<libp2p_kad::record::store::MemoryStore>,
                 libp2p_ping::Behaviour,
             >,
         >();
@@ -370,7 +370,7 @@ fn with_generics_mixed() {
 
     #[allow(dead_code)]
     fn foo() {
-        require_net_behaviour::<Foo<libp2p_kad::Kademlia<libp2p_kad::record::store::MemoryStore>>>(
+        require_net_behaviour::<Foo<libp2p_kad::Behaviour<libp2p_kad::record::store::MemoryStore>>>(
         );
     }
 }
@@ -381,12 +381,12 @@ fn custom_event_with_either() {
 
     #[allow(clippy::large_enum_variant)]
     enum BehaviourOutEvent {
-        Kad(libp2p_kad::KademliaEvent),
+        Kad(libp2p_kad::Event),
         PingOrIdentify(Either<ping::Event, identify::Event>),
     }
 
-    impl From<libp2p_kad::KademliaEvent> for BehaviourOutEvent {
-        fn from(event: libp2p_kad::KademliaEvent) -> Self {
+    impl From<libp2p_kad::Event> for BehaviourOutEvent {
+        fn from(event: libp2p_kad::Event) -> Self {
             BehaviourOutEvent::Kad(event)
         }
     }
@@ -404,7 +404,7 @@ fn custom_event_with_either() {
         prelude = "libp2p_swarm::derive_prelude"
     )]
     struct Foo {
-        kad: libp2p_kad::Kademlia<libp2p_kad::record::store::MemoryStore>,
+        kad: libp2p_kad::Behaviour<libp2p_kad::record::store::MemoryStore>,
         ping_or_identify: Either<ping::Behaviour, identify::Behaviour>,
     }
 
@@ -457,7 +457,7 @@ fn multiple_behaviour_attributes() {
 #[test]
 fn custom_out_event_no_type_parameters() {
     use libp2p_identity::PeerId;
-    use libp2p_swarm::{ConnectionId, PollParameters, ToSwarm};
+    use libp2p_swarm::{ConnectionId, ToSwarm};
     use std::task::Context;
     use std::task::Poll;
 
@@ -500,8 +500,7 @@ fn custom_out_event_no_type_parameters() {
 
         fn poll(
             &mut self,
-            _ctx: &mut Context,
-            _: &mut impl PollParameters,
+            _: &mut Context<'_>,
         ) -> Poll<ToSwarm<Self::ToSwarm, THandlerInEvent<Self>>> {
             Poll::Pending
         }

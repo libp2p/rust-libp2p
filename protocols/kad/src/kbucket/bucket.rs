@@ -54,10 +54,6 @@ pub enum NodeStatus {
 }
 
 impl<TKey, TVal> PendingNode<TKey, TVal> {
-    pub(crate) fn key(&self) -> &TKey {
-        &self.node.key
-    }
-
     pub(crate) fn status(&self) -> NodeStatus {
         self.status
     }
@@ -70,6 +66,7 @@ impl<TKey, TVal> PendingNode<TKey, TVal> {
         Instant::now() >= self.replace
     }
 
+    #[cfg(test)]
     pub(crate) fn set_ready_at(&mut self, t: Instant) {
         self.replace = t;
     }
@@ -189,11 +186,6 @@ where
     pub(crate) fn as_pending(&self, key: &TKey) -> Option<&PendingNode<TKey, TVal>> {
         self.pending()
             .filter(|p| p.node.key.as_ref() == key.as_ref())
-    }
-
-    /// Returns a reference to a node in the bucket.
-    pub(crate) fn get(&self, key: &TKey) -> Option<&Node<TKey, TVal>> {
-        self.position(key).map(|p| &self.nodes[p.0])
     }
 
     /// Returns an iterator over the nodes in the bucket, together with their status.
@@ -398,22 +390,19 @@ where
         }
     }
 
-    /// Checks whether the given position refers to a connected node.
-    pub(crate) fn is_connected(&self, pos: Position) -> bool {
-        self.status(pos) == NodeStatus::Connected
-    }
-
     /// Gets the number of entries currently in the bucket.
     pub(crate) fn num_entries(&self) -> usize {
         self.nodes.len()
     }
 
     /// Gets the number of entries in the bucket that are considered connected.
+    #[cfg(test)]
     pub(crate) fn num_connected(&self) -> usize {
         self.first_connected_pos.map_or(0, |i| self.nodes.len() - i)
     }
 
     /// Gets the number of entries in the bucket that are considered disconnected.
+    #[cfg(test)]
     pub(crate) fn num_disconnected(&self) -> usize {
         self.nodes.len() - self.num_connected()
     }

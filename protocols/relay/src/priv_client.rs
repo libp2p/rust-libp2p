@@ -20,7 +20,7 @@
 
 //! [`NetworkBehaviour`] to act as a circuit relay v2 **client**.
 
-mod handler;
+pub(crate) mod handler;
 pub(crate) mod transport;
 
 use crate::multiaddr_ext::MultiaddrExt;
@@ -40,8 +40,8 @@ use libp2p_swarm::behaviour::{ConnectionClosed, ConnectionEstablished, FromSwarm
 use libp2p_swarm::dial_opts::DialOpts;
 use libp2p_swarm::{
     dummy, ConnectionDenied, ConnectionHandler, ConnectionId, DialFailure, NetworkBehaviour,
-    NotifyHandler, PollParameters, Stream, StreamUpgradeError, THandler, THandlerInEvent,
-    THandlerOutEvent, ToSwarm,
+    NotifyHandler, Stream, StreamUpgradeError, THandler, THandlerInEvent, THandlerOutEvent,
+    ToSwarm,
 };
 use std::collections::{hash_map, HashMap, VecDeque};
 use std::io::{Error, ErrorKind, IoSlice};
@@ -163,7 +163,6 @@ impl NetworkBehaviour for Behaviour {
         if local_addr.is_relayed() {
             return Ok(Either::Right(dummy::ConnectionHandler));
         }
-
         let mut handler = Handler::new(self.local_peer_id, peer, remote_addr.clone());
 
         if let Some(event) = self.pending_handler_commands.remove(&connection_id) {
@@ -288,7 +287,6 @@ impl NetworkBehaviour for Behaviour {
     fn poll(
         &mut self,
         cx: &mut Context<'_>,
-        _poll_parameters: &mut impl PollParameters,
     ) -> Poll<ToSwarm<Self::ToSwarm, THandlerInEvent<Self>>> {
         if let Some(action) = self.queued_actions.pop_front() {
             return Poll::Ready(action);
@@ -303,7 +301,7 @@ impl NetworkBehaviour for Behaviour {
                 match self
                     .directly_connected_peers
                     .get(&relay_peer_id)
-                    .and_then(|cs| cs.get(0))
+                    .and_then(|cs| cs.first())
                 {
                     Some(connection_id) => ToSwarm::NotifyHandler {
                         peer_id: relay_peer_id,
@@ -333,7 +331,7 @@ impl NetworkBehaviour for Behaviour {
                 match self
                     .directly_connected_peers
                     .get(&relay_peer_id)
-                    .and_then(|cs| cs.get(0))
+                    .and_then(|cs| cs.first())
                 {
                     Some(connection_id) => ToSwarm::NotifyHandler {
                         peer_id: relay_peer_id,
@@ -378,10 +376,10 @@ impl NetworkBehaviour for Behaviour {
 ///
 /// Internally, this uses a stream to the relay.
 pub struct Connection {
-    state: ConnectionState,
+    pub(crate) state: ConnectionState,
 }
 
-enum ConnectionState {
+pub(crate) enum ConnectionState {
     InboundAccepting {
         accept: BoxFuture<'static, Result<ConnectionState, Error>>,
     },

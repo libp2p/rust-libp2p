@@ -27,7 +27,6 @@ use crate::handler::protocol::{RequestProtocol, ResponseProtocol};
 use crate::{RequestId, EMPTY_QUEUE_SHRINK_THRESHOLD};
 
 use futures::{channel::oneshot, future::BoxFuture, prelude::*, stream::FuturesUnordered};
-use instant::Instant;
 use libp2p_swarm::handler::{
     ConnectionEvent, DialUpgradeError, FullyNegotiatedInbound, FullyNegotiatedOutbound,
     ListenUpgradeError,
@@ -57,9 +56,6 @@ where
     inbound_protocols: SmallVec<[TCodec::Protocol; 2]>,
     /// The request/response message codec.
     codec: TCodec,
-    /// The keep-alive timeout of idle connections. A connection is considered
-    /// idle if there are no outbound substreams.
-    keep_alive_timeout: Duration,
     /// The timeout for inbound and outbound substreams (i.e. request
     /// and response processing).
     substream_timeout: Duration,
@@ -92,7 +88,6 @@ where
     pub(super) fn new(
         inbound_protocols: SmallVec<[TCodec::Protocol; 2]>,
         codec: TCodec,
-        keep_alive_timeout: Duration,
         substream_timeout: Duration,
         inbound_request_id: Arc<AtomicU64>,
     ) -> Self {
@@ -100,7 +95,6 @@ where
             inbound_protocols,
             codec,
             keep_alive: KeepAlive::Yes,
-            keep_alive_timeout,
             substream_timeout,
             outbound: VecDeque::new(),
             inbound: FuturesUnordered::new(),
@@ -337,11 +331,10 @@ where
         }
 
         if self.inbound.is_empty() && self.keep_alive.is_yes() {
-            // No new inbound or outbound requests. However, we may just have
-            // started the latest inbound or outbound upgrade(s), so make sure
-            // the keep-alive timeout is preceded by the substream timeout.
-            let until = Instant::now() + self.substream_timeout + self.keep_alive_timeout;
-            self.keep_alive = KeepAlive::Until(until);
+            // No new inbound or outbound requests. We already check
+            // there is no active streams exist in swarm connection,
+            // so we can set keep-alive to no directly.
+            self.keep_alive = KeepAlive::No;
         }
 
         Poll::Pending

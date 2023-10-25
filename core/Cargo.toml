@@ -3,7 +3,7 @@ name = "libp2p-core"
 edition = "2021"
 rust-version = { workspace = true }
 description = "Core traits and structs of libp2p"
-version = "0.40.0"
+version = "0.41.0"
 authors = ["Parity Technologies <admin@parity.io>"]
 license = "MIT"
 repository = "https://github.com/libp2p/rust-libp2p"
@@ -11,7 +11,7 @@ keywords = ["peer-to-peer", "libp2p", "networking"]
 categories = ["network-programming", "asynchronous"]
 
 [dependencies]
-either = "1.5"
+either = "1.9"
 fnv = "1.0"
 futures = { version = "0.3.28", features = ["executor", "thread-pool"] }
 futures-timer = "3"
@@ -23,23 +23,23 @@ multihash = { workspace = true }
 multistream-select = { workspace = true }
 once_cell = "1.18.0"
 parking_lot = "0.12.0"
-pin-project = "1.1.2"
+pin-project = "1.1.3"
 quick-protobuf = "0.8"
 rand = "0.8"
 rw-stream-sink = { workspace = true }
 serde = { version = "1", optional = true, features = ["derive"] }
-smallvec = "1.6.1"
+smallvec = "1.11.1"
 thiserror = "1.0"
 unsigned-varint = "0.7"
 void = "1"
 
 [dev-dependencies]
 async-std = { version = "1.6.2", features = ["attributes"] }
-libp2p-mplex = { path = "../muxers/mplex" } # Using `path` here because this is a cyclic dev-dependency which otherwise breaks releasing.
-libp2p-noise = { path = "../transports/noise" } # Using `path` here because this is a cyclic dev-dependency which otherwise breaks releasing.
-multihash = { workspace = true , features = ["arb"] }
+libp2p-mplex = { path = "../muxers/mplex" }                    # Using `path` here because this is a cyclic dev-dependency which otherwise breaks releasing.
+libp2p-noise = { path = "../transports/noise" }                # Using `path` here because this is a cyclic dev-dependency which otherwise breaks releasing.
+multihash = { workspace = true, features = ["arb"] }
 quickcheck = { workspace = true }
-libp2p-identity = { workspace = true, features = ["ed25519"] }
+libp2p-identity = { workspace = true, features = ["ed25519", "rand"] }
 
 [features]
 serde = ["multihash/serde-codec", "dep:serde", "libp2p-identity/serde"]
@@ -50,3 +50,6 @@ serde = ["multihash/serde-codec", "dep:serde", "libp2p-identity/serde"]
 all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
 rustc-args = ["--cfg", "docsrs"]
+
+[lints]
+workspace = true

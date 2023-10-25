@@ -97,6 +97,7 @@ macro_rules! codegen {
                 addr: Multiaddr,
             ) -> Result<(), TransportError<Self::Error>> {
                 if let Ok(path) = multiaddr_to_path(&addr) {
+                    #[allow(clippy::redundant_closure_call)]
                     let listener = $build_listener(path)
                         .map_err(Err)
                         .map_ok(move |listener| {

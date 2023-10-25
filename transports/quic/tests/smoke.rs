@@ -39,24 +39,6 @@ async fn async_std_smoke() {
     smoke::<quic::async_std::Provider>().await
 }
 
-#[cfg(feature = "async-std")]
-#[async_std::test]
-async fn dial_failure() {
-    let _ = env_logger::try_init();
-    let mut a = create_default_transport::<quic::async_std::Provider>().1;
-    let mut b = create_default_transport::<quic::async_std::Provider>().1;
-
-    let addr = start_listening(&mut a, "/ip4/127.0.0.1/udp/0/quic-v1").await;
-    drop(a); // stop a so b can never reach it
-
-    match dial(&mut b, addr).await {
-        Ok(_) => panic!("Expected dial to fail"),
-        Err(error) => {
-            assert_eq!("Handshake with the remote timed out.", error.to_string())
-        }
-    };
-}
-
 #[cfg(feature = "tokio")]
 #[tokio::test]
 async fn endpoint_reuse() {
@@ -414,6 +396,49 @@ async fn write_after_peer_dropped_stream() {
     stream_b.close().await.expect("Close failed.");
 }
 
+/// - A listens on 0.0.0.0:0
+/// - B listens on 127.0.0.1:0
+/// - A dials B
+/// - Source port of A at B is the A's listen port
+#[cfg(feature = "tokio")]
+#[tokio::test]
+async fn test_local_listener_reuse() {
+    let (_, mut a_transport) = create_default_transport::<quic::tokio::Provider>();
+    let (_, mut b_transport) = create_default_transport::<quic::tokio::Provider>();
+
+    a_transport
+        .listen_on(
+            ListenerId::next(),
+            "/ip4/0.0.0.0/udp/0/quic-v1".parse().unwrap(),
+        )
+        .unwrap();
+
+    // wait until a listener reports a loopback address
+    let a_listen_addr = 'outer: loop {
+        let ev = a_transport.next().await.unwrap();
+        let listen_addr = ev.into_new_address().unwrap();
+        for proto in listen_addr.iter() {
+            if let Protocol::Ip4(ip4) = proto {
+                if ip4.is_loopback() {
+                    break 'outer listen_addr;
+                }
+            }
+        }
+    };
+    // If we do not poll until the end, `NewAddress` events may be `Ready` and `connect` function
+    // below will panic due to an unexpected event.
+    poll_fn(|cx| {
+        let mut pinned = Pin::new(&mut a_transport);
+        while pinned.as_mut().poll(cx).is_ready() {}
+        Poll::Ready(())
+    })
+    .await;
+
+    let b_addr = start_listening(&mut b_transport, "/ip4/127.0.0.1/udp/0/quic-v1").await;
+    let (_, send_back_addr, _) = connect(&mut b_transport, &mut a_transport, b_addr).await.0;
+    assert_eq!(send_back_addr, a_listen_addr);
+}
+
 async fn smoke<P: Provider>() {
     let _ = env_logger::try_init();
 
@@ -428,7 +453,7 @@ async fn smoke<P: Provider>() {
     assert_eq!(b_connected, a_peer_id);
 }
 
-async fn build_streams<P: Provider>() -> (SubstreamBox, SubstreamBox) {
+async fn build_streams<P: Provider + Spawn>() -> (SubstreamBox, SubstreamBox) {
     let (_, mut a_transport) = create_default_transport::<P>();
     let (_, mut b_transport) = create_default_transport::<P>();
 
@@ -522,7 +547,7 @@ async fn start_listening(transport: &mut Boxed<(PeerId, StreamMuxerBox)>, addr: 
     }
 }
 
-fn prop<P: Provider + BlockOn>(
+fn prop<P: Provider + BlockOn + Spawn>(
     number_listeners: NonZeroU8,
     number_streams: NonZeroU8,
 ) -> quickcheck::TestResult {
@@ -599,7 +624,7 @@ fn prop<P: Provider + BlockOn>(
     quickcheck::TestResult::passed()
 }
 
-async fn answer_inbound_streams<P: Provider, const BUFFER_SIZE: usize>(
+async fn answer_inbound_streams<P: Provider + Spawn, const BUFFER_SIZE: usize>(
     mut connection: StreamMuxerBox,
 ) {
     loop {
@@ -634,7 +659,7 @@ async fn answer_inbound_streams<P: Provider, const BUFFER_SIZE: usize>(
     }
 }
 
-async fn open_outbound_streams<P: Provider, const BUFFER_SIZE: usize>(
+async fn open_outbound_streams<P: Provider + Spawn, const BUFFER_SIZE: usize>(
     mut connection: StreamMuxerBox,
     number_streams: usize,
     completed_streams_tx: mpsc::Sender<()>,
@@ -687,6 +712,7 @@ async fn open_outbound_streams<P: Provider, const BUFFER_SIZE: usize>(
 }
 
 /// Helper function for driving two transports until they established a connection.
+#[allow(unknown_lints, clippy::needless_pass_by_ref_mut)] // False positive.
 async fn connect(
     listener: &mut Boxed<(PeerId, StreamMuxerBox)>,
     dialer: &mut Boxed<(PeerId, StreamMuxerBox)>,
@@ -738,5 +764,24 @@ impl BlockOn for libp2p_quic::tokio::Provider {
         tokio::runtime::Handle::current()
             .block_on(tokio::time::timeout(timeout, future))
             .unwrap()
+    }
+}
+
+trait Spawn {
+    /// Run the given future in the background until it ends.
+    fn spawn(future: impl Future<Output = ()> + Send + 'static);
+}
+
+#[cfg(feature = "async-std")]
+impl Spawn for libp2p_quic::async_std::Provider {
+    fn spawn(future: impl Future<Output = ()> + Send + 'static) {
+        async_std::task::spawn(future);
+    }
+}
+
+#[cfg(feature = "tokio")]
+impl Spawn for libp2p_quic::tokio::Provider {
+    fn spawn(future: impl Future<Output = ()> + Send + 'static) {
+        tokio::spawn(future);
     }
 }

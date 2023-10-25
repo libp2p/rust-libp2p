@@ -3,7 +3,7 @@ name = "libp2p-request-response"
 edition = "2021"
 rust-version = { workspace = true }
 description = "Generic Request/Response Protocols"
-version = "0.25.0"
+version = "0.26.0"
 authors = ["Parity Technologies <admin@parity.io>"]
 license = "MIT"
 repository = "https://github.com/libp2p/rust-libp2p"
@@ -12,6 +12,7 @@ categories = ["network-programming", "asynchronous"]
 
 [dependencies]
 async-trait = "0.1"
+cbor4ii = { version = "0.3.1", features = ["serde1", "use_std"], optional = true }
 futures = "0.3.28"
 instant = "0.1.12"
 libp2p-core = { workspace = true }
@@ -19,15 +20,14 @@ libp2p-swarm = { workspace = true }
 libp2p-identity = { workspace = true }
 rand = "0.8"
 serde = { version = "1.0", optional = true}
-serde_json = { version = "1.0.99", optional = true }
-serde_cbor = { version = "0.11.2", optional = true }
-smallvec = "1.6.1"
+serde_json = { version = "1.0.107", optional = true }
+smallvec = "1.11.1"
 void = "1.0.2"
-log = "0.4.19"
+log = "0.4.20"
 
 [features]
 json = ["dep:serde", "dep:serde_json", "libp2p-swarm/macros"]
-cbor = ["dep:serde", "dep:serde_cbor", "libp2p-swarm/macros"]
+cbor = ["dep:serde", "dep:cbor4ii", "libp2p-swarm/macros"]
 
 [dev-dependencies]
 async-std = { version = "1.6.2", features = ["attributes"] }
@@ -46,3 +46,6 @@ serde = { version = "1.0", features = ["derive"]}
 all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
 rustc-args = ["--cfg", "docsrs"]
+
+[lints]
+workspace = true

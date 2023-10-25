@@ -5,11 +5,17 @@ edition = "2021"
 publish = false
 license = "MIT"
 
+[package.metadata.release]
+release = false
+
 [dependencies]
 env_logger = "0.10.0"
 futures = "0.3.27"
 hyper = { version = "0.14", features = ["server", "tcp", "http1"] }
 libp2p = { path = "../../libp2p", features = ["async-std", "metrics", "ping", "noise", "identify", "tcp", "yamux", "macros"] }
-log = "0.4.19"
+log = "0.4.20"
 tokio = { version = "1", features = ["rt-multi-thread"] }
-prometheus-client = "0.21.0"
+prometheus-client = "0.21.2"
+
+[lints]
+workspace = true

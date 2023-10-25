@@ -57,16 +57,17 @@
 
 #![cfg_attr(docsrs, feature(doc_cfg, doc_auto_cfg))]
 
+mod config;
 mod connection;
-mod endpoint;
 mod hole_punching;
 mod provider;
 mod transport;
 
 use std::net::SocketAddr;
 
-pub use connection::{Connecting, Connection, Substream};
-pub use endpoint::Config;
+pub use config::Config;
+pub use connection::{Connecting, Connection, Stream};
+
 #[cfg(feature = "async-std")]
 pub use provider::async_std;
 #[cfg(feature = "tokio")]
@@ -89,8 +90,8 @@ pub enum Error {
     #[error(transparent)]
     Io(#[from] std::io::Error),
 
-    /// The task spawned in [`Provider::spawn`] to drive
-    /// the quic endpoint has crashed.
+    /// The task to drive a quic endpoint has crashed.
+    #[deprecated(since = "0.9.3", note = "No longer emitted")]
     #[error("Endpoint driver crashed")]
     EndpointDriverCrashed,
 
@@ -110,9 +111,9 @@ pub enum Error {
 /// Dialing a remote peer failed.
 #[derive(Debug, thiserror::Error)]
 #[error(transparent)]
-pub struct ConnectError(#[from] quinn_proto::ConnectError);
+pub struct ConnectError(quinn::ConnectError);
 
 /// Error on an established [`Connection`].
 #[derive(Debug, thiserror::Error)]
 #[error(transparent)]
-pub struct ConnectionError(#[from] quinn_proto::ConnectionError);
+pub struct ConnectionError(quinn::ConnectionError);

@@ -1,4 +1,16 @@
-## 0.42.0 
+## 0.43.0 - unreleased
+
+
+## 0.42.1
+
+- Bump `futures-rustls` to `0.24.0`.
+  This is a part of the resolution of the [RUSTSEC-2023-0052].
+  See [PR 4378].
+
+[PR 4378]: https://github.com/libp2p/rust-libp2p/pull/4378
+[RUSTSEC-2023-0052]: https://rustsec.org/advisories/RUSTSEC-2023-0052.html
+
+## 0.42.0
 
 - Raise MSRV to 1.65.
   See [PR 3715].

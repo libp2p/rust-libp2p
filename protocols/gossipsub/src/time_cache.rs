@@ -93,10 +93,13 @@ impl<'a, K: 'a, V: 'a> Entry<'a, K, V>
 where
     K: Eq + std::hash::Hash + Clone,
 {
-    pub(crate) fn or_insert_with<F: FnOnce() -> V>(self, default: F) -> &'a mut V {
+    pub(crate) fn or_default(self) -> &'a mut V
+    where
+        V: Default,
+    {
         match self {
             Entry::Occupied(entry) => entry.into_mut(),
-            Entry::Vacant(entry) => entry.insert(default()),
+            Entry::Vacant(entry) => entry.insert(V::default()),
         }
     }
 }
@@ -149,10 +152,6 @@ where
 
     pub(crate) fn contains_key(&self, key: &Key) -> bool {
         self.map.contains_key(key)
-    }
-
-    pub(crate) fn get(&self, key: &Key) -> Option<&Value> {
-        self.map.get(key).map(|e| &e.element)
     }
 }
 

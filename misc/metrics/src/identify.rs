@@ -34,7 +34,6 @@ const ALLOWED_PROTOCOLS: &[StreamProtocol] = &[
     #[cfg(feature = "dcutr")]
     libp2p_dcutr::PROTOCOL_NAME,
     // #[cfg(feature = "gossipsub")]
-    // #[cfg(not(target_os = "unknown"))]
     // TODO: Add Gossipsub protocol name
     libp2p_identify::PROTOCOL_NAME,
     libp2p_identify::PUSH_PROTOCOL_NAME,

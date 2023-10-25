@@ -18,7 +18,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::{error::Error, tls};
+use crate::{error::Error, quicksink, tls};
 use either::Either;
 use futures::{future::BoxFuture, prelude::*, ready, stream::BoxStream};
 use futures_rustls::{client, rustls, server};
@@ -57,7 +57,10 @@ pub struct WsConfig<T> {
     listener_protos: HashMap<ListenerId, Protocol<'static>>,
 }
 
-impl<T> WsConfig<T> {
+impl<T> WsConfig<T>
+where
+    T: Send,
+{
     /// Create a new websocket transport based on another transport.
     pub fn new(transport: T) -> Self {
         WsConfig {

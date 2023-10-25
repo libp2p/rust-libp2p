@@ -64,8 +64,8 @@
 use libp2p_core::{Endpoint, Multiaddr};
 use libp2p_identity::PeerId;
 use libp2p_swarm::{
-    dummy, CloseConnection, ConnectionDenied, ConnectionId, FromSwarm, NetworkBehaviour,
-    PollParameters, THandler, THandlerInEvent, THandlerOutEvent, ToSwarm,
+    dummy, CloseConnection, ConnectionDenied, ConnectionId, FromSwarm, NetworkBehaviour, THandler,
+    THandlerInEvent, THandlerOutEvent, ToSwarm,
 };
 use std::collections::{HashSet, VecDeque};
 use std::fmt;
@@ -261,7 +261,6 @@ where
     fn poll(
         &mut self,
         cx: &mut Context<'_>,
-        _: &mut impl PollParameters,
     ) -> Poll<ToSwarm<Self::ToSwarm, THandlerInEvent<Self>>> {
         if let Some(peer) = self.close_connections.pop_front() {
             return Poll::Ready(ToSwarm::CloseConnection {
@@ -283,14 +282,11 @@ mod tests {
 
     #[async_std::test]
     async fn cannot_dial_blocked_peer() {
-        let mut dialer = Swarm::new_ephemeral(|_| Behaviour::<BlockedPeers>::new());
-        let mut listener = Swarm::new_ephemeral(|_| Behaviour::<BlockedPeers>::new());
+        let mut dialer = Swarm::new_ephemeral(|_| Behaviour::<BlockedPeers>::default());
+        let mut listener = Swarm::new_ephemeral(|_| Behaviour::<BlockedPeers>::default());
         listener.listen().await;
 
-        dialer
-            .behaviour_mut()
-            .list
-            .block_peer(*listener.local_peer_id());
+        dialer.behaviour_mut().block_peer(*listener.local_peer_id());
 
         let DialError::Denied { cause } = dial(&mut dialer, &listener).unwrap_err() else {
             panic!("unexpected dial error")
@@ -300,17 +296,13 @@ mod tests {
 
     #[async_std::test]
     async fn can_dial_unblocked_peer() {
-        let mut dialer = Swarm::new_ephemeral(|_| Behaviour::<BlockedPeers>::new());
-        let mut listener = Swarm::new_ephemeral(|_| Behaviour::<BlockedPeers>::new());
+        let mut dialer = Swarm::new_ephemeral(|_| Behaviour::<BlockedPeers>::default());
+        let mut listener = Swarm::new_ephemeral(|_| Behaviour::<BlockedPeers>::default());
         listener.listen().await;
 
+        dialer.behaviour_mut().block_peer(*listener.local_peer_id());
         dialer
             .behaviour_mut()
-            .list
-            .block_peer(*listener.local_peer_id());
-        dialer
-            .behaviour_mut()
-            .list
             .unblock_peer(*listener.local_peer_id());
 
         dial(&mut dialer, &listener).unwrap();
@@ -318,14 +310,11 @@ mod tests {
 
     #[async_std::test]
     async fn blocked_peer_cannot_dial_us() {
-        let mut dialer = Swarm::new_ephemeral(|_| Behaviour::<BlockedPeers>::new());
-        let mut listener = Swarm::new_ephemeral(|_| Behaviour::<BlockedPeers>::new());
+        let mut dialer = Swarm::new_ephemeral(|_| Behaviour::<BlockedPeers>::default());
+        let mut listener = Swarm::new_ephemeral(|_| Behaviour::<BlockedPeers>::default());
         listener.listen().await;
 
-        listener
-            .behaviour_mut()
-            .list
-            .block_peer(*dialer.local_peer_id());
+        listener.behaviour_mut().block_peer(*dialer.local_peer_id());
         dial(&mut dialer, &listener).unwrap();
         async_std::task::spawn(dialer.loop_on_next());
 
@@ -343,20 +332,24 @@ mod tests {
 
     #[async_std::test]
     async fn connections_get_closed_upon_blocked() {
-        let mut dialer = Swarm::new_ephemeral(|_| Behaviour::<BlockedPeers>::new());
-        let mut listener = Swarm::new_ephemeral(|_| Behaviour::<BlockedPeers>::new());
+        let mut dialer = Swarm::new_ephemeral(|_| Behaviour::<BlockedPeers>::default());
+        let mut listener = Swarm::new_ephemeral(|_| Behaviour::<BlockedPeers>::default());
         listener.listen().await;
         dialer.connect(&mut listener).await;
 
-        dialer
-            .behaviour_mut()
-            .list
-            .block_peer(*listener.local_peer_id());
+        dialer.behaviour_mut().block_peer(*listener.local_peer_id());
 
         let (
-            [SwarmEvent::ConnectionClosed { peer_id: closed_dialer_peer, .. }],
-            [SwarmEvent::ConnectionClosed { peer_id: closed_listener_peer, .. }]
-        ) = libp2p_swarm_test::drive(&mut dialer, &mut listener).await else {
+            [SwarmEvent::ConnectionClosed {
+                peer_id: closed_dialer_peer,
+                ..
+            }],
+            [SwarmEvent::ConnectionClosed {
+                peer_id: closed_listener_peer,
+                ..
+            }],
+        ) = libp2p_swarm_test::drive(&mut dialer, &mut listener).await
+        else {
             panic!("unexpected events")
         };
         assert_eq!(closed_dialer_peer, *listener.local_peer_id());
@@ -365,8 +358,8 @@ mod tests {
 
     #[async_std::test]
     async fn cannot_dial_peer_unless_allowed() {
-        let mut dialer = Swarm::new_ephemeral(|_| Behaviour::<AllowedPeers>::new());
-        let mut listener = Swarm::new_ephemeral(|_| Behaviour::<AllowedPeers>::new());
+        let mut dialer = Swarm::new_ephemeral(|_| Behaviour::<AllowedPeers>::default());
+        let mut listener = Swarm::new_ephemeral(|_| Behaviour::<AllowedPeers>::default());
         listener.listen().await;
 
         let DialError::Denied { cause } = dial(&mut dialer, &listener).unwrap_err() else {
@@ -374,26 +367,19 @@ mod tests {
         };
         assert!(cause.downcast::<NotAllowed>().is_ok());
 
-        dialer
-            .behaviour_mut()
-            .list
-            .allow_peer(*listener.local_peer_id());
+        dialer.behaviour_mut().allow_peer(*listener.local_peer_id());
         assert!(dial(&mut dialer, &listener).is_ok());
     }
 
     #[async_std::test]
     async fn cannot_dial_disallowed_peer() {
-        let mut dialer = Swarm::new_ephemeral(|_| Behaviour::<AllowedPeers>::new());
-        let mut listener = Swarm::new_ephemeral(|_| Behaviour::<AllowedPeers>::new());
+        let mut dialer = Swarm::new_ephemeral(|_| Behaviour::<AllowedPeers>::default());
+        let mut listener = Swarm::new_ephemeral(|_| Behaviour::<AllowedPeers>::default());
         listener.listen().await;
 
+        dialer.behaviour_mut().allow_peer(*listener.local_peer_id());
         dialer
             .behaviour_mut()
-            .list
-            .allow_peer(*listener.local_peer_id());
-        dialer
-            .behaviour_mut()
-            .list
             .disallow_peer(*listener.local_peer_id());
 
         let DialError::Denied { cause } = dial(&mut dialer, &listener).unwrap_err() else {
@@ -404,8 +390,8 @@ mod tests {
 
     #[async_std::test]
     async fn not_allowed_peer_cannot_dial_us() {
-        let mut dialer = Swarm::new_ephemeral(|_| Behaviour::<AllowedPeers>::new());
-        let mut listener = Swarm::new_ephemeral(|_| Behaviour::<AllowedPeers>::new());
+        let mut dialer = Swarm::new_ephemeral(|_| Behaviour::<AllowedPeers>::default());
+        let mut listener = Swarm::new_ephemeral(|_| Behaviour::<AllowedPeers>::default());
         listener.listen().await;
 
         dialer
@@ -417,9 +403,22 @@ mod tests {
             .unwrap();
 
         let (
-            [SwarmEvent::OutgoingConnectionError { error: DialError::Denied { cause: outgoing_cause }, .. }],
-            [_, SwarmEvent::IncomingConnectionError { error: ListenError::Denied { cause: incoming_cause }, .. }],
-        ) = libp2p_swarm_test::drive(&mut dialer, &mut listener).await else {
+            [SwarmEvent::OutgoingConnectionError {
+                error:
+                    DialError::Denied {
+                        cause: outgoing_cause,
+                    },
+                ..
+            }],
+            [_, SwarmEvent::IncomingConnectionError {
+                error:
+                    ListenError::Denied {
+                        cause: incoming_cause,
+                    },
+                ..
+            }],
+        ) = libp2p_swarm_test::drive(&mut dialer, &mut listener).await
+        else {
             panic!("unexpected events")
         };
         assert!(outgoing_cause.downcast::<NotAllowed>().is_ok());
@@ -428,28 +427,28 @@ mod tests {
 
     #[async_std::test]
     async fn connections_get_closed_upon_disallow() {
-        let mut dialer = Swarm::new_ephemeral(|_| Behaviour::<AllowedPeers>::new());
-        let mut listener = Swarm::new_ephemeral(|_| Behaviour::<AllowedPeers>::new());
+        let mut dialer = Swarm::new_ephemeral(|_| Behaviour::<AllowedPeers>::default());
+        let mut listener = Swarm::new_ephemeral(|_| Behaviour::<AllowedPeers>::default());
         listener.listen().await;
-        dialer
-            .behaviour_mut()
-            .list
-            .allow_peer(*listener.local_peer_id());
-        listener
-            .behaviour_mut()
-            .list
-            .allow_peer(*dialer.local_peer_id());
+        dialer.behaviour_mut().allow_peer(*listener.local_peer_id());
+        listener.behaviour_mut().allow_peer(*dialer.local_peer_id());
 
         dialer.connect(&mut listener).await;
 
         dialer
             .behaviour_mut()
-            .list
             .disallow_peer(*listener.local_peer_id());
         let (
-            [SwarmEvent::ConnectionClosed { peer_id: closed_dialer_peer, .. }],
-            [SwarmEvent::ConnectionClosed { peer_id: closed_listener_peer, .. }]
-        ) = libp2p_swarm_test::drive(&mut dialer, &mut listener).await else {
+            [SwarmEvent::ConnectionClosed {
+                peer_id: closed_dialer_peer,
+                ..
+            }],
+            [SwarmEvent::ConnectionClosed {
+                peer_id: closed_listener_peer,
+                ..
+            }],
+        ) = libp2p_swarm_test::drive(&mut dialer, &mut listener).await
+        else {
             panic!("unexpected events")
         };
         assert_eq!(closed_dialer_peer, *listener.local_peer_id());
@@ -468,28 +467,5 @@ mod tests {
                 .addresses(listener.external_addresses().cloned().collect())
                 .build(),
         )
-    }
-
-    #[derive(libp2p_swarm_derive::NetworkBehaviour)]
-    #[behaviour(prelude = "libp2p_swarm::derive_prelude")]
-    struct Behaviour<S> {
-        list: super::Behaviour<S>,
-        keep_alive: libp2p_swarm::keep_alive::Behaviour,
-    }
-
-    impl<S> Behaviour<S>
-    where
-        S: Default,
-    {
-        fn new() -> Self {
-            Self {
-                list: super::Behaviour {
-                    waker: None,
-                    close_connections: VecDeque::new(),
-                    state: S::default(),
-                },
-                keep_alive: libp2p_swarm::keep_alive::Behaviour,
-            }
-        }
     }
 }

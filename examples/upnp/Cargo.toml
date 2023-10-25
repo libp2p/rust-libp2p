@@ -1,0 +1,17 @@
+[package]
+name = "upnp-example"
+version = "0.1.0"
+edition = "2021"
+publish = false
+license = "MIT"
+
+[package.metadata.release]
+release = false
+
+[dependencies]
+tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
+futures = "0.3.28"
+libp2p = { path = "../../libp2p", features = ["tokio", "dns", "macros", "noise", "ping", "tcp", "yamux", "upnp"] }
+
+[lints]
+workspace = true

@@ -32,8 +32,8 @@ use libp2p_swarm::{
     dummy, ConnectionDenied, ConnectionHandler, ConnectionId, THandler, THandlerOutEvent,
 };
 use libp2p_swarm::{
-    ExternalAddresses, NetworkBehaviour, NotifyHandler, PollParameters, StreamUpgradeError,
-    THandlerInEvent, ToSwarm,
+    ExternalAddresses, NetworkBehaviour, NotifyHandler, StreamUpgradeError, THandlerInEvent,
+    ToSwarm,
 };
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::task::{Context, Poll};
@@ -55,9 +55,11 @@ pub enum Event {
     },
     DirectConnectionUpgradeSucceeded {
         remote_peer_id: PeerId,
+        connection_id: ConnectionId,
     },
     DirectConnectionUpgradeFailed {
         remote_peer_id: PeerId,
+        connection_id: ConnectionId,
         error: Error,
     },
 }
@@ -103,8 +105,8 @@ impl Behaviour {
     fn observed_addresses(&self) -> Vec<Multiaddr> {
         self.external_addresses
             .iter()
-            .cloned()
             .filter(|a| !a.iter().any(|p| p == Protocol::P2pCircuit))
+            .cloned()
             .map(|a| a.with(Protocol::P2p(self.local_peer_id)))
             .collect()
     }
@@ -151,6 +153,7 @@ impl Behaviour {
             self.queued_events.extend([ToSwarm::GenerateEvent(
                 Event::DirectConnectionUpgradeFailed {
                     remote_peer_id: peer_id,
+                    connection_id: failed_direct_connection,
                     error: Error::Dial,
                 },
             )]);
@@ -263,6 +266,7 @@ impl NetworkBehaviour for Behaviour {
             self.queued_events.extend([ToSwarm::GenerateEvent(
                 Event::DirectConnectionUpgradeSucceeded {
                     remote_peer_id: peer,
+                    connection_id,
                 },
             )]);
         }
@@ -300,6 +304,7 @@ impl NetworkBehaviour for Behaviour {
                 self.queued_events.push_back(ToSwarm::GenerateEvent(
                     Event::DirectConnectionUpgradeFailed {
                         remote_peer_id: event_source,
+                        connection_id,
                         error: Error::Handler(error),
                     },
                 ));
@@ -320,6 +325,7 @@ impl NetworkBehaviour for Behaviour {
                 self.queued_events.push_back(ToSwarm::GenerateEvent(
                     Event::DirectConnectionUpgradeFailed {
                         remote_peer_id: event_source,
+                        connection_id: relayed_connection_id,
                         error: Error::Handler(error),
                     },
                 ));
@@ -345,11 +351,7 @@ impl NetworkBehaviour for Behaviour {
         };
     }
 
-    fn poll(
-        &mut self,
-        _cx: &mut Context<'_>,
-        _: &mut impl PollParameters,
-    ) -> Poll<ToSwarm<Self::ToSwarm, THandlerInEvent<Self>>> {
+    fn poll(&mut self, _: &mut Context<'_>) -> Poll<ToSwarm<Self::ToSwarm, THandlerInEvent<Self>>> {
         if let Some(event) = self.queued_events.pop_front() {
             return Poll::Ready(event);
         }

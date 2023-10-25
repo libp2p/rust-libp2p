@@ -42,8 +42,8 @@ use libp2p_identity::PeerId;
 use libp2p_swarm::{
     behaviour::{AddressChange, ConnectionClosed, ConnectionEstablished, FromSwarm},
     dial_opts::DialOpts,
-    ConnectionDenied, ConnectionId, NetworkBehaviour, NotifyHandler, PollParameters, THandler,
-    THandlerInEvent, THandlerOutEvent, ToSwarm,
+    ConnectionDenied, ConnectionId, NetworkBehaviour, NotifyHandler, THandler, THandlerInEvent,
+    THandlerOutEvent, ToSwarm,
 };
 
 use crate::backoff::BackoffStorage;
@@ -55,12 +55,12 @@ use crate::metrics::{Churn, Config as MetricsConfig, Inclusion, Metrics, Penalty
 use crate::peer_score::{PeerScore, PeerScoreParams, PeerScoreThresholds, RejectReason};
 use crate::protocol::SIGNING_PREFIX;
 use crate::subscription_filter::{AllowAllSubscriptionFilter, TopicSubscriptionFilter};
-use crate::time_cache::{DuplicateCache, TimeCache};
+use crate::time_cache::DuplicateCache;
 use crate::topic::{Hasher, Topic, TopicHash};
 use crate::transform::{DataTransform, IdentityTransform};
 use crate::types::{
-    ControlAction, FastMessageId, Message, MessageAcceptance, MessageId, PeerInfo, RawMessage,
-    Subscription, SubscriptionAction,
+    ControlAction, Message, MessageAcceptance, MessageId, PeerInfo, RawMessage, Subscription,
+    SubscriptionAction,
 };
 use crate::types::{PeerConnections, PeerKind, Rpc};
 use crate::{rpc_proto::proto, TopicScoreParams};
@@ -323,9 +323,6 @@ pub struct Behaviour<D = IdentityTransform, F = AllowAllSubscriptionFilter> {
     /// our own messages back if the messages are anonymous or use a random author.
     published_message_ids: DuplicateCache<MessageId>,
 
-    /// Short term cache for fast message ids mapping them to the real message ids
-    fast_message_id_cache: TimeCache<FastMessageId, MessageId>,
-
     /// The filter used to handle message subscriptions.
     subscription_filter: F,
 
@@ -446,7 +443,6 @@ where
             control_pool: HashMap::new(),
             publish_config: privacy.into(),
             duplicate_cache: DuplicateCache::new(config.duplicate_cache_time()),
-            fast_message_id_cache: TimeCache::new(config.duplicate_cache_time()),
             topic_peers: HashMap::new(),
             peer_topics: HashMap::new(),
             explicit_peers: HashSet::new(),
@@ -930,6 +926,11 @@ where
         }
     }
 
+    /// Returns a scoring parameters for a topic if existent.
+    pub fn get_topic_params<H: Hasher>(&self, topic: &Topic<H>) -> Option<&TopicScoreParams> {
+        self.peer_score.as_ref()?.0.get_topic_params(&topic.hash())
+    }
+
     /// Sets the application specific score for a peer. Returns true if scoring is active and
     /// the peer is connected or if the score of the peer is not yet expired, false otherwise.
     pub fn set_application_score(&mut self, peer_id: &PeerId, new_score: f64) -> bool {
@@ -1015,10 +1016,7 @@ where
                 "JOIN: Inserting {:?} random peers into the mesh",
                 new_peers.len()
             );
-            let mesh_peers = self
-                .mesh
-                .entry(topic_hash.clone())
-                .or_insert_with(Default::default);
+            let mesh_peers = self.mesh.entry(topic_hash.clone()).or_default();
             mesh_peers.extend(new_peers);
         }
 
@@ -1753,31 +1751,6 @@ where
             metrics.msg_recvd_unfiltered(&raw_message.topic, raw_message.raw_protobuf_len());
         }
 
-        let fast_message_id = self.config.fast_message_id(&raw_message);
-
-        if let Some(fast_message_id) = fast_message_id.as_ref() {
-            if let Some(msg_id) = self.fast_message_id_cache.get(fast_message_id) {
-                let msg_id = msg_id.clone();
-                // Report the duplicate
-                if self.message_is_valid(&msg_id, &mut raw_message, propagation_source) {
-                    if let Some((peer_score, ..)) = &mut self.peer_score {
-                        peer_score.duplicated_message(
-                            propagation_source,
-                            &msg_id,
-                            &raw_message.topic,
-                        );
-                    }
-                    // Update the cache, informing that we have received a duplicate from another peer.
-                    // The peers in this cache are used to prevent us forwarding redundant messages onto
-                    // these peers.
-                    self.mcache.observe_duplicate(&msg_id, propagation_source);
-                }
-
-                // This message has been seen previously. Ignore it
-                return;
-            }
-        }
-
         // Try and perform the data transform to the message. If it fails, consider it invalid.
         let message = match self.data_transform.inbound_transform(raw_message.clone()) {
             Ok(message) => message,
@@ -1801,14 +1774,6 @@ where
         // and instead continually penalize peers that repeatedly send this message.
         if !self.message_is_valid(&msg_id, &mut raw_message, propagation_source) {
             return;
-        }
-
-        // Add the message to the duplicate caches
-        if let Some(fast_message_id) = fast_message_id {
-            // add id to cache
-            self.fast_message_id_cache
-                .entry(fast_message_id)
-                .or_insert_with(|| msg_id.clone());
         }
 
         if !self.duplicate_cache.insert(msg_id.clone()) {
@@ -1885,20 +1850,17 @@ where
                 metrics.register_invalid_message(&raw_message.topic);
             }
 
-            let fast_message_id_cache = &self.fast_message_id_cache;
+            if let Ok(message) = self.data_transform.inbound_transform(raw_message.clone()) {
+                let message_id = self.config.message_id(&message);
 
-            if let Some(msg_id) = self
-                .config
-                .fast_message_id(raw_message)
-                .and_then(|id| fast_message_id_cache.get(&id))
-            {
                 peer_score.reject_message(
                     propagation_source,
-                    msg_id,
-                    &raw_message.topic,
+                    &message_id,
+                    &message.topic,
                     reject_reason,
                 );
-                gossip_promises.reject_message(msg_id, &reject_reason);
+
+                gossip_promises.reject_message(&message_id, &reject_reason);
             } else {
                 // The message is invalid, we reject it ignoring any gossip promises. If a peer is
                 // advertising this message via an IHAVE and it's invalid it will be double
@@ -1957,10 +1919,7 @@ where
         for subscription in filtered_topics {
             // get the peers from the mapping, or insert empty lists if the topic doesn't exist
             let topic_hash = &subscription.topic_hash;
-            let peer_list = self
-                .topic_peers
-                .entry(topic_hash.clone())
-                .or_insert_with(Default::default);
+            let peer_list = self.topic_peers.entry(topic_hash.clone()).or_default();
 
             match subscription.action {
                 SubscriptionAction::Subscribe => {
@@ -2788,7 +2747,7 @@ where
 
                 let signature = {
                     let message = proto::Message {
-                        from: Some(author.clone().to_bytes()),
+                        from: Some(author.to_bytes()),
                         data: Some(data.clone()),
                         seqno: Some(sequence_number.to_be_bytes().to_vec()),
                         topic: topic.clone().into_string(),
@@ -2869,10 +2828,7 @@ where
         peer: PeerId,
         control: ControlAction,
     ) {
-        control_pool
-            .entry(peer)
-            .or_insert_with(Vec::new)
-            .push(control);
+        control_pool.entry(peer).or_default().push(control);
     }
 
     /// Takes each control action mapping and turns it into a message
@@ -3309,6 +3265,7 @@ where
     type ConnectionHandler = Handler;
     type ToSwarm = Event;
 
+    #[allow(deprecated)]
     fn handle_established_inbound_connection(
         &mut self,
         _: ConnectionId,
@@ -3316,12 +3273,10 @@ where
         _: &Multiaddr,
         _: &Multiaddr,
     ) -> Result<THandler<Self>, ConnectionDenied> {
-        Ok(Handler::new(
-            self.config.protocol_config(),
-            self.config.idle_timeout(),
-        ))
+        Ok(Handler::new(self.config.protocol_config()))
     }
 
+    #[allow(deprecated)]
     fn handle_established_outbound_connection(
         &mut self,
         _: ConnectionId,
@@ -3329,10 +3284,7 @@ where
         _: &Multiaddr,
         _: Endpoint,
     ) -> Result<THandler<Self>, ConnectionDenied> {
-        Ok(Handler::new(
-            self.config.protocol_config(),
-            self.config.idle_timeout(),
-        ))
+        Ok(Handler::new(self.config.protocol_config()))
     }
 
     fn on_connection_handler_event(
@@ -3464,7 +3416,6 @@ where
     fn poll(
         &mut self,
         cx: &mut Context<'_>,
-        _: &mut impl PollParameters,
     ) -> Poll<ToSwarm<Self::ToSwarm, THandlerInEvent<Self>>> {
         if let Some(event) = self.events.pop_front() {
             return Poll::Ready(event);
@@ -3564,7 +3515,7 @@ fn peer_removed_from_mesh(
         .get(&peer_id)
         .expect("To be connected to peer.")
         .connections
-        .get(0)
+        .first()
         .expect("There should be at least one connection to a peer.");
 
     if let Some(topics) = known_topics {

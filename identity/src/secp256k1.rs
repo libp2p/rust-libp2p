@@ -38,6 +38,7 @@ pub struct Keypair {
 
 impl Keypair {
     /// Generate a new sec256k1 `Keypair`.
+    #[cfg(feature = "rand")]
     pub fn generate() -> Keypair {
         Keypair::from(SecretKey::generate())
     }
@@ -88,6 +89,7 @@ impl fmt::Debug for SecretKey {
 
 impl SecretKey {
     /// Generate a new random Secp256k1 secret key.
+    #[cfg(feature = "rand")]
     pub fn generate() -> SecretKey {
         SecretKey(libsecp256k1::SecretKey::random(&mut rand::thread_rng()))
     }
@@ -178,7 +180,7 @@ impl hash::Hash for PublicKey {
 
 impl cmp::PartialOrd for PublicKey {
     fn partial_cmp(&self, other: &Self) -> Option<cmp::Ordering> {
-        self.to_bytes().partial_cmp(&other.to_bytes())
+        Some(self.cmp(other))
     }
 }
 
@@ -226,6 +228,7 @@ mod tests {
     use super::*;
 
     #[test]
+    #[cfg(feature = "rand")]
     fn secp256k1_secret_from_bytes() {
         let sk1 = SecretKey::generate();
         let mut sk_bytes = [0; 32];

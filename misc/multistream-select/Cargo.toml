@@ -14,8 +14,8 @@ categories = ["network-programming", "asynchronous"]
 bytes = "1"
 futures = "0.3"
 log = "0.4"
-pin-project = "1.1.2"
-smallvec = "1.6.1"
+pin-project = "1.1.3"
+smallvec = "1.11.1"
 unsigned-varint = "0.7"
 
 [dev-dependencies]
@@ -32,3 +32,6 @@ rw-stream-sink = { workspace = true }
 all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
 rustc-args = ["--cfg", "docsrs"]
+
+[lints]
+workspace = true

@@ -5,11 +5,16 @@ edition = "2021"
 publish = false
 license = "MIT"
 
+[package.metadata.release]
+release = false
+
 [dependencies]
-clap = { version = "4.3.10", features = ["derive"] }
+clap = { version = "4.4.6", features = ["derive"] }
 async-std = { version = "1.12", features = ["attributes"] }
 async-trait = "0.1"
 env_logger = "0.10.0"
 futures = "0.3.28"
-libp2p = { path = "../../libp2p", features = ["async-std", "noise", "macros", "ping", "tcp", "identify", "yamux", "relay"] }
-libp2p-quic = { path = "../../transports/quic", features = ["async-std"] }
+libp2p = { path = "../../libp2p", features = [ "async-std", "noise", "macros", "ping", "tcp", "identify", "yamux", "relay", "quic"] }
+
+[lints]
+workspace = true

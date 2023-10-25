@@ -1,4 +1,23 @@
-## 0.16.0 
+## 0.17.0 - unreleased
+
+## 0.16.2
+
+## 0.16.1
+
+- Export `RateLimiter` type.
+  See [PR 3742].
+
+- Add functions to access data within `Limit`.
+  See [PR 4162].
+
+- Remove unconditional `async-std` dependency.
+  See [PR 4283].
+
+[PR 3742]: https://github.com/libp2p/rust-libp2p/pull/3742
+[PR 4162]: https://github.com/libp2p/rust-libp2p/pull/4162
+[PR 4283]: https://github.com/libp2p/rust-libp2p/pull/4283
+
+## 0.16.0
 
 - Raise MSRV to 1.65.
   See [PR 3715].

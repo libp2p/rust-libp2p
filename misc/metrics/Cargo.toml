@@ -1,9 +1,9 @@
 [package]
 name = "libp2p-metrics"
 edition = "2021"
-rust-version = "1.65.0"
+rust-version = { workspace = true }
 description = "Metrics for libp2p"
-version = "0.13.0"
+version = "0.14.0"
 authors = ["Max Inden <mail@max-inden.de>"]
 license = "MIT"
 repository = "https://github.com/libp2p/rust-libp2p"
@@ -11,18 +11,20 @@ keywords = ["peer-to-peer", "libp2p", "networking"]
 categories = ["network-programming", "asynchronous"]
 
 [features]
+dcutr = ["libp2p-dcutr"]
 gossipsub = ["libp2p-gossipsub"]
 identify = ["libp2p-identify"]
 kad = ["libp2p-kad"]
 ping = ["libp2p-ping"]
 relay = ["libp2p-relay"]
-dcutr = ["libp2p-dcutr"]
 
 [dependencies]
 instant = "0.1.12"
 libp2p-core = { workspace = true }
 libp2p-dcutr =  { workspace = true, optional = true }
+libp2p-gossipsub =  { workspace = true, optional = true }
 libp2p-identify = { workspace = true, optional = true }
+libp2p-identity = { workspace = true }
 libp2p-kad = { workspace = true, optional = true }
 libp2p-ping = { workspace = true, optional = true }
 libp2p-relay =  { workspace = true, optional = true }
@@ -30,12 +32,15 @@ libp2p-swarm = { workspace = true }
 libp2p-identity = { workspace = true }
 prometheus-client = { version = "0.21.1"}
 
-[target.'cfg(not(target_os = "unknown"))'.dependencies]
-libp2p-gossipsub =  { workspace = true, optional = true }
+[dev-dependencies]
+libp2p-identity = { workspace = true, features = ["rand"] }
 
 # Passing arguments to the docsrs builder in order to properly document cfg's.
 # More information: https://docs.rs/about/builds#cross-compiling
 [package.metadata.docs.rs]
 all-features = true
-rustdoc-args = ["--cfg", "docsrs"]
 rustc-args = ["--cfg", "docsrs"]
+rustdoc-args = ["--cfg", "docsrs"]
+
+[lints]
+workspace = true

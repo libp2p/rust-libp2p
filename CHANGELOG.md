@@ -20,6 +20,7 @@
 - [`libp2p-relay` CHANGELOG](protocols/relay/CHANGELOG.md)
 - [`libp2p-request-response` CHANGELOG](protocols/request-response/CHANGELOG.md)
 - [`libp2p-rendezvous` CHANGELOG](protocols/rendezvous/CHANGELOG.md)
+- [`libp2p-upnp` CHANGELOG](protocols/upnp/CHANGELOG.md)
 
 ## Transport Protocols & Upgrades
 
@@ -31,10 +32,11 @@
 - [`libp2p-pnet` CHANGELOG](transports/pnet/CHANGELOG.md)
 - [`libp2p-quic` CHANGELOG](transports/quic/CHANGELOG.md)
 - [`libp2p-tcp` CHANGELOG](transports/tcp/CHANGELOG.md)
+- [`libp2p-tls` CHANGELOG](transports/tls/CHANGELOG.md)
 - [`libp2p-uds` CHANGELOG](transports/uds/CHANGELOG.md)
 - [`libp2p-wasm-ext` CHANGELOG](transports/wasm-ext/CHANGELOG.md)
 - [`libp2p-websocket` CHANGELOG](transports/websocket/CHANGELOG.md)
-- [`libp2p-tls` CHANGELOG](transports/tls/CHANGELOG.md)
+- [`libp2p-websocket-websys` CHANGELOG](transports/websocket-websys/CHANGELOG.md)
 
 ## Multiplexers
 

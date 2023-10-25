@@ -1,4 +1,17 @@
-## 0.44.0 
+## 0.45.0 - unreleased
+
+- Migrate to `{In,Out}boundConnectionUpgrade` traits.
+  See [PR 4695](https://github.com/libp2p/rust-libp2p/pull/4695).
+
+## 0.44.1
+
+- Update to `yamux` `v0.12` which brings performance improvements and introduces an ACK backlog of 256 inbound streams.
+  When interacting with other libp2p nodes that are also running this or a newer version, the creation of inbound streams will be backpressured once the ACK backlog is hit.
+  See [PR 3013].
+
+[PR 3013]: https://github.com/libp2p/rust-libp2p/pull/3013
+
+## 0.44.0
 
 - Raise MSRV to 1.65.
   See [PR 3715].

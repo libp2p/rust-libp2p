@@ -1,4 +1,13 @@
-## 0.13.0 
+## 0.14.0 - unreleased
+
+
+## 0.13.1
+- Refresh registration upon a change in external addresses.
+  See [PR 4629].
+
+[PR 4629]: https://github.com/libp2p/rust-libp2p/pull/4629
+
+## 0.13.0
 
 - Changed the signature of the function `client::Behavior::register()`,
   it returns `Result<(), RegisterError>` now.

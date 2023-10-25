@@ -3,7 +3,7 @@ name = "libp2p-websocket"
 edition = "2021"
 rust-version = { workspace = true }
 description = "WebSocket transport for libp2p"
-version = "0.42.0"
+version = "0.43.0"
 authors = ["Parity Technologies <admin@parity.io>"]
 license = "MIT"
 repository = "https://github.com/libp2p/rust-libp2p"
@@ -11,24 +11,25 @@ keywords = ["peer-to-peer", "libp2p", "networking"]
 categories = ["network-programming", "asynchronous"]
 
 [dependencies]
-futures-rustls = "0.22"
-either = "1.5.3"
+futures-rustls = "0.24.0"
+either = "1.9.0"
 futures = "0.3.28"
 libp2p-core = { workspace = true }
 libp2p-identity = { workspace = true }
-log = "0.4.19"
+log = "0.4.20"
 parking_lot = "0.12.0"
-quicksink = "0.1"
+pin-project-lite = "0.2.13"
 rw-stream-sink = { workspace = true }
 soketto = "0.7.0"
-url = "2.1"
-webpki-roots = "0.23"
+url = "2.4"
+webpki-roots = "0.25"
 
 [dev-dependencies]
 libp2p-tcp = { workspace = true, features = ["async-io"] }
 libp2p-dns = { workspace = true, features = ["async-std"] }
+libp2p-identity = { workspace = true, features = ["rand"] }
 async-std = { version = "1.6.5", features = ["attributes"] }
-rcgen = "0.9.3"
+rcgen = "0.11.0"
 
 # Passing arguments to the docsrs builder in order to properly document cfg's.
 # More information: https://docs.rs/about/builds#cross-compiling
@@ -36,3 +37,6 @@ rcgen = "0.9.3"
 all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
 rustc-args = ["--cfg", "docsrs"]
+
+[lints]
+workspace = true

@@ -22,14 +22,14 @@
 
 #![cfg_attr(docsrs, feature(doc_cfg, doc_auto_cfg))]
 
-use futures::{future, prelude::*, ready, stream::BoxStream};
+use futures::{future, prelude::*, ready};
 use libp2p_core::muxing::{StreamMuxer, StreamMuxerEvent};
-use libp2p_core::upgrade::{InboundUpgrade, OutboundUpgrade, UpgradeInfo};
+use libp2p_core::upgrade::{InboundConnectionUpgrade, OutboundConnectionUpgrade, UpgradeInfo};
 use std::collections::VecDeque;
 use std::io::{IoSlice, IoSliceMut};
 use std::task::Waker;
 use std::{
-    fmt, io, iter, mem,
+    io, iter,
     pin::Pin,
     task::{Context, Poll},
 };
@@ -37,14 +37,12 @@ use thiserror::Error;
 use yamux::ConnectionError;
 
 /// A Yamux connection.
+#[derive(Debug)]
 pub struct Muxer<C> {
-    /// The [`futures::stream::Stream`] of incoming substreams.
-    incoming: BoxStream<'static, Result<yamux::Stream, yamux::ConnectionError>>,
-    /// Handle to control the connection.
-    control: yamux::Control,
+    connection: yamux::Connection<C>,
     /// Temporarily buffers inbound streams in case our node is performing backpressure on the remote.
     ///
-    /// The only way how yamux can make progress is by driving the stream. However, the
+    /// The only way how yamux can make progress is by calling [`yamux::Connection::poll_next_inbound`]. However, the
     /// [`StreamMuxer`] interface is designed to allow a caller to selectively make progress via
     /// [`StreamMuxer::poll_inbound`] and [`StreamMuxer::poll_outbound`] whilst the more general
     /// [`StreamMuxer::poll`] is designed to make progress on existing streams etc.
@@ -54,17 +52,13 @@ pub struct Muxer<C> {
     inbound_stream_buffer: VecDeque<Stream>,
     /// Waker to be called when new inbound streams are available.
     inbound_stream_waker: Option<Waker>,
-
-    _phantom: std::marker::PhantomData<C>,
 }
 
-const MAX_BUFFERED_INBOUND_STREAMS: usize = 25;
-
-impl<S> fmt::Debug for Muxer<S> {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str("Yamux")
-    }
-}
+/// How many streams to buffer before we start resetting them.
+///
+/// This is equal to the ACK BACKLOG in `rust-yamux`.
+/// Thus, for peers running on a recent version of `rust-libp2p`, we should never need to reset streams because they'll voluntarily stop opening them once they hit the ACK backlog.
+const MAX_BUFFERED_INBOUND_STREAMS: usize = 256;
 
 impl<C> Muxer<C>
 where
@@ -72,22 +66,17 @@ where
 {
     /// Create a new Yamux connection.
     fn new(io: C, cfg: yamux::Config, mode: yamux::Mode) -> Self {
-        let conn = yamux::Connection::new(io, cfg, mode);
-        let ctrl = conn.control();
-
-        Self {
-            incoming: yamux::into_stream(conn).err_into().boxed(),
-            control: ctrl,
+        Muxer {
+            connection: yamux::Connection::new(io, cfg, mode),
             inbound_stream_buffer: VecDeque::default(),
             inbound_stream_waker: None,
-            _phantom: Default::default(),
         }
     }
 }
 
 impl<C> StreamMuxer for Muxer<C>
 where
-    C: AsyncRead + AsyncWrite + Send + Unpin + 'static,
+    C: AsyncRead + AsyncWrite + Unpin + 'static,
 {
     type Substream = Stream;
     type Error = Error;
@@ -112,10 +101,15 @@ where
         mut self: Pin<&mut Self>,
         cx: &mut Context<'_>,
     ) -> Poll<Result<Self::Substream, Self::Error>> {
-        Pin::new(&mut self.control)
-            .poll_open_stream(cx)
-            .map_ok(Stream)
-            .map_err(Error)
+        let stream = ready!(self.connection.poll_new_outbound(cx).map_err(Error)?);
+
+        Poll::Ready(Ok(Stream(stream)))
+    }
+
+    fn poll_close(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
+        ready!(self.connection.poll_close(cx).map_err(Error)?);
+
+        Poll::Ready(Ok(()))
     }
 
     fn poll(
@@ -139,23 +133,6 @@ where
 
         // Schedule an immediate wake-up, allowing other code to run.
         cx.waker().wake_by_ref();
-        Poll::Pending
-    }
-
-    fn poll_close(mut self: Pin<&mut Self>, c: &mut Context<'_>) -> Poll<Result<(), Error>> {
-        if let Poll::Ready(()) = Pin::new(&mut self.control).poll_close(c).map_err(Error)? {
-            return Poll::Ready(Ok(()));
-        }
-
-        while let Poll::Ready(maybe_inbound_stream) =
-            self.incoming.poll_next_unpin(c).map_err(Error)?
-        {
-            match maybe_inbound_stream {
-                Some(inbound_stream) => mem::drop(inbound_stream),
-                None => return Poll::Ready(Ok(())),
-            }
-        }
-
         Poll::Pending
     }
 }
@@ -210,18 +187,16 @@ impl AsyncWrite for Stream {
 
 impl<C> Muxer<C>
 where
-    C: AsyncRead + AsyncWrite + Send + Unpin + 'static,
+    C: AsyncRead + AsyncWrite + Unpin + 'static,
 {
     fn poll_inner(&mut self, cx: &mut Context<'_>) -> Poll<Result<Stream, Error>> {
-        self.incoming.poll_next_unpin(cx).map(|maybe_stream| {
-            let stream = maybe_stream
-                .transpose()
-                .map_err(Error)?
-                .map(Stream)
-                .ok_or(Error(ConnectionError::Closed))?;
+        let stream = ready!(self.connection.poll_next_inbound(cx))
+            .transpose()
+            .map_err(Error)?
+            .map(Stream)
+            .ok_or(Error(ConnectionError::Closed))?;
 
-            Ok(stream)
-        })
+        Poll::Ready(Ok(stream))
     }
 }
 
@@ -336,7 +311,7 @@ impl UpgradeInfo for Config {
     }
 }
 
-impl<C> InboundUpgrade<C> for Config
+impl<C> InboundConnectionUpgrade<C> for Config
 where
     C: AsyncRead + AsyncWrite + Send + Unpin + 'static,
 {
@@ -350,7 +325,7 @@ where
     }
 }
 
-impl<C> OutboundUpgrade<C> for Config
+impl<C> OutboundConnectionUpgrade<C> for Config
 where
     C: AsyncRead + AsyncWrite + Send + Unpin + 'static,
 {
