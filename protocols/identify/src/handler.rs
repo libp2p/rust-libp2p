@@ -326,6 +326,7 @@ impl ConnectionHandler for Handler {
         KeepAlive::No
     }
 
+    #[tracing::instrument(level = "info", name = "identify::Handler::poll", skip(self, cx))]
     fn poll(
         &mut self,
         cx: &mut Context<'_>,

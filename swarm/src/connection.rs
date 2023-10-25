@@ -60,7 +60,6 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use std::task::Waker;
 use std::time::Duration;
 use std::{fmt, io, mem, pin::Pin, task::Context, task::Poll};
-use tracing::Span;
 
 static NEXT_CONNECTION_ID: AtomicUsize = AtomicUsize::new(1);
 
@@ -158,7 +157,9 @@ where
     local_supported_protocols: HashSet<StreamProtocol>,
     remote_supported_protocols: HashSet<StreamProtocol>,
     idle_timeout: Duration,
-    span: Span,
+    connection_id: ConnectionId,
+    remote_peer_id: PeerId,
+    remote_addr: Multiaddr,
 }
 
 impl<THandler> fmt::Debug for Connection<THandler>
@@ -181,13 +182,16 @@ where
 {
     /// Builds a new `Connection` from the given substream multiplexer
     /// and connection handler.
+    #[allow(clippy::too_many_arguments)]
     pub(crate) fn new(
         muxer: StreamMuxerBox,
         mut handler: THandler,
         substream_upgrade_protocol_override: Option<upgrade::Version>,
         max_negotiating_inbound_streams: usize,
         idle_timeout: Duration,
-        span: Span,
+        connection_id: ConnectionId,
+        remote_peer_id: PeerId,
+        remote_addr: Multiaddr,
     ) -> Self {
         let initial_protocols = gather_supported_protocols(&handler);
         if !initial_protocols.is_empty() {
@@ -207,7 +211,9 @@ where
             local_supported_protocols: initial_protocols,
             remote_supported_protocols: Default::default(),
             idle_timeout,
-            span,
+            connection_id,
+            remote_peer_id,
+            remote_addr,
         }
     }
 
@@ -224,6 +230,7 @@ where
 
     /// Polls the handler and the substream, forwarding events from the former to the latter and
     /// vice versa.
+    #[tracing::instrument(level = "info", name = "Connection::poll", skip(self, cx), fields(id = %self.connection_id, peer = %self.remote_peer_id, remote_address = %self.remote_addr))]
     pub(crate) fn poll(
         self: Pin<&mut Self>,
         cx: &mut Context<'_>,
@@ -240,10 +247,9 @@ where
             local_supported_protocols: supported_protocols,
             remote_supported_protocols,
             idle_timeout,
-            span,
+            ..
         } = self.get_mut();
 
-        let _guard = span.enter();
         loop {
             match requested_substreams.poll_next_unpin(cx) {
                 Poll::Ready(Some(Ok(()))) => continue,
@@ -790,7 +796,9 @@ mod tests {
                 None,
                 max_negotiating_inbound_streams,
                 Duration::ZERO,
-                tracing::Span::none(),
+                ConnectionId::new_unchecked(0),
+                PeerId::random(),
+                Multiaddr::empty(),
             );
 
             let result = connection.poll_noop_waker();
@@ -815,7 +823,9 @@ mod tests {
             None,
             2,
             Duration::ZERO,
-            tracing::Span::none(),
+            ConnectionId::new_unchecked(0),
+            PeerId::random(),
+            Multiaddr::empty(),
         );
 
         connection.handler.open_new_outbound();
@@ -839,7 +849,9 @@ mod tests {
             None,
             0,
             Duration::ZERO,
-            tracing::Span::none(),
+            ConnectionId::new_unchecked(0),
+            PeerId::random(),
+            Multiaddr::empty(),
         );
 
         // First, start listening on a single protocol.
@@ -879,7 +891,9 @@ mod tests {
             None,
             0,
             Duration::ZERO,
-            tracing::Span::none(),
+            ConnectionId::new_unchecked(0),
+            PeerId::random(),
+            Multiaddr::empty(),
         );
 
         // First, remote supports a single protocol.
@@ -933,7 +947,9 @@ mod tests {
             None,
             0,
             idle_timeout,
-            tracing::Span::none(),
+            ConnectionId::new_unchecked(0),
+            PeerId::random(),
+            Multiaddr::empty(),
         );
 
         assert!(connection.poll_noop_waker().is_pending());
@@ -958,7 +974,9 @@ mod tests {
             None,
             0,
             idle_timeout,
-            tracing::Span::none(),
+            ConnectionId::new_unchecked(0),
+            PeerId::random(),
+            Multiaddr::empty(),
         );
 
         assert!(connection.poll_noop_waker().is_pending());
@@ -990,7 +1008,9 @@ mod tests {
             None,
             0,
             idle_timeout,
-            tracing::Span::none(),
+            ConnectionId::new_unchecked(0),
+            PeerId::random(),
+            Multiaddr::empty(),
         );
 
         assert!(connection.poll_noop_waker().is_pending());

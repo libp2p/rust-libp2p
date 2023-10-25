@@ -43,6 +43,7 @@ where
     type Substream = SubstreamBox;
     type Error = io::Error;
 
+    #[tracing::instrument(level = "info", name = "StreamMuxer::poll_inbound", skip(self, cx))]
     fn poll_inbound(
         self: Pin<&mut Self>,
         cx: &mut Context<'_>,
@@ -54,6 +55,7 @@ where
             .map_err(into_io_error)
     }
 
+    #[tracing::instrument(level = "info", name = "StreamMuxer::poll_outbound", skip(self, cx))]
     fn poll_outbound(
         self: Pin<&mut Self>,
         cx: &mut Context<'_>,
@@ -66,10 +68,12 @@ where
     }
 
     #[inline]
+    #[tracing::instrument(level = "info", name = "StreamMuxer::poll_close", skip(self, cx))]
     fn poll_close(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
         self.project().inner.poll_close(cx).map_err(into_io_error)
     }
 
+    #[tracing::instrument(level = "info", name = "StreamMuxer::poll", skip(self, cx))]
     fn poll(
         self: Pin<&mut Self>,
         cx: &mut Context<'_>,

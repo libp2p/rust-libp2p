@@ -215,6 +215,7 @@ where
         )
     }
 
+    #[tracing::instrument(level = "info", name = "ConnectionHandlerSelect::poll", skip(self, cx), fields(first = %std::any::type_name::<TProto1>(), second = %std::any::type_name::<TProto2>()))]
     fn poll(
         &mut self,
         cx: &mut Context<'_>,

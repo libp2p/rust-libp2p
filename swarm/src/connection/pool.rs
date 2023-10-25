@@ -516,14 +516,15 @@ where
             waker.wake();
         }
 
-        let span = tracing::error_span!("Connection::poll", id = %id, peer = %obtained_peer_id, remote_address = %endpoint.get_remote_address());
         let connection = Connection::new(
             connection,
             handler,
             self.substream_upgrade_protocol_override,
             self.max_negotiating_inbound_streams,
             self.idle_connection_timeout,
-            span,
+            id,
+            obtained_peer_id,
+            endpoint.get_remote_address().clone(),
         );
 
         self.executor.spawn(task::new_for_established_connection(
