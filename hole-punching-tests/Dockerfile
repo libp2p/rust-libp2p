@@ -1,5 +1,5 @@
 # syntax=docker/dockerfile:1.5-labs
-FROM rust:1.72.0 as builder
+FROM rust:1.73.0 as builder
 
 RUN rustup target add x86_64-unknown-linux-musl
 RUN --mount=type=cache,target=/var/cache/apt apt-get update && apt-get install -y musl-dev musl-tools
