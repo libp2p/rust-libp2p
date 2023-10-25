@@ -3,6 +3,9 @@
 - Remove `request_response::Config::set_connection_keep_alive` in favor of `SwarmBuilder::idle_connection_timeout`.
   See [PR 4679](https://github.com/libp2p/rust-libp2p/pull/4679).
 
+- Keep peer addresses in `HashSet` instead of `SmallVec` to prevent adding duplicate addresses.
+  See [PR 4700](https://github.com/libp2p/rust-libp2p/pull/4700).
+
 ## 0.25.2
 
 - Deprecate `request_response::Config::set_connection_keep_alive` in favor of `SwarmBuilder::idle_connection_timeout`.
