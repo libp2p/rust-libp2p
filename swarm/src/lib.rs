@@ -155,6 +155,7 @@ use std::{
     pin::Pin,
     task::{Context, Poll},
 };
+use tracing::Span;
 
 /// Substream for which a protocol has been chosen.
 ///
@@ -1206,52 +1207,39 @@ where
                     }
                 },
                 // No pending event. Allow the [`NetworkBehaviour`] to make progress.
-                None => {
-                    let _span = tracing::trace_span!("NetworkBehaviour::poll").entered();
-
-                    match this.behaviour.poll(cx) {
-                        Poll::Pending => {}
-                        Poll::Ready(behaviour_event) => {
-                            if let Some(swarm_event) = this.handle_behaviour_event(behaviour_event)
-                            {
-                                return Poll::Ready(swarm_event);
-                            }
-
-                            continue;
+                None => match this.behaviour.poll(cx) {
+                    Poll::Pending => {}
+                    Poll::Ready(behaviour_event) => {
+                        if let Some(swarm_event) = this.handle_behaviour_event(behaviour_event) {
+                            return Poll::Ready(swarm_event);
                         }
+
+                        continue;
                     }
+                },
+            }
+
+            // Poll the known peers.
+            match this.pool.poll(cx) {
+                Poll::Pending => {}
+                Poll::Ready(pool_event) => {
+                    if let Some(swarm_event) = this.handle_pool_event(pool_event) {
+                        return Poll::Ready(swarm_event);
+                    }
+
+                    continue;
                 }
             }
 
-            {
-                let _span = tracing::trace_span!("Pool::poll").entered();
-
-                // Poll the known peers.
-                match this.pool.poll(cx) {
-                    Poll::Pending => {}
-                    Poll::Ready(pool_event) => {
-                        if let Some(swarm_event) = this.handle_pool_event(pool_event) {
-                            return Poll::Ready(swarm_event);
-                        }
-
-                        continue;
+            // Poll the listener(s) for new connections.
+            match Pin::new(&mut this.transport).poll(cx) {
+                Poll::Pending => {}
+                Poll::Ready(transport_event) => {
+                    if let Some(swarm_event) = this.handle_transport_event(transport_event) {
+                        return Poll::Ready(swarm_event);
                     }
-                }
-            };
 
-            {
-                let _span = tracing::trace_span!("Transport::poll").entered();
-
-                // Poll the listener(s) for new connections.
-                match Pin::new(&mut this.transport).poll(cx) {
-                    Poll::Pending => {}
-                    Poll::Ready(transport_event) => {
-                        if let Some(swarm_event) = this.handle_transport_event(transport_event) {
-                            return Poll::Ready(swarm_event);
-                        }
-
-                        continue;
-                    }
+                    continue;
                 }
             }
 

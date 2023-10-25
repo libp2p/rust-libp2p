@@ -538,6 +538,7 @@ where
     }
 
     /// Poll all listeners.
+    #[tracing::instrument(level = "trace", name = "Transport::poll", skip(self, cx))]
     fn poll(
         mut self: Pin<&mut Self>,
         cx: &mut Context<'_>,

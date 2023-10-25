@@ -537,6 +537,7 @@ where
     }
 
     /// Polls the connection pool for events.
+    #[tracing::instrument(level = "debug", name = "Pool::poll", skip(self, cx))]
     pub(crate) fn poll(&mut self, cx: &mut Context<'_>) -> Poll<PoolEvent<THandler>>
     where
         THandler: ConnectionHandler + 'static,
