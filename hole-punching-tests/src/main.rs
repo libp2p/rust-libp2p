@@ -171,7 +171,23 @@ async fn main() -> Result<()> {
                 },
                 _,
             ) if connection_id == relay_conn_id => {
-                anyhow::bail!("Connection to relay failed: {error}")
+                log::warn!("Connection to relay failed: {error}");
+
+                // TODO: Re-connecting is a bit of a hack, we should figure out why the connection sometimes fails.
+                match mode {
+                    Mode::Listen => {
+                        swarm.listen_on(relay_addr.with(Protocol::P2pCircuit))?;
+                    }
+                    Mode::Dial => {
+                        let remote_peer_id = redis.pop(LISTEN_CLIENT_PEER_ID).await?;
+
+                        swarm.dial(
+                            relay_addr
+                                .with(Protocol::P2pCircuit)
+                                .with(Protocol::P2p(remote_peer_id)),
+                        )?;
+                    }
+                };
             }
             _ => {}
         }
