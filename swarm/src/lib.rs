@@ -1161,7 +1161,7 @@ where
     /// Internal function used by everything event-related.
     ///
     /// Polls the `Swarm` for the next event.
-    #[tracing::instrument(level = "debug", name = "Swarm::poll", skip(self, cx))]
+    #[tracing::instrument(level = "debug", name = "Swarm::poll", skip(self, cx), fields(local_peer_id = %self.local_peer_id))]
     fn poll_next_event(
         mut self: Pin<&mut Self>,
         cx: &mut Context<'_>,
