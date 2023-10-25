@@ -49,6 +49,7 @@ use std::{
     task::Context,
     task::Poll,
 };
+use tracing::Instrument;
 use void::Void;
 
 mod concurrent_dial;
@@ -426,20 +427,21 @@ where
         dial_concurrency_factor_override: Option<NonZeroU8>,
         connection_id: ConnectionId,
     ) {
-        let dial = ConcurrentDial::new(
-            dials,
-            dial_concurrency_factor_override.unwrap_or(self.dial_concurrency_factor),
-        );
+        let concurrency_factor =
+            dial_concurrency_factor_override.unwrap_or(self.dial_concurrency_factor);
+        let span = tracing::debug_span!("new_outgoing_connection", %concurrency_factor, num_dials=%dials.len(), id = %connection_id);
 
         let (abort_notifier, abort_receiver) = oneshot::channel();
 
-        self.executor
-            .spawn(task::new_for_pending_outgoing_connection(
+        self.executor.spawn(
+            task::new_for_pending_outgoing_connection(
                 connection_id,
-                dial,
+                ConcurrentDial::new(dials, concurrency_factor),
                 abort_receiver,
                 self.pending_connection_events_tx.clone(),
-            ));
+            )
+            .instrument(span),
+        );
 
         let endpoint = PendingPoint::Dialer { role_override };
 
@@ -469,13 +471,15 @@ where
 
         let (abort_notifier, abort_receiver) = oneshot::channel();
 
-        self.executor
-            .spawn(task::new_for_pending_incoming_connection(
+        self.executor.spawn(
+            task::new_for_pending_incoming_connection(
                 connection_id,
                 future,
                 abort_receiver,
                 self.pending_connection_events_tx.clone(),
-            ));
+            )
+            .instrument(tracing::debug_span!("new_incoming_connection", remote_addr = %info.send_back_addr, id = %connection_id)),
+        );
 
         self.counters.inc_pending_incoming();
         self.pending.insert(

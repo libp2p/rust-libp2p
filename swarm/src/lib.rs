@@ -155,6 +155,7 @@ use std::{
     pin::Pin,
     task::{Context, Poll},
 };
+use tracing::Instrument;
 
 /// Substream for which a protocol has been chosen.
 ///
@@ -529,13 +530,20 @@ where
             .into_iter()
             .map(|a| match p2p_addr(peer_id, a) {
                 Ok(address) => {
-                    let dial = match dial_opts.role_override() {
-                        Endpoint::Dialer => self.transport.dial(address.clone()),
-                        Endpoint::Listener => self.transport.dial_as_listener(address.clone()),
+                    let (dial, span) = match dial_opts.role_override() {
+                        Endpoint::Dialer => (
+                            self.transport.dial(address.clone()),
+                            tracing::debug_span!("Transport::dial", %address),
+                        ),
+                        Endpoint::Listener => (
+                            self.transport.dial_as_listener(address.clone()),
+                            tracing::debug_span!("Transport::dial_as_listener", %address),
+                        ),
                     };
                     match dial {
                         Ok(fut) => fut
                             .map(|r| (address, r.map_err(TransportError::Other)))
+                            .instrument(span)
                             .boxed(),
                         Err(err) => futures::future::ready((address, Err(err))).boxed(),
                     }
