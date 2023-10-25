@@ -273,7 +273,7 @@ impl<TResponse> ResponseChannel<TResponse> {
 /// The ID of an inbound request.
 ///
 /// Note: [`InboundRequestId`]'s uniqueness is only guaranteed between
-/// two inbound requests of the same originating [`Behaviour`].
+/// inbound requests of the same originating [`Behaviour`].
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
 pub struct InboundRequestId(u64);
 
@@ -286,7 +286,7 @@ impl fmt::Display for InboundRequestId {
 /// The ID of an outbound request.
 ///
 /// Note: [`OutboundRequestId`]'s uniqueness is only guaranteed between
-/// two outbound requests of the same originating [`Behaviour`].
+/// outbound requests of the same originating [`Behaviour`].
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
 pub struct OutboundRequestId(u64);
 

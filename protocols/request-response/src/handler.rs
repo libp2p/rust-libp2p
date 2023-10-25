@@ -118,6 +118,11 @@ where
         }
     }
 
+    /// Returns the next inbound request ID.
+    fn next_inbound_request_id(&mut self) -> InboundRequestId {
+        InboundRequestId(self.inbound_request_id.fetch_add(1, Ordering::Relaxed))
+    }
+
     fn on_fully_negotiated_inbound(
         &mut self,
         FullyNegotiatedInbound {
@@ -129,7 +134,7 @@ where
         >,
     ) {
         let mut codec = self.codec.clone();
-        let request_id = InboundRequestId(self.inbound_request_id.fetch_add(1, Ordering::Relaxed));
+        let request_id = self.next_inbound_request_id();
         let mut sender = self.inbound_sender.clone();
 
         let recv = async move {
