@@ -430,6 +430,7 @@ where
         let concurrency_factor =
             dial_concurrency_factor_override.unwrap_or(self.dial_concurrency_factor);
         let span = tracing::debug_span!(parent: tracing::Span::none(), "new_outgoing_connection", %concurrency_factor, num_dials=%dials.len(), id = %connection_id);
+        span.follows_from(tracing::Span::current());
 
         let (abort_notifier, abort_receiver) = oneshot::channel();
 
@@ -471,6 +472,9 @@ where
 
         let (abort_notifier, abort_receiver) = oneshot::channel();
 
+        let span = tracing::debug_span!(parent: tracing::Span::none(), "new_incoming_connection", remote_addr = %info.send_back_addr, id = %connection_id);
+        span.follows_from(tracing::Span::current());
+
         self.executor.spawn(
             task::new_for_pending_incoming_connection(
                 connection_id,
@@ -478,7 +482,7 @@ where
                 abort_receiver,
                 self.pending_connection_events_tx.clone(),
             )
-            .instrument(tracing::debug_span!(parent: tracing::Span::none(), "new_incoming_connection", remote_addr = %info.send_back_addr, id = %connection_id)),
+            .instrument(span),
         );
 
         self.counters.inc_pending_incoming();

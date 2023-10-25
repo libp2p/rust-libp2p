@@ -540,6 +540,8 @@ where
                             tracing::debug_span!(parent: tracing::Span::none(), "Transport::dial_as_listener", %address),
                         ),
                     };
+                    span.follows_from(tracing::Span::current());
+
                     match dial {
                         Ok(fut) => fut
                             .map(|r| (address, r.map_err(TransportError::Other)))
