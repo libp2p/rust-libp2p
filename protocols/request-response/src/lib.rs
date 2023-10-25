@@ -326,7 +326,7 @@ where
     /// reachable addresses, if any.
     connected: HashMap<PeerId, SmallVec<[Connection; 2]>>,
     /// Externally managed addresses via `add_address` and `remove_address`.
-    addresses: HashMap<PeerId, SmallVec<[Multiaddr; 6]>>,
+    addresses: HashMap<PeerId, HashSet<Multiaddr>>,
     /// Requests that have not yet been sent and are waiting for a connection
     /// to be established.
     pending_outbound_requests: HashMap<PeerId, SmallVec<[RequestProtocol<TCodec>; 10]>>,
@@ -437,8 +437,11 @@ where
     /// by [`NetworkBehaviour::handle_pending_outbound_connection`].
     ///
     /// Addresses added in this way are only removed by `remove_address`.
-    pub fn add_address(&mut self, peer: &PeerId, address: Multiaddr) {
-        self.addresses.entry(*peer).or_default().push(address);
+    ///
+    /// Returns true if the address was added, false otherwise (i.e. if the
+    /// address is already in the list).
+    pub fn add_address(&mut self, peer: &PeerId, address: Multiaddr) -> bool {
+        self.addresses.entry(*peer).or_default().insert(address)
     }
 
     /// Removes an address of a peer previously added via `add_address`.
@@ -731,7 +734,7 @@ where
             addresses.extend(connections.iter().filter_map(|c| c.remote_address.clone()))
         }
         if let Some(more) = self.addresses.get(&peer) {
-            addresses.extend(more.into_iter().cloned());
+            addresses.extend(more.iter().cloned());
         }
 
         Ok(addresses)
