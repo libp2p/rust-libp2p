@@ -84,8 +84,8 @@ use libp2p_identity::PeerId;
 use libp2p_swarm::{
     behaviour::{AddressChange, ConnectionClosed, DialFailure, FromSwarm},
     dial_opts::DialOpts,
-    ConnectionDenied, ConnectionHandler, ConnectionId, NetworkBehaviour, NotifyHandler,
-    PollParameters, THandler, THandlerInEvent, THandlerOutEvent, ToSwarm,
+    ConnectionDenied, ConnectionHandler, ConnectionId, NetworkBehaviour, NotifyHandler, THandler,
+    THandlerInEvent, THandlerOutEvent, ToSwarm,
 };
 use smallvec::SmallVec;
 use std::{
@@ -284,28 +284,17 @@ impl fmt::Display for RequestId {
 #[derive(Debug, Clone)]
 pub struct Config {
     request_timeout: Duration,
-    connection_keep_alive: Duration,
 }
 
 impl Default for Config {
     fn default() -> Self {
         Self {
-            connection_keep_alive: Duration::from_secs(10),
             request_timeout: Duration::from_secs(10),
         }
     }
 }
 
 impl Config {
-    /// Sets the keep-alive timeout of idle connections.
-    #[deprecated(
-        note = "Set a global idle connection timeout via `SwarmBuilder::idle_connection_timeout` instead."
-    )]
-    pub fn set_connection_keep_alive(&mut self, v: Duration) -> &mut Self {
-        self.connection_keep_alive = v;
-        self
-    }
-
     /// Sets the timeout for inbound and outbound requests.
     pub fn set_request_timeout(&mut self, v: Duration) -> &mut Self {
         self.request_timeout = v;
@@ -337,7 +326,7 @@ where
     /// reachable addresses, if any.
     connected: HashMap<PeerId, SmallVec<[Connection; 2]>>,
     /// Externally managed addresses via `add_address` and `remove_address`.
-    addresses: HashMap<PeerId, SmallVec<[Multiaddr; 6]>>,
+    addresses: HashMap<PeerId, HashSet<Multiaddr>>,
     /// Requests that have not yet been sent and are waiting for a connection
     /// to be established.
     pending_outbound_requests: HashMap<PeerId, SmallVec<[RequestProtocol<TCodec>; 10]>>,
@@ -448,8 +437,11 @@ where
     /// by [`NetworkBehaviour::handle_pending_outbound_connection`].
     ///
     /// Addresses added in this way are only removed by `remove_address`.
-    pub fn add_address(&mut self, peer: &PeerId, address: Multiaddr) {
-        self.addresses.entry(*peer).or_default().push(address);
+    ///
+    /// Returns true if the address was added, false otherwise (i.e. if the
+    /// address is already in the list).
+    pub fn add_address(&mut self, peer: &PeerId, address: Multiaddr) -> bool {
+        self.addresses.entry(*peer).or_default().insert(address)
     }
 
     /// Removes an address of a peer previously added via `add_address`.
@@ -717,7 +709,6 @@ where
             self.inbound_protocols.clone(),
             self.codec.clone(),
             self.config.request_timeout,
-            self.config.connection_keep_alive,
             self.next_inbound_id.clone(),
         );
 
@@ -743,7 +734,7 @@ where
             addresses.extend(connections.iter().filter_map(|c| c.remote_address.clone()))
         }
         if let Some(more) = self.addresses.get(&peer) {
-            addresses.extend(more.into_iter().cloned());
+            addresses.extend(more.iter().cloned());
         }
 
         Ok(addresses)
@@ -760,7 +751,6 @@ where
             self.inbound_protocols.clone(),
             self.codec.clone(),
             self.config.request_timeout,
-            self.config.connection_keep_alive,
             self.next_inbound_id.clone(),
         );
 
@@ -907,11 +897,7 @@ where
         }
     }
 
-    fn poll(
-        &mut self,
-        _: &mut Context<'_>,
-        _: &mut impl PollParameters,
-    ) -> Poll<ToSwarm<Self::ToSwarm, THandlerInEvent<Self>>> {
+    fn poll(&mut self, _: &mut Context<'_>) -> Poll<ToSwarm<Self::ToSwarm, THandlerInEvent<Self>>> {
         if let Some(ev) = self.pending_events.pop_front() {
             return Poll::Ready(ev);
         } else if self.pending_events.capacity() > EMPTY_QUEUE_SHRINK_THRESHOLD {

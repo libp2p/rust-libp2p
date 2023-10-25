@@ -29,7 +29,7 @@ use libp2p_core::Multiaddr;
 use libp2p_identity::PeerId;
 use libp2p_swarm::{
     derive_prelude::ConnectionEstablished, ConnectionClosed, ConnectionId, FromSwarm,
-    NetworkBehaviour, NotifyHandler, PollParameters, THandlerInEvent, THandlerOutEvent, ToSwarm,
+    NetworkBehaviour, NotifyHandler, THandlerInEvent, THandlerOutEvent, ToSwarm,
 };
 
 use crate::RunParams;
@@ -149,7 +149,6 @@ impl NetworkBehaviour for Behaviour {
     fn poll(
         &mut self,
         _cx: &mut Context<'_>,
-        _: &mut impl PollParameters,
     ) -> Poll<ToSwarm<Self::ToSwarm, THandlerInEvent<Self>>> {
         if let Some(event) = self.queued_events.pop_front() {
             return Poll::Ready(event);
