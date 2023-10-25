@@ -2,6 +2,10 @@
 
 - Add `Info` to the `libp2p-identify::Event::Pushed` to report pushed info.
   See [PR 4527](https://github.com/libp2p/rust-libp2p/pull/4527)
+- Don't repeatedly report the same observed address as a `NewExternalAddrCandidate`.
+  Instead, only report each observed address once.
+  This allows users to probabilistically deem an address as external if it gets reported as a candidate repeatedly. 
+  See [PR XXXX](https://github.com/libp2p/rust-libp2p/pull/XXXX).
 
 ## 0.43.1
 
