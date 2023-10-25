@@ -55,22 +55,10 @@
 //!        edition = "2021"
 //!
 //!    [dependencies]
-<<<<<<< HEAD
-//!        libp2p = { version = "0.50", features = ["tcp", "dns", "async-std", "noise", "yamux", "websocket", "ping", "macros"] }
+//!        libp2p = { version = "0.52", features = ["tcp", "dns", "async-std", "noise", "yamux", "websocket", "ping", "macros"] }
 //!        futures = "0.3.21"
 //!        async-std = { version = "1.12.0", features = ["attributes"] }
 //!        tracing-subscriber = { version = "0.3", features = ["env-filter"] }
-||||||| ecdd0ff76
-//!        libp2p = { version = "0.50", features = ["tcp", "dns", "async-std", "noise", "yamux", "websocket", "ping", "macros"] }
-//!        futures = "0.3.21"
-//!        env_logger = "0.10.0"
-//!        async-std = { version = "1.12.0", features = ["attributes"] }
-=======
-//!        libp2p = { version = "0.52", features = ["tcp", "dns", "async-std", "noise", "yamux", "websocket", "ping", "macros"] }
-//!        futures = "0.3"
-//!        env_logger = "0.10.0"
-//!        async-std = { version = "1.12", features = ["attributes"] }
->>>>>>> master
 //!    ```
 //!
 //! ## Network identity
@@ -154,7 +142,7 @@
 //!
 //! #[async_std::main]
 //! async fn main() -> Result<(), Box<dyn Error>> {
-//!     env_logger::init();
+//!     tracing_subscriber::fmt().with_env_filter(EnvFilter::from_default_env()).init();
 //!
 //!     let mut swarm = libp2p::SwarmBuilder::with_new_identity()
 //!         .with_async_std()
@@ -171,34 +159,10 @@
 //!
 //! ## Swarm
 //!
-<<<<<<< HEAD
-//! Now that we have a [`Transport`] and a [`NetworkBehaviour`], we need
-//! something that connects the two, allowing both to make progress. This job is
-//! carried out by a [`Swarm`]. Put simply, a [`Swarm`] drives both a
-//! [`Transport`] and a [`NetworkBehaviour`] forward, passing commands from the
-//! [`NetworkBehaviour`] to the [`Transport`] as well as events from the
-//! [`Transport`] to the [`NetworkBehaviour`]. As you can see, after [`Swarm`] initialization, we
-//! removed the print of the local [`PeerId`](crate::PeerId) because every time a [`Swarm`] is
-//! created, it prints the local [`PeerId`](crate::PeerId) in the logs at the INFO level. In order
-//! to continue to see the local [`PeerId`](crate::PeerId) you must initialize the logger
-//! (In our example, `tracing_subscriber` is used)
-||||||| ecdd0ff76
-//! Now that we have a [`Transport`] and a [`NetworkBehaviour`], we need
-//! something that connects the two, allowing both to make progress. This job is
-//! carried out by a [`Swarm`]. Put simply, a [`Swarm`] drives both a
-//! [`Transport`] and a [`NetworkBehaviour`] forward, passing commands from the
-//! [`NetworkBehaviour`] to the [`Transport`] as well as events from the
-//! [`Transport`] to the [`NetworkBehaviour`]. As you can see, after [`Swarm`] initialization, we
-//! removed the print of the local [`PeerId`](crate::PeerId) because every time a [`Swarm`] is
-//! created, it prints the local [`PeerId`](crate::PeerId) in the logs at the INFO level. In order
-//! to continue to see the local [`PeerId`](crate::PeerId) you must initialize the logger
-//! (In our example, `env_logger` is used)
-=======
 //! Now that we have a [`Transport`] and a [`NetworkBehaviour`], we can build the [`Swarm`]
 //! which connects the two, allowing both to make progress. Put simply, a [`Swarm`] drives both a
 //! [`Transport`] and a [`NetworkBehaviour`] forward, passing commands from the [`NetworkBehaviour`]
 //! to the [`Transport`] as well as events from the [`Transport`] to the [`NetworkBehaviour`].
->>>>>>> master
 //!
 //! ```rust
 //! use libp2p::swarm::{NetworkBehaviour, SwarmBuilder};
@@ -208,17 +172,7 @@
 //!
 //! #[async_std::main]
 //! async fn main() -> Result<(), Box<dyn Error>> {
-<<<<<<< HEAD
 //!     tracing_subscriber::fmt().with_env_filter(EnvFilter::from_default_env()).init();
-//!     let local_key = identity::Keypair::generate_ed25519();
-//!     let local_peer_id = PeerId::from(local_key.public());
-||||||| ecdd0ff76
-//!     env_logger::init();
-//!     let local_key = identity::Keypair::generate_ed25519();
-//!     let local_peer_id = PeerId::from(local_key.public());
-=======
-//!     env_logger::init();
->>>>>>> master
 //!
 //!     let mut swarm = libp2p::SwarmBuilder::with_new_identity()
 //!         .with_async_std()
@@ -252,7 +206,7 @@
 //!
 //! #[async_std::main]
 //! async fn main() -> Result<(), Box<dyn Error>> {
-//!     env_logger::init();
+//!     tracing_subscriber::fmt().with_env_filter(EnvFilter::from_default_env()).init();
 //!
 //!     let mut swarm = libp2p::SwarmBuilder::with_new_identity()
 //!         .with_async_std()
@@ -304,29 +258,8 @@
 //!
 //! #[async_std::main]
 //! async fn main() -> Result<(), Box<dyn Error>> {
-<<<<<<< HEAD
 //!     tracing_subscriber::fmt().with_env_filter(EnvFilter::from_default_env()).init();
-//!     let local_key = identity::Keypair::generate_ed25519();
-//!     let local_peer_id = PeerId::from(local_key.public());
 //!
-//!     let transport = libp2p::development_transport(local_key).await?;
-//!
-//!     let behaviour = ping::Behaviour::default();
-//!
-//!     let mut swarm = SwarmBuilder::with_async_std_executor(transport, behaviour, local_peer_id)
-//!         .idle_connection_timeout(Duration::from_secs(30)) // Allows us to observe pings for 30 seconds.
-||||||| ecdd0ff76
-//!     env_logger::init();
-//!     let local_key = identity::Keypair::generate_ed25519();
-//!     let local_peer_id = PeerId::from(local_key.public());
-//!
-//!     let transport = libp2p::development_transport(local_key).await?;
-//!
-//!     let behaviour = ping::Behaviour::default();
-//!
-//!     let mut swarm = SwarmBuilder::with_async_std_executor(transport, behaviour, local_peer_id)
-//!         .idle_connection_timeout(Duration::from_secs(30)) // Allows us to observe pings for 30 seconds.
-=======
 //!     let mut swarm = libp2p::SwarmBuilder::with_new_identity()
 //!         .with_async_std()
 //!         .with_tcp(
@@ -336,7 +269,6 @@
 //!         )?
 //!         .with_behaviour(|_| ping::Behaviour::default())?
 //!         .with_swarm_config(|cfg| cfg.with_idle_connection_timeout(Duration::from_secs(30))) // Allows us to observe pings for 30 seconds.
->>>>>>> master
 //!         .build();
 //!
 //!     // Tell the swarm to listen on all interfaces and a random, OS-assigned
@@ -371,29 +303,8 @@
 //!
 //! #[async_std::main]
 //! async fn main() -> Result<(), Box<dyn Error>> {
-<<<<<<< HEAD
 //!     tracing_subscriber::fmt().with_env_filter(EnvFilter::from_default_env()).init();
-//!     let local_key = identity::Keypair::generate_ed25519();
-//!     let local_peer_id = PeerId::from(local_key.public());
 //!
-//!     let transport = libp2p::development_transport(local_key).await?;
-//!
-//!     let behaviour = ping::Behaviour::default();
-//!
-//!     let mut swarm = SwarmBuilder::with_async_std_executor(transport, behaviour, local_peer_id)
-//!         .idle_connection_timeout(Duration::from_secs(30)) // Allows us to observe pings for 30 seconds.
-||||||| ecdd0ff76
-//!     env_logger::init();
-//!     let local_key = identity::Keypair::generate_ed25519();
-//!     let local_peer_id = PeerId::from(local_key.public());
-//!
-//!     let transport = libp2p::development_transport(local_key).await?;
-//!
-//!     let behaviour = ping::Behaviour::default();
-//!
-//!     let mut swarm = SwarmBuilder::with_async_std_executor(transport, behaviour, local_peer_id)
-//!         .idle_connection_timeout(Duration::from_secs(30)) // Allows us to observe pings for 30 seconds.
-=======
 //!     let mut swarm = libp2p::SwarmBuilder::with_new_identity()
 //!         .with_async_std()
 //!         .with_tcp(
@@ -403,7 +314,6 @@
 //!         )?
 //!         .with_behaviour(|_| ping::Behaviour::default())?
 //!         .with_swarm_config(|cfg| cfg.with_idle_connection_timeout(Duration::from_secs(30))) // Allows us to observe pings for 30 seconds.
->>>>>>> master
 //!         .build();
 //!
 //!     // Tell the swarm to listen on all interfaces and a random, OS-assigned

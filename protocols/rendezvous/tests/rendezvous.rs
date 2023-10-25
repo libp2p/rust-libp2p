@@ -173,7 +173,9 @@ async fn given_successful_registration_then_refresh_ttl() {
 
 #[tokio::test]
 async fn given_successful_registration_then_refresh_external_addrs() {
-    let _ = env_logger::try_init();
+    let _ = tracing_subscriber::fmt()
+        .with_env_filter(EnvFilter::from_default_env())
+        .try_init();
     let namespace = rendezvous::Namespace::from_static("some-namespace");
     let ([mut alice], mut robert) =
         new_server_with_connected_clients(rendezvous::server::Config::default()).await;
@@ -387,7 +389,7 @@ async fn registration_on_clients_expire() {
     let roberts_peer_id = *robert.local_peer_id();
     tokio::spawn(robert.loop_on_next());
 
-    let registration_ttl = 3;
+    let registration_ttl = 1;
 
     alice
         .behaviour_mut()
@@ -406,7 +408,7 @@ async fn registration_on_clients_expire() {
         event => panic!("Unexpected event: {event:?}"),
     }
 
-    tokio::time::sleep(Duration::from_secs(registration_ttl + 5)).await;
+    tokio::time::sleep(Duration::from_secs(registration_ttl + 1)).await;
 
     let event = bob.select_next_some().await;
     let error = bob.dial(*alice.local_peer_id()).unwrap_err();

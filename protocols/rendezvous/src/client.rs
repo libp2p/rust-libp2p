@@ -28,8 +28,8 @@ use libp2p_core::{Endpoint, Multiaddr, PeerRecord};
 use libp2p_identity::{Keypair, PeerId, SigningError};
 use libp2p_request_response::{ProtocolSupport, RequestId};
 use libp2p_swarm::{
-    ConnectionDenied, ConnectionId, ExternalAddresses, FromSwarm, NetworkBehaviour, PollParameters,
-    THandler, THandlerInEvent, THandlerOutEvent, ToSwarm,
+    ConnectionDenied, ConnectionId, ExternalAddresses, FromSwarm, NetworkBehaviour, THandler,
+    THandlerInEvent, THandlerOutEvent, ToSwarm,
 };
 use std::collections::HashMap;
 use std::iter;
@@ -232,7 +232,7 @@ impl NetworkBehaviour for Behaviour {
             let registered = self.registered_namespaces.clone();
             for ((rz_node, ns), ttl) in registered {
                 if let Err(e) = self.register(ns, rz_node, Some(ttl)) {
-                    log::warn!("refreshing registration failed: {e}")
+                    tracing::warn!("refreshing registration failed: {e}")
                 }
             }
         }
@@ -241,12 +241,11 @@ impl NetworkBehaviour for Behaviour {
     fn poll(
         &mut self,
         cx: &mut Context<'_>,
-        params: &mut impl PollParameters,
     ) -> Poll<ToSwarm<Self::ToSwarm, THandlerInEvent<Self>>> {
         use libp2p_request_response as req_res;
 
         loop {
-            match self.inner.poll(cx, params) {
+            match self.inner.poll(cx) {
                 Poll::Ready(ToSwarm::GenerateEvent(req_res::Event::Message {
                     message:
                         req_res::Message::Response {

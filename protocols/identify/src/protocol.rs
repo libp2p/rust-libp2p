@@ -89,27 +89,23 @@ pub struct PushInfo {
     pub observed_addr: Option<Multiaddr>,
 }
 
-pub(crate) async fn send_identify<T>(io: T, info: Info) -> Result<(), UpgradeError>
+pub(crate) async fn send_identify<T>(io: T, info: Info) -> Result<Info, UpgradeError>
 where
     T: AsyncWrite + Unpin,
 {
     tracing::trace!("Sending: {:?}", info);
 
-    let listen_addrs = info
-        .listen_addrs
-        .into_iter()
-        .map(|addr| addr.to_vec())
-        .collect();
+    let listen_addrs = info.listen_addrs.iter().map(|addr| addr.to_vec()).collect();
 
     let pubkey_bytes = info.public_key.encode_protobuf();
 
     let message = proto::Identify {
-        agentVersion: Some(info.agent_version),
-        protocolVersion: Some(info.protocol_version),
+        agentVersion: Some(info.agent_version.clone()),
+        protocolVersion: Some(info.protocol_version.clone()),
         publicKey: Some(pubkey_bytes),
         listenAddrs: listen_addrs,
         observedAddr: Some(info.observed_addr.to_vec()),
-        protocols: info.protocols.into_iter().map(|p| p.to_string()).collect(),
+        protocols: info.protocols.iter().map(|p| p.to_string()).collect(),
     };
 
     let mut framed_io = FramedWrite::new(
@@ -120,7 +116,7 @@ where
     framed_io.send(message).await?;
     framed_io.close().await?;
 
-    Ok(())
+    Ok(info)
 }
 
 pub(crate) async fn recv_push<T>(socket: T) -> Result<PushInfo, UpgradeError>

@@ -89,21 +89,24 @@ async fn adding_an_external_addresses_activates_server_mode_on_existing_connecti
     // Remove memory address to simulate a server that doesn't know its external address.
     server.remove_external_address(&memory_addr);
     client.dial(memory_addr.clone()).unwrap();
-    // Do the usual identify send/receive dance.
+    // Do the usual identify send/receive dance. This triggers a mode change to Mode::Client.
     match libp2p_swarm_test::drive(&mut client, &mut server).await {
-        ([Identify(_), Identify(_)], [Identify(_), Identify(_)]) => {}
+        ([Identify(_), Identify(_)], [Kad(ModeChanged { new_mode }), Identify(_), Identify(_)]) => {
+            assert_eq!(new_mode, Mode::Client);
+        }
         other => panic!("Unexpected events: {other:?}"),
     }
 
     // Server learns its external address (this could be through AutoNAT or some other mechanism).
     server.add_external_address(memory_addr);
 
-    // The server reconfigured its connection to the client to be in server mode, pushes that information to client which as a result updates its routing table.
+    // The server reconfigured its connection to the client to be in server mode, pushes that information to client which as a result updates its routing table and triggers a mode change to Mode::Server.
     match libp2p_swarm_test::drive(&mut client, &mut server).await {
         (
             [Identify(identify::Event::Received { .. }), Kad(RoutingUpdated { peer: peer1, .. })],
-            [Identify(identify::Event::Pushed { .. })],
+            [Kad(ModeChanged { new_mode }), Identify(identify::Event::Pushed { .. })],
         ) => {
+            assert_eq!(new_mode, Mode::Server);
             assert_eq!(peer1, server_peer_id);
         }
         other => panic!("Unexpected events: {other:?}"),

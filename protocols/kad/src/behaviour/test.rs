@@ -37,6 +37,7 @@ use libp2p_core::{
 use libp2p_identity as identity;
 use libp2p_identity::PeerId;
 use libp2p_noise as noise;
+use libp2p_swarm::behaviour::ConnectionEstablished;
 use libp2p_swarm::{self as swarm, ConnectionId, Swarm, SwarmEvent};
 use libp2p_yamux as yamux;
 use quickcheck::*;
@@ -71,7 +72,8 @@ fn build_node_with_config(cfg: Config) -> (Multiaddr, TestSwarm) {
         transport,
         behaviour,
         local_id,
-        swarm::Config::with_async_std_executor(),
+        swarm::Config::with_async_std_executor()
+            .with_idle_connection_timeout(Duration::from_secs(5)),
     );
 
     let address: Multiaddr = Protocol::Memory(random::<u64>()).into();
@@ -1061,6 +1063,7 @@ fn exceed_jobs_max_queries() {
                             result: QueryResult::GetClosestPeers(Ok(r)),
                             ..
                         }) => break assert!(r.peers.is_empty()),
+                        SwarmEvent::Behaviour(Event::ModeChanged { .. }) => {}
                         SwarmEvent::Behaviour(e) => panic!("Unexpected event: {e:?}"),
                         _ => {}
                     }
@@ -1384,6 +1387,7 @@ fn get_providers_single() {
                     result: QueryResult::StartProviding(Ok(_)),
                     ..
                 }) => {}
+                SwarmEvent::Behaviour(Event::ModeChanged { .. }) => {}
                 SwarmEvent::Behaviour(e) => panic!("Unexpected event: {e:?}"),
                 _ => {}
             }

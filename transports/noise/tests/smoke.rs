@@ -20,7 +20,8 @@
 
 use futures::prelude::*;
 use libp2p_core::transport::{MemoryTransport, Transport};
-use libp2p_core::{upgrade, InboundUpgrade, OutboundUpgrade};
+use libp2p_core::upgrade;
+use libp2p_core::upgrade::{InboundConnectionUpgrade, OutboundConnectionUpgrade};
 use libp2p_identity as identity;
 use libp2p_noise as noise;
 use quickcheck::*;

@@ -27,21 +27,18 @@ use crate::QueryId;
 use either::Either;
 use futures::prelude::*;
 use futures::stream::SelectAll;
-use instant::Instant;
 use libp2p_core::{upgrade, ConnectedPoint};
 use libp2p_identity::PeerId;
 use libp2p_swarm::handler::{
     ConnectionEvent, DialUpgradeError, FullyNegotiatedInbound, FullyNegotiatedOutbound,
 };
 use libp2p_swarm::{
-    ConnectionHandler, ConnectionHandlerEvent, ConnectionId, KeepAlive, Stream, StreamUpgradeError,
+    ConnectionHandler, ConnectionHandlerEvent, KeepAlive, Stream, StreamUpgradeError,
     SubstreamProtocol, SupportedProtocols,
 };
 use std::collections::VecDeque;
 use std::task::Waker;
-use std::{
-    error, fmt, io, marker::PhantomData, pin::Pin, task::Context, task::Poll, time::Duration,
-};
+use std::{error, fmt, io, marker::PhantomData, pin::Pin, task::Context, task::Poll};
 
 const MAX_NUM_SUBSTREAMS: usize = 32;
 
@@ -59,9 +56,6 @@ pub struct Handler {
     /// In client mode, we don't accept inbound substreams.
     mode: Mode,
 
-    /// Time after which we close an idle connection.
-    idle_timeout: Duration,
-
     /// Next unique ID of a connection.
     next_connec_unique_id: UniqueConnecId,
 
@@ -78,9 +72,6 @@ pub struct Handler {
     /// List of active inbound substreams with the state they are in.
     inbound_substreams: SelectAll<InboundSubstreamState>,
 
-    /// Until when to keep the connection alive.
-    keep_alive: KeepAlive,
-
     /// The connected endpoint of the connection that the handler
     /// is associated with.
     endpoint: ConnectedPoint,
@@ -92,9 +83,6 @@ pub struct Handler {
     protocol_status: Option<ProtocolStatus>,
 
     remote_supported_protocols: SupportedProtocols,
-
-    /// The ID of this connection.
-    connection_id: ConnectionId,
 }
 
 /// The states of protocol confirmation that a connection
@@ -464,11 +452,9 @@ struct UniqueConnecId(u64);
 impl Handler {
     pub fn new(
         protocol_config: ProtocolConfig,
-        idle_timeout: Duration,
         endpoint: ConnectedPoint,
         remote_peer_id: PeerId,
         mode: Mode,
-        connection_id: ConnectionId,
     ) -> Self {
         match &endpoint {
             ConnectedPoint::Dialer { .. } => {
@@ -487,13 +473,9 @@ impl Handler {
             }
         }
 
-        #[allow(deprecated)]
-        let keep_alive = KeepAlive::Until(Instant::now() + idle_timeout);
-
         Handler {
             protocol_config,
             mode,
-            idle_timeout,
             endpoint,
             remote_peer_id,
             next_connec_unique_id: UniqueConnecId(0),
@@ -501,10 +483,8 @@ impl Handler {
             outbound_substreams: Default::default(),
             num_requested_outbound_streams: 0,
             pending_messages: Default::default(),
-            keep_alive,
             protocol_status: None,
             remote_supported_protocols: Default::default(),
-            connection_id,
         }
     }
 
@@ -727,7 +707,11 @@ impl ConnectionHandler for Handler {
     }
 
     fn connection_keep_alive(&self) -> KeepAlive {
-        self.keep_alive
+        if self.outbound_substreams.is_empty() && self.inbound_substreams.is_empty() {
+            return KeepAlive::No;
+        };
+
+        KeepAlive::Yes
     }
 
     fn poll(
@@ -778,20 +762,6 @@ impl ConnectionHandler for Handler {
             });
         }
 
-        let no_streams = self.outbound_substreams.is_empty() && self.inbound_substreams.is_empty();
-
-        self.keep_alive = {
-            #[allow(deprecated)]
-            match (no_streams, self.keep_alive) {
-                // No open streams. Preserve the existing idle timeout.
-                (true, k @ KeepAlive::Until(_)) => k,
-                // No open streams. Set idle timeout.
-                (true, _) => KeepAlive::Until(Instant::now() + self.idle_timeout),
-                // Keep alive for open streams.
-                (false, _) => KeepAlive::Yes,
-            }
-        };
-
         Poll::Pending
     }
 
@@ -826,60 +796,10 @@ impl ConnectionHandler for Handler {
                         .iter()
                         .any(|p| self.protocol_config.protocol_names().contains(p));
 
-<<<<<<< HEAD
-                    match (remote_supports_our_kademlia_protocols, self.protocol_status) {
-                        (true, ProtocolStatus::Confirmed | ProtocolStatus::Reported) => {}
-                        (true, _) => {
-                            tracing::debug!(
-                                peer=%self.remote_peer_id,
-                                connection=%self.connection_id,
-                                "Remote peer now supports our kademlia protocol on connection"
-                            );
-
-                            self.protocol_status = ProtocolStatus::Confirmed;
-                        }
-                        (false, ProtocolStatus::Confirmed | ProtocolStatus::Reported) => {
-                            tracing::debug!(
-                                peer=%self.remote_peer_id,
-                                connection=%self.connection_id,
-                                "Remote peer no longer supports our kademlia protocol on connection"
-                            );
-
-                            self.protocol_status = ProtocolStatus::NotSupported;
-                        }
-                        (false, _) => {}
-                    }
-||||||| ecdd0ff76
-                    match (remote_supports_our_kademlia_protocols, self.protocol_status) {
-                        (true, ProtocolStatus::Confirmed | ProtocolStatus::Reported) => {}
-                        (true, _) => {
-                            log::debug!(
-                                "Remote {} now supports our kademlia protocol on connection {}",
-                                self.remote_peer_id,
-                                self.connection_id,
-                            );
-
-                            self.protocol_status = ProtocolStatus::Confirmed;
-                        }
-                        (false, ProtocolStatus::Confirmed | ProtocolStatus::Reported) => {
-                            log::debug!(
-                                "Remote {} no longer supports our kademlia protocol on connection {}",
-                                self.remote_peer_id,
-                                self.connection_id,
-                            );
-
-                            self.protocol_status = ProtocolStatus::NotSupported;
-                        }
-                        (false, _) => {}
-                    }
-=======
                     self.protocol_status = Some(compute_new_protocol_status(
                         remote_supports_our_kademlia_protocols,
                         self.protocol_status,
-                        self.remote_peer_id,
-                        self.connection_id,
                     ))
->>>>>>> master
                 }
             }
         }
@@ -889,8 +809,6 @@ impl ConnectionHandler for Handler {
 fn compute_new_protocol_status(
     now_supported: bool,
     current_status: Option<ProtocolStatus>,
-    remote_peer_id: PeerId,
-    connection_id: ConnectionId,
 ) -> ProtocolStatus {
     let current_status = match current_status {
         None => {
@@ -910,9 +828,9 @@ fn compute_new_protocol_status(
     }
 
     if now_supported {
-        log::debug!("Remote {remote_peer_id} now supports our kademlia protocol on connection {connection_id}");
+        tracing::debug!("Remote now supports our kademlia protocol");
     } else {
-        log::debug!("Remote {remote_peer_id} no longer supports our kademlia protocol on connection {connection_id}");
+        tracing::debug!("Remote no longer supports our kademlia protocol");
     }
 
     ProtocolStatus {
@@ -1262,6 +1180,7 @@ fn process_kad_response(event: KadResponseMsg, query_id: QueryId) -> HandlerEven
 mod tests {
     use super::*;
     use quickcheck::{Arbitrary, Gen};
+    use tracing_subscriber::EnvFilter;
 
     impl Arbitrary for ProtocolStatus {
         fn arbitrary(g: &mut Gen) -> Self {
@@ -1274,15 +1193,12 @@ mod tests {
 
     #[test]
     fn compute_next_protocol_status_test() {
-        let _ = env_logger::try_init();
+        let _ = tracing_subscriber::fmt()
+            .with_env_filter(EnvFilter::from_default_env())
+            .try_init();
 
         fn prop(now_supported: bool, current: Option<ProtocolStatus>) {
-            let new = compute_new_protocol_status(
-                now_supported,
-                current,
-                PeerId::random(),
-                ConnectionId::new_unchecked(0),
-            );
+            let new = compute_new_protocol_status(now_supported, current);
 
             match current {
                 None => {

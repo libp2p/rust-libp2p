@@ -129,7 +129,7 @@ pub async fn run_test(
                     loop {
                         let event = swarm.next().await.unwrap();
 
-                        log::debug!("{event:?}");
+                        tracing::debug!("{event:?}");
                     }
                 }
                 .boxed(),

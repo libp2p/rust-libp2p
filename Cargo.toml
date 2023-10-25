@@ -57,7 +57,6 @@ members = [
     "transports/tcp",
     "transports/tls",
     "transports/uds",
-    "transports/wasm-ext",
     "transports/webrtc",
     "transports/webrtc-websys",
     "transports/websocket",
@@ -68,53 +67,52 @@ members = [
 resolver = "2"
 
 [workspace.package]
-rust-version = "1.65.0"
+rust-version = "1.73.0"
 
 [workspace.dependencies]
-futures-bounded = { version = "0.1.0", path = "misc/futures-bounded" }
-libp2p = { version = "0.52.4", path = "libp2p" }
-libp2p-allow-block-list = { version = "0.2.0", path = "misc/allow-block-list" }
-libp2p-autonat = { version = "0.11.0", path = "protocols/autonat" }
-libp2p-connection-limits = { version = "0.2.1", path = "misc/connection-limits" }
-libp2p-core = { version = "0.40.1", path = "core" }
-libp2p-dcutr = { version = "0.10.0", path = "protocols/dcutr" }
-libp2p-deflate = { version = "0.40.1", path = "transports/deflate" }
-libp2p-dns = { version = "0.40.1", path = "transports/dns" }
-libp2p-floodsub = { version = "0.43.0", path = "protocols/floodsub" }
-libp2p-gossipsub = { version = "0.45.2", path = "protocols/gossipsub" }
-libp2p-identify = { version = "0.43.1", path = "protocols/identify" }
-libp2p-identity = { version = "0.2.6" }
-libp2p-kad = { version = "0.44.6", path = "protocols/kad" }
-libp2p-mdns = { version = "0.44.0", path = "protocols/mdns" }
-libp2p-memory-connection-limits = { version = "0.1.0", path = "misc/memory-connection-limits" }
-libp2p-metrics = { version = "0.13.1", path = "misc/metrics" }
-libp2p-mplex = { version = "0.40.0", path = "muxers/mplex" }
+futures-bounded = { version = "0.2.0", path = "misc/futures-bounded" }
+libp2p = { version = "0.53.0", path = "libp2p" }
+libp2p-allow-block-list = { version = "0.3.0", path = "misc/allow-block-list" }
+libp2p-autonat = { version = "0.12.0", path = "protocols/autonat" }
+libp2p-connection-limits = { version = "0.3.0", path = "misc/connection-limits" }
+libp2p-core = { version = "0.41.0", path = "core" }
+libp2p-dcutr = { version = "0.11.0", path = "protocols/dcutr" }
+libp2p-deflate = { version = "0.41.0", path = "transports/deflate" }
+libp2p-dns = { version = "0.41.0", path = "transports/dns" }
+libp2p-floodsub = { version = "0.44.0", path = "protocols/floodsub" }
+libp2p-gossipsub = { version = "0.46.0", path = "protocols/gossipsub" }
+libp2p-identify = { version = "0.44.0", path = "protocols/identify" }
+libp2p-identity = { version = "0.2.7" }
+libp2p-kad = { version = "0.45.0", path = "protocols/kad" }
+libp2p-mdns = { version = "0.45.0", path = "protocols/mdns" }
+libp2p-memory-connection-limits = { version = "0.2.0", path = "misc/memory-connection-limits" }
+libp2p-metrics = { version = "0.14.0", path = "misc/metrics" }
+libp2p-mplex = { version = "0.41.0", path = "muxers/mplex" }
 libp2p-muxer-test-harness = { path = "muxers/test-harness" }
-libp2p-noise = { version = "0.43.2", path = "transports/noise" }
+libp2p-noise = { version = "0.44.0", path = "transports/noise" }
 libp2p-perf = { version = "0.2.0", path = "protocols/perf" }
-libp2p-ping = { version = "0.43.1", path = "protocols/ping" }
-libp2p-plaintext = { version = "0.40.1", path = "transports/plaintext" }
-libp2p-pnet = { version = "0.23.1", path = "transports/pnet" }
-libp2p-quic = { version = "0.9.3", path = "transports/quic" }
-libp2p-relay = { version = "0.16.2", path = "protocols/relay" }
-libp2p-rendezvous = { version = "0.13.1", path = "protocols/rendezvous" }
-libp2p-upnp = { version = "0.1.1", path = "protocols/upnp" }
-libp2p-request-response = { version = "0.25.2", path = "protocols/request-response" }
+libp2p-ping = { version = "0.44.0", path = "protocols/ping" }
+libp2p-plaintext = { version = "0.41.0", path = "transports/plaintext" }
+libp2p-pnet = { version = "0.24.0", path = "transports/pnet" }
+libp2p-quic = { version = "0.10.0", path = "transports/quic" }
+libp2p-relay = { version = "0.17.0", path = "protocols/relay" }
+libp2p-rendezvous = { version = "0.14.0", path = "protocols/rendezvous" }
+libp2p-upnp = { version = "0.2.0", path = "protocols/upnp" }
+libp2p-request-response = { version = "0.26.0", path = "protocols/request-response" }
 libp2p-server = { version = "0.12.3", path = "misc/server" }
-libp2p-swarm = { version = "0.43.6", path = "swarm" }
-libp2p-swarm-derive = { version = "0.33.0", path = "swarm-derive" }
-libp2p-swarm-test = { version = "0.2.0", path = "swarm-test" }
-libp2p-tcp = { version = "0.40.0", path = "transports/tcp" }
-libp2p-tls = { version = "0.2.1", path = "transports/tls" }
-libp2p-uds = { version = "0.39.0", path = "transports/uds" }
-libp2p-wasm-ext = { version = "0.40.0", path = "transports/wasm-ext" }
+libp2p-swarm = { version = "0.44.0", path = "swarm" }
+libp2p-swarm-derive = { version = "0.34.0", path = "swarm-derive" }
+libp2p-swarm-test = { version = "0.3.0", path = "swarm-test" }
+libp2p-tcp = { version = "0.41.0", path = "transports/tcp" }
+libp2p-tls = { version = "0.3.0", path = "transports/tls" }
+libp2p-uds = { version = "0.40.0", path = "transports/uds" }
 libp2p-webrtc = { version = "0.6.1-alpha", path = "transports/webrtc" }
 libp2p-webrtc-utils = { version = "0.1.0", path = "misc/webrtc-utils" }
 libp2p-webrtc-websys = { version = "0.2.0-alpha", path = "transports/webrtc-websys" }
-libp2p-websocket = { version = "0.42.1", path = "transports/websocket" }
-libp2p-websocket-websys = { version = "0.2.0", path = "transports/websocket-websys" }
-libp2p-webtransport-websys = { version = "0.1.0", path = "transports/webtransport-websys" }
-libp2p-yamux = { version = "0.44.1", path = "muxers/yamux" }
+libp2p-websocket = { version = "0.43.0", path = "transports/websocket" }
+libp2p-websocket-websys = { version = "0.3.0", path = "transports/websocket-websys" }
+libp2p-webtransport-websys = { version = "0.2.0", path = "transports/webtransport-websys" }
+libp2p-yamux = { version = "0.45.0", path = "muxers/yamux" }
 multistream-select = { version = "0.13.0", path = "misc/multistream-select" }
 quick-protobuf-codec = { version = "0.2.0", path = "misc/quick-protobuf-codec" }
 quickcheck = { package = "quickcheck-ext", path = "misc/quickcheck-ext" }
@@ -137,3 +135,6 @@ clippy.used_underscore_binding = "warn"
 clippy.pedantic = "allow"
 clippy.type_complexity = "allow"
 clippy.unnecessary_wraps = "warn"
+
+[workspace.metadata.release]
+pre-release-hook = ["/bin/sh", '-c', '/bin/sh $WORKSPACE_ROOT/scripts/add-changelog-header.sh'] # Nested use of shell to expand variables.

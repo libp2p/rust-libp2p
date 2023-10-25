@@ -5,6 +5,9 @@ edition = "2021"
 publish = false
 license = "MIT"
 
+[package.metadata.release]
+release = false
+
 [dependencies]
 futures = "0.3.27"
 hyper = { version = "0.14", features = ["server", "tcp", "http1"] }

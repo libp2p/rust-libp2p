@@ -19,7 +19,7 @@
 // DEALINGS IN THE SOFTWARE.
 
 use futures::io::{AsyncReadExt, AsyncWriteExt};
-use libp2p_core::InboundUpgrade;
+use libp2p_core::upgrade::InboundConnectionUpgrade;
 use libp2p_identity as identity;
 use libp2p_plaintext as plaintext;
 use quickcheck::QuickCheck;

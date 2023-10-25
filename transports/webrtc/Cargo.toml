@@ -38,8 +38,9 @@ tokio = ["dep:tokio", "dep:tokio-util", "dep:webrtc", "if-watch/tokio"]
 pem = ["webrtc?/pem"]
 
 [dev-dependencies]
+libp2p-identity = { workspace = true, features = ["rand"] }
+tokio = { version = "1.33", features = ["full"] }
 quickcheck = "1.0.3"
-tokio = { version = "1.32", features = ["full"] }
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 
 

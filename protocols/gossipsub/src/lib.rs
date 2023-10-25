@@ -158,7 +158,7 @@ mod types;
 
 pub use self::behaviour::{Behaviour, Event, MessageAuthenticity};
 pub use self::config::{Config, ConfigBuilder, ValidationMode, Version};
-pub use self::error::{PublishError, SubscriptionError, ValidationError};
+pub use self::error::{ConfigBuilderError, PublishError, SubscriptionError, ValidationError};
 pub use self::metrics::Config as MetricsConfig;
 pub use self::peer_score::{
     score_parameter_decay, score_parameter_decay_with_base, PeerScoreParams, PeerScoreThresholds,
@@ -171,7 +171,7 @@ pub use self::subscription_filter::{
 };
 pub use self::topic::{Hasher, Topic, TopicHash};
 pub use self::transform::{DataTransform, IdentityTransform};
-pub use self::types::{FastMessageId, Message, MessageAcceptance, MessageId, RawMessage, Rpc};
+pub use self::types::{Message, MessageAcceptance, MessageId, RawMessage, Rpc};
 
 pub type IdentTopic = Topic<self::topic::IdentityHash>;
 pub type Sha256Topic = Topic<self::topic::Sha256Hash>;

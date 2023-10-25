@@ -11,14 +11,6 @@ pub(crate) mod native {
     use std::time::Duration;
 
     use anyhow::{bail, Context, Result};
-<<<<<<< HEAD
-    use either::Either;
-||||||| ecdd0ff76
-    use either::Either;
-    use env_logger::{Env, Target};
-=======
-    use env_logger::{Env, Target};
->>>>>>> master
     use futures::future::BoxFuture;
     use futures::FutureExt;
     use libp2p::identity::Keypair;

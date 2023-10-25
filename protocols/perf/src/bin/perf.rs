@@ -422,7 +422,8 @@ async fn swarm<B: NetworkBehaviour + Default>() -> Result<Swarm<B>> {
         Default::default(),
         local_peer_id,
         Config::with_tokio_executor()
-            .with_substream_upgrade_protocol_override(upgrade::Version::V1Lazy),
+            .with_substream_upgrade_protocol_override(upgrade::Version::V1Lazy)
+            .with_idle_connection_timeout(Duration::from_secs(60 * 5)),
     );
 
     Ok(swarm)

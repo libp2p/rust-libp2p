@@ -29,8 +29,8 @@ use libp2p_identity::PeerId;
 use libp2p_request_response::ProtocolSupport;
 use libp2p_swarm::behaviour::FromSwarm;
 use libp2p_swarm::{
-    ConnectionDenied, ConnectionId, NetworkBehaviour, PollParameters, THandler, THandlerInEvent,
-    THandlerOutEvent, ToSwarm,
+    ConnectionDenied, ConnectionId, NetworkBehaviour, THandler, THandlerInEvent, THandlerOutEvent,
+    ToSwarm,
 };
 use std::collections::{HashMap, HashSet};
 use std::iter;
@@ -158,7 +158,6 @@ impl NetworkBehaviour for Behaviour {
     fn poll(
         &mut self,
         cx: &mut Context<'_>,
-        params: &mut impl PollParameters,
     ) -> Poll<ToSwarm<Self::ToSwarm, THandlerInEvent<Self>>> {
         if let Poll::Ready(ExpiredRegistration(registration)) = self.registrations.poll(cx) {
             return Poll::Ready(ToSwarm::GenerateEvent(Event::RegistrationExpired(
@@ -167,7 +166,7 @@ impl NetworkBehaviour for Behaviour {
         }
 
         loop {
-            if let Poll::Ready(to_swarm) = self.inner.poll(cx, params) {
+            if let Poll::Ready(to_swarm) = self.inner.poll(cx) {
                 match to_swarm {
                     ToSwarm::GenerateEvent(libp2p_request_response::Event::Message {
                         peer: peer_id,
