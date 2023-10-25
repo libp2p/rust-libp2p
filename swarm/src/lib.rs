@@ -1135,20 +1135,28 @@ where
                         .on_swarm_event(FromSwarm::NewExternalAddrCandidate(
                             NewExternalAddrCandidate { addr: &addr },
                         ));
+                    self.pending_swarm_events
+                        .push_back(SwarmEvent::NewExternalAddrCandidate { address: addr });
                 } else {
                     for addr in translated_addresses {
                         self.behaviour
                             .on_swarm_event(FromSwarm::NewExternalAddrCandidate(
                                 NewExternalAddrCandidate { addr: &addr },
                             ));
+                        self.pending_swarm_events
+                            .push_back(SwarmEvent::NewExternalAddrCandidate { address: addr });
                     }
                 }
             }
             ToSwarm::ExternalAddrConfirmed(addr) => {
-                self.add_external_address(addr);
+                self.add_external_address(addr.clone());
+                self.pending_swarm_events
+                    .push_back(SwarmEvent::ExternalAddrConfirmed { address: addr });
             }
             ToSwarm::ExternalAddrExpired(addr) => {
                 self.remove_external_address(&addr);
+                self.pending_swarm_events
+                    .push_back(SwarmEvent::ExternalAddrExpired { address: addr });
             }
             ToSwarm::CloseConnection {
                 peer_id,
