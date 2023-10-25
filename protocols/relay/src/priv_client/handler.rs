@@ -269,7 +269,7 @@ impl Handler {
             Err(PushError::BeyondCapacity(_)) => log::warn!(
                 "Dropping inbound circuit request to be denied from {src_peer_id} due to exceeding limit."
             ),
-            Err(PushError::ReplacedFuture(_)) => log::warn!(
+            Err(PushError::Replaced(_)) => log::warn!(
                 "Dropping existing inbound circuit request to be denied from {src_peer_id} in favor of new one."
             ),
             Ok(()) => {}
