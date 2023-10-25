@@ -42,7 +42,8 @@ To see the span data collected as part of the `Swarm`s activity, start up an ope
 docker compose up
 ```
 
-
+Next, (re)-start the two example for it to connect to the OTEL collector.
+Finally, open the Jaeger UI in a browser and explore the spans: http://localhost:16686.
 
 ## Conclusion
 
