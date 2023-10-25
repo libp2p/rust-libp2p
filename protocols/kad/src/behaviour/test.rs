@@ -23,7 +23,7 @@
 use super::*;
 
 use crate::kbucket::Distance;
-use crate::record_priv::{store::MemoryStore, Key};
+use crate::record::{store::MemoryStore, Key};
 use crate::{K_VALUE, SHA_256_MH};
 use futures::{executor::block_on, future::poll_fn, prelude::*};
 use futures_timer::Delay;
@@ -449,7 +449,7 @@ fn get_record_not_found() {
         .map(|(_addr, swarm)| swarm)
         .collect::<Vec<_>>();
 
-    let target_key = record_priv::Key::from(random_multihash());
+    let target_key = record::Key::from(random_multihash());
     let qid = swarms[0].behaviour_mut().get_record(target_key.clone());
 
     block_on(poll_fn(move |ctx| {
@@ -858,7 +858,7 @@ fn get_record_many() {
 /// network where X is equal to the configured replication factor.
 #[test]
 fn add_provider() {
-    fn prop(keys: Vec<record_priv::Key>, seed: Seed) {
+    fn prop(keys: Vec<record::Key>, seed: Seed) {
         let mut rng = StdRng::from_seed(seed.0);
         let replication_factor =
             NonZeroUsize::new(rng.gen_range(1..(K_VALUE.get() / 2) + 1)).unwrap();
@@ -1372,7 +1372,7 @@ fn network_behaviour_on_address_change() {
 
 #[test]
 fn get_providers_single() {
-    fn prop(key: record_priv::Key) {
+    fn prop(key: record::Key) {
         let (_, mut single_swarm) = build_node();
         single_swarm
             .behaviour_mut()
@@ -1426,7 +1426,7 @@ fn get_providers_single() {
 }
 
 fn get_providers_limit<const N: usize>() {
-    fn prop<const N: usize>(key: record_priv::Key) {
+    fn prop<const N: usize>(key: record::Key) {
         let mut swarms = build_nodes(3);
 
         // Let first peer know of second peer and second peer know of third peer.

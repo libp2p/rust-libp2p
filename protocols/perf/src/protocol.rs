@@ -18,184 +18,184 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use async_trait::async_trait;
-use futures::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
+use futures_timer::Delay;
 use instant::Instant;
-use libp2p_request_response as request_response;
-use libp2p_swarm::StreamProtocol;
-use std::io;
+use std::time::Duration;
 
-use crate::{RunDuration, RunParams};
+use futures::{
+    future::{select, Either},
+    AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, FutureExt, SinkExt, Stream, StreamExt,
+};
 
-const BUF: [u8; 65536] = [0; 64 << 10];
+use crate::{Final, Intermediate, Run, RunDuration, RunParams, RunUpdate};
 
-#[derive(Debug)]
-pub enum Response {
-    Sender(usize),
-    Receiver(RunDuration),
+const BUF: [u8; 1024] = [0; 1024];
+const REPORT_INTERVAL: Duration = Duration::from_secs(1);
+
+pub(crate) fn send_receive<S: AsyncRead + AsyncWrite + Unpin + Send + 'static>(
+    params: RunParams,
+    stream: S,
+) -> impl Stream<Item = Result<RunUpdate, std::io::Error>> {
+    // Use a channel to simulate a generator. `send_receive_inner` can `yield` events through the
+    // channel.
+    let (sender, receiver) = futures::channel::mpsc::channel(0);
+    let receiver = receiver.fuse();
+    let inner = send_receive_inner(params, stream, sender).fuse();
+
+    futures::stream::select(
+        receiver.map(|progressed| Ok(RunUpdate::Intermediate(progressed))),
+        inner
+            .map(|finished| finished.map(RunUpdate::Final))
+            .into_stream(),
+    )
 }
 
-#[derive(Default)]
-pub struct Codec {
-    to_receive: Option<usize>,
+async fn send_receive_inner<S: AsyncRead + AsyncWrite + Unpin + Send + 'static>(
+    params: RunParams,
+    mut stream: S,
+    mut progress: futures::channel::mpsc::Sender<Intermediate>,
+) -> Result<Final, std::io::Error> {
+    let mut delay = Delay::new(REPORT_INTERVAL);
 
-    write_start: Option<Instant>,
-    read_start: Option<Instant>,
-    read_done: Option<Instant>,
-}
+    let RunParams {
+        to_send,
+        to_receive,
+    } = params;
 
-impl Clone for Codec {
-    fn clone(&self) -> Self {
-        Default::default()
-    }
-}
+    let mut receive_buf = vec![0; 1024];
+    let to_receive_bytes = (to_receive as u64).to_be_bytes();
+    stream.write_all(&to_receive_bytes).await?;
 
-#[async_trait]
-impl request_response::Codec for Codec {
-    /// The type of protocol(s) or protocol versions being negotiated.
-    type Protocol = StreamProtocol;
-    /// The type of inbound and outbound requests.
-    type Request = RunParams;
-    /// The type of inbound and outbound responses.
-    type Response = Response;
+    let write_start = Instant::now();
+    let mut intermittant_start = Instant::now();
+    let mut sent = 0;
+    let mut intermittent_sent = 0;
 
-    /// Reads a request from the given I/O stream according to the
-    /// negotiated protocol.
-    async fn read_request<T>(&mut self, _: &Self::Protocol, io: &mut T) -> io::Result<Self::Request>
-    where
-        T: AsyncRead + Unpin + Send,
-    {
-        let mut receive_buf = vec![0; 64 << 10];
+    while sent < to_send {
+        let n = std::cmp::min(to_send - sent, BUF.len());
+        let buf = &BUF[..n];
 
-        let to_send = {
-            let mut buf = [0; 8];
-            io.read_exact(&mut buf).await?;
-
-            u64::from_be_bytes(buf) as usize
-        };
-
-        let mut received = 0;
-        loop {
-            let n = io.read(&mut receive_buf).await?;
-            received += n;
-            if n == 0 {
-                break;
+        let mut write = stream.write(buf);
+        sent += loop {
+            match select(&mut delay, &mut write).await {
+                Either::Left((_, _)) => {
+                    delay.reset(REPORT_INTERVAL);
+                    progress
+                        .send(Intermediate {
+                            duration: intermittant_start.elapsed(),
+                            sent: sent - intermittent_sent,
+                            received: 0,
+                        })
+                        .await
+                        .expect("receiver not to be dropped");
+                    intermittant_start = Instant::now();
+                    intermittent_sent = sent;
+                }
+                Either::Right((n, _)) => break n?,
             }
         }
+    }
 
-        Ok(RunParams {
+    loop {
+        match select(&mut delay, stream.close()).await {
+            Either::Left((_, _)) => {
+                delay.reset(REPORT_INTERVAL);
+                progress
+                    .send(Intermediate {
+                        duration: intermittant_start.elapsed(),
+                        sent: sent - intermittent_sent,
+                        received: 0,
+                    })
+                    .await
+                    .expect("receiver not to be dropped");
+                intermittant_start = Instant::now();
+                intermittent_sent = sent;
+            }
+            Either::Right((Ok(_), _)) => break,
+            Either::Right((Err(e), _)) => return Err(e),
+        }
+    }
+
+    let write_done = Instant::now();
+    let mut received = 0;
+    let mut intermittend_received = 0;
+
+    while received < to_receive {
+        let mut read = stream.read(&mut receive_buf);
+        received += loop {
+            match select(&mut delay, &mut read).await {
+                Either::Left((_, _)) => {
+                    delay.reset(REPORT_INTERVAL);
+                    progress
+                        .send(Intermediate {
+                            duration: intermittant_start.elapsed(),
+                            sent: sent - intermittent_sent,
+                            received: received - intermittend_received,
+                        })
+                        .await
+                        .expect("receiver not to be dropped");
+                    intermittant_start = Instant::now();
+                    intermittent_sent = sent;
+                    intermittend_received = received;
+                }
+                Either::Right((n, _)) => break n?,
+            }
+        }
+    }
+
+    let read_done = Instant::now();
+
+    Ok(Final {
+        duration: RunDuration {
+            upload: write_done.duration_since(write_start),
+            download: read_done.duration_since(write_done),
+        },
+    })
+}
+
+pub(crate) async fn receive_send<S: AsyncRead + AsyncWrite + Unpin>(
+    mut stream: S,
+) -> Result<Run, std::io::Error> {
+    let to_send = {
+        let mut buf = [0; 8];
+        stream.read_exact(&mut buf).await?;
+
+        u64::from_be_bytes(buf) as usize
+    };
+
+    let read_start = Instant::now();
+
+    let mut receive_buf = vec![0; 1024];
+    let mut received = 0;
+    loop {
+        let n = stream.read(&mut receive_buf).await?;
+        received += n;
+        if n == 0 {
+            break;
+        }
+    }
+
+    let read_done = Instant::now();
+
+    let mut sent = 0;
+    while sent < to_send {
+        let n = std::cmp::min(to_send - sent, BUF.len());
+        let buf = &BUF[..n];
+
+        sent += stream.write(buf).await?;
+    }
+
+    stream.close().await?;
+    let write_done = Instant::now();
+
+    Ok(Run {
+        params: RunParams {
+            to_send: sent,
             to_receive: received,
-            to_send,
-        })
-    }
-
-    /// Reads a response from the given I/O stream according to the
-    /// negotiated protocol.
-    async fn read_response<T>(
-        &mut self,
-        _: &Self::Protocol,
-        io: &mut T,
-    ) -> io::Result<Self::Response>
-    where
-        T: AsyncRead + Unpin + Send,
-    {
-        assert!(self.write_start.is_some());
-        assert_eq!(self.read_start, None);
-        assert_eq!(self.read_done, None);
-
-        self.read_start = Some(Instant::now());
-
-        let mut receive_buf = vec![0; 64 << 10];
-
-        let mut received = 0;
-        loop {
-            let n = io.read(&mut receive_buf).await?;
-            received += n;
-            // Make sure to wait for the remote to close the stream. Otherwise with `to_receive` of `0`
-            // one does not measure the full round-trip of the previous write.
-            if n == 0 {
-                break;
-            }
-        }
-
-        self.read_done = Some(Instant::now());
-
-        assert_eq!(received, self.to_receive.unwrap());
-
-        Ok(Response::Receiver(RunDuration {
-            upload: self
-                .read_start
-                .unwrap()
-                .duration_since(self.write_start.unwrap()),
-            download: self
-                .read_done
-                .unwrap()
-                .duration_since(self.read_start.unwrap()),
-        }))
-    }
-
-    /// Writes a request to the given I/O stream according to the
-    /// negotiated protocol.
-    async fn write_request<T>(
-        &mut self,
-        _: &Self::Protocol,
-        io: &mut T,
-        req: Self::Request,
-    ) -> io::Result<()>
-    where
-        T: AsyncWrite + Unpin + Send,
-    {
-        assert_eq!(self.to_receive, None);
-        assert_eq!(self.write_start, None);
-        assert_eq!(self.read_start, None);
-        assert_eq!(self.read_done, None);
-
-        self.write_start = Some(Instant::now());
-
-        let RunParams {
-            to_send,
-            to_receive,
-        } = req;
-
-        self.to_receive = Some(to_receive);
-
-        io.write_all(&(to_receive as u64).to_be_bytes()).await?;
-
-        let mut sent = 0;
-        while sent < to_send {
-            let n = std::cmp::min(to_send - sent, BUF.len());
-            let buf = &BUF[..n];
-
-            sent += io.write(buf).await?;
-        }
-
-        Ok(())
-    }
-
-    /// Writes a response to the given I/O stream according to the
-    /// negotiated protocol.
-    async fn write_response<T>(
-        &mut self,
-        _: &Self::Protocol,
-        io: &mut T,
-        response: Self::Response,
-    ) -> io::Result<()>
-    where
-        T: AsyncWrite + Unpin + Send,
-    {
-        let to_send = match response {
-            Response::Sender(to_send) => to_send,
-            Response::Receiver(_) => unreachable!(),
-        };
-
-        let mut sent = 0;
-        while sent < to_send {
-            let n = std::cmp::min(to_send - sent, BUF.len());
-            let buf = &BUF[..n];
-
-            sent += io.write(buf).await?;
-        }
-
-        Ok(())
-    }
+        },
+        duration: RunDuration {
+            upload: write_done.duration_since(read_done),
+            download: read_done.duration_since(read_start),
+        },
+    })
 }

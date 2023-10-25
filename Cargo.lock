@@ -1938,6 +1938,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "hole-punching-tests"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "env_logger 0.10.0",
+ "futures",
+ "libp2p",
+ "log",
+ "redis",
+ "serde",
+ "serde_json",
+ "tokio",
+]
+
+[[package]]
 name = "hostname"
 version = "0.3.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2813,19 +2828,20 @@ dependencies = [
 
 [[package]]
 name = "libp2p-perf"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "anyhow",
- "async-trait",
  "clap",
  "env_logger 0.10.0",
  "futures",
+ "futures-bounded",
+ "futures-timer",
  "instant",
+ "libp2p",
  "libp2p-core",
  "libp2p-dns",
  "libp2p-identity",
  "libp2p-quic",
- "libp2p-request-response",
  "libp2p-swarm",
  "libp2p-swarm-test",
  "libp2p-tcp",
