@@ -45,9 +45,13 @@ async fn connect() {
     relay.add_external_address(relay_addr.clone());
 
     let (dst_mem_addr, dst_tcp_addr) = dst.listen().await;
-    dst.remove_external_address(&dst_mem_addr);
     let (src_mem_addr, _) = src.listen().await;
+
+    dst.remove_external_address(&dst_mem_addr);
     src.remove_external_address(&src_mem_addr);
+
+    assert!(src.external_addresses().next().is_none());
+    assert!(dst.external_addresses().next().is_none());
 
     let relay_peer_id = *relay.local_peer_id();
     let dst_peer_id = *dst.local_peer_id();
