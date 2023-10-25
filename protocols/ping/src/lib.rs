@@ -141,6 +141,7 @@ impl NetworkBehaviour for Behaviour {
         })
     }
 
+    #[tracing::instrument(level = "trace", name = "NetworkBehaviour::poll", skip(self))]
     fn poll(&mut self, _: &mut Context<'_>) -> Poll<ToSwarm<Self::ToSwarm, THandlerInEvent<Self>>> {
         if let Some(e) = self.events.pop_back() {
             Poll::Ready(ToSwarm::GenerateEvent(e))

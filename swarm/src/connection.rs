@@ -60,6 +60,7 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use std::task::Waker;
 use std::time::Duration;
 use std::{fmt, io, mem, pin::Pin, task::Context, task::Poll};
+use tracing::Instrument;
 
 static NEXT_CONNECTION_ID: AtomicUsize = AtomicUsize::new(1);
 
@@ -225,12 +226,17 @@ where
     /// Begins an orderly shutdown of the connection, returning the connection
     /// handler and a `Future` that resolves when connection shutdown is complete.
     pub(crate) fn close(self) -> (THandler, impl Future<Output = io::Result<()>>) {
-        (self.handler, self.muxing.close())
+        (
+            self.handler,
+            self.muxing
+                .close()
+                .instrument(tracing::trace_span!("StreamMuxer::poll_close")),
+        )
     }
 
     /// Polls the handler and the substream, forwarding events from the former to the latter and
     /// vice versa.
-    #[tracing::instrument(level = "info", name = "Connection::poll", skip(self, cx), fields(id = %self.connection_id, peer = %self.remote_peer_id, remote_address = %self.remote_addr))]
+    #[tracing::instrument(level = "debug", name = "Connection::poll", skip(self, cx), fields(id = %self.connection_id, peer = %self.remote_peer_id, remote_address = %self.remote_addr))]
     pub(crate) fn poll(
         self: Pin<&mut Self>,
         cx: &mut Context<'_>,
@@ -380,17 +386,23 @@ where
                 }
             }
 
-            match muxing.poll_unpin(cx)? {
-                Poll::Pending => {}
-                Poll::Ready(StreamMuxerEvent::AddressChange(address)) => {
-                    handler.on_connection_event(ConnectionEvent::AddressChange(AddressChange {
-                        new_address: &address,
-                    }));
-                    return Poll::Ready(Ok(Event::AddressChange(address)));
+            {
+                let _span = tracing::trace_span!("StreamMuxer::poll").entered();
+                match muxing.poll_unpin(cx)? {
+                    Poll::Pending => {}
+                    Poll::Ready(StreamMuxerEvent::AddressChange(address)) => {
+                        handler.on_connection_event(ConnectionEvent::AddressChange(
+                            AddressChange {
+                                new_address: &address,
+                            },
+                        ));
+                        return Poll::Ready(Ok(Event::AddressChange(address)));
+                    }
                 }
             }
 
             if let Some(requested_substream) = requested_substreams.iter_mut().next() {
+                let _span = tracing::trace_span!("StreamMuxer::poll_outbound").entered();
                 match muxing.poll_outbound_unpin(cx)? {
                     Poll::Pending => {}
                     Poll::Ready(substream) => {
@@ -410,6 +422,8 @@ where
             }
 
             if negotiating_in.len() < *max_negotiating_inbound_streams {
+                let _span = tracing::trace_span!("StreamMuxer::poll_inbound").entered();
+
                 match muxing.poll_inbound_unpin(cx)? {
                     Poll::Pending => {}
                     Poll::Ready(substream) => {
