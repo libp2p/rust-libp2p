@@ -33,7 +33,7 @@ use libp2p_swarm::handler::{
     ConnectionEvent, DialUpgradeError, FullyNegotiatedInbound, FullyNegotiatedOutbound,
 };
 use libp2p_swarm::{
-    ConnectionHandler, ConnectionHandlerEvent, ConnectionId, KeepAlive, Stream, StreamUpgradeError,
+    ConnectionHandler, ConnectionHandlerEvent, ConnectionId, Stream, StreamUpgradeError,
     SubstreamProtocol, SupportedProtocols,
 };
 use log::trace;
@@ -700,14 +700,6 @@ impl ConnectionHandler for Handler {
                 self.mode = new_mode;
             }
         }
-    }
-
-    fn connection_keep_alive(&self) -> KeepAlive {
-        if self.outbound_substreams.is_empty() && self.inbound_substreams.is_empty() {
-            return KeepAlive::No;
-        };
-
-        KeepAlive::Yes
     }
 
     fn poll(

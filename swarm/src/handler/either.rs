@@ -20,7 +20,7 @@
 
 use crate::handler::{
     ConnectionEvent, ConnectionHandler, ConnectionHandlerEvent, FullyNegotiatedInbound,
-    InboundUpgradeSend, KeepAlive, ListenUpgradeError, SubstreamProtocol,
+    InboundUpgradeSend, ListenUpgradeError, SubstreamProtocol,
 };
 use crate::upgrade::SendWrapper;
 use either::Either;
@@ -108,7 +108,7 @@ where
         }
     }
 
-    fn connection_keep_alive(&self) -> KeepAlive {
+    fn connection_keep_alive(&self) -> bool {
         match self {
             Either::Left(handler) => handler.connection_keep_alive(),
             Either::Right(handler) => handler.connection_keep_alive(),
