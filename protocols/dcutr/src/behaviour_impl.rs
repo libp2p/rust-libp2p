@@ -300,15 +300,6 @@ impl NetworkBehaviour for Behaviour {
                     },
                 )]);
             }
-            Either::Left(handler::relayed::Event::InboundNegotiationFailed { error }) => {
-                self.queued_events.push_back(ToSwarm::GenerateEvent(
-                    Event::DirectConnectionUpgradeFailed {
-                        remote_peer_id: event_source,
-                        connection_id,
-                        error: Error::Handler(error),
-                    },
-                ));
-            }
             Either::Left(handler::relayed::Event::InboundConnectNegotiated(remote_addrs)) => {
                 log::debug!(
                     "Attempting to hole-punch as dialer to {event_source} using {remote_addrs:?}"
