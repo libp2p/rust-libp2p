@@ -15,6 +15,7 @@ members = [
     "examples/relay-server",
     "examples/rendezvous",
     "examples/upnp",
+    "hole-punching-tests",
     "identity",
     "interop-tests",
     "misc/allow-block-list",
