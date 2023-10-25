@@ -72,10 +72,11 @@
 //!
 //! ```rust
 //! use std::error::Error;
+//! use tracing_subscriber::EnvFilter;
 //!
 //! #[async_std::main]
 //! async fn main() -> Result<(), Box<dyn Error>> {
-//!     env_logger::init();
+//!     tracing_subscriber::fmt().with_env_filter(EnvFilter::from_default_env()).init();
 //!
 //!     let mut swarm = libp2p::SwarmBuilder::with_new_identity();
 //!
@@ -96,10 +97,11 @@
 //! ```rust
 //! use libp2p::{identity, PeerId};
 //! use std::error::Error;
+//! use tracing_subscriber::EnvFilter;
 //!
 //! #[async_std::main]
 //! async fn main() -> Result<(), Box<dyn Error>> {
-//!     env_logger::init();
+//!     tracing_subscriber::fmt().with_env_filter(EnvFilter::from_default_env()).init();
 //!
 //!     let mut swarm = libp2p::SwarmBuilder::with_new_identity()
 //!         .with_async_std()
@@ -139,6 +141,7 @@
 //! use libp2p::swarm::NetworkBehaviour;
 //! use libp2p::{identity, ping, PeerId};
 //! use std::error::Error;
+//! use tracing_subscriber::EnvFilter;
 //!
 //! #[async_std::main]
 //! async fn main() -> Result<(), Box<dyn Error>> {
@@ -165,7 +168,7 @@
 //! to the [`Transport`] as well as events from the [`Transport`] to the [`NetworkBehaviour`].
 //!
 //! ```rust
-//! use libp2p::swarm::{NetworkBehaviour, SwarmBuilder};
+//! use libp2p::swarm::NetworkBehaviour;
 //! use libp2p::{identity, ping, PeerId};
 //! use std::error::Error;
 //! use tracing_subscriber::EnvFilter;
@@ -199,10 +202,11 @@
 //! Thus, without any other behaviour in place, we would not be able to observe the pings.
 //!
 //! ```rust
-//! use libp2p::swarm::{NetworkBehaviour, SwarmBuilder};
+//! use libp2p::swarm::NetworkBehaviour;
 //! use libp2p::{identity, ping, PeerId};
 //! use std::error::Error;
 //! use std::time::Duration;
+//! use tracing_subscriber::EnvFilter;
 //!
 //! #[async_std::main]
 //! async fn main() -> Result<(), Box<dyn Error>> {
@@ -250,7 +254,7 @@
 //! remote peer.
 //!
 //! ```rust
-//! use libp2p::swarm::{NetworkBehaviour, SwarmBuilder};
+//! use libp2p::swarm::NetworkBehaviour;
 //! use libp2p::{identity, ping, Multiaddr, PeerId};
 //! use std::error::Error;
 //! use std::time::Duration;
@@ -295,13 +299,13 @@
 //!
 //! ```no_run
 //! use futures::prelude::*;
-//! use libp2p::swarm::{NetworkBehaviour, SwarmEvent, SwarmBuilder};
+//! use libp2p::swarm::{NetworkBehaviour, SwarmEvent};
 //! use libp2p::{identity, ping, Multiaddr, PeerId};
 //! use std::error::Error;
 //! use std::time::Duration;
 //! use tracing_subscriber::EnvFilter;
 //!
-//! #[async_std::main]
+//! #[async_std::main]F
 //! async fn main() -> Result<(), Box<dyn Error>> {
 //!     tracing_subscriber::fmt().with_env_filter(EnvFilter::from_default_env()).init();
 //!
