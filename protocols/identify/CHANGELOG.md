@@ -5,7 +5,7 @@
 - Don't repeatedly report the same observed address as a `NewExternalAddrCandidate`.
   Instead, only report each observed address once.
   This allows users to probabilistically deem an address as external if it gets reported as a candidate repeatedly. 
-  See [PR XXXX](https://github.com/libp2p/rust-libp2p/pull/XXXX).
+  See [PR 4721](https://github.com/libp2p/rust-libp2p/pull/4721).
 
 ## 0.43.1
 

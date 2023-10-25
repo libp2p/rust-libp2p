@@ -14,7 +14,7 @@
 - Log `PeerId` of `Swarm` even when constructed with new `SwarmBuilder`.
   See [PR 4671](https://github.com/libp2p/rust-libp2p/pull/4671).
 - Add `SwarmEvent::{NewExternalAddrCandidate,ExternalAddrConfirmed,ExternalAddrExpired}` variants.
-  See [PR XXXX](https://github.com/libp2p/rust-libp2p/pull/XXXX).
+  See [PR 4721](https://github.com/libp2p/rust-libp2p/pull/4721).
 
 ## 0.43.6
 
