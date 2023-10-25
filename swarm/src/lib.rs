@@ -374,6 +374,8 @@ where
         local_peer_id: PeerId,
         config: Config,
     ) -> Self {
+        log::info!("Local peer id: {local_peer_id}");
+
         Swarm {
             local_peer_id,
             transport,
@@ -1682,18 +1684,14 @@ where
 
     /// Builds a `Swarm` with the current configuration.
     pub fn build(self) -> Swarm<TBehaviour> {
-        log::info!("Local peer id: {}", self.local_peer_id);
-        Swarm {
-            local_peer_id: self.local_peer_id,
-            transport: self.transport,
-            pool: Pool::new(self.local_peer_id, self.pool_config),
-            behaviour: self.behaviour,
-            supported_protocols: Default::default(),
-            confirmed_external_addr: Default::default(),
-            listened_addrs: HashMap::new(),
-            pending_handler_event: None,
-            pending_swarm_events: VecDeque::default(),
-        }
+        Swarm::new(
+            self.transport,
+            self.behaviour,
+            self.local_peer_id,
+            Config {
+                pool_config: self.pool_config,
+            },
+        )
     }
 }
 
