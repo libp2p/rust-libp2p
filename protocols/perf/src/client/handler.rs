@@ -33,7 +33,7 @@ use libp2p_swarm::{
         ConnectionEvent, DialUpgradeError, FullyNegotiatedInbound, FullyNegotiatedOutbound,
         ListenUpgradeError,
     },
-    ConnectionHandler, ConnectionHandlerEvent, KeepAlive, StreamProtocol, SubstreamProtocol,
+    ConnectionHandler, ConnectionHandlerEvent, StreamProtocol, SubstreamProtocol,
 };
 use void::Void;
 
@@ -150,14 +150,6 @@ impl ConnectionHandler for Handler {
             ConnectionEvent::ListenUpgradeError(ListenUpgradeError { info: (), error }) => {
                 void::unreachable(error)
             }
-        }
-    }
-
-    fn connection_keep_alive(&self) -> KeepAlive {
-        if self.outbound.is_empty() {
-            KeepAlive::No
-        } else {
-            KeepAlive::Yes
         }
     }
 
