@@ -130,7 +130,6 @@ rw-stream-sink = { version = "0.4.0", path = "misc/rw-stream-sink" }
 # we import via `rust-multiaddr`.
 # This is expected to stay here until we move `libp2p-identity` to a separate repository which makes the dependency relationship more obvious.
 libp2p-identity = { path = "identity" }
-prometheus-client = { git = 'https://github.com/prometheus/client_rust.git', branch = "master" }
 
 [workspace.lints]
 rust.unreachable_pub = "warn"

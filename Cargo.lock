@@ -4180,7 +4180,8 @@ dependencies = [
 [[package]]
 name = "prometheus-client"
 version = "0.22.0"
-source = "git+https://github.com/prometheus/client_rust.git?branch=master#9d4ba09ec5bfc15522eb75145a5e850efd6fb628"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "510c4f1c9d81d556458f94c98f857748130ea9737bbd6053da497503b26ea63c"
 dependencies = [
  "dtoa",
  "itoa",
@@ -4191,7 +4192,8 @@ dependencies = [
 [[package]]
 name = "prometheus-client-derive-encode"
 version = "0.4.2"
-source = "git+https://github.com/prometheus/client_rust.git?branch=master#9d4ba09ec5bfc15522eb75145a5e850efd6fb628"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "440f724eba9f6996b75d63681b0a92b06947f1457076d503a4d2e2c8f56442b8"
 dependencies = [
  "proc-macro2",
  "quote",
