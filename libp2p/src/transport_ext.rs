@@ -29,7 +29,11 @@ use crate::{
     Transport,
 };
 use libp2p_identity::PeerId;
-use std::sync::Arc;
+use multiaddr::Multiaddr;
+use std::{
+    collections::HashMap,
+    sync::{Arc, RwLock},
+};
 
 /// Trait automatically implemented on all objects that implement `Transport`. Provides some
 /// additional utilities.
@@ -66,7 +70,12 @@ pub trait TransportExt: Transport {
     ///
     /// let (transport, sinks) = transport.with_bandwidth_logging();
     /// ```
-    fn with_bandwidth_logging<S>(self) -> (Boxed<(PeerId, StreamMuxerBox)>, Arc<BandwidthSinks>)
+    fn with_bandwidth_logging<S>(
+        self,
+    ) -> (
+        Boxed<(PeerId, StreamMuxerBox)>,
+        Arc<RwLock<HashMap<String, Arc<BandwidthSinks>>>>,
+    )
     where
         Self: Sized + Send + Unpin + 'static,
         Self::Dial: Send + 'static,
@@ -77,13 +86,32 @@ pub trait TransportExt: Transport {
         S::Substream: Send + 'static,
         S::Error: Send + Sync + 'static,
     {
-        let sinks = BandwidthSinks::new();
+        let sinks: Arc<RwLock<HashMap<_, Arc<BandwidthSinks>>>> = Arc::new(RwLock::new(HashMap::new()));
         let sinks_copy = sinks.clone();
-        let transport = Transport::map(self, |output, _| {
+        let transport = Transport::map(self, move |output, connected_point| {
+            fn as_string(ma: &Multiaddr) -> String {
+                let len = ma
+                    .protocol_stack()
+                    .fold(0, |acc, proto| acc + proto.len() + 1);
+                let mut protocols = String::with_capacity(len);
+                for proto_tag in ma.protocol_stack() {
+                    protocols.push('/');
+                    protocols.push_str(proto_tag);
+                }
+                protocols
+            }
+
+            let sink = sinks_copy
+                .write()
+                .expect("todo")
+                .entry(as_string(connected_point.get_remote_address()))
+                .or_default()
+                .clone();
+
             let (peer_id, stream_muxer_box) = output.into();
             (
                 peer_id,
-                StreamMuxerBox::new(BandwidthLogging::new(stream_muxer_box, sinks_copy)),
+                StreamMuxerBox::new(BandwidthLogging::new(stream_muxer_box, sink)),
             )
         })
         .boxed();

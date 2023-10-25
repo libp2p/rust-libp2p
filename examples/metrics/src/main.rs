@@ -37,13 +37,15 @@ mod http_service;
 fn main() -> Result<(), Box<dyn Error>> {
     env_logger::Builder::from_env(Env::default().default_filter_or("info")).init();
 
-    let mut swarm = libp2p::SwarmBuilder::with_new_identity()
+    let (builder, bandwidth_logging) = libp2p::SwarmBuilder::with_new_identity()
         .with_async_std()
         .with_tcp(
             tcp::Config::default(),
             noise::Config::new,
             yamux::Config::default,
         )?
+        .with_bandwidth_logging();
+    let mut swarm = builder
         .with_behaviour(|key| Behaviour::new(key.public()))?
         .with_swarm_config(|cfg| cfg.with_idle_connection_timeout(Duration::from_secs(u64::MAX)))
         .build();
@@ -58,6 +60,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     let mut metric_registry = Registry::default();
     let metrics = Metrics::new(&mut metric_registry);
+    libp2p::bandwidth::register_bandwidth_sinks(&mut metric_registry, bandwidth_logging);
     thread::spawn(move || block_on(http_service::metrics_server(metric_registry)));
 
     block_on(async {

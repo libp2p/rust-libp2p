@@ -1,4 +1,5 @@
 use super::*;
+use crate::bandwidth::BandwidthSinks;
 use crate::SwarmBuilder;
 #[cfg(all(not(target_arch = "wasm32"), feature = "websocket"))]
 use libp2p_core::muxing::StreamMuxer;
@@ -8,7 +9,9 @@ use libp2p_core::upgrade::{InboundConnectionUpgrade, OutboundConnectionUpgrade};
     all(not(target_arch = "wasm32"), feature = "websocket")
 ))]
 use libp2p_core::{InboundUpgrade, Negotiated, OutboundUpgrade, UpgradeInfo};
-use std::{marker::PhantomData, sync::Arc};
+use std::collections::HashMap;
+use std::marker::PhantomData;
+use std::sync::{Arc, RwLock};
 
 pub struct QuicPhase<T> {
     pub(crate) transport: T,
@@ -254,7 +257,7 @@ impl<Provider, T: AuthenticatedMultiplexedTransport> SwarmBuilder<Provider, Quic
             Provider,
             BehaviourPhase<impl AuthenticatedMultiplexedTransport, NoRelayBehaviour>,
         >,
-        Arc<crate::bandwidth::BandwidthSinks>,
+        Arc<RwLock<HashMap<String, Arc<BandwidthSinks>>>>,
     ) {
         self.without_quic()
             .without_any_other_transports()

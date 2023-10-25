@@ -1,6 +1,7 @@
+use std::collections::HashMap;
 use std::convert::Infallible;
 use std::marker::PhantomData;
-use std::sync::Arc;
+use std::sync::{Arc, RwLock};
 
 use libp2p_core::upgrade::{InboundConnectionUpgrade, OutboundConnectionUpgrade};
 use libp2p_core::Transport;
@@ -153,7 +154,7 @@ impl<Provider, T: AuthenticatedMultiplexedTransport>
             Provider,
             BehaviourPhase<impl AuthenticatedMultiplexedTransport, NoRelayBehaviour>,
         >,
-        Arc<BandwidthSinks>,
+        Arc<RwLock<HashMap<String, Arc<BandwidthSinks>>>>,
     ) {
         self.without_any_other_transports()
             .without_dns()

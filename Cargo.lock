@@ -2409,6 +2409,7 @@ dependencies = [
  "libp2p-yamux",
  "multiaddr",
  "pin-project",
+ "prometheus-client",
  "rw-stream-sink",
  "thiserror",
  "tokio",

@@ -42,6 +42,8 @@ mod protocol_stack;
 mod relay;
 mod swarm;
 
+use std::{sync::{Arc, RwLock}, collections::HashMap};
+
 use prometheus_client::registry::Registry;
 
 /// Set of Swarm and protocol metrics derived from emitted events.

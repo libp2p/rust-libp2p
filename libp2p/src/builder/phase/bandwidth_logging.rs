@@ -2,8 +2,9 @@ use super::*;
 use crate::bandwidth::BandwidthSinks;
 use crate::transport_ext::TransportExt;
 use crate::SwarmBuilder;
+use std::collections::HashMap;
 use std::marker::PhantomData;
-use std::sync::Arc;
+use std::sync::{Arc, RwLock};
 
 pub struct BandwidthLoggingPhase<T, R> {
     pub(crate) relay_behaviour: R,
@@ -17,7 +18,7 @@ impl<T: AuthenticatedMultiplexedTransport, Provider, R>
         self,
     ) -> (
         SwarmBuilder<Provider, BehaviourPhase<impl AuthenticatedMultiplexedTransport, R>>,
-        Arc<BandwidthSinks>,
+        Arc<RwLock<HashMap<String, Arc<BandwidthSinks>>>>,
     ) {
         let (transport, sinks) = self.phase.transport.with_bandwidth_logging();
         (

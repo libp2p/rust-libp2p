@@ -25,13 +25,18 @@ use futures::{
     prelude::*,
     ready,
 };
+use prometheus_client::{
+    encoding::{DescriptorEncoder, EncodeMetric},
+    metrics::{counter::ConstCounter, MetricType},
+};
 use std::{
+    collections::HashMap,
     convert::TryFrom as _,
     io,
     pin::Pin,
     sync::{
         atomic::{AtomicU64, Ordering},
-        Arc,
+        Arc, RwLock,
     },
     task::{Context, Poll},
 };
@@ -101,6 +106,7 @@ where
 }
 
 /// Allows obtaining the average bandwidth of the streams.
+#[derive(Default, Debug)]
 pub struct BandwidthSinks {
     inbound: AtomicU64,
     outbound: AtomicU64,
@@ -207,5 +213,34 @@ impl<SMInner: AsyncWrite> AsyncWrite for InstrumentedStream<SMInner> {
     fn poll_close(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
         let this = self.project();
         this.inner.poll_close(cx)
+    }
+}
+
+// TODO: Ideally this should go somewhere else. I.e. good to not depend on prometheus-client in libp2p.
+pub fn register_bandwidth_sinks(
+    registry: &mut prometheus_client::registry::Registry,
+    sinks: Arc<RwLock<HashMap<String, Arc<BandwidthSinks>>>>,
+) {
+    registry.register_collector(Box::new(SinksCollector(sinks)));
+}
+
+#[derive(Debug)]
+struct SinksCollector(Arc<RwLock<HashMap<String, Arc<BandwidthSinks>>>>);
+
+impl prometheus_client::collector::Collector for SinksCollector {
+    fn encode(&self, mut encoder: DescriptorEncoder) -> Result<(), std::fmt::Error> {
+        let mut family_encoder =
+            encoder.encode_descriptor("bandwidth", "todo", None, MetricType::Counter)?;
+        for (protocols, sink) in self.0.read().expect("todo").iter() {
+            let labels = [("protocols", protocols.as_str()), ("direction", "inbound")];
+            let metric_encoder = family_encoder.encode_family(&labels)?;
+            ConstCounter::new(sink.inbound.load(Ordering::Relaxed)).encode(metric_encoder)?;
+
+            let labels = [("protocols", protocols.as_str()), ("direction", "outbound")];
+            let metric_encoder = family_encoder.encode_family(&labels)?;
+            ConstCounter::new(sink.outbound.load(Ordering::Relaxed)).encode(metric_encoder)?;
+        }
+
+        Ok(())
     }
 }
