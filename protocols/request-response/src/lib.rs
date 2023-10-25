@@ -84,8 +84,8 @@ use libp2p_identity::PeerId;
 use libp2p_swarm::{
     behaviour::{AddressChange, ConnectionClosed, DialFailure, FromSwarm},
     dial_opts::DialOpts,
-    ConnectionDenied, ConnectionHandler, ConnectionId, NetworkBehaviour, NotifyHandler,
-    PollParameters, THandler, THandlerInEvent, THandlerOutEvent, ToSwarm,
+    ConnectionDenied, ConnectionHandler, ConnectionId, NetworkBehaviour, NotifyHandler, THandler,
+    THandlerInEvent, THandlerOutEvent, ToSwarm,
 };
 use smallvec::SmallVec;
 use std::{
@@ -284,28 +284,17 @@ impl fmt::Display for RequestId {
 #[derive(Debug, Clone)]
 pub struct Config {
     request_timeout: Duration,
-    connection_keep_alive: Duration,
 }
 
 impl Default for Config {
     fn default() -> Self {
         Self {
-            connection_keep_alive: Duration::from_secs(10),
             request_timeout: Duration::from_secs(10),
         }
     }
 }
 
 impl Config {
-    /// Sets the keep-alive timeout of idle connections.
-    #[deprecated(
-        note = "Set a global idle connection timeout via `SwarmBuilder::idle_connection_timeout` instead."
-    )]
-    pub fn set_connection_keep_alive(&mut self, v: Duration) -> &mut Self {
-        self.connection_keep_alive = v;
-        self
-    }
-
     /// Sets the timeout for inbound and outbound requests.
     pub fn set_request_timeout(&mut self, v: Duration) -> &mut Self {
         self.request_timeout = v;
@@ -717,7 +706,6 @@ where
             self.inbound_protocols.clone(),
             self.codec.clone(),
             self.config.request_timeout,
-            self.config.connection_keep_alive,
             self.next_inbound_id.clone(),
         );
 
@@ -760,7 +748,6 @@ where
             self.inbound_protocols.clone(),
             self.codec.clone(),
             self.config.request_timeout,
-            self.config.connection_keep_alive,
             self.next_inbound_id.clone(),
         );
 
@@ -907,11 +894,7 @@ where
         }
     }
 
-    fn poll(
-        &mut self,
-        _: &mut Context<'_>,
-        _: &mut impl PollParameters,
-    ) -> Poll<ToSwarm<Self::ToSwarm, THandlerInEvent<Self>>> {
+    fn poll(&mut self, _: &mut Context<'_>) -> Poll<ToSwarm<Self::ToSwarm, THandlerInEvent<Self>>> {
         if let Some(ev) = self.pending_events.pop_front() {
             return Poll::Ready(ev);
         } else if self.pending_events.capacity() > EMPTY_QUEUE_SHRINK_THRESHOLD {

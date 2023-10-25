@@ -1,3 +1,11 @@
+## 0.53.0 - unreleased
+
+- Raise MSRV to 1.73.
+  See [PR 4692](https://github.com/libp2p/rust-libp2p/pull/4692).
+- Remove deprecated `libp2p-wasm-ext`.
+  Users should use `libp2p-websocket-websys` instead.
+  See [PR 4694](https://github.com/libp2p/rust-libp2p/pull/4694).
+
 ## 0.52.4
 
 - Introduce `libp2p::websocket_websys` module behind `websocket-websys` feature flag.

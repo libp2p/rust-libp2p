@@ -1,4 +1,3 @@
-// Copyright 2023 Protocol Labs.
 // Copyright 2018 Parity Technologies (UK) Ltd.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a
@@ -20,30 +19,22 @@
 // DEALINGS IN THE SOFTWARE.
 
 use either::Either;
-use futures::future::MapOk;
-use futures::{future, TryFutureExt};
+use futures::future;
 use libp2p_core::either::EitherFuture;
-use libp2p_core::upgrade::{InboundConnectionUpgrade, OutboundConnectionUpgrade, UpgradeInfo};
-use libp2p_identity::PeerId;
+use libp2p_core::upgrade::{InboundConnectionUpgrade, OutboundConnectionUpgrade};
+use libp2p_core::UpgradeInfo;
 use std::iter::{Chain, Map};
 
-/// Upgrade that combines two upgrades into one. Supports all the protocols supported by either
-/// sub-upgrade.
-///
-/// The protocols supported by the first element have a higher priority.
 #[derive(Debug, Clone)]
-pub struct SelectSecurityUpgrade<A, B>(A, B);
+pub struct SelectMuxerUpgrade<A, B>(A, B);
 
-impl<A, B> SelectSecurityUpgrade<A, B> {
-    /// Combines two upgrades into an `SelectUpgrade`.
-    ///
-    /// The protocols supported by the first element have a higher priority.
+impl<A, B> SelectMuxerUpgrade<A, B> {
     pub fn new(a: A, b: B) -> Self {
-        SelectSecurityUpgrade(a, b)
+        SelectMuxerUpgrade(a, b)
     }
 }
 
-impl<A, B> UpgradeInfo for SelectSecurityUpgrade<A, B>
+impl<A, B> UpgradeInfo for SelectMuxerUpgrade<A, B>
 where
     A: UpgradeInfo,
     B: UpgradeInfo,
@@ -70,44 +61,36 @@ where
     }
 }
 
-impl<C, A, B, TA, TB, EA, EB> InboundConnectionUpgrade<C> for SelectSecurityUpgrade<A, B>
+impl<C, A, B, TA, TB, EA, EB> InboundConnectionUpgrade<C> for SelectMuxerUpgrade<A, B>
 where
-    A: InboundConnectionUpgrade<C, Output = (PeerId, TA), Error = EA>,
-    B: InboundConnectionUpgrade<C, Output = (PeerId, TB), Error = EB>,
+    A: InboundConnectionUpgrade<C, Output = TA, Error = EA>,
+    B: InboundConnectionUpgrade<C, Output = TB, Error = EB>,
 {
-    type Output = (PeerId, future::Either<TA, TB>);
+    type Output = future::Either<TA, TB>;
     type Error = Either<EA, EB>;
-    type Future = MapOk<
-        EitherFuture<A::Future, B::Future>,
-        fn(future::Either<(PeerId, TA), (PeerId, TB)>) -> (PeerId, future::Either<TA, TB>),
-    >;
+    type Future = EitherFuture<A::Future, B::Future>;
 
     fn upgrade_inbound(self, sock: C, info: Self::Info) -> Self::Future {
         match info {
             Either::Left(info) => EitherFuture::First(self.0.upgrade_inbound(sock, info)),
             Either::Right(info) => EitherFuture::Second(self.1.upgrade_inbound(sock, info)),
         }
-        .map_ok(future::Either::factor_first)
     }
 }
 
-impl<C, A, B, TA, TB, EA, EB> OutboundConnectionUpgrade<C> for SelectSecurityUpgrade<A, B>
+impl<C, A, B, TA, TB, EA, EB> OutboundConnectionUpgrade<C> for SelectMuxerUpgrade<A, B>
 where
-    A: OutboundConnectionUpgrade<C, Output = (PeerId, TA), Error = EA>,
-    B: OutboundConnectionUpgrade<C, Output = (PeerId, TB), Error = EB>,
+    A: OutboundConnectionUpgrade<C, Output = TA, Error = EA>,
+    B: OutboundConnectionUpgrade<C, Output = TB, Error = EB>,
 {
-    type Output = (PeerId, future::Either<TA, TB>);
+    type Output = future::Either<TA, TB>;
     type Error = Either<EA, EB>;
-    type Future = MapOk<
-        EitherFuture<A::Future, B::Future>,
-        fn(future::Either<(PeerId, TA), (PeerId, TB)>) -> (PeerId, future::Either<TA, TB>),
-    >;
+    type Future = EitherFuture<A::Future, B::Future>;
 
     fn upgrade_outbound(self, sock: C, info: Self::Info) -> Self::Future {
         match info {
             Either::Left(info) => EitherFuture::First(self.0.upgrade_outbound(sock, info)),
             Either::Right(info) => EitherFuture::Second(self.1.upgrade_outbound(sock, info)),
         }
-        .map_ok(future::Either::factor_first)
     }
 }
