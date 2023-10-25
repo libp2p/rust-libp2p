@@ -90,11 +90,9 @@ async fn main() -> Result<()> {
         .await
         .context("Failed to connect to relay")?;
 
-    let hole_punched_peer = match mode {
+    match mode {
         Mode::Listen => {
             swarm.listen_on(relay_addr.with(Protocol::P2pCircuit))?;
-
-            None
         }
         Mode::Dial => {
             let remote_peer_id = redis.pop(LISTEN_CLIENT_PEER_ID).await?;
@@ -104,8 +102,6 @@ async fn main() -> Result<()> {
                     .with(Protocol::P2pCircuit)
                     .with(Protocol::P2p(remote_peer_id)),
             )?;
-
-            Some(remote_peer_id)
         }
     };
 
@@ -127,7 +123,10 @@ async fn main() -> Result<()> {
             }
             (
                 SwarmEvent::Behaviour(BehaviourEvent::Dcutr(
-                    dcutr::Event::DirectConnectionUpgradeSucceeded { remote_peer_id },
+                    dcutr::Event::DirectConnectionUpgradeSucceeded {
+                        remote_peer_id,
+                        connection_id,
+                    },
                 )),
                 _,
             ) => {
@@ -135,6 +134,7 @@ async fn main() -> Result<()> {
 
                 // Closing the connection to the relay will implicitly close the relayed connection to the other peer.
                 swarm.close_connection(relay_conn_id);
+                hole_punched_peer_connection = Some(connection_id);
             }
             (
                 SwarmEvent::Behaviour(BehaviourEvent::Ping(ping::Event {
@@ -153,6 +153,7 @@ async fn main() -> Result<()> {
                     dcutr::Event::DirectConnectionUpgradeFailed {
                         remote_peer_id,
                         error,
+                        ..
                     },
                 )),
                 _,
@@ -162,37 +163,6 @@ async fn main() -> Result<()> {
             }
             (SwarmEvent::OutgoingConnectionError { error, .. }, _) => {
                 anyhow::bail!(error)
-            }
-            (
-                SwarmEvent::ConnectionEstablished {
-                    connection_id,
-                    endpoint,
-                    peer_id,
-                    ..
-                },
-                _,
-            ) if mode == Mode::Dial => {
-                log::info!(
-                    "Now connected to {peer_id} via {}",
-                    endpoint.get_remote_address()
-                );
-
-                let hole_punched_peer =
-                    hole_punched_peer.expect("dialer always knows remote peer id");
-
-                if hole_punched_peer != peer_id {
-                    continue;
-                }
-
-                if endpoint
-                    .get_remote_address()
-                    .iter()
-                    .any(|p| matches!(p, Protocol::P2pCircuit))
-                {
-                    continue;
-                }
-
-                hole_punched_peer_connection = Some(connection_id)
             }
             (
                 SwarmEvent::ConnectionClosed {
