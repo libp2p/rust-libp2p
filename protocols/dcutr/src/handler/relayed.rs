@@ -48,9 +48,6 @@ pub enum Event {
     InboundConnectRequest {
         remote_addr: Multiaddr,
     },
-    InboundNegotiationFailed {
-        error: StreamUpgradeError<void::Void>,
-    },
     InboundConnectNegotiated(Vec<Multiaddr>),
     OutboundNegotiationFailed {
         error: StreamUpgradeError<void::Void>,
