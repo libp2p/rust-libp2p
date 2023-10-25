@@ -65,7 +65,8 @@ use crate::handshake::State;
 use crate::io::handshake;
 use crate::protocol::{noise_params_into_builder, AuthenticKeypair, Keypair, PARAMS_XX};
 use futures::prelude::*;
-use libp2p_core::{InboundUpgrade, OutboundUpgrade, UpgradeInfo};
+use libp2p_core::upgrade::{InboundConnectionUpgrade, OutboundConnectionUpgrade};
+use libp2p_core::UpgradeInfo;
 use libp2p_identity as identity;
 use libp2p_identity::PeerId;
 use multiaddr::Protocol;
@@ -171,7 +172,7 @@ impl UpgradeInfo for Config {
     }
 }
 
-impl<T> InboundUpgrade<T> for Config
+impl<T> InboundConnectionUpgrade<T> for Config
 where
     T: AsyncRead + AsyncWrite + Unpin + Send + 'static,
 {
@@ -195,7 +196,7 @@ where
     }
 }
 
-impl<T> OutboundUpgrade<T> for Config
+impl<T> OutboundConnectionUpgrade<T> for Config
 where
     T: AsyncRead + AsyncWrite + Unpin + Send + 'static,
 {
