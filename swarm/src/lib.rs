@@ -304,6 +304,12 @@ pub enum SwarmEvent<TBehaviourOutEvent, THandlerErr> {
         /// Identifier of the connection.
         connection_id: ConnectionId,
     },
+    /// We have discovered a new candidate for an external address for us.
+    NewExternalAddrCandidate { address: Multiaddr },
+    /// An external address of the local node was confirmed.
+    ExternalAddrConfirmed { address: Multiaddr },
+    /// An external address of the local node expired, i.e. is no-longer confirmed.
+    ExternalAddrExpired { address: Multiaddr },
 }
 
 impl<TBehaviourOutEvent, THandlerErr> SwarmEvent<TBehaviourOutEvent, THandlerErr> {
