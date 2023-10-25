@@ -2829,19 +2829,20 @@ dependencies = [
 
 [[package]]
 name = "libp2p-perf"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "anyhow",
- "async-trait",
  "clap",
  "env_logger 0.10.0",
  "futures",
+ "futures-bounded",
+ "futures-timer",
  "instant",
+ "libp2p",
  "libp2p-core",
  "libp2p-dns",
  "libp2p-identity",
  "libp2p-quic",
- "libp2p-request-response",
  "libp2p-swarm",
  "libp2p-swarm-test",
  "libp2p-tcp",
