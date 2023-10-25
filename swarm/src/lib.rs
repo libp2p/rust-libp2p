@@ -533,11 +533,11 @@ where
                     let (dial, span) = match dial_opts.role_override() {
                         Endpoint::Dialer => (
                             self.transport.dial(address.clone()),
-                            tracing::debug_span!("Transport::dial", %address),
+                            tracing::debug_span!(parent: tracing::Span::none(), "Transport::dial", %address),
                         ),
                         Endpoint::Listener => (
                             self.transport.dial_as_listener(address.clone()),
-                            tracing::debug_span!("Transport::dial_as_listener", %address),
+                            tracing::debug_span!(parent: tracing::Span::none(), "Transport::dial_as_listener", %address),
                         ),
                     };
                     match dial {
