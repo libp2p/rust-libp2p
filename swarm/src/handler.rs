@@ -55,7 +55,6 @@ pub use select::ConnectionHandlerSelect;
 
 use crate::StreamProtocol;
 use ::either::Either;
-use instant::Instant;
 use libp2p_core::Multiaddr;
 use once_cell::sync::Lazy;
 use smallvec::SmallVec;
@@ -63,7 +62,7 @@ use std::collections::hash_map::RandomState;
 use std::collections::hash_set::{Difference, Intersection};
 use std::collections::HashSet;
 use std::iter::Peekable;
-use std::{cmp::Ordering, error, fmt, io, task::Context, task::Poll, time::Duration};
+use std::{error, fmt, io, task::Context, task::Poll, time::Duration};
 
 /// A handler for a set of protocols used on a connection with a remote.
 ///
@@ -123,27 +122,27 @@ pub trait ConnectionHandler: Send + 'static {
     /// >           This allows a remote to put the list of supported protocols in a cache.
     fn listen_protocol(&self) -> SubstreamProtocol<Self::InboundProtocol, Self::InboundOpenInfo>;
 
-    /// Returns until when the connection should be kept alive.
+    /// Returns whether the connection should be kept alive.
     ///
-    /// This method is called by the `Swarm` after each invocation of
-    /// [`ConnectionHandler::poll`] to determine if the connection and the associated
-    /// [`ConnectionHandler`]s should be kept alive as far as this handler is concerned
-    /// and if so, for how long.
+    /// ## Keep alive algorithm
     ///
-    /// Returning [`KeepAlive::No`] indicates that the connection should be
-    /// closed and this handler destroyed immediately.
+    /// A connection is always kept alive:
     ///
-    /// Returning [`KeepAlive::Until`] indicates that the connection may be closed
-    /// and this handler destroyed after the specified `Instant`.
+    /// - Whilst a [`ConnectionHandler`] returns [`Poll::Ready`].
+    /// - We are negotiating inbound or outbound streams.
+    /// - There are active [`Stream`](crate::Stream)s on the connection.
     ///
-    /// Returning [`KeepAlive::Yes`] indicates that the connection should
-    /// be kept alive until the next call to this method.
+    /// The combination of the above means that _most_ protocols will not need to override this method.
+    /// This method is only invoked when all of the above are `false`, i.e. when the connection is entirely idle.
     ///
-    /// > **Note**: The connection is always closed and the handler destroyed
-    /// > when [`ConnectionHandler::poll`] returns an error. Furthermore, the
-    /// > connection may be closed for reasons outside of the control
-    /// > of the handler.
-    fn connection_keep_alive(&self) -> KeepAlive;
+    /// ## Exceptions
+    ///
+    /// - Protocols like [circuit-relay v2](https://github.com/libp2p/specs/blob/master/relay/circuit-v2.md) need to keep a connection alive beyond these circumstances and can thus override this method.
+    /// - Protocols like [ping](https://github.com/libp2p/specs/blob/master/ping/ping.md) **don't** want to keep a connection alive despite an active streams.
+    /// In that case, protocol authors can use [`Stream::ignore_for_keep_alive`](crate::Stream::ignore_for_keep_alive) to opt-out a particular stream from the keep-alive algorithm.
+    fn connection_keep_alive(&self) -> bool {
+        false
+    }
 
     /// Should behave like `Stream::poll()`.
     fn poll(
@@ -178,10 +177,6 @@ pub trait ConnectionHandler: Send + 'static {
 
     /// Creates a new [`ConnectionHandler`] that selects either this handler or
     /// `other` by delegating methods calls appropriately.
-    ///
-    /// > **Note**: The largest `KeepAlive` returned by the two handlers takes precedence,
-    /// > i.e. is returned from [`ConnectionHandler::connection_keep_alive`] by the returned
-    /// > handler.
     fn select<TProto2>(self, other: TProto2) -> ConnectionHandlerSelect<Self, TProto2>
     where
         Self: Sized,
@@ -543,8 +538,7 @@ pub enum ConnectionHandlerEvent<TConnectionUpgrade, TOutboundOpenInfo, TCustom, 
     /// connection, in other words it will close the connection for all
     /// [`ConnectionHandler`]s. To signal that one has no more need for the
     /// connection, while allowing other [`ConnectionHandler`]s to continue using
-    /// the connection, return [`KeepAlive::No`] in
-    /// [`ConnectionHandler::connection_keep_alive`].
+    /// the connection, return false in [`ConnectionHandler::connection_keep_alive`].
     Close(TErr),
     /// We learned something about the protocols supported by the remote.
     ReportRemoteProtocols(ProtocolSupport),
@@ -721,67 +715,6 @@ where
 {
     fn source(&self) -> Option<&(dyn error::Error + 'static)> {
         None
-    }
-}
-
-/// How long the connection should be kept alive.
-#[derive(Debug, Copy, Clone, PartialEq, Eq)]
-pub enum KeepAlive {
-    /// If nothing new happens, the connection should be closed at the given `Instant`.
-    #[deprecated(
-        note = "Use `swarm::Config::with_idle_connection_timeout` instead. See <https://github.com/libp2p/rust-libp2p/issues/3844> for details."
-    )]
-    Until(Instant),
-    /// Keep the connection alive.
-    Yes,
-    /// Close the connection as soon as possible.
-    No,
-}
-
-impl KeepAlive {
-    /// Returns true for `Yes`, false otherwise.
-    pub fn is_yes(&self) -> bool {
-        matches!(*self, KeepAlive::Yes)
-    }
-}
-
-impl PartialOrd for KeepAlive {
-    fn partial_cmp(&self, other: &KeepAlive) -> Option<Ordering> {
-        Some(self.cmp(other))
-    }
-}
-
-#[allow(deprecated)]
-impl Ord for KeepAlive {
-    fn cmp(&self, other: &KeepAlive) -> Ordering {
-        use self::KeepAlive::*;
-
-        match (self, other) {
-            (No, No) | (Yes, Yes) => Ordering::Equal,
-            (No, _) | (_, Yes) => Ordering::Less,
-            (_, No) | (Yes, _) => Ordering::Greater,
-            (Until(t1), Until(t2)) => t1.cmp(t2),
-        }
-    }
-}
-
-#[cfg(test)]
-impl quickcheck::Arbitrary for KeepAlive {
-    fn arbitrary(g: &mut quickcheck::Gen) -> Self {
-        match quickcheck::GenRange::gen_range(g, 1u8..4) {
-            1 =>
-            {
-                #[allow(deprecated)]
-                KeepAlive::Until(
-                    Instant::now()
-                        .checked_add(Duration::arbitrary(g))
-                        .unwrap_or(Instant::now()),
-                )
-            }
-            2 => KeepAlive::Yes,
-            3 => KeepAlive::No,
-            _ => unreachable!(),
-        }
     }
 }
 
