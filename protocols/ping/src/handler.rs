@@ -257,10 +257,9 @@ impl ConnectionHandler for Handler {
                     log::debug!("Inbound ping error: {:?}", e);
                     self.inbound = None;
                 }
-                Poll::Ready(Ok(mut stream)) => {
+                Poll::Ready(Ok(stream)) => {
                     log::trace!("answered inbound ping from {}", self.peer);
 
-                    stream.ignore_for_keep_alive();
                     // A ping from a remote peer has been answered, wait for the next.
                     self.inbound = Some(protocol::recv_ping(stream).boxed());
                 }
@@ -291,10 +290,9 @@ impl ConnectionHandler for Handler {
                         self.outbound = Some(OutboundState::Ping(ping));
                         break;
                     }
-                    Poll::Ready(Ok((mut stream, rtt))) => {
+                    Poll::Ready(Ok((stream, rtt))) => {
                         log::debug!("latency to {} is {}ms", self.peer, rtt.as_millis());
 
-                        stream.ignore_for_keep_alive();
                         self.failures = 0;
                         self.interval.reset(self.config.interval);
                         self.outbound = Some(OutboundState::Idle(stream));
@@ -305,14 +303,12 @@ impl ConnectionHandler for Handler {
                         self.pending_errors.push_front(e);
                     }
                 },
-                Some(OutboundState::Idle(mut stream)) => match self.interval.poll_unpin(cx) {
+                Some(OutboundState::Idle(stream)) => match self.interval.poll_unpin(cx) {
                     Poll::Pending => {
-                        stream.ignore_for_keep_alive();
                         self.outbound = Some(OutboundState::Idle(stream));
                         break;
                     }
                     Poll::Ready(()) => {
-                        stream.ignore_for_keep_alive();
                         self.outbound = Some(OutboundState::Ping(
                             send_ping(stream, self.config.timeout).boxed(),
                         ));
@@ -349,15 +345,17 @@ impl ConnectionHandler for Handler {
     ) {
         match event {
             ConnectionEvent::FullyNegotiatedInbound(FullyNegotiatedInbound {
-                protocol: stream,
+                protocol: mut stream,
                 ..
             }) => {
+                stream.ignore_for_keep_alive();
                 self.inbound = Some(protocol::recv_ping(stream).boxed());
             }
             ConnectionEvent::FullyNegotiatedOutbound(FullyNegotiatedOutbound {
-                protocol: stream,
+                protocol: mut stream,
                 ..
             }) => {
+                stream.ignore_for_keep_alive();
                 self.outbound = Some(OutboundState::Ping(
                     send_ping(stream, self.config.timeout).boxed(),
                 ));

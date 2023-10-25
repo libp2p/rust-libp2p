@@ -8,8 +8,8 @@
   See [PR 4677](https://github.com/libp2p/rust-libp2p/pull/4677).
 - Simplify the connection keep-alive algorithm.
   Connections are now kept alive by default if there are active `Stream`s on it.
-  As a result, the `ConnectionHandler::connection_keep_alive` method now has a default implementation that returns `false`.
-  See its documentation for more details.
+  In case of no active `Stream`s the `ConnectionHandler` is asked whether it wants to keep the connection alive via  `ConnectionHandler::connection_keep_alive` which defaults to `false`.
+  See documentation on `ConnectionHandler::connection_keep_alive` for more details.
   See [PR 4703](https://github.com/libp2p/rust-libp2p/pull/4703).
 
 ## 0.43.6

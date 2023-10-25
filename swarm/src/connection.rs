@@ -372,6 +372,8 @@ where
                         Poll::Pending => {}
                     },
                 }
+            } else {
+                *shutdown = Shutdown::None;
             }
 
             match muxing.poll_unpin(cx)? {
