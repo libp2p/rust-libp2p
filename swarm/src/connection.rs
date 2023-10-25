@@ -60,7 +60,6 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use std::task::Waker;
 use std::time::Duration;
 use std::{fmt, io, mem, pin::Pin, task::Context, task::Poll};
-use tracing::Instrument;
 
 static NEXT_CONNECTION_ID: AtomicUsize = AtomicUsize::new(1);
 

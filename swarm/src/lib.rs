@@ -155,7 +155,6 @@ use std::{
     pin::Pin,
     task::{Context, Poll},
 };
-use tracing::Span;
 
 /// Substream for which a protocol has been chosen.
 ///
