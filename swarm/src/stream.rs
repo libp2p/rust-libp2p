@@ -4,26 +4,40 @@ use libp2p_core::Negotiated;
 use std::{
     io::{IoSlice, IoSliceMut},
     pin::Pin,
-    sync::{Arc, Weak},
+    sync::Arc,
     task::{Context, Poll},
 };
+
+/// Counter for the number of active streams on a connection.
+#[derive(Debug, Clone)]
+pub struct ActiveStreamCounter(Arc<()>);
+
+impl ActiveStreamCounter {
+    pub fn default() -> Self {
+        Self(Arc::new(()))
+    }
+
+    pub fn has_no_active_streams(&self) -> bool {
+        self.num_alive_streams() == 1
+    }
+
+    fn num_alive_streams(&self) -> usize {
+        Arc::strong_count(&self.0)
+    }
+}
 
 #[derive(Debug)]
 pub struct Stream {
     stream: Negotiated<SubstreamBox>,
-    counter: StreamCounter,
-}
-
-#[derive(Debug)]
-enum StreamCounter {
-    Arc(Arc<()>),
-    Weak(Weak<()>),
+    counter: Option<ActiveStreamCounter>,
 }
 
 impl Stream {
-    pub(crate) fn new(stream: Negotiated<SubstreamBox>, counter: Arc<()>) -> Self {
-        let counter = StreamCounter::Arc(counter);
-        Self { stream, counter }
+    pub(crate) fn new(stream: Negotiated<SubstreamBox>, counter: ActiveStreamCounter) -> Self {
+        Self {
+            stream,
+            counter: Some(counter),
+        }
     }
 
     /// Ignore this stream in the [Swarm](crate::Swarm)'s connection-keep-alive algorithm.
@@ -35,9 +49,7 @@ impl Stream {
     /// for example never complete and are of an auxiliary nature.
     /// These protocols should opt-out of the keep alive algorithm using this method.
     pub fn ignore_for_keep_alive(&mut self) {
-        if let StreamCounter::Arc(arc_counter) = &self.counter {
-            self.counter = StreamCounter::Weak(Arc::downgrade(arc_counter));
-        }
+        self.counter.take();
     }
 }
 

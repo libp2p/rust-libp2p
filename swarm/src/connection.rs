@@ -34,6 +34,7 @@ use crate::handler::{
     FullyNegotiatedOutbound, ListenUpgradeError, ProtocolSupport, ProtocolsAdded, ProtocolsChange,
     UpgradeInfoSend,
 };
+use crate::stream::ActiveStreamCounter;
 use crate::upgrade::{InboundUpgradeSend, OutboundUpgradeSend};
 use crate::{
     ConnectionHandlerEvent, Stream, StreamProtocol, StreamUpgradeError, SubstreamProtocol,
@@ -55,15 +56,11 @@ use std::collections::HashSet;
 use std::fmt::{Display, Formatter};
 use std::future::Future;
 use std::sync::atomic::{AtomicUsize, Ordering};
-use std::sync::Arc;
 use std::task::Waker;
 use std::time::Duration;
 use std::{fmt, io, mem, pin::Pin, task::Context, task::Poll};
 
 static NEXT_CONNECTION_ID: AtomicUsize = AtomicUsize::new(1);
-
-/// Counter for the number of active streams on a connection.
-type ActiveStreamCounter = Arc<()>;
 
 /// Connection identifier.
 #[derive(Debug, Copy, Clone, Hash, PartialEq, Eq, PartialOrd, Ord)]
@@ -208,7 +205,7 @@ where
             local_supported_protocols: initial_protocols,
             remote_supported_protocols: Default::default(),
             idle_timeout,
-            stream_counter: Arc::new(()),
+            stream_counter: ActiveStreamCounter::default(),
         }
     }
 
@@ -354,7 +351,7 @@ where
             if negotiating_in.is_empty()
                 && negotiating_out.is_empty()
                 && requested_substreams.is_empty()
-                && Arc::strong_count(stream_counter) == 1
+                && stream_counter.has_no_active_streams()
             {
                 if let Some(new_timeout) =
                     compute_new_shutdown(handler.connection_keep_alive(), shutdown, *idle_timeout)
@@ -976,7 +973,7 @@ mod tests {
     }
 
     struct DummyStreamMuxer {
-        counter: ActiveStreamCounter,
+        counter: Arc<()>,
     }
 
     impl StreamMuxer for DummyStreamMuxer {
