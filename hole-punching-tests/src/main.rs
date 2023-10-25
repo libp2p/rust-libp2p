@@ -194,6 +194,16 @@ async fn main() -> Result<()> {
 
                 hole_punched_peer_connection = Some(connection_id)
             }
+            (
+                SwarmEvent::ConnectionClosed {
+                    connection_id,
+                    cause: Some(error),
+                    ..
+                },
+                _,
+            ) if connection_id == relay_conn_id => {
+                anyhow::bail!("Connection to relay failed: {error}")
+            }
             _ => {}
         }
     }
