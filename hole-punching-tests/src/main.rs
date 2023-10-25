@@ -89,20 +89,7 @@ async fn main() -> Result<()> {
         .await
         .context("Failed to connect to relay")?;
 
-    match mode {
-        Mode::Listen => {
-            swarm.listen_on(relay_addr.with(Protocol::P2pCircuit))?;
-        }
-        Mode::Dial => {
-            let remote_peer_id = redis.pop(LISTEN_CLIENT_PEER_ID).await?;
-
-            swarm.dial(
-                relay_addr
-                    .with(Protocol::P2pCircuit)
-                    .with(Protocol::P2p(remote_peer_id)),
-            )?;
-        }
-    };
+    client_setup(&mut swarm, &mut redis, relay_addr.clone(), mode).await?;
 
     let mut hole_punched_peer_connection = None;
 
@@ -174,20 +161,7 @@ async fn main() -> Result<()> {
                 log::warn!("Connection to relay failed: {error}");
 
                 // TODO: Re-connecting is a bit of a hack, we should figure out why the connection sometimes fails.
-                match mode {
-                    Mode::Listen => {
-                        swarm.listen_on(relay_addr.with(Protocol::P2pCircuit))?;
-                    }
-                    Mode::Dial => {
-                        let remote_peer_id = redis.pop(LISTEN_CLIENT_PEER_ID).await?;
-
-                        swarm.dial(
-                            relay_addr
-                                .with(Protocol::P2pCircuit)
-                                .with(Protocol::P2p(remote_peer_id)),
-                        )?;
-                    }
-                };
+                client_setup(&mut swarm, &mut redis, relay_addr.clone(), mode).await?;
             }
             _ => {}
         }
@@ -283,6 +257,30 @@ async fn client_listen_on_transport(
             log::info!("Listening on {address}");
         }
     }
+    Ok(())
+}
+
+async fn client_setup(
+    swarm: &mut Swarm<Behaviour>,
+    redis: &mut RedisClient,
+    relay_addr: Multiaddr,
+    mode: Mode,
+) -> Result<()> {
+    match mode {
+        Mode::Listen => {
+            swarm.listen_on(relay_addr.with(Protocol::P2pCircuit))?;
+        }
+        Mode::Dial => {
+            let remote_peer_id = redis.pop(LISTEN_CLIENT_PEER_ID).await?;
+
+            swarm.dial(
+                relay_addr
+                    .with(Protocol::P2pCircuit)
+                    .with(Protocol::P2p(remote_peer_id)),
+            )?;
+        }
+    };
+
     Ok(())
 }
 
