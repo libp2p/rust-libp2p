@@ -35,14 +35,6 @@
 
 #![cfg_attr(docsrs, feature(doc_cfg, doc_auto_cfg))]
 
-mod record_priv;
-#[deprecated(
-    note = "The `record` module will be made private in the future and should not be depended on."
-)]
-pub mod record {
-    pub use super::record_priv::*;
-}
-
 mod addresses;
 mod behaviour;
 mod handler;
@@ -50,6 +42,7 @@ mod jobs;
 mod kbucket;
 mod protocol;
 mod query;
+mod record;
 
 mod proto {
     #![allow(unreachable_pub)]
@@ -77,7 +70,7 @@ pub use kbucket::{
 };
 pub use protocol::ConnectionType;
 pub use query::QueryId;
-pub use record_priv::{store, Key as RecordKey, ProviderRecord, Record};
+pub use record::{store, Key as RecordKey, ProviderRecord, Record};
 
 use libp2p_swarm::StreamProtocol;
 use std::num::NonZeroUsize;

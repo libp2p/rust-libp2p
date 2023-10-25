@@ -20,7 +20,7 @@ pub(crate) struct Behaviour {
     relay: relay::Behaviour,
     ping: ping::Behaviour,
     identify: identify::Behaviour,
-    pub(crate) kademlia: Toggle<kad::Behaviour<kad::record::store::MemoryStore>>,
+    pub(crate) kademlia: Toggle<kad::Behaviour<kad::store::MemoryStore>>,
     autonat: Toggle<autonat::Behaviour>,
 }
 
@@ -39,7 +39,7 @@ impl Behaviour {
             kademlia_config.set_provider_record_ttl(Some(Duration::from_secs(0)));
             let mut kademlia = kad::Behaviour::with_config(
                 pub_key.to_peer_id(),
-                kad::record::store::MemoryStore::new(pub_key.to_peer_id()),
+                kad::store::MemoryStore::new(pub_key.to_peer_id()),
                 kademlia_config,
             );
             let bootaddr = Multiaddr::from_str("/dnsaddr/bootstrap.libp2p.io").unwrap();
