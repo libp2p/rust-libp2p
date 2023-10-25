@@ -81,6 +81,7 @@ where
     type Substream = Stream;
     type Error = Error;
 
+    #[tracing::instrument(level = "trace", name = "StreamMuxer::poll_inbound", skip(self, cx))]
     fn poll_inbound(
         mut self: Pin<&mut Self>,
         cx: &mut Context<'_>,
@@ -97,6 +98,7 @@ where
         Poll::Pending
     }
 
+    #[tracing::instrument(level = "trace", name = "StreamMuxer::poll_outbound", skip(self, cx))]
     fn poll_outbound(
         mut self: Pin<&mut Self>,
         cx: &mut Context<'_>,
@@ -106,12 +108,14 @@ where
         Poll::Ready(Ok(Stream(stream)))
     }
 
+    #[tracing::instrument(level = "trace", name = "StreamMuxer::poll_close", skip(self, cx))]
     fn poll_close(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
         ready!(self.connection.poll_close(cx).map_err(Error)?);
 
         Poll::Ready(Ok(()))
     }
 
+    #[tracing::instrument(level = "trace", name = "StreamMuxer::poll", skip(self, cx))]
     fn poll(
         self: Pin<&mut Self>,
         cx: &mut Context<'_>,

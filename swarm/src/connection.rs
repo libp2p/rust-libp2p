@@ -226,12 +226,7 @@ where
     /// Begins an orderly shutdown of the connection, returning the connection
     /// handler and a `Future` that resolves when connection shutdown is complete.
     pub(crate) fn close(self) -> (THandler, impl Future<Output = io::Result<()>>) {
-        (
-            self.handler,
-            self.muxing
-                .close()
-                .instrument(tracing::trace_span!("StreamMuxer::poll_close")),
-        )
+        (self.handler, self.muxing.close())
     }
 
     /// Polls the handler and the substream, forwarding events from the former to the latter and
@@ -386,23 +381,17 @@ where
                 }
             }
 
-            {
-                let _span = tracing::trace_span!("StreamMuxer::poll").entered();
-                match muxing.poll_unpin(cx)? {
-                    Poll::Pending => {}
-                    Poll::Ready(StreamMuxerEvent::AddressChange(address)) => {
-                        handler.on_connection_event(ConnectionEvent::AddressChange(
-                            AddressChange {
-                                new_address: &address,
-                            },
-                        ));
-                        return Poll::Ready(Ok(Event::AddressChange(address)));
-                    }
+            match muxing.poll_unpin(cx)? {
+                Poll::Pending => {}
+                Poll::Ready(StreamMuxerEvent::AddressChange(address)) => {
+                    handler.on_connection_event(ConnectionEvent::AddressChange(AddressChange {
+                        new_address: &address,
+                    }));
+                    return Poll::Ready(Ok(Event::AddressChange(address)));
                 }
             }
 
             if let Some(requested_substream) = requested_substreams.iter_mut().next() {
-                let _span = tracing::trace_span!("StreamMuxer::poll_outbound").entered();
                 match muxing.poll_outbound_unpin(cx)? {
                     Poll::Pending => {}
                     Poll::Ready(substream) => {
@@ -422,8 +411,6 @@ where
             }
 
             if negotiating_in.len() < *max_negotiating_inbound_streams {
-                let _span = tracing::trace_span!("StreamMuxer::poll_inbound").entered();
-
                 match muxing.poll_inbound_unpin(cx)? {
                     Poll::Pending => {}
                     Poll::Ready(substream) => {
