@@ -160,11 +160,8 @@ where
         if self
             .worker_streams
             .try_push(RequestId::Inbound(request_id), recv.boxed())
-            .is_ok()
+            .is_err()
         {
-            self.pending_events
-                .push_back(Event::IncomingRequest { request_id });
-        } else {
             log::warn!("Dropping inbound stream because we are at capacity")
         }
     }
@@ -261,8 +258,6 @@ pub enum Event<TCodec>
 where
     TCodec: Codec,
 {
-    /// A request is going to be received.
-    IncomingRequest { request_id: InboundRequestId },
     /// A request has been received.
     Request {
         request_id: InboundRequestId,
@@ -300,10 +295,6 @@ where
 impl<TCodec: Codec> fmt::Debug for Event<TCodec> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Event::IncomingRequest { request_id } => f
-                .debug_struct("Event::IncomingRequest")
-                .field("request_id", request_id)
-                .finish(),
             Event::Request {
                 request_id,
                 request: _,
@@ -403,18 +394,6 @@ where
         cx: &mut Context<'_>,
     ) -> Poll<ConnectionHandlerEvent<Protocol<TCodec::Protocol>, (), Self::ToBehaviour, Self::Error>>
     {
-        // Drain pending events that were produced before poll.
-        // E.g. `Event::IncomingRequest` produced by `on_fully_negotiated_inbound`.
-        //
-        // NOTE: This is needed because if `read_request` fails before reaching a
-        // `.await` point, the incoming request will never register and `debug_assert`
-        // in `InboundStreamFailed` will panic.
-        if let Some(event) = self.pending_events.pop_front() {
-            return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(event));
-        } else if self.pending_events.capacity() > EMPTY_QUEUE_SHRINK_THRESHOLD {
-            self.pending_events.shrink_to_fit();
-        }
-
         loop {
             match self.worker_streams.poll_unpin(cx) {
                 Poll::Ready((_, Ok(Ok(event)))) => {
@@ -438,9 +417,6 @@ where
                         }
                     };
 
-                    // TODO: How should we handle errors produced after ConnectionClose event?
-                    // `ConnectionClose` will generate its own error. But only one of the two
-                    // should be forwarded to the upper layer.
                     return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(event));
                 }
                 Poll::Ready((id, Err(futures_bounded::Timeout { .. }))) => {
