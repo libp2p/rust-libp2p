@@ -10,14 +10,14 @@ use std::{
 
 /// Counter for the number of active streams on a connection.
 #[derive(Debug, Clone)]
-pub struct ActiveStreamCounter(Arc<()>);
+pub(crate) struct ActiveStreamCounter(Arc<()>);
 
 impl ActiveStreamCounter {
-    pub fn default() -> Self {
+    pub(crate) fn default() -> Self {
         Self(Arc::new(()))
     }
 
-    pub fn has_no_active_streams(&self) -> bool {
+    pub(crate) fn has_no_active_streams(&self) -> bool {
         self.num_alive_streams() == 1
     }
 
