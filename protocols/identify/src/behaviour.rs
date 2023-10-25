@@ -50,7 +50,7 @@ pub struct Behaviour {
     /// For each peer we're connected to, the observed address to send back to it.
     connected: HashMap<PeerId, HashMap<ConnectionId, Multiaddr>>,
 
-    /// the address a remote observed for us.
+    /// The address a remote observed for us.
     our_observed_addresses: HashMap<ConnectionId, Multiaddr>,
 
     /// Pending events to be emitted when polled.
