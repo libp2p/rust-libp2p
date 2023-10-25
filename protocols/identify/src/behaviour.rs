@@ -307,9 +307,18 @@ impl NetworkBehaviour for Behaviour {
                         self.events
                             .push_back(ToSwarm::NewExternalAddrCandidate(observed));
                     }
-                    Entry::Occupied(already_observed) => {
+                    Entry::Occupied(already_observed) if already_observed.get() == &observed => {
                         // No-op, we already observed this address.
-                        debug_assert_eq!(already_observed.get(), &observed)
+                    }
+                    Entry::Occupied(mut already_observed) => {
+                        log::info!(
+                            "Our observed address on connection {id} changed from {} to {observed}",
+                            already_observed.get()
+                        );
+
+                        *already_observed.get_mut() = observed.clone();
+                        self.events
+                            .push_back(ToSwarm::NewExternalAddrCandidate(observed));
                     }
                 }
             }
