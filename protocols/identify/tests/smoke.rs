@@ -1,8 +1,11 @@
+use futures::StreamExt;
 use libp2p_core::multiaddr::Protocol;
 use libp2p_identify as identify;
 use libp2p_swarm::{Swarm, SwarmEvent};
 use libp2p_swarm_test::SwarmExt;
+use std::collections::HashSet;
 use std::iter;
+use std::time::Duration;
 
 #[async_std::test]
 async fn periodic_identify() {
@@ -76,6 +79,75 @@ async fn periodic_identify() {
         }
         other => panic!("Unexpected events: {other:?}"),
     }
+}
+#[async_std::test]
+async fn only_emits_address_candidate_once_per_connection() {
+    let _ = env_logger::try_init();
+
+    let mut swarm1 = Swarm::new_ephemeral(|identity| {
+        identify::Behaviour::new(
+            identify::Config::new("a".to_string(), identity.public())
+                .with_agent_version("b".to_string())
+                .with_interval(Duration::from_secs(1)),
+        )
+    });
+    let mut swarm2 = Swarm::new_ephemeral(|identity| {
+        identify::Behaviour::new(
+            identify::Config::new("c".to_string(), identity.public())
+                .with_agent_version("d".to_string()),
+        )
+    });
+
+    swarm2.listen().await;
+    swarm1.connect(&mut swarm2).await;
+
+    async_std::task::spawn(swarm2.loop_on_next());
+
+    let swarm_events = futures::stream::poll_fn(|cx| swarm1.poll_next_unpin(cx))
+        .take(10)
+        .collect::<Vec<_>>()
+        .await;
+
+    let infos = swarm_events
+        .iter()
+        .filter_map(|e| match e {
+            SwarmEvent::Behaviour(identify::Event::Received { info, .. }) => Some(info.clone()),
+            _ => None,
+        })
+        .collect::<Vec<_>>();
+
+    assert!(
+        infos.len() > 1,
+        "should exchange identify payload more than once"
+    );
+
+    let varying_observed_addresses = infos
+        .iter()
+        .map(|i| i.observed_addr.clone())
+        .collect::<HashSet<_>>();
+    assert_eq!(
+        varying_observed_addresses.len(),
+        1,
+        "Observed address should not vary on persistent connection"
+    );
+
+    let external_address_candidates = swarm_events
+        .iter()
+        .filter_map(|e| match e {
+            SwarmEvent::NewExternalAddrCandidate { address } => Some(address.clone()),
+            _ => None,
+        })
+        .collect::<Vec<_>>();
+
+    assert_eq!(
+        external_address_candidates.len(),
+        1,
+        "To only have one external address candidate"
+    );
+    assert_eq!(
+        &external_address_candidates[0],
+        varying_observed_addresses.iter().next().unwrap()
+    );
 }
 
 #[async_std::test]
