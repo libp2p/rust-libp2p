@@ -146,7 +146,7 @@ use libp2p_core::{
 };
 use libp2p_identity::PeerId;
 use smallvec::SmallVec;
-use std::collections::{HashMap, HashSet};
+use std::collections::{HashMap, HashSet, VecDeque};
 use std::num::{NonZeroU32, NonZeroU8, NonZeroUsize};
 use std::time::Duration;
 use std::{
@@ -355,7 +355,9 @@ where
     /// Pending event to be delivered to connection handlers
     /// (or dropped if the peer disconnected) before the `behaviour`
     /// can be polled again.
-    pending_event: Option<(PeerId, PendingNotifyHandler, THandlerInEvent<TBehaviour>)>,
+    pending_handler_event: Option<(PeerId, PendingNotifyHandler, THandlerInEvent<TBehaviour>)>,
+
+    pending_swarm_events: VecDeque<SwarmEvent<TBehaviour::ToSwarm, THandlerErr<TBehaviour>>>,
 }
 
 impl<TBehaviour> Unpin for Swarm<TBehaviour> where TBehaviour: NetworkBehaviour {}
@@ -380,7 +382,8 @@ where
             supported_protocols: Default::default(),
             confirmed_external_addr: Default::default(),
             listened_addrs: HashMap::new(),
-            pending_event: None,
+            pending_handler_event: None,
+            pending_swarm_events: VecDeque::default(),
         }
     }
 
@@ -1080,7 +1083,7 @@ where
                 handler,
                 event,
             } => {
-                assert!(self.pending_event.is_none());
+                assert!(self.pending_handler_event.is_none());
                 let handler = match handler {
                     NotifyHandler::One(connection) => PendingNotifyHandler::One(connection),
                     NotifyHandler::Any => {
@@ -1092,7 +1095,7 @@ where
                     }
                 };
 
-                self.pending_event = Some((peer_id, handler, event));
+                self.pending_handler_event = Some((peer_id, handler, event));
             }
             ToSwarm::NewExternalAddrCandidate(addr) => {
                 // Apply address translation to the candidate address.
@@ -1171,7 +1174,11 @@ where
         //
         // (2) is polled before (3) to prioritize existing connections over upgrading new incoming connections.
         loop {
-            match this.pending_event.take() {
+            if let Some(swarm_event) = this.pending_swarm_events.pop_front() {
+                return Poll::Ready(swarm_event);
+            }
+
+            match this.pending_handler_event.take() {
                 // Try to deliver the pending event emitted by the [`NetworkBehaviour`] in the previous
                 // iteration to the connection handler(s).
                 Some((peer_id, handler, event)) => match handler {
@@ -1180,7 +1187,7 @@ where
                             Some(conn) => match notify_one(conn, event, cx) {
                                 None => continue,
                                 Some(event) => {
-                                    this.pending_event = Some((peer_id, handler, event));
+                                    this.pending_handler_event = Some((peer_id, handler, event));
                                 }
                             },
                             None => continue,
@@ -1191,7 +1198,7 @@ where
                             None => continue,
                             Some((event, ids)) => {
                                 let handler = PendingNotifyHandler::Any(ids);
-                                this.pending_event = Some((peer_id, handler, event));
+                                this.pending_handler_event = Some((peer_id, handler, event));
                             }
                         }
                     }
@@ -1671,7 +1678,8 @@ where
             supported_protocols: Default::default(),
             confirmed_external_addr: Default::default(),
             listened_addrs: HashMap::new(),
-            pending_event: None,
+            pending_handler_event: None,
+            pending_swarm_events: VecDeque::default(),
         }
     }
 }
