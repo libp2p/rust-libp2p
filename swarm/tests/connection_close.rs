@@ -4,8 +4,8 @@ use libp2p_identity::PeerId;
 use libp2p_swarm::handler::ConnectionEvent;
 use libp2p_swarm::{
     ConnectionDenied, ConnectionHandler, ConnectionHandlerEvent, ConnectionId, FromSwarm,
-    KeepAlive, NetworkBehaviour, PollParameters, SubstreamProtocol, Swarm, SwarmEvent, THandler,
-    THandlerInEvent, THandlerOutEvent, ToSwarm,
+    KeepAlive, NetworkBehaviour, SubstreamProtocol, Swarm, SwarmEvent, THandler, THandlerInEvent,
+    THandlerOutEvent, ToSwarm,
 };
 use libp2p_swarm_test::SwarmExt;
 use std::task::{Context, Poll};
@@ -88,11 +88,7 @@ impl NetworkBehaviour for Behaviour {
         self.state -= 1;
     }
 
-    fn poll(
-        &mut self,
-        _: &mut Context<'_>,
-        _: &mut impl PollParameters,
-    ) -> Poll<ToSwarm<Self::ToSwarm, THandlerInEvent<Self>>> {
+    fn poll(&mut self, _: &mut Context<'_>) -> Poll<ToSwarm<Self::ToSwarm, THandlerInEvent<Self>>> {
         Poll::Pending
     }
 }
