@@ -9,8 +9,11 @@ keywords = ["peer-to-peer", "libp2p", "networking"]
 categories = ["network-programming", "asynchronous"]
 publish = false
 
+[package.metadata.release]
+release = false
+
 [dependencies]
-clap = { version = "4.3.23", features = ["derive"] }
+clap = { version = "4.4.6", features = ["derive"] }
 zeroize = "1"
 serde = { version = "1.0.189", features = ["derive"] }
 serde_json = "1.0.107"

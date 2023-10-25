@@ -3,7 +3,7 @@ name = "libp2p-plaintext"
 edition = "2021"
 rust-version = { workspace = true }
 description = "Plaintext encryption dummy protocol for libp2p"
-version = "0.40.1"
+version = "0.41.0"
 authors = ["Parity Technologies <admin@parity.io>"]
 license = "MIT"
 repository = "https://github.com/libp2p/rust-libp2p"
@@ -22,7 +22,7 @@ unsigned-varint = { version = "0.7", features = ["asynchronous_codec"] }
 
 [dev-dependencies]
 env_logger = "0.10.0"
-libp2p-identity = { workspace = true, features = ["ed25519"] }
+libp2p-identity = { workspace = true, features = ["ed25519", "rand"] }
 quickcheck = { workspace = true }
 rand = "0.8"
 futures_ringbuf = "0.4.0"

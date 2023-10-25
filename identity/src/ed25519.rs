@@ -34,6 +34,7 @@ pub struct Keypair(ed25519::SigningKey);
 
 impl Keypair {
     /// Generate a new random Ed25519 keypair.
+    #[cfg(feature = "rand")]
     pub fn generate() -> Keypair {
         Keypair::from(SecretKey::generate())
     }
@@ -181,6 +182,7 @@ impl fmt::Debug for SecretKey {
 
 impl SecretKey {
     /// Generate a new Ed25519 secret key.
+    #[cfg(feature = "rand")]
     pub fn generate() -> SecretKey {
         let signing = ed25519::SigningKey::generate(&mut rand::rngs::OsRng);
         SecretKey(signing.to_bytes())
@@ -213,6 +215,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(feature = "rand")]
     fn ed25519_keypair_encode_decode() {
         fn prop() -> bool {
             let kp1 = Keypair::generate();
@@ -224,6 +227,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(feature = "rand")]
     fn ed25519_keypair_from_secret() {
         fn prop() -> bool {
             let kp1 = Keypair::generate();
@@ -235,6 +239,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(feature = "rand")]
     fn ed25519_signature() {
         let kp = Keypair::generate();
         let pk = kp.public();

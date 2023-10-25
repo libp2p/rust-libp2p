@@ -27,7 +27,10 @@ use std::time::Duration;
 use sysinfo::{RefreshKind, SystemExt};
 use util::*;
 
-use libp2p_swarm::{dial_opts::DialOpts, DialError, Swarm};
+use libp2p_swarm::{
+    dial_opts::{DialOpts, PeerCondition},
+    DialError, Swarm,
+};
 use libp2p_swarm_test::SwarmExt;
 
 #[test]
@@ -63,6 +66,8 @@ fn max_percentage() {
         network
             .dial(
                 DialOpts::peer_id(target)
+                    // Always dial, even if already dialing or connected.
+                    .condition(PeerCondition::Always)
                     .addresses(vec![addr.clone()])
                     .build(),
             )
@@ -72,7 +77,12 @@ fn max_percentage() {
     std::thread::sleep(Duration::from_millis(100)); // Memory stats are only updated every 100ms internally, ensure they are up-to-date when we try to exceed it.
 
     match network
-        .dial(DialOpts::peer_id(target).addresses(vec![addr]).build())
+        .dial(
+            DialOpts::peer_id(target)
+                .condition(PeerCondition::Always)
+                .addresses(vec![addr])
+                .build(),
+        )
         .expect_err("Unexpected dialing success.")
     {
         DialError::Denied { cause } => {

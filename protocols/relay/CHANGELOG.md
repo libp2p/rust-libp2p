@@ -1,10 +1,6 @@
-## 0.16.2 - unreleased
+## 0.17.0 - unreleased
 
-<!-- Internal changes
-
-- Allow deprecated usage of `KeepAlive::Until`
-
--->
+## 0.16.2
 
 ## 0.16.1
 

@@ -23,7 +23,7 @@ use either::Either;
 use futures::future::MapOk;
 use futures::{future, TryFutureExt};
 use libp2p_core::either::EitherFuture;
-use libp2p_core::upgrade::{InboundUpgrade, OutboundUpgrade, UpgradeInfo};
+use libp2p_core::upgrade::{InboundConnectionUpgrade, OutboundConnectionUpgrade, UpgradeInfo};
 use libp2p_identity::PeerId;
 use std::iter::{Chain, Map};
 
@@ -70,10 +70,10 @@ where
     }
 }
 
-impl<C, A, B, TA, TB, EA, EB> InboundUpgrade<C> for SelectSecurityUpgrade<A, B>
+impl<C, A, B, TA, TB, EA, EB> InboundConnectionUpgrade<C> for SelectSecurityUpgrade<A, B>
 where
-    A: InboundUpgrade<C, Output = (PeerId, TA), Error = EA>,
-    B: InboundUpgrade<C, Output = (PeerId, TB), Error = EB>,
+    A: InboundConnectionUpgrade<C, Output = (PeerId, TA), Error = EA>,
+    B: InboundConnectionUpgrade<C, Output = (PeerId, TB), Error = EB>,
 {
     type Output = (PeerId, future::Either<TA, TB>);
     type Error = Either<EA, EB>;
@@ -91,10 +91,10 @@ where
     }
 }
 
-impl<C, A, B, TA, TB, EA, EB> OutboundUpgrade<C> for SelectSecurityUpgrade<A, B>
+impl<C, A, B, TA, TB, EA, EB> OutboundConnectionUpgrade<C> for SelectSecurityUpgrade<A, B>
 where
-    A: OutboundUpgrade<C, Output = (PeerId, TA), Error = EA>,
-    B: OutboundUpgrade<C, Output = (PeerId, TB), Error = EB>,
+    A: OutboundConnectionUpgrade<C, Output = (PeerId, TA), Error = EA>,
+    B: OutboundConnectionUpgrade<C, Output = (PeerId, TB), Error = EB>,
 {
     type Output = (PeerId, future::Either<TA, TB>);
     type Error = Either<EA, EB>;

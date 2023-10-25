@@ -40,7 +40,7 @@ jobs:
 
       - uses: dtolnay/rust-toolchain@stable
 
-      - uses: Swatinem/rust-cache@a95ba195448af2da9b00fb742d14ffaaf3c21f43 # v2.7.0
+      - uses: Swatinem/rust-cache@3cf7f8cc28d1b4e7d01e3783be10a97d55d483c8 # v2.7.1
         with:
           shared-key: stable-cache
           save-if: false
@@ -76,7 +76,10 @@ jobs:
         if: >
           github.event_name == 'pull_request' &&
           !startsWith(github.event.pull_request.title, 'chore') &&
-          !startsWith(github.event.pull_request.title, 'refactor')
+          !startsWith(github.event.pull_request.title, 'refactor') &&
+          !startsWith(github.event.pull_request.title, 'deps') &&
+          !startsWith(github.event.pull_request.title, 'docs') &&
+          !contains(github.event.pull_request.labels.*.name, 'internal-change')
         run: |
           git fetch origin master:master
           ./scripts/ensure-version-bump-and-changelog.sh
@@ -138,7 +141,7 @@ jobs:
 
       - uses: r7kamura/rust-problem-matchers@2c2f1016021a7455a6b5b4bbae31145f3b3cd83a #v1.4.0
 
-      - uses: Swatinem/rust-cache@a95ba195448af2da9b00fb742d14ffaaf3c21f43 # v2.7.0
+      - uses: Swatinem/rust-cache@3cf7f8cc28d1b4e7d01e3783be10a97d55d483c8 # v2.7.1
         with:
           key: ${{ matrix.target }}
           save-if: ${{ github.ref == 'refs/heads/master' }}
@@ -163,7 +166,7 @@ jobs:
 
       - uses: r7kamura/rust-problem-matchers@2c2f1016021a7455a6b5b4bbae31145f3b3cd83a #v1.4.0
 
-      - uses: Swatinem/rust-cache@a95ba195448af2da9b00fb742d14ffaaf3c21f43 # v2.7.0
+      - uses: Swatinem/rust-cache@3cf7f8cc28d1b4e7d01e3783be10a97d55d483c8 # v2.7.1
         with:
           save-if: ${{ github.ref == 'refs/heads/master' }}
 
@@ -184,7 +187,7 @@ jobs:
 
       - uses: r7kamura/rust-problem-matchers@2c2f1016021a7455a6b5b4bbae31145f3b3cd83a #v1.4.0
 
-      - uses: Swatinem/rust-cache@a95ba195448af2da9b00fb742d14ffaaf3c21f43 # v2.7.0
+      - uses: Swatinem/rust-cache@3cf7f8cc28d1b4e7d01e3783be10a97d55d483c8 # v2.7.1
         with:
           key: ${{ matrix.features }}
           save-if: ${{ github.ref == 'refs/heads/master' }}
@@ -201,7 +204,7 @@ jobs:
 
       - uses: r7kamura/rust-problem-matchers@2c2f1016021a7455a6b5b4bbae31145f3b3cd83a #v1.4.0
 
-      - uses: Swatinem/rust-cache@a95ba195448af2da9b00fb742d14ffaaf3c21f43 # v2.7.0
+      - uses: Swatinem/rust-cache@3cf7f8cc28d1b4e7d01e3783be10a97d55d483c8 # v2.7.1
         with:
           save-if: ${{ github.ref == 'refs/heads/master' }}
 
@@ -228,7 +231,7 @@ jobs:
 
       - uses: r7kamura/rust-problem-matchers@2c2f1016021a7455a6b5b4bbae31145f3b3cd83a #v1.4.0
 
-      - uses: Swatinem/rust-cache@a95ba195448af2da9b00fb742d14ffaaf3c21f43 # v2.7.0
+      - uses: Swatinem/rust-cache@3cf7f8cc28d1b4e7d01e3783be10a97d55d483c8 # v2.7.1
         with:
           save-if: ${{ github.ref == 'refs/heads/master' }}
 
@@ -244,7 +247,7 @@ jobs:
 
       - uses: r7kamura/rust-problem-matchers@2c2f1016021a7455a6b5b4bbae31145f3b3cd83a #v1.4.0
 
-      - uses: Swatinem/rust-cache@a95ba195448af2da9b00fb742d14ffaaf3c21f43 # v2.7.0
+      - uses: Swatinem/rust-cache@3cf7f8cc28d1b4e7d01e3783be10a97d55d483c8 # v2.7.1
         with:
           save-if: ${{ github.ref == 'refs/heads/master' }}
 
@@ -263,7 +266,7 @@ jobs:
 
       - uses: r7kamura/rust-problem-matchers@2c2f1016021a7455a6b5b4bbae31145f3b3cd83a #v1.4.0
 
-      - uses: Swatinem/rust-cache@a95ba195448af2da9b00fb742d14ffaaf3c21f43 # v2.7.0
+      - uses: Swatinem/rust-cache@3cf7f8cc28d1b4e7d01e3783be10a97d55d483c8 # v2.7.1
         with:
           shared-key: stable-cache
           save-if: false
@@ -339,7 +342,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: Swatinem/rust-cache@a95ba195448af2da9b00fb742d14ffaaf3c21f43 # v2.7.0
+      - uses: Swatinem/rust-cache@3cf7f8cc28d1b4e7d01e3783be10a97d55d483c8 # v2.7.1
 
       - run: cargo install --version 0.10.0 pb-rs --locked
 
@@ -365,7 +368,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: Swatinem/rust-cache@a95ba195448af2da9b00fb742d14ffaaf3c21f43 # v2.7.0
+      - uses: Swatinem/rust-cache@3cf7f8cc28d1b4e7d01e3783be10a97d55d483c8 # v2.7.1
       - run: cargo metadata --locked --format-version=1 > /dev/null
 
   cargo-deny:
