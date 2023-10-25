@@ -2482,7 +2482,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-dcutr"
-version = "0.11.1"
+version = "0.11.0"
 dependencies = [
  "async-std",
  "asynchronous-codec",
