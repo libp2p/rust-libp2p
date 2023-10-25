@@ -44,8 +44,10 @@ async fn connect() {
     relay.remove_external_address(&memory_addr);
     relay.add_external_address(relay_addr.clone());
 
-    let (_, dst_addr) = dst.listen().await;
-    src.listen().await;
+    let (dst_mem_addr, dst_tcp_addr) = dst.listen().await;
+    dst.remove_external_address(&dst_mem_addr);
+    let (src_mem_addr, _) = src.listen().await;
+    src.remove_external_address(&src_mem_addr);
 
     let relay_peer_id = *relay.local_peer_id();
     let dst_peer_id = *dst.local_peer_id();
@@ -89,7 +91,7 @@ async fn connect() {
         }
     }
 
-    let dst_addr = dst_addr.with(Protocol::P2p(dst_peer_id));
+    let dst_addr = dst_tcp_addr.with(Protocol::P2p(dst_peer_id));
 
     let established_conn_id = src
         .wait(move |e| match e {
