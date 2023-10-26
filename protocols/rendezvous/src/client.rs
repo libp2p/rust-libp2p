@@ -28,8 +28,8 @@ use libp2p_core::{Endpoint, Multiaddr, PeerRecord};
 use libp2p_identity::{Keypair, PeerId, SigningError};
 use libp2p_request_response::{OutboundRequestId, ProtocolSupport};
 use libp2p_swarm::{
-    ConnectionDenied, ConnectionId, ExternalAddresses, FromSwarm, NetworkBehaviour, PollParameters,
-    THandler, THandlerInEvent, THandlerOutEvent, ToSwarm,
+    ConnectionDenied, ConnectionId, ExternalAddresses, FromSwarm, NetworkBehaviour, THandler,
+    THandlerInEvent, THandlerOutEvent, ToSwarm,
 };
 use std::collections::HashMap;
 use std::iter;
@@ -223,7 +223,7 @@ impl NetworkBehaviour for Behaviour {
             .on_connection_handler_event(peer_id, connection_id, event);
     }
 
-    fn on_swarm_event(&mut self, event: FromSwarm<Self::ConnectionHandler>) {
+    fn on_swarm_event(&mut self, event: FromSwarm) {
         let changed = self.external_addresses.on_swarm_event(&event);
 
         self.inner.on_swarm_event(event);
@@ -241,12 +241,11 @@ impl NetworkBehaviour for Behaviour {
     fn poll(
         &mut self,
         cx: &mut Context<'_>,
-        params: &mut impl PollParameters,
     ) -> Poll<ToSwarm<Self::ToSwarm, THandlerInEvent<Self>>> {
         use libp2p_request_response as req_res;
 
         loop {
-            match self.inner.poll(cx, params) {
+            match self.inner.poll(cx) {
                 Poll::Ready(ToSwarm::GenerateEvent(req_res::Event::Message {
                     message:
                         req_res::Message::Response {

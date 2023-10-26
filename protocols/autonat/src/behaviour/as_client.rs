@@ -30,7 +30,7 @@ use instant::Instant;
 use libp2p_core::Multiaddr;
 use libp2p_identity::PeerId;
 use libp2p_request_response::{self as request_response, OutboundFailure, OutboundRequestId};
-use libp2p_swarm::{ConnectionId, ListenAddresses, PollParameters, ToSwarm};
+use libp2p_swarm::{ConnectionId, ListenAddresses, ToSwarm};
 use rand::{seq::SliceRandom, thread_rng};
 use std::{
     collections::{HashMap, HashSet, VecDeque},
@@ -101,7 +101,6 @@ pub(crate) struct AsClient<'a> {
 impl<'a> HandleInnerEvent for AsClient<'a> {
     fn handle_event(
         &mut self,
-        _: &mut impl PollParameters,
         event: request_response::Event<DialRequest, DialResponse>,
     ) -> VecDeque<Action> {
         match event {

@@ -67,10 +67,6 @@ pub mod behaviour;
 pub mod dial_opts;
 pub mod dummy;
 pub mod handler;
-#[deprecated(
-    note = "Configure an appropriate idle connection timeout via `SwarmBuilder::idle_connection_timeout` instead. To keep connections alive 'forever', use `Duration::from_secs(u64::MAX)`."
-)]
-pub mod keep_alive;
 mod listen_opts;
 
 /// Bundles all symbols required for the [`libp2p_swarm_derive::NetworkBehaviour`] macro.
@@ -96,7 +92,6 @@ pub mod derive_prelude {
     pub use crate::ConnectionHandlerSelect;
     pub use crate::DialError;
     pub use crate::NetworkBehaviour;
-    pub use crate::PollParameters;
     pub use crate::THandler;
     pub use crate::THandlerInEvent;
     pub use crate::THandlerOutEvent;
@@ -114,13 +109,13 @@ pub use behaviour::{
     AddressChange, CloseConnection, ConnectionClosed, DialFailure, ExpiredListenAddr,
     ExternalAddrExpired, ExternalAddresses, FromSwarm, ListenAddresses, ListenFailure,
     ListenerClosed, ListenerError, NetworkBehaviour, NewExternalAddrCandidate, NewListenAddr,
-    NotifyHandler, PollParameters, ToSwarm,
+    NotifyHandler, ToSwarm,
 };
 pub use connection::pool::ConnectionCounters;
 pub use connection::{ConnectionError, ConnectionId, SupportedProtocols};
 pub use executor::Executor;
 pub use handler::{
-    ConnectionHandler, ConnectionHandlerEvent, ConnectionHandlerSelect, KeepAlive, OneShotHandler,
+    ConnectionHandler, ConnectionHandlerEvent, ConnectionHandlerSelect, OneShotHandler,
     OneShotHandlerConfig, StreamUpgradeError, SubstreamProtocol,
 };
 #[cfg(feature = "macros")]
@@ -367,6 +362,8 @@ where
         local_peer_id: PeerId,
         config: Config,
     ) -> Self {
+        log::info!("Local peer id: {local_peer_id}");
+
         Swarm {
             local_peer_id,
             transport,
@@ -855,7 +852,6 @@ where
                 connected,
                 error,
                 remaining_established_connection_ids,
-                handler,
                 ..
             } => {
                 if let Some(error) = error.as_ref() {
@@ -882,7 +878,6 @@ where
                         peer_id,
                         connection_id: id,
                         endpoint: &endpoint,
-                        handler,
                         remaining_established: num_established as usize,
                     }));
                 return Some(SwarmEvent::ConnectionClosed {
@@ -1192,26 +1187,16 @@ where
                     }
                 },
                 // No pending event. Allow the [`NetworkBehaviour`] to make progress.
-                None => {
-                    let behaviour_poll = {
-                        let mut parameters = SwarmPollParameters {
-                            supported_protocols: &this.supported_protocols,
-                        };
-                        this.behaviour.poll(cx, &mut parameters)
-                    };
-
-                    match behaviour_poll {
-                        Poll::Pending => {}
-                        Poll::Ready(behaviour_event) => {
-                            if let Some(swarm_event) = this.handle_behaviour_event(behaviour_event)
-                            {
-                                return Poll::Ready(swarm_event);
-                            }
-
-                            continue;
+                None => match this.behaviour.poll(cx) {
+                    Poll::Pending => {}
+                    Poll::Ready(behaviour_event) => {
+                        if let Some(swarm_event) = this.handle_behaviour_event(behaviour_event) {
+                            return Poll::Ready(swarm_event);
                         }
+
+                        continue;
                     }
-                }
+                },
             }
 
             // Poll the known peers.
@@ -1354,20 +1339,6 @@ where
 {
     fn is_terminated(&self) -> bool {
         false
-    }
-}
-
-/// Parameters passed to `poll()`, that the `NetworkBehaviour` has access to.
-// TODO: #[derive(Debug)]
-pub struct SwarmPollParameters<'a> {
-    supported_protocols: &'a [Vec<u8>],
-}
-
-impl<'a> PollParameters for SwarmPollParameters<'a> {
-    type SupportedProtocolsIter = std::iter::Cloned<std::slice::Iter<'a, std::vec::Vec<u8>>>;
-
-    fn supported_protocols(&self) -> Self::SupportedProtocolsIter {
-        self.supported_protocols.iter().cloned()
     }
 }
 
@@ -1681,17 +1652,14 @@ where
 
     /// Builds a `Swarm` with the current configuration.
     pub fn build(self) -> Swarm<TBehaviour> {
-        log::info!("Local peer id: {}", self.local_peer_id);
-        Swarm {
-            local_peer_id: self.local_peer_id,
-            transport: self.transport,
-            pool: Pool::new(self.local_peer_id, self.pool_config),
-            behaviour: self.behaviour,
-            supported_protocols: Default::default(),
-            confirmed_external_addr: Default::default(),
-            listened_addrs: HashMap::new(),
-            pending_event: None,
-        }
+        Swarm::new(
+            self.transport,
+            self.behaviour,
+            self.local_peer_id,
+            Config {
+                pool_config: self.pool_config,
+            },
+        )
     }
 }
 

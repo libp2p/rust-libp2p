@@ -1,0 +1,8 @@
+{
+  "id": "rust-libp2p-head",
+  "containerImageID": "rust-libp2p-head",
+  "transports": [
+    "tcp",
+    "quic"
+  ]
+}

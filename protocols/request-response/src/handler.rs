@@ -33,7 +33,7 @@ use libp2p_swarm::handler::{
     ListenUpgradeError,
 };
 use libp2p_swarm::{
-    handler::{ConnectionHandler, ConnectionHandlerEvent, KeepAlive, StreamUpgradeError},
+    handler::{ConnectionHandler, ConnectionHandlerEvent, StreamUpgradeError},
     SubstreamProtocol,
 };
 use smallvec::SmallVec;
@@ -57,8 +57,6 @@ where
     inbound_protocols: SmallVec<[TCodec::Protocol; 2]>,
     /// The request/response message codec.
     codec: TCodec,
-    /// The current connection keep-alive.
-    keep_alive: KeepAlive,
     /// Queue of events to emit in `poll()`.
     pending_events: VecDeque<Event<TCodec>>,
     /// Outbound upgrades waiting to be emitted as an `OutboundSubstreamRequest`.
@@ -104,7 +102,6 @@ where
         Self {
             inbound_protocols,
             codec,
-            keep_alive: KeepAlive::Yes,
             pending_outbound: VecDeque::new(),
             requested_outbound: Default::default(),
             inbound_receiver,
@@ -386,12 +383,7 @@ where
     }
 
     fn on_behaviour_event(&mut self, request: Self::FromBehaviour) {
-        self.keep_alive = KeepAlive::Yes;
         self.pending_outbound.push_back(request);
-    }
-
-    fn connection_keep_alive(&self) -> KeepAlive {
-        self.keep_alive
     }
 
     fn poll(
@@ -442,7 +434,7 @@ where
         // Check for inbound requests.
         if let Poll::Ready(Some((id, rq, rs_sender))) = self.inbound_receiver.poll_next_unpin(cx) {
             // We received an inbound request.
-            self.keep_alive = KeepAlive::Yes;
+
             return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(Event::Request {
                 request_id: id,
                 request: rq,
@@ -464,13 +456,6 @@ where
 
         if self.pending_outbound.capacity() > EMPTY_QUEUE_SHRINK_THRESHOLD {
             self.pending_outbound.shrink_to_fit();
-        }
-
-        if self.worker_streams.is_empty() && self.keep_alive.is_yes() {
-            // No new inbound or outbound requests. We already check
-            // there is no active streams exist in swarm connection,
-            // so we can set keep-alive to no directly.
-            self.keep_alive = KeepAlive::No;
         }
 
         Poll::Pending

@@ -405,7 +405,7 @@ impl EventLoop {
 #[derive(NetworkBehaviour)]
 struct Behaviour {
     request_response: request_response::cbor::Behaviour<FileRequest, FileResponse>,
-    kademlia: kad::Behaviour<kad::record::store::MemoryStore>,
+    kademlia: kad::Behaviour<kad::store::MemoryStore>,
 }
 
 #[derive(Debug)]

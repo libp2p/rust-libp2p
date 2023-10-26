@@ -27,7 +27,8 @@ use crate::error::Error;
 use bytes::Bytes;
 use futures::future::BoxFuture;
 use futures::prelude::*;
-use libp2p_core::{InboundUpgrade, OutboundUpgrade, UpgradeInfo};
+use libp2p_core::upgrade::{InboundConnectionUpgrade, OutboundConnectionUpgrade};
+use libp2p_core::UpgradeInfo;
 use libp2p_identity as identity;
 use libp2p_identity::PeerId;
 use libp2p_identity::PublicKey;
@@ -77,7 +78,7 @@ impl UpgradeInfo for Config {
     }
 }
 
-impl<C> InboundUpgrade<C> for Config
+impl<C> InboundConnectionUpgrade<C> for Config
 where
     C: AsyncRead + AsyncWrite + Send + Unpin + 'static,
 {
@@ -90,7 +91,7 @@ where
     }
 }
 
-impl<C> OutboundUpgrade<C> for Config
+impl<C> OutboundConnectionUpgrade<C> for Config
 where
     C: AsyncRead + AsyncWrite + Send + Unpin + 'static,
 {

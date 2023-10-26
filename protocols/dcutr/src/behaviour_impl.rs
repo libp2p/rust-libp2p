@@ -32,8 +32,8 @@ use libp2p_swarm::{
     dummy, ConnectionDenied, ConnectionHandler, ConnectionId, THandler, THandlerOutEvent,
 };
 use libp2p_swarm::{
-    ExternalAddresses, NetworkBehaviour, NotifyHandler, PollParameters, StreamUpgradeError,
-    THandlerInEvent, ToSwarm,
+    ExternalAddresses, NetworkBehaviour, NotifyHandler, StreamUpgradeError, THandlerInEvent,
+    ToSwarm,
 };
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::task::{Context, Poll};
@@ -167,7 +167,7 @@ impl Behaviour {
             connection_id,
             endpoint: connected_point,
             ..
-        }: ConnectionClosed<<Self as NetworkBehaviour>::ConnectionHandler>,
+        }: ConnectionClosed,
     ) {
         if !connected_point.is_relayed() {
             let connections = self
@@ -300,16 +300,11 @@ impl NetworkBehaviour for Behaviour {
                     },
                 )]);
             }
-            Either::Left(handler::relayed::Event::InboundNegotiationFailed { error }) => {
-                self.queued_events.push_back(ToSwarm::GenerateEvent(
-                    Event::DirectConnectionUpgradeFailed {
-                        remote_peer_id: event_source,
-                        connection_id,
-                        error: Error::Handler(error),
-                    },
-                ));
-            }
             Either::Left(handler::relayed::Event::InboundConnectNegotiated(remote_addrs)) => {
+                log::debug!(
+                    "Attempting to hole-punch as dialer to {event_source} using {remote_addrs:?}"
+                );
+
                 let opts = DialOpts::peer_id(event_source)
                     .addresses(remote_addrs)
                     .condition(dial_opts::PeerCondition::Always)
@@ -331,6 +326,10 @@ impl NetworkBehaviour for Behaviour {
                 ));
             }
             Either::Left(handler::relayed::Event::OutboundConnectNegotiated { remote_addrs }) => {
+                log::debug!(
+                    "Attempting to hole-punch as listener to {event_source} using {remote_addrs:?}"
+                );
+
                 let opts = DialOpts::peer_id(event_source)
                     .condition(dial_opts::PeerCondition::Always)
                     .addresses(remote_addrs)
@@ -351,11 +350,7 @@ impl NetworkBehaviour for Behaviour {
         };
     }
 
-    fn poll(
-        &mut self,
-        _cx: &mut Context<'_>,
-        _: &mut impl PollParameters,
-    ) -> Poll<ToSwarm<Self::ToSwarm, THandlerInEvent<Self>>> {
+    fn poll(&mut self, _: &mut Context<'_>) -> Poll<ToSwarm<Self::ToSwarm, THandlerInEvent<Self>>> {
         if let Some(event) = self.queued_events.pop_front() {
             return Poll::Ready(event);
         }
@@ -363,7 +358,7 @@ impl NetworkBehaviour for Behaviour {
         Poll::Pending
     }
 
-    fn on_swarm_event(&mut self, event: FromSwarm<Self::ConnectionHandler>) {
+    fn on_swarm_event(&mut self, event: FromSwarm) {
         self.external_addresses.on_swarm_event(&event);
 
         match event {
