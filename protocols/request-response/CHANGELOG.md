@@ -1,7 +1,7 @@
 ## 0.25.3
 
 - Keep peer addresses in `HashSet` instead of `SmallVec` to prevent adding duplicate addresses.
-  See [PR 4700](https://github.com/libp2p/rust-libp2p/pull/4700).
+  See [PR 4724](https://github.com/libp2p/rust-libp2p/pull/4724).
 
 ## 0.25.2
 
