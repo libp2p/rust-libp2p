@@ -25,15 +25,12 @@ use log::debug;
 use multistream_select::{self, DialerSelectFuture, ListenerSelectFuture};
 use std::{mem, pin::Pin, task::Context, task::Poll};
 
-pub(crate) use multistream_select::Version;
-
 // TODO: Still needed?
 /// Applies an upgrade to the inbound and outbound direction of a connection or substream.
 pub(crate) fn apply<C, U>(
     conn: C,
     up: U,
     cp: ConnectedPoint,
-    v: Version,
 ) -> Either<InboundUpgradeApply<C, U>, OutboundUpgradeApply<C, U>>
 where
     C: AsyncRead + AsyncWrite + Unpin,
@@ -41,7 +38,7 @@ where
 {
     match cp {
         ConnectedPoint::Dialer { role_override, .. } if role_override.is_dialer() => {
-            Either::Right(apply_outbound(conn, up, v))
+            Either::Right(apply_outbound(conn, up))
         }
         _ => Either::Left(apply_inbound(conn, up)),
     }
@@ -62,14 +59,14 @@ where
 }
 
 /// Tries to perform an upgrade on an outbound connection or substream.
-pub(crate) fn apply_outbound<C, U>(conn: C, up: U, v: Version) -> OutboundUpgradeApply<C, U>
+pub(crate) fn apply_outbound<C, U>(conn: C, up: U) -> OutboundUpgradeApply<C, U>
 where
     C: AsyncRead + AsyncWrite + Unpin,
     U: OutboundConnectionUpgrade<Negotiated<C>>,
 {
     OutboundUpgradeApply {
         inner: OutboundUpgradeApplyState::Init {
-            future: multistream_select::dialer_select_proto(conn, up.protocol_info(), v),
+            future: multistream_select::dialer_select_proto(conn, up.protocol_info()),
             upgrade: up,
         },
     }

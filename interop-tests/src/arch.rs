@@ -189,7 +189,6 @@ pub(crate) mod native {
 pub(crate) mod wasm {
     use anyhow::{bail, Context, Result};
     use futures::future::{BoxFuture, FutureExt};
-    use libp2p::core::upgrade::Version;
     use libp2p::identity::Keypair;
     use libp2p::swarm::{NetworkBehaviour, Swarm};
     use libp2p::{noise, websocket_websys, webtransport_websys, yamux, Transport as _};
@@ -236,7 +235,7 @@ pub(crate) mod wasm {
                     .with_wasm_bindgen()
                     .with_other_transport(|local_key| {
                         Ok(websocket_websys::Transport::default()
-                            .upgrade(Version::V1Lazy)
+                            .upgrade()
                             .authenticate(
                                 noise::Config::new(&local_key)
                                     .context("failed to initialise noise")?,
@@ -253,7 +252,7 @@ pub(crate) mod wasm {
                     .with_wasm_bindgen()
                     .with_other_transport(|local_key| {
                         Ok(websocket_websys::Transport::default()
-                            .upgrade(Version::V1Lazy)
+                            .upgrade()
                             .authenticate(
                                 noise::Config::new(&local_key)
                                     .context("failed to initialise noise")?,

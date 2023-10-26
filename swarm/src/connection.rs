@@ -48,7 +48,6 @@ use instant::Instant;
 use libp2p_core::connection::ConnectedPoint;
 use libp2p_core::multiaddr::Multiaddr;
 use libp2p_core::muxing::{StreamMuxerBox, StreamMuxerEvent, StreamMuxerExt, SubstreamBox};
-use libp2p_core::upgrade;
 use libp2p_core::upgrade::{NegotiationError, ProtocolError};
 use libp2p_core::Endpoint;
 use libp2p_identity::PeerId;
@@ -134,8 +133,6 @@ where
     >,
     /// The currently planned connection & handler shutdown.
     shutdown: Shutdown,
-    /// The substream upgrade protocol override, if any.
-    substream_upgrade_protocol_override: Option<upgrade::Version>,
     /// The maximum number of inbound streams concurrently negotiating on a
     /// connection. New inbound streams exceeding the limit are dropped and thus
     /// reset.
@@ -182,7 +179,6 @@ where
     pub(crate) fn new(
         muxer: StreamMuxerBox,
         mut handler: THandler,
-        substream_upgrade_protocol_override: Option<upgrade::Version>,
         max_negotiating_inbound_streams: usize,
         idle_timeout: Duration,
     ) -> Self {
@@ -199,7 +195,6 @@ where
             negotiating_in: Default::default(),
             negotiating_out: Default::default(),
             shutdown: Shutdown::None,
-            substream_upgrade_protocol_override,
             max_negotiating_inbound_streams,
             requested_substreams: Default::default(),
             local_supported_protocols: initial_protocols,
@@ -247,7 +242,6 @@ where
             negotiating_in,
             shutdown,
             max_negotiating_inbound_streams,
-            substream_upgrade_protocol_override,
             local_supported_protocols: supported_protocols,
             remote_supported_protocols,
             idle_timeout,
@@ -407,7 +401,6 @@ where
                             user_data,
                             timeout,
                             upgrade,
-                            *substream_upgrade_protocol_override,
                             stream_counter.clone(),
                         ));
 
@@ -533,24 +526,11 @@ impl<UserData, TOk, TErr> StreamUpgrade<UserData, TOk, TErr> {
         user_data: UserData,
         timeout: Delay,
         upgrade: Upgrade,
-        version_override: Option<upgrade::Version>,
         counter: ActiveStreamCounter,
     ) -> Self
     where
         Upgrade: OutboundUpgradeSend<Output = TOk, Error = TErr>,
     {
-        let effective_version = match version_override {
-            Some(version_override) if version_override != upgrade::Version::default() => {
-                log::debug!(
-                    "Substream upgrade protocol override: {:?} -> {:?}",
-                    upgrade::Version::default(),
-                    version_override
-                );
-
-                version_override
-            }
-            _ => upgrade::Version::default(),
-        };
         let protocols = upgrade.protocol_info();
 
         Self {
@@ -560,7 +540,6 @@ impl<UserData, TOk, TErr> StreamUpgrade<UserData, TOk, TErr> {
                 let (info, stream) = multistream_select::dialer_select_proto(
                     substream,
                     protocols,
-                    effective_version,
                 )
                 .await
                 .map_err(to_stream_upgrade_error)?;

@@ -80,7 +80,7 @@ impl<Provider, T: AuthenticatedMultiplexedTransport> SwarmBuilder<Provider, Rela
         let (relay_transport, relay_behaviour) =
             libp2p_relay::client::new(self.keypair.public().to_peer_id());
         let relay_transport = relay_transport
-            .upgrade(libp2p_core::upgrade::Version::V1Lazy)
+            .upgrade()
             .authenticate(security_upgrade.into_security_upgrade(&self.keypair)?)
             .multiplex(multiplexer_upgrade.into_multiplexer_upgrade())
             .map(|(p, c), _| (p, StreamMuxerBox::new(c)));

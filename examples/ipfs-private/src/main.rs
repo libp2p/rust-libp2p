@@ -23,7 +23,6 @@
 use either::Either;
 use futures::prelude::*;
 use libp2p::{
-    core::transport::upgrade::Version,
     gossipsub, identify,
     multiaddr::Protocol,
     noise, ping,
@@ -125,7 +124,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
                 None => Either::Right(base_transport),
             };
             maybe_encrypted
-                .upgrade(Version::V1Lazy)
+                .upgrade()
                 .authenticate(noise_config)
                 .multiplex(yamux_config)
         })?

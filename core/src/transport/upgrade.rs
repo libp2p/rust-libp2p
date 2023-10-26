@@ -20,8 +20,6 @@
 
 //! Configuration of transport protocol upgrades.
 
-pub use crate::upgrade::Version;
-
 use crate::{
     connection::ConnectedPoint,
     muxing::{StreamMuxer, StreamMuxerBox},
@@ -68,7 +66,6 @@ use std::{
 #[derive(Clone)]
 pub struct Builder<T> {
     inner: T,
-    version: upgrade::Version,
 }
 
 impl<T> Builder<T>
@@ -77,8 +74,8 @@ where
     T::Error: 'static,
 {
     /// Creates a `Builder` over the given (base) `Transport`.
-    pub fn new(inner: T, version: upgrade::Version) -> Builder<T> {
-        Builder { inner, version }
+    pub fn new(inner: T) -> Builder<T> {
+        Builder { inner }
     }
 
     /// Upgrades the transport to perform authentication of the remote.
@@ -105,12 +102,10 @@ where
         U: OutboundConnectionUpgrade<Negotiated<C>, Output = (PeerId, D), Error = E> + Clone,
         E: Error + 'static,
     {
-        let version = self.version;
         Authenticated(Builder::new(
             self.inner.and_then(move |conn, endpoint| Authenticate {
-                inner: upgrade::apply(conn, upgrade, endpoint, version),
+                inner: upgrade::apply(conn, upgrade, endpoint),
             }),
-            version,
         ))
     }
 }
@@ -214,7 +209,6 @@ where
     {
         Authenticated(Builder::new(
             Upgrade::new(self.0.inner, upgrade),
-            self.0.version,
         ))
     }
 
@@ -240,9 +234,8 @@ where
         U: OutboundConnectionUpgrade<Negotiated<C>, Output = M, Error = E> + Clone,
         E: Error + 'static,
     {
-        let version = self.0.version;
         Multiplexed(self.0.inner.and_then(move |(i, c), endpoint| {
-            let upgrade = upgrade::apply(c, upgrade, endpoint, version);
+            let upgrade = upgrade::apply(c, upgrade, endpoint);
             Multiplex {
                 peer_id: Some(i),
                 upgrade,
@@ -274,9 +267,8 @@ where
         E: Error + 'static,
         F: for<'a> FnOnce(&'a PeerId, &'a ConnectedPoint) -> U + Clone,
     {
-        let version = self.0.version;
         Multiplexed(self.0.inner.and_then(move |(peer_id, c), endpoint| {
-            let upgrade = upgrade::apply(c, up(&peer_id, &endpoint), endpoint, version);
+            let upgrade = upgrade::apply(c, up(&peer_id, &endpoint), endpoint);
             Multiplex {
                 peer_id: Some(peer_id),
                 upgrade,
@@ -535,7 +527,7 @@ where
                     let u = up
                         .take()
                         .expect("DialUpgradeFuture is constructed with Either::Left(Some).");
-                    future::Either::Right((i, apply_outbound(c, u, upgrade::Version::V1)))
+                    future::Either::Right((i, apply_outbound(c, u)))
                 }
                 future::Either::Right((i, ref mut up)) => {
                     let d = match ready!(

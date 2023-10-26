@@ -18,7 +18,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::protocol::{HeaderLine, Message, MessageReader, Protocol, ProtocolError};
+use crate::protocol::{Message, MessageReader, Protocol, ProtocolError};
 
 use futures::{
     io::{IoSlice, IoSliceMut},
@@ -97,7 +97,7 @@ impl<TInner> Negotiated<TInner> {
     pub(crate) fn expecting(
         io: MessageReader<TInner>,
         protocol: Protocol,
-        header: Option<HeaderLine>,
+        header: bool,
     ) -> Self {
         Negotiated {
             state: State::Expecting {
@@ -158,12 +158,12 @@ impl<TInner> Negotiated<TInner> {
                         }
                     };
 
-                    if let Message::Header(h) = &msg {
-                        if Some(h) == header.as_ref() {
+                    if let Message::Header = &msg {
+                        if header {
                             *this.state = State::Expecting {
                                 io,
                                 protocol,
-                                header: None,
+                                header: false,
                             };
                             continue;
                         }
@@ -205,9 +205,10 @@ enum State<R> {
         /// The underlying I/O stream.
         #[pin]
         io: MessageReader<R>,
+        // TODO: Docs
         /// The expected negotiation header/preamble (i.e. multistream-select version),
         /// if one is still expected to be received.
-        header: Option<HeaderLine>,
+        header: bool,
         /// The expected application protocol (i.e. name and version).
         protocol: Protocol,
     },

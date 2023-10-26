@@ -19,7 +19,6 @@
 // DEALINGS IN THE SOFTWARE.
 
 use libp2p_core::multiaddr::{Multiaddr, Protocol};
-use libp2p_core::transport::upgrade::Version;
 use libp2p_core::transport::{MemoryTransport, Transport};
 use libp2p_dcutr as dcutr;
 use libp2p_identify as identify;
@@ -156,7 +155,7 @@ fn build_client() -> Swarm<Client> {
     let transport = relay_transport
         .or_transport(MemoryTransport::default())
         .or_transport(libp2p_tcp::async_io::Transport::default())
-        .upgrade(Version::V1)
+        .upgrade()
         .authenticate(plaintext::Config::new(&local_key))
         .multiplex(libp2p_yamux::Config::default())
         .boxed();

@@ -102,7 +102,7 @@
 //! // Set up an encrypted TCP Transport over yamux
 //! // This is test transport (memory).
 //! let transport = MemoryTransport::default()
-//!            .upgrade(libp2p_core::upgrade::Version::V1)
+//!            .upgrade()
 //!            .authenticate(libp2p_noise::Config::new(&local_key).unwrap())
 //!            .multiplex(libp2p_yamux::Config::default())
 //!            .boxed();

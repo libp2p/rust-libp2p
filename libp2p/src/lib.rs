@@ -210,7 +210,7 @@ pub async fn development_transport(
     };
 
     Ok(transport
-        .upgrade(core::upgrade::Version::V1)
+        .upgrade()
         .authenticate(noise::Config::new(&keypair).unwrap())
         .multiplex(yamux::Config::default())
         .timeout(std::time::Duration::from_secs(20))
@@ -252,7 +252,7 @@ pub fn tokio_development_transport(
     };
 
     Ok(transport
-        .upgrade(core::upgrade::Version::V1)
+        .upgrade()
         .authenticate(noise::Config::new(&keypair).unwrap())
         .multiplex(yamux::Config::default())
         .timeout(std::time::Duration::from_secs(20))

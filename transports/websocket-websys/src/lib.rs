@@ -44,13 +44,13 @@ use web_sys::{window, CloseEvent, Event, MessageEvent, WebSocket};
 /// To create an authenticated transport instance with Noise protocol and Yamux:
 ///
 /// ```
-/// # use libp2p_core::{upgrade::Version, Transport};
+/// # use libp2p_core::Transport;
 /// # use libp2p_identity::Keypair;
 /// # use libp2p_yamux as yamux;
 /// # use libp2p_noise as noise;
 /// let local_key = Keypair::generate_ed25519();
 /// let transport = libp2p_websocket_websys::Transport::default()
-///     .upgrade(Version::V1)
+///     .upgrade()
 ///     .authenticate(noise::Config::new(&local_key).unwrap())
 ///     .multiplex(yamux::Config::default())
 ///     .boxed();

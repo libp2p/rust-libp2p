@@ -35,7 +35,7 @@ fn core_upgrade_compat() {
     let id_keys = identity::Keypair::generate_ed25519();
     let noise = noise::Config::new(&id_keys).unwrap();
     let _ = MemoryTransport::default()
-        .upgrade(upgrade::Version::V1)
+        .upgrade()
         .authenticate(noise);
 }
 

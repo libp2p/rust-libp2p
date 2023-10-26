@@ -1423,24 +1423,6 @@ impl Config {
         self
     }
 
-    /// Configures an override for the substream upgrade protocol to use.
-    ///
-    /// The subtream upgrade protocol is the multistream-select protocol
-    /// used for protocol negotiation on substreams. Since a listener
-    /// supports all existing versions, the choice of upgrade protocol
-    /// only effects the "dialer", i.e. the peer opening a substream.
-    ///
-    /// > **Note**: If configured, specific upgrade protocols for
-    /// > individual [`SubstreamProtocol`]s emitted by the `NetworkBehaviour`
-    /// > are ignored.
-    pub fn with_substream_upgrade_protocol_override(
-        mut self,
-        v: libp2p_core::upgrade::Version,
-    ) -> Self {
-        self.pool_config = self.pool_config.with_substream_upgrade_protocol_override(v);
-        self
-    }
-
     /// The maximum number of inbound streams concurrently negotiating on a
     /// connection. New inbound streams exceeding the limit are dropped and thus
     /// reset.
@@ -1611,21 +1593,6 @@ where
     /// Number of addresses concurrently dialed for a single outbound connection attempt.
     pub fn dial_concurrency_factor(mut self, factor: NonZeroU8) -> Self {
         self.pool_config = self.pool_config.with_dial_concurrency_factor(factor);
-        self
-    }
-
-    /// Configures an override for the substream upgrade protocol to use.
-    ///
-    /// The subtream upgrade protocol is the multistream-select protocol
-    /// used for protocol negotiation on substreams. Since a listener
-    /// supports all existing versions, the choice of upgrade protocol
-    /// only effects the "dialer", i.e. the peer opening a substream.
-    ///
-    /// > **Note**: If configured, specific upgrade protocols for
-    /// > individual [`SubstreamProtocol`]s emitted by the `NetworkBehaviour`
-    /// > are ignored.
-    pub fn substream_upgrade_protocol_override(mut self, v: libp2p_core::upgrade::Version) -> Self {
-        self.pool_config = self.pool_config.with_substream_upgrade_protocol_override(v);
         self
     }
 
@@ -1964,7 +1931,7 @@ mod tests {
         let id_keys = identity::Keypair::generate_ed25519();
         let local_public_key = id_keys.public();
         let transport = transport::MemoryTransport::default()
-            .upgrade(upgrade::Version::V1)
+            .upgrade()
             .authenticate(plaintext::Config::new(&id_keys))
             .multiplex(yamux::Config::default())
             .boxed();

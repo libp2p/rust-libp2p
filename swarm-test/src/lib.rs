@@ -22,7 +22,7 @@ use async_trait::async_trait;
 use futures::future::Either;
 use futures::StreamExt;
 use libp2p_core::{
-    multiaddr::Protocol, transport::MemoryTransport, upgrade::Version, Multiaddr, Transport,
+    multiaddr::Protocol, transport::MemoryTransport, Multiaddr, Transport,
 };
 use libp2p_identity::{Keypair, PeerId};
 use libp2p_plaintext as plaintext;
@@ -210,7 +210,7 @@ where
 
         let transport = MemoryTransport::default()
             .or_transport(libp2p_tcp::async_io::Transport::default())
-            .upgrade(Version::V1)
+            .upgrade()
             .authenticate(plaintext::Config::new(&identity))
             .multiplex(yamux::Config::default())
             .timeout(Duration::from_secs(20))
