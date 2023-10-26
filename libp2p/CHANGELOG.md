@@ -7,7 +7,7 @@
   See [PR 4694](https://github.com/libp2p/rust-libp2p/pull/4694).
 - Remove deprecated `development_transport`.
   Use `libp2p::SwarmBuilder` instead.
-  See [PR XXX]().
+  See [PR 4732](https://github.com/libp2p/rust-libp2p/pull/4732).
 
 ## 0.52.4
 
