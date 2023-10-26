@@ -399,39 +399,37 @@ where
         cx: &mut Context<'_>,
     ) -> Poll<ConnectionHandlerEvent<Protocol<TCodec::Protocol>, (), Self::ToBehaviour, Self::Error>>
     {
-        loop {
-            match self.worker_streams.poll_unpin(cx) {
-                Poll::Ready((_, Ok(Ok(event)))) => {
-                    return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(event));
-                }
-                Poll::Ready((RequestId::Inbound(id), Ok(Err(e)))) => {
-                    return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(
-                        Event::InboundStreamFailed {
-                            request_id: id,
-                            error: e,
-                        },
-                    ));
-                }
-                Poll::Ready((RequestId::Outbound(id), Ok(Err(e)))) => {
-                    return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(
-                        Event::OutboundStreamFailed {
-                            request_id: id,
-                            error: e,
-                        },
-                    ));
-                }
-                Poll::Ready((RequestId::Inbound(id), Err(futures_bounded::Timeout { .. }))) => {
-                    return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(
-                        Event::InboundTimeout(id),
-                    ));
-                }
-                Poll::Ready((RequestId::Outbound(id), Err(futures_bounded::Timeout { .. }))) => {
-                    return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(
-                        Event::OutboundTimeout(id),
-                    ));
-                }
-                Poll::Pending => break,
+        match self.worker_streams.poll_unpin(cx) {
+            Poll::Ready((_, Ok(Ok(event)))) => {
+                return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(event));
             }
+            Poll::Ready((RequestId::Inbound(id), Ok(Err(e)))) => {
+                return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(
+                    Event::InboundStreamFailed {
+                        request_id: id,
+                        error: e,
+                    },
+                ));
+            }
+            Poll::Ready((RequestId::Outbound(id), Ok(Err(e)))) => {
+                return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(
+                    Event::OutboundStreamFailed {
+                        request_id: id,
+                        error: e,
+                    },
+                ));
+            }
+            Poll::Ready((RequestId::Inbound(id), Err(futures_bounded::Timeout { .. }))) => {
+                return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(
+                    Event::InboundTimeout(id),
+                ));
+            }
+            Poll::Ready((RequestId::Outbound(id), Err(futures_bounded::Timeout { .. }))) => {
+                return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(
+                    Event::OutboundTimeout(id),
+                ));
+            }
+            Poll::Pending => {}
         }
 
         // Drain pending events that were produced by `worker_streams`.
