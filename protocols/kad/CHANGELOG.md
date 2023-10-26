@@ -8,6 +8,9 @@
   See [PR 4035](https://github.com/libp2p/rust-libp2p/pull/4035).
 - Expose hashed bytes of KBucketKey.
   See [PR 4698](https://github.com/libp2p/rust-libp2p/pull/4698).
+- Remove previously deprecated type-aliases.
+  Users should follow the convention of importing the `libp2p::kad` module and referring to symbols as `kad::Behaviour` etc.
+  See [PR 4733](https://github.com/libp2p/rust-libp2p/pull/4733). 
 
 ## 0.44.6
 

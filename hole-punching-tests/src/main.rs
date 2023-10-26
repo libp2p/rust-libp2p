@@ -211,7 +211,6 @@ async fn client_connect_to_relay(
                 ..
             })) => {
                 log::info!("Relay told us our public address: {observed_addr}");
-                swarm.add_external_address(observed_addr);
                 break;
             }
             SwarmEvent::ConnectionEstablished { connection_id, .. }

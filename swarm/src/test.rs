@@ -114,7 +114,7 @@ where
         self.next_action.take().map_or(Poll::Pending, Poll::Ready)
     }
 
-    fn on_swarm_event(&mut self, event: FromSwarm<Self::ConnectionHandler>) {
+    fn on_swarm_event(&mut self, event: FromSwarm) {
         match event {
             FromSwarm::ConnectionEstablished(_)
             | FromSwarm::ConnectionClosed(_)
@@ -316,9 +316,8 @@ where
             peer_id,
             connection_id,
             endpoint,
-            handler,
             remaining_established,
-        }: ConnectionClosed<<Self as NetworkBehaviour>::ConnectionHandler>,
+        }: ConnectionClosed,
     ) {
         let mut other_closed_connections = self
             .on_connection_established
@@ -366,7 +365,6 @@ where
                 peer_id,
                 connection_id,
                 endpoint,
-                handler,
                 remaining_established,
             }));
     }
@@ -454,7 +452,7 @@ where
             .handle_established_outbound_connection(connection_id, peer, addr, role_override)
     }
 
-    fn on_swarm_event(&mut self, event: FromSwarm<Self::ConnectionHandler>) {
+    fn on_swarm_event(&mut self, event: FromSwarm) {
         match event {
             FromSwarm::ConnectionEstablished(connection_established) => {
                 self.on_connection_established(connection_established)

@@ -852,7 +852,6 @@ where
                 connected,
                 error,
                 remaining_established_connection_ids,
-                handler,
                 ..
             } => {
                 if let Some(error) = error.as_ref() {
@@ -879,7 +878,6 @@ where
                         peer_id,
                         connection_id: id,
                         endpoint: &endpoint,
-                        handler,
                         remaining_established: num_established as usize,
                     }));
                 return Some(SwarmEvent::ConnectionClosed {

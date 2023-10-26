@@ -87,7 +87,6 @@ pub(crate) enum EstablishedConnectionEvent<THandler: ConnectionHandler> {
         id: ConnectionId,
         peer_id: PeerId,
         error: Option<ConnectionError<THandler::Error>>,
-        handler: THandler,
     },
 }
 
@@ -187,15 +186,25 @@ pub(crate) async fn new_for_established_connection<THandler>(
                 Command::NotifyHandler(event) => connection.on_behaviour_event(event),
                 Command::Close => {
                     command_receiver.close();
-                    let (handler, closing_muxer) = connection.close();
+                    let (remaining_events, closing_muxer) = connection.close();
+
+                    let _ = events
+                        .send_all(&mut remaining_events.map(|event| {
+                            Ok(EstablishedConnectionEvent::Notify {
+                                id: connection_id,
+                                event,
+                                peer_id,
+                            })
+                        }))
+                        .await;
 
                     let error = closing_muxer.await.err().map(ConnectionError::IO);
+
                     let _ = events
                         .send(EstablishedConnectionEvent::Closed {
                             id: connection_id,
                             peer_id,
                             error,
-                            handler,
                         })
                         .await;
                     return;
@@ -227,14 +236,24 @@ pub(crate) async fn new_for_established_connection<THandler>(
                     }
                     Err(error) => {
                         command_receiver.close();
-                        let (handler, _closing_muxer) = connection.close();
+                        let (remaining_events, _closing_muxer) = connection.close();
+
+                        let _ = events
+                            .send_all(&mut remaining_events.map(|event| {
+                                Ok(EstablishedConnectionEvent::Notify {
+                                    id: connection_id,
+                                    event,
+                                    peer_id,
+                                })
+                            }))
+                            .await;
+
                         // Terminate the task with the error, dropping the connection.
                         let _ = events
                             .send(EstablishedConnectionEvent::Closed {
                                 id: connection_id,
                                 peer_id,
                                 error: Some(error),
-                                handler,
                             })
                             .await;
                         return;
