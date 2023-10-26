@@ -404,39 +404,31 @@ where
                 Poll::Ready((_, Ok(Ok(event)))) => {
                     return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(event));
                 }
-                Poll::Ready((id, Ok(Err(e)))) => {
-                    let event = match id {
-                        RequestId::Inbound(id) => {
-                            log::debug!("Stream for inbound request {id} failed: {e}");
-                            Event::InboundStreamFailed {
-                                request_id: id,
-                                error: e,
-                            }
-                        }
-                        RequestId::Outbound(id) => {
-                            log::debug!("Stream for outbound request {id} failed: {e}");
-                            Event::OutboundStreamFailed {
-                                request_id: id,
-                                error: e,
-                            }
-                        }
-                    };
-
-                    return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(event));
+                Poll::Ready((RequestId::Inbound(id), Ok(Err(e)))) => {
+                    return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(
+                        Event::InboundStreamFailed {
+                            request_id: id,
+                            error: e,
+                        },
+                    ));
                 }
-                Poll::Ready((id, Err(futures_bounded::Timeout { .. }))) => {
-                    let event = match id {
-                        RequestId::Inbound(id) => {
-                            log::debug!("Stream for inbound request {id} timed out");
-                            Event::InboundTimeout(id)
-                        }
-                        RequestId::Outbound(id) => {
-                            log::debug!("Stream for outbound request {id} timed out");
-                            Event::OutboundTimeout(id)
-                        }
-                    };
-
-                    return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(event));
+                Poll::Ready((RequestId::Outbound(id), Ok(Err(e)))) => {
+                    return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(
+                        Event::OutboundStreamFailed {
+                            request_id: id,
+                            error: e,
+                        },
+                    ));
+                }
+                Poll::Ready((RequestId::Inbound(id), Err(futures_bounded::Timeout { .. }))) => {
+                    return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(
+                        Event::InboundTimeout(id),
+                    ));
+                }
+                Poll::Ready((RequestId::Outbound(id), Err(futures_bounded::Timeout { .. }))) => {
+                    return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(
+                        Event::OutboundTimeout(id),
+                    ));
                 }
                 Poll::Pending => break,
             }
