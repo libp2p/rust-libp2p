@@ -5,6 +5,9 @@
 - Remove deprecated `libp2p-wasm-ext`.
   Users should use `libp2p-websocket-websys` instead.
   See [PR 4694](https://github.com/libp2p/rust-libp2p/pull/4694).
+- Remove deprecated `libp2p-deflate`.
+  See [issue 4522](https://github.com/libp2p/rust-libp2p/issues/4522) for details.
+  See [PR XXXX](https://github.com/libp2p/rust-libp2p/pull/XXXX).
 
 ## 0.52.4
 
