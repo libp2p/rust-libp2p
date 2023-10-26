@@ -3007,11 +3007,14 @@ dependencies = [
 name = "libp2p-request-response"
 version = "0.26.0"
 dependencies = [
+ "anyhow",
  "async-std",
  "async-trait",
  "cbor4ii",
  "env_logger 0.10.0",
  "futures",
+ "futures-bounded",
+ "futures-timer",
  "futures_ringbuf",
  "instant",
  "libp2p-core",
