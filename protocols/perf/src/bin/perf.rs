@@ -24,7 +24,7 @@ use anyhow::{bail, Result};
 use clap::Parser;
 use futures::StreamExt;
 use instant::{Duration, Instant};
-use libp2p::core::{multiaddr::Protocol, upgrade, Multiaddr};
+use libp2p::core::{multiaddr::Protocol, Multiaddr};
 use libp2p::identity::PeerId;
 use libp2p::swarm::{NetworkBehaviour, Swarm, SwarmEvent};
 use libp2p::SwarmBuilder;
@@ -214,10 +214,7 @@ async fn swarm<B: NetworkBehaviour + Default>() -> Result<Swarm<B>> {
         .with_quic()
         .with_dns()?
         .with_behaviour(|_| B::default())?
-        .with_swarm_config(|cfg| {
-            cfg.with_substream_upgrade_protocol_override(upgrade::Version::V1Lazy)
-                .with_idle_connection_timeout(Duration::from_secs(60 * 5))
-        })
+        .with_swarm_config(|cfg| cfg.with_idle_connection_timeout(Duration::from_secs(60 * 5)))
         .build();
 
     Ok(swarm)

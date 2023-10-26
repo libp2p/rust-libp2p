@@ -364,7 +364,7 @@ where
     StreamSink: AsyncRead + AsyncWrite + Send + Unpin + 'static,
 {
     transport
-        .upgrade(upgrade::Version::V1)
+        .upgrade()
         .authenticate(plaintext::Config::new(identity))
         .multiplex(libp2p_yamux::Config::default())
         .boxed()

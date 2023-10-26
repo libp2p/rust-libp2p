@@ -59,7 +59,7 @@ fn build_node_with_config(cfg: Config) -> (Multiaddr, TestSwarm) {
     let local_key = identity::Keypair::generate_ed25519();
     let local_public_key = local_key.public();
     let transport = MemoryTransport::default()
-        .upgrade(upgrade::Version::V1)
+        .upgrade()
         .authenticate(noise::Config::new(&local_key).unwrap())
         .multiplex(yamux::Config::default())
         .boxed();

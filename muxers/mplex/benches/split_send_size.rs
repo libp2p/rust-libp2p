@@ -28,7 +28,7 @@ use futures::prelude::*;
 use futures::{channel::oneshot, future::join};
 use libp2p_core::muxing::StreamMuxerExt;
 use libp2p_core::transport::ListenerId;
-use libp2p_core::{multiaddr::multiaddr, muxing, transport, upgrade, Multiaddr, Transport};
+use libp2p_core::{multiaddr::multiaddr, muxing, transport, Multiaddr, Transport};
 use libp2p_identity as identity;
 use libp2p_identity::PeerId;
 use libp2p_mplex as mplex;
@@ -170,7 +170,7 @@ fn tcp_transport(split_send_size: usize) -> BenchTransport {
     mplex.set_split_send_size(split_send_size);
 
     libp2p_tcp::async_io::Transport::new(libp2p_tcp::Config::default().nodelay(true))
-        .upgrade(upgrade::Version::V1)
+        .upgrade()
         .authenticate(plaintext::Config::new(
             &identity::Keypair::generate_ed25519(),
         ))
@@ -184,7 +184,7 @@ fn mem_transport(split_send_size: usize) -> BenchTransport {
     mplex.set_split_send_size(split_send_size);
 
     transport::MemoryTransport::default()
-        .upgrade(upgrade::Version::V1)
+        .upgrade()
         .authenticate(plaintext::Config::new(
             &identity::Keypair::generate_ed25519(),
         ))

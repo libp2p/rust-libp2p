@@ -20,8 +20,8 @@
 
 //! Protocol negotiation strategies for the peer acting as the dialer.
 
-use crate::protocol::{HeaderLine, Message, MessageIO, Protocol, ProtocolError};
-use crate::{Negotiated, NegotiationError, Version};
+use crate::protocol::{Message, MessageIO, Protocol, ProtocolError};
+use crate::{Negotiated, NegotiationError};
 
 use futures::prelude::*;
 use std::{
@@ -38,16 +38,9 @@ use std::{
 /// computation that performs the protocol negotiation with the remote. The
 /// returned `Future` resolves with the name of the negotiated protocol and
 /// a [`Negotiated`] I/O stream.
-///
-/// Within the scope of this library, a dialer always commits to a specific
-/// multistream-select [`Version`], whereas a listener always supports
-/// all versions supported by this library. Frictionless multistream-select
-/// protocol upgrades may thus proceed by deployments with updated listeners,
-/// eventually followed by deployments of dialers choosing the newer protocol.
 pub fn dialer_select_proto<R, I>(
     inner: R,
     protocols: I,
-    version: Version,
 ) -> DialerSelectFuture<R, I::IntoIter>
 where
     R: AsyncRead + AsyncWrite,
@@ -56,7 +49,6 @@ where
 {
     let protocols = protocols.into_iter().peekable();
     DialerSelectFuture {
-        version,
         protocols,
         state: State::SendHeader {
             io: MessageIO::new(inner),
@@ -71,7 +63,6 @@ pub struct DialerSelectFuture<R, I: Iterator> {
     // TODO: It would be nice if eventually N = I::Item = Protocol.
     protocols: iter::Peekable<I>,
     state: State<R, I::Item>,
-    version: Version,
 }
 
 enum State<R, N> {
@@ -106,8 +97,7 @@ where
                         }
                     }
 
-                    let h = HeaderLine::from(*this.version);
-                    if let Err(err) = Pin::new(&mut io).start_send(Message::Header(h)) {
+                    if let Err(err) = Pin::new(&mut io).start_send(Message::Header) {
                         return Poll::Ready(Err(From::from(err)));
                     }
 
@@ -136,19 +126,9 @@ where
                     if this.protocols.peek().is_some() {
                         *this.state = State::FlushProtocol { io, protocol }
                     } else {
-                        match this.version {
-                            Version::V1 => *this.state = State::FlushProtocol { io, protocol },
-                            // This is the only effect that `V1Lazy` has compared to `V1`:
-                            // Optimistically settling on the only protocol that
-                            // the dialer supports for this negotiation. Notably,
-                            // the dialer expects a regular `V1` response.
-                            Version::V1Lazy => {
-                                log::debug!("Dialer: Expecting proposed protocol: {}", p);
-                                let hl = HeaderLine::from(Version::V1Lazy);
-                                let io = Negotiated::expecting(io.into_reader(), p, Some(hl));
-                                return Poll::Ready(Ok((protocol, io)));
-                            }
-                        }
+                        log::debug!("Dialer: Expecting proposed protocol: {}", p);
+                        let io = Negotiated::expecting(io.into_reader(), p, true);
+                        return Poll::Ready(Ok((protocol, io)));
                     }
                 }
 
@@ -176,7 +156,7 @@ where
                     };
 
                     match msg {
-                        Message::Header(v) if v == HeaderLine::from(*this.version) => {
+                        Message::Header => {
                             *this.state = State::AwaitProtocol { io, protocol };
                         }
                         Message::Protocol(ref p) if p.as_ref() == protocol.as_ref() => {
@@ -212,9 +192,8 @@ mod tests {
     use quickcheck::{Arbitrary, Gen, GenRange};
     use std::time::Duration;
 
-    #[test]
-    fn select_proto_basic() {
-        async fn run(version: Version) {
+    #[async_std::test]
+    async fn select_proto_basic() {
             let (client_connection, server_connection) = futures_ringbuf::Endpoint::pair(100, 100);
 
             let server = async_std::task::spawn(async move {
@@ -235,7 +214,7 @@ mod tests {
 
             let client = async_std::task::spawn(async move {
                 let protos = vec!["/proto3", "/proto2"];
-                let (proto, mut io) = dialer_select_proto(client_connection, protos, version)
+                let (proto, mut io) = dialer_select_proto(client_connection, protos)
                     .await
                     .unwrap();
                 assert_eq!(proto, "/proto2");
@@ -251,17 +230,12 @@ mod tests {
 
             server.await;
             client.await;
-        }
-
-        async_std::task::block_on(run(Version::V1));
-        async_std::task::block_on(run(Version::V1Lazy));
     }
 
     /// Tests the expected behaviour of failed negotiations.
     #[test]
     fn negotiation_failed() {
         fn prop(
-            version: Version,
             DialerProtos(dial_protos): DialerProtos,
             ListenerProtos(listen_protos): ListenerProtos,
             DialPayload(dial_payload): DialPayload,
@@ -299,7 +273,7 @@ mod tests {
 
                     let mut io = match timeout(
                         Duration::from_secs(2),
-                        dialer_select_proto(client_connection, dial_protos, version),
+                        dialer_select_proto(client_connection, dial_protos),
                     )
                     .await
                     .unwrap()
@@ -330,7 +304,7 @@ mod tests {
 
         quickcheck::QuickCheck::new()
             .tests(1000)
-            .quickcheck(prop as fn(_, _, _, _));
+            .quickcheck(prop as fn(_, _, _));
     }
 
     #[async_std::test]
@@ -341,7 +315,7 @@ mod tests {
         let client = async_std::task::spawn(async move {
             // Single protocol to allow for lazy (or optimistic) protocol negotiation.
             let protos = vec!["/proto1"];
-            let (proto, mut io) = dialer_select_proto(client_connection, protos, Version::V1Lazy)
+            let (proto, mut io) = dialer_select_proto(client_connection, protos)
                 .await
                 .unwrap();
             assert_eq!(proto, "/proto1");

@@ -26,7 +26,6 @@
 //! `MessageReader`.
 
 use crate::length_delimited::{LengthDelimited, LengthDelimitedReader};
-use crate::Version;
 
 use bytes::{BufMut, Bytes, BytesMut};
 use futures::{io::IoSlice, prelude::*, ready};
@@ -48,23 +47,6 @@ const MSG_MULTISTREAM_1_0: &[u8] = b"/multistream/1.0.0\n";
 const MSG_PROTOCOL_NA: &[u8] = b"na\n";
 /// The encoded form of a multistream-select 'ls' message.
 const MSG_LS: &[u8] = b"ls\n";
-
-/// The multistream-select header lines preceeding negotiation.
-///
-/// Every [`Version`] has a corresponding header line.
-#[derive(Copy, Clone, Debug, PartialEq, Eq)]
-pub(crate) enum HeaderLine {
-    /// The `/multistream/1.0.0` header line.
-    V1,
-}
-
-impl From<Version> for HeaderLine {
-    fn from(v: Version) -> HeaderLine {
-        match v {
-            Version::V1 | Version::V1Lazy => HeaderLine::V1,
-        }
-    }
-}
 
 /// A protocol (name) exchanged during protocol negotiation.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -123,7 +105,7 @@ impl fmt::Display for Protocol {
 pub(crate) enum Message {
     /// A header message identifies the multistream-select protocol
     /// that the sender wishes to speak.
-    Header(HeaderLine),
+    Header,
     /// A protocol message identifies a protocol request or acknowledgement.
     Protocol(Protocol),
     /// A message through which a peer requests the complete list of
@@ -139,7 +121,7 @@ impl Message {
     /// Encodes a `Message` into its byte representation.
     fn encode(&self, dest: &mut BytesMut) -> Result<(), ProtocolError> {
         match self {
-            Message::Header(HeaderLine::V1) => {
+            Message::Header => {
                 dest.reserve(MSG_MULTISTREAM_1_0.len());
                 dest.put(MSG_MULTISTREAM_1_0);
                 Ok(())
@@ -180,7 +162,7 @@ impl Message {
     /// Decodes a `Message` from its byte representation.
     fn decode(mut msg: Bytes) -> Result<Message, ProtocolError> {
         if msg == MSG_MULTISTREAM_1_0 {
-            return Ok(Message::Header(HeaderLine::V1));
+            return Ok(Message::Header);
         }
 
         if msg == MSG_PROTOCOL_NA {
@@ -486,7 +468,7 @@ mod tests {
     impl Arbitrary for Message {
         fn arbitrary(g: &mut Gen) -> Message {
             match g.gen_range(0..5u8) {
-                0 => Message::Header(HeaderLine::V1),
+                0 => Message::Header,
                 1 => Message::NotAvailable,
                 2 => Message::ListProtocols,
                 3 => Message::Protocol(Protocol::arbitrary(g)),

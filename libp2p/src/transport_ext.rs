@@ -56,7 +56,7 @@ pub trait TransportExt: Transport {
     /// let id_keys = identity::Keypair::generate_ed25519();
     ///
     /// let transport = tcp::tokio::Transport::new(tcp::Config::default().nodelay(true))
-    ///     .upgrade(upgrade::Version::V1)
+    ///     .upgrade()
     ///     .authenticate(
     ///         noise::Config::new(&id_keys)
     ///             .expect("Signing libp2p-noise static DH keypair failed."),

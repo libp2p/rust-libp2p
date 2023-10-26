@@ -21,7 +21,7 @@
 //! Protocol negotiation strategies for the peer acting as the listener
 //! in a multistream-select protocol negotiation.
 
-use crate::protocol::{HeaderLine, Message, MessageIO, Protocol, ProtocolError};
+use crate::protocol::{Message, MessageIO, Protocol, ProtocolError};
 use crate::{Negotiated, NegotiationError};
 
 use futures::prelude::*;
@@ -124,7 +124,7 @@ where
             match mem::replace(this.state, State::Done) {
                 State::RecvHeader { mut io } => {
                     match io.poll_next_unpin(cx) {
-                        Poll::Ready(Some(Ok(Message::Header(HeaderLine::V1)))) => {
+                        Poll::Ready(Some(Ok(Message::Header))) => {
                             *this.state = State::SendHeader { io }
                         }
                         Poll::Ready(Some(Ok(_))) => {
@@ -152,8 +152,7 @@ where
                         Poll::Ready(Err(err)) => return Poll::Ready(Err(From::from(err))),
                     }
 
-                    let msg = Message::Header(HeaderLine::V1);
-                    if let Err(err) = Pin::new(&mut io).start_send(msg) {
+                    if let Err(err) = Pin::new(&mut io).start_send(Message::Header) {
                         return Poll::Ready(Err(From::from(err)));
                     }
 

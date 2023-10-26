@@ -236,12 +236,12 @@ pub trait Transport {
     }
 
     /// Begins a series of protocol upgrades via an [`upgrade::Builder`].
-    fn upgrade(self, version: upgrade::Version) -> upgrade::Builder<Self>
+    fn upgrade(self) -> upgrade::Builder<Self>
     where
         Self: Sized,
         Self::Error: 'static,
     {
-        upgrade::Builder::new(self, version)
+        upgrade::Builder::new(self)
     }
 }
 

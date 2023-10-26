@@ -104,9 +104,6 @@ where
     /// Number of addresses concurrently dialed for a single outbound connection attempt.
     dial_concurrency_factor: NonZeroU8,
 
-    /// The configured override for substream protocol upgrades, if any.
-    substream_upgrade_protocol_override: Option<libp2p_core::upgrade::Version>,
-
     /// The maximum number of inbound streams concurrently negotiating on a connection.
     ///
     /// See [`Connection::max_negotiating_inbound_streams`].
@@ -321,7 +318,6 @@ where
             pending: Default::default(),
             task_command_buffer_size: config.task_command_buffer_size,
             dial_concurrency_factor: config.dial_concurrency_factor,
-            substream_upgrade_protocol_override: config.substream_upgrade_protocol_override,
             max_negotiating_inbound_streams: config.max_negotiating_inbound_streams,
             per_connection_event_buffer_size: config.per_connection_event_buffer_size,
             idle_connection_timeout: config.idle_connection_timeout,
@@ -519,7 +515,6 @@ where
         let connection = Connection::new(
             connection,
             handler,
-            self.substream_upgrade_protocol_override,
             self.max_negotiating_inbound_streams,
             self.idle_connection_timeout,
         );
@@ -947,8 +942,6 @@ pub(crate) struct PoolConfig {
     pub(crate) dial_concurrency_factor: NonZeroU8,
     /// How long a connection should be kept alive once it is idling.
     pub(crate) idle_connection_timeout: Duration,
-    /// The configured override for substream protocol upgrades, if any.
-    substream_upgrade_protocol_override: Option<libp2p_core::upgrade::Version>,
 
     /// The maximum number of inbound streams concurrently negotiating on a connection.
     ///
@@ -964,7 +957,6 @@ impl PoolConfig {
             per_connection_event_buffer_size: 7,
             dial_concurrency_factor: NonZeroU8::new(8).expect("8 > 0"),
             idle_connection_timeout: Duration::ZERO,
-            substream_upgrade_protocol_override: None,
             max_negotiating_inbound_streams: 128,
         }
     }
@@ -995,15 +987,6 @@ impl PoolConfig {
     /// Number of addresses concurrently dialed for a single outbound connection attempt.
     pub(crate) fn with_dial_concurrency_factor(mut self, factor: NonZeroU8) -> Self {
         self.dial_concurrency_factor = factor;
-        self
-    }
-
-    /// Configures an override for the substream upgrade protocol to use.
-    pub(crate) fn with_substream_upgrade_protocol_override(
-        mut self,
-        v: libp2p_core::upgrade::Version,
-    ) -> Self {
-        self.substream_upgrade_protocol_override = Some(v);
         self
     }
 

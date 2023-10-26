@@ -21,7 +21,7 @@
 use futures::prelude::*;
 use libp2p_core::transport::{ListenerId, MemoryTransport, Transport};
 use libp2p_core::upgrade::{
-    self, InboundConnectionUpgrade, OutboundConnectionUpgrade, UpgradeInfo,
+    InboundConnectionUpgrade, OutboundConnectionUpgrade, UpgradeInfo,
 };
 use libp2p_identity as identity;
 use libp2p_mplex::MplexConfig;
@@ -82,7 +82,7 @@ fn upgrade_pipeline() {
     let listener_keys = identity::Keypair::generate_ed25519();
     let listener_id = listener_keys.public().to_peer_id();
     let mut listener_transport = MemoryTransport::default()
-        .upgrade(upgrade::Version::V1)
+        .upgrade()
         .authenticate(noise::Config::new(&listener_keys).unwrap())
         .apply(HelloUpgrade {})
         .apply(HelloUpgrade {})
@@ -93,7 +93,7 @@ fn upgrade_pipeline() {
     let dialer_keys = identity::Keypair::generate_ed25519();
     let dialer_id = dialer_keys.public().to_peer_id();
     let mut dialer_transport = MemoryTransport::default()
-        .upgrade(upgrade::Version::V1)
+        .upgrade()
         .authenticate(noise::Config::new(&dialer_keys).unwrap())
         .apply(HelloUpgrade {})
         .apply(HelloUpgrade {})

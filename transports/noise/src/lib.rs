@@ -46,7 +46,7 @@
 //! # fn main() {
 //! let id_keys = identity::Keypair::generate_ed25519();
 //! let noise = noise::Config::new(&id_keys).unwrap();
-//! let builder = MemoryTransport::default().upgrade(upgrade::Version::V1).authenticate(noise);
+//! let builder = MemoryTransport::default().upgrade().authenticate(noise);
 //! // let transport = builder.multiplex(...);
 //! # }
 //! ```

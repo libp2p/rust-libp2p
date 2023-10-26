@@ -94,7 +94,7 @@ macro_rules! impl_websocket_builder {
                 let websocket_transport = libp2p_websocket::WsConfig::new(
                     $dnsTcp.await.map_err(WebsocketErrorInner::Dns)?,
                 )
-                    .upgrade(libp2p_core::upgrade::Version::V1Lazy)
+                    .upgrade()
                     .authenticate(security_upgrade)
                     .multiplex(multiplexer_upgrade.into_multiplexer_upgrade())
                     .map(|(p, c), _| (p, StreamMuxerBox::new(c)));

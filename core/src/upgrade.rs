@@ -80,7 +80,7 @@ pub use self::{
     transfer::{read_length_prefixed, read_varint, write_length_prefixed, write_varint},
 };
 pub use crate::Negotiated;
-pub use multistream_select::{NegotiatedComplete, NegotiationError, ProtocolError, Version};
+pub use multistream_select::{NegotiatedComplete, NegotiationError, ProtocolError};
 
 /// Common trait for upgrades that can be applied on inbound substreams, outbound substreams,
 /// or both.

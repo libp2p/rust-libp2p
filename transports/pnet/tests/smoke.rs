@@ -2,7 +2,6 @@ use std::time::Duration;
 
 use futures::{future, AsyncRead, AsyncWrite, StreamExt};
 use libp2p_core::transport::MemoryTransport;
-use libp2p_core::upgrade::Version;
 use libp2p_core::Transport;
 use libp2p_core::{multiaddr::Protocol, Multiaddr};
 use libp2p_pnet::{PnetConfig, PreSharedKey};
@@ -109,7 +108,7 @@ where
     let identity = libp2p_identity::Keypair::generate_ed25519();
     let transport = transport
         .and_then(move |socket, _| pnet.handshake(socket))
-        .upgrade(Version::V1)
+        .upgrade()
         .authenticate(libp2p_noise::Config::new(&identity).unwrap())
         .multiplex(libp2p_yamux::Config::default())
         .boxed();

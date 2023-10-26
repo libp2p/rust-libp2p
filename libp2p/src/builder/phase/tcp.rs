@@ -80,7 +80,7 @@ macro_rules! impl_tcp_builder {
                 Ok(SwarmBuilder {
                     phase: QuicPhase {
                         transport: libp2p_tcp::$path::Transport::new(tcp_config)
-                            .upgrade(libp2p_core::upgrade::Version::V1Lazy)
+                            .upgrade()
                             .authenticate(
                                 security_upgrade.into_security_upgrade(&self.keypair)?,
                             )
