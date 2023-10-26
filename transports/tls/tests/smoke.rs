@@ -3,7 +3,7 @@ use libp2p_core::multiaddr::Protocol;
 use libp2p_core::transport::MemoryTransport;
 use libp2p_core::upgrade::Version;
 use libp2p_core::Transport;
-use libp2p_swarm::{dummy, Swarm, SwarmBuilder, SwarmEvent};
+use libp2p_swarm::{dummy, Config, Swarm, SwarmEvent};
 use std::time::Duration;
 
 #[tokio::test]
@@ -65,7 +65,10 @@ fn make_swarm() -> Swarm<dummy::Behaviour> {
         .multiplex(libp2p_yamux::Config::default())
         .boxed();
 
-    SwarmBuilder::without_executor(transport, dummy::Behaviour, identity.public().to_peer_id())
-        .idle_connection_timeout(Duration::from_secs(5))
-        .build()
+    Swarm::new(
+        transport,
+        dummy::Behaviour,
+        identity.public().to_peer_id(),
+        Config::with_tokio_executor().with_idle_connection_timeout(Duration::from_secs(60)),
+    )
 }

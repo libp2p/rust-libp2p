@@ -37,7 +37,7 @@ use libp2p_swarm::handler::{
     ConnectionEvent, DialUpgradeError, FullyNegotiatedInbound, FullyNegotiatedOutbound,
 };
 use libp2p_swarm::{
-    ConnectionHandler, ConnectionHandlerEvent, ConnectionId, KeepAlive, Stream, StreamProtocol,
+    ConnectionHandler, ConnectionHandlerEvent, ConnectionId, Stream, StreamProtocol,
     StreamUpgradeError, SubstreamProtocol,
 };
 use std::collections::VecDeque;
@@ -355,8 +355,8 @@ pub struct Handler {
         >,
     >,
 
-    /// Until when to keep the connection alive.
-    keep_alive: KeepAlive,
+    /// The point in time when this connection started idleing.
+    idle_at: Option<Instant>,
 
     /// Future handling inbound reservation request.
     reservation_request_future: Option<ReservationRequestFuture>,
@@ -376,10 +376,6 @@ pub struct Handler {
     ///
     /// Contains a [`futures::future::Future`] for each lend out substream that
     /// resolves once the substream is dropped.
-    ///
-    /// Once all substreams are dropped and this handler has no other work,
-    /// [`KeepAlive::Until`] can be set, allowing the connection to be closed
-    /// eventually.
     alive_lend_out_substreams: FuturesUnordered<oneshot::Receiver<()>>,
     /// Futures relaying data for circuit between two peers.
     circuits: Futures<(CircuitId, PeerId, Result<(), std::io::Error>)>,
@@ -411,13 +407,13 @@ impl Handler {
             config,
             queued_events: Default::default(),
             pending_error: Default::default(),
+            idle_at: None,
             reservation_request_future: Default::default(),
             circuit_accept_futures: Default::default(),
             circuit_deny_futures: Default::default(),
             alive_lend_out_substreams: Default::default(),
             circuits: Default::default(),
             active_reservation: Default::default(),
-            keep_alive: KeepAlive::Yes,
             pending_connect_requests: Default::default(),
         }
     }
@@ -615,8 +611,12 @@ impl ConnectionHandler for Handler {
         }
     }
 
-    fn connection_keep_alive(&self) -> KeepAlive {
-        self.keep_alive
+    fn connection_keep_alive(&self) -> bool {
+        let Some(idle_at) = self.idle_at else {
+            return true;
+        };
+
+        Instant::now().duration_since(idle_at) <= Duration::from_secs(10)
     }
 
     fn poll(
@@ -876,22 +876,12 @@ impl ConnectionHandler for Handler {
         {}
 
         // Check keep alive status.
-        if self.reservation_request_future.is_none()
-            && self.circuit_accept_futures.is_empty()
-            && self.circuit_deny_futures.is_empty()
-            && self.alive_lend_out_substreams.is_empty()
-            && self.circuits.is_empty()
-            && self.active_reservation.is_none()
-        {
-            match self.keep_alive {
-                KeepAlive::Yes => {
-                    self.keep_alive = KeepAlive::Until(Instant::now() + Duration::from_secs(10));
-                }
-                KeepAlive::Until(_) => {}
-                KeepAlive::No => panic!("Handler never sets KeepAlive::No."),
+        if self.active_reservation.is_none() {
+            if self.idle_at.is_none() {
+                self.idle_at = Some(Instant::now());
             }
         } else {
-            self.keep_alive = KeepAlive::Yes;
+            self.idle_at = None;
         }
 
         Poll::Pending

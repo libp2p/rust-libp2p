@@ -1,6 +1,36 @@
+## 0.46.0 - unreleased
+
+- Remove `fast_message_id_fn` mechanism from `Config`.
+  See [PR 4285](https://github.com/libp2p/rust-libp2p/pull/4285).
+- Remove deprecated `gossipsub::Config::idle_timeout` in favor of `SwarmBuilder::idle_connection_timeout`.
+  See [PR 4642](https://github.com/libp2p/rust-libp2p/pull/4642).
+- Return typed error from config builder.
+  See [PR 4445].
+
+[PR 4445]: https://github.com/libp2p/rust-libp2p/pull/4445
+
+## 0.45.2
+
+- Deprecate `gossipsub::Config::idle_timeout` in favor of `SwarmBuilder::idle_connection_timeout`.
+  See [PR 4648].
+
+<!-- Interal changes:
+
+- Allow new clippy lint.
+
+-->
+
+[PR 4648]: (https://github.com/libp2p/rust-libp2p/pull/4648)
+
+<!-- Internal changes
+
+- Allow deprecated usage of `KeepAlive::Until`
+
+-->
+
 ## 0.45.1
 
-- Add getter function to obtain `TopicScoreParams`.
+- Add getter function to o  btain `TopicScoreParams`.
   See [PR 4231].
 
 [PR 4231]: https://github.com/libp2p/rust-libp2p/pull/4231

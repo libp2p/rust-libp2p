@@ -61,7 +61,7 @@
 //! > to the size of all stored records. As a job runs, the records are moved
 //! > out of the job to the consumer, where they can be dropped after being sent.
 
-use crate::record_priv::{self, store::RecordStore, ProviderRecord, Record};
+use crate::record::{self, store::RecordStore, ProviderRecord, Record};
 use futures::prelude::*;
 use futures_timer::Delay;
 use instant::Instant;
@@ -74,10 +74,10 @@ use std::vec;
 
 /// The maximum number of queries towards which background jobs
 /// are allowed to start new queries on an invocation of
-/// `Kademlia::poll`.
+/// `Behaviour::poll`.
 pub(crate) const JOBS_MAX_QUERIES: usize = 100;
 /// The maximum number of new queries started by a background job
-/// per invocation of `Kademlia::poll`.
+/// per invocation of `Behaviour::poll`.
 pub(crate) const JOBS_MAX_NEW_QUERIES: usize = 10;
 /// A background job run periodically.
 #[derive(Debug)]
@@ -87,6 +87,7 @@ struct PeriodicJob<T> {
 }
 
 impl<T> PeriodicJob<T> {
+    #[cfg(test)]
     fn is_running(&self) -> bool {
         match self.state {
             PeriodicJobState::Running(..) => true,
@@ -96,6 +97,7 @@ impl<T> PeriodicJob<T> {
 
     /// Cuts short the remaining delay, if the job is currently waiting
     /// for the delay to expire.
+    #[cfg(test)]
     fn asap(&mut self) {
         if let PeriodicJobState::Waiting(delay, deadline) = &mut self.state {
             let new_deadline = Instant::now().checked_sub(Duration::from_secs(1)).unwrap();
@@ -132,7 +134,7 @@ pub(crate) struct PutRecordJob {
     next_publish: Option<Instant>,
     publish_interval: Option<Duration>,
     record_ttl: Option<Duration>,
-    skipped: HashSet<record_priv::Key>,
+    skipped: HashSet<record::Key>,
     inner: PeriodicJob<vec::IntoIter<Record>>,
 }
 
@@ -164,11 +166,12 @@ impl PutRecordJob {
 
     /// Adds the key of a record that is ignored on the current or
     /// next run of the job.
-    pub(crate) fn skip(&mut self, key: record_priv::Key) {
+    pub(crate) fn skip(&mut self, key: record::Key) {
         self.skipped.insert(key);
     }
 
     /// Checks whether the job is currently running.
+    #[cfg(test)]
     pub(crate) fn is_running(&self) -> bool {
         self.inner.is_running()
     }
@@ -177,6 +180,7 @@ impl PutRecordJob {
     /// for the delay to expire.
     ///
     /// The job is guaranteed to run on the next invocation of `poll`.
+    #[cfg(test)]
     pub(crate) fn asap(&mut self, publish: bool) {
         if publish {
             self.next_publish = Some(Instant::now().checked_sub(Duration::from_secs(1)).unwrap())
@@ -273,6 +277,7 @@ impl AddProviderJob {
     }
 
     /// Checks whether the job is currently running.
+    #[cfg(test)]
     pub(crate) fn is_running(&self) -> bool {
         self.inner.is_running()
     }
@@ -281,6 +286,7 @@ impl AddProviderJob {
     /// for the delay to expire.
     ///
     /// The job is guaranteed to run on the next invocation of `poll`.
+    #[cfg(test)]
     pub(crate) fn asap(&mut self) {
         self.inner.asap()
     }
@@ -330,7 +336,7 @@ impl AddProviderJob {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::record_priv::store::MemoryStore;
+    use crate::record::store::MemoryStore;
     use futures::{executor::block_on, future::poll_fn};
     use quickcheck::*;
     use rand::Rng;

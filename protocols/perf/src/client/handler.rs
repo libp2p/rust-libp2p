@@ -21,22 +21,24 @@
 use std::{
     collections::VecDeque,
     task::{Context, Poll},
-    time::{Duration, Instant},
 };
 
-use futures::{future::BoxFuture, stream::FuturesUnordered, FutureExt, StreamExt, TryFutureExt};
+use futures::{
+    stream::{BoxStream, SelectAll},
+    StreamExt,
+};
 use libp2p_core::upgrade::{DeniedUpgrade, ReadyUpgrade};
 use libp2p_swarm::{
     handler::{
         ConnectionEvent, DialUpgradeError, FullyNegotiatedInbound, FullyNegotiatedOutbound,
         ListenUpgradeError,
     },
-    ConnectionHandler, ConnectionHandlerEvent, KeepAlive, StreamProtocol, StreamUpgradeError,
-    SubstreamProtocol,
+    ConnectionHandler, ConnectionHandlerEvent, StreamProtocol, SubstreamProtocol,
 };
 use void::Void;
 
-use super::{RunId, RunParams, RunStats};
+use crate::client::{RunError, RunId};
+use crate::{RunParams, RunUpdate};
 
 #[derive(Debug)]
 pub struct Command {
@@ -47,7 +49,7 @@ pub struct Command {
 #[derive(Debug)]
 pub struct Event {
     pub(crate) id: RunId,
-    pub(crate) result: Result<RunStats, StreamUpgradeError<Void>>,
+    pub(crate) result: Result<RunUpdate, RunError>,
 }
 
 pub struct Handler {
@@ -63,9 +65,7 @@ pub struct Handler {
 
     requested_streams: VecDeque<Command>,
 
-    outbound: FuturesUnordered<BoxFuture<'static, Result<Event, std::io::Error>>>,
-
-    keep_alive: KeepAlive,
+    outbound: SelectAll<BoxStream<'static, (RunId, Result<crate::RunUpdate, std::io::Error>)>>,
 }
 
 impl Handler {
@@ -74,7 +74,6 @@ impl Handler {
             queued_events: Default::default(),
             requested_streams: Default::default(),
             outbound: Default::default(),
-            keep_alive: KeepAlive::Yes,
         }
     }
 }
@@ -129,10 +128,7 @@ impl ConnectionHandler for Handler {
                     .expect("opened a stream without a pending command");
                 self.outbound.push(
                     crate::protocol::send_receive(params, protocol)
-                        .map_ok(move |timers| Event {
-                            id,
-                            result: Ok(RunStats { params, timers }),
-                        })
+                        .map(move |result| (id, result))
                         .boxed(),
                 );
             }
@@ -148,17 +144,13 @@ impl ConnectionHandler for Handler {
                 self.queued_events
                     .push_back(ConnectionHandlerEvent::NotifyBehaviour(Event {
                         id,
-                        result: Err(error),
+                        result: Err(error.into()),
                     }));
             }
             ConnectionEvent::ListenUpgradeError(ListenUpgradeError { info: (), error }) => {
                 void::unreachable(error)
             }
         }
-    }
-
-    fn connection_keep_alive(&self) -> KeepAlive {
-        self.keep_alive
     }
 
     fn poll(
@@ -172,30 +164,15 @@ impl ConnectionHandler for Handler {
             Self::Error,
         >,
     > {
-        // Return queued events.
         if let Some(event) = self.queued_events.pop_front() {
             return Poll::Ready(event);
         }
 
-        while let Poll::Ready(Some(result)) = self.outbound.poll_next_unpin(cx) {
-            match result {
-                Ok(event) => return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(event)),
-                Err(e) => {
-                    panic!("{e:?}")
-                }
-            }
-        }
-
-        if self.outbound.is_empty() {
-            match self.keep_alive {
-                KeepAlive::Yes => {
-                    self.keep_alive = KeepAlive::Until(Instant::now() + Duration::from_secs(10));
-                }
-                KeepAlive::Until(_) => {}
-                KeepAlive::No => panic!("Handler never sets KeepAlive::No."),
-            }
-        } else {
-            self.keep_alive = KeepAlive::Yes
+        if let Poll::Ready(Some((id, result))) = self.outbound.poll_next_unpin(cx) {
+            return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(Event {
+                id,
+                result: result.map_err(Into::into),
+            }));
         }
 
         Poll::Pending

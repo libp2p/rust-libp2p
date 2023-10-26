@@ -18,7 +18,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::record_priv;
+use crate::record;
 use libp2p_core::multihash::Multihash;
 use libp2p_identity::PeerId;
 use sha2::digest::generic_array::{typenum::U32, GenericArray};
@@ -113,8 +113,8 @@ impl From<Vec<u8>> for Key<Vec<u8>> {
     }
 }
 
-impl From<record_priv::Key> for Key<record_priv::Key> {
-    fn from(k: record_priv::Key) -> Self {
+impl From<record::Key> for Key<record::Key> {
+    fn from(k: record::Key) -> Self {
         Key::new(k)
     }
 }

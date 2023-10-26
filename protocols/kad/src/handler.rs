@@ -20,30 +20,26 @@
 
 use crate::behaviour::Mode;
 use crate::protocol::{
-    KadInStreamSink, KadOutStreamSink, KadPeer, KadRequestMsg, KadResponseMsg,
-    KademliaProtocolConfig,
+    KadInStreamSink, KadOutStreamSink, KadPeer, KadRequestMsg, KadResponseMsg, ProtocolConfig,
 };
-use crate::record_priv::{self, Record};
+use crate::record::{self, Record};
 use crate::QueryId;
 use either::Either;
 use futures::prelude::*;
 use futures::stream::SelectAll;
-use instant::Instant;
 use libp2p_core::{upgrade, ConnectedPoint};
 use libp2p_identity::PeerId;
 use libp2p_swarm::handler::{
     ConnectionEvent, DialUpgradeError, FullyNegotiatedInbound, FullyNegotiatedOutbound,
 };
 use libp2p_swarm::{
-    ConnectionHandler, ConnectionHandlerEvent, ConnectionId, KeepAlive, Stream, StreamUpgradeError,
+    ConnectionHandler, ConnectionHandlerEvent, ConnectionId, Stream, StreamUpgradeError,
     SubstreamProtocol, SupportedProtocols,
 };
 use log::trace;
 use std::collections::VecDeque;
 use std::task::Waker;
-use std::{
-    error, fmt, io, marker::PhantomData, pin::Pin, task::Context, task::Poll, time::Duration,
-};
+use std::{error, fmt, io, marker::PhantomData, pin::Pin, task::Context, task::Poll};
 
 const MAX_NUM_SUBSTREAMS: usize = 32;
 
@@ -54,15 +50,12 @@ const MAX_NUM_SUBSTREAMS: usize = 32;
 /// make.
 ///
 /// It also handles requests made by the remote.
-pub struct KademliaHandler {
+pub struct Handler {
     /// Configuration of the wire protocol.
-    protocol_config: KademliaProtocolConfig,
+    protocol_config: ProtocolConfig,
 
     /// In client mode, we don't accept inbound substreams.
     mode: Mode,
-
-    /// Time after which we close an idle connection.
-    idle_timeout: Duration,
 
     /// Next unique ID of a connection.
     next_connec_unique_id: UniqueConnecId,
@@ -80,9 +73,6 @@ pub struct KademliaHandler {
     /// List of active inbound substreams with the state they are in.
     inbound_substreams: SelectAll<InboundSubstreamState>,
 
-    /// Until when to keep the connection alive.
-    keep_alive: KeepAlive,
-
     /// The connected endpoint of the connection that the handler
     /// is associated with.
     endpoint: ConnectedPoint,
@@ -91,7 +81,7 @@ pub struct KademliaHandler {
     remote_peer_id: PeerId,
 
     /// The current state of protocol confirmation.
-    protocol_status: ProtocolStatus,
+    protocol_status: Option<ProtocolStatus>,
 
     remote_supported_protocols: SupportedProtocols,
 
@@ -101,19 +91,12 @@ pub struct KademliaHandler {
 
 /// The states of protocol confirmation that a connection
 /// handler transitions through.
-#[derive(Copy, Clone)]
-enum ProtocolStatus {
-    /// It is as yet unknown whether the remote supports the
-    /// configured protocol name.
-    Unknown,
-    /// The configured protocol name has been confirmed by the remote
-    /// but has not yet been reported to the `Kademlia` behaviour.
-    Confirmed,
-    /// The configured protocol name(s) are not or no longer supported by the remote.
-    NotSupported,
-    /// The configured protocol has been confirmed by the remote
-    /// and the confirmation reported to the `Kademlia` behaviour.
-    Reported,
+#[derive(Debug, Copy, Clone, PartialEq)]
+struct ProtocolStatus {
+    /// Whether the remote node supports one of our kademlia protocols.
+    supported: bool,
+    /// Whether we reported the state to the behaviour.
+    reported: bool,
 }
 
 /// State of an active outbound substream.
@@ -126,7 +109,7 @@ enum OutboundSubstreamState {
     // TODO: add timeout
     WaitingAnswer(KadOutStreamSink<Stream>, QueryId),
     /// An error happened on the substream and we should report the error to the user.
-    ReportError(KademliaHandlerQueryErr, QueryId),
+    ReportError(HandlerQueryErr, QueryId),
     /// The substream is being closed.
     Closing(KadOutStreamSink<Stream>),
     /// The substream is complete and will not perform any more work.
@@ -143,7 +126,7 @@ enum InboundSubstreamState {
         connection_id: UniqueConnecId,
         substream: KadInStreamSink<Stream>,
     },
-    /// Waiting for the behaviour to send a [`KademliaHandlerIn`] event containing the response.
+    /// Waiting for the behaviour to send a [`HandlerIn`] event containing the response.
     WaitingBehaviour(UniqueConnecId, KadInStreamSink<Stream>, Option<Waker>),
     /// Waiting to send an answer back to the remote.
     PendingSend(UniqueConnecId, KadInStreamSink<Stream>, KadResponseMsg),
@@ -162,7 +145,7 @@ enum InboundSubstreamState {
 impl InboundSubstreamState {
     fn try_answer_with(
         &mut self,
-        id: KademliaRequestId,
+        id: RequestId,
         msg: KadResponseMsg,
     ) -> Result<(), KadResponseMsg> {
         match std::mem::replace(
@@ -214,7 +197,7 @@ impl InboundSubstreamState {
 
 /// Event produced by the Kademlia handler.
 #[derive(Debug)]
-pub enum KademliaHandlerEvent {
+pub enum HandlerEvent {
     /// The configured protocol name has been confirmed by the peer through
     /// a successfully negotiated substream or by learning the supported protocols of the remote.
     ProtocolConfirmed { endpoint: ConnectedPoint },
@@ -228,10 +211,10 @@ pub enum KademliaHandlerEvent {
         /// The key for which to locate the closest nodes.
         key: Vec<u8>,
         /// Identifier of the request. Needs to be passed back when answering.
-        request_id: KademliaRequestId,
+        request_id: RequestId,
     },
 
-    /// Response to an `KademliaHandlerIn::FindNodeReq`.
+    /// Response to an `HandlerIn::FindNodeReq`.
     FindNodeRes {
         /// Results of the request.
         closer_peers: Vec<KadPeer>,
@@ -243,12 +226,12 @@ pub enum KademliaHandlerEvent {
     /// this key.
     GetProvidersReq {
         /// The key for which providers are requested.
-        key: record_priv::Key,
+        key: record::Key,
         /// Identifier of the request. Needs to be passed back when answering.
-        request_id: KademliaRequestId,
+        request_id: RequestId,
     },
 
-    /// Response to an `KademliaHandlerIn::GetProvidersReq`.
+    /// Response to an `HandlerIn::GetProvidersReq`.
     GetProvidersRes {
         /// Nodes closest to the key.
         closer_peers: Vec<KadPeer>,
@@ -261,7 +244,7 @@ pub enum KademliaHandlerEvent {
     /// An error happened when performing a query.
     QueryError {
         /// The error that happened.
-        error: KademliaHandlerQueryErr,
+        error: HandlerQueryErr,
         /// The user data passed to the query.
         query_id: QueryId,
     },
@@ -269,7 +252,7 @@ pub enum KademliaHandlerEvent {
     /// The peer announced itself as a provider of a key.
     AddProvider {
         /// The key for which the peer is a provider of the associated value.
-        key: record_priv::Key,
+        key: record::Key,
         /// The peer that is the provider of the value for `key`.
         provider: KadPeer,
     },
@@ -277,12 +260,12 @@ pub enum KademliaHandlerEvent {
     /// Request to get a value from the dht records
     GetRecord {
         /// Key for which we should look in the dht
-        key: record_priv::Key,
+        key: record::Key,
         /// Identifier of the request. Needs to be passed back when answering.
-        request_id: KademliaRequestId,
+        request_id: RequestId,
     },
 
-    /// Response to a `KademliaHandlerIn::GetRecord`.
+    /// Response to a `HandlerIn::GetRecord`.
     GetRecordRes {
         /// The result is present if the key has been found
         record: Option<Record>,
@@ -296,13 +279,13 @@ pub enum KademliaHandlerEvent {
     PutRecord {
         record: Record,
         /// Identifier of the request. Needs to be passed back when answering.
-        request_id: KademliaRequestId,
+        request_id: RequestId,
     },
 
     /// Response to a request to store a record.
     PutRecordRes {
         /// The key of the stored record.
-        key: record_priv::Key,
+        key: record::Key,
         /// The value of the stored record.
         value: Vec<u8>,
         /// The user data passed to the `PutValue`.
@@ -312,7 +295,7 @@ pub enum KademliaHandlerEvent {
 
 /// Error that can happen when requesting an RPC query.
 #[derive(Debug)]
-pub enum KademliaHandlerQueryErr {
+pub enum HandlerQueryErr {
     /// Error while trying to perform the query.
     Upgrade(StreamUpgradeError<io::Error>),
     /// Received an answer that doesn't correspond to the request.
@@ -321,44 +304,44 @@ pub enum KademliaHandlerQueryErr {
     Io(io::Error),
 }
 
-impl fmt::Display for KademliaHandlerQueryErr {
+impl fmt::Display for HandlerQueryErr {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            KademliaHandlerQueryErr::Upgrade(err) => {
+            HandlerQueryErr::Upgrade(err) => {
                 write!(f, "Error while performing Kademlia query: {err}")
             }
-            KademliaHandlerQueryErr::UnexpectedMessage => {
+            HandlerQueryErr::UnexpectedMessage => {
                 write!(
                     f,
                     "Remote answered our Kademlia RPC query with the wrong message type"
                 )
             }
-            KademliaHandlerQueryErr::Io(err) => {
+            HandlerQueryErr::Io(err) => {
                 write!(f, "I/O error during a Kademlia RPC query: {err}")
             }
         }
     }
 }
 
-impl error::Error for KademliaHandlerQueryErr {
+impl error::Error for HandlerQueryErr {
     fn source(&self) -> Option<&(dyn error::Error + 'static)> {
         match self {
-            KademliaHandlerQueryErr::Upgrade(err) => Some(err),
-            KademliaHandlerQueryErr::UnexpectedMessage => None,
-            KademliaHandlerQueryErr::Io(err) => Some(err),
+            HandlerQueryErr::Upgrade(err) => Some(err),
+            HandlerQueryErr::UnexpectedMessage => None,
+            HandlerQueryErr::Io(err) => Some(err),
         }
     }
 }
 
-impl From<StreamUpgradeError<io::Error>> for KademliaHandlerQueryErr {
+impl From<StreamUpgradeError<io::Error>> for HandlerQueryErr {
     fn from(err: StreamUpgradeError<io::Error>) -> Self {
-        KademliaHandlerQueryErr::Upgrade(err)
+        HandlerQueryErr::Upgrade(err)
     }
 }
 
 /// Event to send to the handler.
 #[derive(Debug)]
-pub enum KademliaHandlerIn {
+pub enum HandlerIn {
     /// Resets the (sub)stream associated with the given request ID,
     /// thus signaling an error to the remote.
     ///
@@ -366,7 +349,7 @@ pub enum KademliaHandlerIn {
     /// can be used as an alternative to letting requests simply time
     /// out on the remote peer, thus potentially avoiding some delay
     /// for the query on the remote.
-    Reset(KademliaRequestId),
+    Reset(RequestId),
 
     /// Change the connection to the specified mode.
     ReconfigureMode { new_mode: Mode },
@@ -387,14 +370,14 @@ pub enum KademliaHandlerIn {
         /// Identifier of the request that was made by the remote.
         ///
         /// It is a logic error to use an id of the handler of a different node.
-        request_id: KademliaRequestId,
+        request_id: RequestId,
     },
 
     /// Same as `FindNodeReq`, but should also return the entries of the local providers list for
     /// this key.
     GetProvidersReq {
         /// Identifier being searched.
-        key: record_priv::Key,
+        key: record::Key,
         /// Custom user data. Passed back in the out event when the results arrive.
         query_id: QueryId,
     },
@@ -408,7 +391,7 @@ pub enum KademliaHandlerIn {
         /// Identifier of the request that was made by the remote.
         ///
         /// It is a logic error to use an id of the handler of a different node.
-        request_id: KademliaRequestId,
+        request_id: RequestId,
     },
 
     /// Indicates that this provider is known for this key.
@@ -417,7 +400,7 @@ pub enum KademliaHandlerIn {
     /// succeeded.
     AddProvider {
         /// Key for which we should add providers.
-        key: record_priv::Key,
+        key: record::Key,
         /// Known provider for this key.
         provider: KadPeer,
     },
@@ -425,7 +408,7 @@ pub enum KademliaHandlerIn {
     /// Request to retrieve a record from the DHT.
     GetRecord {
         /// The key of the record.
-        key: record_priv::Key,
+        key: record::Key,
         /// Custom data. Passed back in the out event when the results arrive.
         query_id: QueryId,
     },
@@ -437,7 +420,7 @@ pub enum KademliaHandlerIn {
         /// Nodes that are closer to the key we were searching for.
         closer_peers: Vec<KadPeer>,
         /// Identifier of the request that was made by the remote.
-        request_id: KademliaRequestId,
+        request_id: RequestId,
     },
 
     /// Put a value into the dht records.
@@ -450,18 +433,18 @@ pub enum KademliaHandlerIn {
     /// Response to a `PutRecord`.
     PutRecordRes {
         /// Key of the value that was put.
-        key: record_priv::Key,
+        key: record::Key,
         /// Value that was put.
         value: Vec<u8>,
         /// Identifier of the request that was made by the remote.
-        request_id: KademliaRequestId,
+        request_id: RequestId,
     },
 }
 
 /// Unique identifier for a request. Must be passed back in order to answer a request from
 /// the remote.
 #[derive(Debug, PartialEq, Eq, Copy, Clone)]
-pub struct KademliaRequestId {
+pub struct RequestId {
     /// Unique identifier for an incoming connection.
     connec_unique_id: UniqueConnecId,
 }
@@ -470,10 +453,9 @@ pub struct KademliaRequestId {
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 struct UniqueConnecId(u64);
 
-impl KademliaHandler {
+impl Handler {
     pub fn new(
-        protocol_config: KademliaProtocolConfig,
-        idle_timeout: Duration,
+        protocol_config: ProtocolConfig,
         endpoint: ConnectedPoint,
         remote_peer_id: PeerId,
         mode: Mode,
@@ -492,12 +474,9 @@ impl KademliaHandler {
             }
         }
 
-        let keep_alive = KeepAlive::Until(Instant::now() + idle_timeout);
-
-        KademliaHandler {
+        Handler {
             protocol_config,
             mode,
-            idle_timeout,
             endpoint,
             remote_peer_id,
             next_connec_unique_id: UniqueConnecId(0),
@@ -505,8 +484,7 @@ impl KademliaHandler {
             outbound_substreams: Default::default(),
             num_requested_outbound_streams: 0,
             pending_messages: Default::default(),
-            keep_alive,
-            protocol_status: ProtocolStatus::Unknown,
+            protocol_status: None,
             remote_supported_protocols: Default::default(),
             connection_id,
         }
@@ -528,11 +506,14 @@ impl KademliaHandler {
 
         self.num_requested_outbound_streams -= 1;
 
-        if let ProtocolStatus::Unknown = self.protocol_status {
+        if self.protocol_status.is_none() {
             // Upon the first successfully negotiated substream, we know that the
             // remote is configured with the same protocol name and we want
             // the behaviour to add this peer to the routing table, if possible.
-            self.protocol_status = ProtocolStatus::Confirmed;
+            self.protocol_status = Some(ProtocolStatus {
+                supported: true,
+                reported: false,
+            });
         }
     }
 
@@ -550,11 +531,14 @@ impl KademliaHandler {
             future::Either::Right(p) => void::unreachable(p),
         };
 
-        if let ProtocolStatus::Unknown = self.protocol_status {
+        if self.protocol_status.is_none() {
             // Upon the first successfully negotiated substream, we know that the
             // remote is configured with the same protocol name and we want
             // the behaviour to add this peer to the routing table, if possible.
-            self.protocol_status = ProtocolStatus::Confirmed;
+            self.protocol_status = Some(ProtocolStatus {
+                supported: true,
+                reported: false,
+            });
         }
 
         if self.inbound_substreams.len() == MAX_NUM_SUBSTREAMS {
@@ -612,12 +596,12 @@ impl KademliaHandler {
     }
 }
 
-impl ConnectionHandler for KademliaHandler {
-    type FromBehaviour = KademliaHandlerIn;
-    type ToBehaviour = KademliaHandlerEvent;
+impl ConnectionHandler for Handler {
+    type FromBehaviour = HandlerIn;
+    type ToBehaviour = HandlerEvent;
     type Error = io::Error; // TODO: better error type?
-    type InboundProtocol = Either<KademliaProtocolConfig, upgrade::DeniedUpgrade>;
-    type OutboundProtocol = KademliaProtocolConfig;
+    type InboundProtocol = Either<ProtocolConfig, upgrade::DeniedUpgrade>;
+    type OutboundProtocol = ProtocolConfig;
     type OutboundOpenInfo = ();
     type InboundOpenInfo = ();
 
@@ -628,9 +612,9 @@ impl ConnectionHandler for KademliaHandler {
         }
     }
 
-    fn on_behaviour_event(&mut self, message: KademliaHandlerIn) {
+    fn on_behaviour_event(&mut self, message: HandlerIn) {
         match message {
-            KademliaHandlerIn::Reset(request_id) => {
+            HandlerIn::Reset(request_id) => {
                 if let Some(state) = self
                     .inbound_substreams
                     .iter_mut()
@@ -644,19 +628,19 @@ impl ConnectionHandler for KademliaHandler {
                     state.close();
                 }
             }
-            KademliaHandlerIn::FindNodeReq { key, query_id } => {
+            HandlerIn::FindNodeReq { key, query_id } => {
                 let msg = KadRequestMsg::FindNode { key };
                 self.pending_messages.push_back((msg, Some(query_id)));
             }
-            KademliaHandlerIn::FindNodeRes {
+            HandlerIn::FindNodeRes {
                 closer_peers,
                 request_id,
             } => self.answer_pending_request(request_id, KadResponseMsg::FindNode { closer_peers }),
-            KademliaHandlerIn::GetProvidersReq { key, query_id } => {
+            HandlerIn::GetProvidersReq { key, query_id } => {
                 let msg = KadRequestMsg::GetProviders { key };
                 self.pending_messages.push_back((msg, Some(query_id)));
             }
-            KademliaHandlerIn::GetProvidersRes {
+            HandlerIn::GetProvidersRes {
                 closer_peers,
                 provider_peers,
                 request_id,
@@ -667,19 +651,19 @@ impl ConnectionHandler for KademliaHandler {
                     provider_peers,
                 },
             ),
-            KademliaHandlerIn::AddProvider { key, provider } => {
+            HandlerIn::AddProvider { key, provider } => {
                 let msg = KadRequestMsg::AddProvider { key, provider };
                 self.pending_messages.push_back((msg, None));
             }
-            KademliaHandlerIn::GetRecord { key, query_id } => {
+            HandlerIn::GetRecord { key, query_id } => {
                 let msg = KadRequestMsg::GetValue { key };
                 self.pending_messages.push_back((msg, Some(query_id)));
             }
-            KademliaHandlerIn::PutRecord { record, query_id } => {
+            HandlerIn::PutRecord { record, query_id } => {
                 let msg = KadRequestMsg::PutValue { record };
                 self.pending_messages.push_back((msg, Some(query_id)));
             }
-            KademliaHandlerIn::GetRecordRes {
+            HandlerIn::GetRecordRes {
                 record,
                 closer_peers,
                 request_id,
@@ -692,14 +676,14 @@ impl ConnectionHandler for KademliaHandler {
                     },
                 );
             }
-            KademliaHandlerIn::PutRecordRes {
+            HandlerIn::PutRecordRes {
                 key,
                 request_id,
                 value,
             } => {
                 self.answer_pending_request(request_id, KadResponseMsg::PutValue { key, value });
             }
-            KademliaHandlerIn::ReconfigureMode { new_mode } => {
+            HandlerIn::ReconfigureMode { new_mode } => {
                 let peer = self.remote_peer_id;
 
                 match &self.endpoint {
@@ -718,10 +702,6 @@ impl ConnectionHandler for KademliaHandler {
         }
     }
 
-    fn connection_keep_alive(&self) -> KeepAlive {
-        self.keep_alive
-    }
-
     fn poll(
         &mut self,
         cx: &mut Context<'_>,
@@ -733,13 +713,22 @@ impl ConnectionHandler for KademliaHandler {
             Self::Error,
         >,
     > {
-        if let ProtocolStatus::Confirmed = self.protocol_status {
-            self.protocol_status = ProtocolStatus::Reported;
-            return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(
-                KademliaHandlerEvent::ProtocolConfirmed {
-                    endpoint: self.endpoint.clone(),
-                },
-            ));
+        match &mut self.protocol_status {
+            Some(status) if !status.reported => {
+                status.reported = true;
+                let event = if status.supported {
+                    HandlerEvent::ProtocolConfirmed {
+                        endpoint: self.endpoint.clone(),
+                    }
+                } else {
+                    HandlerEvent::ProtocolNotSupported {
+                        endpoint: self.endpoint.clone(),
+                    }
+                };
+
+                return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(event));
+            }
+            _ => {}
         }
 
         if let Poll::Ready(Some(event)) = self.outbound_substreams.poll_next_unpin(cx) {
@@ -760,16 +749,6 @@ impl ConnectionHandler for KademliaHandler {
                 protocol: SubstreamProtocol::new(self.protocol_config.clone(), ()),
             });
         }
-
-        let no_streams = self.outbound_substreams.is_empty() && self.inbound_substreams.is_empty();
-        self.keep_alive = match (no_streams, self.keep_alive) {
-            // No open streams. Preserve the existing idle timeout.
-            (true, k @ KeepAlive::Until(_)) => k,
-            // No open streams. Set idle timeout.
-            (true, _) => KeepAlive::Until(Instant::now() + self.idle_timeout),
-            // Keep alive for open streams.
-            (false, _) => KeepAlive::Yes,
-        };
 
         Poll::Pending
     }
@@ -805,36 +784,55 @@ impl ConnectionHandler for KademliaHandler {
                         .iter()
                         .any(|p| self.protocol_config.protocol_names().contains(p));
 
-                    match (remote_supports_our_kademlia_protocols, self.protocol_status) {
-                        (true, ProtocolStatus::Confirmed | ProtocolStatus::Reported) => {}
-                        (true, _) => {
-                            log::debug!(
-                                "Remote {} now supports our kademlia protocol on connection {}",
-                                self.remote_peer_id,
-                                self.connection_id,
-                            );
-
-                            self.protocol_status = ProtocolStatus::Confirmed;
-                        }
-                        (false, ProtocolStatus::Confirmed | ProtocolStatus::Reported) => {
-                            log::debug!(
-                                "Remote {} no longer supports our kademlia protocol on connection {}",
-                                self.remote_peer_id,
-                                self.connection_id,
-                            );
-
-                            self.protocol_status = ProtocolStatus::NotSupported;
-                        }
-                        (false, _) => {}
-                    }
+                    self.protocol_status = Some(compute_new_protocol_status(
+                        remote_supports_our_kademlia_protocols,
+                        self.protocol_status,
+                        self.remote_peer_id,
+                        self.connection_id,
+                    ))
                 }
             }
         }
     }
 }
 
-impl KademliaHandler {
-    fn answer_pending_request(&mut self, request_id: KademliaRequestId, mut msg: KadResponseMsg) {
+fn compute_new_protocol_status(
+    now_supported: bool,
+    current_status: Option<ProtocolStatus>,
+    remote_peer_id: PeerId,
+    connection_id: ConnectionId,
+) -> ProtocolStatus {
+    let current_status = match current_status {
+        None => {
+            return ProtocolStatus {
+                supported: now_supported,
+                reported: false,
+            }
+        }
+        Some(current) => current,
+    };
+
+    if now_supported == current_status.supported {
+        return ProtocolStatus {
+            supported: now_supported,
+            reported: true,
+        };
+    }
+
+    if now_supported {
+        log::debug!("Remote {remote_peer_id} now supports our kademlia protocol on connection {connection_id}");
+    } else {
+        log::debug!("Remote {remote_peer_id} no longer supports our kademlia protocol on connection {connection_id}");
+    }
+
+    ProtocolStatus {
+        supported: now_supported,
+        reported: false,
+    }
+}
+
+impl Handler {
+    fn answer_pending_request(&mut self, request_id: RequestId, mut msg: KadResponseMsg) {
         for state in self.inbound_substreams.iter_mut() {
             match state.try_answer_with(request_id, msg) {
                 Ok(()) => return,
@@ -849,7 +847,7 @@ impl KademliaHandler {
 }
 
 impl futures::Stream for OutboundSubstreamState {
-    type Item = ConnectionHandlerEvent<KademliaProtocolConfig, (), KademliaHandlerEvent, io::Error>;
+    type Item = ConnectionHandlerEvent<ProtocolConfig, (), HandlerEvent, io::Error>;
 
     fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
         let this = self.get_mut();
@@ -866,8 +864,8 @@ impl futures::Stream for OutboundSubstreamState {
                                 *this = OutboundSubstreamState::Done;
                                 let event = query_id.map(|query_id| {
                                     ConnectionHandlerEvent::NotifyBehaviour(
-                                        KademliaHandlerEvent::QueryError {
-                                            error: KademliaHandlerQueryErr::Io(error),
+                                        HandlerEvent::QueryError {
+                                            error: HandlerQueryErr::Io(error),
                                             query_id,
                                         },
                                     )
@@ -883,12 +881,10 @@ impl futures::Stream for OutboundSubstreamState {
                         Poll::Ready(Err(error)) => {
                             *this = OutboundSubstreamState::Done;
                             let event = query_id.map(|query_id| {
-                                ConnectionHandlerEvent::NotifyBehaviour(
-                                    KademliaHandlerEvent::QueryError {
-                                        error: KademliaHandlerQueryErr::Io(error),
-                                        query_id,
-                                    },
-                                )
+                                ConnectionHandlerEvent::NotifyBehaviour(HandlerEvent::QueryError {
+                                    error: HandlerQueryErr::Io(error),
+                                    query_id,
+                                })
                             });
 
                             return Poll::Ready(event);
@@ -911,12 +907,10 @@ impl futures::Stream for OutboundSubstreamState {
                         Poll::Ready(Err(error)) => {
                             *this = OutboundSubstreamState::Done;
                             let event = query_id.map(|query_id| {
-                                ConnectionHandlerEvent::NotifyBehaviour(
-                                    KademliaHandlerEvent::QueryError {
-                                        error: KademliaHandlerQueryErr::Io(error),
-                                        query_id,
-                                    },
-                                )
+                                ConnectionHandlerEvent::NotifyBehaviour(HandlerEvent::QueryError {
+                                    error: HandlerQueryErr::Io(error),
+                                    query_id,
+                                })
                             });
 
                             return Poll::Ready(event);
@@ -939,8 +933,8 @@ impl futures::Stream for OutboundSubstreamState {
                         }
                         Poll::Ready(Some(Err(error))) => {
                             *this = OutboundSubstreamState::Done;
-                            let event = KademliaHandlerEvent::QueryError {
-                                error: KademliaHandlerQueryErr::Io(error),
+                            let event = HandlerEvent::QueryError {
+                                error: HandlerQueryErr::Io(error),
                                 query_id,
                             };
 
@@ -950,10 +944,8 @@ impl futures::Stream for OutboundSubstreamState {
                         }
                         Poll::Ready(None) => {
                             *this = OutboundSubstreamState::Done;
-                            let event = KademliaHandlerEvent::QueryError {
-                                error: KademliaHandlerQueryErr::Io(
-                                    io::ErrorKind::UnexpectedEof.into(),
-                                ),
+                            let event = HandlerEvent::QueryError {
+                                error: HandlerQueryErr::Io(io::ErrorKind::UnexpectedEof.into()),
                                 query_id,
                             };
 
@@ -965,7 +957,7 @@ impl futures::Stream for OutboundSubstreamState {
                 }
                 OutboundSubstreamState::ReportError(error, query_id) => {
                     *this = OutboundSubstreamState::Done;
-                    let event = KademliaHandlerEvent::QueryError { error, query_id };
+                    let event = HandlerEvent::QueryError { error, query_id };
 
                     return Poll::Ready(Some(ConnectionHandlerEvent::NotifyBehaviour(event)));
                 }
@@ -987,7 +979,7 @@ impl futures::Stream for OutboundSubstreamState {
 }
 
 impl futures::Stream for InboundSubstreamState {
-    type Item = ConnectionHandlerEvent<KademliaProtocolConfig, (), KademliaHandlerEvent, io::Error>;
+    type Item = ConnectionHandlerEvent<ProtocolConfig, (), HandlerEvent, io::Error>;
 
     fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
         let this = self.get_mut();
@@ -1013,9 +1005,9 @@ impl futures::Stream for InboundSubstreamState {
                         *this =
                             InboundSubstreamState::WaitingBehaviour(connection_id, substream, None);
                         return Poll::Ready(Some(ConnectionHandlerEvent::NotifyBehaviour(
-                            KademliaHandlerEvent::FindNodeReq {
+                            HandlerEvent::FindNodeReq {
                                 key,
-                                request_id: KademliaRequestId {
+                                request_id: RequestId {
                                     connec_unique_id: connection_id,
                                 },
                             },
@@ -1025,9 +1017,9 @@ impl futures::Stream for InboundSubstreamState {
                         *this =
                             InboundSubstreamState::WaitingBehaviour(connection_id, substream, None);
                         return Poll::Ready(Some(ConnectionHandlerEvent::NotifyBehaviour(
-                            KademliaHandlerEvent::GetProvidersReq {
+                            HandlerEvent::GetProvidersReq {
                                 key,
-                                request_id: KademliaRequestId {
+                                request_id: RequestId {
                                     connec_unique_id: connection_id,
                                 },
                             },
@@ -1040,16 +1032,16 @@ impl futures::Stream for InboundSubstreamState {
                             substream,
                         };
                         return Poll::Ready(Some(ConnectionHandlerEvent::NotifyBehaviour(
-                            KademliaHandlerEvent::AddProvider { key, provider },
+                            HandlerEvent::AddProvider { key, provider },
                         )));
                     }
                     Poll::Ready(Some(Ok(KadRequestMsg::GetValue { key }))) => {
                         *this =
                             InboundSubstreamState::WaitingBehaviour(connection_id, substream, None);
                         return Poll::Ready(Some(ConnectionHandlerEvent::NotifyBehaviour(
-                            KademliaHandlerEvent::GetRecord {
+                            HandlerEvent::GetRecord {
                                 key,
-                                request_id: KademliaRequestId {
+                                request_id: RequestId {
                                     connec_unique_id: connection_id,
                                 },
                             },
@@ -1059,9 +1051,9 @@ impl futures::Stream for InboundSubstreamState {
                         *this =
                             InboundSubstreamState::WaitingBehaviour(connection_id, substream, None);
                         return Poll::Ready(Some(ConnectionHandlerEvent::NotifyBehaviour(
-                            KademliaHandlerEvent::PutRecord {
+                            HandlerEvent::PutRecord {
                                 record,
-                                request_id: KademliaRequestId {
+                                request_id: RequestId {
                                     connec_unique_id: connection_id,
                                 },
                             },
@@ -1138,24 +1130,24 @@ impl futures::Stream for InboundSubstreamState {
 }
 
 /// Process a Kademlia message that's supposed to be a response to one of our requests.
-fn process_kad_response(event: KadResponseMsg, query_id: QueryId) -> KademliaHandlerEvent {
+fn process_kad_response(event: KadResponseMsg, query_id: QueryId) -> HandlerEvent {
     // TODO: must check that the response corresponds to the request
     match event {
         KadResponseMsg::Pong => {
             // We never send out pings.
-            KademliaHandlerEvent::QueryError {
-                error: KademliaHandlerQueryErr::UnexpectedMessage,
+            HandlerEvent::QueryError {
+                error: HandlerQueryErr::UnexpectedMessage,
                 query_id,
             }
         }
-        KadResponseMsg::FindNode { closer_peers } => KademliaHandlerEvent::FindNodeRes {
+        KadResponseMsg::FindNode { closer_peers } => HandlerEvent::FindNodeRes {
             closer_peers,
             query_id,
         },
         KadResponseMsg::GetProviders {
             closer_peers,
             provider_peers,
-        } => KademliaHandlerEvent::GetProvidersRes {
+        } => HandlerEvent::GetProvidersRes {
             closer_peers,
             provider_peers,
             query_id,
@@ -1163,15 +1155,62 @@ fn process_kad_response(event: KadResponseMsg, query_id: QueryId) -> KademliaHan
         KadResponseMsg::GetValue {
             record,
             closer_peers,
-        } => KademliaHandlerEvent::GetRecordRes {
+        } => HandlerEvent::GetRecordRes {
             record,
             closer_peers,
             query_id,
         },
-        KadResponseMsg::PutValue { key, value, .. } => KademliaHandlerEvent::PutRecordRes {
+        KadResponseMsg::PutValue { key, value, .. } => HandlerEvent::PutRecordRes {
             key,
             value,
             query_id,
         },
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use quickcheck::{Arbitrary, Gen};
+
+    impl Arbitrary for ProtocolStatus {
+        fn arbitrary(g: &mut Gen) -> Self {
+            Self {
+                supported: bool::arbitrary(g),
+                reported: bool::arbitrary(g),
+            }
+        }
+    }
+
+    #[test]
+    fn compute_next_protocol_status_test() {
+        let _ = env_logger::try_init();
+
+        fn prop(now_supported: bool, current: Option<ProtocolStatus>) {
+            let new = compute_new_protocol_status(
+                now_supported,
+                current,
+                PeerId::random(),
+                ConnectionId::new_unchecked(0),
+            );
+
+            match current {
+                None => {
+                    assert!(!new.reported);
+                    assert_eq!(new.supported, now_supported);
+                }
+                Some(current) => {
+                    if current.supported == now_supported {
+                        assert!(new.reported);
+                    } else {
+                        assert!(!new.reported);
+                    }
+
+                    assert_eq!(new.supported, now_supported);
+                }
+            }
+        }
+
+        quickcheck::quickcheck(prop as fn(_, _))
     }
 }

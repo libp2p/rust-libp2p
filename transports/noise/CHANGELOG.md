@@ -1,9 +1,11 @@
-## 0.43.2 - unreleased
+## 0.44.0 - unreleased
 
-- Refactor internals to use `asynchronous_codec` instead of manual state machines.
-  See [PR 4548].
+- Migrate to `{In,Out}boundConnectionUpgrade` traits.
+  See [PR 4695](https://github.com/libp2p/rust-libp2p/pull/4695).
 
-[PR 4544]: https://github.com/libp2p/rust-libp2p/pull/4548
+## 0.43.2
+
+- Update x25519-dalek to 2.0.0.
 
 ## 0.43.1
 

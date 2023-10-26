@@ -20,14 +20,14 @@
 
 //! The Kademlia connection protocol upgrade and associated message types.
 //!
-//! The connection protocol upgrade is provided by [`KademliaProtocolConfig`], with the
+//! The connection protocol upgrade is provided by [`ProtocolConfig`], with the
 //! request and response types [`KadRequestMsg`] and [`KadResponseMsg`], respectively.
 //! The upgrade's output is a `Sink + Stream` of messages. The `Stream` component is used
 //! to poll the underlying transport for incoming messages, and the `Sink` component
 //! is used to send messages to remote peers.
 
 use crate::proto;
-use crate::record_priv::{self, Record};
+use crate::record::{self, Record};
 use asynchronous_codec::{Decoder, Encoder, Framed};
 use bytes::BytesMut;
 use futures::prelude::*;
@@ -46,7 +46,7 @@ pub(crate) const DEFAULT_PROTO_NAME: StreamProtocol = StreamProtocol::new("/ipfs
 pub(crate) const DEFAULT_MAX_PACKET_SIZE: usize = 16 * 1024;
 /// Status of our connection to a node reported by the Kademlia protocol.
 #[derive(Copy, Clone, PartialEq, Eq, Debug, Hash)]
-pub enum KadConnectionType {
+pub enum ConnectionType {
     /// Sender hasn't tried to connect to peer.
     NotConnected = 0,
     /// Sender is currently connected to peer.
@@ -57,26 +57,26 @@ pub enum KadConnectionType {
     CannotConnect = 3,
 }
 
-impl From<proto::ConnectionType> for KadConnectionType {
-    fn from(raw: proto::ConnectionType) -> KadConnectionType {
+impl From<proto::ConnectionType> for ConnectionType {
+    fn from(raw: proto::ConnectionType) -> ConnectionType {
         use proto::ConnectionType::*;
         match raw {
-            NOT_CONNECTED => KadConnectionType::NotConnected,
-            CONNECTED => KadConnectionType::Connected,
-            CAN_CONNECT => KadConnectionType::CanConnect,
-            CANNOT_CONNECT => KadConnectionType::CannotConnect,
+            NOT_CONNECTED => ConnectionType::NotConnected,
+            CONNECTED => ConnectionType::Connected,
+            CAN_CONNECT => ConnectionType::CanConnect,
+            CANNOT_CONNECT => ConnectionType::CannotConnect,
         }
     }
 }
 
-impl From<KadConnectionType> for proto::ConnectionType {
-    fn from(val: KadConnectionType) -> Self {
+impl From<ConnectionType> for proto::ConnectionType {
+    fn from(val: ConnectionType) -> Self {
         use proto::ConnectionType::*;
         match val {
-            KadConnectionType::NotConnected => NOT_CONNECTED,
-            KadConnectionType::Connected => CONNECTED,
-            KadConnectionType::CanConnect => CAN_CONNECT,
-            KadConnectionType::CannotConnect => CANNOT_CONNECT,
+            ConnectionType::NotConnected => NOT_CONNECTED,
+            ConnectionType::Connected => CONNECTED,
+            ConnectionType::CanConnect => CAN_CONNECT,
+            ConnectionType::CannotConnect => CANNOT_CONNECT,
         }
     }
 }
@@ -89,7 +89,7 @@ pub struct KadPeer {
     /// The multiaddresses that the sender think can be used in order to reach the peer.
     pub multiaddrs: Vec<Multiaddr>,
     /// How the sender is connected to that remote.
-    pub connection_ty: KadConnectionType,
+    pub connection_ty: ConnectionType,
 }
 
 // Builds a `KadPeer` from a corresponding protobuf message.
@@ -135,13 +135,13 @@ impl From<KadPeer> for proto::Peer {
 //       only one request, then we can change the output of the `InboundUpgrade` and
 //       `OutboundUpgrade` to be just a single message
 #[derive(Debug, Clone)]
-pub struct KademliaProtocolConfig {
+pub struct ProtocolConfig {
     protocol_names: Vec<StreamProtocol>,
     /// Maximum allowed size of a packet.
     max_packet_size: usize,
 }
 
-impl KademliaProtocolConfig {
+impl ProtocolConfig {
     /// Returns the configured protocol name.
     pub fn protocol_names(&self) -> &[StreamProtocol] {
         &self.protocol_names
@@ -159,16 +159,16 @@ impl KademliaProtocolConfig {
     }
 }
 
-impl Default for KademliaProtocolConfig {
+impl Default for ProtocolConfig {
     fn default() -> Self {
-        KademliaProtocolConfig {
+        ProtocolConfig {
             protocol_names: iter::once(DEFAULT_PROTO_NAME).collect(),
             max_packet_size: DEFAULT_MAX_PACKET_SIZE,
         }
     }
 }
 
-impl UpgradeInfo for KademliaProtocolConfig {
+impl UpgradeInfo for ProtocolConfig {
     type Info = StreamProtocol;
     type InfoIter = std::vec::IntoIter<Self::Info>;
 
@@ -213,7 +213,7 @@ pub(crate) type KadInStreamSink<S> = Framed<S, Codec<KadResponseMsg, KadRequestM
 /// Sink of requests and stream of responses.
 pub(crate) type KadOutStreamSink<S> = Framed<S, Codec<KadRequestMsg, KadResponseMsg>>;
 
-impl<C> InboundUpgrade<C> for KademliaProtocolConfig
+impl<C> InboundUpgrade<C> for ProtocolConfig
 where
     C: AsyncRead + AsyncWrite + Unpin,
 {
@@ -228,7 +228,7 @@ where
     }
 }
 
-impl<C> OutboundUpgrade<C> for KademliaProtocolConfig
+impl<C> OutboundUpgrade<C> for ProtocolConfig
 where
     C: AsyncRead + AsyncWrite + Unpin,
 {
@@ -260,13 +260,13 @@ pub enum KadRequestMsg {
     /// this key.
     GetProviders {
         /// Identifier being searched.
-        key: record_priv::Key,
+        key: record::Key,
     },
 
     /// Indicates that this list of providers is known for this key.
     AddProvider {
         /// Key for which we should add providers.
-        key: record_priv::Key,
+        key: record::Key,
         /// Known provider for this key.
         provider: KadPeer,
     },
@@ -274,7 +274,7 @@ pub enum KadRequestMsg {
     /// Request to get a value from the dht records.
     GetValue {
         /// The key we are searching for.
-        key: record_priv::Key,
+        key: record::Key,
     },
 
     /// Request to put a value into the dht records.
@@ -312,7 +312,7 @@ pub enum KadResponseMsg {
     /// Response to a `PutValue`.
     PutValue {
         /// The key of the record.
-        key: record_priv::Key,
+        key: record::Key,
         /// Value of the record.
         value: Vec<u8>,
     },
@@ -441,11 +441,11 @@ fn proto_to_req_msg(message: proto::Message) -> Result<KadRequestMsg, io::Error>
             Ok(KadRequestMsg::PutValue { record })
         }
         proto::MessageType::GET_VALUE => Ok(KadRequestMsg::GetValue {
-            key: record_priv::Key::from(message.key),
+            key: record::Key::from(message.key),
         }),
         proto::MessageType::FIND_NODE => Ok(KadRequestMsg::FindNode { key: message.key }),
         proto::MessageType::GET_PROVIDERS => Ok(KadRequestMsg::GetProviders {
-            key: record_priv::Key::from(message.key),
+            key: record::Key::from(message.key),
         }),
         proto::MessageType::ADD_PROVIDER => {
             // TODO: for now we don't parse the peer properly, so it is possible that we get
@@ -457,7 +457,7 @@ fn proto_to_req_msg(message: proto::Message) -> Result<KadRequestMsg, io::Error>
                 .find_map(|peer| KadPeer::try_from(peer).ok());
 
             if let Some(provider) = provider {
-                let key = record_priv::Key::from(message.key);
+                let key = record::Key::from(message.key);
                 Ok(KadRequestMsg::AddProvider { key, provider })
             } else {
                 Err(invalid_data("AddProvider message with no valid peer."))
@@ -521,7 +521,7 @@ fn proto_to_resp_msg(message: proto::Message) -> Result<KadResponseMsg, io::Erro
         }
 
         proto::MessageType::PUT_VALUE => {
-            let key = record_priv::Key::from(message.key);
+            let key = record::Key::from(message.key);
             let rec = message
                 .record
                 .ok_or_else(|| invalid_data("received PutValue message with no record"))?;
@@ -539,7 +539,7 @@ fn proto_to_resp_msg(message: proto::Message) -> Result<KadResponseMsg, io::Erro
 }
 
 fn record_from_proto(record: proto::Record) -> Result<Record, io::Error> {
-    let key = record_priv::Key::from(record.key);
+    let key = record::Key::from(record.key);
     let value = record.value;
 
     let publisher = if !record.publisher.is_empty() {
@@ -624,7 +624,7 @@ mod tests {
     use futures::{Future, Sink, Stream};
     use libp2p_core::{PeerId, PublicKey, Transport};
     use multihash::{encode, Hash};
-    use protocol::{KadConnectionType, KadPeer, KademliaProtocolConfig};
+    use protocol::{ConnectionType, KadPeer, ProtocolConfig};
     use std::sync::mpsc;
     use std::thread;
 
@@ -641,7 +641,7 @@ mod tests {
             closer_peers: vec![KadPeer {
                 node_id: PeerId::random(),
                 multiaddrs: vec!["/ip4/100.101.102.103/tcp/20105".parse().unwrap()],
-                connection_ty: KadConnectionType::Connected,
+                connection_ty: ConnectionType::Connected,
             }],
         });
         test_one(KadMsg::GetProvidersReq {
@@ -651,12 +651,12 @@ mod tests {
             closer_peers: vec![KadPeer {
                 node_id: PeerId::random(),
                 multiaddrs: vec!["/ip4/100.101.102.103/tcp/20105".parse().unwrap()],
-                connection_ty: KadConnectionType::Connected,
+                connection_ty: ConnectionType::Connected,
             }],
             provider_peers: vec![KadPeer {
                 node_id: PeerId::random(),
                 multiaddrs: vec!["/ip4/200.201.202.203/tcp/1999".parse().unwrap()],
-                connection_ty: KadConnectionType::NotConnected,
+                connection_ty: ConnectionType::NotConnected,
             }],
         });
         test_one(KadMsg::AddProvider {
@@ -664,7 +664,7 @@ mod tests {
             provider_peer: KadPeer {
                 node_id: PeerId::random(),
                 multiaddrs: vec!["/ip4/9.1.2.3/udp/23".parse().unwrap()],
-                connection_ty: KadConnectionType::Connected,
+                connection_ty: ConnectionType::Connected,
             },
         });
         // TODO: all messages
@@ -674,7 +674,7 @@ mod tests {
             let (tx, rx) = mpsc::channel();
 
             let bg_thread = thread::spawn(move || {
-                let transport = TcpTransport::default().with_upgrade(KademliaProtocolConfig);
+                let transport = TcpTransport::default().with_upgrade(ProtocolConfig);
 
                 let (listener, addr) = transport
                     .listen_on( "/ip4/127.0.0.1/tcp/0".parse().unwrap())
@@ -694,7 +694,7 @@ mod tests {
                 let _ = rt.block_on(future).unwrap();
             });
 
-            let transport = TcpTransport::default().with_upgrade(KademliaProtocolConfig);
+            let transport = TcpTransport::default().with_upgrade(ProtocolConfig);
 
             let future = transport
                 .dial(rx.recv().unwrap())

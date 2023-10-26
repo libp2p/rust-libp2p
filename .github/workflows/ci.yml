@@ -33,12 +33,14 @@ jobs:
       CRATE: ${{ matrix.crate }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - uses: r7kamura/rust-problem-matchers@2c2f1016021a7455a6b5b4bbae31145f3b3cd83a #v1.4.0
 
       - uses: dtolnay/rust-toolchain@stable
 
-      - uses: Swatinem/rust-cache@a95ba195448af2da9b00fb742d14ffaaf3c21f43 # v2.7.0
+      - uses: Swatinem/rust-cache@3cf7f8cc28d1b4e7d01e3783be10a97d55d483c8 # v2.7.1
         with:
           shared-key: stable-cache
           save-if: false
@@ -50,7 +52,7 @@ jobs:
         run: cargo build --package "$CRATE" --no-default-features
 
       - name: Enforce no dependency on meta crate
-        if: env.CRATE != 'libp2p-server'
+        if: env.CRATE != 'libp2p-server' && env.CRATE != 'libp2p-perf'
         run: |
           cargo metadata --format-version=1 --no-deps | \
           jq -e -r '.packages[] | select(.name == "'"$CRATE"'") | .dependencies | all(.name != "libp2p")'
@@ -69,6 +71,21 @@ jobs:
           echo "Specified version: $SPECIFIED_VERSION";
 
           test "$PACKAGE_VERSION" = "$SPECIFIED_VERSION"
+
+      - name: Ensure manifest and CHANGELOG are properly updated
+        if: >
+          github.event_name == 'pull_request' &&
+          !startsWith(github.event.pull_request.title, 'chore') &&
+          !startsWith(github.event.pull_request.title, 'refactor') &&
+          !startsWith(github.event.pull_request.title, 'deps') &&
+          !startsWith(github.event.pull_request.title, 'docs') &&
+          !contains(github.event.pull_request.labels.*.name, 'internal-change')
+        run: |
+          git fetch origin master:master
+          ./scripts/ensure-version-bump-and-changelog.sh
+        env:
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+
 
   wasm_tests:
     name: Run all WASM tests
@@ -124,7 +141,7 @@ jobs:
 
       - uses: r7kamura/rust-problem-matchers@2c2f1016021a7455a6b5b4bbae31145f3b3cd83a #v1.4.0
 
-      - uses: Swatinem/rust-cache@a95ba195448af2da9b00fb742d14ffaaf3c21f43 # v2.7.0
+      - uses: Swatinem/rust-cache@3cf7f8cc28d1b4e7d01e3783be10a97d55d483c8 # v2.7.1
         with:
           key: ${{ matrix.target }}
           save-if: ${{ github.ref == 'refs/heads/master' }}
@@ -149,7 +166,7 @@ jobs:
 
       - uses: r7kamura/rust-problem-matchers@2c2f1016021a7455a6b5b4bbae31145f3b3cd83a #v1.4.0
 
-      - uses: Swatinem/rust-cache@a95ba195448af2da9b00fb742d14ffaaf3c21f43 # v2.7.0
+      - uses: Swatinem/rust-cache@3cf7f8cc28d1b4e7d01e3783be10a97d55d483c8 # v2.7.1
         with:
           save-if: ${{ github.ref == 'refs/heads/master' }}
 
@@ -170,7 +187,7 @@ jobs:
 
       - uses: r7kamura/rust-problem-matchers@2c2f1016021a7455a6b5b4bbae31145f3b3cd83a #v1.4.0
 
-      - uses: Swatinem/rust-cache@a95ba195448af2da9b00fb742d14ffaaf3c21f43 # v2.7.0
+      - uses: Swatinem/rust-cache@3cf7f8cc28d1b4e7d01e3783be10a97d55d483c8 # v2.7.1
         with:
           key: ${{ matrix.features }}
           save-if: ${{ github.ref == 'refs/heads/master' }}
@@ -187,7 +204,7 @@ jobs:
 
       - uses: r7kamura/rust-problem-matchers@2c2f1016021a7455a6b5b4bbae31145f3b3cd83a #v1.4.0
 
-      - uses: Swatinem/rust-cache@a95ba195448af2da9b00fb742d14ffaaf3c21f43 # v2.7.0
+      - uses: Swatinem/rust-cache@3cf7f8cc28d1b4e7d01e3783be10a97d55d483c8 # v2.7.1
         with:
           save-if: ${{ github.ref == 'refs/heads/master' }}
 
@@ -200,8 +217,9 @@ jobs:
       fail-fast: false
       matrix:
         rust-version: [
-          1.72.0, # current stable
-          beta
+          # 1.72.0, # current stable
+          # beta,
+          nightly-2023-09-10
         ]
     steps:
       - uses: actions/checkout@v4
@@ -213,12 +231,11 @@ jobs:
 
       - uses: r7kamura/rust-problem-matchers@2c2f1016021a7455a6b5b4bbae31145f3b3cd83a #v1.4.0
 
-      - uses: Swatinem/rust-cache@a95ba195448af2da9b00fb742d14ffaaf3c21f43 # v2.7.0
+      - uses: Swatinem/rust-cache@3cf7f8cc28d1b4e7d01e3783be10a97d55d483c8 # v2.7.1
         with:
           save-if: ${{ github.ref == 'refs/heads/master' }}
 
-      - name: Run cargo clippy
-        run: cargo custom-clippy # cargo alias to allow reuse of config locally
+      - run: cargo clippy --all-targets --all-features
 
   ipfs-integration-test:
     name: IPFS Integration tests
@@ -230,12 +247,15 @@ jobs:
 
       - uses: r7kamura/rust-problem-matchers@2c2f1016021a7455a6b5b4bbae31145f3b3cd83a #v1.4.0
 
-      - uses: Swatinem/rust-cache@a95ba195448af2da9b00fb742d14ffaaf3c21f43 # v2.7.0
+      - uses: Swatinem/rust-cache@3cf7f8cc28d1b4e7d01e3783be10a97d55d483c8 # v2.7.1
         with:
           save-if: ${{ github.ref == 'refs/heads/master' }}
 
-      - name: Run ipfs-kad example
-        run: cd ./examples/ipfs-kad/ && RUST_LOG=libp2p_swarm=debug,libp2p_kad=trace,libp2p_tcp=debug cargo run
+      - name: Run ipfs-kad example - get peers
+        run: cd ./examples/ipfs-kad/ && RUST_LOG=libp2p_swarm=debug,libp2p_kad=trace,libp2p_tcp=debug cargo run -- get-peers
+
+      - name: Run ipfs-kad example - put PK record
+        run: cd ./examples/ipfs-kad/ && RUST_LOG=libp2p_swarm=debug,libp2p_kad=trace,libp2p_tcp=debug cargo run -- put-pk-record
 
   examples:
     runs-on: ubuntu-latest
@@ -246,7 +266,7 @@ jobs:
 
       - uses: r7kamura/rust-problem-matchers@2c2f1016021a7455a6b5b4bbae31145f3b3cd83a #v1.4.0
 
-      - uses: Swatinem/rust-cache@a95ba195448af2da9b00fb742d14ffaaf3c21f43 # v2.7.0
+      - uses: Swatinem/rust-cache@3cf7f8cc28d1b4e7d01e3783be10a97d55d483c8 # v2.7.1
         with:
           shared-key: stable-cache
           save-if: false
@@ -263,9 +283,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - run: wget -q -O- https://github.com/obi1kenobi/cargo-semver-checks/releases/download/v0.23.0/cargo-semver-checks-x86_64-unknown-linux-gnu.tar.gz | tar -xz -C ~/.cargo/bin
+      - run: wget -q -O- https://github.com/obi1kenobi/cargo-semver-checks/releases/download/v0.24.0/cargo-semver-checks-x86_64-unknown-linux-gnu.tar.gz | tar -xz -C ~/.cargo/bin
         shell: bash
-      - uses: obi1kenobi/cargo-semver-checks-action@v2
+      - uses: obi1kenobi/cargo-semver-checks-action@e275dda72e250d4df5b564e969e1348d67fefa52 # v2
 
   rustfmt:
     runs-on: ubuntu-latest
@@ -322,7 +342,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: Swatinem/rust-cache@a95ba195448af2da9b00fb742d14ffaaf3c21f43 # v2.7.0
+      - uses: Swatinem/rust-cache@3cf7f8cc28d1b4e7d01e3783be10a97d55d483c8 # v2.7.1
 
       - run: cargo install --version 0.10.0 pb-rs --locked
 
@@ -348,7 +368,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: Swatinem/rust-cache@a95ba195448af2da9b00fb742d14ffaaf3c21f43 # v2.7.0
+      - uses: Swatinem/rust-cache@3cf7f8cc28d1b4e7d01e3783be10a97d55d483c8 # v2.7.1
       - run: cargo metadata --locked --format-version=1 > /dev/null
 
   cargo-deny:

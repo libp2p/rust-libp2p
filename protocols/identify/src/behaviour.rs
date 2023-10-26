@@ -26,7 +26,7 @@ use libp2p_identity::PublicKey;
 use libp2p_swarm::behaviour::{ConnectionClosed, ConnectionEstablished, DialFailure, FromSwarm};
 use libp2p_swarm::{
     ConnectionDenied, DialError, ExternalAddresses, ListenAddresses, NetworkBehaviour,
-    NotifyHandler, PollParameters, StreamUpgradeError, THandlerInEvent, ToSwarm,
+    NotifyHandler, StreamUpgradeError, THandlerInEvent, ToSwarm,
 };
 use libp2p_swarm::{ConnectionId, THandler, THandlerOutEvent};
 use lru::LruCache;
@@ -301,9 +301,9 @@ impl NetworkBehaviour for Behaviour {
                 self.events
                     .push_back(ToSwarm::GenerateEvent(Event::Sent { peer_id }));
             }
-            handler::Event::IdentificationPushed => {
+            handler::Event::IdentificationPushed(info) => {
                 self.events
-                    .push_back(ToSwarm::GenerateEvent(Event::Pushed { peer_id }));
+                    .push_back(ToSwarm::GenerateEvent(Event::Pushed { peer_id, info }));
             }
             handler::Event::IdentificationError(error) => {
                 self.events
@@ -312,11 +312,7 @@ impl NetworkBehaviour for Behaviour {
         }
     }
 
-    fn poll(
-        &mut self,
-        _cx: &mut Context<'_>,
-        _: &mut impl PollParameters,
-    ) -> Poll<ToSwarm<Self::ToSwarm, THandlerInEvent<Self>>> {
+    fn poll(&mut self, _: &mut Context<'_>) -> Poll<ToSwarm<Self::ToSwarm, THandlerInEvent<Self>>> {
         if let Some(event) = self.events.pop_front() {
             return Poll::Ready(event);
         }
@@ -339,7 +335,7 @@ impl NetworkBehaviour for Behaviour {
         Ok(self.discovered_peers.get(&peer))
     }
 
-    fn on_swarm_event(&mut self, event: FromSwarm<Self::ConnectionHandler>) {
+    fn on_swarm_event(&mut self, event: FromSwarm) {
         let listen_addr_changed = self.listen_addresses.on_swarm_event(&event);
         let external_addr_changed = self.external_addresses.on_swarm_event(&event);
 
@@ -431,6 +427,9 @@ pub enum Event {
     Pushed {
         /// The peer that the information has been sent to.
         peer_id: PeerId,
+        /// The full Info struct we pushed to the remote peer. Clients must
+        /// do some diff'ing to know what has changed since the last push.
+        info: Info,
     },
     /// Error while attempting to identify the remote.
     Error {

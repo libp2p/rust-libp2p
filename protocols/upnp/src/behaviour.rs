@@ -39,7 +39,7 @@ use igd_next::PortMappingProtocol;
 use libp2p_core::{multiaddr, transport::ListenerId, Endpoint, Multiaddr};
 use libp2p_swarm::{
     derive_prelude::PeerId, dummy, ConnectionDenied, ConnectionId, ExpiredListenAddr, FromSwarm,
-    NetworkBehaviour, NewListenAddr, PollParameters, ToSwarm,
+    NetworkBehaviour, NewListenAddr, ToSwarm,
 };
 
 /// The duration in seconds of a port mapping on the gateway.
@@ -252,7 +252,7 @@ impl NetworkBehaviour for Behaviour {
         Ok(dummy::ConnectionHandler)
     }
 
-    fn on_swarm_event(&mut self, event: FromSwarm<Self::ConnectionHandler>) {
+    fn on_swarm_event(&mut self, event: FromSwarm) {
         match event {
             FromSwarm::NewListenAddr(NewListenAddr {
                 listener_id,
@@ -370,7 +370,6 @@ impl NetworkBehaviour for Behaviour {
     fn poll(
         &mut self,
         cx: &mut Context<'_>,
-        _params: &mut impl PollParameters,
     ) -> Poll<ToSwarm<Self::ToSwarm, libp2p_swarm::THandlerInEvent<Self>>> {
         // If there are pending addresses to be emitted we emit them.
         if let Some(event) = self.pending_events.pop_front() {
@@ -513,12 +512,7 @@ impl NetworkBehaviour for Behaviour {
                     self.mappings.renew(gateway, cx);
                     return Poll::Pending;
                 }
-                GatewayState::GatewayNotFound => {
-                    return Poll::Ready(ToSwarm::GenerateEvent(Event::GatewayNotFound));
-                }
-                GatewayState::NonRoutableGateway(_) => {
-                    return Poll::Ready(ToSwarm::GenerateEvent(Event::NonRoutableGateway));
-                }
+                _ => return Poll::Pending,
             }
         }
     }
@@ -544,7 +538,7 @@ fn multiaddr_to_socketaddr_protocol(
             Some(multiaddr::Protocol::Udp(port)) => {
                 return Ok((
                     SocketAddr::V4(SocketAddrV4::new(ipv4, port)),
-                    PortMappingProtocol::TCP,
+                    PortMappingProtocol::UDP,
                 ));
             }
             _ => {}

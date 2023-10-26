@@ -61,7 +61,7 @@ async fn test_auto_probe() {
     match client.next_behaviour_event().await {
         Event::OutboundProbe(OutboundProbeEvent::Error { peer, error, .. }) => {
             assert!(peer.is_none());
-            assert_eq!(error, OutboundProbeError::NoAddresses);
+            assert!(matches!(error, OutboundProbeError::NoAddresses));
         }
         other => panic!("Unexpected behaviour event: {other:?}."),
     }
@@ -181,10 +181,10 @@ async fn test_confidence() {
                         peer,
                         error,
                     } if !test_public => {
-                        assert_eq!(
+                        assert!(matches!(
                             error,
                             OutboundProbeError::Response(ResponseError::DialError)
-                        );
+                        ));
                         (peer.unwrap(), probe_id)
                     }
                     other => panic!("Unexpected Outbound Event: {other:?}"),
@@ -261,7 +261,7 @@ async fn test_throttle_server_period() {
     match client.next_behaviour_event().await {
         Event::OutboundProbe(OutboundProbeEvent::Error { peer, error, .. }) => {
             assert!(peer.is_none());
-            assert_eq!(error, OutboundProbeError::NoServer);
+            assert!(matches!(error, OutboundProbeError::NoServer));
         }
         other => panic!("Unexpected behaviour event: {other:?}."),
     }

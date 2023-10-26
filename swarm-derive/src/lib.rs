@@ -72,7 +72,6 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> syn::Result<Toke
     let proto_select_ident = quote! { #prelude_path::ConnectionHandlerSelect };
     let peer_id = quote! { #prelude_path::PeerId };
     let connection_id = quote! { #prelude_path::ConnectionId };
-    let poll_parameters = quote! { #prelude_path::PollParameters };
     let from_swarm = quote! { #prelude_path::FromSwarm };
     let connection_established = quote! { #prelude_path::ConnectionEstablished };
     let address_change = quote! { #prelude_path::AddressChange };
@@ -286,26 +285,15 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> syn::Result<Toke
         data_struct
             .fields
             .iter()
-            .enumerate()
-            // The outmost handler belongs to the last behaviour.
             .rev()
             .enumerate()
-            .map(|(enum_n, (field_n, field))| {
-                let handler = if field_n == 0 {
-                    // Given that the iterator is reversed, this is the innermost handler only.
-                    quote! { let handler = handlers }
-                } else {
-                    quote! {
-                        let (handlers, handler) = handlers.into_inner()
-                    }
-                };
+            .map(|(enum_n, field)| {
                 let inject = match field.ident {
                     Some(ref i) => quote! {
                     self.#i.on_swarm_event(#from_swarm::ConnectionClosed(#connection_closed {
                             peer_id,
                             connection_id,
                             endpoint,
-                            handler,
                             remaining_established,
                         }));
                     },
@@ -314,14 +302,12 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> syn::Result<Toke
                             peer_id,
                             connection_id,
                             endpoint,
-                            handler,
                             remaining_established,
                         }));
                     },
                 };
 
                 quote! {
-                    #handler;
                     #inject;
                 }
             })
@@ -727,7 +713,7 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> syn::Result<Toke
         };
 
         quote!{
-            match #trait_to_impl::poll(&mut self.#field, cx, poll_params) {
+            match #trait_to_impl::poll(&mut self.#field, cx) {
                 #generate_event_match_arm
                 std::task::Poll::Ready(#network_behaviour_action::Dial { opts }) => {
                     return std::task::Poll::Ready(#network_behaviour_action::Dial { opts });
@@ -836,13 +822,13 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> syn::Result<Toke
                 }
             }
 
-            fn poll(&mut self, cx: &mut std::task::Context, poll_params: &mut impl #poll_parameters) -> std::task::Poll<#network_behaviour_action<Self::ToSwarm, #t_handler_in_event<Self>>> {
+            fn poll(&mut self, cx: &mut std::task::Context) -> std::task::Poll<#network_behaviour_action<Self::ToSwarm, #t_handler_in_event<Self>>> {
                 use #prelude_path::futures::*;
                 #(#poll_stmts)*
                 std::task::Poll::Pending
             }
 
-            fn on_swarm_event(&mut self, event: #from_swarm<Self::ConnectionHandler>) {
+            fn on_swarm_event(&mut self, event: #from_swarm) {
                 match event {
                     #from_swarm::ConnectionEstablished(
                         #connection_established { peer_id, connection_id, endpoint, failed_addresses, other_established })
@@ -851,7 +837,7 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> syn::Result<Toke
                         #address_change { peer_id, connection_id, old, new })
                     => { #(#on_address_change_stmts)* }
                     #from_swarm::ConnectionClosed(
-                        #connection_closed { peer_id, connection_id, endpoint, handler: handlers, remaining_established })
+                        #connection_closed { peer_id, connection_id, endpoint, remaining_established })
                     => { #(#on_connection_closed_stmts)* }
                     #from_swarm::DialFailure(
                         #dial_failure { peer_id, connection_id, error })

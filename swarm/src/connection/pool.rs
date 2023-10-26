@@ -260,7 +260,6 @@ pub(crate) enum PoolEvent<THandler: ConnectionHandler> {
         error: Option<ConnectionError<THandler::Error>>,
         /// The remaining established connections to the same peer.
         remaining_established_connection_ids: Vec<ConnectionId>,
-        handler: THandler,
     },
 
     /// An outbound connection attempt failed.
@@ -576,12 +575,7 @@ where
                     old_endpoint,
                 });
             }
-            Poll::Ready(Some(task::EstablishedConnectionEvent::Closed {
-                id,
-                peer_id,
-                error,
-                handler,
-            })) => {
+            Poll::Ready(Some(task::EstablishedConnectionEvent::Closed { id, peer_id, error })) => {
                 let connections = self
                     .established
                     .get_mut(&peer_id)
@@ -599,7 +593,6 @@ where
                     connected: Connected { endpoint, peer_id },
                     error,
                     remaining_established_connection_ids,
-                    handler,
                 });
             }
         }
@@ -981,7 +974,7 @@ impl PoolConfig {
     /// delivery to the connection handler.
     ///
     /// When the buffer for a particular connection is full, `notify_handler` will no
-    /// longer be able to deliver events to the associated [`Connection`](super::Connection),
+    /// longer be able to deliver events to the associated [`Connection`],
     /// thus exerting back-pressure on the connection and peer API.
     pub(crate) fn with_notify_handler_buffer_size(mut self, n: NonZeroUsize) -> Self {
         self.task_command_buffer_size = n.get() - 1;

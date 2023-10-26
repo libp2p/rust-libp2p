@@ -22,12 +22,13 @@
 
 #![cfg_attr(docsrs, feature(doc_cfg, doc_auto_cfg))]
 
-use crate::error::PlainTextError;
+use crate::error::Error;
 
 use bytes::Bytes;
 use futures::future::BoxFuture;
 use futures::prelude::*;
-use libp2p_core::{InboundUpgrade, OutboundUpgrade, UpgradeInfo};
+use libp2p_core::upgrade::{InboundConnectionUpgrade, OutboundConnectionUpgrade};
+use libp2p_core::UpgradeInfo;
 use libp2p_identity as identity;
 use libp2p_identity::PeerId;
 use libp2p_identity::PublicKey;
@@ -46,14 +47,29 @@ mod proto {
     pub(crate) use self::structs::Exchange;
 }
 
-/// `PlainText2Config` is an insecure connection handshake for testing purposes only, implementing
-/// the libp2p plaintext connection handshake specification.
+#[deprecated(note = "Has been renamed to `Config`.")]
+pub type PlainText2Config = Config;
+
+#[deprecated(note = "Has been renamed to `Output`.")]
+pub type PlainTextOutput<T> = Output<T>;
+
+/// [`Config`] is an insecure connection handshake for testing purposes only.
 #[derive(Clone)]
-pub struct PlainText2Config {
+pub struct Config {
+    #[deprecated(note = "Will be made private in the future, please use `Config::new` instead!")]
     pub local_public_key: identity::PublicKey,
 }
 
-impl UpgradeInfo for PlainText2Config {
+impl Config {
+    #[allow(deprecated)]
+    pub fn new(identity: &identity::Keypair) -> Self {
+        Self {
+            local_public_key: identity.public(),
+        }
+    }
+}
+
+impl UpgradeInfo for Config {
     type Info = &'static str;
     type InfoIter = iter::Once<Self::Info>;
 
@@ -62,12 +78,12 @@ impl UpgradeInfo for PlainText2Config {
     }
 }
 
-impl<C> InboundUpgrade<C> for PlainText2Config
+impl<C> InboundConnectionUpgrade<C> for Config
 where
     C: AsyncRead + AsyncWrite + Send + Unpin + 'static,
 {
-    type Output = (PeerId, PlainTextOutput<C>);
-    type Error = PlainTextError;
+    type Output = (PeerId, Output<C>);
+    type Error = Error;
     type Future = BoxFuture<'static, Result<Self::Output, Self::Error>>;
 
     fn upgrade_inbound(self, socket: C, _: Self::Info) -> Self::Future {
@@ -75,12 +91,12 @@ where
     }
 }
 
-impl<C> OutboundUpgrade<C> for PlainText2Config
+impl<C> OutboundConnectionUpgrade<C> for Config
 where
     C: AsyncRead + AsyncWrite + Send + Unpin + 'static,
 {
-    type Output = (PeerId, PlainTextOutput<C>);
-    type Error = PlainTextError;
+    type Output = (PeerId, Output<C>);
+    type Error = Error;
     type Future = BoxFuture<'static, Result<Self::Output, Self::Error>>;
 
     fn upgrade_outbound(self, socket: C, _: Self::Info) -> Self::Future {
@@ -88,8 +104,8 @@ where
     }
 }
 
-impl PlainText2Config {
-    async fn handshake<T>(self, socket: T) -> Result<(PeerId, PlainTextOutput<T>), PlainTextError>
+impl Config {
+    async fn handshake<T>(self, socket: T) -> Result<(PeerId, Output<T>), Error>
     where
         T: AsyncRead + AsyncWrite + Send + Unpin + 'static,
     {
@@ -99,7 +115,7 @@ impl PlainText2Config {
 
         Ok((
             remote.peer_id,
-            PlainTextOutput {
+            Output {
                 socket,
                 remote_key: remote.public_key,
                 read_buffer,
@@ -109,7 +125,7 @@ impl PlainText2Config {
 }
 
 /// Output of the plaintext protocol.
-pub struct PlainTextOutput<S>
+pub struct Output<S>
 where
     S: AsyncRead + AsyncWrite + Unpin,
 {
@@ -123,7 +139,7 @@ where
     read_buffer: Bytes,
 }
 
-impl<S: AsyncRead + AsyncWrite + Unpin> AsyncRead for PlainTextOutput<S> {
+impl<S: AsyncRead + AsyncWrite + Unpin> AsyncRead for Output<S> {
     fn poll_read(
         mut self: Pin<&mut Self>,
         cx: &mut Context<'_>,
@@ -139,7 +155,7 @@ impl<S: AsyncRead + AsyncWrite + Unpin> AsyncRead for PlainTextOutput<S> {
     }
 }
 
-impl<S: AsyncRead + AsyncWrite + Unpin> AsyncWrite for PlainTextOutput<S> {
+impl<S: AsyncRead + AsyncWrite + Unpin> AsyncWrite for Output<S> {
     fn poll_write(
         mut self: Pin<&mut Self>,
         cx: &mut Context<'_>,
