@@ -23,7 +23,7 @@
 use async_std::io;
 use futures::{prelude::*, select};
 use libp2p::kad;
-use libp2p::kad::record::store::MemoryStore;
+use libp2p::kad::store::MemoryStore;
 use libp2p::kad::Mode;
 use libp2p::{
     mdns, noise,
@@ -148,7 +148,7 @@ fn handle_input_line(kademlia: &mut kad::Behaviour<MemoryStore>, line: String) {
         Some("GET") => {
             let key = {
                 match args.next() {
-                    Some(key) => kad::record::Key::new(&key),
+                    Some(key) => kad::RecordKey::new(&key),
                     None => {
                         eprintln!("Expected key");
                         return;
@@ -160,7 +160,7 @@ fn handle_input_line(kademlia: &mut kad::Behaviour<MemoryStore>, line: String) {
         Some("GET_PROVIDERS") => {
             let key = {
                 match args.next() {
-                    Some(key) => kad::record::Key::new(&key),
+                    Some(key) => kad::RecordKey::new(&key),
                     None => {
                         eprintln!("Expected key");
                         return;
@@ -172,7 +172,7 @@ fn handle_input_line(kademlia: &mut kad::Behaviour<MemoryStore>, line: String) {
         Some("PUT") => {
             let key = {
                 match args.next() {
-                    Some(key) => kad::record::Key::new(&key),
+                    Some(key) => kad::RecordKey::new(&key),
                     None => {
                         eprintln!("Expected key");
                         return;
@@ -201,7 +201,7 @@ fn handle_input_line(kademlia: &mut kad::Behaviour<MemoryStore>, line: String) {
         Some("PUT_PROVIDER") => {
             let key = {
                 match args.next() {
-                    Some(key) => kad::record::Key::new(&key),
+                    Some(key) => kad::RecordKey::new(&key),
                     None => {
                         eprintln!("Expected key");
                         return;

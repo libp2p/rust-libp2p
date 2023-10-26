@@ -362,16 +362,14 @@ impl Behaviour {
             peer_id,
             connection_id,
             endpoint,
-            handler,
             remaining_established,
-        }: ConnectionClosed<<Self as NetworkBehaviour>::ConnectionHandler>,
+        }: ConnectionClosed,
     ) {
         self.inner
             .on_swarm_event(FromSwarm::ConnectionClosed(ConnectionClosed {
                 peer_id,
                 connection_id,
                 endpoint,
-                handler,
                 remaining_established,
             }));
 
@@ -539,7 +537,7 @@ impl NetworkBehaviour for Behaviour {
             .handle_established_outbound_connection(connection_id, peer, addr, role_override)
     }
 
-    fn on_swarm_event(&mut self, event: FromSwarm<Self::ConnectionHandler>) {
+    fn on_swarm_event(&mut self, event: FromSwarm) {
         self.listen_addresses.on_swarm_event(&event);
 
         match event {

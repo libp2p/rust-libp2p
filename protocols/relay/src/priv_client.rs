@@ -125,7 +125,7 @@ impl Behaviour {
             connection_id,
             endpoint,
             ..
-        }: ConnectionClosed<<Self as NetworkBehaviour>::ConnectionHandler>,
+        }: ConnectionClosed,
     ) {
         if !endpoint.is_relayed() {
             match self.directly_connected_peers.entry(peer_id) {
@@ -192,7 +192,7 @@ impl NetworkBehaviour for Behaviour {
         Ok(Either::Left(handler))
     }
 
-    fn on_swarm_event(&mut self, event: FromSwarm<Self::ConnectionHandler>) {
+    fn on_swarm_event(&mut self, event: FromSwarm) {
         match event {
             FromSwarm::ConnectionEstablished(ConnectionEstablished {
                 peer_id,

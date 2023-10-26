@@ -223,7 +223,7 @@ impl NetworkBehaviour for Behaviour {
             .on_connection_handler_event(peer_id, connection_id, event);
     }
 
-    fn on_swarm_event(&mut self, event: FromSwarm<Self::ConnectionHandler>) {
+    fn on_swarm_event(&mut self, event: FromSwarm) {
         let changed = self.external_addresses.on_swarm_event(&event);
 
         self.inner.on_swarm_event(event);

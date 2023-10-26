@@ -22,7 +22,7 @@ use crate::behaviour::Mode;
 use crate::protocol::{
     KadInStreamSink, KadOutStreamSink, KadPeer, KadRequestMsg, KadResponseMsg, ProtocolConfig,
 };
-use crate::record_priv::{self, Record};
+use crate::record::{self, Record};
 use crate::QueryId;
 use either::Either;
 use futures::prelude::*;
@@ -33,7 +33,7 @@ use libp2p_swarm::handler::{
     ConnectionEvent, DialUpgradeError, FullyNegotiatedInbound, FullyNegotiatedOutbound,
 };
 use libp2p_swarm::{
-    ConnectionHandler, ConnectionHandlerEvent, ConnectionId, KeepAlive, Stream, StreamUpgradeError,
+    ConnectionHandler, ConnectionHandlerEvent, ConnectionId, Stream, StreamUpgradeError,
     SubstreamProtocol, SupportedProtocols,
 };
 use log::trace;
@@ -226,7 +226,7 @@ pub enum HandlerEvent {
     /// this key.
     GetProvidersReq {
         /// The key for which providers are requested.
-        key: record_priv::Key,
+        key: record::Key,
         /// Identifier of the request. Needs to be passed back when answering.
         request_id: RequestId,
     },
@@ -252,7 +252,7 @@ pub enum HandlerEvent {
     /// The peer announced itself as a provider of a key.
     AddProvider {
         /// The key for which the peer is a provider of the associated value.
-        key: record_priv::Key,
+        key: record::Key,
         /// The peer that is the provider of the value for `key`.
         provider: KadPeer,
     },
@@ -260,7 +260,7 @@ pub enum HandlerEvent {
     /// Request to get a value from the dht records
     GetRecord {
         /// Key for which we should look in the dht
-        key: record_priv::Key,
+        key: record::Key,
         /// Identifier of the request. Needs to be passed back when answering.
         request_id: RequestId,
     },
@@ -285,7 +285,7 @@ pub enum HandlerEvent {
     /// Response to a request to store a record.
     PutRecordRes {
         /// The key of the stored record.
-        key: record_priv::Key,
+        key: record::Key,
         /// The value of the stored record.
         value: Vec<u8>,
         /// The user data passed to the `PutValue`.
@@ -377,7 +377,7 @@ pub enum HandlerIn {
     /// this key.
     GetProvidersReq {
         /// Identifier being searched.
-        key: record_priv::Key,
+        key: record::Key,
         /// Custom user data. Passed back in the out event when the results arrive.
         query_id: QueryId,
     },
@@ -400,7 +400,7 @@ pub enum HandlerIn {
     /// succeeded.
     AddProvider {
         /// Key for which we should add providers.
-        key: record_priv::Key,
+        key: record::Key,
         /// Known provider for this key.
         provider: KadPeer,
     },
@@ -408,7 +408,7 @@ pub enum HandlerIn {
     /// Request to retrieve a record from the DHT.
     GetRecord {
         /// The key of the record.
-        key: record_priv::Key,
+        key: record::Key,
         /// Custom data. Passed back in the out event when the results arrive.
         query_id: QueryId,
     },
@@ -433,7 +433,7 @@ pub enum HandlerIn {
     /// Response to a `PutRecord`.
     PutRecordRes {
         /// Key of the value that was put.
-        key: record_priv::Key,
+        key: record::Key,
         /// Value that was put.
         value: Vec<u8>,
         /// Identifier of the request that was made by the remote.
@@ -700,14 +700,6 @@ impl ConnectionHandler for Handler {
                 self.mode = new_mode;
             }
         }
-    }
-
-    fn connection_keep_alive(&self) -> KeepAlive {
-        if self.outbound_substreams.is_empty() && self.inbound_substreams.is_empty() {
-            return KeepAlive::No;
-        };
-
-        KeepAlive::Yes
     }
 
     fn poll(

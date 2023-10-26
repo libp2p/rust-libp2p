@@ -67,10 +67,6 @@ pub mod behaviour;
 pub mod dial_opts;
 pub mod dummy;
 pub mod handler;
-#[deprecated(
-    note = "Configure an appropriate idle connection timeout via `SwarmBuilder::idle_connection_timeout` instead. To keep connections alive 'forever', use `Duration::from_secs(u64::MAX)`."
-)]
-pub mod keep_alive;
 mod listen_opts;
 
 /// Bundles all symbols required for the [`libp2p_swarm_derive::NetworkBehaviour`] macro.
@@ -119,7 +115,7 @@ pub use connection::pool::ConnectionCounters;
 pub use connection::{ConnectionError, ConnectionId, SupportedProtocols};
 pub use executor::Executor;
 pub use handler::{
-    ConnectionHandler, ConnectionHandlerEvent, ConnectionHandlerSelect, KeepAlive, OneShotHandler,
+    ConnectionHandler, ConnectionHandlerEvent, ConnectionHandlerSelect, OneShotHandler,
     OneShotHandlerConfig, StreamUpgradeError, SubstreamProtocol,
 };
 #[cfg(feature = "macros")]
@@ -856,7 +852,6 @@ where
                 connected,
                 error,
                 remaining_established_connection_ids,
-                handler,
                 ..
             } => {
                 if let Some(error) = error.as_ref() {
@@ -883,7 +878,6 @@ where
                         peer_id,
                         connection_id: id,
                         endpoint: &endpoint,
-                        handler,
                         remaining_established: num_established as usize,
                     }));
                 return Some(SwarmEvent::ConnectionClosed {

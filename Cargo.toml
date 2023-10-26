@@ -15,6 +15,7 @@ members = [
     "examples/relay-server",
     "examples/rendezvous",
     "examples/upnp",
+    "hole-punching-tests",
     "identity",
     "interop-tests",
     "misc/allow-block-list",
@@ -90,14 +91,13 @@ libp2p-metrics = { version = "0.14.0", path = "misc/metrics" }
 libp2p-mplex = { version = "0.41.0", path = "muxers/mplex" }
 libp2p-muxer-test-harness = { path = "muxers/test-harness" }
 libp2p-noise = { version = "0.44.0", path = "transports/noise" }
-libp2p-perf = { version = "0.2.0", path = "protocols/perf" }
+libp2p-perf = { version = "0.3.0", path = "protocols/perf" }
 libp2p-ping = { version = "0.44.0", path = "protocols/ping" }
 libp2p-plaintext = { version = "0.41.0", path = "transports/plaintext" }
 libp2p-pnet = { version = "0.24.0", path = "transports/pnet" }
 libp2p-quic = { version = "0.10.0", path = "transports/quic" }
 libp2p-relay = { version = "0.17.0", path = "protocols/relay" }
 libp2p-rendezvous = { version = "0.14.0", path = "protocols/rendezvous" }
-libp2p-upnp = { version = "0.2.0", path = "protocols/upnp" }
 libp2p-request-response = { version = "0.26.0", path = "protocols/request-response" }
 libp2p-server = { version = "0.12.3", path = "misc/server" }
 libp2p-swarm = { version = "0.44.0", path = "swarm" }
@@ -106,6 +106,7 @@ libp2p-swarm-test = { version = "0.3.0", path = "swarm-test" }
 libp2p-tcp = { version = "0.41.0", path = "transports/tcp" }
 libp2p-tls = { version = "0.3.0", path = "transports/tls" }
 libp2p-uds = { version = "0.40.0", path = "transports/uds" }
+libp2p-upnp = { version = "0.2.0", path = "protocols/upnp" }
 libp2p-webrtc = { version = "0.6.1-alpha", path = "transports/webrtc" }
 libp2p-webrtc-utils = { version = "0.1.0", path = "misc/webrtc-utils" }
 libp2p-webrtc-websys = { version = "0.2.0-alpha", path = "transports/webrtc-websys" }
@@ -113,12 +114,13 @@ libp2p-websocket = { version = "0.43.0", path = "transports/websocket" }
 libp2p-websocket-websys = { version = "0.3.0", path = "transports/websocket-websys" }
 libp2p-webtransport-websys = { version = "0.2.0", path = "transports/webtransport-websys" }
 libp2p-yamux = { version = "0.45.0", path = "muxers/yamux" }
+multiaddr = "0.18.0"
+multihash = "0.19.1"
 multistream-select = { version = "0.13.0", path = "misc/multistream-select" }
+prometheus-client = "0.22.0"
 quick-protobuf-codec = { version = "0.2.0", path = "misc/quick-protobuf-codec" }
 quickcheck = { package = "quickcheck-ext", path = "misc/quickcheck-ext" }
 rw-stream-sink = { version = "0.4.0", path = "misc/rw-stream-sink" }
-multiaddr = "0.18.0"
-multihash = "0.19.1"
 
 [patch.crates-io]
 
