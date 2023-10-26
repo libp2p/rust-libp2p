@@ -25,7 +25,7 @@ async fn report_outbound_failure_on_read_response() {
     swarm1.listen().await;
     swarm2.connect(&mut swarm1).await;
 
-    let join_handle = spawn(async move {
+    let swarm1_task = async move {
         let (peer, req_id, action, resp_channel) = wait_request(&mut swarm1).await.unwrap();
         assert_eq!(peer, peer2_id);
         assert_eq!(action, Action::FailOnReadResponse);
@@ -40,29 +40,30 @@ async fn report_outbound_failure_on_read_response() {
 
         // Wait a bit for the other side
         sleep(Duration::from_millis(10)).await;
-    });
-
-    let req_id = swarm2
-        .behaviour_mut()
-        .send_request(&peer1_id, Action::FailOnReadResponse);
-
-    let (peer, req_id_done, error) = wait_outbound_failure(&mut swarm2).await.unwrap();
-    assert_eq!(peer, peer1_id);
-    assert_eq!(req_id_done, req_id);
-
-    let error = match error {
-        OutboundFailure::Io(e) => e,
-        e => panic!("Unexpected error {e:?}"),
     };
 
-    assert_eq!(error.kind(), io::ErrorKind::Other);
-    assert_eq!(
-        error.into_inner().unwrap().to_string(),
-        "FailOnReadResponse"
-    );
+    let swarm2_task = async move {
+        let req_id = swarm2
+            .behaviour_mut()
+            .send_request(&peer1_id, Action::FailOnReadResponse);
 
-    // Panics if task panicked
-    join_handle.await;
+        let (peer, req_id_done, error) = wait_outbound_failure(&mut swarm2).await.unwrap();
+        assert_eq!(peer, peer1_id);
+        assert_eq!(req_id_done, req_id);
+
+        let error = match error {
+            OutboundFailure::Io(e) => e,
+            e => panic!("Unexpected error {e:?}"),
+        };
+
+        assert_eq!(error.kind(), io::ErrorKind::Other);
+        assert_eq!(
+            error.into_inner().unwrap().to_string(),
+            "FailOnReadResponse"
+        );
+    };
+
+    futures::future::join(swarm1_task, swarm2_task).await;
 }
 
 #[async_std::test]
