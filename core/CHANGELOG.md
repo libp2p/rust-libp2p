@@ -2,6 +2,8 @@
 
 - Remove blanket-impl of `{In,Out}boundUpgrade` for `{In,Out}boundConnectionUpgrade`.
   See [PR 4695](https://github.com/libp2p/rust-libp2p/pull/4695).
+- Remove deprecated functions from `ListenerId`.
+  See [PR XXXX](https://github.com/libp2p/rust-libp2p/pull/XXXX).
 
 ## 0.40.1
 
