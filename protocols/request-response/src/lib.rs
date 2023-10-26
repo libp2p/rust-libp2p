@@ -927,10 +927,6 @@ where
             }
             handler::Event::InboundTimeout(request_id) => {
                 let removed = self.remove_pending_inbound_response(&peer, connection, request_id);
-                debug_assert!(
-                    removed,
-                    "Expect request_id to be pending before request times out."
-                );
 
                 if removed {
                     self.pending_events
