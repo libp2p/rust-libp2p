@@ -3,7 +3,7 @@
 - Migrate to `{In,Out}boundConnectionUpgrade` traits.
   See [PR 4695](https://github.com/libp2p/rust-libp2p/pull/4695).
 - Remove deprecated type-aliases and make `Config::local_public_key` private.
-  See [PR XXXX](https://github.com/libp2p/rust-libp2p/pull/XXXX).
+  See [PR 4734](https://github.com/libp2p/rust-libp2p/pull/4734).
 
 ## 0.40.1
 
