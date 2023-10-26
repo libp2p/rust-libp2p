@@ -4,7 +4,7 @@
   See [PR 4527](https://github.com/libp2p/rust-libp2p/pull/4527)
 - Remove deprecated `initial_delay`.
   Identify requests are always sent instantly after the connection has been established.
-  See [PR XXXX](https://github.com/libp2p/rust-libp2p/pull/XXXX)
+  See [PR 4735](https://github.com/libp2p/rust-libp2p/pull/4735)
 
 ## 0.43.1
 
