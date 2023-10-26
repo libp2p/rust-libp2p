@@ -32,7 +32,7 @@ use instant::Instant;
 use libp2p_core::{multiaddr::Protocol, ConnectedPoint, Endpoint, Multiaddr};
 use libp2p_identity::PeerId;
 use libp2p_request_response::{
-    self as request_response, ProtocolSupport, RequestId, ResponseChannel,
+    self as request_response, InboundRequestId, OutboundRequestId, ProtocolSupport, ResponseChannel,
 };
 use libp2p_swarm::{
     behaviour::{
@@ -133,7 +133,7 @@ impl ProbeId {
 }
 
 /// Event produced by [`Behaviour`].
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug)]
 pub enum Event {
     /// Event on an inbound probe.
     InboundProbe(InboundProbeEvent),
@@ -187,14 +187,14 @@ pub struct Behaviour {
         PeerId,
         (
             ProbeId,
-            RequestId,
+            InboundRequestId,
             Vec<Multiaddr>,
             ResponseChannel<DialResponse>,
         ),
     >,
 
     // Ongoing outbound probes and mapped to the inner request id.
-    ongoing_outbound: HashMap<RequestId, ProbeId>,
+    ongoing_outbound: HashMap<OutboundRequestId, ProbeId>,
 
     // Connected peers with the observed address of each connection.
     // If the endpoint of a connection is relayed or not global (in case of Config::only_global_ips),
@@ -220,9 +220,11 @@ pub struct Behaviour {
 impl Behaviour {
     pub fn new(local_peer_id: PeerId, config: Config) -> Self {
         let protocols = iter::once((DEFAULT_PROTOCOL_NAME, ProtocolSupport::Full));
-        let mut cfg = request_response::Config::default();
-        cfg.set_request_timeout(config.timeout);
-        let inner = request_response::Behaviour::with_codec(AutoNatCodec, protocols, cfg);
+        let inner = request_response::Behaviour::with_codec(
+            AutoNatCodec,
+            protocols,
+            request_response::Config::default().with_request_timeout(config.timeout),
+        );
         Self {
             local_peer_id,
             inner,
