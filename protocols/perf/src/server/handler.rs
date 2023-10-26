@@ -21,13 +21,12 @@
 use std::task::{Context, Poll};
 
 use futures::FutureExt;
-use libp2p_core::upgrade::{DeniedUpgrade, ReadyUpgrade};
 use libp2p_swarm::{
     handler::{
         ConnectionEvent, DialUpgradeError, FullyNegotiatedInbound, FullyNegotiatedOutbound,
         ListenUpgradeError,
     },
-    ConnectionHandler, ConnectionHandlerEvent, StreamProtocol, SubstreamProtocol,
+    ConnectionHandler, ConnectionHandlerEvent, DeniedUpgrade, ReadyUpgrade, SubstreamProtocol,
 };
 use log::error;
 use void::Void;
@@ -64,7 +63,7 @@ impl ConnectionHandler for Handler {
     type FromBehaviour = Void;
     type ToBehaviour = Event;
     type Error = Void;
-    type InboundProtocol = ReadyUpgrade<StreamProtocol>;
+    type InboundProtocol = ReadyUpgrade;
     type OutboundProtocol = DeniedUpgrade;
     type OutboundOpenInfo = Void;
     type InboundOpenInfo = ();

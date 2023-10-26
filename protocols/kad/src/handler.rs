@@ -27,13 +27,13 @@ use crate::QueryId;
 use either::Either;
 use futures::prelude::*;
 use futures::stream::SelectAll;
-use libp2p_core::{upgrade, ConnectedPoint};
+use libp2p_core::ConnectedPoint;
 use libp2p_identity::PeerId;
 use libp2p_swarm::handler::{
     ConnectionEvent, DialUpgradeError, FullyNegotiatedInbound, FullyNegotiatedOutbound,
 };
 use libp2p_swarm::{
-    ConnectionHandler, ConnectionHandlerEvent, ConnectionId, Stream, StreamUpgradeError,
+    ConnectionHandler, ConnectionHandlerEvent, ConnectionId, DeniedUpgrade, StreamUpgradeError,
     SubstreamProtocol, SupportedProtocols,
 };
 use log::trace;
@@ -102,16 +102,16 @@ struct ProtocolStatus {
 /// State of an active outbound substream.
 enum OutboundSubstreamState {
     /// Waiting to send a message to the remote.
-    PendingSend(KadOutStreamSink<Stream>, KadRequestMsg, Option<QueryId>),
+    PendingSend(KadOutStreamSink, KadRequestMsg, Option<QueryId>),
     /// Waiting to flush the substream so that the data arrives to the remote.
-    PendingFlush(KadOutStreamSink<Stream>, Option<QueryId>),
+    PendingFlush(KadOutStreamSink, Option<QueryId>),
     /// Waiting for an answer back from the remote.
     // TODO: add timeout
-    WaitingAnswer(KadOutStreamSink<Stream>, QueryId),
+    WaitingAnswer(KadOutStreamSink, QueryId),
     /// An error happened on the substream and we should report the error to the user.
     ReportError(HandlerQueryErr, QueryId),
     /// The substream is being closed.
-    Closing(KadOutStreamSink<Stream>),
+    Closing(KadOutStreamSink),
     /// The substream is complete and will not perform any more work.
     Done,
     Poisoned,
@@ -124,16 +124,16 @@ enum InboundSubstreamState {
         /// Whether it is the first message to be awaited on this stream.
         first: bool,
         connection_id: UniqueConnecId,
-        substream: KadInStreamSink<Stream>,
+        substream: KadInStreamSink,
     },
     /// Waiting for the behaviour to send a [`HandlerIn`] event containing the response.
-    WaitingBehaviour(UniqueConnecId, KadInStreamSink<Stream>, Option<Waker>),
+    WaitingBehaviour(UniqueConnecId, KadInStreamSink, Option<Waker>),
     /// Waiting to send an answer back to the remote.
-    PendingSend(UniqueConnecId, KadInStreamSink<Stream>, KadResponseMsg),
+    PendingSend(UniqueConnecId, KadInStreamSink, KadResponseMsg),
     /// Waiting to flush an answer back to the remote.
-    PendingFlush(UniqueConnecId, KadInStreamSink<Stream>),
+    PendingFlush(UniqueConnecId, KadInStreamSink),
     /// The substream is being closed.
-    Closing(KadInStreamSink<Stream>),
+    Closing(KadInStreamSink),
     /// The substream was cancelled in favor of a new one.
     Cancelled,
 
@@ -600,7 +600,7 @@ impl ConnectionHandler for Handler {
     type FromBehaviour = HandlerIn;
     type ToBehaviour = HandlerEvent;
     type Error = io::Error; // TODO: better error type?
-    type InboundProtocol = Either<ProtocolConfig, upgrade::DeniedUpgrade>;
+    type InboundProtocol = Either<ProtocolConfig, DeniedUpgrade>;
     type OutboundProtocol = ProtocolConfig;
     type OutboundOpenInfo = ();
     type InboundOpenInfo = ();
@@ -608,7 +608,7 @@ impl ConnectionHandler for Handler {
     fn listen_protocol(&self) -> SubstreamProtocol<Self::InboundProtocol, Self::InboundOpenInfo> {
         match self.mode {
             Mode::Server => SubstreamProtocol::new(Either::Left(self.protocol_config.clone()), ()),
-            Mode::Client => SubstreamProtocol::new(Either::Right(upgrade::DeniedUpgrade), ()),
+            Mode::Client => SubstreamProtocol::new(Either::Right(DeniedUpgrade), ()),
         }
     }
 

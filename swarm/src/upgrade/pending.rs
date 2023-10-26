@@ -20,57 +20,49 @@
 // DEALINGS IN THE SOFTWARE.
 
 use crate::upgrade::{InboundUpgrade, OutboundUpgrade, UpgradeInfo};
+use crate::{Stream, StreamProtocol};
 use futures::future;
 use std::iter;
 use void::Void;
 
 /// Implementation of [`UpgradeInfo`], [`InboundUpgrade`] and [`OutboundUpgrade`] that always
 /// returns a pending upgrade.
-#[derive(Debug, Copy, Clone)]
-pub struct PendingUpgrade<P> {
-    protocol_name: P,
+#[derive(Debug, Clone)]
+pub struct PendingUpgrade {
+    protocol: StreamProtocol,
 }
 
-impl<P> PendingUpgrade<P> {
-    pub fn new(protocol_name: P) -> Self {
-        Self { protocol_name }
+impl PendingUpgrade {
+    pub fn new(protocol: StreamProtocol) -> Self {
+        Self { protocol }
     }
 }
 
-impl<P> UpgradeInfo for PendingUpgrade<P>
-where
-    P: AsRef<str> + Clone,
-{
-    type Info = P;
-    type InfoIter = iter::Once<P>;
+impl UpgradeInfo for PendingUpgrade {
+    type Info = StreamProtocol;
+    type InfoIter = iter::Once<StreamProtocol>;
 
     fn protocol_info(&self) -> Self::InfoIter {
-        iter::once(self.protocol_name.clone())
+        iter::once(self.protocol.clone())
     }
 }
 
-impl<C, P> InboundUpgrade<C> for PendingUpgrade<P>
-where
-    P: AsRef<str> + Clone,
-{
+impl InboundUpgrade for PendingUpgrade {
     type Output = Void;
     type Error = Void;
     type Future = future::Pending<Result<Self::Output, Self::Error>>;
 
-    fn upgrade_inbound(self, _: C, _: Self::Info) -> Self::Future {
+    fn upgrade_inbound(self, _: Stream, _: Self::Info) -> Self::Future {
         future::pending()
     }
 }
 
-impl<C, P> OutboundUpgrade<C> for PendingUpgrade<P>
-where
-    P: AsRef<str> + Clone,
-{
+impl OutboundUpgrade for PendingUpgrade {
     type Output = Void;
     type Error = Void;
     type Future = future::Pending<Result<Self::Output, Self::Error>>;
 
-    fn upgrade_outbound(self, _: C, _: Self::Info) -> Self::Future {
+    fn upgrade_outbound(self, _: Stream, _: Self::Info) -> Self::Future {
         future::pending()
     }
 }

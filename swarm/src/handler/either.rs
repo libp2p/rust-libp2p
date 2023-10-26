@@ -20,18 +20,16 @@
 
 use crate::handler::{
     ConnectionEvent, ConnectionHandler, ConnectionHandlerEvent, FullyNegotiatedInbound,
-    InboundUpgradeSend, ListenUpgradeError, SubstreamProtocol,
+    InboundUpgrade, ListenUpgradeError, SubstreamProtocol,
 };
-use crate::upgrade::SendWrapper;
 use either::Either;
 use futures::future;
 use std::task::{Context, Poll};
 
-impl<LIP, RIP, LIOI, RIOI>
-    FullyNegotiatedInbound<Either<SendWrapper<LIP>, SendWrapper<RIP>>, Either<LIOI, RIOI>>
+impl<LIP, RIP, LIOI, RIOI> FullyNegotiatedInbound<Either<LIP, RIP>, Either<LIOI, RIOI>>
 where
-    RIP: InboundUpgradeSend,
-    LIP: InboundUpgradeSend,
+    RIP: InboundUpgrade,
+    LIP: InboundUpgrade,
 {
     pub(crate) fn transpose(
         self,
@@ -50,11 +48,10 @@ where
     }
 }
 
-impl<LIP, RIP, LIOI, RIOI>
-    ListenUpgradeError<Either<LIOI, RIOI>, Either<SendWrapper<LIP>, SendWrapper<RIP>>>
+impl<LIP, RIP, LIOI, RIOI> ListenUpgradeError<Either<LIOI, RIOI>, Either<LIP, RIP>>
 where
-    RIP: InboundUpgradeSend,
-    LIP: InboundUpgradeSend,
+    RIP: InboundUpgrade,
+    LIP: InboundUpgrade,
 {
     fn transpose(self) -> Either<ListenUpgradeError<LIOI, LIP>, ListenUpgradeError<RIOI, RIP>> {
         match self {
@@ -81,9 +78,8 @@ where
     type FromBehaviour = Either<L::FromBehaviour, R::FromBehaviour>;
     type ToBehaviour = Either<L::ToBehaviour, R::ToBehaviour>;
     type Error = Either<L::Error, R::Error>;
-    type InboundProtocol = Either<SendWrapper<L::InboundProtocol>, SendWrapper<R::InboundProtocol>>;
-    type OutboundProtocol =
-        Either<SendWrapper<L::OutboundProtocol>, SendWrapper<R::OutboundProtocol>>;
+    type InboundProtocol = Either<L::InboundProtocol, R::InboundProtocol>;
+    type OutboundProtocol = Either<L::OutboundProtocol, R::OutboundProtocol>;
     type InboundOpenInfo = Either<L::InboundOpenInfo, R::InboundOpenInfo>;
     type OutboundOpenInfo = Either<L::OutboundOpenInfo, R::OutboundOpenInfo>;
 
@@ -91,11 +87,11 @@ where
         match self {
             Either::Left(a) => a
                 .listen_protocol()
-                .map_upgrade(|u| Either::Left(SendWrapper(u)))
+                .map_upgrade(Either::Left)
                 .map_info(Either::Left),
             Either::Right(b) => b
                 .listen_protocol()
-                .map_upgrade(|u| Either::Right(SendWrapper(u)))
+                .map_upgrade(Either::Right)
                 .map_info(Either::Right),
         }
     }
@@ -130,12 +126,12 @@ where
             Either::Left(handler) => futures::ready!(handler.poll(cx))
                 .map_custom(Either::Left)
                 .map_close(Either::Left)
-                .map_protocol(|p| Either::Left(SendWrapper(p)))
+                .map_protocol(Either::Left)
                 .map_outbound_open_info(Either::Left),
             Either::Right(handler) => futures::ready!(handler.poll(cx))
                 .map_custom(Either::Right)
                 .map_close(Either::Right)
-                .map_protocol(|p| Either::Right(SendWrapper(p)))
+                .map_protocol(Either::Right)
                 .map_outbound_open_info(Either::Right),
         };
 

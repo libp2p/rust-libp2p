@@ -63,7 +63,6 @@ pub use peer_record::PeerRecord;
 pub use signed_envelope::SignedEnvelope;
 pub use translation::address_translation;
 pub use transport::Transport;
-pub use upgrade::{InboundUpgrade, OutboundUpgrade, UpgradeInfo};
 
 #[derive(Debug, thiserror::Error)]
 #[error(transparent)]

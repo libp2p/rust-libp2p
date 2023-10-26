@@ -1,10 +1,9 @@
-use libp2p_core::upgrade::DeniedUpgrade;
 use libp2p_core::{Endpoint, Multiaddr};
 use libp2p_identity::PeerId;
 use libp2p_swarm::handler::ConnectionEvent;
 use libp2p_swarm::{
-    ConnectionDenied, ConnectionHandler, ConnectionHandlerEvent, ConnectionId, FromSwarm,
-    NetworkBehaviour, SubstreamProtocol, Swarm, SwarmEvent, THandler, THandlerInEvent,
+    ConnectionDenied, ConnectionHandler, ConnectionHandlerEvent, ConnectionId, DeniedUpgrade,
+    FromSwarm, NetworkBehaviour, SubstreamProtocol, Swarm, SwarmEvent, THandler, THandlerInEvent,
     THandlerOutEvent, ToSwarm,
 };
 use libp2p_swarm_test::SwarmExt;

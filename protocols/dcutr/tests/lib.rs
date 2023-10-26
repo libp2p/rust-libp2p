@@ -19,8 +19,8 @@
 // DEALINGS IN THE SOFTWARE.
 
 use libp2p_core::multiaddr::{Multiaddr, Protocol};
-use libp2p_core::transport::upgrade::Version;
 use libp2p_core::transport::{MemoryTransport, Transport};
+use libp2p_core::upgrade::Version;
 use libp2p_dcutr as dcutr;
 use libp2p_identify as identify;
 use libp2p_identity as identity;

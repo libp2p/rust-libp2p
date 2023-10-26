@@ -25,14 +25,13 @@ use crate::{protocol, PROTOCOL_NAME};
 use either::Either;
 use futures::future;
 use libp2p_core::multiaddr::Multiaddr;
-use libp2p_core::upgrade::{DeniedUpgrade, ReadyUpgrade};
 use libp2p_core::ConnectedPoint;
 use libp2p_swarm::handler::{
     ConnectionEvent, DialUpgradeError, FullyNegotiatedInbound, FullyNegotiatedOutbound,
     ListenUpgradeError,
 };
 use libp2p_swarm::{
-    ConnectionHandler, ConnectionHandlerEvent, StreamProtocol, StreamUpgradeError,
+    ConnectionHandler, ConnectionHandlerEvent, DeniedUpgrade, ReadyUpgrade, StreamUpgradeError,
     SubstreamProtocol,
 };
 use protocol::{inbound, outbound};
@@ -183,8 +182,8 @@ impl ConnectionHandler for Handler {
     type FromBehaviour = Command;
     type ToBehaviour = Event;
     type Error = Void;
-    type InboundProtocol = Either<ReadyUpgrade<StreamProtocol>, DeniedUpgrade>;
-    type OutboundProtocol = ReadyUpgrade<StreamProtocol>;
+    type InboundProtocol = Either<ReadyUpgrade, DeniedUpgrade>;
+    type OutboundProtocol = ReadyUpgrade;
     type OutboundOpenInfo = ();
     type InboundOpenInfo = ();
 

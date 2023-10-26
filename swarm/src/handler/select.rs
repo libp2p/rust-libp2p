@@ -20,13 +20,12 @@
 
 use crate::handler::{
     AddressChange, ConnectionEvent, ConnectionHandler, ConnectionHandlerEvent, DialUpgradeError,
-    FullyNegotiatedInbound, FullyNegotiatedOutbound, InboundUpgradeSend, ListenUpgradeError,
-    OutboundUpgradeSend, StreamUpgradeError, SubstreamProtocol,
+    FullyNegotiatedInbound, FullyNegotiatedOutbound, InboundUpgrade, ListenUpgradeError,
+    OutboundUpgrade, StreamUpgradeError, SubstreamProtocol,
 };
-use crate::upgrade::SendWrapper;
+use crate::upgrade::SelectUpgrade;
 use either::Either;
 use futures::future;
-use libp2p_core::upgrade::SelectUpgrade;
 use std::{cmp, task::Context, task::Poll};
 
 /// Implementation of [`ConnectionHandler`] that combines two protocols into one.
@@ -49,11 +48,10 @@ impl<TProto1, TProto2> ConnectionHandlerSelect<TProto1, TProto2> {
     }
 }
 
-impl<S1OOI, S2OOI, S1OP, S2OP>
-    FullyNegotiatedOutbound<Either<SendWrapper<S1OP>, SendWrapper<S2OP>>, Either<S1OOI, S2OOI>>
+impl<S1OOI, S2OOI, S1OP, S2OP> FullyNegotiatedOutbound<Either<S1OP, S2OP>, Either<S1OOI, S2OOI>>
 where
-    S1OP: OutboundUpgradeSend,
-    S2OP: OutboundUpgradeSend,
+    S1OP: OutboundUpgrade,
+    S2OP: OutboundUpgrade,
     S1OOI: Send + 'static,
     S2OOI: Send + 'static,
 {
@@ -74,11 +72,10 @@ where
     }
 }
 
-impl<S1IP, S1IOI, S2IP, S2IOI>
-    FullyNegotiatedInbound<SelectUpgrade<SendWrapper<S1IP>, SendWrapper<S2IP>>, (S1IOI, S2IOI)>
+impl<S1IP, S1IOI, S2IP, S2IOI> FullyNegotiatedInbound<SelectUpgrade<S1IP, S2IP>, (S1IOI, S2IOI)>
 where
-    S1IP: InboundUpgradeSend,
-    S2IP: InboundUpgradeSend,
+    S1IP: InboundUpgrade,
+    S2IP: InboundUpgrade,
 {
     pub(crate) fn transpose(
         self,
@@ -96,11 +93,10 @@ where
     }
 }
 
-impl<S1OOI, S2OOI, S1OP, S2OP>
-    DialUpgradeError<Either<S1OOI, S2OOI>, Either<SendWrapper<S1OP>, SendWrapper<S2OP>>>
+impl<S1OOI, S2OOI, S1OP, S2OP> DialUpgradeError<Either<S1OOI, S2OOI>, Either<S1OP, S2OP>>
 where
-    S1OP: OutboundUpgradeSend,
-    S2OP: OutboundUpgradeSend,
+    S1OP: OutboundUpgrade,
+    S2OP: OutboundUpgrade,
     S1OOI: Send + 'static,
     S2OOI: Send + 'static,
 {
@@ -183,11 +179,10 @@ where
     type ToBehaviour = Either<TProto1::ToBehaviour, TProto2::ToBehaviour>;
     type Error = Either<TProto1::Error, TProto2::Error>;
     type InboundProtocol = SelectUpgrade<
-        SendWrapper<<TProto1 as ConnectionHandler>::InboundProtocol>,
-        SendWrapper<<TProto2 as ConnectionHandler>::InboundProtocol>,
+        <TProto1 as ConnectionHandler>::InboundProtocol,
+        <TProto2 as ConnectionHandler>::InboundProtocol,
     >;
-    type OutboundProtocol =
-        Either<SendWrapper<TProto1::OutboundProtocol>, SendWrapper<TProto2::OutboundProtocol>>;
+    type OutboundProtocol = Either<TProto1::OutboundProtocol, TProto2::OutboundProtocol>;
     type OutboundOpenInfo = Either<TProto1::OutboundOpenInfo, TProto2::OutboundOpenInfo>;
     type InboundOpenInfo = (TProto1::InboundOpenInfo, TProto2::InboundOpenInfo);
 
@@ -197,7 +192,7 @@ where
         let timeout = *std::cmp::max(proto1.timeout(), proto2.timeout());
         let (u1, i1) = proto1.into_upgrade();
         let (u2, i2) = proto2.into_upgrade();
-        let choice = SelectUpgrade::new(SendWrapper(u1), SendWrapper(u2));
+        let choice = SelectUpgrade::new(u1, u2);
         SubstreamProtocol::new(choice, (i1, i2)).with_timeout(timeout)
     }
 
@@ -235,9 +230,7 @@ where
             }
             Poll::Ready(ConnectionHandlerEvent::OutboundSubstreamRequest { protocol }) => {
                 return Poll::Ready(ConnectionHandlerEvent::OutboundSubstreamRequest {
-                    protocol: protocol
-                        .map_upgrade(|u| Either::Left(SendWrapper(u)))
-                        .map_info(Either::Left),
+                    protocol: protocol.map_upgrade(Either::Left).map_info(Either::Left),
                 });
             }
             Poll::Ready(ConnectionHandlerEvent::ReportRemoteProtocols(support)) => {
@@ -257,9 +250,7 @@ where
             }
             Poll::Ready(ConnectionHandlerEvent::OutboundSubstreamRequest { protocol }) => {
                 return Poll::Ready(ConnectionHandlerEvent::OutboundSubstreamRequest {
-                    protocol: protocol
-                        .map_upgrade(|u| Either::Right(SendWrapper(u)))
-                        .map_info(Either::Right),
+                    protocol: protocol.map_upgrade(Either::Right).map_info(Either::Right),
                 });
             }
             Poll::Ready(ConnectionHandlerEvent::ReportRemoteProtocols(support)) => {

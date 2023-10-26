@@ -29,14 +29,13 @@ use futures::io::AsyncWriteExt;
 use futures::stream::{FuturesUnordered, StreamExt};
 use futures_timer::Delay;
 use instant::Instant;
-use libp2p_core::upgrade::ReadyUpgrade;
 use libp2p_core::{ConnectedPoint, Multiaddr};
 use libp2p_identity::PeerId;
 use libp2p_swarm::handler::{
     ConnectionEvent, DialUpgradeError, FullyNegotiatedInbound, FullyNegotiatedOutbound,
 };
 use libp2p_swarm::{
-    ConnectionHandler, ConnectionHandlerEvent, ConnectionId, Stream, StreamProtocol,
+    ConnectionHandler, ConnectionHandlerEvent, ConnectionId, ReadyUpgrade, Stream,
     StreamUpgradeError, SubstreamProtocol,
 };
 use std::collections::{HashMap, VecDeque};
@@ -483,9 +482,9 @@ impl ConnectionHandler for Handler {
     type FromBehaviour = In;
     type ToBehaviour = Event;
     type Error = void::Void;
-    type InboundProtocol = ReadyUpgrade<StreamProtocol>;
+    type InboundProtocol = ReadyUpgrade;
     type InboundOpenInfo = ();
-    type OutboundProtocol = ReadyUpgrade<StreamProtocol>;
+    type OutboundProtocol = ReadyUpgrade;
     type OutboundOpenInfo = ();
 
     fn listen_protocol(&self) -> SubstreamProtocol<Self::InboundProtocol, Self::InboundOpenInfo> {

@@ -23,19 +23,20 @@ use crate::handler::{
     ConnectionEvent, ConnectionHandler, ConnectionHandlerEvent, FullyNegotiatedInbound,
     FullyNegotiatedOutbound, SubstreamProtocol,
 };
-use libp2p_core::upgrade::PendingUpgrade;
+use crate::upgrade::PendingUpgrade;
+use crate::StreamProtocol;
 use std::task::{Context, Poll};
 use void::Void;
 
 /// Implementation of [`ConnectionHandler`] that returns a pending upgrade.
 #[derive(Clone, Debug)]
 pub struct PendingConnectionHandler {
-    protocol_name: String,
+    protocol: StreamProtocol,
 }
 
 impl PendingConnectionHandler {
-    pub fn new(protocol_name: String) -> Self {
-        PendingConnectionHandler { protocol_name }
+    pub fn new(protocol: StreamProtocol) -> Self {
+        PendingConnectionHandler { protocol }
     }
 }
 
@@ -43,13 +44,13 @@ impl ConnectionHandler for PendingConnectionHandler {
     type FromBehaviour = Void;
     type ToBehaviour = Void;
     type Error = Void;
-    type InboundProtocol = PendingUpgrade<String>;
-    type OutboundProtocol = PendingUpgrade<String>;
+    type InboundProtocol = PendingUpgrade;
+    type OutboundProtocol = PendingUpgrade;
     type OutboundOpenInfo = Void;
     type InboundOpenInfo = ();
 
     fn listen_protocol(&self) -> SubstreamProtocol<Self::InboundProtocol, Self::InboundOpenInfo> {
-        SubstreamProtocol::new(PendingUpgrade::new(self.protocol_name.clone()), ())
+        SubstreamProtocol::new(PendingUpgrade::new(self.protocol.clone()), ())
     }
 
     fn on_behaviour_event(&mut self, v: Self::FromBehaviour) {

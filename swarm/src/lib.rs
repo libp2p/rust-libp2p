@@ -123,9 +123,11 @@ pub use libp2p_swarm_derive::NetworkBehaviour;
 pub use listen_opts::ListenOpts;
 pub use stream::Stream;
 pub use stream_protocol::{InvalidProtocol, StreamProtocol};
+pub use upgrade::{DeniedUpgrade, PendingUpgrade, ReadyUpgrade, SelectUpgrade};
 
 use crate::behaviour::ExternalAddrConfirmed;
-use crate::handler::UpgradeInfoSend;
+use crate::handler::UpgradeInfo;
+use crate::upgrade::IntoIteratorSend;
 use connection::pool::{EstablishedConnection, Pool, PoolConfig, PoolEvent};
 use connection::IncomingInfo;
 use connection::{
@@ -755,6 +757,7 @@ where
                     .listen_protocol()
                     .upgrade()
                     .protocol_info()
+                    .into_iter_send()
                     .map(|p| p.as_ref().as_bytes().to_vec())
                     .collect();
                 let other_established_connection_ids = self
@@ -1308,7 +1311,7 @@ where
 {
     let mut pending = SmallVec::new();
     let mut event = Some(event); // (1)
-    for id in ids.into_iter() {
+    for id in ids.into_iter_send() {
         if let Some(conn) = pool.get_established(id) {
             match conn.poll_ready_notify_handler(cx) {
                 Poll::Pending => pending.push(id),
@@ -2093,7 +2096,7 @@ mod tests {
                             .build(),
                     )
                     .unwrap();
-                for mut transport in transports.into_iter() {
+                for mut transport in transports.into_iter_send() {
                     match futures::future::select(transport.select_next_some(), swarm.next()).await
                     {
                         future::Either::Left((TransportEvent::Incoming { .. }, _)) => {}
@@ -2280,9 +2283,12 @@ mod tests {
             } => {
                 assert_eq!(target, peer_id.unwrap());
 
-                let failed_addresses = errors.into_iter().map(|(addr, _)| addr).collect::<Vec<_>>();
+                let failed_addresses = errors
+                    .into_iter_send()
+                    .map(|(addr, _)| addr)
+                    .collect::<Vec<_>>();
                 let expected_addresses = addresses
-                    .into_iter()
+                    .into_iter_send()
                     .map(|addr| addr.with(multiaddr::Protocol::P2p(target)))
                     .collect::<Vec<_>>();
 

@@ -27,12 +27,11 @@ use futures::future::Either;
 use futures::prelude::*;
 use futures::StreamExt;
 use instant::Instant;
-use libp2p_core::upgrade::DeniedUpgrade;
 use libp2p_swarm::handler::{
     ConnectionEvent, ConnectionHandler, ConnectionHandlerEvent, DialUpgradeError,
     FullyNegotiatedInbound, FullyNegotiatedOutbound, StreamUpgradeError, SubstreamProtocol,
 };
-use libp2p_swarm::Stream;
+use libp2p_swarm::{DeniedUpgrade, Stream};
 use smallvec::SmallVec;
 use std::{
     pin::Pin,

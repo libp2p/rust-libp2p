@@ -24,13 +24,13 @@ use crate::handler::{
     AddressChange, ConnectionEvent, ConnectionHandler, ConnectionHandlerEvent, DialUpgradeError,
     FullyNegotiatedInbound, FullyNegotiatedOutbound, ListenUpgradeError, SubstreamProtocol,
 };
-use crate::upgrade::SendWrapper;
+use crate::upgrade::DeniedUpgrade;
 use crate::{
     ConnectionDenied, NetworkBehaviour, THandler, THandlerInEvent, THandlerOutEvent, ToSwarm,
 };
 use either::Either;
 use futures::future;
-use libp2p_core::{upgrade::DeniedUpgrade, Endpoint, Multiaddr};
+use libp2p_core::{Endpoint, Multiaddr};
 use libp2p_identity::PeerId;
 use std::{task::Context, task::Poll};
 
@@ -265,7 +265,7 @@ where
     type FromBehaviour = TInner::FromBehaviour;
     type ToBehaviour = TInner::ToBehaviour;
     type Error = TInner::Error;
-    type InboundProtocol = Either<SendWrapper<TInner::InboundProtocol>, SendWrapper<DeniedUpgrade>>;
+    type InboundProtocol = Either<TInner::InboundProtocol, DeniedUpgrade>;
     type OutboundProtocol = TInner::OutboundProtocol;
     type OutboundOpenInfo = TInner::OutboundOpenInfo;
     type InboundOpenInfo = Either<TInner::InboundOpenInfo, ()>;
@@ -274,10 +274,10 @@ where
         if let Some(inner) = self.inner.as_ref() {
             inner
                 .listen_protocol()
-                .map_upgrade(|u| Either::Left(SendWrapper(u)))
+                .map_upgrade(Either::Left)
                 .map_info(Either::Left)
         } else {
-            SubstreamProtocol::new(Either::Right(SendWrapper(DeniedUpgrade)), Either::Right(()))
+            SubstreamProtocol::new(Either::Right(DeniedUpgrade), Either::Right(()))
         }
     }
 

@@ -24,7 +24,6 @@ use either::Either;
 use futures::prelude::*;
 use futures_bounded::Timeout;
 use futures_timer::Delay;
-use libp2p_core::upgrade::{ReadyUpgrade, SelectUpgrade};
 use libp2p_core::Multiaddr;
 use libp2p_identity::PeerId;
 use libp2p_identity::PublicKey;
@@ -33,8 +32,8 @@ use libp2p_swarm::handler::{
     ProtocolSupport,
 };
 use libp2p_swarm::{
-    ConnectionHandler, ConnectionHandlerEvent, StreamProtocol, StreamUpgradeError,
-    SubstreamProtocol, SupportedProtocols,
+    ConnectionHandler, ConnectionHandlerEvent, ReadyUpgrade, SelectUpgrade, StreamProtocol,
+    StreamUpgradeError, SubstreamProtocol, SupportedProtocols,
 };
 use log::{warn, Level};
 use smallvec::SmallVec;
@@ -53,12 +52,7 @@ pub struct Handler {
     remote_peer_id: PeerId,
     /// Pending events to yield.
     events: SmallVec<
-        [ConnectionHandlerEvent<
-            Either<ReadyUpgrade<StreamProtocol>, ReadyUpgrade<StreamProtocol>>,
-            (),
-            Event,
-            io::Error,
-        >; 4],
+        [ConnectionHandlerEvent<Either<ReadyUpgrade, ReadyUpgrade>, (), Event, io::Error>; 4],
     >,
 
     active_streams: futures_bounded::FuturesSet<Result<Success, UpgradeError>>,
@@ -279,9 +273,8 @@ impl ConnectionHandler for Handler {
     type FromBehaviour = InEvent;
     type ToBehaviour = Event;
     type Error = io::Error;
-    type InboundProtocol =
-        SelectUpgrade<ReadyUpgrade<StreamProtocol>, ReadyUpgrade<StreamProtocol>>;
-    type OutboundProtocol = Either<ReadyUpgrade<StreamProtocol>, ReadyUpgrade<StreamProtocol>>;
+    type InboundProtocol = SelectUpgrade<ReadyUpgrade, ReadyUpgrade>;
+    type OutboundProtocol = Either<ReadyUpgrade, ReadyUpgrade>;
     type OutboundOpenInfo = ();
     type InboundOpenInfo = ();
 

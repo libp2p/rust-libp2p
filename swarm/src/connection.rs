@@ -32,10 +32,10 @@ pub use supported_protocols::SupportedProtocols;
 use crate::handler::{
     AddressChange, ConnectionEvent, ConnectionHandler, DialUpgradeError, FullyNegotiatedInbound,
     FullyNegotiatedOutbound, ListenUpgradeError, ProtocolSupport, ProtocolsAdded, ProtocolsChange,
-    UpgradeInfoSend,
+    UpgradeInfo,
 };
 use crate::stream::ActiveStreamCounter;
-use crate::upgrade::{InboundUpgradeSend, OutboundUpgradeSend};
+use crate::upgrade::{InboundUpgrade, IntoIteratorSend, OutboundUpgrade};
 use crate::{
     ConnectionHandlerEvent, Stream, StreamProtocol, StreamUpgradeError, SubstreamProtocol,
 };
@@ -120,16 +120,16 @@ where
     negotiating_in: FuturesUnordered<
         StreamUpgrade<
             THandler::InboundOpenInfo,
-            <THandler::InboundProtocol as InboundUpgradeSend>::Output,
-            <THandler::InboundProtocol as InboundUpgradeSend>::Error,
+            <THandler::InboundProtocol as InboundUpgrade>::Output,
+            <THandler::InboundProtocol as InboundUpgrade>::Error,
         >,
     >,
     /// Futures that upgrade outgoing substreams.
     negotiating_out: FuturesUnordered<
         StreamUpgrade<
             THandler::OutboundOpenInfo,
-            <THandler::OutboundProtocol as OutboundUpgradeSend>::Output,
-            <THandler::OutboundProtocol as OutboundUpgradeSend>::Error,
+            <THandler::OutboundProtocol as OutboundUpgrade>::Output,
+            <THandler::OutboundProtocol as OutboundUpgrade>::Error,
         >,
     >,
     /// The currently planned connection & handler shutdown.
@@ -463,6 +463,7 @@ fn gather_supported_protocols(handler: &impl ConnectionHandler) -> HashSet<Strea
         .listen_protocol()
         .upgrade()
         .protocol_info()
+        .into_iter_send()
         .filter_map(|i| StreamProtocol::try_from_owned(i.as_ref().to_owned()).ok())
         .collect()
 }
@@ -537,7 +538,7 @@ impl<UserData, TOk, TErr> StreamUpgrade<UserData, TOk, TErr> {
         counter: ActiveStreamCounter,
     ) -> Self
     where
-        Upgrade: OutboundUpgradeSend<Output = TOk, Error = TErr>,
+        Upgrade: OutboundUpgrade<Output = TOk, Error = TErr>,
     {
         let effective_version = match version_override {
             Some(version_override) if version_override != upgrade::Version::default() => {
@@ -551,7 +552,7 @@ impl<UserData, TOk, TErr> StreamUpgrade<UserData, TOk, TErr> {
             }
             _ => upgrade::Version::default(),
         };
-        let protocols = upgrade.protocol_info();
+        let protocols = upgrade.protocol_info().into_iter_send();
 
         Self {
             user_data: Some(user_data),
@@ -583,11 +584,11 @@ impl<UserData, TOk, TErr> StreamUpgrade<UserData, TOk, TErr> {
         counter: ActiveStreamCounter,
     ) -> Self
     where
-        Upgrade: InboundUpgradeSend<Output = TOk, Error = TErr>,
+        Upgrade: InboundUpgrade<Output = TOk, Error = TErr>,
     {
         let timeout = *protocol.timeout();
         let (upgrade, open_info) = protocol.into_upgrade();
-        let protocols = upgrade.protocol_info();
+        let protocols = upgrade.protocol_info().into_iter_send();
 
         Self {
             user_data: Some(open_info),
@@ -745,10 +746,10 @@ enum Shutdown {
 mod tests {
     use super::*;
     use crate::dummy;
+    use crate::DeniedUpgrade;
     use futures::future;
     use futures::AsyncRead;
     use futures::AsyncWrite;
-    use libp2p_core::upgrade::{DeniedUpgrade, InboundUpgrade, OutboundUpgrade, UpgradeInfo};
     use libp2p_core::StreamMuxer;
     use quickcheck::*;
     use std::sync::{Arc, Weak};
@@ -1292,26 +1293,26 @@ mod tests {
         type InfoIter = std::vec::IntoIter<Self::Info>;
 
         fn protocol_info(&self) -> Self::InfoIter {
-            self.protocols.clone().into_iter()
+            self.protocols.clone().into_iter_send()
         }
     }
 
-    impl<C> InboundUpgrade<C> for ManyProtocolsUpgrade {
-        type Output = C;
+    impl InboundUpgrade for ManyProtocolsUpgrade {
+        type Output = Stream;
         type Error = Void;
         type Future = future::Ready<Result<Self::Output, Self::Error>>;
 
-        fn upgrade_inbound(self, stream: C, _: Self::Info) -> Self::Future {
+        fn upgrade_inbound(self, stream: Stream, _: Self::Info) -> Self::Future {
             future::ready(Ok(stream))
         }
     }
 
-    impl<C> OutboundUpgrade<C> for ManyProtocolsUpgrade {
-        type Output = C;
+    impl OutboundUpgrade for ManyProtocolsUpgrade {
+        type Output = Stream;
         type Error = Void;
         type Future = future::Ready<Result<Self::Output, Self::Error>>;
 
-        fn upgrade_outbound(self, stream: C, _: Self::Info) -> Self::Future {
+        fn upgrade_outbound(self, stream: Stream, _: Self::Info) -> Self::Future {
             future::ready(Ok(stream))
         }
     }

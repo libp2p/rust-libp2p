@@ -25,7 +25,7 @@ use crate::handler::{
     AddressChange, ConnectionEvent, ConnectionHandler, ConnectionHandlerEvent, DialUpgradeError,
     FullyNegotiatedInbound, FullyNegotiatedOutbound, ListenUpgradeError, SubstreamProtocol,
 };
-use crate::upgrade::{InboundUpgradeSend, OutboundUpgradeSend, UpgradeInfoSend};
+use crate::upgrade::{InboundUpgrade, IntoIteratorSend, OutboundUpgrade, UpgradeInfo};
 use crate::Stream;
 use futures::{future::BoxFuture, prelude::*};
 use rand::Rng;
@@ -106,8 +106,8 @@ impl<K, H> ConnectionHandler for MultiHandler<K, H>
 where
     K: Clone + Debug + Hash + Eq + Send + 'static,
     H: ConnectionHandler,
-    H::InboundProtocol: InboundUpgradeSend,
-    H::OutboundProtocol: OutboundUpgradeSend,
+    H::InboundProtocol: InboundUpgrade,
+    H::OutboundProtocol: OutboundUpgrade,
 {
     type FromBehaviour = (K, <H as ConnectionHandler>::FromBehaviour);
     type ToBehaviour = (K, <H as ConnectionHandler>::ToBehaviour);
@@ -344,9 +344,9 @@ where
     }
 }
 
-impl<K, H> UpgradeInfoSend for Upgrade<K, H>
+impl<K, H> UpgradeInfo for Upgrade<K, H>
 where
-    H: UpgradeInfoSend,
+    H: UpgradeInfo,
     K: Send + 'static,
 {
     type Info = IndexedProtoName<H::Info>;
@@ -356,20 +356,20 @@ where
         self.upgrades
             .iter()
             .enumerate()
-            .flat_map(|(i, (_, h))| iter::repeat(i).zip(h.protocol_info()))
+            .flat_map(|(i, (_, h))| iter::repeat(i).zip(h.protocol_info().into_iter_send()))
             .map(|(i, h)| IndexedProtoName(i, h))
             .collect::<Vec<_>>()
             .into_iter()
     }
 }
 
-impl<K, H> InboundUpgradeSend for Upgrade<K, H>
+impl<K, H> InboundUpgrade for Upgrade<K, H>
 where
-    H: InboundUpgradeSend,
+    H: InboundUpgrade,
     K: Send + 'static,
 {
-    type Output = (K, <H as InboundUpgradeSend>::Output);
-    type Error = (K, <H as InboundUpgradeSend>::Error);
+    type Output = (K, <H as InboundUpgrade>::Output);
+    type Error = (K, <H as InboundUpgrade>::Error);
     type Future = BoxFuture<'static, Result<Self::Output, Self::Error>>;
 
     fn upgrade_inbound(mut self, resource: Stream, info: Self::Info) -> Self::Future {
@@ -385,13 +385,13 @@ where
     }
 }
 
-impl<K, H> OutboundUpgradeSend for Upgrade<K, H>
+impl<K, H> OutboundUpgrade for Upgrade<K, H>
 where
-    H: OutboundUpgradeSend,
+    H: OutboundUpgrade,
     K: Send + 'static,
 {
-    type Output = (K, <H as OutboundUpgradeSend>::Output);
-    type Error = (K, <H as OutboundUpgradeSend>::Error);
+    type Output = (K, <H as OutboundUpgrade>::Output);
+    type Error = (K, <H as OutboundUpgrade>::Error);
     type Future = BoxFuture<'static, Result<Self::Output, Self::Error>>;
 
     fn upgrade_outbound(mut self, resource: Stream, info: Self::Info) -> Self::Future {
@@ -411,11 +411,11 @@ where
 fn uniq_proto_names<I, T>(iter: I) -> Result<(), DuplicateProtonameError>
 where
     I: Iterator<Item = T>,
-    T: UpgradeInfoSend,
+    T: UpgradeInfo,
 {
     let mut set = HashSet::new();
     for infos in iter {
-        for i in infos.protocol_info() {
+        for i in infos.protocol_info().into_iter_send() {
             let v = Vec::from(i.as_ref());
             if set.contains(&v) {
                 return Err(DuplicateProtonameError(v));

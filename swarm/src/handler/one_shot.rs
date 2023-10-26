@@ -22,7 +22,7 @@ use crate::handler::{
     ConnectionEvent, ConnectionHandler, ConnectionHandlerEvent, DialUpgradeError,
     FullyNegotiatedInbound, FullyNegotiatedOutbound, SubstreamProtocol,
 };
-use crate::upgrade::{InboundUpgradeSend, OutboundUpgradeSend};
+use crate::upgrade::{InboundUpgrade, OutboundUpgrade};
 use crate::StreamUpgradeError;
 use smallvec::SmallVec;
 use std::{error, fmt::Debug, task::Context, task::Poll, time::Duration};
@@ -31,7 +31,7 @@ use std::{error, fmt::Debug, task::Context, task::Poll, time::Duration};
 // TODO: Debug
 pub struct OneShotHandler<TInbound, TOutbound, TEvent>
 where
-    TOutbound: OutboundUpgradeSend,
+    TOutbound: OutboundUpgrade,
 {
     /// The upgrade for inbound substreams.
     listen_protocol: SubstreamProtocol<TInbound, ()>,
@@ -47,7 +47,7 @@ where
 
 impl<TInbound, TOutbound, TEvent> OneShotHandler<TInbound, TOutbound, TEvent>
 where
-    TOutbound: OutboundUpgradeSend,
+    TOutbound: OutboundUpgrade,
 {
     /// Creates a `OneShotHandler`.
     pub fn new(
@@ -92,8 +92,8 @@ where
 
 impl<TInbound, TOutbound, TEvent> Default for OneShotHandler<TInbound, TOutbound, TEvent>
 where
-    TOutbound: OutboundUpgradeSend,
-    TInbound: InboundUpgradeSend + Default,
+    TOutbound: OutboundUpgrade,
+    TInbound: InboundUpgrade + Default,
 {
     fn default() -> Self {
         OneShotHandler::new(
@@ -105,8 +105,8 @@ where
 
 impl<TInbound, TOutbound, TEvent> ConnectionHandler for OneShotHandler<TInbound, TOutbound, TEvent>
 where
-    TInbound: InboundUpgradeSend + Send + 'static,
-    TOutbound: Debug + OutboundUpgradeSend,
+    TInbound: InboundUpgrade + Send + 'static,
+    TOutbound: Debug + OutboundUpgrade,
     TInbound::Output: Into<TEvent>,
     TOutbound::Output: Into<TEvent>,
     TOutbound::Error: error::Error + Send + 'static,
@@ -220,9 +220,9 @@ impl Default for OneShotHandlerConfig {
 mod tests {
     use super::*;
 
+    use crate::DeniedUpgrade;
     use futures::executor::block_on;
     use futures::future::poll_fn;
-    use libp2p_core::upgrade::DeniedUpgrade;
     use void::Void;
 
     #[test]

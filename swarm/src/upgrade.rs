@@ -18,141 +18,81 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
+mod denied;
+mod either;
+mod pending;
+mod ready;
+mod select;
+
 use crate::Stream;
-
 use futures::prelude::*;
-use libp2p_core::upgrade;
 
-/// Implemented automatically on all types that implement [`UpgradeInfo`](upgrade::UpgradeInfo)
-/// and `Send + 'static`.
-///
-/// Do not implement this trait yourself. Instead, please implement
-/// [`UpgradeInfo`](upgrade::UpgradeInfo).
-pub trait UpgradeInfoSend: Send + 'static {
-    /// Equivalent to [`UpgradeInfo::Info`](upgrade::UpgradeInfo::Info).
+pub use denied::DeniedUpgrade;
+pub use pending::PendingUpgrade;
+pub use ready::ReadyUpgrade;
+pub use select::SelectUpgrade;
+
+/// Common trait for upgrades that can be applied on inbound substreams, outbound substreams,
+/// or both.
+pub trait UpgradeInfo: Send + 'static {
+    /// Opaque type representing a negotiable protocol.
     type Info: AsRef<str> + Clone + Send + 'static;
-    /// Equivalent to [`UpgradeInfo::InfoIter`](upgrade::UpgradeInfo::InfoIter).
-    type InfoIter: Iterator<Item = Self::Info> + Send + 'static;
+    /// Iterator returned by `protocol_info`.
+    type InfoIter: IntoIteratorSend<Item = Self::Info> + Send + 'static;
 
-    /// Equivalent to [`UpgradeInfo::protocol_info`](upgrade::UpgradeInfo::protocol_info).
+    /// Returns the list of protocols that are supported. Used during the negotiation process.
     fn protocol_info(&self) -> Self::InfoIter;
 }
 
-impl<T> UpgradeInfoSend for T
-where
-    T: upgrade::UpgradeInfo + Send + 'static,
-    T::Info: Send + 'static,
-    <T::InfoIter as IntoIterator>::IntoIter: Send + 'static,
-{
-    type Info = T::Info;
-    type InfoIter = <T::InfoIter as IntoIterator>::IntoIter;
-
-    fn protocol_info(&self) -> Self::InfoIter {
-        upgrade::UpgradeInfo::protocol_info(self).into_iter()
-    }
-}
-
-/// Implemented automatically on all types that implement
-/// [`OutboundUpgrade`](upgrade::OutboundUpgrade) and `Send + 'static`.
-///
-/// Do not implement this trait yourself. Instead, please implement
-/// [`OutboundUpgrade`](upgrade::OutboundUpgrade).
-pub trait OutboundUpgradeSend: UpgradeInfoSend {
-    /// Equivalent to [`OutboundUpgrade::Output`](upgrade::OutboundUpgrade::Output).
+/// Possible upgrade on an inbound connection or substream.
+pub trait InboundUpgrade: UpgradeInfo {
+    /// Output after the upgrade has been successfully negotiated and the handshake performed.
     type Output: Send + 'static;
-    /// Equivalent to [`OutboundUpgrade::Error`](upgrade::OutboundUpgrade::Error).
+    /// Possible error during the handshake.
     type Error: Send + 'static;
-    /// Equivalent to [`OutboundUpgrade::Future`](upgrade::OutboundUpgrade::Future).
+    /// Future that performs the handshake with the remote.
     type Future: Future<Output = Result<Self::Output, Self::Error>> + Send + 'static;
 
-    /// Equivalent to [`OutboundUpgrade::upgrade_outbound`](upgrade::OutboundUpgrade::upgrade_outbound).
-    fn upgrade_outbound(self, socket: Stream, info: Self::Info) -> Self::Future;
-}
-
-impl<T, TInfo> OutboundUpgradeSend for T
-where
-    T: upgrade::OutboundUpgrade<Stream, Info = TInfo> + UpgradeInfoSend<Info = TInfo>,
-    TInfo: AsRef<str> + Clone + Send + 'static,
-    T::Output: Send + 'static,
-    T::Error: Send + 'static,
-    T::Future: Send + 'static,
-{
-    type Output = T::Output;
-    type Error = T::Error;
-    type Future = T::Future;
-
-    fn upgrade_outbound(self, socket: Stream, info: TInfo) -> Self::Future {
-        upgrade::OutboundUpgrade::upgrade_outbound(self, socket, info)
-    }
-}
-
-/// Implemented automatically on all types that implement
-/// [`InboundUpgrade`](upgrade::InboundUpgrade) and `Send + 'static`.
-///
-/// Do not implement this trait yourself. Instead, please implement
-/// [`InboundUpgrade`](upgrade::InboundUpgrade).
-pub trait InboundUpgradeSend: UpgradeInfoSend {
-    /// Equivalent to [`InboundUpgrade::Output`](upgrade::InboundUpgrade::Output).
-    type Output: Send + 'static;
-    /// Equivalent to [`InboundUpgrade::Error`](upgrade::InboundUpgrade::Error).
-    type Error: Send + 'static;
-    /// Equivalent to [`InboundUpgrade::Future`](upgrade::InboundUpgrade::Future).
-    type Future: Future<Output = Result<Self::Output, Self::Error>> + Send + 'static;
-
-    /// Equivalent to [`InboundUpgrade::upgrade_inbound`](upgrade::InboundUpgrade::upgrade_inbound).
+    /// After we have determined that the remote supports one of the protocols we support, this
+    /// method is called to start the handshake.
+    ///
+    /// The `info` is the identifier of the protocol, as produced by `protocol_info`.
     fn upgrade_inbound(self, socket: Stream, info: Self::Info) -> Self::Future;
 }
 
-impl<T, TInfo> InboundUpgradeSend for T
+/// Possible upgrade on an outbound connection or substream.
+pub trait OutboundUpgrade: UpgradeInfo {
+    /// Output after the upgrade has been successfully negotiated and the handshake performed.
+    type Output: Send + 'static;
+    /// Possible error during the handshake.
+    type Error: Send + 'static;
+    /// Future that performs the handshake with the remote.
+    type Future: Future<Output = Result<Self::Output, Self::Error>> + Send + 'static;
+
+    /// After we have determined that the remote supports one of the protocols we support, this
+    /// method is called to start the handshake.
+    ///
+    /// The `info` is the identifier of the protocol, as produced by `protocol_info`.
+    fn upgrade_outbound(self, socket: Stream, info: Self::Info) -> Self::Future;
+}
+
+pub trait IntoIteratorSend {
+    type Item: Send + 'static;
+    type IntoIter: Iterator<Item = Self::Item> + Send + 'static;
+
+    fn into_iter_send(self) -> Self::IntoIter;
+}
+
+impl<I> IntoIteratorSend for I
 where
-    T: upgrade::InboundUpgrade<Stream, Info = TInfo> + UpgradeInfoSend<Info = TInfo>,
-    TInfo: AsRef<str> + Clone + Send + 'static,
-    T::Output: Send + 'static,
-    T::Error: Send + 'static,
-    T::Future: Send + 'static,
+    I: IntoIterator,
+    I::Item: Send + 'static,
+    I::IntoIter: Send + 'static,
 {
-    type Output = T::Output;
-    type Error = T::Error;
-    type Future = T::Future;
+    type Item = I::Item;
+    type IntoIter = I::IntoIter;
 
-    fn upgrade_inbound(self, socket: Stream, info: TInfo) -> Self::Future {
-        upgrade::InboundUpgrade::upgrade_inbound(self, socket, info)
-    }
-}
-
-/// Wraps around a type that implements [`OutboundUpgradeSend`], [`InboundUpgradeSend`], or
-/// both, and implements [`OutboundUpgrade`](upgrade::OutboundUpgrade) and/or
-/// [`InboundUpgrade`](upgrade::InboundUpgrade).
-///
-/// > **Note**: This struct is mostly an implementation detail of the library and normally
-/// >           doesn't need to be used directly.
-pub struct SendWrapper<T>(pub T);
-
-impl<T: UpgradeInfoSend> upgrade::UpgradeInfo for SendWrapper<T> {
-    type Info = T::Info;
-    type InfoIter = T::InfoIter;
-
-    fn protocol_info(&self) -> Self::InfoIter {
-        UpgradeInfoSend::protocol_info(&self.0)
-    }
-}
-
-impl<T: OutboundUpgradeSend> upgrade::OutboundUpgrade<Stream> for SendWrapper<T> {
-    type Output = T::Output;
-    type Error = T::Error;
-    type Future = T::Future;
-
-    fn upgrade_outbound(self, socket: Stream, info: T::Info) -> Self::Future {
-        OutboundUpgradeSend::upgrade_outbound(self.0, socket, info)
-    }
-}
-
-impl<T: InboundUpgradeSend> upgrade::InboundUpgrade<Stream> for SendWrapper<T> {
-    type Output = T::Output;
-    type Error = T::Error;
-    type Future = T::Future;
-
-    fn upgrade_inbound(self, socket: Stream, info: T::Info) -> Self::Future {
-        InboundUpgradeSend::upgrade_inbound(self.0, socket, info)
+    fn into_iter_send(self) -> <Self as IntoIteratorSend>::IntoIter {
+        <Self as IntoIterator>::into_iter(self)
     }
 }

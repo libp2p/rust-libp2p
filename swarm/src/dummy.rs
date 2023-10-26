@@ -3,11 +3,11 @@ use crate::connection::ConnectionId;
 use crate::handler::{
     ConnectionEvent, DialUpgradeError, FullyNegotiatedInbound, FullyNegotiatedOutbound,
 };
+use crate::upgrade::DeniedUpgrade;
 use crate::{
     ConnectionDenied, ConnectionHandlerEvent, StreamUpgradeError, SubstreamProtocol, THandler,
     THandlerInEvent, THandlerOutEvent,
 };
-use libp2p_core::upgrade::DeniedUpgrade;
 use libp2p_core::Endpoint;
 use libp2p_core::Multiaddr;
 use libp2p_identity::PeerId;
