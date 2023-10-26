@@ -1,5 +1,8 @@
 ## 0.44.0 - unreleased
 
+- Remove `handler` field from `ConnectionClosed`.
+  If you need to transfer state from a `ConnectionHandler` to its `NetworkBehaviour` when a connection closes, use `ConnectionHandler::poll_close`.
+  See [PR 4076](https://github.com/libp2p/rust-libp2p/pull/4076).
 - Remove deprecated `PollParameters` from `NetworkBehaviour::poll` function.
   See [PR 4490](https://github.com/libp2p/rust-libp2p/pull/4490).
 - Add `PeerCondition::DisconnectedAndNotDialing` variant, combining pre-existing conditions.

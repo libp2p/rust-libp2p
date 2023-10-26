@@ -157,6 +157,20 @@ pub trait ConnectionHandler: Send + 'static {
         >,
     >;
 
+    /// Gracefully close the [`ConnectionHandler`].
+    ///
+    /// The contract for this function is equivalent to a [`Stream`](futures::Stream).
+    /// When a connection is being shut down, we will first poll this function to completion.
+    /// Following that, the physical connection will be shut down.
+    ///
+    /// This is also called when the shutdown was initiated due to an error on the connection.
+    /// We therefore cannot guarantee that performing IO within here will succeed.
+    ///
+    /// To signal completion, [`Poll::Ready(None)`] should be returned.
+    fn poll_close(&mut self, _: &mut Context<'_>) -> Poll<Option<Self::ToBehaviour>> {
+        Poll::Ready(None)
+    }
+
     /// Adds a closure that turns the input event into something else.
     fn map_in_event<TNewIn, TMap>(self, map: TMap) -> MapInEvent<Self, TNewIn, TMap>
     where
