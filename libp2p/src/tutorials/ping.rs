@@ -373,4 +373,3 @@
 //! [`Transport`]: crate::core::Transport
 //! [`PeerId`]: crate::core::PeerId
 //! [`Swarm`]: crate::swarm::Swarm
-//! [`development_transport`]: crate::development_transport
