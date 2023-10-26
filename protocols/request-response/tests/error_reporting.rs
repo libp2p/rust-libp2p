@@ -1,7 +1,5 @@
 use anyhow::{bail, Result};
-use async_std::channel;
-use async_std::future::timeout;
-use async_std::task::{sleep, spawn};
+use async_std::task::sleep;
 use async_trait::async_trait;
 use futures::prelude::*;
 use libp2p_identity::PeerId;
@@ -12,6 +10,7 @@ use libp2p_swarm_test::SwarmExt;
 use request_response::{
     Codec, InboundFailure, InboundRequestId, OutboundFailure, OutboundRequestId, ResponseChannel,
 };
+use std::pin::pin;
 use std::time::Duration;
 use std::{io, iter};
 
@@ -19,12 +18,13 @@ use std::{io, iter};
 async fn report_outbound_failure_on_read_response() {
     let _ = env_logger::try_init();
 
-    let (peer1_id, mut swarm1) = new_swarm_with_timeout(Duration::from_millis(100));
-    let (peer2_id, mut swarm2) = new_swarm_with_timeout(Duration::from_millis(100));
+    let (peer1_id, mut swarm1) = new_swarm();
+    let (peer2_id, mut swarm2) = new_swarm();
 
     swarm1.listen().await;
     swarm2.connect(&mut swarm1).await;
 
+    // Server
     let swarm1_task = async move {
         let (peer, req_id, action, resp_channel) = wait_request(&mut swarm1).await.unwrap();
         assert_eq!(peer, peer2_id);
@@ -38,10 +38,13 @@ async fn report_outbound_failure_on_read_response() {
         assert_eq!(peer, peer2_id);
         assert_eq!(req_id_done, req_id);
 
-        // Wait a bit for the other side
-        sleep(Duration::from_millis(10)).await;
+        // Keep the connection alive, otherwise swarm2 may receive `ConnectionClosed` instead
+        wait_no_events(&mut swarm1).await;
     };
 
+    // Client
+    //
+    // Expects OutboundFailure::Io failure with `FailOnReadResponse` error
     let swarm2_task = async move {
         let req_id = swarm2
             .behaviour_mut()
@@ -53,7 +56,7 @@ async fn report_outbound_failure_on_read_response() {
 
         let error = match error {
             OutboundFailure::Io(e) => e,
-            e => panic!("Unexpected error {e:?}"),
+            e => panic!("Unexpected error: {e:?}"),
         };
 
         assert_eq!(error.kind(), io::ErrorKind::Other);
@@ -63,42 +66,27 @@ async fn report_outbound_failure_on_read_response() {
         );
     };
 
-    futures::future::join(swarm1_task, swarm2_task).await;
+    let swarm1_task = pin!(swarm1_task);
+    let swarm2_task = pin!(swarm2_task);
+    futures::future::select(swarm1_task, swarm2_task).await;
 }
 
 #[async_std::test]
 async fn report_outbound_failure_on_write_request() {
     let _ = env_logger::try_init();
 
-    let protocols = iter::once((StreamProtocol::new("/test/1"), ProtocolSupport::Full));
-    let cfg = request_response::Config::default();
-
-    let mut swarm1 = Swarm::new_ephemeral(|_| {
-        request_response::Behaviour::<TestCodec>::new(protocols.clone(), cfg.clone())
-    });
-    let peer1_id = *swarm1.local_peer_id();
-
-    let mut swarm2 =
-        Swarm::new_ephemeral(|_| request_response::Behaviour::<TestCodec>::new(protocols, cfg));
+    let (peer1_id, mut swarm1) = new_swarm();
+    let (_peer2_id, mut swarm2) = new_swarm();
 
     swarm1.listen().await;
     swarm2.connect(&mut swarm1).await;
-
-    // On panic `panic_check_rx` will be closed
-    let (panic_check_tx, panic_check_rx) = channel::bounded::<()>(1);
 
     // Server
     //
     // Expects no events because `Event::Request` is produced after `read_request`.
     let swarm1_task = async move {
-        let _panic_check_tx = panic_check_tx;
-
-        loop {
-            match swarm1.select_next_some().await.try_into_behaviour_event() {
-                Ok(ev) => panic!("Peer1: Unexpected event: {ev:?}"),
-                Err(..) => {}
-            }
-        }
+        // Keep the connection alive, otherwise swarm2 may receive `ConnectionClosed` instead
+        wait_no_events(&mut swarm1).await;
     };
 
     // Client
@@ -109,100 +97,54 @@ async fn report_outbound_failure_on_write_request() {
             .behaviour_mut()
             .send_request(&peer1_id, Action::FailOnWriteRequest);
 
-        loop {
-            match swarm2.select_next_some().await.try_into_behaviour_event() {
-                Ok(request_response::Event::OutboundFailure {
-                    peer,
-                    request_id,
-                    error,
-                }) => {
-                    assert_eq!(peer, peer1_id);
-                    assert_eq!(request_id, req_id);
+        let (peer, req_id_done, error) = wait_outbound_failure(&mut swarm2).await.unwrap();
+        assert_eq!(peer, peer1_id);
+        assert_eq!(req_id_done, req_id);
 
-                    let error = match error {
-                        OutboundFailure::Io(e) => e,
-                        e => panic!("Peer2: Unexpected error {e:?}"),
-                    };
+        let error = match error {
+            OutboundFailure::Io(e) => e,
+            e => panic!("Unexpected error: {e:?}"),
+        };
 
-                    assert_eq!(error.kind(), io::ErrorKind::Other);
-                    assert_eq!(
-                        error.into_inner().unwrap().to_string(),
-                        "FailOnWriteRequest"
-                    );
-                    break;
-                }
-                Ok(ev) => panic!("Peer2: Unexpected event: {ev:?}"),
-                Err(..) => {}
-            }
-        }
+        assert_eq!(error.kind(), io::ErrorKind::Other);
+        assert_eq!(
+            error.into_inner().unwrap().to_string(),
+            "FailOnWriteRequest"
+        );
     };
 
-    spawn(swarm1_task);
-    timeout(Duration::from_millis(100), swarm2_task)
-        .await
-        .expect("timed out on waiting FailOnWriteRequest");
-
-    assert!(!panic_check_rx.is_closed(), "swarm1_task panicked");
+    let swarm1_task = pin!(swarm1_task);
+    let swarm2_task = pin!(swarm2_task);
+    futures::future::select(swarm1_task, swarm2_task).await;
 }
 
 #[async_std::test]
 async fn report_outbound_timeout_on_read_response() {
     let _ = env_logger::try_init();
 
-    let protocols = iter::once((StreamProtocol::new("/test/1"), ProtocolSupport::Full));
-    let cfg = request_response::Config::default();
-
-    let mut swarm1 = Swarm::new_ephemeral(|_| {
-        request_response::Behaviour::<TestCodec>::new(protocols.clone(), cfg.clone())
-    });
-    let peer1_id = *swarm1.local_peer_id();
-
-    let mut swarm2 = Swarm::new_ephemeral(|_| {
-        let cfg = cfg.with_request_timeout(Duration::from_millis(100));
-        request_response::Behaviour::<TestCodec>::new(protocols, cfg)
-    });
-    let peer2_id = *swarm2.local_peer_id();
+    // `swarm1` needs to have a bigger timeout to avoid racing
+    let (peer1_id, mut swarm1) = new_swarm_with_timeout(Duration::from_millis(200));
+    let (peer2_id, mut swarm2) = new_swarm_with_timeout(Duration::from_millis(100));
 
     swarm1.listen().await;
     swarm2.connect(&mut swarm1).await;
 
-    // On panic `panic_check_rx` will be closed
-    let (panic_check_tx, panic_check_rx) = channel::bounded::<()>(1);
-
     // Server
     let swarm1_task = async move {
-        let _panic_check_tx = panic_check_tx;
-        let mut req_id = None;
+        let (peer, req_id, action, resp_channel) = wait_request(&mut swarm1).await.unwrap();
+        assert_eq!(peer, peer2_id);
+        assert_eq!(action, Action::TimeoutOnReadResponse);
+        swarm1
+            .behaviour_mut()
+            .send_response(resp_channel, Action::TimeoutOnReadResponse)
+            .unwrap();
 
-        loop {
-            match swarm1.select_next_some().await.try_into_behaviour_event() {
-                Ok(request_response::Event::Message {
-                    peer,
-                    message:
-                        request_response::Message::Request {
-                            request_id,
-                            request,
-                            channel,
-                        },
-                }) => {
-                    assert_eq!(peer, peer2_id);
-                    assert_eq!(request, Action::TimeoutOnReadResponse);
-                    req_id = Some(request_id);
-                    swarm1
-                        .behaviour_mut()
-                        .send_response(channel, Action::TimeoutOnReadResponse)
-                        .unwrap();
-                }
-                Ok(request_response::Event::ResponseSent {
-                    peer, request_id, ..
-                }) => {
-                    assert_eq!(peer, peer2_id);
-                    assert_eq!(req_id, Some(request_id));
-                }
-                Ok(ev) => panic!("Peer1: Unexpected event: {ev:?}"),
-                Err(..) => {}
-            }
-        }
+        let (peer, req_id_done) = wait_response_sent(&mut swarm1).await.unwrap();
+        assert_eq!(peer, peer2_id);
+        assert_eq!(req_id_done, req_id);
+
+        // Keep the connection alive, otherwise swarm2 may receive `ConnectionClosed` instead
+        wait_no_events(&mut swarm1).await;
     };
 
     // Client
@@ -213,65 +155,33 @@ async fn report_outbound_timeout_on_read_response() {
             .behaviour_mut()
             .send_request(&peer1_id, Action::TimeoutOnReadResponse);
 
-        loop {
-            match swarm2.select_next_some().await.try_into_behaviour_event() {
-                Ok(request_response::Event::OutboundFailure {
-                    peer,
-                    request_id,
-                    error,
-                }) => {
-                    assert_eq!(peer, peer1_id);
-                    assert_eq!(request_id, req_id);
-                    assert!(matches!(error, OutboundFailure::Timeout));
-                    break;
-                }
-                Ok(ev) => panic!("Peer2: Unexpected event: {ev:?}"),
-                Err(..) => {}
-            }
-        }
+        let (peer, req_id_done, error) = wait_outbound_failure(&mut swarm2).await.unwrap();
+        assert_eq!(peer, peer1_id);
+        assert_eq!(req_id_done, req_id);
+        assert!(matches!(error, OutboundFailure::Timeout));
     };
 
-    spawn(swarm1_task);
-    timeout(Duration::from_millis(200), swarm2_task)
-        .await
-        .expect("timed out on waiting TimeoutOnReadResponse");
-
-    assert!(!panic_check_rx.is_closed(), "swarm1_task panicked");
+    let swarm1_task = pin!(swarm1_task);
+    let swarm2_task = pin!(swarm2_task);
+    futures::future::select(swarm1_task, swarm2_task).await;
 }
 
 #[async_std::test]
 async fn report_inbound_failure_on_read_request() {
     let _ = env_logger::try_init();
 
-    let protocols = iter::once((StreamProtocol::new("/test/1"), ProtocolSupport::Full));
-    let cfg = request_response::Config::default();
-
-    let mut swarm1 = Swarm::new_ephemeral(|_| {
-        request_response::Behaviour::<TestCodec>::new(protocols.clone(), cfg.clone())
-    });
-    let peer1_id = *swarm1.local_peer_id();
-
-    let mut swarm2 =
-        Swarm::new_ephemeral(|_| request_response::Behaviour::<TestCodec>::new(protocols, cfg));
+    let (peer1_id, mut swarm1) = new_swarm();
+    let (_peer2_id, mut swarm2) = new_swarm();
 
     swarm1.listen().await;
     swarm2.connect(&mut swarm1).await;
-
-    // On panic `panic_check_rx` will be closed
-    let (panic_check_tx, panic_check_rx) = channel::bounded::<()>(1);
 
     // Server
     //
     // Expects no events because `Event::Request` is produced after `read_request`.
     let swarm1_task = async move {
-        let _panic_check_tx = panic_check_tx;
-
-        loop {
-            match swarm1.select_next_some().await.try_into_behaviour_event() {
-                Ok(ev) => panic!("Peer1: Unexpected event: {ev:?}"),
-                Err(..) => {}
-            }
-        }
+        // Keep the connection alive, otherwise swarm2 may receive `ConnectionClosed` instead
+        wait_no_events(&mut swarm1).await;
     };
 
     // Expects io::ErrorKind::UnexpectedEof
@@ -280,324 +190,144 @@ async fn report_inbound_failure_on_read_request() {
             .behaviour_mut()
             .send_request(&peer1_id, Action::FailOnReadRequest);
 
-        loop {
-            match swarm2.select_next_some().await.try_into_behaviour_event() {
-                Ok(request_response::Event::OutboundFailure {
-                    peer,
-                    request_id,
-                    error,
-                }) => {
-                    assert_eq!(peer, peer1_id);
-                    assert_eq!(request_id, req_id);
+        let (peer, req_id_done, error) = wait_outbound_failure(&mut swarm2).await.unwrap();
+        assert_eq!(peer, peer1_id);
+        assert_eq!(req_id_done, req_id);
 
-                    let error = match error {
-                        OutboundFailure::Io(e) => e,
-                        e => panic!("Peer2: Unexpected error {e:?}"),
-                    };
-
-                    assert_eq!(error.kind(), io::ErrorKind::UnexpectedEof);
-                    break;
-                }
-                Ok(ev) => panic!("Peer2: Unexpected event: {ev:?}"),
-                Err(..) => {}
-            }
-        }
+        match error {
+            OutboundFailure::Io(e) if e.kind() == io::ErrorKind::UnexpectedEof => {}
+            e => panic!("Unexpected error: {e:?}"),
+        };
     };
 
-    spawn(swarm1_task);
-    timeout(Duration::from_millis(100), swarm2_task)
-        .await
-        .expect("timed out on waiting FailOnWriteRequest");
-
-    assert!(!panic_check_rx.is_closed(), "swarm1_task panicked");
+    let swarm1_task = pin!(swarm1_task);
+    let swarm2_task = pin!(swarm2_task);
+    futures::future::select(swarm1_task, swarm2_task).await;
 }
 
 #[async_std::test]
 async fn report_inbound_failure_on_write_response() {
     let _ = env_logger::try_init();
 
-    let protocols = iter::once((StreamProtocol::new("/test/1"), ProtocolSupport::Full));
-    let cfg = request_response::Config::default();
-
-    let mut swarm1 = Swarm::new_ephemeral(|_| {
-        request_response::Behaviour::<TestCodec>::new(protocols.clone(), cfg.clone())
-    });
-    let peer1_id = *swarm1.local_peer_id();
-
-    let mut swarm2 =
-        Swarm::new_ephemeral(|_| request_response::Behaviour::<TestCodec>::new(protocols, cfg));
-    let peer2_id = *swarm2.local_peer_id();
+    let (peer1_id, mut swarm1) = new_swarm();
+    let (peer2_id, mut swarm2) = new_swarm();
 
     swarm1.listen().await;
     swarm2.connect(&mut swarm1).await;
-
-    // On panic `panic_check_rx` will be closed
-    let (panic_check_tx, panic_check_rx) = channel::bounded::<()>(1);
 
     // Server
     //
     // Expects OutboundFailure::Io failure with `FailOnWriteResponse` error
     let swarm1_task = async move {
-        let mut req_id = None;
+        let (peer, req_id, action, resp_channel) = wait_request(&mut swarm1).await.unwrap();
+        assert_eq!(peer, peer2_id);
+        assert_eq!(action, Action::FailOnWriteResponse);
+        swarm1
+            .behaviour_mut()
+            .send_response(resp_channel, Action::FailOnWriteResponse)
+            .unwrap();
 
-        loop {
-            match swarm1.select_next_some().await.try_into_behaviour_event() {
-                Ok(request_response::Event::Message {
-                    peer,
-                    message:
-                        request_response::Message::Request {
-                            request_id,
-                            request,
-                            channel,
-                        },
-                }) => {
-                    assert_eq!(peer, peer2_id);
-                    assert_eq!(request, Action::FailOnWriteResponse);
-                    req_id = Some(request_id);
-                    swarm1
-                        .behaviour_mut()
-                        .send_response(channel, Action::FailOnWriteResponse)
-                        .unwrap();
-                }
-                Ok(request_response::Event::InboundFailure {
-                    peer,
-                    request_id,
-                    error,
-                }) => {
-                    assert_eq!(peer, peer2_id);
-                    assert_eq!(req_id, Some(request_id));
+        let (peer, req_id_done, error) = wait_inbound_failure(&mut swarm1).await.unwrap();
+        assert_eq!(peer, peer2_id);
+        assert_eq!(req_id_done, req_id);
 
-                    let error = match error {
-                        InboundFailure::Io(e) => e,
-                        e => panic!("Peer1: Unexpected error {e:?}"),
-                    };
+        let error = match error {
+            InboundFailure::Io(e) => e,
+            e => panic!("Unexpected error: {e:?}"),
+        };
 
-                    assert_eq!(error.kind(), io::ErrorKind::Other);
-                    assert_eq!(
-                        error.into_inner().unwrap().to_string(),
-                        "FailOnWriteResponse"
-                    );
-                    break;
-                }
-                Ok(ev) => panic!("Peer1: Unexpected event: {ev:?}"),
-                Err(..) => {}
-            }
-        }
+        assert_eq!(error.kind(), io::ErrorKind::Other);
+        assert_eq!(
+            error.into_inner().unwrap().to_string(),
+            "FailOnWriteResponse"
+        );
     };
 
     // Client
     //
     // Expects OutboundFailure::ConnectionClosed or io::ErrorKind::UnexpectedEof
     let swarm2_task = async move {
-        let _panic_check_tx = panic_check_tx;
         let req_id = swarm2
             .behaviour_mut()
             .send_request(&peer1_id, Action::FailOnWriteResponse);
 
-        loop {
-            match swarm2.select_next_some().await.try_into_behaviour_event() {
-                Ok(request_response::Event::OutboundFailure {
-                    peer,
-                    request_id,
-                    error,
-                }) => {
-                    assert_eq!(peer, peer1_id);
-                    assert_eq!(request_id, req_id);
+        let (peer, req_id_done, error) = wait_outbound_failure(&mut swarm2).await.unwrap();
+        assert_eq!(peer, peer1_id);
+        assert_eq!(req_id_done, req_id);
 
-                    match error {
-                        OutboundFailure::ConnectionClosed => {
-                            // Connections was closed before `read_response`
-                        }
-                        OutboundFailure::Io(e) => {
-                            assert_eq!(e.kind(), io::ErrorKind::UnexpectedEof);
-                        }
-                        e => panic!("Peer2: Unexpected error {e:?}"),
-                    }
-                }
-                Ok(ev) => panic!("Peer2: Unexpected event: {ev:?}"),
-                Err(..) => {}
+        match error {
+            OutboundFailure::ConnectionClosed => {
+                // ConnectionClosed is allowed here because we mainly test the behavior
+                // of `swarm1_task`.
             }
-        }
+            OutboundFailure::Io(e) if e.kind() == io::ErrorKind::UnexpectedEof => {}
+            e => panic!("Unexpected error: {e:?}"),
+        };
+
+        // Keep alive the task, so only `swarm1_task` can finish
+        wait_no_events(&mut swarm2).await;
     };
 
-    spawn(swarm2_task);
-    timeout(Duration::from_millis(100), swarm1_task)
-        .await
-        .expect("timed out on waiting TimeoutOnWriteResponse");
-
-    assert!(!panic_check_rx.is_closed(), "swarm2_task panicked");
+    let swarm1_task = pin!(swarm1_task);
+    let swarm2_task = pin!(swarm2_task);
+    futures::future::select(swarm1_task, swarm2_task).await;
 }
 
 #[async_std::test]
 async fn report_inbound_timeout_on_write_response() {
     let _ = env_logger::try_init();
 
-    let protocols = iter::once((StreamProtocol::new("/test/1"), ProtocolSupport::Full));
-    let cfg = request_response::Config::default();
-
-    let mut swarm1 = Swarm::new_ephemeral(|_| {
-        let cfg = cfg.clone().with_request_timeout(Duration::from_millis(100));
-        request_response::Behaviour::<TestCodec>::new(protocols.clone(), cfg.clone())
-    });
-    let peer1_id = *swarm1.local_peer_id();
-
-    let mut swarm2 =
-        Swarm::new_ephemeral(|_| request_response::Behaviour::<TestCodec>::new(protocols, cfg));
-    let peer2_id = *swarm2.local_peer_id();
+    // `swarm2` needs to have a bigger timeout to avoid racing
+    let (peer1_id, mut swarm1) = new_swarm_with_timeout(Duration::from_millis(100));
+    let (peer2_id, mut swarm2) = new_swarm_with_timeout(Duration::from_millis(200));
 
     swarm1.listen().await;
     swarm2.connect(&mut swarm1).await;
 
-    // On panic `panic_check_rx` will be closed
-    let (panic_check_tx, panic_check_rx) = channel::bounded::<()>(1);
-
+    // Server
+    //
     // Expects InboundFailure::Timeout
     let swarm1_task = async move {
-        let mut req_id = None;
+        let (peer, req_id, action, resp_channel) = wait_request(&mut swarm1).await.unwrap();
+        assert_eq!(peer, peer2_id);
+        assert_eq!(action, Action::TimeoutOnWriteResponse);
+        swarm1
+            .behaviour_mut()
+            .send_response(resp_channel, Action::TimeoutOnWriteResponse)
+            .unwrap();
 
-        loop {
-            match swarm1.select_next_some().await.try_into_behaviour_event() {
-                Ok(request_response::Event::Message {
-                    peer,
-                    message:
-                        request_response::Message::Request {
-                            request_id,
-                            request,
-                            channel,
-                        },
-                }) => {
-                    assert_eq!(peer, peer2_id);
-                    assert_eq!(request, Action::TimeoutOnWriteResponse);
-                    req_id = Some(request_id);
-                    swarm1
-                        .behaviour_mut()
-                        .send_response(channel, Action::TimeoutOnWriteResponse)
-                        .unwrap();
-                }
-                Ok(request_response::Event::InboundFailure {
-                    peer,
-                    request_id,
-                    error,
-                }) => {
-                    assert_eq!(peer, peer2_id);
-                    assert_eq!(req_id, Some(request_id));
-                    assert!(matches!(error, InboundFailure::Timeout));
-                    break;
-                }
-                Ok(ev) => panic!("Peer1: Unexpected event: {ev:?}"),
-                Err(..) => {}
-            }
-        }
+        let (peer, req_id_done, error) = wait_inbound_failure(&mut swarm1).await.unwrap();
+        assert_eq!(peer, peer2_id);
+        assert_eq!(req_id_done, req_id);
+        assert!(matches!(error, InboundFailure::Timeout));
     };
 
     // Expects OutboundFailure::ConnectionClosed or io::ErrorKind::UnexpectedEof
     let swarm2_task = async move {
-        let _panic_check_tx = panic_check_tx;
         let req_id = swarm2
             .behaviour_mut()
             .send_request(&peer1_id, Action::TimeoutOnWriteResponse);
 
-        loop {
-            match swarm2.select_next_some().await.try_into_behaviour_event() {
-                Ok(request_response::Event::OutboundFailure {
-                    peer,
-                    request_id,
-                    error,
-                }) => {
-                    assert_eq!(peer, peer1_id);
-                    assert_eq!(request_id, req_id);
+        let (peer, req_id_done, error) = wait_outbound_failure(&mut swarm2).await.unwrap();
+        assert_eq!(peer, peer1_id);
+        assert_eq!(req_id_done, req_id);
 
-                    match error {
-                        OutboundFailure::ConnectionClosed => {
-                            // Connections was closed before `read_response`
-                        }
-                        OutboundFailure::Io(e) => {
-                            assert_eq!(e.kind(), io::ErrorKind::UnexpectedEof)
-                        }
-                        e => panic!("Peer2: Unexpected error {e:?}"),
-                    }
-                }
-                Ok(ev) => panic!("Peer2: Unexpected event: {ev:?}"),
-                Err(..) => {}
+        match error {
+            OutboundFailure::ConnectionClosed => {
+                // ConnectionClosed is allowed here because we mainly test the behavior
+                // of `swarm1_task`.
             }
+            OutboundFailure::Io(e) if e.kind() == io::ErrorKind::UnexpectedEof => {}
+            e => panic!("Unexpected error: {e:?}"),
         }
+
+        // Keep alive the task, so only `swarm1_task` can finish
+        wait_no_events(&mut swarm2).await;
     };
 
-    spawn(swarm2_task);
-    timeout(Duration::from_millis(200), swarm1_task)
-        .await
-        .expect("timed out on waiting TimeoutOnWriteResponse");
-
-    assert!(!panic_check_rx.is_closed(), "swarm2_task panicked");
-}
-
-fn new_swarm_with_timeout(
-    timeout: Duration,
-) -> (PeerId, Swarm<request_response::Behaviour<TestCodec>>) {
-    let protocols = iter::once((StreamProtocol::new("/test/1"), ProtocolSupport::Full));
-    let cfg = request_response::Config::default().with_request_timeout(timeout);
-
-    let swarm =
-        Swarm::new_ephemeral(|_| request_response::Behaviour::<TestCodec>::new(protocols, cfg));
-    let peed_id = *swarm.local_peer_id();
-
-    (peed_id, swarm)
-}
-
-async fn wait_request(
-    swarm: &mut Swarm<request_response::Behaviour<TestCodec>>,
-) -> Result<(PeerId, InboundRequestId, Action, ResponseChannel<Action>)> {
-    loop {
-        match swarm.select_next_some().await.try_into_behaviour_event() {
-            Ok(request_response::Event::Message {
-                peer,
-                message:
-                    request_response::Message::Request {
-                        request_id,
-                        request,
-                        channel,
-                    },
-            }) => {
-                return Ok((peer, request_id, request, channel));
-            }
-            Ok(ev) => bail!("Unexpected event: {ev:?}"),
-            Err(..) => {}
-        }
-    }
-}
-
-async fn wait_response_sent(
-    swarm: &mut Swarm<request_response::Behaviour<TestCodec>>,
-) -> Result<(PeerId, InboundRequestId)> {
-    loop {
-        match swarm.select_next_some().await.try_into_behaviour_event() {
-            Ok(request_response::Event::ResponseSent {
-                peer, request_id, ..
-            }) => {
-                return Ok((peer, request_id));
-            }
-            Ok(ev) => bail!("Unexpected event: {ev:?}"),
-            Err(..) => {}
-        }
-    }
-}
-
-async fn wait_outbound_failure(
-    swarm: &mut Swarm<request_response::Behaviour<TestCodec>>,
-) -> Result<(PeerId, OutboundRequestId, OutboundFailure)> {
-    loop {
-        match swarm.select_next_some().await.try_into_behaviour_event() {
-            Ok(request_response::Event::OutboundFailure {
-                peer,
-                request_id,
-                error,
-            }) => {
-                return Ok((peer, request_id, error));
-            }
-            Ok(ev) => bail!("Unexpected event: {ev:?}"),
-            Err(..) => {}
-        }
-    }
+    let swarm1_task = pin!(swarm1_task);
+    let swarm2_task = pin!(swarm2_task);
+    futures::future::select(swarm1_task, swarm2_task).await;
 }
 
 #[derive(Clone, Default)]
@@ -743,6 +473,106 @@ impl Codec for TestCodec {
                 io.write_all(&bytes).await?;
                 Ok(())
             }
+        }
+    }
+}
+
+fn new_swarm_with_timeout(
+    timeout: Duration,
+) -> (PeerId, Swarm<request_response::Behaviour<TestCodec>>) {
+    let protocols = iter::once((StreamProtocol::new("/test/1"), ProtocolSupport::Full));
+    let cfg = request_response::Config::default().with_request_timeout(timeout);
+
+    let swarm =
+        Swarm::new_ephemeral(|_| request_response::Behaviour::<TestCodec>::new(protocols, cfg));
+    let peed_id = *swarm.local_peer_id();
+
+    (peed_id, swarm)
+}
+
+fn new_swarm() -> (PeerId, Swarm<request_response::Behaviour<TestCodec>>) {
+    new_swarm_with_timeout(Duration::from_millis(100))
+}
+
+async fn wait_no_events(swarm: &mut Swarm<request_response::Behaviour<TestCodec>>) {
+    loop {
+        match swarm.select_next_some().await.try_into_behaviour_event() {
+            Ok(ev) => panic!("Unexpected event: {ev:?}"),
+            Err(..) => {}
+        }
+    }
+}
+
+async fn wait_request(
+    swarm: &mut Swarm<request_response::Behaviour<TestCodec>>,
+) -> Result<(PeerId, InboundRequestId, Action, ResponseChannel<Action>)> {
+    loop {
+        match swarm.select_next_some().await.try_into_behaviour_event() {
+            Ok(request_response::Event::Message {
+                peer,
+                message:
+                    request_response::Message::Request {
+                        request_id,
+                        request,
+                        channel,
+                    },
+            }) => {
+                return Ok((peer, request_id, request, channel));
+            }
+            Ok(ev) => bail!("Unexpected event: {ev:?}"),
+            Err(..) => {}
+        }
+    }
+}
+
+async fn wait_response_sent(
+    swarm: &mut Swarm<request_response::Behaviour<TestCodec>>,
+) -> Result<(PeerId, InboundRequestId)> {
+    loop {
+        match swarm.select_next_some().await.try_into_behaviour_event() {
+            Ok(request_response::Event::ResponseSent {
+                peer, request_id, ..
+            }) => {
+                return Ok((peer, request_id));
+            }
+            Ok(ev) => bail!("Unexpected event: {ev:?}"),
+            Err(..) => {}
+        }
+    }
+}
+
+async fn wait_inbound_failure(
+    swarm: &mut Swarm<request_response::Behaviour<TestCodec>>,
+) -> Result<(PeerId, InboundRequestId, InboundFailure)> {
+    loop {
+        match swarm.select_next_some().await.try_into_behaviour_event() {
+            Ok(request_response::Event::InboundFailure {
+                peer,
+                request_id,
+                error,
+            }) => {
+                return Ok((peer, request_id, error));
+            }
+            Ok(ev) => bail!("Unexpected event: {ev:?}"),
+            Err(..) => {}
+        }
+    }
+}
+
+async fn wait_outbound_failure(
+    swarm: &mut Swarm<request_response::Behaviour<TestCodec>>,
+) -> Result<(PeerId, OutboundRequestId, OutboundFailure)> {
+    loop {
+        match swarm.select_next_some().await.try_into_behaviour_event() {
+            Ok(request_response::Event::OutboundFailure {
+                peer,
+                request_id,
+                error,
+            }) => {
+                return Ok((peer, request_id, error));
+            }
+            Ok(ev) => bail!("Unexpected event: {ev:?}"),
+            Err(..) => {}
         }
     }
 }
