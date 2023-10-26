@@ -54,7 +54,6 @@
 //! [noise]: http://noiseprotocol.org/
 
 #![cfg_attr(docsrs, feature(doc_cfg, doc_auto_cfg))]
-#![allow(deprecated)] // Temporarily until we remove deprecated items.
 
 mod io;
 mod protocol;
