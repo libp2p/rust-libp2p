@@ -126,8 +126,20 @@ pub trait OutboundUpgrade<C>: UpgradeInfo {
     fn upgrade_outbound(self, socket: C, info: Self::Info) -> Self::Future;
 }
 
+/// Common trait for upgrades that can be applied on inbound connection, outbound connection,
+/// or both.
+pub trait ConnectionUpgradeInfo {
+    /// Opaque type representing a negotiable protocol.
+    type Info: AsRef<str> + Clone;
+    /// Iterator returned by `protocol_info`.
+    type InfoIter: IntoIterator<Item = Self::Info>;
+
+    /// Returns the list of protocols that are supported. Used during the negotiation process.
+    fn protocol_info(&self) -> Self::InfoIter;
+}
+
 /// Possible upgrade on an inbound connection
-pub trait InboundConnectionUpgrade<T>: UpgradeInfo {
+pub trait InboundConnectionUpgrade<T>: ConnectionUpgradeInfo {
     /// Output after the upgrade has been successfully negotiated and the handshake performed.
     type Output;
     /// Possible error during the handshake.
@@ -143,7 +155,7 @@ pub trait InboundConnectionUpgrade<T>: UpgradeInfo {
 }
 
 /// Possible upgrade on an outbound connection
-pub trait OutboundConnectionUpgrade<T>: UpgradeInfo {
+pub trait OutboundConnectionUpgrade<T>: ConnectionUpgradeInfo {
     /// Output after the upgrade has been successfully negotiated and the handshake performed.
     type Output;
     /// Possible error during the handshake.

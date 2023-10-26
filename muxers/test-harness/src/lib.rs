@@ -3,8 +3,10 @@ use futures::{future, AsyncRead, AsyncWrite};
 use futures::{AsyncReadExt, Stream};
 use futures::{AsyncWriteExt, StreamExt};
 use libp2p_core::muxing::StreamMuxerExt;
-use libp2p_core::upgrade::{InboundConnectionUpgrade, OutboundConnectionUpgrade};
-use libp2p_core::{StreamMuxer, UpgradeInfo};
+use libp2p_core::upgrade::{
+    ConnectionUpgradeInfo, InboundConnectionUpgrade, OutboundConnectionUpgrade,
+};
+use libp2p_core::StreamMuxer;
 use std::future::Future;
 use std::pin::Pin;
 use std::task::{Context, Poll};
@@ -18,8 +20,8 @@ where
         + Send
         + 'static
         + Default,
-    <MC as UpgradeInfo>::Info: Send,
-    <<MC as UpgradeInfo>::InfoIter as IntoIterator>::IntoIter: Send,
+    <MC as ConnectionUpgradeInfo>::Info: Send,
+    <<MC as ConnectionUpgradeInfo>::InfoIter as IntoIterator>::IntoIter: Send,
     <MC as InboundConnectionUpgrade<futures_ringbuf::Endpoint>>::Future: Send,
     <MC as OutboundConnectionUpgrade<futures_ringbuf::Endpoint>>::Future: Send,
     E: std::error::Error + Send + Sync + 'static,

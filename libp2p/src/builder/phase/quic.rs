@@ -2,12 +2,14 @@ use super::*;
 use crate::SwarmBuilder;
 #[cfg(all(not(target_arch = "wasm32"), feature = "websocket"))]
 use libp2p_core::muxing::StreamMuxer;
-use libp2p_core::upgrade::{InboundConnectionUpgrade, OutboundConnectionUpgrade};
+use libp2p_core::upgrade::{
+    ConnectionUpgradeInfo, InboundConnectionUpgrade, OutboundConnectionUpgrade,
+};
 #[cfg(any(
     feature = "relay",
     all(not(target_arch = "wasm32"), feature = "websocket")
 ))]
-use libp2p_core::{InboundUpgrade, Negotiated, OutboundUpgrade, UpgradeInfo};
+use libp2p_core::Negotiated;
 use std::{marker::PhantomData, sync::Arc};
 
 pub struct QuicPhase<T> {
@@ -94,8 +96,8 @@ impl<Provider, T: AuthenticatedMultiplexedTransport> SwarmBuilder<Provider, Quic
         SecUpgrade::Upgrade: InboundConnectionUpgrade<Negotiated<libp2p_relay::client::Connection>, Output = (libp2p_identity::PeerId, SecStream), Error = SecError> + OutboundConnectionUpgrade<Negotiated<libp2p_relay::client::Connection>, Output = (libp2p_identity::PeerId, SecStream), Error = SecError> + Clone + Send + 'static,
     <SecUpgrade::Upgrade as InboundConnectionUpgrade<Negotiated<libp2p_relay::client::Connection>>>::Future: Send,
     <SecUpgrade::Upgrade as OutboundConnectionUpgrade<Negotiated<libp2p_relay::client::Connection>>>::Future: Send,
-    <<<SecUpgrade as IntoSecurityUpgrade<libp2p_relay::client::Connection>>::Upgrade as UpgradeInfo>::InfoIter as IntoIterator>::IntoIter: Send,
-    <<SecUpgrade as IntoSecurityUpgrade<libp2p_relay::client::Connection>>::Upgrade as UpgradeInfo>::Info: Send,
+    <<<SecUpgrade as IntoSecurityUpgrade<libp2p_relay::client::Connection>>::Upgrade as ConnectionUpgradeInfo>::InfoIter as IntoIterator>::IntoIter: Send,
+    <<SecUpgrade as IntoSecurityUpgrade<libp2p_relay::client::Connection>>::Upgrade as ConnectionUpgradeInfo>::Info: Send,
 
         MuxStream: libp2p_core::muxing::StreamMuxer + Send + 'static,
         MuxStream::Substream: Send + 'static,
@@ -105,8 +107,8 @@ impl<Provider, T: AuthenticatedMultiplexedTransport> SwarmBuilder<Provider, Quic
     <MuxUpgrade::Upgrade as InboundConnectionUpgrade<Negotiated<SecStream>>>::Future: Send,
     <MuxUpgrade::Upgrade as OutboundConnectionUpgrade<Negotiated<SecStream>>>::Future: Send,
         MuxError: std::error::Error + Send + Sync + 'static,
-    <<<MuxUpgrade as IntoMultiplexerUpgrade<SecStream>>::Upgrade as UpgradeInfo>::InfoIter as IntoIterator>::IntoIter: Send,
-    <<MuxUpgrade as IntoMultiplexerUpgrade<SecStream>>::Upgrade as UpgradeInfo>::Info: Send,
+    <<<MuxUpgrade as IntoMultiplexerUpgrade<SecStream>>::Upgrade as ConnectionUpgradeInfo>::InfoIter as IntoIterator>::IntoIter: Send,
+    <<MuxUpgrade as IntoMultiplexerUpgrade<SecStream>>::Upgrade as ConnectionUpgradeInfo>::Info: Send,
     {
         self.without_quic()
             .without_any_other_transports()
@@ -211,8 +213,8 @@ macro_rules! impl_quic_phase_with_websocket {
                 SecUpgrade::Upgrade: InboundConnectionUpgrade<Negotiated<$websocketStream>, Output = (libp2p_identity::PeerId, SecStream), Error = SecError> + OutboundConnectionUpgrade<Negotiated<$websocketStream>, Output = (libp2p_identity::PeerId, SecStream), Error = SecError> + Clone + Send + 'static,
             <SecUpgrade::Upgrade as InboundConnectionUpgrade<Negotiated<$websocketStream>>>::Future: Send,
             <SecUpgrade::Upgrade as OutboundConnectionUpgrade<Negotiated<$websocketStream>>>::Future: Send,
-            <<<SecUpgrade as IntoSecurityUpgrade<$websocketStream>>::Upgrade as UpgradeInfo>::InfoIter as IntoIterator>::IntoIter: Send,
-            <<SecUpgrade as IntoSecurityUpgrade<$websocketStream>>::Upgrade as UpgradeInfo>::Info: Send,
+            <<<SecUpgrade as IntoSecurityUpgrade<$websocketStream>>::Upgrade as ConnectionUpgradeInfo>::InfoIter as IntoIterator>::IntoIter: Send,
+            <<SecUpgrade as IntoSecurityUpgrade<$websocketStream>>::Upgrade as ConnectionUpgradeInfo>::Info: Send,
 
                 MuxStream: StreamMuxer + Send + 'static,
                 MuxStream::Substream: Send + 'static,
@@ -222,8 +224,8 @@ macro_rules! impl_quic_phase_with_websocket {
                 <MuxUpgrade::Upgrade as InboundConnectionUpgrade<Negotiated<SecStream>>>::Future: Send,
                 <MuxUpgrade::Upgrade as OutboundConnectionUpgrade<Negotiated<SecStream>>>::Future: Send,
                     MuxError: std::error::Error + Send + Sync + 'static,
-                <<<MuxUpgrade as IntoMultiplexerUpgrade<SecStream>>::Upgrade as UpgradeInfo>::InfoIter as IntoIterator>::IntoIter: Send,
-                <<MuxUpgrade as IntoMultiplexerUpgrade<SecStream>>::Upgrade as UpgradeInfo>::Info: Send,
+                <<<MuxUpgrade as IntoMultiplexerUpgrade<SecStream>>::Upgrade as ConnectionUpgradeInfo>::InfoIter as IntoIterator>::IntoIter: Send,
+                <<MuxUpgrade as IntoMultiplexerUpgrade<SecStream>>::Upgrade as ConnectionUpgradeInfo>::Info: Send,
             {
                 self.without_quic()
                     .without_any_other_transports()

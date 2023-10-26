@@ -24,7 +24,9 @@
 
 use futures::{future, prelude::*, ready};
 use libp2p_core::muxing::{StreamMuxer, StreamMuxerEvent};
-use libp2p_core::upgrade::{InboundConnectionUpgrade, OutboundConnectionUpgrade, UpgradeInfo};
+use libp2p_core::upgrade::{
+    ConnectionUpgradeInfo, InboundConnectionUpgrade, OutboundConnectionUpgrade,
+};
 use std::collections::VecDeque;
 use std::io::{IoSlice, IoSliceMut};
 use std::task::Waker;
@@ -302,7 +304,7 @@ impl Default for Config {
     }
 }
 
-impl UpgradeInfo for Config {
+impl ConnectionUpgradeInfo for Config {
     type Info = &'static str;
     type InfoIter = iter::Once<Self::Info>;
 

@@ -19,8 +19,9 @@
 // DEALINGS IN THE SOFTWARE.
 
 use futures::{AsyncRead, AsyncWrite, AsyncWriteExt};
-use libp2p_core::upgrade::{InboundConnectionUpgrade, OutboundConnectionUpgrade};
-use libp2p_core::UpgradeInfo;
+use libp2p_core::upgrade::{
+    ConnectionUpgradeInfo, InboundConnectionUpgrade, OutboundConnectionUpgrade,
+};
 use libp2p_identity as identity;
 use libp2p_identity::PeerId;
 use libp2p_noise as noise;

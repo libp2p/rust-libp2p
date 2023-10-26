@@ -23,7 +23,9 @@ use either::Either;
 use futures::future::MapOk;
 use futures::{future, TryFutureExt};
 use libp2p_core::either::EitherFuture;
-use libp2p_core::upgrade::{InboundConnectionUpgrade, OutboundConnectionUpgrade, UpgradeInfo};
+use libp2p_core::upgrade::{
+    ConnectionUpgradeInfo, InboundConnectionUpgrade, OutboundConnectionUpgrade,
+};
 use libp2p_identity::PeerId;
 use std::iter::{Chain, Map};
 
@@ -43,10 +45,10 @@ impl<A, B> SelectSecurityUpgrade<A, B> {
     }
 }
 
-impl<A, B> UpgradeInfo for SelectSecurityUpgrade<A, B>
+impl<A, B> ConnectionUpgradeInfo for SelectSecurityUpgrade<A, B>
 where
-    A: UpgradeInfo,
-    B: UpgradeInfo,
+    A: ConnectionUpgradeInfo,
+    B: ConnectionUpgradeInfo,
 {
     type Info = Either<A::Info, B::Info>;
     type InfoIter = Chain<

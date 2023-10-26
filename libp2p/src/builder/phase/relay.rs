@@ -2,11 +2,13 @@ use std::marker::PhantomData;
 
 #[cfg(feature = "relay")]
 use libp2p_core::muxing::StreamMuxerBox;
-use libp2p_core::upgrade::{InboundConnectionUpgrade, OutboundConnectionUpgrade};
+use libp2p_core::upgrade::{
+    ConnectionUpgradeInfo, InboundConnectionUpgrade, OutboundConnectionUpgrade,
+};
 #[cfg(feature = "relay")]
 use libp2p_core::Transport;
 #[cfg(any(feature = "relay", feature = "websocket"))]
-use libp2p_core::{InboundUpgrade, Negotiated, OutboundUpgrade, StreamMuxer, UpgradeInfo};
+use libp2p_core::{Negotiated, StreamMuxer};
 #[cfg(feature = "relay")]
 use libp2p_identity::PeerId;
 
@@ -63,8 +65,8 @@ impl<Provider, T: AuthenticatedMultiplexedTransport> SwarmBuilder<Provider, Rela
         SecUpgrade::Upgrade: InboundConnectionUpgrade<Negotiated<libp2p_relay::client::Connection>, Output = (PeerId, SecStream), Error = SecError> + OutboundConnectionUpgrade<Negotiated<libp2p_relay::client::Connection>, Output = (PeerId, SecStream), Error = SecError> + Clone + Send + 'static,
     <SecUpgrade::Upgrade as InboundConnectionUpgrade<Negotiated<libp2p_relay::client::Connection>>>::Future: Send,
     <SecUpgrade::Upgrade as OutboundConnectionUpgrade<Negotiated<libp2p_relay::client::Connection>>>::Future: Send,
-    <<<SecUpgrade as IntoSecurityUpgrade<libp2p_relay::client::Connection>>::Upgrade as UpgradeInfo>::InfoIter as IntoIterator>::IntoIter: Send,
-    <<SecUpgrade as IntoSecurityUpgrade<libp2p_relay::client::Connection>>::Upgrade as UpgradeInfo>::Info: Send,
+    <<<SecUpgrade as IntoSecurityUpgrade<libp2p_relay::client::Connection>>::Upgrade as ConnectionUpgradeInfo>::InfoIter as IntoIterator>::IntoIter: Send,
+    <<SecUpgrade as IntoSecurityUpgrade<libp2p_relay::client::Connection>>::Upgrade as ConnectionUpgradeInfo>::Info: Send,
 
         MuxStream: StreamMuxer + Send + 'static,
         MuxStream::Substream: Send + 'static,
@@ -74,8 +76,8 @@ impl<Provider, T: AuthenticatedMultiplexedTransport> SwarmBuilder<Provider, Rela
     <MuxUpgrade::Upgrade as InboundConnectionUpgrade<Negotiated<SecStream>>>::Future: Send,
     <MuxUpgrade::Upgrade as OutboundConnectionUpgrade<Negotiated<SecStream>>>::Future: Send,
         MuxError: std::error::Error + Send + Sync + 'static,
-    <<<MuxUpgrade as IntoMultiplexerUpgrade<SecStream>>::Upgrade as UpgradeInfo>::InfoIter as IntoIterator>::IntoIter: Send,
-    <<MuxUpgrade as IntoMultiplexerUpgrade<SecStream>>::Upgrade as UpgradeInfo>::Info: Send,
+    <<<MuxUpgrade as IntoMultiplexerUpgrade<SecStream>>::Upgrade as ConnectionUpgradeInfo>::InfoIter as IntoIterator>::IntoIter: Send,
+    <<MuxUpgrade as IntoMultiplexerUpgrade<SecStream>>::Upgrade as ConnectionUpgradeInfo>::Info: Send,
     {
         let (relay_transport, relay_behaviour) =
             libp2p_relay::client::new(self.keypair.public().to_peer_id());
