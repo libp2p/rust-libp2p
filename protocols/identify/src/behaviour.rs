@@ -222,7 +222,6 @@ impl NetworkBehaviour for Behaviour {
         remote_addr: &Multiaddr,
     ) -> Result<THandler<Self>, ConnectionDenied> {
         Ok(Handler::new(
-            self.config.initial_delay,
             self.config.interval,
             peer,
             self.config.local_public_key.clone(),
@@ -241,7 +240,6 @@ impl NetworkBehaviour for Behaviour {
         _: Endpoint,
     ) -> Result<THandler<Self>, ConnectionDenied> {
         Ok(Handler::new(
-            self.config.initial_delay,
             self.config.interval,
             peer,
             self.config.local_public_key.clone(),
