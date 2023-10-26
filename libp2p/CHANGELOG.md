@@ -5,6 +5,9 @@
 - Remove deprecated `libp2p-wasm-ext`.
   Users should use `libp2p-websocket-websys` instead.
   See [PR 4694](https://github.com/libp2p/rust-libp2p/pull/4694).
+- Remove deprecated `libp2p-deflate`.
+  See [issue 4522](https://github.com/libp2p/rust-libp2p/issues/4522) for details.
+  See [PR 4729](https://github.com/libp2p/rust-libp2p/pull/4729).
 - Remove deprecated `development_transport`.
   Use `libp2p::SwarmBuilder` instead.
   See [PR 4732](https://github.com/libp2p/rust-libp2p/pull/4732).
