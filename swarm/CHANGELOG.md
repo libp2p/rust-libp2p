@@ -17,7 +17,7 @@
 - Log `PeerId` of `Swarm` even when constructed with new `SwarmBuilder`.
   See [PR 4671](https://github.com/libp2p/rust-libp2p/pull/4671).
 - Remove deprecated symbols.
-  See [PR XXXX](https://github.com/libp2p/rust-libp2p/pull/XXXX).
+  See [PR 4737](https://github.com/libp2p/rust-libp2p/pull/4737).
 
 ## 0.43.6
 
