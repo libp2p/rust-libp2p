@@ -24,8 +24,7 @@ async fn report_outbound_failure_on_read_response() {
     swarm1.listen().await;
     swarm2.connect(&mut swarm1).await;
 
-    // Server
-    let swarm1_task = async move {
+    let server_task = async move {
         let (peer, req_id, action, resp_channel) = wait_request(&mut swarm1).await.unwrap();
         assert_eq!(peer, peer2_id);
         assert_eq!(action, Action::FailOnReadResponse);
@@ -42,10 +41,8 @@ async fn report_outbound_failure_on_read_response() {
         wait_no_events(&mut swarm1).await;
     };
 
-    // Client
-    //
     // Expects OutboundFailure::Io failure with `FailOnReadResponse` error
-    let swarm2_task = async move {
+    let client_task = async move {
         let req_id = swarm2
             .behaviour_mut()
             .send_request(&peer1_id, Action::FailOnReadResponse);
@@ -66,9 +63,9 @@ async fn report_outbound_failure_on_read_response() {
         );
     };
 
-    let swarm1_task = pin!(swarm1_task);
-    let swarm2_task = pin!(swarm2_task);
-    futures::future::select(swarm1_task, swarm2_task).await;
+    let server_task = pin!(server_task);
+    let client_task = pin!(client_task);
+    futures::future::select(server_task, client_task).await;
 }
 
 #[async_std::test]
@@ -81,18 +78,12 @@ async fn report_outbound_failure_on_write_request() {
     swarm1.listen().await;
     swarm2.connect(&mut swarm1).await;
 
-    // Server
-    //
     // Expects no events because `Event::Request` is produced after `read_request`.
-    let swarm1_task = async move {
-        // Keep the connection alive, otherwise swarm2 may receive `ConnectionClosed` instead
-        wait_no_events(&mut swarm1).await;
-    };
+    // Keep the connection alive, otherwise swarm2 may receive `ConnectionClosed` instead.
+    let server_task = wait_no_events(&mut swarm1);
 
-    // Client
-    //
     // Expects OutboundFailure::Io failure with `FailOnWriteRequest` error.
-    let swarm2_task = async move {
+    let client_task = async move {
         let req_id = swarm2
             .behaviour_mut()
             .send_request(&peer1_id, Action::FailOnWriteRequest);
@@ -113,9 +104,9 @@ async fn report_outbound_failure_on_write_request() {
         );
     };
 
-    let swarm1_task = pin!(swarm1_task);
-    let swarm2_task = pin!(swarm2_task);
-    futures::future::select(swarm1_task, swarm2_task).await;
+    let server_task = pin!(server_task);
+    let client_task = pin!(client_task);
+    futures::future::select(server_task, client_task).await;
 }
 
 #[async_std::test]
@@ -129,8 +120,7 @@ async fn report_outbound_timeout_on_read_response() {
     swarm1.listen().await;
     swarm2.connect(&mut swarm1).await;
 
-    // Server
-    let swarm1_task = async move {
+    let server_task = async move {
         let (peer, req_id, action, resp_channel) = wait_request(&mut swarm1).await.unwrap();
         assert_eq!(peer, peer2_id);
         assert_eq!(action, Action::TimeoutOnReadResponse);
@@ -147,10 +137,8 @@ async fn report_outbound_timeout_on_read_response() {
         wait_no_events(&mut swarm1).await;
     };
 
-    // Client
-    //
     // Expects OutboundFailure::Timeout
-    let swarm2_task = async move {
+    let client_task = async move {
         let req_id = swarm2
             .behaviour_mut()
             .send_request(&peer1_id, Action::TimeoutOnReadResponse);
@@ -161,9 +149,9 @@ async fn report_outbound_timeout_on_read_response() {
         assert!(matches!(error, OutboundFailure::Timeout));
     };
 
-    let swarm1_task = pin!(swarm1_task);
-    let swarm2_task = pin!(swarm2_task);
-    futures::future::select(swarm1_task, swarm2_task).await;
+    let server_task = pin!(server_task);
+    let client_task = pin!(client_task);
+    futures::future::select(server_task, client_task).await;
 }
 
 #[async_std::test]
@@ -176,16 +164,12 @@ async fn report_inbound_failure_on_read_request() {
     swarm1.listen().await;
     swarm2.connect(&mut swarm1).await;
 
-    // Server
-    //
     // Expects no events because `Event::Request` is produced after `read_request`.
-    let swarm1_task = async move {
-        // Keep the connection alive, otherwise swarm2 may receive `ConnectionClosed` instead
-        wait_no_events(&mut swarm1).await;
-    };
+    // Keep the connection alive, otherwise swarm2 may receive `ConnectionClosed` instead.
+    let server_task = wait_no_events(&mut swarm1);
 
     // Expects io::ErrorKind::UnexpectedEof
-    let swarm2_task = async move {
+    let client_task = async move {
         let req_id = swarm2
             .behaviour_mut()
             .send_request(&peer1_id, Action::FailOnReadRequest);
@@ -200,9 +184,9 @@ async fn report_inbound_failure_on_read_request() {
         };
     };
 
-    let swarm1_task = pin!(swarm1_task);
-    let swarm2_task = pin!(swarm2_task);
-    futures::future::select(swarm1_task, swarm2_task).await;
+    let server_task = pin!(server_task);
+    let client_task = pin!(client_task);
+    futures::future::select(server_task, client_task).await;
 }
 
 #[async_std::test]
@@ -215,10 +199,8 @@ async fn report_inbound_failure_on_write_response() {
     swarm1.listen().await;
     swarm2.connect(&mut swarm1).await;
 
-    // Server
-    //
     // Expects OutboundFailure::Io failure with `FailOnWriteResponse` error
-    let swarm1_task = async move {
+    let server_task = async move {
         let (peer, req_id, action, resp_channel) = wait_request(&mut swarm1).await.unwrap();
         assert_eq!(peer, peer2_id);
         assert_eq!(action, Action::FailOnWriteResponse);
@@ -243,10 +225,8 @@ async fn report_inbound_failure_on_write_response() {
         );
     };
 
-    // Client
-    //
     // Expects OutboundFailure::ConnectionClosed or io::ErrorKind::UnexpectedEof
-    let swarm2_task = async move {
+    let client_task = async move {
         let req_id = swarm2
             .behaviour_mut()
             .send_request(&peer1_id, Action::FailOnWriteResponse);
@@ -258,19 +238,19 @@ async fn report_inbound_failure_on_write_response() {
         match error {
             OutboundFailure::ConnectionClosed => {
                 // ConnectionClosed is allowed here because we mainly test the behavior
-                // of `swarm1_task`.
+                // of `server_task`.
             }
             OutboundFailure::Io(e) if e.kind() == io::ErrorKind::UnexpectedEof => {}
             e => panic!("Unexpected error: {e:?}"),
         };
 
-        // Keep alive the task, so only `swarm1_task` can finish
+        // Keep alive the task, so only `server_task` can finish
         wait_no_events(&mut swarm2).await;
     };
 
-    let swarm1_task = pin!(swarm1_task);
-    let swarm2_task = pin!(swarm2_task);
-    futures::future::select(swarm1_task, swarm2_task).await;
+    let server_task = pin!(server_task);
+    let client_task = pin!(client_task);
+    futures::future::select(server_task, client_task).await;
 }
 
 #[async_std::test]
@@ -284,10 +264,8 @@ async fn report_inbound_timeout_on_write_response() {
     swarm1.listen().await;
     swarm2.connect(&mut swarm1).await;
 
-    // Server
-    //
     // Expects InboundFailure::Timeout
-    let swarm1_task = async move {
+    let server_task = async move {
         let (peer, req_id, action, resp_channel) = wait_request(&mut swarm1).await.unwrap();
         assert_eq!(peer, peer2_id);
         assert_eq!(action, Action::TimeoutOnWriteResponse);
@@ -303,7 +281,7 @@ async fn report_inbound_timeout_on_write_response() {
     };
 
     // Expects OutboundFailure::ConnectionClosed or io::ErrorKind::UnexpectedEof
-    let swarm2_task = async move {
+    let client_task = async move {
         let req_id = swarm2
             .behaviour_mut()
             .send_request(&peer1_id, Action::TimeoutOnWriteResponse);
@@ -315,19 +293,19 @@ async fn report_inbound_timeout_on_write_response() {
         match error {
             OutboundFailure::ConnectionClosed => {
                 // ConnectionClosed is allowed here because we mainly test the behavior
-                // of `swarm1_task`.
+                // of `server_task`.
             }
             OutboundFailure::Io(e) if e.kind() == io::ErrorKind::UnexpectedEof => {}
             e => panic!("Unexpected error: {e:?}"),
         }
 
-        // Keep alive the task, so only `swarm1_task` can finish
+        // Keep alive the task, so only `server_task` can finish
         wait_no_events(&mut swarm2).await;
     };
 
-    let swarm1_task = pin!(swarm1_task);
-    let swarm2_task = pin!(swarm2_task);
-    futures::future::select(swarm1_task, swarm2_task).await;
+    let server_task = pin!(server_task);
+    let client_task = pin!(client_task);
+    futures::future::select(server_task, client_task).await;
 }
 
 #[derive(Clone, Default)]
