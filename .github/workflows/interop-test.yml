@@ -53,4 +53,4 @@ jobs:
           s3-cache-bucket: libp2p-by-tf-aws-bootstrap
           s3-access-key-id: ${{ vars.TEST_PLANS_BUILD_CACHE_KEY_ID }}
           s3-secret-access-key: ${{ secrets.TEST_PLANS_BUILD_CACHE_KEY }}
-          worker-count: 1
+          worker-count: 16
