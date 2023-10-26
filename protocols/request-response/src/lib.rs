@@ -451,8 +451,8 @@ where
     ///
     /// Returns true if the address was added, false otherwise (i.e. if the
     /// address is already in the list).
-    pub fn add_address(&mut self, peer: &PeerId, address: Multiaddr) -> bool {
-        self.addresses.entry(*peer).or_default().insert(address)
+    pub fn add_address(&mut self, peer: &PeerId, address: Multiaddr) {
+        self.addresses.entry(*peer).or_default().insert(address);
     }
 
     /// Removes an address of a peer previously added via `add_address`.
