@@ -8,7 +8,7 @@ use libp2p::{
     identity, kad,
     multiaddr::Protocol,
     noise,
-    request_response::{self, ProtocolSupport, RequestId, ResponseChannel},
+    request_response::{self, OutboundRequestId, ProtocolSupport, ResponseChannel},
     swarm::{NetworkBehaviour, Swarm, SwarmEvent},
     tcp, yamux, PeerId,
 };
@@ -175,7 +175,7 @@ pub(crate) struct EventLoop {
     pending_start_providing: HashMap<kad::QueryId, oneshot::Sender<()>>,
     pending_get_providers: HashMap<kad::QueryId, oneshot::Sender<HashSet<PeerId>>>,
     pending_request_file:
-        HashMap<RequestId, oneshot::Sender<Result<Vec<u8>, Box<dyn Error + Send>>>>,
+        HashMap<OutboundRequestId, oneshot::Sender<Result<Vec<u8>, Box<dyn Error + Send>>>>,
 }
 
 impl EventLoop {
