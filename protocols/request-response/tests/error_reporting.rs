@@ -496,9 +496,8 @@ fn new_swarm() -> (PeerId, Swarm<request_response::Behaviour<TestCodec>>) {
 
 async fn wait_no_events(swarm: &mut Swarm<request_response::Behaviour<TestCodec>>) {
     loop {
-        match swarm.select_next_some().await.try_into_behaviour_event() {
-            Ok(ev) => panic!("Unexpected event: {ev:?}"),
-            Err(..) => {}
+        if let Ok(ev) = swarm.select_next_some().await.try_into_behaviour_event() {
+            panic!("Unexpected event: {ev:?}")
         }
     }
 }
