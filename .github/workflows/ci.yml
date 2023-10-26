@@ -52,7 +52,7 @@ jobs:
         run: cargo build --package "$CRATE" --no-default-features
 
       - name: Enforce no dependency on meta crate
-        if: env.CRATE != 'libp2p-server'
+        if: env.CRATE != 'libp2p-server' && env.CRATE != 'libp2p-perf'
         run: |
           cargo metadata --format-version=1 --no-deps | \
           jq -e -r '.packages[] | select(.name == "'"$CRATE"'") | .dependencies | all(.name != "libp2p")'

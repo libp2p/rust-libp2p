@@ -67,10 +67,6 @@ pub mod behaviour;
 pub mod dial_opts;
 pub mod dummy;
 pub mod handler;
-#[deprecated(
-    note = "Configure an appropriate idle connection timeout via `SwarmBuilder::idle_connection_timeout` instead. To keep connections alive 'forever', use `Duration::from_secs(u64::MAX)`."
-)]
-pub mod keep_alive;
 mod listen_opts;
 
 /// Bundles all symbols required for the [`libp2p_swarm_derive::NetworkBehaviour`] macro.
@@ -119,7 +115,7 @@ pub use connection::pool::ConnectionCounters;
 pub use connection::{ConnectionError, ConnectionId, SupportedProtocols};
 pub use executor::Executor;
 pub use handler::{
-    ConnectionHandler, ConnectionHandlerEvent, ConnectionHandlerSelect, KeepAlive, OneShotHandler,
+    ConnectionHandler, ConnectionHandlerEvent, ConnectionHandlerSelect, OneShotHandler,
     OneShotHandlerConfig, StreamUpgradeError, SubstreamProtocol,
 };
 #[cfg(feature = "macros")]
@@ -366,6 +362,8 @@ where
         local_peer_id: PeerId,
         config: Config,
     ) -> Self {
+        log::info!("Local peer id: {local_peer_id}");
+
         Swarm {
             local_peer_id,
             transport,
@@ -1654,17 +1652,14 @@ where
 
     /// Builds a `Swarm` with the current configuration.
     pub fn build(self) -> Swarm<TBehaviour> {
-        log::info!("Local peer id: {}", self.local_peer_id);
-        Swarm {
-            local_peer_id: self.local_peer_id,
-            transport: self.transport,
-            pool: Pool::new(self.local_peer_id, self.pool_config),
-            behaviour: self.behaviour,
-            supported_protocols: Default::default(),
-            confirmed_external_addr: Default::default(),
-            listened_addrs: HashMap::new(),
-            pending_event: None,
-        }
+        Swarm::new(
+            self.transport,
+            self.behaviour,
+            self.local_peer_id,
+            Config {
+                pool_config: self.pool_config,
+            },
+        )
     }
 }
 

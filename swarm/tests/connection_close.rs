@@ -4,7 +4,7 @@ use libp2p_identity::PeerId;
 use libp2p_swarm::handler::ConnectionEvent;
 use libp2p_swarm::{
     ConnectionDenied, ConnectionHandler, ConnectionHandlerEvent, ConnectionId, FromSwarm,
-    KeepAlive, NetworkBehaviour, SubstreamProtocol, Swarm, SwarmEvent, THandler, THandlerInEvent,
+    NetworkBehaviour, SubstreamProtocol, Swarm, SwarmEvent, THandler, THandlerInEvent,
     THandlerOutEvent, ToSwarm,
 };
 use libp2p_swarm_test::SwarmExt;
@@ -106,8 +106,8 @@ impl ConnectionHandler for HandlerWithState {
         SubstreamProtocol::new(DeniedUpgrade, ())
     }
 
-    fn connection_keep_alive(&self) -> KeepAlive {
-        KeepAlive::Yes
+    fn connection_keep_alive(&self) -> bool {
+        true
     }
 
     fn poll(

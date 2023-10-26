@@ -21,7 +21,7 @@
 
 use crate::handler::{
     ConnectionEvent, ConnectionHandler, ConnectionHandlerEvent, FullyNegotiatedInbound,
-    FullyNegotiatedOutbound, KeepAlive, SubstreamProtocol,
+    FullyNegotiatedOutbound, SubstreamProtocol,
 };
 use libp2p_core::upgrade::PendingUpgrade;
 use std::task::{Context, Poll};
@@ -54,10 +54,6 @@ impl ConnectionHandler for PendingConnectionHandler {
 
     fn on_behaviour_event(&mut self, v: Self::FromBehaviour) {
         void::unreachable(v)
-    }
-
-    fn connection_keep_alive(&self) -> KeepAlive {
-        KeepAlive::No
     }
 
     fn poll(
