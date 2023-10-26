@@ -7,7 +7,8 @@
   See [PR 3914](https://github.com/libp2p/rust-libp2p/pull/3914).
 - Report IO failures on inbound and outbound streams.
   See [PR 3914](https://github.com/libp2p/rust-libp2p/pull/3914).
-
+- Introduce dedicated types for `InboundRequestId` and `OutboundRequestId`.
+  See [PR 3914](https://github.com/libp2p/rust-libp2p/pull/3914).
 - Keep peer addresses in `HashSet` instead of `SmallVec` to prevent adding duplicate addresses.
   See [PR 4700](https://github.com/libp2p/rust-libp2p/pull/4700).
 
