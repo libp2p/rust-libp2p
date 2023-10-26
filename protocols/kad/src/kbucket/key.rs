@@ -77,6 +77,11 @@ impl<T> Key<T> {
         self.bytes.distance(other)
     }
 
+    /// Exposing the hashed bytes.
+    pub fn hashed_bytes(&self) -> &[u8] {
+        &self.bytes.0
+    }
+
     /// Returns the uniquely determined key with the given distance to `self`.
     ///
     /// This implements the following equivalence:
