@@ -448,9 +448,6 @@ where
     /// by [`NetworkBehaviour::handle_pending_outbound_connection`].
     ///
     /// Addresses added in this way are only removed by `remove_address`.
-    ///
-    /// Returns true if the address was added, false otherwise (i.e. if the
-    /// address is already in the list).
     pub fn add_address(&mut self, peer: &PeerId, address: Multiaddr) {
         self.addresses.entry(*peer).or_default().insert(address);
     }
