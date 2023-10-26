@@ -37,10 +37,10 @@ use crate::{protocol::Response, RunDuration, RunParams};
 
 /// Connection identifier.
 #[derive(Debug, Copy, Clone, Hash, PartialEq, Eq)]
-pub struct RunId(request_response::RequestId);
+pub struct RunId(request_response::OutboundRequestId);
 
-impl From<request_response::RequestId> for RunId {
-    fn from(value: request_response::RequestId) -> Self {
+impl From<request_response::OutboundRequestId> for RunId {
+    fn from(value: request_response::OutboundRequestId) -> Self {
         Self(value)
     }
 }

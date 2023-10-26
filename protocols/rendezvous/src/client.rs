@@ -26,7 +26,7 @@ use futures::stream::FuturesUnordered;
 use futures::stream::StreamExt;
 use libp2p_core::{Endpoint, Multiaddr, PeerRecord};
 use libp2p_identity::{Keypair, PeerId, SigningError};
-use libp2p_request_response::{ProtocolSupport, RequestId};
+use libp2p_request_response::{OutboundRequestId, ProtocolSupport};
 use libp2p_swarm::{
     ConnectionDenied, ConnectionId, ExternalAddresses, FromSwarm, NetworkBehaviour, PollParameters,
     THandler, THandlerInEvent, THandlerOutEvent, ToSwarm,
@@ -41,8 +41,8 @@ pub struct Behaviour {
 
     keypair: Keypair,
 
-    waiting_for_register: HashMap<RequestId, (PeerId, Namespace)>,
-    waiting_for_discovery: HashMap<RequestId, (PeerId, Option<Namespace>)>,
+    waiting_for_register: HashMap<OutboundRequestId, (PeerId, Namespace)>,
+    waiting_for_discovery: HashMap<OutboundRequestId, (PeerId, Option<Namespace>)>,
 
     /// Hold addresses of all peers that we have discovered so far.
     ///
@@ -337,7 +337,7 @@ impl NetworkBehaviour for Behaviour {
 }
 
 impl Behaviour {
-    fn event_for_outbound_failure(&mut self, req_id: &RequestId) -> Option<Event> {
+    fn event_for_outbound_failure(&mut self, req_id: &OutboundRequestId) -> Option<Event> {
         if let Some((rendezvous_node, namespace)) = self.waiting_for_register.remove(req_id) {
             return Some(Event::RegisterFailed {
                 rendezvous_node,
@@ -357,7 +357,11 @@ impl Behaviour {
         None
     }
 
-    fn handle_response(&mut self, request_id: &RequestId, response: Message) -> Option<Event> {
+    fn handle_response(
+        &mut self,
+        request_id: &OutboundRequestId,
+        response: Message,
+    ) -> Option<Event> {
         match response {
             RegisterResponse(Ok(ttl)) => {
                 if let Some((rendezvous_node, namespace)) =

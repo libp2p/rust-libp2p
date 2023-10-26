@@ -26,7 +26,7 @@ use instant::Instant;
 use libp2p_core::{multiaddr::Protocol, Multiaddr};
 use libp2p_identity::PeerId;
 use libp2p_request_response::{
-    self as request_response, InboundFailure, RequestId, ResponseChannel,
+    self as request_response, InboundFailure, InboundRequestId, ResponseChannel,
 };
 use libp2p_swarm::{
     dial_opts::{DialOpts, PeerCondition},
@@ -85,7 +85,7 @@ pub(crate) struct AsServer<'a> {
         PeerId,
         (
             ProbeId,
-            RequestId,
+            InboundRequestId,
             Vec<Multiaddr>,
             ResponseChannel<DialResponse>,
         ),
