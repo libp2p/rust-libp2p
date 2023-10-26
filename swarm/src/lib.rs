@@ -405,7 +405,7 @@ where
     /// See also [`DialOpts`].
     ///
     /// ```
-    /// # use libp2p_swarm::SwarmBuilder;
+    /// # use libp2p_swarm::Swarm;
     /// # use libp2p_swarm::dial_opts::{DialOpts, PeerCondition};
     /// # use libp2p_core::{Multiaddr, Transport};
     /// # use libp2p_core::transport::dummy::DummyTransport;
@@ -414,17 +414,17 @@ where
     /// #
     /// # #[tokio::main]
     /// # async fn main() {
-    /// let mut swarm = SwarmBuilder::with_tokio_executor(
-    ///     DummyTransport::new().boxed(),
-    ///     dummy::Behaviour,
-    ///     PeerId::random(),
-    /// ).build();
+    /// let mut swarm = build_swarm();
     ///
     /// // Dial a known peer.
     /// swarm.dial(PeerId::random());
     ///
     /// // Dial an unknown peer.
     /// swarm.dial("/ip6/::1/tcp/12345".parse::<Multiaddr>().unwrap());
+    /// # }
+    ///
+    /// # fn build_swarm() -> Swarm<dummy::Behaviour> {
+    /// #     Swarm::new(DummyTransport::new().boxed(), dummy::Behaviour, PeerId::random(), libp2p_swarm::Config::with_tokio_executor())
     /// # }
     /// ```
     pub fn dial(&mut self, opts: impl Into<DialOpts>) -> Result<(), DialError> {
