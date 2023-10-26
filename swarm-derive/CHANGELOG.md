@@ -2,6 +2,9 @@
 
 - Adapt to interface changes in `libp2p-swarm`.
   See [PR 4706](https://github.com/libp2p/rust-libp2p/pull/4076).
+- Remove supported for deprecated `#[behaviour(out_event = "...")]`.
+  To same functionality is available using `#[behaviour(to_swarm = "...")]`
+  See [PR 4737](https://github.com/libp2p/rust-libp2p/pull/4737).
 
 ## 0.33.0 
 
