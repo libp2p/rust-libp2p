@@ -275,7 +275,7 @@ where
         void::unreachable(ev)
     }
 
-    fn on_swarm_event(&mut self, event: FromSwarm<Self::ConnectionHandler>) {
+    fn on_swarm_event(&mut self, event: FromSwarm) {
         self.listen_addresses
             .write()
             .unwrap_or_else(|e| e.into_inner())

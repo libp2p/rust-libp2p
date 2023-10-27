@@ -3104,7 +3104,7 @@ where
             endpoint,
             remaining_established,
             ..
-        }: ConnectionClosed<<Self as NetworkBehaviour>::ConnectionHandler>,
+        }: ConnectionClosed,
     ) {
         // Remove IP from peer scoring system
         if let Some((peer_score, ..)) = &mut self.peer_score {
@@ -3279,7 +3279,6 @@ where
     type ConnectionHandler = Handler;
     type ToSwarm = Event;
 
-    #[allow(deprecated)]
     fn handle_established_inbound_connection(
         &mut self,
         _: ConnectionId,
@@ -3290,7 +3289,6 @@ where
         Ok(Handler::new(self.config.protocol_config()))
     }
 
-    #[allow(deprecated)]
     fn handle_established_outbound_connection(
         &mut self,
         _: ConnectionId,
@@ -3450,7 +3448,7 @@ where
         Poll::Pending
     }
 
-    fn on_swarm_event(&mut self, event: FromSwarm<Self::ConnectionHandler>) {
+    fn on_swarm_event(&mut self, event: FromSwarm) {
         match event {
             FromSwarm::ConnectionEstablished(connection_established) => {
                 self.on_connection_established(connection_established)

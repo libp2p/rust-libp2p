@@ -15,7 +15,7 @@ libp2p = { path = "../../libp2p", features = ["tokio", "metrics", "ping", "noise
 opentelemetry = { version = "0.20.0", features = ["rt-tokio", "metrics"] }
 opentelemetry-otlp = { version = "0.13.0", features = ["metrics"]}
 opentelemetry_api = "0.20.0"
-prometheus-client = "0.21.2"
+prometheus-client = { workspace = true }
 tokio = { version = "1", features = ["full"] }
 tracing = "0.1.37"
 tracing-opentelemetry = "0.21.0"

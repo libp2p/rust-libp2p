@@ -61,7 +61,7 @@
 //! > to the size of all stored records. As a job runs, the records are moved
 //! > out of the job to the consumer, where they can be dropped after being sent.
 
-use crate::record_priv::{self, store::RecordStore, ProviderRecord, Record};
+use crate::record::{self, store::RecordStore, ProviderRecord, Record};
 use futures::prelude::*;
 use futures_timer::Delay;
 use instant::Instant;
@@ -134,7 +134,7 @@ pub(crate) struct PutRecordJob {
     next_publish: Option<Instant>,
     publish_interval: Option<Duration>,
     record_ttl: Option<Duration>,
-    skipped: HashSet<record_priv::Key>,
+    skipped: HashSet<record::Key>,
     inner: PeriodicJob<vec::IntoIter<Record>>,
 }
 
@@ -166,7 +166,7 @@ impl PutRecordJob {
 
     /// Adds the key of a record that is ignored on the current or
     /// next run of the job.
-    pub(crate) fn skip(&mut self, key: record_priv::Key) {
+    pub(crate) fn skip(&mut self, key: record::Key) {
         self.skipped.insert(key);
     }
 
@@ -336,7 +336,7 @@ impl AddProviderJob {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::record_priv::store::MemoryStore;
+    use crate::record::store::MemoryStore;
     use futures::{executor::block_on, future::poll_fn};
     use quickcheck::*;
     use rand::Rng;

@@ -20,7 +20,7 @@
 
 //! [`ConnectionHandler`] handling relayed connection potentially upgraded to a direct connection.
 
-use crate::behaviour_impl::MAX_NUMBER_OF_UPGRADE_ATTEMPTS;
+use crate::behaviour::MAX_NUMBER_OF_UPGRADE_ATTEMPTS;
 use crate::protocol;
 use either::Either;
 use futures::future;
@@ -33,7 +33,7 @@ use libp2p_swarm::handler::{
     ListenUpgradeError,
 };
 use libp2p_swarm::{
-    ConnectionHandler, ConnectionHandlerEvent, KeepAlive, StreamUpgradeError, SubstreamProtocol,
+    ConnectionHandler, ConnectionHandlerEvent, StreamUpgradeError, SubstreamProtocol,
 };
 use std::collections::VecDeque;
 use std::task::{Context, Poll};
@@ -249,20 +249,12 @@ impl ConnectionHandler for Handler {
         }
     }
 
-    fn connection_keep_alive(&self) -> KeepAlive {
-        if !self.queued_events.is_empty() {
-            return KeepAlive::Yes;
-        }
-
-        if self.inbound_connect.is_some() {
-            return KeepAlive::Yes;
-        }
-
+    fn connection_keep_alive(&self) -> bool {
         if self.attempts < MAX_NUMBER_OF_UPGRADE_ATTEMPTS {
-            return KeepAlive::Yes;
+            return true;
         }
 
-        KeepAlive::No
+        false
     }
 
     fn poll(

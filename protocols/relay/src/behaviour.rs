@@ -252,7 +252,7 @@ impl Behaviour {
             peer_id,
             connection_id,
             ..
-        }: ConnectionClosed<<Self as NetworkBehaviour>::ConnectionHandler>,
+        }: ConnectionClosed,
     ) {
         if let hash_map::Entry::Occupied(mut peer) = self.reservations.entry(peer_id) {
             peer.get_mut().remove(&connection_id);
@@ -332,7 +332,7 @@ impl NetworkBehaviour for Behaviour {
         )))
     }
 
-    fn on_swarm_event(&mut self, event: FromSwarm<Self::ConnectionHandler>) {
+    fn on_swarm_event(&mut self, event: FromSwarm) {
         self.external_addresses.on_swarm_event(&event);
 
         match event {

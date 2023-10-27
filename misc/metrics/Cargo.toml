@@ -29,8 +29,7 @@ libp2p-kad = { workspace = true, optional = true }
 libp2p-ping = { workspace = true, optional = true }
 libp2p-relay =  { workspace = true, optional = true }
 libp2p-swarm = { workspace = true }
-once_cell = "1.18.0"
-prometheus-client = { version = "0.21.2"}
+prometheus-client = { workspace = true }
 
 [dev-dependencies]
 libp2p-identity = { workspace = true, features = ["rand"] }

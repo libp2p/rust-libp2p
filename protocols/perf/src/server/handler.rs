@@ -18,39 +18,38 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use std::{
-    task::{Context, Poll},
-    time::{Duration, Instant},
-};
+use std::task::{Context, Poll};
 
-use futures::{future::BoxFuture, stream::FuturesUnordered, FutureExt, StreamExt};
+use futures::FutureExt;
 use libp2p_core::upgrade::{DeniedUpgrade, ReadyUpgrade};
 use libp2p_swarm::{
     handler::{
         ConnectionEvent, DialUpgradeError, FullyNegotiatedInbound, FullyNegotiatedOutbound,
         ListenUpgradeError,
     },
-    ConnectionHandler, ConnectionHandlerEvent, KeepAlive, StreamProtocol, SubstreamProtocol,
+    ConnectionHandler, ConnectionHandlerEvent, StreamProtocol, SubstreamProtocol,
 };
+use tracing::error;
 use void::Void;
 
-use super::RunStats;
+use crate::Run;
 
 #[derive(Debug)]
 pub struct Event {
-    pub stats: RunStats,
+    pub stats: Run,
 }
 
 pub struct Handler {
-    inbound: FuturesUnordered<BoxFuture<'static, Result<RunStats, std::io::Error>>>,
-    keep_alive: KeepAlive,
+    inbound: futures_bounded::FuturesSet<Result<Run, std::io::Error>>,
 }
 
 impl Handler {
     pub fn new() -> Self {
         Self {
-            inbound: Default::default(),
-            keep_alive: KeepAlive::Yes,
+            inbound: futures_bounded::FuturesSet::new(
+                crate::RUN_TIMEOUT,
+                crate::MAX_PARALLEL_RUNS_PER_CONNECTION,
+            ),
         }
     }
 }
@@ -92,8 +91,13 @@ impl ConnectionHandler for Handler {
                 protocol,
                 info: _,
             }) => {
-                self.inbound
-                    .push(crate::protocol::receive_send(protocol).boxed());
+                if self
+                    .inbound
+                    .try_push(crate::protocol::receive_send(protocol).boxed())
+                    .is_err()
+                {
+                    tracing::warn!("Dropping inbound stream because we are at capacity");
+                }
             }
             ConnectionEvent::FullyNegotiatedOutbound(FullyNegotiatedOutbound { info, .. }) => {
                 void::unreachable(info)
@@ -111,10 +115,6 @@ impl ConnectionHandler for Handler {
         }
     }
 
-    fn connection_keep_alive(&self) -> KeepAlive {
-        self.keep_alive
-    }
-
     fn poll(
         &mut self,
         cx: &mut Context<'_>,
@@ -126,29 +126,23 @@ impl ConnectionHandler for Handler {
             Self::Error,
         >,
     > {
-        while let Poll::Ready(Some(result)) = self.inbound.poll_next_unpin(cx) {
-            match result {
-                Ok(stats) => {
+        loop {
+            match self.inbound.poll_unpin(cx) {
+                Poll::Ready(Ok(Ok(stats))) => {
                     return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(Event { stats }))
                 }
-                Err(e) => {
-                    tracing::error!("{e:?}")
+                Poll::Ready(Ok(Err(e))) => {
+                    error!("{e:?}");
+                    continue;
                 }
-            }
-        }
-
-        if self.inbound.is_empty() {
-            match self.keep_alive {
-                KeepAlive::Yes => {
-                    self.keep_alive = KeepAlive::Until(Instant::now() + Duration::from_secs(10));
+                Poll::Ready(Err(e @ futures_bounded::Timeout { .. })) => {
+                    error!("inbound perf request timed out: {e}");
+                    continue;
                 }
-                KeepAlive::Until(_) => {}
-                KeepAlive::No => panic!("Handler never sets KeepAlive::No."),
+                Poll::Pending => {}
             }
-        } else {
-            self.keep_alive = KeepAlive::Yes
-        }
 
-        Poll::Pending
+            return Poll::Pending;
+        }
     }
 }

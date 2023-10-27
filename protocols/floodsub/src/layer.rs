@@ -306,7 +306,7 @@ impl Floodsub {
             peer_id,
             remaining_established,
             ..
-        }: ConnectionClosed<<Self as NetworkBehaviour>::ConnectionHandler>,
+        }: ConnectionClosed,
     ) {
         if remaining_established > 0 {
             // we only care about peer disconnections
@@ -481,7 +481,7 @@ impl NetworkBehaviour for Floodsub {
         Poll::Pending
     }
 
-    fn on_swarm_event(&mut self, event: FromSwarm<Self::ConnectionHandler>) {
+    fn on_swarm_event(&mut self, event: FromSwarm) {
         match event {
             FromSwarm::ConnectionEstablished(connection_established) => {
                 self.on_connection_established(connection_established)

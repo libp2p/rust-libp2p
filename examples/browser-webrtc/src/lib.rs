@@ -31,13 +31,13 @@ pub async fn run(libp2p_endpoint: String) -> Result<(), JsError> {
         .build();
 
     let addr = libp2p_endpoint.parse::<Multiaddr>()?;
-    log::info!("Dialing {addr}");
+    tracing::info!("Dialing {addr}");
     swarm.dial(addr)?;
 
     loop {
         match swarm.next().await.unwrap() {
             SwarmEvent::Behaviour(BehaviourEvent::Ping(ping::Event { result: Err(e), .. })) => {
-                log::error!("Ping failed: {:?}", e);
+                tracing::error!("Ping failed: {:?}", e);
 
                 break;
             }
@@ -46,10 +46,10 @@ pub async fn run(libp2p_endpoint: String) -> Result<(), JsError> {
                 result: Ok(rtt),
                 ..
             })) => {
-                log::info!("Ping successful: RTT: {rtt:?}, from {peer}");
+                tracing::info!("Ping successful: RTT: {rtt:?}, from {peer}");
                 body.append_p(&format!("RTT: {rtt:?} at {}", Date::new_0().to_string()))?;
             }
-            evt => log::info!("Swarm event: {:?}", evt),
+            evt => tracing::info!("Swarm event: {:?}", evt),
         }
     }
 

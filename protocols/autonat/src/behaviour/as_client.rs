@@ -29,7 +29,7 @@ use futures_timer::Delay;
 use instant::Instant;
 use libp2p_core::Multiaddr;
 use libp2p_identity::PeerId;
-use libp2p_request_response::{self as request_response, OutboundFailure, RequestId};
+use libp2p_request_response::{self as request_response, OutboundFailure, OutboundRequestId};
 use libp2p_swarm::{ConnectionId, ListenAddresses, ToSwarm};
 use rand::{seq::SliceRandom, thread_rng};
 use std::{
@@ -39,7 +39,7 @@ use std::{
 };
 
 /// Outbound probe failed or was aborted.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug)]
 pub enum OutboundProbeError {
     /// Probe was aborted because no server is known, or all servers
     /// are throttled through [`Config::throttle_server_period`].
@@ -53,7 +53,7 @@ pub enum OutboundProbeError {
     Response(ResponseError),
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug)]
 pub enum OutboundProbeEvent {
     /// A dial-back request was sent to a remote peer.
     Request {
@@ -91,7 +91,7 @@ pub(crate) struct AsClient<'a> {
     pub(crate) throttled_servers: &'a mut Vec<(PeerId, Instant)>,
     pub(crate) nat_status: &'a mut NatStatus,
     pub(crate) confidence: &'a mut usize,
-    pub(crate) ongoing_outbound: &'a mut HashMap<RequestId, ProbeId>,
+    pub(crate) ongoing_outbound: &'a mut HashMap<OutboundRequestId, ProbeId>,
     pub(crate) last_probe: &'a mut Option<Instant>,
     pub(crate) schedule_probe: &'a mut Delay,
     pub(crate) listen_addresses: &'a ListenAddresses,
@@ -117,7 +117,7 @@ impl<'a> HandleInnerEvent for AsClient<'a> {
                 let probe_id = self
                     .ongoing_outbound
                     .remove(&request_id)
-                    .expect("RequestId exists.");
+                    .expect("OutboundRequestId exists.");
 
                 let event = match response.result.clone() {
                     Ok(address) => OutboundProbeEvent::Response {

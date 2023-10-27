@@ -158,8 +158,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
                     info: identify::Info { observed_addr, .. },
                     ..
                 })) => {
-                    tracing::info!(address=%observed_addr, "Relay told us our public address");
-                    swarm.add_external_address(observed_addr);
+                    tracing::info!(address=%observed_addr, "Relay told us our observed address");
                     learned_observed_addr = true;
                 }
                 event => panic!("{event:?}"),

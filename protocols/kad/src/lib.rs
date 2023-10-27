@@ -35,14 +35,6 @@
 
 #![cfg_attr(docsrs, feature(doc_cfg, doc_auto_cfg))]
 
-mod record_priv;
-#[deprecated(
-    note = "The `record` module will be made private in the future and should not be depended on."
-)]
-pub mod record {
-    pub use super::record_priv::*;
-}
-
 mod addresses;
 mod behaviour;
 mod handler;
@@ -50,6 +42,7 @@ mod jobs;
 mod kbucket;
 mod protocol;
 mod query;
+mod record;
 
 mod proto {
     #![allow(unreachable_pub)]
@@ -77,7 +70,7 @@ pub use kbucket::{
 };
 pub use protocol::ConnectionType;
 pub use query::QueryId;
-pub use record_priv::{store, Key as RecordKey, ProviderRecord, Record};
+pub use record::{store, Key as RecordKey, ProviderRecord, Record};
 
 use libp2p_swarm::StreamProtocol;
 use std::num::NonZeroUsize;
@@ -113,30 +106,3 @@ pub const PROTOCOL_NAME: StreamProtocol = protocol::DEFAULT_PROTO_NAME;
 /// Constant shared across tests for the [`Multihash`](libp2p_core::multihash::Multihash) type.
 #[cfg(test)]
 const SHA_256_MH: u64 = 0x12;
-
-#[deprecated(note = "Import the `kad` module instead and refer to this type as `kad::Behaviour`.")]
-pub type Kademlia<TStore> = Behaviour<TStore>;
-
-#[deprecated(
-    note = "Import the `kad` module instead and refer to this type as `kad::BucketInserts`."
-)]
-pub type KademliaBucketInserts = BucketInserts;
-
-#[deprecated(
-    note = "Import the `kad` module instead and refer to this type as `kad::StoreInserts`."
-)]
-pub type KademliaStoreInserts = StoreInserts;
-
-#[deprecated(note = "Import the `kad` module instead and refer to this type as `kad::Config`.")]
-pub type KademliaConfig = Config;
-
-#[deprecated(note = "Import the `kad` module instead and refer to this type as `kad::Caching`.")]
-pub type KademliaCaching = Caching;
-
-#[deprecated(note = "Import the `kad` module instead and refer to this type as `kad::Event`.")]
-pub type KademliaEvent = Event;
-
-#[deprecated(
-    note = "Import the `kad` module instead and refer to this type as `kad::ConnectionType`."
-)]
-pub type KadConnectionType = ConnectionType;

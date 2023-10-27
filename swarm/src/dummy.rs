@@ -4,8 +4,8 @@ use crate::handler::{
     ConnectionEvent, DialUpgradeError, FullyNegotiatedInbound, FullyNegotiatedOutbound,
 };
 use crate::{
-    ConnectionDenied, ConnectionHandlerEvent, KeepAlive, StreamUpgradeError, SubstreamProtocol,
-    THandler, THandlerInEvent, THandlerOutEvent,
+    ConnectionDenied, ConnectionHandlerEvent, StreamUpgradeError, SubstreamProtocol, THandler,
+    THandlerInEvent, THandlerOutEvent,
 };
 use libp2p_core::upgrade::DeniedUpgrade;
 use libp2p_core::Endpoint;
@@ -54,7 +54,7 @@ impl NetworkBehaviour for Behaviour {
         Poll::Pending
     }
 
-    fn on_swarm_event(&mut self, event: FromSwarm<Self::ConnectionHandler>) {
+    fn on_swarm_event(&mut self, event: FromSwarm) {
         match event {
             FromSwarm::ConnectionEstablished(_)
             | FromSwarm::ConnectionClosed(_)
@@ -92,10 +92,6 @@ impl crate::handler::ConnectionHandler for ConnectionHandler {
 
     fn on_behaviour_event(&mut self, event: Self::FromBehaviour) {
         void::unreachable(event)
-    }
-
-    fn connection_keep_alive(&self) -> KeepAlive {
-        KeepAlive::No
     }
 
     fn poll(

@@ -33,7 +33,7 @@ use libp2p_swarm::handler::{
     ProtocolSupport,
 };
 use libp2p_swarm::{
-    ConnectionHandler, ConnectionHandlerEvent, KeepAlive, StreamProtocol, StreamUpgradeError,
+    ConnectionHandler, ConnectionHandlerEvent, StreamProtocol, StreamUpgradeError,
     SubstreamProtocol, SupportedProtocols,
 };
 use smallvec::SmallVec;
@@ -316,14 +316,6 @@ impl ConnectionHandler for Handler {
                     });
             }
         }
-    }
-
-    fn connection_keep_alive(&self) -> KeepAlive {
-        if !self.active_streams.is_empty() {
-            return KeepAlive::Yes;
-        }
-
-        KeepAlive::No
     }
 
     #[tracing::instrument(level = "trace", name = "ConnectionHandler::poll", skip(self, cx))]

@@ -88,10 +88,6 @@ pub mod async_std {
     }
 }
 
-#[cfg(feature = "async-std")]
-#[deprecated(note = "Use `async_std::Transport` instead.")]
-pub type DnsConfig<T> = async_std::Transport<T>;
-
 #[cfg(feature = "tokio")]
 pub mod tokio {
     use parking_lot::Mutex;
@@ -123,10 +119,6 @@ pub mod tokio {
         }
     }
 }
-
-#[cfg(feature = "tokio")]
-#[deprecated(note = "Use `tokio::Transport` instead.")]
-pub type TokioDnsConfig<T> = tokio::Transport<T>;
 
 use async_trait::async_trait;
 use futures::{future::BoxFuture, prelude::*};
@@ -183,9 +175,6 @@ pub struct Transport<T, R> {
     /// The DNS resolver used when dialing addresses with DNS components.
     resolver: R,
 }
-
-#[deprecated(note = "Use `async_std::Transport` or `tokio::Transport` instead.")]
-pub type GenDnsConfig<T, R> = Transport<T, R>;
 
 impl<T, R> libp2p_core::Transport for Transport<T, R>
 where
@@ -413,9 +402,6 @@ pub enum Error<TErr> {
     /// should be investigated.
     TooManyLookups,
 }
-
-#[deprecated(note = "Use `Error` instead.")]
-pub type DnsErr<TErr> = Error<TErr>;
 
 impl<TErr> fmt::Display for Error<TErr>
 where

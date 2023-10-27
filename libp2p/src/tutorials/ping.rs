@@ -165,7 +165,7 @@
 //! to the [`Transport`] as well as events from the [`Transport`] to the [`NetworkBehaviour`].
 //!
 //! ```rust
-//! use libp2p::swarm::{NetworkBehaviour, SwarmBuilder};
+//! use libp2p::swarm::NetworkBehaviour;
 //! use libp2p::{identity, ping, PeerId};
 //! use std::error::Error;
 //! use tracing_subscriber::EnvFilter;
@@ -199,7 +199,7 @@
 //! Thus, without any other behaviour in place, we would not be able to observe the pings.
 //!
 //! ```rust
-//! use libp2p::swarm::{NetworkBehaviour, SwarmBuilder};
+//! use libp2p::swarm::NetworkBehaviour;
 //! use libp2p::{identity, ping, PeerId};
 //! use std::error::Error;
 //! use std::time::Duration;
@@ -250,7 +250,6 @@
 //! remote peer.
 //!
 //! ```rust
-//! use libp2p::swarm::{NetworkBehaviour, SwarmBuilder};
 //! use libp2p::{identity, ping, Multiaddr, PeerId};
 //! use std::error::Error;
 //! use std::time::Duration;
@@ -295,7 +294,7 @@
 //!
 //! ```no_run
 //! use futures::prelude::*;
-//! use libp2p::swarm::{NetworkBehaviour, SwarmEvent, SwarmBuilder};
+//! use libp2p::swarm::{NetworkBehaviour, SwarmEvent};
 //! use libp2p::{identity, ping, Multiaddr, PeerId};
 //! use std::error::Error;
 //! use std::time::Duration;
@@ -380,4 +379,3 @@
 //! [`Transport`]: crate::core::Transport
 //! [`PeerId`]: crate::core::PeerId
 //! [`Swarm`]: crate::swarm::Swarm
-//! [`development_transport`]: crate::development_transport

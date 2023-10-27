@@ -46,21 +46,13 @@ mod proto {
     pub(crate) use self::structs::Exchange;
 }
 
-#[deprecated(note = "Has been renamed to `Config`.")]
-pub type PlainText2Config = Config;
-
-#[deprecated(note = "Has been renamed to `Output`.")]
-pub type PlainTextOutput<T> = Output<T>;
-
 /// [`Config`] is an insecure connection handshake for testing purposes only.
 #[derive(Clone)]
 pub struct Config {
-    #[deprecated(note = "Will be made private in the future, please use `Config::new` instead!")]
-    pub local_public_key: identity::PublicKey,
+    local_public_key: identity::PublicKey,
 }
 
 impl Config {
-    #[allow(deprecated)]
     pub fn new(identity: &identity::Keypair) -> Self {
         Self {
             local_public_key: identity.public(),
