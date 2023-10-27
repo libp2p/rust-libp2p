@@ -170,8 +170,6 @@ pub(crate) async fn handle_reserve_message_response(
         .map(Delay::new)
         .ok_or(FatalUpgradeError::InvalidReservationExpiration)?;
 
-    substream.close().await?;
-
     Ok(Ok(Reservation {
         renewal_timeout,
         addrs,
