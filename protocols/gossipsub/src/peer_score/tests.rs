@@ -18,6 +18,8 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
+use bytes::Bytes;
+
 /// A collection of unit tests mostly ported from the go implementation.
 use super::*;
 
@@ -36,7 +38,7 @@ fn within_variance(value: f64, expected: f64, variance: f64) -> bool {
 fn make_test_message(seq: u64) -> (MessageId, RawMessage) {
     let raw_message = RawMessage {
         source: Some(PeerId::random()),
-        data: vec![12, 34, 56],
+        data: Bytes::from(vec![12, 34, 56]),
         sequence_number: Some(seq),
         topic: Topic::new("test").hash(),
         signature: None,

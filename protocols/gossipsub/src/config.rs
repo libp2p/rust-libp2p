@@ -862,6 +862,7 @@ mod test {
     use crate::topic::IdentityHash;
     use crate::types::PeerKind;
     use crate::Topic;
+    use bytes::Bytes;
     use libp2p_core::UpgradeInfo;
     use libp2p_swarm::StreamProtocol;
     use std::collections::hash_map::DefaultHasher;
@@ -961,7 +962,7 @@ mod test {
     fn get_gossipsub_message() -> Message {
         Message {
             source: None,
-            data: vec![12, 34, 56],
+            data: Bytes::from(vec![12, 34, 56]),
             sequence_number: None,
             topic: Topic::<IdentityHash>::new("test").hash(),
         }

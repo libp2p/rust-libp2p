@@ -1,5 +1,6 @@
 ## 0.46.0 - unreleased
 
+- Convert `publish` to require `data: impl Into<Bytes>`.
 - Remove `fast_message_id_fn` mechanism from `Config`.
   See [PR 4285](https://github.com/libp2p/rust-libp2p/pull/4285).
 - Remove deprecated `gossipsub::Config::idle_timeout` in favor of `SwarmBuilder::idle_connection_timeout`.

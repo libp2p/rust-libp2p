@@ -93,7 +93,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
             Ok(Some(line)) = stdin.next_line() => {
                 if let Err(e) = swarm
                     .behaviour_mut().gossipsub
-                    .publish(topic.clone(), line.as_bytes()) {
+                    .publish(topic.clone(), line.as_bytes().to_vec()) {
                     println!("Publish error: {e:?}");
                 }
             }
