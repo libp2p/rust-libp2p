@@ -20,8 +20,6 @@
 
 use anyhow::{Context, Result};
 use futures::stream::StreamExt;
-use libp2p::swarm::dial_opts::DialOpts;
-use libp2p::swarm::ConnectionId;
 use libp2p::{
     core::multiaddr::{Multiaddr, Protocol},
     dcutr, identify, noise, ping, relay,
