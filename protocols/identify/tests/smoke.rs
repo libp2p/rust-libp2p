@@ -24,7 +24,8 @@ async fn periodic_identify() {
     });
     let swarm2_peer_id = *swarm2.local_peer_id();
 
-    let (swarm1_memory_listen, swarm1_tcp_listen_addr) = swarm1.listen().await;
+    let (swarm1_memory_listen, swarm1_tcp_listen_addr) =
+        swarm1.listen().with_memory_addr_external().await;
     let (swarm2_memory_listen, swarm2_tcp_listen_addr) = swarm2.listen().await;
     swarm2.connect(&mut swarm1).await;
 
