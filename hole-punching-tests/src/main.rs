@@ -104,8 +104,7 @@ async fn main() -> Result<()> {
             (
                 SwarmEvent::Behaviour(BehaviourEvent::Dcutr(dcutr::Event {
                     remote_peer_id,
-                    connection_id,
-                    result: Ok(()),
+                    result: Ok(connection_id),
                 })),
                 _,
             ) => {

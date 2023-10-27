@@ -58,12 +58,10 @@ impl From<&libp2p_dcutr::Event> for EventType {
         match event {
             libp2p_dcutr::Event {
                 remote_peer_id: _,
-                connection_id: _,
-                result: Ok(()),
+                result: Ok(_),
             } => EventType::DirectConnectionUpgradeSucceeded,
             libp2p_dcutr::Event {
                 remote_peer_id: _,
-                connection_id: _,
                 result: Err(_),
             } => EventType::DirectConnectionUpgradeFailed,
         }
