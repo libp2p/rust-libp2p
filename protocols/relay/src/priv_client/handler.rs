@@ -719,7 +719,7 @@ pub(crate) enum PendingRequest {
     },
     Connect {
         dst_peer_id: PeerId,
-        /// A channel into the future returned by [`Transport::dial`](priv_client::Transport::dial).
+        /// A channel into the future returned by [`Transport::dial`](libp2p_core::Transport::dial).
         to_dial: oneshot::Sender<Result<priv_client::Connection, outbound_hop::ConnectError>>,
     },
 }
