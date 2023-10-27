@@ -24,6 +24,7 @@ use crate::protocol::{
 };
 use crate::record::{self, Record};
 use crate::QueryId;
+use bytes::Bytes;
 use either::Either;
 use futures::prelude::*;
 use futures::stream::SelectAll;
@@ -283,7 +284,7 @@ pub enum HandlerEvent {
         /// The key of the stored record.
         key: record::Key,
         /// The value of the stored record.
-        value: Vec<u8>,
+        value: Bytes,
         /// The user data passed to the `PutValue`.
         query_id: QueryId,
     },
@@ -431,7 +432,7 @@ pub enum HandlerIn {
         /// Key of the value that was put.
         key: record::Key,
         /// Value that was put.
-        value: Vec<u8>,
+        value: Bytes,
         /// Identifier of the request that was made by the remote.
         request_id: RequestId,
     },

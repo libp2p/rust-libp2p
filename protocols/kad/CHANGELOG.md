@@ -1,3 +1,7 @@
+## 0.46.0 - Unreleased
+- Set Record.value to be `Bytes` instead of `Vec<u8>` to make clones lighter
+  See [PR 4753](https://github.com/libp2p/rust-libp2p/pull/4753).
+
 ## 0.45.0
 
 - Remove deprecated `kad::Config::set_connection_idle_timeout` in favor of `SwarmBuilder::idle_connection_timeout`.
