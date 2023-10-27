@@ -1,7 +1,7 @@
 ## 0.2.1 - unreleased
 
 - Add `.len()` getter to `FuturesMap`, `FuturesSet`, `StreamMap` and `StreamSet`.
-  See [PR XXXX](https://github.com/libp2p/rust-lib2pp/pulls/XXXX).
+  See [PR 4745](https://github.com/libp2p/rust-lib2pp/pulls/4745).
 
 ## 0.2.0
 
