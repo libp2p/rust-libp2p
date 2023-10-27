@@ -238,9 +238,10 @@ impl Handler {
     fn insert_to_deny_futs(&mut self, circuit: inbound_stop::Circuit) {
         let src_peer_id = circuit.src_peer_id();
 
-        if let Err(_) = self
+        if self
             .circuit_deny_futs
             .try_push(circuit.deny(proto::Status::NO_RESERVATION))
+            .is_err()
         {
             log::warn!(
                 "Dropping existing inbound circuit request to be denied from {src_peer_id} in favor of new one."
