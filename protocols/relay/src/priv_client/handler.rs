@@ -205,7 +205,7 @@ impl Handler {
             .expect("got a stream error without a pending request");
 
         match pending_request {
-            PendingRequest::Reserve(mut to_listener) => {
+            PendingRequest::Reserve { mut to_listener } => {
                 let error = match error {
                     StreamUpgradeError::Timeout => {
                         outbound_hop::ReserveError::Io(io::ErrorKind::TimedOut.into())
@@ -227,7 +227,9 @@ impl Handler {
                 );
                 self.reservation.failed();
             }
-            PendingRequest::Connect { send_back, .. } => {
+            PendingRequest::Connect {
+                to_dial: send_back, ..
+            } => {
                 let error = match error {
                     StreamUpgradeError::Timeout => {
                         outbound_hop::ConnectError::Io(io::ErrorKind::TimedOut.into())
@@ -280,8 +282,9 @@ impl ConnectionHandler for Handler {
     fn on_behaviour_event(&mut self, event: Self::FromBehaviour) {
         match event {
             In::Reserve { to_listener } => {
-                self.pending_requests
-                    .push_back(PendingRequest::Reserve(to_listener));
+                self.pending_requests.push_back(PendingRequest::Reserve {
+                    to_listener: to_listener,
+                });
                 self.queued_events
                     .push_back(ConnectionHandlerEvent::OutboundSubstreamRequest {
                         protocol: SubstreamProtocol::new(ReadyUpgrade::new(HOP_PROTOCOL_NAME), ()),
@@ -293,7 +296,7 @@ impl ConnectionHandler for Handler {
             } => {
                 self.pending_requests.push_back(PendingRequest::Connect {
                     dst_peer_id,
-                    send_back,
+                    to_dial: send_back,
                 });
                 self.queued_events
                     .push_back(ConnectionHandlerEvent::OutboundSubstreamRequest {
@@ -484,8 +487,9 @@ impl ConnectionHandler for Handler {
         }
 
         if let Poll::Ready(Some(to_listener)) = self.reservation.poll(cx) {
-            self.pending_requests
-                .push_back(PendingRequest::Reserve(to_listener));
+            self.pending_requests.push_back(PendingRequest::Reserve {
+                to_listener: to_listener,
+            });
 
             return Poll::Ready(ConnectionHandlerEvent::OutboundSubstreamRequest {
                 protocol: SubstreamProtocol::new(ReadyUpgrade::new(HOP_PROTOCOL_NAME), ()),
@@ -555,7 +559,7 @@ impl ConnectionHandler for Handler {
                     "opened a stream without a pending connection command or a reserve listener",
                 );
                 match pending_request {
-                    PendingRequest::Reserve(to_listener) => {
+                    PendingRequest::Reserve { to_listener } => {
                         self.active_reserve_requests.push_back(to_listener);
                         if self
                             .inflight_reserve_requests
@@ -567,7 +571,7 @@ impl ConnectionHandler for Handler {
                     }
                     PendingRequest::Connect {
                         dst_peer_id,
-                        send_back,
+                        to_dial: send_back,
                     } => {
                         self.active_connect_requests.push_back(send_back); // TODO: WHich peer ID is this?
 
@@ -717,9 +721,13 @@ impl Reservation {
 }
 
 pub(crate) enum PendingRequest {
-    Reserve(mpsc::Sender<transport::ToListenerMsg>),
+    Reserve {
+        /// A channel into the [`Transport`](priv_client::Transport).
+        to_listener: mpsc::Sender<transport::ToListenerMsg>,
+    },
     Connect {
         dst_peer_id: PeerId,
-        send_back: oneshot::Sender<Result<priv_client::Connection, outbound_hop::ConnectError>>,
+        /// A channel into the future returned by [`Transport::dial`](priv_client::Transport::dial).
+        to_dial: oneshot::Sender<Result<priv_client::Connection, outbound_hop::ConnectError>>,
     },
 }
