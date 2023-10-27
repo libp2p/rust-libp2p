@@ -192,10 +192,7 @@ where
         };
         Poll::Ready(Ok((
             peer_id,
-            StreamMuxerBox::new(Muxer::new(
-                stream_muxer,
-                this.sinks.take().expect("todo"),
-            )),
+            StreamMuxerBox::new(Muxer::new(stream_muxer, this.sinks.take().expect("todo"))),
         )))
     }
 }
@@ -354,8 +351,13 @@ pub struct SinksCollector(Arc<RwLock<HashMap<String, Arc<BandwidthSinks>>>>);
 
 impl prometheus_client::collector::Collector for SinksCollector {
     fn encode(&self, mut encoder: DescriptorEncoder) -> Result<(), std::fmt::Error> {
-        let mut family_encoder =
-            encoder.encode_descriptor("bandwidth", "todo", None, MetricType::Counter)?;
+        let mut family_encoder = encoder.encode_descriptor(
+            "libp2p_swarm_bandwidth",
+            "Bandwidth usage by direction and transport protocols",
+            None,
+            MetricType::Counter,
+        )?;
+
         for (protocols, sink) in self.0.read().expect("todo").iter() {
             let labels = [("protocols", protocols.as_str()), ("direction", "inbound")];
             let metric_encoder = family_encoder.encode_family(&labels)?;
