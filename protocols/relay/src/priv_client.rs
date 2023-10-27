@@ -60,19 +60,13 @@ pub enum Event {
         renewal: bool,
         limit: Option<protocol::Limit>,
     },
-    ReservationReqFailed {
-        relay_peer_id: PeerId,
-        /// Indicates whether the request replaces an existing reservation.
-        renewal: bool,
-        error: StreamUpgradeError<outbound_hop::ReservationFailedReason>,
-    },
     OutboundCircuitEstablished {
         relay_peer_id: PeerId,
         limit: Option<protocol::Limit>,
     },
     OutboundCircuitReqFailed {
         relay_peer_id: PeerId,
-        error: StreamUpgradeError<outbound_hop::CircuitFailedReason>,
+        error: StreamUpgradeError<outbound_hop::ConnectError>,
     },
     /// An inbound circuit has been established.
     InboundCircuitEstablished {
@@ -251,13 +245,6 @@ impl NetworkBehaviour for Behaviour {
                     relay_peer_id: event_source,
                     renewal,
                     limit,
-                }
-            }
-            handler::Event::ReservationReqFailed { renewal, error } => {
-                Event::ReservationReqFailed {
-                    relay_peer_id: event_source,
-                    renewal,
-                    error,
                 }
             }
             handler::Event::OutboundCircuitEstablished { limit } => {

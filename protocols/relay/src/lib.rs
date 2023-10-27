@@ -55,7 +55,7 @@ pub mod inbound {
 /// Types related to the relay protocol outbound.
 pub mod outbound {
     pub mod hop {
-        pub use crate::protocol::outbound_hop::FatalUpgradeError;
+        pub use crate::protocol::outbound_hop::{ConnectError, ProtocolViolation, ReserveError};
     }
     pub mod stop {
         pub use crate::protocol::outbound_stop::FatalUpgradeError;
