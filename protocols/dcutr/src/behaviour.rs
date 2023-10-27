@@ -44,16 +44,10 @@ pub(crate) const MAX_NUMBER_OF_UPGRADE_ATTEMPTS: u8 = 3;
 
 /// The events produced by the [`Behaviour`].
 #[derive(Debug)]
-pub enum Event {
-    DirectConnectionUpgradeSucceeded {
-        remote_peer_id: PeerId,
-        connection_id: ConnectionId,
-    },
-    DirectConnectionUpgradeFailed {
-        remote_peer_id: PeerId,
-        connection_id: ConnectionId,
-        error: Error,
-    },
+pub struct Event {
+    pub remote_peer_id: PeerId,
+    pub connection_id: ConnectionId,
+    pub result: Result<(), Error>,
 }
 
 #[derive(Debug, Error)]
@@ -136,13 +130,11 @@ impl Behaviour {
                 event: Either::Left(handler::relayed::Command::Connect),
             })
         } else {
-            self.queued_events.extend([ToSwarm::GenerateEvent(
-                Event::DirectConnectionUpgradeFailed {
-                    remote_peer_id: peer_id,
-                    connection_id: failed_direct_connection,
-                    error: Error::AttemptsExceeded,
-                },
-            )]);
+            self.queued_events.extend([ToSwarm::GenerateEvent(Event {
+                remote_peer_id: peer_id,
+                connection_id: failed_direct_connection,
+                result: Err(Error::AttemptsExceeded),
+            })]);
         }
     }
 
@@ -242,12 +234,11 @@ impl NetworkBehaviour for Behaviour {
                 );
             }
 
-            self.queued_events.extend([ToSwarm::GenerateEvent(
-                Event::DirectConnectionUpgradeSucceeded {
-                    remote_peer_id: peer,
-                    connection_id,
-                },
-            )]);
+            self.queued_events.extend([ToSwarm::GenerateEvent(Event {
+                remote_peer_id: peer,
+                connection_id,
+                result: Ok(()),
+            })]);
         }
 
         Ok(Either::Right(dummy::ConnectionHandler))
@@ -288,22 +279,18 @@ impl NetworkBehaviour for Behaviour {
                 self.queued_events.push_back(ToSwarm::Dial { opts });
             }
             Either::Left(handler::relayed::Event::OutboundConnectFailed { error }) => {
-                self.queued_events.push_back(ToSwarm::GenerateEvent(
-                    Event::DirectConnectionUpgradeFailed {
-                        remote_peer_id: event_source,
-                        connection_id: relayed_connection_id,
-                        error: Error::Outbound(error),
-                    },
-                ));
+                self.queued_events.push_back(ToSwarm::GenerateEvent(Event {
+                    remote_peer_id: event_source,
+                    connection_id: relayed_connection_id,
+                    result: Err(Error::Outbound(error)),
+                }));
             }
             Either::Left(handler::relayed::Event::InboundConnectFailed { error }) => {
-                self.queued_events.push_back(ToSwarm::GenerateEvent(
-                    Event::DirectConnectionUpgradeFailed {
-                        remote_peer_id: event_source,
-                        connection_id: relayed_connection_id,
-                        error: Error::Inbound(error),
-                    },
-                ))
+                self.queued_events.push_back(ToSwarm::GenerateEvent(Event {
+                    remote_peer_id: event_source,
+                    connection_id: relayed_connection_id,
+                    result: Err(Error::Inbound(error)),
+                }))
             }
             Either::Left(handler::relayed::Event::OutboundConnectNegotiated { remote_addrs }) => {
                 log::debug!(

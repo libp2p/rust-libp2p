@@ -56,14 +56,15 @@ enum EventType {
 impl From<&libp2p_dcutr::Event> for EventType {
     fn from(event: &libp2p_dcutr::Event) -> Self {
         match event {
-            libp2p_dcutr::Event::DirectConnectionUpgradeSucceeded {
+            libp2p_dcutr::Event {
                 remote_peer_id: _,
                 connection_id: _,
+                result: Ok(()),
             } => EventType::DirectConnectionUpgradeSucceeded,
-            libp2p_dcutr::Event::DirectConnectionUpgradeFailed {
+            libp2p_dcutr::Event {
                 remote_peer_id: _,
                 connection_id: _,
-                error: _,
+                result: Err(_),
             } => EventType::DirectConnectionUpgradeFailed,
         }
     }

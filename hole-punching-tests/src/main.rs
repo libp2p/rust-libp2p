@@ -102,12 +102,11 @@ async fn main() -> Result<()> {
                     .await?;
             }
             (
-                SwarmEvent::Behaviour(BehaviourEvent::Dcutr(
-                    dcutr::Event::DirectConnectionUpgradeSucceeded {
-                        remote_peer_id,
-                        connection_id,
-                    },
-                )),
+                SwarmEvent::Behaviour(BehaviourEvent::Dcutr(dcutr::Event {
+                    remote_peer_id,
+                    connection_id,
+                    result: Ok(()),
+                })),
                 _,
             ) => {
                 log::info!("Successfully hole-punched to {remote_peer_id}");
@@ -127,13 +126,11 @@ async fn main() -> Result<()> {
                 return Ok(());
             }
             (
-                SwarmEvent::Behaviour(BehaviourEvent::Dcutr(
-                    dcutr::Event::DirectConnectionUpgradeFailed {
-                        remote_peer_id,
-                        error,
-                        ..
-                    },
-                )),
+                SwarmEvent::Behaviour(BehaviourEvent::Dcutr(dcutr::Event {
+                    remote_peer_id,
+                    result: Err(error),
+                    ..
+                })),
                 _,
             ) => {
                 log::info!("Failed to hole-punched to {remote_peer_id}");
