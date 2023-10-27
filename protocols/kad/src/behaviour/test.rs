@@ -24,6 +24,7 @@ use super::*;
 
 use crate::record::{store::MemoryStore, Key};
 use crate::{K_VALUE, PROTOCOL_NAME, SHA_256_MH};
+use bytes::Bytes;
 use futures::{executor::block_on, future::poll_fn, prelude::*};
 use futures_timer::Delay;
 use libp2p_core::{
@@ -821,7 +822,7 @@ fn get_record() {
         .map(|(_addr, swarm)| swarm)
         .collect::<Vec<_>>();
 
-    let record = Record::new(random_multihash(), vec![4, 5, 6]);
+    let record = Record::new(random_multihash(), Bytes::from(vec![4, 5, 6]));
 
     swarms[2].behaviour_mut().store.put(record.clone()).unwrap();
     let qid = swarms[0].behaviour_mut().get_record(record.key.clone());
@@ -874,7 +875,7 @@ fn get_record_many() {
         .collect::<Vec<_>>();
     let num_results = 10;
 
-    let record = Record::new(random_multihash(), vec![4, 5, 6]);
+    let record = Record::new(random_multihash(), Bytes::from(vec![4, 5, 6]));
 
     for swarm in swarms.iter_mut().take(num_nodes) {
         swarm.behaviour_mut().store.put(record.clone()).unwrap();
@@ -1173,8 +1174,8 @@ fn disjoint_query_does_not_finish_before_all_paths_did() {
         Multihash::<64>::wrap(SHA_256_MH, &thread_rng().gen::<[u8; 32]>())
             .expect("32 array to fit into 64 byte multihash"),
     );
-    let record_bob = Record::new(key.clone(), b"bob".to_vec());
-    let record_trudy = Record::new(key.clone(), b"trudy".to_vec());
+    let record_bob = Record::new(key.clone(), Bytes::from(b"bob".to_vec()));
+    let record_trudy = Record::new(key.clone(), Bytes::from(b"trudy".to_vec()));
 
     // Make `bob` and `trudy` aware of their version of the record searched by
     // `alice`.

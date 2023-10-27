@@ -27,6 +27,7 @@ use std::time::{Duration, Instant};
 use anyhow::{bail, Result};
 use clap::Parser;
 use futures::StreamExt;
+use libp2p::bytes::Bytes;
 use libp2p::swarm::{StreamProtocol, SwarmEvent};
 use libp2p::{bytes::BufMut, identity, kad, noise, tcp, yamux, PeerId};
 use tracing_subscriber::EnvFilter;
@@ -91,8 +92,10 @@ async fn main() -> Result<()> {
             pk_record_key.put_slice("/pk/".as_bytes());
             pk_record_key.put_slice(swarm.local_peer_id().to_bytes().as_slice());
 
-            let mut pk_record =
-                kad::Record::new(pk_record_key, local_key.public().encode_protobuf());
+            let mut pk_record = kad::Record::new(
+                pk_record_key,
+                Bytes::from(local_key.public().encode_protobuf()),
+            );
             pk_record.publisher = Some(*swarm.local_peer_id());
             pk_record.expires = Some(Instant::now().add(Duration::from_secs(60)));
 
