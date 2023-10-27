@@ -24,7 +24,6 @@
 
 ## Transport Protocols & Upgrades
 
-- [`libp2p-deflate` CHANGELOG](transports/deflate/CHANGELOG.md)
 - [`libp2p-dns` CHANGELOG](transports/dns/CHANGELOG.md)
 - [`libp2p-noise` CHANGELOG](transports/noise/CHANGELOG.md)
 - [`libp2p-perf` CHANGELOG](transports/perf/CHANGELOG.md)

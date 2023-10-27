@@ -22,8 +22,7 @@ use crate::behaviour::FromSwarm;
 use crate::connection::ConnectionId;
 use crate::handler::{
     AddressChange, ConnectionEvent, ConnectionHandler, ConnectionHandlerEvent, DialUpgradeError,
-    FullyNegotiatedInbound, FullyNegotiatedOutbound, KeepAlive, ListenUpgradeError,
-    SubstreamProtocol,
+    FullyNegotiatedInbound, FullyNegotiatedOutbound, ListenUpgradeError, SubstreamProtocol,
 };
 use crate::upgrade::SendWrapper;
 use crate::{
@@ -158,11 +157,9 @@ where
         })
     }
 
-    fn on_swarm_event(&mut self, event: FromSwarm<Self::ConnectionHandler>) {
+    fn on_swarm_event(&mut self, event: FromSwarm) {
         if let Some(behaviour) = &mut self.inner {
-            if let Some(event) = event.maybe_map_handler(|h| h.inner) {
-                behaviour.on_swarm_event(event);
-            }
+            behaviour.on_swarm_event(event);
         }
     }
 
@@ -291,11 +288,11 @@ where
             .on_behaviour_event(event)
     }
 
-    fn connection_keep_alive(&self) -> KeepAlive {
+    fn connection_keep_alive(&self) -> bool {
         self.inner
             .as_ref()
             .map(|h| h.connection_keep_alive())
-            .unwrap_or(KeepAlive::No)
+            .unwrap_or(false)
     }
 
     fn poll(

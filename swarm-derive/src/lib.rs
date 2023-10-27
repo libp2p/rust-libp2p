@@ -28,7 +28,6 @@ use heck::ToUpperCamelCase;
 use proc_macro::TokenStream;
 use quote::quote;
 use syn::punctuated::Punctuated;
-use syn::spanned::Spanned;
 use syn::{parse_macro_input, Data, DataStruct, DeriveInput, Meta, Token};
 
 /// Generates a delegating `NetworkBehaviour` implementation for the struct this is used for. See
@@ -61,7 +60,6 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> syn::Result<Toke
     let BehaviourAttributes {
         prelude_path,
         user_specified_out_event,
-        deprecation_tokenstream,
     } = parse_attributes(ast)?;
 
     let multiaddr = quote! { #prelude_path::Multiaddr };
@@ -285,26 +283,15 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> syn::Result<Toke
         data_struct
             .fields
             .iter()
-            .enumerate()
-            // The outmost handler belongs to the last behaviour.
             .rev()
             .enumerate()
-            .map(|(enum_n, (field_n, field))| {
-                let handler = if field_n == 0 {
-                    // Given that the iterator is reversed, this is the innermost handler only.
-                    quote! { let handler = handlers }
-                } else {
-                    quote! {
-                        let (handlers, handler) = handlers.into_inner()
-                    }
-                };
+            .map(|(enum_n, field)| {
                 let inject = match field.ident {
                     Some(ref i) => quote! {
                     self.#i.on_swarm_event(#from_swarm::ConnectionClosed(#connection_closed {
                             peer_id,
                             connection_id,
                             endpoint,
-                            handler,
                             remaining_established,
                         }));
                     },
@@ -313,14 +300,12 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> syn::Result<Toke
                             peer_id,
                             connection_id,
                             endpoint,
-                            handler,
                             remaining_established,
                         }));
                     },
                 };
 
                 quote! {
-                    #handler;
                     #inject;
                 }
             })
@@ -769,8 +754,6 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> syn::Result<Toke
 
     // Now the magic happens.
     let final_quote = quote! {
-        #deprecation_tokenstream
-
         #out_event_definition
 
         impl #impl_generics #trait_to_impl for #name #ty_generics
@@ -841,7 +824,7 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> syn::Result<Toke
                 std::task::Poll::Pending
             }
 
-            fn on_swarm_event(&mut self, event: #from_swarm<Self::ConnectionHandler>) {
+            fn on_swarm_event(&mut self, event: #from_swarm) {
                 match event {
                     #from_swarm::ConnectionEstablished(
                         #connection_established { peer_id, connection_id, endpoint, failed_addresses, other_established })
@@ -850,7 +833,7 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> syn::Result<Toke
                         #address_change { peer_id, connection_id, old, new })
                     => { #(#on_address_change_stmts)* }
                     #from_swarm::ConnectionClosed(
-                        #connection_closed { peer_id, connection_id, endpoint, handler: handlers, remaining_established })
+                        #connection_closed { peer_id, connection_id, endpoint, remaining_established })
                     => { #(#on_connection_closed_stmts)* }
                     #from_swarm::DialFailure(
                         #dial_failure { peer_id, connection_id, error })
@@ -894,7 +877,6 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> syn::Result<Toke
 struct BehaviourAttributes {
     prelude_path: syn::Path,
     user_specified_out_event: Option<syn::Type>,
-    deprecation_tokenstream: proc_macro2::TokenStream,
 }
 
 /// Parses the `value` of a key=value pair in the `#[behaviour]` attribute into the requested type.
@@ -902,7 +884,6 @@ fn parse_attributes(ast: &DeriveInput) -> syn::Result<BehaviourAttributes> {
     let mut attributes = BehaviourAttributes {
         prelude_path: syn::parse_quote! { ::libp2p::swarm::derive_prelude },
         user_specified_out_event: None,
-        deprecation_tokenstream: proc_macro2::TokenStream::new(),
     };
 
     for attr in ast
@@ -922,16 +903,6 @@ fn parse_attributes(ast: &DeriveInput) -> syn::Result<BehaviourAttributes> {
             }
 
             if meta.path().is_ident("to_swarm") || meta.path().is_ident("out_event") {
-                if meta.path().is_ident("out_event") {
-                    let warning = proc_macro_warning::FormattedWarning::new_deprecated(
-                        "out_event_renamed_to_to_swarm",
-                        "The `out_event` attribute has been renamed to `to_swarm`.",
-                        meta.span(),
-                    );
-
-                    attributes.deprecation_tokenstream = quote::quote! { #warning };
-                }
-
                 let value = meta.require_name_value()?.value.require_str_lit()?;
 
                 attributes.user_specified_out_event = Some(syn::parse_str(&value)?);

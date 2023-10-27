@@ -303,7 +303,7 @@ impl NetworkBehaviour for Behaviour {
         Ok(dummy::ConnectionHandler)
     }
 
-    fn on_swarm_event(&mut self, event: FromSwarm<Self::ConnectionHandler>) {
+    fn on_swarm_event(&mut self, event: FromSwarm) {
         match event {
             FromSwarm::ConnectionClosed(ConnectionClosed {
                 peer_id,
@@ -583,7 +583,7 @@ mod tests {
             )))
         }
 
-        fn on_swarm_event(&mut self, _event: FromSwarm<Self::ConnectionHandler>) {}
+        fn on_swarm_event(&mut self, _event: FromSwarm) {}
 
         fn on_connection_handler_event(
             &mut self,

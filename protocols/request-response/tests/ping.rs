@@ -28,7 +28,7 @@ use libp2p_swarm::{StreamProtocol, Swarm, SwarmEvent};
 use libp2p_swarm_test::SwarmExt;
 use rand::{self, Rng};
 use serde::{Deserialize, Serialize};
-use std::iter;
+use std::{io, iter};
 
 #[async_std::test]
 #[cfg(feature = "cbor")]
@@ -288,7 +288,10 @@ async fn emits_inbound_connection_closed_if_channel_is_dropped() {
         e => panic!("unexpected event from peer 2: {e:?}"),
     };
 
-    assert_eq!(error, request_response::OutboundFailure::ConnectionClosed);
+    assert!(matches!(
+        error,
+        request_response::OutboundFailure::Io(e) if e.kind() == io::ErrorKind::UnexpectedEof,
+    ));
 }
 
 // Simple Ping-Pong Protocol

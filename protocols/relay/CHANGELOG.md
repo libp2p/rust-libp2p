@@ -6,6 +6,8 @@
   - `libp2p::relay::outbound::stop::{Error, ProtocolViolation}` have been introduced.
 
   See [PR 4718](https://github.com/libp2p/rust-libp2p/pull/4718).
+- Fix a rare race condition when making a reservation on a relay that could lead to a failed reservation.
+  See [PR 4747](https://github.com/libp2p/rust-lib2pp/pulls/4747).
 
 ## 0.16.2
 
