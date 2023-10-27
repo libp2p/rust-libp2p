@@ -203,8 +203,6 @@ pub(crate) async fn make_reservation(stream: Stream) -> Result<Reservation, Rese
             ProtocolViolation::InvalidReservationExpiration,
         ))?;
 
-    substream.close().await?;
-
     Ok(Reservation {
         renewal_timeout,
         addrs,
