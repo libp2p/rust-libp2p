@@ -326,6 +326,12 @@ impl ConnectionHandler for Handler {
             return Poll::Ready(ConnectionHandlerEvent::Close(err));
         }
 
+        debug_assert_eq!(
+            self.inflight_reserve_requests.len(),
+            self.active_reserve_requests.len(),
+            "expect to have one active request per inflight stream"
+        );
+
         // Reservations
         match self.inflight_reserve_requests.poll_unpin(cx) {
             Poll::Ready(Ok(Ok(outbound_hop::Reservation {
@@ -384,6 +390,12 @@ impl ConnectionHandler for Handler {
             }
             Poll::Pending => {}
         }
+
+        debug_assert_eq!(
+            self.inflight_output_connect_requests.len(),
+            self.active_connect_requests.len(),
+            "expect to have one active request per inflight stream"
+        );
 
         // Circuits
         match self.inflight_output_connect_requests.poll_unpin(cx) {
@@ -486,9 +498,8 @@ impl ConnectionHandler for Handler {
         }
 
         if let Poll::Ready(Some(to_listener)) = self.reservation.poll(cx) {
-            self.pending_requests.push_back(PendingRequest::Reserve {
-                to_listener: to_listener,
-            });
+            self.pending_requests
+                .push_back(PendingRequest::Reserve { to_listener });
 
             return Poll::Ready(ConnectionHandlerEvent::OutboundSubstreamRequest {
                 protocol: SubstreamProtocol::new(ReadyUpgrade::new(HOP_PROTOCOL_NAME), ()),
