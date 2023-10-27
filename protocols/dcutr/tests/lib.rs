@@ -40,15 +40,11 @@ async fn connect() {
     let mut src = build_client();
 
     // Have all swarms listen on a local TCP address.
-    let (memory_addr, relay_addr) = relay.listen().await;
-    relay.remove_external_address(&memory_addr);
-    relay.add_external_address(relay_addr.clone());
+    let (_, relay_tcp_addr) = relay.listen().await;
+    relay.add_external_address(relay_tcp_addr.clone());
 
-    let (dst_mem_addr, dst_tcp_addr) = dst.listen().await;
-    let (src_mem_addr, _) = src.listen().await;
-
-    dst.remove_external_address(&dst_mem_addr);
-    src.remove_external_address(&src_mem_addr);
+    let (_, dst_tcp_addr) = dst.listen().await;
+    src.listen().await;
 
     assert!(src.external_addresses().next().is_none());
     assert!(dst.external_addresses().next().is_none());
@@ -58,7 +54,7 @@ async fn connect() {
 
     async_std::task::spawn(relay.loop_on_next());
 
-    let dst_relayed_addr = relay_addr
+    let dst_relayed_addr = relay_tcp_addr
         .with(Protocol::P2p(relay_peer_id))
         .with(Protocol::P2pCircuit)
         .with(Protocol::P2p(dst_peer_id));

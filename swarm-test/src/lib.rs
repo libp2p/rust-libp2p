@@ -302,18 +302,9 @@ where
                     address,
                     listener_id,
                 } => (listener_id == memory_addr_listener_id).then_some(address),
-                other => {
-                    log::debug!(
-                        "Ignoring {:?} while waiting for listening to succeed",
-                        other
-                    );
-                    None
-                }
+                other => panic!("Unexpected event while waiting for `NewListenAddr`: {other:?}"),
             })
             .await;
-
-        // Memory addresses are externally reachable because they all share the same memory-space.
-        self.add_external_address(memory_multiaddr.clone());
 
         let tcp_addr_listener_id = self
             .listen_on("/ip4/127.0.0.1/tcp/0".parse().unwrap())
@@ -325,18 +316,9 @@ where
                     address,
                     listener_id,
                 } => (listener_id == tcp_addr_listener_id).then_some(address),
-                other => {
-                    log::debug!(
-                        "Ignoring {:?} while waiting for listening to succeed",
-                        other
-                    );
-                    None
-                }
+                other => panic!("Unexpected event while waiting for `NewListenAddr`: {other:?}"),
             })
             .await;
-
-        // We purposely don't add the TCP addr as an external one because we want to only use the memory transport for making connections in here.
-        // The TCP transport is only supported for protocols that manage their own connections.
 
         (memory_multiaddr, tcp_multiaddr)
     }
