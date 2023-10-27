@@ -80,11 +80,10 @@ async fn adding_an_external_addresses_activates_server_mode_on_existing_connecti
     let (memory_addr, _) = server.listen().await;
 
     client.dial(memory_addr.clone()).unwrap();
-    // Do the usual identify send/receive dance. This triggers a mode change to Mode::Client.
+
+    // Do the usual identify send/receive dance.
     match libp2p_swarm_test::drive(&mut client, &mut server).await {
-        ([Identify(_), Identify(_)], [Kad(ModeChanged { new_mode }), Identify(_), Identify(_)]) => {
-            assert_eq!(new_mode, Mode::Client);
-        }
+        ([Identify(_), Identify(_)], [Identify(_), Identify(_)]) => {}
         other => panic!("Unexpected events: {other:?}"),
     }
 
