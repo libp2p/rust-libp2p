@@ -429,7 +429,7 @@ async fn new_server_with_connected_clients<const N: usize>(
 
 async fn new_client() -> Swarm<rendezvous::client::Behaviour> {
     let mut client = Swarm::new_ephemeral(rendezvous::client::Behaviour::new);
-    client.listen().await; // we need to listen otherwise we don't have addresses to register
+    client.listen().with_memory_addr_external().await; // we need to listen otherwise we don't have addresses to register
 
     client
 }
@@ -458,7 +458,7 @@ async fn new_impersonating_client() -> Swarm<rendezvous::client::Behaviour> {
     // As such, the best we can do is hand eve a completely different keypair from what she is using to authenticate her connection.
     let someone_else = identity::Keypair::generate_ed25519();
     let mut eve = Swarm::new_ephemeral(move |_| rendezvous::client::Behaviour::new(someone_else));
-    eve.listen().await;
+    eve.listen().with_memory_addr_external().await;
 
     eve
 }
