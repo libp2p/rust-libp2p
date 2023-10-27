@@ -360,7 +360,7 @@ impl NetworkBehaviour for Behaviour {
         Ok(self.discovered_peers.get(&peer))
     }
 
-    fn on_swarm_event(&mut self, event: FromSwarm<Self::ConnectionHandler>) {
+    fn on_swarm_event(&mut self, event: FromSwarm) {
         let listen_addr_changed = self.listen_addresses.on_swarm_event(&event);
         let external_addr_changed = self.external_addresses.on_swarm_event(&event);
 

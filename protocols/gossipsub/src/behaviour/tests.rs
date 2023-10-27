@@ -21,7 +21,6 @@
 // Collection of tests for the gossipsub network behaviour
 
 use super::*;
-use crate::protocol::ProtocolConfig;
 use crate::subscription_filter::WhitelistSubscriptionFilter;
 use crate::transform::{DataTransform, IdentityTransform};
 use crate::ValidationError;
@@ -267,13 +266,10 @@ where
         for connection_id in peer_connections.connections.clone() {
             active_connections = active_connections.checked_sub(1).unwrap();
 
-            let dummy_handler = Handler::new(ProtocolConfig::default());
-
             gs.on_swarm_event(FromSwarm::ConnectionClosed(ConnectionClosed {
                 peer_id: *peer_id,
                 connection_id,
                 endpoint: &fake_endpoint,
-                handler: dummy_handler,
                 remaining_established: active_connections,
             }));
         }

@@ -168,7 +168,10 @@ async fn test_dial_error() {
         }) => {
             assert_eq!(probe_id, request_probe_id);
             assert_eq!(peer, client_id);
-            assert_eq!(error, InboundProbeError::Response(ResponseError::DialError));
+            assert!(matches!(
+                error,
+                InboundProbeError::Response(ResponseError::DialError)
+            ));
         }
         other => panic!("Unexpected behaviour event: {other:?}."),
     }
@@ -252,10 +255,10 @@ async fn test_throttle_peer_max() {
         }) => {
             assert_eq!(client_id, peer);
             assert_ne!(first_probe_id, probe_id);
-            assert_eq!(
+            assert!(matches!(
                 error,
                 InboundProbeError::Response(ResponseError::DialRefused)
-            )
+            ));
         }
         other => panic!("Unexpected behaviour event: {other:?}."),
     };
