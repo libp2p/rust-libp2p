@@ -41,29 +41,29 @@ pub(crate) async fn handshake(
         .await
         .ok_or(io::Error::from(io::ErrorKind::UnexpectedEof))??;
 
-    let obs_addrs = if ObsAddrs.is_empty() {
+    if ObsAddrs.is_empty() {
         return Err(Error::Protocol(ProtocolViolation::NoAddresses));
-    } else {
-        ObsAddrs
-            .into_iter()
-            .filter_map(|a| match Multiaddr::try_from(a.to_vec()) {
-                Ok(a) => Some(a),
-                Err(e) => {
-                    log::debug!("Unable to parse multiaddr: {e}");
-                    None
-                }
-            })
-            // Filter out relayed addresses.
-            .filter(|a| {
-                if a.iter().any(|p| p == Protocol::P2pCircuit) {
-                    log::debug!("Dropping relayed address {a}");
-                    false
-                } else {
-                    true
-                }
-            })
-            .collect::<Vec<Multiaddr>>()
     };
+
+    let obs_addrs = ObsAddrs
+        .into_iter()
+        .filter_map(|a| match Multiaddr::try_from(a.to_vec()) {
+            Ok(a) => Some(a),
+            Err(e) => {
+                log::debug!("Unable to parse multiaddr: {e}");
+                None
+            }
+        })
+        // Filter out relayed addresses.
+        .filter(|a| {
+            if a.iter().any(|p| p == Protocol::P2pCircuit) {
+                log::debug!("Dropping relayed address {a}");
+                false
+            } else {
+                true
+            }
+        })
+        .collect();
 
     match type_pb {
         proto::Type::CONNECT => {}
