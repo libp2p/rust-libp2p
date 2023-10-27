@@ -324,7 +324,7 @@ impl NetworkBehaviour for Behaviour {
                         peer_id: relay_peer_id,
                         handler: NotifyHandler::One(*connection_id),
                         event: Either::Left(handler::In::EstablishCircuit {
-                            send_back,
+                            to_dial: send_back,
                             dst_peer_id,
                         }),
                     },
@@ -338,7 +338,7 @@ impl NetworkBehaviour for Behaviour {
                         self.pending_handler_commands.insert(
                             connection_id,
                             handler::In::EstablishCircuit {
-                                send_back,
+                                to_dial: send_back,
                                 dst_peer_id,
                             },
                         );

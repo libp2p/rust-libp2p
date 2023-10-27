@@ -60,7 +60,7 @@ pub enum In {
     },
     EstablishCircuit {
         dst_peer_id: PeerId,
-        send_back: oneshot::Sender<Result<priv_client::Connection, outbound_hop::ConnectError>>,
+        to_dial: oneshot::Sender<Result<priv_client::Connection, outbound_hop::ConnectError>>,
     },
 }
 
@@ -70,7 +70,7 @@ impl fmt::Debug for In {
             In::Reserve { to_listener: _ } => f.debug_struct("In::Reserve").finish(),
             In::EstablishCircuit {
                 dst_peer_id,
-                send_back: _,
+                to_dial: _,
             } => f
                 .debug_struct("In::EstablishCircuit")
                 .field("dst_peer_id", dst_peer_id)
@@ -291,7 +291,7 @@ impl ConnectionHandler for Handler {
                     });
             }
             In::EstablishCircuit {
-                send_back,
+                to_dial: send_back,
                 dst_peer_id,
             } => {
                 self.pending_requests.push_back(PendingRequest::Connect {
