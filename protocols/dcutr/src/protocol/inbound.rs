@@ -65,9 +65,8 @@ pub(crate) async fn handshake(
         })
         .collect();
 
-    match type_pb {
-        proto::Type::CONNECT => {}
-        proto::Type::SYNC => return Err(Error::Protocol(ProtocolViolation::UnexpectedTypeSync)),
+    if !matches!(type_pb, proto::Type::CONNECT) {
+        return Err(Error::Protocol(ProtocolViolation::UnexpectedTypeSync));
     }
 
     let msg = proto::HolePunch {
@@ -81,11 +80,8 @@ pub(crate) async fn handshake(
         .await
         .ok_or(io::Error::from(io::ErrorKind::UnexpectedEof))??;
 
-    match type_pb {
-        proto::Type::CONNECT => {
-            return Err(Error::Protocol(ProtocolViolation::UnexpectedTypeConnect))
-        }
-        proto::Type::SYNC => {}
+    if !matches!(type_pb, proto::Type::SYNC) {
+        return Err(Error::Protocol(ProtocolViolation::UnexpectedTypeConnect));
     }
 
     Ok(obs_addrs)

@@ -55,9 +55,8 @@ pub(crate) async fn handshake(
 
     let rtt = sent_time.elapsed();
 
-    match type_pb {
-        proto::Type::CONNECT => {}
-        proto::Type::SYNC => return Err(Error::Protocol(ProtocolViolation::UnexpectedTypeSync)),
+    if !matches!(type_pb, proto::Type::CONNECT) {
+        return Err(Error::Protocol(ProtocolViolation::UnexpectedTypeSync));
     }
 
     if ObsAddrs.is_empty() {
