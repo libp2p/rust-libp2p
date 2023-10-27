@@ -1,9 +1,9 @@
 ## 0.41.0 - unreleased
 
 - Make `tokio::Transport::custom` and `async_std::Transport::custom` constructors infallible.
-  See [PR 4464].
-
-[PR 4464]: https://github.com/libp2p/rust-libp2p/pull/4464
+  See [PR 4464](https://github.com/libp2p/rust-libp2p/pull/4464).
+- Remove deprecated type-aliases.
+  See [PR 4739](https://github.com/libp2p/rust-libp2p/pull/4739). 
 
 ## 0.40.1
 
