@@ -40,9 +40,7 @@ async fn connect() {
     let mut src = build_client();
 
     // Have all swarms listen on a local TCP address.
-    let (_, relay_tcp_addr) = relay.listen().await;
-    relay.add_external_address(relay_tcp_addr.clone());
-
+    let (_, relay_tcp_addr) = relay.listen().with_tcp_addr_external().await;
     let (_, dst_tcp_addr) = dst.listen().await;
     src.listen().await;
 

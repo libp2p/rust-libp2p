@@ -437,7 +437,7 @@ async fn new_client() -> Swarm<rendezvous::client::Behaviour> {
 async fn new_server(config: rendezvous::server::Config) -> Swarm<rendezvous::server::Behaviour> {
     let mut server = Swarm::new_ephemeral(|_| rendezvous::server::Behaviour::new(config));
 
-    server.listen().await;
+    server.listen().with_memory_addr_external().await;
 
     server
 }
@@ -447,7 +447,7 @@ async fn new_combined_node() -> Swarm<Combined> {
         client: rendezvous::client::Behaviour::new(identity),
         server: rendezvous::server::Behaviour::new(rendezvous::server::Config::default()),
     });
-    node.listen().await;
+    node.listen().with_memory_addr_external().await;
 
     node
 }
