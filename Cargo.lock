@@ -3070,7 +3070,6 @@ name = "libp2p-swarm-derive"
 version = "0.34.0"
 dependencies = [
  "heck",
- "proc-macro-warning",
  "proc-macro2",
  "quote",
  "syn 2.0.38",
@@ -4148,17 +4147,6 @@ dependencies = [
  "proc-macro2",
  "quote",
  "version_check",
-]
-
-[[package]]
-name = "proc-macro-warning"
-version = "1.0.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9b698b0b09d40e9b7c1a47b132d66a8b54bcd20583d9b6d06e4535e383b4405c"
-dependencies = [
- "proc-macro2",
- "quote",
- "syn 2.0.38",
 ]
 
 [[package]]
