@@ -58,8 +58,8 @@ pub enum Event {
 
 #[derive(Debug, Error)]
 pub enum Error {
-    #[error("Failed to dial peer.")]
-    Dial,
+    #[error("Failed to hole-punch after {MAX_NUMBER_OF_UPGRADE_ATTEMPTS}")]
+    AttemptsExceeded,
     #[error("Outbound handshake failed: {0}.")]
     Outbound(protocol::outbound::Error),
     #[error("Inbound handshake failed: {0}.")]
@@ -140,7 +140,7 @@ impl Behaviour {
                 Event::DirectConnectionUpgradeFailed {
                     remote_peer_id: peer_id,
                     connection_id: failed_direct_connection,
-                    error: Error::Dial,
+                    error: Error::AttemptsExceeded,
                 },
             )]);
         }
