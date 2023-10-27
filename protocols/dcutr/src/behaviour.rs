@@ -45,14 +45,6 @@ pub(crate) const MAX_NUMBER_OF_UPGRADE_ATTEMPTS: u8 = 3;
 /// The events produced by the [`Behaviour`].
 #[derive(Debug)]
 pub enum Event {
-    // InitiatedDirectConnectionUpgrade {
-    //     remote_peer_id: PeerId,
-    //     local_relayed_addr: Multiaddr,
-    // },
-    // RemoteInitiatedDirectConnectionUpgrade {
-    //     remote_peer_id: PeerId,
-    //     remote_relayed_addr: Multiaddr,
-    // },
     DirectConnectionUpgradeSucceeded {
         remote_peer_id: PeerId,
         connection_id: ConnectionId,
