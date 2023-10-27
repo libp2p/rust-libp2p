@@ -252,18 +252,16 @@ impl_quic_phase_with_websocket!(
 impl<Provider, T: AuthenticatedMultiplexedTransport> SwarmBuilder<Provider, QuicPhase<T>> {
     pub fn with_bandwidth_logging(
         self,
-    ) -> (
-        SwarmBuilder<
-            Provider,
-            BehaviourPhase<impl AuthenticatedMultiplexedTransport, NoRelayBehaviour>,
-        >,
-        Arc<RwLock<HashMap<String, Arc<BandwidthSinks>>>>,
-    ) {
+        registry: &mut libp2p_metrics::Registry,
+    ) -> SwarmBuilder<
+        Provider,
+        BehaviourPhase<impl AuthenticatedMultiplexedTransport, NoRelayBehaviour>,
+    > {
         self.without_quic()
             .without_any_other_transports()
             .without_dns()
             .without_websocket()
             .without_relay()
-            .with_bandwidth_logging()
+            .with_bandwidth_logging(registry)
     }
 }

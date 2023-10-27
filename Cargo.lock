@@ -2753,6 +2753,7 @@ dependencies = [
 name = "libp2p-metrics"
 version = "0.14.0"
 dependencies = [
+ "futures",
  "instant",
  "libp2p-core",
  "libp2p-dcutr",
@@ -2763,6 +2764,7 @@ dependencies = [
  "libp2p-ping",
  "libp2p-relay",
  "libp2p-swarm",
+ "pin-project",
  "prometheus-client",
 ]
 

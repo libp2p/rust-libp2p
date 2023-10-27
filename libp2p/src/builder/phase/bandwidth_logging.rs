@@ -1,5 +1,7 @@
+use multiaddr::Multiaddr;
+
 use super::*;
-use crate::bandwidth::BandwidthSinks;
+use crate::metrics::bandwidth::{BandwidthSinks, Muxer};
 use crate::transport_ext::TransportExt;
 use crate::SwarmBuilder;
 use std::collections::HashMap;
@@ -11,29 +13,28 @@ pub struct BandwidthLoggingPhase<T, R> {
     pub(crate) transport: T,
 }
 
+#[cfg(feature = "metrics")]
 impl<T: AuthenticatedMultiplexedTransport, Provider, R>
     SwarmBuilder<Provider, BandwidthLoggingPhase<T, R>>
 {
     pub fn with_bandwidth_logging(
         self,
-    ) -> (
-        SwarmBuilder<Provider, BehaviourPhase<impl AuthenticatedMultiplexedTransport, R>>,
-        Arc<RwLock<HashMap<String, Arc<BandwidthSinks>>>>,
-    ) {
-        let (transport, sinks) = self.phase.transport.with_bandwidth_logging();
-        (
-            SwarmBuilder {
-                phase: BehaviourPhase {
-                    relay_behaviour: self.phase.relay_behaviour,
-                    transport,
-                },
-                keypair: self.keypair,
-                phantom: PhantomData,
+        registry: &mut libp2p_metrics::Registry,
+    ) -> SwarmBuilder<Provider, BehaviourPhase<impl AuthenticatedMultiplexedTransport, R>> {
+        SwarmBuilder {
+            phase: BehaviourPhase {
+                relay_behaviour: self.phase.relay_behaviour,
+                transport: crate::metrics::bandwidth::Transport::new(self.phase.transport, registry),
             },
-            sinks,
-        )
+            keypair: self.keypair,
+            phantom: PhantomData,
+        }
     }
+}
 
+impl<T: AuthenticatedMultiplexedTransport, Provider, R>
+    SwarmBuilder<Provider, BandwidthLoggingPhase<T, R>>
+{
     pub fn without_bandwidth_logging(self) -> SwarmBuilder<Provider, BehaviourPhase<T, R>> {
         SwarmBuilder {
             phase: BehaviourPhase {

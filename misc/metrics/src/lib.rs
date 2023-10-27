@@ -27,6 +27,8 @@
 
 #![cfg_attr(docsrs, feature(doc_cfg, doc_auto_cfg))]
 
+// TODO: pub?
+pub mod bandwidth;
 #[cfg(feature = "dcutr")]
 mod dcutr;
 #[cfg(feature = "gossipsub")]
@@ -42,9 +44,7 @@ mod protocol_stack;
 mod relay;
 mod swarm;
 
-use std::{sync::{Arc, RwLock}, collections::HashMap};
-
-use prometheus_client::registry::Registry;
+pub use prometheus_client::registry::Registry;
 
 /// Set of Swarm and protocol metrics derived from emitted events.
 pub struct Metrics {

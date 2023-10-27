@@ -144,23 +144,22 @@ impl<T: AuthenticatedMultiplexedTransport, Provider>
             .with_relay_client(security_upgrade, multiplexer_upgrade)
     }
 }
+#[cfg(feature = "metrics")]
 impl<Provider, T: AuthenticatedMultiplexedTransport>
     SwarmBuilder<Provider, OtherTransportPhase<T>>
 {
     pub fn with_bandwidth_logging(
         self,
-    ) -> (
-        SwarmBuilder<
-            Provider,
-            BehaviourPhase<impl AuthenticatedMultiplexedTransport, NoRelayBehaviour>,
-        >,
-        Arc<RwLock<HashMap<String, Arc<BandwidthSinks>>>>,
-    ) {
+        registry: &mut libp2p_metrics::Registry,
+    ) -> SwarmBuilder<
+        Provider,
+        BehaviourPhase<impl AuthenticatedMultiplexedTransport, NoRelayBehaviour>,
+    > {
         self.without_any_other_transports()
             .without_dns()
             .without_websocket()
             .without_relay()
-            .with_bandwidth_logging()
+            .with_bandwidth_logging(registry)
     }
 }
 impl<Provider, T: AuthenticatedMultiplexedTransport>
