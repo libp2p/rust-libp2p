@@ -20,7 +20,7 @@
 
 //! [`NetworkBehaviour`] to act as a direct connection upgrade through relay node.
 
-use crate::{handler, protocol};
+use crate::handler;
 use either::Either;
 use libp2p_core::connection::ConnectedPoint;
 use libp2p_core::multiaddr::Protocol;
@@ -51,13 +51,9 @@ pub struct Event {
 }
 
 #[derive(Debug, Error)]
-pub enum Error {
-    #[error("Failed to hole-punch after {MAX_NUMBER_OF_UPGRADE_ATTEMPTS}")]
-    AttemptsExceeded,
-    #[error("Outbound handshake failed: {0}.")]
-    Outbound(protocol::outbound::Error),
-    #[error("Inbound handshake failed: {0}.")]
-    Inbound(protocol::inbound::Error),
+#[error("Failed to hole-punch after {attempts} attempts")]
+pub struct Error {
+    attempts: u8,
 }
 
 pub struct Behaviour {
@@ -133,7 +129,9 @@ impl Behaviour {
             self.queued_events.extend([ToSwarm::GenerateEvent(Event {
                 remote_peer_id: peer_id,
                 connection_id: failed_direct_connection,
-                result: Err(Error::AttemptsExceeded),
+                result: Err(Error {
+                    attempts: MAX_NUMBER_OF_UPGRADE_ATTEMPTS,
+                }),
             })]);
         }
     }
@@ -279,18 +277,7 @@ impl NetworkBehaviour for Behaviour {
                 self.queued_events.push_back(ToSwarm::Dial { opts });
             }
             Either::Left(handler::relayed::Event::OutboundConnectFailed { error }) => {
-                self.queued_events.push_back(ToSwarm::GenerateEvent(Event {
-                    remote_peer_id: event_source,
-                    connection_id: relayed_connection_id,
-                    result: Err(Error::Outbound(error)),
-                }));
-            }
-            Either::Left(handler::relayed::Event::InboundConnectFailed { error }) => {
-                self.queued_events.push_back(ToSwarm::GenerateEvent(Event {
-                    remote_peer_id: event_source,
-                    connection_id: relayed_connection_id,
-                    result: Err(Error::Inbound(error)),
-                }))
+                log::debug!("Failed to perform DCUtR handshake: {error}");
             }
             Either::Left(handler::relayed::Event::OutboundConnectNegotiated { remote_addrs }) => {
                 log::debug!(

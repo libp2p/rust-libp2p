@@ -88,7 +88,7 @@ pub(crate) async fn handshake(
 }
 
 #[derive(Debug, Error)]
-pub enum Error {
+pub(crate) enum Error {
     #[error("IO error")]
     Io(#[from] io::Error),
     #[error("Protocol error")]
