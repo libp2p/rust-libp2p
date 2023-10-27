@@ -3,6 +3,12 @@
 - Propagate errors of relay client to the listener / dialer.
   A failed reservation will now appear as `SwarmEvent::ListenerClosed` with the `ListenerId` of the corresponding `Swarm::listen_on` call. 
   A failed circuit request will no appear as `SwarmEvent::OutgoingConnectionError` with the `ConnectionId` of the corresponding `Swarm::dial` call.
+  As a result, we remove the following enum variants:
+  - `relay::client::Event::ReservationReqFailed`
+  - `relay::client::Event::OutboundCircuitReqFailed`
+  - `relay::client::Event::InboundCircuitReqDenied`
+  - `relay::client::Event::InboundCircuitReqDenyFailed`
+  
   See [PR 4745](https://github.com/libp2p/rust-lib2pp/pulls/4745).
 
 ## 0.16.2
