@@ -46,8 +46,7 @@ pub(crate) const MAX_NUMBER_OF_UPGRADE_ATTEMPTS: u8 = 3;
 #[derive(Debug)]
 pub struct Event {
     pub remote_peer_id: PeerId,
-    pub connection_id: ConnectionId,
-    pub result: Result<(), Error>,
+    pub result: Result<ConnectionId, Error>,
 }
 
 #[derive(Debug, Error)]
@@ -128,7 +127,6 @@ impl Behaviour {
         } else {
             self.queued_events.extend([ToSwarm::GenerateEvent(Event {
                 remote_peer_id: peer_id,
-                connection_id: failed_direct_connection,
                 result: Err(Error {
                     attempts: MAX_NUMBER_OF_UPGRADE_ATTEMPTS,
                 }),
@@ -234,8 +232,7 @@ impl NetworkBehaviour for Behaviour {
 
             self.queued_events.extend([ToSwarm::GenerateEvent(Event {
                 remote_peer_id: peer,
-                connection_id,
-                result: Ok(()),
+                result: Ok(connection_id),
             })]);
         }
 

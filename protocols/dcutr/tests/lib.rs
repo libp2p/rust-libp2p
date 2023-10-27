@@ -91,8 +91,7 @@ async fn connect() {
     let reported_conn_id = src
         .wait(move |e| match e {
             SwarmEvent::Behaviour(ClientEvent::Dcutr(dcutr::Event {
-                connection_id,
-                result: Ok(()),
+                result: Ok(connection_id),
                 ..
             })) => Some(connection_id),
             _ => None,
