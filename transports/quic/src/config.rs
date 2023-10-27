@@ -18,7 +18,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use quinn::VarInt;
+use quinn::{VarInt, MtuDiscoveryConfig};
 use std::{sync::Arc, time::Duration};
 
 /// Config for the transport.
@@ -120,6 +120,7 @@ impl From<Config> for QuinnConfig {
         transport.allow_spin(false);
         transport.stream_receive_window(max_stream_data.into());
         transport.receive_window(max_connection_data.into());
+        transport.mtu_discovery_config(Some(MtuDiscoveryConfig::default()));
         let transport = Arc::new(transport);
 
         let mut server_config = quinn::ServerConfig::with_crypto(server_tls_config);
