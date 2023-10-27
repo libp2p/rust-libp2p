@@ -59,7 +59,9 @@ pub struct Error {
 enum InnerError {
     #[error("Giving up after {0} dial attempts")]
     AttemptsExceeded(u8),
-    #[error("Stream error: {0}")]
+    #[error("Inbound stream error: {0}")]
+    InboundError(protocol::inbound::Error),
+    #[error("Outbound stream error: {0}")]
     OutboundError(protocol::outbound::Error),
 }
 
@@ -280,6 +282,14 @@ impl NetworkBehaviour for Behaviour {
                 self.direct_to_relayed_connections
                     .insert(maybe_direct_connection_id, relayed_connection_id);
                 self.queued_events.push_back(ToSwarm::Dial { opts });
+            }
+            Either::Left(handler::relayed::Event::InboundConnectFailed { error }) => {
+                self.queued_events.push_back(ToSwarm::GenerateEvent(Event {
+                    remote_peer_id: event_source,
+                    result: Err(Error {
+                        inner: InnerError::InboundError(error),
+                    }),
+                }));
             }
             Either::Left(handler::relayed::Event::OutboundConnectFailed { error }) => {
                 self.queued_events.push_back(ToSwarm::GenerateEvent(Event {

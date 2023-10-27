@@ -51,6 +51,7 @@ pub enum Command {
 pub enum Event {
     InboundConnectNegotiated { remote_addrs: Vec<Multiaddr> },
     OutboundConnectNegotiated { remote_addrs: Vec<Multiaddr> },
+    InboundConnectFailed { error: inbound::Error },
     OutboundConnectFailed { error: outbound::Error },
 }
 
@@ -234,53 +235,55 @@ impl ConnectionHandler for Handler {
             Self::Error,
         >,
     > {
-        loop {
-            // Return queued events.
-            if let Some(event) = self.queued_events.pop_front() {
-                return Poll::Ready(event);
-            }
+        // Return queued events.
+        if let Some(event) = self.queued_events.pop_front() {
+            return Poll::Ready(event);
+        }
 
-            match self.inbound_stream.poll_unpin(cx) {
-                Poll::Ready(Ok(Ok(addresses))) => {
-                    return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(
-                        Event::InboundConnectNegotiated {
-                            remote_addrs: addresses,
-                        },
-                    ))
-                }
-                Poll::Ready(Ok(Err(error))) => {
-                    log::debug!("Inbound stream failed: {error}");
-                    continue;
-                }
-                Poll::Ready(Err(futures_bounded::Timeout { .. })) => {
-                    log::debug!("Inbound stream timed out");
-                    continue;
-                }
-                Poll::Pending => {}
+        match self.inbound_stream.poll_unpin(cx) {
+            Poll::Ready(Ok(Ok(addresses))) => {
+                return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(
+                    Event::InboundConnectNegotiated {
+                        remote_addrs: addresses,
+                    },
+                ))
             }
+            Poll::Ready(Ok(Err(error))) => {
+                return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(
+                    Event::InboundConnectFailed { error },
+                ))
+            }
+            Poll::Ready(Err(futures_bounded::Timeout { .. })) => {
+                return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(
+                    Event::InboundConnectFailed {
+                        error: inbound::Error::Io(io::ErrorKind::TimedOut.into()),
+                    },
+                ))
+            }
+            Poll::Pending => {}
+        }
 
-            match self.outbound_stream.poll_unpin(cx) {
-                Poll::Ready(Ok(Ok(addresses))) => {
-                    return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(
-                        Event::OutboundConnectNegotiated {
-                            remote_addrs: addresses,
-                        },
-                    ))
-                }
-                Poll::Ready(Ok(Err(error))) => {
-                    return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(
-                        Event::OutboundConnectFailed { error },
-                    ))
-                }
-                Poll::Ready(Err(futures_bounded::Timeout { .. })) => {
-                    return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(
-                        Event::OutboundConnectFailed {
-                            error: outbound::Error::Io(io::ErrorKind::TimedOut.into()),
-                        },
-                    ))
-                }
-                Poll::Pending => break,
+        match self.outbound_stream.poll_unpin(cx) {
+            Poll::Ready(Ok(Ok(addresses))) => {
+                return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(
+                    Event::OutboundConnectNegotiated {
+                        remote_addrs: addresses,
+                    },
+                ))
             }
+            Poll::Ready(Ok(Err(error))) => {
+                return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(
+                    Event::OutboundConnectFailed { error },
+                ))
+            }
+            Poll::Ready(Err(futures_bounded::Timeout { .. })) => {
+                return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(
+                    Event::OutboundConnectFailed {
+                        error: outbound::Error::Io(io::ErrorKind::TimedOut.into()),
+                    },
+                ))
+            }
+            Poll::Pending => {}
         }
 
         Poll::Pending
