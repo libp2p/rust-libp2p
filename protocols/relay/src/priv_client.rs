@@ -25,7 +25,7 @@ pub(crate) mod transport;
 
 use crate::multiaddr_ext::MultiaddrExt;
 use crate::priv_client::handler::Handler;
-use crate::protocol::{self, inbound_stop, outbound_hop};
+use crate::protocol::{self, inbound_stop};
 use bytes::Bytes;
 use either::Either;
 use futures::channel::mpsc::Receiver;
@@ -40,8 +40,7 @@ use libp2p_swarm::behaviour::{ConnectionClosed, ConnectionEstablished, FromSwarm
 use libp2p_swarm::dial_opts::DialOpts;
 use libp2p_swarm::{
     dummy, ConnectionDenied, ConnectionHandler, ConnectionId, DialFailure, NetworkBehaviour,
-    NotifyHandler, Stream, StreamUpgradeError, THandler, THandlerInEvent, THandlerOutEvent,
-    ToSwarm,
+    NotifyHandler, Stream, THandler, THandlerInEvent, THandlerOutEvent, ToSwarm,
 };
 use std::collections::{hash_map, HashMap, VecDeque};
 use std::io::{Error, ErrorKind, IoSlice};
@@ -63,10 +62,6 @@ pub enum Event {
     OutboundCircuitEstablished {
         relay_peer_id: PeerId,
         limit: Option<protocol::Limit>,
-    },
-    OutboundCircuitReqFailed {
-        relay_peer_id: PeerId,
-        error: StreamUpgradeError<outbound_hop::ConnectError>,
     },
     /// An inbound circuit has been established.
     InboundCircuitEstablished {
@@ -253,10 +248,6 @@ impl NetworkBehaviour for Behaviour {
                     limit,
                 }
             }
-            handler::Event::OutboundCircuitReqFailed { error } => Event::OutboundCircuitReqFailed {
-                relay_peer_id: event_source,
-                error,
-            },
             handler::Event::InboundCircuitEstablished { src_peer_id, limit } => {
                 Event::InboundCircuitEstablished { src_peer_id, limit }
             }

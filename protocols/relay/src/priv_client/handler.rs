@@ -88,9 +88,6 @@ pub enum Event {
     },
     /// An outbound circuit has been established.
     OutboundCircuitEstablished { limit: Option<protocol::Limit> },
-    OutboundCircuitReqFailed {
-        error: StreamUpgradeError<outbound_hop::ConnectError>,
-    },
     /// An inbound circuit has been established.
     InboundCircuitEstablished {
         src_peer_id: PeerId,
