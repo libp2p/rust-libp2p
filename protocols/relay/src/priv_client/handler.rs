@@ -573,7 +573,7 @@ impl ConnectionHandler for Handler {
                         dst_peer_id,
                         to_dial: send_back,
                     } => {
-                        self.active_connect_requests.push_back(send_back); // TODO: WHich peer ID is this?
+                        self.active_connect_requests.push_back(send_back);
 
                         if self
                             .inflight_output_connect_requests
