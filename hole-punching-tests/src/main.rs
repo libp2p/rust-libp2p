@@ -87,11 +87,7 @@ async fn main() -> Result<()> {
         .build();
 
     client_listen_on_transport(&mut swarm, transport).await?;
-    let relay_conn_id = client_connect_to_relay(&mut swarm, relay_addr.clone())
-        .await
-        .context("Failed to connect to relay")?;
-
-    let mut id = client_setup(&mut swarm, &mut redis, relay_addr.clone(), mode).await?;
+    let id = client_setup(&mut swarm, &mut redis, relay_addr.clone(), mode).await?;
 
     let mut hole_punched_peer_connection = None;
 
@@ -126,8 +122,6 @@ async fn main() -> Result<()> {
             ) => {
                 log::info!("Successfully hole-punched to {remote_peer_id}");
 
-                // Closing the connection to the relay will implicitly close the relayed connection to the other peer.
-                swarm.close_connection(relay_conn_id);
                 hole_punched_peer_connection = Some(connection_id);
             }
             (
@@ -166,10 +160,7 @@ async fn main() -> Result<()> {
                 _,
                 Either::Left(reservation),
             ) if listener_id == reservation => {
-                log::debug!("Reservation on relay failed: {e}");
-
-                // TODO: Re-connecting is a bit of a hack, we should figure out why the connection sometimes fails.
-                id = client_setup(&mut swarm, &mut redis, relay_addr.clone(), mode).await?;
+                anyhow::bail!("Reservation on relay failed: {e}");
             }
             (
                 SwarmEvent::OutgoingConnectionError {
@@ -180,13 +171,7 @@ async fn main() -> Result<()> {
                 _,
                 Either::Right(circuit),
             ) if connection_id == circuit => {
-                log::debug!("Circuit request relay failed: {error}");
-
-                // TODO: Re-connecting is a bit of a hack, we should figure out why the connection sometimes fails.
-                id = client_setup(&mut swarm, &mut redis, relay_addr.clone(), mode).await?;
-            }
-            (SwarmEvent::OutgoingConnectionError { error, .. }, _, _) => {
-                anyhow::bail!(error)
+                anyhow::bail!("Circuit request relay failed: {error}");
             }
             _ => {}
         }
@@ -217,40 +202,6 @@ where
         .with_context(|| format!("Failed to parse `{key}`)"))?;
 
     Ok(val)
-}
-
-async fn client_connect_to_relay(
-    swarm: &mut Swarm<Behaviour>,
-    relay_addr: Multiaddr,
-) -> Result<ConnectionId> {
-    let opts = DialOpts::from(relay_addr);
-    let relay_connection_id = opts.connection_id();
-
-    // Connect to the relay server.
-    swarm.dial(opts)?;
-
-    loop {
-        match swarm.next().await.unwrap() {
-            SwarmEvent::Behaviour(BehaviourEvent::Identify(identify::Event::Received {
-                info: identify::Info { observed_addr, .. },
-                ..
-            })) => {
-                log::info!("Relay told us our public address: {observed_addr}");
-                break;
-            }
-            SwarmEvent::ConnectionEstablished { connection_id, .. }
-                if connection_id == relay_connection_id =>
-            {
-                log::info!("Connected to the relay");
-            }
-            SwarmEvent::OutgoingConnectionError { error, .. } => {
-                anyhow::bail!(error)
-            }
-            _ => {}
-        }
-    }
-
-    Ok(relay_connection_id)
 }
 
 async fn client_listen_on_transport(
