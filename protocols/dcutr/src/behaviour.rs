@@ -20,7 +20,7 @@
 
 //! [`NetworkBehaviour`] to act as a direct connection upgrade through relay node.
 
-use crate::handler;
+use crate::{handler, protocol};
 use either::Either;
 use libp2p_core::connection::ConnectedPoint;
 use libp2p_core::multiaddr::Protocol;
@@ -50,9 +50,17 @@ pub struct Event {
 }
 
 #[derive(Debug, Error)]
-#[error("Failed to hole-punch after {attempts} attempts")]
+#[error("Failed to hole-punch connection: {inner}")]
 pub struct Error {
-    attempts: u8,
+    inner: InnerError,
+}
+
+#[derive(Debug, Error)]
+enum InnerError {
+    #[error("Giving up after {0} dial attempts")]
+    AttemptsExceeded(u8),
+    #[error("Stream error: {0}")]
+    OutboundError(protocol::outbound::Error),
 }
 
 pub struct Behaviour {
@@ -128,7 +136,7 @@ impl Behaviour {
             self.queued_events.extend([ToSwarm::GenerateEvent(Event {
                 remote_peer_id: peer_id,
                 result: Err(Error {
-                    attempts: MAX_NUMBER_OF_UPGRADE_ATTEMPTS,
+                    inner: InnerError::AttemptsExceeded(MAX_NUMBER_OF_UPGRADE_ATTEMPTS),
                 }),
             })]);
         }
@@ -274,7 +282,14 @@ impl NetworkBehaviour for Behaviour {
                 self.queued_events.push_back(ToSwarm::Dial { opts });
             }
             Either::Left(handler::relayed::Event::OutboundConnectFailed { error }) => {
-                log::debug!("Failed to perform DCUtR handshake: {error}");
+                self.queued_events.push_back(ToSwarm::GenerateEvent(Event {
+                    remote_peer_id: event_source,
+                    result: Err(Error {
+                        inner: InnerError::OutboundError(error),
+                    }),
+                }));
+
+                // Maybe treat these as transient and retry?
             }
             Either::Left(handler::relayed::Event::OutboundConnectNegotiated { remote_addrs }) => {
                 log::debug!(
