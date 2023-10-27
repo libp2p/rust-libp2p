@@ -282,9 +282,8 @@ impl ConnectionHandler for Handler {
     fn on_behaviour_event(&mut self, event: Self::FromBehaviour) {
         match event {
             In::Reserve { to_listener } => {
-                self.pending_requests.push_back(PendingRequest::Reserve {
-                    to_listener: to_listener,
-                });
+                self.pending_requests
+                    .push_back(PendingRequest::Reserve { to_listener });
                 self.queued_events
                     .push_back(ConnectionHandlerEvent::OutboundSubstreamRequest {
                         protocol: SubstreamProtocol::new(ReadyUpgrade::new(HOP_PROTOCOL_NAME), ()),
