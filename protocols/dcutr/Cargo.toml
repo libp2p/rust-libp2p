@@ -25,6 +25,7 @@ quick-protobuf-codec = { workspace = true }
 thiserror = "1.0"
 void = "1"
 lru = "0.11.1"
+futures-bounded = { workspace = true }
 
 [dev-dependencies]
 async-std = { version = "1.12.0", features = ["attributes"] }

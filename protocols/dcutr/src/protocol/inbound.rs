@@ -20,114 +20,95 @@
 
 use crate::proto;
 use asynchronous_codec::Framed;
-use futures::{future::BoxFuture, prelude::*};
-use libp2p_core::{multiaddr::Protocol, upgrade, Multiaddr};
-use libp2p_swarm::{Stream, StreamProtocol};
+use futures::prelude::*;
+use libp2p_core::{multiaddr::Protocol, Multiaddr};
+use libp2p_swarm::Stream;
 use std::convert::TryFrom;
-use std::iter;
+use std::io;
 use thiserror::Error;
 
-pub struct Upgrade {}
+pub(crate) async fn handshake(
+    stream: Stream,
+    candidates: Vec<Multiaddr>,
+) -> Result<Vec<Multiaddr>, Error> {
+    let mut stream = Framed::new(
+        stream,
+        quick_protobuf_codec::Codec::new(super::MAX_MESSAGE_SIZE_BYTES),
+    );
 
-impl upgrade::UpgradeInfo for Upgrade {
-    type Info = StreamProtocol;
-    type InfoIter = iter::Once<Self::Info>;
+    let proto::HolePunch { type_pb, ObsAddrs } = stream
+        .next()
+        .await
+        .ok_or(io::Error::from(io::ErrorKind::UnexpectedEof))??;
 
-    fn protocol_info(&self) -> Self::InfoIter {
-        iter::once(super::PROTOCOL_NAME)
-    }
-}
-
-impl upgrade::InboundUpgrade<Stream> for Upgrade {
-    type Output = PendingConnect;
-    type Error = UpgradeError;
-    type Future = BoxFuture<'static, Result<Self::Output, Self::Error>>;
-
-    fn upgrade_inbound(self, substream: Stream, _: Self::Info) -> Self::Future {
-        let mut substream = Framed::new(
-            substream,
-            quick_protobuf_codec::Codec::new(super::MAX_MESSAGE_SIZE_BYTES),
-        );
-
-        async move {
-            let proto::HolePunch { type_pb, ObsAddrs } =
-                substream.next().await.ok_or(UpgradeError::StreamClosed)??;
-
-            let obs_addrs = if ObsAddrs.is_empty() {
-                return Err(UpgradeError::NoAddresses);
-            } else {
-                ObsAddrs
-                    .into_iter()
-                    .filter_map(|a| match Multiaddr::try_from(a.to_vec()) {
-                        Ok(a) => Some(a),
-                        Err(e) => {
-                            log::debug!("Unable to parse multiaddr: {e}");
-                            None
-                        }
-                    })
-                    // Filter out relayed addresses.
-                    .filter(|a| {
-                        if a.iter().any(|p| p == Protocol::P2pCircuit) {
-                            log::debug!("Dropping relayed address {a}");
-                            false
-                        } else {
-                            true
-                        }
-                    })
-                    .collect::<Vec<Multiaddr>>()
-            };
-
-            match type_pb {
-                proto::Type::CONNECT => {}
-                proto::Type::SYNC => return Err(UpgradeError::UnexpectedTypeSync),
-            }
-
-            Ok(PendingConnect {
-                substream,
-                remote_obs_addrs: obs_addrs,
+    let obs_addrs = if ObsAddrs.is_empty() {
+        return Err(Error::Protocol(ProtocolViolation::NoAddresses));
+    } else {
+        ObsAddrs
+            .into_iter()
+            .filter_map(|a| match Multiaddr::try_from(a.to_vec()) {
+                Ok(a) => Some(a),
+                Err(e) => {
+                    log::debug!("Unable to parse multiaddr: {e}");
+                    None
+                }
             })
-        }
-        .boxed()
+            // Filter out relayed addresses.
+            .filter(|a| {
+                if a.iter().any(|p| p == Protocol::P2pCircuit) {
+                    log::debug!("Dropping relayed address {a}");
+                    false
+                } else {
+                    true
+                }
+            })
+            .collect::<Vec<Multiaddr>>()
+    };
+
+    match type_pb {
+        proto::Type::CONNECT => {}
+        proto::Type::SYNC => return Err(Error::Protocol(ProtocolViolation::UnexpectedTypeSync)),
     }
-}
 
-pub struct PendingConnect {
-    substream: Framed<Stream, quick_protobuf_codec::Codec<proto::HolePunch>>,
-    remote_obs_addrs: Vec<Multiaddr>,
-}
+    let msg = proto::HolePunch {
+        type_pb: proto::Type::CONNECT,
+        ObsAddrs: candidates.into_iter().map(|a| a.to_vec()).collect(),
+    };
 
-impl PendingConnect {
-    pub async fn accept(
-        mut self,
-        local_obs_addrs: Vec<Multiaddr>,
-    ) -> Result<Vec<Multiaddr>, UpgradeError> {
-        let msg = proto::HolePunch {
-            type_pb: proto::Type::CONNECT,
-            ObsAddrs: local_obs_addrs.into_iter().map(|a| a.to_vec()).collect(),
-        };
+    stream.send(msg).await?;
+    let proto::HolePunch { type_pb, .. } = stream
+        .next()
+        .await
+        .ok_or(io::Error::from(io::ErrorKind::UnexpectedEof))??;
 
-        self.substream.send(msg).await?;
-        let proto::HolePunch { type_pb, .. } = self
-            .substream
-            .next()
-            .await
-            .ok_or(UpgradeError::StreamClosed)??;
-
-        match type_pb {
-            proto::Type::CONNECT => return Err(UpgradeError::UnexpectedTypeConnect),
-            proto::Type::SYNC => {}
+    match type_pb {
+        proto::Type::CONNECT => {
+            return Err(Error::Protocol(ProtocolViolation::UnexpectedTypeConnect))
         }
+        proto::Type::SYNC => {}
+    }
 
-        Ok(self.remote_obs_addrs)
+    Ok(obs_addrs)
+}
+
+#[derive(Debug, Error)]
+pub enum Error {
+    #[error("IO error")]
+    Io(#[from] io::Error),
+    #[error("Protocol error")]
+    Protocol(#[from] ProtocolViolation),
+}
+
+impl From<quick_protobuf_codec::Error> for Error {
+    fn from(e: quick_protobuf_codec::Error) -> Self {
+        Error::Protocol(ProtocolViolation::Codec(e))
     }
 }
 
 #[derive(Debug, Error)]
-pub enum UpgradeError {
+pub enum ProtocolViolation {
     #[error(transparent)]
     Codec(#[from] quick_protobuf_codec::Error),
-    #[error("Stream closed")]
-    StreamClosed,
     #[error("Expected at least one address in reservation.")]
     NoAddresses,
     #[error("Failed to parse response type field.")]

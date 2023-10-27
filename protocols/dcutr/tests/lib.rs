@@ -75,26 +75,6 @@ async fn connect() {
 
     src.dial_and_wait(dst_relayed_addr.clone()).await;
 
-    loop {
-        match src
-            .next_swarm_event()
-            .await
-            .try_into_behaviour_event()
-            .unwrap()
-        {
-            ClientEvent::Dcutr(dcutr::Event::RemoteInitiatedDirectConnectionUpgrade {
-                remote_peer_id,
-                remote_relayed_addr,
-            }) => {
-                if remote_peer_id == dst_peer_id && remote_relayed_addr == dst_relayed_addr {
-                    break;
-                }
-            }
-            ClientEvent::Identify(_) => {}
-            other => panic!("Unexpected event: {other:?}."),
-        }
-    }
-
     let dst_addr = dst_tcp_addr.with(Protocol::P2p(dst_peer_id));
 
     let established_conn_id = src
