@@ -3,6 +3,7 @@
 - Propagate errors of relay client to the listener / dialer.
   A failed reservation will now appear as `SwarmEvent::ListenerClosed` with the `ListenerId` of the corresponding `Swarm::listen_on` call. 
   A failed circuit request will no appear as `SwarmEvent::OutgoingConnectionError` with the `ConnectionId` of the corresponding `Swarm::dial` call.
+  Lastly, a failed reservation or circuit request will **no longer** close the underlying relay connection.
   As a result, we remove the following enum variants:
   - `relay::client::Event::ReservationReqFailed`
   - `relay::client::Event::OutboundCircuitReqFailed`
