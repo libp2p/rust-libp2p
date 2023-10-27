@@ -249,6 +249,7 @@ impl_quic_phase_with_websocket!(
     super::provider::Tokio,
     rw_stream_sink::RwStreamSink<libp2p_websocket::BytesConnection<libp2p_tcp::tokio::TcpStream>>
 );
+#[cfg(feature = "metrics")]
 impl<Provider, T: AuthenticatedMultiplexedTransport> SwarmBuilder<Provider, QuicPhase<T>> {
     pub fn with_bandwidth_logging(
         self,

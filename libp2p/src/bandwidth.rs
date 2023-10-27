@@ -112,32 +112,6 @@ pub struct BandwidthSinks {
     outbound: AtomicU64,
 }
 
-impl BandwidthSinks {
-    /// Returns a new [`BandwidthSinks`].
-    pub(crate) fn new() -> Arc<Self> {
-        Arc::new(Self {
-            inbound: AtomicU64::new(0),
-            outbound: AtomicU64::new(0),
-        })
-    }
-
-    /// Returns the total number of bytes that have been downloaded on all the streams.
-    ///
-    /// > **Note**: This method is by design subject to race conditions. The returned value should
-    /// >           only ever be used for statistics purposes.
-    pub fn total_inbound(&self) -> u64 {
-        self.inbound.load(Ordering::Relaxed)
-    }
-
-    /// Returns the total number of bytes that have been uploaded on all the streams.
-    ///
-    /// > **Note**: This method is by design subject to race conditions. The returned value should
-    /// >           only ever be used for statistics purposes.
-    pub fn total_outbound(&self) -> u64 {
-        self.outbound.load(Ordering::Relaxed)
-    }
-}
-
 /// Wraps around an [`AsyncRead`] + [`AsyncWrite`] and logs the bandwidth that goes through it.
 #[pin_project::pin_project]
 pub(crate) struct InstrumentedStream<SMInner> {

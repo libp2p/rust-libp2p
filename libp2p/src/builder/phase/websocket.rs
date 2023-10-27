@@ -197,6 +197,20 @@ impl<Provider, T: AuthenticatedMultiplexedTransport> SwarmBuilder<Provider, Webs
             .with_behaviour(constructor)
     }
 }
+#[cfg(feature = "metrics")]
+impl<Provider, T: AuthenticatedMultiplexedTransport> SwarmBuilder<Provider, WebsocketPhase<T>> {
+    pub fn with_bandwidth_logging(
+        self,
+        registry: &mut libp2p_metrics::Registry,
+    ) -> SwarmBuilder<
+        Provider,
+        BehaviourPhase<impl AuthenticatedMultiplexedTransport, NoRelayBehaviour>,
+    > {
+        self.without_websocket()
+            .without_relay()
+            .with_bandwidth_logging(registry)
+    }
+}
 
 #[derive(Debug, thiserror::Error)]
 #[error(transparent)]

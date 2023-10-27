@@ -53,6 +53,8 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     let config = Zeroizing::new(config::Config::from_file(opt.config.as_path())?);
 
+    let mut metric_registry = Registry::default();
+
     let local_keypair = {
         let keypair = identity::Keypair::from_protobuf_encoding(&Zeroizing::new(
             base64::engine::general_purpose::STANDARD
@@ -78,6 +80,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         )?
         .with_quic()
         .with_dns()?
+        .with_bandwidth_logging(&mut metric_registry)
         .with_behaviour(|key| {
             behaviour::Behaviour::new(key.public(), opt.enable_kademlia, opt.enable_autonat)
         })?
@@ -107,7 +110,6 @@ async fn main() -> Result<(), Box<dyn Error>> {
         swarm.external_addresses().collect::<Vec<_>>()
     );
 
-    let mut metric_registry = Registry::default();
     let metrics = Metrics::new(&mut metric_registry);
     let build_info = Info::new(vec![("version".to_string(), env!("CARGO_PKG_VERSION"))]);
     metric_registry.register(
