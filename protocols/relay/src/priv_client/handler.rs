@@ -136,10 +136,8 @@ pub struct Handler {
         futures_bounded::FuturesSet<Result<outbound_hop::Reservation, outbound_hop::ReserveError>>,
 
     /// A `CONNECT` request is in-flight for each item in this queue.
-    active_connect_requests: VecDeque<(
-        PeerId,
-        oneshot::Sender<Result<priv_client::Connection, outbound_hop::ConnectError>>,
-    )>,
+    active_connect_requests:
+        VecDeque<oneshot::Sender<Result<priv_client::Connection, outbound_hop::ConnectError>>>,
 
     inflight_output_connect_requests:
         futures_bounded::FuturesSet<Result<outbound_hop::Circuit, outbound_hop::ConnectError>>,
@@ -392,7 +390,7 @@ impl ConnectionHandler for Handler {
                 read_buffer,
                 stream,
             }))) => {
-                let (_, to_listener) = self
+                let to_listener = self
                     .active_connect_requests
                     .pop_front()
                     .expect("must have active request for stream");
@@ -409,7 +407,7 @@ impl ConnectionHandler for Handler {
                 ));
             }
             Poll::Ready(Ok(Err(error))) => {
-                let (_, to_dialer) = self
+                let to_dialer = self
                     .active_connect_requests
                     .pop_front()
                     .expect("must have active request for stream");
@@ -571,8 +569,7 @@ impl ConnectionHandler for Handler {
                         dst_peer_id,
                         send_back,
                     } => {
-                        self.active_connect_requests
-                            .push_back((PeerId::random(), send_back)); // TODO: WHich peer ID is this?
+                        self.active_connect_requests.push_back(send_back); // TODO: WHich peer ID is this?
 
                         if self
                             .inflight_output_connect_requests
