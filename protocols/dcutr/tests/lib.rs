@@ -75,13 +75,8 @@ async fn connect() {
 
     src.dial_and_wait(dst_relayed_addr.clone()).await;
 
-    loop {
-        match src
-            .next_swarm_event()
-            .await
-            .try_into_behaviour_event()
-            .unwrap()
-        {
+    while let Ok(event) = src.next_swarm_event().await.try_into_behaviour_event() {
+        match event {
             ClientEvent::Dcutr(dcutr::Event::RemoteInitiatedDirectConnectionUpgrade {
                 remote_peer_id,
                 remote_relayed_addr,
@@ -221,6 +216,7 @@ async fn wait_for_reservation(
                 addr_observed = true;
             }
             SwarmEvent::Behaviour(ClientEvent::Identify(_)) => {}
+            SwarmEvent::NewExternalAddrCandidate { .. } => {}
             e => panic!("{e:?}"),
         }
     }
