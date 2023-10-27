@@ -33,7 +33,8 @@ use libp2p_identity::PeerId;
 use libp2p_ping as ping;
 use libp2p_plaintext as plaintext;
 use libp2p_relay as relay;
-use libp2p_swarm::{Config, NetworkBehaviour, Swarm, SwarmEvent};
+use libp2p_swarm::dial_opts::DialOpts;
+use libp2p_swarm::{Config, DialError, NetworkBehaviour, Swarm, SwarmEvent};
 use libp2p_swarm_test::SwarmExt;
 use std::error::Error;
 use std::time::Duration;
@@ -317,6 +318,60 @@ fn propagate_reservation_error_to_listener() {
     assert!(matches!(
         error,
         relay::outbound::hop::ReserveError::ResourceLimitExceeded
+    ));
+}
+
+#[test]
+fn propagate_connect_error_to_unknown_peer_to_dialer() {
+    let _ = env_logger::try_init();
+    let mut pool = LocalPool::new();
+
+    let relay_addr = Multiaddr::empty().with(Protocol::Memory(rand::random::<u64>()));
+    let mut relay = build_relay();
+    let relay_peer_id = *relay.local_peer_id();
+
+    relay.listen_on(relay_addr.clone()).unwrap();
+    relay.add_external_address(relay_addr.clone());
+    spawn_swarm_on_pool(&pool, relay);
+
+    let mut src = build_client();
+
+    let dst_peer_id = PeerId::random(); // We don't have a destination peer in this test, so the CONNECT request will fail.
+    let dst_addr = relay_addr
+        .with(Protocol::P2p(relay_peer_id))
+        .with(Protocol::P2pCircuit)
+        .with(Protocol::P2p(dst_peer_id));
+
+    let opts = DialOpts::from(dst_addr.clone());
+    let circuit_connection_id = opts.connection_id();
+
+    src.dial(opts).unwrap();
+
+    let (failed_address, error) = pool.run_until(src.wait(|e| match e {
+        SwarmEvent::OutgoingConnectionError {
+            connection_id,
+            error: DialError::Transport(mut errors),
+            ..
+        } if connection_id == circuit_connection_id => {
+            assert_eq!(errors.len(), 1);
+            Some(errors.remove(0))
+        }
+        _ => None,
+    }));
+
+    // This is a bit wonky but we need to get the _actual_ source error :)
+    let error = error
+        .source()
+        .unwrap()
+        .source()
+        .unwrap()
+        .downcast_ref::<relay::outbound::hop::ConnectError>()
+        .unwrap();
+
+    assert_eq!(failed_address, dst_addr);
+    assert!(matches!(
+        error,
+        relay::outbound::hop::ConnectError::NoReservation
     ));
 }
 
