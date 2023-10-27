@@ -26,7 +26,6 @@ use futures::channel::{mpsc, oneshot};
 use futures::future::{BoxFuture, FutureExt};
 use futures::sink::SinkExt;
 use futures::stream::{FuturesUnordered, StreamExt};
-use futures_bounded::PushError;
 use futures_timer::Delay;
 use libp2p_core::multiaddr::Protocol;
 use libp2p_core::upgrade::ReadyUpgrade;
@@ -93,13 +92,6 @@ pub enum Event {
         src_peer_id: PeerId,
         limit: Option<protocol::Limit>,
     },
-    /// An inbound circuit request has been denied.
-    InboundCircuitReqDenied { src_peer_id: PeerId },
-    /// Denying an inbound circuit request failed.
-    InboundCircuitReqDenyFailed {
-        src_peer_id: PeerId,
-        error: inbound_stop::UpgradeError,
-    },
 }
 
 pub struct Handler {
@@ -109,7 +101,7 @@ pub struct Handler {
     /// A pending fatal error that results in the connection being closed.
     pending_error: Option<
         StreamUpgradeError<
-            Either<inbound_stop::FatalUpgradeError, outbound_hop::ProtocolViolation>,
+            Either<inbound_stop::ProtocolViolation, outbound_hop::ProtocolViolation>,
         >,
     >,
 
@@ -140,7 +132,7 @@ pub struct Handler {
         futures_bounded::FuturesSet<Result<outbound_hop::Circuit, outbound_hop::ConnectError>>,
 
     inflight_inbound_circuit_requests:
-        futures_bounded::FuturesSet<Result<inbound_stop::Circuit, inbound_stop::FatalUpgradeError>>,
+        futures_bounded::FuturesSet<Result<inbound_stop::Circuit, inbound_stop::Error>>,
 
     reservation: Reservation,
 
@@ -150,7 +142,7 @@ pub struct Handler {
     /// resolves once the substream is dropped.
     alive_lend_out_substreams: FuturesUnordered<oneshot::Receiver<void::Void>>,
 
-    circuit_deny_futs: futures_bounded::FuturesMap<PeerId, Result<(), inbound_stop::UpgradeError>>,
+    circuit_deny_futs: futures_bounded::FuturesSet<Result<(), inbound_stop::Error>>,
 
     /// Futures that try to send messages to the transport.
     send_channel_tasks: FuturesUnordered<BoxFuture<'static, ()>>,
@@ -181,7 +173,7 @@ impl Handler {
                 STREAM_TIMEOUT,
                 MAX_CONCURRENT_STREAMS_PER_CONNECTION,
             ),
-            circuit_deny_futs: futures_bounded::FuturesMap::new(
+            circuit_deny_futs: futures_bounded::FuturesSet::new(
                 DENYING_CIRCUIT_TIMEOUT,
                 MAX_NUMBER_DENYING_CIRCUIT,
             ),
@@ -247,13 +239,9 @@ impl Handler {
         let src_peer_id = circuit.src_peer_id();
 
         match self.circuit_deny_futs.try_push(
-            src_peer_id,
             circuit.deny(proto::Status::NO_RESERVATION),
         ) {
-            Err(PushError::BeyondCapacity(_)) => log::warn!(
-                "Dropping inbound circuit request to be denied from {src_peer_id} due to exceeding limit."
-            ),
-            Err(PushError::Replaced(_)) => log::warn!(
+            Err(_) => log::warn!(
                 "Dropping existing inbound circuit request to be denied from {src_peer_id} in favor of new one."
             ),
             Ok(()) => {}
@@ -265,7 +253,7 @@ impl ConnectionHandler for Handler {
     type FromBehaviour = In;
     type ToBehaviour = Event;
     type Error = StreamUpgradeError<
-        Either<inbound_stop::FatalUpgradeError, outbound_hop::ProtocolViolation>,
+        Either<inbound_stop::ProtocolViolation, outbound_hop::ProtocolViolation>,
     >;
     type InboundProtocol = ReadyUpgrade<StreamProtocol>;
     type InboundOpenInfo = ();
@@ -451,16 +439,9 @@ impl ConnectionHandler for Handler {
             return Poll::Ready(event);
         }
 
-        if let Poll::Ready(worker_res) = self.inflight_inbound_circuit_requests.poll_unpin(cx) {
-            let res = match worker_res {
-                Ok(r) => r,
-                Err(futures_bounded::Timeout { .. }) => {
-                    return Poll::Ready(ConnectionHandlerEvent::Close(StreamUpgradeError::Timeout));
-                }
-            };
-
-            match res {
-                Ok(circuit) => match &mut self.reservation {
+        loop {
+            match self.inflight_inbound_circuit_requests.poll_unpin(cx) {
+                Poll::Ready(Ok(Ok(circuit))) => match &mut self.reservation {
                     Reservation::Accepted { pending_msgs, .. }
                     | Reservation::Renewing { pending_msgs, .. } => {
                         let src_peer_id = circuit.src_peer_id();
@@ -486,10 +467,16 @@ impl ConnectionHandler for Handler {
                         self.insert_to_deny_futs(circuit);
                     }
                 },
-                Err(e) => {
-                    return Poll::Ready(ConnectionHandlerEvent::Close(StreamUpgradeError::Apply(
-                        Either::Left(e),
-                    )));
+                Poll::Ready(Ok(Err(e))) => {
+                    log::debug!("An inbound circuit request failed: {e}");
+                    continue;
+                }
+                Poll::Ready(Err(e)) => {
+                    log::debug!("An inbound circuit request timed out: {e}");
+                    continue;
+                }
+                Poll::Pending => {
+                    break;
                 }
             }
         }
@@ -504,21 +491,19 @@ impl ConnectionHandler for Handler {
         }
 
         // Deny incoming circuit requests.
-        match self.circuit_deny_futs.poll_unpin(cx) {
-            Poll::Ready((src_peer_id, Ok(Ok(())))) => {
-                return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(
-                    Event::InboundCircuitReqDenied { src_peer_id },
-                ));
+        loop {
+            match self.circuit_deny_futs.poll_unpin(cx) {
+                Poll::Ready(Ok(Ok(()))) => continue,
+                Poll::Ready(Ok(Err(error))) => {
+                    log::debug!("Denying inbound circuit failed: {error}");
+                    continue;
+                }
+                Poll::Ready(Err(futures_bounded::Timeout { .. })) => {
+                    log::debug!("Denying inbound circuit timed out");
+                    continue;
+                }
+                Poll::Pending => break,
             }
-            Poll::Ready((src_peer_id, Ok(Err(error)))) => {
-                return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(
-                    Event::InboundCircuitReqDenyFailed { src_peer_id, error },
-                ));
-            }
-            Poll::Ready((src_peer_id, Err(futures_bounded::Timeout { .. }))) => {
-                log::warn!("Dropping inbound circuit request to be denied from {:?} due to exceeding limit.", src_peer_id);
-            }
-            Poll::Pending => {}
         }
 
         // Send errors to transport.
