@@ -1,5 +1,4 @@
 use super::*;
-use crate::bandwidth::BandwidthSinks;
 use crate::SwarmBuilder;
 #[cfg(all(not(target_arch = "wasm32"), feature = "websocket"))]
 use libp2p_core::muxing::StreamMuxer;
@@ -9,9 +8,7 @@ use libp2p_core::upgrade::{InboundConnectionUpgrade, OutboundConnectionUpgrade};
     all(not(target_arch = "wasm32"), feature = "websocket")
 ))]
 use libp2p_core::{InboundUpgrade, Negotiated, OutboundUpgrade, UpgradeInfo};
-use std::collections::HashMap;
-use std::marker::PhantomData;
-use std::sync::{Arc, RwLock};
+use std::{marker::PhantomData, sync::Arc};
 
 pub struct QuicPhase<T> {
     pub(crate) transport: T,
@@ -249,20 +246,40 @@ impl_quic_phase_with_websocket!(
     super::provider::Tokio,
     rw_stream_sink::RwStreamSink<libp2p_websocket::BytesConnection<libp2p_tcp::tokio::TcpStream>>
 );
-#[cfg(feature = "metrics")]
 impl<Provider, T: AuthenticatedMultiplexedTransport> SwarmBuilder<Provider, QuicPhase<T>> {
+    #[deprecated(note = "Use `with_bandwidth_metrics` instead.")]
     pub fn with_bandwidth_logging(
         self,
-        registry: &mut libp2p_metrics::Registry,
-    ) -> SwarmBuilder<
-        Provider,
-        BehaviourPhase<impl AuthenticatedMultiplexedTransport, NoRelayBehaviour>,
-    > {
+    ) -> (
+        SwarmBuilder<
+                Provider,
+            BandwidthMetricsPhase<impl AuthenticatedMultiplexedTransport, NoRelayBehaviour>,
+            >,
+        Arc<crate::bandwidth::BandwidthSinks>,
+    ) {
+        #[allow(deprecated)]
         self.without_quic()
             .without_any_other_transports()
             .without_dns()
             .without_websocket()
             .without_relay()
-            .with_bandwidth_logging(registry)
+            .with_bandwidth_logging()
+    }
+}
+#[cfg(feature = "metrics")]
+impl<Provider, T: AuthenticatedMultiplexedTransport>
+    SwarmBuilder<Provider, QuicPhase<T>>
+{
+    pub fn with_bandwidth_metrics(
+        self,
+        registry: &mut libp2p_metrics::Registry,
+    ) -> SwarmBuilder<Provider, BehaviourPhase<impl AuthenticatedMultiplexedTransport, NoRelayBehaviour>> {
+        self.without_quic()
+            .without_any_other_transports()
+            .without_dns()
+            .without_websocket()
+            .without_relay()
+            .without_bandwidth_logging()
+            .with_bandwidth_metrics(registry)
     }
 }

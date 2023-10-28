@@ -293,6 +293,7 @@ mod tests {
         feature = "dns",
         feature = "relay",
         feature = "websocket",
+        feature = "metrics",
     ))]
     async fn all() {
         #[derive(NetworkBehaviour)]
@@ -317,7 +318,7 @@ mod tests {
             .unwrap()
             .with_relay_client(libp2p_tls::Config::new, libp2p_yamux::Config::default)
             .unwrap()
-            .with_bandwidth_logging(&mut libp2p_metrics::Registry::default())
+            .with_bandwidth_metrics(&mut libp2p_metrics::Registry::default())
             .with_behaviour(|_key, relay| MyBehaviour { relay })
             .unwrap()
             .build();
@@ -325,7 +326,7 @@ mod tests {
 
     #[test]
     #[cfg(all(feature = "tokio", feature = "tcp", feature = "tls", feature = "yamux"))]
-    fn tcp_bandwidth_logging() -> Result<(), Box<dyn std::error::Error>> {
+    fn tcp_bandwidth_metrics() -> Result<(), Box<dyn std::error::Error>> {
         let _ = SwarmBuilder::with_new_identity()
             .with_tokio()
             .with_tcp(
@@ -333,7 +334,7 @@ mod tests {
                 libp2p_tls::Config::new,
                 libp2p_yamux::Config::default,
             )?
-            .with_bandwidth_logging(&mut libp2p_metrics::Registry::default())
+            .with_bandwidth_metrics(&mut libp2p_metrics::Registry::default())
             .with_behaviour(|_| libp2p_swarm::dummy::Behaviour)
             .unwrap()
             .build();
@@ -343,11 +344,11 @@ mod tests {
 
     #[test]
     #[cfg(all(feature = "tokio", feature = "quic"))]
-    fn quic_bandwidth_logging() -> Result<(), Box<dyn std::error::Error>> {
+    fn quic_bandwidth_metrics() -> Result<(), Box<dyn std::error::Error>> {
         let _ = SwarmBuilder::with_new_identity()
             .with_tokio()
             .with_quic()
-            .with_bandwidth_logging(&mut libp2p_metrics::Registry::default())
+            .with_bandwidth_metrics(&mut libp2p_metrics::Registry::default())
             .with_behaviour(|_| libp2p_swarm::dummy::Behaviour)
             .unwrap()
             .build();
@@ -357,11 +358,11 @@ mod tests {
 
     #[test]
     #[cfg(feature = "tokio")]
-    fn other_transport_bandwidth_logging() -> Result<(), Box<dyn std::error::Error>> {
+    fn other_transport_bandwidth_metrics() -> Result<(), Box<dyn std::error::Error>> {
         let _ = SwarmBuilder::with_new_identity()
             .with_tokio()
             .with_other_transport(|_| DummyTransport::<(PeerId, StreamMuxerBox)>::new())?
-            .with_bandwidth_logging(&mut libp2p_metrics::Registry::default())
+            .with_bandwidth_metrics(&mut libp2p_metrics::Registry::default())
             .with_behaviour(|_| libp2p_swarm::dummy::Behaviour)
             .unwrap()
             .build();
