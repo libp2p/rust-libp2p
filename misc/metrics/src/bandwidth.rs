@@ -31,23 +31,14 @@ use futures::{
 };
 use libp2p_identity::PeerId;
 use prometheus_client::{
-    encoding::{DescriptorEncoder, EncodeMetric},
-    metrics::{counter::ConstCounter, MetricType},
-};
-use prometheus_client::{
     encoding::{EncodeLabelSet, EncodeLabelValue},
     metrics::{counter::Counter, family::Family},
     registry::{Registry, Unit},
 };
 use std::{
-    collections::HashMap,
     convert::TryFrom as _,
     io,
     pin::Pin,
-    sync::{
-        atomic::{AtomicU64, Ordering},
-        Arc, RwLock,
-    },
     task::{Context, Poll},
 };
 
@@ -149,20 +140,18 @@ where
                 upgrade,
                 local_addr,
                 send_back_addr,
-            }) => {
-                Poll::Ready(TransportEvent::Incoming {
-                    listener_id,
-                    upgrade: MapFuture {
-                        metrics: Some(ConnectionMetrics::from_family_and_protocols(
-                            this.metrics,
-                            as_string(&send_back_addr),
-                        )),
-                        inner: upgrade,
-                    },
-                    local_addr,
-                    send_back_addr,
-                })
-            }
+            }) => Poll::Ready(TransportEvent::Incoming {
+                listener_id,
+                upgrade: MapFuture {
+                    metrics: Some(ConnectionMetrics::from_family_and_protocols(
+                        this.metrics,
+                        as_string(&send_back_addr),
+                    )),
+                    inner: upgrade,
+                },
+                local_addr,
+                send_back_addr,
+            }),
             Poll::Ready(other) => {
                 let mapped = other.map_upgrade(|_upgrade| unreachable!("case already matched"));
                 Poll::Ready(mapped)
@@ -292,13 +281,6 @@ where
     }
 }
 
-/// Allows obtaining the average bandwidth of the streams.
-#[derive(Default, Debug)]
-pub struct BandwidthSinks {
-    inbound: AtomicU64,
-    outbound: AtomicU64,
-}
-
 /// Wraps around an [`AsyncRead`] + [`AsyncWrite`] and logs the bandwidth that goes through it.
 #[pin_project::pin_project]
 pub struct InstrumentedStream<SMInner> {
@@ -315,9 +297,9 @@ impl<SMInner: AsyncRead> AsyncRead for InstrumentedStream<SMInner> {
     ) -> Poll<io::Result<usize>> {
         let this = self.project();
         let num_bytes = ready!(this.inner.poll_read(cx, buf))?;
-        this.metrics.inbound.inc_by(
-            u64::try_from(num_bytes).unwrap_or(u64::max_value()),
-        );
+        this.metrics
+            .inbound
+            .inc_by(u64::try_from(num_bytes).unwrap_or(u64::max_value()));
         Poll::Ready(Ok(num_bytes))
     }
 
@@ -328,9 +310,9 @@ impl<SMInner: AsyncRead> AsyncRead for InstrumentedStream<SMInner> {
     ) -> Poll<io::Result<usize>> {
         let this = self.project();
         let num_bytes = ready!(this.inner.poll_read_vectored(cx, bufs))?;
-        this.metrics.inbound.inc_by(
-            u64::try_from(num_bytes).unwrap_or(u64::max_value()),
-        );
+        this.metrics
+            .inbound
+            .inc_by(u64::try_from(num_bytes).unwrap_or(u64::max_value()));
         Poll::Ready(Ok(num_bytes))
     }
 }
@@ -343,9 +325,9 @@ impl<SMInner: AsyncWrite> AsyncWrite for InstrumentedStream<SMInner> {
     ) -> Poll<io::Result<usize>> {
         let this = self.project();
         let num_bytes = ready!(this.inner.poll_write(cx, buf))?;
-        this.metrics.outbound.inc_by(
-            u64::try_from(num_bytes).unwrap_or(u64::max_value()),
-        );
+        this.metrics
+            .outbound
+            .inc_by(u64::try_from(num_bytes).unwrap_or(u64::max_value()));
         Poll::Ready(Ok(num_bytes))
     }
 
@@ -356,9 +338,9 @@ impl<SMInner: AsyncWrite> AsyncWrite for InstrumentedStream<SMInner> {
     ) -> Poll<io::Result<usize>> {
         let this = self.project();
         let num_bytes = ready!(this.inner.poll_write_vectored(cx, bufs))?;
-        this.metrics.outbound.inc_by(
-            u64::try_from(num_bytes).unwrap_or(u64::max_value()),
-        );
+        this.metrics
+            .outbound
+            .inc_by(u64::try_from(num_bytes).unwrap_or(u64::max_value()));
         Poll::Ready(Ok(num_bytes))
     }
 
@@ -373,27 +355,7 @@ impl<SMInner: AsyncWrite> AsyncWrite for InstrumentedStream<SMInner> {
     }
 }
 
-#[derive(Debug)]
-pub struct SinksCollector(Arc<RwLock<HashMap<String, Arc<BandwidthSinks>>>>);
-
-impl prometheus_client::collector::Collector for SinksCollector {
-    fn encode(&self, mut encoder: DescriptorEncoder) -> Result<(), std::fmt::Error> {
-        let mut family_encoder = encoder.encode_descriptor("", "", None, MetricType::Counter)?;
-
-        for (protocols, sink) in self.0.read().expect("todo").iter() {
-            let labels = [("protocols", protocols.as_str()), ("direction", "inbound")];
-            let metric_encoder = family_encoder.encode_family(&labels)?;
-            ConstCounter::new(sink.inbound.load(Ordering::Relaxed)).encode(metric_encoder)?;
-
-            let labels = [("protocols", protocols.as_str()), ("direction", "outbound")];
-            let metric_encoder = family_encoder.encode_family(&labels)?;
-            ConstCounter::new(sink.outbound.load(Ordering::Relaxed)).encode(metric_encoder)?;
-        }
-
-        Ok(())
-    }
-}
-
+// TODO: rename
 fn as_string(ma: &Multiaddr) -> String {
     let len = ma
         .protocol_stack()
