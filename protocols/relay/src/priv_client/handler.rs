@@ -37,7 +37,7 @@ use libp2p_swarm::handler::{
     ConnectionEvent, DialUpgradeError, FullyNegotiatedInbound, FullyNegotiatedOutbound,
 };
 use libp2p_swarm::{
-    ConnectionHandler, ConnectionHandlerEvent, KeepAlive, StreamProtocol, StreamUpgradeError,
+    ConnectionHandler, ConnectionHandlerEvent, StreamProtocol, StreamUpgradeError,
     SubstreamProtocol,
 };
 use log::debug;
@@ -269,7 +269,7 @@ impl Handler {
             Err(PushError::BeyondCapacity(_)) => log::warn!(
                 "Dropping inbound circuit request to be denied from {src_peer_id} due to exceeding limit."
             ),
-            Err(PushError::ReplacedFuture(_)) => log::warn!(
+            Err(PushError::Replaced(_)) => log::warn!(
                 "Dropping existing inbound circuit request to be denied from {src_peer_id} in favor of new one."
             ),
             Ok(()) => {}
@@ -319,28 +319,8 @@ impl ConnectionHandler for Handler {
         }
     }
 
-    fn connection_keep_alive(&self) -> KeepAlive {
-        if self.reservation.is_some() {
-            return KeepAlive::Yes;
-        }
-
-        if !self.alive_lend_out_substreams.is_empty() {
-            return KeepAlive::Yes;
-        }
-
-        if !self.circuit_deny_futs.is_empty() {
-            return KeepAlive::Yes;
-        }
-
-        if !self.open_circuit_futs.is_empty() {
-            return KeepAlive::Yes;
-        }
-
-        if !self.outbound_circuits.is_empty() {
-            return KeepAlive::Yes;
-        }
-
-        KeepAlive::No
+    fn connection_keep_alive(&self) -> bool {
+        self.reservation.is_some()
     }
 
     fn poll(

@@ -268,22 +268,9 @@ pub trait Transport {
 pub struct ListenerId(usize);
 
 impl ListenerId {
-    #[deprecated(note = "Renamed to ` ListenerId::next`.")]
-    #[allow(clippy::new_without_default)]
-    /// Creates a new `ListenerId`.
-    pub fn new() -> Self {
-        ListenerId::next()
-    }
-
     /// Creates a new `ListenerId`.
     pub fn next() -> Self {
         ListenerId(NEXT_LISTENER_ID.fetch_add(1, Ordering::SeqCst))
-    }
-
-    #[deprecated(note = "Use ` ListenerId::next` instead.")]
-    #[allow(clippy::should_implement_trait)]
-    pub fn default() -> Self {
-        Self::next()
     }
 }
 

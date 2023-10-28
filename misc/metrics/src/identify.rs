@@ -21,45 +21,15 @@
 use crate::protocol_stack;
 use libp2p_identity::PeerId;
 use libp2p_swarm::StreamProtocol;
-use once_cell::sync::Lazy;
 use prometheus_client::collector::Collector;
-use prometheus_client::encoding::EncodeLabelSet;
+use prometheus_client::encoding::{DescriptorEncoder, EncodeLabelSet, EncodeMetric};
 use prometheus_client::metrics::counter::Counter;
-use prometheus_client::metrics::family::ConstFamily;
 use prometheus_client::metrics::gauge::ConstGauge;
-use prometheus_client::registry::{Descriptor, LocalMetric, Registry};
-use prometheus_client::MaybeOwned;
-use std::borrow::Cow;
+use prometheus_client::metrics::MetricType;
+use prometheus_client::registry::Registry;
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 
-static PROTOCOLS_DESCRIPTOR: Lazy<Descriptor> = Lazy::new(|| {
-    Descriptor::new(
-        "remote_protocols",
-        "Number of connected nodes supporting a specific protocol, with \"unrecognized\" for each peer supporting one or more unrecognized protocols",
-        None,
-        None,
-        vec![],
-    )
-});
-static LISTEN_ADDRESSES_DESCRIPTOR: Lazy<Descriptor> = Lazy::new(|| {
-    Descriptor::new(
-        "remote_listen_addresses",
-        "Number of connected nodes advertising a specific listen address",
-        None,
-        None,
-        vec![],
-    )
-});
-static OBSERVED_ADDRESSES_DESCRIPTOR: Lazy<Descriptor> = Lazy::new(|| {
-    Descriptor::new(
-        "local_observed_addresses",
-        "Number of connected nodes observing the local node at a specific address",
-        None,
-        None,
-        vec![],
-    )
-});
 const ALLOWED_PROTOCOLS: &[StreamProtocol] = &[
     #[cfg(feature = "dcutr")]
     libp2p_dcutr::PROTOCOL_NAME,
@@ -187,10 +157,7 @@ impl Peers {
 }
 
 impl Collector for Peers {
-    fn collect<'a>(
-        &'a self,
-    ) -> Box<dyn Iterator<Item = (Cow<'a, Descriptor>, MaybeOwned<'a, Box<dyn LocalMetric>>)> + 'a>
-    {
+    fn encode(&self, mut encoder: DescriptorEncoder) -> Result<(), std::fmt::Error> {
         let mut count_by_protocols: HashMap<String, i64> = Default::default();
         let mut count_by_listen_addresses: HashMap<String, i64> = Default::default();
         let mut count_by_observed_addresses: HashMap<String, i64> = Default::default();
@@ -240,40 +207,49 @@ impl Collector for Peers {
             }
         }
 
-        let count_by_protocols: Box<dyn LocalMetric> =
-            Box::new(ConstFamily::new(count_by_protocols.into_iter().map(
-                |(protocol, count)| ([("protocol", protocol)], ConstGauge::new(count)),
-            )));
+        {
+            let mut family_encoder = encoder.encode_descriptor(
+                "remote_protocols",
+                "Number of connected nodes supporting a specific protocol, with \"unrecognized\" for each peer supporting one or more unrecognized protocols",
+                None,
+                MetricType::Gauge,
+            )?;
+            for (protocol, count) in count_by_protocols.into_iter() {
+                let labels = [("protocol", protocol)];
+                let metric_encoder = family_encoder.encode_family(&labels)?;
+                let metric = ConstGauge::new(count);
+                metric.encode(metric_encoder)?;
+            }
+        }
 
-        let count_by_listen_addresses: Box<dyn LocalMetric> =
-            Box::new(ConstFamily::new(count_by_listen_addresses.into_iter().map(
-                |(protocol, count)| ([("listen_address", protocol)], ConstGauge::new(count)),
-            )));
+        {
+            let mut family_encoder = encoder.encode_descriptor(
+                "remote_listen_addresses",
+                "Number of connected nodes advertising a specific listen address",
+                None,
+                MetricType::Gauge,
+            )?;
+            for (protocol, count) in count_by_listen_addresses.into_iter() {
+                let labels = [("listen_address", protocol)];
+                let metric_encoder = family_encoder.encode_family(&labels)?;
+                ConstGauge::new(count).encode(metric_encoder)?;
+            }
+        }
 
-        let count_by_observed_addresses: Box<dyn LocalMetric> = Box::new(ConstFamily::new(
-            count_by_observed_addresses
-                .into_iter()
-                .map(|(protocol, count)| {
-                    ([("observed_address", protocol)], ConstGauge::new(count))
-                }),
-        ));
+        {
+            let mut family_encoder = encoder.encode_descriptor(
+                "local_observed_addresses",
+                "Number of connected nodes observing the local node at a specific address",
+                None,
+                MetricType::Gauge,
+            )?;
+            for (protocol, count) in count_by_observed_addresses.into_iter() {
+                let labels = [("observed_address", protocol)];
+                let metric_encoder = family_encoder.encode_family(&labels)?;
+                ConstGauge::new(count).encode(metric_encoder)?;
+            }
+        }
 
-        Box::new(
-            [
-                (
-                    Cow::Borrowed(&*PROTOCOLS_DESCRIPTOR),
-                    MaybeOwned::Owned(count_by_protocols),
-                ),
-                (
-                    Cow::Borrowed(&*LISTEN_ADDRESSES_DESCRIPTOR),
-                    MaybeOwned::Owned(count_by_listen_addresses),
-                ),
-                (
-                    Cow::Borrowed(&*OBSERVED_ADDRESSES_DESCRIPTOR),
-                    MaybeOwned::Owned(count_by_observed_addresses),
-                ),
-            ]
-            .into_iter(),
-        )
+        Ok(())
     }
 }

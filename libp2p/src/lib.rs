@@ -51,15 +51,6 @@ pub use libp2p_core as core;
 #[cfg(feature = "dcutr")]
 #[doc(inline)]
 pub use libp2p_dcutr as dcutr;
-
-#[cfg(feature = "deflate")]
-#[cfg(not(target_arch = "wasm32"))]
-#[deprecated(
-    note = "Will be removed in the next release, see https://github.com/libp2p/rust-libp2p/issues/4522 for details."
-)]
-pub mod deflate {
-    pub use libp2p_deflate::*;
-}
 #[cfg(feature = "dns")]
 #[cfg_attr(docsrs, doc(cfg(feature = "dns")))]
 #[cfg(not(target_arch = "wasm32"))]
@@ -170,91 +161,3 @@ pub use self::transport_ext::TransportExt;
 pub use libp2p_identity as identity;
 pub use libp2p_identity::PeerId;
 pub use libp2p_swarm::{Stream, StreamProtocol};
-
-/// Builds a `Transport` based on TCP/IP that supports the most commonly-used features of libp2p:
-///
-///  * DNS resolution.
-///  * Noise protocol encryption.
-///  * Websockets.
-///  * Yamux for substream multiplexing.
-///
-/// All async I/O of the transport is based on `async-std`.
-///
-/// > **Note**: This `Transport` is not suitable for production usage, as its implementation
-/// >           reserves the right to support additional protocols or remove deprecated protocols.
-#[deprecated(note = "Use `libp2p::SwarmBuilder` instead.")]
-#[cfg(all(
-    not(target_arch = "wasm32"),
-    feature = "tcp",
-    feature = "dns",
-    feature = "websocket",
-    feature = "noise",
-    feature = "yamux",
-    feature = "async-std",
-))]
-pub async fn development_transport(
-    keypair: identity::Keypair,
-) -> std::io::Result<core::transport::Boxed<(PeerId, core::muxing::StreamMuxerBox)>> {
-    let transport = {
-        let dns_tcp = dns::async_std::Transport::system(tcp::async_io::Transport::new(
-            tcp::Config::new().nodelay(true),
-        ))
-        .await?;
-        let ws_dns_tcp = websocket::WsConfig::new(
-            dns::async_std::Transport::system(tcp::async_io::Transport::new(
-                tcp::Config::new().nodelay(true),
-            ))
-            .await?,
-        );
-        dns_tcp.or_transport(ws_dns_tcp)
-    };
-
-    Ok(transport
-        .upgrade(core::upgrade::Version::V1)
-        .authenticate(noise::Config::new(&keypair).unwrap())
-        .multiplex(yamux::Config::default())
-        .timeout(std::time::Duration::from_secs(20))
-        .boxed())
-}
-
-/// Builds a `Transport` based on TCP/IP that supports the most commonly-used features of libp2p:
-///
-///  * DNS resolution.
-///  * Noise protocol encryption.
-///  * Websockets.
-///  * Yamux for substream multiplexing.
-///
-/// All async I/O of the transport is based on `tokio`.
-///
-/// > **Note**: This `Transport` is not suitable for production usage, as its implementation
-/// >           reserves the right to support additional protocols or remove deprecated protocols.
-#[deprecated(note = "Use `libp2p::SwarmBuilder` instead.")]
-#[cfg(all(
-    not(target_arch = "wasm32"),
-    feature = "tcp",
-    feature = "dns",
-    feature = "websocket",
-    feature = "noise",
-    feature = "yamux",
-    feature = "tokio",
-))]
-pub fn tokio_development_transport(
-    keypair: identity::Keypair,
-) -> std::io::Result<core::transport::Boxed<(PeerId, core::muxing::StreamMuxerBox)>> {
-    let transport = {
-        let dns_tcp = dns::tokio::Transport::system(tcp::tokio::Transport::new(
-            tcp::Config::new().nodelay(true),
-        ))?;
-        let ws_dns_tcp = websocket::WsConfig::new(dns::tokio::Transport::system(
-            tcp::tokio::Transport::new(tcp::Config::new().nodelay(true)),
-        )?);
-        dns_tcp.or_transport(ws_dns_tcp)
-    };
-
-    Ok(transport
-        .upgrade(core::upgrade::Version::V1)
-        .authenticate(noise::Config::new(&keypair).unwrap())
-        .multiplex(yamux::Config::default())
-        .timeout(std::time::Duration::from_secs(20))
-        .boxed())
-}

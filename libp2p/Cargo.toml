@@ -16,7 +16,6 @@ full = [
     "autonat",
     "cbor",
     "dcutr",
-    "deflate",
     "dns",
     "ecdsa",
     "ed25519",
@@ -56,7 +55,6 @@ async-std = [ "libp2p-swarm/async-std", "libp2p-mdns?/async-io", "libp2p-tcp?/as
 autonat = ["dep:libp2p-autonat"]
 cbor = ["libp2p-request-response?/cbor"]
 dcutr = ["dep:libp2p-dcutr", "libp2p-metrics?/dcutr"]
-deflate = ["dep:libp2p-deflate"]
 dns = ["dep:libp2p-dns"]
 ecdsa = ["libp2p-identity/ecdsa"]
 ed25519 = ["libp2p-identity/ed25519"]
@@ -128,7 +126,6 @@ pin-project = "1.0.0"
 thiserror = "1.0"
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
-libp2p-deflate = { workspace = true, optional = true }
 libp2p-dns = { workspace = true, optional = true }
 libp2p-mdns = { workspace = true, optional = true }
 libp2p-memory-connection-limits = { workspace = true, optional = true }

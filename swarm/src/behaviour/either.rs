@@ -18,7 +18,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::behaviour::{self, NetworkBehaviour, PollParameters, ToSwarm};
+use crate::behaviour::{self, NetworkBehaviour, ToSwarm};
 use crate::connection::ConnectionId;
 use crate::{ConnectionDenied, THandler, THandlerInEvent, THandlerOutEvent};
 use either::Either;
@@ -126,16 +126,10 @@ where
         Ok(handler)
     }
 
-    fn on_swarm_event(&mut self, event: behaviour::FromSwarm<Self::ConnectionHandler>) {
+    fn on_swarm_event(&mut self, event: behaviour::FromSwarm) {
         match self {
-            Either::Left(b) => b.on_swarm_event(event.map_handler(|h| match h {
-                Either::Left(h) => h,
-                Either::Right(_) => unreachable!(),
-            })),
-            Either::Right(b) => b.on_swarm_event(event.map_handler(|h| match h {
-                Either::Right(h) => h,
-                Either::Left(_) => unreachable!(),
-            })),
+            Either::Left(b) => b.on_swarm_event(event),
+            Either::Right(b) => b.on_swarm_event(event),
         }
     }
 
@@ -159,13 +153,12 @@ where
     fn poll(
         &mut self,
         cx: &mut Context<'_>,
-        params: &mut impl PollParameters,
     ) -> Poll<ToSwarm<Self::ToSwarm, THandlerInEvent<Self>>> {
         let event = match self {
-            Either::Left(behaviour) => futures::ready!(behaviour.poll(cx, params))
+            Either::Left(behaviour) => futures::ready!(behaviour.poll(cx))
                 .map_out(Either::Left)
                 .map_in(Either::Left),
-            Either::Right(behaviour) => futures::ready!(behaviour.poll(cx, params))
+            Either::Right(behaviour) => futures::ready!(behaviour.poll(cx))
                 .map_out(Either::Right)
                 .map_in(Either::Right),
         };

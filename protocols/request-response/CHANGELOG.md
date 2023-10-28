@@ -2,6 +2,15 @@
 
 - Remove `request_response::Config::set_connection_keep_alive` in favor of `SwarmBuilder::idle_connection_timeout`.
   See [PR 4679](https://github.com/libp2p/rust-libp2p/pull/4679).
+- Allow at most 100 concurrent inbound + outbound streams per instance of `request_response::Behaviour`.
+  This limit is configurable via `Config::with_max_concurrent_streams`.
+  See [PR 3914](https://github.com/libp2p/rust-libp2p/pull/3914).
+- Report IO failures on inbound and outbound streams.
+  See [PR 3914](https://github.com/libp2p/rust-libp2p/pull/3914).
+- Introduce dedicated types for `InboundRequestId` and `OutboundRequestId`.
+  See [PR 3914](https://github.com/libp2p/rust-libp2p/pull/3914).
+- Keep peer addresses in `HashSet` instead of `SmallVec` to prevent adding duplicate addresses.
+  See [PR 4700](https://github.com/libp2p/rust-libp2p/pull/4700).
 
 ## 0.25.2
 

@@ -22,8 +22,8 @@ use libp2p_core::{ConnectedPoint, Endpoint, Multiaddr};
 use libp2p_identity::PeerId;
 use libp2p_swarm::{
     behaviour::{ConnectionEstablished, DialFailure, ListenFailure},
-    dummy, ConnectionClosed, ConnectionDenied, ConnectionId, FromSwarm, NetworkBehaviour,
-    PollParameters, THandler, THandlerInEvent, THandlerOutEvent, ToSwarm,
+    dummy, ConnectionClosed, ConnectionDenied, ConnectionId, FromSwarm, NetworkBehaviour, THandler,
+    THandlerInEvent, THandlerOutEvent, ToSwarm,
 };
 use std::collections::{HashMap, HashSet};
 use std::fmt;
@@ -303,7 +303,7 @@ impl NetworkBehaviour for Behaviour {
         Ok(dummy::ConnectionHandler)
     }
 
-    fn on_swarm_event(&mut self, event: FromSwarm<Self::ConnectionHandler>) {
+    fn on_swarm_event(&mut self, event: FromSwarm) {
         match event {
             FromSwarm::ConnectionClosed(ConnectionClosed {
                 peer_id,
@@ -364,11 +364,7 @@ impl NetworkBehaviour for Behaviour {
         void::unreachable(event)
     }
 
-    fn poll(
-        &mut self,
-        _: &mut Context<'_>,
-        _: &mut impl PollParameters,
-    ) -> Poll<ToSwarm<Self::ToSwarm, THandlerInEvent<Self>>> {
+    fn poll(&mut self, _: &mut Context<'_>) -> Poll<ToSwarm<Self::ToSwarm, THandlerInEvent<Self>>> {
         Poll::Pending
     }
 }
@@ -587,7 +583,7 @@ mod tests {
             )))
         }
 
-        fn on_swarm_event(&mut self, _event: FromSwarm<Self::ConnectionHandler>) {}
+        fn on_swarm_event(&mut self, _event: FromSwarm) {}
 
         fn on_connection_handler_event(
             &mut self,
@@ -600,8 +596,7 @@ mod tests {
 
         fn poll(
             &mut self,
-            _cx: &mut Context<'_>,
-            _params: &mut impl PollParameters,
+            _: &mut Context<'_>,
         ) -> Poll<ToSwarm<Self::ToSwarm, THandlerInEvent<Self>>> {
             Poll::Pending
         }

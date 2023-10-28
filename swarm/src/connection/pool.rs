@@ -261,7 +261,6 @@ pub(crate) enum PoolEvent<THandler: ConnectionHandler> {
         error: Option<ConnectionError<THandler::Error>>,
         /// The remaining established connections to the same peer.
         remaining_established_connection_ids: Vec<ConnectionId>,
-        handler: THandler,
     },
 
     /// An outbound connection attempt failed.
@@ -581,12 +580,7 @@ where
                     old_endpoint,
                 });
             }
-            Poll::Ready(Some(task::EstablishedConnectionEvent::Closed {
-                id,
-                peer_id,
-                error,
-                handler,
-            })) => {
+            Poll::Ready(Some(task::EstablishedConnectionEvent::Closed { id, peer_id, error })) => {
                 let connections = self
                     .established
                     .get_mut(&peer_id)
@@ -604,7 +598,6 @@ where
                     connected: Connected { endpoint, peer_id },
                     error,
                     remaining_established_connection_ids,
-                    handler,
                 });
             }
         }

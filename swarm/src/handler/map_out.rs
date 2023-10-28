@@ -19,7 +19,7 @@
 // DEALINGS IN THE SOFTWARE.
 
 use crate::handler::{
-    ConnectionEvent, ConnectionHandler, ConnectionHandlerEvent, KeepAlive, SubstreamProtocol,
+    ConnectionEvent, ConnectionHandler, ConnectionHandlerEvent, SubstreamProtocol,
 };
 use std::fmt::Debug;
 use std::task::{Context, Poll};
@@ -61,7 +61,7 @@ where
         self.inner.on_behaviour_event(event)
     }
 
-    fn connection_keep_alive(&self) -> KeepAlive {
+    fn connection_keep_alive(&self) -> bool {
         self.inner.connection_keep_alive()
     }
 
