@@ -30,10 +30,14 @@ use futures::{
     ready,
 };
 use libp2p_identity::PeerId;
-use prometheus_client::registry::Registry;
 use prometheus_client::{
     encoding::{DescriptorEncoder, EncodeMetric},
     metrics::{counter::ConstCounter, MetricType},
+};
+use prometheus_client::{
+    encoding::{EncodeLabelSet, EncodeLabelValue},
+    metrics::{counter::Counter, family::Family},
+    registry::{Registry, Unit},
 };
 use std::{
     collections::HashMap,
@@ -54,18 +58,35 @@ use std::{
 pub struct Transport<T> {
     #[pin]
     transport: T,
-    sinks: Arc<RwLock<HashMap<String, Arc<BandwidthSinks>>>>,
+    metrics: Family<Labels, Counter>,
 }
 
 impl<T> Transport<T> {
     pub fn new(transport: T, registry: &mut Registry) -> Self {
-        let sinks: Arc<RwLock<HashMap<_, Arc<BandwidthSinks>>>> =
-            Arc::new(RwLock::new(HashMap::new()));
+        let metrics = Family::<Labels, Counter>::default();
 
-        registry.register_collector(Box::new(SinksCollector(sinks.clone())));
+        registry.register_with_unit(
+            // TODO: Ideally no prefix would be needed.
+            "libp2p_swarm_bandwidth",
+            "Bandwidth usage by direction and transport protocols",
+            Unit::Bytes,
+            metrics.clone(),
+        );
 
-        Transport { transport, sinks }
+        Transport { transport, metrics }
     }
+}
+
+#[derive(EncodeLabelSet, Hash, Clone, Eq, PartialEq, Debug)]
+struct Labels {
+    protocols: String,
+    direction: Direction,
+}
+
+#[derive(Clone, Hash, PartialEq, Eq, EncodeLabelValue, Debug)]
+enum Direction {
+    Inbound,
+    Outbound,
 }
 
 impl<T> libp2p_core::Transport for Transport<T>
@@ -91,17 +112,12 @@ where
     }
 
     fn dial(&mut self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
-        let sinks = self
-            .sinks
-            .write()
-            .expect("todo")
-            .entry(as_string(&addr))
-            .or_default()
-            .clone();
-        let future = self.transport.dial(addr.clone())?;
         Ok(MapFuture {
-            inner: future,
-            sinks: Some(sinks),
+            metrics: Some(ConnectionMetrics::from_family_and_protocols(
+                &self.metrics,
+                as_string(&addr),
+            )),
+            inner: self.transport.dial(addr.clone())?,
         })
     }
 
@@ -109,17 +125,12 @@ where
         &mut self,
         addr: Multiaddr,
     ) -> Result<Self::Dial, TransportError<Self::Error>> {
-        let sinks = self
-            .sinks
-            .write()
-            .expect("todo")
-            .entry(as_string(&addr))
-            .or_default()
-            .clone();
-        let future = self.transport.dial_as_listener(addr.clone())?;
         Ok(MapFuture {
-            inner: future,
-            sinks: Some(sinks),
+            metrics: Some(ConnectionMetrics::from_family_and_protocols(
+                &self.metrics,
+                as_string(&addr),
+            )),
+            inner: self.transport.dial_as_listener(addr.clone())?,
         })
     }
 
@@ -139,19 +150,14 @@ where
                 local_addr,
                 send_back_addr,
             }) => {
-                // TODO: Abstract into method?
-                let sinks = this
-                    .sinks
-                    .write()
-                    .expect("todo")
-                    .entry(as_string(&send_back_addr))
-                    .or_default()
-                    .clone();
                 Poll::Ready(TransportEvent::Incoming {
                     listener_id,
                     upgrade: MapFuture {
+                        metrics: Some(ConnectionMetrics::from_family_and_protocols(
+                            this.metrics,
+                            as_string(&send_back_addr),
+                        )),
                         inner: upgrade,
-                        sinks: Some(sinks),
                     },
                     local_addr,
                     send_back_addr,
@@ -166,6 +172,31 @@ where
     }
 }
 
+#[derive(Clone, Debug)]
+struct ConnectionMetrics {
+    outbound: Counter,
+    inbound: Counter,
+}
+
+impl ConnectionMetrics {
+    fn from_family_and_protocols(family: &Family<Labels, Counter>, protocols: String) -> Self {
+        ConnectionMetrics {
+            outbound: family
+                .get_or_create(&Labels {
+                    protocols: protocols.clone(),
+                    direction: Direction::Outbound,
+                })
+                .clone(),
+            inbound: family
+                .get_or_create(&Labels {
+                    protocols: protocols,
+                    direction: Direction::Inbound,
+                })
+                .clone(),
+        }
+    }
+}
+
 /// Custom `Future` to avoid boxing.
 ///
 /// Applies a function to the inner future's result.
@@ -174,7 +205,7 @@ where
 pub struct MapFuture<T> {
     #[pin]
     inner: T,
-    sinks: Option<Arc<BandwidthSinks>>,
+    metrics: Option<ConnectionMetrics>,
 }
 
 impl<T> Future for MapFuture<T>
@@ -192,7 +223,7 @@ where
         };
         Poll::Ready(Ok((
             peer_id,
-            StreamMuxerBox::new(Muxer::new(stream_muxer, this.sinks.take().expect("todo"))),
+            StreamMuxerBox::new(Muxer::new(stream_muxer, this.metrics.take().expect("todo"))),
         )))
     }
 }
@@ -204,13 +235,13 @@ where
 pub struct Muxer<SMInner> {
     #[pin]
     inner: SMInner,
-    sinks: Arc<BandwidthSinks>,
+    metrics: ConnectionMetrics,
 }
 
 impl<SMInner> Muxer<SMInner> {
     /// Creates a new [`BandwidthLogging`] around the stream muxer.
-    pub fn new(inner: SMInner, sinks: Arc<BandwidthSinks>) -> Self {
-        Self { inner, sinks }
+    fn new(inner: SMInner, metrics: ConnectionMetrics) -> Self {
+        Self { inner, metrics }
     }
 }
 
@@ -237,7 +268,7 @@ where
         let inner = ready!(this.inner.poll_inbound(cx)?);
         let logged = InstrumentedStream {
             inner,
-            sinks: this.sinks.clone(),
+            metrics: this.metrics.clone(),
         };
         Poll::Ready(Ok(logged))
     }
@@ -250,7 +281,7 @@ where
         let inner = ready!(this.inner.poll_outbound(cx)?);
         let logged = InstrumentedStream {
             inner,
-            sinks: this.sinks.clone(),
+            metrics: this.metrics.clone(),
         };
         Poll::Ready(Ok(logged))
     }
@@ -273,7 +304,7 @@ pub struct BandwidthSinks {
 pub struct InstrumentedStream<SMInner> {
     #[pin]
     inner: SMInner,
-    sinks: Arc<BandwidthSinks>,
+    metrics: ConnectionMetrics,
 }
 
 impl<SMInner: AsyncRead> AsyncRead for InstrumentedStream<SMInner> {
@@ -284,9 +315,8 @@ impl<SMInner: AsyncRead> AsyncRead for InstrumentedStream<SMInner> {
     ) -> Poll<io::Result<usize>> {
         let this = self.project();
         let num_bytes = ready!(this.inner.poll_read(cx, buf))?;
-        this.sinks.inbound.fetch_add(
+        this.metrics.inbound.inc_by(
             u64::try_from(num_bytes).unwrap_or(u64::max_value()),
-            Ordering::Relaxed,
         );
         Poll::Ready(Ok(num_bytes))
     }
@@ -298,9 +328,8 @@ impl<SMInner: AsyncRead> AsyncRead for InstrumentedStream<SMInner> {
     ) -> Poll<io::Result<usize>> {
         let this = self.project();
         let num_bytes = ready!(this.inner.poll_read_vectored(cx, bufs))?;
-        this.sinks.inbound.fetch_add(
+        this.metrics.inbound.inc_by(
             u64::try_from(num_bytes).unwrap_or(u64::max_value()),
-            Ordering::Relaxed,
         );
         Poll::Ready(Ok(num_bytes))
     }
@@ -314,9 +343,8 @@ impl<SMInner: AsyncWrite> AsyncWrite for InstrumentedStream<SMInner> {
     ) -> Poll<io::Result<usize>> {
         let this = self.project();
         let num_bytes = ready!(this.inner.poll_write(cx, buf))?;
-        this.sinks.outbound.fetch_add(
+        this.metrics.outbound.inc_by(
             u64::try_from(num_bytes).unwrap_or(u64::max_value()),
-            Ordering::Relaxed,
         );
         Poll::Ready(Ok(num_bytes))
     }
@@ -328,9 +356,8 @@ impl<SMInner: AsyncWrite> AsyncWrite for InstrumentedStream<SMInner> {
     ) -> Poll<io::Result<usize>> {
         let this = self.project();
         let num_bytes = ready!(this.inner.poll_write_vectored(cx, bufs))?;
-        this.sinks.outbound.fetch_add(
+        this.metrics.outbound.inc_by(
             u64::try_from(num_bytes).unwrap_or(u64::max_value()),
-            Ordering::Relaxed,
         );
         Poll::Ready(Ok(num_bytes))
     }
@@ -351,12 +378,7 @@ pub struct SinksCollector(Arc<RwLock<HashMap<String, Arc<BandwidthSinks>>>>);
 
 impl prometheus_client::collector::Collector for SinksCollector {
     fn encode(&self, mut encoder: DescriptorEncoder) -> Result<(), std::fmt::Error> {
-        let mut family_encoder = encoder.encode_descriptor(
-            "libp2p_swarm_bandwidth",
-            "Bandwidth usage by direction and transport protocols",
-            None,
-            MetricType::Counter,
-        )?;
+        let mut family_encoder = encoder.encode_descriptor("", "", None, MetricType::Counter)?;
 
         for (protocols, sink) in self.0.read().expect("todo").iter() {
             let labels = [("protocols", protocols.as_str()), ("direction", "inbound")];
