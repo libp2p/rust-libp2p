@@ -662,7 +662,7 @@ where
 
     fn handle_pool_event(
         &mut self,
-        event: PoolEvent<THandler<TBehaviour>>,
+        event: PoolEvent<THandlerOutEvent<TBehaviour>>,
     ) -> Option<SwarmEvent<TBehaviour::ToSwarm>> {
         match event {
             PoolEvent::ConnectionEstablished {
