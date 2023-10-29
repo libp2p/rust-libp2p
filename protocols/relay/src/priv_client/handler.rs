@@ -157,8 +157,7 @@ pub struct Handler {
 
     /// Futures that try to send errors to the transport.
     ///
-    /// We may drop errors if this handler ends up in a terminal state (by returning
-    /// [`ConnectionHandlerEvent::Close`]).
+    /// We may drop errors if this handler ends up in a terminal state.
     send_error_futs: FuturesUnordered<BoxFuture<'static, ()>>,
 }
 

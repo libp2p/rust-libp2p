@@ -604,12 +604,8 @@ where
     ///
     /// Returns `Ok(())` if there was one or more established connections to the peer.
     ///
-    /// Note: Closing a connection via [`Swarm::disconnect_peer_id`] does
-    /// not inform the corresponding [`ConnectionHandler`].
-    /// Closing a connection via a [`ConnectionHandler`] can be done either in a
-    /// collaborative manner across [`ConnectionHandler`]s
-    /// with [`ConnectionHandler::connection_keep_alive`] or directly with
-    /// [`ConnectionHandlerEvent::Close`].
+    /// Closing a connection via [`Swarm::disconnect_peer_id`] will poll [`ConnectionHandler::poll_close`] to completion.
+    /// Use this function if you want to close a connection _despite_ it still being in use by one or more handlers.
     #[allow(clippy::result_unit_err)]
     pub fn disconnect_peer_id(&mut self, peer_id: PeerId) -> Result<(), ()> {
         let was_connected = self.pool.is_connected(peer_id);
