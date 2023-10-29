@@ -282,9 +282,6 @@ where
                 Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(event)) => {
                     return Poll::Ready(Ok(Event::Handler(event)));
                 }
-                Poll::Ready(ConnectionHandlerEvent::Close(_)) => {
-                    todo!()
-                }
                 Poll::Ready(ConnectionHandlerEvent::ReportRemoteProtocols(
                     ProtocolSupport::Added(protocols),
                 )) => {

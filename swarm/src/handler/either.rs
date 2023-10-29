@@ -119,22 +119,15 @@ where
         &mut self,
         cx: &mut Context<'_>,
     ) -> Poll<
-        ConnectionHandlerEvent<
-            Self::OutboundProtocol,
-            Self::OutboundOpenInfo,
-            Self::ToBehaviour,
-            Self::Error,
-        >,
+        ConnectionHandlerEvent<Self::OutboundProtocol, Self::OutboundOpenInfo, Self::ToBehaviour>,
     > {
         let event = match self {
             Either::Left(handler) => futures::ready!(handler.poll(cx))
                 .map_custom(Either::Left)
-                .map_close(Either::Left)
                 .map_protocol(|p| Either::Left(SendWrapper(p)))
                 .map_outbound_open_info(Either::Left),
             Either::Right(handler) => futures::ready!(handler.poll(cx))
                 .map_custom(Either::Right)
-                .map_close(Either::Right)
                 .map_protocol(|p| Either::Right(SendWrapper(p)))
                 .map_outbound_open_info(Either::Right),
         };

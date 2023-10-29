@@ -344,7 +344,6 @@ pub struct Handler {
             <Self as ConnectionHandler>::OutboundProtocol,
             <Self as ConnectionHandler>::OutboundOpenInfo,
             <Self as ConnectionHandler>::ToBehaviour,
-            <Self as ConnectionHandler>::Error,
         >,
     >,
 
@@ -623,12 +622,7 @@ impl ConnectionHandler for Handler {
         &mut self,
         cx: &mut Context<'_>,
     ) -> Poll<
-        ConnectionHandlerEvent<
-            Self::OutboundProtocol,
-            Self::OutboundOpenInfo,
-            Self::ToBehaviour,
-            Self::Error,
-        >,
+        ConnectionHandlerEvent<Self::OutboundProtocol, Self::OutboundOpenInfo, Self::ToBehaviour>,
     > {
         // Check for a pending (fatal) error.
         if let Some(err) = self.pending_error.take() {

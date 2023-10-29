@@ -706,12 +706,7 @@ impl ConnectionHandler for Handler {
         &mut self,
         cx: &mut Context<'_>,
     ) -> Poll<
-        ConnectionHandlerEvent<
-            Self::OutboundProtocol,
-            Self::OutboundOpenInfo,
-            Self::ToBehaviour,
-            Self::Error,
-        >,
+        ConnectionHandlerEvent<Self::OutboundProtocol, Self::OutboundOpenInfo, Self::ToBehaviour>,
     > {
         match &mut self.protocol_status {
             Some(status) if !status.reported => {
@@ -847,7 +842,7 @@ impl Handler {
 }
 
 impl futures::Stream for OutboundSubstreamState {
-    type Item = ConnectionHandlerEvent<ProtocolConfig, (), HandlerEvent, io::Error>;
+    type Item = ConnectionHandlerEvent<ProtocolConfig, (), HandlerEvent>;
 
     fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
         let this = self.get_mut();
@@ -979,7 +974,7 @@ impl futures::Stream for OutboundSubstreamState {
 }
 
 impl futures::Stream for InboundSubstreamState {
-    type Item = ConnectionHandlerEvent<ProtocolConfig, (), HandlerEvent, io::Error>;
+    type Item = ConnectionHandlerEvent<ProtocolConfig, (), HandlerEvent>;
 
     fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
         let this = self.get_mut();

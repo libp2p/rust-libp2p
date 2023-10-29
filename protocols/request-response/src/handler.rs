@@ -389,8 +389,7 @@ where
     fn poll(
         &mut self,
         cx: &mut Context<'_>,
-    ) -> Poll<ConnectionHandlerEvent<Protocol<TCodec::Protocol>, (), Self::ToBehaviour, Self::Error>>
-    {
+    ) -> Poll<ConnectionHandlerEvent<Protocol<TCodec::Protocol>, (), Self::ToBehaviour>> {
         match self.worker_streams.poll_unpin(cx) {
             Poll::Ready((_, Ok(Ok(event)))) => {
                 return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(event));

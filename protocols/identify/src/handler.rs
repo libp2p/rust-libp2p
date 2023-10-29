@@ -57,7 +57,6 @@ pub struct Handler {
             Either<ReadyUpgrade<StreamProtocol>, ReadyUpgrade<StreamProtocol>>,
             (),
             Event,
-            io::Error,
         >; 4],
     >,
 
@@ -317,9 +316,7 @@ impl ConnectionHandler for Handler {
     fn poll(
         &mut self,
         cx: &mut Context<'_>,
-    ) -> Poll<
-        ConnectionHandlerEvent<Self::OutboundProtocol, Self::OutboundOpenInfo, Event, Self::Error>,
-    > {
+    ) -> Poll<ConnectionHandlerEvent<Self::OutboundProtocol, Self::OutboundOpenInfo, Event>> {
         if let Some(event) = self.events.pop() {
             return Poll::Ready(event);
         }

@@ -69,18 +69,12 @@ where
         &mut self,
         cx: &mut Context<'_>,
     ) -> Poll<
-        ConnectionHandlerEvent<
-            Self::OutboundProtocol,
-            Self::OutboundOpenInfo,
-            Self::ToBehaviour,
-            Self::Error,
-        >,
+        ConnectionHandlerEvent<Self::OutboundProtocol, Self::OutboundOpenInfo, Self::ToBehaviour>,
     > {
         self.inner.poll(cx).map(|ev| match ev {
             ConnectionHandlerEvent::NotifyBehaviour(ev) => {
                 ConnectionHandlerEvent::NotifyBehaviour((self.map)(ev))
             }
-            ConnectionHandlerEvent::Close(err) => ConnectionHandlerEvent::Close(err),
             ConnectionHandlerEvent::OutboundSubstreamRequest { protocol } => {
                 ConnectionHandlerEvent::OutboundSubstreamRequest { protocol }
             }
