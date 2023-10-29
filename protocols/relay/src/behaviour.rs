@@ -169,6 +169,9 @@ pub enum Event {
         renewed: bool,
     },
     /// Accepting an inbound reservation request failed.
+    #[deprecated(
+        note = "Will be removed in favor of logging them internally, see <https://github.com/libp2p/rust-libp2p/issues/4757> for details."
+    )]
     ReservationReqAcceptFailed {
         src_peer_id: PeerId,
         error: inbound_hop::Error,
@@ -176,6 +179,9 @@ pub enum Event {
     /// An inbound reservation request has been denied.
     ReservationReqDenied { src_peer_id: PeerId },
     /// Denying an inbound reservation request has failed.
+    #[deprecated(
+        note = "Will be removed in favor of logging them internally, see <https://github.com/libp2p/rust-libp2p/issues/4757> for details."
+    )]
     ReservationReqDenyFailed {
         src_peer_id: PeerId,
         error: inbound_hop::Error,
@@ -188,6 +194,9 @@ pub enum Event {
         dst_peer_id: PeerId,
     },
     /// Denying an inbound circuit request failed.
+    #[deprecated(
+        note = "Will be removed in favor of logging them internally, see <https://github.com/libp2p/rust-libp2p/issues/4757> for details."
+    )]
     CircuitReqDenyFailed {
         src_peer_id: PeerId,
         dst_peer_id: PeerId,
@@ -199,12 +208,18 @@ pub enum Event {
         dst_peer_id: PeerId,
     },
     /// An outbound connect for an inbound cirucit request failed.
+    #[deprecated(
+        note = "Will be removed in favor of logging them internally, see <https://github.com/libp2p/rust-libp2p/issues/4757> for details."
+    )]
     CircuitReqOutboundConnectFailed {
         src_peer_id: PeerId,
         dst_peer_id: PeerId,
         error: outbound_stop::Error,
     },
     /// Accepting an inbound circuit request failed.
+    #[deprecated(
+        note = "Will be removed in favor of logging them internally, see <https://github.com/libp2p/rust-libp2p/issues/4757> for details."
+    )]
     CircuitReqAcceptFailed {
         src_peer_id: PeerId,
         dst_peer_id: PeerId,
@@ -455,6 +470,7 @@ impl NetworkBehaviour for Behaviour {
                 ));
             }
             handler::Event::ReservationReqAcceptFailed { error } => {
+                #[allow(deprecated)]
                 self.queued_actions.push_back(ToSwarm::GenerateEvent(
                     Event::ReservationReqAcceptFailed {
                         src_peer_id: event_source,
@@ -470,6 +486,7 @@ impl NetworkBehaviour for Behaviour {
                 ));
             }
             handler::Event::ReservationReqDenyFailed { error } => {
+                #[allow(deprecated)]
                 self.queued_actions.push_back(ToSwarm::GenerateEvent(
                     Event::ReservationReqDenyFailed {
                         src_peer_id: event_source,
@@ -592,6 +609,7 @@ impl NetworkBehaviour for Behaviour {
                     self.circuits.remove(circuit_id);
                 }
 
+                #[allow(deprecated)]
                 self.queued_actions.push_back(ToSwarm::GenerateEvent(
                     Event::CircuitReqDenyFailed {
                         src_peer_id: event_source,
@@ -639,6 +657,7 @@ impl NetworkBehaviour for Behaviour {
                         status,
                     }),
                 });
+                #[allow(deprecated)]
                 self.queued_actions.push_back(ToSwarm::GenerateEvent(
                     Event::CircuitReqOutboundConnectFailed {
                         src_peer_id,
@@ -664,6 +683,7 @@ impl NetworkBehaviour for Behaviour {
                 error,
             } => {
                 self.circuits.remove(circuit_id);
+                #[allow(deprecated)]
                 self.queued_actions.push_back(ToSwarm::GenerateEvent(
                     Event::CircuitReqAcceptFailed {
                         src_peer_id: event_source,

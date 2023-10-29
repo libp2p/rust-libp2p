@@ -4,6 +4,7 @@
   To achieve this, error handling was restructured:
   - `libp2p::relay::outbound::stop::FatalUpgradeError` has been removed.
   - `libp2p::relay::outbound::stop::{Error, ProtocolViolation}` have been introduced.
+  - Several variants of `libp2p::relay::Event` have been deprecated.
 
   See [PR 4718](https://github.com/libp2p/rust-libp2p/pull/4718).
 - Fix a rare race condition when making a reservation on a relay that could lead to a failed reservation.
