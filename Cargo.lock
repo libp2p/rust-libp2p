@@ -1363,6 +1363,7 @@ version = "0.1.0"
 dependencies = [
  "async-std",
  "async-trait",
+ "bytes",
  "futures",
  "libp2p",
  "tracing",

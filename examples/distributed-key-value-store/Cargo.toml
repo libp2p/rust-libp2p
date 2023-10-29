@@ -9,6 +9,7 @@ license = "MIT"
 release = false
 
 [dependencies]
+bytes = "1.5"
 async-std = { version = "1.12", features = ["attributes"] }
 async-trait = "0.1"
 futures = { workspace = true }

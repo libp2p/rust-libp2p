@@ -1174,8 +1174,8 @@ fn disjoint_query_does_not_finish_before_all_paths_did() {
         Multihash::<64>::wrap(SHA_256_MH, &thread_rng().gen::<[u8; 32]>())
             .expect("32 array to fit into 64 byte multihash"),
     );
-    let record_bob = Record::new(key.clone(), Bytes::from(b"bob".to_vec()));
-    let record_trudy = Record::new(key.clone(), Bytes::from(b"trudy".to_vec()));
+    let record_bob = Record::new(key.clone(), Bytes::copy_from_slice(b"bob"));
+    let record_trudy = Record::new(key.clone(), Bytes::copy_from_slice(b"trudy"));
 
     // Make `bob` and `trudy` aware of their version of the record searched by
     // `alice`.
