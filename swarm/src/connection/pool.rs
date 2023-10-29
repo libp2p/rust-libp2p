@@ -257,7 +257,7 @@ pub(crate) enum PoolEvent<THandler: ConnectionHandler> {
         connected: Connected,
         /// The error that occurred, if any. If `None`, the connection
         /// was closed by the local peer.
-        error: Option<ConnectionError<THandler::Error>>,
+        error: Option<ConnectionError>,
         /// The remaining established connections to the same peer.
         remaining_established_connection_ids: Vec<ConnectionId>,
     },

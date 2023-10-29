@@ -238,7 +238,7 @@ where
     pub(crate) fn poll(
         self: Pin<&mut Self>,
         cx: &mut Context<'_>,
-    ) -> Poll<Result<Event<THandler::ToBehaviour>, ConnectionError<THandler::Error>>> {
+    ) -> Poll<Result<Event<THandler::ToBehaviour>, ConnectionError>> {
         let Self {
             requested_substreams,
             muxing,
@@ -282,8 +282,8 @@ where
                 Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(event)) => {
                     return Poll::Ready(Ok(Event::Handler(event)));
                 }
-                Poll::Ready(ConnectionHandlerEvent::Close(err)) => {
-                    return Poll::Ready(Err(ConnectionError::Handler(err)));
+                Poll::Ready(ConnectionHandlerEvent::Close(_)) => {
+                    todo!()
                 }
                 Poll::Ready(ConnectionHandlerEvent::ReportRemoteProtocols(
                     ProtocolSupport::Added(protocols),
@@ -451,9 +451,7 @@ where
     }
 
     #[cfg(test)]
-    fn poll_noop_waker(
-        &mut self,
-    ) -> Poll<Result<Event<THandler::ToBehaviour>, ConnectionError<THandler::Error>>> {
+    fn poll_noop_waker(&mut self) -> Poll<Result<Event<THandler::ToBehaviour>, ConnectionError>> {
         Pin::new(self).poll(&mut Context::from_waker(futures::task::noop_waker_ref()))
     }
 }

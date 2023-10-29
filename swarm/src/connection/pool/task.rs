@@ -86,7 +86,7 @@ pub(crate) enum EstablishedConnectionEvent<THandler: ConnectionHandler> {
     Closed {
         id: ConnectionId,
         peer_id: PeerId,
-        error: Option<ConnectionError<THandler::Error>>,
+        error: Option<ConnectionError>,
     },
 }
 
