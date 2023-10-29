@@ -264,7 +264,6 @@ where
 {
     type FromBehaviour = TInner::FromBehaviour;
     type ToBehaviour = TInner::ToBehaviour;
-    type Error = TInner::Error;
     type InboundProtocol = Either<SendWrapper<TInner::InboundProtocol>, SendWrapper<DeniedUpgrade>>;
     type OutboundProtocol = TInner::OutboundProtocol;
     type OutboundOpenInfo = TInner::OutboundOpenInfo;

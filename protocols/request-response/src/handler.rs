@@ -367,7 +367,6 @@ where
 {
     type FromBehaviour = OutboundMessage<TCodec>;
     type ToBehaviour = Event<TCodec>;
-    type Error = void::Void;
     type InboundProtocol = Protocol<TCodec::Protocol>;
     type OutboundProtocol = Protocol<TCodec::Protocol>;
     type OutboundOpenInfo = ();

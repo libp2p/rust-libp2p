@@ -213,7 +213,6 @@ impl Handler {
 impl ConnectionHandler for Handler {
     type FromBehaviour = Void;
     type ToBehaviour = Result<Duration, Failure>;
-    type Error = Void;
     type InboundProtocol = ReadyUpgrade<StreamProtocol>;
     type OutboundProtocol = ReadyUpgrade<StreamProtocol>;
     type OutboundOpenInfo = ();

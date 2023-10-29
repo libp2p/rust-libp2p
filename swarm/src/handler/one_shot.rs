@@ -115,7 +115,6 @@ where
 {
     type FromBehaviour = TOutbound;
     type ToBehaviour = Result<TEvent, StreamUpgradeError<TOutbound::Error>>;
-    type Error = void::Void;
     type InboundProtocol = TInbound;
     type OutboundProtocol = TOutbound;
     type OutboundOpenInfo = ();

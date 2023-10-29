@@ -47,7 +47,6 @@ where
 {
     type FromBehaviour = TConnectionHandler::FromBehaviour;
     type ToBehaviour = TNewOut;
-    type Error = TConnectionHandler::Error;
     type InboundProtocol = TConnectionHandler::InboundProtocol;
     type OutboundProtocol = TConnectionHandler::OutboundProtocol;
     type InboundOpenInfo = TConnectionHandler::InboundOpenInfo;

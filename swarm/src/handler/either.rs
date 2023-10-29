@@ -80,7 +80,6 @@ where
 {
     type FromBehaviour = Either<L::FromBehaviour, R::FromBehaviour>;
     type ToBehaviour = Either<L::ToBehaviour, R::ToBehaviour>;
-    type Error = Either<L::Error, R::Error>;
     type InboundProtocol = Either<SendWrapper<L::InboundProtocol>, SendWrapper<R::InboundProtocol>>;
     type OutboundProtocol =
         Either<SendWrapper<L::OutboundProtocol>, SendWrapper<R::OutboundProtocol>>;

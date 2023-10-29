@@ -209,9 +209,6 @@ impl Handler {
 impl ConnectionHandler for Handler {
     type FromBehaviour = Command;
     type ToBehaviour = Event;
-    type Error = StreamUpgradeError<
-        Either<protocol::inbound::UpgradeError, protocol::outbound::UpgradeError>,
-    >;
     type InboundProtocol = Either<protocol::inbound::Upgrade, DeniedUpgrade>;
     type OutboundProtocol = protocol::outbound::Upgrade;
     type OutboundOpenInfo = ();

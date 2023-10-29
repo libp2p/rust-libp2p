@@ -39,7 +39,7 @@ use libp2p_swarm::{
 use log::{warn, Level};
 use smallvec::SmallVec;
 use std::collections::HashSet;
-use std::{io, task::Context, task::Poll, time::Duration};
+use std::{task::Context, task::Poll, time::Duration};
 
 const STREAM_TIMEOUT: Duration = Duration::from_secs(60);
 const MAX_CONCURRENT_STREAMS_PER_CONNECTION: usize = 10;
@@ -279,7 +279,6 @@ impl Handler {
 impl ConnectionHandler for Handler {
     type FromBehaviour = InEvent;
     type ToBehaviour = Event;
-    type Error = io::Error;
     type InboundProtocol =
         SelectUpgrade<ReadyUpgrade<StreamProtocol>, ReadyUpgrade<StreamProtocol>>;
     type OutboundProtocol = Either<ReadyUpgrade<StreamProtocol>, ReadyUpgrade<StreamProtocol>>;

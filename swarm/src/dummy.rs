@@ -80,7 +80,6 @@ pub struct ConnectionHandler;
 impl crate::handler::ConnectionHandler for ConnectionHandler {
     type FromBehaviour = Void;
     type ToBehaviour = Void;
-    type Error = Void;
     type InboundProtocol = DeniedUpgrade;
     type OutboundProtocol = DeniedUpgrade;
     type InboundOpenInfo = ();

@@ -181,7 +181,6 @@ where
 {
     type FromBehaviour = Either<TProto1::FromBehaviour, TProto2::FromBehaviour>;
     type ToBehaviour = Either<TProto1::ToBehaviour, TProto2::ToBehaviour>;
-    type Error = Either<TProto1::Error, TProto2::Error>;
     type InboundProtocol = SelectUpgrade<
         SendWrapper<<TProto1 as ConnectionHandler>::InboundProtocol>,
         SendWrapper<<TProto2 as ConnectionHandler>::InboundProtocol>,

@@ -599,7 +599,6 @@ impl Handler {
 impl ConnectionHandler for Handler {
     type FromBehaviour = HandlerIn;
     type ToBehaviour = HandlerEvent;
-    type Error = io::Error; // TODO: better error type?
     type InboundProtocol = Either<ProtocolConfig, upgrade::DeniedUpgrade>;
     type OutboundProtocol = ProtocolConfig;
     type OutboundOpenInfo = ();

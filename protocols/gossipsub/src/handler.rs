@@ -38,7 +38,6 @@ use std::{
     pin::Pin,
     task::{Context, Poll},
 };
-use void::Void;
 
 /// The event emitted by the Handler. This informs the behaviour of various events created
 /// by the handler.
@@ -388,7 +387,6 @@ impl EnabledHandler {
 impl ConnectionHandler for Handler {
     type FromBehaviour = HandlerIn;
     type ToBehaviour = HandlerEvent;
-    type Error = Void;
     type InboundOpenInfo = ();
     type InboundProtocol = either::Either<ProtocolConfig, DeniedUpgrade>;
     type OutboundOpenInfo = ();

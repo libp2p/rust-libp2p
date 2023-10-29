@@ -102,8 +102,6 @@ pub trait ConnectionHandler: Send + 'static {
     type FromBehaviour: fmt::Debug + Send + 'static;
     /// A type representing message(s) a [`ConnectionHandler`] can send to a [`NetworkBehaviour`](crate::behaviour::NetworkBehaviour) via [`ConnectionHandlerEvent::NotifyBehaviour`].
     type ToBehaviour: fmt::Debug + Send + 'static;
-    /// The type of errors returned by [`ConnectionHandler::poll`].
-    type Error: error::Error + fmt::Debug + Send + 'static;
     /// The inbound upgrade for the protocol(s) used by the handler.
     type InboundProtocol: InboundUpgradeSend;
     /// The outbound upgrade for the protocol(s) used by the handler.

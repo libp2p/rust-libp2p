@@ -42,7 +42,6 @@ impl PendingConnectionHandler {
 impl ConnectionHandler for PendingConnectionHandler {
     type FromBehaviour = Void;
     type ToBehaviour = Void;
-    type Error = Void;
     type InboundProtocol = PendingUpgrade<String>;
     type OutboundProtocol = PendingUpgrade<String>;
     type OutboundOpenInfo = Void;
