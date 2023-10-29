@@ -6,6 +6,7 @@
   See [PR 4642](https://github.com/libp2p/rust-libp2p/pull/4642).
 - Return typed error from config builder.
   See [PR 4445].
+- Bound send_queue with an `ArrayDeque` and replace frontmost item if full.
 
 [PR 4445]: https://github.com/libp2p/rust-libp2p/pull/4445
 

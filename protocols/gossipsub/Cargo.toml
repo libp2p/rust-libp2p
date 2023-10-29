@@ -35,12 +35,12 @@ rand = "0.8"
 regex = "1.10.2"
 serde = { version = "1", optional = true, features = ["derive"] }
 sha2 = "0.10.8"
-smallvec = "1.11.1"
 unsigned-varint = { version = "0.7.2", features = ["asynchronous_codec"] }
 void = "1.0.2"
 
 # Metrics dependencies
 prometheus-client = { workspace = true }
+arraydeque = "0.5.1"
 
 [dev-dependencies]
 async-std = { version = "1.6.3", features = ["unstable"] }
