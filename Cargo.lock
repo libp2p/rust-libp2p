@@ -2544,6 +2544,7 @@ name = "libp2p-floodsub"
 version = "0.44.0"
 dependencies = [
  "asynchronous-codec 0.6.2",
+ "bytes",
  "cuckoofilter",
  "fnv",
  "futures",
