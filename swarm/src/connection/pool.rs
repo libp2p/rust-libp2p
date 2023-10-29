@@ -131,7 +131,7 @@ where
 
     /// Receivers for events reported from established connections.
     established_connection_events:
-        SelectAll<mpsc::Receiver<task::EstablishedConnectionEvent<THandler>>>,
+        SelectAll<mpsc::Receiver<task::EstablishedConnectionEvent<THandler::ToBehaviour>>>,
 
     /// Receivers for [`NewConnection`] objects that are dropped.
     new_connection_dropped_listeners: FuturesUnordered<oneshot::Receiver<StreamMuxerBox>>,

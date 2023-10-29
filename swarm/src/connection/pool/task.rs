@@ -66,7 +66,7 @@ pub(crate) enum PendingConnectionEvent {
 }
 
 #[derive(Debug)]
-pub(crate) enum EstablishedConnectionEvent<THandler: ConnectionHandler> {
+pub(crate) enum EstablishedConnectionEvent<ToBehaviour> {
     /// A node we are connected to has changed its address.
     AddressChange {
         id: ConnectionId,
@@ -77,7 +77,7 @@ pub(crate) enum EstablishedConnectionEvent<THandler: ConnectionHandler> {
     Notify {
         id: ConnectionId,
         peer_id: PeerId,
-        event: THandler::ToBehaviour,
+        event: ToBehaviour,
     },
     /// A connection closed, possibly due to an error.
     ///
@@ -171,7 +171,7 @@ pub(crate) async fn new_for_established_connection<THandler>(
     peer_id: PeerId,
     mut connection: crate::connection::Connection<THandler>,
     mut command_receiver: mpsc::Receiver<Command<THandler::FromBehaviour>>,
-    mut events: mpsc::Sender<EstablishedConnectionEvent<THandler>>,
+    mut events: mpsc::Sender<EstablishedConnectionEvent<THandler::ToBehaviour>>,
 ) where
     THandler: ConnectionHandler,
 {
