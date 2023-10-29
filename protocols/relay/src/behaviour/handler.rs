@@ -621,12 +621,6 @@ impl ConnectionHandler for Handler {
     ) -> Poll<
         ConnectionHandlerEvent<Self::OutboundProtocol, Self::OutboundOpenInfo, Self::ToBehaviour>,
     > {
-        // Check for a pending (fatal) error.
-        if let Some(err) = self.pending_error.take() {
-            // The handler will not be polled again by the `Swarm`.
-            return Poll::Ready(ConnectionHandlerEvent::Close(err));
-        }
-
         // Return queued events.
         if let Some(event) = self.queued_events.pop_front() {
             return Poll::Ready(event);
@@ -703,17 +697,13 @@ impl ConnectionHandler for Handler {
                 ));
             }
             Poll::Ready(Err(futures_bounded::Timeout { .. })) => {
-                return Poll::Ready(ConnectionHandlerEvent::Close(StreamUpgradeError::Timeout));
+                todo!()
             }
-            Poll::Ready(Ok(Either::Left(Err(e)))) => {
-                return Poll::Ready(ConnectionHandlerEvent::Close(StreamUpgradeError::Apply(
-                    Either::Left(e),
-                )));
+            Poll::Ready(Ok(Either::Left(Err(_)))) => {
+                todo!()
             }
-            Poll::Ready(Ok(Either::Right(Err(e)))) => {
-                return Poll::Ready(ConnectionHandlerEvent::Close(StreamUpgradeError::Apply(
-                    Either::Right(e),
-                )));
+            Poll::Ready(Ok(Either::Right(Err(_)))) => {
+                todo!()
             }
             Poll::Pending => {}
         }

@@ -96,7 +96,6 @@ impl NetworkBehaviour for Behaviour {
 impl ConnectionHandler for HandlerWithState {
     type FromBehaviour = Void;
     type ToBehaviour = u64;
-    type Error = Void;
     type InboundProtocol = DeniedUpgrade;
     type OutboundProtocol = DeniedUpgrade;
     type InboundOpenInfo = ();

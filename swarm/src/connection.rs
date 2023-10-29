@@ -1099,7 +1099,7 @@ mod tests {
 
     #[derive(Default)]
     struct ConfigurableProtocolConnectionHandler {
-        events: Vec<ConnectionHandlerEvent<DeniedUpgrade, (), Void, Void>>,
+        events: Vec<ConnectionHandlerEvent<DeniedUpgrade, (), Void>>,
         active_protocols: HashSet<StreamProtocol>,
         local_added: Vec<Vec<StreamProtocol>>,
         local_removed: Vec<Vec<StreamProtocol>>,
@@ -1134,7 +1134,6 @@ mod tests {
     impl ConnectionHandler for MockConnectionHandler {
         type FromBehaviour = Void;
         type ToBehaviour = Void;
-        type Error = Void;
         type InboundProtocol = DeniedUpgrade;
         type OutboundProtocol = DeniedUpgrade;
         type InboundOpenInfo = ();
@@ -1190,7 +1189,6 @@ mod tests {
                 Self::OutboundProtocol,
                 Self::OutboundOpenInfo,
                 Self::ToBehaviour,
-                Self::Error,
             >,
         > {
             if self.outbound_requested {
@@ -1208,7 +1206,6 @@ mod tests {
     impl ConnectionHandler for ConfigurableProtocolConnectionHandler {
         type FromBehaviour = Void;
         type ToBehaviour = Void;
-        type Error = Void;
         type InboundProtocol = ManyProtocolsUpgrade;
         type OutboundProtocol = DeniedUpgrade;
         type InboundOpenInfo = ();
@@ -1267,7 +1264,6 @@ mod tests {
                 Self::OutboundProtocol,
                 Self::OutboundOpenInfo,
                 Self::ToBehaviour,
-                Self::Error,
             >,
         > {
             if let Some(event) = self.events.pop() {

@@ -325,12 +325,6 @@ impl ConnectionHandler for Handler {
     ) -> Poll<
         ConnectionHandlerEvent<Self::OutboundProtocol, Self::OutboundOpenInfo, Self::ToBehaviour>,
     > {
-        // Check for a pending (fatal) error.
-        if let Some(err) = self.pending_error.take() {
-            // The handler will not be polled again by the `Swarm`.
-            return Poll::Ready(ConnectionHandlerEvent::Close(err));
-        }
-
         // Inbound circuits
         loop {
             match self.outbound_circuits.poll_unpin(cx) {
@@ -372,13 +366,11 @@ impl ConnectionHandler for Handler {
                         },
                     ));
                 }
-                Poll::Ready(Ok(Err(e))) => {
-                    return Poll::Ready(ConnectionHandlerEvent::Close(StreamUpgradeError::Apply(
-                        Either::Right(e),
-                    )))
+                Poll::Ready(Ok(Err(_))) => {
+                    todo!()
                 }
                 Poll::Ready(Err(Timeout { .. })) => {
-                    return Poll::Ready(ConnectionHandlerEvent::Close(StreamUpgradeError::Timeout));
+                    todo!()
                 }
                 Poll::Pending => break,
             }
@@ -393,7 +385,7 @@ impl ConnectionHandler for Handler {
             let res = match worker_res {
                 Ok(r) => r,
                 Err(Timeout { .. }) => {
-                    return Poll::Ready(ConnectionHandlerEvent::Close(StreamUpgradeError::Timeout));
+                    todo!()
                 }
             };
 
@@ -424,10 +416,8 @@ impl ConnectionHandler for Handler {
                         self.insert_to_deny_futs(circuit);
                     }
                 },
-                Err(e) => {
-                    return Poll::Ready(ConnectionHandlerEvent::Close(StreamUpgradeError::Apply(
-                        Either::Left(e),
-                    )));
+                Err(_) => {
+                    todo!()
                 }
             }
         }

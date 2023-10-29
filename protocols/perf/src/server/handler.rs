@@ -63,7 +63,6 @@ impl Default for Handler {
 impl ConnectionHandler for Handler {
     type FromBehaviour = Void;
     type ToBehaviour = Event;
-    type Error = Void;
     type InboundProtocol = ReadyUpgrade<StreamProtocol>;
     type OutboundProtocol = DeniedUpgrade;
     type OutboundOpenInfo = Void;
