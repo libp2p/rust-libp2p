@@ -195,6 +195,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "bddcadddf5e9015d310179a59bb28c4d4b9920ad0f11e8e14dbadf654890c9a6"
 
 [[package]]
+name = "arraydeque"
+version = "0.5.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7d902e3d592a523def97af8f317b08ce16b7ab854c1985a0c671e6f15cebc236"
+
+[[package]]
 name = "arrayref"
 version = "0.3.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2562,6 +2568,7 @@ dependencies = [
 name = "libp2p-gossipsub"
 version = "0.46.0"
 dependencies = [
+ "arraydeque",
  "async-std",
  "asynchronous-codec 0.6.2",
  "base64 0.21.4",
@@ -2591,7 +2598,6 @@ dependencies = [
  "regex",
  "serde",
  "sha2 0.10.8",
- "smallvec",
  "unsigned-varint",
  "void",
 ]
