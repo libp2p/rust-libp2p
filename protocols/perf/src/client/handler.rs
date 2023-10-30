@@ -150,6 +150,7 @@ impl ConnectionHandler for Handler {
             ConnectionEvent::ListenUpgradeError(ListenUpgradeError { info: (), error }) => {
                 void::unreachable(error)
             }
+            _ => {}
         }
     }
 
