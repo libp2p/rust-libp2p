@@ -1,5 +1,8 @@
 ## 0.17.0 - unreleased
 
+- Fix a rare race condition when making a reservation on a relay that could lead to a failed reservation.
+  See [PR 4747](https://github.com/libp2p/rust-lib2pp/pulls/4747).
+
 ## 0.16.2
 
 ## 0.16.1
