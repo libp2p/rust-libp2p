@@ -11,7 +11,7 @@ release = false
 [dependencies]
 tokio = { version = "1.33", features = ["rt-multi-thread", "macros"] }
 async-trait = "0.1"
-clap = { version = "4.4.6", features = ["derive"] }
+clap = { version = "4.4.7", features = ["derive"] }
 env_logger = "0.10"
 futures = "0.3.28"
 anyhow = "1.0.75"
