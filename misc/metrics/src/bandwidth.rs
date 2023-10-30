@@ -22,8 +22,6 @@ use std::{
     task::{Context, Poll},
 };
 
-// TODO: rename to Transport
-/// See `Transport::map`.
 #[derive(Debug, Clone)]
 #[pin_project::pin_project]
 pub struct Transport<T> {
@@ -60,10 +58,12 @@ enum Direction {
     Outbound,
 }
 
-impl<T> libp2p_core::Transport for Transport<T>
+impl<T, M> libp2p_core::Transport for Transport<T>
 where
-    // TODO: Consider depending on StreamMuxer only.
-    T: libp2p_core::Transport<Output = (PeerId, StreamMuxerBox)>,
+    T: libp2p_core::Transport<Output = (PeerId, M)>,
+    M: StreamMuxer + Send + 'static,
+    M::Substream: Send + 'static,
+    M::Error: Send + Sync + 'static,
 {
     type Output = (PeerId, StreamMuxerBox);
     type Error = T::Error;
@@ -177,9 +177,12 @@ pub struct MapFuture<T> {
     metrics: Option<ConnectionMetrics>,
 }
 
-impl<T> Future for MapFuture<T>
+impl<T, M> Future for MapFuture<T>
 where
-    T: TryFuture<Ok = (PeerId, StreamMuxerBox)>,
+    T: TryFuture<Ok = (PeerId, M)>,
+    M: StreamMuxer + Send + 'static,
+    M::Substream: Send + 'static,
+    M::Error: Send + Sync + 'static,
 {
     type Output = Result<(PeerId, StreamMuxerBox), T::Error>;
 
