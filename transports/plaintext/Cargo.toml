@@ -11,7 +11,7 @@ keywords = ["peer-to-peer", "libp2p", "networking"]
 categories = ["network-programming", "asynchronous"]
 
 [dependencies]
-asynchronous-codec = "0.6"
+asynchronous-codec = "0.7"
 bytes = "1"
 futures = "0.3.28"
 libp2p-core = { workspace = true }

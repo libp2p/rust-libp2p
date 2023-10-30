@@ -25,7 +25,7 @@ serde = { version = "1.0", features = ["derive"] }
 sha2 = "0.10.8"
 thiserror = "1"
 tinytemplate = "1.2"
-asynchronous-codec = "0.6"
+asynchronous-codec = "0.7"
 
 [dev-dependencies]
 hex-literal = "0.4"

@@ -2493,7 +2493,7 @@ name = "libp2p-dcutr"
 version = "0.11.0"
 dependencies = [
  "async-std",
- "asynchronous-codec 0.6.2",
+ "asynchronous-codec 0.7.0",
  "clap",
  "either",
  "env_logger 0.10.0",
@@ -2543,7 +2543,7 @@ dependencies = [
 name = "libp2p-floodsub"
 version = "0.44.0"
 dependencies = [
- "asynchronous-codec 0.6.2",
+ "asynchronous-codec 0.7.0",
  "bytes",
  "cuckoofilter",
  "fnv",
@@ -2564,7 +2564,7 @@ name = "libp2p-gossipsub"
 version = "0.46.0"
 dependencies = [
  "async-std",
- "asynchronous-codec 0.6.2",
+ "asynchronous-codec 0.7.0",
  "base64 0.21.4",
  "byteorder",
  "bytes",
@@ -2602,7 +2602,7 @@ name = "libp2p-identify"
 version = "0.44.0"
 dependencies = [
  "async-std",
- "asynchronous-codec 0.6.2",
+ "asynchronous-codec 0.7.0",
  "either",
  "env_logger 0.10.0",
  "futures",
@@ -2656,7 +2656,7 @@ version = "0.45.0"
 dependencies = [
  "arrayvec",
  "async-std",
- "asynchronous-codec 0.6.2",
+ "asynchronous-codec 0.7.0",
  "bytes",
  "either",
  "env_logger 0.10.0",
@@ -2751,7 +2751,7 @@ name = "libp2p-mplex"
 version = "0.41.0"
 dependencies = [
  "async-std",
- "asynchronous-codec 0.6.2",
+ "asynchronous-codec 0.7.0",
  "bytes",
  "criterion",
  "env_logger 0.10.0",
@@ -2862,7 +2862,7 @@ dependencies = [
 name = "libp2p-plaintext"
 version = "0.41.0"
 dependencies = [
- "asynchronous-codec 0.6.2",
+ "asynchronous-codec 0.7.0",
  "bytes",
  "env_logger 0.10.0",
  "futures",
@@ -2930,7 +2930,7 @@ dependencies = [
 name = "libp2p-relay"
 version = "0.17.0"
 dependencies = [
- "asynchronous-codec 0.6.2",
+ "asynchronous-codec 0.7.0",
  "bytes",
  "either",
  "env_logger 0.10.0",
@@ -2959,7 +2959,7 @@ name = "libp2p-rendezvous"
 version = "0.14.0"
 dependencies = [
  "async-trait",
- "asynchronous-codec 0.6.2",
+ "asynchronous-codec 0.7.0",
  "bimap",
  "env_logger 0.10.0",
  "futures",
@@ -3192,7 +3192,7 @@ dependencies = [
 name = "libp2p-webrtc-utils"
 version = "0.1.0"
 dependencies = [
- "asynchronous-codec 0.6.2",
+ "asynchronous-codec 0.7.0",
  "bytes",
  "futures",
  "hex",
@@ -4201,7 +4201,7 @@ dependencies = [
 name = "quick-protobuf-codec"
 version = "0.2.0"
 dependencies = [
- "asynchronous-codec 0.6.2",
+ "asynchronous-codec 0.7.0",
  "bytes",
  "quick-protobuf",
  "thiserror",
