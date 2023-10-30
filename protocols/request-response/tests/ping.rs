@@ -112,6 +112,7 @@ async fn ping_protocol() {
                         request_response::Message::Request {
                             request, channel, ..
                         },
+                    ..
                 }) => {
                     assert_eq!(&request, &expected_ping);
                     assert_eq!(&peer, &peer2_id);
@@ -153,6 +154,7 @@ async fn ping_protocol() {
                             request_id,
                             response,
                         },
+                    ..
                 } => {
                     count += 1;
                     assert_eq!(&response, &expected_pong);
@@ -201,7 +203,8 @@ async fn emits_inbound_connection_closed_failure() {
             event = swarm1.select_next_some() => match event {
                 SwarmEvent::Behaviour(request_response::Event::Message {
                     peer,
-                    message: request_response::Message::Request { request, channel, .. }
+                    message: request_response::Message::Request { request, channel, .. },
+                    ..
                 }) => {
                     assert_eq!(&request, &ping);
                     assert_eq!(&peer, &peer2_id);
@@ -266,7 +269,8 @@ async fn emits_inbound_connection_closed_if_channel_is_dropped() {
             event = swarm1.select_next_some() => {
                 if let SwarmEvent::Behaviour(request_response::Event::Message {
                     peer,
-                    message: request_response::Message::Request { request, channel, .. }
+                    message: request_response::Message::Request { request, channel, .. },
+        ..
                 }) = event {
                     assert_eq!(&request, &ping);
                     assert_eq!(&peer, &peer2_id);

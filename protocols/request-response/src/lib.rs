@@ -130,6 +130,8 @@ pub enum Event<TRequest, TResponse, TChannelResponse = TResponse> {
     Message {
         /// The peer who sent the message.
         peer: PeerId,
+        /// The address that was observed.
+        observed_addr: Arc<Multiaddr>,
         /// The incoming message.
         message: Message<TRequest, TResponse, TChannelResponse>,
     },
@@ -733,7 +735,7 @@ where
         connection_id: ConnectionId,
         peer: PeerId,
         _: &Multiaddr,
-        _: &Multiaddr,
+        remote_address: &Multiaddr,
     ) -> Result<THandler<Self>, ConnectionDenied> {
         let mut handler = Handler::new(
             self.inbound_protocols.clone(),
@@ -741,6 +743,7 @@ where
             self.config.request_timeout,
             self.next_inbound_request_id.clone(),
             self.config.max_concurrent_streams,
+            remote_address,
         );
 
         self.preload_new_handler(&mut handler, peer, connection_id, None);
@@ -784,6 +787,7 @@ where
             self.config.request_timeout,
             self.next_inbound_request_id.clone(),
             self.config.max_concurrent_streams,
+            remote_address,
         );
 
         self.preload_new_handler(
@@ -825,6 +829,7 @@ where
         match event {
             handler::Event::Response {
                 request_id,
+                observed_addr,
                 response,
             } => {
                 let removed = self.remove_pending_outbound_response(&peer, connection, request_id);
@@ -838,12 +843,17 @@ where
                     response,
                 };
                 self.pending_events
-                    .push_back(ToSwarm::GenerateEvent(Event::Message { peer, message }));
+                    .push_back(ToSwarm::GenerateEvent(Event::Message {
+                        peer,
+                        observed_addr,
+                        message,
+                    }));
             }
             handler::Event::Request {
                 request_id,
                 request,
                 sender,
+                observed_addr,
             } => match self.get_connection_mut(&peer, connection) {
                 Some(connection) => {
                     let inserted = connection.pending_inbound_responses.insert(request_id);
@@ -856,7 +866,11 @@ where
                         channel,
                     };
                     self.pending_events
-                        .push_back(ToSwarm::GenerateEvent(Event::Message { peer, message }));
+                        .push_back(ToSwarm::GenerateEvent(Event::Message {
+                            peer,
+                            observed_addr,
+                            message,
+                        }));
                 }
                 None => {
                     log::debug!("Connection ({connection}) closed after `Event::Request` ({request_id}) has been emitted.");

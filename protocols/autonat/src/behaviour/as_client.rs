@@ -111,6 +111,7 @@ impl<'a> HandleInnerEvent for AsClient<'a> {
                         request_id,
                         response,
                     },
+                ..
             } => {
                 log::debug!("Outbound dial-back request returned {:?}.", response);
 

@@ -174,6 +174,7 @@ impl NetworkBehaviour for Behaviour {
                             libp2p_request_response::Message::Request {
                                 request, channel, ..
                             },
+                        ..
                     }) => {
                         if let Some((event, response)) =
                             handle_request(peer_id, request, &mut self.registrations)
@@ -204,6 +205,7 @@ impl NetworkBehaviour for Behaviour {
                     | ToSwarm::GenerateEvent(libp2p_request_response::Event::Message {
                         peer: _,
                         message: libp2p_request_response::Message::Response { .. },
+                        ..
                     })
                     | ToSwarm::GenerateEvent(libp2p_request_response::Event::OutboundFailure {
                         ..

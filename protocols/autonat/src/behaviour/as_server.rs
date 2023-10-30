@@ -106,6 +106,7 @@ impl<'a> HandleInnerEvent for AsServer<'a> {
                         request,
                         channel,
                     },
+                ..
             } => {
                 let probe_id = self.probe_id.next();
                 match self.resolve_inbound_request(peer, request) {

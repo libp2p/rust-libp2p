@@ -493,6 +493,7 @@ async fn wait_request(
                         request,
                         channel,
                     },
+                ..
             }) => {
                 return Ok((peer, request_id, request, channel));
             }

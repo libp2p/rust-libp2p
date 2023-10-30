@@ -20,6 +20,7 @@
 
 pub(crate) mod protocol;
 
+use libp2p_core::Multiaddr;
 pub use protocol::ProtocolSupport;
 
 use crate::codec::Codec;
@@ -79,6 +80,8 @@ where
     inbound_request_id: Arc<AtomicU64>,
 
     worker_streams: futures_bounded::FuturesMap<RequestId, Result<Event<TCodec>, io::Error>>,
+
+    observed_addr: Arc<Multiaddr>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -97,6 +100,7 @@ where
         substream_timeout: Duration,
         inbound_request_id: Arc<AtomicU64>,
         max_concurrent_streams: usize,
+        observed_addr: &Multiaddr,
     ) -> Self {
         let (inbound_sender, inbound_receiver) = mpsc::channel(0);
         Self {
@@ -112,6 +116,7 @@ where
                 substream_timeout,
                 max_concurrent_streams,
             ),
+            observed_addr: Arc::new(observed_addr.clone()),
         }
     }
 
@@ -184,6 +189,7 @@ where
             .expect("negotiated a stream without a pending message");
 
         let mut codec = self.codec.clone();
+        let observed_addr = self.observed_addr.clone();
         let request_id = message.request_id;
 
         let send = async move {
@@ -196,6 +202,7 @@ where
             Ok(Event::Response {
                 request_id,
                 response,
+                observed_addr,
             })
         };
 
@@ -263,12 +270,14 @@ where
     /// A request has been received.
     Request {
         request_id: InboundRequestId,
+        observed_addr: Arc<Multiaddr>,
         request: TCodec::Request,
         sender: oneshot::Sender<TCodec::Response>,
     },
     /// A response has been received.
     Response {
         request_id: OutboundRequestId,
+        observed_addr: Arc<Multiaddr>,
         response: TCodec::Response,
     },
     /// A response to an inbound request has been sent.
@@ -299,18 +308,22 @@ impl<TCodec: Codec> fmt::Debug for Event<TCodec> {
         match self {
             Event::Request {
                 request_id,
+                observed_addr,
                 request: _,
                 sender: _,
             } => f
                 .debug_struct("Event::Request")
                 .field("request_id", request_id)
+                .field("observed_addr", observed_addr)
                 .finish(),
             Event::Response {
                 request_id,
+                observed_addr,
                 response: _,
             } => f
                 .debug_struct("Event::Response")
                 .field("request_id", request_id)
+                .field("observed_addr", observed_addr)
                 .finish(),
             Event::ResponseSent(request_id) => f
                 .debug_tuple("Event::ResponseSent")
@@ -439,6 +452,7 @@ where
                 request_id: id,
                 request: rq,
                 sender: rs_sender,
+                observed_addr: self.observed_addr.clone(),
             }));
         }
 
