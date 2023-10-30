@@ -81,7 +81,7 @@ where
 
     worker_streams: futures_bounded::FuturesMap<RequestId, Result<Event<TCodec>, io::Error>>,
 
-    observed_addr: Arc<Multiaddr>,
+    observed_addr: Multiaddr,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -116,7 +116,7 @@ where
                 substream_timeout,
                 max_concurrent_streams,
             ),
-            observed_addr: Arc::new(observed_addr.clone()),
+            observed_addr: observed_addr.clone(),
         }
     }
 
@@ -270,14 +270,14 @@ where
     /// A request has been received.
     Request {
         request_id: InboundRequestId,
-        observed_addr: Arc<Multiaddr>,
+        observed_addr: Multiaddr,
         request: TCodec::Request,
         sender: oneshot::Sender<TCodec::Response>,
     },
     /// A response has been received.
     Response {
         request_id: OutboundRequestId,
-        observed_addr: Arc<Multiaddr>,
+        observed_addr: Multiaddr,
         response: TCodec::Response,
     },
     /// A response to an inbound request has been sent.

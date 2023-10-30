@@ -131,7 +131,7 @@ pub enum Event<TRequest, TResponse, TChannelResponse = TResponse> {
         /// The peer who sent the message.
         peer: PeerId,
         /// The address that was observed.
-        observed_addr: Arc<Multiaddr>,
+        observed_addr: Multiaddr,
         /// The incoming message.
         message: Message<TRequest, TResponse, TChannelResponse>,
     },
