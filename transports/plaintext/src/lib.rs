@@ -27,7 +27,8 @@ use crate::error::Error;
 use bytes::Bytes;
 use futures::future::BoxFuture;
 use futures::prelude::*;
-use libp2p_core::{InboundUpgrade, OutboundUpgrade, UpgradeInfo};
+use libp2p_core::upgrade::{InboundConnectionUpgrade, OutboundConnectionUpgrade};
+use libp2p_core::UpgradeInfo;
 use libp2p_identity as identity;
 use libp2p_identity::PeerId;
 use libp2p_identity::PublicKey;
@@ -45,21 +46,13 @@ mod proto {
     pub(crate) use self::structs::Exchange;
 }
 
-#[deprecated(note = "Has been renamed to `Config`.")]
-pub type PlainText2Config = Config;
-
-#[deprecated(note = "Has been renamed to `Output`.")]
-pub type PlainTextOutput<T> = Output<T>;
-
 /// [`Config`] is an insecure connection handshake for testing purposes only.
 #[derive(Clone)]
 pub struct Config {
-    #[deprecated(note = "Will be made private in the future, please use `Config::new` instead!")]
-    pub local_public_key: identity::PublicKey,
+    local_public_key: identity::PublicKey,
 }
 
 impl Config {
-    #[allow(deprecated)]
     pub fn new(identity: &identity::Keypair) -> Self {
         Self {
             local_public_key: identity.public(),
@@ -76,7 +69,7 @@ impl UpgradeInfo for Config {
     }
 }
 
-impl<C> InboundUpgrade<C> for Config
+impl<C> InboundConnectionUpgrade<C> for Config
 where
     C: AsyncRead + AsyncWrite + Send + Unpin + 'static,
 {
@@ -89,7 +82,7 @@ where
     }
 }
 
-impl<C> OutboundUpgrade<C> for Config
+impl<C> OutboundConnectionUpgrade<C> for Config
 where
     C: AsyncRead + AsyncWrite + Send + Unpin + 'static,
 {

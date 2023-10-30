@@ -22,8 +22,8 @@ use libp2p_core::{ConnectedPoint, Endpoint, Multiaddr};
 use libp2p_identity::PeerId;
 use libp2p_swarm::{
     behaviour::{ConnectionEstablished, DialFailure, ListenFailure},
-    dummy, ConnectionClosed, ConnectionDenied, ConnectionId, FromSwarm, NetworkBehaviour,
-    PollParameters, THandler, THandlerInEvent, THandlerOutEvent, ToSwarm,
+    dummy, ConnectionClosed, ConnectionDenied, ConnectionId, FromSwarm, NetworkBehaviour, THandler,
+    THandlerInEvent, THandlerOutEvent, ToSwarm,
 };
 use std::collections::{HashMap, HashSet};
 use std::fmt;
@@ -37,7 +37,7 @@ use void::Void;
 /// If a connection is denied due to a limit, either a [`SwarmEvent::IncomingConnectionError`](libp2p_swarm::SwarmEvent::IncomingConnectionError)
 /// or [`SwarmEvent::OutgoingConnectionError`](libp2p_swarm::SwarmEvent::OutgoingConnectionError) will be emitted.
 /// The [`ListenError::Denied`](libp2p_swarm::ListenError::Denied) and respectively the [`DialError::Denied`](libp2p_swarm::DialError::Denied) variant
-/// contain a [`ConnectionDenied`](libp2p_swarm::ConnectionDenied) type that can be downcast to [`Exceeded`] error if (and only if) **this**
+/// contain a [`ConnectionDenied`] type that can be downcast to [`Exceeded`] error if (and only if) **this**
 /// behaviour denied the connection.
 ///
 /// If you employ multiple [`NetworkBehaviour`]s that manage connections, it may also be a different error.
@@ -303,7 +303,7 @@ impl NetworkBehaviour for Behaviour {
         Ok(dummy::ConnectionHandler)
     }
 
-    fn on_swarm_event(&mut self, event: FromSwarm<Self::ConnectionHandler>) {
+    fn on_swarm_event(&mut self, event: FromSwarm) {
         match event {
             FromSwarm::ConnectionClosed(ConnectionClosed {
                 peer_id,
@@ -364,11 +364,7 @@ impl NetworkBehaviour for Behaviour {
         void::unreachable(event)
     }
 
-    fn poll(
-        &mut self,
-        _: &mut Context<'_>,
-        _: &mut impl PollParameters,
-    ) -> Poll<ToSwarm<Self::ToSwarm, THandlerInEvent<Self>>> {
+    fn poll(&mut self, _: &mut Context<'_>) -> Poll<ToSwarm<Self::ToSwarm, THandlerInEvent<Self>>> {
         Poll::Pending
     }
 }
@@ -377,7 +373,8 @@ impl NetworkBehaviour for Behaviour {
 mod tests {
     use super::*;
     use libp2p_swarm::{
-        behaviour::toggle::Toggle, dial_opts::DialOpts, DialError, ListenError, Swarm, SwarmEvent,
+        behaviour::toggle::Toggle, dial_opts::DialOpts, dial_opts::PeerCondition, DialError,
+        ListenError, Swarm, SwarmEvent,
     };
     use libp2p_swarm_test::SwarmExt;
     use quickcheck::*;
@@ -401,6 +398,8 @@ mod tests {
             network
                 .dial(
                     DialOpts::peer_id(target)
+                        // Dial always, even if already dialing or connected.
+                        .condition(PeerCondition::Always)
                         .addresses(vec![addr.clone()])
                         .build(),
                 )
@@ -408,7 +407,12 @@ mod tests {
         }
 
         match network
-            .dial(DialOpts::peer_id(target).addresses(vec![addr]).build())
+            .dial(
+                DialOpts::peer_id(target)
+                    .condition(PeerCondition::Always)
+                    .addresses(vec![addr])
+                    .build(),
+            )
             .expect_err("Unexpected dialing success.")
         {
             DialError::Denied { cause } => {
@@ -579,7 +583,7 @@ mod tests {
             )))
         }
 
-        fn on_swarm_event(&mut self, _event: FromSwarm<Self::ConnectionHandler>) {}
+        fn on_swarm_event(&mut self, _event: FromSwarm) {}
 
         fn on_connection_handler_event(
             &mut self,
@@ -592,8 +596,7 @@ mod tests {
 
         fn poll(
             &mut self,
-            _cx: &mut Context<'_>,
-            _params: &mut impl PollParameters,
+            _: &mut Context<'_>,
         ) -> Poll<ToSwarm<Self::ToSwarm, THandlerInEvent<Self>>> {
             Poll::Pending
         }

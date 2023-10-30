@@ -28,7 +28,7 @@ use crate::jobs::*;
 use crate::kbucket::{self, Distance, KBucketsTable, NodeStatus};
 use crate::protocol::{ConnectionType, KadPeer, ProtocolConfig};
 use crate::query::{Query, QueryConfig, QueryId, QueryPool, QueryPoolState};
-use crate::record_priv::{
+use crate::record::{
     self,
     store::{self, RecordStore},
     ProviderRecord, Record,
@@ -43,8 +43,8 @@ use libp2p_swarm::behaviour::{
 };
 use libp2p_swarm::{
     dial_opts::{self, DialOpts},
-    ConnectionDenied, ConnectionId, DialError, ExternalAddresses, ListenAddresses,
-    NetworkBehaviour, NotifyHandler, PollParameters, StreamProtocol, THandler, THandlerInEvent,
+    ConnectionDenied, ConnectionHandler, ConnectionId, DialError, ExternalAddresses,
+    ListenAddresses, NetworkBehaviour, NotifyHandler, StreamProtocol, THandler, THandlerInEvent,
     THandlerOutEvent, ToSwarm,
 };
 use smallvec::SmallVec;
@@ -95,9 +95,6 @@ pub struct Behaviour<TStore> {
 
     /// The TTL of provider records.
     provider_record_ttl: Option<Duration>,
-
-    /// How long to keep connections alive when they're idle.
-    connection_idle_timeout: Duration,
 
     /// Queued events to return when the behaviour is being polled.
     queued_events: VecDeque<ToSwarm<Event, HandlerIn>>,
@@ -151,7 +148,7 @@ pub enum BucketInserts {
 /// This can be used for e.g. signature verification or validating
 /// the accompanying [`Key`].
 ///
-/// [`Key`]: crate::record_priv::Key
+/// [`Key`]: crate::record::Key
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum StoreInserts {
     /// Whenever a (provider) record is received,
@@ -182,7 +179,6 @@ pub struct Config {
     record_filtering: StoreInserts,
     provider_record_ttl: Option<Duration>,
     provider_publication_interval: Option<Duration>,
-    connection_idle_timeout: Duration,
     kbucket_inserts: BucketInserts,
     caching: Caching,
 }
@@ -199,7 +195,6 @@ impl Default for Config {
             record_filtering: StoreInserts::Unfiltered,
             provider_publication_interval: Some(Duration::from_secs(12 * 60 * 60)),
             provider_record_ttl: Some(Duration::from_secs(24 * 60 * 60)),
-            connection_idle_timeout: Duration::from_secs(10),
             kbucket_inserts: BucketInserts::OnConnected,
             caching: Caching::Enabled { max_peers: 1 },
         }
@@ -371,12 +366,6 @@ impl Config {
         self
     }
 
-    /// Sets the amount of time to keep connections alive when they're idle.
-    pub fn set_connection_idle_timeout(&mut self, duration: Duration) -> &mut Self {
-        self.connection_idle_timeout = duration;
-        self
-    }
-
     /// Modifies the maximum allowed size of individual Kademlia packets.
     ///
     /// It might be necessary to increase this value if trying to put large
@@ -453,7 +442,6 @@ where
             put_record_job,
             record_ttl: config.record_ttl,
             provider_record_ttl: config.provider_record_ttl,
-            connection_idle_timeout: config.connection_idle_timeout,
             external_addresses: Default::default(),
             local_peer_id: id,
             connections: Default::default(),
@@ -692,7 +680,7 @@ where
     ///
     /// The result of this operation is delivered in a
     /// [`Event::OutboundQueryProgressed{QueryResult::GetRecord}`].
-    pub fn get_record(&mut self, key: record_priv::Key) -> QueryId {
+    pub fn get_record(&mut self, key: record::Key) -> QueryId {
         let record = if let Some(record) = self.store.get(&key) {
             if record.is_expired(Instant::now()) {
                 self.store.remove(&key);
@@ -842,7 +830,7 @@ where
     /// This is a _local_ operation. However, it also has the effect that
     /// the record will no longer be periodically re-published, allowing the
     /// record to eventually expire throughout the DHT.
-    pub fn remove_record(&mut self, key: &record_priv::Key) {
+    pub fn remove_record(&mut self, key: &record::Key) {
         if let Some(r) = self.store.get(key) {
             if r.publisher.as_ref() == Some(self.kbuckets.local_key().preimage()) {
                 self.store.remove(key)
@@ -912,7 +900,7 @@ where
     ///
     /// The results of the (repeated) provider announcements sent by this node are
     /// reported via [`Event::OutboundQueryProgressed{QueryResult::StartProviding}`].
-    pub fn start_providing(&mut self, key: record_priv::Key) -> Result<QueryId, store::Error> {
+    pub fn start_providing(&mut self, key: record::Key) -> Result<QueryId, store::Error> {
         // Note: We store our own provider records locally without local addresses
         // to avoid redundant storage and outdated addresses. Instead these are
         // acquired on demand when returning a `ProviderRecord` for the local node.
@@ -940,7 +928,7 @@ where
     ///
     /// This is a local operation. The local node will still be considered as a
     /// provider for the key by other nodes until these provider records expire.
-    pub fn stop_providing(&mut self, key: &record_priv::Key) {
+    pub fn stop_providing(&mut self, key: &record::Key) {
         self.store
             .remove_provider(key, self.kbuckets.local_key().preimage());
     }
@@ -949,7 +937,7 @@ where
     ///
     /// The result of this operation is delivered in a
     /// reported via [`Event::OutboundQueryProgressed{QueryResult::GetProviders}`].
-    pub fn get_providers(&mut self, key: record_priv::Key) -> QueryId {
+    pub fn get_providers(&mut self, key: record::Key) -> QueryId {
         let providers: HashSet<_> = self
             .store
             .providers(&key)
@@ -1045,6 +1033,8 @@ where
     }
 
     fn determine_mode_from_external_addresses(&mut self) {
+        let old_mode = self.mode;
+
         self.mode = match (self.external_addresses.as_slice(), self.mode) {
             ([], Mode::Server) => {
                 tracing::debug!("Switching to client-mode because we no longer have any confirmed external addresses");
@@ -1079,6 +1069,13 @@ where
         };
 
         self.reconfigure_mode();
+
+        if old_mode != self.mode {
+            self.queued_events
+                .push_back(ToSwarm::GenerateEvent(Event::ModeChanged {
+                    new_mode: self.mode,
+                }));
+        }
     }
 
     /// Processes discovered peers from a successful request in an iterative `Query`.
@@ -1125,7 +1122,7 @@ where
     }
 
     /// Collects all peers who are known to be providers of the value for a given `Multihash`.
-    fn provider_peers(&mut self, key: &record_priv::Key, source: &PeerId) -> Vec<KadPeer> {
+    fn provider_peers(&mut self, key: &record::Key, source: &PeerId) -> Vec<KadPeer> {
         let kbuckets = &mut self.kbuckets;
         let connected = &mut self.connected_peers;
         let listen_addresses = &self.listen_addresses;
@@ -1182,7 +1179,7 @@ where
     }
 
     /// Starts an iterative `ADD_PROVIDER` query for the given key.
-    fn start_add_provider(&mut self, key: record_priv::Key, context: AddProviderContext) {
+    fn start_add_provider(&mut self, key: record::Key, context: AddProviderContext) {
         let info = QueryInfo::AddProvider {
             context,
             key: key.clone(),
@@ -1525,7 +1522,7 @@ where
                         get_closest_peers_stats,
                     },
             } => {
-                let mk_result = |key: record_priv::Key| {
+                let mk_result = |key: record::Key| {
                     if success.len() >= quorum.get() {
                         Ok(PutRecordOk { key })
                     } else {
@@ -1826,7 +1823,7 @@ where
     }
 
     /// Processes a provider record received from a peer.
-    fn provider_received(&mut self, key: record_priv::Key, provider: KadPeer) {
+    fn provider_received(&mut self, key: record::Key, provider: KadPeer) {
         if &provider.node_id != self.kbuckets.local_key().preimage() {
             let record = ProviderRecord {
                 key,
@@ -1911,29 +1908,8 @@ where
             self.address_failed(peer_id, addr);
         }
 
-        // When a connection is established, we don't know yet whether the
-        // remote supports the configured protocol name. Only once a connection
-        // handler reports [`HandlerEvent::ProtocolConfirmed`] do we
-        // update the local routing table.
-
         // Peer's first connection.
         if other_established == 0 {
-            // Queue events for sending pending RPCs to the connected peer.
-            // There can be only one pending RPC for a particular peer and query per definition.
-            for (peer_id, event) in self.queries.iter_mut().filter_map(|q| {
-                q.inner
-                    .pending_rpcs
-                    .iter()
-                    .position(|(p, _)| p == &peer_id)
-                    .map(|p| q.inner.pending_rpcs.remove(p))
-            }) {
-                self.queued_events.push_back(ToSwarm::NotifyHandler {
-                    peer_id,
-                    event,
-                    handler: NotifyHandler::Any,
-                });
-            }
-
             self.connected_peers.insert(peer_id);
         }
     }
@@ -2026,7 +2002,9 @@ where
                 }
             }
             DialError::DialPeerConditionFalse(
-                dial_opts::PeerCondition::Disconnected | dial_opts::PeerCondition::NotDialing,
+                dial_opts::PeerCondition::Disconnected
+                | dial_opts::PeerCondition::NotDialing
+                | dial_opts::PeerCondition::DisconnectedAndNotDialing,
             ) => {
                 // We might (still) be connected, or about to be connected, thus do not report the
                 // failure to the queries.
@@ -2044,7 +2022,7 @@ where
             remaining_established,
             connection_id,
             ..
-        }: ConnectionClosed<<Self as NetworkBehaviour>::ConnectionHandler>,
+        }: ConnectionClosed,
     ) {
         self.connections.remove(&connection_id);
 
@@ -2054,6 +2032,27 @@ where
             }
             self.connection_updated(peer_id, None, NodeStatus::Disconnected);
             self.connected_peers.remove(&peer_id);
+        }
+    }
+
+    /// Preloads a new [`Handler`] with requests that are waiting to be sent to the newly connected peer.
+    fn preload_new_handler(
+        &mut self,
+        handler: &mut Handler,
+        connection_id: ConnectionId,
+        peer: PeerId,
+    ) {
+        self.connections.insert(connection_id, peer);
+        // Queue events for sending pending RPCs to the connected peer.
+        // There can be only one pending RPC for a particular peer and query per definition.
+        for (_peer_id, event) in self.queries.iter_mut().filter_map(|q| {
+            q.inner
+                .pending_rpcs
+                .iter()
+                .position(|(p, _)| p == &peer)
+                .map(|p| q.inner.pending_rpcs.remove(p))
+        }) {
+            handler.on_behaviour_event(event)
         }
     }
 }
@@ -2081,16 +2080,16 @@ where
             local_addr: local_addr.clone(),
             send_back_addr: remote_addr.clone(),
         };
-        self.connections.insert(connection_id, peer);
 
-        Ok(Handler::new(
+        let mut handler = Handler::new(
             self.protocol_config.clone(),
-            self.connection_idle_timeout,
             connected_point,
             peer,
             self.mode,
-            connection_id,
-        ))
+        );
+        self.preload_new_handler(&mut handler, connection_id, peer);
+
+        Ok(handler)
     }
 
     fn handle_established_outbound_connection(
@@ -2104,16 +2103,16 @@ where
             address: addr.clone(),
             role_override,
         };
-        self.connections.insert(connection_id, peer);
 
-        Ok(Handler::new(
+        let mut handler = Handler::new(
             self.protocol_config.clone(),
-            self.connection_idle_timeout,
             connected_point,
             peer,
             self.mode,
-            connection_id,
-        ))
+        );
+        self.preload_new_handler(&mut handler, connection_id, peer);
+
+        Ok(handler)
     }
 
     fn handle_pending_outbound_connection(
@@ -2417,7 +2416,6 @@ where
     fn poll(
         &mut self,
         cx: &mut Context<'_>,
-        _: &mut impl PollParameters,
     ) -> Poll<ToSwarm<Self::ToSwarm, THandlerInEvent<Self>>> {
         let now = Instant::now();
 
@@ -2538,7 +2536,7 @@ where
         }
     }
 
-    fn on_swarm_event(&mut self, event: FromSwarm<Self::ConnectionHandler>) {
+    fn on_swarm_event(&mut self, event: FromSwarm) {
         self.listen_addresses.on_swarm_event(&event);
         let external_addresses_changed = self.external_addresses.on_swarm_event(&event);
 
@@ -2678,6 +2676,12 @@ pub enum Event {
     /// See [`Behaviour::kbucket`] for insight into the contents of
     /// the k-bucket of `peer`.
     PendingRoutablePeer { peer: PeerId, address: Multiaddr },
+
+    /// This peer's mode has been updated automatically.
+    ///
+    /// This happens in response to an external
+    /// address being added or removed.
+    ModeChanged { new_mode: Mode },
 }
 
 /// Information about progress events.
@@ -2798,22 +2802,22 @@ pub enum GetRecordOk {
 pub enum GetRecordError {
     #[error("the record was not found")]
     NotFound {
-        key: record_priv::Key,
+        key: record::Key,
         closest_peers: Vec<PeerId>,
     },
     #[error("the quorum failed; needed {quorum} peers")]
     QuorumFailed {
-        key: record_priv::Key,
+        key: record::Key,
         records: Vec<PeerRecord>,
         quorum: NonZeroUsize,
     },
     #[error("the request timed out")]
-    Timeout { key: record_priv::Key },
+    Timeout { key: record::Key },
 }
 
 impl GetRecordError {
     /// Gets the key of the record for which the operation failed.
-    pub fn key(&self) -> &record_priv::Key {
+    pub fn key(&self) -> &record::Key {
         match self {
             GetRecordError::QuorumFailed { key, .. } => key,
             GetRecordError::Timeout { key, .. } => key,
@@ -2823,7 +2827,7 @@ impl GetRecordError {
 
     /// Extracts the key of the record for which the operation failed,
     /// consuming the error.
-    pub fn into_key(self) -> record_priv::Key {
+    pub fn into_key(self) -> record::Key {
         match self {
             GetRecordError::QuorumFailed { key, .. } => key,
             GetRecordError::Timeout { key, .. } => key,
@@ -2838,7 +2842,7 @@ pub type PutRecordResult = Result<PutRecordOk, PutRecordError>;
 /// The successful result of [`Behaviour::put_record`].
 #[derive(Debug, Clone)]
 pub struct PutRecordOk {
-    pub key: record_priv::Key,
+    pub key: record::Key,
 }
 
 /// The error result of [`Behaviour::put_record`].
@@ -2846,14 +2850,14 @@ pub struct PutRecordOk {
 pub enum PutRecordError {
     #[error("the quorum failed; needed {quorum} peers")]
     QuorumFailed {
-        key: record_priv::Key,
+        key: record::Key,
         /// [`PeerId`]s of the peers the record was successfully stored on.
         success: Vec<PeerId>,
         quorum: NonZeroUsize,
     },
     #[error("the request timed out")]
     Timeout {
-        key: record_priv::Key,
+        key: record::Key,
         /// [`PeerId`]s of the peers the record was successfully stored on.
         success: Vec<PeerId>,
         quorum: NonZeroUsize,
@@ -2862,7 +2866,7 @@ pub enum PutRecordError {
 
 impl PutRecordError {
     /// Gets the key of the record for which the operation failed.
-    pub fn key(&self) -> &record_priv::Key {
+    pub fn key(&self) -> &record::Key {
         match self {
             PutRecordError::QuorumFailed { key, .. } => key,
             PutRecordError::Timeout { key, .. } => key,
@@ -2871,7 +2875,7 @@ impl PutRecordError {
 
     /// Extracts the key of the record for which the operation failed,
     /// consuming the error.
-    pub fn into_key(self) -> record_priv::Key {
+    pub fn into_key(self) -> record::Key {
         match self {
             PutRecordError::QuorumFailed { key, .. } => key,
             PutRecordError::Timeout { key, .. } => key,
@@ -2940,7 +2944,7 @@ pub type GetProvidersResult = Result<GetProvidersOk, GetProvidersError>;
 #[derive(Debug, Clone)]
 pub enum GetProvidersOk {
     FoundProviders {
-        key: record_priv::Key,
+        key: record::Key,
         /// The new set of providers discovered.
         providers: HashSet<PeerId>,
     },
@@ -2954,14 +2958,14 @@ pub enum GetProvidersOk {
 pub enum GetProvidersError {
     #[error("the request timed out")]
     Timeout {
-        key: record_priv::Key,
+        key: record::Key,
         closest_peers: Vec<PeerId>,
     },
 }
 
 impl GetProvidersError {
     /// Gets the key for which the operation failed.
-    pub fn key(&self) -> &record_priv::Key {
+    pub fn key(&self) -> &record::Key {
         match self {
             GetProvidersError::Timeout { key, .. } => key,
         }
@@ -2969,7 +2973,7 @@ impl GetProvidersError {
 
     /// Extracts the key for which the operation failed,
     /// consuming the error.
-    pub fn into_key(self) -> record_priv::Key {
+    pub fn into_key(self) -> record::Key {
         match self {
             GetProvidersError::Timeout { key, .. } => key,
         }
@@ -2982,26 +2986,26 @@ pub type AddProviderResult = Result<AddProviderOk, AddProviderError>;
 /// The successful result of publishing a provider record.
 #[derive(Debug, Clone)]
 pub struct AddProviderOk {
-    pub key: record_priv::Key,
+    pub key: record::Key,
 }
 
 /// The possible errors when publishing a provider record.
 #[derive(Debug, Clone, Error)]
 pub enum AddProviderError {
     #[error("the request timed out")]
-    Timeout { key: record_priv::Key },
+    Timeout { key: record::Key },
 }
 
 impl AddProviderError {
     /// Gets the key for which the operation failed.
-    pub fn key(&self) -> &record_priv::Key {
+    pub fn key(&self) -> &record::Key {
         match self {
             AddProviderError::Timeout { key, .. } => key,
         }
     }
 
     /// Extracts the key for which the operation failed,
-    pub fn into_key(self) -> record_priv::Key {
+    pub fn into_key(self) -> record::Key {
         match self {
             AddProviderError::Timeout { key, .. } => key,
         }
@@ -3100,7 +3104,7 @@ pub enum QueryInfo {
     /// A (repeated) query initiated by [`Behaviour::get_providers`].
     GetProviders {
         /// The key for which to search for providers.
-        key: record_priv::Key,
+        key: record::Key,
         /// The number of providers found so far.
         providers_found: usize,
         /// Current index of events.
@@ -3110,7 +3114,7 @@ pub enum QueryInfo {
     /// A (repeated) query initiated by [`Behaviour::start_providing`].
     AddProvider {
         /// The record key.
-        key: record_priv::Key,
+        key: record::Key,
         /// The current phase of the query.
         phase: AddProviderPhase,
         /// The execution context of the query.
@@ -3131,7 +3135,7 @@ pub enum QueryInfo {
     /// A (repeated) query initiated by [`Behaviour::get_record`].
     GetRecord {
         /// The key to look for.
-        key: record_priv::Key,
+        key: record::Key,
         /// Current index of events.
         step: ProgressStep,
         /// Did we find at least one record?

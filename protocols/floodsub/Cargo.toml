@@ -3,7 +3,7 @@ name = "libp2p-floodsub"
 edition = "2021"
 rust-version = { workspace = true }
 description = "Floodsub protocol for libp2p"
-version = "0.43.0"
+version = "0.44.0"
 authors = ["Parity Technologies <admin@parity.io>"]
 license = "MIT"
 repository = "https://github.com/libp2p/rust-libp2p"
@@ -22,7 +22,7 @@ quick-protobuf = "0.8"
 quick-protobuf-codec = { workspace = true }
 rand = "0.8"
 smallvec = "1.11.1"
-thiserror = "1.0.48"
+thiserror = "1.0.50"
 tracing = "0.1.37"
 
 # Passing arguments to the docsrs builder in order to properly document cfg's.
@@ -31,3 +31,6 @@ tracing = "0.1.37"
 all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
 rustc-args = ["--cfg", "docsrs"]
+
+[lints]
+workspace = true

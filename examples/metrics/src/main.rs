@@ -20,45 +20,36 @@
 
 #![doc = include_str!("../README.md")]
 
-use futures::executor::block_on;
-use futures::stream::StreamExt;
-use libp2p::core::{upgrade::Version, Multiaddr, Transport};
-use libp2p::identity::PeerId;
+use futures::StreamExt;
+use libp2p::core::Multiaddr;
 use libp2p::metrics::{Metrics, Recorder};
-use libp2p::swarm::{NetworkBehaviour, SwarmBuilder, SwarmEvent};
+use libp2p::swarm::{NetworkBehaviour, SwarmEvent};
 use libp2p::{identify, identity, noise, ping, tcp, yamux};
+use opentelemetry::sdk;
+use opentelemetry_api::KeyValue;
 use prometheus_client::registry::Registry;
 use std::error::Error;
-use std::thread;
 use std::time::Duration;
-use tracing_subscriber::{filter::LevelFilter, EnvFilter};
+use tracing_subscriber::layer::SubscriberExt;
+use tracing_subscriber::util::SubscriberInitExt;
+use tracing_subscriber::{EnvFilter, Layer};
 
 mod http_service;
 
-fn main() -> Result<(), Box<dyn Error>> {
-    let env_filter = EnvFilter::builder()
-        .with_default_directive(LevelFilter::DEBUG.into())
-        .from_env_lossy();
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn Error>> {
+    setup_tracing()?;
 
-    let _ = tracing_subscriber::fmt()
-        .with_env_filter(env_filter)
-        .try_init();
-
-    let local_key = identity::Keypair::generate_ed25519();
-    let local_peer_id = PeerId::from(local_key.public());
-    let local_pub_key = local_key.public();
-
-    let mut swarm = SwarmBuilder::without_executor(
-        tcp::async_io::Transport::default()
-            .upgrade(Version::V1Lazy)
-            .authenticate(noise::Config::new(&local_key)?)
-            .multiplex(yamux::Config::default())
-            .boxed(),
-        Behaviour::new(local_pub_key),
-        local_peer_id,
-    )
-    .idle_connection_timeout(Duration::from_secs(60))
-    .build();
+    let mut swarm = libp2p::SwarmBuilder::with_new_identity()
+        .with_tokio()
+        .with_tcp(
+            tcp::Config::default(),
+            noise::Config::new,
+            yamux::Config::default,
+        )?
+        .with_behaviour(|key| Behaviour::new(key.public()))?
+        .with_swarm_config(|cfg| cfg.with_idle_connection_timeout(Duration::from_secs(u64::MAX)))
+        .build();
 
     swarm.listen_on("/ip4/0.0.0.0/tcp/0".parse()?)?;
 
@@ -70,26 +61,47 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     let mut metric_registry = Registry::default();
     let metrics = Metrics::new(&mut metric_registry);
-    thread::spawn(move || block_on(http_service::metrics_server(metric_registry)));
+    tokio::spawn(http_service::metrics_server(metric_registry));
 
-    block_on(async {
-        loop {
-            match swarm.select_next_some().await {
-                SwarmEvent::Behaviour(BehaviourEvent::Ping(ping_event)) => {
-                    tracing::info!(?ping_event);
-                    metrics.record(&ping_event);
-                }
-                SwarmEvent::Behaviour(BehaviourEvent::Identify(identify_event)) => {
-                    tracing::info!(?identify_event);
-                    metrics.record(&identify_event);
-                }
-                swarm_event => {
-                    tracing::info!(?swarm_event);
-                    metrics.record(&swarm_event);
-                }
+    loop {
+        match swarm.select_next_some().await {
+            SwarmEvent::Behaviour(BehaviourEvent::Ping(ping_event)) => {
+                tracing::info!(?ping_event);
+                metrics.record(&ping_event);
+            }
+            SwarmEvent::Behaviour(BehaviourEvent::Identify(identify_event)) => {
+                tracing::info!(?identify_event);
+                metrics.record(&identify_event);
+            }
+            swarm_event => {
+                tracing::info!(?swarm_event);
+                metrics.record(&swarm_event);
             }
         }
-    });
+    }
+}
+
+fn setup_tracing() -> Result<(), Box<dyn Error>> {
+    let tracer = opentelemetry_otlp::new_pipeline()
+        .tracing()
+        .with_exporter(opentelemetry_otlp::new_exporter().tonic())
+        .with_trace_config(
+            sdk::trace::Config::default().with_resource(sdk::Resource::new(vec![KeyValue::new(
+                "service.name",
+                "libp2p",
+            )])),
+        )
+        .install_batch(opentelemetry::runtime::Tokio)?;
+
+    tracing_subscriber::registry()
+        .with(tracing_subscriber::fmt::layer().with_filter(EnvFilter::from_default_env()))
+        .with(
+            tracing_opentelemetry::layer()
+                .with_tracer(tracer)
+                .with_filter(EnvFilter::from_default_env()),
+        )
+        .try_init()?;
+
     Ok(())
 }
 

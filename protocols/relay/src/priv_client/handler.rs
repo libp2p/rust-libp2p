@@ -29,7 +29,6 @@ use futures::stream::{FuturesUnordered, StreamExt};
 use futures::TryFutureExt;
 use futures_bounded::{PushError, Timeout};
 use futures_timer::Delay;
-use instant::Instant;
 use libp2p_core::multiaddr::Protocol;
 use libp2p_core::upgrade::ReadyUpgrade;
 use libp2p_core::Multiaddr;
@@ -38,7 +37,7 @@ use libp2p_swarm::handler::{
     ConnectionEvent, DialUpgradeError, FullyNegotiatedInbound, FullyNegotiatedOutbound,
 };
 use libp2p_swarm::{
-    ConnectionHandler, ConnectionHandlerEvent, KeepAlive, StreamProtocol, StreamUpgradeError,
+    ConnectionHandler, ConnectionHandlerEvent, StreamProtocol, StreamUpgradeError,
     SubstreamProtocol,
 };
 use std::collections::VecDeque;
@@ -121,8 +120,6 @@ pub struct Handler {
             Either<inbound_stop::FatalUpgradeError, outbound_hop::FatalUpgradeError>,
         >,
     >,
-    /// Until when to keep the connection alive.
-    keep_alive: KeepAlive,
 
     /// Queue of events to return when polled.
     queued_events: VecDeque<
@@ -151,10 +148,6 @@ pub struct Handler {
     ///
     /// Contains a [`futures::future::Future`] for each lend out substream that
     /// resolves once the substream is dropped.
-    ///
-    /// Once all substreams are dropped and this handler has no other work,
-    /// [`KeepAlive::Until`] can be set, allowing the connection to be closed
-    /// eventually.
     alive_lend_out_substreams: FuturesUnordered<oneshot::Receiver<void::Void>>,
 
     open_circuit_futs:
@@ -193,7 +186,6 @@ impl Handler {
                 MAX_NUMBER_DENYING_CIRCUIT,
             ),
             send_error_futs: Default::default(),
-            keep_alive: KeepAlive::Yes,
         }
     }
 
@@ -277,7 +269,7 @@ impl Handler {
                 peer=%src_peer_id,
                 "Dropping inbound circuit request to be denied from peer due to exceeding limit"
             ),
-            Err(PushError::ReplacedFuture(_)) => tracing::warn!(
+            Err(PushError::Replaced(_)) => tracing::warn!(
                 peer=%src_peer_id,
                 "Dropping existing inbound circuit request to be denied from peer in favor of new one"
             ),
@@ -328,8 +320,8 @@ impl ConnectionHandler for Handler {
         }
     }
 
-    fn connection_keep_alive(&self) -> KeepAlive {
-        self.keep_alive
+    fn connection_keep_alive(&self) -> bool {
+        self.reservation.is_some()
     }
 
     fn poll(
@@ -492,22 +484,6 @@ impl ConnectionHandler for Handler {
             }
         }
 
-        // Update keep-alive handling.
-        if matches!(self.reservation, Reservation::None)
-            && self.alive_lend_out_substreams.is_empty()
-            && self.circuit_deny_futs.is_empty()
-        {
-            match self.keep_alive {
-                KeepAlive::Yes => {
-                    self.keep_alive = KeepAlive::Until(Instant::now() + Duration::from_secs(10));
-                }
-                KeepAlive::Until(_) => {}
-                KeepAlive::No => panic!("Handler never sets KeepAlive::No."),
-            }
-        } else {
-            self.keep_alive = KeepAlive::Yes;
-        }
-
         Poll::Pending
     }
 
@@ -638,6 +614,10 @@ impl Reservation {
         };
 
         Event::ReservationReqAccepted { renewal, limit }
+    }
+
+    fn is_some(&self) -> bool {
+        matches!(self, Self::Accepted { .. } | Self::Renewing { .. })
     }
 
     /// Marks the current reservation as failed.

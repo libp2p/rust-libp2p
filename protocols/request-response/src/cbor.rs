@@ -25,7 +25,7 @@
 ///
 /// ```
 /// # use libp2p_request_response::{cbor, ProtocolSupport, self as request_response};
-/// # use libp2p_swarm::{StreamProtocol, SwarmBuilder};
+/// # use libp2p_swarm::StreamProtocol;
 /// #[derive(Debug, serde::Serialize, serde::Deserialize)]
 /// struct GreetRequest {
 ///     name: String,

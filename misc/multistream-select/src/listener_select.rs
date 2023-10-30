@@ -124,9 +124,9 @@ where
             match mem::replace(this.state, State::Done) {
                 State::RecvHeader { mut io } => {
                     match io.poll_next_unpin(cx) {
-                        Poll::Ready(Some(Ok(Message::Header(h)))) => match h {
-                            HeaderLine::V1 => *this.state = State::SendHeader { io },
-                        },
+                        Poll::Ready(Some(Ok(Message::Header(HeaderLine::V1)))) => {
+                            *this.state = State::SendHeader { io }
+                        }
                         Poll::Ready(Some(Ok(_))) => {
                             return Poll::Ready(Err(ProtocolError::InvalidMessage.into()))
                         }

@@ -24,6 +24,7 @@
 
 pub mod error;
 pub mod framed;
+mod quicksink;
 pub mod tls;
 
 use error::Error;

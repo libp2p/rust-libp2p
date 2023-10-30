@@ -26,10 +26,10 @@ use futures::stream::FuturesUnordered;
 use futures::stream::StreamExt;
 use libp2p_core::{Endpoint, Multiaddr, PeerRecord};
 use libp2p_identity::{Keypair, PeerId, SigningError};
-use libp2p_request_response::{ProtocolSupport, RequestId};
+use libp2p_request_response::{OutboundRequestId, ProtocolSupport};
 use libp2p_swarm::{
-    ConnectionDenied, ConnectionId, ExternalAddresses, FromSwarm, NetworkBehaviour, PollParameters,
-    THandler, THandlerInEvent, THandlerOutEvent, ToSwarm,
+    ConnectionDenied, ConnectionId, ExternalAddresses, FromSwarm, NetworkBehaviour, THandler,
+    THandlerInEvent, THandlerOutEvent, ToSwarm,
 };
 use std::collections::HashMap;
 use std::iter;
@@ -41,13 +41,15 @@ pub struct Behaviour {
 
     keypair: Keypair,
 
-    waiting_for_register: HashMap<RequestId, (PeerId, Namespace)>,
-    waiting_for_discovery: HashMap<RequestId, (PeerId, Option<Namespace>)>,
+    waiting_for_register: HashMap<OutboundRequestId, (PeerId, Namespace)>,
+    waiting_for_discovery: HashMap<OutboundRequestId, (PeerId, Option<Namespace>)>,
 
     /// Hold addresses of all peers that we have discovered so far.
     ///
     /// Storing these internally allows us to assist the [`libp2p_swarm::Swarm`] in dialing by returning addresses from [`NetworkBehaviour::handle_pending_outbound_connection`].
     discovered_peers: HashMap<(PeerId, Namespace), Vec<Multiaddr>>,
+
+    registered_namespaces: HashMap<(PeerId, Namespace), Ttl>,
 
     /// Tracks the expiry of registrations that we have discovered and stored in `discovered_peers` otherwise we have a memory leak.
     expiring_registrations: FuturesUnordered<BoxFuture<'static, (PeerId, Namespace)>>,
@@ -68,6 +70,7 @@ impl Behaviour {
             waiting_for_register: Default::default(),
             waiting_for_discovery: Default::default(),
             discovered_peers: Default::default(),
+            registered_namespaces: Default::default(),
             expiring_registrations: FuturesUnordered::from_iter(vec![
                 futures::future::pending().boxed()
             ]),
@@ -103,6 +106,9 @@ impl Behaviour {
 
     /// Unregister ourselves from the given namespace with the given rendezvous peer.
     pub fn unregister(&mut self, namespace: Namespace, rendezvous_node: PeerId) {
+        self.registered_namespaces
+            .retain(|(rz_node, ns), _| rz_node.ne(&rendezvous_node) && ns.ne(&namespace));
+
         self.inner
             .send_request(&rendezvous_node, Unregister(namespace));
     }
@@ -217,21 +223,29 @@ impl NetworkBehaviour for Behaviour {
             .on_connection_handler_event(peer_id, connection_id, event);
     }
 
-    fn on_swarm_event(&mut self, event: FromSwarm<Self::ConnectionHandler>) {
-        self.external_addresses.on_swarm_event(&event);
+    fn on_swarm_event(&mut self, event: FromSwarm) {
+        let changed = self.external_addresses.on_swarm_event(&event);
 
         self.inner.on_swarm_event(event);
+
+        if changed && self.external_addresses.iter().count() > 0 {
+            let registered = self.registered_namespaces.clone();
+            for ((rz_node, ns), ttl) in registered {
+                if let Err(e) = self.register(ns, rz_node, Some(ttl)) {
+                    tracing::warn!("refreshing registration failed: {e}")
+                }
+            }
+        }
     }
 
     fn poll(
         &mut self,
         cx: &mut Context<'_>,
-        params: &mut impl PollParameters,
     ) -> Poll<ToSwarm<Self::ToSwarm, THandlerInEvent<Self>>> {
         use libp2p_request_response as req_res;
 
         loop {
-            match self.inner.poll(cx, params) {
+            match self.inner.poll(cx) {
                 Poll::Ready(ToSwarm::GenerateEvent(req_res::Event::Message {
                     message:
                         req_res::Message::Response {
@@ -322,7 +336,7 @@ impl NetworkBehaviour for Behaviour {
 }
 
 impl Behaviour {
-    fn event_for_outbound_failure(&mut self, req_id: &RequestId) -> Option<Event> {
+    fn event_for_outbound_failure(&mut self, req_id: &OutboundRequestId) -> Option<Event> {
         if let Some((rendezvous_node, namespace)) = self.waiting_for_register.remove(req_id) {
             return Some(Event::RegisterFailed {
                 rendezvous_node,
@@ -342,12 +356,19 @@ impl Behaviour {
         None
     }
 
-    fn handle_response(&mut self, request_id: &RequestId, response: Message) -> Option<Event> {
+    fn handle_response(
+        &mut self,
+        request_id: &OutboundRequestId,
+        response: Message,
+    ) -> Option<Event> {
         match response {
             RegisterResponse(Ok(ttl)) => {
                 if let Some((rendezvous_node, namespace)) =
                     self.waiting_for_register.remove(request_id)
                 {
+                    self.registered_namespaces
+                        .insert((rendezvous_node, namespace.clone()), ttl);
+
                     return Some(Event::Registered {
                         rendezvous_node,
                         ttl,

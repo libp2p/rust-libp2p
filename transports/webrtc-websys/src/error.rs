@@ -8,7 +8,7 @@ pub enum Error {
     InvalidMultiaddr(&'static str),
 
     #[error("JavaScript error: {0}")]
-    JsError(String),
+    Js(String),
 
     #[error("JavaScript typecasting failed")]
     JsCastFailed,
@@ -34,7 +34,7 @@ impl Error {
             "Unknown error".to_string()
         };
 
-        Error::JsError(s)
+        Error::Js(s)
     }
 }
 
@@ -46,12 +46,12 @@ impl std::convert::From<wasm_bindgen::JsValue> for Error {
 
 impl From<String> for Error {
     fn from(value: String) -> Self {
-        Error::JsError(value)
+        Error::Js(value)
     }
 }
 
 impl From<std::io::Error> for Error {
     fn from(value: std::io::Error) -> Self {
-        Error::JsError(value.to_string())
+        Error::Js(value.to_string())
     }
 }

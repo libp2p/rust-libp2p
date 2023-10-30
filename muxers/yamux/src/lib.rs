@@ -24,7 +24,7 @@
 
 use futures::{future, prelude::*, ready};
 use libp2p_core::muxing::{StreamMuxer, StreamMuxerEvent};
-use libp2p_core::upgrade::{InboundUpgrade, OutboundUpgrade, UpgradeInfo};
+use libp2p_core::upgrade::{InboundConnectionUpgrade, OutboundConnectionUpgrade, UpgradeInfo};
 use std::collections::VecDeque;
 use std::io::{IoSlice, IoSliceMut};
 use std::task::Waker;
@@ -81,6 +81,7 @@ where
     type Substream = Stream;
     type Error = Error;
 
+    #[tracing::instrument(level = "trace", name = "StreamMuxer::poll_inbound", skip(self, cx))]
     fn poll_inbound(
         mut self: Pin<&mut Self>,
         cx: &mut Context<'_>,
@@ -97,6 +98,7 @@ where
         Poll::Pending
     }
 
+    #[tracing::instrument(level = "trace", name = "StreamMuxer::poll_outbound", skip(self, cx))]
     fn poll_outbound(
         mut self: Pin<&mut Self>,
         cx: &mut Context<'_>,
@@ -106,12 +108,14 @@ where
         Poll::Ready(Ok(Stream(stream)))
     }
 
+    #[tracing::instrument(level = "trace", name = "StreamMuxer::poll_close", skip(self, cx))]
     fn poll_close(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
         ready!(self.connection.poll_close(cx).map_err(Error)?);
 
         Poll::Ready(Ok(()))
     }
 
+    #[tracing::instrument(level = "trace", name = "StreamMuxer::poll", skip(self, cx))]
     fn poll(
         self: Pin<&mut Self>,
         cx: &mut Context<'_>,
@@ -314,7 +318,7 @@ impl UpgradeInfo for Config {
     }
 }
 
-impl<C> InboundUpgrade<C> for Config
+impl<C> InboundConnectionUpgrade<C> for Config
 where
     C: AsyncRead + AsyncWrite + Send + Unpin + 'static,
 {
@@ -328,7 +332,7 @@ where
     }
 }
 
-impl<C> OutboundUpgrade<C> for Config
+impl<C> OutboundConnectionUpgrade<C> for Config
 where
     C: AsyncRead + AsyncWrite + Send + Unpin + 'static,
 {

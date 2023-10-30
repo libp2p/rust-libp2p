@@ -49,6 +49,7 @@ use std::{
     task::Context,
     task::Poll,
 };
+use tracing::Instrument;
 use void::Void;
 
 mod concurrent_dial;
@@ -260,7 +261,6 @@ pub(crate) enum PoolEvent<THandler: ConnectionHandler> {
         error: Option<ConnectionError<THandler::Error>>,
         /// The remaining established connections to the same peer.
         remaining_established_connection_ids: Vec<ConnectionId>,
-        handler: THandler,
     },
 
     /// An outbound connection attempt failed.
@@ -426,20 +426,22 @@ where
         dial_concurrency_factor_override: Option<NonZeroU8>,
         connection_id: ConnectionId,
     ) {
-        let dial = ConcurrentDial::new(
-            dials,
-            dial_concurrency_factor_override.unwrap_or(self.dial_concurrency_factor),
-        );
+        let concurrency_factor =
+            dial_concurrency_factor_override.unwrap_or(self.dial_concurrency_factor);
+        let span = tracing::debug_span!(parent: tracing::Span::none(), "new_outgoing_connection", %concurrency_factor, num_dials=%dials.len(), id = %connection_id);
+        span.follows_from(tracing::Span::current());
 
         let (abort_notifier, abort_receiver) = oneshot::channel();
 
-        self.executor
-            .spawn(task::new_for_pending_outgoing_connection(
+        self.executor.spawn(
+            task::new_for_pending_outgoing_connection(
                 connection_id,
-                dial,
+                ConcurrentDial::new(dials, concurrency_factor),
                 abort_receiver,
                 self.pending_connection_events_tx.clone(),
-            ));
+            )
+            .instrument(span),
+        );
 
         let endpoint = PendingPoint::Dialer { role_override };
 
@@ -469,13 +471,18 @@ where
 
         let (abort_notifier, abort_receiver) = oneshot::channel();
 
-        self.executor
-            .spawn(task::new_for_pending_incoming_connection(
+        let span = tracing::debug_span!(parent: tracing::Span::none(), "new_incoming_connection", remote_addr = %info.send_back_addr, id = %connection_id);
+        span.follows_from(tracing::Span::current());
+
+        self.executor.spawn(
+            task::new_for_pending_incoming_connection(
                 connection_id,
                 future,
                 abort_receiver,
                 self.pending_connection_events_tx.clone(),
-            ));
+            )
+            .instrument(span),
+        );
 
         self.counters.inc_pending_incoming();
         self.pending.insert(
@@ -516,14 +523,15 @@ where
             waker.wake();
         }
 
-        let span = tracing::error_span!("Connection::poll", id = %id, peer = %obtained_peer_id, remote_address = %endpoint.get_remote_address());
         let connection = Connection::new(
             connection,
             handler,
             self.substream_upgrade_protocol_override,
             self.max_negotiating_inbound_streams,
             self.idle_connection_timeout,
-            span,
+            id,
+            obtained_peer_id,
+            endpoint.get_remote_address().clone(),
         );
 
         self.executor.spawn(task::new_for_established_connection(
@@ -536,6 +544,7 @@ where
     }
 
     /// Polls the connection pool for events.
+    #[tracing::instrument(level = "debug", name = "Pool::poll", skip(self, cx))]
     pub(crate) fn poll(&mut self, cx: &mut Context<'_>) -> Poll<PoolEvent<THandler>>
     where
         THandler: ConnectionHandler + 'static,
@@ -577,12 +586,7 @@ where
                     old_endpoint,
                 });
             }
-            Poll::Ready(Some(task::EstablishedConnectionEvent::Closed {
-                id,
-                peer_id,
-                error,
-                handler,
-            })) => {
+            Poll::Ready(Some(task::EstablishedConnectionEvent::Closed { id, peer_id, error })) => {
                 let connections = self
                     .established
                     .get_mut(&peer_id)
@@ -600,7 +604,6 @@ where
                     connected: Connected { endpoint, peer_id },
                     error,
                     remaining_established_connection_ids,
-                    handler,
                 });
             }
         }
@@ -982,7 +985,7 @@ impl PoolConfig {
     /// delivery to the connection handler.
     ///
     /// When the buffer for a particular connection is full, `notify_handler` will no
-    /// longer be able to deliver events to the associated [`Connection`](super::Connection),
+    /// longer be able to deliver events to the associated [`Connection`],
     /// thus exerting back-pressure on the connection and peer API.
     pub(crate) fn with_notify_handler_buffer_size(mut self, n: NonZeroUsize) -> Self {
         self.task_command_buffer_size = n.get() - 1;

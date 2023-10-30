@@ -308,7 +308,7 @@ impl<P: Provider> Transport for GenTransport<P> {
     ) -> Result<Self::Dial, TransportError<Self::Error>> {
         let (socket_addr, _version, peer_id) =
             self.remote_multiaddr_to_socketaddr(addr.clone(), true)?;
-        let peer_id = peer_id.ok_or(TransportError::MultiaddrNotSupported(addr))?;
+        let peer_id = peer_id.ok_or(TransportError::MultiaddrNotSupported(addr.clone()))?;
 
         let socket = self
             .eligible_listener(&socket_addr)
@@ -317,6 +317,8 @@ impl<P: Provider> Transport for GenTransport<P> {
             ))?
             .try_clone_socket()
             .map_err(Self::Error::from)?;
+
+        tracing::debug!("Preparing for hole-punch from {addr}");
 
         let hole_puncher = hole_puncher::<P>(socket, socket_addr, self.handshake_timeout);
 
@@ -599,7 +601,7 @@ impl<P: Provider> Stream for Listener<P> {
                     return Poll::Ready(Some(event));
                 }
                 Poll::Ready(None) => {
-                    self.close(Err(Error::EndpointDriverCrashed));
+                    self.close(Ok(()));
                     continue;
                 }
                 Poll::Pending => {}

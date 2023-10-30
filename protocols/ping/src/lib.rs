@@ -54,8 +54,8 @@ use handler::Handler;
 use libp2p_core::{Endpoint, Multiaddr};
 use libp2p_identity::PeerId;
 use libp2p_swarm::{
-    behaviour::FromSwarm, ConnectionDenied, ConnectionId, NetworkBehaviour, PollParameters,
-    THandler, THandlerInEvent, THandlerOutEvent, ToSwarm,
+    behaviour::FromSwarm, ConnectionDenied, ConnectionId, NetworkBehaviour, THandler,
+    THandlerInEvent, THandlerOutEvent, ToSwarm,
 };
 use std::time::Duration;
 use std::{
@@ -141,11 +141,8 @@ impl NetworkBehaviour for Behaviour {
         })
     }
 
-    fn poll(
-        &mut self,
-        _: &mut Context<'_>,
-        _: &mut impl PollParameters,
-    ) -> Poll<ToSwarm<Self::ToSwarm, THandlerInEvent<Self>>> {
+    #[tracing::instrument(level = "trace", name = "NetworkBehaviour::poll", skip(self))]
+    fn poll(&mut self, _: &mut Context<'_>) -> Poll<ToSwarm<Self::ToSwarm, THandlerInEvent<Self>>> {
         if let Some(e) = self.events.pop_back() {
             Poll::Ready(ToSwarm::GenerateEvent(e))
         } else {
@@ -153,7 +150,7 @@ impl NetworkBehaviour for Behaviour {
         }
     }
 
-    fn on_swarm_event(&mut self, event: FromSwarm<Self::ConnectionHandler>) {
+    fn on_swarm_event(&mut self, event: FromSwarm) {
         match event {
             FromSwarm::ConnectionEstablished(_)
             | FromSwarm::ConnectionClosed(_)

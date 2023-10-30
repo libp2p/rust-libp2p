@@ -1,6 +1,6 @@
 ## Description
 
-The example showcases how to run a p2p network with **libp2p** and collect metrics using `libp2p-metrics`.
+The example showcases how to run a p2p network with **libp2p** and collect metrics using `libp2p-metrics` as well as span data via `opentelemetry`.
 It sets up multiple nodes in the network and measures various metrics, such as `libp2p_ping`, to evaluate the network's performance.
 
 ## Usage
@@ -33,6 +33,45 @@ To run the example, follow these steps:
 
    After executing the command, you should see a long list of metrics printed to the terminal.
    Make sure to check the `libp2p_ping` metrics, which should have a value greater than zero (`>0`).
+
+## Opentelemetry
+
+To see the span data collected as part of the `Swarm`s activity, start up an opentelemetry collector:
+
+```sh
+docker compose up
+```
+
+Then, configure tracing to output spans:
+
+```shell
+export RUST_LOG=info,[ConnectionHandler::poll]=trace,[NetworkBehaviour::poll]=trace
+```
+
+Next, (re)-start the two example for it to connect to the OTEL collector.
+Finally, open the Jaeger UI in a browser and explore the spans: http://localhost:16686.
+
+### Filtering spans
+
+For a precise documentation, please see the following documentation in tracing: https://docs.rs/tracing-subscriber/latest/tracing_subscriber/filter/struct.EnvFilter.html#directives.
+
+`rust-libp2p` consistently applies spans to the following functions:
+
+- `ConnectionHandler::poll` implementations
+- `NetworkBehaviour::poll` implementations
+
+The above spans are all called exactly that: `ConnectionHandler::poll` and `NetworkBehaviour::poll`.
+You can activate _all_ of them by setting:
+
+```
+RUST_LOG=[ConnectionHandler::poll]=trace
+```
+
+If you just wanted to see the spans of the `libp2p_ping` crate, you can filter like this:
+
+```
+RUST_LOG=libp2p_ping[ConnectionHandler::poll]=trace
+```
 
 ## Conclusion
 

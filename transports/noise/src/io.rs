@@ -22,8 +22,9 @@
 
 mod framed;
 pub(crate) mod handshake;
+use asynchronous_codec::Framed;
 use bytes::Bytes;
-use framed::{NoiseFramed, MAX_FRAME_LEN};
+use framed::{Codec, MAX_FRAME_LEN};
 use futures::prelude::*;
 use futures::ready;
 use std::{
@@ -37,7 +38,7 @@ use std::{
 ///
 /// `T` is the type of the underlying I/O resource.
 pub struct Output<T> {
-    io: NoiseFramed<T, snow::TransportState>,
+    io: Framed<T, Codec<snow::TransportState>>,
     recv_buffer: Bytes,
     recv_offset: usize,
     send_buffer: Vec<u8>,
@@ -46,12 +47,12 @@ pub struct Output<T> {
 
 impl<T> fmt::Debug for Output<T> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("NoiseOutput").field("io", &self.io).finish()
+        f.debug_struct("NoiseOutput").finish()
     }
 }
 
 impl<T> Output<T> {
-    fn new(io: NoiseFramed<T, snow::TransportState>) -> Self {
+    fn new(io: Framed<T, Codec<snow::TransportState>>) -> Self {
         Output {
             io,
             recv_buffer: Bytes::new(),

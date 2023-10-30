@@ -21,8 +21,8 @@
 use libp2p_core::{Endpoint, Multiaddr};
 use libp2p_identity::PeerId;
 use libp2p_swarm::{
-    dummy, ConnectionDenied, ConnectionId, FromSwarm, NetworkBehaviour, PollParameters, THandler,
-    THandlerInEvent, THandlerOutEvent, ToSwarm,
+    dummy, ConnectionDenied, ConnectionId, FromSwarm, NetworkBehaviour, THandler, THandlerInEvent,
+    THandlerOutEvent, ToSwarm,
 };
 use void::Void;
 
@@ -39,7 +39,7 @@ use std::{
 /// If a connection is denied due to a limit, either a [`SwarmEvent::IncomingConnectionError`](libp2p_swarm::SwarmEvent::IncomingConnectionError)
 /// or [`SwarmEvent::OutgoingConnectionError`](libp2p_swarm::SwarmEvent::OutgoingConnectionError) will be emitted.
 /// The [`ListenError::Denied`](libp2p_swarm::ListenError::Denied) and respectively the [`DialError::Denied`](libp2p_swarm::DialError::Denied) variant
-/// contain a [`ConnectionDenied`](libp2p_swarm::ConnectionDenied) type that can be downcast to [`MemoryUsageLimitExceeded`] error if (and only if) **this**
+/// contain a [`ConnectionDenied`] type that can be downcast to [`MemoryUsageLimitExceeded`] error if (and only if) **this**
 /// behaviour denied the connection.
 ///
 /// If you employ multiple [`NetworkBehaviour`]s that manage connections, it may also be a different error.
@@ -181,7 +181,7 @@ impl NetworkBehaviour for Behaviour {
         Ok(dummy::ConnectionHandler)
     }
 
-    fn on_swarm_event(&mut self, _: FromSwarm<Self::ConnectionHandler>) {}
+    fn on_swarm_event(&mut self, _: FromSwarm) {}
 
     fn on_connection_handler_event(
         &mut self,
@@ -192,11 +192,7 @@ impl NetworkBehaviour for Behaviour {
         void::unreachable(event)
     }
 
-    fn poll(
-        &mut self,
-        _: &mut Context<'_>,
-        _: &mut impl PollParameters,
-    ) -> Poll<ToSwarm<Self::ToSwarm, THandlerInEvent<Self>>> {
+    fn poll(&mut self, _: &mut Context<'_>) -> Poll<ToSwarm<Self::ToSwarm, THandlerInEvent<Self>>> {
         Poll::Pending
     }
 }

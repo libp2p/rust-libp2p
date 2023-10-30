@@ -3,7 +3,7 @@ name = "libp2p-perf"
 edition = "2021"
 rust-version = { workspace = true }
 description = "libp2p perf protocol implementation"
-version = "0.2.0"
+version = "0.3.0"
 authors = ["Max Inden <mail@max-inden.de>"]
 license = "MIT"
 repository = "https://github.com/libp2p/rust-libp2p"
@@ -12,25 +12,26 @@ categories = ["network-programming", "asynchronous"]
 
 [dependencies]
 anyhow = "1"
-async-trait = "0.1"
-clap = { version = "4.3.23", features = ["derive"] }
+clap = { version = "4.4.6", features = ["derive"] }
 futures = "0.3.28"
+futures-bounded = { workspace = true }
+futures-timer = "3.0"
 instant = "0.1.12"
+libp2p = { workspace = true, features = ["tokio", "tcp", "quic", "tls", "yamux", "dns"] }
 libp2p-core = { workspace = true }
 libp2p-dns = { workspace = true, features = ["tokio"] }
-libp2p-identity = { workspace = true }
-libp2p-tls = { workspace = true }
+libp2p-identity = { workspace = true, features = ["rand"] }
 libp2p-quic = { workspace = true, features = ["tokio"] }
-libp2p-request-response = { workspace = true }
 libp2p-swarm = { workspace = true, features = ["macros", "tokio"] }
 libp2p-tcp = { workspace = true, features = ["tokio"] }
+libp2p-tls = { workspace = true }
 libp2p-yamux = { workspace = true }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 thiserror = "1.0"
 tracing = "0.1.37"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
-tokio = { version = "1.32.0", features = ["full"] }
+tokio = { version = "1.33", default-features = false, features = ["macros", "rt", "rt-multi-thread"] }
 void = "1"
 
 [dev-dependencies]
@@ -43,3 +44,6 @@ libp2p-swarm-test = { path = "../../swarm-test" }
 all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
 rustc-args = ["--cfg", "docsrs"]
+
+[lints]
+workspace = true

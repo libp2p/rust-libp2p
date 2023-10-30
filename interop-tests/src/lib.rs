@@ -3,14 +3,15 @@ use std::time::Duration;
 
 use anyhow::{bail, Context, Result};
 use futures::{FutureExt, StreamExt};
+use libp2p::identity::Keypair;
 use libp2p::swarm::SwarmEvent;
-use libp2p::{identify, identity, ping, swarm::NetworkBehaviour, Multiaddr, PeerId};
+use libp2p::{identify, ping, swarm::NetworkBehaviour, Multiaddr};
 #[cfg(target_arch = "wasm32")]
 use wasm_bindgen::prelude::*;
 
 mod arch;
 
-use arch::{build_transport, init_logger, swarm_builder, Instant, RedisClient};
+use arch::{build_swarm, init_logger, Instant, RedisClient};
 
 pub async fn run_test(
     transport: &str,
@@ -18,42 +19,45 @@ pub async fn run_test(
     is_dialer: bool,
     test_timeout_seconds: u64,
     redis_addr: &str,
+    sec_protocol: Option<String>,
+    muxer: Option<String>,
 ) -> Result<Report> {
     init_logger();
 
     let test_timeout = Duration::from_secs(test_timeout_seconds);
     let transport = transport.parse().context("Couldn't parse transport")?;
+    let sec_protocol = sec_protocol
+        .map(|sec_protocol| {
+            sec_protocol
+                .parse()
+                .context("Couldn't parse security protocol")
+        })
+        .transpose()?;
+    let muxer = muxer
+        .map(|sec_protocol| {
+            sec_protocol
+                .parse()
+                .context("Couldn't parse muxer protocol")
+        })
+        .transpose()?;
 
-    let local_key = identity::Keypair::generate_ed25519();
-    let local_peer_id = PeerId::from(local_key.public());
     let redis_client = RedisClient::new(redis_addr).context("Could not connect to redis")?;
 
     // Build the transport from the passed ENV var.
-    let (boxed_transport, local_addr) = build_transport(local_key.clone(), ip, transport)?;
-    let mut swarm = swarm_builder(
-        boxed_transport,
-        Behaviour {
-            ping: ping::Behaviour::new(ping::Config::new().with_interval(Duration::from_secs(10))),
-            // Need to include identify until https://github.com/status-im/nim-libp2p/issues/924 is resolved.
-            identify: identify::Behaviour::new(identify::Config::new(
-                "/interop-tests".to_owned(),
-                local_key.public(),
-            )),
-        },
-        local_peer_id,
-    )
-    .idle_connection_timeout(Duration::from_secs(5))
-    .build();
+    let (mut swarm, local_addr) =
+        build_swarm(ip, transport, sec_protocol, muxer, build_behaviour).await?;
 
     tracing::info!(local_peer=%swarm.local_peer_id(), "Running ping test");
 
-    let mut maybe_id = None;
-
     // See https://github.com/libp2p/rust-libp2p/issues/4071.
     #[cfg(not(target_arch = "wasm32"))]
-    if transport == Transport::WebRtcDirect {
-        maybe_id = Some(swarm.listen_on(local_addr.parse()?)?);
-    }
+    let maybe_id = if transport == Transport::WebRtcDirect {
+        Some(swarm.listen_on(local_addr.parse()?)?)
+    } else {
+        None
+    };
+    #[cfg(target_arch = "wasm32")]
+    let maybe_id = None;
 
     // Run a ping interop test. Based on `is_dialer`, either dial the address
     // retrieved via `listenAddr` key over the redis connection. Or wait to be pinged and have
@@ -112,8 +116,8 @@ pub async fn run_test(
                         continue;
                     }
                     if listener_id == id {
-                        let ma = format!("{address}/p2p/{local_peer_id}");
-                        redis_client.rpush("listenerAddr", ma).await?;
+                        let ma = format!("{address}/p2p/{}", swarm.local_peer_id());
+                        redis_client.rpush("listenerAddr", ma.clone()).await?;
                         break;
                     }
                 }
@@ -123,7 +127,9 @@ pub async fn run_test(
             futures::future::select(
                 async move {
                     loop {
-                        swarm.next().await;
+                        let event = swarm.next().await.unwrap();
+
+                        tracing::debug!("{event:?}");
                     }
                 }
                 .boxed(),
@@ -145,8 +151,19 @@ pub async fn run_test_wasm(
     is_dialer: bool,
     test_timeout_secs: u64,
     base_url: &str,
+    sec_protocol: Option<String>,
+    muxer: Option<String>,
 ) -> Result<(), JsValue> {
-    let result = run_test(transport, ip, is_dialer, test_timeout_secs, base_url).await;
+    let result = run_test(
+        transport,
+        ip,
+        is_dialer,
+        test_timeout_secs,
+        base_url,
+        sec_protocol,
+        muxer,
+    )
+    .await;
     tracing::info!(?result, "Sending test result");
     reqwest::Client::new()
         .post(&format!("http://{}/results", base_url))
@@ -240,18 +257,18 @@ impl FromStr for SecProtocol {
 }
 
 #[derive(NetworkBehaviour)]
-struct Behaviour {
+pub(crate) struct Behaviour {
     ping: ping::Behaviour,
     identify: identify::Behaviour,
 }
 
-/// Helper function to get a ENV variable into an test parameter like `Transport`.
-pub fn from_env<T>(env_var: &str) -> Result<T>
-where
-    T: FromStr<Err = anyhow::Error>,
-{
-    std::env::var(env_var)
-        .with_context(|| format!("{env_var} environment variable is not set"))?
-        .parse()
-        .map_err(Into::into)
+pub(crate) fn build_behaviour(key: &Keypair) -> Behaviour {
+    Behaviour {
+        ping: ping::Behaviour::new(ping::Config::new().with_interval(Duration::from_secs(1))),
+        // Need to include identify until https://github.com/status-im/nim-libp2p/issues/924 is resolved.
+        identify: identify::Behaviour::new(identify::Config::new(
+            "/interop-tests".to_owned(),
+            key.public(),
+        )),
+    }
 }

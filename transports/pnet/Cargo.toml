@@ -3,7 +3,7 @@ name = "libp2p-pnet"
 edition = "2021"
 rust-version = { workspace = true }
 description = "Private swarm support for libp2p"
-version = "0.23.0"
+version = "0.24.0"
 authors = ["Parity Technologies <admin@parity.io>"]
 license = "MIT"
 repository = "https://github.com/libp2p/rust-libp2p"
@@ -20,14 +20,14 @@ pin-project = "1.1.3"
 
 [dev-dependencies]
 libp2p-core = { workspace = true }
-libp2p-identity = { workspace = true, features = ["ed25519", "rsa", "ecdsa", "secp256k1"] }
+libp2p-identity = { workspace = true, features = ["ed25519", "rsa", "ecdsa","secp256k1", "rand"] }
 libp2p-noise = { workspace = true }
 libp2p-swarm = { workspace = true, features = ["tokio"] }
 libp2p-tcp = { workspace = true, features = ["tokio"] }
 libp2p-websocket = { workspace = true }
 libp2p-yamux = { workspace = true }
 quickcheck = { workspace = true }
-tokio = { version = "1.32.0", features = ["full"] }
+tokio = { version = "1.33.0", features = ["full"] }
 
 # Passing arguments to the docsrs builder in order to properly document cfg's. 
 # More information: https://docs.rs/about/builds#cross-compiling
@@ -35,3 +35,6 @@ tokio = { version = "1.32.0", features = ["full"] }
 all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
 rustc-args = ["--cfg", "docsrs"]
+
+[lints]
+workspace = true

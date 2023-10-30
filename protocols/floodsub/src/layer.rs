@@ -30,8 +30,8 @@ use libp2p_core::{Endpoint, Multiaddr};
 use libp2p_identity::PeerId;
 use libp2p_swarm::behaviour::{ConnectionClosed, ConnectionEstablished, FromSwarm};
 use libp2p_swarm::{
-    dial_opts::DialOpts, ConnectionDenied, ConnectionId, NetworkBehaviour, NotifyHandler,
-    OneShotHandler, PollParameters, THandler, THandlerInEvent, THandlerOutEvent, ToSwarm,
+    dial_opts::DialOpts, CloseConnection, ConnectionDenied, ConnectionId, NetworkBehaviour,
+    NotifyHandler, OneShotHandler, THandler, THandlerInEvent, THandlerOutEvent, ToSwarm,
 };
 use smallvec::SmallVec;
 use std::collections::hash_map::{DefaultHasher, HashMap};
@@ -306,7 +306,7 @@ impl Floodsub {
             peer_id,
             remaining_established,
             ..
-        }: ConnectionClosed<<Self as NetworkBehaviour>::ConnectionHandler>,
+        }: ConnectionClosed,
     ) {
         if remaining_established > 0 {
             // we only care about peer disconnections
@@ -353,13 +353,21 @@ impl NetworkBehaviour for Floodsub {
     fn on_connection_handler_event(
         &mut self,
         propagation_source: PeerId,
-        _connection_id: ConnectionId,
+        connection_id: ConnectionId,
         event: THandlerOutEvent<Self>,
     ) {
         // We ignore successful sends or timeouts.
         let event = match event {
-            InnerMessage::Rx(event) => event,
-            InnerMessage::Sent => return,
+            Ok(InnerMessage::Rx(event)) => event,
+            Ok(InnerMessage::Sent) => return,
+            Err(e) => {
+                tracing::debug!("Failed to send floodsub message: {e}");
+                self.events.push_back(ToSwarm::CloseConnection {
+                    peer_id: propagation_source,
+                    connection: CloseConnection::One(connection_id),
+                });
+                return;
+            }
         };
 
         // Update connected peers topics
@@ -465,11 +473,7 @@ impl NetworkBehaviour for Floodsub {
         }
     }
 
-    fn poll(
-        &mut self,
-        _: &mut Context<'_>,
-        _: &mut impl PollParameters,
-    ) -> Poll<ToSwarm<Self::ToSwarm, THandlerInEvent<Self>>> {
+    fn poll(&mut self, _: &mut Context<'_>) -> Poll<ToSwarm<Self::ToSwarm, THandlerInEvent<Self>>> {
         if let Some(event) = self.events.pop_front() {
             return Poll::Ready(event);
         }
@@ -477,7 +481,7 @@ impl NetworkBehaviour for Floodsub {
         Poll::Pending
     }
 
-    fn on_swarm_event(&mut self, event: FromSwarm<Self::ConnectionHandler>) {
+    fn on_swarm_event(&mut self, event: FromSwarm) {
         match event {
             FromSwarm::ConnectionEstablished(connection_established) => {
                 self.on_connection_established(connection_established)

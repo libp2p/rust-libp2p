@@ -34,15 +34,15 @@ use crate::handler::{
     FullyNegotiatedOutbound, ListenUpgradeError, ProtocolSupport, ProtocolsAdded, ProtocolsChange,
     UpgradeInfoSend,
 };
+use crate::stream::ActiveStreamCounter;
 use crate::upgrade::{InboundUpgradeSend, OutboundUpgradeSend};
 use crate::{
-    ConnectionHandlerEvent, KeepAlive, Stream, StreamProtocol, StreamUpgradeError,
-    SubstreamProtocol,
+    ConnectionHandlerEvent, Stream, StreamProtocol, StreamUpgradeError, SubstreamProtocol,
 };
 use futures::future::BoxFuture;
 use futures::stream::FuturesUnordered;
-use futures::FutureExt;
 use futures::StreamExt;
+use futures::{stream, FutureExt};
 use futures_timer::Delay;
 use instant::Instant;
 use libp2p_core::connection::ConnectedPoint;
@@ -52,7 +52,6 @@ use libp2p_core::upgrade;
 use libp2p_core::upgrade::{NegotiationError, ProtocolError};
 use libp2p_core::Endpoint;
 use libp2p_identity::PeerId;
-use std::cmp::max;
 use std::collections::HashSet;
 use std::fmt::{Display, Formatter};
 use std::future::Future;
@@ -60,7 +59,6 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use std::task::Waker;
 use std::time::Duration;
 use std::{fmt, io, mem, pin::Pin, task::Context, task::Poll};
-use tracing::Span;
 
 static NEXT_CONNECTION_ID: AtomicUsize = AtomicUsize::new(1);
 
@@ -145,8 +143,7 @@ where
     /// Note: This only enforces a limit on the number of concurrently
     /// negotiating inbound streams. The total number of inbound streams on a
     /// connection is the sum of negotiating and negotiated streams. A limit on
-    /// the total number of streams can be enforced at the
-    /// [`StreamMuxerBox`](libp2p_core::muxing::StreamMuxerBox) level.
+    /// the total number of streams can be enforced at the [`StreamMuxerBox`] level.
     max_negotiating_inbound_streams: usize,
     /// Contains all upgrades that are waiting for a new outbound substream.
     ///
@@ -159,7 +156,10 @@ where
     local_supported_protocols: HashSet<StreamProtocol>,
     remote_supported_protocols: HashSet<StreamProtocol>,
     idle_timeout: Duration,
-    span: Span,
+    stream_counter: ActiveStreamCounter,
+    connection_id: ConnectionId,
+    remote_peer_id: PeerId,
+    remote_addr: Multiaddr,
 }
 
 impl<THandler> fmt::Debug for Connection<THandler>
@@ -182,13 +182,16 @@ where
 {
     /// Builds a new `Connection` from the given substream multiplexer
     /// and connection handler.
+    #[allow(clippy::too_many_arguments)]
     pub(crate) fn new(
         muxer: StreamMuxerBox,
         mut handler: THandler,
         substream_upgrade_protocol_override: Option<upgrade::Version>,
         max_negotiating_inbound_streams: usize,
         idle_timeout: Duration,
-        span: Span,
+        connection_id: ConnectionId,
+        remote_peer_id: PeerId,
+        remote_addr: Multiaddr,
     ) -> Self {
         let initial_protocols = gather_supported_protocols(&handler);
         if !initial_protocols.is_empty() {
@@ -208,7 +211,10 @@ where
             local_supported_protocols: initial_protocols,
             remote_supported_protocols: Default::default(),
             idle_timeout,
-            span,
+            stream_counter: ActiveStreamCounter::default(),
+            connection_id,
+            remote_peer_id,
+            remote_addr,
         }
     }
 
@@ -217,14 +223,28 @@ where
         self.handler.on_behaviour_event(event);
     }
 
-    /// Begins an orderly shutdown of the connection, returning the connection
-    /// handler and a `Future` that resolves when connection shutdown is complete.
-    pub(crate) fn close(self) -> (THandler, impl Future<Output = io::Result<()>>) {
-        (self.handler, self.muxing.close())
+    /// Begins an orderly shutdown of the connection, returning a stream of final events and a `Future` that resolves when connection shutdown is complete.
+    pub(crate) fn close(
+        self,
+    ) -> (
+        impl futures::Stream<Item = THandler::ToBehaviour>,
+        impl Future<Output = io::Result<()>>,
+    ) {
+        let Connection {
+            mut handler,
+            muxing,
+            ..
+        } = self;
+
+        (
+            stream::poll_fn(move |cx| handler.poll_close(cx)),
+            muxing.close(),
+        )
     }
 
     /// Polls the handler and the substream, forwarding events from the former to the latter and
     /// vice versa.
+    #[tracing::instrument(level = "debug", name = "Connection::poll", skip(self, cx), fields(id = %self.connection_id, peer = %self.remote_peer_id, remote_address = %self.remote_addr))]
     pub(crate) fn poll(
         self: Pin<&mut Self>,
         cx: &mut Context<'_>,
@@ -241,10 +261,10 @@ where
             local_supported_protocols: supported_protocols,
             remote_supported_protocols,
             idle_timeout,
-            span,
+            stream_counter,
+            ..
         } = self.get_mut();
 
-        let _guard = span.enter();
         loop {
             match requested_substreams.poll_next_unpin(cx) {
                 Poll::Ready(Some(Ok(()))) => continue,
@@ -350,55 +370,19 @@ where
                 }
             }
 
-            // Ask the handler whether it wants the connection (and the handler itself)
-            // to be kept alive, which determines the planned shutdown, if any.
-            let keep_alive = handler.connection_keep_alive();
-            match (&mut *shutdown, keep_alive) {
-                (Shutdown::Later(timer, deadline), KeepAlive::Until(t)) => {
-                    if *deadline != t {
-                        *deadline = t;
-                        if let Some(new_duration) = deadline.checked_duration_since(Instant::now())
-                        {
-                            let effective_keep_alive = max(new_duration, *idle_timeout);
-
-                            timer.reset(effective_keep_alive)
-                        }
-                    }
-                }
-                (_, KeepAlive::Until(earliest_shutdown)) => {
-                    let now = Instant::now();
-
-                    if let Some(requested) = earliest_shutdown.checked_duration_since(now) {
-                        let effective_keep_alive = max(requested, *idle_timeout);
-
-                        let safe_keep_alive = checked_add_fraction(now, effective_keep_alive);
-
-                        // Important: We store the _original_ `Instant` given by the `ConnectionHandler` in the `Later` instance to ensure we can compare it in the above branch.
-                        // This is quite subtle but will hopefully become simpler soon once `KeepAlive::Until` is fully deprecated. See <https://github.com/libp2p/rust-libp2p/issues/3844>/
-                        *shutdown = Shutdown::Later(Delay::new(safe_keep_alive), earliest_shutdown)
-                    }
-                }
-                (_, KeepAlive::No) if idle_timeout == &Duration::ZERO => {
-                    *shutdown = Shutdown::Asap;
-                }
-                (Shutdown::Later(_, _), KeepAlive::No) => {
-                    // Do nothing, i.e. let the shutdown timer continue to tick.
-                }
-                (_, KeepAlive::No) => {
-                    let now = Instant::now();
-                    let safe_keep_alive = checked_add_fraction(now, *idle_timeout);
-
-                    *shutdown = Shutdown::Later(Delay::new(safe_keep_alive), now + safe_keep_alive);
-                }
-                (_, KeepAlive::Yes) => *shutdown = Shutdown::None,
-            };
-
             // Check if the connection (and handler) should be shut down.
-            // As long as we're still negotiating substreams, shutdown is always postponed.
+            // As long as we're still negotiating substreams or have any active streams shutdown is always postponed.
             if negotiating_in.is_empty()
                 && negotiating_out.is_empty()
                 && requested_substreams.is_empty()
+                && stream_counter.has_no_active_streams()
             {
+                if let Some(new_timeout) =
+                    compute_new_shutdown(handler.connection_keep_alive(), shutdown, *idle_timeout)
+                {
+                    *shutdown = new_timeout;
+                }
+
                 match shutdown {
                     Shutdown::None => {}
                     Shutdown::Asap => return Poll::Ready(Err(ConnectionError::KeepAliveTimeout)),
@@ -409,6 +393,8 @@ where
                         Poll::Pending => {}
                     },
                 }
+            } else {
+                *shutdown = Shutdown::None;
             }
 
             match muxing.poll_unpin(cx)? {
@@ -433,6 +419,7 @@ where
                             timeout,
                             upgrade,
                             *substream_upgrade_protocol_override,
+                            stream_counter.clone(),
                         ));
 
                         continue; // Go back to the top, handler can potentially make progress again.
@@ -446,7 +433,11 @@ where
                     Poll::Ready(substream) => {
                         let protocol = handler.listen_protocol();
 
-                        negotiating_in.push(StreamUpgrade::new_inbound(substream, protocol));
+                        negotiating_in.push(StreamUpgrade::new_inbound(
+                            substream,
+                            protocol,
+                            stream_counter.clone(),
+                        ));
 
                         continue; // Go back to the top, handler can potentially make progress again.
                     }
@@ -485,6 +476,27 @@ fn gather_supported_protocols(handler: &impl ConnectionHandler) -> HashSet<Strea
         .protocol_info()
         .filter_map(|i| StreamProtocol::try_from_owned(i.as_ref().to_owned()).ok())
         .collect()
+}
+
+fn compute_new_shutdown(
+    handler_keep_alive: bool,
+    current_shutdown: &Shutdown,
+    idle_timeout: Duration,
+) -> Option<Shutdown> {
+    match (current_shutdown, handler_keep_alive) {
+        (_, false) if idle_timeout == Duration::ZERO => Some(Shutdown::Asap),
+        (Shutdown::Later(_, _), false) => None, // Do nothing, i.e. let the shutdown timer continue to tick.
+        (_, false) => {
+            let now = Instant::now();
+            let safe_keep_alive = checked_add_fraction(now, idle_timeout);
+
+            Some(Shutdown::Later(
+                Delay::new(safe_keep_alive),
+                now + safe_keep_alive,
+            ))
+        }
+        (_, true) => Some(Shutdown::None),
+    }
 }
 
 /// Repeatedly halves and adds the [`Duration`] to the [`Instant`] until [`Instant::checked_add`] succeeds.
@@ -533,6 +545,7 @@ impl<UserData, TOk, TErr> StreamUpgrade<UserData, TOk, TErr> {
         timeout: Delay,
         upgrade: Upgrade,
         version_override: Option<upgrade::Version>,
+        counter: ActiveStreamCounter,
     ) -> Self
     where
         Upgrade: OutboundUpgradeSend<Output = TOk, Error = TErr>,
@@ -564,7 +577,7 @@ impl<UserData, TOk, TErr> StreamUpgrade<UserData, TOk, TErr> {
                 .map_err(to_stream_upgrade_error)?;
 
                 let output = upgrade
-                    .upgrade_outbound(Stream::new(stream), info)
+                    .upgrade_outbound(Stream::new(stream, counter), info)
                     .await
                     .map_err(StreamUpgradeError::Apply)?;
 
@@ -578,6 +591,7 @@ impl<UserData, TOk, TErr> StreamUpgrade<UserData, TOk, TErr> {
     fn new_inbound<Upgrade>(
         substream: SubstreamBox,
         protocol: SubstreamProtocol<Upgrade, UserData>,
+        counter: ActiveStreamCounter,
     ) -> Self
     where
         Upgrade: InboundUpgradeSend<Output = TOk, Error = TErr>,
@@ -596,7 +610,7 @@ impl<UserData, TOk, TErr> StreamUpgrade<UserData, TOk, TErr> {
                         .map_err(to_stream_upgrade_error)?;
 
                 let output = upgrade
-                    .upgrade_inbound(Stream::new(stream), info)
+                    .upgrade_inbound(Stream::new(stream, counter), info)
                     .await
                     .map_err(StreamUpgradeError::Apply)?;
 
@@ -750,10 +764,15 @@ mod tests {
     use quickcheck::*;
     use std::sync::{Arc, Weak};
     use std::time::Instant;
+    use tracing_subscriber::EnvFilter;
     use void::Void;
 
     #[test]
     fn max_negotiating_inbound_streams() {
+        let _ = tracing_subscriber::fmt()
+            .with_env_filter(EnvFilter::from_default_env())
+            .try_init();
+
         fn prop(max_negotiating_inbound_streams: u8) {
             let max_negotiating_inbound_streams: usize = max_negotiating_inbound_streams.into();
 
@@ -762,11 +781,13 @@ mod tests {
                 StreamMuxerBox::new(DummyStreamMuxer {
                     counter: alive_substream_counter.clone(),
                 }),
-                MockConnectionHandler::new(Duration::ZERO),
+                MockConnectionHandler::new(Duration::from_secs(10)),
                 None,
                 max_negotiating_inbound_streams,
                 Duration::ZERO,
-                tracing::Span::none(),
+                ConnectionId::new_unchecked(0),
+                PeerId::random(),
+                Multiaddr::empty(),
             );
 
             let result = connection.poll_noop_waker();
@@ -791,7 +812,9 @@ mod tests {
             None,
             2,
             Duration::ZERO,
-            tracing::Span::none(),
+            ConnectionId::new_unchecked(0),
+            PeerId::random(),
+            Multiaddr::empty(),
         );
 
         connection.handler.open_new_outbound();
@@ -815,7 +838,9 @@ mod tests {
             None,
             0,
             Duration::ZERO,
-            tracing::Span::none(),
+            ConnectionId::new_unchecked(0),
+            PeerId::random(),
+            Multiaddr::empty(),
         );
 
         // First, start listening on a single protocol.
@@ -855,7 +880,9 @@ mod tests {
             None,
             0,
             Duration::ZERO,
-            tracing::Span::none(),
+            ConnectionId::new_unchecked(0),
+            PeerId::random(),
+            Multiaddr::empty(),
         );
 
         // First, remote supports a single protocol.
@@ -909,76 +936,14 @@ mod tests {
             None,
             0,
             idle_timeout,
-            tracing::Span::none(),
+            ConnectionId::new_unchecked(0),
+            PeerId::random(),
+            Multiaddr::empty(),
         );
 
         assert!(connection.poll_noop_waker().is_pending());
 
         tokio::time::sleep(idle_timeout).await;
-
-        assert!(matches!(
-            connection.poll_noop_waker(),
-            Poll::Ready(Err(ConnectionError::KeepAliveTimeout))
-        ));
-    }
-
-    #[tokio::test]
-    async fn idle_timeout_with_keep_alive_until_greater_than_idle_timeout() {
-        let idle_timeout = Duration::from_millis(100);
-
-        let mut connection = Connection::new(
-            StreamMuxerBox::new(PendingStreamMuxer),
-            KeepAliveUntilConnectionHandler {
-                until: Instant::now() + idle_timeout * 2,
-            },
-            None,
-            0,
-            idle_timeout,
-            tracing::Span::none(),
-        );
-
-        assert!(connection.poll_noop_waker().is_pending());
-
-        tokio::time::sleep(idle_timeout).await;
-
-        assert!(
-            connection.poll_noop_waker().is_pending(),
-            "`KeepAlive::Until` is greater than idle-timeout, continue sleeping"
-        );
-
-        tokio::time::sleep(idle_timeout).await;
-
-        assert!(matches!(
-            connection.poll_noop_waker(),
-            Poll::Ready(Err(ConnectionError::KeepAliveTimeout))
-        ));
-    }
-
-    #[tokio::test]
-    async fn idle_timeout_with_keep_alive_until_less_than_idle_timeout() {
-        let idle_timeout = Duration::from_millis(100);
-
-        let mut connection = Connection::new(
-            StreamMuxerBox::new(PendingStreamMuxer),
-            KeepAliveUntilConnectionHandler {
-                until: Instant::now() + idle_timeout / 2,
-            },
-            None,
-            0,
-            idle_timeout,
-            tracing::Span::none(),
-        );
-
-        assert!(connection.poll_noop_waker().is_pending());
-
-        tokio::time::sleep(idle_timeout / 2).await;
-
-        assert!(
-            connection.poll_noop_waker().is_pending(),
-            "`KeepAlive::Until` is less than idle-timeout, honor idle-timeout"
-        );
-
-        tokio::time::sleep(idle_timeout / 2).await;
 
         assert!(matches!(
             connection.poll_noop_waker(),
@@ -998,55 +963,59 @@ mod tests {
         assert!(start.checked_add(duration).is_some())
     }
 
-    struct KeepAliveUntilConnectionHandler {
-        until: Instant,
-    }
+    #[test]
+    fn compute_new_shutdown_does_not_panic() {
+        let _ = tracing_subscriber::fmt()
+            .with_env_filter(EnvFilter::from_default_env())
+            .try_init();
 
-    impl ConnectionHandler for KeepAliveUntilConnectionHandler {
-        type FromBehaviour = Void;
-        type ToBehaviour = Void;
-        type Error = Void;
-        type InboundProtocol = DeniedUpgrade;
-        type OutboundProtocol = DeniedUpgrade;
-        type InboundOpenInfo = ();
-        type OutboundOpenInfo = Void;
+        #[derive(Debug)]
+        struct ArbitraryShutdown(Shutdown);
 
-        fn listen_protocol(
-            &self,
-        ) -> SubstreamProtocol<Self::InboundProtocol, Self::InboundOpenInfo> {
-            SubstreamProtocol::new(DeniedUpgrade, ())
+        impl Clone for ArbitraryShutdown {
+            fn clone(&self) -> Self {
+                let shutdown = match self.0 {
+                    Shutdown::None => Shutdown::None,
+                    Shutdown::Asap => Shutdown::Asap,
+                    Shutdown::Later(_, instant) => Shutdown::Later(
+                        // compute_new_shutdown does not touch the delay. Delay does not
+                        // implement Clone. Thus use a placeholder delay.
+                        Delay::new(Duration::from_secs(1)),
+                        instant,
+                    ),
+                };
+
+                ArbitraryShutdown(shutdown)
+            }
         }
 
-        fn connection_keep_alive(&self) -> KeepAlive {
-            KeepAlive::Until(self.until)
+        impl Arbitrary for ArbitraryShutdown {
+            fn arbitrary(g: &mut Gen) -> Self {
+                let shutdown = match g.gen_range(1u8..4) {
+                    1 => Shutdown::None,
+                    2 => Shutdown::Asap,
+                    3 => Shutdown::Later(
+                        Delay::new(Duration::from_secs(u32::arbitrary(g) as u64)),
+                        Instant::now()
+                            .checked_add(Duration::arbitrary(g))
+                            .unwrap_or(Instant::now()),
+                    ),
+                    _ => unreachable!(),
+                };
+
+                Self(shutdown)
+            }
         }
 
-        fn poll(
-            &mut self,
-            _: &mut Context<'_>,
-        ) -> Poll<
-            ConnectionHandlerEvent<
-                Self::OutboundProtocol,
-                Self::OutboundOpenInfo,
-                Self::ToBehaviour,
-                Self::Error,
-            >,
-        > {
-            Poll::Pending
-        }
-
-        fn on_behaviour_event(&mut self, _: Self::FromBehaviour) {}
-
-        fn on_connection_event(
-            &mut self,
-            _: ConnectionEvent<
-                Self::InboundProtocol,
-                Self::OutboundProtocol,
-                Self::InboundOpenInfo,
-                Self::OutboundOpenInfo,
-            >,
+        fn prop(
+            handler_keep_alive: bool,
+            current_shutdown: ArbitraryShutdown,
+            idle_timeout: Duration,
         ) {
+            compute_new_shutdown(handler_keep_alive, &current_shutdown.0, idle_timeout);
         }
+
+        QuickCheck::new().quickcheck(prop as fn(_, _, _));
     }
 
     struct DummyStreamMuxer {
@@ -1247,8 +1216,8 @@ mod tests {
             void::unreachable(event)
         }
 
-        fn connection_keep_alive(&self) -> KeepAlive {
-            KeepAlive::Yes
+        fn connection_keep_alive(&self) -> bool {
+            true
         }
 
         fn poll(
@@ -1324,8 +1293,8 @@ mod tests {
             void::unreachable(event)
         }
 
-        fn connection_keep_alive(&self) -> KeepAlive {
-            KeepAlive::Yes
+        fn connection_keep_alive(&self) -> bool {
+            true
         }
 
         fn poll(
