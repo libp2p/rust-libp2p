@@ -34,6 +34,7 @@ use libp2p_swarm::handler::{
     FullyNegotiatedInbound, FullyNegotiatedOutbound, StreamUpgradeError, SubstreamProtocol,
 };
 use libp2p_swarm::Stream;
+use log::warn;
 use std::{
     pin::Pin,
     task::{Context, Poll},
@@ -408,7 +409,11 @@ impl ConnectionHandler for Handler {
     fn on_behaviour_event(&mut self, message: HandlerIn) {
         match self {
             Handler::Enabled(handler) => match message {
-                HandlerIn::Message(m) => _ = handler.send_queue.push_back(m), // drops frontmost element if full
+                HandlerIn::Message(m) => {
+                    if let Some(_) = handler.send_queue.push_back(m) {
+                        warn!("Handler send queue is full. Dropping message at head");
+                    }
+                }
                 HandlerIn::JoinedMesh => {
                     handler.in_mesh = true;
                 }
