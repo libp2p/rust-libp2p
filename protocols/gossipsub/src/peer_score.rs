@@ -221,11 +221,7 @@ impl PeerScore {
     /// Returns the score for a peer, logging metrics. This is called from the heartbeat and
     /// increments the metric counts for penalties.
     pub(crate) fn metric_score(&self, peer_id: &PeerId, mut metrics: Option<&mut Metrics>) -> f64 {
-        let peer_stats = match self.peer_stats.get(peer_id) {
-            Some(v) => v,
-            None => return 0.0,
-        };
-
+        let Some(peer_stats) = self.peer_stats.get(peer_id) else { return 0.0 };
         let mut score = 0.0;
 
         // topic scores

@@ -166,28 +166,19 @@ impl GossipsubCodec {
     fn verify_signature(message: &proto::Message) -> bool {
         use quick_protobuf::MessageWrite;
 
-        let from = match message.from.as_ref() {
-            Some(v) => v,
-            None => {
-                debug!("Signature verification failed: No source id given");
-                return false;
-            }
+        let Some(from) = message.from.as_ref() else {
+            debug!("Signature verification failed: No source id given");
+            return false;
         };
 
-        let source = match PeerId::from_bytes(from) {
-            Ok(v) => v,
-            Err(_) => {
-                debug!("Signature verification failed: Invalid Peer Id");
-                return false;
-            }
+        let Ok(source) = PeerId::from_bytes(from) else {
+            debug!("Signature verification failed: Invalid Peer Id");
+            return false;
         };
 
-        let signature = match message.signature.as_ref() {
-            Some(v) => v,
-            None => {
-                debug!("Signature verification failed: No signature provided");
-                return false;
-            }
+        let Some(signature) = message.signature.as_ref() else {
+            debug!("Signature verification failed: No signature provided");
+            return false;
         };
 
         // If there is a key value in the protobuf, use that key otherwise the key must be
@@ -238,11 +229,7 @@ impl Decoder for GossipsubCodec {
     type Error = quick_protobuf_codec::Error;
 
     fn decode(&mut self, src: &mut BytesMut) -> Result<Option<Self::Item>, Self::Error> {
-        let rpc = match self.codec.decode(src)? {
-            Some(p) => p,
-            None => return Ok(None),
-        };
-
+        let Some(rpc) = self.codec.decode(src)? else { return Ok(None) };
         // Store valid messages.
         let mut messages = Vec::with_capacity(rpc.publish.len());
         // Store any invalid messages.

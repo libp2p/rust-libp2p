@@ -111,9 +111,7 @@ impl Behaviour {
             ..
         }: DialFailure,
     ) {
-        let peer_id = if let Some(peer_id) = peer_id {
-            peer_id
-        } else {
+        let Some(peer_id) = peer_id else {
             return;
         };
 

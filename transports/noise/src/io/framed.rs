@@ -197,10 +197,7 @@ fn decrypt(
     ciphertext: &mut BytesMut,
     decrypt_fn: impl FnOnce(&[u8], &mut [u8]) -> Result<usize, snow::Error>,
 ) -> io::Result<Option<Bytes>> {
-    let ciphertext = match decode_length_prefixed(ciphertext)? {
-        Some(b) => b,
-        None => return Ok(None),
-    };
+    let Some(ciphertext) = decode_length_prefixed(ciphertext)? else { return Ok(None) };
 
     log::trace!("Incoming ciphertext has {} bytes", ciphertext.len());
 

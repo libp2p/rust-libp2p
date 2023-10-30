@@ -1965,11 +1965,7 @@ where
     }
 
     fn on_dial_failure(&mut self, DialFailure { peer_id, error, .. }: DialFailure) {
-        let peer_id = match peer_id {
-            Some(id) => id,
-            // Not interested in dial failures to unknown peers.
-            None => return,
-        };
+        let Some(peer_id) = peer_id else { return };
 
         match error {
             DialError::LocalPeerId { .. }

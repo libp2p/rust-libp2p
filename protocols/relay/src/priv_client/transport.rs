@@ -342,13 +342,10 @@ impl Stream for Listener {
                 return Poll::Ready(None);
             }
 
-            let msg = match ready!(self.from_behaviour.poll_next_unpin(cx)) {
-                Some(msg) => msg,
-                None => {
-                    // Sender of `from_behaviour` has been dropped, signaling listener to close.
-                    self.close(Ok(()));
-                    continue;
-                }
+            let Some(msg) = ready!(self.from_behaviour.poll_next_unpin(cx)) else {
+                // Sender of `from_behaviour` has been dropped, signaling listener to close.
+                self.close(Ok(()));
+                continue;
             };
 
             match msg {

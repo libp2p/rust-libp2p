@@ -1714,10 +1714,7 @@ impl NetworkInfo {
 /// If the given address is not yet a `p2p` address for the given peer,
 /// the `/p2p/<peer-id>` protocol is appended to the returned address.
 fn p2p_addr(peer: Option<PeerId>, addr: Multiaddr) -> Result<Multiaddr, Multiaddr> {
-    let peer = match peer {
-        Some(p) => p,
-        None => return Ok(addr),
-    };
+    let Some(peer) = peer else { return Ok(addr) };
 
     if let Some(multiaddr::Protocol::P2p(peer_id)) = addr.iter().last() {
         if peer_id != peer {
