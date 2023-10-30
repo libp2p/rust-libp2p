@@ -2444,6 +2444,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "libp2p-autonatv2"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "futures",
+ "libp2p-core",
+ "libp2p-request-response",
+ "libp2p-swarm",
+ "quick-protobuf",
+ "rand 0.8.5",
+ "rand_core 0.6.4",
+]
+
+[[package]]
 name = "libp2p-connection-limits"
 version = "0.3.0"
 dependencies = [

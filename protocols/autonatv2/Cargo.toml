@@ -1,0 +1,24 @@
+[package]
+name = "libp2p-autonatv2"
+version = "0.1.0"
+edition = "2021"
+rust-version.workspace = true
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+quick-protobuf = "0.8"
+libp2p-request-response = { path = "../request-response" }
+libp2p-core = { path = "../../core" }
+async-trait = "0.1"
+futures = "0.3"
+rand_core = "0.6"
+rand = { version = "0.8", optional = true }
+libp2p-swarm = { version = "0.44.0", path = "../../swarm" }
+
+[lints]
+workspace = true
+
+[features]
+default = ["rand"]
+rand = ["dep:rand"]

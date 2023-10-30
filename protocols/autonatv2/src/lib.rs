@@ -1,0 +1,18 @@
+pub(crate) mod request_response;
+pub(crate) mod dial_back;
+mod generated;
+
+pub fn add(left: usize, right: usize) -> usize {
+    left + right
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn it_works() {
+        let result = add(2, 2);
+        assert_eq!(result, 4);
+    }
+}

@@ -34,6 +34,7 @@ members = [
     "muxers/test-harness",
     "muxers/yamux",
     "protocols/autonat",
+    "protocols/autonatv2",
     "protocols/dcutr",
     "protocols/floodsub",
     "protocols/gossipsub",
