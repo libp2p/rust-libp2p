@@ -13,7 +13,7 @@ categories = ["network-programming", "asynchronous"]
 [dependencies]
 asynchronous-codec = "0.6"
 either = "1.9.0"
-futures = "0.3.28"
+futures = "0.3.29"
 futures-timer = "3.0"
 instant = "0.1.12"
 libp2p-core = { workspace = true }

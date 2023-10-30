@@ -10,7 +10,7 @@ release = false
 
 [dependencies]
 env_logger = "0.10.0"
-futures = "0.3.27"
+futures = "0.3.29"
 hyper = { version = "0.14", features = ["server", "tcp", "http1"] }
 libp2p = { path = "../../libp2p", features = ["async-std", "metrics", "ping", "noise", "identify", "tcp", "yamux", "macros"] }
 log = "0.4.20"
