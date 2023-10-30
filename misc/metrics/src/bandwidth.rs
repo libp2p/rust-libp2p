@@ -33,10 +33,8 @@ pub struct Transport<T> {
 impl<T> Transport<T> {
     pub fn new(transport: T, registry: &mut Registry) -> Self {
         let metrics = Family::<Labels, Counter>::default();
-
-        registry.register_with_unit(
-            // TODO: Ideally no prefix would be needed.
-            "libp2p_swarm_bandwidth",
+        registry.sub_registry_with_prefix("libp2p").register_with_unit(
+            "bandwidth",
             "Bandwidth usage by direction and transport protocols",
             Unit::Bytes,
             metrics.clone(),
