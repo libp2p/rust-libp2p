@@ -13,7 +13,7 @@ categories = ["network-programming", "asynchronous"]
 [dependencies]
 asynchronous-codec = "0.6"
 either = "1.9.0"
-futures = "0.3.28"
+futures = "0.3.29"
 futures-timer = "3.0"
 instant = "0.1.12"
 libp2p-core = { workspace = true }
@@ -28,7 +28,7 @@ lru = "0.11.1"
 
 [dev-dependencies]
 async-std = { version = "1.12.0", features = ["attributes"] }
-clap = { version = "4.4.6", features = ["derive"] }
+clap = { version = "4.4.7", features = ["derive"] }
 env_logger = "0.10.0"
 libp2p-dns = { workspace = true, features = ["async-std"] }
 libp2p-identify = { workspace = true }
