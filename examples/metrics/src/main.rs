@@ -46,7 +46,7 @@ fn main() -> Result<(), Box<dyn Error>> {
             noise::Config::new,
             yamux::Config::default,
         )?
-        .with_bandwidth_metrics(&mut metrics_registry)
+        .with_bandwidth_metrics(&mut metric_registry)
         .with_behaviour(|key| Behaviour::new(key.public()))?
         .with_swarm_config(|cfg| cfg.with_idle_connection_timeout(Duration::from_secs(u64::MAX)))
         .build();
@@ -60,7 +60,6 @@ fn main() -> Result<(), Box<dyn Error>> {
     }
 
     let metrics = Metrics::new(&mut metric_registry);
-    libp2p::bandwidth::register_bandwidth_sinks(&mut metric_registry, bandwidth_logging);
     thread::spawn(move || block_on(http_service::metrics_server(metric_registry)));
 
     block_on(async {
