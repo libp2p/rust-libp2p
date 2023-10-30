@@ -532,8 +532,7 @@ mod tests {
                 Behaviour::new(crate::MessageAuthenticity::Signed(keypair.0), config).unwrap();
             let data = (0..g.gen_range(10..10024u32))
                 .map(|_| u8::arbitrary(g))
-                .collect::<Vec<_>>();
-            let data = Bytes::from(data);
+                .collect::<Bytes>();
             let topic_id = TopicId::arbitrary(g).0;
             Message(gs.build_raw_message(topic_id, data).unwrap())
         }
