@@ -99,7 +99,7 @@ async fn only_emits_address_candidate_once_per_connection() {
         )
     });
 
-    swarm2.listen().await;
+    swarm2.listen().with_memory_addr_external().await;
     swarm1.connect(&mut swarm2).await;
 
     async_std::task::spawn(swarm2.loop_on_next());
