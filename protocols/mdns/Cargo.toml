@@ -24,7 +24,7 @@ rand = "0.8.3"
 smallvec = "1.11.1"
 socket2 = { version = "0.5.5", features = ["all"] }
 tokio = { version = "1.33", default-features = false, features = ["net", "time"], optional = true}
-trust-dns-proto = { version = "0.23.0", default-features = false, features = ["mdns"] }
+trust-dns-proto = { version = "0.23.2", default-features = false, features = ["mdns"] }
 void = "1.0.2"
 
 [features]
