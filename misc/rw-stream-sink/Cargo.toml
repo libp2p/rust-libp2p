@@ -11,7 +11,7 @@ keywords = ["networking"]
 categories = ["network-programming", "asynchronous"]
 
 [dependencies]
-futures = "0.3.28"
+futures = "0.3.29"
 pin-project = "1.1.3"
 static_assertions = "1"
 
