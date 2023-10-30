@@ -29,7 +29,6 @@ use crate::protocol::{self, inbound_stop, outbound_hop};
 use bytes::Bytes;
 use either::Either;
 use futures::channel::mpsc::Receiver;
-use futures::channel::oneshot;
 use futures::future::{BoxFuture, FutureExt};
 use futures::io::{AsyncRead, AsyncWrite};
 use futures::ready;
@@ -40,8 +39,8 @@ use libp2p_swarm::behaviour::{ConnectionClosed, ConnectionEstablished, FromSwarm
 use libp2p_swarm::dial_opts::DialOpts;
 use libp2p_swarm::{
     dummy, ConnectionDenied, ConnectionHandler, ConnectionId, DialFailure, NetworkBehaviour,
-    NotifyHandler, PollParameters, Stream, StreamUpgradeError, THandler, THandlerInEvent,
-    THandlerOutEvent, ToSwarm,
+    NotifyHandler, Stream, StreamUpgradeError, THandler, THandlerInEvent, THandlerOutEvent,
+    ToSwarm,
 };
 use std::collections::{hash_map, HashMap, VecDeque};
 use std::io::{Error, ErrorKind, IoSlice};
@@ -125,7 +124,7 @@ impl Behaviour {
             connection_id,
             endpoint,
             ..
-        }: ConnectionClosed<<Self as NetworkBehaviour>::ConnectionHandler>,
+        }: ConnectionClosed,
     ) {
         if !endpoint.is_relayed() {
             match self.directly_connected_peers.entry(peer_id) {
@@ -192,7 +191,7 @@ impl NetworkBehaviour for Behaviour {
         Ok(Either::Left(handler))
     }
 
-    fn on_swarm_event(&mut self, event: FromSwarm<Self::ConnectionHandler>) {
+    fn on_swarm_event(&mut self, event: FromSwarm) {
         match event {
             FromSwarm::ConnectionEstablished(ConnectionEstablished {
                 peer_id,
@@ -278,7 +277,6 @@ impl NetworkBehaviour for Behaviour {
     fn poll(
         &mut self,
         cx: &mut Context<'_>,
-        _poll_parameters: &mut impl PollParameters,
     ) -> Poll<ToSwarm<Self::ToSwarm, THandlerInEvent<Self>>> {
         if let Some(action) = self.queued_actions.pop_front() {
             return Poll::Ready(action);
@@ -293,7 +291,7 @@ impl NetworkBehaviour for Behaviour {
                 match self
                     .directly_connected_peers
                     .get(&relay_peer_id)
-                    .and_then(|cs| cs.get(0))
+                    .and_then(|cs| cs.first())
                 {
                     Some(connection_id) => ToSwarm::NotifyHandler {
                         peer_id: relay_peer_id,
@@ -323,7 +321,7 @@ impl NetworkBehaviour for Behaviour {
                 match self
                     .directly_connected_peers
                     .get(&relay_peer_id)
-                    .and_then(|cs| cs.get(0))
+                    .and_then(|cs| cs.first())
                 {
                     Some(connection_id) => ToSwarm::NotifyHandler {
                         peer_id: relay_peer_id,
@@ -378,22 +376,13 @@ pub(crate) enum ConnectionState {
     Operational {
         read_buffer: Bytes,
         substream: Stream,
-        /// "Drop notifier" pattern to signal to the transport that the connection has been dropped.
-        ///
-        /// This is flagged as "dead-code" by the compiler because we never read from it here.
-        /// However, it is actual use is to trigger the `Canceled` error in the `Transport` when this `Sender` is dropped.
-        #[allow(dead_code)]
-        drop_notifier: oneshot::Sender<void::Void>,
     },
 }
 
 impl Unpin for ConnectionState {}
 
 impl ConnectionState {
-    pub(crate) fn new_inbound(
-        circuit: inbound_stop::Circuit,
-        drop_notifier: oneshot::Sender<void::Void>,
-    ) -> Self {
+    pub(crate) fn new_inbound(circuit: inbound_stop::Circuit) -> Self {
         ConnectionState::InboundAccepting {
             accept: async {
                 let (substream, read_buffer) = circuit
@@ -403,22 +392,16 @@ impl ConnectionState {
                 Ok(ConnectionState::Operational {
                     read_buffer,
                     substream,
-                    drop_notifier,
                 })
             }
             .boxed(),
         }
     }
 
-    pub(crate) fn new_outbound(
-        substream: Stream,
-        read_buffer: Bytes,
-        drop_notifier: oneshot::Sender<void::Void>,
-    ) -> Self {
+    pub(crate) fn new_outbound(substream: Stream, read_buffer: Bytes) -> Self {
         ConnectionState::Operational {
             substream,
             read_buffer,
-            drop_notifier,
         }
     }
 }

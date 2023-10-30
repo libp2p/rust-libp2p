@@ -54,7 +54,6 @@
 //! [noise]: http://noiseprotocol.org/
 
 #![cfg_attr(docsrs, feature(doc_cfg, doc_auto_cfg))]
-#![allow(deprecated)] // Temporarily until we remove deprecated items.
 
 mod io;
 mod protocol;
@@ -65,7 +64,8 @@ use crate::handshake::State;
 use crate::io::handshake;
 use crate::protocol::{noise_params_into_builder, AuthenticKeypair, Keypair, PARAMS_XX};
 use futures::prelude::*;
-use libp2p_core::{InboundUpgrade, OutboundUpgrade, UpgradeInfo};
+use libp2p_core::upgrade::{InboundConnectionUpgrade, OutboundConnectionUpgrade};
+use libp2p_core::UpgradeInfo;
 use libp2p_identity as identity;
 use libp2p_identity::PeerId;
 use multiaddr::Protocol;
@@ -121,7 +121,7 @@ impl Config {
         self
     }
 
-    fn into_responder<S>(self, socket: S) -> Result<State<S>, Error> {
+    fn into_responder<S: AsyncRead + AsyncWrite>(self, socket: S) -> Result<State<S>, Error> {
         let session = noise_params_into_builder(
             self.params,
             &self.prologue,
@@ -141,7 +141,7 @@ impl Config {
         Ok(state)
     }
 
-    fn into_initiator<S>(self, socket: S) -> Result<State<S>, Error> {
+    fn into_initiator<S: AsyncRead + AsyncWrite>(self, socket: S) -> Result<State<S>, Error> {
         let session = noise_params_into_builder(
             self.params,
             &self.prologue,
@@ -171,7 +171,7 @@ impl UpgradeInfo for Config {
     }
 }
 
-impl<T> InboundUpgrade<T> for Config
+impl<T> InboundConnectionUpgrade<T> for Config
 where
     T: AsyncRead + AsyncWrite + Unpin + Send + 'static,
 {
@@ -187,7 +187,7 @@ where
             handshake::send_identity(&mut state).await?;
             handshake::recv_identity(&mut state).await?;
 
-            let (pk, io) = state.finish()?;
+            let (pk, io) = dbg!(state.finish())?;
 
             Ok((pk.to_peer_id(), io))
         }
@@ -195,7 +195,7 @@ where
     }
 }
 
-impl<T> OutboundUpgrade<T> for Config
+impl<T> OutboundConnectionUpgrade<T> for Config
 where
     T: AsyncRead + AsyncWrite + Unpin + Send + 'static,
 {

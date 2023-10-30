@@ -1,4 +1,11 @@
-## 0.40.1 - unreleased
+## 0.41.0 - unreleased
+
+- Make `tokio::Transport::custom` and `async_std::Transport::custom` constructors infallible.
+  See [PR 4464](https://github.com/libp2p/rust-libp2p/pull/4464).
+- Remove deprecated type-aliases.
+  See [PR 4739](https://github.com/libp2p/rust-libp2p/pull/4739). 
+
+## 0.40.1
 
 - Remove `Dns` prefix from types like `TokioDnsConfig` and `DnsConfig` in favor of modules that describe the different variants.
   Users are encouraged to import the `libp2p::dns` module and refer to types as `dns::tokio::Transport` and `dns::async_std::Transport`.
@@ -6,7 +13,7 @@
 
 [PR 4505]: https://github.com/libp2p/rust-libp2p/pull/4505
 
-## 0.40.0 
+## 0.40.0
 
 - Raise MSRV to 1.65.
   See [PR 3715].

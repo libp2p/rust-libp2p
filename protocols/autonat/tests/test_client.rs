@@ -61,7 +61,7 @@ async fn test_auto_probe() {
     match client.next_behaviour_event().await {
         Event::OutboundProbe(OutboundProbeEvent::Error { peer, error, .. }) => {
             assert!(peer.is_none());
-            assert_eq!(error, OutboundProbeError::NoAddresses);
+            assert!(matches!(error, OutboundProbeError::NoAddresses));
         }
         other => panic!("Unexpected behaviour event: {other:?}."),
     }
@@ -155,7 +155,7 @@ async fn test_confidence() {
     // Randomly test either for public or for private status the confidence.
     let test_public = rand::random::<bool>();
     if test_public {
-        client.listen().await;
+        client.listen().with_memory_addr_external().await;
     } else {
         let unreachable_addr = "/ip4/127.0.0.1/tcp/42".parse().unwrap();
         client.behaviour_mut().probe_address(unreachable_addr);
@@ -181,10 +181,10 @@ async fn test_confidence() {
                         peer,
                         error,
                     } if !test_public => {
-                        assert_eq!(
+                        assert!(matches!(
                             error,
                             OutboundProbeError::Response(ResponseError::DialError)
-                        );
+                        ));
                         (peer.unwrap(), probe_id)
                     }
                     other => panic!("Unexpected Outbound Event: {other:?}"),
@@ -261,7 +261,7 @@ async fn test_throttle_server_period() {
     match client.next_behaviour_event().await {
         Event::OutboundProbe(OutboundProbeEvent::Error { peer, error, .. }) => {
             assert!(peer.is_none());
-            assert_eq!(error, OutboundProbeError::NoServer);
+            assert!(matches!(error, OutboundProbeError::NoServer));
         }
         other => panic!("Unexpected behaviour event: {other:?}."),
     }

@@ -18,7 +18,10 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use libp2p_perf::{client, server, RunParams};
+use libp2p_perf::{
+    client::{self},
+    server, RunParams,
+};
 use libp2p_swarm::{Swarm, SwarmEvent};
 use libp2p_swarm_test::SwarmExt;
 
@@ -30,10 +33,10 @@ async fn perf() {
     let server_peer_id = *server.local_peer_id();
     let mut client = Swarm::new_ephemeral(|_| client::Behaviour::new());
 
-    server.listen().await;
+    server.listen().with_memory_addr_external().await;
     client.connect(&mut server).await;
 
-    tokio::spawn(server.loop_on_next());
+    tokio::task::spawn(server.loop_on_next());
 
     client
         .behaviour_mut()

@@ -5,6 +5,12 @@ edition = "2021"
 publish = false
 license = "Unlicense/MIT"
 
+[package.metadata.release]
+release = false
+
 [dependencies]
 quickcheck = "1"
 num-traits = "0.2"
+
+[lints]
+workspace = true

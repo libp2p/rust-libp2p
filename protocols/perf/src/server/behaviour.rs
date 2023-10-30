@@ -27,18 +27,16 @@ use std::{
 
 use libp2p_identity::PeerId;
 use libp2p_swarm::{
-    ConnectionId, FromSwarm, NetworkBehaviour, PollParameters, THandlerInEvent, THandlerOutEvent,
-    ToSwarm,
+    ConnectionId, FromSwarm, NetworkBehaviour, THandlerInEvent, THandlerOutEvent, ToSwarm,
 };
 
 use crate::server::handler::Handler;
-
-use super::RunStats;
+use crate::Run;
 
 #[derive(Debug)]
 pub struct Event {
     pub remote_peer_id: PeerId,
-    pub stats: RunStats,
+    pub stats: Run,
 }
 
 #[derive(Default)]
@@ -77,7 +75,7 @@ impl NetworkBehaviour for Behaviour {
         Ok(Handler::default())
     }
 
-    fn on_swarm_event(&mut self, _: FromSwarm<Self::ConnectionHandler>) {}
+    fn on_swarm_event(&mut self, _event: FromSwarm) {}
 
     fn on_connection_handler_event(
         &mut self,
@@ -94,7 +92,6 @@ impl NetworkBehaviour for Behaviour {
     fn poll(
         &mut self,
         _cx: &mut Context<'_>,
-        _: &mut impl PollParameters,
     ) -> Poll<ToSwarm<Self::ToSwarm, THandlerInEvent<Self>>> {
         if let Some(event) = self.queued_events.pop_front() {
             return Poll::Ready(event);

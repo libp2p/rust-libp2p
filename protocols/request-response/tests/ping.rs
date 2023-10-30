@@ -28,7 +28,7 @@ use libp2p_swarm::{StreamProtocol, Swarm, SwarmEvent};
 use libp2p_swarm_test::SwarmExt;
 use rand::{self, Rng};
 use serde::{Deserialize, Serialize};
-use std::iter;
+use std::{io, iter};
 
 #[async_std::test]
 #[cfg(feature = "cbor")]
@@ -97,7 +97,7 @@ async fn ping_protocol() {
     });
     let peer2_id = *swarm2.local_peer_id();
 
-    swarm1.listen().await;
+    swarm1.listen().with_memory_addr_external().await;
     swarm2.connect(&mut swarm1).await;
 
     let expected_ping = ping.clone();
@@ -190,7 +190,7 @@ async fn emits_inbound_connection_closed_failure() {
     });
     let peer2_id = *swarm2.local_peer_id();
 
-    swarm1.listen().await;
+    swarm1.listen().with_memory_addr_external().await;
     swarm2.connect(&mut swarm1).await;
 
     swarm2.behaviour_mut().send_request(&peer1_id, ping.clone());
@@ -255,7 +255,7 @@ async fn emits_inbound_connection_closed_if_channel_is_dropped() {
     });
     let peer2_id = *swarm2.local_peer_id();
 
-    swarm1.listen().await;
+    swarm1.listen().with_memory_addr_external().await;
     swarm2.connect(&mut swarm1).await;
 
     swarm2.behaviour_mut().send_request(&peer1_id, ping.clone());
@@ -288,7 +288,10 @@ async fn emits_inbound_connection_closed_if_channel_is_dropped() {
         e => panic!("unexpected event from peer 2: {e:?}"),
     };
 
-    assert_eq!(error, request_response::OutboundFailure::ConnectionClosed);
+    assert!(matches!(
+        error,
+        request_response::OutboundFailure::Io(e) if e.kind() == io::ErrorKind::UnexpectedEof,
+    ));
 }
 
 // Simple Ping-Pong Protocol

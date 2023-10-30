@@ -1,4 +1,4 @@
-use libp2p_core::{InboundUpgrade, OutboundUpgrade};
+use libp2p_core::upgrade::{InboundConnectionUpgrade, OutboundConnectionUpgrade};
 use libp2p_identity as identity;
 use libp2p_noise as noise;
 use multihash::Multihash;

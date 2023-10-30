@@ -22,16 +22,14 @@ use std::{net::SocketAddr, str::FromStr};
 
 use anyhow::{bail, Result};
 use clap::Parser;
-use futures::FutureExt;
-use futures::{future::Either, StreamExt};
+use futures::StreamExt;
 use instant::{Duration, Instant};
-use libp2p_core::{
-    multiaddr::Protocol, muxing::StreamMuxerBox, transport::OrTransport, upgrade, Multiaddr,
-    Transport as _,
-};
-use libp2p_identity::PeerId;
-use libp2p_perf::{Run, RunDuration, RunParams};
-use libp2p_swarm::{NetworkBehaviour, Swarm, SwarmBuilder, SwarmEvent};
+use libp2p::core::{multiaddr::Protocol, upgrade, Multiaddr};
+use libp2p::identity::PeerId;
+use libp2p::swarm::{NetworkBehaviour, Swarm, SwarmEvent};
+use libp2p::SwarmBuilder;
+use libp2p_perf::{client, server};
+use libp2p_perf::{Final, Intermediate, Run, RunParams, RunUpdate};
 use log::{error, info};
 use serde::{Deserialize, Serialize};
 
@@ -135,7 +133,7 @@ async fn server(server_address: SocketAddr) -> Result<()> {
                     info!("Established connection to {:?} via {:?}", peer_id, endpoint);
                 }
                 SwarmEvent::ConnectionClosed { .. } => {}
-                SwarmEvent::Behaviour(()) => {
+                SwarmEvent::Behaviour(server::Event { .. }) => {
                     info!("Finished run",)
                 }
                 e => panic!("{e:?}"),
@@ -163,29 +161,31 @@ async fn client(
             .with(Protocol::Udp(server_address.port()))
             .with(Protocol::QuicV1),
     };
-
-    let benchmarks = if upload_bytes.is_some() {
-        vec![custom(
-            server_address,
-            RunParams {
-                to_send: upload_bytes.unwrap(),
-                to_receive: download_bytes.unwrap(),
-            },
-        )
-        .boxed()]
-    } else {
-        vec![
-            latency(server_address.clone()).boxed(),
-            throughput(server_address.clone()).boxed(),
-            requests_per_second(server_address.clone()).boxed(),
-            sequential_connections_per_second(server_address.clone()).boxed(),
-        ]
+    let params = RunParams {
+        to_send: upload_bytes.unwrap(),
+        to_receive: download_bytes.unwrap(),
     };
+    let mut swarm = swarm().await?;
 
     tokio::spawn(async move {
-        for benchmark in benchmarks {
-            benchmark.await?;
-        }
+        info!("start benchmark: custom");
+
+        let start = Instant::now();
+
+        let server_peer_id = connect(&mut swarm, server_address.clone()).await?;
+
+        perf(&mut swarm, server_peer_id, params).await?;
+
+        println!(
+            "{}",
+            serde_json::to_string(&BenchmarkResult {
+                upload_bytes: params.to_send,
+                download_bytes: params.to_receive,
+                r#type: "final".to_string(),
+                time_seconds: start.elapsed().as_secs_f64(),
+            })
+            .unwrap()
+        );
 
         anyhow::Ok(())
     })
@@ -194,235 +194,37 @@ async fn client(
     Ok(())
 }
 
-async fn custom(server_address: Multiaddr, params: RunParams) -> Result<()> {
-    info!("start benchmark: custom");
-    let mut swarm = swarm().await?;
-
-    let start = Instant::now();
-
-    let server_peer_id = connect(&mut swarm, server_address.clone()).await?;
-
-    perf(&mut swarm, server_peer_id, params).await?;
-
-    #[derive(Serialize, Deserialize)]
-    #[serde(rename_all = "camelCase")]
-    struct CustomResult {
-        latency: f64,
-    }
-
-    println!(
-        "{}",
-        serde_json::to_string(&CustomResult {
-            latency: start.elapsed().as_secs_f64(),
-        })
-        .unwrap()
-    );
-
-    Ok(())
-}
-
-async fn latency(server_address: Multiaddr) -> Result<()> {
-    info!("start benchmark: round-trip-time latency");
-    let mut swarm = swarm().await?;
-
-    let server_peer_id = connect(&mut swarm, server_address.clone()).await?;
-
-    let mut rounds = 0;
-    let start = Instant::now();
-    let mut latencies = Vec::new();
-
-    loop {
-        if start.elapsed() > Duration::from_secs(30) {
-            break;
-        }
-
-        let start = Instant::now();
-
-        perf(
-            &mut swarm,
-            server_peer_id,
-            RunParams {
-                to_send: 1,
-                to_receive: 1,
-            },
-        )
-        .await?;
-
-        latencies.push(start.elapsed().as_secs_f64());
-        rounds += 1;
-    }
-
-    latencies.sort_by(|a, b| a.partial_cmp(b).unwrap());
-
-    info!(
-        "Finished: {rounds} pings in {:.4}s",
-        start.elapsed().as_secs_f64()
-    );
-    info!("- {:.4} s median", percentile(&latencies, 0.50),);
-    info!("- {:.4} s 95th percentile\n", percentile(&latencies, 0.95),);
-    Ok(())
-}
-
-fn percentile<V: PartialOrd + Copy>(values: &[V], percentile: f64) -> V {
-    let n: usize = (values.len() as f64 * percentile).ceil() as usize - 1;
-    values[n]
-}
-
-async fn throughput(server_address: Multiaddr) -> Result<()> {
-    info!("start benchmark: single connection single channel throughput");
-    let mut swarm = swarm().await?;
-
-    let server_peer_id = connect(&mut swarm, server_address.clone()).await?;
-
-    let params = RunParams {
-        to_send: 10 * 1024 * 1024,
-        to_receive: 10 * 1024 * 1024,
-    };
-
-    perf(&mut swarm, server_peer_id, params).await?;
-
-    Ok(())
-}
-
-async fn requests_per_second(server_address: Multiaddr) -> Result<()> {
-    info!("start benchmark: single connection parallel requests per second");
-    let mut swarm = swarm().await?;
-
-    let server_peer_id = connect(&mut swarm, server_address.clone()).await?;
-
-    let num = 1_000;
-    let to_send = 1;
-    let to_receive = 1;
-
-    for _ in 0..num {
-        swarm.behaviour_mut().perf(
-            server_peer_id,
-            RunParams {
-                to_send,
-                to_receive,
-            },
-        )?;
-    }
-
-    let mut finished = 0;
-    let start = Instant::now();
-
-    loop {
-        match swarm.next().await.unwrap() {
-            SwarmEvent::Behaviour(libp2p_perf::client::Event {
-                id: _,
-                result: Ok(_),
-            }) => {
-                finished += 1;
-
-                if finished == num {
-                    break;
-                }
-            }
-            e => panic!("{e:?}"),
-        }
-    }
-
-    let duration = start.elapsed().as_secs_f64();
-    let requests_per_second = num as f64 / duration;
-
-    info!(
-            "Finished: sent {num} {to_send} bytes requests with {to_receive} bytes response each within {duration:.2} s",
-        );
-    info!("- {requests_per_second:.2} req/s\n");
-
-    Ok(())
-}
-
-async fn sequential_connections_per_second(server_address: Multiaddr) -> Result<()> {
-    info!("start benchmark: sequential connections with single request per second");
-    let mut rounds = 0;
-    let to_send = 1;
-    let to_receive = 1;
-    let start = Instant::now();
-
-    let mut latency_connection_establishment = Vec::new();
-    let mut latency_connection_establishment_plus_request = Vec::new();
-
-    loop {
-        if start.elapsed() > Duration::from_secs(30) {
-            break;
-        }
-
-        let mut swarm = swarm().await?;
-
-        let start = Instant::now();
-
-        let server_peer_id = connect(&mut swarm, server_address.clone()).await?;
-
-        latency_connection_establishment.push(start.elapsed().as_secs_f64());
-
-        perf(
-            &mut swarm,
-            server_peer_id,
-            RunParams {
-                to_send,
-                to_receive,
-            },
-        )
-        .await?;
-
-        latency_connection_establishment_plus_request.push(start.elapsed().as_secs_f64());
-        rounds += 1;
-    }
-
-    let duration = start.elapsed().as_secs_f64();
-
-    latency_connection_establishment.sort_by(|a, b| a.partial_cmp(b).unwrap());
-    latency_connection_establishment_plus_request.sort_by(|a, b| a.partial_cmp(b).unwrap());
-
-    let connection_establishment_95th = percentile(&latency_connection_establishment, 0.95);
-    let connection_establishment_plus_request_95th =
-        percentile(&latency_connection_establishment_plus_request, 0.95);
-
-    info!(
-            "Finished: established {rounds} connections with one {to_send} bytes request and one {to_receive} bytes response within {duration:.2} s",
-        );
-    info!("- {connection_establishment_95th:.4} s 95th percentile connection establishment");
-    info!("- {connection_establishment_plus_request_95th:.4} s 95th percentile connection establishment + one request");
-
-    Ok(())
+#[derive(Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct BenchmarkResult {
+    r#type: String,
+    time_seconds: f64,
+    upload_bytes: usize,
+    download_bytes: usize,
 }
 
 async fn swarm<B: NetworkBehaviour + Default>() -> Result<Swarm<B>> {
-    let local_key = libp2p_identity::Keypair::generate_ed25519();
-    let local_peer_id = PeerId::from(local_key.public());
-
-    let transport = {
-        let tcp = libp2p_tcp::tokio::Transport::new(libp2p_tcp::Config::default().nodelay(true))
-            .upgrade(upgrade::Version::V1Lazy)
-            .authenticate(libp2p_tls::Config::new(&local_key)?)
-            .multiplex(libp2p_yamux::Config::default());
-
-        let quic = {
-            let mut config = libp2p_quic::Config::new(&local_key);
-            config.support_draft_29 = true;
-            libp2p_quic::tokio::Transport::new(config)
-        };
-
-        let dns = libp2p_dns::tokio::Transport::system(OrTransport::new(quic, tcp))?;
-
-        dns.map(|either_output, _| match either_output {
-            Either::Left((peer_id, muxer)) => (peer_id, StreamMuxerBox::new(muxer)),
-            Either::Right((peer_id, muxer)) => (peer_id, StreamMuxerBox::new(muxer)),
+    let swarm = SwarmBuilder::with_new_identity()
+        .with_tokio()
+        .with_tcp(
+            libp2p_tcp::Config::default().nodelay(true),
+            libp2p_tls::Config::new,
+            libp2p_yamux::Config::default,
+        )?
+        .with_quic()
+        .with_dns()?
+        .with_behaviour(|_| B::default())?
+        .with_swarm_config(|cfg| {
+            cfg.with_substream_upgrade_protocol_override(upgrade::Version::V1Lazy)
+                .with_idle_connection_timeout(Duration::from_secs(60 * 5))
         })
-        .boxed()
-    };
+        .build();
 
-    Ok(
-        SwarmBuilder::with_tokio_executor(transport, Default::default(), local_peer_id)
-            .substream_upgrade_protocol_override(upgrade::Version::V1Lazy)
-            .build(),
-    )
+    Ok(swarm)
 }
 
 async fn connect(
-    swarm: &mut Swarm<libp2p_perf::client::Behaviour>,
+    swarm: &mut Swarm<client::Behaviour>,
     server_address: Multiaddr,
 ) -> Result<PeerId> {
     let start = Instant::now();
@@ -445,21 +247,48 @@ async fn connect(
 }
 
 async fn perf(
-    swarm: &mut Swarm<libp2p_perf::client::Behaviour>,
+    swarm: &mut Swarm<client::Behaviour>,
     server_peer_id: PeerId,
     params: RunParams,
-) -> Result<RunDuration> {
+) -> Result<Run> {
     swarm.behaviour_mut().perf(server_peer_id, params)?;
 
-    let duration = match swarm.next().await.unwrap() {
-        SwarmEvent::Behaviour(libp2p_perf::client::Event {
-            id: _,
-            result: Ok(duration),
-        }) => duration,
-        e => panic!("{e:?}"),
+    let duration = loop {
+        match swarm.next().await.unwrap() {
+            SwarmEvent::Behaviour(client::Event {
+                id: _,
+                result: Ok(RunUpdate::Intermediate(progressed)),
+            }) => {
+                info!("{progressed}");
+
+                let Intermediate {
+                    duration,
+                    sent,
+                    received,
+                } = progressed;
+
+                println!(
+                    "{}",
+                    serde_json::to_string(&BenchmarkResult {
+                        r#type: "intermediate".to_string(),
+                        time_seconds: duration.as_secs_f64(),
+                        upload_bytes: sent,
+                        download_bytes: received,
+                    })
+                    .unwrap()
+                );
+            }
+            SwarmEvent::Behaviour(client::Event {
+                id: _,
+                result: Ok(RunUpdate::Final(Final { duration })),
+            }) => break duration,
+            e => panic!("{e:?}"),
+        };
     };
 
-    info!("{}", Run { params, duration });
+    let run = Run { params, duration };
 
-    Ok(duration)
+    info!("{run}");
+
+    Ok(run)
 }

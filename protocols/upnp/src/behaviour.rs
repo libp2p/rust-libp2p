@@ -39,7 +39,7 @@ use igd_next::PortMappingProtocol;
 use libp2p_core::{multiaddr, transport::ListenerId, Endpoint, Multiaddr};
 use libp2p_swarm::{
     derive_prelude::PeerId, dummy, ConnectionDenied, ConnectionId, ExpiredListenAddr, FromSwarm,
-    NetworkBehaviour, NewListenAddr, PollParameters, ToSwarm,
+    NetworkBehaviour, NewListenAddr, ToSwarm,
 };
 
 /// The duration in seconds of a port mapping on the gateway.
@@ -252,7 +252,7 @@ impl NetworkBehaviour for Behaviour {
         Ok(dummy::ConnectionHandler)
     }
 
-    fn on_swarm_event(&mut self, event: FromSwarm<Self::ConnectionHandler>) {
+    fn on_swarm_event(&mut self, event: FromSwarm) {
         match event {
             FromSwarm::NewListenAddr(NewListenAddr {
                 listener_id,
@@ -360,7 +360,6 @@ impl NetworkBehaviour for Behaviour {
     fn poll(
         &mut self,
         cx: &mut Context<'_>,
-        _params: &mut impl PollParameters,
     ) -> Poll<ToSwarm<Self::ToSwarm, libp2p_swarm::THandlerInEvent<Self>>> {
         // If there are pending addresses to be emitted we emit them.
         if let Some(event) = self.pending_events.pop_front() {

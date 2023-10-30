@@ -3,7 +3,7 @@ name = "libp2p-tcp"
 edition = "2021"
 rust-version = { workspace = true }
 description = "TCP/IP transport protocol for libp2p"
-version = "0.40.0"
+version = "0.41.0"
 authors = ["Parity Technologies <admin@parity.io>"]
 license = "MIT"
 repository = "https://github.com/libp2p/rust-libp2p"
@@ -12,15 +12,15 @@ categories = ["network-programming", "asynchronous"]
 
 [dependencies]
 async-io = { version = "1.13.0", optional = true }
-futures = "0.3.28"
+futures = "0.3.29"
 futures-timer = "3.0"
-if-watch = "3.0.1"
-libc = "0.2.148"
+if-watch = "3.1.0"
+libc = "0.2.149"
 libp2p-core = { workspace = true }
 libp2p-identity = { workspace = true }
 log = "0.4.20"
-socket2 = { version = "0.5.4", features = ["all"] }
-tokio = { version = "1.32.0", default-features = false, features = ["net"], optional = true }
+socket2 = { version = "0.5.5", features = ["all"] }
+tokio = { version = "1.33.0", default-features = false, features = ["net"], optional = true }
 
 [features]
 tokio = ["dep:tokio", "if-watch/tokio"]
@@ -28,7 +28,8 @@ async-io = ["dep:async-io", "if-watch/smol"]
 
 [dev-dependencies]
 async-std = { version = "1.6.5", features = ["attributes"] }
-tokio = { version = "1.32.0", default-features = false, features = ["full"] }
+libp2p-identity = { workspace = true, features = ["rand"] }
+tokio = { version = "1.33.0", default-features = false, features = ["full"] }
 env_logger = "0.10.0"
 
 # Passing arguments to the docsrs builder in order to properly document cfg's.
@@ -38,3 +39,6 @@ all-features = true
 
 rustdoc-args = ["--cfg", "docsrs"]
 rustc-args = ["--cfg", "docsrs"]
+
+[lints]
+workspace = true

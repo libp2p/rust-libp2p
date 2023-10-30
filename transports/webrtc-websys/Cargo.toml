@@ -8,7 +8,7 @@ license = "MIT"
 name = "libp2p-webrtc-websys"
 repository = "https://github.com/libp2p/rust-libp2p"
 rust-version = { workspace = true }
-version = "0.1.0-alpha"
+version = "0.2.0-alpha"
 publish = true
 
 [dependencies]
@@ -34,3 +34,6 @@ web-sys = { version = "0.3.64", features = ["Document", "Location", "MessageEven
 hex-literal = "0.4"
 libp2p-ping = { workspace = true }
 libp2p-swarm = { workspace = true, features = ["wasm-bindgen"] }
+
+[lints]
+workspace = true

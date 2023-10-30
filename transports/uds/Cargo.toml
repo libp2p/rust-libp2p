@@ -3,7 +3,7 @@ name = "libp2p-uds"
 edition = "2021"
 rust-version = { workspace = true }
 description = "Unix domain sockets transport for libp2p"
-version = "0.39.0"
+version = "0.40.0"
 authors = ["Parity Technologies <admin@parity.io>"]
 license = "MIT"
 repository = "https://github.com/libp2p/rust-libp2p"
@@ -14,8 +14,8 @@ categories = ["network-programming", "asynchronous"]
 async-std = { version = "1.6.2", optional = true }
 libp2p-core = { workspace = true }
 log = "0.4.20"
-futures = "0.3.28"
-tokio = { version = "1.32", default-features = false, features = ["net"], optional = true }
+futures = "0.3.29"
+tokio = { version = "1.33", default-features = false, features = ["net"], optional = true }
 
 [dev-dependencies]
 tempfile = "3.8"
@@ -26,3 +26,6 @@ tempfile = "3.8"
 all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
 rustc-args = ["--cfg", "docsrs"]
+
+[lints]
+workspace = true

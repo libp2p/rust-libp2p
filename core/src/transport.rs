@@ -135,7 +135,7 @@ pub trait Transport {
     ///
     /// This option is needed for NAT and firewall hole punching.
     ///
-    /// See [`ConnectedPoint::Dialer`](crate::connection::ConnectedPoint::Dialer) for related option.
+    /// See [`ConnectedPoint::Dialer`] for related option.
     fn dial_as_listener(
         &mut self,
         addr: Multiaddr,
@@ -235,8 +235,7 @@ pub trait Transport {
         and_then::AndThen::new(self, f)
     }
 
-    /// Begins a series of protocol upgrades via an
-    /// [`upgrade::Builder`](upgrade::Builder).
+    /// Begins a series of protocol upgrades via an [`upgrade::Builder`].
     fn upgrade(self, version: upgrade::Version) -> upgrade::Builder<Self>
     where
         Self: Sized,
@@ -251,22 +250,9 @@ pub trait Transport {
 pub struct ListenerId(usize);
 
 impl ListenerId {
-    #[deprecated(note = "Renamed to ` ListenerId::next`.")]
-    #[allow(clippy::new_without_default)]
-    /// Creates a new `ListenerId`.
-    pub fn new() -> Self {
-        ListenerId::next()
-    }
-
     /// Creates a new `ListenerId`.
     pub fn next() -> Self {
         ListenerId(NEXT_LISTENER_ID.fetch_add(1, Ordering::SeqCst))
-    }
-
-    #[deprecated(note = "Use ` ListenerId::next` instead.")]
-    #[allow(clippy::should_implement_trait)]
-    pub fn default() -> Self {
-        Self::next()
     }
 }
 

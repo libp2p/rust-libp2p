@@ -1,3 +1,8 @@
+## 0.41.0 - unreleased
+
+- Migrate to `{In,Out}boundConnectionUpgrade` traits.
+  See [PR 4695](https://github.com/libp2p/rust-libp2p/pull/4695).
+
 ## 0.40.0 
 
 - Raise MSRV to 1.65.

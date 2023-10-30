@@ -1,11 +1,11 @@
-use crate::behaviour::{FromSwarm, NetworkBehaviour, PollParameters, ToSwarm};
+use crate::behaviour::{FromSwarm, NetworkBehaviour, ToSwarm};
 use crate::connection::ConnectionId;
 use crate::handler::{
     ConnectionEvent, DialUpgradeError, FullyNegotiatedInbound, FullyNegotiatedOutbound,
 };
 use crate::{
-    ConnectionDenied, ConnectionHandlerEvent, KeepAlive, StreamUpgradeError, SubstreamProtocol,
-    THandler, THandlerInEvent, THandlerOutEvent,
+    ConnectionDenied, ConnectionHandlerEvent, StreamUpgradeError, SubstreamProtocol, THandler,
+    THandlerInEvent, THandlerOutEvent,
 };
 use libp2p_core::upgrade::DeniedUpgrade;
 use libp2p_core::Endpoint;
@@ -50,15 +50,11 @@ impl NetworkBehaviour for Behaviour {
         void::unreachable(event)
     }
 
-    fn poll(
-        &mut self,
-        _: &mut Context<'_>,
-        _: &mut impl PollParameters,
-    ) -> Poll<ToSwarm<Self::ToSwarm, THandlerInEvent<Self>>> {
+    fn poll(&mut self, _: &mut Context<'_>) -> Poll<ToSwarm<Self::ToSwarm, THandlerInEvent<Self>>> {
         Poll::Pending
     }
 
-    fn on_swarm_event(&mut self, _: FromSwarm<Self::ConnectionHandler>) {}
+    fn on_swarm_event(&mut self, _event: FromSwarm) {}
 }
 
 /// An implementation of [`ConnectionHandler`] that neither handles any protocols nor does it keep the connection alive.
@@ -80,10 +76,6 @@ impl crate::handler::ConnectionHandler for ConnectionHandler {
 
     fn on_behaviour_event(&mut self, event: Self::FromBehaviour) {
         void::unreachable(event)
-    }
-
-    fn connection_keep_alive(&self) -> KeepAlive {
-        KeepAlive::No
     }
 
     fn poll(

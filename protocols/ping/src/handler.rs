@@ -28,8 +28,8 @@ use libp2p_swarm::handler::{
     ConnectionEvent, DialUpgradeError, FullyNegotiatedInbound, FullyNegotiatedOutbound,
 };
 use libp2p_swarm::{
-    ConnectionHandler, ConnectionHandlerEvent, KeepAlive, Stream, StreamProtocol,
-    StreamUpgradeError, SubstreamProtocol,
+    ConnectionHandler, ConnectionHandlerEvent, Stream, StreamProtocol, StreamUpgradeError,
+    SubstreamProtocol,
 };
 use std::collections::VecDeque;
 use std::{
@@ -225,10 +225,6 @@ impl ConnectionHandler for Handler {
 
     fn on_behaviour_event(&mut self, _: Void) {}
 
-    fn connection_keep_alive(&self) -> KeepAlive {
-        KeepAlive::No
-    }
-
     fn poll(
         &mut self,
         cx: &mut Context<'_>,
@@ -349,15 +345,17 @@ impl ConnectionHandler for Handler {
     ) {
         match event {
             ConnectionEvent::FullyNegotiatedInbound(FullyNegotiatedInbound {
-                protocol: stream,
+                protocol: mut stream,
                 ..
             }) => {
+                stream.ignore_for_keep_alive();
                 self.inbound = Some(protocol::recv_ping(stream).boxed());
             }
             ConnectionEvent::FullyNegotiatedOutbound(FullyNegotiatedOutbound {
-                protocol: stream,
+                protocol: mut stream,
                 ..
             }) => {
+                stream.ignore_for_keep_alive();
                 self.outbound = Some(OutboundState::Ping(
                     send_ping(stream, self.config.timeout).boxed(),
                 ));
