@@ -278,12 +278,9 @@ impl<'a> AsClient<'a> {
             log::debug!("Outbound dial-back request aborted: No dial-back addresses.");
             return Err(OutboundProbeError::NoAddresses);
         }
-        let server = match self.random_server() {
-            Some(s) => s,
-            None => {
-                log::debug!("Outbound dial-back request aborted: No qualified server.");
-                return Err(OutboundProbeError::NoServer);
-            }
+        let Some(server) = self.random_server() else {
+            log::debug!("Outbound dial-back request aborted: No qualified server.");
+            return Err(OutboundProbeError::NoServer);
         };
         let request_id = self.inner.send_request(
             &server,
@@ -301,12 +298,7 @@ impl<'a> AsClient<'a> {
     // Set the delay to the next probe based on the time of our last probe
     // and the specified delay.
     fn schedule_next_probe(&mut self, delay: Duration) {
-        let last_probe_instant = match self.last_probe {
-            Some(instant) => instant,
-            None => {
-                return;
-            }
-        };
+        let Some(last_probe_instant) = self.last_probe else { return; };
         let schedule_next = *last_probe_instant + delay;
         self.schedule_probe
             .reset(schedule_next.saturating_duration_since(Instant::now()));

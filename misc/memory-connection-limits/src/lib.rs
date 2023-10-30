@@ -124,12 +124,9 @@ impl Behaviour {
             return;
         }
 
-        let stats = match memory_stats::memory_stats() {
-            Some(stats) => stats,
-            None => {
-                log::warn!("Failed to retrieve process memory stats");
-                return;
-            }
+        let Some(stats) = memory_stats::memory_stats() else {
+            log::warn!("Failed to retrieve process memory stats");
+            return;
         };
 
         self.last_refreshed = now;

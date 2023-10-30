@@ -202,16 +202,13 @@ pub(crate) async fn handle_connection_message_response(
         return Err(FatalUpgradeError::StreamClosed);
     }
 
-    let proto::HopMessage {
+    let Some(Ok(proto::HopMessage {
         type_pb,
         peer: _,
         reservation: _,
         limit,
         status,
-    } = match substream.next().await {
-        Some(Ok(r)) => r,
-        _ => return Err(FatalUpgradeError::StreamClosed),
-    };
+    })) = substream.next().await else { return Err(FatalUpgradeError::StreamClosed) };
 
     match type_pb {
         proto::HopMessageType::CONNECT => {

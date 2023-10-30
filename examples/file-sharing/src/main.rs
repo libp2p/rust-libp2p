@@ -59,9 +59,8 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     // In case the user provided an address of a peer on the CLI, dial it.
     if let Some(addr) = opt.peer {
-        let peer_id = match addr.iter().last() {
-            Some(Protocol::P2p(peer_id)) => peer_id,
-            _ => return Err("Expect peer multiaddr to contain peer ID.".into()),
+        let Some(Protocol::P2p(peer_id)) = addr.iter().last() else {
+            return Err("Expect peer multiaddr to contain peer ID.".into())
         };
         network_client
             .dial(peer_id, addr)

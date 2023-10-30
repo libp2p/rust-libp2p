@@ -869,9 +869,8 @@ where
     /// Fails the entire multiplexed stream if too many pending `Reset`
     /// frames accumulate when using [`MaxBufferBehaviour::ResetStream`].
     fn buffer(&mut self, id: LocalStreamId, data: Bytes) -> io::Result<()> {
-        let state = if let Some(state) = self.substreams.get_mut(&id) {
-            state
-        } else {
+
+        let Some(state) = self.substreams.get_mut(&id) else {
             trace!(
                 "{}: Dropping data {:?} for unknown substream {}",
                 self.id,
@@ -881,9 +880,7 @@ where
             return Ok(());
         };
 
-        let buf = if let Some(buf) = state.recv_buf_open() {
-            buf
-        } else {
+        let Some(buf) = state.recv_buf_open() else {
             trace!(
                 "{}: Dropping data {:?} for closed or reset substream {}",
                 self.id,

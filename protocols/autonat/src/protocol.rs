@@ -105,16 +105,14 @@ impl DialRequest {
         if msg.type_pb != Some(proto::MessageType::DIAL) {
             return Err(io::Error::new(io::ErrorKind::InvalidData, "invalid type"));
         }
-        let (peer_id, addrs) = if let Some(proto::Dial {
+
+        let Some(proto::Dial {
             peer:
                 Some(proto::PeerInfo {
                     id: Some(peer_id),
                     addrs,
-                }),
-        }) = msg.dial
-        {
-            (peer_id, addrs)
-        } else {
+                })
+        }) = msg.dial else {
             log::debug!("Received malformed dial message.");
             return Err(io::Error::new(
                 io::ErrorKind::InvalidData,

@@ -91,9 +91,8 @@ struct StaticFiles;
 
 /// Serve the Multiaddr we are listening on and the host files.
 pub(crate) async fn serve(libp2p_transport: Multiaddr) {
-    let listen_addr = match libp2p_transport.iter().next() {
-        Some(Protocol::Ip4(addr)) => addr,
-        _ => panic!("Expected 1st protocol to be IP4"),
+    let Some(Protocol::Ip4(listen_addr)) = libp2p_transport.iter().next() else {
+        panic!("Expected 1st protocol to be IP4")
     };
 
     let server = Router::new()
