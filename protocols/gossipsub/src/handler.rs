@@ -410,7 +410,7 @@ impl ConnectionHandler for Handler {
         match self {
             Handler::Enabled(handler) => match message {
                 HandlerIn::Message(m) => {
-                    if let Some(_) = handler.send_queue.push_back(m) {
+                    if handler.send_queue.push_back(m).is_some() {
                         warn!("Handler send queue is full. Dropping message at head");
                     }
                 }
