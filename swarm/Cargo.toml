@@ -48,7 +48,7 @@ libp2p-identity = { workspace = true, features = ["ed25519"] }
 libp2p-kad = { path = "../protocols/kad" }                          # Using `path` here because this is a cyclic dev-dependency which otherwise breaks releasing.
 libp2p-ping = { path = "../protocols/ping" }                        # Using `path` here because this is a cyclic dev-dependency which otherwise breaks releasing.
 libp2p-plaintext = { path = "../transports/plaintext" }             # Using `path` here because this is a cyclic dev-dependency which otherwise breaks releasing.
-libp2p-swarm-derive = { path = "../swarm-derive" }                  # Using `path` here because this is a cyclic dev-dependency which otherwise breaks releasing.
+libp2p-swarm-derive = { version = "=0.35.0", path = "../swarm-derive" }                  # Using `path` here because this is a cyclic dev-dependency which otherwise breaks releasing.
 libp2p-swarm-test = { path = "../swarm-test" }                      # Using `path` here because this is a cyclic dev-dependency which otherwise breaks releasing.
 libp2p-yamux = { path = "../muxers/yamux" }                         # Using `path` here because this is a cyclic dev-dependency which otherwise breaks releasing.
 quickcheck = { workspace = true }
