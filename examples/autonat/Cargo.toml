@@ -10,7 +10,7 @@ release = false
 
 [dependencies]
 tokio = { version = "1.33", features = ["full"] }
-clap = { version = "4.4.6", features = ["derive"] }
+clap = { version = "4.4.7", features = ["derive"] }
 env_logger = "0.10.0"
 futures = "0.3.29"
 libp2p = { path = "../../libp2p", features = ["tokio", "tcp", "noise", "yamux", "autonat", "identify", "macros"] }
