@@ -36,7 +36,7 @@ fn ping_pong() {
         let mut swarm2 = Swarm::new_ephemeral(|_| ping::Behaviour::new(cfg.clone()));
 
         async_std::task::block_on(async {
-            swarm1.listen().await;
+            swarm1.listen().with_memory_addr_external().await;
             swarm2.connect(&mut swarm1).await;
 
             for _ in 0..count.get() {
@@ -67,7 +67,7 @@ fn unsupported_doesnt_fail() {
     let mut swarm2 = Swarm::new_ephemeral(|_| ping::Behaviour::new(ping::Config::new()));
 
     let result = async_std::task::block_on(async {
-        swarm1.listen().await;
+        swarm1.listen().with_memory_addr_external().await;
         swarm2.connect(&mut swarm1).await;
         let swarm1_peer_id = *swarm1.local_peer_id();
         async_std::task::spawn(swarm1.loop_on_next());
