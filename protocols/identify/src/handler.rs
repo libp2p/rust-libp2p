@@ -133,7 +133,7 @@ impl Handler {
                 STREAM_TIMEOUT,
                 MAX_CONCURRENT_STREAMS_PER_CONNECTION,
             ),
-            trigger_next_identify: Delay::new(interval),
+            trigger_next_identify: Delay::new(Duration::ZERO),
             exchanged_one_periodic_identify: false,
             interval,
             public_key,
