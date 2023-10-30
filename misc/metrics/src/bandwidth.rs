@@ -166,9 +166,7 @@ impl ConnectionMetrics {
     }
 }
 
-/// Custom `Future` to avoid boxing.
-///
-/// Applies a function to the inner future's result.
+/// Map the resulting [`StreamMuxer`] of a connection upgrade with a [`Muxer`].
 #[pin_project::pin_project]
 #[derive(Clone, Debug)]
 pub struct MapFuture<T> {
