@@ -11,7 +11,7 @@ license = "MIT"
 [dependencies]
 async-std = { version = "1.12.0", optional = true }
 bytes = "1.5.0"
-futures = "0.3.28"
+futures = "0.3.29"
 futures-timer = "3.0.2"
 if-watch = "3.1.0"
 libp2p-core = { workspace = true }
@@ -20,7 +20,7 @@ libp2p-identity = { workspace = true }
 parking_lot = "0.12.0"
 quinn = { version = "0.10.2", default-features = false, features = ["tls-rustls", "futures-io"] }
 rand = "0.8.5"
-rustls = { version = "0.21.7", default-features = false }
+rustls = { version = "0.21.8", default-features = false }
 thiserror = "1.0.50"
 tokio = { version = "1.33.0", default-features = false, features = ["net", "rt", "time"], optional = true }
 tracing = "0.1.37"

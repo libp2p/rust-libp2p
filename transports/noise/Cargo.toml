@@ -12,7 +12,7 @@ repository = "https://github.com/libp2p/rust-libp2p"
 asynchronous-codec = "0.7"
 bytes = "1"
 curve25519-dalek = "4.1.1"
-futures = "0.3.28"
+futures = "0.3.29"
 libp2p-core = { workspace = true }
 libp2p-identity = { workspace = true, features = ["ed25519"] }
 multiaddr = { workspace = true }

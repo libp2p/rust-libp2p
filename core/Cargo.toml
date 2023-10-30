@@ -13,7 +13,7 @@ categories = ["network-programming", "asynchronous"]
 [dependencies]
 either = "1.9"
 fnv = "1.0"
-futures = { version = "0.3.28", features = ["executor", "thread-pool"] }
+futures = { version = "0.3.29", features = ["executor", "thread-pool"] }
 futures-timer = "3"
 instant = "0.1.12"
 libp2p-identity = { workspace = true, features = ["peerid", "ed25519"] }

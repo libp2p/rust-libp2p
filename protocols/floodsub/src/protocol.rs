@@ -21,6 +21,7 @@
 use crate::proto;
 use crate::topic::Topic;
 use asynchronous_codec::Framed;
+use bytes::Bytes;
 use futures::{
     io::{AsyncRead, AsyncWrite},
     Future,
@@ -81,7 +82,7 @@ where
                 messages.push(FloodsubMessage {
                     source: PeerId::from_bytes(&publish.from.unwrap_or_default())
                         .map_err(|_| FloodsubError::InvalidPeerId)?,
-                    data: publish.data.unwrap_or_default(),
+                    data: publish.data.unwrap_or_default().into(),
                     sequence_number: publish.seqno.unwrap_or_default(),
                     topics: publish.topic_ids.into_iter().map(Topic::new).collect(),
                 });
@@ -172,7 +173,7 @@ impl FloodsubRpc {
                 .into_iter()
                 .map(|msg| proto::Message {
                     from: Some(msg.source.to_bytes()),
-                    data: Some(msg.data),
+                    data: Some(msg.data.to_vec()),
                     seqno: Some(msg.sequence_number),
                     topic_ids: msg.topics.into_iter().map(|topic| topic.into()).collect(),
                 })
@@ -197,7 +198,7 @@ pub struct FloodsubMessage {
     pub source: PeerId,
 
     /// Content of the message. Its meaning is out of scope of this library.
-    pub data: Vec<u8>,
+    pub data: Bytes,
 
     /// An incrementing sequence number.
     pub sequence_number: Vec<u8>,
