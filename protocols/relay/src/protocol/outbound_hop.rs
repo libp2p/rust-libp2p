@@ -26,7 +26,6 @@ use futures::prelude::*;
 use futures_timer::Delay;
 use log::debug;
 use thiserror::Error;
-use void::Void;
 
 use libp2p_core::Multiaddr;
 use libp2p_identity::PeerId;
@@ -171,8 +170,6 @@ pub(crate) async fn handle_reserve_message_response(
         .map(Delay::new)
         .ok_or(FatalUpgradeError::InvalidReservationExpiration)?;
 
-    substream.close().await?;
-
     Ok(Ok(Reservation {
         renewal_timeout,
         addrs,
@@ -185,7 +182,6 @@ pub(crate) async fn handle_connection_message_response(
     protocol: Stream,
     remote_peer_id: PeerId,
     con_command: Command,
-    tx: oneshot::Sender<Void>,
 ) -> Result<Result<Option<Circuit>, CircuitFailedReason>, FatalUpgradeError> {
     let msg = proto::HopMessage {
         type_pb: proto::HopMessageType::CONNECT,
@@ -261,7 +257,7 @@ pub(crate) async fn handle_connection_message_response(
     );
 
     match con_command.send_back.send(Ok(priv_client::Connection {
-        state: priv_client::ConnectionState::new_outbound(io, read_buffer.freeze(), tx),
+        state: priv_client::ConnectionState::new_outbound(io, read_buffer.freeze()),
     })) {
         Ok(()) => Ok(Ok(Some(Circuit { limit }))),
         Err(_) => {
