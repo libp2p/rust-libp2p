@@ -822,7 +822,7 @@ fn get_record() {
         .map(|(_addr, swarm)| swarm)
         .collect::<Vec<_>>();
 
-    let record = Record::new(random_multihash(), Bytes::from(vec![4, 5, 6]));
+    let record = Record::new(random_multihash(), Bytes::from_static(&[4, 5, 6]));
 
     swarms[2].behaviour_mut().store.put(record.clone()).unwrap();
     let qid = swarms[0].behaviour_mut().get_record(record.key.clone());
@@ -875,7 +875,7 @@ fn get_record_many() {
         .collect::<Vec<_>>();
     let num_results = 10;
 
-    let record = Record::new(random_multihash(), Bytes::from(vec![4, 5, 6]));
+    let record = Record::new(random_multihash(), Bytes::from_static(&[4, 5, 6]));
 
     for swarm in swarms.iter_mut().take(num_nodes) {
         swarm.behaviour_mut().store.put(record.clone()).unwrap();
