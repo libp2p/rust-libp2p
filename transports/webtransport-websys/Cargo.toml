@@ -14,7 +14,7 @@ keywords = ["peer-to-peer", "libp2p", "networking"]
 categories = ["network-programming", "asynchronous"]
 
 [dependencies]
-futures = "0.3.28"
+futures = "0.3.29"
 js-sys = "0.3.64"
 libp2p-core = { workspace = true }
 libp2p-identity = { workspace = true }
