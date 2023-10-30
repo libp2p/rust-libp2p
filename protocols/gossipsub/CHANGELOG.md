@@ -1,6 +1,6 @@
 ## 0.46.0 - unreleased
 
-- Convert `publish` to require `data: impl Into<Bytes>` (as opposed to `data: impl Into<Vec<u8>>`).
+- Optimize memory usage through use of Bytes in various places. (`publish` require's `data: impl Into<Bytes>` (as opposed to `data: impl Into<Vec<u8>>`, `outbound_transform` now takes `data` as `Bytes`.
   See [PR 4751](https://github.com/libp2p/rust-libp2p/pull/4751).
 - Remove `fast_message_id_fn` mechanism from `Config`.
   See [PR 4285](https://github.com/libp2p/rust-libp2p/pull/4285).
