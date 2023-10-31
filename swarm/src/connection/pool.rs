@@ -529,9 +529,6 @@ where
             self.substream_upgrade_protocol_override,
             self.max_negotiating_inbound_streams,
             self.idle_connection_timeout,
-            id,
-            obtained_peer_id,
-            endpoint.get_remote_address().clone(),
         );
 
         let span = tracing::debug_span!(parent: tracing::Span::none(), "new_established_connection", remote_addr = %endpoint.get_remote_address(), %id, peer = %obtained_peer_id);

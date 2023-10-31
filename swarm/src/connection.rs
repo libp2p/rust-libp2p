@@ -157,9 +157,6 @@ where
     remote_supported_protocols: HashSet<StreamProtocol>,
     idle_timeout: Duration,
     stream_counter: ActiveStreamCounter,
-    connection_id: ConnectionId,
-    remote_peer_id: PeerId,
-    remote_addr: Multiaddr,
 }
 
 impl<THandler> fmt::Debug for Connection<THandler>
@@ -182,16 +179,12 @@ where
 {
     /// Builds a new `Connection` from the given substream multiplexer
     /// and connection handler.
-    #[allow(clippy::too_many_arguments)]
     pub(crate) fn new(
         muxer: StreamMuxerBox,
         mut handler: THandler,
         substream_upgrade_protocol_override: Option<upgrade::Version>,
         max_negotiating_inbound_streams: usize,
         idle_timeout: Duration,
-        connection_id: ConnectionId,
-        remote_peer_id: PeerId,
-        remote_addr: Multiaddr,
     ) -> Self {
         let initial_protocols = gather_supported_protocols(&handler);
         if !initial_protocols.is_empty() {
@@ -212,9 +205,6 @@ where
             remote_supported_protocols: Default::default(),
             idle_timeout,
             stream_counter: ActiveStreamCounter::default(),
-            connection_id,
-            remote_peer_id,
-            remote_addr,
         }
     }
 
@@ -785,9 +775,6 @@ mod tests {
                 None,
                 max_negotiating_inbound_streams,
                 Duration::ZERO,
-                ConnectionId::new_unchecked(0),
-                PeerId::random(),
-                Multiaddr::empty(),
             );
 
             let result = connection.poll_noop_waker();
@@ -812,9 +799,6 @@ mod tests {
             None,
             2,
             Duration::ZERO,
-            ConnectionId::new_unchecked(0),
-            PeerId::random(),
-            Multiaddr::empty(),
         );
 
         connection.handler.open_new_outbound();
@@ -838,9 +822,6 @@ mod tests {
             None,
             0,
             Duration::ZERO,
-            ConnectionId::new_unchecked(0),
-            PeerId::random(),
-            Multiaddr::empty(),
         );
 
         // First, start listening on a single protocol.
@@ -880,9 +861,6 @@ mod tests {
             None,
             0,
             Duration::ZERO,
-            ConnectionId::new_unchecked(0),
-            PeerId::random(),
-            Multiaddr::empty(),
         );
 
         // First, remote supports a single protocol.
@@ -936,9 +914,6 @@ mod tests {
             None,
             0,
             idle_timeout,
-            ConnectionId::new_unchecked(0),
-            PeerId::random(),
-            Multiaddr::empty(),
         );
 
         assert!(connection.poll_noop_waker().is_pending());
