@@ -53,7 +53,7 @@ Finally, open the Jaeger UI in a browser and explore the spans: http://localhost
 
 ### Filtering spans
 
-For a precise documentation, please see the following documentation in tracing: https://docs.rs/tracing-subscriber/latest/tracing_subscriber/filter/struct.EnvFilter.html#directives.
+For a precise documentation, please see the following documentation in tracing: <https://docs.rs/tracing-subscriber/latest/tracing_subscriber/filter/struct.EnvFilter.html#directives>.
 
 `rust-libp2p` consistently applies spans to the following functions:
 
