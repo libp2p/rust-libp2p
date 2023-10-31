@@ -534,13 +534,19 @@ where
             endpoint.get_remote_address().clone(),
         );
 
-        self.executor.spawn(task::new_for_established_connection(
-            id,
-            obtained_peer_id,
-            connection,
-            command_receiver,
-            event_sender,
-        ))
+        let span = tracing::debug_span!(parent: tracing::Span::none(), "new_established_connection", remote_addr = %endpoint.get_remote_address(), %id, peer = %obtained_peer_id);
+        span.follows_from(tracing::Span::current());
+
+        self.executor.spawn(
+            task::new_for_established_connection(
+                id,
+                obtained_peer_id,
+                connection,
+                command_receiver,
+                event_sender,
+            )
+            .instrument(span),
+        )
     }
 
     /// Polls the connection pool for events.
