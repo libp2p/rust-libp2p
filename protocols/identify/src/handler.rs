@@ -117,9 +117,7 @@ pub enum Event {
 
 impl Handler {
     /// Creates a new `Handler`.
-    #[allow(clippy::too_many_arguments)]
     pub fn new(
-        initial_delay: Duration,
         interval: Duration,
         remote_peer_id: PeerId,
         public_key: PublicKey,
@@ -135,7 +133,7 @@ impl Handler {
                 STREAM_TIMEOUT,
                 MAX_CONCURRENT_STREAMS_PER_CONNECTION,
             ),
-            trigger_next_identify: Delay::new(initial_delay),
+            trigger_next_identify: Delay::new(Duration::ZERO),
             exchanged_one_periodic_identify: false,
             interval,
             public_key,

@@ -448,7 +448,7 @@ async fn new_server_with_connected_clients<const N: usize>(
 
 async fn new_client() -> Swarm<rendezvous::client::Behaviour> {
     let mut client = Swarm::new_ephemeral(rendezvous::client::Behaviour::new);
-    client.listen().await; // we need to listen otherwise we don't have addresses to register
+    client.listen().with_memory_addr_external().await; // we need to listen otherwise we don't have addresses to register
 
     client
 }
@@ -456,7 +456,7 @@ async fn new_client() -> Swarm<rendezvous::client::Behaviour> {
 async fn new_server(config: rendezvous::server::Config) -> Swarm<rendezvous::server::Behaviour> {
     let mut server = Swarm::new_ephemeral(|_| rendezvous::server::Behaviour::new(config));
 
-    server.listen().await;
+    server.listen().with_memory_addr_external().await;
 
     server
 }
@@ -466,7 +466,7 @@ async fn new_combined_node() -> Swarm<Combined> {
         client: rendezvous::client::Behaviour::new(identity),
         server: rendezvous::server::Behaviour::new(rendezvous::server::Config::default()),
     });
-    node.listen().await;
+    node.listen().with_memory_addr_external().await;
 
     node
 }
@@ -477,7 +477,7 @@ async fn new_impersonating_client() -> Swarm<rendezvous::client::Behaviour> {
     // As such, the best we can do is hand eve a completely different keypair from what she is using to authenticate her connection.
     let someone_else = identity::Keypair::generate_ed25519();
     let mut eve = Swarm::new_ephemeral(move |_| rendezvous::client::Behaviour::new(someone_else));
-    eve.listen().await;
+    eve.listen().with_memory_addr_external().await;
 
     eve
 }

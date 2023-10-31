@@ -121,7 +121,7 @@ async fn build_node() -> Swarm<gossipsub::Behaviour> {
             .unwrap();
         gossipsub::Behaviour::new(MessageAuthenticity::Author(peer_id), config).unwrap()
     });
-    swarm.listen().await;
+    swarm.listen().with_memory_addr_external().await;
 
     swarm
 }

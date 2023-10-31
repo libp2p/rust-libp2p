@@ -144,12 +144,6 @@ pub struct Handler {
 
     reservation: Reservation,
 
-    /// Tracks substreams lent out to the transport.
-    ///
-    /// Contains a [`futures::future::Future`] for each lend out substream that
-    /// resolves once the substream is dropped.
-    alive_lend_out_substreams: FuturesUnordered<oneshot::Receiver<void::Void>>,
-
     open_circuit_futs:
         futures_bounded::FuturesSet<Result<inbound_stop::Circuit, inbound_stop::FatalUpgradeError>>,
 
@@ -176,7 +170,6 @@ impl Handler {
                 MAX_CONCURRENT_STREAMS_PER_CONNECTION,
             ),
             reservation: Reservation::None,
-            alive_lend_out_substreams: Default::default(),
             open_circuit_futs: futures_bounded::FuturesSet::new(
                 STREAM_TIMEOUT,
                 MAX_CONCURRENT_STREAMS_PER_CONNECTION,
@@ -414,9 +407,7 @@ impl ConnectionHandler for Handler {
                         let src_peer_id = circuit.src_peer_id();
                         let limit = circuit.limit();
 
-                        let (tx, rx) = oneshot::channel();
-                        self.alive_lend_out_substreams.push(rx);
-                        let connection = super::ConnectionState::new_inbound(circuit, tx);
+                        let connection = super::ConnectionState::new_inbound(circuit);
 
                         pending_msgs.push_back(
                             transport::ToListenerMsg::IncomingRelayedConnection {
@@ -475,15 +466,6 @@ impl ConnectionHandler for Handler {
         // Send errors to transport.
         while let Poll::Ready(Some(())) = self.send_error_futs.poll_next_unpin(cx) {}
 
-        // Check status of lend out substreams.
-        loop {
-            match self.alive_lend_out_substreams.poll_next_unpin(cx) {
-                Poll::Ready(Some(Err(oneshot::Canceled))) => {}
-                Poll::Ready(Some(Ok(v))) => void::unreachable(v),
-                Poll::Ready(None) | Poll::Pending => break,
-            }
-        }
-
         Poll::Pending
     }
 
@@ -530,9 +512,6 @@ impl ConnectionHandler for Handler {
                         }
                     }
                     outbound_hop::OutboundStreamInfo::CircuitConnection(cmd) => {
-                        let (tx, rx) = oneshot::channel();
-                        self.alive_lend_out_substreams.push(rx);
-
                         if self
                             .outbound_circuits
                             .try_push(
@@ -540,7 +519,6 @@ impl ConnectionHandler for Handler {
                                     stream,
                                     self.remote_peer_id,
                                     cmd,
-                                    tx,
                                 )
                                 .map_ok(Either::Right),
                             )
