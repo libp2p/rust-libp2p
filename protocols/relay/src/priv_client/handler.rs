@@ -132,9 +132,10 @@ pub struct Handler {
     inflight_inbound_circuit_requests:
         futures_bounded::FuturesSet<Result<inbound_stop::Circuit, inbound_stop::Error>>,
 
-    reservation: Reservation,
+    inflight_outbound_circuit_deny_requests:
+        futures_bounded::FuturesSet<Result<(), inbound_stop::Error>>,
 
-    circuit_deny_futs: futures_bounded::FuturesSet<Result<(), inbound_stop::Error>>,
+    reservation: Reservation,
 }
 
 impl Handler {
@@ -158,13 +159,13 @@ impl Handler {
                 STREAM_TIMEOUT,
                 MAX_CONCURRENT_STREAMS_PER_CONNECTION,
             ),
-            active_connect_requests: Default::default(),
-            pending_error: Default::default(),
-            reservation: Reservation::None,
-            circuit_deny_futs: futures_bounded::FuturesSet::new(
+            inflight_outbound_circuit_deny_requests: futures_bounded::FuturesSet::new(
                 DENYING_CIRCUIT_TIMEOUT,
                 MAX_NUMBER_DENYING_CIRCUIT,
             ),
+            active_connect_requests: Default::default(),
+            pending_error: Default::default(),
+            reservation: Reservation::None,
         }
     }
 
@@ -223,7 +224,7 @@ impl Handler {
         let src_peer_id = circuit.src_peer_id();
 
         if self
-            .circuit_deny_futs
+            .inflight_outbound_circuit_deny_requests
             .try_push(circuit.deny(proto::Status::NO_RESERVATION))
             .is_err()
         {
@@ -465,7 +466,7 @@ impl ConnectionHandler for Handler {
             }
 
             // Deny incoming circuit requests.
-            match self.circuit_deny_futs.poll_unpin(cx) {
+            match self.inflight_outbound_circuit_deny_requests.poll_unpin(cx) {
                 Poll::Ready(Ok(Ok(()))) => continue,
                 Poll::Ready(Ok(Err(error))) => {
                     log::debug!("Denying inbound circuit failed: {error}");
