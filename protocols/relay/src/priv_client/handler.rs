@@ -299,128 +299,132 @@ impl ConnectionHandler for Handler {
             Self::Error,
         >,
     > {
-        // Check for a pending (fatal) error.
-        if let Some(err) = self.pending_error.take() {
-            // The handler will not be polled again by the `Swarm`.
-            return Poll::Ready(ConnectionHandlerEvent::Close(err));
-        }
-
-        debug_assert_eq!(
-            self.inflight_reserve_requests.len(),
-            self.active_reserve_requests.len(),
-            "expect to have one active request per inflight stream"
-        );
-
-        // Reservations
-        match self.inflight_reserve_requests.poll_unpin(cx) {
-            Poll::Ready(Ok(Ok(outbound_hop::Reservation {
-                renewal_timeout,
-                addrs,
-                limit,
-            }))) => {
-                let to_listener = self
-                    .active_reserve_requests
-                    .pop_front()
-                    .expect("must have active request for stream");
-
-                return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(
-                    self.reservation.accepted(
-                        renewal_timeout,
-                        addrs,
-                        to_listener,
-                        self.local_peer_id,
-                        limit,
-                    ),
-                ));
-            }
-            Poll::Ready(Ok(Err(error))) => {
-                let mut to_listener = self
-                    .active_reserve_requests
-                    .pop_front()
-                    .expect("must have active request for stream");
-
-                if let Err(e) =
-                    to_listener.try_send(transport::ToListenerMsg::Reservation(Err(error)))
-                {
-                    log::debug!("Unable to send error to listener: {}", e.into_send_error())
-                }
-                self.reservation.failed();
-            }
-            Poll::Ready(Err(futures_bounded::Timeout { .. })) => {
-                let mut to_listener = self
-                    .active_reserve_requests
-                    .pop_front()
-                    .expect("must have active request for stream");
-
-                if let Err(e) = to_listener.try_send(transport::ToListenerMsg::Reservation(Err(
-                    outbound_hop::ReserveError::Io(io::ErrorKind::TimedOut.into()),
-                ))) {
-                    log::debug!("Unable to send error to listener: {}", e.into_send_error())
-                }
-                self.reservation.failed();
-            }
-            Poll::Pending => {}
-        }
-
-        debug_assert_eq!(
-            self.inflight_outbound_connect_requests.len(),
-            self.active_connect_requests.len(),
-            "expect to have one active request per inflight stream"
-        );
-
-        // Circuits
-        match self.inflight_outbound_connect_requests.poll_unpin(cx) {
-            Poll::Ready(Ok(Ok(outbound_hop::Circuit {
-                limit,
-                read_buffer,
-                stream,
-            }))) => {
-                let to_listener = self
-                    .active_connect_requests
-                    .pop_front()
-                    .expect("must have active request for stream");
-
-                let (tx, _) = oneshot::channel();
-
-                // TODO: What do we on error?
-                let _ = to_listener.send(Ok(priv_client::Connection {
-                    state: priv_client::ConnectionState::new_outbound(stream, read_buffer, tx),
-                }));
-
-                return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(
-                    Event::OutboundCircuitEstablished { limit },
-                ));
-            }
-            Poll::Ready(Ok(Err(error))) => {
-                let to_dialer = self
-                    .active_connect_requests
-                    .pop_front()
-                    .expect("must have active request for stream");
-
-                let _ = to_dialer.send(Err(error));
-            }
-            Poll::Ready(Err(futures_bounded::Timeout { .. })) => {
-                let mut to_listener = self
-                    .active_reserve_requests
-                    .pop_front()
-                    .expect("must have active request for stream");
-
-                if let Err(e) = to_listener.try_send(transport::ToListenerMsg::Reservation(Err(
-                    outbound_hop::ReserveError::Io(io::ErrorKind::TimedOut.into()),
-                ))) {
-                    log::debug!("Unable to send error to listener: {}", e.into_send_error())
-                }
-                self.reservation.failed();
-            }
-            Poll::Pending => {}
-        }
-
-        // Return queued events.
-        if let Some(event) = self.queued_events.pop_front() {
-            return Poll::Ready(event);
-        }
-
         loop {
+            // Check for a pending (fatal) error.
+            if let Some(err) = self.pending_error.take() {
+                // The handler will not be polled again by the `Swarm`.
+                return Poll::Ready(ConnectionHandlerEvent::Close(err));
+            }
+
+            debug_assert_eq!(
+                self.inflight_reserve_requests.len(),
+                self.active_reserve_requests.len(),
+                "expect to have one active request per inflight stream"
+            );
+
+            // Reservations
+            match self.inflight_reserve_requests.poll_unpin(cx) {
+                Poll::Ready(Ok(Ok(outbound_hop::Reservation {
+                    renewal_timeout,
+                    addrs,
+                    limit,
+                }))) => {
+                    let to_listener = self
+                        .active_reserve_requests
+                        .pop_front()
+                        .expect("must have active request for stream");
+
+                    return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(
+                        self.reservation.accepted(
+                            renewal_timeout,
+                            addrs,
+                            to_listener,
+                            self.local_peer_id,
+                            limit,
+                        ),
+                    ));
+                }
+                Poll::Ready(Ok(Err(error))) => {
+                    let mut to_listener = self
+                        .active_reserve_requests
+                        .pop_front()
+                        .expect("must have active request for stream");
+
+                    if let Err(e) =
+                        to_listener.try_send(transport::ToListenerMsg::Reservation(Err(error)))
+                    {
+                        log::debug!("Unable to send error to listener: {}", e.into_send_error())
+                    }
+                    self.reservation.failed();
+                }
+                Poll::Ready(Err(futures_bounded::Timeout { .. })) => {
+                    let mut to_listener = self
+                        .active_reserve_requests
+                        .pop_front()
+                        .expect("must have active request for stream");
+
+                    if let Err(e) =
+                        to_listener.try_send(transport::ToListenerMsg::Reservation(Err(
+                            outbound_hop::ReserveError::Io(io::ErrorKind::TimedOut.into()),
+                        )))
+                    {
+                        log::debug!("Unable to send error to listener: {}", e.into_send_error())
+                    }
+                    self.reservation.failed();
+                }
+                Poll::Pending => {}
+            }
+
+            debug_assert_eq!(
+                self.inflight_outbound_connect_requests.len(),
+                self.active_connect_requests.len(),
+                "expect to have one active request per inflight stream"
+            );
+
+            // Circuits
+            match self.inflight_outbound_connect_requests.poll_unpin(cx) {
+                Poll::Ready(Ok(Ok(outbound_hop::Circuit {
+                    limit,
+                    read_buffer,
+                    stream,
+                }))) => {
+                    let to_listener = self
+                        .active_connect_requests
+                        .pop_front()
+                        .expect("must have active request for stream");
+
+                    let (tx, _) = oneshot::channel();
+
+                    // TODO: What do we on error?
+                    let _ = to_listener.send(Ok(priv_client::Connection {
+                        state: priv_client::ConnectionState::new_outbound(stream, read_buffer, tx),
+                    }));
+
+                    return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(
+                        Event::OutboundCircuitEstablished { limit },
+                    ));
+                }
+                Poll::Ready(Ok(Err(error))) => {
+                    let to_dialer = self
+                        .active_connect_requests
+                        .pop_front()
+                        .expect("must have active request for stream");
+
+                    let _ = to_dialer.send(Err(error));
+                }
+                Poll::Ready(Err(futures_bounded::Timeout { .. })) => {
+                    let mut to_listener = self
+                        .active_reserve_requests
+                        .pop_front()
+                        .expect("must have active request for stream");
+
+                    if let Err(e) =
+                        to_listener.try_send(transport::ToListenerMsg::Reservation(Err(
+                            outbound_hop::ReserveError::Io(io::ErrorKind::TimedOut.into()),
+                        )))
+                    {
+                        log::debug!("Unable to send error to listener: {}", e.into_send_error())
+                    }
+                    self.reservation.failed();
+                }
+                Poll::Pending => {}
+            }
+
+            // Return queued events.
+            if let Some(event) = self.queued_events.pop_front() {
+                return Poll::Ready(event);
+            }
+
             match self.inflight_inbound_circuit_requests.poll_unpin(cx) {
                 Poll::Ready(Ok(Ok(circuit))) => match &mut self.reservation {
                     Reservation::Accepted { pending_msgs, .. }
@@ -456,23 +460,19 @@ impl ConnectionHandler for Handler {
                     log::debug!("An inbound circuit request timed out: {e}");
                     continue;
                 }
-                Poll::Pending => {
-                    break;
-                }
+                Poll::Pending => {}
             }
-        }
 
-        if let Poll::Ready(Some(to_listener)) = self.reservation.poll(cx) {
-            self.pending_requests
-                .push_back(PendingRequest::Reserve { to_listener });
+            if let Poll::Ready(Some(to_listener)) = self.reservation.poll(cx) {
+                self.pending_requests
+                    .push_back(PendingRequest::Reserve { to_listener });
 
-            return Poll::Ready(ConnectionHandlerEvent::OutboundSubstreamRequest {
-                protocol: SubstreamProtocol::new(ReadyUpgrade::new(HOP_PROTOCOL_NAME), ()),
-            });
-        }
+                return Poll::Ready(ConnectionHandlerEvent::OutboundSubstreamRequest {
+                    protocol: SubstreamProtocol::new(ReadyUpgrade::new(HOP_PROTOCOL_NAME), ()),
+                });
+            }
 
-        // Deny incoming circuit requests.
-        loop {
+            // Deny incoming circuit requests.
             match self.circuit_deny_futs.poll_unpin(cx) {
                 Poll::Ready(Ok(Ok(()))) => continue,
                 Poll::Ready(Ok(Err(error))) => {
@@ -483,20 +483,19 @@ impl ConnectionHandler for Handler {
                     log::debug!("Denying inbound circuit timed out");
                     continue;
                 }
-                Poll::Pending => break,
+                Poll::Pending => {}
             }
-        }
 
-        // Check status of lend out substreams.
-        loop {
+            // Check status of lend out substreams.
             match self.alive_lend_out_substreams.poll_next_unpin(cx) {
                 Poll::Ready(Some(Err(oneshot::Canceled))) => {}
                 Poll::Ready(Some(Ok(v))) => void::unreachable(v),
-                Poll::Ready(None) | Poll::Pending => break,
+                Poll::Ready(None) => continue,
+                Poll::Pending => {}
             }
-        }
 
-        Poll::Pending
+            return Poll::Pending;
+        }
     }
 
     fn on_connection_event(
