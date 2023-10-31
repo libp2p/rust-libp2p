@@ -33,12 +33,14 @@ pub struct Transport<T> {
 impl<T> Transport<T> {
     pub fn new(transport: T, registry: &mut Registry) -> Self {
         let metrics = Family::<Labels, Counter>::default();
-        registry.sub_registry_with_prefix("libp2p").register_with_unit(
-            "bandwidth",
-            "Bandwidth usage by direction and transport protocols",
-            Unit::Bytes,
-            metrics.clone(),
-        );
+        registry
+            .sub_registry_with_prefix("libp2p")
+            .register_with_unit(
+                "bandwidth",
+                "Bandwidth usage by direction and transport protocols",
+                Unit::Bytes,
+                metrics.clone(),
+            );
 
         Transport { transport, metrics }
     }
@@ -147,20 +149,23 @@ struct ConnectionMetrics {
 
 impl ConnectionMetrics {
     fn from_family_and_protocols(family: &Family<Labels, Counter>, protocols: String) -> Self {
-        ConnectionMetrics {
-            outbound: family
-                .get_or_create(&Labels {
-                    protocols: protocols.clone(),
-                    direction: Direction::Outbound,
-                })
-                .clone(),
-            inbound: family
-                .get_or_create(&Labels {
-                    protocols: protocols,
-                    direction: Direction::Inbound,
-                })
-                .clone(),
-        }
+        // Additional scope to make sure to drop the lock guard from `get_or_create`.
+        let outbound = {
+            let m = family.get_or_create(&Labels {
+                protocols: protocols.clone(),
+                direction: Direction::Outbound,
+            });
+            m.clone()
+        };
+        // Additional scope to make sure to drop the lock guard from `get_or_create`.
+        let inbound = {
+            let m = family.get_or_create(&Labels {
+                protocols: protocols.clone(),
+                direction: Direction::Inbound,
+            });
+            m.clone()
+        };
+        ConnectionMetrics { outbound, inbound }
     }
 }
 
