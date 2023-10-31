@@ -244,7 +244,7 @@ where
 
     /// Polls the handler and the substream, forwarding events from the former to the latter and
     /// vice versa.
-    #[tracing::instrument(level = "debug", name = "Connection::poll", skip(self, cx), fields(id = %self.connection_id, peer = %self.remote_peer_id, remote_address = %self.remote_addr))]
+    #[tracing::instrument(level = "debug", name = "Connection::poll", skip(self, cx))]
     pub(crate) fn poll(
         self: Pin<&mut Self>,
         cx: &mut Context<'_>,
