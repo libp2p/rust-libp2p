@@ -102,7 +102,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let _ = tracing_subscriber::fmt()
         .with_env_filter(env_filter)
         .try_init();
-    
+
     init_telemetry().await?;
 
     let local_key = identity::Keypair::generate_ed25519();
