@@ -5,7 +5,7 @@ use libp2p_swarm::{Swarm, SwarmEvent};
 use libp2p_swarm_test::SwarmExt;
 use std::collections::HashSet;
 use std::iter;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 #[async_std::test]
 async fn periodic_identify() {
@@ -250,4 +250,42 @@ async fn discover_peer_after_disconnect() {
         .await;
 
     assert_eq!(connected_peer, swarm1_peer_id);
+}
+
+#[async_std::test]
+async fn configured_interval_starts_after_first_identify() {
+    let _ = env_logger::try_init();
+
+    let identify_interval = Duration::from_secs(5);
+
+    let mut swarm1 = Swarm::new_ephemeral(|identity| {
+        identify::Behaviour::new(
+            identify::Config::new("a".to_string(), identity.public())
+                .with_interval(identify_interval),
+        )
+    });
+    let mut swarm2 = Swarm::new_ephemeral(|identity| {
+        identify::Behaviour::new(
+            identify::Config::new("a".to_string(), identity.public())
+                .with_agent_version("b".to_string()),
+        )
+    });
+
+    swarm1.listen().with_memory_addr_external().await;
+    swarm2.connect(&mut swarm1).await;
+
+    async_std::task::spawn(swarm2.loop_on_next());
+
+    let start = Instant::now();
+
+    // Wait until we identified.
+    swarm1
+        .wait(|event| {
+            matches!(event, SwarmEvent::Behaviour(identify::Event::Sent { .. })).then_some(())
+        })
+        .await;
+
+    let time_to_first_identify = Instant::now().duration_since(start);
+
+    assert!(time_to_first_identify < identify_interval)
 }
