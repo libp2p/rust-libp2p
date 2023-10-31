@@ -23,7 +23,7 @@ use std::sync::{Arc, Mutex};
 
 use crate::protocol_stack;
 use instant::Instant;
-use libp2p_swarm::ConnectionId;
+use libp2p_swarm::{ConnectionId, DialError, SwarmEvent};
 use prometheus_client::encoding::{EncodeLabelSet, EncodeLabelValue};
 use prometheus_client::metrics::counter::Counter;
 use prometheus_client::metrics::family::Family;
@@ -40,6 +40,10 @@ pub(crate) struct Metrics {
 
     new_listen_addr: Family<AddressLabels, Counter>,
     expired_listen_addr: Family<AddressLabels, Counter>,
+
+    external_addr_candidates: Family<AddressLabels, Counter>,
+    external_addr_confirmed: Family<AddressLabels, Counter>,
+    external_addr_expired: Family<AddressLabels, Counter>,
 
     listener_closed: Family<AddressLabels, Counter>,
     listener_error: Counter,
@@ -80,6 +84,27 @@ impl Metrics {
             "expired_listen_addr",
             "Number of expired listen addresses",
             expired_listen_addr.clone(),
+        );
+
+        let external_addr_candidates = Family::default();
+        sub_registry.register(
+            "external_addr_candidates",
+            "Number of new external address candidates",
+            external_addr_candidates.clone(),
+        );
+
+        let external_addr_confirmed = Family::default();
+        sub_registry.register(
+            "external_addr_confirmed",
+            "Number of confirmed external addresses",
+            external_addr_confirmed.clone(),
+        );
+
+        let external_addr_expired = Family::default();
+        sub_registry.register(
+            "external_addr_expired",
+            "Number of expired external addresses",
+            external_addr_expired.clone(),
         );
 
         let listener_closed = Family::default();
@@ -146,6 +171,9 @@ impl Metrics {
             connections_established,
             new_listen_addr,
             expired_listen_addr,
+            external_addr_candidates,
+            external_addr_confirmed,
+            external_addr_expired,
             listener_closed,
             listener_error,
             dial_attempt,
@@ -157,11 +185,11 @@ impl Metrics {
     }
 }
 
-impl<TBvEv, THandleErr> super::Recorder<libp2p_swarm::SwarmEvent<TBvEv, THandleErr>> for Metrics {
-    fn record(&self, event: &libp2p_swarm::SwarmEvent<TBvEv, THandleErr>) {
+impl<TBvEv, THandleErr> super::Recorder<SwarmEvent<TBvEv, THandleErr>> for Metrics {
+    fn record(&self, event: &SwarmEvent<TBvEv, THandleErr>) {
         match event {
-            libp2p_swarm::SwarmEvent::Behaviour(_) => {}
-            libp2p_swarm::SwarmEvent::ConnectionEstablished {
+            SwarmEvent::Behaviour(_) => {}
+            SwarmEvent::ConnectionEstablished {
                 endpoint,
                 established_in: time_taken,
                 connection_id,
@@ -180,7 +208,7 @@ impl<TBvEv, THandleErr> super::Recorder<libp2p_swarm::SwarmEvent<TBvEv, THandleE
                     .expect("lock not to be poisoned")
                     .insert(*connection_id, Instant::now());
             }
-            libp2p_swarm::SwarmEvent::ConnectionClosed {
+            SwarmEvent::ConnectionClosed {
                 endpoint,
                 connection_id,
                 cause,
@@ -203,14 +231,14 @@ impl<TBvEv, THandleErr> super::Recorder<libp2p_swarm::SwarmEvent<TBvEv, THandleE
                         .as_secs_f64(),
                 );
             }
-            libp2p_swarm::SwarmEvent::IncomingConnection { send_back_addr, .. } => {
+            SwarmEvent::IncomingConnection { send_back_addr, .. } => {
                 self.connections_incoming
                     .get_or_create(&AddressLabels {
                         protocols: protocol_stack::as_string(send_back_addr),
                     })
                     .inc();
             }
-            libp2p_swarm::SwarmEvent::IncomingConnectionError {
+            SwarmEvent::IncomingConnectionError {
                 error,
                 send_back_addr,
                 ..
@@ -222,7 +250,7 @@ impl<TBvEv, THandleErr> super::Recorder<libp2p_swarm::SwarmEvent<TBvEv, THandleE
                     })
                     .inc();
             }
-            libp2p_swarm::SwarmEvent::OutgoingConnectionError { error, peer_id, .. } => {
+            SwarmEvent::OutgoingConnectionError { error, peer_id, .. } => {
                 let peer = match peer_id {
                     Some(_) => PeerStatus::Known,
                     None => PeerStatus::Unknown,
@@ -235,7 +263,7 @@ impl<TBvEv, THandleErr> super::Recorder<libp2p_swarm::SwarmEvent<TBvEv, THandleE
                 };
 
                 match error {
-                    libp2p_swarm::DialError::Transport(errors) => {
+                    DialError::Transport(errors) => {
                         for (_multiaddr, error) in errors {
                             match error {
                                 libp2p_core::transport::TransportError::MultiaddrNotSupported(
@@ -249,39 +277,31 @@ impl<TBvEv, THandleErr> super::Recorder<libp2p_swarm::SwarmEvent<TBvEv, THandleE
                             };
                         }
                     }
-                    libp2p_swarm::DialError::LocalPeerId { .. } => {
-                        record(OutgoingConnectionError::LocalPeerId)
-                    }
-                    libp2p_swarm::DialError::NoAddresses => {
-                        record(OutgoingConnectionError::NoAddresses)
-                    }
-                    libp2p_swarm::DialError::DialPeerConditionFalse(_) => {
+                    DialError::LocalPeerId { .. } => record(OutgoingConnectionError::LocalPeerId),
+                    DialError::NoAddresses => record(OutgoingConnectionError::NoAddresses),
+                    DialError::DialPeerConditionFalse(_) => {
                         record(OutgoingConnectionError::DialPeerConditionFalse)
                     }
-                    libp2p_swarm::DialError::Aborted => record(OutgoingConnectionError::Aborted),
-                    libp2p_swarm::DialError::WrongPeerId { .. } => {
-                        record(OutgoingConnectionError::WrongPeerId)
-                    }
-                    libp2p_swarm::DialError::Denied { .. } => {
-                        record(OutgoingConnectionError::Denied)
-                    }
+                    DialError::Aborted => record(OutgoingConnectionError::Aborted),
+                    DialError::WrongPeerId { .. } => record(OutgoingConnectionError::WrongPeerId),
+                    DialError::Denied { .. } => record(OutgoingConnectionError::Denied),
                 };
             }
-            libp2p_swarm::SwarmEvent::NewListenAddr { address, .. } => {
+            SwarmEvent::NewListenAddr { address, .. } => {
                 self.new_listen_addr
                     .get_or_create(&AddressLabels {
                         protocols: protocol_stack::as_string(address),
                     })
                     .inc();
             }
-            libp2p_swarm::SwarmEvent::ExpiredListenAddr { address, .. } => {
+            SwarmEvent::ExpiredListenAddr { address, .. } => {
                 self.expired_listen_addr
                     .get_or_create(&AddressLabels {
                         protocols: protocol_stack::as_string(address),
                     })
                     .inc();
             }
-            libp2p_swarm::SwarmEvent::ListenerClosed { addresses, .. } => {
+            SwarmEvent::ListenerClosed { addresses, .. } => {
                 for address in addresses {
                     self.listener_closed
                         .get_or_create(&AddressLabels {
@@ -290,11 +310,32 @@ impl<TBvEv, THandleErr> super::Recorder<libp2p_swarm::SwarmEvent<TBvEv, THandleE
                         .inc();
                 }
             }
-            libp2p_swarm::SwarmEvent::ListenerError { .. } => {
+            SwarmEvent::ListenerError { .. } => {
                 self.listener_error.inc();
             }
-            libp2p_swarm::SwarmEvent::Dialing { .. } => {
+            SwarmEvent::Dialing { .. } => {
                 self.dial_attempt.inc();
+            }
+            SwarmEvent::NewExternalAddrCandidate { address } => {
+                self.external_addr_candidates
+                    .get_or_create(&AddressLabels {
+                        protocols: protocol_stack::as_string(address),
+                    })
+                    .inc();
+            }
+            SwarmEvent::ExternalAddrConfirmed { address } => {
+                self.external_addr_confirmed
+                    .get_or_create(&AddressLabels {
+                        protocols: protocol_stack::as_string(address),
+                    })
+                    .inc();
+            }
+            SwarmEvent::ExternalAddrExpired { address } => {
+                self.external_addr_expired
+                    .get_or_create(&AddressLabels {
+                        protocols: protocol_stack::as_string(address),
+                    })
+                    .inc();
             }
             _ => {}
         }

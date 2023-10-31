@@ -262,15 +262,20 @@ pub enum ToSwarm<TOutEvent, TInEvent> {
         event: TInEvent,
     },
 
-    /// Reports a new candidate for an external address to the [`Swarm`](crate::Swarm).
+    /// Reports a **new** candidate for an external address to the [`Swarm`](crate::Swarm).
     ///
+    /// The emphasis on a **new** candidate is important.
+    /// Protocols MUST take care to only emit a candidate once per "source".
+    /// For example, the observed address of a TCP connection does not change throughout its lifetime.
+    /// Thus, only one candidate should be emitted per connection.    
+    ///
+    /// This makes the report frequency of an address a meaningful data-point for consumers of this event.
     /// This address will be shared with all [`NetworkBehaviour`]s via [`FromSwarm::NewExternalAddrCandidate`].
     ///
     /// This address could come from a variety of sources:
     /// - A protocol such as identify obtained it from a remote.
     /// - The user provided it based on configuration.
     /// - We made an educated guess based on one of our listen addresses.
-    /// - We established a new relay connection.
     NewExternalAddrCandidate(Multiaddr),
 
     /// Indicates to the [`Swarm`](crate::Swarm) that the provided address is confirmed to be externally reachable.
