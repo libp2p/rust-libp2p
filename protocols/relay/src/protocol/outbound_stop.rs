@@ -22,7 +22,6 @@ use std::time::Duration;
 
 use asynchronous_codec::{Framed, FramedParts};
 use bytes::Bytes;
-use futures::channel::oneshot::{self};
 use futures::prelude::*;
 use thiserror::Error;
 
@@ -77,7 +76,6 @@ pub enum FatalUpgradeError {
 pub(crate) async fn connect(
     io: Stream,
     stop_command: PendingConnect,
-    tx: oneshot::Sender<()>,
 ) -> Result<Result<Circuit, CircuitFailed>, FatalUpgradeError> {
     let msg = proto::StopMessage {
         type_pb: proto::StopMessageType::CONNECT,
@@ -164,7 +162,6 @@ pub(crate) async fn connect(
         src_peer_id: stop_command.src_peer_id,
         src_connection_id: stop_command.src_connection_id,
         inbound_circuit_req: stop_command.inbound_circuit_req,
-        dst_handler_notifier: tx,
         dst_stream: io,
         dst_pending_data: read_buffer.freeze(),
     }))
@@ -175,7 +172,6 @@ pub(crate) struct Circuit {
     pub(crate) src_peer_id: PeerId,
     pub(crate) src_connection_id: ConnectionId,
     pub(crate) inbound_circuit_req: inbound_hop::CircuitReq,
-    pub(crate) dst_handler_notifier: oneshot::Sender<()>,
     pub(crate) dst_stream: Stream,
     pub(crate) dst_pending_data: Bytes,
 }
