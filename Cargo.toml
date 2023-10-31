@@ -99,7 +99,7 @@ libp2p-rendezvous = { version = "0.14.0", path = "protocols/rendezvous" }
 libp2p-request-response = { version = "0.26.0", path = "protocols/request-response" }
 libp2p-server = { version = "0.12.3", path = "misc/server" }
 libp2p-swarm = { version = "0.44.0", path = "swarm" }
-libp2p-swarm-derive = { version = "=0.35.0", path = "swarm-derive" }
+libp2p-swarm-derive = { version = "=0.34.0", path = "swarm-derive" }
 libp2p-swarm-test = { version = "0.3.0", path = "swarm-test" }
 libp2p-tcp = { version = "0.41.0", path = "transports/tcp" }
 libp2p-tls = { version = "0.3.0", path = "transports/tls" }

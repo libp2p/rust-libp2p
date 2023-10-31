@@ -280,22 +280,12 @@ impl NetworkBehaviour for Behaviour {
                 )) => {
                     unreachable!("rendezvous clients never receive requests")
                 }
-                Poll::Ready(
-                    other @ (ToSwarm::ExternalAddrConfirmed(_)
-                    | ToSwarm::ExternalAddrExpired(_)
-                    | ToSwarm::NewExternalAddrCandidate(_)
-                    | ToSwarm::NotifyHandler { .. }
-                    | ToSwarm::Dial { .. }
-                    | ToSwarm::CloseConnection { .. }
-                    | ToSwarm::ListenOn { .. }
-                    | ToSwarm::RemoveListener { .. }),
-                ) => {
+                Poll::Ready(other @ _) => {
                     let new_to_swarm =
                         other.map_out(|_| unreachable!("we manually map `GenerateEvent` variants"));
 
                     return Poll::Ready(new_to_swarm);
                 }
-                Poll::Ready(_) => return Poll::Pending,
                 Poll::Pending => {}
             }
 
