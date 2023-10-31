@@ -3938,16 +3938,6 @@ checksum = "de3145af08024dea9fa9914f381a17b8fc6034dfb00f3a84013f7ff43f29ed4c"
 
 [[package]]
 name = "pem"
-version = "2.0.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6b13fe415cdf3c8e44518e18a7c95a13431d9bdf6d15367d82b23c377fdd441a"
-dependencies = [
- "base64 0.21.5",
- "serde",
-]
-
-[[package]]
-name = "pem"
 version = "3.0.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3163d2912b7c3b52d651a055f2c7eec9ba5cd22d26ef75b8dd3a59980b185923"
@@ -4384,11 +4374,11 @@ dependencies = [
 
 [[package]]
 name = "rcgen"
-version = "0.11.1"
+version = "0.11.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4954fbc00dcd4d8282c987710e50ba513d351400dbdd00e803a05172a90d8976"
+checksum = "52c4f3084aa3bc7dfbba4eff4fab2a54db4324965d8872ab933565e6fbd83bc6"
 dependencies = [
- "pem 2.0.1",
+ "pem",
  "ring 0.16.20",
  "time",
  "x509-parser",
@@ -6188,7 +6178,7 @@ dependencies = [
  "interceptor",
  "lazy_static",
  "log",
- "pem 3.0.2",
+ "pem",
  "rand 0.8.5",
  "rcgen",
  "regex",
@@ -6251,7 +6241,7 @@ dependencies = [
  "log",
  "p256",
  "p384",
- "pem 3.0.2",
+ "pem",
  "rand 0.8.5",
  "rand_core 0.6.4",
  "rcgen",
