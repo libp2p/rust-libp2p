@@ -190,7 +190,9 @@ async fn discover_peer_after_disconnect() {
 
 #[async_std::test]
 async fn configured_interval_starts_after_first_identify() {
-    let _ = env_logger::try_init();
+    let _ = tracing_subscriber::fmt()
+        .with_env_filter(EnvFilter::from_default_env())
+        .try_init();
 
     let identify_interval = Duration::from_secs(5);
 

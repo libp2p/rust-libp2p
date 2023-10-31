@@ -325,7 +325,7 @@ where
         {
             Either::Left(((), _)) => panic!("Swarm did not emit an event within 10s"),
             Either::Right((event, _)) => {
-                log::trace!("Swarm produced: {:?}", event);
+                tracing::trace!(?event);
 
                 event
             }
@@ -342,7 +342,7 @@ where
 
     async fn loop_on_next(mut self) {
         while let Some(event) = self.next().await {
-            log::trace!("Swarm produced: {:?}", event);
+            tracing::trace!(?event);
         }
     }
 }
