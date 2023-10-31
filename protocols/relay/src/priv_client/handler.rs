@@ -128,7 +128,7 @@ pub struct Handler {
     active_connect_requests:
         VecDeque<oneshot::Sender<Result<priv_client::Connection, outbound_hop::ConnectError>>>,
 
-    inflight_output_connect_requests:
+    inflight_outbound_connect_requests:
         futures_bounded::FuturesSet<Result<outbound_hop::Circuit, outbound_hop::ConnectError>>,
 
     inflight_inbound_circuit_requests:
@@ -161,7 +161,7 @@ impl Handler {
                 STREAM_TIMEOUT,
                 MAX_CONCURRENT_STREAMS_PER_CONNECTION,
             ),
-            inflight_output_connect_requests: futures_bounded::FuturesSet::new(
+            inflight_outbound_connect_requests: futures_bounded::FuturesSet::new(
                 STREAM_TIMEOUT,
                 MAX_CONCURRENT_STREAMS_PER_CONNECTION,
             ),
@@ -378,13 +378,13 @@ impl ConnectionHandler for Handler {
         }
 
         debug_assert_eq!(
-            self.inflight_output_connect_requests.len(),
+            self.inflight_outbound_connect_requests.len(),
             self.active_connect_requests.len(),
             "expect to have one active request per inflight stream"
         );
 
         // Circuits
-        match self.inflight_output_connect_requests.poll_unpin(cx) {
+        match self.inflight_outbound_connect_requests.poll_unpin(cx) {
             Poll::Ready(Ok(Ok(outbound_hop::Circuit {
                 limit,
                 read_buffer,
@@ -569,7 +569,7 @@ impl ConnectionHandler for Handler {
                         self.active_connect_requests.push_back(send_back);
 
                         if self
-                            .inflight_output_connect_requests
+                            .inflight_outbound_connect_requests
                             .try_push(outbound_hop::open_circuit(stream, dst_peer_id))
                             .is_err()
                         {
