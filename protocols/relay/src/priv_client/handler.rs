@@ -364,10 +364,17 @@ impl ConnectionHandler for Handler {
                         .pop_front()
                         .expect("must have active request for stream");
 
-                    // TODO: What do we on error?
-                    let _ = to_listener.send(Ok(priv_client::Connection {
-                        state: priv_client::ConnectionState::new_outbound(stream, read_buffer),
-                    }));
+                    if to_listener
+                        .send(Ok(priv_client::Connection {
+                            state: priv_client::ConnectionState::new_outbound(stream, read_buffer),
+                        }))
+                        .is_err()
+                    {
+                        log::debug!(
+                            "Dropping newly established circuit because the listener is gone"
+                        );
+                        continue;
+                    }
 
                     return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(
                         Event::OutboundCircuitEstablished { limit },
