@@ -99,7 +99,7 @@ pub struct Transport {
 
 impl Transport {
     pub(crate) fn new() -> (Self, mpsc::Receiver<TransportToBehaviourMsg>) {
-        let (to_behaviour, from_transport) = mpsc::channel(0);
+        let (to_behaviour, from_transport) = mpsc::channel(1000);
         let transport = Transport {
             to_behaviour,
             pending_to_behaviour: VecDeque::new(),

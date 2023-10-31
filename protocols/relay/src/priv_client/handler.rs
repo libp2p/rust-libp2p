@@ -143,9 +143,6 @@ pub struct Handler {
     alive_lend_out_substreams: FuturesUnordered<oneshot::Receiver<void::Void>>,
 
     circuit_deny_futs: futures_bounded::FuturesSet<Result<(), inbound_stop::Error>>,
-
-    /// Futures that try to send messages to the transport.
-    send_channel_tasks: FuturesUnordered<BoxFuture<'static, ()>>,
 }
 
 impl Handler {
@@ -177,7 +174,6 @@ impl Handler {
                 DENYING_CIRCUIT_TIMEOUT,
                 MAX_NUMBER_DENYING_CIRCUIT,
             ),
-            send_channel_tasks: Default::default(),
         }
     }
 
@@ -206,14 +202,11 @@ impl Handler {
                     StreamUpgradeError::Io(e) => outbound_hop::ReserveError::Io(e),
                 };
 
-                self.send_channel_tasks.push(
-                    async move {
-                        let _ = to_listener
-                            .send(transport::ToListenerMsg::Reservation(Err(error)))
-                            .await;
-                    }
-                    .boxed(),
-                );
+                if let Err(e) =
+                    to_listener.try_send(transport::ToListenerMsg::Reservation(Err(error)))
+                {
+                    log::debug!("Unable to send error to listener: {}", e.into_send_error())
+                }
                 self.reservation.failed();
             }
             PendingRequest::Connect {
@@ -346,14 +339,11 @@ impl ConnectionHandler for Handler {
                     .pop_front()
                     .expect("must have active request for stream");
 
-                self.send_channel_tasks.push(
-                    async move {
-                        let _ = to_listener
-                            .send(transport::ToListenerMsg::Reservation(Err(error)))
-                            .await;
-                    }
-                    .boxed(),
-                );
+                if let Err(e) =
+                    to_listener.try_send(transport::ToListenerMsg::Reservation(Err(error)))
+                {
+                    log::debug!("Unable to send error to listener: {}", e.into_send_error())
+                }
                 self.reservation.failed();
             }
             Poll::Ready(Err(futures_bounded::Timeout { .. })) => {
@@ -362,16 +352,11 @@ impl ConnectionHandler for Handler {
                     .pop_front()
                     .expect("must have active request for stream");
 
-                self.send_channel_tasks.push(
-                    async move {
-                        let _ = to_listener
-                            .send(transport::ToListenerMsg::Reservation(Err(
-                                outbound_hop::ReserveError::Io(io::ErrorKind::TimedOut.into()),
-                            )))
-                            .await;
-                    }
-                    .boxed(),
-                );
+                if let Err(e) = to_listener.try_send(transport::ToListenerMsg::Reservation(Err(
+                    outbound_hop::ReserveError::Io(io::ErrorKind::TimedOut.into()),
+                ))) {
+                    log::debug!("Unable to send error to listener: {}", e.into_send_error())
+                }
                 self.reservation.failed();
             }
             Poll::Pending => {}
@@ -420,16 +405,11 @@ impl ConnectionHandler for Handler {
                     .pop_front()
                     .expect("must have active request for stream");
 
-                self.send_channel_tasks.push(
-                    async move {
-                        let _ = to_listener
-                            .send(transport::ToListenerMsg::Reservation(Err(
-                                outbound_hop::ReserveError::Io(io::ErrorKind::TimedOut.into()),
-                            )))
-                            .await;
-                    }
-                    .boxed(),
-                );
+                if let Err(e) = to_listener.try_send(transport::ToListenerMsg::Reservation(Err(
+                    outbound_hop::ReserveError::Io(io::ErrorKind::TimedOut.into()),
+                ))) {
+                    log::debug!("Unable to send error to listener: {}", e.into_send_error())
+                }
                 self.reservation.failed();
             }
             Poll::Pending => {}
@@ -506,9 +486,6 @@ impl ConnectionHandler for Handler {
                 Poll::Pending => break,
             }
         }
-
-        // Send errors to transport.
-        while let Poll::Ready(Some(())) = self.send_channel_tasks.poll_next_unpin(cx) {}
 
         // Check status of lend out substreams.
         loop {
