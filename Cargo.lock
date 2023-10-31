@@ -1581,7 +1581,7 @@ dependencies = [
 
 [[package]]
 name = "futures-bounded"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "futures-timer",
  "futures-util",
@@ -1939,6 +1939,7 @@ name = "hole-punching-tests"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "either",
  "env_logger 0.10.0",
  "futures",
  "libp2p",
@@ -2946,6 +2947,7 @@ dependencies = [
  "libp2p-ping",
  "libp2p-plaintext",
  "libp2p-swarm",
+ "libp2p-swarm-test",
  "libp2p-yamux",
  "log",
  "quick-protobuf",

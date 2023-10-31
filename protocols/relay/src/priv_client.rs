@@ -25,7 +25,7 @@ pub(crate) mod transport;
 
 use crate::multiaddr_ext::MultiaddrExt;
 use crate::priv_client::handler::Handler;
-use crate::protocol::{self, inbound_stop, outbound_hop};
+use crate::protocol::{self, inbound_stop};
 use bytes::Bytes;
 use either::Either;
 use futures::channel::mpsc::Receiver;
@@ -39,8 +39,7 @@ use libp2p_swarm::behaviour::{ConnectionClosed, ConnectionEstablished, FromSwarm
 use libp2p_swarm::dial_opts::DialOpts;
 use libp2p_swarm::{
     dummy, ConnectionDenied, ConnectionHandler, ConnectionId, DialFailure, NetworkBehaviour,
-    NotifyHandler, Stream, StreamUpgradeError, THandler, THandlerInEvent, THandlerOutEvent,
-    ToSwarm,
+    NotifyHandler, Stream, THandler, THandlerInEvent, THandlerOutEvent, ToSwarm,
 };
 use std::collections::{hash_map, HashMap, VecDeque};
 use std::io::{Error, ErrorKind, IoSlice};
@@ -59,31 +58,14 @@ pub enum Event {
         renewal: bool,
         limit: Option<protocol::Limit>,
     },
-    ReservationReqFailed {
-        relay_peer_id: PeerId,
-        /// Indicates whether the request replaces an existing reservation.
-        renewal: bool,
-        error: StreamUpgradeError<outbound_hop::ReservationFailedReason>,
-    },
     OutboundCircuitEstablished {
         relay_peer_id: PeerId,
         limit: Option<protocol::Limit>,
-    },
-    OutboundCircuitReqFailed {
-        relay_peer_id: PeerId,
-        error: StreamUpgradeError<outbound_hop::CircuitFailedReason>,
     },
     /// An inbound circuit has been established.
     InboundCircuitEstablished {
         src_peer_id: PeerId,
         limit: Option<protocol::Limit>,
-    },
-    /// An inbound circuit request has been denied.
-    InboundCircuitReqDenied { src_peer_id: PeerId },
-    /// Denying an inbound circuit request failed.
-    InboundCircuitReqDenyFailed {
-        src_peer_id: PeerId,
-        error: inbound_stop::UpgradeError,
     },
 }
 
@@ -243,31 +225,14 @@ impl NetworkBehaviour for Behaviour {
                     limit,
                 }
             }
-            handler::Event::ReservationReqFailed { renewal, error } => {
-                Event::ReservationReqFailed {
-                    relay_peer_id: event_source,
-                    renewal,
-                    error,
-                }
-            }
             handler::Event::OutboundCircuitEstablished { limit } => {
                 Event::OutboundCircuitEstablished {
                     relay_peer_id: event_source,
                     limit,
                 }
             }
-            handler::Event::OutboundCircuitReqFailed { error } => Event::OutboundCircuitReqFailed {
-                relay_peer_id: event_source,
-                error,
-            },
             handler::Event::InboundCircuitEstablished { src_peer_id, limit } => {
                 Event::InboundCircuitEstablished { src_peer_id, limit }
-            }
-            handler::Event::InboundCircuitReqDenied { src_peer_id } => {
-                Event::InboundCircuitReqDenied { src_peer_id }
-            }
-            handler::Event::InboundCircuitReqDenyFailed { src_peer_id, error } => {
-                Event::InboundCircuitReqDenyFailed { src_peer_id, error }
             }
         };
 
@@ -327,7 +292,7 @@ impl NetworkBehaviour for Behaviour {
                         peer_id: relay_peer_id,
                         handler: NotifyHandler::One(*connection_id),
                         event: Either::Left(handler::In::EstablishCircuit {
-                            send_back,
+                            to_dial: send_back,
                             dst_peer_id,
                         }),
                     },
@@ -341,7 +306,7 @@ impl NetworkBehaviour for Behaviour {
                         self.pending_handler_commands.insert(
                             connection_id,
                             handler::In::EstablishCircuit {
-                                send_back,
+                                to_dial: send_back,
                                 dst_peer_id,
                             },
                         );
