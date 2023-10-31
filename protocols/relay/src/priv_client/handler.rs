@@ -96,12 +96,6 @@ pub struct Handler {
     local_peer_id: PeerId,
     remote_peer_id: PeerId,
     remote_addr: Multiaddr,
-    /// A pending fatal error that results in the connection being closed.
-    pending_error: Option<
-        StreamUpgradeError<
-            Either<inbound_stop::ProtocolViolation, outbound_hop::ProtocolViolation>,
-        >,
-    >,
 
     /// Queue of events to return when polled.
     queued_events: VecDeque<
@@ -164,7 +158,6 @@ impl Handler {
                 MAX_NUMBER_DENYING_CIRCUIT,
             ),
             active_connect_requests: Default::default(),
-            pending_error: Default::default(),
             reservation: Reservation::None,
         }
     }
@@ -292,12 +285,6 @@ impl ConnectionHandler for Handler {
         >,
     > {
         loop {
-            // Check for a pending (fatal) error.
-            if let Some(err) = self.pending_error.take() {
-                // The handler will not be polled again by the `Swarm`.
-                return Poll::Ready(ConnectionHandlerEvent::Close(err));
-            }
-
             debug_assert_eq!(
                 self.inflight_reserve_requests.len(),
                 self.active_reserve_requests.len(),
