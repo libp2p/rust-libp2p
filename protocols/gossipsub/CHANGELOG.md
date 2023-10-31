@@ -5,12 +5,9 @@
 - Remove deprecated `gossipsub::Config::idle_timeout` in favor of `SwarmBuilder::idle_connection_timeout`.
   See [PR 4642](https://github.com/libp2p/rust-libp2p/pull/4642).
 - Return typed error from config builder.
-  See [PR 4445].
-- Bound send_queue with an `ArrayDeque` and replace frontmost item if full.
-  See [PR 4756]
-
-[PR 4445]: https://github.com/libp2p/rust-libp2p/pull/4445
-[PR 4756]: https://github.com/libp2p/rust-libp2p/pull/4756
+  See [PR 4445](https://github.com/libp2p/rust-libp2p/pull/4445).
+- Bound send_queue with an `ArrayDeque` and drop front-most item if full.
+  See [PR 4756](https://github.com/libp2p/rust-libp2p/pull/4756).
 
 ## 0.45.2
 
