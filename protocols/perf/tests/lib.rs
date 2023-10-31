@@ -33,7 +33,7 @@ async fn perf() {
     let server_peer_id = *server.local_peer_id();
     let mut client = Swarm::new_ephemeral(|_| client::Behaviour::new());
 
-    server.listen().await;
+    server.listen().with_memory_addr_external().await;
     client.connect(&mut server).await;
 
     tokio::task::spawn(server.loop_on_next());

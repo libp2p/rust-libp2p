@@ -23,9 +23,7 @@ use crate::protocol::{self, inbound_stop, outbound_hop};
 use crate::{priv_client, proto, HOP_PROTOCOL_NAME, STOP_PROTOCOL_NAME};
 use either::Either;
 use futures::channel::{mpsc, oneshot};
-use futures::future::{BoxFuture, FutureExt};
-use futures::sink::SinkExt;
-use futures::stream::{FuturesUnordered, StreamExt};
+use futures::future::FutureExt;
 use futures_timer::Delay;
 use libp2p_core::multiaddr::Protocol;
 use libp2p_core::upgrade::ReadyUpgrade;
@@ -136,12 +134,6 @@ pub struct Handler {
 
     reservation: Reservation,
 
-    /// Tracks substreams lent out to the transport.
-    ///
-    /// Contains a [`futures::future::Future`] for each lend out substream that
-    /// resolves once the substream is dropped.
-    alive_lend_out_substreams: FuturesUnordered<oneshot::Receiver<void::Void>>,
-
     circuit_deny_futs: futures_bounded::FuturesSet<Result<(), inbound_stop::Error>>,
 }
 
@@ -158,6 +150,10 @@ impl Handler {
                 STREAM_TIMEOUT,
                 MAX_CONCURRENT_STREAMS_PER_CONNECTION,
             ),
+            inflight_inbound_circuit_requests: futures_bounded::FuturesSet::new(
+                STREAM_TIMEOUT,
+                MAX_CONCURRENT_STREAMS_PER_CONNECTION,
+            ),
             inflight_outbound_connect_requests: futures_bounded::FuturesSet::new(
                 STREAM_TIMEOUT,
                 MAX_CONCURRENT_STREAMS_PER_CONNECTION,
@@ -165,11 +161,6 @@ impl Handler {
             active_connect_requests: Default::default(),
             pending_error: Default::default(),
             reservation: Reservation::None,
-            alive_lend_out_substreams: Default::default(),
-            inflight_inbound_circuit_requests: futures_bounded::FuturesSet::new(
-                STREAM_TIMEOUT,
-                MAX_CONCURRENT_STREAMS_PER_CONNECTION,
-            ),
             circuit_deny_futs: futures_bounded::FuturesSet::new(
                 DENYING_CIRCUIT_TIMEOUT,
                 MAX_NUMBER_DENYING_CIRCUIT,
@@ -385,11 +376,9 @@ impl ConnectionHandler for Handler {
                         .pop_front()
                         .expect("must have active request for stream");
 
-                    let (tx, _) = oneshot::channel();
-
                     // TODO: What do we on error?
                     let _ = to_listener.send(Ok(priv_client::Connection {
-                        state: priv_client::ConnectionState::new_outbound(stream, read_buffer, tx),
+                        state: priv_client::ConnectionState::new_outbound(stream, read_buffer),
                     }));
 
                     return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(
@@ -436,9 +425,7 @@ impl ConnectionHandler for Handler {
                         let src_peer_id = circuit.src_peer_id();
                         let limit = circuit.limit();
 
-                        let (tx, rx) = oneshot::channel();
-                        self.alive_lend_out_substreams.push(rx);
-                        let connection = super::ConnectionState::new_inbound(circuit, tx);
+                        let connection = super::ConnectionState::new_inbound(circuit);
 
                         pending_msgs.push_back(
                             transport::ToListenerMsg::IncomingRelayedConnection {
@@ -488,14 +475,6 @@ impl ConnectionHandler for Handler {
                     log::debug!("Denying inbound circuit timed out");
                     continue;
                 }
-                Poll::Pending => {}
-            }
-
-            // Check status of lend out substreams.
-            match self.alive_lend_out_substreams.poll_next_unpin(cx) {
-                Poll::Ready(Some(Err(oneshot::Canceled))) => {}
-                Poll::Ready(Some(Ok(v))) => void::unreachable(v),
-                Poll::Ready(None) => continue,
                 Poll::Pending => {}
             }
 

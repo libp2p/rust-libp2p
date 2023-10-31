@@ -11,7 +11,7 @@ keywords = ["peer-to-peer", "libp2p", "networking"]
 categories = ["network-programming", "asynchronous"]
 
 [dependencies]
-futures = "0.3.28"
+futures = "0.3.29"
 log = "0.4.20"
 salsa20 = "0.10"
 sha3 = "0.10"

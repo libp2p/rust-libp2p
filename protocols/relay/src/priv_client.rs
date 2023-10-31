@@ -29,7 +29,6 @@ use crate::protocol::{self, inbound_stop};
 use bytes::Bytes;
 use either::Either;
 use futures::channel::mpsc::Receiver;
-use futures::channel::oneshot;
 use futures::future::{BoxFuture, FutureExt};
 use futures::io::{AsyncRead, AsyncWrite};
 use futures::ready;
@@ -351,22 +350,13 @@ pub(crate) enum ConnectionState {
     Operational {
         read_buffer: Bytes,
         substream: Stream,
-        /// "Drop notifier" pattern to signal to the transport that the connection has been dropped.
-        ///
-        /// This is flagged as "dead-code" by the compiler because we never read from it here.
-        /// However, it is actual use is to trigger the `Canceled` error in the `Transport` when this `Sender` is dropped.
-        #[allow(dead_code)]
-        drop_notifier: oneshot::Sender<void::Void>,
     },
 }
 
 impl Unpin for ConnectionState {}
 
 impl ConnectionState {
-    pub(crate) fn new_inbound(
-        circuit: inbound_stop::Circuit,
-        drop_notifier: oneshot::Sender<void::Void>,
-    ) -> Self {
+    pub(crate) fn new_inbound(circuit: inbound_stop::Circuit) -> Self {
         ConnectionState::InboundAccepting {
             accept: async {
                 let (substream, read_buffer) = circuit
@@ -376,22 +366,16 @@ impl ConnectionState {
                 Ok(ConnectionState::Operational {
                     read_buffer,
                     substream,
-                    drop_notifier,
                 })
             }
             .boxed(),
         }
     }
 
-    pub(crate) fn new_outbound(
-        substream: Stream,
-        read_buffer: Bytes,
-        drop_notifier: oneshot::Sender<void::Void>,
-    ) -> Self {
+    pub(crate) fn new_outbound(substream: Stream, read_buffer: Bytes) -> Self {
         ConnectionState::Operational {
             substream,
             read_buffer,
-            drop_notifier,
         }
     }
 }
