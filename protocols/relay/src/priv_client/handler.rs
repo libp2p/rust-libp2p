@@ -346,6 +346,7 @@ impl ConnectionHandler for Handler {
                         log::debug!("Unable to send error to listener: {}", e.into_send_error())
                     }
                     self.reservation.failed();
+                    continue;
                 }
                 Poll::Ready(Err(futures_bounded::Timeout { .. })) => {
                     let mut to_listener = self
@@ -361,6 +362,7 @@ impl ConnectionHandler for Handler {
                         log::debug!("Unable to send error to listener: {}", e.into_send_error())
                     }
                     self.reservation.failed();
+                    continue;
                 }
                 Poll::Pending => {}
             }
@@ -401,6 +403,7 @@ impl ConnectionHandler for Handler {
                         .expect("must have active request for stream");
 
                     let _ = to_dialer.send(Err(error));
+                    continue;
                 }
                 Poll::Ready(Err(futures_bounded::Timeout { .. })) => {
                     let mut to_listener = self
@@ -416,6 +419,7 @@ impl ConnectionHandler for Handler {
                         log::debug!("Unable to send error to listener: {}", e.into_send_error())
                     }
                     self.reservation.failed();
+                    continue;
                 }
                 Poll::Pending => {}
             }
@@ -450,6 +454,7 @@ impl ConnectionHandler for Handler {
                     }
                     Reservation::None => {
                         self.insert_to_deny_futs(circuit);
+                        continue;
                     }
                 },
                 Poll::Ready(Ok(Err(e))) => {
