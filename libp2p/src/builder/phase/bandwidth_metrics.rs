@@ -31,7 +31,9 @@ impl<T: AuthenticatedMultiplexedTransport, Provider, R>
             phantom: PhantomData,
         }
     }
+}
 
+impl<T, Provider, R> SwarmBuilder<Provider, BandwidthMetricsPhase<T, R>> {
     pub fn without_bandwidth_metrics(self) -> SwarmBuilder<Provider, BehaviourPhase<T, R>> {
         SwarmBuilder {
             phase: BehaviourPhase {
