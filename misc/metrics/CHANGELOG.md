@@ -1,5 +1,7 @@
 ## 0.14.0 - unreleased
 
+- Add metrics for `SwarmEvent::{NewExternalAddrCandidate,ExternalAddrConfirmed,ExternalAddrExpired}`.
+  See [PR 4721](https://github.com/libp2p/rust-libp2p/pull/4721).
 
 ## 0.13.1
 

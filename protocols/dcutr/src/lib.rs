@@ -36,8 +36,8 @@ mod proto {
 pub use behaviour::{Behaviour, Error, Event};
 pub use protocol::PROTOCOL_NAME;
 pub mod inbound {
-    pub use crate::protocol::inbound::UpgradeError;
+    pub use crate::protocol::inbound::ProtocolViolation;
 }
 pub mod outbound {
-    pub use crate::protocol::outbound::UpgradeError;
+    pub use crate::protocol::outbound::ProtocolViolation;
 }

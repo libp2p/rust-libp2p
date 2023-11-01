@@ -40,15 +40,9 @@ async fn connect() {
     let mut src = build_client();
 
     // Have all swarms listen on a local TCP address.
-    let (memory_addr, relay_addr) = relay.listen().await;
-    relay.remove_external_address(&memory_addr);
-    relay.add_external_address(relay_addr.clone());
-
-    let (dst_mem_addr, dst_tcp_addr) = dst.listen().await;
-    let (src_mem_addr, _) = src.listen().await;
-
-    dst.remove_external_address(&dst_mem_addr);
-    src.remove_external_address(&src_mem_addr);
+    let (_, relay_tcp_addr) = relay.listen().with_tcp_addr_external().await;
+    let (_, dst_tcp_addr) = dst.listen().await;
+    src.listen().await;
 
     assert!(src.external_addresses().next().is_none());
     assert!(dst.external_addresses().next().is_none());
@@ -58,7 +52,7 @@ async fn connect() {
 
     async_std::task::spawn(relay.loop_on_next());
 
-    let dst_relayed_addr = relay_addr
+    let dst_relayed_addr = relay_tcp_addr
         .with(Protocol::P2p(relay_peer_id))
         .with(Protocol::P2pCircuit)
         .with(Protocol::P2p(dst_peer_id));
@@ -75,26 +69,6 @@ async fn connect() {
 
     src.dial_and_wait(dst_relayed_addr.clone()).await;
 
-    loop {
-        match src
-            .next_swarm_event()
-            .await
-            .try_into_behaviour_event()
-            .unwrap()
-        {
-            ClientEvent::Dcutr(dcutr::Event::RemoteInitiatedDirectConnectionUpgrade {
-                remote_peer_id,
-                remote_relayed_addr,
-            }) => {
-                if remote_peer_id == dst_peer_id && remote_relayed_addr == dst_relayed_addr {
-                    break;
-                }
-            }
-            ClientEvent::Identify(_) => {}
-            other => panic!("Unexpected event: {other:?}."),
-        }
-    }
-
     let dst_addr = dst_tcp_addr.with(Protocol::P2p(dst_peer_id));
 
     let established_conn_id = src
@@ -110,9 +84,10 @@ async fn connect() {
 
     let reported_conn_id = src
         .wait(move |e| match e {
-            SwarmEvent::Behaviour(ClientEvent::Dcutr(
-                dcutr::Event::DirectConnectionUpgradeSucceeded { connection_id, .. },
-            )) => Some(connection_id),
+            SwarmEvent::Behaviour(ClientEvent::Dcutr(dcutr::Event {
+                result: Ok(connection_id),
+                ..
+            })) => Some(connection_id),
             _ => None,
         })
         .await;
@@ -221,6 +196,7 @@ async fn wait_for_reservation(
                 addr_observed = true;
             }
             SwarmEvent::Behaviour(ClientEvent::Identify(_)) => {}
+            SwarmEvent::NewExternalAddrCandidate { .. } => {}
             e => panic!("{e:?}"),
         }
     }
