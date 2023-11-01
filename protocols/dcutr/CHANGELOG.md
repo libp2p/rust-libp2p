@@ -1,5 +1,7 @@
 ## 0.11.0 - unreleased
 
+- Add `_ => {}` arm to `#[non_exhaustive]` enum `match`es
+  See [PR 4581](https://github.com/libp2p/rust-libp2p/pull/4581).
 - Add `ConnectionId` to `Event::DirectConnectionUpgradeSucceeded` and `Event::DirectConnectionUpgradeFailed`.
   See [PR 4558](https://github.com/libp2p/rust-libp2p/pull/4558).
 - Exchange address _candidates_ instead of external addresses in `CONNECT`.
@@ -9,7 +11,7 @@
   We now only emit a single event: whether the hole-punch was successful or not.
   See [PR XXXX](https://github.com/libp2p/rust-libp2p/pull/XXXX).
 
-## 0.10.0 
+## 0.10.0
 
 - Raise MSRV to 1.65.
   See [PR 3715].
