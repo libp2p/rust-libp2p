@@ -252,9 +252,9 @@ impl<Provider, T: AuthenticatedMultiplexedTransport> SwarmBuilder<Provider, Quic
         self,
     ) -> (
         SwarmBuilder<
-                Provider,
+            Provider,
             BandwidthMetricsPhase<impl AuthenticatedMultiplexedTransport, NoRelayBehaviour>,
-            >,
+        >,
         Arc<crate::bandwidth::BandwidthSinks>,
     ) {
         #[allow(deprecated)]
@@ -267,13 +267,14 @@ impl<Provider, T: AuthenticatedMultiplexedTransport> SwarmBuilder<Provider, Quic
     }
 }
 #[cfg(feature = "metrics")]
-impl<Provider, T: AuthenticatedMultiplexedTransport>
-    SwarmBuilder<Provider, QuicPhase<T>>
-{
+impl<Provider, T: AuthenticatedMultiplexedTransport> SwarmBuilder<Provider, QuicPhase<T>> {
     pub fn with_bandwidth_metrics(
         self,
         registry: &mut libp2p_metrics::Registry,
-    ) -> SwarmBuilder<Provider, BehaviourPhase<impl AuthenticatedMultiplexedTransport, NoRelayBehaviour>> {
+    ) -> SwarmBuilder<
+        Provider,
+        BehaviourPhase<impl AuthenticatedMultiplexedTransport, NoRelayBehaviour>,
+    > {
         self.without_quic()
             .without_any_other_transports()
             .without_dns()

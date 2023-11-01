@@ -124,7 +124,7 @@ where
                 send_back_addr,
             }) => {
                 let metrics =
-                    ConnectionMetrics::from_family_and_addr(&this.metrics, &send_back_addr);
+                    ConnectionMetrics::from_family_and_addr(this.metrics, &send_back_addr);
                 Poll::Ready(TransportEvent::Incoming {
                     listener_id,
                     upgrade: upgrade.map_ok(Box::new(|(peer_id, stream_muxer)| {
@@ -184,7 +184,7 @@ pub struct Muxer<SMInner> {
 }
 
 impl<SMInner> Muxer<SMInner> {
-    /// Creates a new [`BandwidthLogging`] around the stream muxer.
+    /// Creates a new [`Muxer`] wrapping around the provided stream muxer.
     fn new(inner: SMInner, metrics: ConnectionMetrics) -> Self {
         Self { inner, metrics }
     }

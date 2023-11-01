@@ -171,7 +171,10 @@ impl<Provider, T: AuthenticatedMultiplexedTransport>
     pub fn with_bandwidth_metrics(
         self,
         registry: &mut libp2p_metrics::Registry,
-    ) -> SwarmBuilder<Provider, BehaviourPhase<impl AuthenticatedMultiplexedTransport, NoRelayBehaviour>> {
+    ) -> SwarmBuilder<
+        Provider,
+        BehaviourPhase<impl AuthenticatedMultiplexedTransport, NoRelayBehaviour>,
+    > {
         self.without_any_other_transports()
             .without_dns()
             .without_websocket()
