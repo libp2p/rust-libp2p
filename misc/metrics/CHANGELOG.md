@@ -3,6 +3,7 @@
 - Add metrics for `SwarmEvent::{NewExternalAddrCandidate,ExternalAddrConfirmed,ExternalAddrExpired}`.
   See [PR 4721](https://github.com/libp2p/rust-libp2p/pull/4721).
 - Add `BandwidthMetricTransport`, wrapping an existing `Transport`, exposing Prometheus bandwidth metrics.
+  See also `SwarmBuilder::with_bandwidth_metrics`.
   See [PR 4727](https://github.com/libp2p/rust-libp2p/pull/4727).
 
 ## 0.13.1

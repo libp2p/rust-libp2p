@@ -1,4 +1,5 @@
 use super::*;
+#[allow(deprecated)]
 use crate::bandwidth::BandwidthSinks;
 use crate::transport_ext::TransportExt;
 use crate::SwarmBuilder;

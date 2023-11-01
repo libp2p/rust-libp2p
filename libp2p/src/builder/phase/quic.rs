@@ -247,14 +247,15 @@ impl_quic_phase_with_websocket!(
     rw_stream_sink::RwStreamSink<libp2p_websocket::BytesConnection<libp2p_tcp::tokio::TcpStream>>
 );
 impl<Provider, T: AuthenticatedMultiplexedTransport> SwarmBuilder<Provider, QuicPhase<T>> {
+    #[allow(deprecated)]
     #[deprecated(note = "Use `with_bandwidth_metrics` instead.")]
     pub fn with_bandwidth_logging(
         self,
     ) -> (
         SwarmBuilder<
-            Provider,
+                Provider,
             BandwidthMetricsPhase<impl AuthenticatedMultiplexedTransport, NoRelayBehaviour>,
-        >,
+            >,
         Arc<crate::bandwidth::BandwidthSinks>,
     ) {
         #[allow(deprecated)]

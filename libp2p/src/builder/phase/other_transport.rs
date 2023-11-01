@@ -9,6 +9,7 @@ use libp2p_core::{Negotiated, UpgradeInfo};
 #[cfg(feature = "relay")]
 use libp2p_identity::PeerId;
 
+#[allow(deprecated)]
 use crate::bandwidth::BandwidthSinks;
 use crate::SwarmBuilder;
 
@@ -146,6 +147,7 @@ impl<T: AuthenticatedMultiplexedTransport, Provider>
 impl<Provider, T: AuthenticatedMultiplexedTransport>
     SwarmBuilder<Provider, OtherTransportPhase<T>>
 {
+    #[allow(deprecated)]
     #[deprecated(note = "Use `with_bandwidth_metrics` instead.")]
     pub fn with_bandwidth_logging(
         self,

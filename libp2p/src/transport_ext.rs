@@ -24,10 +24,11 @@ use crate::core::{
     muxing::{StreamMuxer, StreamMuxerBox},
     transport::Boxed,
 };
+#[allow(deprecated)]
 use crate::{
     bandwidth::{BandwidthLogging, BandwidthSinks},
-    Transport,
 };
+use crate::Transport;
 use libp2p_identity::PeerId;
 use std::sync::Arc;
 
@@ -66,6 +67,8 @@ pub trait TransportExt: Transport {
     ///
     /// let (transport, sinks) = transport.with_bandwidth_logging();
     /// ```
+    #[allow(deprecated)]
+    #[deprecated(note = "Use `libp2p::SwarmBuilder::with_bandwidth_metrics` or `libp2p_metrics::BandwidthMetricTransport` instead.")]
     fn with_bandwidth_logging<S>(self) -> (Boxed<(PeerId, StreamMuxerBox)>, Arc<BandwidthSinks>)
     where
         Self: Sized + Send + Unpin + 'static,

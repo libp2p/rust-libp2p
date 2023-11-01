@@ -1,4 +1,5 @@
 use super::*;
+#[allow(deprecated)]
 use crate::bandwidth::BandwidthSinks;
 use crate::transport_ext::TransportExt;
 use crate::SwarmBuilder;
@@ -13,6 +14,7 @@ pub struct BandwidthLoggingPhase<T, R> {
 impl<T: AuthenticatedMultiplexedTransport, Provider, R>
     SwarmBuilder<Provider, BandwidthLoggingPhase<T, R>>
 {
+    #[allow(deprecated)]
     #[deprecated(note = "Use `with_bandwidth_metrics` instead.")]
     pub fn with_bandwidth_logging(
         self,
