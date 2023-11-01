@@ -7,7 +7,7 @@
   See [PR 4490](https://github.com/libp2p/rust-libp2p/pull/4490).
 - Remove deprecated `ConnectionHandlerEvent::Close` and `ConnectionHandler::Error`.
   `ConnectionHandler`s should not close connections directly as the connection might still be in use by other handlers.
-  See [PR XXXX](https://github.com/libp2p/rust-libp2p/pull/XXXX).
+  See [PR 4755](https://github.com/libp2p/rust-libp2p/pull/4755).
 - Add `PeerCondition::DisconnectedAndNotDialing` variant, combining pre-existing conditions.
   This is the new default.
   A new dialing attempt is iniated _only if_ the peer is both considered disconnected and there is currently no ongoing dialing attempt.
