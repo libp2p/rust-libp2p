@@ -344,7 +344,7 @@ where
     /// can be polled again.
     pending_handler_event: Option<(PeerId, PendingNotifyHandler, THandlerInEvent<TBehaviour>)>,
 
-    pending_swarm_events: VecDeque<SwarmEvent<TBehaviour::ToSwarm, THandlerErr<TBehaviour>>>,
+    pending_swarm_events: VecDeque<SwarmEvent<TBehaviour::ToSwarm>>,
 }
 
 impl<TBehaviour> Unpin for Swarm<TBehaviour> where TBehaviour: NetworkBehaviour {}
@@ -665,7 +665,7 @@ where
         &mut self.behaviour
     }
 
-    fn handle_pool_event(&mut self, event: PoolEvent<THandler<TBehaviour>>) {
+    fn handle_pool_event(&mut self, event: PoolEvent<THandlerOutEvent<TBehaviour>>) {
         match event {
             PoolEvent::ConnectionEstablished {
                 peer_id,

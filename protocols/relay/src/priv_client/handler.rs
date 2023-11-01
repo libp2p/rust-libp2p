@@ -21,7 +21,6 @@
 use crate::priv_client::transport;
 use crate::protocol::{self, inbound_stop, outbound_hop};
 use crate::{priv_client, proto, HOP_PROTOCOL_NAME, STOP_PROTOCOL_NAME};
-use either::Either;
 use futures::channel::{mpsc, oneshot};
 use futures::future::FutureExt;
 use futures_timer::Delay;

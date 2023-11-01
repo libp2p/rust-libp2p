@@ -40,7 +40,6 @@ use std::collections::VecDeque;
 use std::io;
 use std::task::{Context, Poll};
 use std::time::Duration;
-use void::Void;
 
 #[derive(Debug)]
 pub enum Command {
@@ -181,8 +180,8 @@ impl Handler {
 impl ConnectionHandler for Handler {
     type FromBehaviour = Command;
     type ToBehaviour = Event;
-    type InboundProtocol = Either<protocol::inbound::Upgrade, DeniedUpgrade>;
-    type OutboundProtocol = protocol::outbound::Upgrade;
+    type InboundProtocol = Either<ReadyUpgrade<StreamProtocol>, DeniedUpgrade>;
+    type OutboundProtocol = ReadyUpgrade<StreamProtocol>;
     type OutboundOpenInfo = ();
     type InboundOpenInfo = ();
 
