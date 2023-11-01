@@ -14,7 +14,7 @@ categories = ["network-programming", "asynchronous"]
 asynchronous-codec = "0.6"
 bytes = "1"
 either = "1.9.0"
-futures = "0.3.28"
+futures = "0.3.29"
 futures-timer = "3"
 futures-bounded = { workspace = true }
 instant = "0.1.12"
@@ -37,6 +37,7 @@ libp2p-plaintext = { workspace = true }
 libp2p-swarm = { workspace = true, features = ["macros", "async-std"] }
 libp2p-yamux = { workspace = true }
 quickcheck = { workspace = true }
+libp2p-swarm-test = { workspace = true }
 
 # Passing arguments to the docsrs builder in order to properly document cfg's.
 # More information: https://docs.rs/about/builds#cross-compiling

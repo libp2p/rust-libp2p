@@ -303,7 +303,7 @@ impl NetworkBehaviour for Behaviour {
         Ok(dummy::ConnectionHandler)
     }
 
-    fn on_swarm_event(&mut self, event: FromSwarm<Self::ConnectionHandler>) {
+    fn on_swarm_event(&mut self, event: FromSwarm) {
         match event {
             FromSwarm::ConnectionClosed(ConnectionClosed {
                 peer_id,
@@ -448,7 +448,7 @@ mod tests {
             });
 
             async_std::task::block_on(async {
-                let (listen_addr, _) = swarm1.listen().await;
+                let (listen_addr, _) = swarm1.listen().with_memory_addr_external().await;
 
                 for _ in 0..limit {
                     swarm2.connect(&mut swarm1).await;
@@ -583,7 +583,7 @@ mod tests {
             )))
         }
 
-        fn on_swarm_event(&mut self, _event: FromSwarm<Self::ConnectionHandler>) {}
+        fn on_swarm_event(&mut self, _event: FromSwarm) {}
 
         fn on_connection_handler_event(
             &mut self,

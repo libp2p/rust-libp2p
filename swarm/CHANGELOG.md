@@ -1,5 +1,8 @@
 ## 0.44.0 - unreleased
 
+- Remove `handler` field from `ConnectionClosed`.
+  If you need to transfer state from a `ConnectionHandler` to its `NetworkBehaviour` when a connection closes, use `ConnectionHandler::poll_close`.
+  See [PR 4076](https://github.com/libp2p/rust-libp2p/pull/4076).
 - Remove deprecated `PollParameters` from `NetworkBehaviour::poll` function.
   See [PR 4490](https://github.com/libp2p/rust-libp2p/pull/4490).
 - Add `PeerCondition::DisconnectedAndNotDialing` variant, combining pre-existing conditions.
@@ -13,6 +16,10 @@
   See [PR 4715](https://github.com/libp2p/rust-libp2p/pull/4715).
 - Log `PeerId` of `Swarm` even when constructed with new `SwarmBuilder`.
   See [PR 4671](https://github.com/libp2p/rust-libp2p/pull/4671).
+- Add `SwarmEvent::{NewExternalAddrCandidate,ExternalAddrConfirmed,ExternalAddrExpired}` variants.
+  See [PR 4721](https://github.com/libp2p/rust-libp2p/pull/4721).
+- Remove deprecated symbols.
+  See [PR 4737](https://github.com/libp2p/rust-libp2p/pull/4737).
 
 ## 0.43.6
 

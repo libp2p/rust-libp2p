@@ -157,11 +157,9 @@ where
         })
     }
 
-    fn on_swarm_event(&mut self, event: FromSwarm<Self::ConnectionHandler>) {
+    fn on_swarm_event(&mut self, event: FromSwarm) {
         if let Some(behaviour) = &mut self.inner {
-            if let Some(event) = event.maybe_map_handler(|h| h.inner) {
-                behaviour.on_swarm_event(event);
-            }
+            behaviour.on_swarm_event(event);
         }
     }
 

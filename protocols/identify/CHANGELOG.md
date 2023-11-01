@@ -2,6 +2,13 @@
 
 - Add `Info` to the `libp2p-identify::Event::Pushed` to report pushed info.
   See [PR 4527](https://github.com/libp2p/rust-libp2p/pull/4527)
+- Remove deprecated `initial_delay`.
+  Identify requests are always sent instantly after the connection has been established.
+  See [PR 4735](https://github.com/libp2p/rust-libp2p/pull/4735)
+- Don't repeatedly report the same observed address as a `NewExternalAddrCandidate`.
+  Instead, only report each observed address once per connection.
+  This allows users to probabilistically deem an address as external if it gets reported as a candidate repeatedly. 
+  See [PR 4721](https://github.com/libp2p/rust-libp2p/pull/4721).
 
 ## 0.43.1
 

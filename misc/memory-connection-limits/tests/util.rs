@@ -107,7 +107,7 @@ impl<const MEM_PENDING: usize, const MEM_ESTABLISHED: usize> NetworkBehaviour
         Ok(dummy::ConnectionHandler)
     }
 
-    fn on_swarm_event(&mut self, _: FromSwarm<Self::ConnectionHandler>) {}
+    fn on_swarm_event(&mut self, _: FromSwarm) {}
 
     fn on_connection_handler_event(
         &mut self,

@@ -22,6 +22,7 @@ use libp2p_core::multiaddr::{Multiaddr, Protocol};
 use libp2p_core::transport::upgrade::Version;
 use libp2p_core::transport::{MemoryTransport, Transport};
 use libp2p_dcutr as dcutr;
+use libp2p_identify as identify;
 use libp2p_identity as identity;
 use libp2p_identity::PeerId;
 use libp2p_plaintext as plaintext;
@@ -38,17 +39,20 @@ async fn connect() {
     let mut dst = build_client();
     let mut src = build_client();
 
-    // Have all swarms listen on a local memory address.
-    let (relay_addr, _) = relay.listen().await;
-    let (dst_addr, _) = dst.listen().await;
+    // Have all swarms listen on a local TCP address.
+    let (_, relay_tcp_addr) = relay.listen().with_tcp_addr_external().await;
+    let (_, dst_tcp_addr) = dst.listen().await;
     src.listen().await;
+
+    assert!(src.external_addresses().next().is_none());
+    assert!(dst.external_addresses().next().is_none());
 
     let relay_peer_id = *relay.local_peer_id();
     let dst_peer_id = *dst.local_peer_id();
 
     async_std::task::spawn(relay.loop_on_next());
 
-    let dst_relayed_addr = relay_addr
+    let dst_relayed_addr = relay_tcp_addr
         .with(Protocol::P2p(relay_peer_id))
         .with(Protocol::P2pCircuit)
         .with(Protocol::P2p(dst_peer_id));
@@ -65,26 +69,7 @@ async fn connect() {
 
     src.dial_and_wait(dst_relayed_addr.clone()).await;
 
-    loop {
-        match src
-            .next_swarm_event()
-            .await
-            .try_into_behaviour_event()
-            .unwrap()
-        {
-            ClientEvent::Dcutr(dcutr::Event::RemoteInitiatedDirectConnectionUpgrade {
-                remote_peer_id,
-                remote_relayed_addr,
-            }) => {
-                if remote_peer_id == dst_peer_id && remote_relayed_addr == dst_relayed_addr {
-                    break;
-                }
-            }
-            other => panic!("Unexpected event: {other:?}."),
-        }
-    }
-
-    let dst_addr = dst_addr.with(Protocol::P2p(dst_peer_id));
+    let dst_addr = dst_tcp_addr.with(Protocol::P2p(dst_peer_id));
 
     let established_conn_id = src
         .wait(move |e| match e {
@@ -99,9 +84,10 @@ async fn connect() {
 
     let reported_conn_id = src
         .wait(move |e| match e {
-            SwarmEvent::Behaviour(ClientEvent::Dcutr(
-                dcutr::Event::DirectConnectionUpgradeSucceeded { connection_id, .. },
-            )) => Some(connection_id),
+            SwarmEvent::Behaviour(ClientEvent::Dcutr(dcutr::Event {
+                result: Ok(connection_id),
+                ..
+            })) => Some(connection_id),
             _ => None,
         })
         .await;
@@ -109,18 +95,31 @@ async fn connect() {
     assert_eq!(established_conn_id, reported_conn_id);
 }
 
-fn build_relay() -> Swarm<relay::Behaviour> {
+fn build_relay() -> Swarm<Relay> {
     Swarm::new_ephemeral(|identity| {
         let local_peer_id = identity.public().to_peer_id();
 
-        relay::Behaviour::new(
-            local_peer_id,
-            relay::Config {
-                reservation_duration: Duration::from_secs(2),
-                ..Default::default()
-            },
-        )
+        Relay {
+            relay: relay::Behaviour::new(
+                local_peer_id,
+                relay::Config {
+                    reservation_duration: Duration::from_secs(2),
+                    ..Default::default()
+                },
+            ),
+            identify: identify::Behaviour::new(identify::Config::new(
+                "/relay".to_owned(),
+                identity.public(),
+            )),
+        }
     })
+}
+
+#[derive(NetworkBehaviour)]
+#[behaviour(prelude = "libp2p_swarm::derive_prelude")]
+struct Relay {
+    relay: relay::Behaviour,
+    identify: identify::Behaviour,
 }
 
 fn build_client() -> Swarm<Client> {
@@ -142,6 +141,10 @@ fn build_client() -> Swarm<Client> {
         Client {
             relay: behaviour,
             dcutr: dcutr::Behaviour::new(local_peer_id),
+            identify: identify::Behaviour::new(identify::Config::new(
+                "/client".to_owned(),
+                local_key.public(),
+            )),
         },
         local_peer_id,
         Config::with_async_std_executor(),
@@ -153,6 +156,7 @@ fn build_client() -> Swarm<Client> {
 struct Client {
     relay: relay::client::Behaviour,
     dcutr: dcutr::Behaviour,
+    identify: identify::Behaviour,
 }
 
 async fn wait_for_reservation(
@@ -163,14 +167,16 @@ async fn wait_for_reservation(
 ) {
     let mut new_listen_addr_for_relayed_addr = false;
     let mut reservation_req_accepted = false;
+    let mut addr_observed = false;
+
     loop {
+        if new_listen_addr_for_relayed_addr && reservation_req_accepted && addr_observed {
+            break;
+        }
+
         match client.next_swarm_event().await {
-            SwarmEvent::NewListenAddr { address, .. } if address != client_addr => {}
             SwarmEvent::NewListenAddr { address, .. } if address == client_addr => {
                 new_listen_addr_for_relayed_addr = true;
-                if reservation_req_accepted {
-                    break;
-                }
             }
             SwarmEvent::Behaviour(ClientEvent::Relay(
                 relay::client::Event::ReservationReqAccepted {
@@ -180,15 +186,17 @@ async fn wait_for_reservation(
                 },
             )) if relay_peer_id == peer_id && renewal == is_renewal => {
                 reservation_req_accepted = true;
-                if new_listen_addr_for_relayed_addr {
-                    break;
-                }
             }
             SwarmEvent::Dialing {
                 peer_id: Some(peer_id),
                 ..
             } if peer_id == relay_peer_id => {}
             SwarmEvent::ConnectionEstablished { peer_id, .. } if peer_id == relay_peer_id => {}
+            SwarmEvent::Behaviour(ClientEvent::Identify(identify::Event::Received { .. })) => {
+                addr_observed = true;
+            }
+            SwarmEvent::Behaviour(ClientEvent::Identify(_)) => {}
+            SwarmEvent::NewExternalAddrCandidate { .. } => {}
             e => panic!("{e:?}"),
         }
     }

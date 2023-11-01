@@ -18,20 +18,18 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-//! This module provides a `Sink` and `Stream` for length-delimited
-//! Noise protocol messages in form of [`NoiseFramed`].
+//! Provides a [`Codec`] type implementing the [`Encoder`] and [`Decoder`] traits.
+//!
+//! Alongside a [`asynchronous_codec::Framed`] this provides a [Sink](futures::Sink)
+//! and [Stream](futures::Stream) for length-delimited Noise protocol messages.
 
-use crate::io::Output;
+use super::handshake::proto;
 use crate::{protocol::PublicKey, Error};
-use bytes::{Bytes, BytesMut};
-use futures::prelude::*;
-use futures::ready;
-use log::{debug, trace};
-use std::{
-    fmt, io,
-    pin::Pin,
-    task::{Context, Poll},
-};
+use asynchronous_codec::{Decoder, Encoder};
+use bytes::{Buf, Bytes, BytesMut};
+use quick_protobuf::{BytesReader, MessageRead, MessageWrite, Writer};
+use std::io;
+use std::mem::size_of;
 
 /// Max. size of a noise message.
 const MAX_NOISE_MSG_LEN: usize = 65535;
@@ -43,61 +41,49 @@ static_assertions::const_assert! {
     MAX_FRAME_LEN + EXTRA_ENCRYPT_SPACE <= MAX_NOISE_MSG_LEN
 }
 
-/// A `NoiseFramed` is a `Sink` and `Stream` for length-delimited
-/// Noise protocol messages.
-///
-/// `T` is the type of the underlying I/O resource and `S` the
-/// type of the Noise session state.
-pub(crate) struct NoiseFramed<T, S> {
-    io: T,
+/// Codec holds the noise session state `S` and acts as a medium for
+/// encoding and decoding length-delimited session messages.
+pub(crate) struct Codec<S> {
     session: S,
-    read_state: ReadState,
-    write_state: WriteState,
-    read_buffer: Vec<u8>,
-    write_buffer: Vec<u8>,
-    decrypt_buffer: BytesMut,
+
+    // We reuse write and encryption buffers across multiple messages to avoid reallocations.
+    // We cannot reuse read and decryption buffers because we cannot return borrowed data.
+    write_buffer: BytesMut,
+    encrypt_buffer: BytesMut,
 }
 
-impl<T, S> fmt::Debug for NoiseFramed<T, S> {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("NoiseFramed")
-            .field("read_state", &self.read_state)
-            .field("write_state", &self.write_state)
-            .finish()
-    }
-}
-
-impl<T> NoiseFramed<T, snow::HandshakeState> {
-    /// Creates a nwe `NoiseFramed` for beginning a Noise protocol handshake.
-    pub(crate) fn new(io: T, state: snow::HandshakeState) -> Self {
-        NoiseFramed {
-            io,
-            session: state,
-            read_state: ReadState::Ready,
-            write_state: WriteState::Ready,
-            read_buffer: Vec::new(),
-            write_buffer: Vec::new(),
-            decrypt_buffer: BytesMut::new(),
+impl<S> Codec<S> {
+    pub(crate) fn new(session: S) -> Self {
+        Codec {
+            session,
+            write_buffer: BytesMut::default(),
+            encrypt_buffer: BytesMut::default(),
         }
     }
+}
 
+impl Codec<snow::HandshakeState> {
+    /// Checks if the session was started in the `initiator` role.
     pub(crate) fn is_initiator(&self) -> bool {
         self.session.is_initiator()
     }
 
+    /// Checks if the session was started in the `responder` role.
     pub(crate) fn is_responder(&self) -> bool {
         !self.session.is_initiator()
     }
 
-    /// Converts the `NoiseFramed` into a `NoiseOutput` encrypted data stream
-    /// once the handshake is complete, including the static DH [`PublicKey`]
-    /// of the remote, if received.
+    /// Converts the underlying Noise session from the [`snow::HandshakeState`] to a
+    /// [`snow::TransportState`] once the handshake is complete, including the static
+    /// DH [`PublicKey`] of the remote if received.
     ///
-    /// If the underlying Noise protocol session state does not permit
-    /// transitioning to transport mode because the handshake is incomplete,
-    /// an error is returned. Similarly if the remote's static DH key, if
-    /// present, cannot be parsed.
-    pub(crate) fn into_transport(self) -> Result<(PublicKey, Output<T>), Error> {
+    /// If the Noise protocol session state does not permit transitioning to
+    /// transport mode because the handshake is incomplete, an error is returned.
+    ///
+    /// An error is also returned if the remote's static DH key is not present or
+    /// cannot be parsed, as that indicates a fatal handshake error for the noise
+    /// `XX` pattern, which is the only handshake protocol libp2p currently supports.
+    pub(crate) fn into_transport(self) -> Result<(PublicKey, Codec<snow::TransportState>), Error> {
         let dh_remote_pubkey = self.session.get_remote_static().ok_or_else(|| {
             Error::Io(io::Error::new(
                 io::ErrorKind::Other,
@@ -106,355 +92,152 @@ impl<T> NoiseFramed<T, snow::HandshakeState> {
         })?;
 
         let dh_remote_pubkey = PublicKey::from_slice(dh_remote_pubkey)?;
+        let codec = Codec::new(self.session.into_transport_mode()?);
 
-        let io = NoiseFramed {
-            session: self.session.into_transport_mode()?,
-            io: self.io,
-            read_state: ReadState::Ready,
-            write_state: WriteState::Ready,
-            read_buffer: self.read_buffer,
-            write_buffer: self.write_buffer,
-            decrypt_buffer: self.decrypt_buffer,
+        Ok((dh_remote_pubkey, codec))
+    }
+}
+
+impl Encoder for Codec<snow::HandshakeState> {
+    type Error = io::Error;
+    type Item<'a> = &'a proto::NoiseHandshakePayload;
+
+    fn encode(&mut self, item: Self::Item<'_>, dst: &mut BytesMut) -> Result<(), Self::Error> {
+        let item_size = item.get_size();
+
+        self.write_buffer.resize(item_size, 0);
+        let mut writer = Writer::new(&mut self.write_buffer[..item_size]);
+        item.write_message(&mut writer)
+            .expect("Protobuf encoding to succeed");
+
+        encrypt(
+            &self.write_buffer[..item_size],
+            dst,
+            &mut self.encrypt_buffer,
+            |item, buffer| self.session.write_message(item, buffer),
+        )?;
+
+        Ok(())
+    }
+}
+
+impl Decoder for Codec<snow::HandshakeState> {
+    type Error = io::Error;
+    type Item = proto::NoiseHandshakePayload;
+
+    fn decode(&mut self, src: &mut BytesMut) -> Result<Option<Self::Item>, Self::Error> {
+        let cleartext = match decrypt(src, |ciphertext, decrypt_buffer| {
+            self.session.read_message(ciphertext, decrypt_buffer)
+        })? {
+            None => return Ok(None),
+            Some(cleartext) => cleartext,
         };
 
-        Ok((dh_remote_pubkey, Output::new(io)))
+        let mut reader = BytesReader::from_bytes(&cleartext[..]);
+        let pb =
+            proto::NoiseHandshakePayload::from_reader(&mut reader, &cleartext).map_err(|_| {
+                io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    "Failed decoding handshake payload",
+                )
+            })?;
+
+        Ok(Some(pb))
     }
 }
 
-/// The states for reading Noise protocol frames.
-#[derive(Debug)]
-enum ReadState {
-    /// Ready to read another frame.
-    Ready,
-    /// Reading frame length.
-    ReadLen { buf: [u8; 2], off: usize },
-    /// Reading frame data.
-    ReadData { len: usize, off: usize },
-    /// EOF has been reached (terminal state).
-    ///
-    /// The associated result signals if the EOF was unexpected or not.
-    Eof(Result<(), ()>),
-    /// A decryption error occurred (terminal state).
-    DecErr,
-}
-
-/// The states for writing Noise protocol frames.
-#[derive(Debug)]
-enum WriteState {
-    /// Ready to write another frame.
-    Ready,
-    /// Writing the frame length.
-    WriteLen {
-        len: usize,
-        buf: [u8; 2],
-        off: usize,
-    },
-    /// Writing the frame data.
-    WriteData { len: usize, off: usize },
-    /// EOF has been reached unexpectedly (terminal state).
-    Eof,
-    /// An encryption error occurred (terminal state).
-    EncErr,
-}
-
-impl WriteState {
-    fn is_ready(&self) -> bool {
-        if let WriteState::Ready = self {
-            return true;
-        }
-        false
-    }
-}
-
-impl<T, S> futures::stream::Stream for NoiseFramed<T, S>
-where
-    T: AsyncRead + Unpin,
-    S: SessionState + Unpin,
-{
-    type Item = io::Result<Bytes>;
-
-    fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
-        let this = Pin::into_inner(self);
-        loop {
-            trace!("read state: {:?}", this.read_state);
-            match this.read_state {
-                ReadState::Ready => {
-                    this.read_state = ReadState::ReadLen {
-                        buf: [0, 0],
-                        off: 0,
-                    };
-                }
-                ReadState::ReadLen { mut buf, mut off } => {
-                    let n = match read_frame_len(&mut this.io, cx, &mut buf, &mut off) {
-                        Poll::Ready(Ok(Some(n))) => n,
-                        Poll::Ready(Ok(None)) => {
-                            trace!("read: eof");
-                            this.read_state = ReadState::Eof(Ok(()));
-                            return Poll::Ready(None);
-                        }
-                        Poll::Ready(Err(e)) => return Poll::Ready(Some(Err(e))),
-                        Poll::Pending => {
-                            this.read_state = ReadState::ReadLen { buf, off };
-                            return Poll::Pending;
-                        }
-                    };
-                    trace!("read: frame len = {}", n);
-                    if n == 0 {
-                        trace!("read: empty frame");
-                        this.read_state = ReadState::Ready;
-                        continue;
-                    }
-                    this.read_buffer.resize(usize::from(n), 0u8);
-                    this.read_state = ReadState::ReadData {
-                        len: usize::from(n),
-                        off: 0,
-                    }
-                }
-                ReadState::ReadData { len, ref mut off } => {
-                    let n = {
-                        let f =
-                            Pin::new(&mut this.io).poll_read(cx, &mut this.read_buffer[*off..len]);
-                        match ready!(f) {
-                            Ok(n) => n,
-                            Err(e) => return Poll::Ready(Some(Err(e))),
-                        }
-                    };
-                    trace!("read: {}/{} bytes", *off + n, len);
-                    if n == 0 {
-                        trace!("read: eof");
-                        this.read_state = ReadState::Eof(Err(()));
-                        return Poll::Ready(Some(Err(io::ErrorKind::UnexpectedEof.into())));
-                    }
-                    *off += n;
-                    if len == *off {
-                        trace!("read: decrypting {} bytes", len);
-                        this.decrypt_buffer.resize(len, 0);
-                        if let Ok(n) = this
-                            .session
-                            .read_message(&this.read_buffer, &mut this.decrypt_buffer)
-                        {
-                            this.decrypt_buffer.truncate(n);
-                            trace!("read: payload len = {} bytes", n);
-                            this.read_state = ReadState::Ready;
-                            // Return an immutable view into the current buffer.
-                            // If the view is dropped before the next frame is
-                            // read, the `BytesMut` will reuse the same buffer
-                            // for the next frame.
-                            let view = this.decrypt_buffer.split().freeze();
-                            return Poll::Ready(Some(Ok(view)));
-                        } else {
-                            debug!("read: decryption error");
-                            this.read_state = ReadState::DecErr;
-                            return Poll::Ready(Some(Err(io::ErrorKind::InvalidData.into())));
-                        }
-                    }
-                }
-                ReadState::Eof(Ok(())) => {
-                    trace!("read: eof");
-                    return Poll::Ready(None);
-                }
-                ReadState::Eof(Err(())) => {
-                    trace!("read: eof (unexpected)");
-                    return Poll::Ready(Some(Err(io::ErrorKind::UnexpectedEof.into())));
-                }
-                ReadState::DecErr => {
-                    return Poll::Ready(Some(Err(io::ErrorKind::InvalidData.into())))
-                }
-            }
-        }
-    }
-}
-
-impl<T, S> futures::sink::Sink<&Vec<u8>> for NoiseFramed<T, S>
-where
-    T: AsyncWrite + Unpin,
-    S: SessionState + Unpin,
-{
+impl Encoder for Codec<snow::TransportState> {
     type Error = io::Error;
+    type Item<'a> = &'a [u8];
 
-    fn poll_ready(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
-        let this = Pin::into_inner(self);
-        loop {
-            trace!("write state {:?}", this.write_state);
-            match this.write_state {
-                WriteState::Ready => {
-                    return Poll::Ready(Ok(()));
-                }
-                WriteState::WriteLen { len, buf, mut off } => {
-                    trace!("write: frame len ({}, {:?}, {}/2)", len, buf, off);
-                    match write_frame_len(&mut this.io, cx, &buf, &mut off) {
-                        Poll::Ready(Ok(true)) => (),
-                        Poll::Ready(Ok(false)) => {
-                            trace!("write: eof");
-                            this.write_state = WriteState::Eof;
-                            return Poll::Ready(Err(io::ErrorKind::WriteZero.into()));
-                        }
-                        Poll::Ready(Err(e)) => return Poll::Ready(Err(e)),
-                        Poll::Pending => {
-                            this.write_state = WriteState::WriteLen { len, buf, off };
-                            return Poll::Pending;
-                        }
-                    }
-                    this.write_state = WriteState::WriteData { len, off: 0 }
-                }
-                WriteState::WriteData { len, ref mut off } => {
-                    let n = {
-                        let f =
-                            Pin::new(&mut this.io).poll_write(cx, &this.write_buffer[*off..len]);
-                        match ready!(f) {
-                            Ok(n) => n,
-                            Err(e) => return Poll::Ready(Err(e)),
-                        }
-                    };
-                    if n == 0 {
-                        trace!("write: eof");
-                        this.write_state = WriteState::Eof;
-                        return Poll::Ready(Err(io::ErrorKind::WriteZero.into()));
-                    }
-                    *off += n;
-                    trace!("write: {}/{} bytes written", *off, len);
-                    if len == *off {
-                        trace!("write: finished with {} bytes", len);
-                        this.write_state = WriteState::Ready;
-                    }
-                }
-                WriteState::Eof => {
-                    trace!("write: eof");
-                    return Poll::Ready(Err(io::ErrorKind::WriteZero.into()));
-                }
-                WriteState::EncErr => return Poll::Ready(Err(io::ErrorKind::InvalidData.into())),
-            }
-        }
-    }
-
-    fn start_send(self: Pin<&mut Self>, frame: &Vec<u8>) -> Result<(), Self::Error> {
-        assert!(frame.len() <= MAX_FRAME_LEN);
-        let this = Pin::into_inner(self);
-        assert!(this.write_state.is_ready());
-
-        this.write_buffer
-            .resize(frame.len() + EXTRA_ENCRYPT_SPACE, 0u8);
-        match this
-            .session
-            .write_message(frame, &mut this.write_buffer[..])
-        {
-            Ok(n) => {
-                trace!("write: cipher text len = {} bytes", n);
-                this.write_buffer.truncate(n);
-                this.write_state = WriteState::WriteLen {
-                    len: n,
-                    buf: u16::to_be_bytes(n as u16),
-                    off: 0,
-                };
-                Ok(())
-            }
-            Err(e) => {
-                log::error!("encryption error: {:?}", e);
-                this.write_state = WriteState::EncErr;
-                Err(io::ErrorKind::InvalidData.into())
-            }
-        }
-    }
-
-    fn poll_flush(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
-        ready!(self.as_mut().poll_ready(cx))?;
-        Pin::new(&mut self.io).poll_flush(cx)
-    }
-
-    fn poll_close(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
-        ready!(self.as_mut().poll_flush(cx))?;
-        Pin::new(&mut self.io).poll_close(cx)
+    fn encode(&mut self, item: Self::Item<'_>, dst: &mut BytesMut) -> Result<(), Self::Error> {
+        encrypt(item, dst, &mut self.encrypt_buffer, |item, buffer| {
+            self.session.write_message(item, buffer)
+        })
     }
 }
 
-/// A stateful context in which Noise protocol messages can be read and written.
-pub(crate) trait SessionState {
-    fn read_message(&mut self, msg: &[u8], buf: &mut [u8]) -> Result<usize, snow::Error>;
-    fn write_message(&mut self, msg: &[u8], buf: &mut [u8]) -> Result<usize, snow::Error>;
-}
+impl Decoder for Codec<snow::TransportState> {
+    type Error = io::Error;
+    type Item = Bytes;
 
-impl SessionState for snow::HandshakeState {
-    fn read_message(&mut self, msg: &[u8], buf: &mut [u8]) -> Result<usize, snow::Error> {
-        self.read_message(msg, buf)
-    }
-
-    fn write_message(&mut self, msg: &[u8], buf: &mut [u8]) -> Result<usize, snow::Error> {
-        self.write_message(msg, buf)
+    fn decode(&mut self, src: &mut BytesMut) -> Result<Option<Self::Item>, Self::Error> {
+        decrypt(src, |ciphertext, decrypt_buffer| {
+            self.session.read_message(ciphertext, decrypt_buffer)
+        })
     }
 }
 
-impl SessionState for snow::TransportState {
-    fn read_message(&mut self, msg: &[u8], buf: &mut [u8]) -> Result<usize, snow::Error> {
-        self.read_message(msg, buf)
-    }
+/// Encrypts the given cleartext to `dst`.
+///
+/// This is a standalone function to allow us reusing the `encrypt_buffer` and to use to across different session states of the noise protocol.
+fn encrypt(
+    cleartext: &[u8],
+    dst: &mut BytesMut,
+    encrypt_buffer: &mut BytesMut,
+    encrypt_fn: impl FnOnce(&[u8], &mut [u8]) -> Result<usize, snow::Error>,
+) -> io::Result<()> {
+    log::trace!("Encrypting {} bytes", cleartext.len());
 
-    fn write_message(&mut self, msg: &[u8], buf: &mut [u8]) -> Result<usize, snow::Error> {
-        self.write_message(msg, buf)
-    }
+    encrypt_buffer.resize(cleartext.len() + EXTRA_ENCRYPT_SPACE, 0);
+    let n = encrypt_fn(cleartext, encrypt_buffer).map_err(into_io_error)?;
+
+    log::trace!("Outgoing ciphertext has {n} bytes");
+
+    encode_length_prefixed(&encrypt_buffer[..n], dst);
+
+    Ok(())
 }
 
-/// Read 2 bytes as frame length from the given source into the given buffer.
+/// Encrypts the given ciphertext.
 ///
-/// Panics if `off >= 2`.
-///
-/// When [`Poll::Pending`] is returned, the given buffer and offset
-/// may have been updated (i.e. a byte may have been read) and must be preserved
-/// for the next invocation.
-///
-/// Returns `None` if EOF has been encountered.
-fn read_frame_len<R: AsyncRead + Unpin>(
-    mut io: &mut R,
-    cx: &mut Context<'_>,
-    buf: &mut [u8; 2],
-    off: &mut usize,
-) -> Poll<io::Result<Option<u16>>> {
-    loop {
-        match ready!(Pin::new(&mut io).poll_read(cx, &mut buf[*off..])) {
-            Ok(n) => {
-                if n == 0 {
-                    return Poll::Ready(Ok(None));
-                }
-                *off += n;
-                if *off == 2 {
-                    return Poll::Ready(Ok(Some(u16::from_be_bytes(*buf))));
-                }
-            }
-            Err(e) => {
-                return Poll::Ready(Err(e));
-            }
-        }
-    }
+/// This is a standalone function so we can use it across different session states of the noise protocol.
+/// In case `ciphertext` does not contain enough bytes to decrypt the entire frame, `Ok(None)` is returned.
+fn decrypt(
+    ciphertext: &mut BytesMut,
+    decrypt_fn: impl FnOnce(&[u8], &mut [u8]) -> Result<usize, snow::Error>,
+) -> io::Result<Option<Bytes>> {
+    let ciphertext = match decode_length_prefixed(ciphertext)? {
+        Some(b) => b,
+        None => return Ok(None),
+    };
+
+    log::trace!("Incoming ciphertext has {} bytes", ciphertext.len());
+
+    let mut decrypt_buffer = BytesMut::zeroed(ciphertext.len());
+    let n = decrypt_fn(&ciphertext, &mut decrypt_buffer).map_err(into_io_error)?;
+
+    log::trace!("Decrypted cleartext has {n} bytes");
+
+    Ok(Some(decrypt_buffer.split_to(n).freeze()))
 }
 
-/// Write 2 bytes as frame length from the given buffer into the given sink.
-///
-/// Panics if `off >= 2`.
-///
-/// When [`Poll::Pending`] is returned, the given offset
-/// may have been updated (i.e. a byte may have been written) and must
-/// be preserved for the next invocation.
-///
-/// Returns `false` if EOF has been encountered.
-fn write_frame_len<W: AsyncWrite + Unpin>(
-    mut io: &mut W,
-    cx: &mut Context<'_>,
-    buf: &[u8; 2],
-    off: &mut usize,
-) -> Poll<io::Result<bool>> {
-    loop {
-        match ready!(Pin::new(&mut io).poll_write(cx, &buf[*off..])) {
-            Ok(n) => {
-                if n == 0 {
-                    return Poll::Ready(Ok(false));
-                }
-                *off += n;
-                if *off == 2 {
-                    return Poll::Ready(Ok(true));
-                }
-            }
-            Err(e) => {
-                return Poll::Ready(Err(e));
-            }
-        }
+fn into_io_error(err: snow::Error) -> io::Error {
+    io::Error::new(io::ErrorKind::InvalidData, err)
+}
+
+const U16_LENGTH: usize = size_of::<u16>();
+
+fn encode_length_prefixed(src: &[u8], dst: &mut BytesMut) {
+    dst.reserve(U16_LENGTH + src.len());
+    dst.extend_from_slice(&(src.len() as u16).to_be_bytes());
+    dst.extend_from_slice(src);
+}
+
+fn decode_length_prefixed(src: &mut BytesMut) -> Result<Option<Bytes>, io::Error> {
+    if src.len() < size_of::<u16>() {
+        return Ok(None);
+    }
+
+    let mut len_bytes = [0u8; U16_LENGTH];
+    len_bytes.copy_from_slice(&src[..U16_LENGTH]);
+    let len = u16::from_be_bytes(len_bytes) as usize;
+
+    if src.len() - U16_LENGTH >= len {
+        // Skip the length header we already read.
+        src.advance(U16_LENGTH);
+        Ok(Some(src.split_to(len).freeze()))
+    } else {
+        Ok(None)
     }
 }

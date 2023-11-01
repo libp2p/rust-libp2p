@@ -34,7 +34,7 @@ use libp2p_identity::PeerId;
 use libp2p_swarm::behaviour::{ConnectionClosed, FromSwarm};
 use libp2p_swarm::{
     dummy, ConnectionDenied, ConnectionId, ExternalAddresses, NetworkBehaviour, NotifyHandler,
-    StreamUpgradeError, THandler, THandlerInEvent, THandlerOutEvent, ToSwarm,
+    THandler, THandlerInEvent, THandlerOutEvent, ToSwarm,
 };
 use std::collections::{hash_map, HashMap, HashSet, VecDeque};
 use std::num::NonZeroU32;
@@ -169,16 +169,22 @@ pub enum Event {
         renewed: bool,
     },
     /// Accepting an inbound reservation request failed.
+    #[deprecated(
+        note = "Will be removed in favor of logging them internally, see <https://github.com/libp2p/rust-libp2p/issues/4757> for details."
+    )]
     ReservationReqAcceptFailed {
         src_peer_id: PeerId,
-        error: inbound_hop::UpgradeError,
+        error: inbound_hop::Error,
     },
     /// An inbound reservation request has been denied.
     ReservationReqDenied { src_peer_id: PeerId },
     /// Denying an inbound reservation request has failed.
+    #[deprecated(
+        note = "Will be removed in favor of logging them internally, see <https://github.com/libp2p/rust-libp2p/issues/4757> for details."
+    )]
     ReservationReqDenyFailed {
         src_peer_id: PeerId,
-        error: inbound_hop::UpgradeError,
+        error: inbound_hop::Error,
     },
     /// An inbound reservation has timed out.
     ReservationTimedOut { src_peer_id: PeerId },
@@ -188,10 +194,13 @@ pub enum Event {
         dst_peer_id: PeerId,
     },
     /// Denying an inbound circuit request failed.
+    #[deprecated(
+        note = "Will be removed in favor of logging them internally, see <https://github.com/libp2p/rust-libp2p/issues/4757> for details."
+    )]
     CircuitReqDenyFailed {
         src_peer_id: PeerId,
         dst_peer_id: PeerId,
-        error: inbound_hop::UpgradeError,
+        error: inbound_hop::Error,
     },
     /// An inbound cirucit request has been accepted.
     CircuitReqAccepted {
@@ -199,16 +208,22 @@ pub enum Event {
         dst_peer_id: PeerId,
     },
     /// An outbound connect for an inbound cirucit request failed.
+    #[deprecated(
+        note = "Will be removed in favor of logging them internally, see <https://github.com/libp2p/rust-libp2p/issues/4757> for details."
+    )]
     CircuitReqOutboundConnectFailed {
         src_peer_id: PeerId,
         dst_peer_id: PeerId,
-        error: StreamUpgradeError<outbound_stop::CircuitFailedReason>,
+        error: outbound_stop::Error,
     },
     /// Accepting an inbound circuit request failed.
+    #[deprecated(
+        note = "Will be removed in favor of logging them internally, see <https://github.com/libp2p/rust-libp2p/issues/4757> for details."
+    )]
     CircuitReqAcceptFailed {
         src_peer_id: PeerId,
         dst_peer_id: PeerId,
-        error: inbound_hop::UpgradeError,
+        error: inbound_hop::Error,
     },
     /// An inbound circuit has closed.
     CircuitClosed {
@@ -252,7 +267,7 @@ impl Behaviour {
             peer_id,
             connection_id,
             ..
-        }: ConnectionClosed<<Self as NetworkBehaviour>::ConnectionHandler>,
+        }: ConnectionClosed,
     ) {
         if let hash_map::Entry::Occupied(mut peer) = self.reservations.entry(peer_id) {
             peer.get_mut().remove(&connection_id);
@@ -332,7 +347,7 @@ impl NetworkBehaviour for Behaviour {
         )))
     }
 
-    fn on_swarm_event(&mut self, event: FromSwarm<Self::ConnectionHandler>) {
+    fn on_swarm_event(&mut self, event: FromSwarm) {
         self.external_addresses.on_swarm_event(&event);
 
         match event {
@@ -455,6 +470,7 @@ impl NetworkBehaviour for Behaviour {
                 ));
             }
             handler::Event::ReservationReqAcceptFailed { error } => {
+                #[allow(deprecated)]
                 self.queued_actions.push_back(ToSwarm::GenerateEvent(
                     Event::ReservationReqAcceptFailed {
                         src_peer_id: event_source,
@@ -470,6 +486,7 @@ impl NetworkBehaviour for Behaviour {
                 ));
             }
             handler::Event::ReservationReqDenyFailed { error } => {
+                #[allow(deprecated)]
                 self.queued_actions.push_back(ToSwarm::GenerateEvent(
                     Event::ReservationReqDenyFailed {
                         src_peer_id: event_source,
@@ -592,6 +609,7 @@ impl NetworkBehaviour for Behaviour {
                     self.circuits.remove(circuit_id);
                 }
 
+                #[allow(deprecated)]
                 self.queued_actions.push_back(ToSwarm::GenerateEvent(
                     Event::CircuitReqDenyFailed {
                         src_peer_id: event_source,
@@ -605,7 +623,6 @@ impl NetworkBehaviour for Behaviour {
                 src_peer_id,
                 src_connection_id,
                 inbound_circuit_req,
-                dst_handler_notifier,
                 dst_stream,
                 dst_pending_data,
             } => {
@@ -616,7 +633,6 @@ impl NetworkBehaviour for Behaviour {
                         circuit_id,
                         dst_peer_id: event_source,
                         inbound_circuit_req,
-                        dst_handler_notifier,
                         dst_stream,
                         dst_pending_data,
                     }),
@@ -639,6 +655,7 @@ impl NetworkBehaviour for Behaviour {
                         status,
                     }),
                 });
+                #[allow(deprecated)]
                 self.queued_actions.push_back(ToSwarm::GenerateEvent(
                     Event::CircuitReqOutboundConnectFailed {
                         src_peer_id,
@@ -664,6 +681,7 @@ impl NetworkBehaviour for Behaviour {
                 error,
             } => {
                 self.circuits.remove(circuit_id);
+                #[allow(deprecated)]
                 self.queued_actions.push_back(ToSwarm::GenerateEvent(
                     Event::CircuitReqAcceptFailed {
                         src_peer_id: event_source,

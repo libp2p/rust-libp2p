@@ -20,7 +20,7 @@
 
 //! [`NetworkBehaviour`] to act as a direct connection upgrade through relay node.
 
-use crate::handler;
+use crate::{handler, protocol};
 use either::Either;
 use libp2p_core::connection::ConnectedPoint;
 use libp2p_core::multiaddr::Protocol;
@@ -29,13 +29,13 @@ use libp2p_identity::PeerId;
 use libp2p_swarm::behaviour::{ConnectionClosed, DialFailure, FromSwarm};
 use libp2p_swarm::dial_opts::{self, DialOpts};
 use libp2p_swarm::{
-    dummy, ConnectionDenied, ConnectionHandler, ConnectionId, THandler, THandlerOutEvent,
+    dummy, ConnectionDenied, ConnectionHandler, ConnectionId, NewExternalAddrCandidate, THandler,
+    THandlerOutEvent,
 };
-use libp2p_swarm::{
-    ExternalAddresses, NetworkBehaviour, NotifyHandler, StreamUpgradeError, THandlerInEvent,
-    ToSwarm,
-};
+use libp2p_swarm::{NetworkBehaviour, NotifyHandler, THandlerInEvent, ToSwarm};
+use lru::LruCache;
 use std::collections::{HashMap, HashSet, VecDeque};
+use std::num::NonZeroUsize;
 use std::task::{Context, Poll};
 use thiserror::Error;
 use void::Void;
@@ -44,32 +44,25 @@ pub(crate) const MAX_NUMBER_OF_UPGRADE_ATTEMPTS: u8 = 3;
 
 /// The events produced by the [`Behaviour`].
 #[derive(Debug)]
-pub enum Event {
-    InitiatedDirectConnectionUpgrade {
-        remote_peer_id: PeerId,
-        local_relayed_addr: Multiaddr,
-    },
-    RemoteInitiatedDirectConnectionUpgrade {
-        remote_peer_id: PeerId,
-        remote_relayed_addr: Multiaddr,
-    },
-    DirectConnectionUpgradeSucceeded {
-        remote_peer_id: PeerId,
-        connection_id: ConnectionId,
-    },
-    DirectConnectionUpgradeFailed {
-        remote_peer_id: PeerId,
-        connection_id: ConnectionId,
-        error: Error,
-    },
+pub struct Event {
+    pub remote_peer_id: PeerId,
+    pub result: Result<ConnectionId, Error>,
 }
 
 #[derive(Debug, Error)]
-pub enum Error {
-    #[error("Failed to dial peer.")]
-    Dial,
-    #[error("Failed to establish substream: {0}.")]
-    Handler(StreamUpgradeError<Void>),
+#[error("Failed to hole-punch connection: {inner}")]
+pub struct Error {
+    inner: InnerError,
+}
+
+#[derive(Debug, Error)]
+enum InnerError {
+    #[error("Giving up after {0} dial attempts")]
+    AttemptsExceeded(u8),
+    #[error("Inbound stream error: {0}")]
+    InboundError(protocol::inbound::Error),
+    #[error("Outbound stream error: {0}")]
+    OutboundError(protocol::outbound::Error),
 }
 
 pub struct Behaviour {
@@ -79,9 +72,7 @@ pub struct Behaviour {
     /// All direct (non-relayed) connections.
     direct_connections: HashMap<PeerId, HashSet<ConnectionId>>,
 
-    external_addresses: ExternalAddresses,
-
-    local_peer_id: PeerId,
+    address_candidates: Candidates,
 
     direct_to_relayed_connections: HashMap<ConnectionId, ConnectionId>,
 
@@ -95,20 +86,14 @@ impl Behaviour {
         Behaviour {
             queued_events: Default::default(),
             direct_connections: Default::default(),
-            external_addresses: Default::default(),
-            local_peer_id,
+            address_candidates: Candidates::new(local_peer_id),
             direct_to_relayed_connections: Default::default(),
             outgoing_direct_connection_attempts: Default::default(),
         }
     }
 
     fn observed_addresses(&self) -> Vec<Multiaddr> {
-        self.external_addresses
-            .iter()
-            .filter(|a| !a.iter().any(|p| p == Protocol::P2pCircuit))
-            .cloned()
-            .map(|a| a.with(Protocol::P2p(self.local_peer_id)))
-            .collect()
+        self.address_candidates.iter().cloned().collect()
     }
 
     fn on_dial_failure(
@@ -150,13 +135,12 @@ impl Behaviour {
                 event: Either::Left(handler::relayed::Command::Connect),
             })
         } else {
-            self.queued_events.extend([ToSwarm::GenerateEvent(
-                Event::DirectConnectionUpgradeFailed {
-                    remote_peer_id: peer_id,
-                    connection_id: failed_direct_connection,
-                    error: Error::Dial,
-                },
-            )]);
+            self.queued_events.extend([ToSwarm::GenerateEvent(Event {
+                remote_peer_id: peer_id,
+                result: Err(Error {
+                    inner: InnerError::AttemptsExceeded(MAX_NUMBER_OF_UPGRADE_ATTEMPTS),
+                }),
+            })]);
         }
     }
 
@@ -167,7 +151,7 @@ impl Behaviour {
             connection_id,
             endpoint: connected_point,
             ..
-        }: ConnectionClosed<<Self as NetworkBehaviour>::ConnectionHandler>,
+        }: ConnectionClosed,
     ) {
         if !connected_point.is_relayed() {
             let connections = self
@@ -204,13 +188,6 @@ impl NetworkBehaviour for Behaviour {
             let mut handler =
                 handler::relayed::Handler::new(connected_point, self.observed_addresses());
             handler.on_behaviour_event(handler::relayed::Command::Connect);
-
-            self.queued_events.extend([ToSwarm::GenerateEvent(
-                Event::InitiatedDirectConnectionUpgrade {
-                    remote_peer_id: peer,
-                    local_relayed_addr: local_addr.clone(),
-                },
-            )]);
 
             return Ok(Either::Left(handler)); // TODO: We could make two `handler::relayed::Handler` here, one inbound one outbound.
         }
@@ -263,12 +240,10 @@ impl NetworkBehaviour for Behaviour {
                 );
             }
 
-            self.queued_events.extend([ToSwarm::GenerateEvent(
-                Event::DirectConnectionUpgradeSucceeded {
-                    remote_peer_id: peer,
-                    connection_id,
-                },
-            )]);
+            self.queued_events.extend([ToSwarm::GenerateEvent(Event {
+                remote_peer_id: peer,
+                result: Ok(connection_id),
+            })]);
         }
 
         Ok(Either::Right(dummy::ConnectionHandler))
@@ -292,15 +267,7 @@ impl NetworkBehaviour for Behaviour {
         };
 
         match handler_event {
-            Either::Left(handler::relayed::Event::InboundConnectRequest { remote_addr }) => {
-                self.queued_events.extend([ToSwarm::GenerateEvent(
-                    Event::RemoteInitiatedDirectConnectionUpgrade {
-                        remote_peer_id: event_source,
-                        remote_relayed_addr: remote_addr,
-                    },
-                )]);
-            }
-            Either::Left(handler::relayed::Event::InboundConnectNegotiated(remote_addrs)) => {
+            Either::Left(handler::relayed::Event::InboundConnectNegotiated { remote_addrs }) => {
                 log::debug!(
                     "Attempting to hole-punch as dialer to {event_source} using {remote_addrs:?}"
                 );
@@ -316,14 +283,23 @@ impl NetworkBehaviour for Behaviour {
                     .insert(maybe_direct_connection_id, relayed_connection_id);
                 self.queued_events.push_back(ToSwarm::Dial { opts });
             }
-            Either::Left(handler::relayed::Event::OutboundNegotiationFailed { error }) => {
-                self.queued_events.push_back(ToSwarm::GenerateEvent(
-                    Event::DirectConnectionUpgradeFailed {
-                        remote_peer_id: event_source,
-                        connection_id: relayed_connection_id,
-                        error: Error::Handler(error),
-                    },
-                ));
+            Either::Left(handler::relayed::Event::InboundConnectFailed { error }) => {
+                self.queued_events.push_back(ToSwarm::GenerateEvent(Event {
+                    remote_peer_id: event_source,
+                    result: Err(Error {
+                        inner: InnerError::InboundError(error),
+                    }),
+                }));
+            }
+            Either::Left(handler::relayed::Event::OutboundConnectFailed { error }) => {
+                self.queued_events.push_back(ToSwarm::GenerateEvent(Event {
+                    remote_peer_id: event_source,
+                    result: Err(Error {
+                        inner: InnerError::OutboundError(error),
+                    }),
+                }));
+
+                // Maybe treat these as transient and retry?
             }
             Either::Left(handler::relayed::Event::OutboundConnectNegotiated { remote_addrs }) => {
                 log::debug!(
@@ -358,14 +334,15 @@ impl NetworkBehaviour for Behaviour {
         Poll::Pending
     }
 
-    fn on_swarm_event(&mut self, event: FromSwarm<Self::ConnectionHandler>) {
-        self.external_addresses.on_swarm_event(&event);
-
+    fn on_swarm_event(&mut self, event: FromSwarm) {
         match event {
             FromSwarm::ConnectionClosed(connection_closed) => {
                 self.on_connection_closed(connection_closed)
             }
             FromSwarm::DialFailure(dial_failure) => self.on_dial_failure(dial_failure),
+            FromSwarm::NewExternalAddrCandidate(NewExternalAddrCandidate { addr }) => {
+                self.address_candidates.add(addr.clone());
+            }
             FromSwarm::AddressChange(_)
             | FromSwarm::ConnectionEstablished(_)
             | FromSwarm::ListenFailure(_)
@@ -374,10 +351,45 @@ impl NetworkBehaviour for Behaviour {
             | FromSwarm::ExpiredListenAddr(_)
             | FromSwarm::ListenerError(_)
             | FromSwarm::ListenerClosed(_)
-            | FromSwarm::NewExternalAddrCandidate(_)
             | FromSwarm::ExternalAddrExpired(_)
             | FromSwarm::ExternalAddrConfirmed(_) => {}
         }
+    }
+}
+
+/// Stores our address candidates.
+///
+/// We use an [`LruCache`] to favor addresses that are reported more often.
+/// When attempting a hole-punch, we will try more frequent addresses first.
+/// Most of these addresses will come from observations by other nodes (via e.g. the identify protocol).
+/// More common observations mean a more likely stable port-mapping and thus a higher chance of a successful hole-punch.
+struct Candidates {
+    inner: LruCache<Multiaddr, ()>,
+    me: PeerId,
+}
+
+impl Candidates {
+    fn new(me: PeerId) -> Self {
+        Self {
+            inner: LruCache::new(NonZeroUsize::new(20).expect("20 > 0")),
+            me,
+        }
+    }
+
+    fn add(&mut self, mut address: Multiaddr) {
+        if is_relayed(&address) {
+            return;
+        }
+
+        if address.iter().last() != Some(Protocol::P2p(self.me)) {
+            address.push(Protocol::P2p(self.me));
+        }
+
+        self.inner.push(address, ());
+    }
+
+    fn iter(&self) -> impl Iterator<Item = &Multiaddr> {
+        self.inner.iter().map(|(a, _)| a)
     }
 }
 
