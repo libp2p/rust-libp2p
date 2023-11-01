@@ -72,11 +72,9 @@ impl From<quick_protobuf_codec::Error> for Error {
 }
 
 #[derive(Debug, Error)]
-pub enum ProtocolViolation {
+pub(crate) enum ProtocolViolation {
     #[error(transparent)]
     Codec(#[from] quick_protobuf_codec::Error),
-    #[error("Failed to parse response type field.")]
-    ParseTypeField,
     #[error("Failed to parse peer id.")]
     ParsePeerId,
     #[error("Expected 'peer' field to be set.")]
