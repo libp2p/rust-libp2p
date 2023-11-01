@@ -1,4 +1,4 @@
-## -1.45.0 - unreleased
+## 0.45.0 - unreleased
 
 - Add `_ => {}` arm to `#[non_exhaustive]` enum `match`es
   See [PR 4581](https://github.com/libp2p/rust-libp2p/pull/4581).
