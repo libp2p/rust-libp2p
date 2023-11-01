@@ -278,10 +278,9 @@ impl<'a> AsClient<'a> {
             log::debug!("Outbound dial-back request aborted: No dial-back addresses.");
             return Err(OutboundProbeError::NoAddresses);
         }
-        let Some(server) = self.random_server() else {
-            log::debug!("Outbound dial-back request aborted: No qualified server.");
-            return Err(OutboundProbeError::NoServer);
-        };
+
+        let server = self.random_server().ok_or(OutboundProbeError::NoServer)?;
+       
         let request_id = self.inner.send_request(
             &server,
             DialRequest {

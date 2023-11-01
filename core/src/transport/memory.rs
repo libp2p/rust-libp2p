@@ -187,9 +187,7 @@ impl Transport for MemoryTransport {
 
         let port = parse_memory_addr(&addr).map_err(|_| TransportError::MultiaddrNotSupported(addr))?;
 
-        let Some((rx, port)) = HUB.register_port(port) else { 
-            return Err(TransportError::Other(MemoryTransportError::Unreachable)) 
-        };
+        let (rx, port) = HUB.register_port(port).ok_or(TransportError::Other(MemoryTransportError::Unreachable))?;
 
         let listener = Listener {
             id,
