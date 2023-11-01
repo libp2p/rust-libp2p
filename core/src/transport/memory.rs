@@ -185,6 +185,8 @@ impl Transport for MemoryTransport {
             return Err(TransportError::MultiaddrNotSupported(addr));
         };
 
+        let port = parse_memory_addr(&addr).map_err(|_| TransportError::MultiaddrNotSupported(addr))?;
+
         let Some((rx, port)) = HUB.register_port(port) else { 
             return Err(TransportError::Other(MemoryTransportError::Unreachable)) 
         };
