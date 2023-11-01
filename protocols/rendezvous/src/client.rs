@@ -280,7 +280,7 @@ impl NetworkBehaviour for Behaviour {
                 )) => {
                     unreachable!("rendezvous clients never receive requests")
                 }
-                Poll::Ready(other @ _) => {
+                Poll::Ready(other) => {
                     let new_to_swarm =
                         other.map_out(|_| unreachable!("we manually map `GenerateEvent` variants"));
 

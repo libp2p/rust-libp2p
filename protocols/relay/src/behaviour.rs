@@ -335,11 +335,8 @@ impl NetworkBehaviour for Behaviour {
     fn on_swarm_event(&mut self, event: FromSwarm) {
         self.external_addresses.on_swarm_event(&event);
 
-        match event {
-            FromSwarm::ConnectionClosed(connection_closed) => {
-                self.on_connection_closed(connection_closed)
-            }
-            _ => {}
+        if let FromSwarm::ConnectionClosed(connection_closed) = event {
+            self.on_connection_closed(connection_closed)
         }
     }
 
