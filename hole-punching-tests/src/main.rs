@@ -19,7 +19,11 @@
 // DEALINGS IN THE SOFTWARE.
 
 use anyhow::{Context, Result};
+use either::Either;
 use futures::stream::StreamExt;
+use libp2p::core::transport::ListenerId;
+use libp2p::swarm::dial_opts::DialOpts;
+use libp2p::swarm::ConnectionId;
 use libp2p::{
     core::multiaddr::{Multiaddr, Protocol},
     dcutr, identify, noise, ping, relay,
@@ -83,16 +87,21 @@ async fn main() -> Result<()> {
         .build();
 
     client_listen_on_transport(&mut swarm, transport).await?;
-    client_setup(&mut swarm, &mut redis, relay_addr.clone(), mode).await?;
+    let id = client_setup(&mut swarm, &mut redis, relay_addr.clone(), mode).await?;
 
     let mut hole_punched_peer_connection = None;
 
     loop {
-        match (swarm.next().await.unwrap(), hole_punched_peer_connection) {
+        match (
+            swarm.next().await.unwrap(),
+            hole_punched_peer_connection,
+            id,
+        ) {
             (
                 SwarmEvent::Behaviour(BehaviourEvent::RelayClient(
                     relay::client::Event::ReservationReqAccepted { .. },
                 )),
+                _,
                 _,
             ) => {
                 log::info!("Relay accepted our reservation request.");
@@ -107,6 +116,7 @@ async fn main() -> Result<()> {
                     result: Ok(connection_id),
                 })),
                 _,
+                _,
             ) => {
                 log::info!("Successfully hole-punched to {remote_peer_id}");
 
@@ -119,6 +129,7 @@ async fn main() -> Result<()> {
                     ..
                 })),
                 Some(hole_punched_connection),
+                _,
             ) if mode == Mode::Dial && connection == hole_punched_connection => {
                 println!("{}", serde_json::to_string(&Report::new(rtt))?);
 
@@ -131,12 +142,32 @@ async fn main() -> Result<()> {
                     ..
                 })),
                 _,
+                _,
             ) => {
                 log::info!("Failed to hole-punched to {remote_peer_id}");
                 return Err(anyhow::Error::new(error));
             }
-            (SwarmEvent::OutgoingConnectionError { error, .. }, _) => {
-                anyhow::bail!(error)
+            (
+                SwarmEvent::ListenerClosed {
+                    listener_id,
+                    reason: Err(e),
+                    ..
+                },
+                _,
+                Either::Left(reservation),
+            ) if listener_id == reservation => {
+                anyhow::bail!("Reservation on relay failed: {e}");
+            }
+            (
+                SwarmEvent::OutgoingConnectionError {
+                    connection_id,
+                    error,
+                    ..
+                },
+                _,
+                Either::Right(circuit),
+            ) if connection_id == circuit => {
+                anyhow::bail!("Circuit request relay failed: {error}");
             }
             _ => {}
         }
@@ -205,23 +236,30 @@ async fn client_setup(
     redis: &mut RedisClient,
     relay_addr: Multiaddr,
     mode: Mode,
-) -> Result<()> {
-    match mode {
+) -> Result<Either<ListenerId, ConnectionId>> {
+    let either = match mode {
         Mode::Listen => {
-            swarm.listen_on(relay_addr.with(Protocol::P2pCircuit))?;
+            let id = swarm.listen_on(relay_addr.with(Protocol::P2pCircuit))?;
+
+            Either::Left(id)
         }
         Mode::Dial => {
             let remote_peer_id = redis.pop(LISTEN_CLIENT_PEER_ID).await?;
 
-            swarm.dial(
+            let opts = DialOpts::from(
                 relay_addr
                     .with(Protocol::P2pCircuit)
                     .with(Protocol::P2p(remote_peer_id)),
-            )?;
+            );
+            let id = opts.connection_id();
+
+            swarm.dial(opts)?;
+
+            Either::Right(id)
         }
     };
 
-    Ok(())
+    Ok(either)
 }
 
 fn tcp_addr(addr: IpAddr) -> Multiaddr {

@@ -88,6 +88,10 @@ where
         Some(inner)
     }
 
+    pub fn len(&self) -> usize {
+        self.inner.len()
+    }
+
     pub fn is_empty(&self) -> bool {
         self.inner.is_empty()
     }
@@ -256,7 +260,7 @@ mod tests {
 
         assert!(poll.is_pending());
         assert_eq!(
-            streams.inner.len(),
+            streams.len(),
             0,
             "resources of cancelled streams are cleaned up properly"
         );

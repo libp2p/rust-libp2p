@@ -97,7 +97,7 @@ async fn ping_protocol() {
     });
     let peer2_id = *swarm2.local_peer_id();
 
-    swarm1.listen().await;
+    swarm1.listen().with_memory_addr_external().await;
     swarm2.connect(&mut swarm1).await;
 
     let expected_ping = ping.clone();
@@ -190,7 +190,7 @@ async fn emits_inbound_connection_closed_failure() {
     });
     let peer2_id = *swarm2.local_peer_id();
 
-    swarm1.listen().await;
+    swarm1.listen().with_memory_addr_external().await;
     swarm2.connect(&mut swarm1).await;
 
     swarm2.behaviour_mut().send_request(&peer1_id, ping.clone());
@@ -255,7 +255,7 @@ async fn emits_inbound_connection_closed_if_channel_is_dropped() {
     });
     let peer2_id = *swarm2.local_peer_id();
 
-    swarm1.listen().await;
+    swarm1.listen().with_memory_addr_external().await;
     swarm2.connect(&mut swarm1).await;
 
     swarm2.behaviour_mut().send_request(&peer1_id, ping.clone());

@@ -18,26 +18,24 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
+use std::io;
 use std::time::{Duration, SystemTime};
 
 use asynchronous_codec::{Framed, FramedParts};
-use futures::channel::{mpsc, oneshot};
+use bytes::Bytes;
 use futures::prelude::*;
 use futures_timer::Delay;
-use log::debug;
 use thiserror::Error;
-use void::Void;
 
 use libp2p_core::Multiaddr;
 use libp2p_identity::PeerId;
 use libp2p_swarm::Stream;
 
-use crate::priv_client::transport;
 use crate::protocol::{Limit, MAX_MESSAGE_SIZE};
-use crate::{priv_client, proto};
+use crate::{proto, HOP_PROTOCOL_NAME};
 
 #[derive(Debug, Error)]
-pub enum CircuitFailedReason {
+pub enum ConnectError {
     #[error("Remote reported resource limit exceeded.")]
     ResourceLimitExceeded,
     #[error("Relay failed to connect to destination.")]
@@ -46,22 +44,32 @@ pub enum CircuitFailedReason {
     NoReservation,
     #[error("Remote denied permission.")]
     PermissionDenied,
+    #[error("Remote does not support the `{HOP_PROTOCOL_NAME}` protocol")]
+    Unsupported,
+    #[error("IO error")]
+    Io(#[source] io::Error),
+    #[error("Protocol error")]
+    Protocol(#[from] ProtocolViolation),
 }
 
 #[derive(Debug, Error)]
-pub enum ReservationFailedReason {
+pub enum ReserveError {
     #[error("Reservation refused.")]
     Refused,
     #[error("Remote reported resource limit exceeded.")]
     ResourceLimitExceeded,
+    #[error("Remote does not support the `{HOP_PROTOCOL_NAME}` protocol")]
+    Unsupported,
+    #[error("IO error")]
+    Io(#[source] io::Error),
+    #[error("Protocol error")]
+    Protocol(#[from] ProtocolViolation),
 }
 
 #[derive(Debug, Error)]
-pub enum FatalUpgradeError {
+pub enum ProtocolViolation {
     #[error(transparent)]
     Codec(#[from] quick_protobuf_codec::Error),
-    #[error("Stream closed")]
-    StreamClosed,
     #[error("Expected 'status' field to be set.")]
     MissingStatusField,
     #[error("Expected 'reservation' field to be set.")]
@@ -84,21 +92,31 @@ pub enum FatalUpgradeError {
     UnexpectedStatus(proto::Status),
 }
 
+impl From<quick_protobuf_codec::Error> for ConnectError {
+    fn from(e: quick_protobuf_codec::Error) -> Self {
+        ConnectError::Protocol(ProtocolViolation::Codec(e))
+    }
+}
+
+impl From<quick_protobuf_codec::Error> for ReserveError {
+    fn from(e: quick_protobuf_codec::Error) -> Self {
+        ReserveError::Protocol(ProtocolViolation::Codec(e))
+    }
+}
+
 pub(crate) struct Reservation {
     pub(crate) renewal_timeout: Delay,
     pub(crate) addrs: Vec<Multiaddr>,
     pub(crate) limit: Option<Limit>,
-    pub(crate) to_listener: mpsc::Sender<transport::ToListenerMsg>,
 }
 
 pub(crate) struct Circuit {
+    pub(crate) stream: Stream,
+    pub(crate) read_buffer: Bytes,
     pub(crate) limit: Option<Limit>,
 }
 
-pub(crate) async fn handle_reserve_message_response(
-    protocol: Stream,
-    to_listener: mpsc::Sender<transport::ToListenerMsg>,
-) -> Result<Result<Reservation, ReservationFailedReason>, FatalUpgradeError> {
+pub(crate) async fn make_reservation(stream: Stream) -> Result<Reservation, ReserveError> {
     let msg = proto::HopMessage {
         type_pb: proto::HopMessageType::RESERVE,
         peer: None,
@@ -106,7 +124,7 @@ pub(crate) async fn handle_reserve_message_response(
         limit: None,
         status: None,
     };
-    let mut substream = Framed::new(protocol, quick_protobuf_codec::Codec::new(MAX_MESSAGE_SIZE));
+    let mut substream = Framed::new(stream, quick_protobuf_codec::Codec::new(MAX_MESSAGE_SIZE));
 
     substream.send(msg).await?;
 
@@ -119,35 +137,47 @@ pub(crate) async fn handle_reserve_message_response(
     } = substream
         .next()
         .await
-        .ok_or(FatalUpgradeError::StreamClosed)??;
+        .ok_or(ReserveError::Io(io::ErrorKind::UnexpectedEof.into()))??;
 
     match type_pb {
         proto::HopMessageType::CONNECT => {
-            return Err(FatalUpgradeError::UnexpectedTypeConnect);
+            return Err(ReserveError::Protocol(
+                ProtocolViolation::UnexpectedTypeConnect,
+            ));
         }
         proto::HopMessageType::RESERVE => {
-            return Err(FatalUpgradeError::UnexpectedTypeReserve);
+            return Err(ReserveError::Protocol(
+                ProtocolViolation::UnexpectedTypeReserve,
+            ));
         }
         proto::HopMessageType::STATUS => {}
     }
 
     let limit = limit.map(Into::into);
 
-    match status.ok_or(FatalUpgradeError::MissingStatusField)? {
+    match status.ok_or(ProtocolViolation::MissingStatusField)? {
         proto::Status::OK => {}
         proto::Status::RESERVATION_REFUSED => {
-            return Ok(Err(ReservationFailedReason::Refused));
+            return Err(ReserveError::Refused);
         }
         proto::Status::RESOURCE_LIMIT_EXCEEDED => {
-            return Ok(Err(ReservationFailedReason::ResourceLimitExceeded));
+            return Err(ReserveError::ResourceLimitExceeded);
         }
-        s => return Err(FatalUpgradeError::UnexpectedStatus(s)),
+        s => {
+            return Err(ReserveError::Protocol(ProtocolViolation::UnexpectedStatus(
+                s,
+            )))
+        }
     }
 
-    let reservation = reservation.ok_or(FatalUpgradeError::MissingReservationField)?;
+    let reservation = reservation.ok_or(ReserveError::Protocol(
+        ProtocolViolation::MissingReservationField,
+    ))?;
 
     if reservation.addrs.is_empty() {
-        return Err(FatalUpgradeError::NoAddressesInReservation);
+        return Err(ReserveError::Protocol(
+            ProtocolViolation::NoAddressesInReservation,
+        ));
     }
 
     let addrs = reservation
@@ -155,7 +185,7 @@ pub(crate) async fn handle_reserve_message_response(
         .into_iter()
         .map(|b| Multiaddr::try_from(b.to_vec()))
         .collect::<Result<Vec<Multiaddr>, _>>()
-        .map_err(|_| FatalUpgradeError::InvalidReservationAddrs)?;
+        .map_err(|_| ReserveError::Protocol(ProtocolViolation::InvalidReservationAddrs))?;
 
     let renewal_timeout = reservation
         .expire
@@ -169,26 +199,25 @@ pub(crate) async fn handle_reserve_message_response(
         .and_then(|duration| duration.checked_sub(duration / 4))
         .map(Duration::from_secs)
         .map(Delay::new)
-        .ok_or(FatalUpgradeError::InvalidReservationExpiration)?;
+        .ok_or(ReserveError::Protocol(
+            ProtocolViolation::InvalidReservationExpiration,
+        ))?;
 
-    Ok(Ok(Reservation {
+    Ok(Reservation {
         renewal_timeout,
         addrs,
         limit,
-        to_listener,
-    }))
+    })
 }
 
-pub(crate) async fn handle_connection_message_response(
+pub(crate) async fn open_circuit(
     protocol: Stream,
-    remote_peer_id: PeerId,
-    con_command: Command,
-    tx: oneshot::Sender<Void>,
-) -> Result<Result<Option<Circuit>, CircuitFailedReason>, FatalUpgradeError> {
+    dst_peer_id: PeerId,
+) -> Result<Circuit, ConnectError> {
     let msg = proto::HopMessage {
         type_pb: proto::HopMessageType::CONNECT,
         peer: Some(proto::Peer {
-            id: con_command.dst_peer_id.to_bytes(),
+            id: dst_peer_id.to_bytes(),
             addrs: vec![],
         }),
         reservation: None,
@@ -198,9 +227,7 @@ pub(crate) async fn handle_connection_message_response(
 
     let mut substream = Framed::new(protocol, quick_protobuf_codec::Codec::new(MAX_MESSAGE_SIZE));
 
-    if substream.send(msg).await.is_err() {
-        return Err(FatalUpgradeError::StreamClosed);
-    }
+    substream.send(msg).await?;
 
     let proto::HopMessage {
         type_pb,
@@ -208,17 +235,21 @@ pub(crate) async fn handle_connection_message_response(
         reservation: _,
         limit,
         status,
-    } = match substream.next().await {
-        Some(Ok(r)) => r,
-        _ => return Err(FatalUpgradeError::StreamClosed),
-    };
+    } = substream
+        .next()
+        .await
+        .ok_or(ConnectError::Io(io::ErrorKind::UnexpectedEof.into()))??;
 
     match type_pb {
         proto::HopMessageType::CONNECT => {
-            return Err(FatalUpgradeError::UnexpectedTypeConnect);
+            return Err(ConnectError::Protocol(
+                ProtocolViolation::UnexpectedTypeConnect,
+            ));
         }
         proto::HopMessageType::RESERVE => {
-            return Err(FatalUpgradeError::UnexpectedTypeReserve);
+            return Err(ConnectError::Protocol(
+                ProtocolViolation::UnexpectedTypeReserve,
+            ));
         }
         proto::HopMessageType::STATUS => {}
     }
@@ -226,22 +257,26 @@ pub(crate) async fn handle_connection_message_response(
     match status {
         Some(proto::Status::OK) => {}
         Some(proto::Status::RESOURCE_LIMIT_EXCEEDED) => {
-            return Ok(Err(CircuitFailedReason::ResourceLimitExceeded));
+            return Err(ConnectError::ResourceLimitExceeded);
         }
         Some(proto::Status::CONNECTION_FAILED) => {
-            return Ok(Err(CircuitFailedReason::ConnectionFailed));
+            return Err(ConnectError::ConnectionFailed);
         }
         Some(proto::Status::NO_RESERVATION) => {
-            return Ok(Err(CircuitFailedReason::NoReservation));
+            return Err(ConnectError::NoReservation);
         }
         Some(proto::Status::PERMISSION_DENIED) => {
-            return Ok(Err(CircuitFailedReason::PermissionDenied));
+            return Err(ConnectError::PermissionDenied);
         }
         Some(s) => {
-            return Err(FatalUpgradeError::UnexpectedStatus(s));
+            return Err(ConnectError::Protocol(ProtocolViolation::UnexpectedStatus(
+                s,
+            )));
         }
         None => {
-            return Err(FatalUpgradeError::MissingStatusField);
+            return Err(ConnectError::Protocol(
+                ProtocolViolation::MissingStatusField,
+            ));
         }
     }
 
@@ -258,40 +293,11 @@ pub(crate) async fn handle_connection_message_response(
         "Expect a flushed Framed to have empty write buffer."
     );
 
-    match con_command.send_back.send(Ok(priv_client::Connection {
-        state: priv_client::ConnectionState::new_outbound(io, read_buffer.freeze(), tx),
-    })) {
-        Ok(()) => Ok(Ok(Some(Circuit { limit }))),
-        Err(_) => {
-            debug!(
-                "Oneshot to `client::transport::Dial` future dropped. \
-                         Dropping established relayed connection to {:?}.",
-                remote_peer_id,
-            );
+    let circuit = Circuit {
+        stream: io,
+        read_buffer: read_buffer.freeze(),
+        limit,
+    };
 
-            Ok(Ok(None))
-        }
-    }
-}
-
-pub(crate) enum OutboundStreamInfo {
-    Reserve(mpsc::Sender<transport::ToListenerMsg>),
-    CircuitConnection(Command),
-}
-
-pub(crate) struct Command {
-    dst_peer_id: PeerId,
-    pub(crate) send_back: oneshot::Sender<Result<priv_client::Connection, ()>>,
-}
-
-impl Command {
-    pub(crate) fn new(
-        dst_peer_id: PeerId,
-        send_back: oneshot::Sender<Result<priv_client::Connection, ()>>,
-    ) -> Self {
-        Self {
-            dst_peer_id,
-            send_back,
-        }
-    }
+    Ok(circuit)
 }

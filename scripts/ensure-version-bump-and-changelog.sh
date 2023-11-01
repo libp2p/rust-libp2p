@@ -7,7 +7,7 @@ DIR_TO_CRATE=$(dirname "$MANIFEST_PATH")
 
 MERGE_BASE=$(git merge-base "$HEAD_SHA" master) # Find the merge base. This ensures we only diff what was actually added in the PR.
 
-DIFF_TO_MASTER=$(git diff "$HEAD_SHA".."$MERGE_BASE" --name-status -- "$DIR_TO_CRATE")
+SRC_DIFF_TO_MASTER=$(git diff "$HEAD_SHA".."$MERGE_BASE" --name-status -- "$DIR_TO_CRATE/src" "$DIR_TO_CRATE/Cargo.toml")
 CHANGELOG_DIFF=$(git diff "$HEAD_SHA".."$MERGE_BASE" --name-only -- "$DIR_TO_CRATE/CHANGELOG.md")
 
 VERSION_IN_CHANGELOG=$(awk -F' ' '/^## [0-9]+\.[0-9]+\.[0-9]+/{print $2; exit}' "$DIR_TO_CRATE/CHANGELOG.md")
@@ -19,8 +19,8 @@ if [[ "$VERSION_IN_CHANGELOG" != "$VERSION_IN_MANIFEST" ]]; then
     exit 1
 fi
 
-# If the crate wasn't touched in this PR, exit early.
-if [ -z "$DIFF_TO_MASTER" ]; then
+# If the source files of this crate weren't touched in this PR, exit early.
+if [ -z "$SRC_DIFF_TO_MASTER" ]; then
   exit 0;
 fi
 

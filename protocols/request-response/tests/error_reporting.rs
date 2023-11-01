@@ -21,7 +21,7 @@ async fn report_outbound_failure_on_read_response() {
     let (peer1_id, mut swarm1) = new_swarm();
     let (peer2_id, mut swarm2) = new_swarm();
 
-    swarm1.listen().await;
+    swarm1.listen().with_memory_addr_external().await;
     swarm2.connect(&mut swarm1).await;
 
     let server_task = async move {
@@ -75,7 +75,7 @@ async fn report_outbound_failure_on_write_request() {
     let (peer1_id, mut swarm1) = new_swarm();
     let (_peer2_id, mut swarm2) = new_swarm();
 
-    swarm1.listen().await;
+    swarm1.listen().with_memory_addr_external().await;
     swarm2.connect(&mut swarm1).await;
 
     // Expects no events because `Event::Request` is produced after `read_request`.
@@ -117,7 +117,7 @@ async fn report_outbound_timeout_on_read_response() {
     let (peer1_id, mut swarm1) = new_swarm_with_timeout(Duration::from_millis(200));
     let (peer2_id, mut swarm2) = new_swarm_with_timeout(Duration::from_millis(100));
 
-    swarm1.listen().await;
+    swarm1.listen().with_memory_addr_external().await;
     swarm2.connect(&mut swarm1).await;
 
     let server_task = async move {
@@ -161,7 +161,7 @@ async fn report_inbound_failure_on_read_request() {
     let (peer1_id, mut swarm1) = new_swarm();
     let (_peer2_id, mut swarm2) = new_swarm();
 
-    swarm1.listen().await;
+    swarm1.listen().with_memory_addr_external().await;
     swarm2.connect(&mut swarm1).await;
 
     // Expects no events because `Event::Request` is produced after `read_request`.
@@ -196,7 +196,7 @@ async fn report_inbound_failure_on_write_response() {
     let (peer1_id, mut swarm1) = new_swarm();
     let (peer2_id, mut swarm2) = new_swarm();
 
-    swarm1.listen().await;
+    swarm1.listen().with_memory_addr_external().await;
     swarm2.connect(&mut swarm1).await;
 
     // Expects OutboundFailure::Io failure with `FailOnWriteResponse` error
@@ -261,7 +261,7 @@ async fn report_inbound_timeout_on_write_response() {
     let (peer1_id, mut swarm1) = new_swarm_with_timeout(Duration::from_millis(100));
     let (peer2_id, mut swarm2) = new_swarm_with_timeout(Duration::from_millis(200));
 
-    swarm1.listen().await;
+    swarm1.listen().with_memory_addr_external().await;
     swarm2.connect(&mut swarm1).await;
 
     // Expects InboundFailure::Timeout
