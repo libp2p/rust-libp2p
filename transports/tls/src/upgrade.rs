@@ -121,9 +121,9 @@ where
 fn extract_single_certificate(
     state: &CommonState,
 ) -> Result<P2pCertificate<'_>, certificate::ParseError> {
-    let [cert] = state
-        .peer_certificates()
-        .expect("config enforces presence of certificates") else { panic!("config enforces exactly one certificate"); };
-
-    certificate::parse(cert)
+    if let Some([cert]) = state.peer_certificates() {
+        return certificate::parse(cert);
+    } else {
+        panic!("config enforces exactly one certificate");
+    }
 }

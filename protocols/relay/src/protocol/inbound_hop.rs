@@ -215,7 +215,7 @@ pub(crate) async fn handle_inbound_request(
                 None => return Err(FatalUpgradeError::MissingPeer),
             };
 
-            let Ok(dst) = peer_id_res else { return Err(FatalUpgradeError::ParsePeerId) };
+            let dst = peer_id_res.map_err(|_| FatalUpgradeError::ParsePeerId)?;
 
             Either::Right(CircuitReq { dst, substream })
         }

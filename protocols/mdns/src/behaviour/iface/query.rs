@@ -156,7 +156,7 @@ impl MdnsResponse {
                     return None;
                 }
 
-                let Some(RData::PTR(record_value)) = record.data() else { return None };
+                let RData::PTR(record_value) = record.data()? else { return None };
 
                 MdnsPeer::new(packet, record_value, record.ttl())
             })
@@ -244,15 +244,15 @@ impl MdnsPeer {
             .flat_map(|txt| txt.iter())
             .filter_map(|txt| {
                 // TODO: wrong, txt can be multiple character strings
-                let Ok(addr) = dns::decode_character_string(txt) else { return None };
+                let addr = dns::decode_character_string(txt).ok()?;
                 
                 if !addr.starts_with(b"dnsaddr=") {
                     return None;
                 }
 
-                let Ok(addr) = str::from_utf8(&addr[8..]) else { return None };
+                let addr = str::from_utf8(&addr[8..]).ok()?;
 
-                let Ok(mut addr) = addr.parse::<Multiaddr>() else { return None };
+                let mut addr = addr.parse::<Multiaddr>().ok()?;
 
                 match addr.pop() {
                     Some(Protocol::P2p(peer_id)) => {

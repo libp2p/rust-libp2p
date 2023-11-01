@@ -441,9 +441,7 @@ where
         id: ListenerId,
         addr: Multiaddr,
     ) -> Result<(), TransportError<Self::Error>> {
-        let Ok(socket_addr) = multiaddr_to_socketaddr(addr.clone()) else {
-            return Err(TransportError::MultiaddrNotSupported(addr));
-        };
+        let socket_addr = multiaddr_to_socketaddr(addr.clone()).map_err(|_| TransportError::MultiaddrNotSupported(addr))?;
         log::debug!("listening on {}", socket_addr);
         let listener = self
             .do_listen(id, socket_addr)
