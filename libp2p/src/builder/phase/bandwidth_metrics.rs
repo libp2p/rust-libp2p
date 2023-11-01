@@ -21,7 +21,7 @@ impl<T: AuthenticatedMultiplexedTransport, Provider, R>
         SwarmBuilder {
             phase: BehaviourPhase {
                 relay_behaviour: self.phase.relay_behaviour,
-                transport: libp2p_metrics::bandwidth::Transport::new(
+                transport: libp2p_metrics::BandwidthMetricTransport::new(
                     self.phase.transport,
                     registry,
                 )
