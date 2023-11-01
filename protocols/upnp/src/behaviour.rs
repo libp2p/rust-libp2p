@@ -374,6 +374,7 @@ impl NetworkBehaviour for Behaviour {
         void::unreachable(event)
     }
 
+    #[tracing::instrument(level = "trace", name = "ConnectionHandler::poll", skip(self, cx))]
     fn poll(
         &mut self,
         cx: &mut Context<'_>,

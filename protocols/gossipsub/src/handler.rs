@@ -429,6 +429,7 @@ impl ConnectionHandler for Handler {
         matches!(self, Handler::Enabled(h) if h.in_mesh)
     }
 
+    #[tracing::instrument(level = "trace", name = "ConnectionHandler::poll", skip(self, cx))]
     fn poll(
         &mut self,
         cx: &mut Context<'_>,
