@@ -251,7 +251,7 @@ impl ConnectionHandler for Handler {
             match fut.poll_unpin(cx) {
                 Poll::Pending => {}
                 Poll::Ready(Err(e)) => {
-                    tracing::error!("Inbound ping error: {:?}", e);
+                    tracing::debug!("Inbound ping error: {:?}", e);
                     self.inbound = None;
                 }
                 Poll::Ready(Ok(stream)) => {
@@ -266,7 +266,7 @@ impl ConnectionHandler for Handler {
         loop {
             // Check for outbound ping failures.
             if let Some(error) = self.pending_errors.pop_back() {
-                tracing::error!("Ping failure: {:?}", error);
+                tracing::debug!("Ping failure: {:?}", error);
 
                 self.failures += 1;
 
