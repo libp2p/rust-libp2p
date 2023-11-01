@@ -1,3 +1,10 @@
+## 0.12.4 - unreleased
+
+### Added
+
+- Expose `libp2p_bandwidth` Prometheus metrics.
+  See [PR 4727](https://github.com/libp2p/rust-libp2p/pull/4727).
+
 ## 0.12.3
 
 ### Changed
