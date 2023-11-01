@@ -623,7 +623,6 @@ impl NetworkBehaviour for Behaviour {
                 src_peer_id,
                 src_connection_id,
                 inbound_circuit_req,
-                dst_handler_notifier,
                 dst_stream,
                 dst_pending_data,
             } => {
@@ -634,7 +633,6 @@ impl NetworkBehaviour for Behaviour {
                         circuit_id,
                         dst_peer_id: event_source,
                         inbound_circuit_req,
-                        dst_handler_notifier,
                         dst_stream,
                         dst_pending_data,
                     }),

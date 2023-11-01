@@ -25,6 +25,7 @@ use bytes::Bytes;
 use futures::prelude::*;
 use libp2p_identity::PeerId;
 use libp2p_swarm::Stream;
+use std::io;
 use thiserror::Error;
 
 pub(crate) async fn handle_open_circuit(io: Stream) -> Result<Circuit, Error> {
@@ -35,28 +36,45 @@ pub(crate) async fn handle_open_circuit(io: Stream) -> Result<Circuit, Error> {
         peer,
         limit,
         status: _,
-    } = substream.next().await.ok_or(Error::StreamClosed)??;
+    } = substream
+        .next()
+        .await
+        .ok_or(Error::Io(io::ErrorKind::UnexpectedEof.into()))??;
 
     match type_pb {
         proto::StopMessageType::CONNECT => {
-            let src_peer_id = PeerId::from_bytes(&peer.ok_or(Error::MissingPeer)?.id)
-                .map_err(|_| Error::ParsePeerId)?;
+            let src_peer_id = PeerId::from_bytes(&peer.ok_or(ProtocolViolation::MissingPeer)?.id)
+                .map_err(|_| ProtocolViolation::ParsePeerId)?;
             Ok(Circuit {
                 substream,
                 src_peer_id,
                 limit: limit.map(Into::into),
             })
         }
-        proto::StopMessageType::STATUS => Err(Error::UnexpectedTypeStatus),
+        proto::StopMessageType::STATUS => {
+            Err(Error::Protocol(ProtocolViolation::UnexpectedTypeStatus))
+        }
     }
 }
 
 #[derive(Debug, Error)]
-pub enum Error {
+pub(crate) enum Error {
+    #[error("Protocol error")]
+    Protocol(#[from] ProtocolViolation),
+    #[error("IO error")]
+    Io(#[from] io::Error),
+}
+
+impl From<quick_protobuf_codec::Error> for Error {
+    fn from(error: quick_protobuf_codec::Error) -> Self {
+        Self::Protocol(ProtocolViolation::Codec(error))
+    }
+}
+
+#[derive(Debug, Error)]
+pub enum ProtocolViolation {
     #[error(transparent)]
     Codec(#[from] quick_protobuf_codec::Error),
-    #[error("Stream closed")]
-    StreamClosed,
     #[error("Failed to parse response type field.")]
     ParseTypeField,
     #[error("Failed to parse peer id.")]

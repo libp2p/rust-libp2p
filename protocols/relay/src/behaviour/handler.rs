@@ -24,7 +24,6 @@ use crate::protocol::{inbound_hop, outbound_stop};
 use crate::{proto, HOP_PROTOCOL_NAME, STOP_PROTOCOL_NAME};
 use bytes::Bytes;
 use either::Either;
-use futures::channel::oneshot::{self, Canceled};
 use futures::future::{BoxFuture, FutureExt, TryFutureExt};
 use futures::io::AsyncWriteExt;
 use futures::stream::{FuturesUnordered, StreamExt};
@@ -79,7 +78,6 @@ pub enum In {
         circuit_id: CircuitId,
         dst_peer_id: PeerId,
         inbound_circuit_req: inbound_hop::CircuitReq,
-        dst_handler_notifier: oneshot::Sender<()>,
         dst_stream: Stream,
         dst_pending_data: Bytes,
     },
@@ -126,7 +124,6 @@ impl fmt::Debug for In {
                 circuit_id,
                 inbound_circuit_req: _,
                 dst_peer_id,
-                dst_handler_notifier: _,
                 dst_stream: _,
                 dst_pending_data: _,
             } => f
@@ -195,7 +192,6 @@ pub enum Event {
         src_peer_id: PeerId,
         src_connection_id: ConnectionId,
         inbound_circuit_req: inbound_hop::CircuitReq,
-        dst_handler_notifier: oneshot::Sender<()>,
         dst_stream: Stream,
         dst_pending_data: Bytes,
     },
@@ -292,7 +288,6 @@ impl fmt::Debug for Event {
                 src_peer_id,
                 src_connection_id,
                 inbound_circuit_req: _,
-                dst_handler_notifier: _,
                 dst_stream: _,
                 dst_pending_data: _,
             } => f
@@ -360,11 +355,6 @@ pub struct Handler {
     circuit_accept_futures: Futures<Result<CircuitParts, (CircuitId, PeerId, inbound_hop::Error)>>,
     /// Futures denying an inbound circuit request.
     circuit_deny_futures: Futures<(Option<CircuitId>, PeerId, Result<(), inbound_hop::Error>)>,
-    /// Tracks substreams lend out to other [`Handler`]s.
-    ///
-    /// Contains a [`futures::future::Future`] for each lend out substream that
-    /// resolves once the substream is dropped.
-    alive_lend_out_substreams: FuturesUnordered<oneshot::Receiver<()>>,
     /// Futures relaying data for circuit between two peers.
     circuits: Futures<(CircuitId, PeerId, Result<(), std::io::Error>)>,
 
@@ -401,7 +391,6 @@ impl Handler {
             reservation_request_future: Default::default(),
             circuit_accept_futures: Default::default(),
             circuit_deny_futures: Default::default(),
-            alive_lend_out_substreams: Default::default(),
             circuits: Default::default(),
             active_reservation: Default::default(),
             pending_connect_requests: Default::default(),
@@ -569,7 +558,6 @@ impl ConnectionHandler for Handler {
                 circuit_id,
                 dst_peer_id,
                 inbound_circuit_req,
-                dst_handler_notifier,
                 dst_stream,
                 dst_pending_data,
             } => {
@@ -582,7 +570,6 @@ impl ConnectionHandler for Handler {
                             src_stream,
                             src_pending_data,
                             dst_peer_id,
-                            dst_handler_notifier,
                             dst_stream,
                             dst_pending_data,
                         })
@@ -684,8 +671,6 @@ impl ConnectionHandler for Handler {
                     .active_connect_requests
                     .remove(&id)
                     .expect("must have pending connect");
-                let (tx, rx) = oneshot::channel();
-                self.alive_lend_out_substreams.push(rx);
 
                 return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(
                     Event::OutboundConnectNegotiated {
@@ -693,7 +678,6 @@ impl ConnectionHandler for Handler {
                         src_peer_id: connect.src_peer_id,
                         src_connection_id: connect.src_connection_id,
                         inbound_circuit_req: connect.inbound_circuit_req,
-                        dst_handler_notifier: tx,
                         dst_stream: circuit.dst_stream,
                         dst_pending_data: circuit.dst_pending_data,
                     },
@@ -770,7 +754,6 @@ impl ConnectionHandler for Handler {
                         mut src_stream,
                         src_pending_data,
                         dst_peer_id,
-                        dst_handler_notifier,
                         mut dst_stream,
                         dst_pending_data,
                     } = parts;
@@ -794,8 +777,6 @@ impl ConnectionHandler for Handler {
                         )
                         .await?;
 
-                        // Inform destination handler that the stream to the destination is dropped.
-                        drop(dst_handler_notifier);
                         Ok(())
                     }
                     .map(move |r| (circuit_id, dst_peer_id, r))
@@ -879,11 +860,6 @@ impl ConnectionHandler for Handler {
             None => {}
         }
 
-        // Check lend out substreams.
-        while let Poll::Ready(Some(Err(Canceled))) =
-            self.alive_lend_out_substreams.poll_next_unpin(cx)
-        {}
-
         // Check keep alive status.
         if self.active_reservation.is_none() {
             if self.idle_at.is_none() {
@@ -934,7 +910,6 @@ struct CircuitParts {
     src_stream: Stream,
     src_pending_data: Bytes,
     dst_peer_id: PeerId,
-    dst_handler_notifier: oneshot::Sender<()>,
     dst_stream: Stream,
     dst_pending_data: Bytes,
 }
