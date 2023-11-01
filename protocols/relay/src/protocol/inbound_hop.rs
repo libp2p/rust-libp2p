@@ -40,8 +40,6 @@ pub enum Error {
     Codec(#[from] quick_protobuf_codec::Error),
     #[error("Stream closed")]
     StreamClosed,
-    #[error("Failed to parse response type field.")]
-    ParseTypeField,
     #[error("Failed to parse peer id.")]
     ParsePeerId,
     #[error("Expected 'peer' field to be set.")]

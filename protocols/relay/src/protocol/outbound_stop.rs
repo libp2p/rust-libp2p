@@ -68,12 +68,8 @@ pub enum ProtocolViolation {
     Codec(#[from] quick_protobuf_codec::Error),
     #[error("Expected 'status' field to be set.")]
     MissingStatusField,
-    #[error("Failed to parse response type field.")]
-    ParseTypeField,
     #[error("Unexpected message type 'connect'")]
     UnexpectedTypeConnect,
-    #[error("Failed to parse response type field.")]
-    ParseStatusField,
     #[error("Unexpected message status '{0:?}'")]
     UnexpectedStatus(proto::Status),
 }
