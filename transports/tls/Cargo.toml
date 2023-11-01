@@ -9,11 +9,11 @@ license = "MIT"
 exclude = ["src/test_assets"]
 
 [dependencies]
-futures = { version = "0.3.28", default-features = false }
+futures = { version = "0.3.29", default-features = false }
 futures-rustls = "0.24.0"
 libp2p-core = { workspace = true }
 libp2p-identity = { workspace = true }
-rcgen = "0.11.0"
+rcgen = "0.11.3"
 ring = "0.16.20"
 thiserror = "1.0.50"
 webpki = { version = "0.101.4", package = "rustls-webpki", features = ["std"] }
@@ -22,7 +22,7 @@ yasna = "0.5.2"
 
 # Exposed dependencies. Breaking changes to these are breaking changes to us.
 [dependencies.rustls]
-version = "0.21.7"
+version = "0.21.8"
 default-features = false
 features = ["dangerous_configuration"] # Must enable this to allow for custom verification code.
 

@@ -24,6 +24,7 @@ use crate::protocol::{
 };
 use crate::topic::Topic;
 use crate::FloodsubConfig;
+use bytes::Bytes;
 use cuckoofilter::{CuckooError, CuckooFilter};
 use fnv::FnvHashSet;
 use libp2p_core::{Endpoint, Multiaddr};
@@ -171,12 +172,12 @@ impl Floodsub {
     }
 
     /// Publishes a message to the network, if we're subscribed to the topic only.
-    pub fn publish(&mut self, topic: impl Into<Topic>, data: impl Into<Vec<u8>>) {
+    pub fn publish(&mut self, topic: impl Into<Topic>, data: impl Into<Bytes>) {
         self.publish_many(iter::once(topic), data)
     }
 
     /// Publishes a message to the network, even if we're not subscribed to the topic.
-    pub fn publish_any(&mut self, topic: impl Into<Topic>, data: impl Into<Vec<u8>>) {
+    pub fn publish_any(&mut self, topic: impl Into<Topic>, data: impl Into<Bytes>) {
         self.publish_many_any(iter::once(topic), data)
     }
 
@@ -187,7 +188,7 @@ impl Floodsub {
     pub fn publish_many(
         &mut self,
         topic: impl IntoIterator<Item = impl Into<Topic>>,
-        data: impl Into<Vec<u8>>,
+        data: impl Into<Bytes>,
     ) {
         self.publish_many_inner(topic, data, true)
     }
@@ -196,7 +197,7 @@ impl Floodsub {
     pub fn publish_many_any(
         &mut self,
         topic: impl IntoIterator<Item = impl Into<Topic>>,
-        data: impl Into<Vec<u8>>,
+        data: impl Into<Bytes>,
     ) {
         self.publish_many_inner(topic, data, false)
     }
@@ -204,7 +205,7 @@ impl Floodsub {
     fn publish_many_inner(
         &mut self,
         topic: impl IntoIterator<Item = impl Into<Topic>>,
-        data: impl Into<Vec<u8>>,
+        data: impl Into<Bytes>,
         check_self_subscriptions: bool,
     ) {
         let message = FloodsubMessage {

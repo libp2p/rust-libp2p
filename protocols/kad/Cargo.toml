@@ -16,7 +16,7 @@ bytes = "1"
 either = "1.9"
 fnv = "1.0"
 asynchronous-codec = "0.6"
-futures = "0.3.28"
+futures = "0.3.29"
 log = "0.4"
 libp2p-core = { workspace = true }
 libp2p-swarm = { workspace = true }

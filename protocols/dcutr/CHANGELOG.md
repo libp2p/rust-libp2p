@@ -1,13 +1,13 @@
 ## 0.11.0 - unreleased
 
 - Add `ConnectionId` to `Event::DirectConnectionUpgradeSucceeded` and `Event::DirectConnectionUpgradeFailed`.
-  See [PR 4558].
-
-[PR 4558]: https://github.com/libp2p/rust-libp2p/pull/4558
-
+  See [PR 4558](https://github.com/libp2p/rust-libp2p/pull/4558).
 - Exchange address _candidates_ instead of external addresses in `CONNECT`.
   If hole-punching wasn't working properly for you until now, this might be the reason why.
   See [PR 4624](https://github.com/libp2p/rust-libp2p/pull/4624).
+- Simplify public API.
+  We now only emit a single event: whether the hole-punch was successful or not.
+  See [PR XXXX](https://github.com/libp2p/rust-libp2p/pull/XXXX).
 
 ## 0.10.0 
 

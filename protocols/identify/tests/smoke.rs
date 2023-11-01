@@ -1,8 +1,11 @@
+use futures::StreamExt;
 use libp2p_core::multiaddr::Protocol;
 use libp2p_identify as identify;
 use libp2p_swarm::{Swarm, SwarmEvent};
 use libp2p_swarm_test::SwarmExt;
+use std::collections::HashSet;
 use std::iter;
+use std::time::{Duration, Instant};
 
 #[async_std::test]
 async fn periodic_identify() {
@@ -24,7 +27,8 @@ async fn periodic_identify() {
     });
     let swarm2_peer_id = *swarm2.local_peer_id();
 
-    let (swarm1_memory_listen, swarm1_tcp_listen_addr) = swarm1.listen().await;
+    let (swarm1_memory_listen, swarm1_tcp_listen_addr) =
+        swarm1.listen().with_memory_addr_external().await;
     let (swarm2_memory_listen, swarm2_tcp_listen_addr) = swarm2.listen().await;
     swarm2.connect(&mut swarm1).await;
 
@@ -77,6 +81,75 @@ async fn periodic_identify() {
         other => panic!("Unexpected events: {other:?}"),
     }
 }
+#[async_std::test]
+async fn only_emits_address_candidate_once_per_connection() {
+    let _ = env_logger::try_init();
+
+    let mut swarm1 = Swarm::new_ephemeral(|identity| {
+        identify::Behaviour::new(
+            identify::Config::new("a".to_string(), identity.public())
+                .with_agent_version("b".to_string())
+                .with_interval(Duration::from_secs(1)),
+        )
+    });
+    let mut swarm2 = Swarm::new_ephemeral(|identity| {
+        identify::Behaviour::new(
+            identify::Config::new("c".to_string(), identity.public())
+                .with_agent_version("d".to_string()),
+        )
+    });
+
+    swarm2.listen().with_memory_addr_external().await;
+    swarm1.connect(&mut swarm2).await;
+
+    async_std::task::spawn(swarm2.loop_on_next());
+
+    let swarm_events = futures::stream::poll_fn(|cx| swarm1.poll_next_unpin(cx))
+        .take(5)
+        .collect::<Vec<_>>()
+        .await;
+
+    let infos = swarm_events
+        .iter()
+        .filter_map(|e| match e {
+            SwarmEvent::Behaviour(identify::Event::Received { info, .. }) => Some(info.clone()),
+            _ => None,
+        })
+        .collect::<Vec<_>>();
+
+    assert!(
+        infos.len() > 1,
+        "should exchange identify payload more than once"
+    );
+
+    let varying_observed_addresses = infos
+        .iter()
+        .map(|i| i.observed_addr.clone())
+        .collect::<HashSet<_>>();
+    assert_eq!(
+        varying_observed_addresses.len(),
+        1,
+        "Observed address should not vary on persistent connection"
+    );
+
+    let external_address_candidates = swarm_events
+        .iter()
+        .filter_map(|e| match e {
+            SwarmEvent::NewExternalAddrCandidate { address } => Some(address.clone()),
+            _ => None,
+        })
+        .collect::<Vec<_>>();
+
+    assert_eq!(
+        external_address_candidates.len(),
+        1,
+        "To only have one external address candidate"
+    );
+    assert_eq!(
+        &external_address_candidates[0],
+        varying_observed_addresses.iter().next().unwrap()
+    );
+}
 
 #[async_std::test]
 async fn identify_push() {
@@ -92,7 +165,7 @@ async fn identify_push() {
         )
     });
 
-    swarm1.listen().await;
+    swarm1.listen().with_memory_addr_external().await;
     swarm2.connect(&mut swarm1).await;
 
     // First, let the periodic identify do its thing.
@@ -142,7 +215,7 @@ async fn discover_peer_after_disconnect() {
         )
     });
 
-    swarm1.listen().await;
+    swarm1.listen().with_memory_addr_external().await;
     swarm2.connect(&mut swarm1).await;
 
     let swarm1_peer_id = *swarm1.local_peer_id();
@@ -177,4 +250,42 @@ async fn discover_peer_after_disconnect() {
         .await;
 
     assert_eq!(connected_peer, swarm1_peer_id);
+}
+
+#[async_std::test]
+async fn configured_interval_starts_after_first_identify() {
+    let _ = env_logger::try_init();
+
+    let identify_interval = Duration::from_secs(5);
+
+    let mut swarm1 = Swarm::new_ephemeral(|identity| {
+        identify::Behaviour::new(
+            identify::Config::new("a".to_string(), identity.public())
+                .with_interval(identify_interval),
+        )
+    });
+    let mut swarm2 = Swarm::new_ephemeral(|identity| {
+        identify::Behaviour::new(
+            identify::Config::new("a".to_string(), identity.public())
+                .with_agent_version("b".to_string()),
+        )
+    });
+
+    swarm1.listen().with_memory_addr_external().await;
+    swarm2.connect(&mut swarm1).await;
+
+    async_std::task::spawn(swarm2.loop_on_next());
+
+    let start = Instant::now();
+
+    // Wait until we identified.
+    swarm1
+        .wait(|event| {
+            matches!(event, SwarmEvent::Behaviour(identify::Event::Sent { .. })).then_some(())
+        })
+        .await;
+
+    let time_to_first_identify = Instant::now().duration_since(start);
+
+    assert!(time_to_first_identify < identify_interval)
 }
