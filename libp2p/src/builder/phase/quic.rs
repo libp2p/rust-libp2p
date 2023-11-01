@@ -253,9 +253,9 @@ impl<Provider, T: AuthenticatedMultiplexedTransport> SwarmBuilder<Provider, Quic
         self,
     ) -> (
         SwarmBuilder<
-                Provider,
+            Provider,
             BandwidthMetricsPhase<impl AuthenticatedMultiplexedTransport, NoRelayBehaviour>,
-            >,
+        >,
         Arc<crate::bandwidth::BandwidthSinks>,
     ) {
         #[allow(deprecated)]
