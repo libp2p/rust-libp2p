@@ -24,7 +24,8 @@ impl<T: AuthenticatedMultiplexedTransport, Provider, R>
                 transport: libp2p_metrics::bandwidth::Transport::new(
                     self.phase.transport,
                     registry,
-                ),
+                )
+                .map(|(peer_id, conn), _| (peer_id, StreamMuxerBox::new(conn))),
             },
             keypair: self.keypair,
             phantom: PhantomData,

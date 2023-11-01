@@ -1,10 +1,11 @@
 use libp2p_core::{
-    muxing::{StreamMuxer, StreamMuxerBox, StreamMuxerEvent},
+    muxing::{StreamMuxer, StreamMuxerEvent},
     transport::{ListenerId, TransportError, TransportEvent},
     Multiaddr,
 };
 
 use futures::{
+    future::{MapOk, TryFutureExt},
     io::{IoSlice, IoSliceMut},
     prelude::*,
     ready,
@@ -65,10 +66,11 @@ where
     M::Substream: Send + 'static,
     M::Error: Send + Sync + 'static,
 {
-    type Output = (PeerId, StreamMuxerBox);
+    type Output = (PeerId, Muxer<M>);
     type Error = T::Error;
-    type ListenerUpgrade = MapFuture<T::ListenerUpgrade>;
-    type Dial = MapFuture<T::Dial>;
+    type ListenerUpgrade =
+        MapOk<T::ListenerUpgrade, Box<dyn FnOnce((PeerId, M)) -> (PeerId, Muxer<M>) + Send>>;
+    type Dial = MapOk<T::Dial, Box<dyn FnOnce((PeerId, M)) -> (PeerId, Muxer<M>) + Send>>;
 
     fn listen_on(
         &mut self,
@@ -83,26 +85,26 @@ where
     }
 
     fn dial(&mut self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
-        Ok(MapFuture {
-            metrics: Some(ConnectionMetrics::from_family_and_protocols(
-                &self.metrics,
-                as_string(&addr),
-            )),
-            inner: self.transport.dial(addr.clone())?,
-        })
+        let metrics = ConnectionMetrics::from_family_and_addr(&self.metrics, &addr);
+        Ok(self
+            .transport
+            .dial(addr.clone())?
+            .map_ok(Box::new(|(peer_id, stream_muxer)| {
+                (peer_id, Muxer::new(stream_muxer, metrics))
+            })))
     }
 
     fn dial_as_listener(
         &mut self,
         addr: Multiaddr,
     ) -> Result<Self::Dial, TransportError<Self::Error>> {
-        Ok(MapFuture {
-            metrics: Some(ConnectionMetrics::from_family_and_protocols(
-                &self.metrics,
-                as_string(&addr),
-            )),
-            inner: self.transport.dial_as_listener(addr.clone())?,
-        })
+        let metrics = ConnectionMetrics::from_family_and_addr(&self.metrics, &addr);
+        Ok(self
+            .transport
+            .dial_as_listener(addr.clone())?
+            .map_ok(Box::new(|(peer_id, stream_muxer)| {
+                (peer_id, Muxer::new(stream_muxer, metrics))
+            })))
     }
 
     fn address_translation(&self, server: &Multiaddr, observed: &Multiaddr) -> Option<Multiaddr> {
@@ -120,18 +122,18 @@ where
                 upgrade,
                 local_addr,
                 send_back_addr,
-            }) => Poll::Ready(TransportEvent::Incoming {
-                listener_id,
-                upgrade: MapFuture {
-                    metrics: Some(ConnectionMetrics::from_family_and_protocols(
-                        this.metrics,
-                        as_string(&send_back_addr),
-                    )),
-                    inner: upgrade,
-                },
-                local_addr,
-                send_back_addr,
-            }),
+            }) => {
+                let metrics =
+                    ConnectionMetrics::from_family_and_addr(&this.metrics, &send_back_addr);
+                Poll::Ready(TransportEvent::Incoming {
+                    listener_id,
+                    upgrade: upgrade.map_ok(Box::new(|(peer_id, stream_muxer)| {
+                        (peer_id, Muxer::new(stream_muxer, metrics))
+                    })),
+                    local_addr,
+                    send_back_addr,
+                })
+            }
             Poll::Ready(other) => {
                 let mapped = other.map_upgrade(|_upgrade| unreachable!("case already matched"));
                 Poll::Ready(mapped)
@@ -148,7 +150,9 @@ struct ConnectionMetrics {
 }
 
 impl ConnectionMetrics {
-    fn from_family_and_protocols(family: &Family<Labels, Counter>, protocols: String) -> Self {
+    fn from_family_and_addr(family: &Family<Labels, Counter>, protocols: &Multiaddr) -> Self {
+        let protocols = as_string(protocols);
+
         // Additional scope to make sure to drop the lock guard from `get_or_create`.
         let outbound = {
             let m = family.get_or_create(&Labels {
@@ -160,44 +164,12 @@ impl ConnectionMetrics {
         // Additional scope to make sure to drop the lock guard from `get_or_create`.
         let inbound = {
             let m = family.get_or_create(&Labels {
-                protocols: protocols.clone(),
+                protocols,
                 direction: Direction::Inbound,
             });
             m.clone()
         };
         ConnectionMetrics { outbound, inbound }
-    }
-}
-
-/// Map the resulting [`StreamMuxer`] of a connection upgrade with a [`Muxer`].
-#[pin_project::pin_project]
-#[derive(Clone, Debug)]
-pub struct MapFuture<T> {
-    #[pin]
-    inner: T,
-    metrics: Option<ConnectionMetrics>,
-}
-
-impl<T, M> Future for MapFuture<T>
-where
-    T: TryFuture<Ok = (PeerId, M)>,
-    M: StreamMuxer + Send + 'static,
-    M::Substream: Send + 'static,
-    M::Error: Send + Sync + 'static,
-{
-    type Output = Result<(PeerId, StreamMuxerBox), T::Error>;
-
-    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        let this = self.project();
-        let (peer_id, stream_muxer) = match TryFuture::try_poll(this.inner, cx) {
-            Poll::Pending => return Poll::Pending,
-            Poll::Ready(Ok(v)) => v,
-            Poll::Ready(Err(err)) => return Poll::Ready(Err(err)),
-        };
-        Poll::Ready(Ok((
-            peer_id,
-            StreamMuxerBox::new(Muxer::new(stream_muxer, this.metrics.take().expect("todo"))),
-        )))
     }
 }
 
