@@ -84,8 +84,8 @@ use libp2p_identity::PeerId;
 use libp2p_swarm::{
     behaviour::{AddressChange, ConnectionClosed, DialFailure, FromSwarm},
     dial_opts::DialOpts,
-    ConnectionDenied, ConnectionHandler, ConnectionId, NetworkBehaviour, NotifyHandler, THandler,
-    THandlerInEvent, THandlerOutEvent, ToSwarm,
+    ConnectionDenied, ConnectionHandler, ConnectionId, ListenFailure, NetworkBehaviour,
+    NotifyHandler, THandler, THandlerInEvent, THandlerOutEvent, ToSwarm,
 };
 use smallvec::SmallVec;
 use std::{
@@ -677,7 +677,34 @@ where
         }
     }
 
-    fn on_dial_failure(&mut self, DialFailure { peer_id, .. }: DialFailure) {
+    // Removes the connection if it exists.
+    fn remove_connection(&mut self, connection_id: ConnectionId, peer: Option<PeerId>) {
+        if let Some(peer) = peer {
+            if let Some(connections) = self.connected.get_mut(&peer) {
+                connections
+                    .iter()
+                    .position(|c| c.id == connection_id)
+                    .map(|p: usize| connections.remove(p));
+            }
+        } else {
+            // We don't know the peer id search all connections and remove it if found.
+            self.connected.iter_mut().for_each(|(_, connections)| {
+                connections
+                    .iter()
+                    .position(|c| c.id == connection_id)
+                    .map(|p: usize| connections.remove(p));
+            })
+        }
+    }
+
+    fn on_dial_failure(
+        &mut self,
+        DialFailure {
+            peer_id,
+            connection_id,
+            ..
+        }: DialFailure,
+    ) {
         if let Some(peer) = peer_id {
             // If there are pending outgoing requests when a dial failure occurs,
             // it is implied that we are not connected to the peer, since pending
@@ -696,6 +723,17 @@ where
                 }
             }
         }
+        // Its possible that this dial failure is for an existing connection.
+        // If so we need to remove the connection.
+        self.remove_connection(connection_id, peer_id);
+    }
+    fn on_listen_failure(&mut self, ListenFailure { connection_id, .. }: ListenFailure) {
+        // Its possible that this listen failure is for an existing connection.
+        // If so we need to remove the connection.
+        //
+        // TODO: Once  https://github.com/libp2p/rust-libp2p/pull/4818 merges we should pass in the
+        // peer_id so that we can be more efficent at finding and removing the connection.
+        self.remove_connection(connection_id, None);
     }
 
     /// Preloads a new [`Handler`] with requests that are waiting to be sent to the newly connected peer.
@@ -804,6 +842,7 @@ where
             }
             FromSwarm::AddressChange(address_change) => self.on_address_change(address_change),
             FromSwarm::DialFailure(dial_failure) => self.on_dial_failure(dial_failure),
+            FromSwarm::ListenFailure(listen_failure) => self.on_listen_failure(listen_failure),
             _ => {}
         }
     }
