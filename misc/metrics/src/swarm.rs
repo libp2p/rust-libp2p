@@ -23,7 +23,7 @@ use std::sync::{Arc, Mutex};
 
 use crate::protocol_stack;
 use instant::Instant;
-use libp2p_swarm::ConnectionId;
+use libp2p_swarm::{ConnectionId, SwarmEvent};
 use prometheus_client::encoding::{EncodeLabelSet, EncodeLabelValue};
 use prometheus_client::metrics::counter::Counter;
 use prometheus_client::metrics::family::Family;
@@ -40,6 +40,10 @@ pub(crate) struct Metrics {
 
     new_listen_addr: Family<AddressLabels, Counter>,
     expired_listen_addr: Family<AddressLabels, Counter>,
+
+    external_addr_candidates: Family<AddressLabels, Counter>,
+    external_addr_confirmed: Family<AddressLabels, Counter>,
+    external_addr_expired: Family<AddressLabels, Counter>,
 
     listener_closed: Family<AddressLabels, Counter>,
     listener_error: Counter,
@@ -80,6 +84,27 @@ impl Metrics {
             "expired_listen_addr",
             "Number of expired listen addresses",
             expired_listen_addr.clone(),
+        );
+
+        let external_addr_candidates = Family::default();
+        sub_registry.register(
+            "external_addr_candidates",
+            "Number of new external address candidates",
+            external_addr_candidates.clone(),
+        );
+
+        let external_addr_confirmed = Family::default();
+        sub_registry.register(
+            "external_addr_confirmed",
+            "Number of confirmed external addresses",
+            external_addr_confirmed.clone(),
+        );
+
+        let external_addr_expired = Family::default();
+        sub_registry.register(
+            "external_addr_expired",
+            "Number of expired external addresses",
+            external_addr_expired.clone(),
         );
 
         let listener_closed = Family::default();
@@ -146,6 +171,9 @@ impl Metrics {
             connections_established,
             new_listen_addr,
             expired_listen_addr,
+            external_addr_candidates,
+            external_addr_confirmed,
+            external_addr_expired,
             listener_closed,
             listener_error,
             dial_attempt,
@@ -295,6 +323,27 @@ impl<TBvEv, THandleErr> super::Recorder<libp2p_swarm::SwarmEvent<TBvEv, THandleE
             }
             libp2p_swarm::SwarmEvent::Dialing { .. } => {
                 self.dial_attempt.inc();
+            }
+            SwarmEvent::NewExternalAddrCandidate { address } => {
+                self.external_addr_candidates
+                    .get_or_create(&AddressLabels {
+                        protocols: protocol_stack::as_string(address),
+                    })
+                    .inc();
+            }
+            SwarmEvent::ExternalAddrConfirmed { address } => {
+                self.external_addr_confirmed
+                    .get_or_create(&AddressLabels {
+                        protocols: protocol_stack::as_string(address),
+                    })
+                    .inc();
+            }
+            SwarmEvent::ExternalAddrExpired { address } => {
+                self.external_addr_expired
+                    .get_or_create(&AddressLabels {
+                        protocols: protocol_stack::as_string(address),
+                    })
+                    .inc();
             }
         }
     }

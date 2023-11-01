@@ -21,6 +21,8 @@
 
 use crate::multiaddr_ext::MultiaddrExt;
 use crate::priv_client::Connection;
+use crate::protocol::outbound_hop;
+use crate::protocol::outbound_hop::{ConnectError, ReserveError};
 use crate::RequestId;
 use futures::channel::mpsc;
 use futures::channel::oneshot;
@@ -97,7 +99,7 @@ pub struct Transport {
 
 impl Transport {
     pub(crate) fn new() -> (Self, mpsc::Receiver<TransportToBehaviourMsg>) {
-        let (to_behaviour, from_transport) = mpsc::channel(0);
+        let (to_behaviour, from_transport) = mpsc::channel(1000);
         let transport = Transport {
             to_behaviour,
             pending_to_behaviour: VecDeque::new(),
@@ -189,7 +191,8 @@ impl libp2p_core::Transport for Transport {
                     send_back: tx,
                 })
                 .await?;
-            let stream = rx.await?.map_err(|()| Error::Connect)?;
+            let stream = rx.await??;
+
             Ok(stream)
         }
         .boxed())
@@ -381,7 +384,7 @@ impl Stream for Listener {
                         send_back_addr: Protocol::P2p(src_peer_id).into(),
                     })
                 }
-                ToListenerMsg::Reservation(Err(())) => self.close(Err(Error::Reservation)),
+                ToListenerMsg::Reservation(Err(e)) => self.close(Err(Error::Reservation(e))),
             };
         }
     }
@@ -409,9 +412,9 @@ pub enum Error {
     #[error("One of the provided multiaddresses is malformed.")]
     MalformedMultiaddr,
     #[error("Failed to get Reservation.")]
-    Reservation,
+    Reservation(#[from] ReserveError),
     #[error("Failed to connect to destination.")]
-    Connect,
+    Connect(#[from] ConnectError),
 }
 
 impl From<Error> for TransportError<Error> {
@@ -431,7 +434,7 @@ pub(crate) enum TransportToBehaviourMsg {
         relay_peer_id: PeerId,
         dst_addr: Option<Multiaddr>,
         dst_peer_id: PeerId,
-        send_back: oneshot::Sender<Result<Connection, ()>>,
+        send_back: oneshot::Sender<Result<Connection, outbound_hop::ConnectError>>,
     },
     /// Listen for incoming relayed connections via relay node.
     ListenReq {
@@ -443,7 +446,7 @@ pub(crate) enum TransportToBehaviourMsg {
 
 #[allow(clippy::large_enum_variant)]
 pub enum ToListenerMsg {
-    Reservation(Result<Reservation, ()>),
+    Reservation(Result<Reservation, ReserveError>),
     IncomingRelayedConnection {
         stream: Connection,
         src_peer_id: PeerId,
