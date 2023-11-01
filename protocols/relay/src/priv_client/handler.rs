@@ -21,7 +21,6 @@
 use crate::priv_client::transport;
 use crate::protocol::{self, inbound_stop, outbound_hop};
 use crate::{priv_client, proto, HOP_PROTOCOL_NAME, STOP_PROTOCOL_NAME};
-use either::Either;
 use futures::channel::{mpsc, oneshot};
 use futures::future::FutureExt;
 use futures_timer::Delay;
@@ -231,9 +230,7 @@ impl Handler {
 impl ConnectionHandler for Handler {
     type FromBehaviour = In;
     type ToBehaviour = Event;
-    type Error = StreamUpgradeError<
-        Either<inbound_stop::ProtocolViolation, outbound_hop::ProtocolViolation>,
-    >;
+    type Error = void::Void;
     type InboundProtocol = ReadyUpgrade<StreamProtocol>;
     type InboundOpenInfo = ();
     type OutboundProtocol = ReadyUpgrade<StreamProtocol>;

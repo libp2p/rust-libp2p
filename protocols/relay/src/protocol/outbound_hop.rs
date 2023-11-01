@@ -80,14 +80,10 @@ pub enum ProtocolViolation {
     InvalidReservationExpiration,
     #[error("Invalid addresses in reservation.")]
     InvalidReservationAddrs,
-    #[error("Failed to parse response type field.")]
-    ParseTypeField,
     #[error("Unexpected message type 'connect'")]
     UnexpectedTypeConnect,
     #[error("Unexpected message type 'reserve'")]
     UnexpectedTypeReserve,
-    #[error("Failed to parse response type field.")]
-    ParseStatusField,
     #[error("Unexpected message status '{0:?}'")]
     UnexpectedStatus(proto::Status),
 }
