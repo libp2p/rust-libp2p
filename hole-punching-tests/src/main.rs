@@ -111,12 +111,10 @@ async fn main() -> Result<()> {
                     .await?;
             }
             (
-                SwarmEvent::Behaviour(BehaviourEvent::Dcutr(
-                    dcutr::Event::DirectConnectionUpgradeSucceeded {
-                        remote_peer_id,
-                        connection_id,
-                    },
-                )),
+                SwarmEvent::Behaviour(BehaviourEvent::Dcutr(dcutr::Event {
+                    remote_peer_id,
+                    result: Ok(connection_id),
+                })),
                 _,
                 _,
             ) => {
@@ -138,13 +136,11 @@ async fn main() -> Result<()> {
                 return Ok(());
             }
             (
-                SwarmEvent::Behaviour(BehaviourEvent::Dcutr(
-                    dcutr::Event::DirectConnectionUpgradeFailed {
-                        remote_peer_id,
-                        error,
-                        ..
-                    },
-                )),
+                SwarmEvent::Behaviour(BehaviourEvent::Dcutr(dcutr::Event {
+                    remote_peer_id,
+                    result: Err(error),
+                    ..
+                })),
                 _,
                 _,
             ) => {

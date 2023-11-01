@@ -2502,6 +2502,7 @@ dependencies = [
  "either",
  "env_logger 0.10.0",
  "futures",
+ "futures-bounded",
  "futures-timer",
  "instant",
  "libp2p-core",

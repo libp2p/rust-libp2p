@@ -20,7 +20,7 @@
 
 //! [`NetworkBehaviour`] to act as a direct connection upgrade through relay node.
 
-use crate::handler;
+use crate::{handler, protocol};
 use either::Either;
 use libp2p_core::connection::ConnectedPoint;
 use libp2p_core::multiaddr::Protocol;
@@ -32,7 +32,7 @@ use libp2p_swarm::{
     dummy, ConnectionDenied, ConnectionHandler, ConnectionId, NewExternalAddrCandidate, THandler,
     THandlerOutEvent,
 };
-use libp2p_swarm::{NetworkBehaviour, NotifyHandler, StreamUpgradeError, THandlerInEvent, ToSwarm};
+use libp2p_swarm::{NetworkBehaviour, NotifyHandler, THandlerInEvent, ToSwarm};
 use lru::LruCache;
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::num::NonZeroUsize;
@@ -44,32 +44,25 @@ pub(crate) const MAX_NUMBER_OF_UPGRADE_ATTEMPTS: u8 = 3;
 
 /// The events produced by the [`Behaviour`].
 #[derive(Debug)]
-pub enum Event {
-    InitiatedDirectConnectionUpgrade {
-        remote_peer_id: PeerId,
-        local_relayed_addr: Multiaddr,
-    },
-    RemoteInitiatedDirectConnectionUpgrade {
-        remote_peer_id: PeerId,
-        remote_relayed_addr: Multiaddr,
-    },
-    DirectConnectionUpgradeSucceeded {
-        remote_peer_id: PeerId,
-        connection_id: ConnectionId,
-    },
-    DirectConnectionUpgradeFailed {
-        remote_peer_id: PeerId,
-        connection_id: ConnectionId,
-        error: Error,
-    },
+pub struct Event {
+    pub remote_peer_id: PeerId,
+    pub result: Result<ConnectionId, Error>,
 }
 
 #[derive(Debug, Error)]
-pub enum Error {
-    #[error("Failed to dial peer.")]
-    Dial,
-    #[error("Failed to establish substream: {0}.")]
-    Handler(StreamUpgradeError<Void>),
+#[error("Failed to hole-punch connection: {inner}")]
+pub struct Error {
+    inner: InnerError,
+}
+
+#[derive(Debug, Error)]
+enum InnerError {
+    #[error("Giving up after {0} dial attempts")]
+    AttemptsExceeded(u8),
+    #[error("Inbound stream error: {0}")]
+    InboundError(protocol::inbound::Error),
+    #[error("Outbound stream error: {0}")]
+    OutboundError(protocol::outbound::Error),
 }
 
 pub struct Behaviour {
@@ -142,13 +135,12 @@ impl Behaviour {
                 event: Either::Left(handler::relayed::Command::Connect),
             })
         } else {
-            self.queued_events.extend([ToSwarm::GenerateEvent(
-                Event::DirectConnectionUpgradeFailed {
-                    remote_peer_id: peer_id,
-                    connection_id: failed_direct_connection,
-                    error: Error::Dial,
-                },
-            )]);
+            self.queued_events.extend([ToSwarm::GenerateEvent(Event {
+                remote_peer_id: peer_id,
+                result: Err(Error {
+                    inner: InnerError::AttemptsExceeded(MAX_NUMBER_OF_UPGRADE_ATTEMPTS),
+                }),
+            })]);
         }
     }
 
@@ -196,13 +188,6 @@ impl NetworkBehaviour for Behaviour {
             let mut handler =
                 handler::relayed::Handler::new(connected_point, self.observed_addresses());
             handler.on_behaviour_event(handler::relayed::Command::Connect);
-
-            self.queued_events.extend([ToSwarm::GenerateEvent(
-                Event::InitiatedDirectConnectionUpgrade {
-                    remote_peer_id: peer,
-                    local_relayed_addr: local_addr.clone(),
-                },
-            )]);
 
             return Ok(Either::Left(handler)); // TODO: We could make two `handler::relayed::Handler` here, one inbound one outbound.
         }
@@ -255,12 +240,10 @@ impl NetworkBehaviour for Behaviour {
                 );
             }
 
-            self.queued_events.extend([ToSwarm::GenerateEvent(
-                Event::DirectConnectionUpgradeSucceeded {
-                    remote_peer_id: peer,
-                    connection_id,
-                },
-            )]);
+            self.queued_events.extend([ToSwarm::GenerateEvent(Event {
+                remote_peer_id: peer,
+                result: Ok(connection_id),
+            })]);
         }
 
         Ok(Either::Right(dummy::ConnectionHandler))
@@ -284,15 +267,7 @@ impl NetworkBehaviour for Behaviour {
         };
 
         match handler_event {
-            Either::Left(handler::relayed::Event::InboundConnectRequest { remote_addr }) => {
-                self.queued_events.extend([ToSwarm::GenerateEvent(
-                    Event::RemoteInitiatedDirectConnectionUpgrade {
-                        remote_peer_id: event_source,
-                        remote_relayed_addr: remote_addr,
-                    },
-                )]);
-            }
-            Either::Left(handler::relayed::Event::InboundConnectNegotiated(remote_addrs)) => {
+            Either::Left(handler::relayed::Event::InboundConnectNegotiated { remote_addrs }) => {
                 log::debug!(
                     "Attempting to hole-punch as dialer to {event_source} using {remote_addrs:?}"
                 );
@@ -308,14 +283,23 @@ impl NetworkBehaviour for Behaviour {
                     .insert(maybe_direct_connection_id, relayed_connection_id);
                 self.queued_events.push_back(ToSwarm::Dial { opts });
             }
-            Either::Left(handler::relayed::Event::OutboundNegotiationFailed { error }) => {
-                self.queued_events.push_back(ToSwarm::GenerateEvent(
-                    Event::DirectConnectionUpgradeFailed {
-                        remote_peer_id: event_source,
-                        connection_id: relayed_connection_id,
-                        error: Error::Handler(error),
-                    },
-                ));
+            Either::Left(handler::relayed::Event::InboundConnectFailed { error }) => {
+                self.queued_events.push_back(ToSwarm::GenerateEvent(Event {
+                    remote_peer_id: event_source,
+                    result: Err(Error {
+                        inner: InnerError::InboundError(error),
+                    }),
+                }));
+            }
+            Either::Left(handler::relayed::Event::OutboundConnectFailed { error }) => {
+                self.queued_events.push_back(ToSwarm::GenerateEvent(Event {
+                    remote_peer_id: event_source,
+                    result: Err(Error {
+                        inner: InnerError::OutboundError(error),
+                    }),
+                }));
+
+                // Maybe treat these as transient and retry?
             }
             Either::Left(handler::relayed::Event::OutboundConnectNegotiated { remote_addrs }) => {
                 log::debug!(
