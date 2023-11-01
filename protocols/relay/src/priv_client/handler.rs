@@ -317,6 +317,7 @@ impl ConnectionHandler for Handler {
         self.reservation.is_some()
     }
 
+    #[tracing::instrument(level = "trace", name = "ConnectionHandler::poll", skip(self, cx))]
     fn poll(
         &mut self,
         cx: &mut Context<'_>,

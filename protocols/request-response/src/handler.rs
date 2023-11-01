@@ -386,6 +386,7 @@ where
         self.pending_outbound.push_back(request);
     }
 
+    #[tracing::instrument(level = "trace", name = "ConnectionHandler::poll", skip(self, cx))]
     fn poll(
         &mut self,
         cx: &mut Context<'_>,

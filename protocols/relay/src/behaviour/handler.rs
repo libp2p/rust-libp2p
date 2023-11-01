@@ -603,6 +603,7 @@ impl ConnectionHandler for Handler {
         Instant::now().duration_since(idle_at) <= Duration::from_secs(10)
     }
 
+    #[tracing::instrument(level = "trace", name = "ConnectionHandler::poll", skip(self, cx))]
     fn poll(
         &mut self,
         cx: &mut Context<'_>,
