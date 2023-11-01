@@ -6,8 +6,11 @@
   See [PR 4642](https://github.com/libp2p/rust-libp2p/pull/4642).
 - Return typed error from config builder.
   See [PR 4445].
+- Process outbound stream before inbound stream in `EnabledHandler::poll(..)`.
+  See [PR 4778].
 
 [PR 4445]: https://github.com/libp2p/rust-libp2p/pull/4445
+[PR 4778]: https://github.com/libp2p/rust-libp2p/pull/4778
 
 ## 0.45.2
 
