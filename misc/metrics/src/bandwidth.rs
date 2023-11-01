@@ -1,14 +1,14 @@
-use libp2p_core::{
-    muxing::{StreamMuxer, StreamMuxerEvent},
-    transport::{ListenerId, TransportError, TransportEvent},
-    Multiaddr,
-};
-
+use crate::protocol_stack;
 use futures::{
     future::{MapOk, TryFutureExt},
     io::{IoSlice, IoSliceMut},
     prelude::*,
     ready,
+};
+use libp2p_core::{
+    muxing::{StreamMuxer, StreamMuxerEvent},
+    transport::{ListenerId, TransportError, TransportEvent},
+    Multiaddr,
 };
 use libp2p_identity::PeerId;
 use prometheus_client::{
@@ -151,7 +151,7 @@ struct ConnectionMetrics {
 
 impl ConnectionMetrics {
     fn from_family_and_addr(family: &Family<Labels, Counter>, protocols: &Multiaddr) -> Self {
-        let protocols = as_string(protocols);
+        let protocols = protocol_stack::as_string(protocols);
 
         // Additional scope to make sure to drop the lock guard from `get_or_create`.
         let outbound = {
@@ -309,17 +309,4 @@ impl<SMInner: AsyncWrite> AsyncWrite for InstrumentedStream<SMInner> {
         let this = self.project();
         this.inner.poll_close(cx)
     }
-}
-
-// TODO: rename
-fn as_string(ma: &Multiaddr) -> String {
-    let len = ma
-        .protocol_stack()
-        .fold(0, |acc, proto| acc + proto.len() + 1);
-    let mut protocols = String::with_capacity(len);
-    for proto_tag in ma.protocol_stack() {
-        protocols.push('/');
-        protocols.push_str(proto_tag);
-    }
-    protocols
 }
