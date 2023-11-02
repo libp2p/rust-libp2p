@@ -47,7 +47,6 @@ use libp2p_swarm::{
     ListenAddresses, NetworkBehaviour, NotifyHandler, StreamProtocol, THandler, THandlerInEvent,
     THandlerOutEvent, ToSwarm,
 };
-use log::{debug, info, warn};
 use smallvec::SmallVec;
 use std::collections::{BTreeMap, HashMap, HashSet, VecDeque};
 use std::fmt;
@@ -56,6 +55,7 @@ use std::task::{Context, Poll, Waker};
 use std::time::Duration;
 use std::vec;
 use thiserror::Error;
+use tracing::Level;
 
 pub use crate::query::QueryStats;
 
@@ -561,7 +561,7 @@ where
                         RoutingUpdate::Success
                     }
                     kbucket::InsertResult::Full => {
-                        debug!("Bucket full. Peer not added to routing table: {}", peer);
+                        tracing::debug!(%peer, "Bucket full. Peer not added to routing table");
                         RoutingUpdate::Failed
                     }
                     kbucket::InsertResult::Pending { disconnected } => {
@@ -1012,7 +1012,7 @@ where
 
         let num_connections = self.connections.len();
 
-        log::debug!(
+        tracing::debug!(
             "Re-configuring {} established connection{}",
             num_connections,
             if num_connections > 1 { "s" } else { "" }
@@ -1037,7 +1037,7 @@ where
 
         self.mode = match (self.external_addresses.as_slice(), self.mode) {
             ([], Mode::Server) => {
-                log::debug!("Switching to client-mode because we no longer have any confirmed external addresses");
+                tracing::debug!("Switching to client-mode because we no longer have any confirmed external addresses");
 
                 Mode::Client
             }
@@ -1047,11 +1047,11 @@ where
                 Mode::Client
             }
             (confirmed_external_addresses, Mode::Client) => {
-                if log::log_enabled!(log::Level::Debug) {
+                if tracing::enabled!(Level::DEBUG) {
                     let confirmed_external_addresses =
                         to_comma_separated_list(confirmed_external_addresses);
 
-                    log::debug!("Switching to server-mode assuming that one of [{confirmed_external_addresses}] is externally reachable");
+                    tracing::debug!("Switching to server-mode assuming that one of [{confirmed_external_addresses}] is externally reachable");
                 }
 
                 Mode::Server
@@ -1086,13 +1086,13 @@ where
         let local_id = self.kbuckets.local_key().preimage();
         let others_iter = peers.filter(|p| &p.node_id != local_id);
         if let Some(query) = self.queries.get_mut(query_id) {
-            log::trace!("Request to {:?} in query {:?} succeeded.", source, query_id);
+            tracing::trace!(peer=%source, query=?query_id, "Request to peer in query succeeded");
             for peer in others_iter.clone() {
-                log::trace!(
-                    "Peer {:?} reported by {:?} in query {:?}.",
-                    peer,
-                    source,
-                    query_id
+                tracing::trace!(
+                    ?peer,
+                    %source,
+                    query=?query_id,
+                    "Peer reported by source in query"
                 );
                 let addrs = peer.multiaddrs.iter().cloned().collect();
                 query.inner.addresses.insert(peer.node_id, addrs);
@@ -1282,7 +1282,10 @@ where
                                 self.queued_events.push_back(ToSwarm::GenerateEvent(event));
                             }
                             kbucket::InsertResult::Full => {
-                                debug!("Bucket full. Peer not added to routing table: {}", peer);
+                                tracing::debug!(
+                                    %peer,
+                                    "Bucket full. Peer not added to routing table"
+                                );
                                 let address = addresses.first().clone();
                                 self.queued_events.push_back(ToSwarm::GenerateEvent(
                                     Event::RoutablePeer { peer, address },
@@ -1319,7 +1322,7 @@ where
     /// Handles a finished (i.e. successful) query.
     fn query_finished(&mut self, q: Query<QueryInner>) -> Option<Event> {
         let query_id = q.id();
-        log::trace!("Query {:?} finished.", query_id);
+        tracing::trace!(query=?query_id, "Query finished");
         let result = q.into_result();
         match result.inner.info {
             QueryInfo::Bootstrap {
@@ -1546,7 +1549,7 @@ where
                         step: ProgressStep::first_and_last(),
                     }),
                     PutRecordContext::Replicate => {
-                        debug!("Record replicated: {:?}", record.key);
+                        tracing::debug!(record=?record.key, "Record replicated");
                         None
                     }
                 }
@@ -1557,7 +1560,7 @@ where
     /// Handles a query that timed out.
     fn query_timeout(&mut self, query: Query<QueryInner>) -> Option<Event> {
         let query_id = query.id();
-        log::trace!("Query {:?} timed out.", query_id);
+        tracing::trace!(query=?query_id, "Query timed out");
         let result = query.into_result();
         match result.inner.info {
             QueryInfo::Bootstrap {
@@ -1655,11 +1658,14 @@ where
                     }),
                     PutRecordContext::Replicate => match phase {
                         PutRecordPhase::GetClosestPeers => {
-                            warn!("Locating closest peers for replication failed: {:?}", err);
+                            tracing::warn!(
+                                "Locating closest peers for replication failed: {:?}",
+                                err
+                            );
                             None
                         }
                         PutRecordPhase::PutRecord { .. } => {
-                            debug!("Replicating record failed: {:?}", err);
+                            tracing::debug!("Replicating record failed: {:?}", err);
                             None
                         }
                     },
@@ -1759,9 +1765,9 @@ where
             match self.record_filtering {
                 StoreInserts::Unfiltered => match self.store.put(record.clone()) {
                     Ok(()) => {
-                        debug!(
-                            "Record stored: {:?}; {} bytes",
-                            record.key,
+                        tracing::debug!(
+                            record=?record.key,
+                            "Record stored: {} bytes",
                             record.value.len()
                         );
                         self.queued_events.push_back(ToSwarm::GenerateEvent(
@@ -1775,7 +1781,7 @@ where
                         ));
                     }
                     Err(e) => {
-                        info!("Record not stored: {:?}", e);
+                        tracing::info!("Record not stored: {:?}", e);
                         self.queued_events.push_back(ToSwarm::NotifyHandler {
                             peer_id: source,
                             handler: NotifyHandler::One(connection),
@@ -1828,7 +1834,7 @@ where
             match self.record_filtering {
                 StoreInserts::Unfiltered => {
                     if let Err(e) = self.store.add_provider(record) {
-                        info!("Provider record not stored: {:?}", e);
+                        tracing::info!("Provider record not stored: {:?}", e);
                         return;
                     }
 
@@ -1859,9 +1865,10 @@ where
             // of the error is not possible (and also not truly desirable or ergonomic).
             // The error passed in should rather be a dedicated enum.
             if addrs.remove(address).is_ok() {
-                debug!(
-                    "Address '{}' removed from peer '{}' due to error.",
-                    address, peer_id
+                tracing::debug!(
+                    peer=%peer_id,
+                    %address,
+                    "Address removed from peer due to error."
                 );
             } else {
                 // Despite apparently having no reachable address (any longer),
@@ -1873,10 +1880,11 @@ where
                 // into the same bucket. This is handled transparently by the
                 // `KBucketsTable` and takes effect through `KBucketsTable::take_applied_pending`
                 // within `Behaviour::poll`.
-                debug!(
-                    "Last remaining address '{}' of peer '{}' is unreachable.",
-                    address, peer_id,
-                )
+                tracing::debug!(
+                    peer=%peer_id,
+                    %address,
+                    "Last remaining address of peer is unreachable."
+                );
             }
         }
 
@@ -1920,22 +1928,27 @@ where
         // Update routing table.
         if let Some(addrs) = self.kbuckets.entry(&kbucket::Key::from(peer)).value() {
             if addrs.replace(old, new) {
-                debug!(
-                    "Address '{}' replaced with '{}' for peer '{}'.",
-                    old, new, peer
+                tracing::debug!(
+                    %peer,
+                    old_address=%old,
+                    new_address=%new,
+                    "Old address replaced with new address for peer."
                 );
             } else {
-                debug!(
-                    "Address '{}' not replaced with '{}' for peer '{}' as old address wasn't \
-                     present.",
-                    old, new, peer
+                tracing::debug!(
+                    %peer,
+                    old_address=%old,
+                    new_address=%new,
+                    "Old address not replaced with new address for peer as old address wasn't present.",
                 );
             }
         } else {
-            debug!(
-                "Address '{}' not replaced with '{}' for peer '{}' as peer is not present in the \
-                 routing table.",
-                old, new, peer
+            tracing::debug!(
+                %peer,
+                old_address=%old,
+                new_address=%new,
+                "Old address not replaced with new address for peer as peer is not present in the \
+                 routing table."
             );
         }
 
@@ -2073,7 +2086,6 @@ where
             connected_point,
             peer,
             self.mode,
-            connection_id,
         );
         self.preload_new_handler(&mut handler, connection_id, peer);
 
@@ -2097,7 +2109,6 @@ where
             connected_point,
             peer,
             self.mode,
-            connection_id,
         );
         self.preload_new_handler(&mut handler, connection_id, peer);
 
@@ -2253,12 +2264,11 @@ where
                     }
                 }
             }
-
             HandlerEvent::QueryError { query_id, error } => {
-                log::debug!(
-                    "Request to {:?} in query {:?} failed with {:?}",
-                    source,
-                    query_id,
+                tracing::debug!(
+                    peer=%source,
+                    query=?query_id,
+                    "Request to peer in query failed with {:?}",
                     error
                 );
                 // If the query to which the error relates is still active,
@@ -2346,7 +2356,7 @@ where
 
                             *step = step.next();
                         } else {
-                            log::trace!("Record with key {:?} not found at {}", key, source);
+                            tracing::trace!(record=?key, %source, "Record not found at source");
                             if let Caching::Enabled { max_peers } = self.caching {
                                 let source_key = kbucket::Key::from(source);
                                 let target_key = kbucket::Key::from(key.clone());
@@ -2387,13 +2397,13 @@ where
                             let peers = success.clone();
                             let finished = query.try_finish(peers.iter());
                             if !finished {
-                                debug!(
-                                    "PutRecord query ({:?}) reached quorum ({}/{}) with response \
-                                     from peer {} but could not yet finish.",
-                                    query_id,
+                                tracing::debug!(
+                                    peer=%source,
+                                    query=?query_id,
+                                    "PutRecord query reached quorum ({}/{}) with response \
+                                     from peer but could not yet finish.",
                                     peers.len(),
                                     quorum,
-                                    source,
                                 );
                             }
                         }
@@ -2403,6 +2413,7 @@ where
         };
     }
 
+    #[tracing::instrument(level = "trace", name = "ConnectionHandler::poll", skip(self, cx))]
     fn poll(
         &mut self,
         cx: &mut Context<'_>,
@@ -2543,15 +2554,7 @@ where
             }
             FromSwarm::DialFailure(dial_failure) => self.on_dial_failure(dial_failure),
             FromSwarm::AddressChange(address_change) => self.on_address_change(address_change),
-            FromSwarm::ExpiredListenAddr(_)
-            | FromSwarm::NewExternalAddrCandidate(_)
-            | FromSwarm::NewListenAddr(_)
-            | FromSwarm::ListenFailure(_)
-            | FromSwarm::NewListener(_)
-            | FromSwarm::ListenerClosed(_)
-            | FromSwarm::ListenerError(_)
-            | FromSwarm::ExternalAddrExpired(_)
-            | FromSwarm::ExternalAddrConfirmed(_) => {}
+            _ => {}
         }
     }
 }

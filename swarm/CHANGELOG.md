@@ -1,5 +1,7 @@
 ## 0.44.0 - unreleased
 
+- Add `#[non_exhaustive]` to `FromSwarm`, `ToSwarm`, `SwarmEvent`, `ConnectionHandlerEvent`, `ConnectionEvent`.
+  See [PR 4581](https://github.com/libp2p/rust-libp2p/pull/4581).
 - Remove `handler` field from `ConnectionClosed`.
   If you need to transfer state from a `ConnectionHandler` to its `NetworkBehaviour` when a connection closes, use `ConnectionHandler::poll_close`.
   See [PR 4076](https://github.com/libp2p/rust-libp2p/pull/4076).

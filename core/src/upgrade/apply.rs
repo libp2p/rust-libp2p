@@ -21,7 +21,6 @@
 use crate::upgrade::{InboundConnectionUpgrade, OutboundConnectionUpgrade, UpgradeError};
 use crate::{connection::ConnectedPoint, Negotiated};
 use futures::{future::Either, prelude::*};
-use log::debug;
 use multistream_select::{self, DialerSelectFuture, ListenerSelectFuture};
 use std::{mem, pin::Pin, task::Context, task::Poll};
 
@@ -141,11 +140,11 @@ where
                             return Poll::Pending;
                         }
                         Poll::Ready(Ok(x)) => {
-                            log::trace!("Upgraded inbound stream to {name}");
+                            tracing::trace!(upgrade=%name, "Upgraded inbound stream");
                             return Poll::Ready(Ok(x));
                         }
                         Poll::Ready(Err(e)) => {
-                            debug!("Failed to upgrade inbound stream to {name}");
+                            tracing::debug!(upgrade=%name, "Failed to upgrade inbound stream");
                             return Poll::Ready(Err(UpgradeError::Apply(e)));
                         }
                     }
@@ -223,11 +222,11 @@ where
                             return Poll::Pending;
                         }
                         Poll::Ready(Ok(x)) => {
-                            log::trace!("Upgraded outbound stream to {name}",);
+                            tracing::trace!(upgrade=%name, "Upgraded outbound stream");
                             return Poll::Ready(Ok(x));
                         }
                         Poll::Ready(Err(e)) => {
-                            debug!("Failed to upgrade outbound stream to {name}",);
+                            tracing::debug!(upgrade=%name, "Failed to upgrade outbound stream",);
                             return Poll::Ready(Err(UpgradeError::Apply(e)));
                         }
                     }

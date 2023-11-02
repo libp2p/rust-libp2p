@@ -110,7 +110,7 @@ impl Handler {
                     ))
                     .is_err()
                 {
-                    log::warn!(
+                    tracing::warn!(
                         "New inbound connect stream while still upgrading previous one. Replacing previous with new.",
                     );
                 }
@@ -142,7 +142,7 @@ impl Handler {
             ))
             .is_err()
         {
-            log::warn!(
+            tracing::warn!(
                 "New outbound connect stream while still upgrading previous one. Replacing previous with new.",
             );
         }
@@ -224,6 +224,7 @@ impl ConnectionHandler for Handler {
         false
     }
 
+    #[tracing::instrument(level = "trace", name = "ConnectionHandler::poll", skip(self, cx))]
     fn poll(
         &mut self,
         cx: &mut Context<'_>,
@@ -311,9 +312,7 @@ impl ConnectionHandler for Handler {
             ConnectionEvent::DialUpgradeError(dial_upgrade_error) => {
                 self.on_dial_upgrade_error(dial_upgrade_error)
             }
-            ConnectionEvent::AddressChange(_)
-            | ConnectionEvent::LocalProtocolsChange(_)
-            | ConnectionEvent::RemoteProtocolsChange(_) => {}
+            _ => {}
         }
     }
 }

@@ -121,17 +121,7 @@ impl NetworkBehaviour for Behaviour {
                     assert!(self.connected.remove(&peer_id));
                 }
             }
-            FromSwarm::AddressChange(_)
-            | FromSwarm::DialFailure(_)
-            | FromSwarm::ListenFailure(_)
-            | FromSwarm::NewListener(_)
-            | FromSwarm::NewListenAddr(_)
-            | FromSwarm::ExpiredListenAddr(_)
-            | FromSwarm::ListenerError(_)
-            | FromSwarm::ListenerClosed(_)
-            | FromSwarm::NewExternalAddrCandidate(_)
-            | FromSwarm::ExternalAddrExpired(_)
-            | FromSwarm::ExternalAddrConfirmed(_) => {}
+            _ => {}
         }
     }
 
@@ -145,6 +135,7 @@ impl NetworkBehaviour for Behaviour {
             .push_back(ToSwarm::GenerateEvent(Event { id, result }));
     }
 
+    #[tracing::instrument(level = "trace", name = "ConnectionHandler::poll", skip(self, _cx))]
     fn poll(
         &mut self,
         _cx: &mut Context<'_>,

@@ -232,7 +232,7 @@ impl NetworkBehaviour for Behaviour {
             let registered = self.registered_namespaces.clone();
             for ((rz_node, ns), ttl) in registered {
                 if let Err(e) = self.register(ns, rz_node, Some(ttl)) {
-                    log::warn!("refreshing registration failed: {e}")
+                    tracing::warn!("refreshing registration failed: {e}")
                 }
             }
         }
@@ -280,16 +280,7 @@ impl NetworkBehaviour for Behaviour {
                 )) => {
                     unreachable!("rendezvous clients never receive requests")
                 }
-                Poll::Ready(
-                    other @ (ToSwarm::ExternalAddrConfirmed(_)
-                    | ToSwarm::ExternalAddrExpired(_)
-                    | ToSwarm::NewExternalAddrCandidate(_)
-                    | ToSwarm::NotifyHandler { .. }
-                    | ToSwarm::Dial { .. }
-                    | ToSwarm::CloseConnection { .. }
-                    | ToSwarm::ListenOn { .. }
-                    | ToSwarm::RemoveListener { .. }),
-                ) => {
+                Poll::Ready(other) => {
                     let new_to_swarm =
                         other.map_out(|_| unreachable!("we manually map `GenerateEvent` variants"));
 

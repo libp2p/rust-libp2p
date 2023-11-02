@@ -16,16 +16,16 @@ bytes = "1"
 futures = "0.3.29"
 libp2p-core = { workspace = true }
 libp2p-identity = { workspace = true }
-log = "0.4.20"
 quick-protobuf = "0.8"
+tracing = "0.1.37"
 quick-protobuf-codec = { workspace = true }
 
 [dev-dependencies]
-env_logger = "0.10.0"
 libp2p-identity = { workspace = true, features = ["ed25519", "rand"] }
 quickcheck = { workspace = true }
 rand = "0.8"
 futures_ringbuf = "0.4.0"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 
 # Passing arguments to the docsrs builder in order to properly document cfg's. 
 # More information: https://docs.rs/about/builds#cross-compiling

@@ -25,7 +25,6 @@ use libp2p_core::{multiaddr, Multiaddr};
 use libp2p_identity as identity;
 use libp2p_identity::PublicKey;
 use libp2p_swarm::StreamProtocol;
-use log::{debug, trace};
 use std::convert::TryFrom;
 use std::io;
 use thiserror::Error;
@@ -94,7 +93,7 @@ pub(crate) async fn send_identify<T>(io: T, info: Info) -> Result<Info, UpgradeE
 where
     T: AsyncWrite + Unpin,
 {
-    trace!("Sending: {:?}", info);
+    tracing::trace!("Sending: {:?}", info);
 
     let listen_addrs = info.listen_addrs.iter().map(|addr| addr.to_vec()).collect();
 
@@ -126,7 +125,7 @@ where
 {
     let info = recv(socket).await?.try_into()?;
 
-    trace!("Received {:?}", info);
+    tracing::trace!(?info, "Received");
 
     Ok(info)
 }
@@ -137,7 +136,7 @@ where
 {
     let info = recv(socket).await?.try_into()?;
 
-    trace!("Received {:?}", info);
+    tracing::trace!(?info, "Received");
 
     Ok(info)
 }
@@ -168,7 +167,7 @@ fn parse_listen_addrs(listen_addrs: Vec<Vec<u8>>) -> Vec<Multiaddr> {
         .filter_map(|bytes| match Multiaddr::try_from(bytes) {
             Ok(a) => Some(a),
             Err(e) => {
-                debug!("Unable to parse multiaddr: {e:?}");
+                tracing::debug!("Unable to parse multiaddr: {e:?}");
                 None
             }
         })
@@ -181,7 +180,7 @@ fn parse_protocols(protocols: Vec<String>) -> Vec<StreamProtocol> {
         .filter_map(|p| match StreamProtocol::try_from_owned(p) {
             Ok(p) => Some(p),
             Err(e) => {
-                debug!("Received invalid protocol from peer: {e}");
+                tracing::debug!("Received invalid protocol from peer: {e}");
                 None
             }
         })
@@ -192,7 +191,7 @@ fn parse_public_key(public_key: Option<Vec<u8>>) -> Option<PublicKey> {
     public_key.and_then(|key| match PublicKey::try_decode_protobuf(&key) {
         Ok(k) => Some(k),
         Err(e) => {
-            debug!("Unable to decode public key: {e:?}");
+            tracing::debug!("Unable to decode public key: {e:?}");
             None
         }
     })
@@ -202,7 +201,7 @@ fn parse_observed_addr(observed_addr: Option<Vec<u8>>) -> Option<Multiaddr> {
     observed_addr.and_then(|bytes| match Multiaddr::try_from(bytes) {
         Ok(a) => Some(a),
         Err(e) => {
-            debug!("Unable to parse observed multiaddr: {e:?}");
+            tracing::debug!("Unable to parse observed multiaddr: {e:?}");
             None
         }
     })

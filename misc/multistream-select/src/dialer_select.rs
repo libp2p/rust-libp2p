@@ -131,7 +131,7 @@ where
                     if let Err(err) = Pin::new(&mut io).start_send(Message::Protocol(p.clone())) {
                         return Poll::Ready(Err(From::from(err)));
                     }
-                    log::debug!("Dialer: Proposed protocol: {}", p);
+                    tracing::debug!(protocol=%p, "Dialer: Proposed protocol");
 
                     if this.protocols.peek().is_some() {
                         *this.state = State::FlushProtocol { io, protocol }
@@ -143,7 +143,7 @@ where
                             // the dialer supports for this negotiation. Notably,
                             // the dialer expects a regular `V1` response.
                             Version::V1Lazy => {
-                                log::debug!("Dialer: Expecting proposed protocol: {}", p);
+                                tracing::debug!(protocol=%p, "Dialer: Expecting proposed protocol");
                                 let hl = HeaderLine::from(Version::V1Lazy);
                                 let io = Negotiated::expecting(io.into_reader(), p, Some(hl));
                                 return Poll::Ready(Ok((protocol, io)));
@@ -180,14 +180,14 @@ where
                             *this.state = State::AwaitProtocol { io, protocol };
                         }
                         Message::Protocol(ref p) if p.as_ref() == protocol.as_ref() => {
-                            log::debug!("Dialer: Received confirmation for protocol: {}", p);
+                            tracing::debug!(protocol=%p, "Dialer: Received confirmation for protocol");
                             let io = Negotiated::completed(io.into_inner());
                             return Poll::Ready(Ok((protocol, io)));
                         }
                         Message::NotAvailable => {
-                            log::debug!(
-                                "Dialer: Received rejection of protocol: {}",
-                                protocol.as_ref()
+                            tracing::debug!(
+                                protocol=%protocol.as_ref(),
+                                "Dialer: Received rejection of protocol"
                             );
                             let protocol = this.protocols.next().ok_or(NegotiationError::Failed)?;
                             *this.state = State::SendProtocol { io, protocol }
@@ -208,9 +208,10 @@ mod tests {
     use crate::listener_select_proto;
     use async_std::future::timeout;
     use async_std::net::{TcpListener, TcpStream};
-    use log::info;
     use quickcheck::{Arbitrary, Gen, GenRange};
     use std::time::Duration;
+    use tracing::metadata::LevelFilter;
+    use tracing_subscriber::EnvFilter;
 
     #[test]
     fn select_proto_basic() {
@@ -266,7 +267,13 @@ mod tests {
             ListenerProtos(listen_protos): ListenerProtos,
             DialPayload(dial_payload): DialPayload,
         ) {
-            let _ = env_logger::try_init();
+            let _ = tracing_subscriber::fmt()
+                .with_env_filter(
+                    EnvFilter::builder()
+                        .with_default_directive(LevelFilter::DEBUG.into())
+                        .from_env_lossy(),
+                )
+                .try_init();
 
             async_std::task::block_on(async move {
                 let listener = TcpListener::bind("0.0.0.0:0").await.unwrap();
@@ -312,7 +319,7 @@ mod tests {
                     // got confirmation of the last proposed protocol, when `V1Lazy`
                     // is used.
 
-                    info!("Writing early data");
+                    tracing::info!("Writing early data");
 
                     io.write_all(&dial_payload).await.unwrap();
                     match io.complete().await {
@@ -324,7 +331,7 @@ mod tests {
                 server.await;
                 client.await;
 
-                info!("---------------------------------------")
+                tracing::info!("---------------------------------------")
             });
         }
 
