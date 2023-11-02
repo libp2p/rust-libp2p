@@ -243,7 +243,6 @@ impl NetworkBehaviour for Behaviour {
                     .get(&connection)
                     .cloned()
                     .expect("Connection to be direct")
-                    .with(Protocol::P2p(event_source))
                     .with(Protocol::P2pCircuit)
                     .with(Protocol::P2p(self.local_peer_id));
 
