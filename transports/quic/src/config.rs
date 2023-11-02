@@ -18,7 +18,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use quinn::VarInt;
+use quinn::{MtuDiscoveryConfig, VarInt};
 use std::{sync::Arc, time::Duration};
 
 /// Config for the transport.
@@ -63,6 +63,9 @@ pub struct Config {
     server_tls_config: Arc<rustls::ServerConfig>,
     /// Libp2p identity of the node.
     keypair: libp2p_identity::Keypair,
+
+    /// Parameters governing MTU discovery. See [`MtuDiscoveryConfig`] for details.
+    path_mtu_discovery_config: Option<MtuDiscoveryConfig>,
 }
 
 impl Config {
@@ -83,7 +86,16 @@ impl Config {
             // Ensure that one stream is not consuming the whole connection.
             max_stream_data: 10_000_000,
             keypair: keypair.clone(),
+            path_mtu_discovery_config: Some(Default::default()),
         }
+    }
+
+    pub fn path_mtu_discovery_config(
+        mut self,
+        path_mtu_discovery_config: Option<MtuDiscoveryConfig>,
+    ) -> Self {
+        self.path_mtu_discovery_config = path_mtu_discovery_config;
+        self
     }
 }
 
@@ -108,6 +120,7 @@ impl From<Config> for QuinnConfig {
             support_draft_29,
             handshake_timeout: _,
             keypair,
+            path_mtu_discovery_config,
         } = config;
         let mut transport = quinn::TransportConfig::default();
         // Disable uni-directional streams.
@@ -120,6 +133,7 @@ impl From<Config> for QuinnConfig {
         transport.allow_spin(false);
         transport.stream_receive_window(max_stream_data.into());
         transport.receive_window(max_connection_data.into());
+        transport.mtu_discovery_config(path_mtu_discovery_config);
         let transport = Arc::new(transport);
 
         let mut server_config = quinn::ServerConfig::with_crypto(server_tls_config);
