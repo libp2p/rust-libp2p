@@ -28,7 +28,7 @@ use anyhow::{bail, Result};
 use clap::Parser;
 use futures::StreamExt;
 use libp2p::{bytes::BufMut, identity, kad, noise, swarm::SwarmEvent, tcp, yamux, PeerId};
-use tracing_subscriber::{filter::LevelFilter, EnvFilter};
+use tracing_subscriber::EnvFilter;
 
 const BOOTNODES: [&str; 4] = [
     "QmNnooDu7bfjPFoTZYxMNLWUQJyrVwtbZg5gBMjTezGAJN",
@@ -39,12 +39,8 @@ const BOOTNODES: [&str; 4] = [
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    let env_filter = EnvFilter::builder()
-        .with_default_directive(LevelFilter::DEBUG.into())
-        .from_env_lossy();
-
     let _ = tracing_subscriber::fmt()
-        .with_env_filter(env_filter)
+        .with_env_filter(EnvFilter::from_default_env())
         .try_init();
 
     // Create a random key for ourselves.

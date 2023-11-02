@@ -708,7 +708,10 @@ impl NetworkBehaviour for Behaviour {
     }
 
     #[tracing::instrument(level = "trace", name = "ConnectionHandler::poll", skip(self, _cx))]
-    fn poll(&mut self, _cx: &mut Context<'_>) -> Poll<ToSwarm<Self::ToSwarm, THandlerInEvent<Self>>> {
+    fn poll(
+        &mut self,
+        _cx: &mut Context<'_>,
+    ) -> Poll<ToSwarm<Self::ToSwarm, THandlerInEvent<Self>>> {
         if let Some(to_swarm) = self.queued_actions.pop_front() {
             return Poll::Ready(to_swarm);
         }

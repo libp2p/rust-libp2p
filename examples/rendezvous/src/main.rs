@@ -28,16 +28,12 @@ use libp2p::{
 };
 use std::error::Error;
 use std::time::Duration;
-use tracing_subscriber::{filter::LevelFilter, EnvFilter};
+use tracing_subscriber::EnvFilter;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
-    let env_filter = EnvFilter::builder()
-        .with_default_directive(LevelFilter::DEBUG.into())
-        .from_env_lossy();
-
     let _ = tracing_subscriber::fmt()
-        .with_env_filter(env_filter)
+        .with_env_filter(EnvFilter::from_default_env())
         .try_init();
 
     // Results in PeerID 12D3KooWDpJ7As7BWAwRMfu1VU2WCqNjvq387JEYKDBj4kx6nXTN which is

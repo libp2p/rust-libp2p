@@ -33,15 +33,11 @@ use libp2p::{
 };
 use std::error::Error;
 use std::net::{Ipv4Addr, Ipv6Addr};
-use tracing_subscriber::{filter::LevelFilter, EnvFilter};
+use tracing_subscriber::EnvFilter;
 
 fn main() -> Result<(), Box<dyn Error>> {
-    let env_filter = EnvFilter::builder()
-        .with_default_directive(LevelFilter::DEBUG.into())
-        .from_env_lossy();
-
     let _ = tracing_subscriber::fmt()
-        .with_env_filter(env_filter)
+        .with_env_filter(EnvFilter::from_default_env())
         .try_init();
 
     let opt = Opt::parse();

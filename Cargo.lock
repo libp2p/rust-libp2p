@@ -6132,6 +6132,7 @@ dependencies = [
  "futures",
  "libp2p",
  "tokio",
+ "tracing-subscriber",
 ]
 
 [[package]]

@@ -285,7 +285,9 @@ fn handle_dial_failure() {
 
 #[test]
 fn propagate_reservation_error_to_listener() {
-    let _ = env_logger::try_init();
+    let _ = tracing_subscriber::fmt()
+        .with_env_filter(EnvFilter::from_default_env())
+        .try_init();
     let mut pool = LocalPool::new();
 
     let relay_addr = Multiaddr::empty().with(Protocol::Memory(rand::random::<u64>()));
@@ -332,7 +334,9 @@ fn propagate_reservation_error_to_listener() {
 
 #[test]
 fn propagate_connect_error_to_unknown_peer_to_dialer() {
-    let _ = env_logger::try_init();
+    let _ = tracing_subscriber::fmt()
+        .with_env_filter(EnvFilter::from_default_env())
+        .try_init();
     let mut pool = LocalPool::new();
 
     let relay_addr = Multiaddr::empty().with(Protocol::Memory(rand::random::<u64>()));
