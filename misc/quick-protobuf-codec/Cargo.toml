@@ -20,6 +20,7 @@ quick-protobuf = "0.8"
 [dev-dependencies]
 criterion = "0.5.1"
 futures = "0.3.28"
+quickcheck = { workspace = true }
 
 [[bench]]
 name = "codec"

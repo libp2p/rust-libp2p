@@ -597,7 +597,7 @@ mod tests {
             }
         }
 
-        QuickCheck::new().quickcheck(prop as fn(_, _) -> _)
+        QuickCheck::new().quickcheck(prop as fn(_) -> _)
     }
 
     #[test]

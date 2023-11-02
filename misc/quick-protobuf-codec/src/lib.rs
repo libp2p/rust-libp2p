@@ -180,9 +180,11 @@ impl From<Error> for io::Error {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::proto;
     use asynchronous_codec::FramedRead;
     use futures::io::Cursor;
     use futures::{FutureExt, StreamExt};
+    use quickcheck::{Arbitrary, Gen, QuickCheck};
     use std::error::Error;
 
     #[test]
@@ -199,6 +201,21 @@ mod tests {
         )
     }
 
+    #[test]
+    fn handles_arbitrary_initial_capacity() {
+        fn prop(message: proto::Message, initial_capacity: u16) {
+            let mut buffer = BytesMut::with_capacity(initial_capacity as usize);
+            let mut codec = Codec::<proto::Message>::new(u32::MAX as usize);
+
+            codec.encode(message.clone(), &mut buffer).unwrap();
+            let decoded = codec.decode(&mut buffer).unwrap().unwrap();
+
+            assert_eq!(message, decoded);
+        }
+
+        QuickCheck::new().quickcheck(prop as fn(_, _) -> _)
+    }
+
     /// Constructs a [`BytesMut`] of the provided length where the message is all zeros.
     fn varint_zeroes(length: usize) -> BytesMut {
         let mut buf = unsigned_varint::encode::usize_buffer();
@@ -208,6 +225,14 @@ mod tests {
         src.extend_from_slice(encoded_length);
         src.extend(std::iter::repeat(0).take(length));
         src
+    }
+
+    impl Arbitrary for proto::Message {
+        fn arbitrary(g: &mut Gen) -> Self {
+            Self {
+                data: Vec::arbitrary(g),
+            }
+        }
     }
 
     #[derive(Debug)]

@@ -4373,6 +4373,7 @@ dependencies = [
  "criterion",
  "futures",
  "quick-protobuf",
+ "quickcheck-ext",
  "thiserror",
  "unsigned-varint 0.8.0",
 ]
