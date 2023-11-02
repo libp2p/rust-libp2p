@@ -23,7 +23,6 @@ use futures::future::{BoxFuture, Either};
 use futures::prelude::*;
 use futures_timer::Delay;
 use libp2p_core::upgrade::ReadyUpgrade;
-use libp2p_identity::PeerId;
 use libp2p_swarm::handler::{
     ConnectionEvent, DialUpgradeError, FullyNegotiatedInbound, FullyNegotiatedOutbound,
 };
@@ -147,8 +146,6 @@ pub struct Handler {
     inbound: Option<PongFuture>,
     /// Tracks the state of our handler.
     state: State,
-    /// The peer we are connected to.
-    peer: PeerId,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -166,9 +163,8 @@ enum State {
 
 impl Handler {
     /// Builds a new [`Handler`] with the given configuration.
-    pub fn new(config: Config, peer: PeerId) -> Self {
+    pub fn new(config: Config) -> Self {
         Handler {
-            peer,
             config,
             interval: Delay::new(Duration::new(0, 0)),
             pending_errors: VecDeque::with_capacity(2),
@@ -225,6 +221,7 @@ impl ConnectionHandler for Handler {
 
     fn on_behaviour_event(&mut self, _: Void) {}
 
+    #[tracing::instrument(level = "trace", name = "ConnectionHandler::poll", skip(self, cx))]
     fn poll(
         &mut self,
         cx: &mut Context<'_>,
@@ -254,11 +251,11 @@ impl ConnectionHandler for Handler {
             match fut.poll_unpin(cx) {
                 Poll::Pending => {}
                 Poll::Ready(Err(e)) => {
-                    log::debug!("Inbound ping error: {:?}", e);
+                    tracing::debug!("Inbound ping error: {:?}", e);
                     self.inbound = None;
                 }
                 Poll::Ready(Ok(stream)) => {
-                    log::trace!("answered inbound ping from {}", self.peer);
+                    tracing::trace!("answered inbound ping from peer");
 
                     // A ping from a remote peer has been answered, wait for the next.
                     self.inbound = Some(protocol::recv_ping(stream).boxed());
@@ -269,7 +266,7 @@ impl ConnectionHandler for Handler {
         loop {
             // Check for outbound ping failures.
             if let Some(error) = self.pending_errors.pop_back() {
-                log::debug!("Ping failure: {:?}", error);
+                tracing::debug!("Ping failure: {:?}", error);
 
                 self.failures += 1;
 
@@ -291,8 +288,7 @@ impl ConnectionHandler for Handler {
                         break;
                     }
                     Poll::Ready(Ok((stream, rtt))) => {
-                        log::debug!("latency to {} is {}ms", self.peer, rtt.as_millis());
-
+                        tracing::debug!(?rtt, "ping succeeded");
                         self.failures = 0;
                         self.interval.reset(self.config.interval);
                         self.outbound = Some(OutboundState::Idle(stream));

@@ -25,7 +25,6 @@ use asynchronous_codec::{Framed, FramedParts};
 use bytes::Bytes;
 use futures::prelude::*;
 use libp2p_identity::{PeerId, PublicKey};
-use log::{debug, trace};
 use std::io::{Error as IoError, ErrorKind as IoErrorKind};
 
 pub(crate) async fn handshake<S>(socket: S, config: Config) -> Result<(S, PublicKey, Bytes), Error>
@@ -35,7 +34,7 @@ where
     // The handshake messages all start with a variable-length integer indicating the size.
     let mut framed_socket = Framed::new(socket, quick_protobuf_codec::Codec::<Exchange>::new(100));
 
-    trace!("sending exchange to remote");
+    tracing::trace!("sending exchange to remote");
     framed_socket
         .send(Exchange {
             id: Some(config.local_public_key.to_peer_id().to_bytes()),
@@ -44,7 +43,7 @@ where
         .await
         .map_err(DecodeError)?;
 
-    trace!("receiving the remote's exchange");
+    tracing::trace!("receiving the remote's exchange");
     let public_key = match framed_socket
         .next()
         .await
@@ -62,13 +61,13 @@ where
             public_key
         }
         None => {
-            debug!("unexpected eof while waiting for remote's exchange");
+            tracing::debug!("unexpected eof while waiting for remote's exchange");
             let err = IoError::new(IoErrorKind::BrokenPipe, "unexpected eof");
             return Err(err.into());
         }
     };
 
-    trace!("received exchange from remote; pubkey = {:?}", public_key);
+    tracing::trace!(?public_key, "received exchange from remote");
 
     let FramedParts {
         io,

@@ -192,7 +192,6 @@ where
                 ProtocolsChange::Added(ProtocolsAdded::from_set(&initial_protocols)),
             ));
         }
-
         Connection {
             muxing: muxer,
             handler,
@@ -235,6 +234,7 @@ where
 
     /// Polls the handler and the substream, forwarding events from the former to the latter and
     /// vice versa.
+    #[tracing::instrument(level = "debug", name = "Connection::poll", skip(self, cx))]
     pub(crate) fn poll(
         self: Pin<&mut Self>,
         cx: &mut Context<'_>,
@@ -252,6 +252,7 @@ where
             remote_supported_protocols,
             idle_timeout,
             stream_counter,
+            ..
         } = self.get_mut();
 
         loop {
@@ -346,15 +347,15 @@ where
                     continue;
                 }
                 Poll::Ready(Some((_, Err(StreamUpgradeError::Io(e))))) => {
-                    log::debug!("failed to upgrade inbound stream: {e}");
+                    tracing::debug!("failed to upgrade inbound stream: {e}");
                     continue;
                 }
                 Poll::Ready(Some((_, Err(StreamUpgradeError::NegotiationFailed)))) => {
-                    log::debug!("no protocol could be agreed upon for inbound stream");
+                    tracing::debug!("no protocol could be agreed upon for inbound stream");
                     continue;
                 }
                 Poll::Ready(Some((_, Err(StreamUpgradeError::Timeout)))) => {
-                    log::debug!("inbound stream upgrade timed out");
+                    tracing::debug!("inbound stream upgrade timed out");
                     continue;
                 }
             }
@@ -494,7 +495,7 @@ fn compute_new_shutdown(
 /// The [`Duration`] computed by the this function may not be the longest possible that we can add to `now` but it will work.
 fn checked_add_fraction(start: Instant, mut duration: Duration) -> Duration {
     while start.checked_add(duration).is_none() {
-        log::debug!("{start:?} + {duration:?} cannot be presented, halving duration");
+        tracing::debug!(start=?start, duration=?duration, "start + duration cannot be presented, halving duration");
 
         duration /= 2;
     }
@@ -541,7 +542,7 @@ impl<UserData, TOk, TErr> StreamUpgrade<UserData, TOk, TErr> {
     {
         let effective_version = match version_override {
             Some(version_override) if version_override != upgrade::Version::default() => {
-                log::debug!(
+                tracing::debug!(
                     "Substream upgrade protocol override: {:?} -> {:?}",
                     upgrade::Version::default(),
                     version_override
@@ -753,11 +754,14 @@ mod tests {
     use quickcheck::*;
     use std::sync::{Arc, Weak};
     use std::time::Instant;
+    use tracing_subscriber::EnvFilter;
     use void::Void;
 
     #[test]
     fn max_negotiating_inbound_streams() {
-        let _ = env_logger::try_init();
+        let _ = tracing_subscriber::fmt()
+            .with_env_filter(EnvFilter::from_default_env())
+            .try_init();
 
         fn prop(max_negotiating_inbound_streams: u8) {
             let max_negotiating_inbound_streams: usize = max_negotiating_inbound_streams.into();
@@ -924,7 +928,9 @@ mod tests {
 
     #[test]
     fn checked_add_fraction_can_add_u64_max() {
-        let _ = env_logger::try_init();
+        let _ = tracing_subscriber::fmt()
+            .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
+            .try_init();
         let start = Instant::now();
 
         let duration = checked_add_fraction(start, Duration::from_secs(u64::MAX));
@@ -934,7 +940,9 @@ mod tests {
 
     #[test]
     fn compute_new_shutdown_does_not_panic() {
-        let _ = env_logger::try_init();
+        let _ = tracing_subscriber::fmt()
+            .with_env_filter(EnvFilter::from_default_env())
+            .try_init();
 
         #[derive(Debug)]
         struct ArbitraryShutdown(Shutdown);

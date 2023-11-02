@@ -33,10 +33,13 @@ use std::num::NonZeroU8;
 use std::pin::Pin;
 use std::task::{Context, Poll};
 use std::time::Duration;
+use tracing_subscriber::EnvFilter;
 
 #[tokio::test]
 async fn smoke() {
-    let _ = env_logger::try_init();
+    let _ = tracing_subscriber::fmt()
+        .with_env_filter(EnvFilter::from_default_env())
+        .try_init();
 
     let (a_peer_id, mut a_transport) = create_transport();
     let (b_peer_id, mut b_transport) = create_transport();
@@ -53,7 +56,9 @@ async fn smoke() {
 // Note: This test should likely be ported to the muxer compliance test suite.
 #[test]
 fn concurrent_connections_and_streams_tokio() {
-    let _ = env_logger::try_init();
+    let _ = tracing_subscriber::fmt()
+        .with_env_filter(EnvFilter::from_default_env())
+        .try_init();
 
     let rt = tokio::runtime::Runtime::new().unwrap();
     let _guard = rt.enter();
@@ -102,7 +107,11 @@ fn prop(number_listeners: NonZeroU8, number_streams: NonZeroU8) -> quickcheck::T
 
     let (listeners_tx, mut listeners_rx) = mpsc::channel(number_listeners);
 
-    log::info!("Creating {number_streams} streams on {number_listeners} connections");
+    tracing::info!(
+        stream_count=%number_streams,
+        connection_count=%number_listeners,
+        "Creating streams on connections"
+    );
 
     // Spawn the listener nodes.
     for _ in 0..number_listeners {
@@ -244,7 +253,7 @@ async fn open_outbound_streams<const BUFFER_SIZE: usize>(
         });
     }
 
-    log::info!("Created {number_streams} streams");
+    tracing::info!(stream_count=%number_streams, "Created streams");
 
     while future::poll_fn(|cx| connection.poll_unpin(cx))
         .await
