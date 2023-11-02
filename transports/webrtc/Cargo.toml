@@ -24,7 +24,7 @@ libp2p-webrtc-utils = { workspace = true }
 log = "0.4"
 multihash = { workspace = true }
 rand = "0.8"
-rcgen = "0.11.1"
+rcgen = "0.11.3"
 serde = { version = "1.0", features = ["derive"] }
 stun = "0.5"
 thiserror = "1"

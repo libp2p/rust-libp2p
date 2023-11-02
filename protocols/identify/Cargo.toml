@@ -12,7 +12,7 @@ categories = ["network-programming", "asynchronous"]
 
 [dependencies]
 asynchronous-codec = "0.7"
-futures = "0.3.28"
+futures = "0.3.29"
 futures-timer = "3.0.2"
 futures-bounded = { workspace = true }
 libp2p-core = { workspace = true }

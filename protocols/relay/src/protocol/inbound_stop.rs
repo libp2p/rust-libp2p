@@ -25,9 +25,10 @@ use bytes::Bytes;
 use futures::prelude::*;
 use libp2p_identity::PeerId;
 use libp2p_swarm::Stream;
+use std::io;
 use thiserror::Error;
 
-pub(crate) async fn handle_open_circuit(io: Stream) -> Result<Circuit, FatalUpgradeError> {
+pub(crate) async fn handle_open_circuit(io: Stream) -> Result<Circuit, Error> {
     let mut substream = Framed::new(io, quick_protobuf_codec::Codec::new(MAX_MESSAGE_SIZE));
 
     let proto::StopMessage {
@@ -38,42 +39,42 @@ pub(crate) async fn handle_open_circuit(io: Stream) -> Result<Circuit, FatalUpgr
     } = substream
         .next()
         .await
-        .ok_or(FatalUpgradeError::StreamClosed)??;
+        .ok_or(Error::Io(io::ErrorKind::UnexpectedEof.into()))??;
 
     match type_pb {
         proto::StopMessageType::CONNECT => {
-            let src_peer_id = PeerId::from_bytes(&peer.ok_or(FatalUpgradeError::MissingPeer)?.id)
-                .map_err(|_| FatalUpgradeError::ParsePeerId)?;
+            let src_peer_id = PeerId::from_bytes(&peer.ok_or(ProtocolViolation::MissingPeer)?.id)
+                .map_err(|_| ProtocolViolation::ParsePeerId)?;
             Ok(Circuit {
                 substream,
                 src_peer_id,
                 limit: limit.map(Into::into),
             })
         }
-        proto::StopMessageType::STATUS => Err(FatalUpgradeError::UnexpectedTypeStatus),
+        proto::StopMessageType::STATUS => {
+            Err(Error::Protocol(ProtocolViolation::UnexpectedTypeStatus))
+        }
     }
 }
 
 #[derive(Debug, Error)]
-pub enum UpgradeError {
-    #[error("Fatal")]
-    Fatal(#[from] FatalUpgradeError),
+pub(crate) enum Error {
+    #[error("Protocol error")]
+    Protocol(#[from] ProtocolViolation),
+    #[error("IO error")]
+    Io(#[from] io::Error),
 }
 
-impl From<quick_protobuf_codec::Error> for UpgradeError {
+impl From<quick_protobuf_codec::Error> for Error {
     fn from(error: quick_protobuf_codec::Error) -> Self {
-        Self::Fatal(error.into())
+        Self::Protocol(ProtocolViolation::Codec(error))
     }
 }
 
 #[derive(Debug, Error)]
-pub enum FatalUpgradeError {
+pub(crate) enum ProtocolViolation {
     #[error(transparent)]
     Codec(#[from] quick_protobuf_codec::Error),
-    #[error("Stream closed")]
-    StreamClosed,
-    #[error("Failed to parse response type field.")]
-    ParseTypeField,
     #[error("Failed to parse peer id.")]
     ParsePeerId,
     #[error("Expected 'peer' field to be set.")]
@@ -97,7 +98,7 @@ impl Circuit {
         self.limit
     }
 
-    pub(crate) async fn accept(mut self) -> Result<(Stream, Bytes), UpgradeError> {
+    pub(crate) async fn accept(mut self) -> Result<(Stream, Bytes), Error> {
         let msg = proto::StopMessage {
             type_pb: proto::StopMessageType::STATUS,
             peer: None,
@@ -121,7 +122,7 @@ impl Circuit {
         Ok((io, read_buffer.freeze()))
     }
 
-    pub(crate) async fn deny(mut self, status: proto::Status) -> Result<(), UpgradeError> {
+    pub(crate) async fn deny(mut self, status: proto::Status) -> Result<(), Error> {
         let msg = proto::StopMessage {
             type_pb: proto::StopMessageType::STATUS,
             peer: None,
@@ -129,10 +130,12 @@ impl Circuit {
             status: Some(status),
         };
 
-        self.send(msg).await.map_err(Into::into)
+        self.send(msg).await?;
+
+        Ok(())
     }
 
-    async fn send(&mut self, msg: proto::StopMessage) -> Result<(), quick_protobuf_codec::Error> {
+    async fn send(&mut self, msg: proto::StopMessage) -> Result<(), Error> {
         self.substream.send(msg).await?;
         self.substream.flush().await?;
 

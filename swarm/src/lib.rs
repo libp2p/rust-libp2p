@@ -142,7 +142,7 @@ use libp2p_core::{
 };
 use libp2p_identity::PeerId;
 use smallvec::SmallVec;
-use std::collections::{HashMap, HashSet};
+use std::collections::{HashMap, HashSet, VecDeque};
 use std::num::{NonZeroU32, NonZeroU8, NonZeroUsize};
 use std::time::Duration;
 use std::{
@@ -294,6 +294,12 @@ pub enum SwarmEvent<TBehaviourOutEvent, THandlerErr> {
         /// Identifier of the connection.
         connection_id: ConnectionId,
     },
+    /// We have discovered a new candidate for an external address for us.
+    NewExternalAddrCandidate { address: Multiaddr },
+    /// An external address of the local node was confirmed.
+    ExternalAddrConfirmed { address: Multiaddr },
+    /// An external address of the local node expired, i.e. is no-longer confirmed.
+    ExternalAddrExpired { address: Multiaddr },
 }
 
 impl<TBehaviourOutEvent, THandlerErr> SwarmEvent<TBehaviourOutEvent, THandlerErr> {
@@ -339,7 +345,9 @@ where
     /// Pending event to be delivered to connection handlers
     /// (or dropped if the peer disconnected) before the `behaviour`
     /// can be polled again.
-    pending_event: Option<(PeerId, PendingNotifyHandler, THandlerInEvent<TBehaviour>)>,
+    pending_handler_event: Option<(PeerId, PendingNotifyHandler, THandlerInEvent<TBehaviour>)>,
+
+    pending_swarm_events: VecDeque<SwarmEvent<TBehaviour::ToSwarm, THandlerErr<TBehaviour>>>,
 }
 
 impl<TBehaviour> Unpin for Swarm<TBehaviour> where TBehaviour: NetworkBehaviour {}
@@ -366,7 +374,8 @@ where
             supported_protocols: Default::default(),
             confirmed_external_addr: Default::default(),
             listened_addrs: HashMap::new(),
-            pending_event: None,
+            pending_handler_event: None,
+            pending_swarm_events: VecDeque::default(),
         }
     }
 
@@ -663,10 +672,7 @@ where
         &mut self.behaviour
     }
 
-    fn handle_pool_event(
-        &mut self,
-        event: PoolEvent<THandler<TBehaviour>>,
-    ) -> Option<SwarmEvent<TBehaviour::ToSwarm, THandlerErr<TBehaviour>>> {
+    fn handle_pool_event(&mut self, event: PoolEvent<THandler<TBehaviour>>) {
         match event {
             PoolEvent::ConnectionEstablished {
                 peer_id,
@@ -698,11 +704,14 @@ where
                                     },
                                 ));
 
-                                return Some(SwarmEvent::OutgoingConnectionError {
-                                    peer_id: Some(peer_id),
-                                    connection_id: id,
-                                    error: dial_error,
-                                });
+                                self.pending_swarm_events.push_back(
+                                    SwarmEvent::OutgoingConnectionError {
+                                        peer_id: Some(peer_id),
+                                        connection_id: id,
+                                        error: dial_error,
+                                    },
+                                );
+                                return;
                             }
                         }
                     }
@@ -728,12 +737,15 @@ where
                                     },
                                 ));
 
-                                return Some(SwarmEvent::IncomingConnectionError {
-                                    connection_id: id,
-                                    send_back_addr,
-                                    local_addr,
-                                    error: listen_error,
-                                });
+                                self.pending_swarm_events.push_back(
+                                    SwarmEvent::IncomingConnectionError {
+                                        connection_id: id,
+                                        send_back_addr,
+                                        local_addr,
+                                        error: listen_error,
+                                    },
+                                );
+                                return;
                             }
                         }
                     }
@@ -783,14 +795,15 @@ where
                         },
                     ));
                 self.supported_protocols = supported_protocols;
-                return Some(SwarmEvent::ConnectionEstablished {
-                    peer_id,
-                    connection_id: id,
-                    num_established,
-                    endpoint,
-                    concurrent_dial_errors,
-                    established_in,
-                });
+                self.pending_swarm_events
+                    .push_back(SwarmEvent::ConnectionEstablished {
+                        peer_id,
+                        connection_id: id,
+                        num_established,
+                        endpoint,
+                        concurrent_dial_errors,
+                        established_in,
+                    });
             }
             PoolEvent::PendingOutboundConnectionError {
                 id: connection_id,
@@ -812,11 +825,12 @@ where
                     log::debug!("Connection attempt to unknown peer failed with {:?}", error);
                 }
 
-                return Some(SwarmEvent::OutgoingConnectionError {
-                    peer_id: peer,
-                    connection_id,
-                    error,
-                });
+                self.pending_swarm_events
+                    .push_back(SwarmEvent::OutgoingConnectionError {
+                        peer_id: peer,
+                        connection_id,
+                        error,
+                    });
             }
             PoolEvent::PendingInboundConnectionError {
                 id,
@@ -834,12 +848,13 @@ where
                         error: &error,
                         connection_id: id,
                     }));
-                return Some(SwarmEvent::IncomingConnectionError {
-                    connection_id: id,
-                    local_addr,
-                    send_back_addr,
-                    error,
-                });
+                self.pending_swarm_events
+                    .push_back(SwarmEvent::IncomingConnectionError {
+                        connection_id: id,
+                        local_addr,
+                        send_back_addr,
+                        error,
+                    });
             }
             PoolEvent::ConnectionClosed {
                 id,
@@ -874,13 +889,14 @@ where
                         endpoint: &endpoint,
                         remaining_established: num_established as usize,
                     }));
-                return Some(SwarmEvent::ConnectionClosed {
-                    peer_id,
-                    connection_id: id,
-                    endpoint,
-                    cause: error,
-                    num_established,
-                });
+                self.pending_swarm_events
+                    .push_back(SwarmEvent::ConnectionClosed {
+                        peer_id,
+                        connection_id: id,
+                        endpoint,
+                        cause: error,
+                        num_established,
+                    });
             }
             PoolEvent::ConnectionEvent { peer_id, id, event } => {
                 self.behaviour
@@ -901,8 +917,6 @@ where
                     }));
             }
         }
-
-        None
     }
 
     fn handle_transport_event(
@@ -911,7 +925,7 @@ where
             <transport::Boxed<(PeerId, StreamMuxerBox)> as Transport>::ListenerUpgrade,
             io::Error,
         >,
-    ) -> Option<SwarmEvent<TBehaviour::ToSwarm, THandlerErr<TBehaviour>>> {
+    ) {
         match event {
             TransportEvent::Incoming {
                 listener_id: _,
@@ -938,12 +952,14 @@ where
                                 connection_id,
                             }));
 
-                        return Some(SwarmEvent::IncomingConnectionError {
-                            connection_id,
-                            local_addr,
-                            send_back_addr,
-                            error: listen_error,
-                        });
+                        self.pending_swarm_events
+                            .push_back(SwarmEvent::IncomingConnectionError {
+                                connection_id,
+                                local_addr,
+                                send_back_addr,
+                                error: listen_error,
+                            });
+                        return;
                     }
                 }
 
@@ -956,11 +972,12 @@ where
                     connection_id,
                 );
 
-                Some(SwarmEvent::IncomingConnection {
-                    connection_id,
-                    local_addr,
-                    send_back_addr,
-                })
+                self.pending_swarm_events
+                    .push_back(SwarmEvent::IncomingConnection {
+                        connection_id,
+                        local_addr,
+                        send_back_addr,
+                    })
             }
             TransportEvent::NewAddress {
                 listener_id,
@@ -976,10 +993,11 @@ where
                         listener_id,
                         addr: &listen_addr,
                     }));
-                Some(SwarmEvent::NewListenAddr {
-                    listener_id,
-                    address: listen_addr,
-                })
+                self.pending_swarm_events
+                    .push_back(SwarmEvent::NewListenAddr {
+                        listener_id,
+                        address: listen_addr,
+                    })
             }
             TransportEvent::AddressExpired {
                 listener_id,
@@ -998,10 +1016,11 @@ where
                         listener_id,
                         addr: &listen_addr,
                     }));
-                Some(SwarmEvent::ExpiredListenAddr {
-                    listener_id,
-                    address: listen_addr,
-                })
+                self.pending_swarm_events
+                    .push_back(SwarmEvent::ExpiredListenAddr {
+                        listener_id,
+                        address: listen_addr,
+                    })
             }
             TransportEvent::ListenerClosed {
                 listener_id,
@@ -1019,11 +1038,12 @@ where
                         listener_id,
                         reason: reason.as_ref().copied(),
                     }));
-                Some(SwarmEvent::ListenerClosed {
-                    listener_id,
-                    addresses: addrs.to_vec(),
-                    reason,
-                })
+                self.pending_swarm_events
+                    .push_back(SwarmEvent::ListenerClosed {
+                        listener_id,
+                        addresses: addrs.to_vec(),
+                        reason,
+                    })
             }
             TransportEvent::ListenerError { listener_id, error } => {
                 self.behaviour
@@ -1031,7 +1051,8 @@ where
                         listener_id,
                         err: &error,
                     }));
-                Some(SwarmEvent::ListenerError { listener_id, error })
+                self.pending_swarm_events
+                    .push_back(SwarmEvent::ListenerError { listener_id, error })
             }
         }
     }
@@ -1039,14 +1060,17 @@ where
     fn handle_behaviour_event(
         &mut self,
         event: ToSwarm<TBehaviour::ToSwarm, THandlerInEvent<TBehaviour>>,
-    ) -> Option<SwarmEvent<TBehaviour::ToSwarm, THandlerErr<TBehaviour>>> {
+    ) {
         match event {
-            ToSwarm::GenerateEvent(event) => return Some(SwarmEvent::Behaviour(event)),
+            ToSwarm::GenerateEvent(event) => {
+                self.pending_swarm_events
+                    .push_back(SwarmEvent::Behaviour(event));
+            }
             ToSwarm::Dial { opts } => {
                 let peer_id = opts.get_peer_id();
                 let connection_id = opts.connection_id();
                 if let Ok(()) = self.dial(opts) {
-                    return Some(SwarmEvent::Dialing {
+                    self.pending_swarm_events.push_back(SwarmEvent::Dialing {
                         peer_id,
                         connection_id,
                     });
@@ -1064,7 +1088,7 @@ where
                 handler,
                 event,
             } => {
-                assert!(self.pending_event.is_none());
+                assert!(self.pending_handler_event.is_none());
                 let handler = match handler {
                     NotifyHandler::One(connection) => PendingNotifyHandler::One(connection),
                     NotifyHandler::Any => {
@@ -1076,7 +1100,7 @@ where
                     }
                 };
 
-                self.pending_event = Some((peer_id, handler, event));
+                self.pending_handler_event = Some((peer_id, handler, event));
             }
             ToSwarm::NewExternalAddrCandidate(addr) => {
                 // Apply address translation to the candidate address.
@@ -1101,20 +1125,28 @@ where
                         .on_swarm_event(FromSwarm::NewExternalAddrCandidate(
                             NewExternalAddrCandidate { addr: &addr },
                         ));
+                    self.pending_swarm_events
+                        .push_back(SwarmEvent::NewExternalAddrCandidate { address: addr });
                 } else {
                     for addr in translated_addresses {
                         self.behaviour
                             .on_swarm_event(FromSwarm::NewExternalAddrCandidate(
                                 NewExternalAddrCandidate { addr: &addr },
                             ));
+                        self.pending_swarm_events
+                            .push_back(SwarmEvent::NewExternalAddrCandidate { address: addr });
                     }
                 }
             }
             ToSwarm::ExternalAddrConfirmed(addr) => {
-                self.add_external_address(addr);
+                self.add_external_address(addr.clone());
+                self.pending_swarm_events
+                    .push_back(SwarmEvent::ExternalAddrConfirmed { address: addr });
             }
             ToSwarm::ExternalAddrExpired(addr) => {
                 self.remove_external_address(&addr);
+                self.pending_swarm_events
+                    .push_back(SwarmEvent::ExternalAddrExpired { address: addr });
             }
             ToSwarm::CloseConnection {
                 peer_id,
@@ -1130,8 +1162,6 @@ where
                 }
             },
         }
-
-        None
     }
 
     /// Internal function used by everything event-related.
@@ -1155,7 +1185,11 @@ where
         //
         // (2) is polled before (3) to prioritize existing connections over upgrading new incoming connections.
         loop {
-            match this.pending_event.take() {
+            if let Some(swarm_event) = this.pending_swarm_events.pop_front() {
+                return Poll::Ready(swarm_event);
+            }
+
+            match this.pending_handler_event.take() {
                 // Try to deliver the pending event emitted by the [`NetworkBehaviour`] in the previous
                 // iteration to the connection handler(s).
                 Some((peer_id, handler, event)) => match handler {
@@ -1164,7 +1198,7 @@ where
                             Some(conn) => match notify_one(conn, event, cx) {
                                 None => continue,
                                 Some(event) => {
-                                    this.pending_event = Some((peer_id, handler, event));
+                                    this.pending_handler_event = Some((peer_id, handler, event));
                                 }
                             },
                             None => continue,
@@ -1175,7 +1209,7 @@ where
                             None => continue,
                             Some((event, ids)) => {
                                 let handler = PendingNotifyHandler::Any(ids);
-                                this.pending_event = Some((peer_id, handler, event));
+                                this.pending_handler_event = Some((peer_id, handler, event));
                             }
                         }
                     }
@@ -1184,9 +1218,7 @@ where
                 None => match this.behaviour.poll(cx) {
                     Poll::Pending => {}
                     Poll::Ready(behaviour_event) => {
-                        if let Some(swarm_event) = this.handle_behaviour_event(behaviour_event) {
-                            return Poll::Ready(swarm_event);
-                        }
+                        this.handle_behaviour_event(behaviour_event);
 
                         continue;
                     }
@@ -1197,10 +1229,7 @@ where
             match this.pool.poll(cx) {
                 Poll::Pending => {}
                 Poll::Ready(pool_event) => {
-                    if let Some(swarm_event) = this.handle_pool_event(pool_event) {
-                        return Poll::Ready(swarm_event);
-                    }
-
+                    this.handle_pool_event(pool_event);
                     continue;
                 }
             };
@@ -1209,10 +1238,7 @@ where
             match Pin::new(&mut this.transport).poll(cx) {
                 Poll::Pending => {}
                 Poll::Ready(transport_event) => {
-                    if let Some(swarm_event) = this.handle_transport_event(transport_event) {
-                        return Poll::Ready(swarm_event);
-                    }
-
+                    this.handle_transport_event(transport_event);
                     continue;
                 }
             }
