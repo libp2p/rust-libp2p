@@ -121,6 +121,7 @@ quickcheck = { package = "quickcheck-ext", path = "misc/quickcheck-ext" }
 rw-stream-sink = { version = "0.4.0", path = "misc/rw-stream-sink" }
 multiaddr = "0.18.0"
 multihash = "0.19.1"
+unsigned-varint = { version = "0.8.0" }
 
 [patch.crates-io]
 

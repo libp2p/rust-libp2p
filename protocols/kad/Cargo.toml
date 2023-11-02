@@ -27,7 +27,7 @@ rand = "0.8"
 sha2 = "0.10.8"
 smallvec = "1.11.1"
 uint = "0.9"
-unsigned-varint = { version = "0.7", features = ["asynchronous_codec"] }
+unsigned-varint = { workspace = true, features = ["asynchronous_codec"] }
 void = "1.0"
 futures-timer = "3.0.2"
 instant = "0.1.12"

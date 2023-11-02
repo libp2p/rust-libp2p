@@ -225,10 +225,10 @@ impl GossipsubCodec {
 }
 
 impl Encoder for GossipsubCodec {
-    type Item = proto::RPC;
+    type Item<'a> = proto::RPC;
     type Error = quick_protobuf_codec::Error;
 
-    fn encode(&mut self, item: Self::Item, dst: &mut BytesMut) -> Result<(), Self::Error> {
+    fn encode(&mut self, item: Self::Item<'_>, dst: &mut BytesMut) -> Result<(), Self::Error> {
         self.codec.encode(item, dst)
     }
 }

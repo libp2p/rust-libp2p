@@ -16,7 +16,7 @@ futures = "0.3"
 log = "0.4"
 pin-project = "1.1.3"
 smallvec = "1.11.1"
-unsigned-varint = "0.7"
+unsigned-varint = { workspace = true }
 
 [dev-dependencies]
 async-std = { version = "1.6.2", features = ["attributes"] }
