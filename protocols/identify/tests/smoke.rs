@@ -86,7 +86,9 @@ async fn periodic_identify() {
 }
 #[async_std::test]
 async fn only_emits_address_candidate_once_per_connection() {
-    let _ = env_logger::try_init();
+    let _ = tracing_subscriber::fmt()
+        .with_env_filter(EnvFilter::from_default_env())
+        .try_init();
 
     let mut swarm1 = Swarm::new_ephemeral(|identity| {
         identify::Behaviour::new(
