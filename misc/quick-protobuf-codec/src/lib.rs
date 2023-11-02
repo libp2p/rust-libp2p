@@ -110,7 +110,7 @@ where
             return Err(Error(io::Error::new(
                 io::ErrorKind::PermissionDenied,
                 format!(
-                    "message with {len}b exceeds maximum of {}b",
+                    "message with {message_length}b exceeds maximum of {}b",
                     self.max_message_len_bytes
                 ),
             )));
