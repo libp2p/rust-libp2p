@@ -24,7 +24,7 @@
 //! outbound upgrade send a request and receives a response.
 
 use futures::future::{ready, Ready};
-use libp2p_core::upgrade::{InboundUpgrade, OutboundUpgrade, UpgradeInfo};
+use libp2p_swarm::handler::{InboundUpgrade, OutboundUpgrade, UpgradeInfo};
 use libp2p_swarm::Stream;
 use smallvec::SmallVec;
 
@@ -67,7 +67,7 @@ pub struct Protocol<P> {
 
 impl<P> UpgradeInfo for Protocol<P>
 where
-    P: AsRef<str> + Clone,
+    P: AsRef<str> + Clone + Send + 'static,
 {
     type Info = P;
     type InfoIter = smallvec::IntoIter<[Self::Info; 2]>;
@@ -77,9 +77,9 @@ where
     }
 }
 
-impl<P> InboundUpgrade<Stream> for Protocol<P>
+impl<P> InboundUpgrade for Protocol<P>
 where
-    P: AsRef<str> + Clone,
+    P: AsRef<str> + Clone + Send + 'static,
 {
     type Output = (Stream, P);
     type Error = void::Void;
@@ -90,9 +90,9 @@ where
     }
 }
 
-impl<P> OutboundUpgrade<Stream> for Protocol<P>
+impl<P> OutboundUpgrade for Protocol<P>
 where
-    P: AsRef<str> + Clone,
+    P: AsRef<str> + Clone + Send + 'static,
 {
     type Output = (Stream, P);
     type Error = void::Void;

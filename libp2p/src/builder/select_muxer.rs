@@ -21,8 +21,9 @@
 use either::Either;
 use futures::future;
 use libp2p_core::either::EitherFuture;
-use libp2p_core::upgrade::{InboundConnectionUpgrade, OutboundConnectionUpgrade};
-use libp2p_core::UpgradeInfo;
+use libp2p_core::upgrade::{
+    ConnectionUpgradeInfo, InboundConnectionUpgrade, OutboundConnectionUpgrade,
+};
 use std::iter::{Chain, Map};
 
 #[derive(Debug, Clone)]
@@ -34,10 +35,10 @@ impl<A, B> SelectMuxerUpgrade<A, B> {
     }
 }
 
-impl<A, B> UpgradeInfo for SelectMuxerUpgrade<A, B>
+impl<A, B> ConnectionUpgradeInfo for SelectMuxerUpgrade<A, B>
 where
-    A: UpgradeInfo,
-    B: UpgradeInfo,
+    A: ConnectionUpgradeInfo,
+    B: ConnectionUpgradeInfo,
 {
     type Info = Either<A::Info, B::Info>;
     type InfoIter = Chain<

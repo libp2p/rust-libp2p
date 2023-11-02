@@ -22,13 +22,12 @@ use crate::{protocol, PROTOCOL_NAME};
 use futures::future::{BoxFuture, Either};
 use futures::prelude::*;
 use futures_timer::Delay;
-use libp2p_core::upgrade::ReadyUpgrade;
 use libp2p_identity::PeerId;
 use libp2p_swarm::handler::{
-    ConnectionEvent, DialUpgradeError, FullyNegotiatedInbound, FullyNegotiatedOutbound,
+    ConnectionEvent, DialUpgradeError, FullyNegotiatedInbound, FullyNegotiatedOutbound, UpgradeInfo,
 };
 use libp2p_swarm::{
-    ConnectionHandler, ConnectionHandlerEvent, Stream, StreamProtocol, StreamUpgradeError,
+    ConnectionHandler, ConnectionHandlerEvent, ReadyUpgrade, Stream, StreamUpgradeError,
     SubstreamProtocol,
 };
 use std::collections::VecDeque;
@@ -214,12 +213,12 @@ impl ConnectionHandler for Handler {
     type FromBehaviour = Void;
     type ToBehaviour = Result<Duration, Failure>;
     type Error = Void;
-    type InboundProtocol = ReadyUpgrade<StreamProtocol>;
-    type OutboundProtocol = ReadyUpgrade<StreamProtocol>;
+    type InboundProtocol = ReadyUpgrade;
+    type OutboundProtocol = ReadyUpgrade;
     type OutboundOpenInfo = ();
     type InboundOpenInfo = ();
 
-    fn listen_protocol(&self) -> SubstreamProtocol<ReadyUpgrade<StreamProtocol>, ()> {
+    fn listen_protocol(&self) -> SubstreamProtocol<ReadyUpgrade, ()> {
         SubstreamProtocol::new(ReadyUpgrade::new(PROTOCOL_NAME), ())
     }
 
@@ -228,14 +227,8 @@ impl ConnectionHandler for Handler {
     fn poll(
         &mut self,
         cx: &mut Context<'_>,
-    ) -> Poll<
-        ConnectionHandlerEvent<
-            ReadyUpgrade<StreamProtocol>,
-            (),
-            Result<Duration, Failure>,
-            Self::Error,
-        >,
-    > {
+    ) -> Poll<ConnectionHandlerEvent<ReadyUpgrade, (), Result<Duration, Failure>, Self::Error>>
+    {
         match self.state {
             State::Inactive { reported: true } => {
                 return Poll::Pending; // nothing to do on this connection
@@ -337,22 +330,23 @@ impl ConnectionHandler for Handler {
     fn on_connection_event(
         &mut self,
         event: ConnectionEvent<
-            Self::InboundProtocol,
-            Self::OutboundProtocol,
+            <Self::InboundProtocol as UpgradeInfo>::Info,
+            <Self::OutboundProtocol as UpgradeInfo>::Info,
             Self::InboundOpenInfo,
             Self::OutboundOpenInfo,
         >,
     ) {
         match event {
             ConnectionEvent::FullyNegotiatedInbound(FullyNegotiatedInbound {
-                protocol: mut stream,
+                mut stream,
+                protocol,
                 ..
             }) => {
                 stream.ignore_for_keep_alive();
                 self.inbound = Some(protocol::recv_ping(stream).boxed());
             }
             ConnectionEvent::FullyNegotiatedOutbound(FullyNegotiatedOutbound {
-                protocol: mut stream,
+                stream: mut stream,
                 ..
             }) => {
                 stream.ignore_for_keep_alive();

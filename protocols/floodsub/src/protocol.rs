@@ -22,14 +22,11 @@ use crate::proto;
 use crate::topic::Topic;
 use asynchronous_codec::Framed;
 use bytes::Bytes;
-use futures::{
-    io::{AsyncRead, AsyncWrite},
-    Future,
-};
+use futures::Future;
 use futures::{SinkExt, StreamExt};
-use libp2p_core::{InboundUpgrade, OutboundUpgrade, UpgradeInfo};
 use libp2p_identity::PeerId;
-use libp2p_swarm::StreamProtocol;
+use libp2p_swarm::handler::{InboundUpgrade, OutboundUpgrade, UpgradeInfo};
+use libp2p_swarm::{Stream, StreamProtocol};
 use std::{io, iter, pin::Pin};
 
 const MAX_MESSAGE_LEN_BYTES: usize = 2048;
@@ -56,15 +53,12 @@ impl UpgradeInfo for FloodsubProtocol {
     }
 }
 
-impl<TSocket> InboundUpgrade<TSocket> for FloodsubProtocol
-where
-    TSocket: AsyncRead + AsyncWrite + Send + Unpin + 'static,
-{
+impl InboundUpgrade for FloodsubProtocol {
     type Output = FloodsubRpc;
     type Error = FloodsubError;
     type Future = Pin<Box<dyn Future<Output = Result<Self::Output, Self::Error>> + Send>>;
 
-    fn upgrade_inbound(self, socket: TSocket, _: Self::Info) -> Self::Future {
+    fn upgrade_inbound(self, socket: Stream, _: Self::Info) -> Self::Future {
         Box::pin(async move {
             let mut framed = Framed::new(
                 socket,
@@ -143,15 +137,12 @@ impl UpgradeInfo for FloodsubRpc {
     }
 }
 
-impl<TSocket> OutboundUpgrade<TSocket> for FloodsubRpc
-where
-    TSocket: AsyncWrite + AsyncRead + Send + Unpin + 'static,
-{
+impl OutboundUpgrade for FloodsubRpc {
     type Output = ();
     type Error = CodecError;
     type Future = Pin<Box<dyn Future<Output = Result<Self::Output, Self::Error>> + Send>>;
 
-    fn upgrade_outbound(self, socket: TSocket, _: Self::Info) -> Self::Future {
+    fn upgrade_outbound(self, socket: Stream, _: Self::Info) -> Self::Future {
         Box::pin(async move {
             let mut framed = Framed::new(
                 socket,

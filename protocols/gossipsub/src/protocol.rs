@@ -31,9 +31,9 @@ use byteorder::{BigEndian, ByteOrder};
 use bytes::BytesMut;
 use futures::future;
 use futures::prelude::*;
-use libp2p_core::{InboundUpgrade, OutboundUpgrade, UpgradeInfo};
 use libp2p_identity::{PeerId, PublicKey};
-use libp2p_swarm::StreamProtocol;
+use libp2p_swarm::handler::{InboundUpgrade, OutboundUpgrade, UpgradeInfo};
+use libp2p_swarm::{Stream, StreamProtocol};
 use log::{debug, warn};
 use quick_protobuf::Writer;
 use std::pin::Pin;
@@ -100,15 +100,12 @@ impl UpgradeInfo for ProtocolConfig {
     }
 }
 
-impl<TSocket> InboundUpgrade<TSocket> for ProtocolConfig
-where
-    TSocket: AsyncRead + AsyncWrite + Unpin + Send + 'static,
-{
-    type Output = (Framed<TSocket, GossipsubCodec>, PeerKind);
+impl InboundUpgrade for ProtocolConfig {
+    type Output = (Framed<Stream, GossipsubCodec>, PeerKind);
     type Error = Void;
     type Future = Pin<Box<dyn Future<Output = Result<Self::Output, Self::Error>> + Send>>;
 
-    fn upgrade_inbound(self, socket: TSocket, protocol_id: Self::Info) -> Self::Future {
+    fn upgrade_inbound(self, socket: Stream, protocol_id: Self::Info) -> Self::Future {
         let mut length_codec = codec::UviBytes::default();
         length_codec.set_max_len(self.max_transmit_size);
         Box::pin(future::ok((
@@ -121,15 +118,12 @@ where
     }
 }
 
-impl<TSocket> OutboundUpgrade<TSocket> for ProtocolConfig
-where
-    TSocket: AsyncWrite + AsyncRead + Unpin + Send + 'static,
-{
-    type Output = (Framed<TSocket, GossipsubCodec>, PeerKind);
+impl OutboundUpgrade for ProtocolConfig {
+    type Output = (Framed<Stream, GossipsubCodec>, PeerKind);
     type Error = Void;
     type Future = Pin<Box<dyn Future<Output = Result<Self::Output, Self::Error>> + Send>>;
 
-    fn upgrade_outbound(self, socket: TSocket, protocol_id: Self::Info) -> Self::Future {
+    fn upgrade_outbound(self, socket: Stream, protocol_id: Self::Info) -> Self::Future {
         let mut length_codec = codec::UviBytes::default();
         length_codec.set_max_len(self.max_transmit_size);
         Box::pin(future::ok((

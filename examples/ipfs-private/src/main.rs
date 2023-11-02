@@ -22,8 +22,8 @@
 
 use either::Either;
 use futures::prelude::*;
+use libp2p::core::upgrade::Version;
 use libp2p::{
-    core::transport::upgrade::Version,
     gossipsub, identify,
     multiaddr::Protocol,
     noise, ping,

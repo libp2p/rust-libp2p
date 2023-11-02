@@ -27,13 +27,12 @@ use futures::{
     stream::{BoxStream, SelectAll},
     StreamExt,
 };
-use libp2p_core::upgrade::{DeniedUpgrade, ReadyUpgrade};
 use libp2p_swarm::{
     handler::{
         ConnectionEvent, DialUpgradeError, FullyNegotiatedInbound, FullyNegotiatedOutbound,
         ListenUpgradeError,
     },
-    ConnectionHandler, ConnectionHandlerEvent, StreamProtocol, SubstreamProtocol,
+    ConnectionHandler, ConnectionHandlerEvent, DeniedUpgrade, ReadyUpgrade, SubstreamProtocol,
 };
 use void::Void;
 
@@ -89,7 +88,7 @@ impl ConnectionHandler for Handler {
     type ToBehaviour = Event;
     type Error = Void;
     type InboundProtocol = DeniedUpgrade;
-    type OutboundProtocol = ReadyUpgrade<StreamProtocol>;
+    type OutboundProtocol = ReadyUpgrade;
     type OutboundOpenInfo = ();
     type InboundOpenInfo = ();
 
@@ -107,19 +106,15 @@ impl ConnectionHandler for Handler {
 
     fn on_connection_event(
         &mut self,
-        event: ConnectionEvent<
-            Self::InboundProtocol,
-            Self::OutboundProtocol,
-            Self::InboundOpenInfo,
-            Self::OutboundOpenInfo,
-        >,
+        event: ConnectionEvent<Self::InboundOpenInfo, Self::OutboundOpenInfo>,
     ) {
         match event {
             ConnectionEvent::FullyNegotiatedInbound(FullyNegotiatedInbound {
-                protocol, ..
+                stream: protocol,
+                ..
             }) => void::unreachable(protocol),
             ConnectionEvent::FullyNegotiatedOutbound(FullyNegotiatedOutbound {
-                protocol,
+                stream: protocol,
                 info: (),
             }) => {
                 let Command { id, params } = self

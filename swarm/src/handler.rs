@@ -41,19 +41,18 @@
 pub mod either;
 mod map_in;
 mod map_out;
-pub mod multi;
 mod one_shot;
 mod pending;
 mod select;
 
-pub use crate::upgrade::{InboundUpgradeSend, OutboundUpgradeSend, SendWrapper, UpgradeInfoSend};
+pub use crate::upgrade::{InboundUpgrade, OutboundUpgrade, UpgradeInfo};
 pub use map_in::MapInEvent;
 pub use map_out::MapOutEvent;
 pub use one_shot::{OneShotHandler, OneShotHandlerConfig};
 pub use pending::PendingConnectionHandler;
 pub use select::ConnectionHandlerSelect;
 
-use crate::StreamProtocol;
+use crate::{Stream, StreamProtocol};
 use ::either::Either;
 use libp2p_core::Multiaddr;
 use once_cell::sync::Lazy;
@@ -63,6 +62,7 @@ use std::collections::hash_set::{Difference, Intersection};
 use std::collections::HashSet;
 use std::iter::Peekable;
 use std::{error, fmt, io, task::Context, task::Poll, time::Duration};
+use void::Void;
 
 /// A handler for a set of protocols used on a connection with a remote.
 ///
@@ -105,9 +105,9 @@ pub trait ConnectionHandler: Send + 'static {
     /// The type of errors returned by [`ConnectionHandler::poll`].
     type Error: error::Error + fmt::Debug + Send + 'static;
     /// The inbound upgrade for the protocol(s) used by the handler.
-    type InboundProtocol: InboundUpgradeSend;
+    type InboundProtocol: UpgradeInfo;
     /// The outbound upgrade for the protocol(s) used by the handler.
-    type OutboundProtocol: OutboundUpgradeSend;
+    type OutboundProtocol: UpgradeInfo;
     /// The type of additional information returned from `listen_protocol`.
     type InboundOpenInfo: Send + 'static;
     /// The type of additional information passed to an `OutboundSubstreamRequest`.
@@ -204,8 +204,8 @@ pub trait ConnectionHandler: Send + 'static {
     fn on_connection_event(
         &mut self,
         event: ConnectionEvent<
-            Self::InboundProtocol,
-            Self::OutboundProtocol,
+            <Self::InboundProtocol as UpgradeInfo>::Info,
+            <Self::OutboundProtocol as UpgradeInfo>::Info,
             Self::InboundOpenInfo,
             Self::OutboundOpenInfo,
         >,
@@ -214,7 +214,7 @@ pub trait ConnectionHandler: Send + 'static {
 
 /// Enumeration with the list of the possible stream events
 /// to pass to [`on_connection_event`](ConnectionHandler::on_connection_event).
-pub enum ConnectionEvent<'a, IP: InboundUpgradeSend, OP: OutboundUpgradeSend, IOI, OOI> {
+pub enum ConnectionEvent<'a, IP, OP, IOI, OOI> {
     /// Informs the handler about the output of a successful upgrade on a new inbound substream.
     FullyNegotiatedInbound(FullyNegotiatedInbound<IP, IOI>),
     /// Informs the handler about the output of a successful upgrade on a new outbound stream.
@@ -222,9 +222,9 @@ pub enum ConnectionEvent<'a, IP: InboundUpgradeSend, OP: OutboundUpgradeSend, IO
     /// Informs the handler about a change in the address of the remote.
     AddressChange(AddressChange<'a>),
     /// Informs the handler that upgrading an outbound substream to the given protocol has failed.
-    DialUpgradeError(DialUpgradeError<OOI, OP>),
+    DialUpgradeError(DialUpgradeError<OOI>),
     /// Informs the handler that upgrading an inbound substream to the given protocol has failed.
-    ListenUpgradeError(ListenUpgradeError<IOI, IP>),
+    ListenUpgradeError(ListenUpgradeError<IOI>),
     /// The local [`ConnectionHandler`] added or removed support for one or more protocols.
     LocalProtocolsChange(ProtocolsChange<'a>),
     /// The remote [`ConnectionHandler`] now supports a different set of protocols.
@@ -233,12 +233,8 @@ pub enum ConnectionEvent<'a, IP: InboundUpgradeSend, OP: OutboundUpgradeSend, IO
 
 impl<'a, IP, OP, IOI, OOI> fmt::Debug for ConnectionEvent<'a, IP, OP, IOI, OOI>
 where
-    IP: InboundUpgradeSend + fmt::Debug,
-    IP::Output: fmt::Debug,
-    IP::Error: fmt::Debug,
-    OP: OutboundUpgradeSend + fmt::Debug,
-    OP::Output: fmt::Debug,
-    OP::Error: fmt::Debug,
+    IP: fmt::Debug,
+    OP: fmt::Debug,
     IOI: fmt::Debug,
     OOI: fmt::Debug,
 {
@@ -267,9 +263,7 @@ where
     }
 }
 
-impl<'a, IP: InboundUpgradeSend, OP: OutboundUpgradeSend, IOI, OOI>
-    ConnectionEvent<'a, IP, OP, IOI, OOI>
-{
+impl<'a, IP, OP, IOI, OOI> ConnectionEvent<'a, IP, OP, IOI, OOI> {
     /// Whether the event concerns an outbound stream.
     pub fn is_outbound(&self) -> bool {
         match self {
@@ -308,8 +302,9 @@ impl<'a, IP: InboundUpgradeSend, OP: OutboundUpgradeSend, IOI, OOI>
 /// [`ConnectionHandler`] implementation to stop a malicious remote node to open and keep alive
 /// an excessive amount of inbound substreams.
 #[derive(Debug)]
-pub struct FullyNegotiatedInbound<IP: InboundUpgradeSend, IOI> {
-    pub protocol: IP::Output,
+pub struct FullyNegotiatedInbound<P, IOI> {
+    pub stream: Stream,
+    pub protocol: P,
     pub info: IOI,
 }
 
@@ -318,8 +313,9 @@ pub struct FullyNegotiatedInbound<IP: InboundUpgradeSend, IOI> {
 /// The `protocol` field is the information that was previously passed to
 /// [`ConnectionHandlerEvent::OutboundSubstreamRequest`].
 #[derive(Debug)]
-pub struct FullyNegotiatedOutbound<OP: OutboundUpgradeSend, OOI> {
-    pub protocol: OP::Output,
+pub struct FullyNegotiatedOutbound<P, OOI> {
+    pub stream: Stream,
+    pub protocol: P,
     pub info: OOI,
 }
 
@@ -448,17 +444,17 @@ impl<'a> Iterator for ProtocolsRemoved<'a> {
 /// [`ConnectionEvent`] variant that informs the handler
 /// that upgrading an outbound substream to the given protocol has failed.
 #[derive(Debug)]
-pub struct DialUpgradeError<OOI, OP: OutboundUpgradeSend> {
+pub struct DialUpgradeError<OOI> {
     pub info: OOI,
-    pub error: StreamUpgradeError<OP::Error>,
+    pub error: StreamUpgradeError<Void>,
 }
 
 /// [`ConnectionEvent`] variant that informs the handler
 /// that upgrading an inbound substream to the given protocol has failed.
 #[derive(Debug)]
-pub struct ListenUpgradeError<IOI, IP: InboundUpgradeSend> {
+pub struct ListenUpgradeError<IOI> {
     pub info: IOI,
-    pub error: IP::Error,
+    pub error: Void,
 }
 
 /// Configuration of inbound or outbound substream protocol(s)

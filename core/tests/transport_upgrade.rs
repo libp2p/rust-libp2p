@@ -21,7 +21,7 @@
 use futures::prelude::*;
 use libp2p_core::transport::{ListenerId, MemoryTransport, Transport};
 use libp2p_core::upgrade::{
-    self, InboundConnectionUpgrade, OutboundConnectionUpgrade, UpgradeInfo,
+    self, ConnectionUpgradeInfo, InboundConnectionUpgrade, OutboundConnectionUpgrade,
 };
 use libp2p_identity as identity;
 use libp2p_mplex::MplexConfig;
@@ -33,7 +33,7 @@ use std::{io, pin::Pin};
 #[derive(Clone)]
 struct HelloUpgrade {}
 
-impl UpgradeInfo for HelloUpgrade {
+impl ConnectionUpgradeInfo for HelloUpgrade {
     type Info = &'static str;
     type InfoIter = std::iter::Once<Self::Info>;
 

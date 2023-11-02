@@ -57,34 +57,17 @@
 //!             need to use these methods.
 //!
 
-mod apply;
-mod denied;
-mod either;
-mod error;
-mod pending;
-mod ready;
-mod select;
 mod transfer;
 
-pub(crate) use apply::{
-    apply, apply_inbound, apply_outbound, InboundUpgradeApply, OutboundUpgradeApply,
-};
-pub(crate) use error::UpgradeError;
 use futures::future::Future;
 
-pub use self::{
-    denied::DeniedUpgrade,
-    pending::PendingUpgrade,
-    ready::ReadyUpgrade,
-    select::SelectUpgrade,
-    transfer::{read_length_prefixed, read_varint, write_length_prefixed, write_varint},
-};
+pub use self::transfer::{read_length_prefixed, read_varint, write_length_prefixed, write_varint};
 pub use crate::Negotiated;
 pub use multistream_select::{NegotiatedComplete, NegotiationError, ProtocolError, Version};
 
-/// Common trait for upgrades that can be applied on inbound substreams, outbound substreams,
+/// Common trait for upgrades that can be applied on inbound connection, outbound connection,
 /// or both.
-pub trait UpgradeInfo {
+pub trait ConnectionUpgradeInfo {
     /// Opaque type representing a negotiable protocol.
     type Info: AsRef<str> + Clone;
     /// Iterator returned by `protocol_info`.
@@ -94,40 +77,8 @@ pub trait UpgradeInfo {
     fn protocol_info(&self) -> Self::InfoIter;
 }
 
-/// Possible upgrade on an inbound connection or substream.
-pub trait InboundUpgrade<C>: UpgradeInfo {
-    /// Output after the upgrade has been successfully negotiated and the handshake performed.
-    type Output;
-    /// Possible error during the handshake.
-    type Error;
-    /// Future that performs the handshake with the remote.
-    type Future: Future<Output = Result<Self::Output, Self::Error>>;
-
-    /// After we have determined that the remote supports one of the protocols we support, this
-    /// method is called to start the handshake.
-    ///
-    /// The `info` is the identifier of the protocol, as produced by `protocol_info`.
-    fn upgrade_inbound(self, socket: C, info: Self::Info) -> Self::Future;
-}
-
-/// Possible upgrade on an outbound connection or substream.
-pub trait OutboundUpgrade<C>: UpgradeInfo {
-    /// Output after the upgrade has been successfully negotiated and the handshake performed.
-    type Output;
-    /// Possible error during the handshake.
-    type Error;
-    /// Future that performs the handshake with the remote.
-    type Future: Future<Output = Result<Self::Output, Self::Error>>;
-
-    /// After we have determined that the remote supports one of the protocols we support, this
-    /// method is called to start the handshake.
-    ///
-    /// The `info` is the identifier of the protocol, as produced by `protocol_info`.
-    fn upgrade_outbound(self, socket: C, info: Self::Info) -> Self::Future;
-}
-
 /// Possible upgrade on an inbound connection
-pub trait InboundConnectionUpgrade<T>: UpgradeInfo {
+pub trait InboundConnectionUpgrade<T>: ConnectionUpgradeInfo {
     /// Output after the upgrade has been successfully negotiated and the handshake performed.
     type Output;
     /// Possible error during the handshake.
@@ -143,7 +94,7 @@ pub trait InboundConnectionUpgrade<T>: UpgradeInfo {
 }
 
 /// Possible upgrade on an outbound connection
-pub trait OutboundConnectionUpgrade<T>: UpgradeInfo {
+pub trait OutboundConnectionUpgrade<T>: ConnectionUpgradeInfo {
     /// Output after the upgrade has been successfully negotiated and the handshake performed.
     type Output;
     /// Possible error during the handshake.

@@ -18,8 +18,9 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::either::EitherFuture;
-use crate::upgrade::{InboundUpgrade, OutboundUpgrade, UpgradeInfo};
+use crate::upgrade::either::EitherFuture;
+use crate::upgrade::{InboundUpgrade, IntoIteratorSend, OutboundUpgrade, UpgradeInfo};
+use crate::Stream;
 use either::Either;
 use futures::future;
 use std::iter::{Chain, Map};
@@ -47,36 +48,40 @@ where
 {
     type Info = Either<A::Info, B::Info>;
     type InfoIter = Chain<
-        Map<<A::InfoIter as IntoIterator>::IntoIter, fn(A::Info) -> Self::Info>,
-        Map<<B::InfoIter as IntoIterator>::IntoIter, fn(B::Info) -> Self::Info>,
+        Map<<A::InfoIter as IntoIteratorSend>::IntoIter, fn(A::Info) -> Self::Info>,
+        Map<<B::InfoIter as IntoIteratorSend>::IntoIter, fn(B::Info) -> Self::Info>,
     >;
 
     fn protocol_info(&self) -> Self::InfoIter {
         let a = self
             .0
             .protocol_info()
-            .into_iter()
+            .into_iter_send()
             .map(Either::Left as fn(A::Info) -> _);
         let b = self
             .1
             .protocol_info()
-            .into_iter()
+            .into_iter_send()
             .map(Either::Right as fn(B::Info) -> _);
 
         a.chain(b)
     }
 }
 
-impl<C, A, B, TA, TB, EA, EB> InboundUpgrade<C> for SelectUpgrade<A, B>
+impl<A, B, TA, TB, EA, EB> InboundUpgrade for SelectUpgrade<A, B>
 where
-    A: InboundUpgrade<C, Output = TA, Error = EA>,
-    B: InboundUpgrade<C, Output = TB, Error = EB>,
+    A: InboundUpgrade<Output = TA, Error = EA>,
+    B: InboundUpgrade<Output = TB, Error = EB>,
+    TA: Send + 'static,
+    TB: Send + 'static,
+    EA: Send + 'static,
+    EB: Send + 'static,
 {
     type Output = future::Either<TA, TB>;
     type Error = Either<EA, EB>;
     type Future = EitherFuture<A::Future, B::Future>;
 
-    fn upgrade_inbound(self, sock: C, info: Self::Info) -> Self::Future {
+    fn upgrade_inbound(self, sock: Stream, info: Self::Info) -> Self::Future {
         match info {
             Either::Left(info) => EitherFuture::First(self.0.upgrade_inbound(sock, info)),
             Either::Right(info) => EitherFuture::Second(self.1.upgrade_inbound(sock, info)),
@@ -84,16 +89,20 @@ where
     }
 }
 
-impl<C, A, B, TA, TB, EA, EB> OutboundUpgrade<C> for SelectUpgrade<A, B>
+impl<A, B, TA, TB, EA, EB> OutboundUpgrade for SelectUpgrade<A, B>
 where
-    A: OutboundUpgrade<C, Output = TA, Error = EA>,
-    B: OutboundUpgrade<C, Output = TB, Error = EB>,
+    A: OutboundUpgrade<Output = TA, Error = EA>,
+    B: OutboundUpgrade<Output = TB, Error = EB>,
+    TA: Send + 'static,
+    TB: Send + 'static,
+    EA: Send + 'static,
+    EB: Send + 'static,
 {
     type Output = future::Either<TA, TB>;
     type Error = Either<EA, EB>;
     type Future = EitherFuture<A::Future, B::Future>;
 
-    fn upgrade_outbound(self, sock: C, info: Self::Info) -> Self::Future {
+    fn upgrade_outbound(self, sock: Stream, info: Self::Info) -> Self::Future {
         match info {
             Either::Left(info) => EitherFuture::First(self.0.upgrade_outbound(sock, info)),
             Either::Right(info) => EitherFuture::Second(self.1.upgrade_outbound(sock, info)),

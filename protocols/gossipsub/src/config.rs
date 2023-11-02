@@ -862,7 +862,7 @@ mod test {
     use crate::topic::IdentityHash;
     use crate::types::PeerKind;
     use crate::Topic;
-    use libp2p_core::UpgradeInfo;
+    use libp2p_swarm::handler::UpgradeInfo;
     use libp2p_swarm::StreamProtocol;
     use std::collections::hash_map::DefaultHasher;
     use std::hash::{Hash, Hasher};

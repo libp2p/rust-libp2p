@@ -25,15 +25,13 @@ use futures::channel::{mpsc, oneshot};
 use futures::future::FutureExt;
 use futures_timer::Delay;
 use libp2p_core::multiaddr::Protocol;
-use libp2p_core::upgrade::ReadyUpgrade;
 use libp2p_core::Multiaddr;
 use libp2p_identity::PeerId;
 use libp2p_swarm::handler::{
     ConnectionEvent, DialUpgradeError, FullyNegotiatedInbound, FullyNegotiatedOutbound,
 };
 use libp2p_swarm::{
-    ConnectionHandler, ConnectionHandlerEvent, StreamProtocol, StreamUpgradeError,
-    SubstreamProtocol,
+    ConnectionHandler, ConnectionHandlerEvent, ReadyUpgrade, StreamUpgradeError, SubstreamProtocol,
 };
 use log::debug;
 use std::collections::VecDeque;
@@ -231,9 +229,9 @@ impl ConnectionHandler for Handler {
     type FromBehaviour = In;
     type ToBehaviour = Event;
     type Error = void::Void;
-    type InboundProtocol = ReadyUpgrade<StreamProtocol>;
+    type InboundProtocol = ReadyUpgrade;
     type InboundOpenInfo = ();
-    type OutboundProtocol = ReadyUpgrade<StreamProtocol>;
+    type OutboundProtocol = ReadyUpgrade;
     type OutboundOpenInfo = ();
 
     fn listen_protocol(&self) -> SubstreamProtocol<Self::InboundProtocol, Self::InboundOpenInfo> {
@@ -476,16 +474,11 @@ impl ConnectionHandler for Handler {
 
     fn on_connection_event(
         &mut self,
-        event: ConnectionEvent<
-            Self::InboundProtocol,
-            Self::OutboundProtocol,
-            Self::InboundOpenInfo,
-            Self::OutboundOpenInfo,
-        >,
+        event: ConnectionEvent<Self::InboundOpenInfo, Self::OutboundOpenInfo>,
     ) {
         match event {
             ConnectionEvent::FullyNegotiatedInbound(FullyNegotiatedInbound {
-                protocol: stream,
+                stream: stream,
                 ..
             }) => {
                 if self
@@ -497,7 +490,7 @@ impl ConnectionHandler for Handler {
                 }
             }
             ConnectionEvent::FullyNegotiatedOutbound(FullyNegotiatedOutbound {
-                protocol: stream,
+                stream: stream,
                 ..
             }) => {
                 let pending_request = self.pending_requests.pop_front().expect(

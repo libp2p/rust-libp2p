@@ -2,10 +2,12 @@ use std::convert::Infallible;
 use std::marker::PhantomData;
 use std::sync::Arc;
 
-use libp2p_core::upgrade::{InboundConnectionUpgrade, OutboundConnectionUpgrade};
-use libp2p_core::Transport;
+use libp2p_core::upgrade::{
+    ConnectionUpgradeInfo, InboundConnectionUpgrade, OutboundConnectionUpgrade,
+};
 #[cfg(feature = "relay")]
-use libp2p_core::{Negotiated, UpgradeInfo};
+use libp2p_core::Negotiated;
+use libp2p_core::Transport;
 #[cfg(feature = "relay")]
 use libp2p_identity::PeerId;
 
@@ -123,8 +125,8 @@ impl<T: AuthenticatedMultiplexedTransport, Provider>
         SecUpgrade::Upgrade: InboundConnectionUpgrade<Negotiated<libp2p_relay::client::Connection>, Output = (PeerId, SecStream), Error = SecError> + OutboundConnectionUpgrade<Negotiated<libp2p_relay::client::Connection>, Output = (PeerId, SecStream), Error = SecError> + Clone + Send + 'static,
     <SecUpgrade::Upgrade as InboundConnectionUpgrade<Negotiated<libp2p_relay::client::Connection>>>::Future: Send,
     <SecUpgrade::Upgrade as OutboundConnectionUpgrade<Negotiated<libp2p_relay::client::Connection>>>::Future: Send,
-    <<<SecUpgrade as IntoSecurityUpgrade<libp2p_relay::client::Connection>>::Upgrade as UpgradeInfo>::InfoIter as IntoIterator>::IntoIter: Send,
-    <<SecUpgrade as IntoSecurityUpgrade<libp2p_relay::client::Connection>>::Upgrade as UpgradeInfo>::Info: Send,
+    <<<SecUpgrade as IntoSecurityUpgrade<libp2p_relay::client::Connection>>::Upgrade as ConnectionUpgradeInfo>::InfoIter as IntoIterator>::IntoIter: Send,
+    <<SecUpgrade as IntoSecurityUpgrade<libp2p_relay::client::Connection>>::Upgrade as ConnectionUpgradeInfo>::Info: Send,
 
         MuxStream: libp2p_core::muxing::StreamMuxer + Send + 'static,
         MuxStream::Substream: Send + 'static,
@@ -134,8 +136,8 @@ impl<T: AuthenticatedMultiplexedTransport, Provider>
     <MuxUpgrade::Upgrade as InboundConnectionUpgrade<Negotiated<SecStream>>>::Future: Send,
     <MuxUpgrade::Upgrade as OutboundConnectionUpgrade<Negotiated<SecStream>>>::Future: Send,
         MuxError: std::error::Error + Send + Sync + 'static,
-    <<<MuxUpgrade as IntoMultiplexerUpgrade<SecStream>>::Upgrade as UpgradeInfo>::InfoIter as IntoIterator>::IntoIter: Send,
-    <<MuxUpgrade as IntoMultiplexerUpgrade<SecStream>>::Upgrade as UpgradeInfo>::Info: Send,
+    <<<MuxUpgrade as IntoMultiplexerUpgrade<SecStream>>::Upgrade as ConnectionUpgradeInfo>::InfoIter as IntoIterator>::IntoIter: Send,
+    <<MuxUpgrade as IntoMultiplexerUpgrade<SecStream>>::Upgrade as ConnectionUpgradeInfo>::Info: Send,
     {
         self.without_any_other_transports()
             .without_dns()

@@ -150,11 +150,7 @@ pub mod bandwidth;
 pub mod tutorials;
 
 pub use self::builder::SwarmBuilder;
-pub use self::core::{
-    transport::TransportError,
-    upgrade::{InboundUpgrade, OutboundUpgrade},
-    Transport,
-};
+pub use self::core::{transport::TransportError, Transport};
 pub use self::multiaddr::{multiaddr as build_multiaddr, Multiaddr};
 pub use self::swarm::Swarm;
 pub use self::transport_ext::TransportExt;

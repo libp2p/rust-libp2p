@@ -20,9 +20,9 @@
 
 use crate::handler::{
     ConnectionEvent, ConnectionHandler, ConnectionHandlerEvent, DialUpgradeError,
-    FullyNegotiatedInbound, FullyNegotiatedOutbound, SubstreamProtocol,
+    FullyNegotiatedInbound, FullyNegotiatedOutbound, SubstreamProtocol, UpgradeInfo,
 };
-use crate::upgrade::{InboundUpgradeSend, OutboundUpgradeSend};
+use crate::upgrade::{InboundUpgrade, OutboundUpgrade};
 use crate::StreamUpgradeError;
 use smallvec::SmallVec;
 use std::{error, fmt::Debug, task::Context, task::Poll, time::Duration};
@@ -31,7 +31,7 @@ use std::{error, fmt::Debug, task::Context, task::Poll, time::Duration};
 // TODO: Debug
 pub struct OneShotHandler<TInbound, TOutbound, TEvent>
 where
-    TOutbound: OutboundUpgradeSend,
+    TOutbound: OutboundUpgrade,
 {
     /// The upgrade for inbound substreams.
     listen_protocol: SubstreamProtocol<TInbound, ()>,
@@ -47,7 +47,7 @@ where
 
 impl<TInbound, TOutbound, TEvent> OneShotHandler<TInbound, TOutbound, TEvent>
 where
-    TOutbound: OutboundUpgradeSend,
+    TOutbound: OutboundUpgrade,
 {
     /// Creates a `OneShotHandler`.
     pub fn new(
@@ -92,8 +92,8 @@ where
 
 impl<TInbound, TOutbound, TEvent> Default for OneShotHandler<TInbound, TOutbound, TEvent>
 where
-    TOutbound: OutboundUpgradeSend,
-    TInbound: InboundUpgradeSend + Default,
+    TOutbound: OutboundUpgrade,
+    TInbound: InboundUpgrade + Default,
 {
     fn default() -> Self {
         OneShotHandler::new(
@@ -105,8 +105,8 @@ where
 
 impl<TInbound, TOutbound, TEvent> ConnectionHandler for OneShotHandler<TInbound, TOutbound, TEvent>
 where
-    TInbound: InboundUpgradeSend + Send + 'static,
-    TOutbound: Debug + OutboundUpgradeSend,
+    TInbound: InboundUpgrade + Send + 'static,
+    TOutbound: Debug + OutboundUpgrade,
     TInbound::Output: Into<TEvent>,
     TOutbound::Output: Into<TEvent>,
     TOutbound::Error: error::Error + Send + 'static,
@@ -167,8 +167,8 @@ where
     fn on_connection_event(
         &mut self,
         event: ConnectionEvent<
-            Self::InboundProtocol,
-            Self::OutboundProtocol,
+            <Self::InboundProtocol as UpgradeInfo>::Info,
+            <Self::OutboundProtocol as UpgradeInfo>::Info,
             Self::InboundOpenInfo,
             Self::OutboundOpenInfo,
         >,
@@ -178,17 +178,17 @@ where
                 protocol: out,
                 ..
             }) => {
-                self.events_out.push(Ok(out.into()));
+                self.events_out.push(Ok(todo!()));
             }
             ConnectionEvent::FullyNegotiatedOutbound(FullyNegotiatedOutbound {
                 protocol: out,
                 ..
             }) => {
                 self.dial_negotiated -= 1;
-                self.events_out.push(Ok(out.into()));
+                self.events_out.push(Ok(todo!()));
             }
             ConnectionEvent::DialUpgradeError(DialUpgradeError { error, .. }) => {
-                self.events_out.push(Err(error));
+                self.events_out.push(Err(todo!()));
             }
             ConnectionEvent::AddressChange(_)
             | ConnectionEvent::ListenUpgradeError(_)
@@ -220,9 +220,9 @@ impl Default for OneShotHandlerConfig {
 mod tests {
     use super::*;
 
+    use crate::DeniedUpgrade;
     use futures::executor::block_on;
     use futures::future::poll_fn;
-    use libp2p_core::upgrade::DeniedUpgrade;
     use void::Void;
 
     #[test]

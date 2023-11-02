@@ -1,3 +1,4 @@
+// Copyright 2022 Protocol Labs.
 // Copyright 2017-2018 Parity Technologies (UK) Ltd.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a
@@ -19,40 +20,48 @@
 // DEALINGS IN THE SOFTWARE.
 
 use crate::upgrade::{InboundUpgrade, OutboundUpgrade, UpgradeInfo};
+use crate::{Stream, StreamProtocol};
 use futures::future;
 use std::iter;
 use void::Void;
 
-/// Dummy implementation of `UpgradeInfo`/`InboundUpgrade`/`OutboundUpgrade` that doesn't support
-/// any protocol.
-#[derive(Debug, Copy, Clone)]
-pub struct DeniedUpgrade;
+/// Implementation of [`UpgradeInfo`], [`InboundUpgrade`] and [`OutboundUpgrade`] that directly yields the substream.
+#[derive(Debug, Clone)]
+pub struct ReadyUpgrade {
+    protocol: StreamProtocol,
+}
 
-impl UpgradeInfo for DeniedUpgrade {
-    type Info = &'static str;
-    type InfoIter = iter::Empty<Self::Info>;
+impl ReadyUpgrade {
+    pub fn new(protocol: StreamProtocol) -> Self {
+        Self { protocol }
+    }
+}
+
+impl UpgradeInfo for ReadyUpgrade {
+    type Info = StreamProtocol;
+    type InfoIter = iter::Once<StreamProtocol>;
 
     fn protocol_info(&self) -> Self::InfoIter {
-        iter::empty()
+        iter::once(self.protocol.clone())
     }
 }
 
-impl<C> InboundUpgrade<C> for DeniedUpgrade {
-    type Output = Void;
+impl InboundUpgrade for ReadyUpgrade {
+    type Output = Stream;
     type Error = Void;
-    type Future = future::Pending<Result<Self::Output, Self::Error>>;
+    type Future = future::Ready<Result<Self::Output, Self::Error>>;
 
-    fn upgrade_inbound(self, _: C, _: Self::Info) -> Self::Future {
-        future::pending()
+    fn upgrade_inbound(self, stream: Stream, _: Self::Info) -> Self::Future {
+        future::ready(Ok(stream))
     }
 }
 
-impl<C> OutboundUpgrade<C> for DeniedUpgrade {
-    type Output = Void;
+impl OutboundUpgrade for ReadyUpgrade {
+    type Output = Stream;
     type Error = Void;
-    type Future = future::Pending<Result<Self::Output, Self::Error>>;
+    type Future = future::Ready<Result<Self::Output, Self::Error>>;
 
-    fn upgrade_outbound(self, _: C, _: Self::Info) -> Self::Future {
-        future::pending()
+    fn upgrade_outbound(self, stream: Stream, _: Self::Info) -> Self::Future {
+        future::ready(Ok(stream))
     }
 }

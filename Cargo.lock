@@ -3065,6 +3065,7 @@ dependencies = [
  "log",
  "multistream-select",
  "once_cell",
+ "pin-project",
  "quickcheck-ext",
  "rand 0.8.5",
  "smallvec",

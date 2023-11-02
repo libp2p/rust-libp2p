@@ -27,12 +27,11 @@ use futures::future::Either;
 use futures::prelude::*;
 use futures::StreamExt;
 use instant::Instant;
-use libp2p_core::upgrade::DeniedUpgrade;
 use libp2p_swarm::handler::{
     ConnectionEvent, ConnectionHandler, ConnectionHandlerEvent, DialUpgradeError,
     FullyNegotiatedInbound, FullyNegotiatedOutbound, StreamUpgradeError, SubstreamProtocol,
 };
-use libp2p_swarm::Stream;
+use libp2p_swarm::{DeniedUpgrade, Stream};
 use smallvec::SmallVec;
 use std::{
     pin::Pin,
@@ -193,7 +192,9 @@ impl EnabledHandler {
 
     fn on_fully_negotiated_outbound(
         &mut self,
-        FullyNegotiatedOutbound { protocol, .. }: FullyNegotiatedOutbound<
+        FullyNegotiatedOutbound {
+            stream: protocol, ..
+        }: FullyNegotiatedOutbound<
             <Handler as ConnectionHandler>::OutboundProtocol,
             <Handler as ConnectionHandler>::OutboundOpenInfo,
         >,
@@ -456,12 +457,7 @@ impl ConnectionHandler for Handler {
 
     fn on_connection_event(
         &mut self,
-        event: ConnectionEvent<
-            Self::InboundProtocol,
-            Self::OutboundProtocol,
-            Self::InboundOpenInfo,
-            Self::OutboundOpenInfo,
-        >,
+        event: ConnectionEvent<Self::InboundOpenInfo, Self::OutboundOpenInfo>,
     ) {
         match self {
             Handler::Enabled(handler) => {
@@ -493,7 +489,7 @@ impl ConnectionHandler for Handler {
 
                 match event {
                     ConnectionEvent::FullyNegotiatedInbound(FullyNegotiatedInbound {
-                        protocol,
+                        stream: protocol,
                         ..
                     }) => match protocol {
                         Either::Left(protocol) => handler.on_fully_negotiated_inbound(protocol),

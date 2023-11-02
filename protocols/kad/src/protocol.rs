@@ -32,10 +32,10 @@ use asynchronous_codec::{Decoder, Encoder, Framed};
 use bytes::BytesMut;
 use futures::prelude::*;
 use instant::Instant;
-use libp2p_core::upgrade::{InboundUpgrade, OutboundUpgrade, UpgradeInfo};
 use libp2p_core::Multiaddr;
 use libp2p_identity::PeerId;
-use libp2p_swarm::StreamProtocol;
+use libp2p_swarm::handler::{InboundUpgrade, OutboundUpgrade, UpgradeInfo};
+use libp2p_swarm::{Stream, StreamProtocol};
 use std::marker::PhantomData;
 use std::{convert::TryFrom, time::Duration};
 use std::{io, iter};
@@ -209,34 +209,28 @@ impl<A, B: TryFrom<proto::Message, Error = io::Error>> Decoder for Codec<A, B> {
 }
 
 /// Sink of responses and stream of requests.
-pub(crate) type KadInStreamSink<S> = Framed<S, Codec<KadResponseMsg, KadRequestMsg>>;
+pub(crate) type KadInStreamSink = Framed<Stream, Codec<KadResponseMsg, KadRequestMsg>>;
 /// Sink of requests and stream of responses.
-pub(crate) type KadOutStreamSink<S> = Framed<S, Codec<KadRequestMsg, KadResponseMsg>>;
+pub(crate) type KadOutStreamSink = Framed<Stream, Codec<KadRequestMsg, KadResponseMsg>>;
 
-impl<C> InboundUpgrade<C> for ProtocolConfig
-where
-    C: AsyncRead + AsyncWrite + Unpin,
-{
-    type Output = KadInStreamSink<C>;
+impl InboundUpgrade for ProtocolConfig {
+    type Output = KadInStreamSink;
     type Future = future::Ready<Result<Self::Output, io::Error>>;
     type Error = io::Error;
 
-    fn upgrade_inbound(self, incoming: C, _: Self::Info) -> Self::Future {
+    fn upgrade_inbound(self, incoming: Stream, _: Self::Info) -> Self::Future {
         let codec = Codec::new(self.max_packet_size);
 
         future::ok(Framed::new(incoming, codec))
     }
 }
 
-impl<C> OutboundUpgrade<C> for ProtocolConfig
-where
-    C: AsyncRead + AsyncWrite + Unpin,
-{
-    type Output = KadOutStreamSink<C>;
+impl OutboundUpgrade for ProtocolConfig {
+    type Output = KadOutStreamSink;
     type Future = future::Ready<Result<Self::Output, io::Error>>;
     type Error = io::Error;
 
-    fn upgrade_outbound(self, incoming: C, _: Self::Info) -> Self::Future {
+    fn upgrade_outbound(self, incoming: Stream, _: Self::Info) -> Self::Future {
         let codec = Codec::new(self.max_packet_size);
 
         future::ok(Framed::new(incoming, codec))

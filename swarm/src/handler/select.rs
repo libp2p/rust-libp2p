@@ -20,13 +20,12 @@
 
 use crate::handler::{
     AddressChange, ConnectionEvent, ConnectionHandler, ConnectionHandlerEvent, DialUpgradeError,
-    FullyNegotiatedInbound, FullyNegotiatedOutbound, InboundUpgradeSend, ListenUpgradeError,
-    OutboundUpgradeSend, StreamUpgradeError, SubstreamProtocol,
+    FullyNegotiatedInbound, FullyNegotiatedOutbound, InboundUpgrade, ListenUpgradeError,
+    OutboundUpgrade, StreamUpgradeError, SubstreamProtocol, UpgradeInfo,
 };
-use crate::upgrade::SendWrapper;
+use crate::upgrade::SelectUpgrade;
 use either::Either;
 use futures::future;
-use libp2p_core::upgrade::SelectUpgrade;
 use std::{cmp, task::Context, task::Poll};
 
 /// Implementation of [`ConnectionHandler`] that combines two protocols into one.
@@ -49,94 +48,91 @@ impl<TProto1, TProto2> ConnectionHandlerSelect<TProto1, TProto2> {
     }
 }
 
-impl<S1OOI, S2OOI, S1OP, S2OP>
-    FullyNegotiatedOutbound<Either<SendWrapper<S1OP>, SendWrapper<S2OP>>, Either<S1OOI, S2OOI>>
+impl<S1OOI, S2OOI, S1OP, S2OP> FullyNegotiatedOutbound<Either<S1OP, S2OP>, Either<S1OOI, S2OOI>>
 where
-    S1OP: OutboundUpgradeSend,
-    S2OP: OutboundUpgradeSend,
+    S1OP: OutboundUpgrade,
+    S2OP: OutboundUpgrade,
     S1OOI: Send + 'static,
     S2OOI: Send + 'static,
 {
     pub(crate) fn transpose(
         self,
     ) -> Either<FullyNegotiatedOutbound<S1OP, S1OOI>, FullyNegotiatedOutbound<S2OP, S2OOI>> {
-        match self {
-            FullyNegotiatedOutbound {
-                protocol: future::Either::Left(protocol),
-                info: Either::Left(info),
-            } => Either::Left(FullyNegotiatedOutbound { protocol, info }),
-            FullyNegotiatedOutbound {
-                protocol: future::Either::Right(protocol),
-                info: Either::Right(info),
-            } => Either::Right(FullyNegotiatedOutbound { protocol, info }),
-            _ => panic!("wrong API usage: the protocol doesn't match the upgrade info"),
-        }
+        // match self {
+        //     FullyNegotiatedOutbound {
+        //         protocol: future::Either::Left(protocol),
+        //         info: Either::Left(info),
+        //     } => Either::Left(FullyNegotiatedOutbound { protocol, info }),
+        //     FullyNegotiatedOutbound {
+        //         protocol: future::Either::Right(protocol),
+        //         info: Either::Right(info),
+        //     } => Either::Right(FullyNegotiatedOutbound { protocol, info }),
+        //     _ => panic!("wrong API usage: the protocol doesn't match the upgrade info"),
+        // }
+        todo!()
     }
 }
 
-impl<S1IP, S1IOI, S2IP, S2IOI>
-    FullyNegotiatedInbound<SelectUpgrade<SendWrapper<S1IP>, SendWrapper<S2IP>>, (S1IOI, S2IOI)>
+impl<S1IP, S1IOI, S2IP, S2IOI> FullyNegotiatedInbound<SelectUpgrade<S1IP, S2IP>, (S1IOI, S2IOI)>
 where
-    S1IP: InboundUpgradeSend,
-    S2IP: InboundUpgradeSend,
+    S1IP: InboundUpgrade,
+    S2IP: InboundUpgrade,
 {
     pub(crate) fn transpose(
         self,
     ) -> Either<FullyNegotiatedInbound<S1IP, S1IOI>, FullyNegotiatedInbound<S2IP, S2IOI>> {
-        match self {
-            FullyNegotiatedInbound {
-                protocol: future::Either::Left(protocol),
-                info: (i1, _i2),
-            } => Either::Left(FullyNegotiatedInbound { protocol, info: i1 }),
-            FullyNegotiatedInbound {
-                protocol: future::Either::Right(protocol),
-                info: (_i1, i2),
-            } => Either::Right(FullyNegotiatedInbound { protocol, info: i2 }),
-        }
+        // match self {
+        //     FullyNegotiatedInbound {
+        //         protocol: future::Either::Left(protocol),
+        //         info: (i1, _i2),
+        //     } => Either::Left(FullyNegotiatedInbound { protocol, info: i1 }),
+        //     FullyNegotiatedInbound {
+        //         protocol: future::Either::Right(protocol),
+        //         info: (_i1, i2),
+        //     } => Either::Right(FullyNegotiatedInbound { protocol, info: i2 }),
+        // }
+        todo!()
     }
 }
 
-impl<S1OOI, S2OOI, S1OP, S2OP>
-    DialUpgradeError<Either<S1OOI, S2OOI>, Either<SendWrapper<S1OP>, SendWrapper<S2OP>>>
+impl<S1OOI, S2OOI> DialUpgradeError<Either<S1OOI, S2OOI>>
 where
-    S1OP: OutboundUpgradeSend,
-    S2OP: OutboundUpgradeSend,
     S1OOI: Send + 'static,
     S2OOI: Send + 'static,
 {
-    pub(crate) fn transpose(
-        self,
-    ) -> Either<DialUpgradeError<S1OOI, S1OP>, DialUpgradeError<S2OOI, S2OP>> {
-        match self {
-            DialUpgradeError {
-                info: Either::Left(info),
-                error: StreamUpgradeError::Apply(Either::Left(err)),
-            } => Either::Left(DialUpgradeError {
-                info,
-                error: StreamUpgradeError::Apply(err),
-            }),
-            DialUpgradeError {
-                info: Either::Right(info),
-                error: StreamUpgradeError::Apply(Either::Right(err)),
-            } => Either::Right(DialUpgradeError {
-                info,
-                error: StreamUpgradeError::Apply(err),
-            }),
-            DialUpgradeError {
-                info: Either::Left(info),
-                error: e,
-            } => Either::Left(DialUpgradeError {
-                info,
-                error: e.map_upgrade_err(|_| panic!("already handled above")),
-            }),
-            DialUpgradeError {
-                info: Either::Right(info),
-                error: e,
-            } => Either::Right(DialUpgradeError {
-                info,
-                error: e.map_upgrade_err(|_| panic!("already handled above")),
-            }),
-        }
+    pub(crate) fn transpose(self) -> Either<DialUpgradeError<S1OOI>, DialUpgradeError<S2OOI>> {
+        // match self {
+        //     DialUpgradeError {
+        //         info: Either::Left(info),
+        //         error: StreamUpgradeError::Apply(Either::Left(err)),
+        //     } => Either::Left(DialUpgradeError {
+        //         info,
+        //         error: StreamUpgradeError::Apply(err),
+        //     }),
+        //     DialUpgradeError {
+        //         info: Either::Right(info),
+        //         error: StreamUpgradeError::Apply(Either::Right(err)),
+        //     } => Either::Right(DialUpgradeError {
+        //         info,
+        //         error: StreamUpgradeError::Apply(err),
+        //     }),
+        //     DialUpgradeError {
+        //         info: Either::Left(info),
+        //         error: e,
+        //     } => Either::Left(DialUpgradeError {
+        //         info,
+        //         error: e.map_upgrade_err(|_| panic!("already handled above")),
+        //     }),
+        //     DialUpgradeError {
+        //         info: Either::Right(info),
+        //         error: e,
+        //     } => Either::Right(DialUpgradeError {
+        //         info,
+        //         error: e.map_upgrade_err(|_| panic!("already handled above")),
+        //     }),
+        // }
+
+        todo!()
     }
 }
 
@@ -150,27 +146,26 @@ where
         ListenUpgradeError {
             info: (i1, i2),
             error,
-        }: ListenUpgradeError<
-            <Self as ConnectionHandler>::InboundOpenInfo,
-            <Self as ConnectionHandler>::InboundProtocol,
-        >,
+        }: ListenUpgradeError<<Self as ConnectionHandler>::InboundOpenInfo>,
     ) {
-        match error {
-            Either::Left(error) => {
-                self.proto1
-                    .on_connection_event(ConnectionEvent::ListenUpgradeError(ListenUpgradeError {
-                        info: i1,
-                        error,
-                    }));
-            }
-            Either::Right(error) => {
-                self.proto2
-                    .on_connection_event(ConnectionEvent::ListenUpgradeError(ListenUpgradeError {
-                        info: i2,
-                        error,
-                    }));
-            }
-        }
+        // match error {
+        //     Either::Left(error) => {
+        //         self.proto1
+        //             .on_connection_event(ConnectionEvent::ListenUpgradeError(ListenUpgradeError {
+        //                 info: i1,
+        //                 error,
+        //             }));
+        //     }
+        //     Either::Right(error) => {
+        //         self.proto2
+        //             .on_connection_event(ConnectionEvent::ListenUpgradeError(ListenUpgradeError {
+        //                 info: i2,
+        //                 error,
+        //             }));
+        //     }
+        // }
+
+        todo!()
     }
 }
 
@@ -183,11 +178,10 @@ where
     type ToBehaviour = Either<TProto1::ToBehaviour, TProto2::ToBehaviour>;
     type Error = Either<TProto1::Error, TProto2::Error>;
     type InboundProtocol = SelectUpgrade<
-        SendWrapper<<TProto1 as ConnectionHandler>::InboundProtocol>,
-        SendWrapper<<TProto2 as ConnectionHandler>::InboundProtocol>,
+        <TProto1 as ConnectionHandler>::InboundProtocol,
+        <TProto2 as ConnectionHandler>::InboundProtocol,
     >;
-    type OutboundProtocol =
-        Either<SendWrapper<TProto1::OutboundProtocol>, SendWrapper<TProto2::OutboundProtocol>>;
+    type OutboundProtocol = Either<TProto1::OutboundProtocol, TProto2::OutboundProtocol>;
     type OutboundOpenInfo = Either<TProto1::OutboundOpenInfo, TProto2::OutboundOpenInfo>;
     type InboundOpenInfo = (TProto1::InboundOpenInfo, TProto2::InboundOpenInfo);
 
@@ -197,7 +191,7 @@ where
         let timeout = *std::cmp::max(proto1.timeout(), proto2.timeout());
         let (u1, i1) = proto1.into_upgrade();
         let (u2, i2) = proto2.into_upgrade();
-        let choice = SelectUpgrade::new(SendWrapper(u1), SendWrapper(u2));
+        let choice = SelectUpgrade::new(u1, u2);
         SubstreamProtocol::new(choice, (i1, i2)).with_timeout(timeout)
     }
 
@@ -235,9 +229,7 @@ where
             }
             Poll::Ready(ConnectionHandlerEvent::OutboundSubstreamRequest { protocol }) => {
                 return Poll::Ready(ConnectionHandlerEvent::OutboundSubstreamRequest {
-                    protocol: protocol
-                        .map_upgrade(|u| Either::Left(SendWrapper(u)))
-                        .map_info(Either::Left),
+                    protocol: protocol.map_upgrade(Either::Left).map_info(Either::Left),
                 });
             }
             Poll::Ready(ConnectionHandlerEvent::ReportRemoteProtocols(support)) => {
@@ -257,9 +249,7 @@ where
             }
             Poll::Ready(ConnectionHandlerEvent::OutboundSubstreamRequest { protocol }) => {
                 return Poll::Ready(ConnectionHandlerEvent::OutboundSubstreamRequest {
-                    protocol: protocol
-                        .map_upgrade(|u| Either::Right(SendWrapper(u)))
-                        .map_info(Either::Right),
+                    protocol: protocol.map_upgrade(Either::Right).map_info(Either::Right),
                 });
             }
             Poll::Ready(ConnectionHandlerEvent::ReportRemoteProtocols(support)) => {
@@ -274,77 +264,78 @@ where
     fn on_connection_event(
         &mut self,
         event: ConnectionEvent<
-            Self::InboundProtocol,
-            Self::OutboundProtocol,
+            <Self::InboundProtocol as UpgradeInfo>::Info,
+            <Self::OutboundProtocol as UpgradeInfo>::Info,
             Self::InboundOpenInfo,
             Self::OutboundOpenInfo,
         >,
     ) {
-        match event {
-            ConnectionEvent::FullyNegotiatedOutbound(fully_negotiated_outbound) => {
-                match fully_negotiated_outbound.transpose() {
-                    Either::Left(f) => self
-                        .proto1
-                        .on_connection_event(ConnectionEvent::FullyNegotiatedOutbound(f)),
-                    Either::Right(f) => self
-                        .proto2
-                        .on_connection_event(ConnectionEvent::FullyNegotiatedOutbound(f)),
-                }
-            }
-            ConnectionEvent::FullyNegotiatedInbound(fully_negotiated_inbound) => {
-                match fully_negotiated_inbound.transpose() {
-                    Either::Left(f) => self
-                        .proto1
-                        .on_connection_event(ConnectionEvent::FullyNegotiatedInbound(f)),
-                    Either::Right(f) => self
-                        .proto2
-                        .on_connection_event(ConnectionEvent::FullyNegotiatedInbound(f)),
-                }
-            }
-            ConnectionEvent::AddressChange(address) => {
-                self.proto1
-                    .on_connection_event(ConnectionEvent::AddressChange(AddressChange {
-                        new_address: address.new_address,
-                    }));
-
-                self.proto2
-                    .on_connection_event(ConnectionEvent::AddressChange(AddressChange {
-                        new_address: address.new_address,
-                    }));
-            }
-            ConnectionEvent::DialUpgradeError(dial_upgrade_error) => {
-                match dial_upgrade_error.transpose() {
-                    Either::Left(err) => self
-                        .proto1
-                        .on_connection_event(ConnectionEvent::DialUpgradeError(err)),
-                    Either::Right(err) => self
-                        .proto2
-                        .on_connection_event(ConnectionEvent::DialUpgradeError(err)),
-                }
-            }
-            ConnectionEvent::ListenUpgradeError(listen_upgrade_error) => {
-                self.on_listen_upgrade_error(listen_upgrade_error)
-            }
-            ConnectionEvent::LocalProtocolsChange(supported_protocols) => {
-                self.proto1
-                    .on_connection_event(ConnectionEvent::LocalProtocolsChange(
-                        supported_protocols.clone(),
-                    ));
-                self.proto2
-                    .on_connection_event(ConnectionEvent::LocalProtocolsChange(
-                        supported_protocols,
-                    ));
-            }
-            ConnectionEvent::RemoteProtocolsChange(supported_protocols) => {
-                self.proto1
-                    .on_connection_event(ConnectionEvent::RemoteProtocolsChange(
-                        supported_protocols.clone(),
-                    ));
-                self.proto2
-                    .on_connection_event(ConnectionEvent::RemoteProtocolsChange(
-                        supported_protocols,
-                    ));
-            }
-        }
+        // match event {
+        //     ConnectionEvent::FullyNegotiatedOutbound(fully_negotiated_outbound) => {
+        //         match fully_negotiated_outbound.transpose() {
+        //             Either::Left(f) => self
+        //                 .proto1
+        //                 .on_connection_event(ConnectionEvent::FullyNegotiatedOutbound(f)),
+        //             Either::Right(f) => self
+        //                 .proto2
+        //                 .on_connection_event(ConnectionEvent::FullyNegotiatedOutbound(f)),
+        //         }
+        //     }
+        //     ConnectionEvent::FullyNegotiatedInbound(fully_negotiated_inbound) => {
+        //         match fully_negotiated_inbound.transpose() {
+        //             Either::Left(f) => self
+        //                 .proto1
+        //                 .on_connection_event(ConnectionEvent::FullyNegotiatedInbound(f)),
+        //             Either::Right(f) => self
+        //                 .proto2
+        //                 .on_connection_event(ConnectionEvent::FullyNegotiatedInbound(f)),
+        //         }
+        //     }
+        //     ConnectionEvent::AddressChange(address) => {
+        //         self.proto1
+        //             .on_connection_event(ConnectionEvent::AddressChange(AddressChange {
+        //                 new_address: address.new_address,
+        //             }));
+        //
+        //         self.proto2
+        //             .on_connection_event(ConnectionEvent::AddressChange(AddressChange {
+        //                 new_address: address.new_address,
+        //             }));
+        //     }
+        //     ConnectionEvent::DialUpgradeError(dial_upgrade_error) => {
+        //         match dial_upgrade_error.transpose() {
+        //             Either::Left(err) => self
+        //                 .proto1
+        //                 .on_connection_event(ConnectionEvent::DialUpgradeError(err)),
+        //             Either::Right(err) => self
+        //                 .proto2
+        //                 .on_connection_event(ConnectionEvent::DialUpgradeError(err)),
+        //         }
+        //     }
+        //     ConnectionEvent::ListenUpgradeError(listen_upgrade_error) => {
+        //         self.on_listen_upgrade_error(listen_upgrade_error)
+        //     }
+        //     ConnectionEvent::LocalProtocolsChange(supported_protocols) => {
+        //         self.proto1
+        //             .on_connection_event(ConnectionEvent::LocalProtocolsChange(
+        //                 supported_protocols.clone(),
+        //             ));
+        //         self.proto2
+        //             .on_connection_event(ConnectionEvent::LocalProtocolsChange(
+        //                 supported_protocols,
+        //             ));
+        //     }
+        //     ConnectionEvent::RemoteProtocolsChange(supported_protocols) => {
+        //         self.proto1
+        //             .on_connection_event(ConnectionEvent::RemoteProtocolsChange(
+        //                 supported_protocols.clone(),
+        //             ));
+        //         self.proto2
+        //             .on_connection_event(ConnectionEvent::RemoteProtocolsChange(
+        //                 supported_protocols,
+        //             ));
+        //     }
+        // }
+        todo!()
     }
 }

@@ -27,8 +27,9 @@ use crate::error::Error;
 use bytes::Bytes;
 use futures::future::BoxFuture;
 use futures::prelude::*;
-use libp2p_core::upgrade::{InboundConnectionUpgrade, OutboundConnectionUpgrade};
-use libp2p_core::UpgradeInfo;
+use libp2p_core::upgrade::{
+    ConnectionUpgradeInfo, InboundConnectionUpgrade, OutboundConnectionUpgrade,
+};
 use libp2p_identity as identity;
 use libp2p_identity::PeerId;
 use libp2p_identity::PublicKey;
@@ -61,7 +62,7 @@ impl Config {
     }
 }
 
-impl UpgradeInfo for Config {
+impl ConnectionUpgradeInfo for Config {
     type Info = &'static str;
     type InfoIter = iter::Once<Self::Info>;
 

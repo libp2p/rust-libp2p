@@ -12,7 +12,8 @@ use libp2p_core::Transport;
     any(feature = "tcp", feature = "websocket")
 ))]
 use libp2p_core::{
-    upgrade::InboundConnectionUpgrade, upgrade::OutboundConnectionUpgrade, Negotiated, UpgradeInfo,
+    upgrade::{ConnectionUpgradeInfo, InboundConnectionUpgrade, OutboundConnectionUpgrade},
+    Negotiated,
 };
 use std::marker::PhantomData;
 
@@ -63,8 +64,8 @@ macro_rules! impl_tcp_builder {
                 SecUpgrade::Upgrade: InboundConnectionUpgrade<Negotiated<libp2p_tcp::$path::TcpStream>, Output = (libp2p_identity::PeerId, SecStream), Error = SecError> + OutboundConnectionUpgrade<Negotiated<libp2p_tcp::$path::TcpStream>, Output = (libp2p_identity::PeerId, SecStream), Error = SecError> + Clone + Send + 'static,
                 <SecUpgrade::Upgrade as InboundConnectionUpgrade<Negotiated<libp2p_tcp::$path::TcpStream>>>::Future: Send,
                 <SecUpgrade::Upgrade as OutboundConnectionUpgrade<Negotiated<libp2p_tcp::$path::TcpStream>>>::Future: Send,
-                <<<SecUpgrade as IntoSecurityUpgrade<libp2p_tcp::$path::TcpStream>>::Upgrade as UpgradeInfo>::InfoIter as IntoIterator>::IntoIter: Send,
-                <<SecUpgrade as IntoSecurityUpgrade<libp2p_tcp::$path::TcpStream>>::Upgrade as UpgradeInfo>::Info: Send,
+                <<<SecUpgrade as IntoSecurityUpgrade<libp2p_tcp::$path::TcpStream>>::Upgrade as ConnectionUpgradeInfo>::InfoIter as IntoIterator>::IntoIter: Send,
+                <<SecUpgrade as IntoSecurityUpgrade<libp2p_tcp::$path::TcpStream>>::Upgrade as ConnectionUpgradeInfo>::Info: Send,
 
                 MuxStream: StreamMuxer + Send + 'static,
                 MuxStream::Substream: Send + 'static,
@@ -74,8 +75,8 @@ macro_rules! impl_tcp_builder {
                 <MuxUpgrade::Upgrade as InboundConnectionUpgrade<Negotiated<SecStream>>>::Future: Send,
                 <MuxUpgrade::Upgrade as OutboundConnectionUpgrade<Negotiated<SecStream>>>::Future: Send,
                 MuxError: std::error::Error + Send + Sync + 'static,
-                <<<MuxUpgrade as IntoMultiplexerUpgrade<SecStream>>::Upgrade as UpgradeInfo>::InfoIter as IntoIterator>::IntoIter: Send,
-                <<MuxUpgrade as IntoMultiplexerUpgrade<SecStream>>::Upgrade as UpgradeInfo>::Info: Send,
+                <<<MuxUpgrade as IntoMultiplexerUpgrade<SecStream>>::Upgrade as ConnectionUpgradeInfo>::InfoIter as IntoIterator>::IntoIter: Send,
+                <<MuxUpgrade as IntoMultiplexerUpgrade<SecStream>>::Upgrade as ConnectionUpgradeInfo>::Info: Send,
             {
                 Ok(SwarmBuilder {
                     phase: QuicPhase {
@@ -189,8 +190,8 @@ macro_rules! impl_tcp_phase_with_websocket {
                 SecUpgrade::Upgrade: InboundConnectionUpgrade<Negotiated<$websocketStream>, Output = (libp2p_identity::PeerId, SecStream), Error = SecError> + OutboundConnectionUpgrade<Negotiated<$websocketStream>, Output = (libp2p_identity::PeerId, SecStream), Error = SecError> + Clone + Send + 'static,
             <SecUpgrade::Upgrade as InboundConnectionUpgrade<Negotiated<$websocketStream>>>::Future: Send,
             <SecUpgrade::Upgrade as OutboundConnectionUpgrade<Negotiated<$websocketStream>>>::Future: Send,
-            <<<SecUpgrade as IntoSecurityUpgrade<$websocketStream>>::Upgrade as UpgradeInfo>::InfoIter as IntoIterator>::IntoIter: Send,
-            <<SecUpgrade as IntoSecurityUpgrade<$websocketStream>>::Upgrade as UpgradeInfo>::Info: Send,
+            <<<SecUpgrade as IntoSecurityUpgrade<$websocketStream>>::Upgrade as ConnectionUpgradeInfo>::InfoIter as IntoIterator>::IntoIter: Send,
+            <<SecUpgrade as IntoSecurityUpgrade<$websocketStream>>::Upgrade as ConnectionUpgradeInfo>::Info: Send,
 
                 MuxStream: StreamMuxer + Send + 'static,
                 MuxStream::Substream: Send + 'static,
@@ -200,8 +201,8 @@ macro_rules! impl_tcp_phase_with_websocket {
                 <MuxUpgrade::Upgrade as InboundConnectionUpgrade<Negotiated<SecStream>>>::Future: Send,
                 <MuxUpgrade::Upgrade as OutboundConnectionUpgrade<Negotiated<SecStream>>>::Future: Send,
                     MuxError: std::error::Error + Send + Sync + 'static,
-                <<<MuxUpgrade as IntoMultiplexerUpgrade<SecStream>>::Upgrade as UpgradeInfo>::InfoIter as IntoIterator>::IntoIter: Send,
-                <<MuxUpgrade as IntoMultiplexerUpgrade<SecStream>>::Upgrade as UpgradeInfo>::Info: Send,
+                <<<MuxUpgrade as IntoMultiplexerUpgrade<SecStream>>::Upgrade as ConnectionUpgradeInfo>::InfoIter as IntoIterator>::IntoIter: Send,
+                <<MuxUpgrade as IntoMultiplexerUpgrade<SecStream>>::Upgrade as ConnectionUpgradeInfo>::Info: Send,
             {
                 self.without_tcp()
                     .without_quic()
