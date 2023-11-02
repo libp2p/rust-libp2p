@@ -512,7 +512,11 @@ where
     ///
     /// If the routing table has been updated as a result of this operation,
     /// a [`Event::RoutingUpdated`] event is emitted.
-    pub fn add_address(&mut self, peer: &PeerId, address: Multiaddr) -> RoutingUpdate {
+    pub fn add_address(
+        &mut self,
+        peer: &PeerId,
+        address: Multiaddr,
+    ) -> Result<RoutingUpdateOk, RoutingUpdateError> {
         let key = kbucket::Key::from(*peer);
         match self.kbuckets.entry(&key) {
             kbucket::Entry::Present(mut entry, _) => {
@@ -530,11 +534,11 @@ where
                                 .expect("Not kbucket::Entry::SelfEntry."),
                         }))
                 }
-                RoutingUpdate::Success
+                Ok(RoutingUpdateOk::Success)
             }
             kbucket::Entry::Pending(mut entry, _) => {
                 entry.value().insert(address);
-                RoutingUpdate::Pending
+                Ok(RoutingUpdateOk::Pending)
             }
             kbucket::Entry::Absent(entry) => {
                 let addresses = Addresses::new(address);
@@ -558,11 +562,11 @@ where
                                     .expect("Not kbucket::Entry::SelfEntry."),
                             },
                         ));
-                        RoutingUpdate::Success
+                        Ok(RoutingUpdateOk::Success)
                     }
                     kbucket::InsertResult::Full => {
-                        debug!("Bucket full. Peer not added to routing table: {}", peer);
-                        RoutingUpdate::Failed
+                        debug!("Bucket full. Peer not added to routing table: {peer}");
+                        Err(RoutingUpdateError::BucketFull(*peer))
                     }
                     kbucket::InsertResult::Pending { disconnected } => {
                         self.queued_events.push_back(ToSwarm::Dial {
@@ -570,11 +574,11 @@ where
                                 .condition(dial_opts::PeerCondition::NotDialing)
                                 .build(),
                         });
-                        RoutingUpdate::Pending
+                        Ok(RoutingUpdateOk::Pending)
                     }
                 }
             }
-            kbucket::Entry::SelfEntry => RoutingUpdate::Failed,
+            kbucket::Entry::SelfEntry => Err(RoutingUpdateError::SelfEntry),
         }
     }
 
@@ -3288,9 +3292,9 @@ impl fmt::Display for NoKnownPeers {
 
 impl std::error::Error for NoKnownPeers {}
 
-/// The possible outcomes of [`Behaviour::add_address`].
+/// The possible success outcomes of [`Behaviour::add_address`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum RoutingUpdate {
+pub enum RoutingUpdateOk {
     /// The given peer and address has been added to the routing
     /// table.
     Success,
@@ -3300,12 +3304,18 @@ pub enum RoutingUpdate {
     /// in the routing table, [`Event::RoutingUpdated`]
     /// is eventually emitted.
     Pending,
-    /// The routing table update failed, either because the
-    /// corresponding bucket for the peer is full and the
-    /// pending slot(s) are occupied, or because the given
-    /// peer ID is deemed invalid (e.g. refers to the local
-    /// peer ID).
-    Failed,
+}
+
+/// The routing table update failed, either because the
+/// corresponding bucket for the peer is full and the
+/// pending slot(s) are occupied, or because the given
+/// peer ID refers to the local peer ID.
+#[derive(Debug, Clone, Error)]
+pub enum RoutingUpdateError {
+    #[error("peer `{0}` is not added to the DHT as the corresponding bucket is full")]
+    BucketFull(PeerId),
+    #[error("cannot add local peer to the DHT")]
+    SelfEntry,
 }
 
 #[derive(PartialEq, Copy, Clone, Debug)]

@@ -1,5 +1,7 @@
 ## 0.45.0 - unreleased
 
+- Make `Kademlia::add_address` return `Result`.
+  See [PR 4280](https://github.com/libp2p/rust-libp2p/pull/4280).
 - Remove deprecated `kad::Config::set_connection_idle_timeout` in favor of `SwarmBuilder::idle_connection_timeout`.
   See [PR 4659](https://github.com/libp2p/rust-libp2p/pull/4659).
 - Emit `ModeChanged` event whenever we automatically reconfigure the mode.
@@ -27,13 +29,8 @@
 [PR 4645]: https://github.com/libp2p/rust-libp2p/pull/4645
 [PR 4675]: https://github.com/libp2p/rust-libp2p/pull/4675
 
-<!-- Internal changes
-
-- Allow deprecated usage of `KeepAlive::Until`
-
--->
-
 ## 0.44.5
+
 - Migrate to `quick-protobuf-codec` crate for codec logic.
   See [PR 4501].
 

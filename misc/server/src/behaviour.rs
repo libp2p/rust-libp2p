@@ -44,7 +44,9 @@ impl Behaviour {
             );
             let bootaddr = Multiaddr::from_str("/dnsaddr/bootstrap.libp2p.io").unwrap();
             for peer in &BOOTNODES {
-                kademlia.add_address(&PeerId::from_str(peer).unwrap(), bootaddr.clone());
+                kademlia
+                    .add_address(&PeerId::from_str(peer).unwrap(), bootaddr.clone())
+                    .expect("to add bootnode to the DHT");
             }
             kademlia.bootstrap().unwrap();
             Some(kademlia)

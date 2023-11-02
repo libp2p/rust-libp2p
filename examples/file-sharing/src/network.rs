@@ -349,7 +349,8 @@ impl EventLoop {
                     self.swarm
                         .behaviour_mut()
                         .kademlia
-                        .add_address(&peer_id, peer_addr.clone());
+                        .add_address(&peer_id, peer_addr.clone())
+                        .expect("Adding a peer to the DHT");
                     match self.swarm.dial(peer_addr.with(Protocol::P2p(peer_id))) {
                         Ok(()) => {
                             e.insert(sender);

@@ -116,7 +116,8 @@ fn build_connected_nodes_with_config(
             swarms[i]
                 .1
                 .behaviour_mut()
-                .add_address(peer_id, addr.clone());
+                .add_address(peer_id, addr.clone())
+                .unwrap();
         }
         if j % step == 0 {
             i += step;
@@ -138,7 +139,12 @@ fn build_fully_connected_nodes_with_config(
 
     for (_addr, swarm) in swarms.iter_mut() {
         for (addr, peer) in &swarm_addr_and_peer_id {
-            swarm.behaviour_mut().add_address(peer, addr.clone());
+            if swarm.local_peer_id() != peer {
+                swarm
+                    .behaviour_mut()
+                    .add_address(peer, addr.clone())
+                    .unwrap();
+            }
         }
     }
 
@@ -334,7 +340,8 @@ fn unresponsive_not_returned_direct() {
     for _ in 0..10 {
         swarms[0]
             .behaviour_mut()
-            .add_address(&PeerId::random(), Protocol::Udp(10u16).into());
+            .add_address(&PeerId::random(), Protocol::Udp(10u16).into())
+            .unwrap();
     }
 
     // Ask first to search a random value.
@@ -378,7 +385,8 @@ fn unresponsive_not_returned_indirect() {
         swarms[0]
             .1
             .behaviour_mut()
-            .add_address(&PeerId::random(), multiaddr![Udp(10u16)]);
+            .add_address(&PeerId::random(), multiaddr![Udp(10u16)])
+            .unwrap();
     }
 
     // Connect second to first.
@@ -387,7 +395,8 @@ fn unresponsive_not_returned_indirect() {
     swarms[1]
         .1
         .behaviour_mut()
-        .add_address(&first_peer_id, first_address);
+        .add_address(&first_peer_id, first_address)
+        .unwrap();
 
     // Drop the swarm addresses.
     let mut swarms = swarms
@@ -437,11 +446,13 @@ fn get_record_not_found() {
     swarms[0]
         .1
         .behaviour_mut()
-        .add_address(&swarm_ids[1], second);
+        .add_address(&swarm_ids[1], second)
+        .unwrap();
     swarms[1]
         .1
         .behaviour_mut()
-        .add_address(&swarm_ids[2], third);
+        .add_address(&swarm_ids[2], third)
+        .unwrap();
 
     // Drop the swarm addresses.
     let mut swarms = swarms
@@ -516,7 +527,8 @@ fn put_record() {
                 single_swarm
                     .1
                     .behaviour_mut()
-                    .add_address(swarm.1.local_peer_id(), swarm.0.clone());
+                    .add_address(swarm.1.local_peer_id(), swarm.0.clone())
+                    .unwrap();
             }
 
             let mut swarms = vec![single_swarm];
@@ -746,7 +758,11 @@ fn get_record() {
             *Swarm::local_peer_id(&swarms[i + 1].1),
             swarms[i + 1].0.clone(),
         );
-        swarms[i].1.behaviour_mut().add_address(&peer_id, address);
+        swarms[i]
+            .1
+            .behaviour_mut()
+            .add_address(&peer_id, address)
+            .unwrap();
     }
 
     // Drop the swarm addresses.
@@ -881,7 +897,8 @@ fn add_provider() {
                 single_swarm
                     .1
                     .behaviour_mut()
-                    .add_address(swarm.1.local_peer_id(), swarm.0.clone());
+                    .add_address(swarm.1.local_peer_id(), swarm.0.clone())
+                    .unwrap();
             }
 
             let mut swarms = vec![single_swarm];
@@ -1113,11 +1130,13 @@ fn disjoint_query_does_not_finish_before_all_paths_did() {
     alice
         .1
         .behaviour_mut()
-        .add_address(trudy.1.local_peer_id(), trudy.0.clone());
+        .add_address(trudy.1.local_peer_id(), trudy.0.clone())
+        .unwrap();
     alice
         .1
         .behaviour_mut()
-        .add_address(bob.1.local_peer_id(), bob.0.clone());
+        .add_address(bob.1.local_peer_id(), bob.0.clone())
+        .unwrap();
 
     // Drop the swarm addresses.
     let (mut alice, mut bob, mut trudy) = (alice.1, bob.1, trudy.1);
@@ -1435,7 +1454,11 @@ fn get_providers_limit<const N: usize>() {
                 *Swarm::local_peer_id(&swarms[i + 1].1),
                 swarms[i + 1].0.clone(),
             );
-            swarms[i].1.behaviour_mut().add_address(&peer_id, address);
+            swarms[i]
+                .1
+                .behaviour_mut()
+                .add_address(&peer_id, address)
+                .unwrap();
         }
 
         // Drop the swarm addresses.

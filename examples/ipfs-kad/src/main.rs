@@ -67,7 +67,7 @@ async fn main() -> Result<()> {
     for peer in &BOOTNODES {
         swarm
             .behaviour_mut()
-            .add_address(&peer.parse()?, "/dnsaddr/bootstrap.libp2p.io".parse()?);
+            .add_address(&peer.parse()?, "/dnsaddr/bootstrap.libp2p.io".parse()?)?;
     }
 
     let cli_opt = Opt::parse();
