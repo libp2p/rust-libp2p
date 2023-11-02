@@ -4,6 +4,9 @@
   See [PR 4695](https://github.com/libp2p/rust-libp2p/pull/4695).
 - Remove deprecated functions from `ListenerId`.
   See [PR 4736](https://github.com/libp2p/rust-libp2p/pull/4736).
+- Remove `upgrade::transfer` module.
+  See [issue 4011](https://github.com/libp2p/rust-libp2p/issues/4011) for details.
+  See [PR XXXX](https://github.com/libp2p/rust-libp2p/pull/XXXX).
 
 ## 0.40.1
 
