@@ -236,8 +236,6 @@ impl NetworkBehaviour for Behaviour {
             Either::Right(v) => void::unreachable(v),
         };
 
-        let mut external_event = None;
-
         let event = match handler_event {
             handler::Event::ReservationReqAccepted { renewal, limit } => {
                 let addr = self
@@ -249,7 +247,8 @@ impl NetworkBehaviour for Behaviour {
                     .with(Protocol::P2pCircuit)
                     .with(Protocol::P2p(self.local_peer_id));
 
-                    external_event = Some(ToSwarm::ExternalAddrConfirmed(addr));
+                self.queued_actions
+                    .push_back(ToSwarm::ExternalAddrConfirmed(addr));
 
                 Event::ReservationReqAccepted {
                     relay_peer_id: event_source,
@@ -269,10 +268,6 @@ impl NetworkBehaviour for Behaviour {
         };
 
         self.queued_actions.push_back(ToSwarm::GenerateEvent(event));
-
-        if let Some(event) = external_event.take() {
-            self.queued_actions.push_back(event);
-        }
     }
 
     fn poll(
