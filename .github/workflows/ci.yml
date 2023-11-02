@@ -82,10 +82,11 @@ jobs:
           !contains(github.event.pull_request.labels.*.name, 'internal-change')
         run: |
           git fetch origin master:master
+          git fetch origin ${{ github.event.pull_request.base.ref }}:${{ github.event.pull_request.base.ref }}
           ./scripts/ensure-version-bump-and-changelog.sh
         env:
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-
+          PR_BASE: ${{ github.event.pull_request.base.ref }}
 
   wasm_tests:
     name: Run all WASM tests
@@ -278,6 +279,15 @@ jobs:
           for toml in examples/**/Cargo.toml; do
             cargo check --manifest-path "$toml";
           done
+
+      - uses: taiki-e/cache-cargo-install-action@v1
+        with:
+          tool: wasm-pack@0.12.0
+
+      - name: Build webrtc-browser example
+        run: |
+          cd examples/browser-webrtc
+          wasm-pack build --target web --out-dir static
 
   semver:
     runs-on: ubuntu-latest

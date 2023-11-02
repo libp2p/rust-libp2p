@@ -41,7 +41,7 @@ pub enum Error {
 }
 
 #[derive(Debug)]
-pub struct DecodeError(pub(crate) quick_protobuf::Error);
+pub struct DecodeError(pub(crate) quick_protobuf_codec::Error);
 
 impl fmt::Display for DecodeError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
