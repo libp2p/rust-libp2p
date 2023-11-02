@@ -36,24 +36,12 @@ pub struct ConnectionHandlerSelect<TProto1, TProto2> {
     proto1: TProto1,
     /// The second protocol.
     proto2: TProto2,
-    /// The state when closing via [`ConnectionHandler::poll_close`].
-    closing_state: ClosingState,
-}
-
-#[derive(Debug, Clone)]
-enum ClosingState {
-    Open,
-    Closed1,
 }
 
 impl<TProto1, TProto2> ConnectionHandlerSelect<TProto1, TProto2> {
     /// Builds a [`ConnectionHandlerSelect`].
     pub(crate) fn new(proto1: TProto1, proto2: TProto2) -> Self {
-        ConnectionHandlerSelect {
-            proto1,
-            proto2,
-            closing_state: ClosingState::Open,
-        }
+        ConnectionHandlerSelect { proto1, proto2 }
     }
 
     pub fn into_inner(self) -> (TProto1, TProto2) {
@@ -284,21 +272,15 @@ where
     }
 
     fn poll_close(&mut self, cx: &mut Context<'_>) -> Poll<Option<Self::ToBehaviour>> {
-        loop {
-            match self.closing_state {
-                ClosingState::Open => match ready!(self.proto1.poll_close(cx)) {
-                    Some(event) => return Poll::Ready(Some(Either::Left(event))),
-                    None => {
-                        self.closing_state = ClosingState::Closed1;
-                        continue;
-                    }
-                },
-                ClosingState::Closed1 => match ready!(self.proto2.poll_close(cx)) {
-                    Some(event) => return Poll::Ready(Some(Either::Right(event))),
-                    None => return Poll::Ready(None),
-                },
-            }
+        if let Some(e) = ready!(self.proto1.poll_close(cx)) {
+            return Poll::Ready(Some(Either::Left(e)));
         }
+
+        if let Some(e) = ready!(self.proto2.poll_close(cx)) {
+            return Poll::Ready(Some(Either::Right(e)));
+        }
+
+        Poll::Ready(None)
     }
 
     fn on_connection_event(

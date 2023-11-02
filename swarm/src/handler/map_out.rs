@@ -21,6 +21,7 @@
 use crate::handler::{
     ConnectionEvent, ConnectionHandler, ConnectionHandlerEvent, SubstreamProtocol,
 };
+use futures::ready;
 use std::fmt::Debug;
 use std::task::{Context, Poll};
 
@@ -91,9 +92,11 @@ where
     }
 
     fn poll_close(&mut self, cx: &mut Context<'_>) -> Poll<Option<Self::ToBehaviour>> {
-        self.inner
-            .poll_close(cx)
-            .map(|ev| ev.map(|ev| (self.map)(ev)))
+        let Some(e) = ready!(self.inner.poll_close(cx)) else {
+            return Poll::Ready(None);
+        };
+
+        Poll::Ready(Some((self.map)(e)))
     }
 
     fn on_connection_event(

@@ -27,7 +27,7 @@ use crate::handler::{
 };
 use crate::upgrade::{InboundUpgradeSend, OutboundUpgradeSend, UpgradeInfoSend};
 use crate::Stream;
-use futures::{future::BoxFuture, prelude::*};
+use futures::{future::BoxFuture, prelude::*, ready};
 use rand::Rng;
 use std::{
     cmp,
@@ -279,22 +279,14 @@ where
     }
 
     fn poll_close(&mut self, cx: &mut Context<'_>) -> Poll<Option<Self::ToBehaviour>> {
-        'outer: loop {
-            for (k, h) in self.handlers.iter_mut() {
-                match h.poll_close(cx) {
-                    Poll::Ready(Some(e)) => {
-                        return Poll::Ready(Some((k.clone(), e)));
-                    }
-                    Poll::Ready(None) => {
-                        self.handlers.remove(k).expect("to be present");
-                        continue 'outer;
-                    }
-                    Poll::Pending => {}
-                }
-            }
-
-            return Poll::Pending;
+        for (k, h) in self.handlers.iter_mut() {
+            let Some(e) = ready!(h.poll_close(cx)) else {
+                continue;
+            };
+            return Poll::Ready(Some((k.clone(), e)));
         }
+
+        Poll::Ready(None)
     }
 }
 

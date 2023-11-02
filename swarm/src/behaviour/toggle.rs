@@ -371,10 +371,10 @@ where
     }
 
     fn poll_close(&mut self, cx: &mut Context<'_>) -> Poll<Option<Self::ToBehaviour>> {
-        if let Some(inner) = self.inner.as_mut() {
-            inner.poll_close(cx)
-        } else {
-            Poll::Ready(None)
-        }
+        let Some(inner) = self.inner.as_mut() else {
+            return Poll::Ready(None);
+        };
+
+        inner.poll_close(cx)
     }
 }
