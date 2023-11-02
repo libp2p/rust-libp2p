@@ -2,9 +2,10 @@
 
 use asynchronous_codec::{Decoder, Encoder};
 use bytes::{Buf, BytesMut};
-use quick_protobuf::{BytesReader, MessageRead, MessageWrite, Writer};
+use quick_protobuf::{BytesReader, MessageRead, MessageWrite, Writer, WriterBackend};
 use std::io;
 use std::marker::PhantomData;
+use std::mem::MaybeUninit;
 
 mod generated;
 
@@ -43,12 +44,88 @@ impl<In: MessageWrite, Out> Encoder for Codec<In, Out> {
         let mut uvi_buf = unsigned_varint::encode::usize_buffer();
         let encoded_length = unsigned_varint::encode::usize(message_length, &mut uvi_buf);
 
-        dst.reserve(message_length);
+        // Append the 'unsigned varint'-encoded length.
         dst.extend_from_slice(encoded_length);
 
-        let mut writer = Writer::new(dst.as_mut());
+        // Ensure we have enough capacity to encode our message.
+        dst.reserve(message_length);
+
+        let mut written = 0;
+
+        let mut writer = Writer::new(UninitMemoryWriterBackend::new(
+            dst.spare_capacity_mut(),
+            &mut written,
+        ));
         item.write_message(&mut writer)
-            .expect("Encoding to succeed");
+            .map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
+
+        if written != message_length {
+            return Err(Error(io::Error::new(
+                io::ErrorKind::Other,
+                format!(
+                    "expected message to be {message_length} bytes long but was {written} bytes"
+                ),
+            )));
+        }
+
+        // SAFETY: `written` records exactly how many bytes we wrote to `dst`, thus it is safe to extend the length by `written`.
+        unsafe {
+            dst.set_len(dst.len() + written);
+        }
+
+        Ok(())
+    }
+}
+
+struct UninitMemoryWriterBackend<'a> {
+    memory: &'a mut [MaybeUninit<u8>],
+    written: &'a mut usize,
+}
+
+impl<'a> UninitMemoryWriterBackend<'a> {
+    fn new(memory: &'a mut [MaybeUninit<u8>], written: &'a mut usize) -> Self {
+        Self { memory, written }
+    }
+}
+
+impl<'a> WriterBackend for UninitMemoryWriterBackend<'a> {
+    fn pb_write_u8(&mut self, x: u8) -> quick_protobuf::Result<()> {
+        self.pb_write_all(&[x])
+    }
+
+    fn pb_write_u32(&mut self, x: u32) -> quick_protobuf::Result<()> {
+        self.pb_write_all(&x.to_le_bytes())
+    }
+
+    fn pb_write_i32(&mut self, x: i32) -> quick_protobuf::Result<()> {
+        self.pb_write_all(&x.to_le_bytes())
+    }
+
+    fn pb_write_f32(&mut self, x: f32) -> quick_protobuf::Result<()> {
+        self.pb_write_all(&x.to_le_bytes())
+    }
+
+    fn pb_write_u64(&mut self, x: u64) -> quick_protobuf::Result<()> {
+        self.pb_write_all(&x.to_le_bytes())
+    }
+
+    fn pb_write_i64(&mut self, x: i64) -> quick_protobuf::Result<()> {
+        self.pb_write_all(&x.to_le_bytes())
+    }
+
+    fn pb_write_f64(&mut self, x: f64) -> quick_protobuf::Result<()> {
+        self.pb_write_all(&x.to_le_bytes())
+    }
+
+    fn pb_write_all(&mut self, buf: &[u8]) -> quick_protobuf::Result<()> {
+        if self.memory.len() - *self.written < buf.len() {
+            return Err(quick_protobuf::errors::Error::UnexpectedEndOfBuffer);
+        }
+
+        for b in buf {
+            self.memory[*self.written].write(*b);
+            *self.written += 1;
+        }
 
         Ok(())
     }
