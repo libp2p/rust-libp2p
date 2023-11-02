@@ -52,7 +52,7 @@ impl<In: MessageWrite, Out> Encoder for Codec<In, Out> {
 
         let mut written = 0;
 
-        let mut writer = Writer::new(UninitMemoryWriterBackend::new(
+        let mut writer = Writer::new(MaybeUninitWriterBackend::new(
             dst.spare_capacity_mut(),
             &mut written,
         ));
@@ -113,18 +113,18 @@ where
     }
 }
 
-struct UninitMemoryWriterBackend<'a> {
+struct MaybeUninitWriterBackend<'a> {
     memory: &'a mut [MaybeUninit<u8>],
     written: &'a mut usize,
 }
 
-impl<'a> UninitMemoryWriterBackend<'a> {
+impl<'a> MaybeUninitWriterBackend<'a> {
     fn new(memory: &'a mut [MaybeUninit<u8>], written: &'a mut usize) -> Self {
         Self { memory, written }
     }
 }
 
-impl<'a> WriterBackend for UninitMemoryWriterBackend<'a> {
+impl<'a> WriterBackend for MaybeUninitWriterBackend<'a> {
     fn pb_write_u8(&mut self, x: u8) -> quick_protobuf::Result<()> {
         self.pb_write_all(&[x])
     }
