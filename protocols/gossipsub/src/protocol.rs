@@ -37,7 +37,6 @@ use libp2p_swarm::StreamProtocol;
 use log::{debug, warn};
 use quick_protobuf::Writer;
 use std::pin::Pin;
-use unsigned_varint::codec;
 use void::Void;
 
 pub(crate) const SIGNING_PREFIX: &[u8] = b"libp2p-pubsub:";
@@ -109,12 +108,10 @@ where
     type Future = Pin<Box<dyn Future<Output = Result<Self::Output, Self::Error>> + Send>>;
 
     fn upgrade_inbound(self, socket: TSocket, protocol_id: Self::Info) -> Self::Future {
-        let mut length_codec = codec::UviBytes::default();
-        length_codec.set_max_len(self.max_transmit_size);
         Box::pin(future::ok((
             Framed::new(
                 socket,
-                GossipsubCodec::new(length_codec, self.validation_mode),
+                GossipsubCodec::new(self.max_transmit_size, self.validation_mode),
             ),
             protocol_id.kind,
         )))
@@ -130,12 +127,10 @@ where
     type Future = Pin<Box<dyn Future<Output = Result<Self::Output, Self::Error>> + Send>>;
 
     fn upgrade_outbound(self, socket: TSocket, protocol_id: Self::Info) -> Self::Future {
-        let mut length_codec = codec::UviBytes::default();
-        length_codec.set_max_len(self.max_transmit_size);
         Box::pin(future::ok((
             Framed::new(
                 socket,
-                GossipsubCodec::new(length_codec, self.validation_mode),
+                GossipsubCodec::new(self.max_transmit_size, self.validation_mode),
             ),
             protocol_id.kind,
         )))
@@ -152,8 +147,8 @@ pub struct GossipsubCodec {
 }
 
 impl GossipsubCodec {
-    pub fn new(length_codec: codec::UviBytes, validation_mode: ValidationMode) -> GossipsubCodec {
-        let codec = quick_protobuf_codec::Codec::new(length_codec.max_len());
+    pub fn new(max_length: usize, validation_mode: ValidationMode) -> GossipsubCodec {
+        let codec = quick_protobuf_codec::Codec::new(max_length);
         GossipsubCodec {
             validation_mode,
             codec,
@@ -593,7 +588,7 @@ mod tests {
                 control_msgs: vec![],
             };
 
-            let mut codec = GossipsubCodec::new(codec::UviBytes::default(), ValidationMode::Strict);
+            let mut codec = GossipsubCodec::new(u32::MAX as usize, ValidationMode::Strict);
             let mut buf = BytesMut::new();
             codec.encode(rpc.into_protobuf(), &mut buf).unwrap();
             let decoded_rpc = codec.decode(&mut buf).unwrap().unwrap();

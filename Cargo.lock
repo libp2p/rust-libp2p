@@ -442,7 +442,7 @@ dependencies = [
  "futures-sink",
  "futures-util",
  "memchr",
- "pin-project-lite 0.2.12",
+ "pin-project-lite",
 ]
 
 [[package]]
@@ -2536,6 +2536,7 @@ name = "libp2p-floodsub"
 version = "0.44.0"
 dependencies = [
  "asynchronous-codec",
+ "bytes",
  "cuckoofilter",
  "fnv",
  "futures",
@@ -2584,7 +2585,6 @@ dependencies = [
  "serde",
  "sha2 0.10.8",
  "smallvec",
- "unsigned-varint 0.8.0",
  "void",
 ]
 
@@ -2776,7 +2776,7 @@ dependencies = [
 name = "libp2p-noise"
 version = "0.44.0"
 dependencies = [
- "asynchronous-codec 0.7.0",
+ "asynchronous-codec",
  "bytes",
  "curve25519-dalek",
  "env_logger 0.10.0",
