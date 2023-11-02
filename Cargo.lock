@@ -2672,7 +2672,6 @@ dependencies = [
  "smallvec",
  "thiserror",
  "uint",
- "unsigned-varint 0.8.0",
  "void",
 ]
 
