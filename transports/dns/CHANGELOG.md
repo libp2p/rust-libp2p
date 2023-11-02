@@ -5,7 +5,7 @@
 - Remove deprecated type-aliases.
   See [PR 4739](https://github.com/libp2p/rust-libp2p/pull/4739). 
 - Migrate to the `hickory-dns` project which has rebranded from `trust-dns`.
-  See [PR XXXX](https://github.com/libp2p/rust-libp2p/pull/XXXX).
+  See [PR 4780](https://github.com/libp2p/rust-libp2p/pull/4780).
 
 ## 0.40.1
 
