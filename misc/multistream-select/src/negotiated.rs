@@ -171,7 +171,7 @@ impl<TInner> Negotiated<TInner> {
 
                     if let Message::Protocol(p) = &msg {
                         if p.as_ref() == protocol.as_ref() {
-                            log::debug!("Negotiated: Received confirmation for protocol: {}", p);
+                            tracing::debug!(protocol=%p, "Negotiated: Received confirmation for protocol");
                             *this.state = State::Completed {
                                 io: io.into_inner(),
                             };
@@ -317,7 +317,7 @@ where
             StateProj::Expecting { io, .. } => {
                 let close_poll = io.poll_close(cx);
                 if let Poll::Ready(Ok(())) = close_poll {
-                    log::debug!("Stream closed. Confirmation from remote for optimstic protocol negotiation still pending.")
+                    tracing::debug!("Stream closed. Confirmation from remote for optimstic protocol negotiation still pending")
                 }
                 close_poll
             }

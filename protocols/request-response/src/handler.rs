@@ -164,7 +164,7 @@ where
             .try_push(RequestId::Inbound(request_id), recv.boxed())
             .is_err()
         {
-            log::warn!("Dropping inbound stream because we are at capacity")
+            tracing::warn!("Dropping inbound stream because we are at capacity")
         }
     }
 
@@ -204,7 +204,7 @@ where
             .try_push(RequestId::Outbound(request_id), send.boxed())
             .is_err()
         {
-            log::warn!("Dropping outbound stream because we are at capacity")
+            tracing::warn!("Dropping outbound stream because we are at capacity")
         }
     }
 
@@ -236,7 +236,7 @@ where
             }
             StreamUpgradeError::Apply(e) => void::unreachable(e),
             StreamUpgradeError::Io(e) => {
-                log::debug!(
+                tracing::debug!(
                     "outbound stream for request {} failed: {e}, retrying",
                     message.request_id
                 );
@@ -386,6 +386,7 @@ where
         self.pending_outbound.push_back(request);
     }
 
+    #[tracing::instrument(level = "trace", name = "ConnectionHandler::poll", skip(self, cx))]
     fn poll(
         &mut self,
         cx: &mut Context<'_>,

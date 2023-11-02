@@ -20,7 +20,6 @@
 
 use crate::types::Subscription;
 use crate::TopicHash;
-use log::debug;
 use std::collections::{BTreeSet, HashMap, HashSet};
 
 pub trait TopicSubscriptionFilter {
@@ -66,7 +65,7 @@ pub trait TopicSubscriptionFilter {
             if self.allow_incoming_subscription(s) {
                 true
             } else {
-                debug!("Filtered incoming subscription {:?}", s);
+                tracing::debug!(subscription=?s, "Filtered incoming subscription");
                 false
             }
         });

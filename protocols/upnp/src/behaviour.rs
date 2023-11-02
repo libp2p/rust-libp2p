@@ -175,9 +175,9 @@ impl MappingList {
                         mapping: mapping.clone(),
                         duration,
                     }) {
-                        log::debug!(
-                            "could not request port mapping for {} on the gateway: {}",
-                            mapping.multiaddr,
+                        tracing::debug!(
+                            multiaddress=%mapping.multiaddr,
+                            "could not request port mapping for multiaddress on the gateway: {}",
                             err
                         );
                     }
@@ -190,9 +190,9 @@ impl MappingList {
                             mapping: mapping.clone(),
                             duration,
                         }) {
-                            log::debug!(
-                                "could not request port mapping for {} on the gateway: {}",
-                                mapping.multiaddr,
+                            tracing::debug!(
+                                multiaddress=%mapping.multiaddr,
+                                "could not request port mapping for multiaddress on the gateway: {}",
                                 err
                             );
                         }
@@ -261,7 +261,7 @@ impl NetworkBehaviour for Behaviour {
                 let (addr, protocol) = match multiaddr_to_socketaddr_protocol(multiaddr.clone()) {
                     Ok(addr_port) => addr_port,
                     Err(()) => {
-                        log::debug!("multiaddress not supported for UPnP {multiaddr}");
+                        tracing::debug!("multiaddress not supported for UPnP {multiaddr}");
                         return;
                     }
                 };
@@ -271,7 +271,11 @@ impl NetworkBehaviour for Behaviour {
                     .iter()
                     .find(|(mapping, _state)| mapping.internal_addr.port() == addr.port())
                 {
-                    log::debug!("port from multiaddress {multiaddr} is already being mapped to another multiaddr: {}", mapping.multiaddr);
+                    tracing::debug!(
+                        multiaddress=%multiaddr,
+                        mapped_multiaddress=%mapping.multiaddr,
+                        "port from multiaddress is already being mapped"
+                    );
                     return;
                 }
 
@@ -302,9 +306,9 @@ impl NetworkBehaviour for Behaviour {
                             mapping: mapping.clone(),
                             duration,
                         }) {
-                            log::debug!(
-                                "could not request port mapping for {} on the gateway: {}",
-                                mapping.multiaddr,
+                            tracing::debug!(
+                                multiaddress=%mapping.multiaddr,
+                                "could not request port mapping for multiaddress on the gateway: {}",
                                 err
                             );
                         }
@@ -312,14 +316,17 @@ impl NetworkBehaviour for Behaviour {
                         self.mappings.insert(mapping, MappingState::Pending);
                     }
                     GatewayState::GatewayNotFound => {
-                        log::debug!(
-                            "network gateway not found, UPnP port mapping of {multiaddr} discarded"
+                        tracing::debug!(
+                            multiaddres=%multiaddr,
+                            "network gateway not found, UPnP port mapping of multiaddres discarded"
                         );
                     }
                     GatewayState::NonRoutableGateway(addr) => {
-                        log::debug!(
-                            "the network gateway is not exposed to the public network, \
-                            it's ip is {addr}. UPnP port mapping of {multiaddr} discarded"
+                        tracing::debug!(
+                            multiaddress=%multiaddr,
+                            network_gateway_ip=%addr,
+                            "the network gateway is not exposed to the public network. /
+                             UPnP port mapping of multiaddress discarded"
                         );
                     }
                 };
@@ -334,9 +341,9 @@ impl NetworkBehaviour for Behaviour {
                             .sender
                             .try_send(GatewayRequest::RemoveMapping(mapping.clone()))
                         {
-                            log::debug!(
-                                "could not request port removal for {} on the gateway: {}",
-                                mapping.multiaddr,
+                            tracing::debug!(
+                                multiaddress=%mapping.multiaddr,
+                                "could not request port removal for multiaddress on the gateway: {}",
                                 err
                             );
                         }
@@ -357,6 +364,7 @@ impl NetworkBehaviour for Behaviour {
         void::unreachable(event)
     }
 
+    #[tracing::instrument(level = "trace", name = "ConnectionHandler::poll", skip(self, cx))]
     fn poll(
         &mut self,
         cx: &mut Context<'_>,
@@ -377,9 +385,9 @@ impl NetworkBehaviour for Behaviour {
                                 if !is_addr_global(gateway.external_addr) {
                                     self.state =
                                         GatewayState::NonRoutableGateway(gateway.external_addr);
-                                    log::debug!(
-                                        "the gateway is not routable, its address is {}",
-                                        gateway.external_addr
+                                    tracing::debug!(
+                                        gateway_address=%gateway.external_addr,
+                                        "the gateway is not routable"
                                     );
                                     return Poll::Ready(ToSwarm::GenerateEvent(
                                         Event::NonRoutableGateway,
@@ -388,7 +396,7 @@ impl NetworkBehaviour for Behaviour {
                                 self.state = GatewayState::Available(gateway);
                             }
                             Err(err) => {
-                                log::debug!("could not find gateway: {err}");
+                                tracing::debug!("could not find gateway: {err}");
                                 self.state = GatewayState::GatewayNotFound;
                                 return Poll::Ready(ToSwarm::GenerateEvent(Event::GatewayNotFound));
                             }
@@ -416,20 +424,20 @@ impl NetworkBehaviour for Behaviour {
                                         self.pending_events.push_back(Event::NewExternalAddr(
                                             external_multiaddr.clone(),
                                         ));
-                                        log::debug!(
-                                            "succcessfully mapped UPnP {} for {} protocol",
-                                            mapping.internal_addr,
-                                            mapping.protocol
+                                        tracing::debug!(
+                                            address=%mapping.internal_addr,
+                                            protocol=%mapping.protocol,
+                                            "successfully mapped UPnP for protocol"
                                         );
                                         return Poll::Ready(ToSwarm::ExternalAddrConfirmed(
                                             external_multiaddr,
                                         ));
                                     }
                                     MappingState::Active(_) => {
-                                        log::debug!(
-                                            "succcessfully renewed UPnP mapping {} for {} protocol",
-                                            mapping.internal_addr,
-                                            mapping.protocol
+                                        tracing::debug!(
+                                            address=%mapping.internal_addr,
+                                            protocol=%mapping.protocol,
+                                            "successfully renewed UPnP mapping for protocol"
                                         );
                                     }
                                     _ => unreachable!(),
@@ -442,10 +450,10 @@ impl NetworkBehaviour for Behaviour {
                                     .expect("mapping should exist")
                                 {
                                     MappingState::Active(_) => {
-                                        log::debug!(
-                                            "failed to remap UPnP mapped {} for {} protocol: {err}",
-                                            mapping.internal_addr,
-                                            mapping.protocol
+                                        tracing::debug!(
+                                            address=%mapping.internal_addr,
+                                            protocol=%mapping.protocol,
+                                            "failed to remap UPnP mapped for protocol: {err}"
                                         );
                                         let external_multiaddr =
                                             mapping.external_addr(gateway.external_addr);
@@ -457,10 +465,10 @@ impl NetworkBehaviour for Behaviour {
                                         ));
                                     }
                                     MappingState::Pending => {
-                                        log::debug!(
-                                            "failed to map upnp mapped {} for {} protocol: {err}",
-                                            mapping.internal_addr,
-                                            mapping.protocol
+                                        tracing::debug!(
+                                            address=%mapping.internal_addr,
+                                            protocol=%mapping.protocol,
+                                            "failed to map UPnP mapped for protocol: {err}"
                                         );
                                     }
                                     _ => {
@@ -469,28 +477,28 @@ impl NetworkBehaviour for Behaviour {
                                 }
                             }
                             GatewayEvent::Removed(mapping) => {
-                                log::debug!(
-                                    "succcessfully removed UPnP mapping {} for {} protocol",
-                                    mapping.internal_addr,
-                                    mapping.protocol
+                                tracing::debug!(
+                                    address=%mapping.internal_addr,
+                                    protocol=%mapping.protocol,
+                                    "successfully removed UPnP mapping for protocol"
                                 );
                                 self.mappings
                                     .remove(&mapping)
                                     .expect("mapping should exist");
                             }
                             GatewayEvent::RemovalFailure(mapping, err) => {
-                                log::debug!(
-                                    "could not remove UPnP mapping {} for {} protocol: {err}",
-                                    mapping.internal_addr,
-                                    mapping.protocol
+                                tracing::debug!(
+                                    address=%mapping.internal_addr,
+                                    protocol=%mapping.protocol,
+                                    "could not remove UPnP mapping for protocol: {err}"
                                 );
                                 if let Err(err) = gateway
                                     .sender
                                     .try_send(GatewayRequest::RemoveMapping(mapping.clone()))
                                 {
-                                    log::debug!(
-                                        "could not request port removal for {} on the gateway: {}",
-                                        mapping.multiaddr,
+                                    tracing::debug!(
+                                        multiaddress=%mapping.multiaddr,
+                                        "could not request port removal for multiaddress on the gateway: {}",
                                         err
                                     );
                                 }

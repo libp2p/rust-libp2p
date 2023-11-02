@@ -278,7 +278,7 @@ impl Connection {
                 let mut read_buffer = read_buffer.lock().unwrap();
 
                 if read_buffer.len() + data.length() as usize > MAX_BUFFER {
-                    log::warn!("Remote is overloading us with messages, closing connection");
+                    tracing::warn!("Remote is overloading us with messages, closing connection");
                     errored.store(true, Ordering::SeqCst);
 
                     return;

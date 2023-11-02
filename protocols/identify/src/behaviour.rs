@@ -168,7 +168,7 @@ impl Behaviour {
     {
         for p in peers {
             if !self.connected.contains_key(&p) {
-                log::debug!("Not pushing to {p} because we are not connected");
+                tracing::debug!(peer=%p, "Not pushing to peer because we are not connected");
                 continue;
             }
 
@@ -286,9 +286,10 @@ impl NetworkBehaviour for Behaviour {
                         // No-op, we already observed this address.
                     }
                     Entry::Occupied(mut already_observed) => {
-                        log::info!(
-                            "Our observed address on connection {id} changed from {} to {observed}",
-                            already_observed.get()
+                        tracing::info!(
+                            old_address=%already_observed.get(),
+                            new_address=%observed,
+                            "Our observed address on connection {id} changed",
                         );
 
                         *already_observed.get_mut() = observed.clone();
@@ -312,6 +313,7 @@ impl NetworkBehaviour for Behaviour {
         }
     }
 
+    #[tracing::instrument(level = "trace", name = "NetworkBehaviour::poll", skip(self))]
     fn poll(&mut self, _: &mut Context<'_>) -> Poll<ToSwarm<Self::ToSwarm, THandlerInEvent<Self>>> {
         if let Some(event) = self.events.pop_front() {
             return Poll::Ready(event);

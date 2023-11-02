@@ -111,21 +111,21 @@ impl NetworkBehaviour for Behaviour {
     fn handle_established_inbound_connection(
         &mut self,
         _: ConnectionId,
-        peer: PeerId,
+        _: PeerId,
         _: &Multiaddr,
         _: &Multiaddr,
     ) -> Result<THandler<Self>, ConnectionDenied> {
-        Ok(Handler::new(self.config.clone(), peer))
+        Ok(Handler::new(self.config.clone()))
     }
 
     fn handle_established_outbound_connection(
         &mut self,
         _: ConnectionId,
-        peer: PeerId,
+        _: PeerId,
         _: &Multiaddr,
         _: Endpoint,
     ) -> Result<THandler<Self>, ConnectionDenied> {
-        Ok(Handler::new(self.config.clone(), peer))
+        Ok(Handler::new(self.config.clone()))
     }
 
     fn on_connection_handler_event(
@@ -141,6 +141,7 @@ impl NetworkBehaviour for Behaviour {
         })
     }
 
+    #[tracing::instrument(level = "trace", name = "NetworkBehaviour::poll", skip(self))]
     fn poll(&mut self, _: &mut Context<'_>) -> Poll<ToSwarm<Self::ToSwarm, THandlerInEvent<Self>>> {
         if let Some(e) = self.events.pop_back() {
             Poll::Ready(ToSwarm::GenerateEvent(e))
