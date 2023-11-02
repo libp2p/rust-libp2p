@@ -79,7 +79,7 @@ where
                         return Poll::Ready(Ok(()));
                     }
                     Poll::Ready(Err(Canceled)) => {
-                        log::info!("Stream dropped without graceful close, sending Reset");
+                        tracing::info!("Stream dropped without graceful close, sending Reset");
                         *state = State::SendingReset { stream };
                         continue;
                     }

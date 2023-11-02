@@ -29,7 +29,7 @@ use libp2p_swarm::{
     },
     ConnectionHandler, ConnectionHandlerEvent, StreamProtocol, SubstreamProtocol,
 };
-use log::error;
+use tracing::error;
 use void::Void;
 
 use crate::Run;
@@ -96,7 +96,7 @@ impl ConnectionHandler for Handler {
                     .try_push(crate::protocol::receive_send(protocol).boxed())
                     .is_err()
                 {
-                    log::warn!("Dropping inbound stream because we are at capacity");
+                    tracing::warn!("Dropping inbound stream because we are at capacity");
                 }
             }
             ConnectionEvent::FullyNegotiatedOutbound(FullyNegotiatedOutbound { info, .. }) => {
@@ -115,6 +115,7 @@ impl ConnectionHandler for Handler {
         }
     }
 
+    #[tracing::instrument(level = "trace", name = "ConnectionHandler::poll", skip(self, cx))]
     fn poll(
         &mut self,
         cx: &mut Context<'_>,

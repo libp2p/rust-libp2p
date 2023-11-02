@@ -11,7 +11,6 @@ pub(crate) mod native {
     use std::time::Duration;
 
     use anyhow::{bail, Context, Result};
-    use env_logger::{Env, Target};
     use futures::future::BoxFuture;
     use futures::FutureExt;
     use libp2p::identity::Keypair;
@@ -20,15 +19,16 @@ pub(crate) mod native {
     use libp2p_mplex as mplex;
     use libp2p_webrtc as webrtc;
     use redis::AsyncCommands;
+    use tracing_subscriber::EnvFilter;
 
     use crate::{Muxer, SecProtocol, Transport};
 
     pub(crate) type Instant = std::time::Instant;
 
     pub(crate) fn init_logger() {
-        env_logger::Builder::from_env(Env::default().default_filter_or("info"))
-            .target(Target::Stdout)
-            .init();
+        let _ = tracing_subscriber::fmt()
+            .with_env_filter(EnvFilter::from_default_env())
+            .try_init();
     }
 
     pub(crate) fn sleep(duration: Duration) -> BoxFuture<'static, ()> {

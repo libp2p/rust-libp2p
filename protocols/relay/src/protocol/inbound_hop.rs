@@ -58,7 +58,7 @@ pub struct ReservationReq {
 impl ReservationReq {
     pub async fn accept(self, addrs: Vec<Multiaddr>) -> Result<(), Error> {
         if addrs.is_empty() {
-            log::debug!(
+            tracing::debug!(
                 "Accepting relay reservation without providing external addresses of local node. \
                  Thus the remote node might not be able to advertise its relayed address."
             )

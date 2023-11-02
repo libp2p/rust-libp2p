@@ -145,6 +145,7 @@ impl NetworkBehaviour for Behaviour {
             .push_back(ToSwarm::GenerateEvent(Event { id, result }));
     }
 
+    #[tracing::instrument(level = "trace", name = "ConnectionHandler::poll", skip(self, _cx))]
     fn poll(
         &mut self,
         _cx: &mut Context<'_>,

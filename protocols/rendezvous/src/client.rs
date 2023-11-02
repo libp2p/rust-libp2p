@@ -232,7 +232,7 @@ impl NetworkBehaviour for Behaviour {
             let registered = self.registered_namespaces.clone();
             for ((rz_node, ns), ttl) in registered {
                 if let Err(e) = self.register(ns, rz_node, Some(ttl)) {
-                    log::warn!("refreshing registration failed: {e}")
+                    tracing::warn!("refreshing registration failed: {e}")
                 }
             }
         }

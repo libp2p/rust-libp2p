@@ -34,7 +34,6 @@ use libp2p_swarm::{
     dial_opts::DialOpts, CloseConnection, ConnectionDenied, ConnectionId, NetworkBehaviour,
     NotifyHandler, OneShotHandler, THandler, THandlerInEvent, THandlerOutEvent, ToSwarm,
 };
-use log::warn;
 use smallvec::SmallVec;
 use std::collections::hash_map::{DefaultHasher, HashMap};
 use std::task::{Context, Poll};
@@ -223,7 +222,7 @@ impl Floodsub {
             .any(|t| message.topics.iter().any(|u| t == u));
         if self_subscribed {
             if let Err(e @ CuckooError::NotEnoughSpace) = self.received.add(&message) {
-                warn!(
+                tracing::warn!(
                     "Message was added to 'received' Cuckoofilter but some \
                      other message was removed as a consequence: {}",
                     e,
@@ -362,7 +361,7 @@ impl NetworkBehaviour for Floodsub {
             Ok(InnerMessage::Rx(event)) => event,
             Ok(InnerMessage::Sent) => return,
             Err(e) => {
-                log::debug!("Failed to send floodsub message: {e}");
+                tracing::debug!("Failed to send floodsub message: {e}");
                 self.events.push_back(ToSwarm::CloseConnection {
                     peer_id: propagation_source,
                     connection: CloseConnection::One(connection_id),
@@ -414,7 +413,7 @@ impl NetworkBehaviour for Floodsub {
                 Ok(false) => continue, // Message already existed.
                 Err(e @ CuckooError::NotEnoughSpace) => {
                     // Message added, but some other removed.
-                    warn!(
+                    tracing::warn!(
                         "Message was added to 'received' Cuckoofilter but some \
                          other message was removed as a consequence: {}",
                         e,
