@@ -63,7 +63,6 @@ impl Default for Handler {
 impl ConnectionHandler for Handler {
     type FromBehaviour = Void;
     type ToBehaviour = Event;
-    type Error = Void;
     type InboundProtocol = ReadyUpgrade<StreamProtocol>;
     type OutboundProtocol = DeniedUpgrade;
     type OutboundOpenInfo = Void;
@@ -121,12 +120,7 @@ impl ConnectionHandler for Handler {
         &mut self,
         cx: &mut Context<'_>,
     ) -> Poll<
-        ConnectionHandlerEvent<
-            Self::OutboundProtocol,
-            Self::OutboundOpenInfo,
-            Self::ToBehaviour,
-            Self::Error,
-        >,
+        ConnectionHandlerEvent<Self::OutboundProtocol, Self::OutboundOpenInfo, Self::ToBehaviour>,
     > {
         loop {
             match self.inbound.poll_unpin(cx) {

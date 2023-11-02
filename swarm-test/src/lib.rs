@@ -27,9 +27,7 @@ use libp2p_core::{
 use libp2p_identity::{Keypair, PeerId};
 use libp2p_plaintext as plaintext;
 use libp2p_swarm::dial_opts::PeerCondition;
-use libp2p_swarm::{
-    self as swarm, dial_opts::DialOpts, NetworkBehaviour, Swarm, SwarmEvent, THandlerErr,
-};
+use libp2p_swarm::{self as swarm, dial_opts::DialOpts, NetworkBehaviour, Swarm, SwarmEvent};
 use libp2p_yamux as yamux;
 use std::fmt::Debug;
 use std::future::IntoFuture;
@@ -70,9 +68,7 @@ pub trait SwarmExt {
     /// Wait for specified condition to return `Some`.
     async fn wait<E, P>(&mut self, predicate: P) -> E
     where
-        P: Fn(
-            SwarmEvent<<Self::NB as NetworkBehaviour>::ToSwarm, THandlerErr<Self::NB>>,
-        ) -> Option<E>,
+        P: Fn(SwarmEvent<<Self::NB as NetworkBehaviour>::ToSwarm>) -> Option<E>,
         P: Send;
 
     /// Listens for incoming connections, polling the [`Swarm`] until the transport is ready to accept connections.
@@ -83,9 +79,7 @@ pub trait SwarmExt {
     /// Returns the next [`SwarmEvent`] or times out after 10 seconds.
     ///
     /// If the 10s timeout does not fit your usecase, please fall back to `StreamExt::next`.
-    async fn next_swarm_event(
-        &mut self,
-    ) -> SwarmEvent<<Self::NB as NetworkBehaviour>::ToSwarm, THandlerErr<Self::NB>>;
+    async fn next_swarm_event(&mut self) -> SwarmEvent<<Self::NB as NetworkBehaviour>::ToSwarm>;
 
     /// Returns the next behaviour event or times out after 10 seconds.
     ///
@@ -142,8 +136,8 @@ where
     TBehaviour2::ToSwarm: Debug,
     TBehaviour1: NetworkBehaviour + Send,
     TBehaviour1::ToSwarm: Debug,
-    SwarmEvent<TBehaviour2::ToSwarm, THandlerErr<TBehaviour2>>: TryIntoOutput<Out1>,
-    SwarmEvent<TBehaviour1::ToSwarm, THandlerErr<TBehaviour1>>: TryIntoOutput<Out2>,
+    SwarmEvent<TBehaviour2::ToSwarm>: TryIntoOutput<Out1>,
+    SwarmEvent<TBehaviour1::ToSwarm>: TryIntoOutput<Out2>,
     Out1: Debug,
     Out2: Debug,
 {
@@ -185,15 +179,15 @@ pub trait TryIntoOutput<O>: Sized {
     fn try_into_output(self) -> Result<O, Self>;
 }
 
-impl<O, THandlerErr> TryIntoOutput<O> for SwarmEvent<O, THandlerErr> {
+impl<O> TryIntoOutput<O> for SwarmEvent<O> {
     fn try_into_output(self) -> Result<O, Self> {
         self.try_into_behaviour_event()
     }
 }
-impl<TBehaviourOutEvent, THandlerErr> TryIntoOutput<SwarmEvent<TBehaviourOutEvent, THandlerErr>>
-    for SwarmEvent<TBehaviourOutEvent, THandlerErr>
+impl<TBehaviourOutEvent> TryIntoOutput<SwarmEvent<TBehaviourOutEvent>>
+    for SwarmEvent<TBehaviourOutEvent>
 {
-    fn try_into_output(self) -> Result<SwarmEvent<TBehaviourOutEvent, THandlerErr>, Self> {
+    fn try_into_output(self) -> Result<SwarmEvent<TBehaviourOutEvent>, Self> {
         Ok(self)
     }
 }
@@ -295,7 +289,7 @@ where
 
     async fn wait<E, P>(&mut self, predicate: P) -> E
     where
-        P: Fn(SwarmEvent<<B as NetworkBehaviour>::ToSwarm, THandlerErr<B>>) -> Option<E>,
+        P: Fn(SwarmEvent<<B as NetworkBehaviour>::ToSwarm>) -> Option<E>,
         P: Send,
     {
         loop {
@@ -314,9 +308,7 @@ where
         }
     }
 
-    async fn next_swarm_event(
-        &mut self,
-    ) -> SwarmEvent<<Self::NB as NetworkBehaviour>::ToSwarm, THandlerErr<Self::NB>> {
+    async fn next_swarm_event(&mut self) -> SwarmEvent<<Self::NB as NetworkBehaviour>::ToSwarm> {
         match futures::future::select(
             futures_timer::Delay::new(Duration::from_secs(10)),
             self.select_next_some(),

@@ -35,7 +35,6 @@ use libp2p_swarm::{
     },
     ConnectionHandler, ConnectionHandlerEvent, StreamProtocol, SubstreamProtocol,
 };
-use void::Void;
 
 use crate::client::{RunError, RunId};
 use crate::{RunParams, RunUpdate};
@@ -59,7 +58,6 @@ pub struct Handler {
             <Self as ConnectionHandler>::OutboundProtocol,
             <Self as ConnectionHandler>::OutboundOpenInfo,
             <Self as ConnectionHandler>::ToBehaviour,
-            <Self as ConnectionHandler>::Error,
         >,
     >,
 
@@ -87,7 +85,6 @@ impl Default for Handler {
 impl ConnectionHandler for Handler {
     type FromBehaviour = Command;
     type ToBehaviour = Event;
-    type Error = Void;
     type InboundProtocol = DeniedUpgrade;
     type OutboundProtocol = ReadyUpgrade<StreamProtocol>;
     type OutboundOpenInfo = ();
@@ -159,12 +156,7 @@ impl ConnectionHandler for Handler {
         &mut self,
         cx: &mut Context<'_>,
     ) -> Poll<
-        ConnectionHandlerEvent<
-            Self::OutboundProtocol,
-            Self::OutboundOpenInfo,
-            Self::ToBehaviour,
-            Self::Error,
-        >,
+        ConnectionHandlerEvent<Self::OutboundProtocol, Self::OutboundOpenInfo, Self::ToBehaviour>,
     > {
         if let Some(event) = self.queued_events.pop_front() {
             return Poll::Ready(event);
