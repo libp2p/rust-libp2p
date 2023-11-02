@@ -3,7 +3,7 @@ name = "libp2p"
 edition = "2021"
 rust-version = { workspace = true }
 description = "Peer-to-peer networking library"
-version = "0.52.4"
+version = "0.53.0"
 authors = ["Parity Technologies <admin@parity.io>"]
 license = "MIT"
 repository = "https://github.com/libp2p/rust-libp2p"
@@ -16,7 +16,6 @@ full = [
     "autonat",
     "cbor",
     "dcutr",
-    "deflate",
     "dns",
     "ecdsa",
     "ed25519",
@@ -45,8 +44,6 @@ full = [
     "tokio",
     "uds",
     "wasm-bindgen",
-    "wasm-ext",
-    "wasm-ext-websocket",
     "websocket-websys",
     "websocket",
     "webtransport-websys",
@@ -58,7 +55,6 @@ async-std = [ "libp2p-swarm/async-std", "libp2p-mdns?/async-io", "libp2p-tcp?/as
 autonat = ["dep:libp2p-autonat"]
 cbor = ["libp2p-request-response?/cbor"]
 dcutr = ["dep:libp2p-dcutr", "libp2p-metrics?/dcutr"]
-deflate = ["dep:libp2p-deflate"]
 dns = ["dep:libp2p-dns"]
 ecdsa = ["libp2p-identity/ecdsa"]
 ed25519 = ["libp2p-identity/ed25519"]
@@ -87,8 +83,6 @@ tls = ["dep:libp2p-tls"]
 tokio = [ "libp2p-swarm/tokio", "libp2p-mdns?/tokio", "libp2p-tcp?/tokio", "libp2p-dns?/tokio", "libp2p-quic?/tokio", "libp2p-upnp?/tokio"]
 uds = ["dep:libp2p-uds"]
 wasm-bindgen = [ "futures-timer/wasm-bindgen", "instant/wasm-bindgen", "getrandom/js", "libp2p-swarm/wasm-bindgen", "libp2p-gossipsub?/wasm-bindgen",]
-wasm-ext = ["dep:libp2p-wasm-ext"]
-wasm-ext-websocket = ["wasm-ext", "libp2p-wasm-ext?/websocket"]
 websocket-websys = ["dep:libp2p-websocket-websys"]
 websocket = ["dep:libp2p-websocket"]
 webtransport-websys = ["dep:libp2p-webtransport-websys"]
@@ -113,7 +107,7 @@ libp2p-dcutr = { workspace = true, optional = true }
 libp2p-floodsub = { workspace = true, optional = true }
 libp2p-gossipsub = { workspace = true, optional = true }
 libp2p-identify = { workspace = true, optional = true }
-libp2p-identity = { workspace = true }
+libp2p-identity = { workspace = true, features = ["rand"] }
 libp2p-kad = { workspace = true, optional = true }
 libp2p-metrics = { workspace = true, optional = true }
 libp2p-noise = { workspace = true, optional = true }
@@ -124,7 +118,6 @@ libp2p-relay = { workspace = true, optional = true }
 libp2p-rendezvous = { workspace = true, optional = true }
 libp2p-request-response = { workspace = true, optional = true }
 libp2p-swarm = { workspace = true }
-libp2p-wasm-ext = { workspace = true, optional = true }
 libp2p-websocket-websys = { workspace = true, optional = true }
 libp2p-webtransport-websys = { workspace = true, optional = true }
 libp2p-yamux = { workspace = true, optional = true }
@@ -133,7 +126,6 @@ pin-project = "1.0.0"
 thiserror = "1.0"
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
-libp2p-deflate = { workspace = true, optional = true }
 libp2p-dns = { workspace = true, optional = true }
 libp2p-mdns = { workspace = true, optional = true }
 libp2p-memory-connection-limits = { workspace = true, optional = true }

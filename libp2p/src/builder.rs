@@ -1,6 +1,7 @@
 use std::marker::PhantomData;
 
 mod phase;
+mod select_muxer;
 mod select_security;
 
 /// Build a [`Swarm`](libp2p_swarm::Swarm) by combining an identity, a set of
@@ -42,16 +43,20 @@ mod select_security;
 ///      .with_quic()
 ///      .with_other_transport(|_key| DummyTransport::<(PeerId, StreamMuxerBox)>::new())?
 ///      .with_dns()?
-///      .with_relay_client(
-///          (libp2p_tls::Config::new, libp2p_noise::Config::new),
-///          libp2p_yamux::Config::default,
-///      )?
 ///      .with_websocket(
 ///          (libp2p_tls::Config::new, libp2p_noise::Config::new),
 ///          libp2p_yamux::Config::default,
 ///      )
 ///      .await?
+///      .with_relay_client(
+///          (libp2p_tls::Config::new, libp2p_noise::Config::new),
+///          libp2p_yamux::Config::default,
+///      )?
 ///      .with_behaviour(|_key, relay| MyBehaviour { relay })?
+///      .with_swarm_config(|cfg| {
+///          // Edit cfg here.
+///          cfg
+///      })
 ///      .build();
 /// #
 /// #     Ok(())
@@ -66,6 +71,8 @@ pub struct SwarmBuilder<Provider, Phase> {
 #[cfg(test)]
 mod tests {
     use crate::SwarmBuilder;
+    use libp2p_core::{muxing::StreamMuxerBox, transport::dummy::DummyTransport};
+    use libp2p_identity::PeerId;
     use libp2p_swarm::{NetworkBehaviour, Swarm};
 
     #[test]
@@ -228,9 +235,6 @@ mod tests {
     #[test]
     #[cfg(feature = "tokio")]
     fn other_transport() -> Result<(), Box<dyn std::error::Error>> {
-        use libp2p_core::{muxing::StreamMuxerBox, transport::dummy::DummyTransport};
-        use libp2p_identity::PeerId;
-
         let _ = SwarmBuilder::with_new_identity()
             .with_tokio()
             // Closure can either return a Transport directly.
@@ -308,15 +312,67 @@ mod tests {
             .with_quic()
             .with_dns()
             .unwrap()
-            .with_relay_client(libp2p_tls::Config::new, libp2p_yamux::Config::default)
-            .unwrap()
             .with_websocket(libp2p_tls::Config::new, libp2p_yamux::Config::default)
             .await
+            .unwrap()
+            .with_relay_client(libp2p_tls::Config::new, libp2p_yamux::Config::default)
             .unwrap()
             .with_bandwidth_logging();
         let _: Swarm<MyBehaviour> = builder
             .with_behaviour(|_key, relay| MyBehaviour { relay })
             .unwrap()
             .build();
+    }
+
+    #[test]
+    #[cfg(all(feature = "tokio", feature = "tcp", feature = "tls", feature = "yamux"))]
+    fn tcp_bandwidth_logging() -> Result<(), Box<dyn std::error::Error>> {
+        let (builder, _logging) = SwarmBuilder::with_new_identity()
+            .with_tokio()
+            .with_tcp(
+                Default::default(),
+                libp2p_tls::Config::new,
+                libp2p_yamux::Config::default,
+            )?
+            .with_bandwidth_logging();
+
+        builder
+            .with_behaviour(|_| libp2p_swarm::dummy::Behaviour)
+            .unwrap()
+            .build();
+
+        Ok(())
+    }
+
+    #[test]
+    #[cfg(all(feature = "tokio", feature = "quic"))]
+    fn quic_bandwidth_logging() -> Result<(), Box<dyn std::error::Error>> {
+        let (builder, _logging) = SwarmBuilder::with_new_identity()
+            .with_tokio()
+            .with_quic()
+            .with_bandwidth_logging();
+
+        builder
+            .with_behaviour(|_| libp2p_swarm::dummy::Behaviour)
+            .unwrap()
+            .build();
+
+        Ok(())
+    }
+
+    #[test]
+    #[cfg(feature = "tokio")]
+    fn other_transport_bandwidth_logging() -> Result<(), Box<dyn std::error::Error>> {
+        let (builder, _logging) = SwarmBuilder::with_new_identity()
+            .with_tokio()
+            .with_other_transport(|_| DummyTransport::<(PeerId, StreamMuxerBox)>::new())?
+            .with_bandwidth_logging();
+
+        builder
+            .with_behaviour(|_| libp2p_swarm::dummy::Behaviour)
+            .unwrap()
+            .build();
+
+        Ok(())
     }
 }

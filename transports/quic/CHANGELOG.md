@@ -1,4 +1,12 @@
-## 0.9.3 - unreleased
+## 0.10.0 - unreleased
+
+- Improve hole-punch timing.
+  This should improve success rates for hole-punching QUIC connections.
+  See [PR 4549](https://github.com/libp2p/rust-libp2p/pull/4549).
+- Remove deprecated `Error::EndpointDriverCrashed` variant.
+  See [PR 4738](https://github.com/libp2p/rust-libp2p/pull/4738).
+
+## 0.9.3
 
 - No longer report error when explicit closing of a QUIC endpoint succeeds.
   See [PR 4621].

@@ -29,19 +29,18 @@ use libp2p_core::Multiaddr;
 use libp2p_identity::PeerId;
 use libp2p_swarm::{
     derive_prelude::ConnectionEstablished, ConnectionClosed, ConnectionId, FromSwarm,
-    NetworkBehaviour, NotifyHandler, PollParameters, StreamUpgradeError, THandlerInEvent,
-    THandlerOutEvent, ToSwarm,
+    NetworkBehaviour, NotifyHandler, THandlerInEvent, THandlerOutEvent, ToSwarm,
 };
-use void::Void;
 
-use crate::client::handler::Handler;
+use crate::RunParams;
+use crate::{client::handler::Handler, RunUpdate};
 
-use super::{RunId, RunParams, RunStats};
+use super::{RunError, RunId};
 
 #[derive(Debug)]
 pub struct Event {
     pub id: RunId,
-    pub result: Result<RunStats, StreamUpgradeError<Void>>,
+    pub result: Result<RunUpdate, RunError>,
 }
 
 #[derive(Default)]
@@ -57,9 +56,9 @@ impl Behaviour {
         Self::default()
     }
 
-    pub fn perf(&mut self, server: PeerId, params: RunParams) -> Result<RunId, PerfError> {
+    pub fn perf(&mut self, server: PeerId, params: RunParams) -> Result<RunId, NotConnected> {
         if !self.connected.contains(&server) {
-            return Err(PerfError::NotConnected);
+            return Err(NotConnected {});
         }
 
         let id = RunId::next();
@@ -75,9 +74,12 @@ impl Behaviour {
 }
 
 #[derive(thiserror::Error, Debug)]
-pub enum PerfError {
-    #[error("Not connected to peer")]
-    NotConnected,
+pub struct NotConnected();
+
+impl std::fmt::Display for NotConnected {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "not connected to peer")
+    }
 }
 
 impl NetworkBehaviour for Behaviour {
@@ -104,7 +106,7 @@ impl NetworkBehaviour for Behaviour {
         Ok(Handler::default())
     }
 
-    fn on_swarm_event(&mut self, event: FromSwarm<Self::ConnectionHandler>) {
+    fn on_swarm_event(&mut self, event: FromSwarm) {
         match event {
             FromSwarm::ConnectionEstablished(ConnectionEstablished { peer_id, .. }) => {
                 self.connected.insert(peer_id);
@@ -113,7 +115,6 @@ impl NetworkBehaviour for Behaviour {
                 peer_id,
                 connection_id: _,
                 endpoint: _,
-                handler: _,
                 remaining_established,
             }) => {
                 if remaining_established == 0 {
@@ -147,7 +148,6 @@ impl NetworkBehaviour for Behaviour {
     fn poll(
         &mut self,
         _cx: &mut Context<'_>,
-        _: &mut impl PollParameters,
     ) -> Poll<ToSwarm<Self::ToSwarm, THandlerInEvent<Self>>> {
         if let Some(event) = self.queued_events.pop_front() {
             return Poll::Ready(event);

@@ -140,3 +140,11 @@ pub enum Version {
     // Draft: https://github.com/libp2p/specs/pull/95
     // V2,
 }
+
+#[cfg(test)]
+impl quickcheck::Arbitrary for Version {
+    fn arbitrary(g: &mut quickcheck::Gen) -> Self {
+        *g.choose(&[Version::V1, Version::V1Lazy])
+            .expect("slice not empty")
+    }
+}

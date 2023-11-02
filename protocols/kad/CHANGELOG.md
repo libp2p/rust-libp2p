@@ -1,8 +1,37 @@
-## 0.44.6 - unreleased
-- Rename `Kademlia` symbols to follow naming convention. 
+## 0.45.0 - unreleased
+
+- Remove deprecated `kad::Config::set_connection_idle_timeout` in favor of `SwarmBuilder::idle_connection_timeout`.
+  See [PR 4659](https://github.com/libp2p/rust-libp2p/pull/4659).
+- Emit `ModeChanged` event whenever we automatically reconfigure the mode.
+  See [PR 4503](https://github.com/libp2p/rust-libp2p/pull/4503).
+- Make previously "deprecated" `record` module private.
+  See [PR 4035](https://github.com/libp2p/rust-libp2p/pull/4035).
+- Expose hashed bytes of KBucketKey.
+  See [PR 4698](https://github.com/libp2p/rust-libp2p/pull/4698).
+- Remove previously deprecated type-aliases.
+  Users should follow the convention of importing the `libp2p::kad` module and referring to symbols as `kad::Behaviour` etc.
+  See [PR 4733](https://github.com/libp2p/rust-libp2p/pull/4733). 
+
+## 0.44.6
+
+- Rename `Kademlia` symbols to follow naming convention.
   See [PR 4547].
+- Fix a bug where we didn't detect a remote peer moving into client-state.
+  See [PR 4639](https://github.com/libp2p/rust-libp2p/pull/4639).
+- Re-export `NodeStatus`.
+  See [PR 4645].
+- Deprecate `kad::Config::set_connection_idle_timeout` in favor of `SwarmBuilder::idle_connection_timeout`.
+  See [PR 4675].
 
 [PR 4547]: https://github.com/libp2p/rust-libp2p/pull/4547
+[PR 4645]: https://github.com/libp2p/rust-libp2p/pull/4645
+[PR 4675]: https://github.com/libp2p/rust-libp2p/pull/4675
+
+<!-- Internal changes
+
+- Allow deprecated usage of `KeepAlive::Until`
+
+-->
 
 ## 0.44.5
 - Migrate to `quick-protobuf-codec` crate for codec logic.

@@ -10,7 +10,7 @@ use futures_util::future::BoxFuture;
 use futures_util::stream::FuturesUnordered;
 use futures_util::{FutureExt, StreamExt};
 
-use crate::Timeout;
+use crate::{PushError, Timeout};
 
 /// Represents a map of [`Future`]s.
 ///
@@ -21,15 +21,6 @@ pub struct FuturesMap<ID, O> {
     inner: FuturesUnordered<TaggedFuture<ID, TimeoutFuture<BoxFuture<'static, O>>>>,
     empty_waker: Option<Waker>,
     full_waker: Option<Waker>,
-}
-
-/// Error of a future pushing
-#[derive(PartialEq, Debug)]
-pub enum PushError<F> {
-    /// The length of the set is equal to the capacity
-    BeyondCapacity(F),
-    /// The set already contains the given future's ID
-    ReplacedFuture(F),
 }
 
 impl<ID, O> FuturesMap<ID, O> {
@@ -54,7 +45,7 @@ where
     /// If the length of the map is equal to the capacity, this method returns [PushError::BeyondCapacity],
     /// that contains the passed future. In that case, the future is not inserted to the map.
     /// If a future with the given `future_id` already exists, then the old future will be replaced by a new one.
-    /// In that case, the returned error [PushError::ReplacedFuture] contains the old future.
+    /// In that case, the returned error [PushError::Replaced] contains the old future.
     pub fn try_push<F>(&mut self, future_id: ID, future: F) -> Result<(), PushError<BoxFuture<O>>>
     where
         F: Future<Output = O> + Send + 'static,
@@ -88,7 +79,7 @@ where
                     },
                 );
 
-                Err(PushError::ReplacedFuture(old_future.inner))
+                Err(PushError::Replaced(old_future.inner))
             }
         }
     }
@@ -187,7 +178,7 @@ mod tests {
         assert!(futures.try_push("ID", ready(())).is_ok());
         matches!(
             futures.try_push("ID", ready(())),
-            Err(PushError::ReplacedFuture(_))
+            Err(PushError::Replaced(_))
         );
     }
 
