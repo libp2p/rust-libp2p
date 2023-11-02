@@ -2861,9 +2861,9 @@ dependencies = [
  "libp2p-identity",
  "log",
  "quick-protobuf",
+ "quick-protobuf-codec",
  "quickcheck-ext",
  "rand 0.8.5",
- "unsigned-varint 0.8.0",
 ]
 
 [[package]]
