@@ -1,3 +1,8 @@
+## 0.2.1 - unreleased
+
+- Reduce allocations during encoding.
+  See [PR XXXX](https://github.com/libp2p/rust-libp2p/pull/XXXX).
+
 ## 0.2.0 
 
 - Raise MSRV to 1.65.
