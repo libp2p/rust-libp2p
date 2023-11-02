@@ -5,6 +5,8 @@
 - Remove deprecated type-aliases.
   See [PR 4739](https://github.com/libp2p/rust-libp2p/pull/4739). 
 - Migrate to the `hickory-dns` project which has rebranded from `trust-dns`.
+  We also remove the `tokio-dns-over-rustls` and `tokio-dns-over-https-rustls` features.
+  Users should activate these features themselves on `hickory-resolver` if so desired.
   See [PR 4780](https://github.com/libp2p/rust-libp2p/pull/4780).
 
 ## 0.40.1

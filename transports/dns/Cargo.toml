@@ -30,11 +30,6 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 [features]
 async-std = ["async-std-resolver"]
 tokio = ["hickory-resolver/tokio-runtime"]
-# The `tokio-` prefix and feature dependency is just to be explicit,
-# since these features of `trust-dns-resolver` are currently only
-# available for `tokio`.
-tokio-dns-over-rustls = ["tokio", "hickory-resolver/dns-over-rustls"]
-tokio-dns-over-https-rustls = ["tokio", "hickory-resolver/dns-over-https-rustls"]
 
 # Passing arguments to the docsrs builder in order to properly document cfg's.
 # More information: https://docs.rs/about/builds#cross-compiling
