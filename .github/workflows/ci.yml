@@ -85,7 +85,7 @@ jobs:
           ./scripts/ensure-version-bump-and-changelog.sh
         env:
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-          PR_BASE: ${{ github.event.pull_request.base.sha }}
+          PR_BASE: ${{ github.event.pull_request.base.ref }}
 
   wasm_tests:
     name: Run all WASM tests
