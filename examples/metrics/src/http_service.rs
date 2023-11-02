@@ -32,7 +32,7 @@ const METRICS_CONTENT_TYPE: &str = "application/openmetrics-text;charset=utf-8;v
 
 pub(crate) async fn metrics_server(registry: Registry) -> Result<(), std::io::Error> {
     // Serve on localhost.
-    let addr = ([127, 0, 0, 1], 8080).into();
+    let addr = ([127, 0, 0, 1], 0).into();
 
     let server = Server::bind(&addr).serve(MakeMetricService::new(registry));
     tracing::info!(metrics_server=%format!("http://{}/metrics", server.local_addr()));
