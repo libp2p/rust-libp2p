@@ -217,6 +217,27 @@ mod tests {
     }
 
     #[test]
+    fn empty_bytes_mut_does_not_panic() {
+        let mut codec = Codec::<Dummy>::new(100);
+
+        let mut src = varint_zeroes(100);
+        src.truncate(50);
+
+        let result = codec.decode(&mut src);
+
+        assert!(result.unwrap().is_none());
+    }
+
+    #[test]
+    fn only_partial_message_in_bytes_mut_does_not_panic() {
+        let mut codec = Codec::<Dummy>::new(100);
+
+        let result = codec.decode(&mut BytesMut::new());
+
+        assert!(result.unwrap().is_none());
+    }
+
+    #[test]
     fn handles_arbitrary_initial_capacity() {
         fn prop(message: proto::Message, initial_capacity: u16) {
             let mut buffer = BytesMut::with_capacity(initial_capacity as usize);
