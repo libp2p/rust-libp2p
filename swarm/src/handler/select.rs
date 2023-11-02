@@ -25,7 +25,7 @@ use crate::handler::{
 };
 use crate::upgrade::SendWrapper;
 use either::Either;
-use futures::future;
+use futures::{future, ready};
 use libp2p_core::upgrade::SelectUpgrade;
 use std::{cmp, task::Context, task::Poll};
 
@@ -36,12 +36,24 @@ pub struct ConnectionHandlerSelect<TProto1, TProto2> {
     proto1: TProto1,
     /// The second protocol.
     proto2: TProto2,
+    /// The state when closing via [`ConnectionHandler::poll_close`].
+    closing_state: ClosingState,
+}
+
+#[derive(Debug, Clone)]
+enum ClosingState {
+    Open,
+    Closed1,
 }
 
 impl<TProto1, TProto2> ConnectionHandlerSelect<TProto1, TProto2> {
     /// Builds a [`ConnectionHandlerSelect`].
     pub(crate) fn new(proto1: TProto1, proto2: TProto2) -> Self {
-        ConnectionHandlerSelect { proto1, proto2 }
+        ConnectionHandlerSelect {
+            proto1,
+            proto2,
+            closing_state: ClosingState::Open,
+        }
     }
 
     pub fn into_inner(self) -> (TProto1, TProto2) {
@@ -269,6 +281,24 @@ where
         };
 
         Poll::Pending
+    }
+
+    fn poll_close(&mut self, cx: &mut Context<'_>) -> Poll<Option<Self::ToBehaviour>> {
+        loop {
+            match self.closing_state {
+                ClosingState::Open => match ready!(self.proto1.poll_close(cx)) {
+                    Some(event) => return Poll::Ready(Some(Either::Left(event))),
+                    None => {
+                        self.closing_state = ClosingState::Closed1;
+                        continue;
+                    }
+                },
+                ClosingState::Closed1 => match ready!(self.proto2.poll_close(cx)) {
+                    Some(event) => return Poll::Ready(Some(Either::Right(event))),
+                    None => return Poll::Ready(None),
+                },
+            }
+        }
     }
 
     fn on_connection_event(
