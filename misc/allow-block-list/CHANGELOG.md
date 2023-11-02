@@ -1,9 +1,7 @@
 ## 0.3.0 - unreleased
 
-- Clean up on_swarm_event handler.
-  See [PR 4581](https://github.com/libp2p/rust-libp2p/pull/4581).
 
-## 0.2.0
+## 0.2.0 
 
 - Raise MSRV to 1.65.
   See [PR 3715].

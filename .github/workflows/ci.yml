@@ -61,19 +61,8 @@ jobs:
         with:
           tool: tomlq
 
-      - name: Enforce libp2p-swarm-derive version is pinned and matches latest version
-        if: env.CRATE == 'libp2p-swarm-derive'
-        run: |
-          PACKAGE_VERSION=$(cargo metadata --format-version=1 --no-deps | jq -e -r '.packages[] | select(.name == "'"$CRATE"'") | .version')
-          SPECIFIED_VERSION=$(tomlq "workspace.dependencies.$CRATE.version" --file ./Cargo.toml)
-
-          echo "Package version: $PACKAGE_VERSION";
-          echo "Specified version: $SPECIFIED_VERSION";
-
-          test "=$PACKAGE_VERSION" = "$SPECIFIED_VERSION"
-
       - name: Enforce version in `workspace.dependencies` matches latest version
-        if: env.CRATE != 'libp2p' && env.CRATE != 'libp2p-swarm-derive'
+        if: env.CRATE != 'libp2p'
         run: |
           PACKAGE_VERSION=$(cargo metadata --format-version=1 --no-deps | jq -e -r '.packages[] | select(.name == "'"$CRATE"'") | .version')
           SPECIFIED_VERSION=$(tomlq "workspace.dependencies.$CRATE.version" --file ./Cargo.toml)
@@ -81,7 +70,7 @@ jobs:
           echo "Package version: $PACKAGE_VERSION";
           echo "Specified version: $SPECIFIED_VERSION";
 
-          test "$PACKAGE_VERSION" = "$SPECIFIED_VERSION"
+          test "$PACKAGE_VERSION" = "$SPECIFIED_VERSION" || test "=$PACKAGE_VERSION" = "$SPECIFIED_VERSION"
 
       - name: Ensure manifest and CHANGELOG are properly updated
         if: >

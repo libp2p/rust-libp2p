@@ -1,7 +1,5 @@
 ## 0.14.0 - unreleased
 
-- Add `_ => {}` arm to `#[non_exhaustive]` enum `match`es
-  See [PR 4581](https://github.com/libp2p/rust-libp2p/pull/4581).
 
 ## 0.13.1
 - Refresh registration upon a change in external addresses.

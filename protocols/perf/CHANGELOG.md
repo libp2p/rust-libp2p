@@ -1,7 +1,5 @@
 ## 0.3.0 - unreleased
 
-- Add `_ => {}` arm to `#[non_exhaustive]` enum `match`es
-  See [PR 4581](https://github.com/libp2p/rust-libp2p/pull/4581).
 - Continuously measure on single connection (iperf-style).
   See https://github.com/libp2p/test-plans/issues/261 for high level overview.
   See [PR 4382](https://github.com/libp2p/rust-libp2p/pull/4382).
