@@ -277,6 +277,25 @@ where
 
         Poll::Pending
     }
+
+    fn poll_close(&mut self, cx: &mut Context<'_>) -> Poll<Option<Self::ToBehaviour>> {
+        'outer: loop {
+            for (k, h) in self.handlers.iter_mut() {
+                match h.poll_close(cx) {
+                    Poll::Ready(Some(e)) => {
+                        return Poll::Ready(Some((k.clone(), e)));
+                    }
+                    Poll::Ready(None) => {
+                        self.handlers.remove(k).expect("to be present");
+                        continue 'outer;
+                    }
+                    Poll::Pending => {}
+                }
+            }
+
+            return Poll::Pending;
+        }
+    }
 }
 
 /// Split [`MultiHandler`] into parts.
