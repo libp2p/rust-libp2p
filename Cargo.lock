@@ -4371,6 +4371,7 @@ dependencies = [
  "asynchronous-codec",
  "bytes",
  "criterion",
+ "futures",
  "quick-protobuf",
  "thiserror",
  "unsigned-varint 0.8.0",

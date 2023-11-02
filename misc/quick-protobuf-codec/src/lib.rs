@@ -91,10 +91,53 @@ where
 
 #[derive(thiserror::Error, Debug)]
 #[error("Failed to encode/decode message")]
-pub struct Error(#[from] std::io::Error);
+pub struct Error(#[from] io::Error);
 
-impl From<Error> for std::io::Error {
+impl From<Error> for io::Error {
     fn from(e: Error) -> Self {
         e.0
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use asynchronous_codec::FramedRead;
+    use futures::io::Cursor;
+    use futures::{FutureExt, StreamExt};
+    use std::error::Error;
+
+    #[test]
+    fn honors_max_message_length() {
+        let codec = Codec::<Dummy>::new(1);
+        let mut src = varint_zeroes(100);
+
+        let mut read = FramedRead::new(Cursor::new(&mut src), codec);
+        let err = read.next().now_or_never().unwrap().unwrap().unwrap_err();
+
+        assert_eq!(
+            err.source().unwrap().to_string(),
+            "message with 100b exceeds maximum of 1b"
+        )
+    }
+
+    /// Constructs a [`BytesMut`] of the provided length where the message is all zeros.
+    fn varint_zeroes(length: usize) -> BytesMut {
+        let mut buf = unsigned_varint::encode::usize_buffer();
+        let encoded_length = unsigned_varint::encode::usize(length, &mut buf);
+
+        let mut src = BytesMut::new();
+        src.extend_from_slice(encoded_length);
+        src.extend(std::iter::repeat(0).take(length));
+        src
+    }
+
+    #[derive(Debug)]
+    struct Dummy;
+
+    impl<'a> MessageRead<'a> for Dummy {
+        fn from_reader(_: &mut BytesReader, _: &'a [u8]) -> quick_protobuf::Result<Self> {
+            todo!()
+        }
     }
 }
