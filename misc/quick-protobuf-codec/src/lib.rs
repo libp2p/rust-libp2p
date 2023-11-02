@@ -77,6 +77,42 @@ impl<In: MessageWrite, Out> Encoder for Codec<In, Out> {
     }
 }
 
+impl<In, Out> Decoder for Codec<In, Out>
+where
+    Out: for<'a> MessageRead<'a>,
+{
+    type Item = Out;
+    type Error = Error;
+
+    fn decode(&mut self, src: &mut BytesMut) -> Result<Option<Self::Item>, Self::Error> {
+        let (len, remaining) = match unsigned_varint::decode::usize(src) {
+            Ok((len, remaining)) => (len, remaining),
+            Err(unsigned_varint::decode::Error::Insufficient) => return Ok(None),
+            Err(e) => return Err(Error(io::Error::new(io::ErrorKind::InvalidData, e))),
+        };
+        let consumed = src.len() - remaining.len();
+        src.advance(consumed);
+
+        if len > self.max_message_len_bytes {
+            return Err(Error(io::Error::new(
+                io::ErrorKind::PermissionDenied,
+                format!(
+                    "message with {len}b exceeds maximum of {}b",
+                    self.max_message_len_bytes
+                ),
+            )));
+        }
+
+        let msg = src.split_to(len);
+
+        let mut reader = BytesReader::from_bytes(&msg);
+        let message = Self::Item::from_reader(&mut reader, &msg)
+            .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
+
+        Ok(Some(message))
+    }
+}
+
 struct UninitMemoryWriterBackend<'a> {
     memory: &'a mut [MaybeUninit<u8>],
     written: &'a mut usize,
@@ -128,42 +164,6 @@ impl<'a> WriterBackend for UninitMemoryWriterBackend<'a> {
         }
 
         Ok(())
-    }
-}
-
-impl<In, Out> Decoder for Codec<In, Out>
-where
-    Out: for<'a> MessageRead<'a>,
-{
-    type Item = Out;
-    type Error = Error;
-
-    fn decode(&mut self, src: &mut BytesMut) -> Result<Option<Self::Item>, Self::Error> {
-        let (len, remaining) = match unsigned_varint::decode::usize(src) {
-            Ok((len, remaining)) => (len, remaining),
-            Err(unsigned_varint::decode::Error::Insufficient) => return Ok(None),
-            Err(e) => return Err(Error(io::Error::new(io::ErrorKind::InvalidData, e))),
-        };
-        let consumed = src.len() - remaining.len();
-        src.advance(consumed);
-
-        if len > self.max_message_len_bytes {
-            return Err(Error(io::Error::new(
-                io::ErrorKind::PermissionDenied,
-                format!(
-                    "message with {len}b exceeds maximum of {}b",
-                    self.max_message_len_bytes
-                ),
-            )));
-        }
-
-        let msg = src.split_to(len);
-
-        let mut reader = BytesReader::from_bytes(&msg);
-        let message = Self::Item::from_reader(&mut reader, &msg)
-            .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
-
-        Ok(Some(message))
     }
 }
 
