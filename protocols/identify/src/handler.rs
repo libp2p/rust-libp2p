@@ -407,9 +407,6 @@ impl ConnectionHandler for Handler {
                 ));
                 self.trigger_next_identify.reset(self.interval);
             }
-            ConnectionEvent::AddressChange(_)
-            | ConnectionEvent::ListenUpgradeError(_)
-            | ConnectionEvent::RemoteProtocolsChange(_) => {}
             ConnectionEvent::LocalProtocolsChange(change) => {
                 let before = tracing::enabled!(Level::DEBUG)
                     .then(|| self.local_protocols_to_string())
@@ -436,6 +433,7 @@ impl ConnectionHandler for Handler {
                         });
                 }
             }
+            _ => {}
         }
     }
 }

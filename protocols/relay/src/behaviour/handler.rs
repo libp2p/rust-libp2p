@@ -898,10 +898,7 @@ impl ConnectionHandler for Handler {
             ConnectionEvent::DialUpgradeError(dial_upgrade_error) => {
                 self.on_dial_upgrade_error(dial_upgrade_error);
             }
-            ConnectionEvent::AddressChange(_)
-            | ConnectionEvent::ListenUpgradeError(_)
-            | ConnectionEvent::LocalProtocolsChange(_)
-            | ConnectionEvent::RemoteProtocolsChange(_) => {}
+            _ => {}
         }
     }
 }

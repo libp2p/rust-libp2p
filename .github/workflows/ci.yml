@@ -70,7 +70,7 @@ jobs:
           echo "Package version: $PACKAGE_VERSION";
           echo "Specified version: $SPECIFIED_VERSION";
 
-          test "$PACKAGE_VERSION" = "$SPECIFIED_VERSION"
+          test "$PACKAGE_VERSION" = "$SPECIFIED_VERSION" || test "=$PACKAGE_VERSION" = "$SPECIFIED_VERSION"
 
       - name: Ensure manifest and CHANGELOG are properly updated
         if: >
