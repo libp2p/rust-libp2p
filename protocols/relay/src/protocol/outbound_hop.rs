@@ -124,6 +124,8 @@ pub(crate) async fn make_reservation(stream: Stream) -> Result<Reservation, Rese
 
     substream.send(msg).await?;
 
+    substream.close().await?;
+
     let proto::HopMessage {
         type_pb,
         peer: _,
