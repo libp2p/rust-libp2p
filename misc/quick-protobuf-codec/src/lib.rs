@@ -100,15 +100,13 @@ where
     type Error = Error;
 
     fn decode(&mut self, src: &mut BytesMut) -> Result<Option<Self::Item>, Self::Error> {
-        let (len, remaining) = match unsigned_varint::decode::usize(src) {
+        let (message_length, remaining) = match unsigned_varint::decode::usize(src) {
             Ok((len, remaining)) => (len, remaining),
             Err(unsigned_varint::decode::Error::Insufficient) => return Ok(None),
             Err(e) => return Err(Error(io::Error::new(io::ErrorKind::InvalidData, e))),
         };
-        let consumed = src.len() - remaining.len();
-        src.advance(consumed);
 
-        if len > self.max_message_len_bytes {
+        if message_length > self.max_message_len_bytes {
             return Err(Error(io::Error::new(
                 io::ErrorKind::PermissionDenied,
                 format!(
@@ -118,10 +116,21 @@ where
             )));
         }
 
-        let msg = src.split_to(len);
+        // Compute how many bytes the varint itself consumed.
+        let varint_length = src.len() - remaining.len();
 
-        let mut reader = BytesReader::from_bytes(&msg);
-        let message = Self::Item::from_reader(&mut reader, &msg)
+        // Ensure we can read an entire message.
+        if src.len() < (message_length + varint_length) {
+            return Ok(None);
+        }
+
+        // Safe to advance buffer now.
+        src.advance(varint_length);
+
+        let message = src.split_to(message_length);
+
+        let mut reader = BytesReader::from_bytes(&message);
+        let message = Self::Item::from_reader(&mut reader, &message)
             .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
 
         Ok(Some(message))
@@ -226,6 +235,11 @@ mod tests {
         let result = codec.decode(&mut src);
 
         assert!(result.unwrap().is_none());
+        assert_eq!(
+            src.len(),
+            50,
+            "to not modify `src` if we cannot read a full message"
+        )
     }
 
     #[test]
