@@ -1,7 +1,5 @@
 ## 0.34.0 - unreleased
 
-- Add `#[non_exhaustive]` to `FromSwarm`, `ToSwarm`, `SwarmEvent`, `ConnectionHandlerEvent`, `ConnectionEvent`.
-  See [PR 4581](https://github.com/libp2p/rust-libp2p/pull/4581).
 - Adapt to interface changes in `libp2p-swarm`.
   See [PR 4706](https://github.com/libp2p/rust-libp2p/pull/4076).
 - Remove supported for deprecated `#[behaviour(out_event = "...")]`.
