@@ -3,12 +3,11 @@
 use futures::StreamExt;
 use js_sys::Date;
 use libp2p::core::Multiaddr;
-use libp2p::identity::{Keypair, PeerId};
 use libp2p::ping;
-use libp2p::swarm::{keep_alive, NetworkBehaviour, SwarmBuilder, SwarmEvent};
-use libp2p::webrtc_websys;
-use std::convert::From;
+use libp2p::swarm::SwarmEvent;
+use libp2p_webrtc_websys as webrtc_websys;
 use std::io;
+use std::time::Duration;
 use wasm_bindgen::prelude::*;
 use web_sys::{Document, HtmlElement};
 
@@ -19,15 +18,13 @@ pub async fn run(libp2p_endpoint: String) -> Result<(), JsError> {
     let body = Body::from_current_window()?;
     body.append_p("Let's ping the WebRTC Server!")?;
 
-    let swarm = libp2p::SwarmBuilder::with_new_identity()
+    let mut swarm = libp2p::SwarmBuilder::with_new_identity()
         .with_wasm_bindgen()
         .with_other_transport(|key| {
             webrtc_websys::Transport::new(webrtc_websys::Config::new(&key))
         })?
-        .with_behaviour(|_| Behaviour {
-            ping: ping::Behaviour::new(ping::Config::new()),
-            keep_alive: keep_alive::Behaviour,
-        })?
+        .with_behaviour(|_| ping::Behaviour::new(ping::Config::new()))?
+        .with_swarm_config(|c| c.with_idle_connection_timeout(Duration::from_secs(5)))
         .build();
 
     let addr = libp2p_endpoint.parse::<Multiaddr>()?;
@@ -36,16 +33,16 @@ pub async fn run(libp2p_endpoint: String) -> Result<(), JsError> {
 
     loop {
         match swarm.next().await.unwrap() {
-            SwarmEvent::Behaviour(BehaviourEvent::Ping(ping::Event { result: Err(e), .. })) => {
+            SwarmEvent::Behaviour(ping::Event { result: Err(e), .. }) => {
                 log::error!("Ping failed: {:?}", e);
 
                 break;
             }
-            SwarmEvent::Behaviour(BehaviourEvent::Ping(ping::Event {
+            SwarmEvent::Behaviour(ping::Event {
                 peer,
                 result: Ok(rtt),
                 ..
-            })) => {
+            }) => {
                 log::info!("Ping successful: RTT: {rtt:?}, from {peer}");
                 body.append_p(&format!("RTT: {rtt:?} at {}", Date::new_0().to_string()))?;
             }
@@ -54,12 +51,6 @@ pub async fn run(libp2p_endpoint: String) -> Result<(), JsError> {
     }
 
     Ok(())
-}
-
-#[derive(NetworkBehaviour)]
-struct Behaviour {
-    ping: ping::Behaviour,
-    keep_alive: keep_alive::Behaviour,
 }
 
 /// Convenience wrapper around the current document body
