@@ -320,7 +320,10 @@ impl<'a> AsServer<'a> {
     ) -> Vec<Multiaddr> {
         let Some(observed_ip) = observed_remote_at
             .into_iter()
-            .find(|p| matches!(p, Protocol::Ip4(_) | Protocol::Ip6(_))) else { return Vec::new() };
+            .find(|p| matches!(p, Protocol::Ip4(_) | Protocol::Ip6(_)))
+        else {
+            return Vec::new();
+        };
 
         let mut distinct = HashSet::new();
         demanded

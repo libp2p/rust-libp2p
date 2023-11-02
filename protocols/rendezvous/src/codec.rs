@@ -227,7 +227,9 @@ impl Decoder for Codec {
     fn decode(&mut self, src: &mut BytesMut) -> Result<Option<Self::Item>, Self::Error> {
         let mut pb: ProtobufCodec<proto::Message> = ProtobufCodec::new(MAX_MESSAGE_LEN_BYTES);
 
-        let Some(message) = pb.decode(src)? else { return Ok(None) };
+        let Some(message) = pb.decode(src)? else {
+            return Ok(None);
+        };
 
         Ok(Some(message.try_into()?))
     }

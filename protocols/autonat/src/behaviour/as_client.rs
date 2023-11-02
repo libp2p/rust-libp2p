@@ -280,7 +280,7 @@ impl<'a> AsClient<'a> {
         }
 
         let server = self.random_server().ok_or(OutboundProbeError::NoServer)?;
-       
+
         let request_id = self.inner.send_request(
             &server,
             DialRequest {
@@ -297,7 +297,9 @@ impl<'a> AsClient<'a> {
     // Set the delay to the next probe based on the time of our last probe
     // and the specified delay.
     fn schedule_next_probe(&mut self, delay: Duration) {
-        let Some(last_probe_instant) = self.last_probe else { return; };
+        let Some(last_probe_instant) = self.last_probe else {
+            return;
+        };
         let schedule_next = *last_probe_instant + delay;
         self.schedule_probe
             .reset(schedule_next.saturating_duration_since(Instant::now()));

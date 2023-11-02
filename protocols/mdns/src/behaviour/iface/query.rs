@@ -156,7 +156,9 @@ impl MdnsResponse {
                     return None;
                 }
 
-                let RData::PTR(record_value) = record.data()? else { return None };
+                let RData::PTR(record_value) = record.data()? else {
+                    return None;
+                };
 
                 MdnsPeer::new(packet, record_value, record.ttl())
             })
@@ -245,7 +247,7 @@ impl MdnsPeer {
             .filter_map(|txt| {
                 // TODO: wrong, txt can be multiple character strings
                 let addr = dns::decode_character_string(txt).ok()?;
-                
+
                 if !addr.starts_with(b"dnsaddr=") {
                     return None;
                 }

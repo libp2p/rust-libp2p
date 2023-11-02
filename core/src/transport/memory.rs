@@ -62,7 +62,9 @@ impl Hub {
             port
         } else {
             loop {
-                let Some(port) = NonZeroU64::new(rand::random()) else { continue };
+                let Some(port) = NonZeroU64::new(rand::random()) else {
+                    continue;
+                };
                 if !hub.contains_key(&port) {
                     break port;
                 }
@@ -181,13 +183,12 @@ impl Transport for MemoryTransport {
         id: ListenerId,
         addr: Multiaddr,
     ) -> Result<(), TransportError<Self::Error>> {
-        let Ok(port) = parse_memory_addr(&addr) else {
-            return Err(TransportError::MultiaddrNotSupported(addr));
-        };
+        let port =
+            parse_memory_addr(&addr).map_err(|_| TransportError::MultiaddrNotSupported(addr))?;
 
-        let port = parse_memory_addr(&addr).map_err(|_| TransportError::MultiaddrNotSupported(addr))?;
-
-        let (rx, port) = HUB.register_port(port).ok_or(TransportError::Other(MemoryTransportError::Unreachable))?;
+        let (rx, port) = HUB
+            .register_port(port)
+            .ok_or(TransportError::Other(MemoryTransportError::Unreachable))?;
 
         let listener = Listener {
             id,

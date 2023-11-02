@@ -517,7 +517,9 @@ impl<P: Provider> Listener<P> {
     /// Poll for a next If Event.
     fn poll_if_addr(&mut self, cx: &mut Context<'_>) -> Poll<<Self as Stream>::Item> {
         let endpoint_addr = self.socket_addr();
-        let Some(if_watcher) = self.if_watcher.as_mut() else { return Poll::Pending };
+        let Some(if_watcher) = self.if_watcher.as_mut() else {
+            return Poll::Pending;
+        };
         loop {
             match ready!(P::poll_if_event(if_watcher, cx)) {
                 Ok(IfEvent::Up(inet)) => {
@@ -703,9 +705,15 @@ fn multiaddr_to_socketaddr(
 fn is_quic_addr(addr: &Multiaddr, support_draft_29: bool) -> bool {
     use Protocol::*;
     let mut iter = addr.iter();
-    let Some(first) = iter.next() else { return false };
-    let Some(second) = iter.next() else { return false };
-    let Some(third) = iter.next() else { return false };
+    let Some(first) = iter.next() else {
+        return false;
+    };
+    let Some(second) = iter.next() else {
+        return false;
+    };
+    let Some(third) = iter.next() else {
+        return false;
+    };
     let fourth = iter.next();
     let fifth = iter.next();
 

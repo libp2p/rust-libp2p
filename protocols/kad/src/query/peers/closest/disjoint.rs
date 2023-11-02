@@ -406,7 +406,9 @@ impl<I: Iterator<Item = Key<PeerId>>> Iterator for ResultIter<I> {
             .iter_mut()
             // Find the iterator with the next closest peer.
             .fold(Option::<&mut Peekable<_>>::None, |iter_a, iter_b| {
-                let Some(iter_a) = iter_a else { return Some(iter_b) };
+                let Some(iter_a) = iter_a else {
+                    return Some(iter_b);
+                };
 
                 match (iter_a.peek(), iter_b.peek()) {
                     (Some(next_a), Some(next_b)) => {

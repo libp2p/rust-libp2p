@@ -441,7 +441,8 @@ where
         id: ListenerId,
         addr: Multiaddr,
     ) -> Result<(), TransportError<Self::Error>> {
-        let socket_addr = multiaddr_to_socketaddr(addr.clone()).map_err(|_| TransportError::MultiaddrNotSupported(addr))?;
+        let socket_addr = multiaddr_to_socketaddr(addr.clone())
+            .map_err(|_| TransportError::MultiaddrNotSupported(addr))?;
         log::debug!("listening on {}", socket_addr);
         let listener = self
             .do_listen(id, socket_addr)
@@ -660,7 +661,9 @@ where
 
     /// Poll for a next If Event.
     fn poll_if_addr(&mut self, cx: &mut Context<'_>) -> Poll<<Self as Stream>::Item> {
-        let Some(if_watcher) = self.if_watcher.as_mut() else { return Poll::Pending };
+        let Some(if_watcher) = self.if_watcher.as_mut() else {
+            return Poll::Pending;
+        };
 
         let my_listen_addr_port = self.listen_addr.port();
 

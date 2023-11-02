@@ -229,7 +229,9 @@ impl Decoder for GossipsubCodec {
     type Error = quick_protobuf_codec::Error;
 
     fn decode(&mut self, src: &mut BytesMut) -> Result<Option<Self::Item>, Self::Error> {
-        let Some(rpc) = self.codec.decode(src)? else { return Ok(None) };
+        let Some(rpc) = self.codec.decode(src)? else {
+            return Ok(None);
+        };
         // Store valid messages.
         let mut messages = Vec::with_capacity(rpc.publish.len());
         // Store any invalid messages.
