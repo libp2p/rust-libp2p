@@ -102,14 +102,14 @@ impl Config {
         T: AsyncRead + AsyncWrite + Send + Unpin + 'static,
     {
         debug!("Starting plaintext handshake.");
-        let (socket, remote, read_buffer) = handshake::handshake(socket, self).await?;
+        let (socket, remote_key, read_buffer) = handshake::handshake(socket, self).await?;
         debug!("Finished plaintext handshake.");
 
         Ok((
-            remote.peer_id,
+            remote_key.to_peer_id(),
             Output {
                 socket,
-                remote_key: remote.public_key,
+                remote_key,
                 read_buffer,
             },
         ))
