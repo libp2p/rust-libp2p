@@ -21,7 +21,6 @@
 use hyper::http::StatusCode;
 use hyper::service::Service;
 use hyper::{Body, Method, Request, Response, Server};
-use log::{error, info};
 use prometheus_client::encoding::text::encode;
 use prometheus_client::registry::Registry;
 use std::future::Future;
@@ -33,18 +32,14 @@ const METRICS_CONTENT_TYPE: &str = "application/openmetrics-text;charset=utf-8;v
 
 pub(crate) async fn metrics_server(registry: Registry) -> Result<(), std::io::Error> {
     // Serve on localhost.
-    let addr = ([127, 0, 0, 1], 8080).into();
+    let addr = ([127, 0, 0, 1], 0).into();
 
-    // Use the tokio runtime to run the hyper server.
-    let rt = tokio::runtime::Runtime::new()?;
-    rt.block_on(async {
-        let server = Server::bind(&addr).serve(MakeMetricService::new(registry));
-        info!("Metrics server on http://{}/metrics", server.local_addr());
-        if let Err(e) = server.await {
-            error!("server error: {}", e);
-        }
-        Ok(())
-    })
+    let server = Server::bind(&addr).serve(MakeMetricService::new(registry));
+    tracing::info!(metrics_server=%format!("http://{}/metrics", server.local_addr()));
+    if let Err(e) = server.await {
+        tracing::error!("server error: {}", e);
+    }
+    Ok(())
 }
 
 pub(crate) struct MetricService {

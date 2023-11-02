@@ -318,7 +318,7 @@ impl<P: Provider> Transport for GenTransport<P> {
             .try_clone_socket()
             .map_err(Self::Error::from)?;
 
-        log::debug!("Preparing for hole-punch from {addr}");
+        tracing::debug!("Preparing for hole-punch from {addr}");
 
         let hole_puncher = hole_puncher::<P>(socket, socket_addr, self.handshake_timeout);
 
@@ -348,7 +348,12 @@ impl<P: Provider> Transport for GenTransport<P> {
                         .expect("hole punch connection sender is never dropped before receiver")
                         .await?;
                     if inbound_peer_id != peer_id {
-                        log::warn!("expected inbound connection from {socket_addr} to resolve to  {peer_id} but got {inbound_peer_id}");
+                        tracing::warn!(
+                            peer=%peer_id,
+                            inbound_peer=%inbound_peer_id,
+                            socket_address=%socket_addr,
+                            "expected inbound connection from socket_address to resolve to peer but got inbound peer"
+                        );
                     }
                     Ok((inbound_peer_id, connection))
                 }
@@ -527,7 +532,10 @@ impl<P: Provider> Listener<P> {
                     if let Some(listen_addr) =
                         ip_to_listenaddr(&endpoint_addr, inet.addr(), self.version)
                     {
-                        log::debug!("New listen address: {listen_addr}");
+                        tracing::debug!(
+                            address=%listen_addr,
+                            "New listen address"
+                        );
                         self.listening_addresses.insert(inet.addr());
                         return Poll::Ready(TransportEvent::NewAddress {
                             listener_id: self.listener_id,
@@ -539,7 +547,10 @@ impl<P: Provider> Listener<P> {
                     if let Some(listen_addr) =
                         ip_to_listenaddr(&endpoint_addr, inet.addr(), self.version)
                     {
-                        log::debug!("Expired listen address: {listen_addr}");
+                        tracing::debug!(
+                            address=%listen_addr,
+                            "Expired listen address"
+                        );
                         self.listening_addresses.remove(&inet.addr());
                         return Poll::Ready(TransportEvent::AddressExpired {
                             listener_id: self.listener_id,

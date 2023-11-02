@@ -23,10 +23,13 @@
 use futures::StreamExt;
 use libp2p::{core::multiaddr::Multiaddr, identify, noise, swarm::SwarmEvent, tcp, yamux};
 use std::error::Error;
+use tracing_subscriber::EnvFilter;
 
 #[async_std::main]
 async fn main() -> Result<(), Box<dyn Error>> {
-    env_logger::init();
+    let _ = tracing_subscriber::fmt()
+        .with_env_filter(EnvFilter::from_default_env())
+        .try_init();
 
     let mut swarm = libp2p::SwarmBuilder::with_new_identity()
         .with_async_std()

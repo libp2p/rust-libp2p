@@ -217,6 +217,7 @@ pub trait NetworkBehaviour: 'static {
 ///
 /// [`Swarm`]: super::Swarm
 #[derive(Debug)]
+#[non_exhaustive]
 pub enum ToSwarm<TOutEvent, TInEvent> {
     /// Instructs the `Swarm` to return an event when it is being polled.
     GenerateEvent(TOutEvent),
@@ -394,6 +395,7 @@ pub enum CloseConnection {
 /// Enumeration with the list of the possible events
 /// to pass to [`on_swarm_event`](NetworkBehaviour::on_swarm_event).
 #[derive(Debug)]
+#[non_exhaustive]
 pub enum FromSwarm<'a> {
     /// Informs the behaviour about a newly established connection to a peer.
     ConnectionEstablished(ConnectionEstablished<'a>),

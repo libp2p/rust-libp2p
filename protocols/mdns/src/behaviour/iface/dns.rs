@@ -134,7 +134,7 @@ pub(crate) fn build_query_response<'a>(
                 records.push(txt_record);
             }
             Err(e) => {
-                log::warn!("Excluding address {} from response: {:?}", addr, e);
+                tracing::warn!(address=%addr, "Excluding address from response: {:?}", e);
             }
         }
 

@@ -22,7 +22,6 @@ use crate::{
     multiaddr::{Multiaddr, Protocol},
     transport::{ListenerId, TransportError, TransportEvent},
 };
-use log::debug;
 use std::{
     pin::Pin,
     task::{Context, Poll},
@@ -292,20 +291,20 @@ impl<T: crate::Transport + Unpin> crate::Transport for Transport<T> {
         match addr.iter().next() {
             Some(Protocol::Ip4(a)) => {
                 if !ipv4_global::is_global(a) {
-                    debug!("Not dialing non global IP address {:?}.", a);
+                    tracing::debug!(ip=%a, "Not dialing non global IP address");
                     return Err(TransportError::MultiaddrNotSupported(addr));
                 }
                 self.inner.dial(addr)
             }
             Some(Protocol::Ip6(a)) => {
                 if !ipv6_global::is_global(a) {
-                    debug!("Not dialing non global IP address {:?}.", a);
+                    tracing::debug!(ip=%a, "Not dialing non global IP address");
                     return Err(TransportError::MultiaddrNotSupported(addr));
                 }
                 self.inner.dial(addr)
             }
             _ => {
-                debug!("Not dialing unsupported Multiaddress {:?}.", addr);
+                tracing::debug!(address=%addr, "Not dialing unsupported Multiaddress");
                 Err(TransportError::MultiaddrNotSupported(addr))
             }
         }
@@ -318,20 +317,20 @@ impl<T: crate::Transport + Unpin> crate::Transport for Transport<T> {
         match addr.iter().next() {
             Some(Protocol::Ip4(a)) => {
                 if !ipv4_global::is_global(a) {
-                    debug!("Not dialing non global IP address {:?}.", a);
+                    tracing::debug!(ip=?a, "Not dialing non global IP address");
                     return Err(TransportError::MultiaddrNotSupported(addr));
                 }
                 self.inner.dial_as_listener(addr)
             }
             Some(Protocol::Ip6(a)) => {
                 if !ipv6_global::is_global(a) {
-                    debug!("Not dialing non global IP address {:?}.", a);
+                    tracing::debug!(ip=?a, "Not dialing non global IP address");
                     return Err(TransportError::MultiaddrNotSupported(addr));
                 }
                 self.inner.dial_as_listener(addr)
             }
             _ => {
-                debug!("Not dialing unsupported Multiaddress {:?}.", addr);
+                tracing::debug!(address=%addr, "Not dialing unsupported Multiaddress");
                 Err(TransportError::MultiaddrNotSupported(addr))
             }
         }

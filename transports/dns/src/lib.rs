@@ -277,7 +277,7 @@ where
                     )
                 }) {
                     if dns_lookups == MAX_DNS_LOOKUPS {
-                        log::debug!("Too many DNS lookups. Dropping unresolved {}.", addr);
+                        tracing::debug!(address=%addr, "Too many DNS lookups, dropping unresolved address");
                         last_err = Some(Error::TooManyLookups);
                         // There may still be fully resolved addresses in `unresolved`,
                         // so keep going until `unresolved` is empty.
@@ -294,13 +294,13 @@ where
                             last_err = Some(e);
                         }
                         Ok(Resolved::One(ip)) => {
-                            log::trace!("Resolved {} -> {}", name, ip);
+                            tracing::trace!(protocol=%name, resolved=%ip);
                             let addr = addr.replace(i, |_| Some(ip)).expect("`i` is a valid index");
                             unresolved.push(addr);
                         }
                         Ok(Resolved::Many(ips)) => {
                             for ip in ips {
-                                log::trace!("Resolved {} -> {}", name, ip);
+                                tracing::trace!(protocol=%name, resolved=%ip);
                                 let addr =
                                     addr.replace(i, |_| Some(ip)).expect("`i` is a valid index");
                                 unresolved.push(addr);
@@ -314,14 +314,14 @@ where
                                 if a.ends_with(&suffix) {
                                     if n < MAX_TXT_RECORDS {
                                         n += 1;
-                                        log::trace!("Resolved {} -> {}", name, a);
+                                        tracing::trace!(protocol=%name, resolved=%a);
                                         let addr =
                                             prefix.iter().chain(a.iter()).collect::<Multiaddr>();
                                         unresolved.push(addr);
                                     } else {
-                                        log::debug!(
-                                            "Too many TXT records. Dropping resolved {}.",
-                                            a
+                                        tracing::debug!(
+                                            resolved=%a,
+                                            "Too many TXT records, dropping resolved"
                                         );
                                     }
                                 }
@@ -330,7 +330,7 @@ where
                     }
                 } else {
                     // We have a fully resolved address, so try to dial it.
-                    log::debug!("Dialing {}", addr);
+                    tracing::debug!(address=%addr, "Dialing address");
 
                     let transport = inner.clone();
                     let dial = match role_override {
@@ -354,12 +354,12 @@ where
                     match result {
                         Ok(out) => return Ok(out),
                         Err(err) => {
-                            log::debug!("Dial error: {:?}.", err);
+                            tracing::debug!("Dial error: {:?}.", err);
                             if unresolved.is_empty() {
                                 return Err(err);
                             }
                             if dial_attempts == MAX_DIAL_ATTEMPTS {
-                                log::debug!(
+                                tracing::debug!(
                                     "Aborting dialing after {} attempts.",
                                     MAX_DIAL_ATTEMPTS
                                 );
@@ -537,7 +537,7 @@ fn resolve<'a, E: 'a + Send, R: Resolver>(
                                 match parse_dnsaddr_txt(chars) {
                                     Err(e) => {
                                         // Skip over seemingly invalid entries.
-                                        log::debug!("Invalid TXT record: {:?}", e);
+                                        tracing::debug!("Invalid TXT record: {:?}", e);
                                     }
                                     Ok(a) => {
                                         addrs.push(a);
@@ -612,7 +612,9 @@ mod tests {
 
     #[test]
     fn basic_resolve() {
-        let _ = env_logger::try_init();
+        let _ = tracing_subscriber::fmt()
+            .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
+            .try_init();
 
         #[derive(Clone)]
         struct CustomTransport;

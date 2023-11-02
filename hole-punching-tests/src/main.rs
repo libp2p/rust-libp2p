@@ -104,7 +104,7 @@ async fn main() -> Result<()> {
                 _,
                 _,
             ) => {
-                log::info!("Relay accepted our reservation request.");
+                tracing::info!("Relay accepted our reservation request.");
 
                 redis
                     .push(LISTEN_CLIENT_PEER_ID, swarm.local_peer_id())
@@ -118,7 +118,7 @@ async fn main() -> Result<()> {
                 _,
                 _,
             ) => {
-                log::info!("Successfully hole-punched to {remote_peer_id}");
+                tracing::info!("Successfully hole-punched to {remote_peer_id}");
 
                 hole_punched_peer_connection = Some(connection_id);
             }
@@ -144,7 +144,7 @@ async fn main() -> Result<()> {
                 _,
                 _,
             ) => {
-                log::info!("Failed to hole-punched to {remote_peer_id}");
+                tracing::info!("Failed to hole-punched to {remote_peer_id}");
                 return Err(anyhow::Error::new(error));
             }
             (
@@ -225,7 +225,7 @@ async fn client_listen_on_transport(
                 listen_addresses += 1;
             }
 
-            log::info!("Listening on {address}");
+            tracing::info!("Listening on {address}");
         }
     }
     Ok(())
@@ -292,7 +292,7 @@ impl RedisClient {
     async fn push(&mut self, key: &str, value: impl ToString) -> Result<()> {
         let value = value.to_string();
 
-        log::debug!("Pushing {key}={value} to redis");
+        tracing::debug!("Pushing {key}={value} to redis");
 
         self.inner.rpush(key, value).await?;
 
@@ -304,7 +304,7 @@ impl RedisClient {
         V: FromStr + fmt::Display,
         V::Err: std::error::Error + Send + Sync + 'static,
     {
-        log::debug!("Fetching {key} from redis");
+        tracing::debug!("Fetching {key} from redis");
 
         let value = self
             .inner
@@ -314,7 +314,7 @@ impl RedisClient {
             .with_context(|| format!("Failed to get value for {key} from redis"))?
             .parse()?;
 
-        log::debug!("{key}={value}");
+        tracing::debug!("{key}={value}");
 
         Ok(value)
     }
