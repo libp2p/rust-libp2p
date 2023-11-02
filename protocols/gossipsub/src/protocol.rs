@@ -573,7 +573,7 @@ mod tests {
     #[test]
     /// Test that RPC messages can be encoded and decoded successfully.
     fn encode_decode() {
-        fn prop(message: Message, buf_length: u16) {
+        fn prop(message: Message) {
             let message = message.0;
 
             let rpc = Rpc {
@@ -583,7 +583,7 @@ mod tests {
             };
 
             let mut codec = GossipsubCodec::new(u32::MAX as usize, ValidationMode::Strict);
-            let mut buf = BytesMut::with_capacity(buf_length as usize);
+            let mut buf = BytesMut::new();
             codec.encode(rpc.into_protobuf(), &mut buf).unwrap();
             let decoded_rpc = codec.decode(&mut buf).unwrap().unwrap();
             // mark as validated as its a published message
