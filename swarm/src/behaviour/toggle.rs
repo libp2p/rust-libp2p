@@ -369,4 +369,12 @@ where
             }
         }
     }
+
+    fn poll_close(&mut self, cx: &mut Context<'_>) -> Poll<Option<Self::ToBehaviour>> {
+        if let Some(inner) = self.inner.as_mut() {
+            inner.poll_close(cx)
+        } else {
+            Poll::Ready(None)
+        }
+    }
 }

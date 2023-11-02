@@ -90,6 +90,12 @@ where
         })
     }
 
+    fn poll_close(&mut self, cx: &mut Context<'_>) -> Poll<Option<Self::ToBehaviour>> {
+        self.inner
+            .poll_close(cx)
+            .map(|ev| ev.map(|ev| (self.map)(ev)))
+    }
+
     fn on_connection_event(
         &mut self,
         event: ConnectionEvent<
