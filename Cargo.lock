@@ -2893,11 +2893,11 @@ dependencies = [
  "libp2p-core",
  "libp2p-identity",
  "quick-protobuf",
+ "quick-protobuf-codec",
  "quickcheck-ext",
  "rand 0.8.5",
  "tracing",
  "tracing-subscriber",
- "unsigned-varint",
 ]
 
 [[package]]
