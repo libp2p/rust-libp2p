@@ -142,6 +142,7 @@
 //! use libp2p::{identity, ping, PeerId};
 //! use tracing_subscriber::EnvFilter;
 //! use std::error::Error;
+//! use tracing_subscriber::EnvFilter;
 //!
 //! #[async_std::main]
 //! async fn main() -> Result<(), Box<dyn Error>> {
