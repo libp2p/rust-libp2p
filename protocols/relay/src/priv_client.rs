@@ -33,6 +33,7 @@ use futures::future::{BoxFuture, FutureExt};
 use futures::io::{AsyncRead, AsyncWrite};
 use futures::ready;
 use futures::stream::StreamExt;
+use libp2p_core::multiaddr::Protocol;
 use libp2p_core::{Endpoint, Multiaddr};
 use libp2p_identity::PeerId;
 use libp2p_swarm::behaviour::{ConnectionClosed, ConnectionEstablished, FromSwarm};
@@ -79,6 +80,9 @@ pub struct Behaviour {
     /// connection.
     directly_connected_peers: HashMap<PeerId, Vec<ConnectionId>>,
 
+    /// Direct connection address
+    direct_connection_addrs: HashMap<ConnectionId, Multiaddr>,
+
     /// Queue of actions to return when polled.
     queued_actions: VecDeque<ToSwarm<Event, Either<handler::In, Void>>>,
 
@@ -92,6 +96,7 @@ pub fn new(local_peer_id: PeerId) -> (Transport, Behaviour) {
         local_peer_id,
         from_transport,
         directly_connected_peers: Default::default(),
+        direct_connection_addrs: Default::default(),
         queued_actions: Default::default(),
         pending_handler_commands: Default::default(),
     };
@@ -126,6 +131,7 @@ impl Behaviour {
                     unreachable!("`on_connection_closed` for unconnected peer.")
                 }
             };
+            self.direct_connection_addrs.remove(&connection_id);
         }
     }
 }
@@ -186,6 +192,10 @@ impl NetworkBehaviour for Behaviour {
                         .entry(peer_id)
                         .or_default()
                         .push(connection_id);
+
+                    let addr = endpoint.get_remote_address().clone();
+
+                    self.direct_connection_addrs.insert(connection_id, addr);
                 }
 
                 if let Some(event) = self.pending_handler_commands.remove(&connection_id) {
@@ -218,7 +228,7 @@ impl NetworkBehaviour for Behaviour {
     fn on_connection_handler_event(
         &mut self,
         event_source: PeerId,
-        _connection: ConnectionId,
+        connection: ConnectionId,
         handler_event: THandlerOutEvent<Self>,
     ) {
         let handler_event = match handler_event {
@@ -226,8 +236,21 @@ impl NetworkBehaviour for Behaviour {
             Either::Right(v) => void::unreachable(v),
         };
 
+        let mut external_event = None;
+
         let event = match handler_event {
             handler::Event::ReservationReqAccepted { renewal, limit } => {
+                let addr = self
+                    .direct_connection_addrs
+                    .get(&connection)
+                    .cloned()
+                    .expect("Connection to be direct")
+                    .with(Protocol::P2p(event_source))
+                    .with(Protocol::P2pCircuit)
+                    .with(Protocol::P2p(self.local_peer_id));
+
+                    external_event = Some(ToSwarm::ExternalAddrConfirmed(addr));
+
                 Event::ReservationReqAccepted {
                     relay_peer_id: event_source,
                     renewal,
@@ -245,7 +268,11 @@ impl NetworkBehaviour for Behaviour {
             }
         };
 
-        self.queued_actions.push_back(ToSwarm::GenerateEvent(event))
+        self.queued_actions.push_back(ToSwarm::GenerateEvent(event));
+
+        if let Some(event) = external_event.take() {
+            self.queued_actions.push_back(event);
+        }
     }
 
     fn poll(
