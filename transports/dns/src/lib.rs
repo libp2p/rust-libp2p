@@ -60,12 +60,12 @@
 #[cfg(feature = "async-std")]
 pub mod async_std {
     use async_std_resolver::AsyncStdResolver;
-    use parking_lot::Mutex;
-    use std::{io, sync::Arc};
-    use trust_dns_resolver::{
+    use hickory_resolver::{
         config::{ResolverConfig, ResolverOpts},
         system_conf,
     };
+    use parking_lot::Mutex;
+    use std::{io, sync::Arc};
 
     /// A `Transport` wrapper for performing DNS lookups when dialing `Multiaddr`esses
     /// using `async-std` for all async I/O.
@@ -90,9 +90,9 @@ pub mod async_std {
 
 #[cfg(feature = "tokio")]
 pub mod tokio {
+    use hickory_resolver::{system_conf, TokioAsyncResolver};
     use parking_lot::Mutex;
     use std::sync::Arc;
-    use trust_dns_resolver::{system_conf, TokioAsyncResolver};
 
     /// A `Transport` wrapper for performing DNS lookups when dialing `Multiaddr`esses
     /// using `tokio` for all async I/O.
@@ -109,8 +109,8 @@ pub mod tokio {
         /// and options.
         pub fn custom(
             inner: T,
-            cfg: trust_dns_resolver::config::ResolverConfig,
-            opts: trust_dns_resolver::config::ResolverOpts,
+            cfg: hickory_resolver::config::ResolverConfig,
+            opts: hickory_resolver::config::ResolverOpts,
         ) -> Transport<T> {
             Transport {
                 inner: Arc::new(Mutex::new(inner)),
@@ -141,12 +141,12 @@ use std::{
     task::{Context, Poll},
 };
 
-pub use trust_dns_resolver::config::{ResolverConfig, ResolverOpts};
-pub use trust_dns_resolver::error::{ResolveError, ResolveErrorKind};
-use trust_dns_resolver::lookup::{Ipv4Lookup, Ipv6Lookup, TxtLookup};
-use trust_dns_resolver::lookup_ip::LookupIp;
-use trust_dns_resolver::name_server::ConnectionProvider;
-use trust_dns_resolver::AsyncResolver;
+pub use hickory_resolver::config::{ResolverConfig, ResolverOpts};
+pub use hickory_resolver::error::{ResolveError, ResolveErrorKind};
+use hickory_resolver::lookup::{Ipv4Lookup, Ipv6Lookup, TxtLookup};
+use hickory_resolver::lookup_ip::LookupIp;
+use hickory_resolver::name_server::ConnectionProvider;
+use hickory_resolver::AsyncResolver;
 
 /// The prefix for `dnsaddr` protocol TXT record lookups.
 const DNSADDR_PREFIX: &str = "_dnsaddr.";

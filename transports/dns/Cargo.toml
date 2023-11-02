@@ -16,9 +16,9 @@ libp2p-core = { workspace = true }
 libp2p-identity = { workspace = true }
 log = "0.4.20"
 futures = "0.3.29"
-async-std-resolver = { version = "0.23", optional = true }
+async-std-resolver = { version = "0.24", optional = true }
 parking_lot = "0.12.0"
-trust-dns-resolver = { version = "0.23", default-features = false, features = ["system-config"] }
+hickory-resolver = { version = "0.24.0", default-features = false, features = ["system-config"] }
 smallvec = "1.11.1"
 
 [dev-dependencies]
@@ -29,12 +29,12 @@ async-std-crate = { package = "async-std", version = "1.6" }
 
 [features]
 async-std = ["async-std-resolver"]
-tokio = ["trust-dns-resolver/tokio-runtime"]
+tokio = ["hickory-resolver/tokio-runtime"]
 # The `tokio-` prefix and feature dependency is just to be explicit,
 # since these features of `trust-dns-resolver` are currently only
 # available for `tokio`.
-tokio-dns-over-rustls = ["tokio", "trust-dns-resolver/dns-over-rustls"]
-tokio-dns-over-https-rustls = ["tokio", "trust-dns-resolver/dns-over-https-rustls"]
+tokio-dns-over-rustls = ["tokio", "hickory-resolver/dns-over-rustls"]
+tokio-dns-over-https-rustls = ["tokio", "hickory-resolver/dns-over-https-rustls"]
 
 # Passing arguments to the docsrs builder in order to properly document cfg's.
 # More information: https://docs.rs/about/builds#cross-compiling
