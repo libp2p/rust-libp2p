@@ -1,7 +1,5 @@
 ## 0.26.0 - unreleased
 
-- Add `_ => {}` arm to `#[non_exhaustive]` enum `match`es
-  See [PR 4581](https://github.com/libp2p/rust-libp2p/pull/4581).
 - Remove `request_response::Config::set_connection_keep_alive` in favor of `SwarmBuilder::idle_connection_timeout`.
   See [PR 4679](https://github.com/libp2p/rust-libp2p/pull/4679).
 - Allow at most 100 concurrent inbound + outbound streams per instance of `request_response::Behaviour`.
