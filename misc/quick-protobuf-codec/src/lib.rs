@@ -43,6 +43,7 @@ impl<In: MessageWrite, Out> Encoder for Codec<In, Out> {
         let mut uvi_buf = unsigned_varint::encode::usize_buffer();
         let encoded_length = unsigned_varint::encode::usize(message_length, &mut uvi_buf);
 
+        dst.reserve(message_length);
         dst.extend_from_slice(encoded_length);
 
         let mut writer = Writer::new(dst.as_mut());
