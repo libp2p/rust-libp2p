@@ -34,7 +34,6 @@ use futures::prelude::*;
 use libp2p_core::{InboundUpgrade, OutboundUpgrade, UpgradeInfo};
 use libp2p_identity::{PeerId, PublicKey};
 use libp2p_swarm::StreamProtocol;
-use log::{debug, warn};
 use quick_protobuf::Writer;
 use std::pin::Pin;
 use unsigned_varint::codec;
@@ -169,7 +168,7 @@ impl GossipsubCodec {
         let from = match message.from.as_ref() {
             Some(v) => v,
             None => {
-                debug!("Signature verification failed: No source id given");
+                tracing::debug!("Signature verification failed: No source id given");
                 return false;
             }
         };
@@ -177,7 +176,7 @@ impl GossipsubCodec {
         let source = match PeerId::from_bytes(from) {
             Ok(v) => v,
             Err(_) => {
-                debug!("Signature verification failed: Invalid Peer Id");
+                tracing::debug!("Signature verification failed: Invalid Peer Id");
                 return false;
             }
         };
@@ -185,7 +184,7 @@ impl GossipsubCodec {
         let signature = match message.signature.as_ref() {
             Some(v) => v,
             None => {
-                debug!("Signature verification failed: No signature provided");
+                tracing::debug!("Signature verification failed: No signature provided");
                 return false;
             }
         };
@@ -197,7 +196,7 @@ impl GossipsubCodec {
             _ => match PublicKey::try_decode_protobuf(&source.to_bytes()[2..]) {
                 Ok(v) => v,
                 Err(_) => {
-                    warn!("Signature verification failed: No valid public key supplied");
+                    tracing::warn!("Signature verification failed: No valid public key supplied");
                     return false;
                 }
             },
@@ -205,7 +204,9 @@ impl GossipsubCodec {
 
         // The key must match the peer_id
         if source != public_key.to_peer_id() {
-            warn!("Signature verification failed: Public key doesn't match source peer id");
+            tracing::warn!(
+                "Signature verification failed: Public key doesn't match source peer id"
+            );
             return false;
         }
 
@@ -276,13 +277,17 @@ impl Decoder for GossipsubCodec {
                 }
                 ValidationMode::Anonymous => {
                     if message.signature.is_some() {
-                        warn!("Signature field was non-empty and anonymous validation mode is set");
+                        tracing::warn!(
+                            "Signature field was non-empty and anonymous validation mode is set"
+                        );
                         invalid_kind = Some(ValidationError::SignaturePresent);
                     } else if message.seqno.is_some() {
-                        warn!("Sequence number was non-empty and anonymous validation mode is set");
+                        tracing::warn!(
+                            "Sequence number was non-empty and anonymous validation mode is set"
+                        );
                         invalid_kind = Some(ValidationError::SequenceNumberPresent);
                     } else if message.from.is_some() {
-                        warn!("Message dropped. Message source was non-empty and anonymous validation mode is set");
+                        tracing::warn!("Message dropped. Message source was non-empty and anonymous validation mode is set");
                         invalid_kind = Some(ValidationError::MessageSourcePresent);
                     }
                 }
@@ -308,7 +313,7 @@ impl Decoder for GossipsubCodec {
 
             // verify message signatures if required
             if verify_signature && !GossipsubCodec::verify_signature(&message) {
-                warn!("Invalid signature for received message");
+                tracing::warn!("Invalid signature for received message");
 
                 // Build the invalid message (ignoring further validation of sequence number
                 // and source)
@@ -332,10 +337,10 @@ impl Decoder for GossipsubCodec {
                     if seq_no.is_empty() {
                         None
                     } else if seq_no.len() != 8 {
-                        debug!(
-                            "Invalid sequence number length for received message. SeqNo: {:?} Size: {}",
-                            seq_no,
-                            seq_no.len()
+                        tracing::debug!(
+                            sequence_number=?seq_no,
+                            sequence_length=%seq_no.len(),
+                            "Invalid sequence number length for received message"
                         );
                         let message = RawMessage {
                             source: None, // don't bother inform the application
@@ -355,7 +360,7 @@ impl Decoder for GossipsubCodec {
                     }
                 } else {
                     // sequence number was not present
-                    debug!("Sequence number not present but expected");
+                    tracing::debug!("Sequence number not present but expected");
                     let message = RawMessage {
                         source: None, // don't bother inform the application
                         data: message.data.unwrap_or_default(),
@@ -381,7 +386,7 @@ impl Decoder for GossipsubCodec {
                             Ok(peer_id) => Some(peer_id), // valid peer id
                             Err(_) => {
                                 // invalid peer id, add to invalid messages
-                                debug!("Message source has an invalid PeerId");
+                                tracing::debug!("Message source has an invalid PeerId");
                                 let message = RawMessage {
                                     source: None, // don't bother inform the application
                                     data: message.data.unwrap_or_default(),

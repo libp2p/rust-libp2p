@@ -207,6 +207,7 @@ pub trait ConnectionHandler: Send + 'static {
 
 /// Enumeration with the list of the possible stream events
 /// to pass to [`on_connection_event`](ConnectionHandler::on_connection_event).
+#[non_exhaustive]
 pub enum ConnectionEvent<'a, IP: InboundUpgradeSend, OP: OutboundUpgradeSend, IOI, OOI> {
     /// Informs the handler about the output of a successful upgrade on a new inbound substream.
     FullyNegotiatedInbound(FullyNegotiatedInbound<IP, IOI>),
@@ -532,6 +533,7 @@ impl<TUpgrade, TInfo> SubstreamProtocol<TUpgrade, TInfo> {
 
 /// Event produced by a handler.
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum ConnectionHandlerEvent<TConnectionUpgrade, TOutboundOpenInfo, TCustom> {
     /// Request a new outbound substream to be opened with the remote.
     OutboundSubstreamRequest {

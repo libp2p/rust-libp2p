@@ -19,11 +19,11 @@ if-watch = "3.1.0"
 libp2p-core = { workspace = true }
 libp2p-swarm = { workspace = true }
 libp2p-identity = { workspace = true }
-log = "0.4.20"
 rand = "0.8.3"
 smallvec = "1.11.1"
 socket2 = { version = "0.5.5", features = ["all"] }
 tokio = { version = "1.33", default-features = false, features = ["net", "time"], optional = true}
+tracing = "0.1.37"
 trust-dns-proto = { version = "0.23.0", default-features = false, features = ["mdns"] }
 void = "1.0.2"
 
@@ -33,13 +33,13 @@ async-io = ["dep:async-io", "dep:async-std", "if-watch/smol"]
 
 [dev-dependencies]
 async-std = { version = "1.9.0", features = ["attributes"] }
-env_logger = "0.10.0"
 libp2p-noise = { workspace = true }
 libp2p-swarm = { workspace = true, features = ["tokio", "async-std"] }
 libp2p-tcp = { workspace = true, features = ["tokio", "async-io"] }
 libp2p-yamux = { workspace = true }
 tokio = { version = "1.33", default-features = false, features = ["macros", "rt", "rt-multi-thread", "time"] }
 libp2p-swarm-test = { path = "../../swarm-test" }
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 
 [[test]]
 name = "use-async-std"

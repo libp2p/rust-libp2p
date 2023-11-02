@@ -53,7 +53,7 @@ impl PollDataChannel {
             let open_waker = open_waker.clone();
 
             move |_: RtcDataChannelEvent| {
-                log::trace!("DataChannel opened");
+                tracing::trace!("DataChannel opened");
                 open_waker.wake();
             }
         });
@@ -65,7 +65,7 @@ impl PollDataChannel {
             let write_waker = write_waker.clone();
 
             move |_: Event| {
-                log::trace!("DataChannel available for writing (again)");
+                tracing::trace!("DataChannel available for writing (again)");
                 write_waker.wake();
             }
         });
@@ -76,7 +76,7 @@ impl PollDataChannel {
             let close_waker = close_waker.clone();
 
             move |_: Event| {
-                log::trace!("DataChannel closed");
+                tracing::trace!("DataChannel closed");
                 close_waker.wake();
             }
         });
@@ -98,7 +98,7 @@ impl PollDataChannel {
 
                 if read_buffer.len() + data.length() as usize > MAX_MSG_LEN {
                     overloaded.store(true, Ordering::SeqCst);
-                    log::warn!("Remote is overloading us with messages, resetting stream",);
+                    tracing::warn!("Remote is overloading us with messages, resetting stream",);
                     return;
                 }
 

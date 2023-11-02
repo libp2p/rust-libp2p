@@ -28,10 +28,13 @@ use libp2p::{
 };
 use std::error::Error;
 use std::time::Duration;
+use tracing_subscriber::EnvFilter;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
-    env_logger::init();
+    let _ = tracing_subscriber::fmt()
+        .with_env_filter(EnvFilter::from_default_env())
+        .try_init();
 
     // Results in PeerID 12D3KooWDpJ7As7BWAwRMfu1VU2WCqNjvq387JEYKDBj4kx6nXTN which is
     // used as the rendezvous point by the other peer examples.
@@ -60,15 +63,15 @@ async fn main() -> Result<(), Box<dyn Error>> {
     while let Some(event) = swarm.next().await {
         match event {
             SwarmEvent::ConnectionEstablished { peer_id, .. } => {
-                log::info!("Connected to {}", peer_id);
+                tracing::info!("Connected to {}", peer_id);
             }
             SwarmEvent::ConnectionClosed { peer_id, .. } => {
-                log::info!("Disconnected from {}", peer_id);
+                tracing::info!("Disconnected from {}", peer_id);
             }
             SwarmEvent::Behaviour(MyBehaviourEvent::Rendezvous(
                 rendezvous::server::Event::PeerRegistered { peer, registration },
             )) => {
-                log::info!(
+                tracing::info!(
                     "Peer {} registered for namespace '{}'",
                     peer,
                     registration.namespace
@@ -80,14 +83,14 @@ async fn main() -> Result<(), Box<dyn Error>> {
                     registrations,
                 },
             )) => {
-                log::info!(
+                tracing::info!(
                     "Served peer {} with {} registrations",
                     enquirer,
                     registrations.len()
                 );
             }
             other => {
-                log::debug!("Unhandled {:?}", other);
+                tracing::debug!("Unhandled {:?}", other);
             }
         }
     }

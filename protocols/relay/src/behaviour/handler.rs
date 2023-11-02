@@ -408,7 +408,7 @@ impl Handler {
             ))
             .is_err()
         {
-            log::warn!("Dropping inbound stream because we are at capacity")
+            tracing::warn!("Dropping inbound stream because we are at capacity")
         }
     }
 
@@ -431,7 +431,7 @@ impl Handler {
             )
             .is_err()
         {
-            log::warn!("Dropping outbound stream because we are at capacity")
+            tracing::warn!("Dropping outbound stream because we are at capacity")
         }
 
         self.active_connect_requests
@@ -503,7 +503,7 @@ impl ConnectionHandler for Handler {
                     ))
                     .is_some()
                 {
-                    log::warn!("Dropping existing deny/accept future in favor of new one.")
+                    tracing::warn!("Dropping existing deny/accept future in favor of new one")
                 }
             }
             In::DenyReservationReq {
@@ -517,7 +517,7 @@ impl ConnectionHandler for Handler {
                     ))
                     .is_some()
                 {
-                    log::warn!("Dropping existing deny/accept future in favor of new one.")
+                    tracing::warn!("Dropping existing deny/accept future in favor of new one")
                 }
             }
             In::NegotiateOutboundConnect {
@@ -586,6 +586,7 @@ impl ConnectionHandler for Handler {
         Instant::now().duration_since(idle_at) <= Duration::from_secs(10)
     }
 
+    #[tracing::instrument(level = "trace", name = "ConnectionHandler::poll", skip(self, cx))]
     fn poll(
         &mut self,
         cx: &mut Context<'_>,
@@ -644,11 +645,11 @@ impl ConnectionHandler for Handler {
                     ));
                 }
                 Poll::Ready(Err(e)) => {
-                    log::debug!("Inbound stream operation timed out: {e}");
+                    tracing::debug!("Inbound stream operation timed out: {e}");
                     continue;
                 }
                 Poll::Ready(Ok(Err(e))) => {
-                    log::debug!("Inbound stream operation failed: {e}");
+                    tracing::debug!("Inbound stream operation failed: {e}");
                     continue;
                 }
                 Poll::Pending => {
@@ -890,10 +891,7 @@ impl ConnectionHandler for Handler {
             ConnectionEvent::DialUpgradeError(dial_upgrade_error) => {
                 self.on_dial_upgrade_error(dial_upgrade_error);
             }
-            ConnectionEvent::AddressChange(_)
-            | ConnectionEvent::ListenUpgradeError(_)
-            | ConnectionEvent::LocalProtocolsChange(_)
-            | ConnectionEvent::RemoteProtocolsChange(_) => {}
+            _ => {}
         }
     }
 }

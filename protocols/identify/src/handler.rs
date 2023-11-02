@@ -36,10 +36,10 @@ use libp2p_swarm::{
     ConnectionHandler, ConnectionHandlerEvent, StreamProtocol, StreamUpgradeError,
     SubstreamProtocol, SupportedProtocols,
 };
-use log::{warn, Level};
 use smallvec::SmallVec;
 use std::collections::HashSet;
 use std::{task::Context, task::Poll, time::Duration};
+use tracing::Level;
 
 const STREAM_TIMEOUT: Duration = Duration::from_secs(60);
 const MAX_CONCURRENT_STREAMS_PER_CONNECTION: usize = 10;
@@ -166,7 +166,7 @@ impl Handler {
                     )
                     .is_err()
                 {
-                    warn!("Dropping inbound stream because we are at capacity");
+                    tracing::warn!("Dropping inbound stream because we are at capacity");
                 } else {
                     self.exchanged_one_periodic_identify = true;
                 }
@@ -177,7 +177,9 @@ impl Handler {
                     .try_push(protocol::recv_push(stream).map_ok(Success::ReceivedIdentifyPush))
                     .is_err()
                 {
-                    warn!("Dropping inbound identify push stream because we are at capacity");
+                    tracing::warn!(
+                        "Dropping inbound identify push stream because we are at capacity"
+                    );
                 }
             }
         }
@@ -199,7 +201,7 @@ impl Handler {
                     .try_push(protocol::recv_identify(stream).map_ok(Success::ReceivedIdentify))
                     .is_err()
                 {
-                    warn!("Dropping outbound identify stream because we are at capacity");
+                    tracing::warn!("Dropping outbound identify stream because we are at capacity");
                 }
             }
             future::Either::Right(stream) => {
@@ -212,7 +214,9 @@ impl Handler {
                     )
                     .is_err()
                 {
-                    warn!("Dropping outbound identify push stream because we are at capacity");
+                    tracing::warn!(
+                        "Dropping outbound identify push stream because we are at capacity"
+                    );
                 }
             }
         }
@@ -310,6 +314,7 @@ impl ConnectionHandler for Handler {
         }
     }
 
+    #[tracing::instrument(level = "trace", name = "ConnectionHandler::poll", skip(self, cx))]
     fn poll(
         &mut self,
         cx: &mut Context<'_>,
@@ -398,22 +403,21 @@ impl ConnectionHandler for Handler {
                 ));
                 self.trigger_next_identify.reset(self.interval);
             }
-            ConnectionEvent::AddressChange(_)
-            | ConnectionEvent::ListenUpgradeError(_)
-            | ConnectionEvent::RemoteProtocolsChange(_) => {}
             ConnectionEvent::LocalProtocolsChange(change) => {
-                let before = log::log_enabled!(Level::Debug)
+                let before = tracing::enabled!(Level::DEBUG)
                     .then(|| self.local_protocols_to_string())
                     .unwrap_or_default();
                 let protocols_changed = self.local_supported_protocols.on_protocols_change(change);
-                let after = log::log_enabled!(Level::Debug)
+                let after = tracing::enabled!(Level::DEBUG)
                     .then(|| self.local_protocols_to_string())
                     .unwrap_or_default();
 
                 if protocols_changed && self.exchanged_one_periodic_identify {
-                    log::debug!(
-                        "Supported listen protocols changed from [{before}] to [{after}], pushing to {}",
-                        self.remote_peer_id
+                    tracing::debug!(
+                        peer=%self.remote_peer_id,
+                        %before,
+                        %after,
+                        "Supported listen protocols changed, pushing to peer"
                     );
 
                     self.events
@@ -425,6 +429,7 @@ impl ConnectionHandler for Handler {
                         });
                 }
             }
+            _ => {}
         }
     }
 }

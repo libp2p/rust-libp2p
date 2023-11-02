@@ -250,10 +250,16 @@ where
                     listener_done = true;
                 }
                 Either::Left((other, _)) => {
-                    log::debug!("Ignoring event from dialer {:?}", other);
+                    tracing::debug!(
+                        dialer=?other,
+                        "Ignoring event from dialer"
+                    );
                 }
                 Either::Right((other, _)) => {
-                    log::debug!("Ignoring event from listener {:?}", other);
+                    tracing::debug!(
+                        listener=?other,
+                        "Ignoring event from listener"
+                    );
                 }
             }
 
@@ -271,7 +277,10 @@ where
                 endpoint, peer_id, ..
             } => (endpoint.get_remote_address() == &addr).then_some(peer_id),
             other => {
-                log::debug!("Ignoring event from dialer {:?}", other);
+                tracing::debug!(
+                    dialer=?other,
+                    "Ignoring event from dialer"
+                );
                 None
             }
         })
@@ -308,7 +317,7 @@ where
         {
             Either::Left(((), _)) => panic!("Swarm did not emit an event within 10s"),
             Either::Right((event, _)) => {
-                log::trace!("Swarm produced: {:?}", event);
+                tracing::trace!(?event);
 
                 event
             }
@@ -325,7 +334,7 @@ where
 
     async fn loop_on_next(mut self) {
         while let Some(event) = self.next().await {
-            log::trace!("Swarm produced: {:?}", event);
+            tracing::trace!(?event);
         }
     }
 }

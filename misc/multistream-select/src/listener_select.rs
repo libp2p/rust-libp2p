@@ -52,7 +52,7 @@ where
         .filter_map(|n| match Protocol::try_from(n.as_ref()) {
             Ok(p) => Some((n, p)),
             Err(e) => {
-                log::warn!(
+                tracing::warn!(
                     "Listener: Ignoring invalid protocol: {} due to {}",
                     n.as_ref(),
                     e
@@ -186,7 +186,7 @@ where
                                 // the dialer also raises `NegotiationError::Failed` when finally
                                 // reading the `N/A` response.
                                 if let ProtocolError::InvalidMessage = &err {
-                                    log::trace!(
+                                    tracing::trace!(
                                         "Listener: Negotiation failed with invalid \
                                         message after protocol rejection."
                                     );
@@ -194,7 +194,7 @@ where
                                 }
                                 if let ProtocolError::IoError(e) = &err {
                                     if e.kind() == std::io::ErrorKind::UnexpectedEof {
-                                        log::trace!(
+                                        tracing::trace!(
                                             "Listener: Negotiation failed with EOF \
                                             after protocol rejection."
                                         );
@@ -228,10 +228,10 @@ where
                             });
 
                             let message = if protocol.is_some() {
-                                log::debug!("Listener: confirming protocol: {}", p);
+                                tracing::debug!(protocol=%p, "Listener: confirming protocol");
                                 Message::Protocol(p.clone())
                             } else {
-                                log::debug!("Listener: rejecting protocol: {}", p.as_ref());
+                                tracing::debug!(protocol=%p.as_ref(), "Listener: rejecting protocol");
                                 Message::NotAvailable
                             };
 
@@ -287,9 +287,9 @@ where
                             // Otherwise expect to receive another message.
                             match protocol {
                                 Some(protocol) => {
-                                    log::debug!(
-                                        "Listener: sent confirmed protocol: {}",
-                                        protocol.as_ref()
+                                    tracing::debug!(
+                                        protocol=%protocol.as_ref(),
+                                        "Listener: sent confirmed protocol"
                                     );
                                     let io = Negotiated::completed(io.into_inner());
                                     return Poll::Ready(Ok((protocol, io)));

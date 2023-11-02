@@ -147,9 +147,11 @@ impl ConnectionHandler for Handler {
             ConnectionEvent::ListenUpgradeError(ListenUpgradeError { info: (), error }) => {
                 void::unreachable(error)
             }
+            _ => {}
         }
     }
 
+    #[tracing::instrument(level = "trace", name = "ConnectionHandler::poll", skip(self, cx))]
     fn poll(
         &mut self,
         cx: &mut Context<'_>,

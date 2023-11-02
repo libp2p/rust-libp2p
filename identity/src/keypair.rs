@@ -672,7 +672,7 @@ impl TryFrom<proto::PublicKey> for PublicKey {
             )?),
             #[cfg(not(feature = "ed25519"))]
             proto::KeyType::Ed25519 => {
-                log::debug!("support for ed25519 was disabled at compile-time");
+                tracing::debug!("support for ed25519 was disabled at compile-time");
                 Err(DecodingError::missing_feature("ed25519"))
             }
             #[cfg(all(feature = "rsa", not(target_arch = "wasm32")))]
@@ -685,7 +685,7 @@ impl TryFrom<proto::PublicKey> for PublicKey {
             }
             #[cfg(any(not(feature = "rsa"), target_arch = "wasm32"))]
             proto::KeyType::RSA => {
-                log::debug!("support for RSA was disabled at compile-time");
+                tracing::debug!("support for RSA was disabled at compile-time");
                 Err(DecodingError::missing_feature("rsa"))
             }
             #[cfg(feature = "secp256k1")]
@@ -695,7 +695,7 @@ impl TryFrom<proto::PublicKey> for PublicKey {
                 })?),
             #[cfg(not(feature = "secp256k1"))]
             proto::KeyType::Secp256k1 => {
-                log::debug!("support for secp256k1 was disabled at compile-time");
+                tracing::debug!("support for secp256k1 was disabled at compile-time");
                 Err(DecodingError::missing_feature("secp256k1"))
             }
             #[cfg(feature = "ecdsa")]
@@ -706,7 +706,7 @@ impl TryFrom<proto::PublicKey> for PublicKey {
             )?),
             #[cfg(not(feature = "ecdsa"))]
             proto::KeyType::ECDSA => {
-                log::debug!("support for ECDSA was disabled at compile-time");
+                tracing::debug!("support for ECDSA was disabled at compile-time");
                 Err(DecodingError::missing_feature("ecdsa"))
             }
         }
