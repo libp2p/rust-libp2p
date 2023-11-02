@@ -11,7 +11,7 @@ version = "0.1.0"
 publish = true
 
 [dependencies]
-asynchronous-codec = "0.7"
+asynchronous-codec = { workspace = true }
 bytes = "1"
 futures = "0.3"
 hex = "0.4"

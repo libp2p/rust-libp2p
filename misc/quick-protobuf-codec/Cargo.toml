@@ -11,7 +11,7 @@ keywords = ["networking"]
 categories = ["asynchronous"]
 
 [dependencies]
-asynchronous-codec = { version = "0.7" }
+asynchronous-codec = { workspace = true }
 bytes = { version = "1" }
 thiserror = "1.0"
 unsigned-varint = { workspace = true, features = ["asynchronous_codec"] }

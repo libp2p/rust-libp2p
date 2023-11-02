@@ -23,7 +23,7 @@ quick-protobuf = "0.8"
 rand = "0.8"
 tracing = "0.1.37"
 quick-protobuf-codec = { workspace = true }
-asynchronous-codec = "0.7.0"
+asynchronous-codec = { workspace = true }
 
 [dev-dependencies]
 async-std = { version = "1.10", features = ["attributes"] }
