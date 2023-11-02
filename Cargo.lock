@@ -1907,26 +1907,20 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "091a6fbccf4860009355e3efc52ff4acf37a63489aad7435372d44ceeb6fbbcf"
 dependencies = [
  "async-trait",
- "bytes",
  "cfg-if",
  "data-encoding",
  "enum-as-inner",
  "futures-channel",
  "futures-io",
  "futures-util",
- "h2",
- "http",
  "idna",
  "ipnet",
  "once_cell",
  "rand 0.8.5",
- "rustls 0.21.8",
- "rustls-pemfile",
  "socket2 0.5.5",
  "thiserror",
  "tinyvec",
  "tokio",
- "tokio-rustls 0.24.1",
  "tracing",
  "url",
 ]
@@ -1946,11 +1940,9 @@ dependencies = [
  "parking_lot",
  "rand 0.8.5",
  "resolv-conf",
- "rustls 0.21.8",
  "smallvec",
  "thiserror",
  "tokio",
- "tokio-rustls 0.24.1",
  "tracing",
 ]
 
@@ -2102,7 +2094,7 @@ dependencies = [
  "rustls 0.20.8",
  "rustls-native-certs",
  "tokio",
- "tokio-rustls 0.23.4",
+ "tokio-rustls",
 ]
 
 [[package]]
@@ -5780,16 +5772,6 @@ dependencies = [
  "rustls 0.20.8",
  "tokio",
  "webpki",
-]
-
-[[package]]
-name = "tokio-rustls"
-version = "0.24.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c28327cf380ac148141087fbfb9de9d7bd4e84ab5d2c28fbc911d753de8a7081"
-dependencies = [
- "rustls 0.21.8",
- "tokio",
 ]
 
 [[package]]
