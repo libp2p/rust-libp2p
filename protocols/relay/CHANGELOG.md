@@ -1,4 +1,6 @@
 ## 0.17.0 - unreleased
+- Emit an external address on making reservation.
+  See [PR XXXX](https://github.com/libp2p/rust-lib2pp/pulls/).
 
 - Don't close connections on protocol failures within the relay-server.
   To achieve this, error handling was restructured:
