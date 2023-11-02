@@ -39,42 +39,57 @@ impl<In: MessageWrite, Out> Encoder for Codec<In, Out> {
     type Error = Error;
 
     fn encode(&mut self, item: Self::Item<'_>, dst: &mut BytesMut) -> Result<(), Self::Error> {
-        let message_length = item.get_size();
+        write_length(&item, dst);
+        write_message(&item, dst)?;
 
-        let mut uvi_buf = unsigned_varint::encode::usize_buffer();
-        let encoded_length = unsigned_varint::encode::usize(message_length, &mut uvi_buf);
+        Ok(())
+    }
+}
 
-        // Append the 'unsigned varint'-encoded length.
-        dst.extend_from_slice(encoded_length);
+/// Write the message's length (i.e. `size`) to `dst` as a variable-length integer.
+fn write_length(message: &impl MessageWrite, dst: &mut BytesMut) {
+    let message_length = message.get_size();
 
-        // Ensure we have enough capacity to encode our message.
-        dst.reserve(message_length);
+    let mut uvi_buf = unsigned_varint::encode::usize_buffer();
+    let encoded_length = unsigned_varint::encode::usize(message_length, &mut uvi_buf);
 
-        let mut written = 0;
+    dst.extend_from_slice(encoded_length);
+}
 
-        let mut writer = Writer::new(MaybeUninitWriterBackend::new(
-            dst.spare_capacity_mut(),
-            &mut written,
-        ));
-        item.write_message(&mut writer)
-            .map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
+/// Write the message itself to `dst`.
+fn write_message(item: &impl MessageWrite, dst: &mut BytesMut) -> io::Result<()> {
+    let message_length = item.get_size();
 
+    // Ensure we have enough capacity to encode our message.
+    dst.reserve(message_length);
+
+    let mut written = 0;
+
+    let mut writer = Writer::new(MaybeUninitWriterBackend::new(
+        dst.spare_capacity_mut(),
+        &mut written,
+    ));
+    item.write_message(&mut writer)
+        .map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
+
+    // Check that we have written exactly as much as we intended to.
+    {
         if written != message_length {
-            return Err(Error(io::Error::new(
+            return Err(io::Error::new(
                 io::ErrorKind::Other,
                 format!(
                     "expected message to be {message_length} bytes long but was {written} bytes"
                 ),
-            )));
+            ));
         }
 
-        // SAFETY: `written` records exactly how many bytes we wrote to `dst`, thus it is safe to extend the length by `written`.
+        // SAFETY: `written` records exactly how many bytes we wrote, hence set them as initialized.
         unsafe {
             dst.set_len(dst.len() + written);
         }
-
-        Ok(())
     }
+
+    Ok(())
 }
 
 impl<In, Out> Decoder for Codec<In, Out>
