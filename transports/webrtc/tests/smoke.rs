@@ -344,7 +344,7 @@ impl Future for ListenUpgrade<'_> {
 
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         loop {
-            match dbg!(self.listener.poll_next_unpin(cx)) {
+            match self.listener.poll_next_unpin(cx) {
                 Poll::Ready(Some(TransportEvent::Incoming {
                     upgrade,
                     send_back_addr,
