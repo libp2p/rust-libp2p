@@ -2628,7 +2628,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-identity"
-version = "0.2.7"
+version = "0.2.8"
 dependencies = [
  "asn1_der",
  "base64 0.21.5",
@@ -2644,7 +2644,7 @@ dependencies = [
  "quick-protobuf",
  "quickcheck-ext",
  "rand 0.8.5",
- "ring 0.16.20",
+ "ring 0.17.5",
  "rmp-serde",
  "sec1",
  "serde",

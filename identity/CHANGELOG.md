@@ -1,3 +1,8 @@
+## 0.2.8 - unreleased
+
+- Bump `ring` to `0.17.5.
+  See [PR XXXX](https://github.com/libp2p/rust-libp2p/pull/XXXX).
+
 ## 0.2.7
 
 - Add `rand` feature to gate methods requiring a random number generator, enabling use in restricted environments (e.g. smartcontracts).
