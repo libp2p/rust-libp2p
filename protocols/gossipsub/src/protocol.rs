@@ -573,7 +573,7 @@ mod tests {
     #[test]
     /// Test that RPC messages can be encoded and decoded successfully.
     fn encode_decode() {
-        fn prop(message: Message, buf_length: u32) {
+        fn prop(message: Message, buf_length: u16) {
             let message = message.0;
 
             let rpc = Rpc {
