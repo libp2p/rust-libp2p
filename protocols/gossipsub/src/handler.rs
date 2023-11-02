@@ -33,6 +33,7 @@ use libp2p_swarm::handler::{
     FullyNegotiatedInbound, FullyNegotiatedOutbound, StreamUpgradeError, SubstreamProtocol,
 };
 use libp2p_swarm::Stream;
+use prometheus_client::metrics::counter::Counter;
 use smallvec::SmallVec;
 use std::{
     pin::Pin,
@@ -120,6 +121,9 @@ pub struct EnabledHandler {
     /// Keeps track of whether this connection is for a peer in the mesh. This is used to make
     /// decisions about the keep alive state for this connection.
     in_mesh: bool,
+
+    messages_added_to_queue: Counter,
+    messages_removed_from_queue: Counter,
 }
 
 pub enum DisabledHandler {
@@ -159,7 +163,11 @@ enum OutboundSubstreamState {
 
 impl Handler {
     /// Builds a new [`Handler`].
-    pub fn new(protocol_config: ProtocolConfig) -> Self {
+    pub fn new(
+        protocol_config: ProtocolConfig,
+        messages_added_to_queue: Counter,
+        messages_removed_from_queue: Counter,
+    ) -> Self {
         Handler::Enabled(EnabledHandler {
             listen_protocol: protocol_config,
             inbound_substream: None,
@@ -172,6 +180,8 @@ impl Handler {
             peer_kind_sent: false,
             last_io_activity: Instant::now(),
             in_mesh: false,
+            messages_added_to_queue,
+            messages_removed_from_queue,
         })
     }
 }
@@ -316,6 +326,7 @@ impl EnabledHandler {
                 // outbound idle state
                 Some(OutboundSubstreamState::WaitingOutput(substream)) => {
                     if let Some(message) = self.send_queue.pop() {
+                        self.messages_removed_from_queue.inc();
                         self.send_queue.shrink_to_fit();
                         self.outbound_substream =
                             Some(OutboundSubstreamState::PendingSend(substream, message));
@@ -409,7 +420,10 @@ impl ConnectionHandler for Handler {
     fn on_behaviour_event(&mut self, message: HandlerIn) {
         match self {
             Handler::Enabled(handler) => match message {
-                HandlerIn::Message(m) => handler.send_queue.push(m),
+                HandlerIn::Message(m) => {
+                    handler.send_queue.push(m);
+                    handler.messages_added_to_queue.inc();
+                }
                 HandlerIn::JoinedMesh => {
                     handler.in_mesh = true;
                 }

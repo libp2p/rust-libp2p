@@ -174,6 +174,9 @@ pub(crate) struct Metrics {
     /// The number of times we have decided that an IWANT control message is required for this
     /// topic. A very high metric might indicate an underperforming network.
     topic_iwant_msgs: Family<TopicHash, Counter>,
+
+    pub messages_added_to_queue: Counter,
+    pub messages_removed_from_queue: Counter,
 }
 
 impl Metrics {
@@ -301,6 +304,24 @@ impl Metrics {
             );
             metric
         };
+        let messages_added_to_queue = {
+            let metric = Counter::default();
+            registry.register(
+                "messages_added_to_queue",
+                "TODO",
+                metric.clone(),
+            );
+            metric
+        };
+        let messages_removed_from_queue = {
+            let metric = Counter::default();
+            registry.register(
+                "messages_removed_from_queue",
+                "TODO",
+                metric.clone(),
+            );
+            metric
+        };
 
         Self {
             max_topics,
@@ -327,6 +348,8 @@ impl Metrics {
             heartbeat_duration,
             memcache_misses,
             topic_iwant_msgs,
+            messages_added_to_queue,
+            messages_removed_from_queue,
         }
     }
 
