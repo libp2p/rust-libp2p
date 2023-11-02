@@ -25,7 +25,6 @@ use asynchronous_codec::{Framed, FramedParts};
 use bytes::Bytes;
 use futures::prelude::*;
 use libp2p_identity::{PeerId, PublicKey};
-use quick_protobuf::{BytesReader, MessageRead, MessageWrite, Writer};
 use std::io::{Error as IoError, ErrorKind as IoErrorKind};
 
 pub(crate) async fn handshake<S>(socket: S, config: Config) -> Result<(S, PublicKey, Bytes), Error>
