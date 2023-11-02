@@ -92,10 +92,7 @@ impl Handler {
 
     fn on_fully_negotiated_inbound(
         &mut self,
-        FullyNegotiatedInbound {
-            protocol: output, ..
-        }: FullyNegotiatedInbound<
-            <Self as ConnectionHandler>::InboundProtocol,
+        FullyNegotiatedInbound { stream: output, .. }: FullyNegotiatedInbound<
             <Self as ConnectionHandler>::InboundOpenInfo,
         >,
     ) {
@@ -122,9 +119,7 @@ impl Handler {
 
     fn on_fully_negotiated_outbound(
         &mut self,
-        FullyNegotiatedOutbound {
-            protocol: stream, ..
-        }: FullyNegotiatedOutbound<
+        FullyNegotiatedOutbound { stream: stream, .. }: FullyNegotiatedOutbound<
             <Self as ConnectionHandler>::OutboundProtocol,
             <Self as ConnectionHandler>::OutboundOpenInfo,
         >,
@@ -150,8 +145,7 @@ impl Handler {
     fn on_listen_upgrade_error(
         &mut self,
         ListenUpgradeError { error, .. }: ListenUpgradeError<
-            <Self as ConnectionHandler>::InboundOpenInfo,
-            <Self as ConnectionHandler>::InboundProtocol,
+            <<Self as ConnectionHandler>::InboundProtocol as UpgradeInfo>::Info,
         >,
     ) {
         void::unreachable(error.into_inner());
@@ -290,12 +284,7 @@ impl ConnectionHandler for Handler {
 
     fn on_connection_event(
         &mut self,
-        event: ConnectionEvent<
-            Self::InboundProtocol,
-            Self::OutboundProtocol,
-            Self::InboundOpenInfo,
-            Self::OutboundOpenInfo,
-        >,
+        event: ConnectionEvent<Self::InboundOpenInfo, Self::OutboundOpenInfo>,
     ) {
         match event {
             ConnectionEvent::FullyNegotiatedInbound(fully_negotiated_inbound) => {

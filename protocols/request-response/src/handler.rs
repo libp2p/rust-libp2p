@@ -123,12 +123,9 @@ where
     fn on_fully_negotiated_inbound(
         &mut self,
         FullyNegotiatedInbound {
-            protocol: (mut stream, protocol),
+            stream: (mut stream, protocol),
             info: (),
-        }: FullyNegotiatedInbound<
-            <Self as ConnectionHandler>::InboundProtocol,
-            <Self as ConnectionHandler>::InboundOpenInfo,
-        >,
+        }: FullyNegotiatedInbound<<Self as ConnectionHandler>::InboundOpenInfo>,
     ) {
         let mut codec = self.codec.clone();
         let request_id = self.next_inbound_request_id();
@@ -171,7 +168,7 @@ where
     fn on_fully_negotiated_outbound(
         &mut self,
         FullyNegotiatedOutbound {
-            protocol: (mut stream, protocol),
+            stream: (mut stream, protocol),
             info: (),
         }: FullyNegotiatedOutbound<
             <Self as ConnectionHandler>::OutboundProtocol,
@@ -247,8 +244,7 @@ where
     fn on_listen_upgrade_error(
         &mut self,
         ListenUpgradeError { error, .. }: ListenUpgradeError<
-            <Self as ConnectionHandler>::InboundOpenInfo,
-            <Self as ConnectionHandler>::InboundProtocol,
+            <<Self as ConnectionHandler>::InboundProtocol as UpgradeInfo>::Info,
         >,
     ) {
         void::unreachable(error)
@@ -463,12 +459,7 @@ where
 
     fn on_connection_event(
         &mut self,
-        event: ConnectionEvent<
-            Self::InboundProtocol,
-            Self::OutboundProtocol,
-            Self::InboundOpenInfo,
-            Self::OutboundOpenInfo,
-        >,
+        event: ConnectionEvent<Self::InboundOpenInfo, Self::OutboundOpenInfo>,
     ) {
         match event {
             ConnectionEvent::FullyNegotiatedInbound(fully_negotiated_inbound) => {

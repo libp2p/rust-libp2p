@@ -24,7 +24,7 @@ use futures::prelude::*;
 use futures_timer::Delay;
 use libp2p_identity::PeerId;
 use libp2p_swarm::handler::{
-    ConnectionEvent, DialUpgradeError, FullyNegotiatedInbound, FullyNegotiatedOutbound,
+    ConnectionEvent, DialUpgradeError, FullyNegotiatedInbound, FullyNegotiatedOutbound, UpgradeInfo,
 };
 use libp2p_swarm::{
     ConnectionHandler, ConnectionHandlerEvent, ReadyUpgrade, Stream, StreamUpgradeError,
@@ -330,22 +330,23 @@ impl ConnectionHandler for Handler {
     fn on_connection_event(
         &mut self,
         event: ConnectionEvent<
-            Self::InboundProtocol,
-            Self::OutboundProtocol,
+            <Self::InboundProtocol as UpgradeInfo>::Info,
+            <Self::OutboundProtocol as UpgradeInfo>::Info,
             Self::InboundOpenInfo,
             Self::OutboundOpenInfo,
         >,
     ) {
         match event {
             ConnectionEvent::FullyNegotiatedInbound(FullyNegotiatedInbound {
-                protocol: mut stream,
+                mut stream,
+                protocol,
                 ..
             }) => {
                 stream.ignore_for_keep_alive();
                 self.inbound = Some(protocol::recv_ping(stream).boxed());
             }
             ConnectionEvent::FullyNegotiatedOutbound(FullyNegotiatedOutbound {
-                protocol: mut stream,
+                stream: mut stream,
                 ..
             }) => {
                 stream.ignore_for_keep_alive();

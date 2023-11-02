@@ -21,7 +21,7 @@
 
 use crate::handler::{
     ConnectionEvent, ConnectionHandler, ConnectionHandlerEvent, FullyNegotiatedInbound,
-    FullyNegotiatedOutbound, SubstreamProtocol,
+    FullyNegotiatedOutbound, SubstreamProtocol, UpgradeInfo,
 };
 use crate::upgrade::PendingUpgrade;
 use crate::StreamProtocol;
@@ -74,8 +74,8 @@ impl ConnectionHandler for PendingConnectionHandler {
     fn on_connection_event(
         &mut self,
         event: ConnectionEvent<
-            Self::InboundProtocol,
-            Self::OutboundProtocol,
+            <Self::InboundProtocol as UpgradeInfo>::Info,
+            <Self::OutboundProtocol as UpgradeInfo>::Info,
             Self::InboundOpenInfo,
             Self::OutboundOpenInfo,
         >,
@@ -83,12 +83,13 @@ impl ConnectionHandler for PendingConnectionHandler {
         match event {
             ConnectionEvent::FullyNegotiatedInbound(FullyNegotiatedInbound {
                 protocol, ..
-            }) => void::unreachable(protocol),
+            }) => todo!("should be void but doesn't implement `AsRef<str>`"),
             ConnectionEvent::FullyNegotiatedOutbound(FullyNegotiatedOutbound {
                 protocol,
                 info: _info,
+                stream,
             }) => {
-                void::unreachable(protocol);
+                todo!("should be void but doesn't implement `AsRef<str>`");
                 #[allow(unreachable_code, clippy::used_underscore_binding)]
                 {
                     void::unreachable(_info);

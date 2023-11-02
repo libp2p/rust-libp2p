@@ -192,7 +192,9 @@ impl EnabledHandler {
 
     fn on_fully_negotiated_outbound(
         &mut self,
-        FullyNegotiatedOutbound { protocol, .. }: FullyNegotiatedOutbound<
+        FullyNegotiatedOutbound {
+            stream: protocol, ..
+        }: FullyNegotiatedOutbound<
             <Handler as ConnectionHandler>::OutboundProtocol,
             <Handler as ConnectionHandler>::OutboundOpenInfo,
         >,
@@ -455,12 +457,7 @@ impl ConnectionHandler for Handler {
 
     fn on_connection_event(
         &mut self,
-        event: ConnectionEvent<
-            Self::InboundProtocol,
-            Self::OutboundProtocol,
-            Self::InboundOpenInfo,
-            Self::OutboundOpenInfo,
-        >,
+        event: ConnectionEvent<Self::InboundOpenInfo, Self::OutboundOpenInfo>,
     ) {
         match self {
             Handler::Enabled(handler) => {
@@ -492,7 +489,7 @@ impl ConnectionHandler for Handler {
 
                 match event {
                     ConnectionEvent::FullyNegotiatedInbound(FullyNegotiatedInbound {
-                        protocol,
+                        stream: protocol,
                         ..
                     }) => match protocol {
                         Either::Left(protocol) => handler.on_fully_negotiated_inbound(protocol),

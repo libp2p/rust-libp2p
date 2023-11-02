@@ -30,7 +30,7 @@ use void::Void;
 pub struct DeniedUpgrade;
 
 impl UpgradeInfo for DeniedUpgrade {
-    type Info = StreamProtocol;
+    type Info = StreamProtocol; // This should be `Void` but it doesn't implement `AsRef<&str>`.
     type InfoIter = iter::Empty<Self::Info>;
 
     fn protocol_info(&self) -> Self::InfoIter {

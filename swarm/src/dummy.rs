@@ -1,7 +1,7 @@
 use crate::behaviour::{FromSwarm, NetworkBehaviour, ToSwarm};
 use crate::connection::ConnectionId;
 use crate::handler::{
-    ConnectionEvent, DialUpgradeError, FullyNegotiatedInbound, FullyNegotiatedOutbound,
+    ConnectionEvent, DialUpgradeError, FullyNegotiatedInbound, FullyNegotiatedOutbound, UpgradeInfo,
 };
 use crate::upgrade::DeniedUpgrade;
 use crate::{
@@ -111,8 +111,8 @@ impl crate::handler::ConnectionHandler for ConnectionHandler {
     fn on_connection_event(
         &mut self,
         event: ConnectionEvent<
-            Self::InboundProtocol,
-            Self::OutboundProtocol,
+            <Self::InboundProtocol as UpgradeInfo>::Info,
+            <Self::OutboundProtocol as UpgradeInfo>::Info,
             Self::InboundOpenInfo,
             Self::OutboundOpenInfo,
         >,
@@ -120,10 +120,10 @@ impl crate::handler::ConnectionHandler for ConnectionHandler {
         match event {
             ConnectionEvent::FullyNegotiatedInbound(FullyNegotiatedInbound {
                 protocol, ..
-            }) => void::unreachable(protocol),
+            }) => todo!("should be void but doesn't implement `AsRef<str>`"),
             ConnectionEvent::FullyNegotiatedOutbound(FullyNegotiatedOutbound {
                 protocol, ..
-            }) => void::unreachable(protocol),
+            }) => todo!("should be void but doesn't implement `AsRef<str>`"),
             ConnectionEvent::DialUpgradeError(DialUpgradeError { info: _, error }) => match error {
                 StreamUpgradeError::Timeout => unreachable!(),
                 StreamUpgradeError::Apply(e) => void::unreachable(e),

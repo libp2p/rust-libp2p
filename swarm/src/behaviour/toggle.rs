@@ -23,13 +23,13 @@ use crate::connection::ConnectionId;
 use crate::handler::{
     AddressChange, ConnectionEvent, ConnectionHandler, ConnectionHandlerEvent, DialUpgradeError,
     FullyNegotiatedInbound, FullyNegotiatedOutbound, ListenUpgradeError, SubstreamProtocol,
+    UpgradeInfo,
 };
 use crate::upgrade::DeniedUpgrade;
 use crate::{
     ConnectionDenied, NetworkBehaviour, THandler, THandlerInEvent, THandlerOutEvent, ToSwarm,
 };
 use either::Either;
-use futures::future;
 use libp2p_core::{Endpoint, Multiaddr};
 use libp2p_identity::PeerId;
 use std::{task::Context, task::Poll};
@@ -198,16 +198,17 @@ where
     fn on_fully_negotiated_inbound(
         &mut self,
         FullyNegotiatedInbound {
-            protocol: out,
+            protocol,
+            stream,
             info,
         }: FullyNegotiatedInbound<
-            <Self as ConnectionHandler>::InboundProtocol,
+            <<Self as ConnectionHandler>::InboundProtocol as UpgradeInfo>::Info,
             <Self as ConnectionHandler>::InboundOpenInfo,
         >,
     ) {
-        let out = match out {
-            future::Either::Left(out) => out,
-            future::Either::Right(v) => void::unreachable(v),
+        let protocol = match protocol {
+            Either::Left(out) => out,
+            Either::Right(v) => todo!("should be void but doesn't implement `AsRef<str>`"),
         };
 
         if let Either::Left(info) = info {
@@ -216,8 +217,9 @@ where
                 .expect("Can't receive an inbound substream if disabled; QED")
                 .on_connection_event(ConnectionEvent::FullyNegotiatedInbound(
                     FullyNegotiatedInbound {
-                        protocol: out,
+                        stream,
                         info,
+                        protocol,
                     },
                 ));
         } else {
@@ -229,7 +231,6 @@ where
         &mut self,
         ListenUpgradeError { info, error: err }: ListenUpgradeError<
             <Self as ConnectionHandler>::InboundOpenInfo,
-            <Self as ConnectionHandler>::InboundProtocol,
         >,
     ) {
         let (inner, info) = match (self.inner.as_mut(), info) {
@@ -245,16 +246,16 @@ where
                  `on_listen_upgrade_error` in disabled state.",
             ),
         };
-
-        let err = match err {
-            Either::Left(e) => e,
-            Either::Right(v) => void::unreachable(v),
-        };
-
-        inner.on_connection_event(ConnectionEvent::ListenUpgradeError(ListenUpgradeError {
-            info,
-            error: err,
-        }));
+        //
+        // let err = match err {
+        //     Either::Left(e) => e,
+        //     Either::Right(v) => void::unreachable(v),
+        // };
+        //
+        // inner.on_connection_event(ConnectionEvent::ListenUpgradeError(ListenUpgradeError {
+        //     info,
+        //     error: err,
+        // }));
     }
 }
 
@@ -316,8 +317,8 @@ where
     fn on_connection_event(
         &mut self,
         event: ConnectionEvent<
-            Self::InboundProtocol,
-            Self::OutboundProtocol,
+            <Self::InboundProtocol as UpgradeInfo>::Info,
+            <Self::OutboundProtocol as UpgradeInfo>::Info,
             Self::InboundOpenInfo,
             Self::OutboundOpenInfo,
         >,
@@ -327,15 +328,17 @@ where
                 self.on_fully_negotiated_inbound(fully_negotiated_inbound)
             }
             ConnectionEvent::FullyNegotiatedOutbound(FullyNegotiatedOutbound {
-                protocol: out,
+                protocol: protocol,
                 info,
+                stream,
             }) => self
                 .inner
                 .as_mut()
                 .expect("Can't receive an outbound substream if disabled; QED")
                 .on_connection_event(ConnectionEvent::FullyNegotiatedOutbound(
                     FullyNegotiatedOutbound {
-                        protocol: out,
+                        protocol,
+                        stream,
                         info,
                     },
                 )),

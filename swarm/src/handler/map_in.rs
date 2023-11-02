@@ -19,7 +19,7 @@
 // DEALINGS IN THE SOFTWARE.
 
 use crate::handler::{
-    ConnectionEvent, ConnectionHandler, ConnectionHandlerEvent, SubstreamProtocol,
+    ConnectionEvent, ConnectionHandler, ConnectionHandlerEvent, SubstreamProtocol, UpgradeInfo,
 };
 use std::{fmt::Debug, marker::PhantomData, task::Context, task::Poll};
 
@@ -89,8 +89,8 @@ where
     fn on_connection_event(
         &mut self,
         event: ConnectionEvent<
-            Self::InboundProtocol,
-            Self::OutboundProtocol,
+            <Self::InboundProtocol as UpgradeInfo>::Info,
+            <Self::OutboundProtocol as UpgradeInfo>::Info,
             Self::InboundOpenInfo,
             Self::OutboundOpenInfo,
         >,

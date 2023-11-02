@@ -140,12 +140,7 @@ impl ConnectionHandler for HandlerWithState {
 
     fn on_connection_event(
         &mut self,
-        _: ConnectionEvent<
-            Self::InboundProtocol,
-            Self::OutboundProtocol,
-            Self::InboundOpenInfo,
-            Self::OutboundOpenInfo,
-        >,
+        _: ConnectionEvent<Self::InboundOpenInfo, Self::OutboundOpenInfo>,
     ) {
     }
 }

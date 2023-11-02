@@ -492,7 +492,10 @@ impl Handler {
 
     fn on_fully_negotiated_outbound(
         &mut self,
-        FullyNegotiatedOutbound { protocol, info: () }: FullyNegotiatedOutbound<
+        FullyNegotiatedOutbound {
+            stream: protocol,
+            info: (),
+        }: FullyNegotiatedOutbound<
             <Self as ConnectionHandler>::OutboundProtocol,
             <Self as ConnectionHandler>::OutboundOpenInfo,
         >,
@@ -519,10 +522,9 @@ impl Handler {
 
     fn on_fully_negotiated_inbound(
         &mut self,
-        FullyNegotiatedInbound { protocol, .. }: FullyNegotiatedInbound<
-            <Self as ConnectionHandler>::InboundProtocol,
-            <Self as ConnectionHandler>::InboundOpenInfo,
-        >,
+        FullyNegotiatedInbound {
+            stream: protocol, ..
+        }: FullyNegotiatedInbound<<Self as ConnectionHandler>::InboundOpenInfo>,
     ) {
         // If `self.allow_listening` is false, then we produced a `DeniedUpgrade` and `protocol`
         // is a `Void`.
@@ -755,12 +757,7 @@ impl ConnectionHandler for Handler {
 
     fn on_connection_event(
         &mut self,
-        event: ConnectionEvent<
-            Self::InboundProtocol,
-            Self::OutboundProtocol,
-            Self::InboundOpenInfo,
-            Self::OutboundOpenInfo,
-        >,
+        event: ConnectionEvent<Self::InboundOpenInfo, Self::OutboundOpenInfo>,
     ) {
         match event {
             ConnectionEvent::FullyNegotiatedOutbound(fully_negotiated_outbound) => {

@@ -20,7 +20,7 @@
 
 use crate::handler::{
     ConnectionEvent, ConnectionHandler, ConnectionHandlerEvent, DialUpgradeError,
-    FullyNegotiatedInbound, FullyNegotiatedOutbound, SubstreamProtocol,
+    FullyNegotiatedInbound, FullyNegotiatedOutbound, SubstreamProtocol, UpgradeInfo,
 };
 use crate::upgrade::{InboundUpgrade, OutboundUpgrade};
 use crate::StreamUpgradeError;
@@ -167,8 +167,8 @@ where
     fn on_connection_event(
         &mut self,
         event: ConnectionEvent<
-            Self::InboundProtocol,
-            Self::OutboundProtocol,
+            <Self::InboundProtocol as UpgradeInfo>::Info,
+            <Self::OutboundProtocol as UpgradeInfo>::Info,
             Self::InboundOpenInfo,
             Self::OutboundOpenInfo,
         >,
@@ -178,17 +178,17 @@ where
                 protocol: out,
                 ..
             }) => {
-                self.events_out.push(Ok(out.into()));
+                self.events_out.push(Ok(todo!()));
             }
             ConnectionEvent::FullyNegotiatedOutbound(FullyNegotiatedOutbound {
                 protocol: out,
                 ..
             }) => {
                 self.dial_negotiated -= 1;
-                self.events_out.push(Ok(out.into()));
+                self.events_out.push(Ok(todo!()));
             }
             ConnectionEvent::DialUpgradeError(DialUpgradeError { error, .. }) => {
-                self.events_out.push(Err(error));
+                self.events_out.push(Err(todo!()));
             }
             ConnectionEvent::AddressChange(_)
             | ConnectionEvent::ListenUpgradeError(_)

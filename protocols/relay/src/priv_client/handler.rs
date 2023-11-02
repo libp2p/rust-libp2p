@@ -474,16 +474,11 @@ impl ConnectionHandler for Handler {
 
     fn on_connection_event(
         &mut self,
-        event: ConnectionEvent<
-            Self::InboundProtocol,
-            Self::OutboundProtocol,
-            Self::InboundOpenInfo,
-            Self::OutboundOpenInfo,
-        >,
+        event: ConnectionEvent<Self::InboundOpenInfo, Self::OutboundOpenInfo>,
     ) {
         match event {
             ConnectionEvent::FullyNegotiatedInbound(FullyNegotiatedInbound {
-                protocol: stream,
+                stream: stream,
                 ..
             }) => {
                 if self
@@ -495,7 +490,7 @@ impl ConnectionHandler for Handler {
                 }
             }
             ConnectionEvent::FullyNegotiatedOutbound(FullyNegotiatedOutbound {
-                protocol: stream,
+                stream: stream,
                 ..
             }) => {
                 let pending_request = self.pending_requests.pop_front().expect(
