@@ -1,7 +1,7 @@
 ## 0.2.1 - unreleased
 
 - Reduce allocations during encoding.
-  See [PR XXXX](https://github.com/libp2p/rust-libp2p/pull/XXXX).
+  See [PR 4782](https://github.com/libp2p/rust-libp2p/pull/4782).
 
 ## 0.2.0 
 
