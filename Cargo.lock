@@ -3200,7 +3200,6 @@ dependencies = [
  "sha2 0.10.8",
  "thiserror",
  "tinytemplate",
- "unsigned-varint 0.8.0",
 ]
 
 [[package]]

@@ -29,7 +29,6 @@ asynchronous-codec = "0.7"
 
 [dev-dependencies]
 hex-literal = "0.4"
-unsigned-varint = { workspace = true, features = ["asynchronous_codec"] }
 
 [lints]
 workspace = true
