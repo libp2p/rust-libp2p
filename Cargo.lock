@@ -2449,6 +2449,7 @@ version = "0.12.0"
 dependencies = [
  "async-std",
  "async-trait",
+ "asynchronous-codec 0.6.2",
  "futures",
  "futures-timer",
  "instant",
@@ -2458,6 +2459,7 @@ dependencies = [
  "libp2p-swarm",
  "libp2p-swarm-test",
  "quick-protobuf",
+ "quick-protobuf-codec",
  "rand 0.8.5",
  "tracing",
  "tracing-subscriber",
