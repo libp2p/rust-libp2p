@@ -117,7 +117,7 @@ where
         listen_addresses: Arc<RwLock<ListenAddresses>>,
         query_response_sender: mpsc::Sender<(PeerId, Multiaddr, Instant)>,
     ) -> io::Result<Self> {
-        log::info!("creating instance on iface {}", addr);
+        tracing::info!(address=%addr, "creating instance on iface address");
         let recv_socket = match addr {
             IpAddr::V4(addr) => {
                 let socket = Socket::new(Domain::IPV4, Type::DGRAM, Some(socket2::Protocol::UDP))?;
@@ -184,7 +184,7 @@ where
     }
 
     pub(crate) fn reset_timer(&mut self) {
-        log::trace!("reset timer on {:#?} {:#?}", self.addr, self.probe_state);
+        tracing::trace!(address=%self.addr, probe_state=?self.probe_state, "reset timer");
         let interval = *self.probe_state.interval();
         self.timeout = T::interval(interval);
     }
@@ -207,9 +207,9 @@ where
         loop {
             // 1st priority: Low latency: Create packet ASAP after timeout.
             if this.timeout.poll_next_unpin(cx).is_ready() {
-                log::trace!("sending query on iface {}", this.addr);
+                tracing::trace!(address=%this.addr, "sending query on iface");
                 this.send_buffer.push_back(build_query());
-                log::trace!("tick on {:#?} {:#?}", this.addr, this.probe_state);
+                tracing::trace!(address=%this.addr, probe_state=?this.probe_state, "tick");
 
                 // Stop to probe when the initial interval reach the query interval
                 if let ProbeState::Probing(interval) = this.probe_state {
@@ -228,11 +228,11 @@ where
             if let Some(packet) = this.send_buffer.pop_front() {
                 match this.send_socket.poll_write(cx, &packet, this.mdns_socket()) {
                     Poll::Ready(Ok(_)) => {
-                        log::trace!("sent packet on iface {}", this.addr);
+                        tracing::trace!(address=%this.addr, "sent packet on iface address");
                         continue;
                     }
                     Poll::Ready(Err(err)) => {
-                        log::error!("error sending packet on iface {} {}", this.addr, err);
+                        tracing::error!(address=%this.addr, "error sending packet on iface address {}", err);
                         continue;
                     }
                     Poll::Pending => {
@@ -265,10 +265,10 @@ where
                 .map_ok(|(len, from)| MdnsPacket::new_from_bytes(&this.recv_buffer[..len], from))
             {
                 Poll::Ready(Ok(Ok(Some(MdnsPacket::Query(query))))) => {
-                    log::trace!(
-                        "received query from {} on {}",
-                        query.remote_addr(),
-                        this.addr
+                    tracing::trace!(
+                        address=%this.addr,
+                        remote_address=%query.remote_addr(),
+                        "received query from remote address on address"
                     );
 
                     this.send_buffer.extend(build_query_response(
@@ -283,10 +283,10 @@ where
                     continue;
                 }
                 Poll::Ready(Ok(Ok(Some(MdnsPacket::Response(response))))) => {
-                    log::trace!(
-                        "received response from {} on {}",
-                        response.remote_addr(),
-                        this.addr
+                    tracing::trace!(
+                        address=%this.addr,
+                        remote_address=%response.remote_addr(),
+                        "received response from remote address on address"
                     );
 
                     this.discovered
@@ -300,10 +300,10 @@ where
                     continue;
                 }
                 Poll::Ready(Ok(Ok(Some(MdnsPacket::ServiceDiscovery(disc))))) => {
-                    log::trace!(
-                        "received service discovery from {} on {}",
-                        disc.remote_addr(),
-                        this.addr
+                    tracing::trace!(
+                        address=%this.addr,
+                        remote_address=%disc.remote_addr(),
+                        "received service discovery from remote address on address"
                     );
 
                     this.send_buffer
@@ -314,10 +314,10 @@ where
                     // No more bytes available on the socket to read
                 }
                 Poll::Ready(Err(err)) => {
-                    log::error!("failed reading datagram: {}", err);
+                    tracing::error!("failed reading datagram: {}", err);
                 }
                 Poll::Ready(Ok(Err(err))) => {
-                    log::debug!("Parsing mdns packet failed: {:?}", err);
+                    tracing::debug!("Parsing mdns packet failed: {:?}", err);
                 }
                 Poll::Ready(Ok(Ok(None))) | Poll::Pending => {}
             }

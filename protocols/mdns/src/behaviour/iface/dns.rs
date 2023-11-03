@@ -134,7 +134,7 @@ pub(crate) fn build_query_response<'a>(
                 records.push(txt_record);
             }
             Err(e) => {
-                log::warn!("Excluding address {} from response: {:?}", addr, e);
+                tracing::warn!(address=%addr, "Excluding address from response: {:?}", e);
             }
         }
 
@@ -395,9 +395,9 @@ impl error::Error for MdnsResponseError {}
 #[cfg(test)]
 mod tests {
     use super::*;
+    use hickory_proto::op::Message;
     use libp2p_identity as identity;
     use std::time::Duration;
-    use trust_dns_proto::op::Message;
 
     #[test]
     fn build_query_correct() {

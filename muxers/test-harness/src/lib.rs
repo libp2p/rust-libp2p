@@ -149,20 +149,20 @@ async fn run<A, B, S, E, F1, F2>(
     loop {
         match futures::future::select(dialer.next(), listener.next()).await {
             Either::Left((Some(Event::SetupComplete), _)) => {
-                log::info!("Dialer opened outbound stream");
+                tracing::info!("Dialer opened outbound stream");
             }
             Either::Left((Some(Event::ProtocolComplete), _)) => {
-                log::info!("Dialer completed protocol");
+                tracing::info!("Dialer completed protocol");
                 dialer_complete = true
             }
             Either::Left((Some(Event::Timeout), _)) => {
                 panic!("Dialer protocol timed out");
             }
             Either::Right((Some(Event::SetupComplete), _)) => {
-                log::info!("Listener received inbound stream");
+                tracing::info!("Listener received inbound stream");
             }
             Either::Right((Some(Event::ProtocolComplete), _)) => {
-                log::info!("Listener completed protocol");
+                tracing::info!("Listener completed protocol");
                 listener_complete = true
             }
             Either::Right((Some(Event::Timeout), _)) => {

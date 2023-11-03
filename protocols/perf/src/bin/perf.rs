@@ -30,8 +30,8 @@ use libp2p::swarm::{NetworkBehaviour, Swarm, SwarmEvent};
 use libp2p::SwarmBuilder;
 use libp2p_perf::{client, server};
 use libp2p_perf::{Final, Intermediate, Run, RunParams, RunUpdate};
-use log::{error, info};
 use serde::{Deserialize, Serialize};
+use tracing_subscriber::EnvFilter;
 
 #[derive(Debug, Parser)]
 #[clap(name = "libp2p perf client")]
@@ -71,9 +71,9 @@ impl FromStr for Transport {
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info"))
-        .format_timestamp_millis()
-        .init();
+    let _ = tracing_subscriber::fmt()
+        .with_env_filter(EnvFilter::from_default_env())
+        .try_init();
 
     let opts = Opts::parse();
     match opts {
@@ -121,20 +121,20 @@ async fn server(server_address: SocketAddr) -> Result<()> {
         loop {
             match swarm.next().await.unwrap() {
                 SwarmEvent::NewListenAddr { address, .. } => {
-                    info!("Listening on {address}");
+                    tracing::info!(%address, "Listening on address");
                 }
                 SwarmEvent::IncomingConnection { .. } => {}
                 e @ SwarmEvent::IncomingConnectionError { .. } => {
-                    error!("{e:?}");
+                    tracing::error!("{e:?}");
                 }
                 SwarmEvent::ConnectionEstablished {
                     peer_id, endpoint, ..
                 } => {
-                    info!("Established connection to {:?} via {:?}", peer_id, endpoint);
+                    tracing::info!(peer=%peer_id, ?endpoint, "Established new connection");
                 }
                 SwarmEvent::ConnectionClosed { .. } => {}
                 SwarmEvent::Behaviour(server::Event { .. }) => {
-                    info!("Finished run",)
+                    tracing::info!("Finished run",)
                 }
                 e => panic!("{e:?}"),
             }
@@ -168,7 +168,7 @@ async fn client(
     let mut swarm = swarm().await?;
 
     tokio::spawn(async move {
-        info!("start benchmark: custom");
+        tracing::info!("start benchmark: custom");
 
         let start = Instant::now();
 
@@ -241,7 +241,7 @@ async fn connect(
     let duration = start.elapsed();
     let duration_seconds = duration.as_secs_f64();
 
-    info!("established connection in {duration_seconds:.4} s");
+    tracing::info!(elapsed_time=%format!("{duration_seconds:.4} s"));
 
     Ok(server_peer_id)
 }
@@ -259,7 +259,7 @@ async fn perf(
                 id: _,
                 result: Ok(RunUpdate::Intermediate(progressed)),
             }) => {
-                info!("{progressed}");
+                tracing::info!("{progressed}");
 
                 let Intermediate {
                     duration,
@@ -288,7 +288,7 @@ async fn perf(
 
     let run = Run { params, duration };
 
-    info!("{run}");
+    tracing::info!("{run}");
 
     Ok(run)
 }

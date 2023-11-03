@@ -102,8 +102,6 @@ pub trait ConnectionHandler: Send + 'static {
     type FromBehaviour: fmt::Debug + Send + 'static;
     /// A type representing message(s) a [`ConnectionHandler`] can send to a [`NetworkBehaviour`](crate::behaviour::NetworkBehaviour) via [`ConnectionHandlerEvent::NotifyBehaviour`].
     type ToBehaviour: fmt::Debug + Send + 'static;
-    /// The type of errors returned by [`ConnectionHandler::poll`].
-    type Error: error::Error + fmt::Debug + Send + 'static;
     /// The inbound upgrade for the protocol(s) used by the handler.
     type InboundProtocol: InboundUpgradeSend;
     /// The outbound upgrade for the protocol(s) used by the handler.
@@ -149,12 +147,7 @@ pub trait ConnectionHandler: Send + 'static {
         &mut self,
         cx: &mut Context<'_>,
     ) -> Poll<
-        ConnectionHandlerEvent<
-            Self::OutboundProtocol,
-            Self::OutboundOpenInfo,
-            Self::ToBehaviour,
-            Self::Error,
-        >,
+        ConnectionHandlerEvent<Self::OutboundProtocol, Self::OutboundOpenInfo, Self::ToBehaviour>,
     >;
 
     /// Gracefully close the [`ConnectionHandler`].
@@ -214,6 +207,7 @@ pub trait ConnectionHandler: Send + 'static {
 
 /// Enumeration with the list of the possible stream events
 /// to pass to [`on_connection_event`](ConnectionHandler::on_connection_event).
+#[non_exhaustive]
 pub enum ConnectionEvent<'a, IP: InboundUpgradeSend, OP: OutboundUpgradeSend, IOI, OOI> {
     /// Informs the handler about the output of a successful upgrade on a new inbound substream.
     FullyNegotiatedInbound(FullyNegotiatedInbound<IP, IOI>),
@@ -539,21 +533,13 @@ impl<TUpgrade, TInfo> SubstreamProtocol<TUpgrade, TInfo> {
 
 /// Event produced by a handler.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum ConnectionHandlerEvent<TConnectionUpgrade, TOutboundOpenInfo, TCustom, TErr> {
+#[non_exhaustive]
+pub enum ConnectionHandlerEvent<TConnectionUpgrade, TOutboundOpenInfo, TCustom> {
     /// Request a new outbound substream to be opened with the remote.
     OutboundSubstreamRequest {
         /// The protocol(s) to apply on the substream.
         protocol: SubstreamProtocol<TConnectionUpgrade, TOutboundOpenInfo>,
     },
-
-    /// Close the connection for the given reason.
-    ///
-    /// Note this will affect all [`ConnectionHandler`]s handling this
-    /// connection, in other words it will close the connection for all
-    /// [`ConnectionHandler`]s. To signal that one has no more need for the
-    /// connection, while allowing other [`ConnectionHandler`]s to continue using
-    /// the connection, return false in [`ConnectionHandler::connection_keep_alive`].
-    Close(TErr),
     /// We learned something about the protocols supported by the remote.
     ReportRemoteProtocols(ProtocolSupport),
 
@@ -570,15 +556,15 @@ pub enum ProtocolSupport {
 }
 
 /// Event produced by a handler.
-impl<TConnectionUpgrade, TOutboundOpenInfo, TCustom, TErr>
-    ConnectionHandlerEvent<TConnectionUpgrade, TOutboundOpenInfo, TCustom, TErr>
+impl<TConnectionUpgrade, TOutboundOpenInfo, TCustom>
+    ConnectionHandlerEvent<TConnectionUpgrade, TOutboundOpenInfo, TCustom>
 {
     /// If this is an `OutboundSubstreamRequest`, maps the `info` member from a
     /// `TOutboundOpenInfo` to something else.
     pub fn map_outbound_open_info<F, I>(
         self,
         map: F,
-    ) -> ConnectionHandlerEvent<TConnectionUpgrade, I, TCustom, TErr>
+    ) -> ConnectionHandlerEvent<TConnectionUpgrade, I, TCustom>
     where
         F: FnOnce(TOutboundOpenInfo) -> I,
     {
@@ -591,7 +577,6 @@ impl<TConnectionUpgrade, TOutboundOpenInfo, TCustom, TErr>
             ConnectionHandlerEvent::NotifyBehaviour(val) => {
                 ConnectionHandlerEvent::NotifyBehaviour(val)
             }
-            ConnectionHandlerEvent::Close(val) => ConnectionHandlerEvent::Close(val),
             ConnectionHandlerEvent::ReportRemoteProtocols(support) => {
                 ConnectionHandlerEvent::ReportRemoteProtocols(support)
             }
@@ -600,10 +585,7 @@ impl<TConnectionUpgrade, TOutboundOpenInfo, TCustom, TErr>
 
     /// If this is an `OutboundSubstreamRequest`, maps the protocol (`TConnectionUpgrade`)
     /// to something else.
-    pub fn map_protocol<F, I>(
-        self,
-        map: F,
-    ) -> ConnectionHandlerEvent<I, TOutboundOpenInfo, TCustom, TErr>
+    pub fn map_protocol<F, I>(self, map: F) -> ConnectionHandlerEvent<I, TOutboundOpenInfo, TCustom>
     where
         F: FnOnce(TConnectionUpgrade) -> I,
     {
@@ -616,7 +598,6 @@ impl<TConnectionUpgrade, TOutboundOpenInfo, TCustom, TErr>
             ConnectionHandlerEvent::NotifyBehaviour(val) => {
                 ConnectionHandlerEvent::NotifyBehaviour(val)
             }
-            ConnectionHandlerEvent::Close(val) => ConnectionHandlerEvent::Close(val),
             ConnectionHandlerEvent::ReportRemoteProtocols(support) => {
                 ConnectionHandlerEvent::ReportRemoteProtocols(support)
             }
@@ -627,7 +608,7 @@ impl<TConnectionUpgrade, TOutboundOpenInfo, TCustom, TErr>
     pub fn map_custom<F, I>(
         self,
         map: F,
-    ) -> ConnectionHandlerEvent<TConnectionUpgrade, TOutboundOpenInfo, I, TErr>
+    ) -> ConnectionHandlerEvent<TConnectionUpgrade, TOutboundOpenInfo, I>
     where
         F: FnOnce(TCustom) -> I,
     {
@@ -638,29 +619,6 @@ impl<TConnectionUpgrade, TOutboundOpenInfo, TCustom, TErr>
             ConnectionHandlerEvent::NotifyBehaviour(val) => {
                 ConnectionHandlerEvent::NotifyBehaviour(map(val))
             }
-            ConnectionHandlerEvent::Close(val) => ConnectionHandlerEvent::Close(val),
-            ConnectionHandlerEvent::ReportRemoteProtocols(support) => {
-                ConnectionHandlerEvent::ReportRemoteProtocols(support)
-            }
-        }
-    }
-
-    /// If this is a `Close` event, maps the content to something else.
-    pub fn map_close<F, I>(
-        self,
-        map: F,
-    ) -> ConnectionHandlerEvent<TConnectionUpgrade, TOutboundOpenInfo, TCustom, I>
-    where
-        F: FnOnce(TErr) -> I,
-    {
-        match self {
-            ConnectionHandlerEvent::OutboundSubstreamRequest { protocol } => {
-                ConnectionHandlerEvent::OutboundSubstreamRequest { protocol }
-            }
-            ConnectionHandlerEvent::NotifyBehaviour(val) => {
-                ConnectionHandlerEvent::NotifyBehaviour(val)
-            }
-            ConnectionHandlerEvent::Close(val) => ConnectionHandlerEvent::Close(map(val)),
             ConnectionHandlerEvent::ReportRemoteProtocols(support) => {
                 ConnectionHandlerEvent::ReportRemoteProtocols(support)
             }

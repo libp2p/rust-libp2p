@@ -56,9 +56,9 @@
 //!
 //!    [dependencies]
 //!        libp2p = { version = "0.52", features = ["tcp", "dns", "async-std", "noise", "yamux", "websocket", "ping", "macros"] }
-//!        futures = "0.3"
-//!        env_logger = "0.10.0"
-//!        async-std = { version = "1.12", features = ["attributes"] }
+//!        futures = "0.3.21"
+//!        async-std = { version = "1.12.0", features = ["attributes"] }
+//!        tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 //!    ```
 //!
 //! ## Network identity
@@ -72,10 +72,11 @@
 //!
 //! ```rust
 //! use std::error::Error;
+//! use tracing_subscriber::EnvFilter;
 //!
 //! #[async_std::main]
 //! async fn main() -> Result<(), Box<dyn Error>> {
-//!     env_logger::init();
+//!     tracing_subscriber::fmt().with_env_filter(EnvFilter::from_default_env()).init();
 //!
 //!     let mut swarm = libp2p::SwarmBuilder::with_new_identity();
 //!
@@ -96,10 +97,11 @@
 //! ```rust
 //! use libp2p::{identity, PeerId};
 //! use std::error::Error;
+//! use tracing_subscriber::EnvFilter;
 //!
 //! #[async_std::main]
 //! async fn main() -> Result<(), Box<dyn Error>> {
-//!     env_logger::init();
+//!     tracing_subscriber::fmt().with_env_filter(EnvFilter::from_default_env()).init();
 //!
 //!     let mut swarm = libp2p::SwarmBuilder::with_new_identity()
 //!         .with_async_std()
@@ -138,11 +140,12 @@
 //! ```rust
 //! use libp2p::swarm::NetworkBehaviour;
 //! use libp2p::{identity, ping, PeerId};
+//! use tracing_subscriber::EnvFilter;
 //! use std::error::Error;
 //!
 //! #[async_std::main]
 //! async fn main() -> Result<(), Box<dyn Error>> {
-//!     env_logger::init();
+//!     tracing_subscriber::fmt().with_env_filter(EnvFilter::from_default_env()).init();
 //!
 //!     let mut swarm = libp2p::SwarmBuilder::with_new_identity()
 //!         .with_async_std()
@@ -168,10 +171,11 @@
 //! use libp2p::swarm::NetworkBehaviour;
 //! use libp2p::{identity, ping, PeerId};
 //! use std::error::Error;
+//! use tracing_subscriber::EnvFilter;
 //!
 //! #[async_std::main]
 //! async fn main() -> Result<(), Box<dyn Error>> {
-//!     env_logger::init();
+//!     tracing_subscriber::fmt().with_env_filter(EnvFilter::from_default_env()).init();
 //!
 //!     let mut swarm = libp2p::SwarmBuilder::with_new_identity()
 //!         .with_async_std()
@@ -202,10 +206,11 @@
 //! use libp2p::{identity, ping, PeerId};
 //! use std::error::Error;
 //! use std::time::Duration;
+//! use tracing_subscriber::EnvFilter;
 //!
 //! #[async_std::main]
 //! async fn main() -> Result<(), Box<dyn Error>> {
-//!     env_logger::init();
+//!     tracing_subscriber::fmt().with_env_filter(EnvFilter::from_default_env()).init();
 //!
 //!     let mut swarm = libp2p::SwarmBuilder::with_new_identity()
 //!         .with_async_std()
@@ -252,9 +257,12 @@
 //! use libp2p::{identity, ping, Multiaddr, PeerId};
 //! use std::error::Error;
 //! use std::time::Duration;
+//! use tracing_subscriber::EnvFilter;
 //!
 //! #[async_std::main]
 //! async fn main() -> Result<(), Box<dyn Error>> {
+//!     tracing_subscriber::fmt().with_env_filter(EnvFilter::from_default_env()).init();
+//!
 //!     let mut swarm = libp2p::SwarmBuilder::with_new_identity()
 //!         .with_async_std()
 //!         .with_tcp(
@@ -294,9 +302,12 @@
 //! use libp2p::{identity, ping, Multiaddr, PeerId};
 //! use std::error::Error;
 //! use std::time::Duration;
+//! use tracing_subscriber::EnvFilter;
 //!
 //! #[async_std::main]
 //! async fn main() -> Result<(), Box<dyn Error>> {
+//!     tracing_subscriber::fmt().with_env_filter(EnvFilter::from_default_env()).init();
+//!
 //!     let mut swarm = libp2p::SwarmBuilder::with_new_identity()
 //!         .with_async_std()
 //!         .with_tcp(

@@ -6,7 +6,7 @@
   To same functionality is available using `#[behaviour(to_swarm = "...")]`
   See [PR 4737](https://github.com/libp2p/rust-libp2p/pull/4737).
 
-## 0.33.0 
+## 0.33.0
 
 - Raise MSRV to 1.65.
   See [PR 3715].

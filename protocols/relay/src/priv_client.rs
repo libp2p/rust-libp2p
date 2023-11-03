@@ -212,16 +212,7 @@ impl NetworkBehaviour for Behaviour {
             FromSwarm::DialFailure(DialFailure { connection_id, .. }) => {
                 self.pending_handler_commands.remove(&connection_id);
             }
-            FromSwarm::AddressChange(_)
-            | FromSwarm::ListenFailure(_)
-            | FromSwarm::NewListener(_)
-            | FromSwarm::NewListenAddr(_)
-            | FromSwarm::ExpiredListenAddr(_)
-            | FromSwarm::ListenerError(_)
-            | FromSwarm::ListenerClosed(_)
-            | FromSwarm::NewExternalAddrCandidate(_)
-            | FromSwarm::ExternalAddrExpired(_)
-            | FromSwarm::ExternalAddrConfirmed(_) => {}
+            _ => {}
         }
     }
 

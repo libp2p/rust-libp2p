@@ -34,7 +34,7 @@ pub fn answer(addr: SocketAddr, server_fingerprint: Fingerprint, client_ufrag: &
         client_ufrag,
     );
 
-    log::trace!("Created SDP answer: {answer}");
+    tracing::trace!(%answer, "Created SDP answer");
 
     answer
 }

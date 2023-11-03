@@ -96,7 +96,6 @@ impl NetworkBehaviour for Behaviour {
 impl ConnectionHandler for HandlerWithState {
     type FromBehaviour = Void;
     type ToBehaviour = u64;
-    type Error = Void;
     type InboundProtocol = DeniedUpgrade;
     type OutboundProtocol = DeniedUpgrade;
     type InboundOpenInfo = ();
@@ -114,12 +113,7 @@ impl ConnectionHandler for HandlerWithState {
         &mut self,
         _: &mut Context<'_>,
     ) -> Poll<
-        ConnectionHandlerEvent<
-            Self::OutboundProtocol,
-            Self::OutboundOpenInfo,
-            Self::ToBehaviour,
-            Self::Error,
-        >,
+        ConnectionHandlerEvent<Self::OutboundProtocol, Self::OutboundOpenInfo, Self::ToBehaviour>,
     > {
         Poll::Pending
     }
