@@ -67,7 +67,7 @@ pub trait TransportExt: Transport {
     /// ```
     #[allow(deprecated)]
     #[deprecated(
-        note = "Use `libp2p::SwarmBuilder::with_bandwidth_metrics` or `libp2p_metrics::BandwidthMetricTransport` instead."
+        note = "Use `libp2p::SwarmBuilder::with_bandwidth_metrics` or `libp2p_metrics::BandwidthTransport` instead."
     )]
     fn with_bandwidth_logging<S>(self) -> (Boxed<(PeerId, StreamMuxerBox)>, Arc<BandwidthSinks>)
     where

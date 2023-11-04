@@ -104,7 +104,7 @@ where
 
 /// Allows obtaining the average bandwidth of the streams.
 #[deprecated(
-    note = "Use `libp2p::SwarmBuilder::with_bandwidth_metrics` or `libp2p_metrics::BandwidthMetricTransport` instead."
+    note = "Use `libp2p::SwarmBuilder::with_bandwidth_metrics` or `libp2p_metrics::BandwidthTransport` instead."
 )]
 pub struct BandwidthSinks {
     inbound: AtomicU64,

@@ -43,7 +43,7 @@ mod protocol_stack;
 mod relay;
 mod swarm;
 
-pub use bandwidth::Transport as BandwidthMetricTransport;
+pub use bandwidth::Transport as BandwidthTransport;
 pub use prometheus_client::registry::Registry;
 
 /// Set of Swarm and protocol metrics derived from emitted events.
