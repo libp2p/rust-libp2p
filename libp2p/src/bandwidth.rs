@@ -18,6 +18,8 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
+#![allow(deprecated)]
+
 use crate::core::muxing::{StreamMuxer, StreamMuxerEvent};
 
 use futures::{
@@ -43,11 +45,9 @@ use std::{
 pub(crate) struct BandwidthLogging<SMInner> {
     #[pin]
     inner: SMInner,
-    #[allow(deprecated)]
     sinks: Arc<BandwidthSinks>,
 }
 
-#[allow(deprecated)]
 impl<SMInner> BandwidthLogging<SMInner> {
     /// Creates a new [`BandwidthLogging`] around the stream muxer.
     pub(crate) fn new(inner: SMInner, sinks: Arc<BandwidthSinks>) -> Self {
@@ -111,7 +111,6 @@ pub struct BandwidthSinks {
     outbound: AtomicU64,
 }
 
-#[allow(deprecated)]
 impl BandwidthSinks {
     /// Returns a new [`BandwidthSinks`].
     pub(crate) fn new() -> Arc<Self> {
@@ -143,7 +142,6 @@ impl BandwidthSinks {
 pub(crate) struct InstrumentedStream<SMInner> {
     #[pin]
     inner: SMInner,
-    #[allow(deprecated)]
     sinks: Arc<BandwidthSinks>,
 }
 
@@ -155,7 +153,6 @@ impl<SMInner: AsyncRead> AsyncRead for InstrumentedStream<SMInner> {
     ) -> Poll<io::Result<usize>> {
         let this = self.project();
         let num_bytes = ready!(this.inner.poll_read(cx, buf))?;
-        #[allow(deprecated)]
         this.sinks.inbound.fetch_add(
             u64::try_from(num_bytes).unwrap_or(u64::max_value()),
             Ordering::Relaxed,
@@ -170,7 +167,6 @@ impl<SMInner: AsyncRead> AsyncRead for InstrumentedStream<SMInner> {
     ) -> Poll<io::Result<usize>> {
         let this = self.project();
         let num_bytes = ready!(this.inner.poll_read_vectored(cx, bufs))?;
-        #[allow(deprecated)]
         this.sinks.inbound.fetch_add(
             u64::try_from(num_bytes).unwrap_or(u64::max_value()),
             Ordering::Relaxed,
@@ -187,7 +183,6 @@ impl<SMInner: AsyncWrite> AsyncWrite for InstrumentedStream<SMInner> {
     ) -> Poll<io::Result<usize>> {
         let this = self.project();
         let num_bytes = ready!(this.inner.poll_write(cx, buf))?;
-        #[allow(deprecated)]
         this.sinks.outbound.fetch_add(
             u64::try_from(num_bytes).unwrap_or(u64::max_value()),
             Ordering::Relaxed,
@@ -202,7 +197,6 @@ impl<SMInner: AsyncWrite> AsyncWrite for InstrumentedStream<SMInner> {
     ) -> Poll<io::Result<usize>> {
         let this = self.project();
         let num_bytes = ready!(this.inner.poll_write_vectored(cx, bufs))?;
-        #[allow(deprecated)]
         this.sinks.outbound.fetch_add(
             u64::try_from(num_bytes).unwrap_or(u64::max_value()),
             Ordering::Relaxed,
