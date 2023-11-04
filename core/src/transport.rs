@@ -405,8 +405,9 @@ impl<TUpgr, TErr> TransportEvent<TUpgr, TErr> {
             upgrade,
             send_back_addr,
             ..
-        } = self else {
-            return None
+        } = self
+        else {
+            return None;
         };
 
         Some((upgrade, send_back_addr))

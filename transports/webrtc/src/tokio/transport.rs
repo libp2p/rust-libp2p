@@ -411,10 +411,10 @@ fn parse_webrtc_listen_addr(addr: &Multiaddr) -> Option<SocketAddr> {
         _ => return None,
     };
 
-    let port = iter.next()?;
-    let webrtc = iter.next()?;
-
-    let (Protocol::Udp(port), Protocol::WebRTCDirect) = (port, webrtc) else {
+    let Protocol::Udp(port) = iter.next()? else {
+        return None;
+    };
+    let Protocol::WebRTCDirect = iter.next()? else {
         return None;
     };
 

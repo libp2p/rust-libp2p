@@ -252,9 +252,7 @@ impl MdnsPeer {
                     return None;
                 }
 
-                let addr = str::from_utf8(&addr[8..]).ok()?;
-
-                let mut addr = addr.parse::<Multiaddr>().ok()?;
+                let mut addr = str::from_utf8(&addr[8..]).ok()?.parse::<Multiaddr>().ok()?;
 
                 match addr.pop() {
                     Some(Protocol::P2p(peer_id)) => {
