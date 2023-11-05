@@ -1,4 +1,4 @@
-## 0.3.0 - unreleased
+## 0.3.0
 
 - Continuously measure on single connection (iperf-style).
   See https://github.com/libp2p/test-plans/issues/261 for high level overview.
