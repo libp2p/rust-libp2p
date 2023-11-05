@@ -1,4 +1,4 @@
-## 0.34.0 - unreleased
+## 0.34.0
 
 - Adapt to interface changes in `libp2p-swarm`.
   See [PR 4706](https://github.com/libp2p/rust-libp2p/pull/4076).
