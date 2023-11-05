@@ -1,5 +1,3 @@
-use async_std::io;
-use either::Either;
 use futures::channel::{mpsc, oneshot};
 use futures::prelude::*;
 
@@ -208,10 +206,7 @@ impl EventLoop {
         }
     }
 
-    async fn handle_event(
-        &mut self,
-        event: SwarmEvent<BehaviourEvent, Either<void::Void, io::Error>>,
-    ) {
+    async fn handle_event(&mut self, event: SwarmEvent<BehaviourEvent>) {
         match event {
             SwarmEvent::Behaviour(BehaviourEvent::Kademlia(
                 kad::Event::OutboundQueryProgressed {

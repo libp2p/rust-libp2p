@@ -597,7 +597,6 @@ impl Handler {
 impl ConnectionHandler for Handler {
     type FromBehaviour = HandlerIn;
     type ToBehaviour = HandlerEvent;
-    type Error = io::Error; // TODO: better error type?
     type InboundProtocol = Either<ProtocolConfig, upgrade::DeniedUpgrade>;
     type OutboundProtocol = ProtocolConfig;
     type OutboundOpenInfo = ();
@@ -711,12 +710,7 @@ impl ConnectionHandler for Handler {
         &mut self,
         cx: &mut Context<'_>,
     ) -> Poll<
-        ConnectionHandlerEvent<
-            Self::OutboundProtocol,
-            Self::OutboundOpenInfo,
-            Self::ToBehaviour,
-            Self::Error,
-        >,
+        ConnectionHandlerEvent<Self::OutboundProtocol, Self::OutboundOpenInfo, Self::ToBehaviour>,
     > {
         match &mut self.protocol_status {
             Some(status) if !status.reported => {
@@ -777,9 +771,6 @@ impl ConnectionHandler for Handler {
             ConnectionEvent::DialUpgradeError(dial_upgrade_error) => {
                 self.on_dial_upgrade_error(dial_upgrade_error)
             }
-            ConnectionEvent::AddressChange(_)
-            | ConnectionEvent::ListenUpgradeError(_)
-            | ConnectionEvent::LocalProtocolsChange(_) => {}
             ConnectionEvent::RemoteProtocolsChange(change) => {
                 let dirty = self.remote_supported_protocols.on_protocols_change(change);
 
@@ -795,6 +786,7 @@ impl ConnectionHandler for Handler {
                     ))
                 }
             }
+            _ => {}
         }
     }
 }
@@ -848,7 +840,7 @@ impl Handler {
 }
 
 impl futures::Stream for OutboundSubstreamState {
-    type Item = ConnectionHandlerEvent<ProtocolConfig, (), HandlerEvent, io::Error>;
+    type Item = ConnectionHandlerEvent<ProtocolConfig, (), HandlerEvent>;
 
     fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
         let this = self.get_mut();
@@ -980,7 +972,7 @@ impl futures::Stream for OutboundSubstreamState {
 }
 
 impl futures::Stream for InboundSubstreamState {
-    type Item = ConnectionHandlerEvent<ProtocolConfig, (), HandlerEvent, io::Error>;
+    type Item = ConnectionHandlerEvent<ProtocolConfig, (), HandlerEvent>;
 
     fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
         let this = self.get_mut();

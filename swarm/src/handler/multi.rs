@@ -111,7 +111,6 @@ where
 {
     type FromBehaviour = (K, <H as ConnectionHandler>::FromBehaviour);
     type ToBehaviour = (K, <H as ConnectionHandler>::ToBehaviour);
-    type Error = <H as ConnectionHandler>::Error;
     type InboundProtocol = Upgrade<K, <H as ConnectionHandler>::InboundProtocol>;
     type OutboundProtocol = <H as ConnectionHandler>::OutboundProtocol;
     type InboundOpenInfo = Info<K, <H as ConnectionHandler>::InboundOpenInfo>;
@@ -241,12 +240,7 @@ where
         &mut self,
         cx: &mut Context<'_>,
     ) -> Poll<
-        ConnectionHandlerEvent<
-            Self::OutboundProtocol,
-            Self::OutboundOpenInfo,
-            Self::ToBehaviour,
-            Self::Error,
-        >,
+        ConnectionHandlerEvent<Self::OutboundProtocol, Self::OutboundOpenInfo, Self::ToBehaviour>,
     > {
         // Calling `gen_range(0, 0)` (see below) would panic, so we have return early to avoid
         // that situation.
