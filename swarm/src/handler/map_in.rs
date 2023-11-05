@@ -80,6 +80,10 @@ where
         self.inner.poll(cx)
     }
 
+    fn poll_close(&mut self, cx: &mut Context<'_>) -> Poll<Option<Self::ToBehaviour>> {
+        self.inner.poll_close(cx)
+    }
+
     fn on_connection_event(
         &mut self,
         event: ConnectionEvent<

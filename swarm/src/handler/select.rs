@@ -25,7 +25,7 @@ use crate::handler::{
 };
 use crate::upgrade::SendWrapper;
 use either::Either;
-use futures::future;
+use futures::{future, ready};
 use libp2p_core::upgrade::SelectUpgrade;
 use std::{cmp, task::Context, task::Poll};
 
@@ -257,6 +257,18 @@ where
         };
 
         Poll::Pending
+    }
+
+    fn poll_close(&mut self, cx: &mut Context<'_>) -> Poll<Option<Self::ToBehaviour>> {
+        if let Some(e) = ready!(self.proto1.poll_close(cx)) {
+            return Poll::Ready(Some(Either::Left(e)));
+        }
+
+        if let Some(e) = ready!(self.proto2.poll_close(cx)) {
+            return Poll::Ready(Some(Either::Right(e)));
+        }
+
+        Poll::Ready(None)
     }
 
     fn on_connection_event(
