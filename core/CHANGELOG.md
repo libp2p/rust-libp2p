@@ -1,4 +1,4 @@
-## 0.41.1
+## 0.41.1 - unreleased
 - Add  `{In,Out}boundConnectionUpgrade` for `SelectUpgrade`.
   See [PR 4812].
 
