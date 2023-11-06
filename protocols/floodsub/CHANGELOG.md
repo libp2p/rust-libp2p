@@ -1,4 +1,4 @@
-## 0.44.0 - unreleased
+## 0.44.0
 
 - Change publish to require `data: impl Into<Bytes>` to internally avoid any costly cloning / allocation.
   See [PR 4754](https://github.com/libp2p/rust-libp2p/pull/4754).

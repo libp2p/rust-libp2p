@@ -134,6 +134,15 @@ where
         Poll::Ready(event)
     }
 
+    fn poll_close(&mut self, cx: &mut Context<'_>) -> Poll<Option<Self::ToBehaviour>> {
+        let event = match self {
+            Either::Left(handler) => futures::ready!(handler.poll_close(cx)).map(Either::Left),
+            Either::Right(handler) => futures::ready!(handler.poll_close(cx)).map(Either::Right),
+        };
+
+        Poll::Ready(event)
+    }
+
     fn on_connection_event(
         &mut self,
         event: ConnectionEvent<

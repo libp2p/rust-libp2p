@@ -1,4 +1,4 @@
-## 0.10.0 - unreleased
+## 0.10.0
 
 - Improve hole-punch timing.
   This should improve success rates for hole-punching QUIC connections.
