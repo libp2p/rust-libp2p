@@ -1,3 +1,9 @@
+## 0.41.1
+- Add  `{In,Out}boundConnectionUpgrade` for `SelectUpgrade`.
+  See [PR 4812](https://github.com/libp2p/rust-libp2p/pull/4695).
+
+[PR 4812]: https://github.com/libp2p/rust-libp2p/pull/4812
+
 ## 0.41.0
 
 - Remove blanket-impl of `{In,Out}boundUpgrade` for `{In,Out}boundConnectionUpgrade`.
