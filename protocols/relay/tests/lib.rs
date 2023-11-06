@@ -169,6 +169,7 @@ fn new_reservation_to_same_relay_replaces_old() {
                         break;
                     }
                 }
+                SwarmEvent::ExternalAddrConfirmed { .. } => {}
                 SwarmEvent::Behaviour(ClientEvent::Ping(_)) => {}
                 e => panic!("{e:?}"),
             }
@@ -521,6 +522,7 @@ async fn wait_for_reservation(
 
     loop {
         match client.select_next_some().await {
+            SwarmEvent::ExternalAddrConfirmed { .. } => {}
             SwarmEvent::Behaviour(ClientEvent::Relay(
                 relay::client::Event::ReservationReqAccepted {
                     relay_peer_id: peer_id,
