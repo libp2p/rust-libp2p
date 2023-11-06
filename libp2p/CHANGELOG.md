@@ -1,3 +1,8 @@
+## 0.53.1
+
+- Introduce `libp2p::SwarmBuilder::with_dns_config`.
+  See [PR 4808](https://github.com/libp2p/rust-libp2p/pull/4808).
+
 ## 0.53.0
 
 - Raise MSRV to 1.73.
