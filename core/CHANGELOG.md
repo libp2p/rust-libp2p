@@ -1,8 +1,7 @@
 ## 0.41.1 - unreleased
-- Add  `{In,Out}boundConnectionUpgrade` for `SelectUpgrade`.
-  See [PR 4812].
 
-[PR 4812]: https://github.com/libp2p/rust-libp2p/pull/4812
+- Implement `{In,Out}boundConnectionUpgrade` for `SelectUpgrade`.
+  See [PR 4812](https://github.com/libp2p/rust-libp2p/pull/4812).
 
 ## 0.41.0
 
