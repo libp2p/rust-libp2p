@@ -49,18 +49,43 @@ impl<T: AuthenticatedMultiplexedTransport> SwarmBuilder<super::provider::Tokio, 
     }
 }
 
-#[cfg(all(not(target_arch = "wasm32"), feature = "dns"))]
-impl<Provider, T: AuthenticatedMultiplexedTransport> SwarmBuilder<Provider, DnsPhase<T>> {
+#[cfg(all(not(target_arch = "wasm32"), feature = "async-std", feature = "dns"))]
+impl<T: AuthenticatedMultiplexedTransport> SwarmBuilder<super::provider::AsyncStd, DnsPhase<T>> {
     pub fn with_dns_config(
         self,
         cfg: libp2p_dns::ResolverConfig,
         opts: libp2p_dns::ResolverOpts,
-    ) -> SwarmBuilder<Provider, WebsocketPhase<impl AuthenticatedMultiplexedTransport>> {
+    ) -> SwarmBuilder<
+        super::provider::AsyncStd,
+        WebsocketPhase<impl AuthenticatedMultiplexedTransport>,
+    > {
         SwarmBuilder {
             keypair: self.keypair,
             phantom: PhantomData,
             phase: WebsocketPhase {
-                transport: libp2p_dns::tokio::Transport::custom2(self.phase.transport, cfg, opts),
+                transport: libp2p_dns::async_std::Transport::custom2(
+                    self.phase.transport,
+                    cfg,
+                    opts,
+                ),
+            },
+        }
+    }
+}
+
+#[cfg(all(not(target_arch = "wasm32"), feature = "tokio", feature = "dns"))]
+impl<T: AuthenticatedMultiplexedTransport> SwarmBuilder<super::provider::Tokio, DnsPhase<T>> {
+    pub fn with_dns_config(
+        self,
+        cfg: libp2p_dns::ResolverConfig,
+        opts: libp2p_dns::ResolverOpts,
+    ) -> SwarmBuilder<super::provider::Tokio, WebsocketPhase<impl AuthenticatedMultiplexedTransport>>
+    {
+        SwarmBuilder {
+            keypair: self.keypair,
+            phantom: PhantomData,
+            phase: WebsocketPhase {
+                transport: libp2p_dns::tokio::Transport::custom(self.phase.transport, cfg, opts),
             },
         }
     }

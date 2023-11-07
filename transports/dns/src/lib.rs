@@ -142,22 +142,6 @@ pub mod tokio {
                 resolver: TokioAsyncResolver::tokio(cfg, opts),
             }
         }
-
-        // TODO: Remove this when `system2` of async-std is removed
-        #[doc(hidden)]
-        pub fn system2(inner: T) -> Result<Transport<T>, std::io::Error> {
-            Self::system(inner)
-        }
-
-        // TODO: Remove this when `custom2` of async-std is removed
-        #[doc(hidden)]
-        pub fn custom2(
-            inner: T,
-            cfg: hickory_resolver::config::ResolverConfig,
-            opts: hickory_resolver::config::ResolverOpts,
-        ) -> Transport<T> {
-            Self::custom(inner, cfg, opts)
-        }
     }
 }
 
