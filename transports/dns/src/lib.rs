@@ -87,9 +87,8 @@ pub mod async_std {
             }
         }
 
-        // TODO: Replace `system` with this
+        // TODO: Replace `system` implementation with this
         #[doc(hidden)]
-        /// Creates a new [`Transport`] from the OS's DNS configuration and defaults.
         pub fn system2(inner: T) -> Result<Transport<T>, io::Error> {
             Ok(Transport {
                 inner: Arc::new(Mutex::new(inner)),
@@ -101,9 +100,8 @@ pub mod async_std {
             })
         }
 
-        // TODO: Replace `custom` with this
+        // TODO: Replace `custom` implementation with this
         #[doc(hidden)]
-        /// Creates a [`Transport`] with a custom resolver configuration and options.
         pub fn custom2(inner: T, cfg: ResolverConfig, opts: ResolverOpts) -> Transport<T> {
             Transport {
                 inner: Arc::new(Mutex::new(inner)),
@@ -143,6 +141,22 @@ pub mod tokio {
                 inner: Arc::new(Mutex::new(inner)),
                 resolver: TokioAsyncResolver::tokio(cfg, opts),
             }
+        }
+
+        // TODO: Remove this when `system2` of async-std is removed
+        #[doc(hidden)]
+        pub fn system2(inner: T) -> Result<Transport<T>, std::io::Error> {
+            Self::system(inner)
+        }
+
+        // TODO: Remove this when `custom2` of async-std is removed
+        #[doc(hidden)]
+        pub fn custom2(
+            inner: T,
+            cfg: hickory_resolver::config::ResolverConfig,
+            opts: hickory_resolver::config::ResolverOpts,
+        ) -> Transport<T> {
+            Self::custom(inner, cfg, opts)
         }
     }
 }
