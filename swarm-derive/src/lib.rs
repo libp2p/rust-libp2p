@@ -346,7 +346,8 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> syn::Result<Toke
                     local_addr,
                     send_back_addr,
                     connection_id,
-                    error
+                    error,
+                    peer_id,
                 }));
             },
             None => quote! {
@@ -354,7 +355,8 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> syn::Result<Toke
                     local_addr,
                     send_back_addr,
                     connection_id,
-                    error
+                    error,
+                    peer_id,
                 }));
             },
         });
@@ -806,7 +808,7 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> syn::Result<Toke
                         #dial_failure { peer_id, connection_id, error })
                     => { #(#on_dial_failure_stmts)* }
                     #from_swarm::ListenFailure(
-                        #listen_failure { local_addr, send_back_addr, connection_id, error })
+                        #listen_failure { local_addr, send_back_addr, connection_id, error, peer_id })
                     => { #(#on_listen_failure_stmts)* }
                     #from_swarm::NewListener(
                         #new_listener { listener_id })
