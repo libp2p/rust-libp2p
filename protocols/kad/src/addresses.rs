@@ -67,7 +67,7 @@ impl Addresses {
     /// otherwise unreachable.
     #[allow(clippy::result_unit_err)]
     pub fn remove(&mut self, addr: &Multiaddr) -> Result<(), ()> {
-        if self.addrs.len() == 1 {
+        if self.addrs.len() == 1 && self.addrs[0] == *addr {
             return Err(());
         }
 
@@ -111,5 +111,69 @@ impl Addresses {
 impl fmt::Debug for Addresses {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_list().entries(self.addrs.iter()).finish()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn given_one_address_when_removing_different_one_returns_ok() {
+        let addrs = &[tcp_addr("1234")];
+        let mut addresses = make_addresses(addrs);
+
+        assert!(addresses.remove(&tcp_addr("4321")).is_ok());
+        // assert that content did not change since the removed value was not present in the addresses list
+        assert_eq!(addresses.addrs.as_slice(), addrs);
+    }
+
+    #[test]
+    fn given_one_address_when_removing_correct_one_returns_err() {
+        let addrs = &[tcp_addr("1234")];
+        let mut addresses = make_addresses(addrs);
+
+        assert!(addresses.remove(&tcp_addr("1234")).is_err());
+        // assert that content did not change since the removed value, while present in the addresses list, was the last one
+        assert_eq!(addresses.addrs.as_slice(), addrs);
+    }
+
+    #[test]
+    fn given_many_addresses_when_removing_different_one_does_not_remove_and_returns_ok() {
+        let addrs = &[tcp_addr("1234"), tcp_addr("4321")];
+        let mut addresses = make_addresses(addrs);
+
+        assert!(addresses.remove(&tcp_addr("5678")).is_ok());
+        // assert that content did not change since the removed value was not present in the addresses list
+        assert_eq!(addresses.addrs.as_slice(), addrs);
+    }
+
+    #[test]
+    fn given_many_addresses_when_removing_correct_one_removes_and_returns_ok() {
+        let mut addresses = make_addresses(&[tcp_addr("1234"), tcp_addr("4321")]);
+
+        assert!(addresses.remove(&tcp_addr("1234")).is_ok());
+        // assert that content did change since the removed value was present in the addresses list and was not the last one
+        assert_eq!(addresses.addrs.as_slice(), &[tcp_addr("4321")]);
+    }
+
+    /// Helper function to easily initialize Addresses struct
+    /// with multiple addresses
+    fn make_addresses(addrs: &[Multiaddr]) -> Addresses {
+        let mut addrs = addrs.into_iter();
+
+        let first = addrs.next().expect("Addresses must have at least one addr");
+        let mut addresses = Addresses::new(first.clone());
+
+        while let Some(addr) = addrs.next() {
+            addresses.insert(addr.clone());
+        }
+
+        addresses
+    }
+
+    /// Helper function to create a tcp Multiaddr with a specific port
+    fn tcp_addr(port: &str) -> Multiaddr {
+        format!("/ip4/127.0.0.1/tcp/{port}").parse().unwrap()
     }
 }
