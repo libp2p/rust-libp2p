@@ -2448,13 +2448,18 @@ name = "libp2p-autonatv2"
 version = "0.1.0"
 dependencies = [
  "async-trait",
+ "either",
  "futures",
+ "futures-bounded",
  "libp2p-core",
- "libp2p-request-response",
+ "libp2p-identity",
  "libp2p-swarm",
  "quick-protobuf",
  "rand 0.8.5",
  "rand_core 0.6.4",
+ "scc",
+ "thiserror",
+ "void",
 ]
 
 [[package]]
@@ -4871,6 +4876,12 @@ checksum = "93fc1dc3aaa9bfed95e02e6eadabb4baf7e3078b0bd1b4d7b6b0b68378900502"
 dependencies = [
  "winapi-util",
 ]
+
+[[package]]
+name = "scc"
+version = "2.0.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ca628bbcc4be16ffaeae429444cf4538d7a23b1aa5457cc9ce9a220286befbc3"
 
 [[package]]
 name = "schannel"

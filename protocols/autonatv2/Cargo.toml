@@ -8,13 +8,18 @@ rust-version.workspace = true
 
 [dependencies]
 quick-protobuf = "0.8"
-libp2p-request-response = { path = "../request-response" }
-libp2p-core = { path = "../../core" }
+libp2p-core = { workspace = true }
 async-trait = "0.1"
-futures = "0.3"
 rand_core = "0.6"
 rand = { version = "0.8", optional = true }
-libp2p-swarm = { version = "0.44.0", path = "../../swarm" }
+libp2p-swarm = { workspace = true }
+libp2p-identity = { workspace = true }
+futures-bounded = { workspace = true }
+void = "1.0.2"
+either = "1.9.0"
+futures = "0.3.29"
+thiserror = "1.0.50"
+scc = "2.0.3"
 
 [lints]
 workspace = true

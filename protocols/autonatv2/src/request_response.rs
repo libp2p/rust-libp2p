@@ -5,7 +5,6 @@ use libp2p_core::{
     upgrade::{read_length_prefixed, write_length_prefixed},
     Multiaddr,
 };
-use libp2p_request_response::{Behaviour, Codec};
 use libp2p_swarm::{ConnectionId, NetworkBehaviour, StreamProtocol};
 use quick_protobuf::{BytesReader, MessageRead, MessageWrite, Writer};
 use rand::Rng;
@@ -13,12 +12,9 @@ use rand::Rng;
 use crate::generated::structs as proto;
 
 const REQUEST_MAX_SIZE: usize = 4104;
-const DATA_LEN_LOWER_BOUND: usize = 30_000u32 as usize;
-const DATA_LEN_UPPER_BOUND: usize = 100_000u32 as usize;
-const DATA_FIELD_LEN_UPPER_BOUND: usize = 4096;
-
-pub(crate) const REQUEST_PROTOCOL_NAME: StreamProtocol =
-    StreamProtocol::new("/libp2p/autonat/2/dial-request");
+pub(super) const DATA_LEN_LOWER_BOUND: usize = 30_000u32 as usize;
+pub(super) const DATA_LEN_UPPER_BOUND: usize = 100_000u32 as usize;
+pub(super) const DATA_FIELD_LEN_UPPER_BOUND: usize = 4096;
 
 macro_rules! new_io_invalid_data_err {
     ($msg:expr) => {
@@ -29,6 +25,30 @@ macro_rules! new_io_invalid_data_err {
 macro_rules! check_existence {
     ($field:ident) => {
         $field.ok_or_else(|| new_io_invalid_data_err!(concat!(stringify!($field), " is missing")))
+    };
+}
+
+macro_rules! read_from {
+    () => {
+        pub(crate) async fn read_from<R>(mut reader: R) -> io::Result<Self>
+        where
+            R: AsyncRead + Unpin,
+        {
+            let bytes = read_length_prefixed(&mut reader, 1024).await?;
+            Self::from_bytes(&bytes)
+        }
+    };
+}
+
+macro_rules! write_into {
+    () => {
+        pub(crate) async fn write_into<W>(self, mut writer: W) -> io::Result<()>
+        where
+            W: AsyncWrite + Unpin,
+        {
+            let bytes = self.into_bytes();
+            write_length_prefixed(&mut writer, bytes).await
+        }
     };
 }
 
@@ -50,6 +70,8 @@ pub(crate) struct DialDataResponse {
 }
 
 impl Request {
+    read_from!();
+
     fn from_bytes(bytes: &[u8]) -> io::Result<Self> {
         let mut reader = BytesReader::from_bytes(bytes);
         let msg = proto::Message::from_reader(&mut reader, bytes)
@@ -77,6 +99,8 @@ impl Request {
             )),
         }
     }
+
+    write_into!();
 
     fn into_bytes(self) -> Cow<'static, [u8]> {
         fn make_message_bytes(request: Request) -> Vec<u8> {
@@ -147,6 +171,8 @@ pub(crate) struct DialResponse {
 }
 
 impl Response {
+    read_from!();
+
     fn from_bytes(bytes: &[u8]) -> std::io::Result<Self> {
         let mut reader = BytesReader::from_bytes(bytes);
         let msg = proto::Message::from_reader(&mut reader, bytes)
@@ -183,6 +209,8 @@ impl Response {
             )),
         }
     }
+
+    write_into!();
 
     fn into_bytes(self) -> Vec<u8> {
         let msg = match self {
@@ -229,66 +257,36 @@ impl DialDataRequest {
     }
 }
 
-#[derive(Debug, Clone)]
-pub(crate) struct AutoNATv2Codec {
-    observed_addr: Multiaddr,
-    connection_id: ConnectionId,
+const DIAL_BACK_MAX_SIZE: usize = 10;
+
+pub(crate) struct DialBack {
+    pub nonce: u64,
 }
 
-#[async_trait::async_trait]
-impl Codec for AutoNATv2Codec {
-    type Protocol = String;
-    type Request = Request;
-    type Response = Response;
+impl DialBack {
+    read_from!();
 
-    async fn read_request<T>(
-        &mut self,
-        _protocol: &Self::Protocol,
-        io: &mut T,
-    ) -> io::Result<Self::Request>
-    where
-        T: AsyncRead + Unpin + Send,
-    {
-        let bytes = read_length_prefixed(io, REQUEST_MAX_SIZE).await?;
-        Request::from_bytes(&bytes)
+    fn from_bytes(bytes: &[u8]) -> io::Result<Self> {
+        let mut reader = BytesReader::from_bytes(bytes);
+        let proto::DialBack { nonce } = proto::DialBack::from_reader(&mut reader, bytes)
+            .map_err(|err| new_io_invalid_data_err!(err))?;
+        let nonce = check_existence!(nonce)?;
+        Ok(Self { nonce })
     }
 
-    async fn read_response<T>(
-        &mut self,
-        _protocol: &Self::Protocol,
-        io: &mut T,
-    ) -> io::Result<Self::Response>
+    pub(crate) async fn write_into<W>(self, mut writer: W) -> io::Result<()>
     where
-        T: AsyncRead + Unpin + Send,
+        W: AsyncWrite + Unpin,
     {
-        let bytes = read_length_prefixed(io, 1024).await?;
-        Response::from_bytes(&bytes)
-    }
-
-    async fn write_request<T>(
-        &mut self,
-        _protocol: &Self::Protocol,
-        io: &mut T,
-        req: Self::Request,
-    ) -> io::Result<()>
-    where
-        T: AsyncWrite + Unpin + Send,
-    {
-        write_length_prefixed(io, req.into_bytes()).await?;
-        io.close().await
-    }
-
-    async fn write_response<T>(
-        &mut self,
-        _protocol: &Self::Protocol,
-        io: &mut T,
-        res: Self::Response,
-    ) -> std::io::Result<()>
-    where
-        T: AsyncWrite + Unpin + Send,
-    {
-        write_length_prefixed(io, res.into_bytes()).await?;
-        io.close().await
+        let msg = proto::DialBack {
+            nonce: Some(self.nonce),
+        };
+        let mut buf = [0u8; DIAL_BACK_MAX_SIZE];
+        debug_assert!(msg.get_size() <= DIAL_BACK_MAX_SIZE);
+        let mut msg_writer = Writer::new(&mut buf[..]);
+        msg.write_message(&mut msg_writer)
+            .expect("encoding to succeed");
+        write_length_prefixed(&mut writer, &buf[..msg.get_size()]).await
     }
 }
 
@@ -305,5 +303,22 @@ mod tests {
         })
         .unwrap();
         assert_eq!(message_bytes.len(), super::REQUEST_MAX_SIZE);
+    }
+
+    #[test]
+    fn dial_back_correct_size() {
+        let dial_back = super::proto::DialBack { nonce: Some(0) };
+        let buf = quick_protobuf::serialize_into_vec(&dial_back).unwrap();
+        assert!(buf.len() <= super::DIAL_BACK_MAX_SIZE);
+
+        let dial_back_none = super::proto::DialBack { nonce: None };
+        let buf = quick_protobuf::serialize_into_vec(&dial_back_none).unwrap();
+        assert!(buf.len() <= super::DIAL_BACK_MAX_SIZE);
+
+        let dial_back_max_nonce = super::proto::DialBack {
+            nonce: Some(u64::MAX),
+        };
+        let buf = quick_protobuf::serialize_into_vec(&dial_back_max_nonce).unwrap();
+        assert!(buf.len() <= super::DIAL_BACK_MAX_SIZE);
     }
 }
