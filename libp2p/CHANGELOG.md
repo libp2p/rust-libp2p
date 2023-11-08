@@ -1,3 +1,7 @@
+## 0.53.1 - unreleased
+
+- Add `SwarmBuilder::with_quic_config` for `TcpPhase`
+
 ## 0.53.0
 
 - Raise MSRV to 1.73.
