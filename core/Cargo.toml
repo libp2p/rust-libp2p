@@ -16,6 +16,7 @@ fnv = "1.0"
 futures = { version = "0.3.29", features = ["executor", "thread-pool"] }
 futures-timer = "3"
 instant = "0.1.12"
+ip-global = { workspace = true }
 libp2p-identity = { workspace = true, features = ["peerid", "ed25519"] }
 log = "0.4"
 multiaddr = { workspace = true }

@@ -2237,6 +2237,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "ip-global"
+version = "0.1.0"
+
+[[package]]
 name = "ipconfig"
 version = "0.3.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2451,6 +2455,7 @@ dependencies = [
  "either",
  "futures",
  "futures-bounded",
+ "ip-global",
  "libp2p-core",
  "libp2p-identity",
  "libp2p-swarm",
@@ -2489,6 +2494,7 @@ dependencies = [
  "futures",
  "futures-timer",
  "instant",
+ "ip-global",
  "libp2p-identity",
  "libp2p-mplex",
  "libp2p-noise",

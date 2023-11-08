@@ -21,6 +21,7 @@ members = [
     "misc/allow-block-list",
     "misc/connection-limits",
     "misc/futures-bounded",
+    "misc/ip-global",
     "misc/keygen",
     "misc/memory-connection-limits",
     "misc/metrics",
@@ -116,6 +117,7 @@ prometheus-client = "0.22.0"
 quick-protobuf-codec = { version = "0.2.0", path = "misc/quick-protobuf-codec" }
 quickcheck = { package = "quickcheck-ext", path = "misc/quickcheck-ext" }
 rw-stream-sink = { version = "0.4.0", path = "misc/rw-stream-sink" }
+ip-global = { version = "0.1.0", path = "misc/ip-global" }
 
 [patch.crates-io]
 

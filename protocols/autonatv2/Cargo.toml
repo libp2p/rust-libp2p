@@ -7,14 +7,15 @@ rust-version.workspace = true
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+async-trait = "0.1"
 quick-protobuf = "0.8"
 libp2p-core = { workspace = true }
-async-trait = "0.1"
 rand_core = "0.6"
 rand = { version = "0.8", optional = true }
 libp2p-swarm = { workspace = true }
 libp2p-identity = { workspace = true }
 futures-bounded = { workspace = true }
+ip-global = { workspace = true }
 void = "1.0.2"
 either = "1.9.0"
 futures = "0.3.29"
