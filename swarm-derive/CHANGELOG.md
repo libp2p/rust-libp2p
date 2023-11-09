@@ -1,3 +1,5 @@
+## 0.34.1 - unreleased
+
 ## 0.34.0
 
 - Adapt to interface changes in `libp2p-swarm`.

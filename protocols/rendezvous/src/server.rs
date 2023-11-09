@@ -214,20 +214,12 @@ impl NetworkBehaviour for Behaviour {
                     }) => {
                         continue;
                     }
-                    ToSwarm::Dial { .. }
-                    | ToSwarm::ListenOn { .. }
-                    | ToSwarm::RemoveListener { .. }
-                    | ToSwarm::NotifyHandler { .. }
-                    | ToSwarm::NewExternalAddrCandidate(_)
-                    | ToSwarm::ExternalAddrConfirmed(_)
-                    | ToSwarm::ExternalAddrExpired(_)
-                    | ToSwarm::CloseConnection { .. } => {
-                        let new_to_swarm = to_swarm
+                    other => {
+                        let new_to_swarm = other
                             .map_out(|_| unreachable!("we manually map `GenerateEvent` variants"));
 
                         return Poll::Ready(new_to_swarm);
                     }
-                    _ => {}
                 };
             }
 
