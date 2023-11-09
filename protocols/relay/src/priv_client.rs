@@ -232,16 +232,18 @@ impl NetworkBehaviour for Behaviour {
 
         let event = match handler_event {
             handler::Event::ReservationReqAccepted { renewal, limit } => {
-                let addr = self
-                    .relay_connection_addr
-                    .get(&connection)
-                    .cloned()
-                    .expect("Relay connection exist")
-                    .with(Protocol::P2pCircuit)
-                    .with(Protocol::P2p(self.local_peer_id));
+                if !renewal {
+                    let addr = self
+                        .relay_connection_addr
+                        .get(&connection)
+                        .cloned()
+                        .expect("Relay connection exist")
+                        .with(Protocol::P2pCircuit)
+                        .with(Protocol::P2p(self.local_peer_id));
 
-                self.queued_actions
-                    .push_back(ToSwarm::ExternalAddrConfirmed(addr));
+                    self.queued_actions
+                        .push_back(ToSwarm::ExternalAddrConfirmed(addr));
+                }
 
                 Event::ReservationReqAccepted {
                     relay_peer_id: event_source,
