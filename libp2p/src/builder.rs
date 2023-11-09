@@ -113,7 +113,7 @@ mod tests {
     }
 
     #[test]
-    #[cfg(all(feature = "tokio", feature = "tcp", feature = "tls", feature = "mplex"))]
+    #[cfg(all(feature = "tokio", feature = "tcp", feature = "tls", feature = "yamux"))]
     fn tcp_yamux_mplex() {
         let _ = SwarmBuilder::with_new_identity()
             .with_tokio()
@@ -121,8 +121,8 @@ mod tests {
                 Default::default(),
                 libp2p_tls::Config::new,
                 (
-                    libp2p_yamux::Config::default(),
-                    libp2p_mplex::MplexConfig::default(),
+                    libp2p_yamux::Config::default,
+                    libp2p_mplex::MplexConfig::default,
                 ),
             )
             .unwrap()
@@ -132,7 +132,13 @@ mod tests {
     }
 
     #[test]
-    #[cfg(all(feature = "tokio", feature = "tcp", feature = "tls", feature = "noise"))]
+    #[cfg(all(
+        feature = "tokio",
+        feature = "tcp",
+        feature = "tls",
+        feature = "noise",
+        feature = "yamux"
+    ))]
     fn tcp_tls_noise() {
         let _ = SwarmBuilder::with_new_identity()
             .with_tokio()
