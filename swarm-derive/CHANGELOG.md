@@ -1,5 +1,8 @@
 ## 0.34.1 - unreleased
 
+- Always forward all variants of `FromSwarm`.
+  See [PR 4825](https://github.com/libp2p/rust-libp2p/pull/4825).
+
 ## 0.34.0
 
 - Adapt to interface changes in `libp2p-swarm`.
