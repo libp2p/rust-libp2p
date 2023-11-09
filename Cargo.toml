@@ -73,7 +73,7 @@ rust-version = "1.73.0"
 futures-bounded = { version = "0.2.1", path = "misc/futures-bounded" }
 libp2p = { version = "0.53.0", path = "libp2p" }
 libp2p-allow-block-list = { version = "0.3.0", path = "misc/allow-block-list" }
-libp2p-autonat = { version = "0.12.1", path = "protocols/autonat" }
+libp2p-autonat = { version = "0.12.0", path = "protocols/autonat" }
 libp2p-connection-limits = { version = "0.3.0", path = "misc/connection-limits" }
 libp2p-core = { version = "0.41.1", path = "core" }
 libp2p-dcutr = { version = "0.11.0", path = "protocols/dcutr" }
@@ -95,7 +95,7 @@ libp2p-plaintext = { version = "0.41.0", path = "transports/plaintext" }
 libp2p-pnet = { version = "0.24.0", path = "transports/pnet" }
 libp2p-quic = { version = "0.10.0", path = "transports/quic" }
 libp2p-relay = { version = "0.17.0", path = "protocols/relay" }
-libp2p-rendezvous = { version = "0.14.1", path = "protocols/rendezvous" }
+libp2p-rendezvous = { version = "0.14.0", path = "protocols/rendezvous" }
 libp2p-request-response = { version = "0.26.0", path = "protocols/request-response" }
 libp2p-server = { version = "0.12.3", path = "misc/server" }
 libp2p-swarm = { version = "0.44.1", path = "swarm" }
