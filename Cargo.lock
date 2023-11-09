@@ -4370,6 +4370,7 @@ version = "0.2.0"
 dependencies = [
  "asynchronous-codec",
  "bytes",
+ "criterion",
  "quick-protobuf",
  "thiserror",
  "unsigned-varint 0.8.0",

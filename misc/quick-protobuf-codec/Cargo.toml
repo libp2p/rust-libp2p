@@ -17,6 +17,13 @@ thiserror = "1.0"
 unsigned-varint = { workspace = true, features = ["asynchronous_codec"] }
 quick-protobuf = "0.8"
 
+[dev-dependencies]
+criterion = "0.5.1"
+
+[[bench]]
+name = "codec"
+harness = false
+
 # Passing arguments to the docsrs builder in order to properly document cfg's.
 # More information: https://docs.rs/about/builds#cross-compiling
 [package.metadata.docs.rs]

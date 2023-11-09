@@ -6,6 +6,11 @@ use quick_protobuf::{BytesReader, MessageRead, MessageWrite, Writer};
 use std::marker::PhantomData;
 use unsigned_varint::codec::UviBytes;
 
+mod generated;
+
+#[doc(hidden)] // NOT public API. Do not use.
+pub use generated::test as proto;
+
 /// [`Codec`] implements [`Encoder`] and [`Decoder`], uses [`unsigned_varint`]
 /// to prefix messages with their length and uses [`quick_protobuf`] and a provided
 /// `struct` implementing [`MessageRead`] and [`MessageWrite`] to do the encoding.
