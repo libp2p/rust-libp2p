@@ -459,7 +459,11 @@ fn gather_supported_protocols(handler: &impl ConnectionHandler) -> HashSet<Strea
         .listen_protocol()
         .upgrade()
         .protocol_info()
-        .filter_map(|i| StreamProtocol::try_from_owned(i.as_ref().to_owned()).ok())
+        .map(|i| {
+            let p: &StreamProtocol = i.as_ref();
+
+            p.to_owned()
+        })
         .collect()
 }
 

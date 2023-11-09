@@ -90,6 +90,12 @@ impl AsRef<str> for ProtocolId {
     }
 }
 
+impl AsRef<StreamProtocol> for ProtocolId {
+    fn as_ref(&self) -> &StreamProtocol {
+        self.protocol.as_ref()
+    }
+}
+
 impl UpgradeInfo for ProtocolConfig {
     type Info = ProtocolId;
     type InfoIter = Vec<Self::Info>;

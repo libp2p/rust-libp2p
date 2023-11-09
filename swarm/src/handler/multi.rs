@@ -26,7 +26,7 @@ use crate::handler::{
     FullyNegotiatedInbound, FullyNegotiatedOutbound, ListenUpgradeError, SubstreamProtocol,
 };
 use crate::upgrade::{InboundUpgradeSend, OutboundUpgradeSend, UpgradeInfoSend};
-use crate::Stream;
+use crate::{Stream, StreamProtocol};
 use futures::{future::BoxFuture, prelude::*, ready};
 use rand::Rng;
 use std::{
@@ -304,6 +304,12 @@ impl<H: AsRef<str>> AsRef<str> for IndexedProtoName<H> {
     }
 }
 
+impl<H: AsRef<StreamProtocol>> AsRef<StreamProtocol> for IndexedProtoName<H> {
+    fn as_ref(&self) -> &StreamProtocol {
+        self.1.as_ref()
+    }
+}
+
 /// The aggregated `InboundOpenInfo`s of supported inbound substream protocols.
 #[derive(Clone)]
 pub struct Info<K, I> {
@@ -421,7 +427,9 @@ where
     let mut set = HashSet::new();
     for infos in iter {
         for i in infos.protocol_info() {
-            let v = Vec::from(i.as_ref());
+            let x: &str = i.as_ref();
+
+            let v = Vec::from(x);
             if set.contains(&v) {
                 return Err(DuplicateProtonameError(v));
             } else {

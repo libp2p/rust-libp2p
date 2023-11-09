@@ -334,9 +334,6 @@ where
     /// handlers.
     behaviour: TBehaviour,
 
-    /// List of protocols that the behaviour says it supports.
-    supported_protocols: SmallVec<[Vec<u8>; 16]>,
-
     confirmed_external_addr: HashSet<Multiaddr>,
 
     /// Multiaddresses that our listeners are listening on,
@@ -371,7 +368,6 @@ where
             transport,
             pool: Pool::new(local_peer_id, config.pool_config),
             behaviour,
-            supported_protocols: Default::default(),
             confirmed_external_addr: Default::default(),
             listened_addrs: HashMap::new(),
             pending_handler_event: None,
@@ -760,12 +756,6 @@ where
                     }
                 };
 
-                let supported_protocols = handler
-                    .listen_protocol()
-                    .upgrade()
-                    .protocol_info()
-                    .map(|p| p.as_ref().as_bytes().to_vec())
-                    .collect();
                 let other_established_connection_ids = self
                     .pool
                     .iter_established_connections_of_peer(&peer_id)
@@ -803,7 +793,6 @@ where
                             other_established: other_established_connection_ids.len(),
                         },
                     ));
-                self.supported_protocols = supported_protocols;
                 self.pending_swarm_events
                     .push_back(SwarmEvent::ConnectionEstablished {
                         peer_id,
