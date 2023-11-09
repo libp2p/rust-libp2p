@@ -37,7 +37,6 @@ pub struct AutoNatCodec;
 
 #[async_trait]
 impl request_response::Codec for AutoNatCodec {
-    type Protocol = StreamProtocol;
     type Request = DialRequest;
     type Response = DialResponse;
 

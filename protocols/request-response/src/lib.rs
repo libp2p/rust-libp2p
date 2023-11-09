@@ -84,8 +84,8 @@ use libp2p_identity::PeerId;
 use libp2p_swarm::{
     behaviour::{AddressChange, ConnectionClosed, DialFailure, FromSwarm},
     dial_opts::DialOpts,
-    ConnectionDenied, ConnectionHandler, ConnectionId, NetworkBehaviour, NotifyHandler, THandler,
-    THandlerInEvent, THandlerOutEvent, ToSwarm,
+    ConnectionDenied, ConnectionHandler, ConnectionId, NetworkBehaviour, NotifyHandler,
+    StreamProtocol, THandler, THandlerInEvent, THandlerOutEvent, ToSwarm,
 };
 use smallvec::SmallVec;
 use std::{
@@ -339,9 +339,9 @@ where
     TCodec: Codec + Clone + Send + 'static,
 {
     /// The supported inbound protocols.
-    inbound_protocols: SmallVec<[TCodec::Protocol; 2]>,
+    inbound_protocols: SmallVec<[StreamProtocol; 2]>,
     /// The supported outbound protocols.
-    outbound_protocols: SmallVec<[TCodec::Protocol; 2]>,
+    outbound_protocols: SmallVec<[StreamProtocol; 2]>,
     /// The next (local) request ID.
     next_outbound_request_id: OutboundRequestId,
     /// The next (inbound) request ID.
@@ -370,7 +370,7 @@ where
     /// Creates a new `Behaviour` for the given protocols and configuration, using [`Default`] to construct the codec.
     pub fn new<I>(protocols: I, cfg: Config) -> Self
     where
-        I: IntoIterator<Item = (TCodec::Protocol, ProtocolSupport)>,
+        I: IntoIterator<Item = (StreamProtocol, ProtocolSupport)>,
     {
         Self::with_codec(TCodec::default(), protocols, cfg)
     }
@@ -384,7 +384,7 @@ where
     /// protocols, codec and configuration.
     pub fn with_codec<I>(codec: TCodec, protocols: I, cfg: Config) -> Self
     where
-        I: IntoIterator<Item = (TCodec::Protocol, ProtocolSupport)>,
+        I: IntoIterator<Item = (StreamProtocol, ProtocolSupport)>,
     {
         let mut inbound_protocols = SmallVec::new();
         let mut outbound_protocols = SmallVec::new();

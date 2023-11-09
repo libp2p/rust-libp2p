@@ -34,7 +34,7 @@ use libp2p_swarm::handler::{
 };
 use libp2p_swarm::{
     handler::{ConnectionHandler, ConnectionHandlerEvent, StreamUpgradeError},
-    SubstreamProtocol,
+    StreamProtocol, SubstreamProtocol,
 };
 use smallvec::SmallVec;
 use std::{
@@ -54,7 +54,7 @@ where
     TCodec: Codec,
 {
     /// The supported inbound protocols.
-    inbound_protocols: SmallVec<[TCodec::Protocol; 2]>,
+    inbound_protocols: SmallVec<[StreamProtocol; 2]>,
     /// The request/response message codec.
     codec: TCodec,
     /// Queue of events to emit in `poll()`.
@@ -92,7 +92,7 @@ where
     TCodec: Codec + Send + Clone + 'static,
 {
     pub(super) fn new(
-        inbound_protocols: SmallVec<[TCodec::Protocol; 2]>,
+        inbound_protocols: SmallVec<[StreamProtocol; 2]>,
         codec: TCodec,
         substream_timeout: Duration,
         inbound_request_id: Arc<AtomicU64>,
@@ -349,7 +349,7 @@ impl<TCodec: Codec> fmt::Debug for Event<TCodec> {
 pub struct OutboundMessage<TCodec: Codec> {
     pub(crate) request_id: OutboundRequestId,
     pub(crate) request: TCodec::Request,
-    pub(crate) protocols: SmallVec<[TCodec::Protocol; 2]>,
+    pub(crate) protocols: SmallVec<[StreamProtocol; 2]>,
 }
 
 impl<TCodec> fmt::Debug for OutboundMessage<TCodec>
@@ -367,8 +367,8 @@ where
 {
     type FromBehaviour = OutboundMessage<TCodec>;
     type ToBehaviour = Event<TCodec>;
-    type InboundProtocol = Protocol<TCodec::Protocol>;
-    type OutboundProtocol = Protocol<TCodec::Protocol>;
+    type InboundProtocol = Protocol<StreamProtocol>;
+    type OutboundProtocol = Protocol<StreamProtocol>;
     type OutboundOpenInfo = ();
     type InboundOpenInfo = ();
 
@@ -389,7 +389,7 @@ where
     fn poll(
         &mut self,
         cx: &mut Context<'_>,
-    ) -> Poll<ConnectionHandlerEvent<Protocol<TCodec::Protocol>, (), Self::ToBehaviour>> {
+    ) -> Poll<ConnectionHandlerEvent<Protocol<StreamProtocol>, (), Self::ToBehaviour>> {
         match self.worker_streams.poll_unpin(cx) {
             Poll::Ready((_, Ok(Ok(event)))) => {
                 return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(event));
