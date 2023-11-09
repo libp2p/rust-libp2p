@@ -1,6 +1,6 @@
 ## 0.53.1 - unreleased
 
-- Add `SwarmBuilder::with_quic_config` for `TcpPhase`.
+- Allow `SwarmBuilder::with_quic_config` to be called without `with_tcp` first.
   See [PR 4821](https://github.com/libp2p/rust-libp2p/pull/4821).
 
 ## 0.53.0
