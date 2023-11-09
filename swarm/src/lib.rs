@@ -123,6 +123,7 @@ pub use libp2p_swarm_derive::NetworkBehaviour;
 pub use listen_opts::ListenOpts;
 pub use stream::Stream;
 pub use stream_protocol::{InvalidProtocol, StreamProtocol};
+pub use upgrade::single::SingleProtocol;
 
 use crate::behaviour::ExternalAddrConfirmed;
 use crate::handler::UpgradeInfoSend;

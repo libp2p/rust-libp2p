@@ -25,14 +25,14 @@ use crate::{protocol, PROTOCOL_NAME};
 use either::Either;
 use futures::future;
 use libp2p_core::multiaddr::Multiaddr;
-use libp2p_core::upgrade::{DeniedUpgrade, ReadyUpgrade};
+use libp2p_core::upgrade::DeniedUpgrade;
 use libp2p_core::ConnectedPoint;
 use libp2p_swarm::handler::{
     ConnectionEvent, DialUpgradeError, FullyNegotiatedInbound, FullyNegotiatedOutbound,
     ListenUpgradeError,
 };
 use libp2p_swarm::{
-    ConnectionHandler, ConnectionHandlerEvent, StreamProtocol, StreamUpgradeError,
+    ConnectionHandler, ConnectionHandlerEvent, SingleProtocol, StreamProtocol, StreamUpgradeError,
     SubstreamProtocol,
 };
 use protocol::{inbound, outbound};
@@ -180,15 +180,15 @@ impl Handler {
 impl ConnectionHandler for Handler {
     type FromBehaviour = Command;
     type ToBehaviour = Event;
-    type InboundProtocol = Either<ReadyUpgrade<StreamProtocol>, DeniedUpgrade>;
-    type OutboundProtocol = ReadyUpgrade<StreamProtocol>;
+    type InboundProtocol = Either<SingleProtocol, DeniedUpgrade>;
+    type OutboundProtocol = SingleProtocol;
     type OutboundOpenInfo = ();
     type InboundOpenInfo = ();
 
     fn listen_protocol(&self) -> SubstreamProtocol<Self::InboundProtocol, Self::InboundOpenInfo> {
         match self.endpoint {
             ConnectedPoint::Dialer { .. } => {
-                SubstreamProtocol::new(Either::Left(ReadyUpgrade::new(PROTOCOL_NAME)), ())
+                SubstreamProtocol::new(Either::Left(SingleProtocol::new(PROTOCOL_NAME)), ())
             }
             ConnectedPoint::Listener { .. } => {
                 // By the protocol specification the listening side of a relayed connection
@@ -206,7 +206,7 @@ impl ConnectionHandler for Handler {
             Command::Connect => {
                 self.queued_events
                     .push_back(ConnectionHandlerEvent::OutboundSubstreamRequest {
-                        protocol: SubstreamProtocol::new(ReadyUpgrade::new(PROTOCOL_NAME), ()),
+                        protocol: SubstreamProtocol::new(SingleProtocol::new(PROTOCOL_NAME), ()),
                     });
                 self.attempts += 1;
             }

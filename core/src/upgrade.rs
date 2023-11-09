@@ -71,6 +71,7 @@ pub(crate) use apply::{
 pub(crate) use error::UpgradeError;
 use futures::future::Future;
 
+#[allow(deprecated)]
 pub use self::{
     denied::DeniedUpgrade, pending::PendingUpgrade, ready::ReadyUpgrade, select::SelectUpgrade,
 };
