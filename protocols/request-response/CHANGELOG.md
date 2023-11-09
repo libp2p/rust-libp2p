@@ -1,3 +1,9 @@
+## Unreleased
+
+- Remove failed connections from internal state. Fixes [Issue
+    4773](https://github.com/libp2p/rust-libp2p/issues/4773).
+    See [PR 4777](https://github.com/libp2p/rust-libp2p/pull/4777)
+
 ## 0.26.0
 
 - Remove `request_response::Config::set_connection_keep_alive` in favor of `SwarmBuilder::idle_connection_timeout`.
