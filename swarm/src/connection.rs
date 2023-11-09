@@ -740,7 +740,7 @@ enum Shutdown {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::dummy;
+    use crate::{dummy, SeveralProtocols};
     use futures::future;
     use futures::AsyncRead;
     use futures::AsyncWrite;
@@ -1214,7 +1214,7 @@ mod tests {
     impl ConnectionHandler for ConfigurableProtocolConnectionHandler {
         type FromBehaviour = Void;
         type ToBehaviour = Void;
-        type InboundProtocol = ManyProtocolsUpgrade;
+        type InboundProtocol = SeveralProtocols;
         type OutboundProtocol = DeniedUpgrade;
         type InboundOpenInfo = ();
         type OutboundOpenInfo = ();
@@ -1223,9 +1223,7 @@ mod tests {
             &self,
         ) -> SubstreamProtocol<Self::InboundProtocol, Self::InboundOpenInfo> {
             SubstreamProtocol::new(
-                ManyProtocolsUpgrade {
-                    protocols: Vec::from_iter(self.active_protocols.clone()),
-                },
+                SeveralProtocols::new(Vec::from_iter(self.active_protocols.clone())),
                 (),
             )
         }
@@ -1279,39 +1277,6 @@ mod tests {
             }
 
             Poll::Pending
-        }
-    }
-
-    struct ManyProtocolsUpgrade {
-        protocols: Vec<StreamProtocol>,
-    }
-
-    impl UpgradeInfo for ManyProtocolsUpgrade {
-        type Info = StreamProtocol;
-        type InfoIter = std::vec::IntoIter<Self::Info>;
-
-        fn protocol_info(&self) -> Self::InfoIter {
-            self.protocols.clone().into_iter()
-        }
-    }
-
-    impl<C> InboundUpgrade<C> for ManyProtocolsUpgrade {
-        type Output = C;
-        type Error = Void;
-        type Future = future::Ready<Result<Self::Output, Self::Error>>;
-
-        fn upgrade_inbound(self, stream: C, _: Self::Info) -> Self::Future {
-            future::ready(Ok(stream))
-        }
-    }
-
-    impl<C> OutboundUpgrade<C> for ManyProtocolsUpgrade {
-        type Output = C;
-        type Error = Void;
-        type Future = future::Ready<Result<Self::Output, Self::Error>>;
-
-        fn upgrade_outbound(self, stream: C, _: Self::Info) -> Self::Future {
-            future::ready(Ok(stream))
         }
     }
 }

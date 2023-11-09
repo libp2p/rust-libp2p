@@ -23,7 +23,6 @@ pub(crate) mod protocol;
 pub use protocol::ProtocolSupport;
 
 use crate::codec::Codec;
-use crate::handler::protocol::Protocol;
 use crate::{InboundRequestId, OutboundRequestId, EMPTY_QUEUE_SHRINK_THRESHOLD};
 
 use futures::channel::mpsc;
@@ -34,7 +33,7 @@ use libp2p_swarm::handler::{
 };
 use libp2p_swarm::{
     handler::{ConnectionHandler, ConnectionHandlerEvent, StreamUpgradeError},
-    StreamProtocol, SubstreamProtocol,
+    SeveralProtocols, StreamProtocol, SubstreamProtocol,
 };
 use smallvec::SmallVec;
 use std::{
@@ -367,18 +366,13 @@ where
 {
     type FromBehaviour = OutboundMessage<TCodec>;
     type ToBehaviour = Event<TCodec>;
-    type InboundProtocol = Protocol<StreamProtocol>;
-    type OutboundProtocol = Protocol<StreamProtocol>;
+    type InboundProtocol = SeveralProtocols;
+    type OutboundProtocol = SeveralProtocols;
     type OutboundOpenInfo = ();
     type InboundOpenInfo = ();
 
     fn listen_protocol(&self) -> SubstreamProtocol<Self::InboundProtocol, Self::InboundOpenInfo> {
-        SubstreamProtocol::new(
-            Protocol {
-                protocols: self.inbound_protocols.clone(),
-            },
-            (),
-        )
+        SubstreamProtocol::new(SeveralProtocols::new(self.inbound_protocols.to_vec()), ())
     }
 
     fn on_behaviour_event(&mut self, request: Self::FromBehaviour) {
@@ -389,7 +383,7 @@ where
     fn poll(
         &mut self,
         cx: &mut Context<'_>,
-    ) -> Poll<ConnectionHandlerEvent<Protocol<StreamProtocol>, (), Self::ToBehaviour>> {
+    ) -> Poll<ConnectionHandlerEvent<SeveralProtocols, (), Self::ToBehaviour>> {
         match self.worker_streams.poll_unpin(cx) {
             Poll::Ready((_, Ok(Ok(event)))) => {
                 return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(event));
@@ -447,7 +441,7 @@ where
             self.requested_outbound.push_back(request);
 
             return Poll::Ready(ConnectionHandlerEvent::OutboundSubstreamRequest {
-                protocol: SubstreamProtocol::new(Protocol { protocols }, ()),
+                protocol: SubstreamProtocol::new(SeveralProtocols::new(protocols.to_vec()), ()),
             });
         }
 

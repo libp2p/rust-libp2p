@@ -23,11 +23,6 @@
 //! receives a request and sends a response, whereas the
 //! outbound upgrade send a request and receives a response.
 
-use futures::future::{ready, Ready};
-use libp2p_core::upgrade::{InboundUpgrade, OutboundUpgrade, UpgradeInfo};
-use libp2p_swarm::Stream;
-use smallvec::SmallVec;
-
 /// The level of support for a particular protocol.
 #[derive(Debug, Clone)]
 pub enum ProtocolSupport {
@@ -54,51 +49,5 @@ impl ProtocolSupport {
             ProtocolSupport::Outbound | ProtocolSupport::Full => true,
             ProtocolSupport::Inbound => false,
         }
-    }
-}
-
-/// Response substream upgrade protocol.
-///
-/// Receives a request and sends a response.
-#[derive(Debug)]
-pub struct Protocol<P> {
-    pub(crate) protocols: SmallVec<[P; 2]>,
-}
-
-impl<P> UpgradeInfo for Protocol<P>
-where
-    P: AsRef<str> + Clone,
-{
-    type Info = P;
-    type InfoIter = smallvec::IntoIter<[Self::Info; 2]>;
-
-    fn protocol_info(&self) -> Self::InfoIter {
-        self.protocols.clone().into_iter()
-    }
-}
-
-impl<P> InboundUpgrade<Stream> for Protocol<P>
-where
-    P: AsRef<str> + Clone,
-{
-    type Output = (Stream, P);
-    type Error = void::Void;
-    type Future = Ready<Result<Self::Output, Self::Error>>;
-
-    fn upgrade_inbound(self, io: Stream, protocol: Self::Info) -> Self::Future {
-        ready(Ok((io, protocol)))
-    }
-}
-
-impl<P> OutboundUpgrade<Stream> for Protocol<P>
-where
-    P: AsRef<str> + Clone,
-{
-    type Output = (Stream, P);
-    type Error = void::Void;
-    type Future = Ready<Result<Self::Output, Self::Error>>;
-
-    fn upgrade_outbound(self, io: Stream, protocol: Self::Info) -> Self::Future {
-        ready(Ok((io, protocol)))
     }
 }
