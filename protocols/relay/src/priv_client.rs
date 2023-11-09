@@ -80,8 +80,7 @@ pub struct Behaviour {
     /// connection.
     directly_connected_peers: HashMap<PeerId, Vec<ConnectionId>>,
 
-    /// Direct connection address
-    direct_connection_addrs: HashMap<ConnectionId, Multiaddr>,
+    relay_connection_addr: HashMap<ConnectionId, Multiaddr>,
 
     /// Queue of actions to return when polled.
     queued_actions: VecDeque<ToSwarm<Event, Either<handler::In, Void>>>,
@@ -96,7 +95,7 @@ pub fn new(local_peer_id: PeerId) -> (Transport, Behaviour) {
         local_peer_id,
         from_transport,
         directly_connected_peers: Default::default(),
-        direct_connection_addrs: Default::default(),
+        relay_connection_addr: Default::default(),
         queued_actions: Default::default(),
         pending_handler_commands: Default::default(),
     };
@@ -131,7 +130,14 @@ impl Behaviour {
                     unreachable!("`on_connection_closed` for unconnected peer.")
                 }
             };
-            self.direct_connection_addrs.remove(&connection_id);
+            if let Some(addr) = self.relay_connection_addr.remove(&connection_id) {
+                let addr = addr
+                    .with(Protocol::P2pCircuit)
+                    .with(Protocol::P2p(self.local_peer_id));
+
+                self.queued_actions
+                    .push_back(ToSwarm::ExternalAddrExpired(addr));
+            }
         }
     }
 }
@@ -192,10 +198,6 @@ impl NetworkBehaviour for Behaviour {
                         .entry(peer_id)
                         .or_default()
                         .push(connection_id);
-
-                    let addr = endpoint.get_remote_address().clone();
-
-                    self.direct_connection_addrs.insert(connection_id, addr);
                 }
 
                 if let Some(event) = self.pending_handler_commands.remove(&connection_id) {
@@ -210,6 +212,7 @@ impl NetworkBehaviour for Behaviour {
                 self.on_connection_closed(connection_closed)
             }
             FromSwarm::DialFailure(DialFailure { connection_id, .. }) => {
+                self.relay_connection_addr.remove(&connection_id);
                 self.pending_handler_commands.remove(&connection_id);
             }
             _ => {}
@@ -230,10 +233,10 @@ impl NetworkBehaviour for Behaviour {
         let event = match handler_event {
             handler::Event::ReservationReqAccepted { renewal, limit } => {
                 let addr = self
-                    .direct_connection_addrs
+                    .relay_connection_addr
                     .get(&connection)
                     .cloned()
-                    .expect("Connection to be direct")
+                    .expect("Relay connection exist")
                     .with(Protocol::P2pCircuit)
                     .with(Protocol::P2p(self.local_peer_id));
 
@@ -279,17 +282,29 @@ impl NetworkBehaviour for Behaviour {
                     .get(&relay_peer_id)
                     .and_then(|cs| cs.first())
                 {
-                    Some(connection_id) => ToSwarm::NotifyHandler {
-                        peer_id: relay_peer_id,
-                        handler: NotifyHandler::One(*connection_id),
-                        event: Either::Left(handler::In::Reserve { to_listener }),
-                    },
+                    Some(connection_id) => {
+                        self.relay_connection_addr.insert(
+                            *connection_id,
+                            relay_addr.with(Protocol::P2p(relay_peer_id)),
+                        );
+
+                        ToSwarm::NotifyHandler {
+                            peer_id: relay_peer_id,
+                            handler: NotifyHandler::One(*connection_id),
+                            event: Either::Left(handler::In::Reserve { to_listener }),
+                        }
+                    }
                     None => {
                         let opts = DialOpts::peer_id(relay_peer_id)
-                            .addresses(vec![relay_addr])
+                            .addresses(vec![relay_addr.clone()])
                             .extend_addresses_through_behaviour()
                             .build();
                         let relayed_connection_id = opts.connection_id();
+
+                        self.relay_connection_addr.insert(
+                            relayed_connection_id,
+                            relay_addr.with(Protocol::P2p(relay_peer_id)),
+                        );
 
                         self.pending_handler_commands
                             .insert(relayed_connection_id, handler::In::Reserve { to_listener });
