@@ -146,7 +146,7 @@ mod tests {
     fn quic_config() {
         let _ = SwarmBuilder::with_new_identity()
             .with_tokio()
-            .with_quic_config(|config: libp2p_quic::Config| config)
+            .with_quic_config(|config| config)
             .with_behaviour(|_| libp2p_swarm::dummy::Behaviour)
             .unwrap()
             .build();
@@ -157,7 +157,7 @@ mod tests {
     fn async_std_quic_config() {
         let _ = SwarmBuilder::with_new_identity()
             .with_async_std()
-            .with_quic_config(|config: libp2p_quic::Config| config)
+            .with_quic_config(|config| config)
             .with_behaviour(|_| libp2p_swarm::dummy::Behaviour)
             .unwrap()
             .build();
@@ -273,7 +273,7 @@ mod tests {
                 libp2p_yamux::Config::default,
             )
             .unwrap()
-            .with_quic_config(|config: libp2p_quic::Config| config)
+            .with_quic_config(|config| config)
             .with_behaviour(|_| libp2p_swarm::dummy::Behaviour)
             .unwrap()
             .build();
@@ -297,7 +297,7 @@ mod tests {
                 libp2p_yamux::Config::default,
             )
             .unwrap()
-            .with_quic_config(|config: libp2p_quic::Config| config)
+            .with_quic_config(|config| config)
             .with_behaviour(|_| libp2p_swarm::dummy::Behaviour)
             .unwrap()
             .build();
