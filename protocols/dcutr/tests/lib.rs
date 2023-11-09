@@ -199,7 +199,7 @@ async fn wait_for_reservation(
                 addr_observed = true;
             }
             SwarmEvent::Behaviour(ClientEvent::Identify(_)) => {}
-            SwarmEvent::NewExternalAddrCandidate { .. } => {},
+            SwarmEvent::NewExternalAddrCandidate { .. } => {}
             SwarmEvent::ExternalAddrConfirmed { address } => {
                 assert_eq!(address, client_addr);
             }
