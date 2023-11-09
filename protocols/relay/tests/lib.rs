@@ -527,7 +527,7 @@ async fn wait_for_reservation(
 
     loop {
         match client.select_next_some().await {
-            SwarmEvent::ExternalAddrConfirmed { address } => {
+            SwarmEvent::ExternalAddrConfirmed { address } if !is_renewal => {
                 assert_eq!(address, client_addr);
             }
             SwarmEvent::Behaviour(ClientEvent::Relay(
