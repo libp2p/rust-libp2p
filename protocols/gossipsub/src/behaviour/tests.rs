@@ -23,8 +23,8 @@
 use super::*;
 use crate::subscription_filter::WhitelistSubscriptionFilter;
 use crate::transform::{DataTransform, IdentityTransform};
-use crate::ValidationError;
 use crate::{config::Config, config::ConfigBuilder, IdentTopic as Topic, TopicScoreParams};
+use crate::{Rpc, ValidationError};
 use async_std::net::Ipv4Addr;
 use byteorder::{BigEndian, ByteOrder};
 use libp2p_core::{ConnectedPoint, Endpoint};
@@ -404,11 +404,11 @@ fn test_subscribe() {
         .iter()
         .fold(vec![], |mut collected_subscriptions, e| match e {
             ToSwarm::NotifyHandler {
-                event: HandlerIn::Message(ref message),
+                event: HandlerIn::Message(RpcOut::Subscriptions(subscriptions)),
                 ..
             } => {
-                for s in &message.subscriptions {
-                    if let Some(true) = s.subscribe {
+                for s in subscriptions {
+                    if let SubscriptionAction::Subscribe = s.action {
                         collected_subscriptions.push(s.clone())
                     };
                 }
@@ -472,11 +472,11 @@ fn test_unsubscribe() {
         .iter()
         .fold(vec![], |mut collected_subscriptions, e| match e {
             ToSwarm::NotifyHandler {
-                event: HandlerIn::Message(ref message),
+                event: HandlerIn::Message(RpcOut::Subscriptions(subscriptions)),
                 ..
             } => {
-                for s in &message.subscriptions {
-                    if let Some(true) = s.subscribe {
+                for s in subscriptions {
+                    if let SubscriptionAction::Subscribe = s.action {
                         collected_subscriptions.push(s.clone())
                     };
                 }
@@ -657,16 +657,13 @@ fn test_publish_without_flood_publishing() {
     // Collect all publish messages
     let publishes = gs
         .events
-        .iter()
+        .into_iter()
         .fold(vec![], |mut collected_publish, e| match e {
             ToSwarm::NotifyHandler {
-                event: HandlerIn::Message(ref message),
+                event: HandlerIn::Message(RpcOut::Publish(message)),
                 ..
             } => {
-                let event = proto_to_message(message);
-                for s in &event.messages {
-                    collected_publish.push(s.clone());
-                }
+                collected_publish.push(message);
                 collected_publish
             }
             _ => collected_publish,
@@ -747,16 +744,13 @@ fn test_fanout() {
     // Collect all publish messages
     let publishes = gs
         .events
-        .iter()
+        .into_iter()
         .fold(vec![], |mut collected_publish, e| match e {
             ToSwarm::NotifyHandler {
-                event: HandlerIn::Message(ref message),
+                event: HandlerIn::Message(RpcOut::Publish(message)),
                 ..
             } => {
-                let event = proto_to_message(message);
-                for s in &event.messages {
-                    collected_publish.push(s.clone());
-                }
+                collected_publish.push(message);
                 collected_publish
             }
             _ => collected_publish,
@@ -803,9 +797,9 @@ fn test_inject_connected() {
         .iter()
         .filter(|e| match e {
             ToSwarm::NotifyHandler {
-                event: HandlerIn::Message(ref m),
+                event: HandlerIn::Message(RpcOut::Subscriptions(subscriptions)),
                 ..
-            } => !m.subscriptions.is_empty(),
+            } => !subscriptions.is_empty(),
             _ => false,
         })
         .collect();
@@ -813,12 +807,12 @@ fn test_inject_connected() {
     // check that there are two subscriptions sent to each peer
     for sevent in send_events.clone() {
         if let ToSwarm::NotifyHandler {
-            event: HandlerIn::Message(ref m),
+            event: HandlerIn::Message(RpcOut::Subscriptions(subscriptions)),
             ..
         } = sevent
         {
             assert!(
-                m.subscriptions.len() == 2,
+                subscriptions.len() == 2,
                 "There should be two subscriptions sent to each peer (1 for each topic)."
             );
         };
@@ -1041,21 +1035,18 @@ fn test_handle_iwant_msg_cached() {
     gs.handle_iwant(&peers[7], vec![msg_id.clone()]);
 
     // the messages we are sending
-    let sent_messages = gs
-        .events
-        .iter()
-        .fold(vec![], |mut collected_messages, e| match e {
+    let sent_messages = gs.events.into_iter().fold(
+        Vec::<RawMessage>::new(),
+        |mut collected_messages, e| match e {
             ToSwarm::NotifyHandler { event, .. } => {
-                if let HandlerIn::Message(ref m) = event {
-                    let event = proto_to_message(m);
-                    for c in &event.messages {
-                        collected_messages.push(c.clone())
-                    }
+                if let HandlerIn::Message(RpcOut::Forward(mut messages)) = event {
+                    collected_messages.append(&mut messages);
                 }
                 collected_messages
             }
             _ => collected_messages,
-        });
+        },
+    );
 
     assert!(
         sent_messages
@@ -1104,16 +1095,12 @@ fn test_handle_iwant_msg_cached_shifted() {
         // is the message is being sent?
         let message_exists = gs.events.iter().any(|e| match e {
             ToSwarm::NotifyHandler {
-                event: HandlerIn::Message(ref m),
+                event: HandlerIn::Message(RpcOut::Forward(messages)),
                 ..
-            } => {
-                let event = proto_to_message(m);
-                event
-                    .messages
-                    .iter()
-                    .map(|msg| gs.data_transform.inbound_transform(msg.clone()).unwrap())
-                    .any(|msg| gs.config.message_id(&msg) == msg_id)
-            }
+            } => messages
+                .iter()
+                .map(|msg| gs.data_transform.inbound_transform(msg.clone()).unwrap())
+                .any(|msg| gs.config.message_id(&msg) == msg_id),
             _ => false,
         });
         // default history_length is 5, expect no messages after shift > 5
@@ -1346,16 +1333,9 @@ fn count_control_msgs<D: DataTransform, F: TopicSubscriptionFilter>(
             .map(|e| match e {
                 ToSwarm::NotifyHandler {
                     peer_id,
-                    event: HandlerIn::Message(ref m),
+                    event: HandlerIn::Message(RpcOut::Control(actions)),
                     ..
-                } => {
-                    let event = proto_to_message(m);
-                    event
-                        .control_msgs
-                        .iter()
-                        .filter(|m| filter(peer_id, m))
-                        .count()
-                }
+                } => actions.iter().filter(|m| filter(peer_id, m)).count(),
                 _ => 0,
             })
             .sum::<usize>()
@@ -1567,17 +1547,11 @@ fn do_forward_messages_to_explicit_peers() {
             .filter(|e| match e {
                 ToSwarm::NotifyHandler {
                     peer_id,
-                    event: HandlerIn::Message(ref m),
+                    event: HandlerIn::Message(RpcOut::Forward(messages)),
                     ..
                 } => {
-                    let event = proto_to_message(m);
                     peer_id == &peers[0]
-                        && event
-                            .messages
-                            .iter()
-                            .filter(|m| m.data == message.data)
-                            .count()
-                            > 0
+                        && messages.iter().filter(|m| m.data == message.data).count() > 0
                 }
                 _ => false,
             })
@@ -2111,14 +2085,11 @@ fn test_flood_publish() {
     // Collect all publish messages
     let publishes = gs
         .events
-        .iter()
+        .into_iter()
         .fold(vec![], |mut collected_publish, e| match e {
             ToSwarm::NotifyHandler { event, .. } => {
-                if let HandlerIn::Message(ref m) = event {
-                    let event = proto_to_message(m);
-                    for s in &event.messages {
-                        collected_publish.push(s.clone());
-                    }
+                if let HandlerIn::Message(RpcOut::Publish(message)) = event {
+                    collected_publish.push(message);
                 }
                 collected_publish
             }
@@ -2672,14 +2643,12 @@ fn test_iwant_msg_from_peer_below_gossip_threshold_gets_ignored() {
     // the messages we are sending
     let sent_messages = gs
         .events
-        .iter()
+        .into_iter()
         .fold(vec![], |mut collected_messages, e| match e {
             ToSwarm::NotifyHandler { event, peer_id, .. } => {
-                if let HandlerIn::Message(ref m) = event {
-                    let event = proto_to_message(m);
-                    for c in &event.messages {
-                        collected_messages.push((*peer_id, c.clone()))
-                    }
+                if let HandlerIn::Message(RpcOut::Forward(messages)) = event {
+                    let mut cm = messages.into_iter().map(|m| (peer_id, m)).collect();
+                    collected_messages.append(&mut cm);
                 }
                 collected_messages
             }
@@ -2820,14 +2789,11 @@ fn test_do_not_publish_to_peer_below_publish_threshold() {
     // Collect all publish messages
     let publishes = gs
         .events
-        .iter()
+        .into_iter()
         .fold(vec![], |mut collected_publish, e| match e {
             ToSwarm::NotifyHandler { event, peer_id, .. } => {
-                if let HandlerIn::Message(ref m) = event {
-                    let event = proto_to_message(m);
-                    for s in &event.messages {
-                        collected_publish.push((*peer_id, s.clone()));
-                    }
+                if let HandlerIn::Message(RpcOut::Publish(message)) = event {
+                    collected_publish.push((peer_id, message));
                 }
                 collected_publish
             }
@@ -2877,14 +2843,11 @@ fn test_do_not_flood_publish_to_peer_below_publish_threshold() {
     // Collect all publish messages
     let publishes = gs
         .events
-        .iter()
+        .into_iter()
         .fold(vec![], |mut collected_publish, e| match e {
             ToSwarm::NotifyHandler { event, peer_id, .. } => {
-                if let HandlerIn::Message(ref m) = event {
-                    let event = proto_to_message(m);
-                    for s in &event.messages {
-                        collected_publish.push((*peer_id, s.clone()));
-                    }
+                if let HandlerIn::Message(RpcOut::Publish(message)) = event {
+                    collected_publish.push((peer_id, message));
                 }
                 collected_publish
             }
@@ -4405,11 +4368,10 @@ fn test_ignore_too_many_iwants_from_same_peer_for_same_message() {
             .iter()
             .map(|e| match e {
                 ToSwarm::NotifyHandler {
-                    event: HandlerIn::Message(ref m),
+                    event: HandlerIn::Message(RpcOut::Forward(messages)),
                     ..
                 } => {
-                    let event = proto_to_message(m);
-                    event.messages.len()
+                    messages.len()
                 }
                 _ => 0,
             })
@@ -4815,11 +4777,8 @@ fn test_publish_to_floodsub_peers_without_flood_publish() {
         .fold(vec![], |mut collected_publish, e| match e {
             ToSwarm::NotifyHandler { peer_id, event, .. } => {
                 if peer_id == &p1 || peer_id == &p2 {
-                    if let HandlerIn::Message(ref m) = event {
-                        let event = proto_to_message(m);
-                        for s in &event.messages {
-                            collected_publish.push(s.clone());
-                        }
+                    if let HandlerIn::Message(RpcOut::Publish(message)) = event {
+                        collected_publish.push(message);
                     }
                 }
                 collected_publish
@@ -4872,11 +4831,8 @@ fn test_do_not_use_floodsub_in_fanout() {
         .fold(vec![], |mut collected_publish, e| match e {
             ToSwarm::NotifyHandler { peer_id, event, .. } => {
                 if peer_id == &p1 || peer_id == &p2 {
-                    if let HandlerIn::Message(ref m) = event {
-                        let event = proto_to_message(m);
-                        for s in &event.messages {
-                            collected_publish.push(s.clone());
-                        }
+                    if let HandlerIn::Message(RpcOut::Publish(message)) = event {
+                        collected_publish.push(message);
                     }
                 }
                 collected_publish
@@ -5122,7 +5078,7 @@ fn test_subscribe_and_graft_with_negative_score() {
                 p2,
                 connection_id,
                 HandlerEvent::Message {
-                    rpc: proto_to_message(&message),
+                    rpc: proto_to_message(&message.into_protobuf()),
                     invalid_messages: vec![],
                 },
             );
