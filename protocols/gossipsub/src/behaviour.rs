@@ -61,7 +61,7 @@ use crate::types::{
     ControlAction, Message, MessageAcceptance, MessageId, PeerInfo, RawMessage, Subscription,
     SubscriptionAction,
 };
-use crate::types::{PeerConnections, PeerKind, Rpc};
+use crate::types::{PeerConnections, PeerKind, RpcOut};
 use crate::{rpc_proto::proto, TopicScoreParams};
 use crate::{PublishError, SubscriptionError, ValidationError};
 use instant::SystemTime;
@@ -536,14 +536,10 @@ where
         // send subscription request to all peers
         let peer_list = self.peer_topics.keys().cloned().collect::<Vec<_>>();
         if !peer_list.is_empty() {
-            let event = Rpc {
-                messages: Vec::new(),
-                subscriptions: vec![Subscription {
-                    topic_hash: topic_hash.clone(),
-                    action: SubscriptionAction::Subscribe,
-                }],
-                control_msgs: Vec::new(),
-            }
+            let event = RpcOut::Subscriptions(vec![Subscription {
+                topic_hash: topic_hash.clone(),
+                action: SubscriptionAction::Subscribe,
+            }])
             .into_protobuf();
 
             for peer in peer_list {
@@ -576,14 +572,10 @@ where
         // announce to all peers
         let peer_list = self.peer_topics.keys().cloned().collect::<Vec<_>>();
         if !peer_list.is_empty() {
-            let event = Rpc {
-                messages: Vec::new(),
-                subscriptions: vec![Subscription {
-                    topic_hash: topic_hash.clone(),
-                    action: SubscriptionAction::Unsubscribe,
-                }],
-                control_msgs: Vec::new(),
-            }
+            let event = RpcOut::Subscriptions(vec![Subscription {
+                topic_hash: topic_hash.clone(),
+                action: SubscriptionAction::Unsubscribe,
+            }])
             .into_protobuf();
 
             for peer in peer_list {
@@ -624,12 +616,7 @@ where
             topic: raw_message.topic.clone(),
         });
 
-        let event = Rpc {
-            subscriptions: Vec::new(),
-            messages: vec![raw_message.clone()],
-            control_msgs: Vec::new(),
-        }
-        .into_protobuf();
+        let event = RpcOut::Publish(raw_message.clone()).into_protobuf();
 
         // check that the size doesn't exceed the max transmission size
         if event.get_size() > self.config.max_transmit_size() {
@@ -1360,12 +1347,7 @@ where
                 .map(|message| message.topic.clone())
                 .collect::<HashSet<TopicHash>>();
 
-            let message = Rpc {
-                subscriptions: Vec::new(),
-                messages: message_list,
-                control_msgs: Vec::new(),
-            }
-            .into_protobuf();
+            let message = RpcOut::Forward(message_list).into_protobuf();
 
             let msg_bytes = message.get_size();
 
@@ -1537,15 +1519,9 @@ where
                 "GRAFT: Not subscribed to topics -  Sending PRUNE to peer"
             );
 
-            if let Err(e) = self.send_message(
-                *peer_id,
-                Rpc {
-                    subscriptions: Vec::new(),
-                    messages: Vec::new(),
-                    control_msgs: prune_messages,
-                }
-                .into_protobuf(),
-            ) {
+            if let Err(e) =
+                self.send_message(*peer_id, RpcOut::Control(prune_messages).into_protobuf())
+            {
                 tracing::error!("Failed to send PRUNE: {:?}", e);
             }
         }
@@ -2043,14 +2019,12 @@ where
             && self
                 .send_message(
                     *propagation_source,
-                    Rpc {
-                        subscriptions: Vec::new(),
-                        messages: Vec::new(),
-                        control_msgs: topics_to_graft
+                    RpcOut::Control(
+                        topics_to_graft
                             .into_iter()
                             .map(|topic_hash| ControlAction::Graft { topic_hash })
                             .collect(),
-                    }
+                    )
                     .into_protobuf(),
                 )
                 .is_err()
@@ -2612,15 +2586,7 @@ where
 
             // send the control messages
             if self
-                .send_message(
-                    peer,
-                    Rpc {
-                        subscriptions: Vec::new(),
-                        messages: Vec::new(),
-                        control_msgs,
-                    }
-                    .into_protobuf(),
-                )
+                .send_message(peer, RpcOut::Control(control_msgs).into_protobuf())
                 .is_err()
             {
                 tracing::error!("Failed to send control messages. Message too large");
@@ -2652,15 +2618,7 @@ where
             }
 
             if self
-                .send_message(
-                    *peer,
-                    Rpc {
-                        subscriptions: Vec::new(),
-                        messages: Vec::new(),
-                        control_msgs: remaining_prunes,
-                    }
-                    .into_protobuf(),
-                )
+                .send_message(*peer, RpcOut::Control(remaining_prunes).into_protobuf())
                 .is_err()
             {
                 tracing::error!("Failed to send prune messages. Message too large");
@@ -2721,12 +2679,7 @@ where
 
         // forward the message to peers
         if !recipient_peers.is_empty() {
-            let event = Rpc {
-                subscriptions: Vec::new(),
-                messages: vec![message.clone()],
-                control_msgs: Vec::new(),
-            }
-            .into_protobuf();
+            let event = RpcOut::Forward(vec![message.clone()]).into_protobuf();
 
             let msg_bytes = event.get_size();
             for peer in recipient_peers.iter() {
@@ -2848,15 +2801,7 @@ where
     fn flush_control_pool(&mut self) {
         for (peer, controls) in self.control_pool.drain().collect::<Vec<_>>() {
             if self
-                .send_message(
-                    peer,
-                    Rpc {
-                        subscriptions: Vec::new(),
-                        messages: Vec::new(),
-                        control_msgs: controls,
-                    }
-                    .into_protobuf(),
-                )
+                .send_message(peer, RpcOut::Control(controls).into_protobuf())
                 .is_err()
             {
                 tracing::error!("Failed to flush control pool. Message too large");
@@ -3073,12 +3018,7 @@ where
                     if self
                         .send_message(
                             peer_id,
-                            Rpc {
-                                messages: Vec::new(),
-                                subscriptions,
-                                control_msgs: Vec::new(),
-                            }
-                            .into_protobuf(),
+                            RpcOut::Subscriptions(subscriptions).into_protobuf(),
                         )
                         .is_err()
                     {
@@ -3668,14 +3608,6 @@ mod local_test {
     use asynchronous_codec::Encoder;
     use quickcheck::*;
 
-    fn empty_rpc() -> Rpc {
-        Rpc {
-            subscriptions: Vec::new(),
-            messages: Vec::new(),
-            control_msgs: Vec::new(),
-        }
-    }
-
     fn test_message() -> RawMessage {
         RawMessage {
             source: Some(PeerId::random()),
@@ -3702,20 +3634,33 @@ mod local_test {
         }
     }
 
-    impl Arbitrary for Rpc {
+    impl Arbitrary for RpcOut {
         fn arbitrary(g: &mut Gen) -> Self {
-            let mut rpc = empty_rpc();
-
-            for _ in 0..g.gen_range(0..10u8) {
-                rpc.subscriptions.push(test_subscription());
+            match u8::arbitrary(g) % 4 {
+                0 => {
+                    let mut subscriptions = Vec::new();
+                    for _ in 0..g.gen_range(0..10u8) {
+                        subscriptions.push(test_subscription());
+                    }
+                    RpcOut::Subscriptions(subscriptions)
+                }
+                1 => RpcOut::Publish(test_message()),
+                2 => {
+                    let mut messages = Vec::new();
+                    for _ in 0..g.gen_range(0..10u8) {
+                        messages.push(test_message());
+                    }
+                    RpcOut::Forward(messages)
+                }
+                3 => {
+                    let mut control = Vec::new();
+                    for _ in 0..g.gen_range(0..10u8) {
+                        control.push(test_control());
+                    }
+                    RpcOut::Control(control)
+                }
+                _ => panic!("outside range"),
             }
-            for _ in 0..g.gen_range(0..10u8) {
-                rpc.messages.push(test_message());
-            }
-            for _ in 0..g.gen_range(0..10u8) {
-                rpc.control_msgs.push(test_control());
-            }
-            rpc
         }
     }
 
@@ -3731,10 +3676,7 @@ mod local_test {
         let gs: Behaviour = Behaviour::new(MessageAuthenticity::RandomAuthor, config).unwrap();
 
         // Message under the limit should be fine.
-        let mut rpc = empty_rpc();
-        rpc.messages.push(test_message());
-
-        let mut rpc_proto = rpc.clone().into_protobuf();
+        let mut rpc_proto = RpcOut::Publish(test_message()).into_protobuf();
         let fragmented_messages = gs.fragment_message(rpc_proto.clone()).unwrap();
         assert_eq!(
             fragmented_messages,
@@ -3744,9 +3686,10 @@ mod local_test {
 
         // Messages over the limit should be split
 
+        let mut messages = vec![];
         while rpc_proto.get_size() < max_transmit_size {
-            rpc.messages.push(test_message());
-            rpc_proto = rpc.clone().into_protobuf();
+            messages.push(test_message());
+            rpc_proto = RpcOut::Forward(messages.clone()).into_protobuf();
         }
 
         let fragmented_messages = gs
@@ -3769,7 +3712,7 @@ mod local_test {
 
     #[test]
     fn test_message_fragmentation() {
-        fn prop(rpc: Rpc) {
+        fn prop(rpc: RpcOut) {
             let max_transmit_size = 500;
             let config = crate::config::ConfigBuilder::default()
                 .max_transmit_size(max_transmit_size)

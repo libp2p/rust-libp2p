@@ -518,7 +518,7 @@ impl Decoder for GossipsubCodec {
 mod tests {
     use super::*;
     use crate::config::Config;
-    use crate::{Behaviour, ConfigBuilder};
+    use crate::{types::RpcOut, Behaviour, ConfigBuilder};
     use crate::{IdentTopic as Topic, Version};
     use libp2p_identity::Keypair;
     use quickcheck::*;
@@ -592,12 +592,7 @@ mod tests {
         fn prop(message: Message) {
             let message = message.0;
 
-            let rpc = Rpc {
-                messages: vec![message],
-                subscriptions: vec![],
-                control_msgs: vec![],
-            };
-
+            let rpc = RpcOut::Publish(message.clone());
             let mut codec = GossipsubCodec::new(codec::UviBytes::default(), ValidationMode::Strict);
             let mut buf = BytesMut::new();
             codec.encode(rpc.into_protobuf(), &mut buf).unwrap();
@@ -607,7 +602,7 @@ mod tests {
                 HandlerEvent::Message { mut rpc, .. } => {
                     rpc.messages[0].validated = true;
 
-                    assert_eq!(rpc, rpc);
+                    assert_eq!(vec![message], rpc.messages);
                 }
                 _ => panic!("Must decode a message"),
             }
