@@ -182,10 +182,14 @@ impl<'a> WriterBackend for MaybeUninitWriterBackend<'a> {
             return Err(quick_protobuf::errors::Error::UnexpectedEndOfBuffer);
         }
 
-        for b in buf {
-            self.memory[*self.written].write(*b);
-            *self.written += 1;
-        }
+        // SAFETY: &[u8] and &[MaybeUninit<u8>] have the same layout
+        let uninit_src: &[MaybeUninit<u8>] = unsafe { std::mem::transmute(buf) };
+
+        let start = *self.written;
+        let end = *self.written + buf.len();
+
+        self.memory[start..end].copy_from_slice(uninit_src);
+        *self.written += buf.len();
 
         Ok(())
     }
