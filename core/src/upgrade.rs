@@ -58,7 +58,6 @@
 //!
 
 mod apply;
-mod denied;
 mod either;
 mod error;
 mod ready;
@@ -71,7 +70,7 @@ pub(crate) use error::UpgradeError;
 use futures::future::Future;
 
 #[allow(deprecated)]
-pub use self::{denied::DeniedUpgrade, ready::ReadyUpgrade, select::SelectUpgrade};
+pub use self::{ready::ReadyUpgrade, select::SelectUpgrade};
 pub use crate::Negotiated;
 pub use multistream_select::{NegotiatedComplete, NegotiationError, ProtocolError, Version};
 

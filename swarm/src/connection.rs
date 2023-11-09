@@ -740,11 +740,9 @@ enum Shutdown {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{dummy, SeveralProtocols};
-    use futures::future;
+    use crate::{dummy, NoProtocols, SeveralProtocols};
     use futures::AsyncRead;
     use futures::AsyncWrite;
-    use libp2p_core::upgrade::{DeniedUpgrade, InboundUpgrade, OutboundUpgrade, UpgradeInfo};
     use libp2p_core::StreamMuxer;
     use quickcheck::*;
     use std::sync::{Arc, Weak};
@@ -1107,7 +1105,7 @@ mod tests {
 
     #[derive(Default)]
     struct ConfigurableProtocolConnectionHandler {
-        events: Vec<ConnectionHandlerEvent<DeniedUpgrade, (), Void>>,
+        events: Vec<ConnectionHandlerEvent<NoProtocols, (), Void>>,
         active_protocols: HashSet<StreamProtocol>,
         local_added: Vec<Vec<StreamProtocol>>,
         local_removed: Vec<Vec<StreamProtocol>>,
@@ -1142,15 +1140,15 @@ mod tests {
     impl ConnectionHandler for MockConnectionHandler {
         type FromBehaviour = Void;
         type ToBehaviour = Void;
-        type InboundProtocol = DeniedUpgrade;
-        type OutboundProtocol = DeniedUpgrade;
+        type InboundProtocol = NoProtocols;
+        type OutboundProtocol = NoProtocols;
         type InboundOpenInfo = ();
         type OutboundOpenInfo = ();
 
         fn listen_protocol(
             &self,
         ) -> SubstreamProtocol<Self::InboundProtocol, Self::InboundOpenInfo> {
-            SubstreamProtocol::new(DeniedUpgrade, ()).with_timeout(self.upgrade_timeout)
+            SubstreamProtocol::new(NoProtocols::new(), ()).with_timeout(self.upgrade_timeout)
         }
 
         fn on_connection_event(
@@ -1202,7 +1200,7 @@ mod tests {
             if self.outbound_requested {
                 self.outbound_requested = false;
                 return Poll::Ready(ConnectionHandlerEvent::OutboundSubstreamRequest {
-                    protocol: SubstreamProtocol::new(DeniedUpgrade, ())
+                    protocol: SubstreamProtocol::new(NoProtocols::new(), ())
                         .with_timeout(self.upgrade_timeout),
                 });
             }
@@ -1215,7 +1213,7 @@ mod tests {
         type FromBehaviour = Void;
         type ToBehaviour = Void;
         type InboundProtocol = SeveralProtocols;
-        type OutboundProtocol = DeniedUpgrade;
+        type OutboundProtocol = NoProtocols;
         type InboundOpenInfo = ();
         type OutboundOpenInfo = ();
 

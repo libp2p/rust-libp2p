@@ -25,14 +25,13 @@ use crate::{protocol, PROTOCOL_NAME};
 use either::Either;
 use futures::future;
 use libp2p_core::multiaddr::Multiaddr;
-use libp2p_core::upgrade::DeniedUpgrade;
 use libp2p_core::ConnectedPoint;
 use libp2p_swarm::handler::{
     ConnectionEvent, DialUpgradeError, FullyNegotiatedInbound, FullyNegotiatedOutbound,
     ListenUpgradeError,
 };
 use libp2p_swarm::{
-    ConnectionHandler, ConnectionHandlerEvent, SingleProtocol, StreamProtocol, StreamUpgradeError,
+    ConnectionHandler, ConnectionHandlerEvent, NoProtocols, SingleProtocol, StreamUpgradeError,
     SubstreamProtocol,
 };
 use protocol::{inbound, outbound};
@@ -180,7 +179,7 @@ impl Handler {
 impl ConnectionHandler for Handler {
     type FromBehaviour = Command;
     type ToBehaviour = Event;
-    type InboundProtocol = Either<SingleProtocol, DeniedUpgrade>;
+    type InboundProtocol = Either<SingleProtocol, NoProtocols>;
     type OutboundProtocol = SingleProtocol;
     type OutboundOpenInfo = ();
     type InboundOpenInfo = ();
@@ -196,7 +195,7 @@ impl ConnectionHandler for Handler {
                 // the relayed connection opens a substream to the dialing side. (Connection roles
                 // and substream roles are reversed.) The listening side on a relayed connection
                 // never expects incoming substreams, hence the denied upgrade below.
-                SubstreamProtocol::new(Either::Right(DeniedUpgrade), ())
+                SubstreamProtocol::new(Either::Right(NoProtocols::new()), ())
             }
         }
     }

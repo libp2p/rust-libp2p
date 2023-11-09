@@ -4,10 +4,9 @@ use crate::handler::{
     ConnectionEvent, DialUpgradeError, FullyNegotiatedInbound, FullyNegotiatedOutbound,
 };
 use crate::{
-    ConnectionDenied, ConnectionHandlerEvent, StreamUpgradeError, SubstreamProtocol, THandler,
-    THandlerInEvent, THandlerOutEvent,
+    ConnectionDenied, ConnectionHandlerEvent, NoProtocols, StreamUpgradeError, SubstreamProtocol,
+    THandler, THandlerInEvent, THandlerOutEvent,
 };
-use libp2p_core::upgrade::DeniedUpgrade;
 use libp2p_core::Endpoint;
 use libp2p_core::Multiaddr;
 use libp2p_identity::PeerId;
@@ -64,13 +63,13 @@ pub struct ConnectionHandler;
 impl crate::handler::ConnectionHandler for ConnectionHandler {
     type FromBehaviour = Void;
     type ToBehaviour = Void;
-    type InboundProtocol = DeniedUpgrade;
-    type OutboundProtocol = DeniedUpgrade;
+    type InboundProtocol = NoProtocols;
+    type OutboundProtocol = NoProtocols;
     type InboundOpenInfo = ();
     type OutboundOpenInfo = Void;
 
     fn listen_protocol(&self) -> SubstreamProtocol<Self::InboundProtocol, Self::InboundOpenInfo> {
-        SubstreamProtocol::new(DeniedUpgrade, ())
+        SubstreamProtocol::new(NoProtocols::new(), ())
     }
 
     fn on_behaviour_event(&mut self, event: Self::FromBehaviour) {

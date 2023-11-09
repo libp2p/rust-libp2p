@@ -1,10 +1,9 @@
-use libp2p_core::upgrade::DeniedUpgrade;
 use libp2p_core::{Endpoint, Multiaddr};
 use libp2p_identity::PeerId;
 use libp2p_swarm::handler::ConnectionEvent;
 use libp2p_swarm::{
     ConnectionDenied, ConnectionHandler, ConnectionHandlerEvent, ConnectionId, FromSwarm,
-    NetworkBehaviour, SubstreamProtocol, Swarm, SwarmEvent, THandler, THandlerInEvent,
+    NetworkBehaviour, NoProtocols, SubstreamProtocol, Swarm, SwarmEvent, THandler, THandlerInEvent,
     THandlerOutEvent, ToSwarm,
 };
 use libp2p_swarm_test::SwarmExt;
@@ -96,13 +95,13 @@ impl NetworkBehaviour for Behaviour {
 impl ConnectionHandler for HandlerWithState {
     type FromBehaviour = Void;
     type ToBehaviour = u64;
-    type InboundProtocol = DeniedUpgrade;
-    type OutboundProtocol = DeniedUpgrade;
+    type InboundProtocol = NoProtocols;
+    type OutboundProtocol = NoProtocols;
     type InboundOpenInfo = ();
     type OutboundOpenInfo = ();
 
     fn listen_protocol(&self) -> SubstreamProtocol<Self::InboundProtocol, Self::InboundOpenInfo> {
-        SubstreamProtocol::new(DeniedUpgrade, ())
+        SubstreamProtocol::new(NoProtocols::new(), ())
     }
 
     fn connection_keep_alive(&self) -> bool {

@@ -27,12 +27,11 @@ use futures::future::Either;
 use futures::prelude::*;
 use futures::StreamExt;
 use instant::Instant;
-use libp2p_core::upgrade::DeniedUpgrade;
 use libp2p_swarm::handler::{
     ConnectionEvent, ConnectionHandler, ConnectionHandlerEvent, DialUpgradeError,
     FullyNegotiatedInbound, FullyNegotiatedOutbound, StreamUpgradeError, SubstreamProtocol,
 };
-use libp2p_swarm::Stream;
+use libp2p_swarm::{NoProtocols, Stream};
 use smallvec::SmallVec;
 use std::{
     pin::Pin,
@@ -390,7 +389,7 @@ impl ConnectionHandler for Handler {
     type FromBehaviour = HandlerIn;
     type ToBehaviour = HandlerEvent;
     type InboundOpenInfo = ();
-    type InboundProtocol = either::Either<ProtocolConfig, DeniedUpgrade>;
+    type InboundProtocol = either::Either<ProtocolConfig, NoProtocols>;
     type OutboundOpenInfo = ();
     type OutboundProtocol = ProtocolConfig;
 
@@ -400,7 +399,7 @@ impl ConnectionHandler for Handler {
                 SubstreamProtocol::new(either::Either::Left(handler.listen_protocol.clone()), ())
             }
             Handler::Disabled(_) => {
-                SubstreamProtocol::new(either::Either::Right(DeniedUpgrade), ())
+                SubstreamProtocol::new(either::Either::Right(NoProtocols::new()), ())
             }
         }
     }

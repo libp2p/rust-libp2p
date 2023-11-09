@@ -214,15 +214,15 @@ impl Default for OneShotHandlerConfig {
 mod tests {
     use super::*;
 
+    use crate::NoProtocols;
     use futures::executor::block_on;
     use futures::future::poll_fn;
-    use libp2p_core::upgrade::DeniedUpgrade;
     use void::Void;
 
     #[test]
     fn do_not_keep_idle_connection_alive() {
-        let mut handler: OneShotHandler<_, DeniedUpgrade, Void> = OneShotHandler::new(
-            SubstreamProtocol::new(DeniedUpgrade {}, ()),
+        let mut handler: OneShotHandler<_, NoProtocols, Void> = OneShotHandler::new(
+            SubstreamProtocol::new(NoProtocols::new(), ()),
             Default::default(),
         );
 

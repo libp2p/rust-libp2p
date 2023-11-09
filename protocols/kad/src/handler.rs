@@ -34,8 +34,8 @@ use libp2p_swarm::handler::{
     ConnectionEvent, DialUpgradeError, FullyNegotiatedInbound, FullyNegotiatedOutbound,
 };
 use libp2p_swarm::{
-    ConnectionHandler, ConnectionHandlerEvent, SeveralProtocols, Stream, StreamProtocol,
-    StreamUpgradeError, SubstreamProtocol, SupportedProtocols,
+    ConnectionHandler, ConnectionHandlerEvent, NoProtocols, SeveralProtocols, Stream,
+    StreamProtocol, StreamUpgradeError, SubstreamProtocol, SupportedProtocols,
 };
 use std::collections::VecDeque;
 use std::task::Waker;
@@ -608,7 +608,7 @@ impl Handler {
 impl ConnectionHandler for Handler {
     type FromBehaviour = HandlerIn;
     type ToBehaviour = HandlerEvent;
-    type InboundProtocol = Either<SeveralProtocols, upgrade::DeniedUpgrade>;
+    type InboundProtocol = Either<SeveralProtocols, NoProtocols>;
     type OutboundProtocol = SeveralProtocols;
     type OutboundOpenInfo = ();
     type InboundOpenInfo = ();
@@ -619,7 +619,7 @@ impl ConnectionHandler for Handler {
                 Either::Left(SeveralProtocols::new(self.protocol_names.clone())),
                 (),
             ),
-            Mode::Client => SubstreamProtocol::new(Either::Right(upgrade::DeniedUpgrade), ()),
+            Mode::Client => SubstreamProtocol::new(Either::Right(NoProtocols::new()), ()),
         }
     }
 
