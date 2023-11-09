@@ -30,15 +30,13 @@ use crate::proto;
 use crate::record::{self, Record};
 use asynchronous_codec::{Decoder, Encoder, Framed};
 use bytes::BytesMut;
-use futures::prelude::*;
 use instant::Instant;
-use libp2p_core::upgrade::{InboundUpgrade, OutboundUpgrade, UpgradeInfo};
 use libp2p_core::Multiaddr;
 use libp2p_identity::PeerId;
 use libp2p_swarm::StreamProtocol;
+use std::io;
 use std::marker::PhantomData;
 use std::{convert::TryFrom, time::Duration};
-use std::{io, iter};
 
 /// The protocol name used for negotiating with multistream-select.
 pub(crate) const DEFAULT_PROTO_NAME: StreamProtocol = StreamProtocol::new("/ipfs/kad/1.0.0");
@@ -129,61 +127,13 @@ impl From<KadPeer> for proto::Peer {
     }
 }
 
-/// Configuration for a Kademlia connection upgrade. When applied to a connection, turns this
-/// connection into a `Stream + Sink` whose items are of type `KadRequestMsg` and `KadResponseMsg`.
-// TODO: if, as suspected, we can confirm with Protocol Labs that each open Kademlia substream does
-//       only one request, then we can change the output of the `InboundUpgrade` and
-//       `OutboundUpgrade` to be just a single message
-#[derive(Debug, Clone)]
-pub struct ProtocolConfig {
-    protocol_names: Vec<StreamProtocol>,
-    /// Maximum allowed size of a packet.
-    max_packet_size: usize,
-}
-
-impl ProtocolConfig {
-    /// Returns the configured protocol name.
-    pub fn protocol_names(&self) -> &[StreamProtocol] {
-        &self.protocol_names
-    }
-
-    /// Modifies the protocol names used on the wire. Can be used to create incompatibilities
-    /// between networks on purpose.
-    pub fn set_protocol_names(&mut self, names: Vec<StreamProtocol>) {
-        self.protocol_names = names;
-    }
-
-    /// Modifies the maximum allowed size of a single Kademlia packet.
-    pub fn set_max_packet_size(&mut self, size: usize) {
-        self.max_packet_size = size;
-    }
-}
-
-impl Default for ProtocolConfig {
-    fn default() -> Self {
-        ProtocolConfig {
-            protocol_names: iter::once(DEFAULT_PROTO_NAME).collect(),
-            max_packet_size: DEFAULT_MAX_PACKET_SIZE,
-        }
-    }
-}
-
-impl UpgradeInfo for ProtocolConfig {
-    type Info = StreamProtocol;
-    type InfoIter = std::vec::IntoIter<Self::Info>;
-
-    fn protocol_info(&self) -> Self::InfoIter {
-        self.protocol_names.clone().into_iter()
-    }
-}
-
 /// Codec for Kademlia inbound and outbound message framing.
-pub struct Codec<A, B> {
+pub(crate) struct Codec<A, B> {
     codec: quick_protobuf_codec::Codec<proto::Message>,
     __phantom: PhantomData<(A, B)>,
 }
 impl<A, B> Codec<A, B> {
-    fn new(max_packet_size: usize) -> Self {
+    pub(crate) fn new(max_packet_size: usize) -> Self {
         Codec {
             codec: quick_protobuf_codec::Codec::new(max_packet_size),
             __phantom: PhantomData,
@@ -213,39 +163,9 @@ pub(crate) type KadInStreamSink<S> = Framed<S, Codec<KadResponseMsg, KadRequestM
 /// Sink of requests and stream of responses.
 pub(crate) type KadOutStreamSink<S> = Framed<S, Codec<KadRequestMsg, KadResponseMsg>>;
 
-impl<C> InboundUpgrade<C> for ProtocolConfig
-where
-    C: AsyncRead + AsyncWrite + Unpin,
-{
-    type Output = KadInStreamSink<C>;
-    type Future = future::Ready<Result<Self::Output, io::Error>>;
-    type Error = io::Error;
-
-    fn upgrade_inbound(self, incoming: C, _: Self::Info) -> Self::Future {
-        let codec = Codec::new(self.max_packet_size);
-
-        future::ok(Framed::new(incoming, codec))
-    }
-}
-
-impl<C> OutboundUpgrade<C> for ProtocolConfig
-where
-    C: AsyncRead + AsyncWrite + Unpin,
-{
-    type Output = KadOutStreamSink<C>;
-    type Future = future::Ready<Result<Self::Output, io::Error>>;
-    type Error = io::Error;
-
-    fn upgrade_outbound(self, incoming: C, _: Self::Info) -> Self::Future {
-        let codec = Codec::new(self.max_packet_size);
-
-        future::ok(Framed::new(incoming, codec))
-    }
-}
-
 /// Request that we can send to a peer or that we received from a peer.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum KadRequestMsg {
+pub(crate) enum KadRequestMsg {
     /// Ping request.
     Ping,
 
@@ -283,7 +203,7 @@ pub enum KadRequestMsg {
 
 /// Response that we can send to a peer or that we received from a peer.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum KadResponseMsg {
+pub(crate) enum KadResponseMsg {
     /// Ping response.
     Pong,
 

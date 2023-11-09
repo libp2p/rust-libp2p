@@ -26,7 +26,7 @@ use crate::addresses::Addresses;
 use crate::handler::{Handler, HandlerEvent, HandlerIn, RequestId};
 use crate::jobs::*;
 use crate::kbucket::{self, Distance, KBucketsTable, NodeStatus};
-use crate::protocol::{ConnectionType, KadPeer, ProtocolConfig};
+use crate::protocol::{ConnectionType, KadPeer, DEFAULT_MAX_PACKET_SIZE, DEFAULT_PROTO_NAME};
 use crate::query::{Query, QueryConfig, QueryId, QueryPool, QueryPoolState};
 use crate::record::{
     self,
@@ -68,8 +68,8 @@ pub struct Behaviour<TStore> {
     /// The k-bucket insertion strategy.
     kbucket_inserts: BucketInserts,
 
-    /// Configuration of the wire protocol.
-    protocol_config: ProtocolConfig,
+    protocol_names: Vec<StreamProtocol>,
+    max_packet_size: usize,
 
     /// Configuration of [`RecordStore`] filtering.
     record_filtering: StoreInserts,
@@ -172,7 +172,8 @@ pub enum StoreInserts {
 pub struct Config {
     kbucket_pending_timeout: Duration,
     query_config: QueryConfig,
-    protocol_config: ProtocolConfig,
+    protocol_names: Vec<StreamProtocol>,
+    max_packet_size: usize,
     record_ttl: Option<Duration>,
     record_replication_interval: Option<Duration>,
     record_publication_interval: Option<Duration>,
@@ -188,7 +189,7 @@ impl Default for Config {
         Config {
             kbucket_pending_timeout: Duration::from_secs(60),
             query_config: QueryConfig::default(),
-            protocol_config: Default::default(),
+            protocol_names: vec![DEFAULT_PROTO_NAME],
             record_ttl: Some(Duration::from_secs(36 * 60 * 60)),
             record_replication_interval: Some(Duration::from_secs(60 * 60)),
             record_publication_interval: Some(Duration::from_secs(24 * 60 * 60)),
@@ -197,6 +198,7 @@ impl Default for Config {
             provider_record_ttl: Some(Duration::from_secs(24 * 60 * 60)),
             kbucket_inserts: BucketInserts::OnConnected,
             caching: Caching::Enabled { max_peers: 1 },
+            max_packet_size: DEFAULT_MAX_PACKET_SIZE,
         }
     }
 }
@@ -227,7 +229,7 @@ impl Config {
     /// be able to talk to other nodes supporting any of the provided names.
     /// Multiple names must be used with caution to avoid network partitioning.
     pub fn set_protocol_names(&mut self, names: Vec<StreamProtocol>) -> &mut Self {
-        self.protocol_config.set_protocol_names(names);
+        self.protocol_names = names;
         self
     }
 
@@ -371,7 +373,7 @@ impl Config {
     /// It might be necessary to increase this value if trying to put large
     /// records.
     pub fn set_max_packet_size(&mut self, size: usize) -> &mut Self {
-        self.protocol_config.set_max_packet_size(size);
+        self.max_packet_size = size;
         self
     }
 
@@ -404,7 +406,7 @@ where
 
     /// Get the protocol name of this kademlia instance.
     pub fn protocol_names(&self) -> &[StreamProtocol] {
-        self.protocol_config.protocol_names()
+        self.protocol_names.as_slice()
     }
 
     /// Creates a new `Kademlia` network behaviour with the given configuration.
@@ -432,7 +434,8 @@ where
             caching: config.caching,
             kbuckets: KBucketsTable::new(local_key, config.kbucket_pending_timeout),
             kbucket_inserts: config.kbucket_inserts,
-            protocol_config: config.protocol_config,
+            protocol_names: config.protocol_names,
+            max_packet_size: config.max_packet_size,
             record_filtering: config.record_filtering,
             queued_events: VecDeque::with_capacity(config.query_config.replication_factor.get()),
             listen_addresses: Default::default(),
@@ -2082,7 +2085,8 @@ where
         };
 
         let mut handler = Handler::new(
-            self.protocol_config.clone(),
+            self.protocol_names.clone(),
+            self.max_packet_size,
             connected_point,
             peer,
             self.mode,
@@ -2105,7 +2109,8 @@ where
         };
 
         let mut handler = Handler::new(
-            self.protocol_config.clone(),
+            self.protocol_names.clone(),
+            self.max_packet_size,
             connected_point,
             peer,
             self.mode,
