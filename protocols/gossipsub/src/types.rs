@@ -267,8 +267,10 @@ pub enum RpcOut {
     Publish(RawMessage),
     /// Forward a Gossipsub message to the network.
     Forward(Vec<RawMessage>),
-    /// List of subscriptions.
-    Subscriptions(Vec<Subscription>),
+    /// Subscribe a topic.
+    Subscribe(TopicHash),
+    /// Unsubscribe a topic.
+    Unsubscribe(TopicHash),
     /// List of Gossipsub control messages.
     Control(Vec<ControlAction>),
 }
@@ -295,20 +297,22 @@ impl From<RpcOut> for proto::RPC {
                 subscriptions: Vec::new(),
                 control: None,
             },
-            RpcOut::Subscriptions(subscriptions) => {
-                let subscriptions = subscriptions
-                    .into_iter()
-                    .map(|sub| proto::SubOpts {
-                        subscribe: Some(sub.action == SubscriptionAction::Subscribe),
-                        topic_id: Some(sub.topic_hash.into_string()),
-                    })
-                    .collect::<Vec<_>>();
-                proto::RPC {
-                    publish: Vec::new(),
-                    subscriptions,
-                    control: None,
-                }
-            }
+            RpcOut::Subscribe(topic) => proto::RPC {
+                publish: Vec::new(),
+                subscriptions: vec![proto::SubOpts {
+                    subscribe: Some(true),
+                    topic_id: Some(topic.into_string()),
+                }],
+                control: None,
+            },
+            RpcOut::Unsubscribe(topic) => proto::RPC {
+                publish: Vec::new(),
+                subscriptions: vec![proto::SubOpts {
+                    subscribe: Some(false),
+                    topic_id: Some(topic.into_string()),
+                }],
+                control: None,
+            },
             RpcOut::Control(actions) => {
                 if actions.is_empty() {
                     return proto::RPC {

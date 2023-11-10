@@ -536,10 +536,7 @@ where
         // send subscription request to all peers
         let peer_list = self.peer_topics.keys().cloned().collect::<Vec<_>>();
         if !peer_list.is_empty() {
-            let event = RpcOut::Subscriptions(vec![Subscription {
-                topic_hash: topic_hash.clone(),
-                action: SubscriptionAction::Subscribe,
-            }]);
+            let event = RpcOut::Subscribe(topic_hash.clone());
 
             for peer in peer_list {
                 tracing::debug!(%peer, "Sending SUBSCRIBE to peer");
@@ -570,10 +567,7 @@ where
         // announce to all peers
         let peer_list = self.peer_topics.keys().cloned().collect::<Vec<_>>();
         if !peer_list.is_empty() {
-            let event = RpcOut::Subscriptions(vec![Subscription {
-                topic_hash: topic_hash.clone(),
-                action: SubscriptionAction::Unsubscribe,
-            }]);
+            let event = RpcOut::Unsubscribe(topic_hash.clone());
 
             for peer in peer_list {
                 tracing::debug!(%peer, "Sending UNSUBSCRIBE to peer");
@@ -2851,17 +2845,8 @@ where
             } else {
                 tracing::debug!(peer=%peer_id, "New peer connected");
                 // We need to send our subscriptions to the newly-connected node.
-                let mut subscriptions = vec![];
-                for topic_hash in self.mesh.keys() {
-                    subscriptions.push(Subscription {
-                        topic_hash: topic_hash.clone(),
-                        action: SubscriptionAction::Subscribe,
-                    });
-                }
-
-                if !subscriptions.is_empty() {
-                    // send our subscriptions to the peer
-                    self.send_message(peer_id, RpcOut::Subscriptions(subscriptions));
+                for topic_hash in self.mesh.keys().cloned().collect::<Vec<_>>() {
+                    self.send_message(peer_id, RpcOut::Subscribe(topic_hash));
                 }
             }
 
@@ -3457,13 +3442,6 @@ mod local_test {
         }
     }
 
-    fn test_subscription() -> Subscription {
-        Subscription {
-            action: SubscriptionAction::Subscribe,
-            topic_hash: IdentTopic::new("TestTopic").hash(),
-        }
-    }
-
     fn test_control() -> ControlAction {
         ControlAction::IHave {
             topic_hash: IdentTopic::new("TestTopic").hash(),
@@ -3473,23 +3451,18 @@ mod local_test {
 
     impl Arbitrary for RpcOut {
         fn arbitrary(g: &mut Gen) -> Self {
-            match u8::arbitrary(g) % 4 {
-                0 => {
-                    let mut subscriptions = Vec::new();
-                    for _ in 0..g.gen_range(0..10u8) {
-                        subscriptions.push(test_subscription());
-                    }
-                    RpcOut::Subscriptions(subscriptions)
-                }
-                1 => RpcOut::Publish(test_message()),
-                2 => {
+            match u8::arbitrary(g) % 5 {
+                0 => RpcOut::Subscribe(IdentTopic::new("TestTopic").hash()),
+                1 => RpcOut::Unsubscribe(IdentTopic::new("TestTopic").hash()),
+                2 => RpcOut::Publish(test_message()),
+                3 => {
                     let mut messages = Vec::new();
                     for _ in 0..g.gen_range(0..10u8) {
                         messages.push(test_message());
                     }
                     RpcOut::Forward(messages)
                 }
-                3 => {
+                4 => {
                     let mut control = Vec::new();
                     for _ in 0..g.gen_range(0..10u8) {
                         control.push(test_control());

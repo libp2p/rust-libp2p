@@ -402,26 +402,16 @@ fn test_subscribe() {
     let subscriptions = gs
         .events
         .iter()
-        .fold(vec![], |mut collected_subscriptions, e| match e {
+        .fold(0, |collected_subscriptions, e| match e {
             ToSwarm::NotifyHandler {
-                event: HandlerIn::Message(RpcOut::Subscriptions(subscriptions)),
+                event: HandlerIn::Message(RpcOut::Subscribe(_)),
                 ..
-            } => {
-                for s in subscriptions {
-                    if let SubscriptionAction::Subscribe = s.action {
-                        collected_subscriptions.push(s.clone())
-                    };
-                }
-                collected_subscriptions
-            }
+            } => collected_subscriptions + 1,
             _ => collected_subscriptions,
         });
 
     // we sent a subscribe to all known peers
-    assert!(
-        subscriptions.len() == 20,
-        "Should send a subscription to all known peers"
-    );
+    assert_eq!(subscriptions, 20);
 }
 
 #[test]
@@ -470,26 +460,16 @@ fn test_unsubscribe() {
     let subscriptions = gs
         .events
         .iter()
-        .fold(vec![], |mut collected_subscriptions, e| match e {
+        .fold(0, |collected_subscriptions, e| match e {
             ToSwarm::NotifyHandler {
-                event: HandlerIn::Message(RpcOut::Subscriptions(subscriptions)),
+                event: HandlerIn::Message(RpcOut::Subscribe(_)),
                 ..
-            } => {
-                for s in subscriptions {
-                    if let SubscriptionAction::Subscribe = s.action {
-                        collected_subscriptions.push(s.clone())
-                    };
-                }
-                collected_subscriptions
-            }
+            } => collected_subscriptions + 1,
             _ => collected_subscriptions,
         });
 
     // we sent a unsubscribe to all known peers, for two topics
-    assert!(
-        subscriptions.len() == 40,
-        "Should send an unsubscribe event to all known peers"
-    );
+    assert_eq!(subscriptions, 40);
 
     // check we clean up internal structures
     for topic_hash in &topic_hashes {
@@ -792,37 +772,33 @@ fn test_inject_connected() {
 
     // check that our subscriptions are sent to each of the peers
     // collect all the SendEvents
-    let send_events: Vec<_> = gs
+    let subscriptions = gs
         .events
-        .iter()
-        .filter(|e| match e {
+        .into_iter()
+        .filter_map(|e| match e {
             ToSwarm::NotifyHandler {
-                event: HandlerIn::Message(RpcOut::Subscriptions(subscriptions)),
+                event: HandlerIn::Message(RpcOut::Subscribe(topic)),
+                peer_id,
                 ..
-            } => !subscriptions.is_empty(),
-            _ => false,
+            } => Some((peer_id, topic)),
+            _ => None,
         })
-        .collect();
+        .fold(HashMap::new(), |mut subs, (peer, sub)| {
+            let mut peer_subs = subs.remove(&peer).unwrap_or(vec![]);
+            peer_subs.push(sub.into_string());
+            subs.insert(peer, peer_subs);
+            subs
+        });
 
     // check that there are two subscriptions sent to each peer
-    for sevent in send_events.clone() {
-        if let ToSwarm::NotifyHandler {
-            event: HandlerIn::Message(RpcOut::Subscriptions(subscriptions)),
-            ..
-        } = sevent
-        {
-            assert!(
-                subscriptions.len() == 2,
-                "There should be two subscriptions sent to each peer (1 for each topic)."
-            );
-        };
+    for peer_subs in subscriptions.values() {
+        assert!(peer_subs.contains(&String::from("topic1")));
+        assert!(peer_subs.contains(&String::from("topic2")));
+        assert_eq!(peer_subs.len(), 2);
     }
 
     // check that there are 20 send events created
-    assert!(
-        send_events.len() == 20,
-        "There should be a subscription event sent to each peer."
-    );
+    assert_eq!(subscriptions.len(), 20);
 
     // should add the new peers to `peer_topics` with an empty vec as a gossipsub node
     for peer in peers {
