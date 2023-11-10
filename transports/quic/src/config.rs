@@ -65,7 +65,7 @@ pub struct Config {
     keypair: libp2p_identity::Keypair,
 
     /// Parameters governing MTU discovery. See [`MtuDiscoveryConfig`] for details.
-    path_mtu_discovery_config: Option<MtuDiscoveryConfig>,
+    mtu_discovery_config: Option<MtuDiscoveryConfig>,
 }
 
 impl Config {
@@ -86,13 +86,13 @@ impl Config {
             // Ensure that one stream is not consuming the whole connection.
             max_stream_data: 10_000_000,
             keypair: keypair.clone(),
-            path_mtu_discovery_config: Some(Default::default()),
+            mtu_discovery_config: Some(Default::default()),
         }
     }
 
     /// Disable MTU path discovery (it is enabled by default).
     pub fn disable_path_mtu_discovery(mut self) -> Self {
-        self.path_mtu_discovery_config = None;
+        self.mtu_discovery_config = None;
         self
     }
 }
@@ -118,7 +118,7 @@ impl From<Config> for QuinnConfig {
             support_draft_29,
             handshake_timeout: _,
             keypair,
-            path_mtu_discovery_config,
+            mtu_discovery_config,
         } = config;
         let mut transport = quinn::TransportConfig::default();
         // Disable uni-directional streams.
@@ -131,7 +131,7 @@ impl From<Config> for QuinnConfig {
         transport.allow_spin(false);
         transport.stream_receive_window(max_stream_data.into());
         transport.receive_window(max_connection_data.into());
-        transport.mtu_discovery_config(path_mtu_discovery_config);
+        transport.mtu_discovery_config(mtu_discovery_config);
         let transport = Arc::new(transport);
 
         let mut server_config = quinn::ServerConfig::with_crypto(server_tls_config);

@@ -1,3 +1,10 @@
+## 0.10.1 - unreleased
+
+- Allow disabling MTU discovering.
+  See [PR 4823].
+
+[PR 4823]: https://github.com/libp2p/rust-libp2p/pull/4823
+
 ## 0.10.0
 
 - Improve hole-punch timing.
