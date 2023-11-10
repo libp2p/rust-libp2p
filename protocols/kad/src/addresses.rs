@@ -120,60 +120,69 @@ mod tests {
 
     #[test]
     fn given_one_address_when_removing_different_one_returns_ok() {
-        let addrs = &[tcp_addr("1234")];
-        let mut addresses = make_addresses(addrs);
+        let mut addresses = make_addresses([tcp_addr(1234)]);
 
-        assert!(addresses.remove(&tcp_addr("4321")).is_ok());
-        // assert that content did not change since the removed value was not present in the addresses list
-        assert_eq!(addresses.addrs.as_slice(), addrs);
+        let result = addresses.remove(&tcp_addr(4321));
+
+        assert!(result.is_ok());
+        assert_eq!(
+            addresses.into_vec(),
+            vec![tcp_addr(1234)],
+            "`Addresses` to not change because we tried to remove a non-present address"
+        );
     }
 
     #[test]
     fn given_one_address_when_removing_correct_one_returns_err() {
-        let addrs = &[tcp_addr("1234")];
-        let mut addresses = make_addresses(addrs);
+        let mut addresses = make_addresses([tcp_addr(1234)]);
 
-        assert!(addresses.remove(&tcp_addr("1234")).is_err());
-        // assert that content did not change since the removed value, while present in the addresses list, was the last one
-        assert_eq!(addresses.addrs.as_slice(), addrs);
+        let result = addresses.remove(&tcp_addr(1234));
+
+        assert!(result.is_err());
+        assert_eq!(
+            addresses.into_vec(),
+            vec![tcp_addr(1234)],
+            "`Addresses` to not be empty because it would have been the last address to be removed"
+        );
     }
 
     #[test]
     fn given_many_addresses_when_removing_different_one_does_not_remove_and_returns_ok() {
-        let addrs = &[tcp_addr("1234"), tcp_addr("4321")];
-        let mut addresses = make_addresses(addrs);
+        let mut addresses = make_addresses([tcp_addr(1234), tcp_addr(4321)]);
 
-        assert!(addresses.remove(&tcp_addr("5678")).is_ok());
-        // assert that content did not change since the removed value was not present in the addresses list
-        assert_eq!(addresses.addrs.as_slice(), addrs);
+        let result = addresses.remove(&tcp_addr(5678));
+
+        assert!(result.is_ok());
+        assert_eq!(
+            addresses.into_vec(),
+            vec![tcp_addr(1234), tcp_addr(4321)],
+            "`Addresses` to not change because we tried to remove a non-present address"
+        );
     }
 
     #[test]
     fn given_many_addresses_when_removing_correct_one_removes_and_returns_ok() {
-        let mut addresses = make_addresses(&[tcp_addr("1234"), tcp_addr("4321")]);
+        let mut addresses = make_addresses([tcp_addr(1234), tcp_addr(4321)]);
 
-        assert!(addresses.remove(&tcp_addr("1234")).is_ok());
-        // assert that content did change since the removed value was present in the addresses list and was not the last one
-        assert_eq!(addresses.addrs.as_slice(), &[tcp_addr("4321")]);
+        let result = addresses.remove(&tcp_addr(1234));
+
+        assert!(result.is_ok());
+        assert_eq!(
+            addresses.into_vec(),
+            vec![tcp_addr(4321)],
+            "`Addresses to no longer contain address was present and then removed`"
+        );
     }
 
-    /// Helper function to easily initialize Addresses struct
-    /// with multiple addresses
-    fn make_addresses(addrs: &[Multiaddr]) -> Addresses {
-        let mut addrs = addrs.into_iter();
-
-        let first = addrs.next().expect("Addresses must have at least one addr");
-        let mut addresses = Addresses::new(first.clone());
-
-        while let Some(addr) = addrs.next() {
-            addresses.insert(addr.clone());
+    /// Helper function to easily initialize Addresses struct with multiple addresses.
+    fn make_addresses(addresses: impl IntoIterator<Item = Multiaddr>) -> Addresses {
+        Addresses {
+            addrs: SmallVec::from_iter(addresses),
         }
-
-        addresses
     }
 
     /// Helper function to create a tcp Multiaddr with a specific port
-    fn tcp_addr(port: &str) -> Multiaddr {
+    fn tcp_addr(port: u16) -> Multiaddr {
         format!("/ip4/127.0.0.1/tcp/{port}").parse().unwrap()
     }
 }
