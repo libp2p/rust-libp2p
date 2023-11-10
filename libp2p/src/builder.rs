@@ -76,7 +76,13 @@ mod tests {
     use libp2p_swarm::{NetworkBehaviour, Swarm};
 
     #[test]
-    #[cfg(all(feature = "tokio", feature = "tcp", feature = "tls", feature = "noise"))]
+    #[cfg(all(
+        feature = "tokio",
+        feature = "tcp",
+        feature = "tls",
+        feature = "noise",
+        feature = "yamux",
+    ))]
     fn tcp() {
         let _ = SwarmBuilder::with_new_identity()
             .with_tokio()
@@ -96,7 +102,8 @@ mod tests {
         feature = "async-std",
         feature = "tcp",
         feature = "tls",
-        feature = "noise"
+        feature = "noise",
+        feature = "yamux",
     ))]
     fn async_std_tcp() {
         let _ = SwarmBuilder::with_new_identity()
@@ -107,6 +114,50 @@ mod tests {
                 libp2p_yamux::Config::default,
             )
             .unwrap()
+            .with_behaviour(|_| libp2p_swarm::dummy::Behaviour)
+            .unwrap()
+            .build();
+    }
+
+    #[test]
+    #[cfg(all(feature = "tokio", feature = "quic"))]
+    fn quic() {
+        let _ = SwarmBuilder::with_new_identity()
+            .with_tokio()
+            .with_quic()
+            .with_behaviour(|_| libp2p_swarm::dummy::Behaviour)
+            .unwrap()
+            .build();
+    }
+
+    #[test]
+    #[cfg(all(feature = "async-std", feature = "quic"))]
+    fn async_std_quic() {
+        let _ = SwarmBuilder::with_new_identity()
+            .with_async_std()
+            .with_quic()
+            .with_behaviour(|_| libp2p_swarm::dummy::Behaviour)
+            .unwrap()
+            .build();
+    }
+
+    #[test]
+    #[cfg(all(feature = "tokio", feature = "quic"))]
+    fn quic_config() {
+        let _ = SwarmBuilder::with_new_identity()
+            .with_tokio()
+            .with_quic_config(|config| config)
+            .with_behaviour(|_| libp2p_swarm::dummy::Behaviour)
+            .unwrap()
+            .build();
+    }
+
+    #[test]
+    #[cfg(all(feature = "async-std", feature = "quic"))]
+    fn async_std_quic_config() {
+        let _ = SwarmBuilder::with_new_identity()
+            .with_async_std()
+            .with_quic_config(|config| config)
             .with_behaviour(|_| libp2p_swarm::dummy::Behaviour)
             .unwrap()
             .build();
@@ -162,6 +213,7 @@ mod tests {
         feature = "tcp",
         feature = "tls",
         feature = "noise",
+        feature = "yamux",
         feature = "quic"
     ))]
     fn tcp_quic() {
@@ -181,10 +233,83 @@ mod tests {
 
     #[test]
     #[cfg(all(
+        feature = "async-std",
+        feature = "tcp",
+        feature = "tls",
+        feature = "noise",
+        feature = "yamux",
+        feature = "quic"
+    ))]
+    fn async_std_tcp_quic() {
+        let _ = SwarmBuilder::with_new_identity()
+            .with_async_std()
+            .with_tcp(
+                Default::default(),
+                (libp2p_tls::Config::new, libp2p_noise::Config::new),
+                libp2p_yamux::Config::default,
+            )
+            .unwrap()
+            .with_quic()
+            .with_behaviour(|_| libp2p_swarm::dummy::Behaviour)
+            .unwrap()
+            .build();
+    }
+
+    #[test]
+    #[cfg(all(
         feature = "tokio",
         feature = "tcp",
         feature = "tls",
         feature = "noise",
+        feature = "yamux",
+        feature = "quic"
+    ))]
+    fn tcp_quic_config() {
+        let _ = SwarmBuilder::with_new_identity()
+            .with_tokio()
+            .with_tcp(
+                Default::default(),
+                (libp2p_tls::Config::new, libp2p_noise::Config::new),
+                libp2p_yamux::Config::default,
+            )
+            .unwrap()
+            .with_quic_config(|config| config)
+            .with_behaviour(|_| libp2p_swarm::dummy::Behaviour)
+            .unwrap()
+            .build();
+    }
+
+    #[test]
+    #[cfg(all(
+        feature = "async-std",
+        feature = "tcp",
+        feature = "tls",
+        feature = "noise",
+        feature = "yamux",
+        feature = "quic"
+    ))]
+    fn async_std_tcp_quic_config() {
+        let _ = SwarmBuilder::with_new_identity()
+            .with_async_std()
+            .with_tcp(
+                Default::default(),
+                (libp2p_tls::Config::new, libp2p_noise::Config::new),
+                libp2p_yamux::Config::default,
+            )
+            .unwrap()
+            .with_quic_config(|config| config)
+            .with_behaviour(|_| libp2p_swarm::dummy::Behaviour)
+            .unwrap()
+            .build();
+    }
+
+    #[test]
+    #[cfg(all(
+        feature = "tokio",
+        feature = "tcp",
+        feature = "tls",
+        feature = "noise",
+        feature = "yamux",
         feature = "relay"
     ))]
     fn tcp_relay() {
@@ -219,6 +344,7 @@ mod tests {
         feature = "tcp",
         feature = "tls",
         feature = "noise",
+        feature = "yamux",
         feature = "dns"
     ))]
     async fn tcp_dns() {
@@ -266,6 +392,7 @@ mod tests {
         feature = "tcp",
         feature = "tls",
         feature = "noise",
+        feature = "yamux",
         feature = "dns",
         feature = "websocket",
     ))]
@@ -295,6 +422,7 @@ mod tests {
         feature = "tcp",
         feature = "tls",
         feature = "noise",
+        feature = "yamux",
         feature = "quic",
         feature = "dns",
         feature = "relay",
