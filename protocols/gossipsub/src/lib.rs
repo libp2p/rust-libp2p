@@ -125,7 +125,11 @@ pub use self::subscription_filter::{
 };
 pub use self::topic::{Hasher, Topic, TopicHash};
 pub use self::transform::{DataTransform, IdentityTransform};
-pub use self::types::{Message, MessageAcceptance, MessageId, RawMessage, Rpc};
+pub use self::types::{Message, MessageAcceptance, MessageId, RawMessage};
+
+#[deprecated(note = "Will be removed from the public API.")]
+#[allow(private_interfaces)]
+pub type Rpc = self::types::Rpc;
 
 pub type IdentTopic = Topic<self::topic::IdentityHash>;
 pub type Sha256Topic = Topic<self::topic::Sha256Hash>;

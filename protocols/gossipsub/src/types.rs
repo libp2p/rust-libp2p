@@ -182,8 +182,8 @@ pub enum SubscriptionAction {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct PeerInfo {
-    pub peer_id: Option<PeerId>,
+pub(crate) struct PeerInfo {
+    pub(crate) peer_id: Option<PeerId>,
     //TODO add this when RFC: Signed Address Records got added to the spec (see pull request
     // https://github.com/libp2p/specs/pull/217)
     //pub signed_peer_record: ?,
@@ -191,7 +191,7 @@ pub struct PeerInfo {
 
 /// A Control message received by the gossipsub system.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub enum ControlAction {
+pub(crate) enum ControlAction {
     /// Node broadcasts known messages per topic - IHave control message.
     IHave {
         /// The topic of the messages.
@@ -222,19 +222,19 @@ pub enum ControlAction {
 
 /// An RPC received/sent.
 #[derive(Clone, PartialEq, Eq, Hash)]
-pub struct Rpc {
+pub(crate) struct Rpc {
     /// List of messages that were part of this RPC query.
-    pub messages: Vec<RawMessage>,
+    pub(crate) messages: Vec<RawMessage>,
     /// List of subscriptions.
-    pub subscriptions: Vec<Subscription>,
+    pub(crate) subscriptions: Vec<Subscription>,
     /// List of Gossipsub control messages.
-    pub control_msgs: Vec<ControlAction>,
+    pub(crate) control_msgs: Vec<ControlAction>,
 }
 
 impl Rpc {
     /// Converts the GossipsubRPC into its protobuf format.
     // A convenience function to avoid explicitly specifying types.
-    pub fn into_protobuf(self) -> proto::RPC {
+    pub(crate) fn into_protobuf(self) -> proto::RPC {
         self.into()
     }
 }
