@@ -363,6 +363,103 @@ mod tests {
             .build();
     }
 
+    #[tokio::test]
+    #[cfg(all(
+        feature = "tokio",
+        feature = "tcp",
+        feature = "noise",
+        feature = "yamux",
+        feature = "dns"
+    ))]
+    async fn tcp_dns_config() {
+        SwarmBuilder::with_new_identity()
+            .with_tokio()
+            .with_tcp(
+                Default::default(),
+                (libp2p_tls::Config::new, libp2p_noise::Config::new),
+                libp2p_yamux::Config::default,
+            )
+            .unwrap()
+            .with_dns_config(
+                libp2p_dns::ResolverConfig::default(),
+                libp2p_dns::ResolverOpts::default(),
+            )
+            .with_behaviour(|_| libp2p_swarm::dummy::Behaviour)
+            .unwrap()
+            .build();
+    }
+
+    #[tokio::test]
+    #[cfg(all(feature = "tokio", feature = "quic", feature = "dns"))]
+    async fn quic_dns_config() {
+        SwarmBuilder::with_new_identity()
+            .with_tokio()
+            .with_quic()
+            .with_dns_config(
+                libp2p_dns::ResolverConfig::default(),
+                libp2p_dns::ResolverOpts::default(),
+            )
+            .with_behaviour(|_| libp2p_swarm::dummy::Behaviour)
+            .unwrap()
+            .build();
+    }
+
+    #[tokio::test]
+    #[cfg(all(
+        feature = "tokio",
+        feature = "tcp",
+        feature = "noise",
+        feature = "yamux",
+        feature = "quic",
+        feature = "dns"
+    ))]
+    async fn tcp_quic_dns_config() {
+        SwarmBuilder::with_new_identity()
+            .with_tokio()
+            .with_tcp(
+                Default::default(),
+                (libp2p_tls::Config::new, libp2p_noise::Config::new),
+                libp2p_yamux::Config::default,
+            )
+            .unwrap()
+            .with_quic()
+            .with_dns_config(
+                libp2p_dns::ResolverConfig::default(),
+                libp2p_dns::ResolverOpts::default(),
+            )
+            .with_behaviour(|_| libp2p_swarm::dummy::Behaviour)
+            .unwrap()
+            .build();
+    }
+
+    #[tokio::test]
+    #[cfg(all(
+        feature = "async-std",
+        feature = "tcp",
+        feature = "noise",
+        feature = "yamux",
+        feature = "quic",
+        feature = "dns"
+    ))]
+    async fn async_std_tcp_quic_dns_config() {
+        SwarmBuilder::with_new_identity()
+            .with_async_std()
+            .with_tcp(
+                Default::default(),
+                (libp2p_tls::Config::new, libp2p_noise::Config::new),
+                libp2p_yamux::Config::default,
+            )
+            .unwrap()
+            .with_quic()
+            .with_dns_config(
+                libp2p_dns::ResolverConfig::default(),
+                libp2p_dns::ResolverOpts::default(),
+            )
+            .with_behaviour(|_| libp2p_swarm::dummy::Behaviour)
+            .unwrap()
+            .build();
+    }
+
     /// Showcases how to provide custom transports unknown to the libp2p crate, e.g. WebRTC.
     #[test]
     #[cfg(feature = "tokio")]
