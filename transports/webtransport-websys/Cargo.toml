@@ -26,7 +26,7 @@ thiserror = "1.0.50"
 tracing = "0.1.37"
 wasm-bindgen = "0.2.88"
 wasm-bindgen-futures = "0.4.38"
-web-sys = { version = "0.3.64", features = [
+web-sys = { version = "0.3.65", features = [
     "ReadableStreamDefaultReader",
     "WebTransport",
     "WebTransportBidirectionalStream",
