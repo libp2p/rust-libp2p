@@ -1,6 +1,7 @@
 #![allow(unused_imports)]
 
 mod bandwidth_logging;
+mod bandwidth_metrics;
 mod behaviour;
 mod build;
 mod dns;
@@ -14,6 +15,7 @@ mod tcp;
 mod websocket;
 
 use bandwidth_logging::*;
+use bandwidth_metrics::*;
 use behaviour::*;
 use build::*;
 use dns::*;

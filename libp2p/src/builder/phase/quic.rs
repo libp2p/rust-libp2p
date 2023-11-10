@@ -276,20 +276,41 @@ impl_quic_phase_with_websocket!(
     rw_stream_sink::RwStreamSink<libp2p_websocket::BytesConnection<libp2p_tcp::tokio::TcpStream>>
 );
 impl<Provider, T: AuthenticatedMultiplexedTransport> SwarmBuilder<Provider, QuicPhase<T>> {
+    #[allow(deprecated)]
+    #[deprecated(note = "Use `with_bandwidth_metrics` instead.")]
     pub fn with_bandwidth_logging(
         self,
     ) -> (
         SwarmBuilder<
             Provider,
-            BehaviourPhase<impl AuthenticatedMultiplexedTransport, NoRelayBehaviour>,
+            BandwidthMetricsPhase<impl AuthenticatedMultiplexedTransport, NoRelayBehaviour>,
         >,
         Arc<crate::bandwidth::BandwidthSinks>,
     ) {
+        #[allow(deprecated)]
         self.without_quic()
             .without_any_other_transports()
             .without_dns()
             .without_websocket()
             .without_relay()
             .with_bandwidth_logging()
+    }
+}
+#[cfg(feature = "metrics")]
+impl<Provider, T: AuthenticatedMultiplexedTransport> SwarmBuilder<Provider, QuicPhase<T>> {
+    pub fn with_bandwidth_metrics(
+        self,
+        registry: &mut libp2p_metrics::Registry,
+    ) -> SwarmBuilder<
+        Provider,
+        BehaviourPhase<impl AuthenticatedMultiplexedTransport, NoRelayBehaviour>,
+    > {
+        self.without_quic()
+            .without_any_other_transports()
+            .without_dns()
+            .without_websocket()
+            .without_relay()
+            .without_bandwidth_logging()
+            .with_bandwidth_metrics(registry)
     }
 }

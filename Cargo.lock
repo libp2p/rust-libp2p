@@ -2803,8 +2803,9 @@ dependencies = [
 
 [[package]]
 name = "libp2p-metrics"
-version = "0.14.0"
+version = "0.14.1"
 dependencies = [
+ "futures",
  "instant",
  "libp2p-core",
  "libp2p-dcutr",
@@ -2815,6 +2816,7 @@ dependencies = [
  "libp2p-ping",
  "libp2p-relay",
  "libp2p-swarm",
+ "pin-project",
  "prometheus-client",
 ]
 
@@ -3088,7 +3090,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-server"
-version = "0.12.3"
+version = "0.12.4"
 dependencies = [
  "base64 0.21.5",
  "clap",
