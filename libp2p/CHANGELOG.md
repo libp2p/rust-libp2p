@@ -1,4 +1,11 @@
-## 0.53.0 - unreleased
+## 0.53.1 - unreleased
+
+- Allow `SwarmBuilder::with_quic_config` to be called without `with_tcp` first.
+  See [PR 4821](https://github.com/libp2p/rust-libp2p/pull/4821).
+- Introduce `SwarmBuilder::with_dns_config`.
+  See [PR 4808](https://github.com/libp2p/rust-libp2p/pull/4808).
+
+## 0.53.0
 
 - Raise MSRV to 1.73.
   See [PR 4692](https://github.com/libp2p/rust-libp2p/pull/4692).

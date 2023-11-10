@@ -181,6 +181,35 @@ impl<T: AuthenticatedMultiplexedTransport> SwarmBuilder<super::provider::Tokio, 
             .with_dns()
     }
 }
+#[cfg(all(not(target_arch = "wasm32"), feature = "async-std", feature = "dns"))]
+impl<T: AuthenticatedMultiplexedTransport> SwarmBuilder<super::provider::AsyncStd, QuicPhase<T>> {
+    pub fn with_dns_config(
+        self,
+        cfg: libp2p_dns::ResolverConfig,
+        opts: libp2p_dns::ResolverOpts,
+    ) -> SwarmBuilder<
+        super::provider::AsyncStd,
+        WebsocketPhase<impl AuthenticatedMultiplexedTransport>,
+    > {
+        self.without_quic()
+            .without_any_other_transports()
+            .with_dns_config(cfg, opts)
+    }
+}
+#[cfg(all(not(target_arch = "wasm32"), feature = "tokio", feature = "dns"))]
+impl<T: AuthenticatedMultiplexedTransport> SwarmBuilder<super::provider::Tokio, QuicPhase<T>> {
+    pub fn with_dns_config(
+        self,
+        cfg: libp2p_dns::ResolverConfig,
+        opts: libp2p_dns::ResolverOpts,
+    ) -> SwarmBuilder<super::provider::Tokio, WebsocketPhase<impl AuthenticatedMultiplexedTransport>>
+    {
+        self.without_quic()
+            .without_any_other_transports()
+            .with_dns_config(cfg, opts)
+    }
+}
+
 macro_rules! impl_quic_phase_with_websocket {
     ($providerKebabCase:literal, $providerPascalCase:ty, $websocketStream:ty) => {
         #[cfg(all(feature = $providerKebabCase, not(target_arch = "wasm32"), feature = "websocket"))]

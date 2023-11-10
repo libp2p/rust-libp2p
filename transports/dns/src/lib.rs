@@ -60,12 +60,13 @@
 #[cfg(feature = "async-std")]
 pub mod async_std {
     use async_std_resolver::AsyncStdResolver;
-    use parking_lot::Mutex;
-    use std::{io, sync::Arc};
-    use trust_dns_resolver::{
+    use futures::FutureExt;
+    use hickory_resolver::{
         config::{ResolverConfig, ResolverOpts},
         system_conf,
     };
+    use parking_lot::Mutex;
+    use std::{io, sync::Arc};
 
     /// A `Transport` wrapper for performing DNS lookups when dialing `Multiaddr`esses
     /// using `async-std` for all async I/O.
@@ -85,14 +86,38 @@ pub mod async_std {
                 resolver: async_std_resolver::resolver(cfg, opts).await,
             }
         }
+
+        // TODO: Replace `system` implementation with this
+        #[doc(hidden)]
+        pub fn system2(inner: T) -> Result<Transport<T>, io::Error> {
+            Ok(Transport {
+                inner: Arc::new(Mutex::new(inner)),
+                resolver: async_std_resolver::resolver_from_system_conf()
+                    .now_or_never()
+                    .expect(
+                        "async_std_resolver::resolver_from_system_conf did not resolve immediately",
+                    )?,
+            })
+        }
+
+        // TODO: Replace `custom` implementation with this
+        #[doc(hidden)]
+        pub fn custom2(inner: T, cfg: ResolverConfig, opts: ResolverOpts) -> Transport<T> {
+            Transport {
+                inner: Arc::new(Mutex::new(inner)),
+                resolver: async_std_resolver::resolver(cfg, opts)
+                    .now_or_never()
+                    .expect("async_std_resolver::resolver did not resolve immediately"),
+            }
+        }
     }
 }
 
 #[cfg(feature = "tokio")]
 pub mod tokio {
+    use hickory_resolver::{system_conf, TokioAsyncResolver};
     use parking_lot::Mutex;
     use std::sync::Arc;
-    use trust_dns_resolver::{system_conf, TokioAsyncResolver};
 
     /// A `Transport` wrapper for performing DNS lookups when dialing `Multiaddr`esses
     /// using `tokio` for all async I/O.
@@ -109,8 +134,8 @@ pub mod tokio {
         /// and options.
         pub fn custom(
             inner: T,
-            cfg: trust_dns_resolver::config::ResolverConfig,
-            opts: trust_dns_resolver::config::ResolverOpts,
+            cfg: hickory_resolver::config::ResolverConfig,
+            opts: hickory_resolver::config::ResolverOpts,
         ) -> Transport<T> {
             Transport {
                 inner: Arc::new(Mutex::new(inner)),
@@ -141,12 +166,12 @@ use std::{
     task::{Context, Poll},
 };
 
-pub use trust_dns_resolver::config::{ResolverConfig, ResolverOpts};
-pub use trust_dns_resolver::error::{ResolveError, ResolveErrorKind};
-use trust_dns_resolver::lookup::{Ipv4Lookup, Ipv6Lookup, TxtLookup};
-use trust_dns_resolver::lookup_ip::LookupIp;
-use trust_dns_resolver::name_server::ConnectionProvider;
-use trust_dns_resolver::AsyncResolver;
+pub use hickory_resolver::config::{ResolverConfig, ResolverOpts};
+pub use hickory_resolver::error::{ResolveError, ResolveErrorKind};
+use hickory_resolver::lookup::{Ipv4Lookup, Ipv6Lookup, TxtLookup};
+use hickory_resolver::lookup_ip::LookupIp;
+use hickory_resolver::name_server::ConnectionProvider;
+use hickory_resolver::AsyncResolver;
 
 /// The prefix for `dnsaddr` protocol TXT record lookups.
 const DNSADDR_PREFIX: &str = "_dnsaddr.";
@@ -277,7 +302,7 @@ where
                     )
                 }) {
                     if dns_lookups == MAX_DNS_LOOKUPS {
-                        log::debug!("Too many DNS lookups. Dropping unresolved {}.", addr);
+                        tracing::debug!(address=%addr, "Too many DNS lookups, dropping unresolved address");
                         last_err = Some(Error::TooManyLookups);
                         // There may still be fully resolved addresses in `unresolved`,
                         // so keep going until `unresolved` is empty.
@@ -294,13 +319,13 @@ where
                             last_err = Some(e);
                         }
                         Ok(Resolved::One(ip)) => {
-                            log::trace!("Resolved {} -> {}", name, ip);
+                            tracing::trace!(protocol=%name, resolved=%ip);
                             let addr = addr.replace(i, |_| Some(ip)).expect("`i` is a valid index");
                             unresolved.push(addr);
                         }
                         Ok(Resolved::Many(ips)) => {
                             for ip in ips {
-                                log::trace!("Resolved {} -> {}", name, ip);
+                                tracing::trace!(protocol=%name, resolved=%ip);
                                 let addr =
                                     addr.replace(i, |_| Some(ip)).expect("`i` is a valid index");
                                 unresolved.push(addr);
@@ -314,14 +339,14 @@ where
                                 if a.ends_with(&suffix) {
                                     if n < MAX_TXT_RECORDS {
                                         n += 1;
-                                        log::trace!("Resolved {} -> {}", name, a);
+                                        tracing::trace!(protocol=%name, resolved=%a);
                                         let addr =
                                             prefix.iter().chain(a.iter()).collect::<Multiaddr>();
                                         unresolved.push(addr);
                                     } else {
-                                        log::debug!(
-                                            "Too many TXT records. Dropping resolved {}.",
-                                            a
+                                        tracing::debug!(
+                                            resolved=%a,
+                                            "Too many TXT records, dropping resolved"
                                         );
                                     }
                                 }
@@ -330,7 +355,7 @@ where
                     }
                 } else {
                     // We have a fully resolved address, so try to dial it.
-                    log::debug!("Dialing {}", addr);
+                    tracing::debug!(address=%addr, "Dialing address");
 
                     let transport = inner.clone();
                     let dial = match role_override {
@@ -354,12 +379,12 @@ where
                     match result {
                         Ok(out) => return Ok(out),
                         Err(err) => {
-                            log::debug!("Dial error: {:?}.", err);
+                            tracing::debug!("Dial error: {:?}.", err);
                             if unresolved.is_empty() {
                                 return Err(err);
                             }
                             if dial_attempts == MAX_DIAL_ATTEMPTS {
-                                log::debug!(
+                                tracing::debug!(
                                     "Aborting dialing after {} attempts.",
                                     MAX_DIAL_ATTEMPTS
                                 );
@@ -537,7 +562,7 @@ fn resolve<'a, E: 'a + Send, R: Resolver>(
                                 match parse_dnsaddr_txt(chars) {
                                     Err(e) => {
                                         // Skip over seemingly invalid entries.
-                                        log::debug!("Invalid TXT record: {:?}", e);
+                                        tracing::debug!("Invalid TXT record: {:?}", e);
                                     }
                                     Ok(a) => {
                                         addrs.push(a);
@@ -612,7 +637,9 @@ mod tests {
 
     #[test]
     fn basic_resolve() {
-        let _ = env_logger::try_init();
+        let _ = tracing_subscriber::fmt()
+            .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
+            .try_init();
 
         #[derive(Clone)]
         struct CustomTransport;

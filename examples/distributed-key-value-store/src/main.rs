@@ -31,10 +31,13 @@ use libp2p::{
     tcp, yamux,
 };
 use std::error::Error;
+use tracing_subscriber::EnvFilter;
 
 #[async_std::main]
 async fn main() -> Result<(), Box<dyn Error>> {
-    env_logger::init();
+    let _ = tracing_subscriber::fmt()
+        .with_env_filter(EnvFilter::from_default_env())
+        .try_init();
 
     // We create a custom network behaviour that combines Kademlia and mDNS.
     #[derive(NetworkBehaviour)]

@@ -35,7 +35,6 @@ use libp2p_swarm::{
     ConnectionHandler, ConnectionHandlerEvent, StreamProtocol, StreamUpgradeError,
     SubstreamProtocol,
 };
-use log::debug;
 use std::collections::VecDeque;
 use std::task::{Context, Poll};
 use std::time::Duration;
@@ -102,7 +101,6 @@ pub struct Handler {
             <Handler as ConnectionHandler>::OutboundProtocol,
             <Handler as ConnectionHandler>::OutboundOpenInfo,
             <Handler as ConnectionHandler>::ToBehaviour,
-            <Handler as ConnectionHandler>::Error,
         >,
     >,
 
@@ -189,7 +187,7 @@ impl Handler {
                 if let Err(e) =
                     to_listener.try_send(transport::ToListenerMsg::Reservation(Err(error)))
                 {
-                    log::debug!("Unable to send error to listener: {}", e.into_send_error())
+                    tracing::debug!("Unable to send error to listener: {}", e.into_send_error())
                 }
                 self.reservation.failed();
             }
@@ -220,8 +218,9 @@ impl Handler {
             .try_push(circuit.deny(proto::Status::NO_RESERVATION))
             .is_err()
         {
-            log::warn!(
-                "Dropping existing inbound circuit request to be denied from {src_peer_id} in favor of new one."
+            tracing::warn!(
+                peer=%src_peer_id,
+                "Dropping existing inbound circuit request to be denied from peer in favor of new one"
             )
         }
     }
@@ -230,7 +229,6 @@ impl Handler {
 impl ConnectionHandler for Handler {
     type FromBehaviour = In;
     type ToBehaviour = Event;
-    type Error = void::Void;
     type InboundProtocol = ReadyUpgrade<StreamProtocol>;
     type InboundOpenInfo = ();
     type OutboundProtocol = ReadyUpgrade<StreamProtocol>;
@@ -270,16 +268,12 @@ impl ConnectionHandler for Handler {
         self.reservation.is_some()
     }
 
+    #[tracing::instrument(level = "trace", name = "ConnectionHandler::poll", skip(self, cx))]
     fn poll(
         &mut self,
         cx: &mut Context<'_>,
     ) -> Poll<
-        ConnectionHandlerEvent<
-            Self::OutboundProtocol,
-            Self::OutboundOpenInfo,
-            Self::ToBehaviour,
-            Self::Error,
-        >,
+        ConnectionHandlerEvent<Self::OutboundProtocol, Self::OutboundOpenInfo, Self::ToBehaviour>,
     > {
         loop {
             debug_assert_eq!(
@@ -319,7 +313,7 @@ impl ConnectionHandler for Handler {
                     if let Err(e) =
                         to_listener.try_send(transport::ToListenerMsg::Reservation(Err(error)))
                     {
-                        log::debug!("Unable to send error to listener: {}", e.into_send_error())
+                        tracing::debug!("Unable to send error to listener: {}", e.into_send_error())
                     }
                     self.reservation.failed();
                     continue;
@@ -335,7 +329,7 @@ impl ConnectionHandler for Handler {
                             outbound_hop::ReserveError::Io(io::ErrorKind::TimedOut.into()),
                         )))
                     {
-                        log::debug!("Unable to send error to listener: {}", e.into_send_error())
+                        tracing::debug!("Unable to send error to listener: {}", e.into_send_error())
                     }
                     self.reservation.failed();
                     continue;
@@ -367,7 +361,7 @@ impl ConnectionHandler for Handler {
                         }))
                         .is_err()
                     {
-                        log::debug!(
+                        tracing::debug!(
                             "Dropping newly established circuit because the listener is gone"
                         );
                         continue;
@@ -397,7 +391,7 @@ impl ConnectionHandler for Handler {
                             outbound_hop::ReserveError::Io(io::ErrorKind::TimedOut.into()),
                         )))
                     {
-                        log::debug!("Unable to send error to listener: {}", e.into_send_error())
+                        tracing::debug!("Unable to send error to listener: {}", e.into_send_error())
                     }
                     self.reservation.failed();
                     continue;
@@ -437,11 +431,11 @@ impl ConnectionHandler for Handler {
                     }
                 },
                 Poll::Ready(Ok(Err(e))) => {
-                    log::debug!("An inbound circuit request failed: {e}");
+                    tracing::debug!("An inbound circuit request failed: {e}");
                     continue;
                 }
                 Poll::Ready(Err(e)) => {
-                    log::debug!("An inbound circuit request timed out: {e}");
+                    tracing::debug!("An inbound circuit request timed out: {e}");
                     continue;
                 }
                 Poll::Pending => {}
@@ -460,11 +454,11 @@ impl ConnectionHandler for Handler {
             match self.inflight_outbound_circuit_deny_requests.poll_unpin(cx) {
                 Poll::Ready(Ok(Ok(()))) => continue,
                 Poll::Ready(Ok(Err(error))) => {
-                    log::debug!("Denying inbound circuit failed: {error}");
+                    tracing::debug!("Denying inbound circuit failed: {error}");
                     continue;
                 }
                 Poll::Ready(Err(futures_bounded::Timeout { .. })) => {
-                    log::debug!("Denying inbound circuit timed out");
+                    tracing::debug!("Denying inbound circuit timed out");
                     continue;
                 }
                 Poll::Pending => {}
@@ -493,7 +487,7 @@ impl ConnectionHandler for Handler {
                     .try_push(inbound_stop::handle_open_circuit(stream))
                     .is_err()
                 {
-                    log::warn!("Dropping inbound stream because we are at capacity")
+                    tracing::warn!("Dropping inbound stream because we are at capacity")
                 }
             }
             ConnectionEvent::FullyNegotiatedOutbound(FullyNegotiatedOutbound {
@@ -511,7 +505,7 @@ impl ConnectionHandler for Handler {
                             .try_push(outbound_hop::make_reservation(stream))
                             .is_err()
                         {
-                            log::warn!("Dropping outbound stream because we are at capacity")
+                            tracing::warn!("Dropping outbound stream because we are at capacity")
                         }
                     }
                     PendingRequest::Connect {
@@ -525,7 +519,7 @@ impl ConnectionHandler for Handler {
                             .try_push(outbound_hop::open_circuit(stream, dst_peer_id))
                             .is_err()
                         {
-                            log::warn!("Dropping outbound stream because we are at capacity")
+                            tracing::warn!("Dropping outbound stream because we are at capacity")
                         }
                     }
                 }
@@ -536,9 +530,7 @@ impl ConnectionHandler for Handler {
             ConnectionEvent::DialUpgradeError(dial_upgrade_error) => {
                 self.on_dial_upgrade_error(dial_upgrade_error)
             }
-            ConnectionEvent::AddressChange(_)
-            | ConnectionEvent::LocalProtocolsChange(_)
-            | ConnectionEvent::RemoteProtocolsChange(_) => {}
+            _ => {}
         }
     }
 }
@@ -617,12 +609,12 @@ impl Reservation {
                         if let Err(e) = to_listener
                             .start_send(pending_msgs.pop_front().expect("Called !is_empty()."))
                         {
-                            debug!("Failed to sent pending message to listener: {:?}", e);
+                            tracing::debug!("Failed to sent pending message to listener: {:?}", e);
                             *self = Reservation::None;
                         }
                     }
                     Poll::Ready(Err(e)) => {
-                        debug!("Channel to listener failed: {:?}", e);
+                        tracing::debug!("Channel to listener failed: {:?}", e);
                         *self = Reservation::None;
                     }
                     Poll::Pending => {}

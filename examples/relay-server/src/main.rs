@@ -33,9 +33,12 @@ use libp2p::{
 };
 use std::error::Error;
 use std::net::{Ipv4Addr, Ipv6Addr};
+use tracing_subscriber::EnvFilter;
 
 fn main() -> Result<(), Box<dyn Error>> {
-    env_logger::init();
+    let _ = tracing_subscriber::fmt()
+        .with_env_filter(EnvFilter::from_default_env())
+        .try_init();
 
     let opt = Opt::parse();
 

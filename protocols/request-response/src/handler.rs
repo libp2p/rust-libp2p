@@ -164,7 +164,7 @@ where
             .try_push(RequestId::Inbound(request_id), recv.boxed())
             .is_err()
         {
-            log::warn!("Dropping inbound stream because we are at capacity")
+            tracing::warn!("Dropping inbound stream because we are at capacity")
         }
     }
 
@@ -204,7 +204,7 @@ where
             .try_push(RequestId::Outbound(request_id), send.boxed())
             .is_err()
         {
-            log::warn!("Dropping outbound stream because we are at capacity")
+            tracing::warn!("Dropping outbound stream because we are at capacity")
         }
     }
 
@@ -236,7 +236,7 @@ where
             }
             StreamUpgradeError::Apply(e) => void::unreachable(e),
             StreamUpgradeError::Io(e) => {
-                log::debug!(
+                tracing::debug!(
                     "outbound stream for request {} failed: {e}, retrying",
                     message.request_id
                 );
@@ -367,7 +367,6 @@ where
 {
     type FromBehaviour = OutboundMessage<TCodec>;
     type ToBehaviour = Event<TCodec>;
-    type Error = void::Void;
     type InboundProtocol = Protocol<TCodec::Protocol>;
     type OutboundProtocol = Protocol<TCodec::Protocol>;
     type OutboundOpenInfo = ();
@@ -386,11 +385,11 @@ where
         self.pending_outbound.push_back(request);
     }
 
+    #[tracing::instrument(level = "trace", name = "ConnectionHandler::poll", skip(self, cx))]
     fn poll(
         &mut self,
         cx: &mut Context<'_>,
-    ) -> Poll<ConnectionHandlerEvent<Protocol<TCodec::Protocol>, (), Self::ToBehaviour, Self::Error>>
-    {
+    ) -> Poll<ConnectionHandlerEvent<Protocol<TCodec::Protocol>, (), Self::ToBehaviour>> {
         match self.worker_streams.poll_unpin(cx) {
             Poll::Ready((_, Ok(Ok(event)))) => {
                 return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(event));
@@ -483,9 +482,7 @@ where
             ConnectionEvent::ListenUpgradeError(listen_upgrade_error) => {
                 self.on_listen_upgrade_error(listen_upgrade_error)
             }
-            ConnectionEvent::AddressChange(_)
-            | ConnectionEvent::LocalProtocolsChange(_)
-            | ConnectionEvent::RemoteProtocolsChange(_) => {}
+            _ => {}
         }
     }
 }

@@ -23,7 +23,6 @@ use futures::{
     ready,
     task::{Context, Poll},
 };
-use log::trace;
 use pin_project::pin_project;
 use salsa20::{cipher::StreamCipher, XSalsa20};
 use std::{fmt, pin::Pin};
@@ -120,7 +119,7 @@ impl<W: AsyncWrite> AsyncWrite for CryptWriter<W> {
         let res = Pin::new(&mut *this.buf).poll_write(cx, buf);
         if let Poll::Ready(Ok(count)) = res {
             this.cipher.apply_keystream(&mut this.buf[0..count]);
-            trace!("encrypted {} bytes", count);
+            tracing::trace!(bytes=%count, "encrypted bytes");
         } else {
             debug_assert!(false);
         };

@@ -34,7 +34,7 @@ async fn punch_holes<P: Provider>(
             .take(64)
             .collect();
 
-        log::trace!("Sending random UDP packet to {remote_addr}");
+        tracing::trace!("Sending random UDP packet to {remote_addr}");
 
         P::send_to(&socket, &contents, remote_addr).await?;
 

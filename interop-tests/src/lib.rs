@@ -47,7 +47,7 @@ pub async fn run_test(
     let (mut swarm, local_addr) =
         build_swarm(ip, transport, sec_protocol, muxer, build_behaviour).await?;
 
-    log::info!("Running ping test: {}", swarm.local_peer_id());
+    tracing::info!(local_peer=%swarm.local_peer_id(), "Running ping test");
 
     // See https://github.com/libp2p/rust-libp2p/issues/4071.
     #[cfg(not(target_arch = "wasm32"))]
@@ -74,7 +74,7 @@ pub async fn run_test(
             let handshake_start = Instant::now();
 
             swarm.dial(other.parse::<Multiaddr>()?)?;
-            log::info!("Test instance, dialing multiaddress on: {}.", other);
+            tracing::info!(listener=%other, "Test instance, dialing multiaddress");
 
             let rtt = loop {
                 if let Some(SwarmEvent::Behaviour(BehaviourEvent::Ping(ping::Event {
@@ -82,7 +82,7 @@ pub async fn run_test(
                     ..
                 }))) = swarm.next().await
                 {
-                    log::info!("Ping successful: {rtt:?}");
+                    tracing::info!(?rtt, "Ping successful");
                     break rtt.as_micros() as f32 / 1000.;
                 }
             };
@@ -101,9 +101,9 @@ pub async fn run_test(
                 Some(id) => id,
             };
 
-            log::info!(
-                "Test instance, listening for incoming connections on: {:?}.",
-                local_addr
+            tracing::info!(
+                address=%local_addr,
+                "Test instance, listening for incoming connections on address"
             );
 
             loop {
@@ -129,7 +129,7 @@ pub async fn run_test(
                     loop {
                         let event = swarm.next().await.unwrap();
 
-                        log::debug!("{event:?}");
+                        tracing::debug!("{event:?}");
                     }
                 }
                 .boxed(),
@@ -164,7 +164,7 @@ pub async fn run_test_wasm(
         muxer,
     )
     .await;
-    log::info!("Sending test result: {result:?}");
+    tracing::info!(?result, "Sending test result");
     reqwest::Client::new()
         .post(&format!("http://{}/results", base_url))
         .json(&result.map_err(|e| e.to_string()))
