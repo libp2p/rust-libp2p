@@ -182,8 +182,8 @@ pub enum SubscriptionAction {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub(crate) struct PeerInfo {
-    pub(crate) peer_id: Option<PeerId>,
+pub struct PeerInfo {
+    pub peer_id: Option<PeerId>,
     //TODO add this when RFC: Signed Address Records got added to the spec (see pull request
     // https://github.com/libp2p/specs/pull/217)
     //pub signed_peer_record: ?,
@@ -191,7 +191,7 @@ pub(crate) struct PeerInfo {
 
 /// A Control message received by the gossipsub system.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub(crate) enum ControlAction {
+pub enum ControlAction {
     /// Node broadcasts known messages per topic - IHave control message.
     IHave {
         /// The topic of the messages.
@@ -222,13 +222,13 @@ pub(crate) enum ControlAction {
 
 /// An RPC received/sent.
 #[derive(Clone, PartialEq, Eq, Hash)]
-pub(crate) struct Rpc {
+pub struct Rpc {
     /// List of messages that were part of this RPC query.
-    pub(crate) messages: Vec<RawMessage>,
+    pub messages: Vec<RawMessage>,
     /// List of subscriptions.
-    pub(crate) subscriptions: Vec<Subscription>,
+    pub subscriptions: Vec<Subscription>,
     /// List of Gossipsub control messages.
-    pub(crate) control_msgs: Vec<ControlAction>,
+    pub control_msgs: Vec<ControlAction>,
 }
 
 impl Rpc {

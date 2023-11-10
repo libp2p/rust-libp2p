@@ -127,7 +127,7 @@ pub use self::topic::{Hasher, Topic, TopicHash};
 pub use self::transform::{DataTransform, IdentityTransform};
 pub use self::types::{Message, MessageAcceptance, MessageId, RawMessage};
 
-#[deprecated(note = "Will be removed from the public API.")]
+#[deprecated(note = "Will be removed from the public API.")] // Once this is done, remove `#[allow(unreachable_pub)]` from it!
 #[allow(private_interfaces)]
 pub type Rpc = self::types::Rpc;
 
