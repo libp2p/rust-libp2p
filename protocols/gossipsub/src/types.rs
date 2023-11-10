@@ -234,7 +234,7 @@ pub struct Rpc {
 impl Rpc {
     /// Converts the GossipsubRPC into its protobuf format.
     // A convenience function to avoid explicitly specifying types.
-    pub(crate) fn into_protobuf(self) -> proto::RPC {
+    pub fn into_protobuf(self) -> proto::RPC {
         self.into()
     }
 }

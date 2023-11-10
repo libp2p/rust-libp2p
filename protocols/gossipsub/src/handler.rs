@@ -47,8 +47,6 @@ pub enum HandlerEvent {
     /// any) that were received.
     Message {
         /// The GossipsubRPC message excluding any invalid messages.
-        // `HandlerEvent` shouldn't be public but we can't enforce that.
-        #[allow(private_interfaces)]
         rpc: Rpc,
         /// Any invalid messages that were received in the RPC, along with the associated
         /// validation error.
