@@ -543,8 +543,7 @@ where
 
             for peer in peer_list {
                 tracing::debug!(%peer, "Sending SUBSCRIBE to peer");
-                self.send_message(peer, event.clone())
-                    .map_err(SubscriptionError::PublishError)?;
+                self.send_message(peer, event.clone());
             }
         }
 
@@ -578,7 +577,7 @@ where
 
             for peer in peer_list {
                 tracing::debug!(%peer, "Sending UNSUBSCRIBE to peer");
-                self.send_message(peer, event.clone())?;
+                self.send_message(peer, event.clone());
             }
         }
 
@@ -734,7 +733,7 @@ where
         // Send to peers we know are subscribed to the topic.
         for peer_id in recipient_peers.iter() {
             tracing::trace!(peer=%peer_id, "Sending message to peer");
-            self.send_message(*peer_id, event.clone())?;
+            self.send_message(*peer_id, event.clone());
 
             if let Some(m) = self.metrics.as_mut() {
                 m.msg_sent(&topic_hash, msg_bytes);
@@ -1354,9 +1353,8 @@ where
 
             let message = RpcOut::Forward(message_list);
 
-            if self.send_message(*peer_id, message).is_err() {
-                tracing::error!("Failed to send cached messages. Messages too large");
-            } else if let Some(m) = self.metrics.as_mut() {
+            self.send_message(*peer_id, message);
+            if let Some(m) = self.metrics.as_mut() {
                 // Sending of messages succeeded, register them on the internal metrics.
                 for topic in topics.iter() {
                     m.msg_sent(topic, msg_bytes);
@@ -1521,10 +1519,7 @@ where
                 peer=%peer_id,
                 "GRAFT: Not subscribed to topics -  Sending PRUNE to peer"
             );
-
-            if let Err(e) = self.send_message(*peer_id, RpcOut::Control(prune_messages)) {
-                tracing::error!("Failed to send PRUNE: {:?}", e);
-            }
+            self.send_message(*peer_id, RpcOut::Control(prune_messages));
         }
         tracing::debug!(peer=%peer_id, "Completed GRAFT handling for peer");
     }
@@ -2016,20 +2011,16 @@ where
 
         // If we need to send grafts to peer, do so immediately, rather than waiting for the
         // heartbeat.
-        if !topics_to_graft.is_empty()
-            && self
-                .send_message(
-                    *propagation_source,
-                    RpcOut::Control(
-                        topics_to_graft
-                            .into_iter()
-                            .map(|topic_hash| ControlAction::Graft { topic_hash })
-                            .collect(),
-                    ),
-                )
-                .is_err()
-        {
-            tracing::error!("Failed sending grafts. Message too large");
+        if !topics_to_graft.is_empty() {
+            self.send_message(
+                *propagation_source,
+                RpcOut::Control(
+                    topics_to_graft
+                        .into_iter()
+                        .map(|topic_hash| ControlAction::Graft { topic_hash })
+                        .collect(),
+                ),
+            )
         }
 
         // Notify the application of the subscriptions
@@ -2585,12 +2576,7 @@ where
             }
 
             // send the control messages
-            if self
-                .send_message(peer, RpcOut::Control(control_msgs))
-                .is_err()
-            {
-                tracing::error!("Failed to send control messages. Message too large");
-            }
+            self.send_message(peer, RpcOut::Control(control_msgs));
         }
 
         // handle the remaining prunes
@@ -2617,12 +2603,7 @@ where
                 );
             }
 
-            if self
-                .send_message(*peer, RpcOut::Control(remaining_prunes))
-                .is_err()
-            {
-                tracing::error!("Failed to send prune messages. Message too large");
-            }
+            self.send_message(*peer, RpcOut::Control(remaining_prunes))
         }
     }
 
@@ -2684,7 +2665,7 @@ where
 
             for peer in recipient_peers.iter() {
                 tracing::debug!(%peer, message=%msg_id, "Sending message to peer");
-                self.send_message(*peer, event.clone())?;
+                self.send_message(*peer, event.clone());
                 if let Some(m) = self.metrics.as_mut() {
                     m.msg_sent(&message.topic, msg_bytes);
                 }
@@ -2800,9 +2781,7 @@ where
     /// Takes each control action mapping and turns it into a message
     fn flush_control_pool(&mut self) {
         for (peer, controls) in self.control_pool.drain().collect::<Vec<_>>() {
-            if self.send_message(peer, RpcOut::Control(controls)).is_err() {
-                tracing::error!("Failed to flush control pool. Message too large");
-            }
+            self.send_message(peer, RpcOut::Control(controls));
         }
 
         // This clears all pending IWANT messages
@@ -2811,17 +2790,12 @@ where
 
     /// Send a [`RpcOut`] message to a peer. This will wrap the message in an arc if it
     /// is not already an arc.
-    fn send_message(&mut self, peer_id: PeerId, message: RpcOut) -> Result<(), PublishError> {
-        // If the message is oversized, try and fragment it. If it cannot be fragmented, log an
-        // error and drop the message (all individual messages should be small enough to fit in the
-        // max_transmit_size)
-
+    fn send_message(&mut self, peer_id: PeerId, message: RpcOut) {
         self.events.push_back(ToSwarm::NotifyHandler {
             peer_id,
             event: HandlerIn::Message(message),
             handler: NotifyHandler::Any,
         });
-        Ok(())
     }
 
     fn on_connection_established(
@@ -2887,12 +2861,7 @@ where
 
                 if !subscriptions.is_empty() {
                     // send our subscriptions to the peer
-                    if self
-                        .send_message(peer_id, RpcOut::Subscriptions(subscriptions))
-                        .is_err()
-                    {
-                        tracing::error!("Failed to send subscriptions, message too large");
-                    }
+                    self.send_message(peer_id, RpcOut::Subscriptions(subscriptions));
                 }
             }
 
