@@ -1,8 +1,7 @@
-## Unreleased
+## 0.26.1 - unreleased
 
-- Remove failed connections from internal state. Fixes [Issue
-    4773](https://github.com/libp2p/rust-libp2p/issues/4773).
-    See [PR 4777](https://github.com/libp2p/rust-libp2p/pull/4777)
+- Correctly update internal state for failed connections.
+  See [PR 4777](https://github.com/libp2p/rust-libp2p/pull/4777)
 
 ## 0.26.0
 
