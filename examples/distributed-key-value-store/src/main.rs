@@ -21,6 +21,7 @@
 #![doc = include_str!("../README.md")]
 
 use async_std::io;
+use bytes::Bytes;
 use futures::{prelude::*, select};
 use libp2p::kad;
 use libp2p::kad::store::MemoryStore;
@@ -184,7 +185,7 @@ fn handle_input_line(kademlia: &mut kad::Behaviour<MemoryStore>, line: String) {
             };
             let value = {
                 match args.next() {
-                    Some(value) => value.as_bytes().to_vec(),
+                    Some(value) => Bytes::copy_from_slice(value.as_bytes()),
                     None => {
                         eprintln!("Expected value");
                         return;

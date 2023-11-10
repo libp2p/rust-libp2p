@@ -29,7 +29,7 @@
 use crate::proto;
 use crate::record::{self, Record};
 use asynchronous_codec::{Decoder, Encoder, Framed};
-use bytes::BytesMut;
+use bytes::{Bytes, BytesMut};
 use futures::prelude::*;
 use instant::Instant;
 use libp2p_core::upgrade::{InboundUpgrade, OutboundUpgrade, UpgradeInfo};
@@ -314,7 +314,7 @@ pub enum KadResponseMsg {
         /// The key of the record.
         key: record::Key,
         /// Value of the record.
-        value: Vec<u8>,
+        value: Bytes,
     },
 }
 
@@ -422,7 +422,7 @@ fn resp_msg_to_proto(kad_msg: KadResponseMsg) -> proto::Message {
             key: key.to_vec(),
             record: Some(proto::Record {
                 key: key.to_vec(),
-                value,
+                value: value.to_vec(),
                 ..proto::Record::default()
             }),
             ..proto::Message::default()
@@ -528,7 +528,7 @@ fn proto_to_resp_msg(message: proto::Message) -> Result<KadResponseMsg, io::Erro
 
             Ok(KadResponseMsg::PutValue {
                 key,
-                value: rec.value,
+                value: Bytes::from(rec.value),
             })
         }
 
@@ -540,7 +540,7 @@ fn proto_to_resp_msg(message: proto::Message) -> Result<KadResponseMsg, io::Erro
 
 fn record_from_proto(record: proto::Record) -> Result<Record, io::Error> {
     let key = record::Key::from(record.key);
-    let value = record.value;
+    let value = Bytes::from(record.value);
 
     let publisher = if !record.publisher.is_empty() {
         PeerId::from_bytes(&record.publisher)
@@ -567,7 +567,7 @@ fn record_from_proto(record: proto::Record) -> Result<Record, io::Error> {
 fn record_to_proto(record: Record) -> proto::Record {
     proto::Record {
         key: record.key.to_vec(),
-        value: record.value,
+        value: record.value.to_vec(),
         publisher: record.publisher.map(|id| id.to_bytes()).unwrap_or_default(),
         ttl: record
             .expires
