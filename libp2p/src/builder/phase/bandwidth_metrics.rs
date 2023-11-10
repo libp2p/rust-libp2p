@@ -22,11 +22,8 @@ impl<T: AuthenticatedMultiplexedTransport, Provider, R>
         SwarmBuilder {
             phase: BehaviourPhase {
                 relay_behaviour: self.phase.relay_behaviour,
-                transport: libp2p_metrics::BandwidthTransport::new(
-                    self.phase.transport,
-                    registry,
-                )
-                .map(|(peer_id, conn), _| (peer_id, StreamMuxerBox::new(conn))),
+                transport: libp2p_metrics::BandwidthTransport::new(self.phase.transport, registry)
+                    .map(|(peer_id, conn), _| (peer_id, StreamMuxerBox::new(conn))),
             },
             keypair: self.keypair,
             phantom: PhantomData,
