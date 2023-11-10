@@ -2909,6 +2909,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "libp2p-protocol-utils"
+version = "0.1.0"
+
+[[package]]
 name = "libp2p-quic"
 version = "0.10.1"
 dependencies = [
