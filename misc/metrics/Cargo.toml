@@ -3,7 +3,7 @@ name = "libp2p-metrics"
 edition = "2021"
 rust-version = { workspace = true }
 description = "Metrics for libp2p"
-version = "0.14.0"
+version = "0.14.1"
 authors = ["Max Inden <mail@max-inden.de>"]
 license = "MIT"
 repository = "https://github.com/libp2p/rust-libp2p"
