@@ -1,4 +1,4 @@
-## 0.45.1
+## 0.45.1 - unreleased
 
 - Fix a bug where calling `Behaviour::remove_address` with an address not in the peer's bucket would remove the peer from the routing table if the bucket has only one address left.
   See [PR 4816](https://github.com/libp2p/rust-libp2p/pull/4816)
