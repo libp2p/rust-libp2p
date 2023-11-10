@@ -2,6 +2,8 @@
 
 - Allow `SwarmBuilder::with_quic_config` to be called without `with_tcp` first.
   See [PR 4821](https://github.com/libp2p/rust-libp2p/pull/4821).
+- Introduce `SwarmBuilder::with_dns_config`.
+  See [PR 4808](https://github.com/libp2p/rust-libp2p/pull/4808).
 
 ## 0.53.0
 

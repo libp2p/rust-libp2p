@@ -100,6 +100,36 @@ impl<T: AuthenticatedMultiplexedTransport>
         self.without_any_other_transports().with_dns()
     }
 }
+#[cfg(all(not(target_arch = "wasm32"), feature = "async-std", feature = "dns"))]
+impl<T: AuthenticatedMultiplexedTransport>
+    SwarmBuilder<super::provider::AsyncStd, OtherTransportPhase<T>>
+{
+    pub fn with_dns_config(
+        self,
+        cfg: libp2p_dns::ResolverConfig,
+        opts: libp2p_dns::ResolverOpts,
+    ) -> SwarmBuilder<
+        super::provider::AsyncStd,
+        WebsocketPhase<impl AuthenticatedMultiplexedTransport>,
+    > {
+        self.without_any_other_transports()
+            .with_dns_config(cfg, opts)
+    }
+}
+#[cfg(all(not(target_arch = "wasm32"), feature = "tokio", feature = "dns"))]
+impl<T: AuthenticatedMultiplexedTransport>
+    SwarmBuilder<super::provider::Tokio, OtherTransportPhase<T>>
+{
+    pub fn with_dns_config(
+        self,
+        cfg: libp2p_dns::ResolverConfig,
+        opts: libp2p_dns::ResolverOpts,
+    ) -> SwarmBuilder<super::provider::Tokio, WebsocketPhase<impl AuthenticatedMultiplexedTransport>>
+    {
+        self.without_any_other_transports()
+            .with_dns_config(cfg, opts)
+    }
+}
 #[cfg(feature = "relay")]
 impl<T: AuthenticatedMultiplexedTransport, Provider>
     SwarmBuilder<Provider, OtherTransportPhase<T>>
