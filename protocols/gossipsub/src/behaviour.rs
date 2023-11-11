@@ -713,7 +713,6 @@ where
         // If the message isn't a duplicate and we have sent it to some peers add it to the
         // duplicate cache and memcache.
         self.duplicate_cache.insert(msg_id.clone());
-        let msg_bytes = raw_message.raw_protobuf_len();
         self.mcache.put(&msg_id, raw_message);
 
         // If the message is anonymous or has a random author add it to the published message ids
@@ -728,10 +727,6 @@ where
         for peer_id in recipient_peers.iter() {
             tracing::trace!(peer=%peer_id, "Sending message to peer");
             self.send_message(*peer_id, event.clone());
-
-            if let Some(m) = self.metrics.as_mut() {
-                m.msg_sent(&topic_hash, msg_bytes);
-            }
         }
 
         tracing::debug!(message=%msg_id, "Published message");
@@ -1334,12 +1329,6 @@ where
         // Forward cached messages.
         for message in cached_messages.into_iter().map(|entry| entry.1) {
             tracing::debug!(peer=%peer_id, "IWANT: Sending cached messages to peer");
-            let msg_bytes = message.raw_protobuf_len();
-
-            if let Some(m) = self.metrics.as_mut() {
-                // Sending of messages succeeded, register them on the internal metrics.
-                m.msg_sent(&message.topic, msg_bytes);
-            }
             self.send_message(*peer_id, RpcOut::Forward(message));
         }
         tracing::debug!(peer=%peer_id, "Completed IWANT handling for peer");
@@ -2641,15 +2630,11 @@ where
 
         // forward the message to peers
         if !recipient_peers.is_empty() {
-            let msg_bytes = message.raw_protobuf_len();
             let event = RpcOut::Forward(message.clone());
 
             for peer in recipient_peers.iter() {
                 tracing::debug!(%peer, message=%msg_id, "Sending message to peer");
                 self.send_message(*peer, event.clone());
-                if let Some(m) = self.metrics.as_mut() {
-                    m.msg_sent(&message.topic, msg_bytes);
-                }
             }
             tracing::debug!("Completed forwarding message");
             Ok(true)
@@ -2771,10 +2756,17 @@ where
 
     /// Send a [`RpcOut`] message to a peer. This will wrap the message in an arc if it
     /// is not already an arc.
-    fn send_message(&mut self, peer_id: PeerId, message: RpcOut) {
+    fn send_message(&mut self, peer_id: PeerId, rpc: RpcOut) {
+        if let Some(m) = self.metrics.as_mut() {
+            if let RpcOut::Publish(ref message) | RpcOut::Forward(ref message) = rpc {
+                // register bytes sent on the internal metrics.
+                m.msg_sent(&message.topic, message.raw_protobuf_len());
+            }
+        }
+
         self.events.push_back(ToSwarm::NotifyHandler {
             peer_id,
-            event: HandlerIn::Message(message),
+            event: HandlerIn::Message(rpc),
             handler: NotifyHandler::Any,
         });
     }
