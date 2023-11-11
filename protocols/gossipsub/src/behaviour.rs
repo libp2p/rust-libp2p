@@ -565,14 +565,10 @@ where
         }
 
         // announce to all peers
-        let peer_list = self.peer_topics.keys().cloned().collect::<Vec<_>>();
-        if !peer_list.is_empty() {
+        for peer in self.peer_topics.keys().cloned().collect::<Vec<_>>() {
+            tracing::debug!(%peer, "Sending UNSUBSCRIBE to peer");
             let event = RpcOut::Unsubscribe(topic_hash.clone());
-
-            for peer in peer_list {
-                tracing::debug!(%peer, "Sending UNSUBSCRIBE to peer");
-                self.send_message(peer, event.clone());
-            }
+            self.send_message(peer, event);
         }
 
         // call LEAVE(topic)
@@ -2817,24 +2813,27 @@ where
             .connections
             .push(connection_id);
 
-        if other_established == 0 {
-            // Ignore connections from blacklisted peers.
-            if self.blacklisted_peers.contains(&peer_id) {
-                tracing::debug!(peer=%peer_id, "Ignoring connection from blacklisted peer");
-            } else {
-                tracing::debug!(peer=%peer_id, "New peer connected");
-                // We need to send our subscriptions to the newly-connected node.
-                for topic_hash in self.mesh.keys().cloned().collect::<Vec<_>>() {
-                    self.send_message(peer_id, RpcOut::Subscribe(topic_hash));
-                }
-            }
+        if other_established > 0 {
+            return; // Not our first connection to this peer, hence nothing to do.
+        }
 
-            // Insert an empty set of the topics of this peer until known.
-            self.peer_topics.insert(peer_id, Default::default());
+        // Ignore connections from blacklisted peers.
+        if self.blacklisted_peers.contains(&peer_id) {
+            tracing::debug!(peer=%peer_id, "Ignoring connection from blacklisted peer");
+            return;
+        }
 
-            if let Some((peer_score, ..)) = &mut self.peer_score {
-                peer_score.add_peer(peer_id);
-            }
+        tracing::debug!(peer=%peer_id, "New peer connected");
+        // We need to send our subscriptions to the newly-connected node.
+        for topic_hash in self.mesh.keys().cloned().collect::<Vec<_>>() {
+            self.send_message(peer_id, RpcOut::Subscribe(topic_hash));
+        }
+
+        // Insert an empty set of the topics of this peer until known.
+        self.peer_topics.insert(peer_id, Default::default());
+
+        if let Some((peer_score, ..)) = &mut self.peer_score {
+            peer_score.add_peer(peer_id);
         }
     }
 
