@@ -1331,29 +1331,16 @@ where
             }
         }
 
-        if !cached_messages.is_empty() {
+        // Forward cached messages.
+        for message in cached_messages.into_iter().map(|entry| entry.1) {
             tracing::debug!(peer=%peer_id, "IWANT: Sending cached messages to peer");
-            // Send the messages to the peer
-            let message_list: Vec<_> = cached_messages.into_iter().map(|entry| entry.1).collect();
+            let msg_bytes = message.raw_protobuf_len();
 
-            let topics = message_list
-                .iter()
-                .map(|message| message.topic.clone())
-                .collect::<HashSet<TopicHash>>();
-
-            let msg_bytes = message_list
-                .iter()
-                .fold(0, |acc, m| acc + m.raw_protobuf_len());
-
-            let message = RpcOut::Forward(message_list);
-
-            self.send_message(*peer_id, message);
             if let Some(m) = self.metrics.as_mut() {
                 // Sending of messages succeeded, register them on the internal metrics.
-                for topic in topics.iter() {
-                    m.msg_sent(topic, msg_bytes);
-                }
+                m.msg_sent(&message.topic, msg_bytes);
             }
+            self.send_message(*peer_id, RpcOut::Forward(message));
         }
         tracing::debug!(peer=%peer_id, "Completed IWANT handling for peer");
     }
@@ -2655,7 +2642,7 @@ where
         // forward the message to peers
         if !recipient_peers.is_empty() {
             let msg_bytes = message.raw_protobuf_len();
-            let event = RpcOut::Forward(vec![message.clone()]);
+            let event = RpcOut::Forward(message.clone());
 
             for peer in recipient_peers.iter() {
                 tracing::debug!(%peer, message=%msg_id, "Sending message to peer");
@@ -3455,13 +3442,7 @@ mod local_test {
                 0 => RpcOut::Subscribe(IdentTopic::new("TestTopic").hash()),
                 1 => RpcOut::Unsubscribe(IdentTopic::new("TestTopic").hash()),
                 2 => RpcOut::Publish(test_message()),
-                3 => {
-                    let mut messages = Vec::new();
-                    for _ in 0..g.gen_range(0..10u8) {
-                        messages.push(test_message());
-                    }
-                    RpcOut::Forward(messages)
-                }
+                3 => RpcOut::Forward(test_message()),
                 4 => {
                     let mut control = Vec::new();
                     for _ in 0..g.gen_range(0..10u8) {

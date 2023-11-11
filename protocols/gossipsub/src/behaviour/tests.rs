@@ -1015,8 +1015,8 @@ fn test_handle_iwant_msg_cached() {
         Vec::<RawMessage>::new(),
         |mut collected_messages, e| match e {
             ToSwarm::NotifyHandler { event, .. } => {
-                if let HandlerIn::Message(RpcOut::Forward(mut messages)) = event {
-                    collected_messages.append(&mut messages);
+                if let HandlerIn::Message(RpcOut::Forward(message)) = event {
+                    collected_messages.push(message);
                 }
                 collected_messages
             }
@@ -1071,12 +1071,15 @@ fn test_handle_iwant_msg_cached_shifted() {
         // is the message is being sent?
         let message_exists = gs.events.iter().any(|e| match e {
             ToSwarm::NotifyHandler {
-                event: HandlerIn::Message(RpcOut::Forward(messages)),
+                event: HandlerIn::Message(RpcOut::Forward(message)),
                 ..
-            } => messages
-                .iter()
-                .map(|msg| gs.data_transform.inbound_transform(msg.clone()).unwrap())
-                .any(|msg| gs.config.message_id(&msg) == msg_id),
+            } => {
+                gs.config.message_id(
+                    &gs.data_transform
+                        .inbound_transform(message.clone())
+                        .unwrap(),
+                ) == msg_id
+            }
             _ => false,
         });
         // default history_length is 5, expect no messages after shift > 5
@@ -1523,11 +1526,10 @@ fn do_forward_messages_to_explicit_peers() {
             .filter(|e| match e {
                 ToSwarm::NotifyHandler {
                     peer_id,
-                    event: HandlerIn::Message(RpcOut::Forward(messages)),
+                    event: HandlerIn::Message(RpcOut::Forward(m)),
                     ..
                 } => {
-                    peer_id == &peers[0]
-                        && messages.iter().filter(|m| m.data == message.data).count() > 0
+                    peer_id == &peers[0] && m.data == message.data
                 }
                 _ => false,
             })
@@ -2622,9 +2624,8 @@ fn test_iwant_msg_from_peer_below_gossip_threshold_gets_ignored() {
         .into_iter()
         .fold(vec![], |mut collected_messages, e| match e {
             ToSwarm::NotifyHandler { event, peer_id, .. } => {
-                if let HandlerIn::Message(RpcOut::Forward(messages)) = event {
-                    let mut cm = messages.into_iter().map(|m| (peer_id, m)).collect();
-                    collected_messages.append(&mut cm);
+                if let HandlerIn::Message(RpcOut::Forward(message)) = event {
+                    collected_messages.push((peer_id, message));
                 }
                 collected_messages
             }
@@ -4342,16 +4343,14 @@ fn test_ignore_too_many_iwants_from_same_peer_for_same_message() {
     assert_eq!(
         gs.events
             .iter()
-            .map(|e| match e {
+            .filter(|e| matches!(
+                e,
                 ToSwarm::NotifyHandler {
-                    event: HandlerIn::Message(RpcOut::Forward(messages)),
+                    event: HandlerIn::Message(RpcOut::Forward(_)),
                     ..
-                } => {
-                    messages.len()
                 }
-                _ => 0,
-            })
-            .sum::<usize>(),
+            ))
+            .count(),
         config.gossip_retransimission() as usize,
         "not more then gossip_retransmission many messages get sent back"
     );

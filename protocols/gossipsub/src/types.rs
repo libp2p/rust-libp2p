@@ -266,7 +266,7 @@ pub enum RpcOut {
     /// Publish a Gossipsub message on network.
     Publish(RawMessage),
     /// Forward a Gossipsub message to the network.
-    Forward(Vec<RawMessage>),
+    Forward(RawMessage),
     /// Subscribe a topic.
     Subscribe(TopicHash),
     /// Unsubscribe a topic.
@@ -292,8 +292,8 @@ impl From<RpcOut> for proto::RPC {
                 publish: vec![message.into()],
                 control: None,
             },
-            RpcOut::Forward(messages) => proto::RPC {
-                publish: messages.into_iter().map(Into::into).collect(),
+            RpcOut::Forward(message) => proto::RPC {
+                publish: vec![message.into()],
                 subscriptions: Vec::new(),
                 control: None,
             },
