@@ -400,7 +400,7 @@ impl Config {
 
     /// Sets the interval on which [`Behaviour::bootstrap`] is called from [`Behaviour::poll`]
     ///
-    /// `None` means that [`Behaviour::bootstrap`] is not called from [`Behaviour::poll`]
+    /// `None` means we don't bootstrap at all.
     pub fn set_refresh_interval(&mut self, interval: Option<Duration>) -> &mut Self {
         self.refresh_interval = interval;
         self
