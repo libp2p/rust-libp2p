@@ -1,3 +1,8 @@
+## 0.45.4
+
+- Add periodic and automatic bootstrap.
+  See [PR 4838](https://github.com/libp2p/rust-libp2p/pull/4838).
+
 ## 0.45.3
 
 - The progress of the close query iterator shall be decided by ANY of the new peers.
@@ -5,9 +10,6 @@
 
 ## 0.45.2
 
-- Automatically `bootstrap` every 5 minutes.
-  This can be configured using the `bootstrap_interval` config.
-  See [PR 4838](https://github.com/libp2p/rust-libp2p/pull/4838)
 - Ensure `Multiaddr` handled and returned by `Behaviour` are `/p2p` terminated.
   See [PR 4596](https://github.com/libp2p/rust-libp2p/pull/4596).
 

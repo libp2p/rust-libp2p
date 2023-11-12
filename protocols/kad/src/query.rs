@@ -511,10 +511,4 @@ impl QueryStats {
             end: std::cmp::max(self.end, other.end),
         }
     }
-
-    #[cfg(test)]
-    pub(crate) fn with_successes(mut self, successes: u32) -> Self {
-        self.success = successes;
-        self
-    }
 }
