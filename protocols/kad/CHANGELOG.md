@@ -1,3 +1,8 @@
+## 0.45.2
+
+- Add `refresh_interval` config and `Behaviour::poll` function used to poll `Behaviour::boostrap`
+  See [PR 4838](https://github.com/libp2p/rust-libp2p/pull/4838)
+  
 ## 0.45.1
 
 - Fix a bug where calling `Behaviour::remove_address` with an address not in the peer's bucket would remove the peer from the routing table if the bucket has only one address left.
