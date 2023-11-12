@@ -119,7 +119,7 @@ pub struct Behaviour<TStore> {
     store: TStore,
 
     /// The interval used by [`Behaviour::poll`] to call [`Behaviour::bootstrap`].
-    refresh_interval: Option<Duration>,
+    bootstrap_interval: Option<Duration>,
 }
 
 /// The configurable strategies for the insertion of peers
