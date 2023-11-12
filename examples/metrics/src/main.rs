@@ -40,6 +40,8 @@ mod http_service;
 async fn main() -> Result<(), Box<dyn Error>> {
     setup_tracing()?;
 
+    let mut metric_registry = Registry::default();
+
     let mut swarm = libp2p::SwarmBuilder::with_new_identity()
         .with_tokio()
         .with_tcp(
@@ -47,6 +49,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
             noise::Config::new,
             yamux::Config::default,
         )?
+        .with_bandwidth_metrics(&mut metric_registry)
         .with_behaviour(|key| Behaviour::new(key.public()))?
         .with_swarm_config(|cfg| cfg.with_idle_connection_timeout(Duration::from_secs(u64::MAX)))
         .build();
@@ -59,7 +62,6 @@ async fn main() -> Result<(), Box<dyn Error>> {
         tracing::info!(address=%addr, "Dialed address")
     }
 
-    let mut metric_registry = Registry::default();
     let metrics = Metrics::new(&mut metric_registry);
     tokio::spawn(http_service::metrics_server(metric_registry));
 
