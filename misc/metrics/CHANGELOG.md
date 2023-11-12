@@ -1,4 +1,4 @@
-## 0.14.1 - unreleased
+## 0.14.1
 
 - Add `BandwidthTransport`, wrapping an existing `Transport`, exposing Prometheus bandwidth metrics.
   See also `SwarmBuilder::with_bandwidth_metrics`.
