@@ -2425,7 +2425,7 @@ checksum = "89d92a4743f9a61002fae18374ed11e7973f530cb3a3255fb354818118b2203c"
 
 [[package]]
 name = "libp2p"
-version = "0.53.0"
+version = "0.53.1"
 dependencies = [
  "async-std",
  "async-trait",
@@ -2724,7 +2724,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-kad"
-version = "0.45.0"
+version = "0.45.1"
 dependencies = [
  "arrayvec",
  "async-std",
@@ -2803,8 +2803,9 @@ dependencies = [
 
 [[package]]
 name = "libp2p-metrics"
-version = "0.14.0"
+version = "0.14.1"
 dependencies = [
+ "futures",
  "instant",
  "libp2p-core",
  "libp2p-dcutr",
@@ -2815,6 +2816,7 @@ dependencies = [
  "libp2p-ping",
  "libp2p-relay",
  "libp2p-swarm",
+ "pin-project",
  "prometheus-client",
 ]
 
@@ -3088,7 +3090,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-server"
-version = "0.12.3"
+version = "0.12.4"
 dependencies = [
  "base64 0.21.5",
  "clap",

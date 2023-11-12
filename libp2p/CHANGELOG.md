@@ -1,3 +1,10 @@
+## 0.53.1 - unreleased
+
+- Allow `SwarmBuilder::with_quic_config` to be called without `with_tcp` first.
+  See [PR 4821](https://github.com/libp2p/rust-libp2p/pull/4821).
+- Introduce `SwarmBuilder::with_dns_config`.
+  See [PR 4808](https://github.com/libp2p/rust-libp2p/pull/4808).
+
 ## 0.53.0
 
 - Raise MSRV to 1.73.
@@ -11,6 +18,9 @@
 - Remove deprecated `development_transport`.
   Use `libp2p::SwarmBuilder` instead.
   See [PR 4732](https://github.com/libp2p/rust-libp2p/pull/4732).
+- Introduce `SwarmBuilder::with_bandwidth_metrics` exposing Prometheus bandwidth metrics per transport protocol stack and direction (in-/ outbound).
+  Deprecate `Transport::with_bandwidth_logging` and `SwarmBuilder::with_bandwidth_logging` in favor of the new `SwarmBuilder::with_bandwidth_metrics`.
+  See [PR 4727](https://github.com/libp2p/rust-libp2p/pull/4727).
 
 ## 0.52.4
 
