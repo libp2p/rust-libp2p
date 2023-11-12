@@ -35,6 +35,7 @@ use crate::record::{
 };
 use crate::K_VALUE;
 use fnv::{FnvHashMap, FnvHashSet};
+use futures_timer::Delay;
 use instant::Instant;
 use libp2p_core::{ConnectedPoint, Endpoint, Multiaddr};
 use libp2p_identity::PeerId;
@@ -116,6 +117,9 @@ pub struct Behaviour<TStore> {
 
     /// The record storage.
     store: TStore,
+
+    /// The interval used by [`Behaviour::poll`] to call [`Behaviour::bootstrap`].
+    refresh_interval: Option<Duration>,
 }
 
 /// The configurable strategies for the insertion of peers
@@ -181,6 +185,7 @@ pub struct Config {
     provider_publication_interval: Option<Duration>,
     kbucket_inserts: BucketInserts,
     caching: Caching,
+    refresh_interval: Option<Duration>,
 }
 
 impl Default for Config {
@@ -197,6 +202,7 @@ impl Default for Config {
             provider_record_ttl: Some(Duration::from_secs(24 * 60 * 60)),
             kbucket_inserts: BucketInserts::OnConnected,
             caching: Caching::Enabled { max_peers: 1 },
+            refresh_interval: Some(Duration::from_secs(5 * 60)),
         }
     }
 }
@@ -391,6 +397,14 @@ impl Config {
         self.caching = c;
         self
     }
+
+    /// Sets the interval on which [`Behaviour::bootstrap`] is called from [`Behaviour::poll`]
+    ///
+    /// `None` means that [`Behaviour::bootstrap`] is not called from [`Behaviour::poll`]
+    pub fn set_refresh_interval(&mut self, interval: Option<Duration>) -> &mut Self {
+        self.refresh_interval = interval;
+        self
+    }
 }
 
 impl<TStore> Behaviour<TStore>
@@ -448,6 +462,7 @@ where
             mode: Mode::Client,
             auto_mode: true,
             no_events_waker: None,
+            refresh_interval: config.refresh_interval,
         }
     }
 
@@ -1003,6 +1018,24 @@ where
         if let Some(waker) = self.no_events_waker.take() {
             waker.wake();
         }
+    }
+
+    /// Asynchronously polls the Kademlia behavior, triggering [`Behaviour::bootstrap`] if necessary.
+    ///
+    /// This function checks the refresh interval and, if ready, resets the timer and
+    /// triggers the bootstrap operation. It returns a `Result<(), NoKnownPeers>` where
+    /// Ok(()) indicates success, and Err(NoKnownPeers) is returned if there are no known peers
+    /// during the bootstrap operation. See [`Behaviour::bootstrap`] for more details.
+    pub async fn poll(&mut self) -> Result<(), NoKnownPeers> {
+        if let Some(refresh_interval) = &mut self.refresh_interval {
+            let mut bootstrap_timer = Delay::new(*refresh_interval);
+            if let Poll::Ready(()) = futures::poll!(&mut bootstrap_timer) {
+                bootstrap_timer.reset(*refresh_interval);
+                self.bootstrap()?;
+            };
+        }
+
+        Ok(())
     }
 
     fn reconfigure_mode(&mut self) {
