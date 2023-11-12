@@ -1,4 +1,4 @@
-## 0.10.1 - unreleased
+## 0.10.1
 
 - Allow disabling path MTU discovery.
   See [PR 4823](https://github.com/libp2p/rust-libp2p/pull/4823).
