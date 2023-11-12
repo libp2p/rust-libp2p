@@ -185,7 +185,7 @@ pub struct Config {
     provider_publication_interval: Option<Duration>,
     kbucket_inserts: BucketInserts,
     caching: Caching,
-    refresh_interval: Option<Duration>,
+    bootstrap_interval: Option<Duration>,
 }
 
 impl Default for Config {
@@ -202,7 +202,7 @@ impl Default for Config {
             provider_record_ttl: Some(Duration::from_secs(24 * 60 * 60)),
             kbucket_inserts: BucketInserts::OnConnected,
             caching: Caching::Enabled { max_peers: 1 },
-            refresh_interval: Some(Duration::from_secs(5 * 60)),
+            bootstrap_interval: Some(Duration::from_secs(5 * 60)),
         }
     }
 }
@@ -401,8 +401,8 @@ impl Config {
     /// Sets the interval on which [`Behaviour::bootstrap`] is called from [`Behaviour::poll`]
     ///
     /// `None` means we don't bootstrap at all.
-    pub fn set_refresh_interval(&mut self, interval: Option<Duration>) -> &mut Self {
-        self.refresh_interval = interval;
+    pub fn set_bootstrap_interval(&mut self, interval: Option<Duration>) -> &mut Self {
+        self.bootstrap_interval = interval;
         self
     }
 }
@@ -462,7 +462,7 @@ where
             mode: Mode::Client,
             auto_mode: true,
             no_events_waker: None,
-            refresh_interval: config.refresh_interval,
+            bootstrap_interval: config.bootstrap_interval,
         }
     }
 
@@ -1027,10 +1027,10 @@ where
     /// Ok(()) indicates success, and Err(NoKnownPeers) is returned if there are no known peers
     /// during the bootstrap operation. See [`Behaviour::bootstrap`] for more details.
     pub async fn poll(&mut self) -> Result<(), NoKnownPeers> {
-        if let Some(refresh_interval) = &mut self.refresh_interval {
-            let mut bootstrap_timer = Delay::new(*refresh_interval);
+        if let Some(bootstrap_interval) = &mut self.bootstrap_interval {
+            let mut bootstrap_timer = Delay::new(*bootstrap_interval);
             if let Poll::Ready(()) = futures::poll!(&mut bootstrap_timer) {
-                bootstrap_timer.reset(*refresh_interval);
+                bootstrap_timer.reset(*bootstrap_interval);
                 self.bootstrap()?;
             };
         }
