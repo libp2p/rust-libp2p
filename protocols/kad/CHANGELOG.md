@@ -1,6 +1,7 @@
-## 0.45.2
+## 0.45.2 - unreleased
 
-- Add `refresh_interval` config and `Behaviour::poll` function used to poll `Behaviour::boostrap`
+- Automatically `bootstrap` every 5 minutes.
+  This can be configured using the `bootstrap_interval` config.
   See [PR 4838](https://github.com/libp2p/rust-libp2p/pull/4838)
   
 ## 0.45.1
