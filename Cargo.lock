@@ -3614,9 +3614,9 @@ dependencies = [
 
 [[package]]
 name = "multiaddr"
-version = "0.18.0"
+version = "0.18.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "92a651988b3ed3ad1bc8c87d016bb92f6f395b84ed1db9b926b32b1fc5a2c8b5"
+checksum = "8b852bc02a2da5feed68cd14fa50d0774b92790a5bdbfa932a813926c8472070"
 dependencies = [
  "arrayref",
  "byteorder",
