@@ -42,7 +42,7 @@ use libp2p_swarm::{
     dummy, ConnectionDenied, ConnectionHandler, ConnectionId, DialFailure, NetworkBehaviour,
     NotifyHandler, Stream, THandler, THandlerInEvent, THandlerOutEvent, ToSwarm,
 };
-use std::collections::{hash_map, HashMap, VecDeque};
+use std::collections::{hash_map, HashMap, HashSet, VecDeque};
 use std::io::{Error, ErrorKind, IoSlice};
 use std::pin::Pin;
 use std::task::{Context, Poll};
@@ -82,6 +82,8 @@ pub struct Behaviour {
 
     relay_connection_addr: HashMap<ConnectionId, Multiaddr>,
 
+    reservation: HashSet<Multiaddr>,
+
     /// Queue of actions to return when polled.
     queued_actions: VecDeque<ToSwarm<Event, Either<handler::In, Void>>>,
 
@@ -96,6 +98,7 @@ pub fn new(local_peer_id: PeerId) -> (Transport, Behaviour) {
         from_transport,
         directly_connected_peers: Default::default(),
         relay_connection_addr: Default::default(),
+        reservation: Default::default(),
         queued_actions: Default::default(),
         pending_handler_commands: Default::default(),
     };
@@ -135,8 +138,10 @@ impl Behaviour {
                     .with(Protocol::P2pCircuit)
                     .with(Protocol::P2p(self.local_peer_id));
 
-                self.queued_actions
-                    .push_back(ToSwarm::ExternalAddrExpired(addr));
+                if self.reservation.remove(&addr) {
+                    self.queued_actions
+                        .push_back(ToSwarm::ExternalAddrExpired(addr));
+                }
             }
         }
     }
@@ -232,15 +237,15 @@ impl NetworkBehaviour for Behaviour {
 
         let event = match handler_event {
             handler::Event::ReservationReqAccepted { renewal, limit } => {
-                if !renewal {
-                    let addr = self
-                        .relay_connection_addr
-                        .get(&connection)
-                        .cloned()
-                        .expect("Relay connection exist")
-                        .with(Protocol::P2pCircuit)
-                        .with(Protocol::P2p(self.local_peer_id));
+                let addr = self
+                    .relay_connection_addr
+                    .get(&connection)
+                    .cloned()
+                    .expect("Relay connection exist")
+                    .with(Protocol::P2pCircuit)
+                    .with(Protocol::P2p(self.local_peer_id));
 
+                if !renewal && self.reservation.insert(addr.clone()) {
                     self.queued_actions
                         .push_back(ToSwarm::ExternalAddrConfirmed(addr));
                 }
