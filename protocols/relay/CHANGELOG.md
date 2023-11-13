@@ -1,6 +1,6 @@
 
 ## 0.17.1 - unreleased
-- Emit an external address on making reservation.
+- Automatically register relayed addresses as external addresses.
   See [PR 4809](https://github.com/libp2p/rust-lib2pp/pulls/4809).
 
 ## 0.17.0
