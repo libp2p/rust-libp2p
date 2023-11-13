@@ -3,7 +3,7 @@ name = "libp2p-dns"
 edition = "2021"
 rust-version = { workspace = true }
 description = "DNS transport implementation for libp2p"
-version = "0.41.0"
+version = "0.41.1"
 authors = ["Parity Technologies <admin@parity.io>"]
 license = "MIT"
 repository = "https://github.com/libp2p/rust-libp2p"
