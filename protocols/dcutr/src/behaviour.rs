@@ -223,25 +223,22 @@ impl NetworkBehaviour for Behaviour {
             .insert(connection_id);
 
         // Whether this is a connection requested by this behaviour.
-        let Some(&relayed_connection_id) = self.direct_to_relayed_connections.get(&connection_id)
-        else {
-            panic!("no direct connection for this connection id")
-        };
+        if let Some(&relayed_connection_id) = self.direct_to_relayed_connections.get(&connection_id)
+        {
+            if role_override == Endpoint::Listener {
+                assert!(
+                    self.outgoing_direct_connection_attempts
+                        .remove(&(relayed_connection_id, peer))
+                        .is_some(),
+                    "state mismatch"
+                );
+            }
 
-        if role_override == Endpoint::Listener {
-            assert!(
-                self.outgoing_direct_connection_attempts
-                    .remove(&(relayed_connection_id, peer))
-                    .is_some(),
-                "state mismatch"
-            );
+            self.queued_events.extend([ToSwarm::GenerateEvent(Event {
+                remote_peer_id: peer,
+                result: Ok(connection_id),
+            })]);
         }
-
-        self.queued_events.extend([ToSwarm::GenerateEvent(Event {
-            remote_peer_id: peer,
-            result: Ok(connection_id),
-        })]);
-
         Ok(Either::Right(dummy::ConnectionHandler))
     }
 
@@ -319,11 +316,11 @@ impl NetworkBehaviour for Behaviour {
     }
 
     fn poll(&mut self, _: &mut Context<'_>) -> Poll<ToSwarm<Self::ToSwarm, THandlerInEvent<Self>>> {
-        let Some(event) = self.queued_events.pop_front() else {
-            return Poll::Pending;
-        };
+        if let Some(event) = self.queued_events.pop_front() {
+            return Poll::Ready(event);
+        }
 
-        return Poll::Ready(event);
+        Poll::Pending
     }
 
     fn on_swarm_event(&mut self, event: FromSwarm) {
