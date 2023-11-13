@@ -1,3 +1,8 @@
+## 0.2.2 - unreleased
+
+- Introduce `FuturesTupleSet`, holding tuples of a `Future` together with an arbitrary piece of data.
+  See [PR XXXX](https://github.com/libp2p/rust-lib2pp/pulls/XXXX).
+
 ## 0.2.1
 
 - Add `.len()` getter to `FuturesMap`, `FuturesSet`, `StreamMap` and `StreamSet`.
