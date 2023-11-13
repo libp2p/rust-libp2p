@@ -13,7 +13,7 @@ futures = "0.3.29"
 hyper = { version = "0.14", features = ["server", "tcp", "http1"] }
 libp2p = { path = "../../libp2p", features = ["tokio", "metrics", "ping", "noise", "identify", "tcp", "yamux", "macros"] }
 opentelemetry = { version = "0.20.0", features = ["rt-tokio", "metrics"] }
-opentelemetry-otlp = { version = "0.13.0", features = ["metrics"]}
+opentelemetry-otlp = { version = "0.14.0", features = ["metrics"]}
 opentelemetry_api = "0.20.0"
 prometheus-client = { workspace = true }
 tokio = { version = "1", features = ["full"] }
