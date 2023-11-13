@@ -1,4 +1,4 @@
-## 0.2.8 - unreleased
+## 0.2.8
 
 - Bump `ring` to `0.17.5.
   See [PR 4779](https://github.com/libp2p/rust-libp2p/pull/4779).
