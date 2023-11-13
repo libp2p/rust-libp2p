@@ -1466,6 +1466,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "escape-hatch"
+version = "0.1.0"
+dependencies = [
+ "async-std",
+ "async-trait",
+ "futures",
+ "futures-timer",
+ "libp2p",
+ "libp2p-core",
+ "rand 0.8.5",
+ "tokio",
+ "tracing",
+ "tracing-subscriber",
+]
+
+[[package]]
 name = "event-listener"
 version = "2.5.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"

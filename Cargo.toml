@@ -6,6 +6,7 @@ members = [
     "examples/chat",
     "examples/dcutr",
     "examples/distributed-key-value-store",
+    "examples/escape-hatch",
     "examples/file-sharing",
     "examples/identify",
     "examples/ipfs-kad",
