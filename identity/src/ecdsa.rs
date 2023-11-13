@@ -151,7 +151,9 @@ pub struct PublicKey(VerifyingKey);
 impl PublicKey {
     /// Verify an ECDSA signature on a message using the public key.
     pub fn verify(&self, msg: &[u8], sig: &[u8]) -> bool {
-        let Ok(sig) = Signature::from_der(sig) else { return false };
+        let Ok(sig) = Signature::from_der(sig) else {
+            return false;
+        };
         self.0.verify(msg, &sig).is_ok()
     }
 
