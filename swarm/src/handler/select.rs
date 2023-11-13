@@ -25,7 +25,7 @@ use crate::handler::{
 };
 use crate::upgrade::SendWrapper;
 use either::Either;
-use futures::future;
+use futures::{future, ready};
 use libp2p_core::upgrade::SelectUpgrade;
 use std::{cmp, task::Context, task::Poll};
 
@@ -181,7 +181,6 @@ where
 {
     type FromBehaviour = Either<TProto1::FromBehaviour, TProto2::FromBehaviour>;
     type ToBehaviour = Either<TProto1::ToBehaviour, TProto2::ToBehaviour>;
-    type Error = Either<TProto1::Error, TProto2::Error>;
     type InboundProtocol = SelectUpgrade<
         SendWrapper<<TProto1 as ConnectionHandler>::InboundProtocol>,
         SendWrapper<<TProto2 as ConnectionHandler>::InboundProtocol>,
@@ -219,19 +218,11 @@ where
         &mut self,
         cx: &mut Context<'_>,
     ) -> Poll<
-        ConnectionHandlerEvent<
-            Self::OutboundProtocol,
-            Self::OutboundOpenInfo,
-            Self::ToBehaviour,
-            Self::Error,
-        >,
+        ConnectionHandlerEvent<Self::OutboundProtocol, Self::OutboundOpenInfo, Self::ToBehaviour>,
     > {
         match self.proto1.poll(cx) {
             Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(event)) => {
                 return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(Either::Left(event)));
-            }
-            Poll::Ready(ConnectionHandlerEvent::Close(event)) => {
-                return Poll::Ready(ConnectionHandlerEvent::Close(Either::Left(event)));
             }
             Poll::Ready(ConnectionHandlerEvent::OutboundSubstreamRequest { protocol }) => {
                 return Poll::Ready(ConnectionHandlerEvent::OutboundSubstreamRequest {
@@ -252,9 +243,6 @@ where
                     event,
                 )));
             }
-            Poll::Ready(ConnectionHandlerEvent::Close(event)) => {
-                return Poll::Ready(ConnectionHandlerEvent::Close(Either::Right(event)));
-            }
             Poll::Ready(ConnectionHandlerEvent::OutboundSubstreamRequest { protocol }) => {
                 return Poll::Ready(ConnectionHandlerEvent::OutboundSubstreamRequest {
                     protocol: protocol
@@ -269,6 +257,18 @@ where
         };
 
         Poll::Pending
+    }
+
+    fn poll_close(&mut self, cx: &mut Context<'_>) -> Poll<Option<Self::ToBehaviour>> {
+        if let Some(e) = ready!(self.proto1.poll_close(cx)) {
+            return Poll::Ready(Some(Either::Left(e)));
+        }
+
+        if let Some(e) = ready!(self.proto2.poll_close(cx)) {
+            return Poll::Ready(Some(Either::Right(e)));
+        }
+
+        Poll::Ready(None)
     }
 
     fn on_connection_event(

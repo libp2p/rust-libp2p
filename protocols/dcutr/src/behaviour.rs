@@ -335,16 +335,7 @@ impl NetworkBehaviour for Behaviour {
             FromSwarm::NewExternalAddrCandidate(NewExternalAddrCandidate { addr }) => {
                 self.address_candidates.add(addr.clone());
             }
-            FromSwarm::AddressChange(_)
-            | FromSwarm::ConnectionEstablished(_)
-            | FromSwarm::ListenFailure(_)
-            | FromSwarm::NewListener(_)
-            | FromSwarm::NewListenAddr(_)
-            | FromSwarm::ExpiredListenAddr(_)
-            | FromSwarm::ListenerError(_)
-            | FromSwarm::ListenerClosed(_)
-            | FromSwarm::ExternalAddrExpired(_)
-            | FromSwarm::ExternalAddrConfirmed(_) => {}
+            _ => {}
         }
     }
 }
