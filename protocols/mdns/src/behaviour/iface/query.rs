@@ -336,9 +336,8 @@ mod tests {
                     if record.name().to_utf8() != SERVICE_NAME_FQDN {
                         return None;
                     }
-                    let record_value = match record.data() {
-                        Some(RData::PTR(record)) => record,
-                        _ => return None,
+                    let Some(RData::PTR(record_value)) = record.data() else {
+                        return None;
                     };
                     Some(record_value)
                 })
