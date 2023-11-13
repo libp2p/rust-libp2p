@@ -1,3 +1,8 @@
+## 0.17.1 - unreleased
+
+- Fix an error where performing too many reservations at once could lead to inconsistent internal state.
+  See [PR XXXX](https://github.com/libp2p/rust-libp2p/pull/XXXX).
+
 ## 0.17.0
 
 - Don't close connections on protocol failures within the relay-server.
