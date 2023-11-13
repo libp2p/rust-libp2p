@@ -1,7 +1,7 @@
-## 0.41.1 - unreleased
+## 0.41.1
 
-- Add hidden API that removes unnecessary async for `async-std`
-  See [PR 4808](https://github.com/libp2p/rust-libp2p/pull/4808)
+- Add hidden API that removes unnecessary async for `async-std`.
+  See [PR 4808](https://github.com/libp2p/rust-libp2p/pull/4808).
 
 ## 0.41.0
 
