@@ -1,7 +1,7 @@
 ## 0.17.1 - unreleased
 
 - Fix an error where performing too many reservations at once could lead to inconsistent internal state.
-  See [PR XXXX](https://github.com/libp2p/rust-libp2p/pull/XXXX).
+  See [PR 4841](https://github.com/libp2p/rust-libp2p/pull/4841).
 
 ## 0.17.0
 
