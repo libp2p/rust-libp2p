@@ -505,7 +505,8 @@ impl ConnectionHandler for Handler {
                             .try_push(outbound_hop::make_reservation(stream))
                             .is_err()
                         {
-                            tracing::warn!("Dropping outbound stream because we are at capacity")
+                            tracing::warn!("Dropping outbound stream because we are at capacity");
+                            self.active_reserve_requests.pop_front();
                         }
                     }
                     PendingRequest::Connect {
@@ -519,7 +520,8 @@ impl ConnectionHandler for Handler {
                             .try_push(outbound_hop::open_circuit(stream, dst_peer_id))
                             .is_err()
                         {
-                            tracing::warn!("Dropping outbound stream because we are at capacity")
+                            tracing::warn!("Dropping outbound stream because we are at capacity");
+                            self.active_connect_requests.pop_front();
                         }
                     }
                 }
