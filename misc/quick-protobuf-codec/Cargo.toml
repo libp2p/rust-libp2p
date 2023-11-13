@@ -14,7 +14,7 @@ categories = ["asynchronous"]
 asynchronous-codec = { version = "0.6" }
 bytes = { version = "1" }
 thiserror = "1.0"
-unsigned-varint = { version = "0.7", features = ["asynchronous_codec"] }
+unsigned-varint = { version = "0.8", features = ["asynchronous_codec"] }
 quick-protobuf = "0.8"
 
 # Passing arguments to the docsrs builder in order to properly document cfg's.
