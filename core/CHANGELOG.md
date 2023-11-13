@@ -1,9 +1,17 @@
-## 0.41.0 - unreleased
+## 0.41.1
+
+- Implement `{In,Out}boundConnectionUpgrade` for `SelectUpgrade`.
+  See [PR 4812](https://github.com/libp2p/rust-libp2p/pull/4812).
+
+## 0.41.0
 
 - Remove blanket-impl of `{In,Out}boundUpgrade` for `{In,Out}boundConnectionUpgrade`.
   See [PR 4695](https://github.com/libp2p/rust-libp2p/pull/4695).
 - Remove deprecated functions from `ListenerId`.
   See [PR 4736](https://github.com/libp2p/rust-libp2p/pull/4736).
+- Remove `upgrade::transfer` module.
+  See [issue 4011](https://github.com/libp2p/rust-libp2p/issues/4011) for details.
+  See [PR 4788](https://github.com/libp2p/rust-libp2p/pull/4788).
 
 ## 0.40.1
 

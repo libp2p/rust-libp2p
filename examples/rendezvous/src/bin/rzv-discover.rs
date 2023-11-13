@@ -27,12 +27,15 @@ use libp2p::{
 };
 use std::error::Error;
 use std::time::Duration;
+use tracing_subscriber::EnvFilter;
 
 const NAMESPACE: &str = "rendezvous";
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
-    env_logger::init();
+    let _ = tracing_subscriber::fmt()
+        .with_env_filter(EnvFilter::from_default_env())
+        .try_init();
 
     let rendezvous_point_address = "/ip4/127.0.0.1/tcp/62649".parse::<Multiaddr>().unwrap();
     let rendezvous_point = "12D3KooWDpJ7As7BWAwRMfu1VU2WCqNjvq387JEYKDBj4kx6nXTN"
@@ -62,7 +65,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         tokio::select! {
                 event = swarm.select_next_some() => match event {
                     SwarmEvent::ConnectionEstablished { peer_id, .. } if peer_id == rendezvous_point => {
-                        log::info!(
+                        tracing::info!(
                             "Connected to rendezvous point, discovering nodes in '{}' namespace ...",
                             NAMESPACE
                         );
@@ -84,7 +87,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
                         for registration in registrations {
                             for address in registration.record.addresses() {
                                 let peer = registration.record.peer_id();
-                                log::info!("Discovered peer {} at {}", peer, address);
+                                tracing::info!(%peer, %address, "Discovered peer");
 
                                 let p2p_suffix = Protocol::P2p(peer);
                                 let address_with_p2p =
@@ -103,10 +106,10 @@ async fn main() -> Result<(), Box<dyn Error>> {
                         result: Ok(rtt),
                         ..
                     })) if peer != rendezvous_point => {
-                        log::info!("Ping to {} is {}ms", peer, rtt.as_millis())
+                        tracing::info!(%peer, "Ping is {}ms", rtt.as_millis())
                     }
                     other => {
-                        log::debug!("Unhandled {:?}", other);
+                        tracing::debug!("Unhandled {:?}", other);
                     }
             },
             _ = discover_tick.tick(), if cookie.is_some() =>

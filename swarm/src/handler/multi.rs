@@ -27,7 +27,7 @@ use crate::handler::{
 };
 use crate::upgrade::{InboundUpgradeSend, OutboundUpgradeSend, UpgradeInfoSend};
 use crate::Stream;
-use futures::{future::BoxFuture, prelude::*};
+use futures::{future::BoxFuture, prelude::*, ready};
 use rand::Rng;
 use std::{
     cmp,
@@ -111,7 +111,6 @@ where
 {
     type FromBehaviour = (K, <H as ConnectionHandler>::FromBehaviour);
     type ToBehaviour = (K, <H as ConnectionHandler>::ToBehaviour);
-    type Error = <H as ConnectionHandler>::Error;
     type InboundProtocol = Upgrade<K, <H as ConnectionHandler>::InboundProtocol>;
     type OutboundProtocol = <H as ConnectionHandler>::OutboundProtocol;
     type InboundOpenInfo = Info<K, <H as ConnectionHandler>::InboundOpenInfo>;
@@ -161,7 +160,7 @@ where
                         },
                     ));
                 } else {
-                    log::error!("FullyNegotiatedOutbound: no handler for key")
+                    tracing::error!("FullyNegotiatedOutbound: no handler for key")
                 }
             }
             ConnectionEvent::FullyNegotiatedInbound(FullyNegotiatedInbound {
@@ -178,7 +177,7 @@ where
                         ));
                     }
                 } else {
-                    log::error!("FullyNegotiatedInbound: no handler for key")
+                    tracing::error!("FullyNegotiatedInbound: no handler for key")
                 }
             }
             ConnectionEvent::AddressChange(AddressChange { new_address }) => {
@@ -198,7 +197,7 @@ where
                         error,
                     }));
                 } else {
-                    log::error!("DialUpgradeError: no handler for protocol")
+                    tracing::error!("DialUpgradeError: no handler for protocol")
                 }
             }
             ConnectionEvent::ListenUpgradeError(listen_upgrade_error) => {
@@ -225,7 +224,7 @@ where
         if let Some(h) = self.handlers.get_mut(&key) {
             h.on_behaviour_event(event)
         } else {
-            log::error!("on_behaviour_event: no handler for key")
+            tracing::error!("on_behaviour_event: no handler for key")
         }
     }
 
@@ -241,12 +240,7 @@ where
         &mut self,
         cx: &mut Context<'_>,
     ) -> Poll<
-        ConnectionHandlerEvent<
-            Self::OutboundProtocol,
-            Self::OutboundOpenInfo,
-            Self::ToBehaviour,
-            Self::Error,
-        >,
+        ConnectionHandlerEvent<Self::OutboundProtocol, Self::OutboundOpenInfo, Self::ToBehaviour>,
     > {
         // Calling `gen_range(0, 0)` (see below) would panic, so we have return early to avoid
         // that situation.
@@ -276,6 +270,17 @@ where
         }
 
         Poll::Pending
+    }
+
+    fn poll_close(&mut self, cx: &mut Context<'_>) -> Poll<Option<Self::ToBehaviour>> {
+        for (k, h) in self.handlers.iter_mut() {
+            let Some(e) = ready!(h.poll_close(cx)) else {
+                continue;
+            };
+            return Poll::Ready(Some((k.clone(), e)));
+        }
+
+        Poll::Ready(None)
     }
 }
 

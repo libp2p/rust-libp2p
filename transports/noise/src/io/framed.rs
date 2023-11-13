@@ -177,12 +177,12 @@ fn encrypt(
     encrypt_buffer: &mut BytesMut,
     encrypt_fn: impl FnOnce(&[u8], &mut [u8]) -> Result<usize, snow::Error>,
 ) -> io::Result<()> {
-    log::trace!("Encrypting {} bytes", cleartext.len());
+    tracing::trace!("Encrypting {} bytes", cleartext.len());
 
     encrypt_buffer.resize(cleartext.len() + EXTRA_ENCRYPT_SPACE, 0);
     let n = encrypt_fn(cleartext, encrypt_buffer).map_err(into_io_error)?;
 
-    log::trace!("Outgoing ciphertext has {n} bytes");
+    tracing::trace!("Outgoing ciphertext has {n} bytes");
 
     encode_length_prefixed(&encrypt_buffer[..n], dst);
 
@@ -202,12 +202,12 @@ fn decrypt(
         None => return Ok(None),
     };
 
-    log::trace!("Incoming ciphertext has {} bytes", ciphertext.len());
+    tracing::trace!("Incoming ciphertext has {} bytes", ciphertext.len());
 
     let mut decrypt_buffer = BytesMut::zeroed(ciphertext.len());
     let n = decrypt_fn(&ciphertext, &mut decrypt_buffer).map_err(into_io_error)?;
 
-    log::trace!("Decrypted cleartext has {n} bytes");
+    tracing::trace!("Decrypted cleartext has {n} bytes");
 
     Ok(Some(decrypt_buffer.split_to(n).freeze()))
 }

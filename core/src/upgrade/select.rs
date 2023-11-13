@@ -19,7 +19,10 @@
 // DEALINGS IN THE SOFTWARE.
 
 use crate::either::EitherFuture;
-use crate::upgrade::{InboundUpgrade, OutboundUpgrade, UpgradeInfo};
+use crate::upgrade::{
+    InboundConnectionUpgrade, InboundUpgrade, OutboundConnectionUpgrade, OutboundUpgrade,
+    UpgradeInfo,
+};
 use either::Either;
 use futures::future;
 use std::iter::{Chain, Map};
@@ -84,10 +87,44 @@ where
     }
 }
 
+impl<C, A, B, TA, TB, EA, EB> InboundConnectionUpgrade<C> for SelectUpgrade<A, B>
+where
+    A: InboundConnectionUpgrade<C, Output = TA, Error = EA>,
+    B: InboundConnectionUpgrade<C, Output = TB, Error = EB>,
+{
+    type Output = future::Either<TA, TB>;
+    type Error = Either<EA, EB>;
+    type Future = EitherFuture<A::Future, B::Future>;
+
+    fn upgrade_inbound(self, sock: C, info: Self::Info) -> Self::Future {
+        match info {
+            Either::Left(info) => EitherFuture::First(self.0.upgrade_inbound(sock, info)),
+            Either::Right(info) => EitherFuture::Second(self.1.upgrade_inbound(sock, info)),
+        }
+    }
+}
+
 impl<C, A, B, TA, TB, EA, EB> OutboundUpgrade<C> for SelectUpgrade<A, B>
 where
     A: OutboundUpgrade<C, Output = TA, Error = EA>,
     B: OutboundUpgrade<C, Output = TB, Error = EB>,
+{
+    type Output = future::Either<TA, TB>;
+    type Error = Either<EA, EB>;
+    type Future = EitherFuture<A::Future, B::Future>;
+
+    fn upgrade_outbound(self, sock: C, info: Self::Info) -> Self::Future {
+        match info {
+            Either::Left(info) => EitherFuture::First(self.0.upgrade_outbound(sock, info)),
+            Either::Right(info) => EitherFuture::Second(self.1.upgrade_outbound(sock, info)),
+        }
+    }
+}
+
+impl<C, A, B, TA, TB, EA, EB> OutboundConnectionUpgrade<C> for SelectUpgrade<A, B>
+where
+    A: OutboundConnectionUpgrade<C, Output = TA, Error = EA>,
+    B: OutboundConnectionUpgrade<C, Output = TB, Error = EB>,
 {
     type Output = future::Either<TA, TB>;
     type Error = Either<EA, EB>;

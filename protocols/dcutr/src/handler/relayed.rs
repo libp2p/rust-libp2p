@@ -40,7 +40,6 @@ use std::collections::VecDeque;
 use std::io;
 use std::task::{Context, Poll};
 use std::time::Duration;
-use void::Void;
 
 #[derive(Debug)]
 pub enum Command {
@@ -63,7 +62,6 @@ pub struct Handler {
             <Self as ConnectionHandler>::OutboundProtocol,
             <Self as ConnectionHandler>::OutboundOpenInfo,
             <Self as ConnectionHandler>::ToBehaviour,
-            <Self as ConnectionHandler>::Error,
         >,
     >,
 
@@ -110,7 +108,7 @@ impl Handler {
                     ))
                     .is_err()
                 {
-                    log::warn!(
+                    tracing::warn!(
                         "New inbound connect stream while still upgrading previous one. Replacing previous with new.",
                     );
                 }
@@ -142,7 +140,7 @@ impl Handler {
             ))
             .is_err()
         {
-            log::warn!(
+            tracing::warn!(
                 "New outbound connect stream while still upgrading previous one. Replacing previous with new.",
             );
         }
@@ -182,7 +180,6 @@ impl Handler {
 impl ConnectionHandler for Handler {
     type FromBehaviour = Command;
     type ToBehaviour = Event;
-    type Error = Void;
     type InboundProtocol = Either<ReadyUpgrade<StreamProtocol>, DeniedUpgrade>;
     type OutboundProtocol = ReadyUpgrade<StreamProtocol>;
     type OutboundOpenInfo = ();
@@ -224,16 +221,12 @@ impl ConnectionHandler for Handler {
         false
     }
 
+    #[tracing::instrument(level = "trace", name = "ConnectionHandler::poll", skip(self, cx))]
     fn poll(
         &mut self,
         cx: &mut Context<'_>,
     ) -> Poll<
-        ConnectionHandlerEvent<
-            Self::OutboundProtocol,
-            Self::OutboundOpenInfo,
-            Self::ToBehaviour,
-            Self::Error,
-        >,
+        ConnectionHandlerEvent<Self::OutboundProtocol, Self::OutboundOpenInfo, Self::ToBehaviour>,
     > {
         // Return queued events.
         if let Some(event) = self.queued_events.pop_front() {
@@ -311,9 +304,7 @@ impl ConnectionHandler for Handler {
             ConnectionEvent::DialUpgradeError(dial_upgrade_error) => {
                 self.on_dial_upgrade_error(dial_upgrade_error)
             }
-            ConnectionEvent::AddressChange(_)
-            | ConnectionEvent::LocalProtocolsChange(_)
-            | ConnectionEvent::RemoteProtocolsChange(_) => {}
+            _ => {}
         }
     }
 }

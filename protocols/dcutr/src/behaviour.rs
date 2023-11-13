@@ -268,9 +268,7 @@ impl NetworkBehaviour for Behaviour {
 
         match handler_event {
             Either::Left(handler::relayed::Event::InboundConnectNegotiated { remote_addrs }) => {
-                log::debug!(
-                    "Attempting to hole-punch as dialer to {event_source} using {remote_addrs:?}"
-                );
+                tracing::debug!(target=%event_source, addresses=?remote_addrs, "Attempting to hole-punch as dialer");
 
                 let opts = DialOpts::peer_id(event_source)
                     .addresses(remote_addrs)
@@ -302,9 +300,7 @@ impl NetworkBehaviour for Behaviour {
                 // Maybe treat these as transient and retry?
             }
             Either::Left(handler::relayed::Event::OutboundConnectNegotiated { remote_addrs }) => {
-                log::debug!(
-                    "Attempting to hole-punch as listener to {event_source} using {remote_addrs:?}"
-                );
+                tracing::debug!(target=%event_source, addresses=?remote_addrs, "Attempting to hole-punch as dialer");
 
                 let opts = DialOpts::peer_id(event_source)
                     .condition(dial_opts::PeerCondition::Always)
@@ -343,16 +339,7 @@ impl NetworkBehaviour for Behaviour {
             FromSwarm::NewExternalAddrCandidate(NewExternalAddrCandidate { addr }) => {
                 self.address_candidates.add(addr.clone());
             }
-            FromSwarm::AddressChange(_)
-            | FromSwarm::ConnectionEstablished(_)
-            | FromSwarm::ListenFailure(_)
-            | FromSwarm::NewListener(_)
-            | FromSwarm::NewListenAddr(_)
-            | FromSwarm::ExpiredListenAddr(_)
-            | FromSwarm::ListenerError(_)
-            | FromSwarm::ListenerClosed(_)
-            | FromSwarm::ExternalAddrExpired(_)
-            | FromSwarm::ExternalAddrConfirmed(_) => {}
+            _ => {}
         }
     }
 }

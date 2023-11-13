@@ -15,7 +15,6 @@ use tokio::process::Child;
 use tokio::sync::mpsc;
 use tower_http::cors::CorsLayer;
 use tower_http::trace::TraceLayer;
-use tracing::{error, warn};
 use tracing_subscriber::{fmt, prelude::*, EnvFilter};
 
 use interop_tests::{BlpopRequest, Report};
@@ -144,16 +143,17 @@ async fn redis_blpop(
 ) -> Result<Json<Vec<String>>, StatusCode> {
     let client = state.0.redis_client;
     let mut conn = client.get_async_connection().await.map_err(|e| {
-        warn!("Failed to connect to redis: {e}");
+        tracing::warn!("Failed to connect to redis: {e}");
         StatusCode::INTERNAL_SERVER_ERROR
     })?;
     let res = conn
         .blpop(&request.key, request.timeout as usize)
         .await
         .map_err(|e| {
-            warn!(
-                "Failed to get list elem {} within timeout {}: {e}",
-                request.key, request.timeout
+            tracing::warn!(
+                key=%request.key,
+                timeout=%request.timeout,
+                "Failed to get list elem key within timeout: {e}"
             );
             StatusCode::INTERNAL_SERVER_ERROR
         })?;
@@ -167,7 +167,7 @@ async fn post_results(
     request: Json<Result<Report, String>>,
 ) -> Result<(), StatusCode> {
     state.0.results_tx.send(request.0).await.map_err(|_| {
-        error!("Failed to send results");
+        tracing::error!("Failed to send results");
         StatusCode::INTERNAL_SERVER_ERROR
     })
 }

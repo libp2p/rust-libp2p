@@ -49,19 +49,16 @@ pub(crate) async fn outbound(
     server_fingerprint: Fingerprint,
     id_keys: identity::Keypair,
 ) -> Result<(PeerId, Connection), Error> {
-    log::debug!("new outbound connection to {addr})");
+    tracing::debug!(address=%addr, "new outbound connection to address");
 
     let (peer_connection, ufrag) = new_outbound_connection(addr, config, udp_mux).await?;
 
     let offer = peer_connection.create_offer(None).await?;
-    log::debug!("created SDP offer for outbound connection: {:?}", offer.sdp);
+    tracing::debug!(offer=%offer.sdp, "created SDP offer for outbound connection");
     peer_connection.set_local_description(offer).await?;
 
     let answer = sdp::answer(addr, server_fingerprint, &ufrag);
-    log::debug!(
-        "calculated SDP answer for outbound connection: {:?}",
-        answer
-    );
+    tracing::debug!(?answer, "calculated SDP answer for outbound connection");
     peer_connection.set_remote_description(answer).await?; // This will start the gathering of ICE candidates.
 
     let data_channel = create_substream_for_noise_handshake(&peer_connection).await?;
@@ -85,16 +82,16 @@ pub(crate) async fn inbound(
     remote_ufrag: String,
     id_keys: identity::Keypair,
 ) -> Result<(PeerId, Connection), Error> {
-    log::debug!("new inbound connection from {addr} (ufrag: {remote_ufrag})");
+    tracing::debug!(address=%addr, ufrag=%remote_ufrag, "new inbound connection from address");
 
     let peer_connection = new_inbound_connection(addr, config, udp_mux, &remote_ufrag).await?;
 
     let offer = sdp::offer(addr, &remote_ufrag);
-    log::debug!("calculated SDP offer for inbound connection: {:?}", offer);
+    tracing::debug!(?offer, "calculated SDP offer for inbound connection");
     peer_connection.set_remote_description(offer).await?;
 
     let answer = peer_connection.create_answer(None).await?;
-    log::debug!("created SDP answer for inbound connection: {:?}", answer);
+    tracing::debug!(?answer, "created SDP answer for inbound connection");
     peer_connection.set_local_description(answer).await?; // This will start the gathering of ICE candidates.
 
     let data_channel = create_substream_for_noise_handshake(&peer_connection).await?;

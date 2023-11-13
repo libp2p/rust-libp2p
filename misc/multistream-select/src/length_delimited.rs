@@ -170,7 +170,7 @@ where
                     if (buf[*pos - 1] & 0x80) == 0 {
                         // MSB is not set, indicating the end of the length prefix.
                         let (len, _) = unsigned_varint::decode::u16(buf).map_err(|e| {
-                            log::debug!("invalid length prefix: {}", e);
+                            tracing::debug!("invalid length prefix: {e}");
                             io::Error::new(io::ErrorKind::InvalidData, "invalid length prefix")
                         })?;
 

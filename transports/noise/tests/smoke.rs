@@ -24,9 +24,9 @@ use libp2p_core::upgrade;
 use libp2p_core::upgrade::{InboundConnectionUpgrade, OutboundConnectionUpgrade};
 use libp2p_identity as identity;
 use libp2p_noise as noise;
-use log::info;
 use quickcheck::*;
 use std::{convert::TryInto, io};
+use tracing_subscriber::EnvFilter;
 
 #[allow(dead_code)]
 fn core_upgrade_compat() {
@@ -41,7 +41,9 @@ fn core_upgrade_compat() {
 
 #[test]
 fn xx() {
-    let _ = env_logger::try_init();
+    let _ = tracing_subscriber::fmt()
+        .with_env_filter(EnvFilter::from_default_env())
+        .try_init();
     fn prop(mut messages: Vec<Message>) -> bool {
         messages.truncate(5);
         let server_id = identity::Keypair::generate_ed25519();
@@ -86,7 +88,7 @@ fn xx() {
                             Err(e) => panic!("error reading len: {e}"),
                         }
                     };
-                    info!("server: reading message ({} bytes)", len);
+                    tracing::info!(bytes=%len, "server: reading message");
                     let mut server_buffer = vec![0; len.try_into().unwrap()];
                     server_session
                         .read_exact(&mut server_buffer)

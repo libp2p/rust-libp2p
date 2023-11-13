@@ -804,15 +804,7 @@ where
             }
             FromSwarm::AddressChange(address_change) => self.on_address_change(address_change),
             FromSwarm::DialFailure(dial_failure) => self.on_dial_failure(dial_failure),
-            FromSwarm::ListenFailure(_) => {}
-            FromSwarm::NewListener(_) => {}
-            FromSwarm::NewListenAddr(_) => {}
-            FromSwarm::ExpiredListenAddr(_) => {}
-            FromSwarm::ListenerError(_) => {}
-            FromSwarm::ListenerClosed(_) => {}
-            FromSwarm::NewExternalAddrCandidate(_) => {}
-            FromSwarm::ExternalAddrExpired(_) => {}
-            FromSwarm::ExternalAddrConfirmed(_) => {}
+            _ => {}
         }
     }
 
@@ -859,7 +851,7 @@ where
                         .push_back(ToSwarm::GenerateEvent(Event::Message { peer, message }));
                 }
                 None => {
-                    log::debug!("Connection ({connection}) closed after `Event::Request` ({request_id}) has been emitted.");
+                    tracing::debug!("Connection ({connection}) closed after `Event::Request` ({request_id}) has been emitted.");
                 }
             },
             handler::Event::ResponseSent(request_id) => {
@@ -940,7 +932,9 @@ where
                         }));
                 } else {
                     // This happens when timeout is emitted before `read_request` finishes.
-                    log::debug!("Inbound request timeout for an unknown request_id ({request_id})");
+                    tracing::debug!(
+                        "Inbound request timeout for an unknown request_id ({request_id})"
+                    );
                 }
             }
             handler::Event::InboundStreamFailed { request_id, error } => {
@@ -955,7 +949,7 @@ where
                         }));
                 } else {
                     // This happens when `read_request` fails.
-                    log::debug!("Inbound failure is reported for an unknown request_id ({request_id}): {error}");
+                    tracing::debug!("Inbound failure is reported for an unknown request_id ({request_id}): {error}");
                 }
             }
         }
