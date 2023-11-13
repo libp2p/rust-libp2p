@@ -402,13 +402,16 @@ fn test_subscribe() {
     let subscriptions = gs
         .events
         .iter()
-        .fold(0, |collected_subscriptions, e| match e {
-            ToSwarm::NotifyHandler {
-                event: HandlerIn::Message(RpcOut::Subscribe(_)),
-                ..
-            } => collected_subscriptions + 1,
-            _ => collected_subscriptions,
-        });
+        .filter(|e| {
+            matches!(
+                e,
+                ToSwarm::NotifyHandler {
+                    event: HandlerIn::Message(RpcOut::Subscribe(_)),
+                    ..
+                }
+            )
+        })
+        .count();
 
     // we sent a subscribe to all known peers
     assert_eq!(subscriptions, 20);
@@ -783,12 +786,15 @@ fn test_inject_connected() {
             } => Some((peer_id, topic)),
             _ => None,
         })
-        .fold(HashMap::new(), |mut subs, (peer, sub)| {
-            let mut peer_subs = subs.remove(&peer).unwrap_or(vec![]);
-            peer_subs.push(sub.into_string());
-            subs.insert(peer, peer_subs);
-            subs
-        });
+        .fold(
+            HashMap::<PeerId, Vec<String>>::new(),
+            |mut subs, (peer, sub)| {
+                let mut peer_subs = subs.remove(&peer).unwrap_or_default();
+                peer_subs.push(sub.into_string());
+                subs.insert(peer, peer_subs);
+                subs
+            },
+        );
 
     // check that there are two subscriptions sent to each peer
     for peer_subs in subscriptions.values() {
@@ -1309,15 +1315,15 @@ fn count_control_msgs<D: DataTransform, F: TopicSubscriptionFilter>(
         .sum::<usize>()
         + gs.events
             .iter()
-            .map(|e| match e {
+            .filter(|e| match e {
                 ToSwarm::NotifyHandler {
                     peer_id,
-                    event: HandlerIn::Message(RpcOut::Control(actions)),
+                    event: HandlerIn::Message(RpcOut::Control(action)),
                     ..
-                } => actions.iter().filter(|m| filter(peer_id, m)).count(),
-                _ => 0,
+                } => filter(peer_id, action),
+                _ => false,
             })
-            .sum::<usize>()
+            .count()
 }
 
 fn flush_events<D: DataTransform, F: TopicSubscriptionFilter>(gs: &mut Behaviour<D, F>) {
