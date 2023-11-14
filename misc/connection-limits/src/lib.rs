@@ -80,6 +80,10 @@ impl Behaviour {
         }
     }
 
+    pub fn limits_mut(&mut self) -> &mut ConnectionLimits {
+        &mut self.limits
+    }
+
     fn check_limit(
         &mut self,
         limit: Option<u32>,
