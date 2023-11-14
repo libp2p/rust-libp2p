@@ -193,6 +193,7 @@ mod tests {
     use std::future::{poll_fn, ready, Future};
     use std::pin::Pin;
     use std::time::Instant;
+    use tokio::sync::oneshot;
 
     use super::*;
 
@@ -264,6 +265,31 @@ mod tests {
             0,
             "resources of cancelled streams are cleaned up properly"
         );
+    }
+
+    #[tokio::test]
+    async fn replaced_stream_is_still_registered() {
+        let mut streams = StreamMap::new(Duration::from_millis(100), 3);
+
+        let (tx1, rx1) = oneshot::channel();
+
+        let _ = streams.try_push("ID1", stream::once(rx1));
+        let _ = streams.try_push("ID2", stream::pending());
+
+        let _ = tx1.send(1);
+        let (id, res) = poll_fn(|cx| streams.poll_next_unpin(cx)).await;
+        assert_eq!(id, "ID1");
+        assert_eq!(res.unwrap().unwrap().unwrap(), 1);
+
+        let (tx2, rx2) = oneshot::channel();
+        let replaced = streams.try_push("ID2", stream::once(rx2));
+        assert!(matches!(replaced.unwrap_err(), PushError::Replaced(_)));
+
+        let _ = tx2.send(2);
+        let (id, res) = poll_fn(|cx| streams.poll_next_unpin(cx)).await;
+
+        assert_eq!(id, "ID2");
+        assert_eq!(res.unwrap().unwrap().unwrap(), 2);
     }
 
     // Each stream emits 1 item with delay, `Task` only has a capacity of 1, meaning they must be processed in sequence.
