@@ -181,6 +181,7 @@ impl MdnsResponse {
 
                 peer.addresses().iter().filter_map(move |address| {
                     let new_addr = address_translation(address, &observed)?;
+                    let new_addr = new_addr.with_p2p(*peer.id()).ok()?;
 
                     Some((*peer.id(), new_addr, new_expiration))
                 })
