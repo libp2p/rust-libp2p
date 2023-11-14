@@ -200,6 +200,9 @@ async fn wait_for_reservation(
             }
             SwarmEvent::Behaviour(ClientEvent::Identify(_)) => {}
             SwarmEvent::NewExternalAddrCandidate { .. } => {}
+            SwarmEvent::ExternalAddrConfirmed { address } if !is_renewal => {
+                assert_eq!(address, client_addr);
+            }
             e => panic!("{e:?}"),
         }
     }

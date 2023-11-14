@@ -257,9 +257,8 @@ impl ListenStream {
     }
 
     fn poll_if_watcher(&mut self, cx: &mut Context<'_>) -> Poll<<Self as Stream>::Item> {
-        let if_watcher = match self.if_watcher.as_mut() {
-            Some(w) => w,
-            None => return Poll::Pending,
+        let Some(if_watcher) = self.if_watcher.as_mut() else {
+            return Poll::Pending;
         };
 
         while let Poll::Ready(event) = if_watcher.poll_if_event(cx) {
@@ -412,12 +411,11 @@ fn parse_webrtc_listen_addr(addr: &Multiaddr) -> Option<SocketAddr> {
         _ => return None,
     };
 
-    let port = iter.next()?;
-    let webrtc = iter.next()?;
-
-    let port = match (port, webrtc) {
-        (Protocol::Udp(port), Protocol::WebRTCDirect) => port,
-        _ => return None,
+    let Protocol::Udp(port) = iter.next()? else {
+        return None;
+    };
+    let Protocol::WebRTCDirect = iter.next()? else {
+        return None;
     };
 
     if iter.next().is_some() {

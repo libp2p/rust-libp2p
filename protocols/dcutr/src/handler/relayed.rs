@@ -40,7 +40,6 @@ use std::collections::VecDeque;
 use std::io;
 use std::task::{Context, Poll};
 use std::time::Duration;
-use void::Void;
 
 #[derive(Debug)]
 pub enum Command {
@@ -63,7 +62,6 @@ pub struct Handler {
             <Self as ConnectionHandler>::OutboundProtocol,
             <Self as ConnectionHandler>::OutboundOpenInfo,
             <Self as ConnectionHandler>::ToBehaviour,
-            <Self as ConnectionHandler>::Error,
         >,
     >,
 
@@ -182,7 +180,6 @@ impl Handler {
 impl ConnectionHandler for Handler {
     type FromBehaviour = Command;
     type ToBehaviour = Event;
-    type Error = Void;
     type InboundProtocol = Either<ReadyUpgrade<StreamProtocol>, DeniedUpgrade>;
     type OutboundProtocol = ReadyUpgrade<StreamProtocol>;
     type OutboundOpenInfo = ();
@@ -229,12 +226,7 @@ impl ConnectionHandler for Handler {
         &mut self,
         cx: &mut Context<'_>,
     ) -> Poll<
-        ConnectionHandlerEvent<
-            Self::OutboundProtocol,
-            Self::OutboundOpenInfo,
-            Self::ToBehaviour,
-            Self::Error,
-        >,
+        ConnectionHandlerEvent<Self::OutboundProtocol, Self::OutboundOpenInfo, Self::ToBehaviour>,
     > {
         // Return queued events.
         if let Some(event) = self.queued_events.pop_front() {

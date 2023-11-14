@@ -9,6 +9,7 @@ use libp2p_core::{Negotiated, UpgradeInfo};
 #[cfg(feature = "relay")]
 use libp2p_identity::PeerId;
 
+#[allow(deprecated)]
 use crate::bandwidth::BandwidthSinks;
 use crate::SwarmBuilder;
 
@@ -100,6 +101,36 @@ impl<T: AuthenticatedMultiplexedTransport>
         self.without_any_other_transports().with_dns()
     }
 }
+#[cfg(all(not(target_arch = "wasm32"), feature = "async-std", feature = "dns"))]
+impl<T: AuthenticatedMultiplexedTransport>
+    SwarmBuilder<super::provider::AsyncStd, OtherTransportPhase<T>>
+{
+    pub fn with_dns_config(
+        self,
+        cfg: libp2p_dns::ResolverConfig,
+        opts: libp2p_dns::ResolverOpts,
+    ) -> SwarmBuilder<
+        super::provider::AsyncStd,
+        WebsocketPhase<impl AuthenticatedMultiplexedTransport>,
+    > {
+        self.without_any_other_transports()
+            .with_dns_config(cfg, opts)
+    }
+}
+#[cfg(all(not(target_arch = "wasm32"), feature = "tokio", feature = "dns"))]
+impl<T: AuthenticatedMultiplexedTransport>
+    SwarmBuilder<super::provider::Tokio, OtherTransportPhase<T>>
+{
+    pub fn with_dns_config(
+        self,
+        cfg: libp2p_dns::ResolverConfig,
+        opts: libp2p_dns::ResolverOpts,
+    ) -> SwarmBuilder<super::provider::Tokio, WebsocketPhase<impl AuthenticatedMultiplexedTransport>>
+    {
+        self.without_any_other_transports()
+            .with_dns_config(cfg, opts)
+    }
+}
 #[cfg(feature = "relay")]
 impl<T: AuthenticatedMultiplexedTransport, Provider>
     SwarmBuilder<Provider, OtherTransportPhase<T>>
@@ -146,20 +177,42 @@ impl<T: AuthenticatedMultiplexedTransport, Provider>
 impl<Provider, T: AuthenticatedMultiplexedTransport>
     SwarmBuilder<Provider, OtherTransportPhase<T>>
 {
+    #[allow(deprecated)]
+    #[deprecated(note = "Use `with_bandwidth_metrics` instead.")]
     pub fn with_bandwidth_logging(
         self,
     ) -> (
         SwarmBuilder<
             Provider,
-            BehaviourPhase<impl AuthenticatedMultiplexedTransport, NoRelayBehaviour>,
+            BandwidthMetricsPhase<impl AuthenticatedMultiplexedTransport, NoRelayBehaviour>,
         >,
         Arc<BandwidthSinks>,
     ) {
+        #[allow(deprecated)]
         self.without_any_other_transports()
             .without_dns()
             .without_websocket()
             .without_relay()
             .with_bandwidth_logging()
+    }
+}
+#[cfg(feature = "metrics")]
+impl<Provider, T: AuthenticatedMultiplexedTransport>
+    SwarmBuilder<Provider, OtherTransportPhase<T>>
+{
+    pub fn with_bandwidth_metrics(
+        self,
+        registry: &mut libp2p_metrics::Registry,
+    ) -> SwarmBuilder<
+        Provider,
+        BehaviourPhase<impl AuthenticatedMultiplexedTransport, NoRelayBehaviour>,
+    > {
+        self.without_any_other_transports()
+            .without_dns()
+            .without_websocket()
+            .without_relay()
+            .without_bandwidth_logging()
+            .with_bandwidth_metrics(registry)
     }
 }
 impl<Provider, T: AuthenticatedMultiplexedTransport>

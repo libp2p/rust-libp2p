@@ -80,7 +80,6 @@ where
 {
     type FromBehaviour = Either<L::FromBehaviour, R::FromBehaviour>;
     type ToBehaviour = Either<L::ToBehaviour, R::ToBehaviour>;
-    type Error = Either<L::Error, R::Error>;
     type InboundProtocol = Either<SendWrapper<L::InboundProtocol>, SendWrapper<R::InboundProtocol>>;
     type OutboundProtocol =
         Either<SendWrapper<L::OutboundProtocol>, SendWrapper<R::OutboundProtocol>>;
@@ -119,24 +118,26 @@ where
         &mut self,
         cx: &mut Context<'_>,
     ) -> Poll<
-        ConnectionHandlerEvent<
-            Self::OutboundProtocol,
-            Self::OutboundOpenInfo,
-            Self::ToBehaviour,
-            Self::Error,
-        >,
+        ConnectionHandlerEvent<Self::OutboundProtocol, Self::OutboundOpenInfo, Self::ToBehaviour>,
     > {
         let event = match self {
             Either::Left(handler) => futures::ready!(handler.poll(cx))
                 .map_custom(Either::Left)
-                .map_close(Either::Left)
                 .map_protocol(|p| Either::Left(SendWrapper(p)))
                 .map_outbound_open_info(Either::Left),
             Either::Right(handler) => futures::ready!(handler.poll(cx))
                 .map_custom(Either::Right)
-                .map_close(Either::Right)
                 .map_protocol(|p| Either::Right(SendWrapper(p)))
                 .map_outbound_open_info(Either::Right),
+        };
+
+        Poll::Ready(event)
+    }
+
+    fn poll_close(&mut self, cx: &mut Context<'_>) -> Poll<Option<Self::ToBehaviour>> {
+        let event = match self {
+            Either::Left(handler) => futures::ready!(handler.poll_close(cx)).map(Either::Left),
+            Either::Right(handler) => futures::ready!(handler.poll_close(cx)).map(Either::Right),
         };
 
         Poll::Ready(event)

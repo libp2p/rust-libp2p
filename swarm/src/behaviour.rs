@@ -290,16 +290,13 @@ pub enum ToSwarm<TOutEvent, TInEvent> {
     /// This address will be shared with all [`NetworkBehaviour`]s via [`FromSwarm::ExternalAddrExpired`].
     ExternalAddrExpired(Multiaddr),
 
-    /// Instructs the `Swarm` to initiate a graceful close of one or all connections
-    /// with the given peer.
+    /// Instructs the `Swarm` to initiate a graceful close of one or all connections with the given peer.
     ///
-    /// Note: Closing a connection via
-    /// [`ToSwarm::CloseConnection`] does not inform the
-    /// corresponding [`ConnectionHandler`].
-    /// Closing a connection via a [`ConnectionHandler`] can be done
-    /// either in a collaborative manner across [`ConnectionHandler`]s
-    /// with [`ConnectionHandler::connection_keep_alive`] or directly with
-    /// [`ConnectionHandlerEvent::Close`](crate::ConnectionHandlerEvent::Close).
+    /// Closing a connection via [`ToSwarm::CloseConnection`] will poll [`ConnectionHandler::poll_close`] to completion.
+    /// In most cases, stopping to "use" a connection is enough to have it closed.
+    /// The keep-alive algorithm will close a connection automatically once all [`ConnectionHandler`]s are idle.
+    ///
+    /// Use this command if you want to close a connection _despite_ it still being in use by one or more handlers.
     CloseConnection {
         /// The peer to disconnect.
         peer_id: PeerId,

@@ -18,6 +18,8 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
+#![allow(deprecated)]
+
 use crate::core::muxing::{StreamMuxer, StreamMuxerEvent};
 
 use futures::{
@@ -101,6 +103,9 @@ where
 }
 
 /// Allows obtaining the average bandwidth of the streams.
+#[deprecated(
+    note = "Use `libp2p::SwarmBuilder::with_bandwidth_metrics` or `libp2p_metrics::BandwidthTransport` instead."
+)]
 pub struct BandwidthSinks {
     inbound: AtomicU64,
     outbound: AtomicU64,

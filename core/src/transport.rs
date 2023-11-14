@@ -401,16 +401,16 @@ impl<TUpgr, TErr> TransportEvent<TUpgr, TErr> {
     /// Returns `None` if the event is not actually an incoming connection,
     /// otherwise the upgrade and the remote address.
     pub fn into_incoming(self) -> Option<(TUpgr, Multiaddr)> {
-        if let TransportEvent::Incoming {
+        let TransportEvent::Incoming {
             upgrade,
             send_back_addr,
             ..
         } = self
-        {
-            Some((upgrade, send_back_addr))
-        } else {
-            None
-        }
+        else {
+            return None;
+        };
+
+        Some((upgrade, send_back_addr))
     }
 
     /// Returns `true` if this is a [`TransportEvent::NewAddress`].

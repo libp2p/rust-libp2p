@@ -1,13 +1,18 @@
-## 0.45.0 - unreleased
+## 0.45.1 - unreleased
+
+- Ensure `Multiaddr` handled and returned by `Behaviour` are `/p2p` terminated.
+  See [PR 4596](https://github.com/libp2p/rust-libp2p/pull/4596).
+
+## 0.45.0
 
 - Don't perform IO in `Behaviour::poll`.
   See [PR 4623](https://github.com/libp2p/rust-libp2p/pull/4623).
 
-## 0.44.0 
+## 0.44.0
 
 - Change `mdns::Event` to hold `Vec` and remove `DiscoveredAddrsIter` and `ExpiredAddrsIter`.
   See [PR 3621].
-  
+
 - Raise MSRV to 1.65.
   See [PR 3715].
 - Remove deprecated `Mdns` prefixed items. See [PR 3699].

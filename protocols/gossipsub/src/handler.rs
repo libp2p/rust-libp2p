@@ -38,7 +38,6 @@ use std::{
     pin::Pin,
     task::{Context, Poll},
 };
-use void::Void;
 
 /// The event emitted by the Handler. This informs the behaviour of various events created
 /// by the handler.
@@ -220,7 +219,6 @@ impl EnabledHandler {
             <Handler as ConnectionHandler>::OutboundProtocol,
             <Handler as ConnectionHandler>::OutboundOpenInfo,
             <Handler as ConnectionHandler>::ToBehaviour,
-            <Handler as ConnectionHandler>::Error,
         >,
     > {
         if !self.peer_kind_sent {
@@ -391,7 +389,6 @@ impl EnabledHandler {
 impl ConnectionHandler for Handler {
     type FromBehaviour = HandlerIn;
     type ToBehaviour = HandlerEvent;
-    type Error = Void;
     type InboundOpenInfo = ();
     type InboundProtocol = either::Either<ProtocolConfig, DeniedUpgrade>;
     type OutboundOpenInfo = ();
@@ -434,12 +431,7 @@ impl ConnectionHandler for Handler {
         &mut self,
         cx: &mut Context<'_>,
     ) -> Poll<
-        ConnectionHandlerEvent<
-            Self::OutboundProtocol,
-            Self::OutboundOpenInfo,
-            Self::ToBehaviour,
-            Self::Error,
-        >,
+        ConnectionHandlerEvent<Self::OutboundProtocol, Self::OutboundOpenInfo, Self::ToBehaviour>,
     > {
         match self {
             Handler::Enabled(handler) => handler.poll(cx),
