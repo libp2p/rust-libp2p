@@ -28,6 +28,7 @@ static_assertions = "1"
 thiserror = "1.0"
 tracing = "0.1.37"
 void = "1"
+libp2p-protocol-utils = { workspace = true }
 
 [dev-dependencies]
 libp2p-identity = { workspace = true, features = ["rand"] }

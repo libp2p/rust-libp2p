@@ -2956,6 +2956,7 @@ dependencies = [
  "libp2p-identity",
  "libp2p-ping",
  "libp2p-plaintext",
+ "libp2p-protocol-utils",
  "libp2p-swarm",
  "libp2p-swarm-test",
  "libp2p-yamux",
