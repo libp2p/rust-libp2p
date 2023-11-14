@@ -158,6 +158,7 @@ where
 
 #[cfg(test)]
 mod tests {
+    use futures::channel::oneshot;
     use std::future::{pending, poll_fn, ready};
     use std::pin::Pin;
     use std::time::Instant;
@@ -195,6 +196,32 @@ mod tests {
         let (_, result) = poll_fn(|cx| futures.poll_unpin(cx)).await;
 
         assert!(result.is_err())
+    }
+
+    #[tokio::test]
+    async fn replaced_pending_future_is_polled() {
+        let mut streams = FuturesMap::new(Duration::from_millis(100), 3);
+
+        let (_tx1, rx1) = oneshot::channel();
+        let (tx2, rx2) = oneshot::channel();
+
+        let _ = streams.try_push("ID1", rx1);
+        let _ = streams.try_push("ID2", rx2);
+
+        let _ = tx2.send(2);
+        let (id, res) = poll_fn(|cx| streams.poll_unpin(cx)).await;
+        assert_eq!(id, "ID2");
+        assert_eq!(res.unwrap().unwrap(), 2);
+
+        let (new_tx1, new_rx1) = oneshot::channel();
+        let replaced = streams.try_push("ID1", new_rx1);
+        assert!(matches!(replaced.unwrap_err(), PushError::Replaced(_)));
+
+        let _ = new_tx1.send(4);
+        let (id, res) = poll_fn(|cx| streams.poll_unpin(cx)).await;
+
+        assert_eq!(id, "ID1");
+        assert_eq!(res.unwrap().unwrap(), 4);
     }
 
     // Each future causes a delay, `Task` only has a capacity of 1, meaning they must be processed in sequence.
