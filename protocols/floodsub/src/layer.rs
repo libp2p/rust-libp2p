@@ -146,9 +146,8 @@ impl Floodsub {
     ///
     /// Returns true if we were subscribed to this topic.
     pub fn unsubscribe(&mut self, topic: Topic) -> bool {
-        let pos = match self.subscribed_topics.iter().position(|t| *t == topic) {
-            Some(pos) => pos,
-            None => return false,
+        let Some(pos) = self.subscribed_topics.iter().position(|t| *t == topic) else {
+            return false;
         };
 
         self.subscribed_topics.remove(pos);

@@ -201,10 +201,7 @@ pub(crate) async fn handle_inbound_request(
                 None => return Err(Error::MissingPeer),
             };
 
-            let dst = match peer_id_res {
-                Ok(res) => res,
-                Err(_) => return Err(Error::ParsePeerId),
-            };
+            let dst = peer_id_res.map_err(|_| Error::ParsePeerId)?;
 
             Either::Right(CircuitReq { dst, substream })
         }

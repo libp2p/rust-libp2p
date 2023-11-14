@@ -912,9 +912,7 @@ where
     /// Fails the entire multiplexed stream if too many pending `Reset`
     /// frames accumulate when using [`MaxBufferBehaviour::ResetStream`].
     fn buffer(&mut self, id: LocalStreamId, data: Bytes) -> io::Result<()> {
-        let state = if let Some(state) = self.substreams.get_mut(&id) {
-            state
-        } else {
+        let Some(state) = self.substreams.get_mut(&id) else {
             tracing::trace!(
                 connection=%self.id,
                 substream=%id,
@@ -924,9 +922,7 @@ where
             return Ok(());
         };
 
-        let buf = if let Some(buf) = state.recv_buf_open() {
-            buf
-        } else {
+        let Some(buf) = state.recv_buf_open() else {
             tracing::trace!(
                 connection=%self.id,
                 substream=%id,
