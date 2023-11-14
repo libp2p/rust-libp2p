@@ -155,6 +155,7 @@ impl NetworkBehaviour for Behaviour {
             .on_connection_handler_event(peer_id, connection, event);
     }
 
+    #[tracing::instrument(level = "trace", name = "NetworkBehaviour::poll", skip(self, cx))]
     fn poll(
         &mut self,
         cx: &mut Context<'_>,
