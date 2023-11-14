@@ -53,33 +53,22 @@ where
             waker.wake();
         }
 
-        match self.inner.iter_mut().find(|tagged| tagged.key == id) {
-            None => {
-                self.inner.push(TaggedStream::new(
-                    id,
-                    TimeoutStream {
-                        inner: stream.boxed(),
-                        timeout: Delay::new(self.timeout),
-                    },
-                ));
+        let old = self.remove(id.clone());
+        self.inner.push(TaggedStream::new(
+            id,
+            TimeoutStream {
+                inner: stream.boxed(),
+                timeout: Delay::new(self.timeout),
+            },
+        ));
 
-                Ok(())
-            }
-            Some(existing) => {
-                let old = mem::replace(
-                    &mut existing.inner,
-                    TimeoutStream {
-                        inner: stream.boxed(),
-                        timeout: Delay::new(self.timeout),
-                    },
-                );
-
-                Err(PushError::Replaced(old.inner))
-            }
+        match old {
+            None => Ok(()),
+            Some(old) => Err(PushError::Replaced(old)),
         }
     }
 
-    pub fn remove(&mut self, id: ID) -> Option<BoxStream<O>> {
+    pub fn remove(&mut self, id: ID) -> Option<BoxStream<'static, O>> {
         let tagged = self.inner.iter_mut().find(|s| s.key == id)?;
 
         let inner = mem::replace(&mut tagged.inner.inner, stream::pending().boxed());
@@ -189,7 +178,9 @@ where
 
 #[cfg(test)]
 mod tests {
+    use futures::channel::mpsc;
     use futures_util::stream::{once, pending};
+    use futures_util::SinkExt;
     use std::future::{poll_fn, ready, Future};
     use std::pin::Pin;
     use std::time::Instant;
@@ -264,6 +255,40 @@ mod tests {
             0,
             "resources of cancelled streams are cleaned up properly"
         );
+    }
+
+    #[tokio::test]
+    async fn replaced_stream_is_still_registered() {
+        let mut streams = StreamMap::new(Duration::from_millis(100), 3);
+
+        let (mut tx1, rx1) = mpsc::channel(5);
+        let (mut tx2, rx2) = mpsc::channel(5);
+
+        let _ = streams.try_push("ID1", rx1);
+        let _ = streams.try_push("ID2", rx2);
+
+        let _ = tx2.send(2).await;
+        let _ = tx1.send(1).await;
+        let _ = tx2.send(3).await;
+        let (id, res) = poll_fn(|cx| streams.poll_next_unpin(cx)).await;
+        assert_eq!(id, "ID1");
+        assert_eq!(res.unwrap().unwrap(), 1);
+        let (id, res) = poll_fn(|cx| streams.poll_next_unpin(cx)).await;
+        assert_eq!(id, "ID2");
+        assert_eq!(res.unwrap().unwrap(), 2);
+        let (id, res) = poll_fn(|cx| streams.poll_next_unpin(cx)).await;
+        assert_eq!(id, "ID2");
+        assert_eq!(res.unwrap().unwrap(), 3);
+
+        let (mut new_tx1, new_rx1) = mpsc::channel(5);
+        let replaced = streams.try_push("ID1", new_rx1);
+        assert!(matches!(replaced.unwrap_err(), PushError::Replaced(_)));
+
+        let _ = new_tx1.send(4).await;
+        let (id, res) = poll_fn(|cx| streams.poll_next_unpin(cx)).await;
+
+        assert_eq!(id, "ID1");
+        assert_eq!(res.unwrap().unwrap(), 4);
     }
 
     // Each stream emits 1 item with delay, `Task` only has a capacity of 1, meaning they must be processed in sequence.

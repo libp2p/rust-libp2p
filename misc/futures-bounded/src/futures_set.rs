@@ -23,7 +23,10 @@ impl<O> FuturesSet<O> {
     }
 }
 
-impl<O> FuturesSet<O> {
+impl<O> FuturesSet<O>
+where
+    O: 'static,
+{
     /// Push a future into the list.
     ///
     /// This method adds the given future to the list.
