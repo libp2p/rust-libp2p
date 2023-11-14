@@ -40,6 +40,7 @@ use std::marker::PhantomData;
 use std::{convert::TryFrom, time::Duration};
 use std::{io, iter};
 use tracing::debug;
+use void::Void;
 
 /// The protocol name used for negotiating with multistream-select.
 pub(crate) const DEFAULT_PROTO_NAME: StreamProtocol = StreamProtocol::new("/ipfs/kad/1.0.0");
@@ -220,8 +221,8 @@ where
     C: AsyncRead + AsyncWrite + Unpin,
 {
     type Output = KadInStreamSink<C>;
-    type Future = future::Ready<Result<Self::Output, io::Error>>;
-    type Error = io::Error;
+    type Future = future::Ready<Result<Self::Output, Self::Error>>;
+    type Error = Void;
 
     fn upgrade_inbound(self, incoming: C, _: Self::Info) -> Self::Future {
         let codec = Codec::new(self.max_packet_size);
@@ -235,8 +236,8 @@ where
     C: AsyncRead + AsyncWrite + Unpin,
 {
     type Output = KadOutStreamSink<C>;
-    type Future = future::Ready<Result<Self::Output, io::Error>>;
-    type Error = io::Error;
+    type Future = future::Ready<Result<Self::Output, Self::Error>>;
+    type Error = Void;
 
     fn upgrade_outbound(self, incoming: C, _: Self::Info) -> Self::Future {
         let codec = Codec::new(self.max_packet_size);

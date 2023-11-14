@@ -28,11 +28,6 @@ impl<D, Req, Res> InflightProtocolDataQueue<D, Req, Res> {
     pub fn enqueue_request(&mut self, request: Req, data: D) {
         self.pending_requests.push_back(request);
         self.data_of_inflight_requests.push_back(data);
-
-        debug_assert_eq!(
-            self.pending_requests.len(),
-            self.data_of_inflight_requests.len()
-        );
     }
 
     /// Submits a response to the queue.
@@ -44,6 +39,11 @@ impl<D, Req, Res> InflightProtocolDataQueue<D, Req, Res> {
             "Expect to not provide more responses than requests were started"
         );
         self.received_responses.push_back(res);
+    }
+
+    /// How many protocols are currently in-flight.
+    pub fn num_inflight(&self) -> usize {
+        self.data_of_inflight_requests.len() - self.received_responses.len()
     }
 
     pub fn next_completed(&mut self) -> Option<(Res, D)> {
