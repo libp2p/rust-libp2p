@@ -18,6 +18,7 @@ futures-timer = "3.0.2"
 
 [dev-dependencies]
 tokio = { version = "1.33.0", features = ["macros", "rt", "sync"] }
+futures = "0.3.28"
 
 [lints]
 workspace = true

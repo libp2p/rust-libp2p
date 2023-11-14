@@ -189,11 +189,12 @@ where
 
 #[cfg(test)]
 mod tests {
+    use futures::channel::mpsc;
     use futures_util::stream::{once, pending};
+    use futures_util::SinkExt;
     use std::future::{poll_fn, ready, Future};
     use std::pin::Pin;
     use std::time::Instant;
-    use tokio::sync::oneshot;
 
     use super::*;
 
@@ -271,25 +272,34 @@ mod tests {
     async fn replaced_stream_is_still_registered() {
         let mut streams = StreamMap::new(Duration::from_millis(100), 3);
 
-        let (tx1, rx1) = oneshot::channel();
+        let (mut tx1, rx1) = mpsc::channel(5);
+        let (mut tx2, rx2) = mpsc::channel(5);
 
-        let _ = streams.try_push("ID1", stream::once(rx1));
-        let _ = streams.try_push("ID2", stream::pending());
+        let _ = streams.try_push("ID1", rx1);
+        let _ = streams.try_push("ID2", rx2);
 
-        let _ = tx1.send(1);
+        let _ = tx2.send(2).await;
+        let _ = tx1.send(1).await;
+        let _ = tx2.send(3).await;
         let (id, res) = poll_fn(|cx| streams.poll_next_unpin(cx)).await;
         assert_eq!(id, "ID1");
-        assert_eq!(res.unwrap().unwrap().unwrap(), 1);
+        assert_eq!(res.unwrap().unwrap(), 1);
+        let (id, res) = poll_fn(|cx| streams.poll_next_unpin(cx)).await;
+        assert_eq!(id, "ID2");
+        assert_eq!(res.unwrap().unwrap(), 2);
+        let (id, res) = poll_fn(|cx| streams.poll_next_unpin(cx)).await;
+        assert_eq!(id, "ID2");
+        assert_eq!(res.unwrap().unwrap(), 3);
 
-        let (tx2, rx2) = oneshot::channel();
-        let replaced = streams.try_push("ID2", stream::once(rx2));
+        let (mut new_tx1, new_rx1) = mpsc::channel(5);
+        let replaced = streams.try_push("ID1", new_rx1);
         assert!(matches!(replaced.unwrap_err(), PushError::Replaced(_)));
 
-        let _ = tx2.send(2);
+        let _ = new_tx1.send(4).await;
         let (id, res) = poll_fn(|cx| streams.poll_next_unpin(cx)).await;
 
-        assert_eq!(id, "ID2");
-        assert_eq!(res.unwrap().unwrap().unwrap(), 2);
+        assert_eq!(id, "ID1");
+        assert_eq!(res.unwrap().unwrap(), 4);
     }
 
     // Each stream emits 1 item with delay, `Task` only has a capacity of 1, meaning they must be processed in sequence.

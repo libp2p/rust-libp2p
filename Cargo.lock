@@ -1535,6 +1535,7 @@ dependencies = [
 name = "futures-bounded"
 version = "0.2.1"
 dependencies = [
+ "futures",
  "futures-timer",
  "futures-util",
  "tokio",
