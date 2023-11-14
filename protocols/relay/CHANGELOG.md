@@ -1,5 +1,7 @@
 ## 0.17.1 - unreleased
 
+- Automatically register relayed addresses as external addresses.
+  See [PR 4809](https://github.com/libp2p/rust-lib2pp/pulls/4809).
 - Fix an error where performing too many reservations at once could lead to inconsistent internal state.
   See [PR XXXX](https://github.com/libp2p/rust-libp2p/pull/XXXX).
 

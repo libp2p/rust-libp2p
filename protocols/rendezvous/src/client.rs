@@ -238,6 +238,7 @@ impl NetworkBehaviour for Behaviour {
         }
     }
 
+    #[tracing::instrument(level = "trace", name = "NetworkBehaviour::poll", skip(self, cx))]
     fn poll(
         &mut self,
         cx: &mut Context<'_>,

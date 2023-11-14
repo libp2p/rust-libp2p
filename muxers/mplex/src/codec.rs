@@ -285,10 +285,10 @@ impl Decoder for Codec {
 }
 
 impl Encoder for Codec {
-    type Item = Frame<LocalStreamId>;
+    type Item<'a> = Frame<LocalStreamId>;
     type Error = io::Error;
 
-    fn encode(&mut self, item: Self::Item, dst: &mut BytesMut) -> Result<(), Self::Error> {
+    fn encode(&mut self, item: Self::Item<'_>, dst: &mut BytesMut) -> Result<(), Self::Error> {
         let (header, data) = match item {
             Frame::Open { stream_id } => (stream_id.num << 3, Bytes::new()),
             Frame::Data {

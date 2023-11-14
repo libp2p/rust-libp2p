@@ -208,10 +208,10 @@ pub enum ErrorCode {
 }
 
 impl Encoder for Codec {
-    type Item = Message;
+    type Item<'a> = Message;
     type Error = Error;
 
-    fn encode(&mut self, item: Self::Item, dst: &mut BytesMut) -> Result<(), Self::Error> {
+    fn encode(&mut self, item: Self::Item<'_>, dst: &mut BytesMut) -> Result<(), Self::Error> {
         let mut pb: ProtobufCodec<proto::Message> = ProtobufCodec::new(MAX_MESSAGE_LEN_BYTES);
 
         pb.encode(proto::Message::from(item), dst)?;
@@ -227,9 +227,8 @@ impl Decoder for Codec {
     fn decode(&mut self, src: &mut BytesMut) -> Result<Option<Self::Item>, Self::Error> {
         let mut pb: ProtobufCodec<proto::Message> = ProtobufCodec::new(MAX_MESSAGE_LEN_BYTES);
 
-        let message = match pb.decode(src)? {
-            Some(p) => p,
-            None => return Ok(None),
+        let Some(message) = pb.decode(src)? else {
+            return Ok(None);
         };
 
         Ok(Some(message.try_into()?))

@@ -1895,15 +1895,12 @@ where
 
         let mut unsubscribed_peers = Vec::new();
 
-        let subscribed_topics = match self.peer_topics.get_mut(propagation_source) {
-            Some(topics) => topics,
-            None => {
-                tracing::error!(
-                    peer=%propagation_source,
-                    "Subscription by unknown peer"
-                );
-                return;
-            }
+        let Some(subscribed_topics) = self.peer_topics.get_mut(propagation_source) else {
+            tracing::error!(
+                peer=%propagation_source,
+                "Subscription by unknown peer"
+            );
+            return;
         };
 
         // Collect potential graft topics for the peer.
@@ -3152,15 +3149,12 @@ where
             // remove from mesh, topic_peers, peer_topic and the fanout
             tracing::debug!(peer=%peer_id, "Peer disconnected");
             {
-                let topics = match self.peer_topics.get(&peer_id) {
-                    Some(topics) => topics,
-                    None => {
-                        debug_assert!(
-                            self.blacklisted_peers.contains(&peer_id),
-                            "Disconnected node not in connected list"
-                        );
-                        return;
-                    }
+                let Some(topics) = self.peer_topics.get(&peer_id) else {
+                    debug_assert!(
+                        self.blacklisted_peers.contains(&peer_id),
+                        "Disconnected node not in connected list"
+                    );
+                    return;
                 };
 
                 // remove peer from all mappings
@@ -3426,7 +3420,7 @@ where
         }
     }
 
-    #[tracing::instrument(level = "trace", name = "ConnectionHandler::poll", skip(self, cx))]
+    #[tracing::instrument(level = "trace", name = "NetworkBehaviour::poll", skip(self, cx))]
     fn poll(
         &mut self,
         cx: &mut Context<'_>,
@@ -3778,10 +3772,8 @@ mod local_test {
                 .unwrap();
             let gs: Behaviour = Behaviour::new(MessageAuthenticity::RandomAuthor, config).unwrap();
 
-            let mut length_codec = unsigned_varint::codec::UviBytes::default();
-            length_codec.set_max_len(max_transmit_size);
             let mut codec =
-                crate::protocol::GossipsubCodec::new(length_codec, ValidationMode::Permissive);
+                crate::protocol::GossipsubCodec::new(max_transmit_size, ValidationMode::Permissive);
 
             let rpc_proto = rpc.into_protobuf();
             let fragmented_messages = gs
