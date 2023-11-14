@@ -2608,7 +2608,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-identify"
-version = "0.44.0"
+version = "0.44.1"
 dependencies = [
  "async-std",
  "asynchronous-codec 0.6.2",
@@ -2661,7 +2661,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-kad"
-version = "0.45.1"
+version = "0.45.2"
 dependencies = [
  "arrayvec",
  "async-std",
@@ -2696,7 +2696,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-mdns"
-version = "0.45.0"
+version = "0.45.1"
 dependencies = [
  "async-io",
  "async-std",
