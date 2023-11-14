@@ -895,7 +895,7 @@ where
     /// > See [`Behaviour::add_address`].
     /// > **Note**: The bootstrapping interval is used to call bootstrap periodically
     /// to ensure a healthy routing table.
-    /// > See [`Config::bootstrap_interval`] field.
+    /// > See bootstrap_interval field in Config.
     pub fn bootstrap(&mut self) -> Result<QueryId, NoKnownPeers> {
         let local_key = self.kbuckets.local_key().clone();
         let info = QueryInfo::Bootstrap {
