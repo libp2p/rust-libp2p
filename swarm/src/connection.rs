@@ -459,7 +459,11 @@ fn gather_supported_protocols(handler: &impl ConnectionHandler) -> HashSet<Strea
         .listen_protocol()
         .upgrade()
         .protocol_info()
-        .filter_map(|i| StreamProtocol::try_from_owned(i.as_ref().to_owned()).ok())
+        .map(|i| {
+            let p: &StreamProtocol = i.as_ref();
+
+            p.to_owned()
+        })
         .collect()
 }
 
@@ -740,11 +744,9 @@ enum Shutdown {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::dummy;
-    use futures::future;
+    use crate::{dummy, NoProtocols, SeveralProtocols};
     use futures::AsyncRead;
     use futures::AsyncWrite;
-    use libp2p_core::upgrade::{DeniedUpgrade, InboundUpgrade, OutboundUpgrade, UpgradeInfo};
     use libp2p_core::StreamMuxer;
     use quickcheck::*;
     use std::sync::{Arc, Weak};
@@ -1107,7 +1109,7 @@ mod tests {
 
     #[derive(Default)]
     struct ConfigurableProtocolConnectionHandler {
-        events: Vec<ConnectionHandlerEvent<DeniedUpgrade, (), Void>>,
+        events: Vec<ConnectionHandlerEvent<NoProtocols, (), Void>>,
         active_protocols: HashSet<StreamProtocol>,
         local_added: Vec<Vec<StreamProtocol>>,
         local_removed: Vec<Vec<StreamProtocol>>,
@@ -1142,15 +1144,15 @@ mod tests {
     impl ConnectionHandler for MockConnectionHandler {
         type FromBehaviour = Void;
         type ToBehaviour = Void;
-        type InboundProtocol = DeniedUpgrade;
-        type OutboundProtocol = DeniedUpgrade;
+        type InboundProtocol = NoProtocols;
+        type OutboundProtocol = NoProtocols;
         type InboundOpenInfo = ();
         type OutboundOpenInfo = ();
 
         fn listen_protocol(
             &self,
         ) -> SubstreamProtocol<Self::InboundProtocol, Self::InboundOpenInfo> {
-            SubstreamProtocol::new(DeniedUpgrade, ()).with_timeout(self.upgrade_timeout)
+            SubstreamProtocol::new(NoProtocols::new(), ()).with_timeout(self.upgrade_timeout)
         }
 
         fn on_connection_event(
@@ -1202,7 +1204,7 @@ mod tests {
             if self.outbound_requested {
                 self.outbound_requested = false;
                 return Poll::Ready(ConnectionHandlerEvent::OutboundSubstreamRequest {
-                    protocol: SubstreamProtocol::new(DeniedUpgrade, ())
+                    protocol: SubstreamProtocol::new(NoProtocols::new(), ())
                         .with_timeout(self.upgrade_timeout),
                 });
             }
@@ -1214,8 +1216,8 @@ mod tests {
     impl ConnectionHandler for ConfigurableProtocolConnectionHandler {
         type FromBehaviour = Void;
         type ToBehaviour = Void;
-        type InboundProtocol = ManyProtocolsUpgrade;
-        type OutboundProtocol = DeniedUpgrade;
+        type InboundProtocol = SeveralProtocols;
+        type OutboundProtocol = NoProtocols;
         type InboundOpenInfo = ();
         type OutboundOpenInfo = ();
 
@@ -1223,9 +1225,7 @@ mod tests {
             &self,
         ) -> SubstreamProtocol<Self::InboundProtocol, Self::InboundOpenInfo> {
             SubstreamProtocol::new(
-                ManyProtocolsUpgrade {
-                    protocols: Vec::from_iter(self.active_protocols.clone()),
-                },
+                SeveralProtocols::new(Vec::from_iter(self.active_protocols.clone())),
                 (),
             )
         }
@@ -1279,39 +1279,6 @@ mod tests {
             }
 
             Poll::Pending
-        }
-    }
-
-    struct ManyProtocolsUpgrade {
-        protocols: Vec<StreamProtocol>,
-    }
-
-    impl UpgradeInfo for ManyProtocolsUpgrade {
-        type Info = StreamProtocol;
-        type InfoIter = std::vec::IntoIter<Self::Info>;
-
-        fn protocol_info(&self) -> Self::InfoIter {
-            self.protocols.clone().into_iter()
-        }
-    }
-
-    impl<C> InboundUpgrade<C> for ManyProtocolsUpgrade {
-        type Output = C;
-        type Error = Void;
-        type Future = future::Ready<Result<Self::Output, Self::Error>>;
-
-        fn upgrade_inbound(self, stream: C, _: Self::Info) -> Self::Future {
-            future::ready(Ok(stream))
-        }
-    }
-
-    impl<C> OutboundUpgrade<C> for ManyProtocolsUpgrade {
-        type Output = C;
-        type Error = Void;
-        type Future = future::Ready<Result<Self::Output, Self::Error>>;
-
-        fn upgrade_outbound(self, stream: C, _: Self::Info) -> Self::Future {
-            future::ready(Ok(stream))
         }
     }
 }

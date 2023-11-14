@@ -27,13 +27,13 @@ use futures::{
     stream::{BoxStream, SelectAll},
     StreamExt,
 };
-use libp2p_core::upgrade::{DeniedUpgrade, ReadyUpgrade};
+use libp2p_core::upgrade::ReadyUpgrade;
 use libp2p_swarm::{
     handler::{
         ConnectionEvent, DialUpgradeError, FullyNegotiatedInbound, FullyNegotiatedOutbound,
         ListenUpgradeError,
     },
-    ConnectionHandler, ConnectionHandlerEvent, StreamProtocol, SubstreamProtocol,
+    ConnectionHandler, ConnectionHandlerEvent, NoProtocols, StreamProtocol, SubstreamProtocol,
 };
 
 use crate::client::{RunError, RunId};
@@ -85,13 +85,13 @@ impl Default for Handler {
 impl ConnectionHandler for Handler {
     type FromBehaviour = Command;
     type ToBehaviour = Event;
-    type InboundProtocol = DeniedUpgrade;
+    type InboundProtocol = NoProtocols;
     type OutboundProtocol = ReadyUpgrade<StreamProtocol>;
     type OutboundOpenInfo = ();
     type InboundOpenInfo = ();
 
     fn listen_protocol(&self) -> SubstreamProtocol<Self::InboundProtocol, Self::InboundOpenInfo> {
-        SubstreamProtocol::new(DeniedUpgrade, ())
+        SubstreamProtocol::new(NoProtocols::new(), ())
     }
 
     fn on_behaviour_event(&mut self, command: Self::FromBehaviour) {

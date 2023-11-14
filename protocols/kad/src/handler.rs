@@ -20,10 +20,11 @@
 
 use crate::behaviour::Mode;
 use crate::protocol::{
-    KadInStreamSink, KadOutStreamSink, KadPeer, KadRequestMsg, KadResponseMsg, ProtocolConfig,
+    Codec, KadInStreamSink, KadOutStreamSink, KadPeer, KadRequestMsg, KadResponseMsg,
 };
 use crate::record::{self, Record};
 use crate::QueryId;
+use asynchronous_codec::Framed;
 use either::Either;
 use futures::prelude::*;
 use futures::stream::SelectAll;
@@ -33,12 +34,13 @@ use libp2p_swarm::handler::{
     ConnectionEvent, DialUpgradeError, FullyNegotiatedInbound, FullyNegotiatedOutbound,
 };
 use libp2p_swarm::{
-    ConnectionHandler, ConnectionHandlerEvent, Stream, StreamUpgradeError, SubstreamProtocol,
-    SupportedProtocols,
+    ConnectionHandler, ConnectionHandlerEvent, NoProtocols, SeveralProtocols, Stream,
+    StreamProtocol, StreamUpgradeError, SubstreamProtocol, SupportedProtocols,
 };
 use std::collections::VecDeque;
 use std::task::Waker;
 use std::{error, fmt, io, marker::PhantomData, pin::Pin, task::Context, task::Poll};
+use void::Void;
 
 const MAX_NUM_SUBSTREAMS: usize = 32;
 
@@ -50,8 +52,8 @@ const MAX_NUM_SUBSTREAMS: usize = 32;
 ///
 /// It also handles requests made by the remote.
 pub struct Handler {
-    /// Configuration of the wire protocol.
-    protocol_config: ProtocolConfig,
+    protocol_names: Vec<StreamProtocol>,
+    max_packet_size: usize,
 
     /// In client mode, we don't accept inbound substreams.
     mode: Mode,
@@ -293,7 +295,7 @@ pub enum HandlerEvent {
 #[derive(Debug)]
 pub enum HandlerQueryErr {
     /// Error while trying to perform the query.
-    Upgrade(StreamUpgradeError<io::Error>),
+    Upgrade(StreamUpgradeError<Void>),
     /// Received an answer that doesn't correspond to the request.
     UnexpectedMessage,
     /// I/O error in the substream.
@@ -329,8 +331,8 @@ impl error::Error for HandlerQueryErr {
     }
 }
 
-impl From<StreamUpgradeError<io::Error>> for HandlerQueryErr {
-    fn from(err: StreamUpgradeError<io::Error>) -> Self {
+impl From<StreamUpgradeError<Void>> for HandlerQueryErr {
+    fn from(err: StreamUpgradeError<Void>) -> Self {
         HandlerQueryErr::Upgrade(err)
     }
 }
@@ -451,7 +453,8 @@ struct UniqueConnecId(u64);
 
 impl Handler {
     pub fn new(
-        protocol_config: ProtocolConfig,
+        protocol_names: Vec<StreamProtocol>,
+        max_packet_size: usize,
         endpoint: ConnectedPoint,
         remote_peer_id: PeerId,
         mode: Mode,
@@ -474,7 +477,8 @@ impl Handler {
         }
 
         Handler {
-            protocol_config,
+            protocol_names,
+            max_packet_size,
             mode,
             endpoint,
             remote_peer_id,
@@ -490,14 +494,21 @@ impl Handler {
 
     fn on_fully_negotiated_outbound(
         &mut self,
-        FullyNegotiatedOutbound { protocol, info: () }: FullyNegotiatedOutbound<
+        FullyNegotiatedOutbound {
+            protocol: (stream, _),
+            info: (),
+        }: FullyNegotiatedOutbound<
             <Self as ConnectionHandler>::OutboundProtocol,
             <Self as ConnectionHandler>::OutboundOpenInfo,
         >,
     ) {
         if let Some((msg, query_id)) = self.pending_messages.pop_front() {
             self.outbound_substreams
-                .push(OutboundSubstreamState::PendingSend(protocol, msg, query_id));
+                .push(OutboundSubstreamState::PendingSend(
+                    Framed::new(stream, Codec::new(self.max_packet_size)),
+                    msg,
+                    query_id,
+                ));
         } else {
             debug_assert!(false, "Requested outbound stream without message")
         }
@@ -525,7 +536,7 @@ impl Handler {
         // If `self.allow_listening` is false, then we produced a `DeniedUpgrade` and `protocol`
         // is a `Void`.
         let protocol = match protocol {
-            future::Either::Left(p) => p,
+            future::Either::Left((p, _)) => p,
             future::Either::Right(p) => void::unreachable(p),
         };
 
@@ -569,7 +580,7 @@ impl Handler {
             .push(InboundSubstreamState::WaitingMessage {
                 first: true,
                 connection_id: connec_unique_id,
-                substream: protocol,
+                substream: Framed::new(protocol, Codec::new(self.max_packet_size)),
             });
     }
 
@@ -597,15 +608,18 @@ impl Handler {
 impl ConnectionHandler for Handler {
     type FromBehaviour = HandlerIn;
     type ToBehaviour = HandlerEvent;
-    type InboundProtocol = Either<ProtocolConfig, upgrade::DeniedUpgrade>;
-    type OutboundProtocol = ProtocolConfig;
+    type InboundProtocol = Either<SeveralProtocols, NoProtocols>;
+    type OutboundProtocol = SeveralProtocols;
     type OutboundOpenInfo = ();
     type InboundOpenInfo = ();
 
     fn listen_protocol(&self) -> SubstreamProtocol<Self::InboundProtocol, Self::InboundOpenInfo> {
         match self.mode {
-            Mode::Server => SubstreamProtocol::new(Either::Left(self.protocol_config.clone()), ()),
-            Mode::Client => SubstreamProtocol::new(Either::Right(upgrade::DeniedUpgrade), ()),
+            Mode::Server => SubstreamProtocol::new(
+                Either::Left(SeveralProtocols::new(self.protocol_names.clone())),
+                (),
+            ),
+            Mode::Client => SubstreamProtocol::new(Either::Right(NoProtocols::new()), ()),
         }
     }
 
@@ -745,7 +759,10 @@ impl ConnectionHandler for Handler {
         {
             self.num_requested_outbound_streams += 1;
             return Poll::Ready(ConnectionHandlerEvent::OutboundSubstreamRequest {
-                protocol: SubstreamProtocol::new(self.protocol_config.clone(), ()),
+                protocol: SubstreamProtocol::new(
+                    SeveralProtocols::new(self.protocol_names.clone()),
+                    (),
+                ),
             });
         }
 
@@ -778,7 +795,7 @@ impl ConnectionHandler for Handler {
                     let remote_supports_our_kademlia_protocols = self
                         .remote_supported_protocols
                         .iter()
-                        .any(|p| self.protocol_config.protocol_names().contains(p));
+                        .any(|p| self.protocol_names.contains(p));
 
                     self.protocol_status = Some(compute_new_protocol_status(
                         remote_supports_our_kademlia_protocols,
@@ -840,7 +857,7 @@ impl Handler {
 }
 
 impl futures::Stream for OutboundSubstreamState {
-    type Item = ConnectionHandlerEvent<ProtocolConfig, (), HandlerEvent>;
+    type Item = ConnectionHandlerEvent<SeveralProtocols, (), HandlerEvent>;
 
     fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
         let this = self.get_mut();
@@ -972,7 +989,7 @@ impl futures::Stream for OutboundSubstreamState {
 }
 
 impl futures::Stream for InboundSubstreamState {
-    type Item = ConnectionHandlerEvent<ProtocolConfig, (), HandlerEvent>;
+    type Item = ConnectionHandlerEvent<SeveralProtocols, (), HandlerEvent>;
 
     fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
         let this = self.get_mut();

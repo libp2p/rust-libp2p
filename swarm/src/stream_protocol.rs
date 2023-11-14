@@ -50,6 +50,12 @@ impl AsRef<str> for StreamProtocol {
     }
 }
 
+impl AsRef<StreamProtocol> for StreamProtocol {
+    fn as_ref(&self) -> &StreamProtocol {
+        &self
+    }
+}
+
 impl fmt::Debug for StreamProtocol {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         either::for_both!(&self.inner, s => s.fmt(f))
@@ -64,25 +70,31 @@ impl fmt::Display for StreamProtocol {
 
 impl PartialEq<&str> for StreamProtocol {
     fn eq(&self, other: &&str) -> bool {
-        self.as_ref() == *other
+        let x: &str = self.as_ref();
+        x == *other
     }
 }
 
 impl PartialEq<StreamProtocol> for &str {
     fn eq(&self, other: &StreamProtocol) -> bool {
-        *self == other.as_ref()
+        let x: &str = other.as_ref();
+        *self == x
     }
 }
 
 impl PartialEq for StreamProtocol {
     fn eq(&self, other: &Self) -> bool {
-        self.as_ref() == other.as_ref()
+        let x: &str = self.as_ref();
+        let y: &str = other.as_ref();
+
+        x == y
     }
 }
 
 impl Hash for StreamProtocol {
     fn hash<H: Hasher>(&self, state: &mut H) {
-        self.as_ref().hash(state)
+        let x: &str = self.as_ref();
+        x.hash(state)
     }
 }
 

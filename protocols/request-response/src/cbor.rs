@@ -81,11 +81,10 @@ mod codec {
         Req: Send + Serialize + DeserializeOwned,
         Resp: Send + Serialize + DeserializeOwned,
     {
-        type Protocol = StreamProtocol;
         type Request = Req;
         type Response = Resp;
 
-        async fn read_request<T>(&mut self, _: &Self::Protocol, io: &mut T) -> io::Result<Req>
+        async fn read_request<T>(&mut self, _: &StreamProtocol, io: &mut T) -> io::Result<Req>
         where
             T: AsyncRead + Unpin + Send,
         {
@@ -96,7 +95,7 @@ mod codec {
             cbor4ii::serde::from_slice(vec.as_slice()).map_err(decode_into_io_error)
         }
 
-        async fn read_response<T>(&mut self, _: &Self::Protocol, io: &mut T) -> io::Result<Resp>
+        async fn read_response<T>(&mut self, _: &StreamProtocol, io: &mut T) -> io::Result<Resp>
         where
             T: AsyncRead + Unpin + Send,
         {
@@ -109,7 +108,7 @@ mod codec {
 
         async fn write_request<T>(
             &mut self,
-            _: &Self::Protocol,
+            _: &StreamProtocol,
             io: &mut T,
             req: Self::Request,
         ) -> io::Result<()>
@@ -126,7 +125,7 @@ mod codec {
 
         async fn write_response<T>(
             &mut self,
-            _: &Self::Protocol,
+            _: &StreamProtocol,
             io: &mut T,
             resp: Self::Response,
         ) -> io::Result<()>

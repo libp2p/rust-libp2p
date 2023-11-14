@@ -365,13 +365,12 @@ impl TryFrom<u8> for Action {
 
 #[async_trait]
 impl Codec for TestCodec {
-    type Protocol = StreamProtocol;
     type Request = Action;
     type Response = Action;
 
     async fn read_request<T>(
         &mut self,
-        _protocol: &Self::Protocol,
+        _protocol: &StreamProtocol,
         io: &mut T,
     ) -> io::Result<Self::Request>
     where
@@ -396,7 +395,7 @@ impl Codec for TestCodec {
 
     async fn read_response<T>(
         &mut self,
-        _protocol: &Self::Protocol,
+        _protocol: &StreamProtocol,
         io: &mut T,
     ) -> io::Result<Self::Response>
     where
@@ -424,7 +423,7 @@ impl Codec for TestCodec {
 
     async fn write_request<T>(
         &mut self,
-        _protocol: &Self::Protocol,
+        _protocol: &StreamProtocol,
         io: &mut T,
         req: Self::Request,
     ) -> io::Result<()>
@@ -445,7 +444,7 @@ impl Codec for TestCodec {
 
     async fn write_response<T>(
         &mut self,
-        _protocol: &Self::Protocol,
+        _protocol: &StreamProtocol,
         io: &mut T,
         res: Self::Response,
     ) -> io::Result<()>

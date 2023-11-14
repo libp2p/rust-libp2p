@@ -18,7 +18,11 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::Stream;
+pub(crate) mod no;
+pub(crate) mod several;
+pub(crate) mod single;
+
+use crate::{Stream, StreamProtocol};
 
 use futures::prelude::*;
 use libp2p_core::upgrade;
@@ -30,7 +34,7 @@ use libp2p_core::upgrade;
 /// [`UpgradeInfo`](upgrade::UpgradeInfo).
 pub trait UpgradeInfoSend: Send + 'static {
     /// Equivalent to [`UpgradeInfo::Info`](upgrade::UpgradeInfo::Info).
-    type Info: AsRef<str> + Clone + Send + 'static;
+    type Info: AsRef<str> + AsRef<StreamProtocol> + Clone + Send + 'static;
     /// Equivalent to [`UpgradeInfo::InfoIter`](upgrade::UpgradeInfo::InfoIter).
     type InfoIter: Iterator<Item = Self::Info> + Send + 'static;
 
@@ -38,11 +42,12 @@ pub trait UpgradeInfoSend: Send + 'static {
     fn protocol_info(&self) -> Self::InfoIter;
 }
 
-impl<T> UpgradeInfoSend for T
+impl<T, I> UpgradeInfoSend for T
 where
-    T: upgrade::UpgradeInfo + Send + 'static,
+    T: upgrade::UpgradeInfo<Info = I> + Send + 'static,
     T::Info: Send + 'static,
     <T::InfoIter as IntoIterator>::IntoIter: Send + 'static,
+    I: AsRef<StreamProtocol> + AsRef<str> + Clone + Send + 'static,
 {
     type Info = T::Info;
     type InfoIter = <T::InfoIter as IntoIterator>::IntoIter;
@@ -128,7 +133,9 @@ where
 /// >           doesn't need to be used directly.
 pub struct SendWrapper<T>(pub T);
 
-impl<T: UpgradeInfoSend> upgrade::UpgradeInfo for SendWrapper<T> {
+impl<I: AsRef<StreamProtocol> + Clone + AsRef<str>, T: UpgradeInfoSend<Info = I>>
+    upgrade::UpgradeInfo for SendWrapper<T>
+{
     type Info = T::Info;
     type InfoIter = T::InfoIter;
 

@@ -19,6 +19,8 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
+#![allow(deprecated)]
+
 use crate::upgrade::{InboundUpgrade, OutboundUpgrade, UpgradeInfo};
 use futures::future;
 use std::iter;
@@ -26,6 +28,7 @@ use void::Void;
 
 /// Implementation of [`UpgradeInfo`], [`InboundUpgrade`] and [`OutboundUpgrade`] that directly yields the substream.
 #[derive(Debug, Copy, Clone)]
+#[deprecated(note = "Use `libp2p::swarm::SingleProtocol` instead.")]
 pub struct ReadyUpgrade<P> {
     protocol_name: P,
 }

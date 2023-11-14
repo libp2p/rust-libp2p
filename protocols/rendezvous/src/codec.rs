@@ -241,11 +241,10 @@ pub struct Codec {}
 
 #[async_trait]
 impl libp2p_request_response::Codec for Codec {
-    type Protocol = StreamProtocol;
     type Request = Message;
     type Response = Message;
 
-    async fn read_request<T>(&mut self, _: &Self::Protocol, io: &mut T) -> io::Result<Self::Request>
+    async fn read_request<T>(&mut self, _: &StreamProtocol, io: &mut T) -> io::Result<Self::Request>
     where
         T: AsyncRead + Unpin + Send,
     {
@@ -259,7 +258,7 @@ impl libp2p_request_response::Codec for Codec {
 
     async fn read_response<T>(
         &mut self,
-        _: &Self::Protocol,
+        _: &StreamProtocol,
         io: &mut T,
     ) -> io::Result<Self::Response>
     where
@@ -275,7 +274,7 @@ impl libp2p_request_response::Codec for Codec {
 
     async fn write_request<T>(
         &mut self,
-        _: &Self::Protocol,
+        _: &StreamProtocol,
         io: &mut T,
         req: Self::Request,
     ) -> io::Result<()>
@@ -289,7 +288,7 @@ impl libp2p_request_response::Codec for Codec {
 
     async fn write_response<T>(
         &mut self,
-        _: &Self::Protocol,
+        _: &StreamProtocol,
         io: &mut T,
         res: Self::Response,
     ) -> io::Result<()>
