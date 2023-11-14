@@ -135,7 +135,6 @@ use dial_opts::{DialOpts, PeerCondition};
 use futures::{prelude::*, stream::FusedStream};
 use libp2p_core::{
     connection::ConnectedPoint,
-    multiaddr,
     muxing::StreamMuxerBox,
     transport::{self, ListenerId, TransportError, TransportEvent},
     Endpoint, Multiaddr, Transport,
@@ -525,7 +524,7 @@ where
 
         let dials = addresses
             .into_iter()
-            .map(|a| match p2p_addr(peer_id, a) {
+            .map(|a| match peer_id.map_or(Ok(a.clone()), |p| a.with_p2p(p)) {
                 Ok(address) => {
                     let (dial, span) = match dial_opts.role_override() {
                         Endpoint::Dialer => (
@@ -1744,30 +1743,6 @@ impl NetworkInfo {
     pub fn connection_counters(&self) -> &ConnectionCounters {
         &self.connection_counters
     }
-}
-
-/// Ensures a given `Multiaddr` is a `/p2p/...` address for the given peer.
-///
-/// If the given address is already a `p2p` address for the given peer,
-/// i.e. the last encapsulated protocol is `/p2p/<peer-id>`, this is a no-op.
-///
-/// If the given address is already a `p2p` address for a different peer
-/// than the one given, the given `Multiaddr` is returned as an `Err`.
-///
-/// If the given address is not yet a `p2p` address for the given peer,
-/// the `/p2p/<peer-id>` protocol is appended to the returned address.
-fn p2p_addr(peer: Option<PeerId>, addr: Multiaddr) -> Result<Multiaddr, Multiaddr> {
-    let Some(peer) = peer else { return Ok(addr) };
-
-    if let Some(multiaddr::Protocol::P2p(peer_id)) = addr.iter().last() {
-        if peer_id != peer {
-            return Err(addr);
-        }
-
-        return Ok(addr);
-    }
-
-    Ok(addr.with(multiaddr::Protocol::P2p(peer)))
 }
 
 #[cfg(test)]

@@ -513,6 +513,10 @@ where
     /// If the routing table has been updated as a result of this operation,
     /// a [`Event::RoutingUpdated`] event is emitted.
     pub fn add_address(&mut self, peer: &PeerId, address: Multiaddr) -> RoutingUpdate {
+        // ensuring address is a fully-qualified /p2p multiaddr
+        let Ok(address) = address.with_p2p(*peer) else {
+            return RoutingUpdate::Failed;
+        };
         let key = kbucket::Key::from(*peer);
         match self.kbuckets.entry(&key) {
             kbucket::Entry::Present(mut entry, _) => {
@@ -593,6 +597,7 @@ where
         peer: &PeerId,
         address: &Multiaddr,
     ) -> Option<kbucket::EntryView<kbucket::Key<PeerId>, Addresses>> {
+        let address = &address.to_owned().with_p2p(*peer).ok()?;
         let key = kbucket::Key::from(*peer);
         match self.kbuckets.entry(&key) {
             kbucket::Entry::Present(mut entry, _) => {
@@ -2409,7 +2414,7 @@ where
         };
     }
 
-    #[tracing::instrument(level = "trace", name = "ConnectionHandler::poll", skip(self, cx))]
+    #[tracing::instrument(level = "trace", name = "NetworkBehaviour::poll", skip(self, cx))]
     fn poll(
         &mut self,
         cx: &mut Context<'_>,
