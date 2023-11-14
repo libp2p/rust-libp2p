@@ -63,19 +63,21 @@ mod either;
 mod error;
 mod pending;
 mod ready;
+mod secure;
 mod select;
-
-pub(crate) use apply::{
-    apply, apply_inbound, apply_outbound, InboundUpgradeApply, OutboundUpgradeApply,
-};
-pub(crate) use error::UpgradeError;
-use futures::future::Future;
 
 pub use self::{
     denied::DeniedUpgrade, pending::PendingUpgrade, ready::ReadyUpgrade, select::SelectUpgrade,
 };
 pub use crate::Negotiated;
+pub(crate) use apply::{
+    apply, apply_inbound, apply_outbound, InboundUpgradeApply, OutboundUpgradeApply,
+};
+pub(crate) use error::UpgradeError;
+use futures::future::Future;
+use libp2p_identity::PeerId;
 pub use multistream_select::{NegotiatedComplete, NegotiationError, ProtocolError, Version};
+pub(crate) use secure::secure;
 
 /// Common trait for upgrades that can be applied on inbound substreams, outbound substreams,
 /// or both.
@@ -151,4 +153,23 @@ pub trait OutboundConnectionUpgrade<T>: UpgradeInfo {
     ///
     /// The `info` is the identifier of the protocol, as produced by `protocol_info`.
     fn upgrade_outbound(self, socket: T, info: Self::Info) -> Self::Future;
+}
+
+/// Possible security upgrade on a connection
+pub trait SecurityUpgrade<T>: UpgradeInfo {
+    /// Output after the upgrade has been successfully negotiated and the handshake performed.
+    type Output;
+    /// Possible error during the handshake.
+    type Error;
+    /// Future that performs the handshake with the remote.
+    type Future: Future<Output = Result<Self::Output, Self::Error>>;
+
+    /// After we have determined that the remote supports one of the protocols we support, this
+    /// method is called to start the handshake.
+    ///
+    /// The `info` is the identifier of the protocol, as produced by `protocol_info`. Security
+    /// transports use the optional `peer_id` parameter on outgoing upgrades to validate validate
+    /// the expected `PeerId`.
+    fn upgrade_security(self, socket: T, info: Self::Info, peer_id: Option<PeerId>)
+        -> Self::Future;
 }

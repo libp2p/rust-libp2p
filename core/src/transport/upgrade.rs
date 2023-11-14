@@ -31,11 +31,11 @@ use crate::{
     },
     upgrade::{
         self, apply_inbound, apply_outbound, InboundConnectionUpgrade, InboundUpgradeApply,
-        OutboundConnectionUpgrade, OutboundUpgradeApply, UpgradeError,
+        OutboundConnectionUpgrade, OutboundUpgradeApply, SecurityUpgrade, UpgradeError,
     },
     Negotiated,
 };
-use futures::{prelude::*, ready};
+use futures::{future::LocalBoxFuture, prelude::*, ready};
 use libp2p_identity::PeerId;
 use multiaddr::Multiaddr;
 use std::{
@@ -99,16 +99,15 @@ where
     ) -> Authenticated<AndThen<T, impl FnOnce(C, ConnectedPoint) -> Authenticate<C, U> + Clone>>
     where
         T: Transport<Output = C>,
-        C: AsyncRead + AsyncWrite + Unpin,
+        C: AsyncRead + AsyncWrite + Unpin + 'static,
         D: AsyncRead + AsyncWrite + Unpin,
-        U: InboundConnectionUpgrade<Negotiated<C>, Output = (PeerId, D), Error = E>,
-        U: OutboundConnectionUpgrade<Negotiated<C>, Output = (PeerId, D), Error = E> + Clone,
+        U: SecurityUpgrade<Negotiated<C>, Output = (PeerId, D), Error = E> + Clone + 'static,
         E: Error + 'static,
     {
         let version = self.version;
         Authenticated(Builder::new(
             self.inner.and_then(move |conn, endpoint| Authenticate {
-                inner: upgrade::apply(conn, upgrade, endpoint, version),
+                inner: upgrade::secure(conn, upgrade, endpoint, version).boxed_local(),
             }),
             version,
         ))
@@ -123,23 +122,18 @@ where
 pub struct Authenticate<C, U>
 where
     C: AsyncRead + AsyncWrite + Unpin,
-    U: InboundConnectionUpgrade<Negotiated<C>> + OutboundConnectionUpgrade<Negotiated<C>>,
+    U: SecurityUpgrade<Negotiated<C>>,
 {
     #[pin]
-    inner: EitherUpgrade<C, U>,
+    inner: LocalBoxFuture<'static, Result<U::Output, UpgradeError<U::Error>>>,
 }
 
 impl<C, U> Future for Authenticate<C, U>
 where
     C: AsyncRead + AsyncWrite + Unpin,
-    U: InboundConnectionUpgrade<Negotiated<C>>
-        + OutboundConnectionUpgrade<
-            Negotiated<C>,
-            Output = <U as InboundConnectionUpgrade<Negotiated<C>>>::Output,
-            Error = <U as InboundConnectionUpgrade<Negotiated<C>>>::Error,
-        >,
+    U: SecurityUpgrade<Negotiated<C>>,
 {
-    type Output = <EitherUpgrade<C, U> as Future>::Output;
+    type Output = Result<U::Output, UpgradeError<U::Error>>;
 
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         let this = self.project();
