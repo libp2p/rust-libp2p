@@ -3,7 +3,9 @@
 - Automatically `bootstrap` every 5 minutes.
   This can be configured using the `bootstrap_interval` config.
   See [PR 4838](https://github.com/libp2p/rust-libp2p/pull/4838)
-  
+- Ensure `Multiaddr` handled and returned by `Behaviour` are `/p2p` terminated.
+  See [PR 4596](https://github.com/libp2p/rust-libp2p/pull/4596).
+
 ## 0.45.1
 
 - Fix a bug where calling `Behaviour::remove_address` with an address not in the peer's bucket would remove the peer from the routing table if the bucket has only one address left.
