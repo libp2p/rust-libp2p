@@ -121,8 +121,6 @@ async fn main() -> Result<(), Box<dyn Error>> {
     });
 
     loop {
-        let _ = swarm.behaviour_mut().kademlia.as_mut().map(|k| k.poll());
-
         let event = swarm.next().await.expect("Swarm not to terminate.");
         metrics.record(&event);
         match event {

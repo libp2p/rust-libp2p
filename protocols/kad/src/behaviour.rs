@@ -35,6 +35,7 @@ use crate::record::{
 };
 use crate::K_VALUE;
 use fnv::{FnvHashMap, FnvHashSet};
+use futures::Future;
 use futures_timer::Delay;
 use instant::Instant;
 use libp2p_core::{ConnectedPoint, Endpoint, Multiaddr};
@@ -52,6 +53,7 @@ use smallvec::SmallVec;
 use std::collections::{BTreeMap, HashMap, HashSet, VecDeque};
 use std::fmt;
 use std::num::NonZeroUsize;
+use std::pin::Pin;
 use std::task::{Context, Poll, Waker};
 use std::time::Duration;
 use std::vec;
@@ -118,8 +120,11 @@ pub struct Behaviour<TStore> {
     /// The record storage.
     store: TStore,
 
-    /// The interval used by [`Behaviour::poll`] to call [`Behaviour::bootstrap`].
+    /// The interval used to poll [`Behaviour::bootstrap`].
     bootstrap_interval: Option<Duration>,
+
+    /// The timer used to poll [`Behaviour::bootstrap`].
+    bootstrap_timer: Option<Delay>,
 }
 
 /// The configurable strategies for the insertion of peers
@@ -441,6 +446,11 @@ where
             .provider_publication_interval
             .map(AddProviderJob::new);
 
+        let bootstrap_timer = config
+            .bootstrap_interval
+            .map(|duration| Some(Delay::new(duration)))
+            .unwrap_or_else(|| None);
+
         Behaviour {
             store,
             caching: config.caching,
@@ -463,6 +473,7 @@ where
             auto_mode: true,
             no_events_waker: None,
             bootstrap_interval: config.bootstrap_interval,
+            bootstrap_timer,
         }
     }
 
@@ -877,6 +888,9 @@ where
     ///
     /// > **Note**: Bootstrapping requires at least one node of the DHT to be known.
     /// > See [`Behaviour::add_address`].
+    /// > **Note**: The bootstrapping interval is used to call bootstrap periodically
+    /// to ensure a healthy routing table.
+    /// > See [`Config::bootstrap_interval`] field.
     pub fn bootstrap(&mut self) -> Result<QueryId, NoKnownPeers> {
         let local_key = self.kbuckets.local_key().clone();
         let info = QueryInfo::Bootstrap {
@@ -1018,24 +1032,6 @@ where
         if let Some(waker) = self.no_events_waker.take() {
             waker.wake();
         }
-    }
-
-    /// Asynchronously polls the Kademlia behavior, triggering [`Behaviour::bootstrap`] if necessary.
-    ///
-    /// This function checks the refresh interval and, if ready, resets the timer and
-    /// triggers the bootstrap operation. It returns a `Result<(), NoKnownPeers>` where
-    /// Ok(()) indicates success, and Err(NoKnownPeers) is returned if there are no known peers
-    /// during the bootstrap operation. See [`Behaviour::bootstrap`] for more details.
-    pub async fn poll(&mut self) -> Result<(), NoKnownPeers> {
-        if let Some(bootstrap_interval) = &mut self.bootstrap_interval {
-            let mut bootstrap_timer = Delay::new(*bootstrap_interval);
-            if let Poll::Ready(()) = futures::poll!(&mut bootstrap_timer) {
-                bootstrap_timer.reset(*bootstrap_interval);
-                self.bootstrap()?;
-            };
-        }
-
-        Ok(())
     }
 
     fn reconfigure_mode(&mut self) {
@@ -2487,6 +2483,17 @@ where
                 }
             }
             self.put_record_job = Some(job);
+        }
+
+        // Poll bootstrap periodically.
+        if let Some(mut bootstrap_timer) = self.bootstrap_timer.take() {
+            if let Poll::Ready(()) = Pin::new(&mut bootstrap_timer).poll(cx) {
+                if let Some(interval) = self.bootstrap_interval {
+                    bootstrap_timer.reset(interval);
+                    let _ = self.bootstrap();
+                }
+            }
+            self.bootstrap_timer = Some(bootstrap_timer);
         }
 
         loop {
