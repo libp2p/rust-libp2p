@@ -3018,6 +3018,7 @@ dependencies = [
  "libp2p-core",
  "libp2p-identity",
  "libp2p-noise",
+ "libp2p-protocol-utils",
  "libp2p-swarm",
  "libp2p-swarm-test",
  "libp2p-tcp",

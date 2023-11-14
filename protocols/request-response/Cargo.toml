@@ -18,6 +18,7 @@ instant = "0.1.12"
 libp2p-core = { workspace = true }
 libp2p-swarm = { workspace = true }
 libp2p-identity = { workspace = true }
+libp2p-protocol-utils = { workspace = true }
 rand = "0.8"
 serde = { version = "1.0", optional = true}
 serde_json = { version = "1.0.108", optional = true }
