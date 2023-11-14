@@ -239,6 +239,7 @@ impl NetworkBehaviour for Behaviour {
         self.queued_actions.push_back(ToSwarm::GenerateEvent(event))
     }
 
+    #[tracing::instrument(level = "trace", name = "NetworkBehaviour::poll", skip(self, cx))]
     fn poll(
         &mut self,
         cx: &mut Context<'_>,
