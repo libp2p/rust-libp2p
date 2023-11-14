@@ -139,11 +139,11 @@ impl Behaviour {
                     unreachable!("`on_connection_closed` for unconnected peer.")
                 }
             };
-            if let Some((addr, status)) = self.reservation_addresses.remove(&connection_id) {
-                if matches!(status, ReservationStatus::Confirmed) {
-                    self.queued_actions
-                        .push_back(ToSwarm::ExternalAddrExpired(addr));
-                }
+            if let Some((addr, ReservationStatus::Confirmed)) =
+                self.reservation_addresses.remove(&connection_id)
+            {
+                self.queued_actions
+                    .push_back(ToSwarm::ExternalAddrExpired(addr));
             }
         }
     }
@@ -244,7 +244,7 @@ impl NetworkBehaviour for Behaviour {
                     .get_mut(&connection)
                     .expect("Relay connection exist");
 
-                if !renewal && matches!(status, ReservationStatus::Pending) {
+                if !renewal && *status == ReservationStatus::Pending {
                     *status = ReservationStatus::Confirmed;
                     self.queued_actions
                         .push_back(ToSwarm::ExternalAddrConfirmed(addr.clone()));
