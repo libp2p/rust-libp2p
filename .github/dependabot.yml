@@ -13,6 +13,10 @@ updates:
         patterns:
           - "trust-dns-*"
           - "async-std-resolver"
+      opentelemetry:
+        patterns:
+          - "opentelemetry*"
+          - "tracing-opentelemetry"
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
