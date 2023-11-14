@@ -53,33 +53,22 @@ where
             waker.wake();
         }
 
-        match self.inner.iter_mut().find(|tagged| tagged.key == id) {
-            None => {
-                self.inner.push(TaggedStream::new(
-                    id,
-                    TimeoutStream {
-                        inner: stream.boxed(),
-                        timeout: Delay::new(self.timeout),
-                    },
-                ));
+        let old = self.remove(id.clone());
+        self.inner.push(TaggedStream::new(
+            id,
+            TimeoutStream {
+                inner: stream.boxed(),
+                timeout: Delay::new(self.timeout),
+            },
+        ));
 
-                Ok(())
-            }
-            Some(existing) => {
-                let old = mem::replace(
-                    &mut existing.inner,
-                    TimeoutStream {
-                        inner: stream.boxed(),
-                        timeout: Delay::new(self.timeout),
-                    },
-                );
-
-                Err(PushError::Replaced(old.inner))
-            }
+        match old {
+            None => Ok(()),
+            Some(old) => Err(PushError::Replaced(old)),
         }
     }
 
-    pub fn remove(&mut self, id: ID) -> Option<BoxStream<O>> {
+    pub fn remove(&mut self, id: ID) -> Option<BoxStream<'static, O>> {
         let tagged = self.inner.iter_mut().find(|s| s.key == id)?;
 
         let inner = mem::replace(&mut tagged.inner.inner, stream::pending().boxed());
