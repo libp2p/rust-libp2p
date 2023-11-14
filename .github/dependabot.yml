@@ -9,9 +9,9 @@ updates:
       prefix: "deps"
     rebase-strategy: "disabled"
     groups:
-      trust-dns:
+      hickory-dns:
         patterns:
-          - "trust-dns-*"
+          - "hickory-*"
           - "async-std-resolver"
   - package-ecosystem: "github-actions"
     directory: "/"
