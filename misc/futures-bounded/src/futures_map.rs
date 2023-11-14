@@ -1,9 +1,9 @@
 use std::future::Future;
 use std::hash::Hash;
-use std::mem;
 use std::pin::Pin;
 use std::task::{Context, Poll, Waker};
 use std::time::Duration;
+use std::{future, mem};
 
 use futures_timer::Delay;
 use futures_util::future::BoxFuture;
@@ -38,6 +38,7 @@ impl<ID, O> FuturesMap<ID, O> {
 impl<ID, O> FuturesMap<ID, O>
 where
     ID: Clone + Hash + Eq + Send + Unpin + 'static,
+    O: 'static,
 {
     /// Push a future into the map.
     ///
@@ -58,30 +59,26 @@ where
             waker.wake();
         }
 
-        match self.inner.iter_mut().find(|tagged| tagged.tag == future_id) {
-            None => {
-                self.inner.push(TaggedFuture {
-                    tag: future_id,
-                    inner: TimeoutFuture {
-                        inner: future.boxed(),
-                        timeout: Delay::new(self.timeout),
-                    },
-                });
-
-                Ok(())
-            }
-            Some(existing) => {
-                let old_future = mem::replace(
-                    &mut existing.inner,
-                    TimeoutFuture {
-                        inner: future.boxed(),
-                        timeout: Delay::new(self.timeout),
-                    },
-                );
-
-                Err(PushError::Replaced(old_future.inner))
-            }
+        let old = self.remove(future_id.clone());
+        self.inner.push(TaggedFuture {
+            tag: future_id,
+            inner: TimeoutFuture {
+                inner: future.boxed(),
+                timeout: Delay::new(self.timeout),
+            },
+        });
+        match old {
+            None => Ok(()),
+            Some(old) => Err(PushError::Replaced(old)),
         }
+    }
+
+    pub fn remove(&mut self, id: ID) -> Option<BoxFuture<'static, O>> {
+        let tagged = self.inner.iter_mut().find(|s| s.tag == id)?;
+
+        let inner = mem::replace(&mut tagged.inner.inner, future::pending().boxed());
+
+        Some(inner)
     }
 
     pub fn len(&self) -> usize {
