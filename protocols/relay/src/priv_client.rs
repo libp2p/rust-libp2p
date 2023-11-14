@@ -42,7 +42,7 @@ use libp2p_swarm::{
     dummy, ConnectionDenied, ConnectionHandler, ConnectionId, DialFailure, NetworkBehaviour,
     NotifyHandler, Stream, THandler, THandlerInEvent, THandlerOutEvent, ToSwarm,
 };
-use std::collections::{hash_map, HashMap, HashSet, VecDeque};
+use std::collections::{hash_map, HashMap, VecDeque};
 use std::io::{Error, ErrorKind, IoSlice};
 use std::pin::Pin;
 use std::task::{Context, Poll};
@@ -70,6 +70,12 @@ pub enum Event {
     },
 }
 
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+enum ReservationStatus {
+    Pending,
+    Confirm,
+}
+
 /// [`NetworkBehaviour`] implementation of the relay client
 /// functionality of the circuit relay v2 protocol.
 pub struct Behaviour {
@@ -80,9 +86,10 @@ pub struct Behaviour {
     /// connection.
     directly_connected_peers: HashMap<PeerId, Vec<ConnectionId>>,
 
-    relay_connection_addr: HashMap<ConnectionId, Multiaddr>,
-
-    reservation: HashSet<Multiaddr>,
+    /// Stores the address of a pending or confirmed reservation.
+    ///
+    /// This is indexed by the [`ConnectionId`] to a relay server and the address is the `/p2p-circuit` address we reserved on it.
+    reservation_addresses: HashMap<ConnectionId, (Multiaddr, ReservationStatus)>,
 
     /// Queue of actions to return when polled.
     queued_actions: VecDeque<ToSwarm<Event, Either<handler::In, Void>>>,
@@ -97,8 +104,7 @@ pub fn new(local_peer_id: PeerId) -> (Transport, Behaviour) {
         local_peer_id,
         from_transport,
         directly_connected_peers: Default::default(),
-        relay_connection_addr: Default::default(),
-        reservation: Default::default(),
+        reservation_addresses: Default::default(),
         queued_actions: Default::default(),
         pending_handler_commands: Default::default(),
     };
@@ -133,12 +139,8 @@ impl Behaviour {
                     unreachable!("`on_connection_closed` for unconnected peer.")
                 }
             };
-            if let Some(addr) = self.relay_connection_addr.remove(&connection_id) {
-                let addr = addr
-                    .with(Protocol::P2pCircuit)
-                    .with(Protocol::P2p(self.local_peer_id));
-
-                if self.reservation.remove(&addr) {
+            if let Some((addr, status)) = self.reservation_addresses.remove(&connection_id) {
+                if matches!(status, ReservationStatus::Confirm) {
                     self.queued_actions
                         .push_back(ToSwarm::ExternalAddrExpired(addr));
                 }
@@ -217,7 +219,7 @@ impl NetworkBehaviour for Behaviour {
                 self.on_connection_closed(connection_closed)
             }
             FromSwarm::DialFailure(DialFailure { connection_id, .. }) => {
-                self.relay_connection_addr.remove(&connection_id);
+                self.reservation_addresses.remove(&connection_id);
                 self.pending_handler_commands.remove(&connection_id);
             }
             _ => {}
@@ -237,17 +239,15 @@ impl NetworkBehaviour for Behaviour {
 
         let event = match handler_event {
             handler::Event::ReservationReqAccepted { renewal, limit } => {
-                let addr = self
-                    .relay_connection_addr
-                    .get(&connection)
-                    .cloned()
-                    .expect("Relay connection exist")
-                    .with(Protocol::P2pCircuit)
-                    .with(Protocol::P2p(self.local_peer_id));
+                let (addr, status) = self
+                    .reservation_addresses
+                    .get_mut(&connection)
+                    .expect("Relay connection exist");
 
-                if !renewal && self.reservation.insert(addr.clone()) {
+                if !renewal && matches!(status, ReservationStatus::Pending) {
+                    *status = ReservationStatus::Confirm;
                     self.queued_actions
-                        .push_back(ToSwarm::ExternalAddrConfirmed(addr));
+                        .push_back(ToSwarm::ExternalAddrConfirmed(addr.clone()));
                 }
 
                 Event::ReservationReqAccepted {
@@ -290,9 +290,15 @@ impl NetworkBehaviour for Behaviour {
                     .and_then(|cs| cs.first())
                 {
                     Some(connection_id) => {
-                        self.relay_connection_addr.insert(
+                        self.reservation_addresses.insert(
                             *connection_id,
-                            relay_addr.with(Protocol::P2p(relay_peer_id)),
+                            (
+                                relay_addr
+                                    .with(Protocol::P2p(relay_peer_id))
+                                    .with(Protocol::P2pCircuit)
+                                    .with(Protocol::P2p(self.local_peer_id)),
+                                ReservationStatus::Pending,
+                            ),
                         );
 
                         ToSwarm::NotifyHandler {
@@ -308,9 +314,15 @@ impl NetworkBehaviour for Behaviour {
                             .build();
                         let relayed_connection_id = opts.connection_id();
 
-                        self.relay_connection_addr.insert(
+                        self.reservation_addresses.insert(
                             relayed_connection_id,
-                            relay_addr.with(Protocol::P2p(relay_peer_id)),
+                            (
+                                relay_addr
+                                    .with(Protocol::P2p(relay_peer_id))
+                                    .with(Protocol::P2pCircuit)
+                                    .with(Protocol::P2p(self.local_peer_id)),
+                                ReservationStatus::Pending,
+                            ),
                         );
 
                         self.pending_handler_commands
