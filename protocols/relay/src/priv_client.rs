@@ -73,7 +73,7 @@ pub enum Event {
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 enum ReservationStatus {
     Pending,
-    Confirm,
+    Confirmed,
 }
 
 /// [`NetworkBehaviour`] implementation of the relay client
@@ -140,7 +140,7 @@ impl Behaviour {
                 }
             };
             if let Some((addr, status)) = self.reservation_addresses.remove(&connection_id) {
-                if matches!(status, ReservationStatus::Confirm) {
+                if matches!(status, ReservationStatus::Confirmed) {
                     self.queued_actions
                         .push_back(ToSwarm::ExternalAddrExpired(addr));
                 }
@@ -245,7 +245,7 @@ impl NetworkBehaviour for Behaviour {
                     .expect("Relay connection exist");
 
                 if !renewal && matches!(status, ReservationStatus::Pending) {
-                    *status = ReservationStatus::Confirm;
+                    *status = ReservationStatus::Confirmed;
                     self.queued_actions
                         .push_back(ToSwarm::ExternalAddrConfirmed(addr.clone()));
                 }
