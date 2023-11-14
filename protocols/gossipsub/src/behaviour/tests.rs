@@ -23,8 +23,10 @@
 use super::*;
 use crate::subscription_filter::WhitelistSubscriptionFilter;
 use crate::transform::{DataTransform, IdentityTransform};
-use crate::{config::Config, config::ConfigBuilder, IdentTopic as Topic, TopicScoreParams};
-use crate::{Rpc, ValidationError};
+use crate::ValidationError;
+use crate::{
+    config::Config, config::ConfigBuilder, types::Rpc, IdentTopic as Topic, TopicScoreParams,
+};
 use async_std::net::Ipv4Addr;
 use byteorder::{BigEndian, ByteOrder};
 use libp2p_core::{ConnectedPoint, Endpoint};
