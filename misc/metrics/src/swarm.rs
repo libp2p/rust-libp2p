@@ -185,8 +185,8 @@ impl Metrics {
     }
 }
 
-impl<TBvEv, THandleErr> super::Recorder<SwarmEvent<TBvEv, THandleErr>> for Metrics {
-    fn record(&self, event: &SwarmEvent<TBvEv, THandleErr>) {
+impl<TBvEv> super::Recorder<SwarmEvent<TBvEv>> for Metrics {
+    fn record(&self, event: &SwarmEvent<TBvEv>) {
         match event {
             SwarmEvent::Behaviour(_) => {}
             SwarmEvent::ConnectionEstablished {
@@ -359,15 +359,13 @@ struct ConnectionClosedLabels {
 enum ConnectionError {
     Io,
     KeepAliveTimeout,
-    Handler,
 }
 
-impl<E> From<&libp2p_swarm::ConnectionError<E>> for ConnectionError {
-    fn from(value: &libp2p_swarm::ConnectionError<E>) -> Self {
+impl From<&libp2p_swarm::ConnectionError> for ConnectionError {
+    fn from(value: &libp2p_swarm::ConnectionError) -> Self {
         match value {
             libp2p_swarm::ConnectionError::IO(_) => ConnectionError::Io,
             libp2p_swarm::ConnectionError::KeepAliveTimeout => ConnectionError::KeepAliveTimeout,
-            libp2p_swarm::ConnectionError::Handler(_) => ConnectionError::Handler,
         }
     }
 }

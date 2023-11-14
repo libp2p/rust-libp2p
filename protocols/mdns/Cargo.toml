@@ -2,7 +2,7 @@
 name = "libp2p-mdns"
 edition = "2021"
 rust-version = { workspace = true }
-version = "0.45.0"
+version = "0.45.1"
 description = "Implementation of the libp2p mDNS discovery method"
 authors = ["Parity Technologies <admin@parity.io>"]
 license = "MIT"
@@ -24,7 +24,7 @@ smallvec = "1.11.1"
 socket2 = { version = "0.5.5", features = ["all"] }
 tokio = { version = "1.33", default-features = false, features = ["net", "time"], optional = true}
 tracing = "0.1.37"
-trust-dns-proto = { version = "0.23.0", default-features = false, features = ["mdns"] }
+hickory-proto = { version = "0.24.0", default-features = false, features = ["mdns"] }
 void = "1.0.2"
 
 [features]

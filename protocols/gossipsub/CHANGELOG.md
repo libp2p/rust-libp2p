@@ -1,4 +1,9 @@
-## 0.46.0 - unreleased
+## 0.46.1 - unreleased
+
+- Deprecate `Rpc` in preparation for removing it from the public API because it is an internal type.
+  See [PR 4833](https://github.com/libp2p/rust-libp2p/pull/4833). 
+
+## 0.46.0
 
 - Remove `fast_message_id_fn` mechanism from `Config`.
   See [PR 4285](https://github.com/libp2p/rust-libp2p/pull/4285).

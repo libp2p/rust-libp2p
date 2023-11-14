@@ -38,7 +38,7 @@ use libp2p_swarm::{
 };
 use smallvec::SmallVec;
 use std::collections::HashSet;
-use std::{io, task::Context, task::Poll, time::Duration};
+use std::{task::Context, task::Poll, time::Duration};
 use tracing::Level;
 
 const STREAM_TIMEOUT: Duration = Duration::from_secs(60);
@@ -57,7 +57,6 @@ pub struct Handler {
             Either<ReadyUpgrade<StreamProtocol>, ReadyUpgrade<StreamProtocol>>,
             (),
             Event,
-            io::Error,
         >; 4],
     >,
 
@@ -282,7 +281,6 @@ impl Handler {
 impl ConnectionHandler for Handler {
     type FromBehaviour = InEvent;
     type ToBehaviour = Event;
-    type Error = io::Error;
     type InboundProtocol =
         SelectUpgrade<ReadyUpgrade<StreamProtocol>, ReadyUpgrade<StreamProtocol>>;
     type OutboundProtocol = Either<ReadyUpgrade<StreamProtocol>, ReadyUpgrade<StreamProtocol>>;
@@ -320,9 +318,7 @@ impl ConnectionHandler for Handler {
     fn poll(
         &mut self,
         cx: &mut Context<'_>,
-    ) -> Poll<
-        ConnectionHandlerEvent<Self::OutboundProtocol, Self::OutboundOpenInfo, Event, Self::Error>,
-    > {
+    ) -> Poll<ConnectionHandlerEvent<Self::OutboundProtocol, Self::OutboundOpenInfo, Event>> {
         if let Some(event) = self.events.pop() {
             return Poll::Ready(event);
         }

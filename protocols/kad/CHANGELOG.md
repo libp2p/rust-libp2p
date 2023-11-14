@@ -1,4 +1,16 @@
-## 0.45.0 - unreleased
+## 0.45.2 - unreleased
+
+- Ensure `Multiaddr` handled and returned by `Behaviour` are `/p2p` terminated.
+  See [PR 4596](https://github.com/libp2p/rust-libp2p/pull/4596).
+
+## 0.45.1
+
+- Fix a bug where calling `Behaviour::remove_address` with an address not in the peer's bucket would remove the peer from the routing table if the bucket has only one address left.
+  See [PR 4816](https://github.com/libp2p/rust-libp2p/pull/4816)
+- Add `std::fmt::Display` implementation on `QueryId`.
+  See [PR 4814](https://github.com/libp2p/rust-libp2p/pull/4814).
+
+## 0.45.0
 
 - Remove deprecated `kad::Config::set_connection_idle_timeout` in favor of `SwarmBuilder::idle_connection_timeout`.
   See [PR 4659](https://github.com/libp2p/rust-libp2p/pull/4659).
@@ -10,7 +22,7 @@
   See [PR 4698](https://github.com/libp2p/rust-libp2p/pull/4698).
 - Remove previously deprecated type-aliases.
   Users should follow the convention of importing the `libp2p::kad` module and referring to symbols as `kad::Behaviour` etc.
-  See [PR 4733](https://github.com/libp2p/rust-libp2p/pull/4733). 
+  See [PR 4733](https://github.com/libp2p/rust-libp2p/pull/4733).
 
 ## 0.44.6
 

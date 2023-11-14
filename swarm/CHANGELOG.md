@@ -1,4 +1,4 @@
-## 0.44.0 - unreleased
+## 0.44.0
 
 - Add `#[non_exhaustive]` to `FromSwarm`, `ToSwarm`, `SwarmEvent`, `ConnectionHandlerEvent`, `ConnectionEvent`.
   See [PR 4581](https://github.com/libp2p/rust-libp2p/pull/4581).
@@ -7,6 +7,9 @@
   See [PR 4076](https://github.com/libp2p/rust-libp2p/pull/4076).
 - Remove deprecated `PollParameters` from `NetworkBehaviour::poll` function.
   See [PR 4490](https://github.com/libp2p/rust-libp2p/pull/4490).
+- Remove deprecated `ConnectionHandlerEvent::Close` and `ConnectionHandler::Error`.
+  `ConnectionHandler`s should not close connections directly as the connection might still be in use by other handlers.
+  See [PR 4755](https://github.com/libp2p/rust-libp2p/pull/4755).
 - Add `PeerCondition::DisconnectedAndNotDialing` variant, combining pre-existing conditions.
   This is the new default.
   A new dialing attempt is iniated _only if_ the peer is both considered disconnected and there is currently no ongoing dialing attempt.
@@ -22,6 +25,12 @@
   See [PR 4721](https://github.com/libp2p/rust-libp2p/pull/4721).
 - Remove deprecated symbols.
   See [PR 4737](https://github.com/libp2p/rust-libp2p/pull/4737).
+
+## 0.43.7
+
+- Deprecate `ConnectionHandlerEvent::Close`.
+  See [issue 3591](https://github.com/libp2p/rust-libp2p/issues/3591) for details.
+  See [PR 4714](https://github.com/libp2p/rust-libp2p/pull/4714).
 
 ## 0.43.6
 

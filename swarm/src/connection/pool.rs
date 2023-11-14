@@ -132,7 +132,7 @@ where
 
     /// Receivers for events reported from established connections.
     established_connection_events:
-        SelectAll<mpsc::Receiver<task::EstablishedConnectionEvent<THandler>>>,
+        SelectAll<mpsc::Receiver<task::EstablishedConnectionEvent<THandler::ToBehaviour>>>,
 
     /// Receivers for [`NewConnection`] objects that are dropped.
     new_connection_dropped_listeners: FuturesUnordered<oneshot::Receiver<StreamMuxerBox>>,
@@ -226,7 +226,7 @@ impl<THandler: ConnectionHandler> fmt::Debug for Pool<THandler> {
 
 /// Event that can happen on the `Pool`.
 #[derive(Debug)]
-pub(crate) enum PoolEvent<THandler: ConnectionHandler> {
+pub(crate) enum PoolEvent<ToBehaviour> {
     /// A new connection has been established.
     ConnectionEstablished {
         id: ConnectionId,
@@ -258,7 +258,7 @@ pub(crate) enum PoolEvent<THandler: ConnectionHandler> {
         connected: Connected,
         /// The error that occurred, if any. If `None`, the connection
         /// was closed by the local peer.
-        error: Option<ConnectionError<THandler::Error>>,
+        error: Option<ConnectionError>,
         /// The remaining established connections to the same peer.
         remaining_established_connection_ids: Vec<ConnectionId>,
     },
@@ -290,7 +290,7 @@ pub(crate) enum PoolEvent<THandler: ConnectionHandler> {
         id: ConnectionId,
         peer_id: PeerId,
         /// The produced event.
-        event: THandler::ToBehaviour,
+        event: ToBehaviour,
     },
 
     /// The connection to a node has changed its address.
@@ -548,7 +548,7 @@ where
 
     /// Polls the connection pool for events.
     #[tracing::instrument(level = "debug", name = "Pool::poll", skip(self, cx))]
-    pub(crate) fn poll(&mut self, cx: &mut Context<'_>) -> Poll<PoolEvent<THandler>>
+    pub(crate) fn poll(&mut self, cx: &mut Context<'_>) -> Poll<PoolEvent<THandler::ToBehaviour>>
     where
         THandler: ConnectionHandler + 'static,
         <THandler as ConnectionHandler>::OutboundOpenInfo: Send,

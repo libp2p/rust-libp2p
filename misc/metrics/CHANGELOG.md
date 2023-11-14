@@ -1,4 +1,10 @@
-## 0.14.0 - unreleased
+## 0.14.1
+
+- Add `BandwidthTransport`, wrapping an existing `Transport`, exposing Prometheus bandwidth metrics.
+  See also `SwarmBuilder::with_bandwidth_metrics`.
+  See [PR 4727](https://github.com/libp2p/rust-libp2p/pull/4727).
+
+## 0.14.0
 
 - Add metrics for `SwarmEvent::{NewExternalAddrCandidate,ExternalAddrConfirmed,ExternalAddrExpired}`.
   See [PR 4721](https://github.com/libp2p/rust-libp2p/pull/4721).

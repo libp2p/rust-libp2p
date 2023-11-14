@@ -209,7 +209,6 @@ impl Handler {
 impl ConnectionHandler for Handler {
     type FromBehaviour = Void;
     type ToBehaviour = Result<Duration, Failure>;
-    type Error = Void;
     type InboundProtocol = ReadyUpgrade<StreamProtocol>;
     type OutboundProtocol = ReadyUpgrade<StreamProtocol>;
     type OutboundOpenInfo = ();
@@ -225,14 +224,8 @@ impl ConnectionHandler for Handler {
     fn poll(
         &mut self,
         cx: &mut Context<'_>,
-    ) -> Poll<
-        ConnectionHandlerEvent<
-            ReadyUpgrade<StreamProtocol>,
-            (),
-            Result<Duration, Failure>,
-            Self::Error,
-        >,
-    > {
+    ) -> Poll<ConnectionHandlerEvent<ReadyUpgrade<StreamProtocol>, (), Result<Duration, Failure>>>
+    {
         match self.state {
             State::Inactive { reported: true } => {
                 return Poll::Pending; // nothing to do on this connection

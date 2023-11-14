@@ -101,7 +101,6 @@ pub struct Handler {
             <Handler as ConnectionHandler>::OutboundProtocol,
             <Handler as ConnectionHandler>::OutboundOpenInfo,
             <Handler as ConnectionHandler>::ToBehaviour,
-            <Handler as ConnectionHandler>::Error,
         >,
     >,
 
@@ -230,7 +229,6 @@ impl Handler {
 impl ConnectionHandler for Handler {
     type FromBehaviour = In;
     type ToBehaviour = Event;
-    type Error = void::Void;
     type InboundProtocol = ReadyUpgrade<StreamProtocol>;
     type InboundOpenInfo = ();
     type OutboundProtocol = ReadyUpgrade<StreamProtocol>;
@@ -275,12 +273,7 @@ impl ConnectionHandler for Handler {
         &mut self,
         cx: &mut Context<'_>,
     ) -> Poll<
-        ConnectionHandlerEvent<
-            Self::OutboundProtocol,
-            Self::OutboundOpenInfo,
-            Self::ToBehaviour,
-            Self::Error,
-        >,
+        ConnectionHandlerEvent<Self::OutboundProtocol, Self::OutboundOpenInfo, Self::ToBehaviour>,
     > {
         loop {
             debug_assert_eq!(

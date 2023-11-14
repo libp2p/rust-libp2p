@@ -1,9 +1,18 @@
-## 0.41.0 - unreleased
+## 0.41.1
+
+- Add hidden API that removes unnecessary async for `async-std`.
+  See [PR 4808](https://github.com/libp2p/rust-libp2p/pull/4808).
+
+## 0.41.0
 
 - Make `tokio::Transport::custom` and `async_std::Transport::custom` constructors infallible.
   See [PR 4464](https://github.com/libp2p/rust-libp2p/pull/4464).
 - Remove deprecated type-aliases.
-  See [PR 4739](https://github.com/libp2p/rust-libp2p/pull/4739). 
+  See [PR 4739](https://github.com/libp2p/rust-libp2p/pull/4739).
+- Migrate to the `hickory-dns` project which has rebranded from `trust-dns`.
+  We also remove the `tokio-dns-over-rustls` and `tokio-dns-over-https-rustls` features.
+  Users should activate these features themselves on `hickory-resolver` if so desired.
+  See [PR 4780](https://github.com/libp2p/rust-libp2p/pull/4780).
 
 ## 0.40.1
 
