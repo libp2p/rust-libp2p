@@ -430,19 +430,6 @@ dependencies = [
 
 [[package]]
 name = "asynchronous-codec"
-version = "0.6.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4057f2c32adbb2fc158e22fb38433c8e9bbf76b75a4732c7c0cbaf695fb65568"
-dependencies = [
- "bytes",
- "futures-sink",
- "futures-util",
- "memchr",
- "pin-project-lite",
-]
-
-[[package]]
-name = "asynchronous-codec"
 version = "0.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a860072022177f903e59730004fb5dc13db9275b79bb2aef7ba8ce831956c233"
@@ -2494,7 +2481,7 @@ version = "0.12.0"
 dependencies = [
  "async-std",
  "async-trait",
- "asynchronous-codec 0.6.2",
+ "asynchronous-codec",
  "futures",
  "futures-timer",
  "instant",
@@ -2554,7 +2541,7 @@ dependencies = [
  "smallvec",
  "thiserror",
  "tracing",
- "unsigned-varint",
+ "unsigned-varint 0.8.0",
  "void",
 ]
 
@@ -2563,7 +2550,7 @@ name = "libp2p-dcutr"
 version = "0.11.0"
 dependencies = [
  "async-std",
- "asynchronous-codec 0.6.2",
+ "asynchronous-codec",
  "clap",
  "either",
  "futures",
@@ -2614,7 +2601,7 @@ dependencies = [
 name = "libp2p-floodsub"
 version = "0.44.0"
 dependencies = [
- "asynchronous-codec 0.6.2",
+ "asynchronous-codec",
  "bytes",
  "cuckoofilter",
  "fnv",
@@ -2635,7 +2622,7 @@ name = "libp2p-gossipsub"
 version = "0.46.1"
 dependencies = [
  "async-std",
- "asynchronous-codec 0.6.2",
+ "asynchronous-codec",
  "base64 0.21.5",
  "byteorder",
  "bytes",
@@ -2664,7 +2651,6 @@ dependencies = [
  "smallvec",
  "tracing",
  "tracing-subscriber",
- "unsigned-varint",
  "void",
 ]
 
@@ -2673,7 +2659,7 @@ name = "libp2p-identify"
 version = "0.44.1"
 dependencies = [
  "async-std",
- "asynchronous-codec 0.6.2",
+ "asynchronous-codec",
  "either",
  "futures",
  "futures-bounded",
@@ -2727,7 +2713,7 @@ version = "0.45.2"
 dependencies = [
  "arrayvec",
  "async-std",
- "asynchronous-codec 0.6.2",
+ "asynchronous-codec",
  "bytes",
  "either",
  "fnv",
@@ -2752,7 +2738,6 @@ dependencies = [
  "tracing",
  "tracing-subscriber",
  "uint",
- "unsigned-varint",
  "void",
 ]
 
@@ -2824,7 +2809,7 @@ name = "libp2p-mplex"
 version = "0.41.0"
 dependencies = [
  "async-std",
- "asynchronous-codec 0.6.2",
+ "asynchronous-codec",
  "bytes",
  "criterion",
  "futures",
@@ -2840,7 +2825,7 @@ dependencies = [
  "smallvec",
  "tracing",
  "tracing-subscriber",
- "unsigned-varint",
+ "unsigned-varint 0.8.0",
 ]
 
 [[package]]
@@ -2858,7 +2843,7 @@ dependencies = [
 name = "libp2p-noise"
 version = "0.44.0"
 dependencies = [
- "asynchronous-codec 0.7.0",
+ "asynchronous-codec",
  "bytes",
  "curve25519-dalek",
  "futures",
@@ -2935,7 +2920,7 @@ dependencies = [
 name = "libp2p-plaintext"
 version = "0.41.0"
 dependencies = [
- "asynchronous-codec 0.6.2",
+ "asynchronous-codec",
  "bytes",
  "futures",
  "futures_ringbuf",
@@ -3003,7 +2988,7 @@ dependencies = [
 name = "libp2p-relay"
 version = "0.17.1"
 dependencies = [
- "asynchronous-codec 0.6.2",
+ "asynchronous-codec",
  "bytes",
  "either",
  "futures",
@@ -3033,7 +3018,7 @@ name = "libp2p-rendezvous"
 version = "0.14.0"
 dependencies = [
  "async-trait",
- "asynchronous-codec 0.6.2",
+ "asynchronous-codec",
  "bimap",
  "futures",
  "futures-timer",
@@ -3266,7 +3251,7 @@ dependencies = [
 name = "libp2p-webrtc-utils"
 version = "0.1.0"
 dependencies = [
- "asynchronous-codec 0.6.2",
+ "asynchronous-codec",
  "bytes",
  "futures",
  "hex",
@@ -3282,7 +3267,6 @@ dependencies = [
  "thiserror",
  "tinytemplate",
  "tracing",
- "unsigned-varint",
 ]
 
 [[package]]
@@ -3626,7 +3610,7 @@ dependencies = [
  "percent-encoding",
  "serde",
  "static_assertions",
- "unsigned-varint",
+ "unsigned-varint 0.7.2",
  "url",
 ]
 
@@ -3652,7 +3636,7 @@ dependencies = [
  "quickcheck",
  "rand 0.8.5",
  "serde",
- "unsigned-varint",
+ "unsigned-varint 0.7.2",
 ]
 
 [[package]]
@@ -3670,7 +3654,7 @@ dependencies = [
  "smallvec",
  "tracing",
  "tracing-subscriber",
- "unsigned-varint",
+ "unsigned-varint 0.8.0",
 ]
 
 [[package]]
@@ -4384,11 +4368,11 @@ dependencies = [
 name = "quick-protobuf-codec"
 version = "0.2.0"
 dependencies = [
- "asynchronous-codec 0.6.2",
+ "asynchronous-codec",
  "bytes",
  "quick-protobuf",
  "thiserror",
- "unsigned-varint",
+ "unsigned-varint 0.8.0",
 ]
 
 [[package]]
@@ -6083,8 +6067,14 @@ name = "unsigned-varint"
 version = "0.7.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6889a77d49f1f013504cec6bf97a2c730394adedaeb1deb5ea08949a50541105"
+
+[[package]]
+name = "unsigned-varint"
+version = "0.8.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "eb066959b24b5196ae73cb057f45598450d2c5f71460e98c49b738086eff9c06"
 dependencies = [
- "asynchronous-codec 0.6.2",
+ "asynchronous-codec",
  "bytes",
 ]
 

@@ -36,7 +36,6 @@ use libp2p_identity::{PeerId, PublicKey};
 use libp2p_swarm::StreamProtocol;
 use quick_protobuf::Writer;
 use std::pin::Pin;
-use unsigned_varint::codec;
 use void::Void;
 
 pub(crate) const SIGNING_PREFIX: &[u8] = b"libp2p-pubsub:";
@@ -108,12 +107,10 @@ where
     type Future = Pin<Box<dyn Future<Output = Result<Self::Output, Self::Error>> + Send>>;
 
     fn upgrade_inbound(self, socket: TSocket, protocol_id: Self::Info) -> Self::Future {
-        let mut length_codec = codec::UviBytes::default();
-        length_codec.set_max_len(self.max_transmit_size);
         Box::pin(future::ok((
             Framed::new(
                 socket,
-                GossipsubCodec::new(length_codec, self.validation_mode),
+                GossipsubCodec::new(self.max_transmit_size, self.validation_mode),
             ),
             protocol_id.kind,
         )))
@@ -129,12 +126,10 @@ where
     type Future = Pin<Box<dyn Future<Output = Result<Self::Output, Self::Error>> + Send>>;
 
     fn upgrade_outbound(self, socket: TSocket, protocol_id: Self::Info) -> Self::Future {
-        let mut length_codec = codec::UviBytes::default();
-        length_codec.set_max_len(self.max_transmit_size);
         Box::pin(future::ok((
             Framed::new(
                 socket,
-                GossipsubCodec::new(length_codec, self.validation_mode),
+                GossipsubCodec::new(self.max_transmit_size, self.validation_mode),
             ),
             protocol_id.kind,
         )))
@@ -151,8 +146,8 @@ pub struct GossipsubCodec {
 }
 
 impl GossipsubCodec {
-    pub fn new(length_codec: codec::UviBytes, validation_mode: ValidationMode) -> GossipsubCodec {
-        let codec = quick_protobuf_codec::Codec::new(length_codec.max_len());
+    pub fn new(max_length: usize, validation_mode: ValidationMode) -> GossipsubCodec {
+        let codec = quick_protobuf_codec::Codec::new(max_length);
         GossipsubCodec {
             validation_mode,
             codec,
@@ -217,10 +212,10 @@ impl GossipsubCodec {
 }
 
 impl Encoder for GossipsubCodec {
-    type Item = proto::RPC;
+    type Item<'a> = proto::RPC;
     type Error = quick_protobuf_codec::Error;
 
-    fn encode(&mut self, item: Self::Item, dst: &mut BytesMut) -> Result<(), Self::Error> {
+    fn encode(&mut self, item: Self::Item<'_>, dst: &mut BytesMut) -> Result<(), Self::Error> {
         self.codec.encode(item, dst)
     }
 }
@@ -507,7 +502,7 @@ impl Decoder for GossipsubCodec {
 mod tests {
     use super::*;
     use crate::config::Config;
-    use crate::{types::RpcOut, Behaviour, ConfigBuilder};
+    use crate::{Behaviour, ConfigBuilder};
     use crate::{IdentTopic as Topic, Version};
     use libp2p_identity::Keypair;
     use quickcheck::*;
@@ -581,8 +576,13 @@ mod tests {
         fn prop(message: Message) {
             let message = message.0;
 
-            let rpc = RpcOut::Publish(message.clone());
-            let mut codec = GossipsubCodec::new(codec::UviBytes::default(), ValidationMode::Strict);
+            let rpc = Rpc {
+                messages: vec![message.clone()],
+                subscriptions: vec![],
+                control_msgs: vec![],
+            };
+
+            let mut codec = GossipsubCodec::new(u32::MAX as usize, ValidationMode::Strict);
             let mut buf = BytesMut::new();
             codec.encode(rpc.into_protobuf(), &mut buf).unwrap();
             let decoded_rpc = codec.decode(&mut buf).unwrap().unwrap();
