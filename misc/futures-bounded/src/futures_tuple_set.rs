@@ -26,7 +26,10 @@ impl<O, D> FuturesTupleSet<O, D> {
     }
 }
 
-impl<O, D> FuturesTupleSet<O, D> {
+impl<O, D> FuturesTupleSet<O, D>
+where
+    O: 'static,
+{
     /// Push a future into the list.
     ///
     /// This method adds the given future to the list.
