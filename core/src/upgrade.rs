@@ -168,8 +168,8 @@ pub trait SecurityUpgrade<T>: UpgradeInfo {
     /// method is called to start the handshake.
     ///
     /// The `info` is the identifier of the protocol, as produced by `protocol_info`. Security
-    /// transports use the optional `peer_id` parameter on outgoing upgrades to validate validate
-    /// the expected `PeerId`.
+    /// transports use the optional `peer_id` parameter on outgoing upgrades to validate the
+    /// expected `PeerId`.
     fn upgrade_security(self, socket: T, info: Self::Info, peer_id: Option<PeerId>)
         -> Self::Future;
 }
