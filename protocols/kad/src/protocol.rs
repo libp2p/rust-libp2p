@@ -196,9 +196,9 @@ impl<A, B> Codec<A, B> {
 
 impl<A: Into<proto::Message>, B> Encoder for Codec<A, B> {
     type Error = io::Error;
-    type Item = A;
+    type Item<'a> = A;
 
-    fn encode(&mut self, item: Self::Item, dst: &mut BytesMut) -> Result<(), Self::Error> {
+    fn encode(&mut self, item: Self::Item<'_>, dst: &mut BytesMut) -> Result<(), Self::Error> {
         Ok(self.codec.encode(item.into(), dst)?)
     }
 }

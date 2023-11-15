@@ -9,7 +9,7 @@ license = "MIT"
 release = false
 
 [dependencies]
-tokio = { version = "1.33", features = ["full"] }
+tokio = { version = "1.34", features = ["full"] }
 clap = { version = "4.4.8", features = ["derive"] }
 futures = "0.3.29"
 libp2p = { path = "../../libp2p", features = ["tokio", "tcp", "noise", "yamux", "autonat", "identify", "macros"] }

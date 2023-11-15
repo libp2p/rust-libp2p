@@ -111,18 +111,15 @@ pub struct Handler {
         Result<Stream, StreamUpgradeError<Void>>,
     >,
 
-    /// A `RESERVE` request is in-flight for each item in this queue.
-    active_reserve_requests: VecDeque<mpsc::Sender<transport::ToListenerMsg>>,
+    inflight_reserve_requests: futures_bounded::FuturesTupleSet<
+        Result<outbound_hop::Reservation, outbound_hop::ReserveError>,
+        mpsc::Sender<transport::ToListenerMsg>,
+    >,
 
-    inflight_reserve_requests:
-        futures_bounded::FuturesSet<Result<outbound_hop::Reservation, outbound_hop::ReserveError>>,
-
-    /// A `CONNECT` request is in-flight for each item in this queue.
-    active_connect_requests:
-        VecDeque<oneshot::Sender<Result<priv_client::Connection, outbound_hop::ConnectError>>>,
-
-    inflight_outbound_connect_requests:
-        futures_bounded::FuturesSet<Result<outbound_hop::Circuit, outbound_hop::ConnectError>>,
+    inflight_outbound_connect_requests: futures_bounded::FuturesTupleSet<
+        Result<outbound_hop::Circuit, outbound_hop::ConnectError>,
+        oneshot::Sender<Result<priv_client::Connection, outbound_hop::ConnectError>>,
+    >,
 
     inflight_inbound_circuit_requests:
         futures_bounded::FuturesSet<Result<inbound_stop::Circuit, inbound_stop::Error>>,
@@ -141,8 +138,7 @@ impl Handler {
             remote_addr,
             queued_events: Default::default(),
             pending_streams: Default::default(),
-            active_reserve_requests: Default::default(),
-            inflight_reserve_requests: futures_bounded::FuturesSet::new(
+            inflight_reserve_requests: futures_bounded::FuturesTupleSet::new(
                 STREAM_TIMEOUT,
                 MAX_CONCURRENT_STREAMS_PER_CONNECTION,
             ),
@@ -150,7 +146,7 @@ impl Handler {
                 STREAM_TIMEOUT,
                 MAX_CONCURRENT_STREAMS_PER_CONNECTION,
             ),
-            inflight_outbound_connect_requests: futures_bounded::FuturesSet::new(
+            inflight_outbound_connect_requests: futures_bounded::FuturesTupleSet::new(
                 STREAM_TIMEOUT,
                 MAX_CONCURRENT_STREAMS_PER_CONNECTION,
             ),
@@ -158,7 +154,6 @@ impl Handler {
                 DENYING_CIRCUIT_TIMEOUT,
                 MAX_NUMBER_DENYING_CIRCUIT,
             ),
-            active_connect_requests: Default::default(),
             reservation: Reservation::None,
         }
     }
@@ -224,24 +219,16 @@ impl ConnectionHandler for Handler {
         ConnectionHandlerEvent<Self::OutboundProtocol, Self::OutboundOpenInfo, Self::ToBehaviour>,
     > {
         loop {
-            debug_assert_eq!(
-                self.inflight_reserve_requests.len(),
-                self.active_reserve_requests.len(),
-                "expect to have one active request per inflight stream"
-            );
-
             // Reservations
             match self.inflight_reserve_requests.poll_unpin(cx) {
-                Poll::Ready(Ok(Ok(outbound_hop::Reservation {
-                    renewal_timeout,
-                    addrs,
-                    limit,
-                }))) => {
-                    let to_listener = self
-                        .active_reserve_requests
-                        .pop_front()
-                        .expect("must have active request for stream");
-
+                Poll::Ready((
+                    Ok(Ok(outbound_hop::Reservation {
+                        renewal_timeout,
+                        addrs,
+                        limit,
+                    })),
+                    to_listener,
+                )) => {
                     return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(
                         self.reservation.accepted(
                             renewal_timeout,
@@ -252,12 +239,7 @@ impl ConnectionHandler for Handler {
                         ),
                     ));
                 }
-                Poll::Ready(Ok(Err(error))) => {
-                    let mut to_listener = self
-                        .active_reserve_requests
-                        .pop_front()
-                        .expect("must have active request for stream");
-
+                Poll::Ready((Ok(Err(error)), mut to_listener)) => {
                     if let Err(e) =
                         to_listener.try_send(transport::ToListenerMsg::Reservation(Err(error)))
                     {
@@ -266,12 +248,7 @@ impl ConnectionHandler for Handler {
                     self.reservation.failed();
                     continue;
                 }
-                Poll::Ready(Err(futures_bounded::Timeout { .. })) => {
-                    let mut to_listener = self
-                        .active_reserve_requests
-                        .pop_front()
-                        .expect("must have active request for stream");
-
+                Poll::Ready((Err(futures_bounded::Timeout { .. }), mut to_listener)) => {
                     if let Err(e) =
                         to_listener.try_send(transport::ToListenerMsg::Reservation(Err(
                             outbound_hop::ReserveError::Io(io::ErrorKind::TimedOut.into()),
@@ -285,25 +262,17 @@ impl ConnectionHandler for Handler {
                 Poll::Pending => {}
             }
 
-            debug_assert_eq!(
-                self.inflight_outbound_connect_requests.len(),
-                self.active_connect_requests.len(),
-                "expect to have one active request per inflight stream"
-            );
-
             // Circuits
             match self.inflight_outbound_connect_requests.poll_unpin(cx) {
-                Poll::Ready(Ok(Ok(outbound_hop::Circuit {
-                    limit,
-                    read_buffer,
-                    stream,
-                }))) => {
-                    let to_listener = self
-                        .active_connect_requests
-                        .pop_front()
-                        .expect("must have active request for stream");
-
-                    if to_listener
+                Poll::Ready((
+                    Ok(Ok(outbound_hop::Circuit {
+                        limit,
+                        read_buffer,
+                        stream,
+                    })),
+                    to_dialer,
+                )) => {
+                    if to_dialer
                         .send(Ok(priv_client::Connection {
                             state: priv_client::ConnectionState::new_outbound(stream, read_buffer),
                         }))
@@ -319,27 +288,18 @@ impl ConnectionHandler for Handler {
                         Event::OutboundCircuitEstablished { limit },
                     ));
                 }
-                Poll::Ready(Ok(Err(error))) => {
-                    let to_dialer = self
-                        .active_connect_requests
-                        .pop_front()
-                        .expect("must have active request for stream");
-
+                Poll::Ready((Ok(Err(error)), to_dialer)) => {
                     let _ = to_dialer.send(Err(error));
                     continue;
                 }
-                Poll::Ready(Err(futures_bounded::Timeout { .. })) => {
-                    let mut to_listener = self
-                        .active_reserve_requests
-                        .pop_front()
-                        .expect("must have active request for stream");
-
-                    if let Err(e) =
-                        to_listener.try_send(transport::ToListenerMsg::Reservation(Err(
-                            outbound_hop::ReserveError::Io(io::ErrorKind::TimedOut.into()),
+                Poll::Ready((Err(futures_bounded::Timeout { .. }), to_dialer)) => {
+                    if to_dialer
+                        .send(Err(outbound_hop::ConnectError::Io(
+                            io::ErrorKind::TimedOut.into(),
                         )))
+                        .is_err()
                     {
-                        tracing::debug!("Unable to send error to listener: {}", e.into_send_error())
+                        tracing::debug!("Unable to send error to dialer")
                     }
                     self.reservation.failed();
                     continue;
@@ -417,10 +377,9 @@ impl ConnectionHandler for Handler {
 
             match self.pending_streams.next_completed() {
                 Some((Ok(stream), PendingRequest::Reserve { to_listener })) => {
-                    self.active_reserve_requests.push_back(to_listener);
                     if self
                         .inflight_reserve_requests
-                        .try_push(outbound_hop::make_reservation(stream))
+                        .try_push(outbound_hop::make_reservation(stream), to_listener)
                         .is_err()
                     {
                         tracing::warn!("Dropping outbound stream because we are at capacity")
@@ -454,11 +413,9 @@ impl ConnectionHandler for Handler {
                         dst_peer_id,
                     },
                 )) => {
-                    self.active_connect_requests.push_back(to_dial);
-
                     if self
                         .inflight_outbound_connect_requests
-                        .try_push(outbound_hop::open_circuit(stream, dst_peer_id))
+                        .try_push(outbound_hop::open_circuit(stream, dst_peer_id), to_dial)
                         .is_err()
                     {
                         tracing::warn!("Dropping outbound stream because we are at capacity")

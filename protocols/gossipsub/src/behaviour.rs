@@ -3772,10 +3772,8 @@ mod local_test {
                 .unwrap();
             let gs: Behaviour = Behaviour::new(MessageAuthenticity::RandomAuthor, config).unwrap();
 
-            let mut length_codec = unsigned_varint::codec::UviBytes::default();
-            length_codec.set_max_len(max_transmit_size);
             let mut codec =
-                crate::protocol::GossipsubCodec::new(length_codec, ValidationMode::Permissive);
+                crate::protocol::GossipsubCodec::new(max_transmit_size, ValidationMode::Permissive);
 
             let rpc_proto = rpc.into_protobuf();
             let fragmented_messages = gs

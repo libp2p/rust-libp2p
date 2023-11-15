@@ -30,7 +30,7 @@ serde = { version = "1", optional = true, features = ["derive"] }
 smallvec = "1.11.2"
 thiserror = "1.0"
 tracing = "0.1.37"
-unsigned-varint = "0.7"
+unsigned-varint = { workspace = true }
 void = "1"
 
 [dev-dependencies]
