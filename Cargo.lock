@@ -6744,6 +6744,50 @@ dependencies = [
 ]
 
 [[package]]
+name = "websocket-server"
+version = "0.1.0"
+dependencies = [
+ "base64 0.21.5",
+ "clap",
+ "futures",
+ "futures-timer",
+ "libp2p",
+ "serde",
+ "serde_derive",
+ "serde_json",
+ "sha2 0.10.8",
+ "tokio",
+ "tracing",
+ "tracing-subscriber",
+ "zeroize",
+]
+
+[[package]]
+name = "websocket-tests"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "env_logger 0.10.0",
+ "futures",
+ "futures-timer",
+ "getrandom 0.2.10",
+ "libp2p",
+ "libp2p-core",
+ "libp2p-identity",
+ "libp2p-noise",
+ "libp2p-websocket-websys",
+ "log",
+ "multiaddr",
+ "multihash",
+ "tokio",
+ "wasm-bindgen",
+ "wasm-bindgen-futures",
+ "wasm-bindgen-test",
+ "wasm-logger",
+ "web-sys",
+]
+
+[[package]]
 name = "webtransport-tests"
 version = "0.1.0"
 dependencies = [

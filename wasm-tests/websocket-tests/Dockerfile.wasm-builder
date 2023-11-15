@@ -1,0 +1,20 @@
+# syntax=docker/dockerfile:1.5-labs
+FROM rust:1.73.0
+RUN rustup target add wasm32-unknown-unknown
+RUN wget -q -O- https://github.com/rustwasm/wasm-pack/releases/download/v0.12.1/wasm-pack-v0.12.1-x86_64-unknown-linux-musl.tar.gz | tar -zx -C /usr/local/bin --strip-components 1 --wildcards "wasm-pack-*/wasm-pack"
+RUN wget -q -O- https://github.com/WebAssembly/binaryen/releases/download/version_115/binaryen-version_115-x86_64-linux.tar.gz | tar -zx -C /usr/local/bin --strip-components 2 --wildcards "binaryen-version_*/bin/wasm-opt"
+RUN wget -q -O- https://github.com/LukeMathWalker/cargo-chef/releases/download/v0.1.62/cargo-chef-x86_64-unknown-linux-gnu.tar.gz | tar -zx -C /usr/local/bin
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    sudo \
+    libnss3 \
+    chromium-driver
+
+# 1001 app user id
+RUN groupadd docker -g 1337 && \
+    useradd -u 1001 -G docker,sudo -ms /bin/bash app && \
+    echo '%sudo ALL=(ALL) NOPASSWD:ALL' >> /etc/sudoers
+
+USER app
+
+WORKDIR /app

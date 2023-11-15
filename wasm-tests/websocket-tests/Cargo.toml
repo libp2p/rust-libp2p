@@ -1,0 +1,40 @@
+[package]
+name = "websocket-tests"
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+publish = false
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[members]
+websocket-server = { path = "websocket-server" }
+
+[package.metadata.release]
+release = false
+
+[dependencies]
+log = "0.4.20"
+anyhow = "1.0.75"
+futures = "0.3.29"
+futures-timer = "3.0.2"
+getrandom = { version = "0.2.9", features = ["js"] }
+wasm-bindgen = "0.2.88"
+wasm-bindgen-futures = "0.4.38"
+wasm-bindgen-test = "0.3.37"
+wasm-logger = "0.2.0"
+web-sys = { version = "0.3.65", features = ["Response", "Window"] }
+tokio = { version = "1.15", features = [ "macros", "rt"] }
+env_logger = "0.10.0"
+
+libp2p = { workspace = true, features = ["dns", "identify", "kad", "macros", "noise", "tokio", "relay", "request-response", "tcp", "wasm-bindgen", "websocket-websys", "websocket", "yamux", "autonat", "ping"] }
+libp2p-core = { workspace = true }
+libp2p-identity = { workspace = true, features = ["rand"] }
+libp2p-noise = { workspace = true }
+libp2p-websocket-websys = { workspace = true }
+multiaddr = { workspace = true }
+multihash = { workspace = true }
+
+[lints]
+workspace = true
