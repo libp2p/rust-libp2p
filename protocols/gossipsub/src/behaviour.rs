@@ -1306,13 +1306,22 @@ where
                 iwant_ids_vec
             );
 
-            Self::control_pool_add(
-                &mut self.control_pool,
-                *peer_id,
-                ControlAction::IWant {
-                    message_ids: iwant_ids_vec,
-                },
-            );
+            if self
+                .send_message(
+                    *peer_id,
+                    Rpc {
+                        subscriptions: Vec::new(),
+                        messages: Vec::new(),
+                        control_msgs: vec![ControlAction::IWant {
+                            message_ids: iwant_ids_vec,
+                        }],
+                    }
+                    .into_protobuf(),
+                )
+                .is_err()
+            {
+                tracing::error!("IHAVE: Failed to send message asking to peer");
+            }
         }
         tracing::trace!(peer=%peer_id, "Completed IHAVE handling for peer");
     }
