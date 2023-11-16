@@ -20,6 +20,8 @@
 
 use quinn::VarInt;
 use std::{sync::Arc, time::Duration};
+use libp2p_core::multihash::Multihash;
+use crate::webtransport::fingerprint::Fingerprint;
 
 /// Config for the transport.
 #[derive(Clone)]
@@ -57,10 +59,21 @@ pub struct Config {
     /// As client the version is chosen based on the remote's address.
     pub support_draft_29: bool,
 
+    // pub web_transport_config: WebTransportConfig,
+
     /// TLS client config for the inner [`quinn::ClientConfig`].
     client_tls_config: Arc<rustls::ClientConfig>,
+    //todo At first boot of the node, it creates one self-signed certificate with a validity of 14 days,
+    // starting immediately, and another certificate with the 14 day validity period starting on
+    // the expiry date of the first certificate.
+    // The node advertises a multiaddress containing the certificate hashes of these two certificates.
+    // Once the first certificate has expired, the node starts using the already generated next certificate.
+    // At the same time, it again generates a new certificate for the following period and updates
+    // the multiaddress it advertises.
     /// TLS server config for the inner [`quinn::ServerConfig`].
     server_tls_config: Arc<rustls::ServerConfig>,
+    pub(crate) cert_hash: Multihash<64>,
+
     /// Libp2p identity of the node.
     keypair: libp2p_identity::Keypair,
 }
@@ -69,10 +82,26 @@ impl Config {
     /// Creates a new configuration object with default values.
     pub fn new(keypair: &libp2p_identity::Keypair) -> Self {
         let client_tls_config = Arc::new(libp2p_tls::make_client_config(keypair, None).unwrap());
-        let server_tls_config = Arc::new(libp2p_tls::make_server_config(keypair).unwrap());
+
+        //todo set up cert's dates
+        let (cert, private_key) = libp2p_tls::certificate::generate(keypair).unwrap();
+
+        let server_tls_config = Arc::new(
+            libp2p_tls::make_server_config_with_cert(
+                cert.clone(), private_key, vec![
+                    b"libp2p".to_vec(),
+                    b"h3".to_vec(),
+                    b"h3-32".to_vec(),
+                    b"h3-31".to_vec(),
+                    b"h3-30".to_vec(),
+                    b"h3-29".to_vec(),
+                ]
+            ).unwrap()
+        );
         Self {
             client_tls_config,
             server_tls_config,
+            cert_hash: Fingerprint::from_certificate(cert.as_ref()).to_multihash(),
             support_draft_29: false,
             handshake_timeout: Duration::from_secs(5),
             max_idle_timeout: 30 * 1000,
@@ -100,6 +129,7 @@ impl From<Config> for QuinnConfig {
         let Config {
             client_tls_config,
             server_tls_config,
+            cert_hash: _,
             max_idle_timeout,
             max_concurrent_stream_limit,
             keep_alive_interval,

@@ -62,6 +62,7 @@ mod connection;
 mod hole_punching;
 mod provider;
 mod transport;
+mod webtransport;
 
 use std::net::SocketAddr;
 
@@ -101,6 +102,9 @@ pub enum Error {
     /// Error when holepunching for a remote is already in progress
     #[error("Already punching hole for {0}).")]
     HolePunchInProgress(SocketAddr),
+
+    #[error("WebTransport error.")]
+    WebTransportError,
 }
 
 /// Dialing a remote peer failed.

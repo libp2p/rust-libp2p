@@ -38,13 +38,15 @@ async fn main() -> Result<(), Box<dyn Error>> {
             noise::Config::new,
             yamux::Config::default,
         )?
+        .with_quic()
         .with_behaviour(|_| ping::Behaviour::default())?
         .with_swarm_config(|cfg| cfg.with_idle_connection_timeout(Duration::from_secs(u64::MAX)))
         .build();
 
     // Tell the swarm to listen on all interfaces and a random, OS-assigned
     // port.
-    swarm.listen_on("/ip4/0.0.0.0/tcp/0".parse()?)?;
+    // swarm.listen_on("/ip4/0.0.0.0/tcp/0".parse()?)?;
+    swarm.listen_on("/ip4/0.0.0.0/udp/0/quic".parse()?)?;
 
     // Dial the peer identified by the multi-address given as the second
     // command-line argument, if any.

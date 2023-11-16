@@ -26,6 +26,16 @@ tokio = { version = "1.33.0", default-features = false, features = ["net", "rt",
 tracing = "0.1.37"
 socket2 = "0.5.5"
 ring = "0.16.20"
+sha2 = "0.10.7"
+hex = "0.4"
+
+# WebTransport
+http = "0.2.11"
+h3 = { git = "https://github.com/hyperium/h3" }
+h3-quinn = { git = "https://github.com/hyperium/h3" }
+h3-webtransport = { git = "https://github.com/hyperium/h3" }
+rcgen = "0.11.3"
+time = "0.3"
 
 [features]
 tokio = ["dep:tokio", "if-watch/tokio", "quinn/runtime-tokio"]
@@ -48,6 +58,7 @@ libp2p-yamux = { workspace = true }
 quickcheck = "1"
 tokio = { version = "1.33.0", features = ["macros", "rt-multi-thread", "time"] }
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+hex-literal = "0.4"
 
 [[test]]
 name = "stream_compliance"

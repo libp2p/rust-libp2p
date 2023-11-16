@@ -33,6 +33,7 @@ use std::{
     task::{Context, Poll},
     time::Duration,
 };
+use libp2p_core::muxing::StreamMuxerBox;
 
 /// A QUIC connection currently being negotiated.
 #[derive(Debug)]
@@ -67,7 +68,7 @@ impl Connecting {
 }
 
 impl Future for Connecting {
-    type Output = Result<(PeerId, Connection), Error>;
+    type Output = Result<(PeerId, StreamMuxerBox), Error>;
 
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         let connection = match futures::ready!(self.connecting.poll_unpin(cx)) {
@@ -77,6 +78,6 @@ impl Future for Connecting {
 
         let peer_id = Self::remote_peer_id(&connection);
         let muxer = Connection::new(connection);
-        Poll::Ready(Ok((peer_id, muxer)))
+        Poll::Ready(Ok((peer_id, StreamMuxerBox::new(muxer))))
     }
 }
