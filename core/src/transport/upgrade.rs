@@ -99,6 +99,39 @@ where
     ) -> Authenticated<AndThen<T, impl FnOnce(C, ConnectedPoint) -> Authenticate<C, U> + Clone>>
     where
         T: Transport<Output = C>,
+        C: AsyncRead + AsyncWrite + Unpin,
+        D: AsyncRead + AsyncWrite + Unpin,
+        U: InboundConnectionUpgrade<Negotiated<C>, Output = (PeerId, D), Error = E>,
+        U: OutboundConnectionUpgrade<Negotiated<C>, Output = (PeerId, D), Error = E> + Clone,
+        E: Error + 'static,
+    {
+        let version = self.version;
+        Authenticated(Builder::new(
+            self.inner.and_then(move |conn, endpoint| Authenticate {
+                inner: upgrade::apply(conn, upgrade, endpoint, version),
+            }),
+            version,
+        ))
+    }
+
+    /// Upgrades the transport to perform authentication of the remote
+    ///
+    /// The supplied upgrade receives the I/O resource `C` and must
+    /// produce a pair `(PeerId, D)`, where `D` is a new I/O resource.
+    /// The upgrade must thus at a minimum identify the remote, which typically
+    /// involves the use of a cryptographic authentication protocol in the
+    /// context of establishing a secure channel.
+    ///
+    /// ## Transitions
+    ///
+    ///   * I/O upgrade: `C -> (PeerId, D)`.
+    ///   * Transport output: `C -> (PeerId, D)`
+    pub fn authenticate2<C, D, U, E>(
+        self,
+        upgrade: U,
+    ) -> Authenticated<AndThen<T, impl FnOnce(C, ConnectedPoint) -> Authenticate2<C, U> + Clone>>
+    where
+        T: Transport<Output = C>,
         C: AsyncRead + AsyncWrite + Unpin + 'static,
         D: AsyncRead + AsyncWrite + Unpin,
         U: SecurityUpgrade<Negotiated<C>, Output = (PeerId, D), Error = E> + Clone + 'static,
@@ -106,7 +139,7 @@ where
     {
         let version = self.version;
         Authenticated(Builder::new(
-            self.inner.and_then(move |conn, endpoint| Authenticate {
+            self.inner.and_then(move |conn, endpoint| Authenticate2 {
                 inner: upgrade::secure(conn, upgrade, endpoint, version).boxed_local(),
             }),
             version,
@@ -122,18 +155,50 @@ where
 pub struct Authenticate<C, U>
 where
     C: AsyncRead + AsyncWrite + Unpin,
-    U: SecurityUpgrade<Negotiated<C>>,
+    U: InboundConnectionUpgrade<Negotiated<C>> + OutboundConnectionUpgrade<Negotiated<C>>,
 {
     #[pin]
-    inner: LocalBoxFuture<'static, Result<U::Output, UpgradeError<U::Error>>>,
+    inner: EitherUpgrade<C, U>,
 }
 
 impl<C, U> Future for Authenticate<C, U>
 where
     C: AsyncRead + AsyncWrite + Unpin,
+    U: InboundConnectionUpgrade<Negotiated<C>>
+        + OutboundConnectionUpgrade<
+            Negotiated<C>,
+            Output = <U as InboundConnectionUpgrade<Negotiated<C>>>::Output,
+            Error = <U as InboundConnectionUpgrade<Negotiated<C>>>::Error,
+        >,
+{
+    type Output = <EitherUpgrade<C, U> as Future>::Output;
+
+    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        let this = self.project();
+        Future::poll(this.inner, cx)
+    }
+}
+
+/// An upgrade that authenticates the remote peer, typically
+/// in the context of negotiating a secure channel.
+///
+/// Configured through [`Builder::authenticate`].
+#[pin_project::pin_project]
+pub struct Authenticate2<C, U>
+where
+    C: AsyncRead + AsyncWrite + Unpin,
     U: SecurityUpgrade<Negotiated<C>>,
 {
-    type Output = Result<U::Output, UpgradeError<U::Error>>;
+    #[pin]
+    inner: LocalBoxFuture<'static, Result<(PeerId, U::Output), UpgradeError<U::Error>>>,
+}
+
+impl<C, U> Future for Authenticate2<C, U>
+where
+    C: AsyncRead + AsyncWrite + Unpin,
+    U: SecurityUpgrade<Negotiated<C>>,
+{
+    type Output = Result<(PeerId, U::Output), UpgradeError<U::Error>>;
 
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         let this = self.project();

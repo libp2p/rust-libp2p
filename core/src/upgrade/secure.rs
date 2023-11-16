@@ -15,7 +15,7 @@ pub(crate) async fn secure<C, U>(
     up: U,
     cp: ConnectedPoint,
     v: Version,
-) -> Result<U::Output, UpgradeError<U::Error>>
+) -> Result<(PeerId, U::Output), UpgradeError<U::Error>>
 where
     C: AsyncRead + AsyncWrite + Unpin,
     U: SecurityUpgrade<Negotiated<C>>,
@@ -28,61 +28,35 @@ where
                 .find_map(|protocol| match protocol {
                     Protocol::P2p(peer_id) => Some(peer_id),
                     _ => None,
-                })
-                .expect("It should have /p2p as part of the address");
-            secure_outbound(conn, up, Some(peer_id), v).await
+                });
+            let (info, stream) =
+                multistream_select::dialer_select_proto(conn, up.protocol_info(), v).await?;
+            let name = info.as_ref().to_owned();
+            match up.upgrade_security(stream, info, peer_id).await {
+                Ok(x) => {
+                    tracing::trace!(up=%name, "Secured outbound stream");
+                    Ok(x)
+                }
+                Err(e) => {
+                    tracing::trace!(up=%name, "Failed to secure outbound stream");
+                    Err(UpgradeError::Apply(e))
+                }
+            }
         }
-        _ => secure_inbound(conn, up, None).await,
-    }
-}
-
-/// Tries to perform a security upgrade on an inbound connection or substream.
-async fn secure_inbound<C, U>(
-    conn: C,
-    up: U,
-    peer_id: Option<PeerId>,
-) -> Result<U::Output, UpgradeError<U::Error>>
-where
-    C: AsyncRead + AsyncWrite + Unpin,
-    U: SecurityUpgrade<Negotiated<C>>,
-{
-    let (info, stream) =
-        multistream_select::listener_select_proto(conn, up.protocol_info()).await?;
-    let name = info.as_ref().to_owned();
-    match up.upgrade_security(stream, info, peer_id).await {
-        Ok(x) => {
-            tracing::trace!(up=%name, "Secured inbound stream");
-            Ok(x)
-        }
-        Err(e) => {
-            tracing::trace!(up=%name, "Failed to secure inbound stream");
-            Err(UpgradeError::Apply(e))
-        }
-    }
-}
-
-/// Tries to perform a security upgrade on an outbound connection or substream.
-async fn secure_outbound<C, U>(
-    conn: C,
-    up: U,
-    peer_id: Option<PeerId>,
-    v: Version,
-) -> Result<U::Output, UpgradeError<U::Error>>
-where
-    C: AsyncRead + AsyncWrite + Unpin,
-    U: SecurityUpgrade<Negotiated<C>>,
-{
-    let (info, stream) =
-        multistream_select::dialer_select_proto(conn, up.protocol_info(), v).await?;
-    let name = info.as_ref().to_owned();
-    match up.upgrade_security(stream, info, peer_id).await {
-        Ok(x) => {
-            tracing::trace!(up=%name, "Secured outbound stream");
-            Ok(x)
-        }
-        Err(e) => {
-            tracing::trace!(up=%name, "Failed to secure outbound stream");
-            Err(UpgradeError::Apply(e))
+        _ => {
+            let (info, stream) =
+                multistream_select::listener_select_proto(conn, up.protocol_info()).await?;
+            let name = info.as_ref().to_owned();
+            match up.upgrade_security(stream, info, None).await {
+                Ok(x) => {
+                    tracing::trace!(up=%name, "Secured inbound stream");
+                    Ok(x)
+                }
+                Err(e) => {
+                    tracing::trace!(up=%name, "Failed to secure inbound stream");
+                    Err(UpgradeError::Apply(e))
+                }
+            }
         }
     }
 }
