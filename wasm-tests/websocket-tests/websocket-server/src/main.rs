@@ -78,7 +78,6 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
         match event {
             SwarmEvent::Behaviour(behaviour::BehaviourEvent::Identify(e)) => {
-                tracing::info!("{:?}", e);
                 tracing::debug!("{:?}", e);
 
                 if let identify::Event::Received {

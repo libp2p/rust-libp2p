@@ -12,6 +12,7 @@ use futures::{select, StreamExt};
 use futures_timer::Delay;
 use futures::FutureExt;
 use libp2p::swarm::NetworkBehaviour;
+use tracing_subscriber::prelude::*;
 
 #[cfg(target_arch = "wasm32")]
 use wasm_bindgen_test::{wasm_bindgen_test, wasm_bindgen_test_configure};
@@ -113,13 +114,24 @@ async fn connect() -> Result<(), Box<dyn Error>> {
 
 #[tokio::test]
 async fn test_with_tokio() -> Result<(), Box<dyn Error>> {
-    let _ = env_logger::builder().is_test(true).try_init();
+
+    let _ = tracing_subscriber::fmt()
+        .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
+        .try_init();
+
     connect().await
 }
 
 #[cfg(target_arch = "wasm32")]
 #[wasm_bindgen_test]
 async fn test_with_wasm_bindgen() -> Result<(), Box<dyn Error>> {
-    wasm_logger::init(wasm_logger::Config::new(log::Level::Debug));
+
+    let config = tracing_wasm::WASMLayerConfigBuilder::new()
+        .set_max_level(tracing::Level::DEBUG)
+        .build();
+    let subscriber = tracing_subscriber::Registry::default()
+        .with(tracing_wasm::WASMLayer::new(config));
+    tracing::subscriber::set_global_default(subscriber).expect("set global default failed");
+
     connect().await
 }

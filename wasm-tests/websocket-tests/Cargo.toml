@@ -27,6 +27,9 @@ wasm-logger = "0.2.0"
 web-sys = { version = "0.3.65", features = ["Response", "Window"] }
 tokio = { version = "1.15", features = [ "macros", "rt"] }
 env_logger = "0.10.0"
+tracing = { version = "0.1.37" , features = [] }
+tracing-subscriber = { version = "0.3", features = ["env-filter", "time"] }
+tracing-wasm = "0.2.1"
 
 libp2p = { workspace = true, features = ["dns", "identify", "kad", "macros", "noise", "tokio", "relay", "request-response", "tcp", "wasm-bindgen", "websocket-websys", "websocket", "yamux", "autonat", "ping"] }
 libp2p-core = { workspace = true }
