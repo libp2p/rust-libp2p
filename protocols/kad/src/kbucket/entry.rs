@@ -82,7 +82,7 @@ pub(crate) enum Entry<'a, TPeerId, TVal> {
     /// The entry is absent and may be inserted.
     Absent(AbsentEntry<'a, TPeerId, TVal>),
     /// The entry represents the local node.
-    SelfEntry,
+    LocalNode,
 }
 
 /// The internal representation of the different states of an `Entry`,
@@ -144,7 +144,7 @@ where
             Entry::Present(entry, _) => Some(entry.value()),
             Entry::Pending(entry, _) => Some(entry.value()),
             Entry::Absent(_) => None,
-            Entry::SelfEntry => None,
+            Entry::LocalNode => None,
         }
     }
 }

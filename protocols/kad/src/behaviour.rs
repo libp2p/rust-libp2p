@@ -578,7 +578,7 @@ where
                     }
                 }
             }
-            kbucket::Entry::SelfEntry => RoutingUpdate::Failed,
+            kbucket::Entry::LocalNode => RoutingUpdate::Failed,
         }
     }
 
@@ -614,7 +614,7 @@ where
                     None
                 }
             }
-            kbucket::Entry::Absent(..) | kbucket::Entry::SelfEntry => None,
+            kbucket::Entry::Absent(..) | kbucket::Entry::LocalNode => None,
         }
     }
 
@@ -630,7 +630,7 @@ where
         match self.kbuckets.entry(&key) {
             kbucket::Entry::Present(entry, _) => Some(entry.remove()),
             kbucket::Entry::Pending(entry, _) => Some(entry.remove()),
-            kbucket::Entry::Absent(..) | kbucket::Entry::SelfEntry => None,
+            kbucket::Entry::Absent(..) | kbucket::Entry::LocalNode => None,
         }
     }
 

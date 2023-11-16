@@ -181,7 +181,7 @@ where
             }
             Entry::new(bucket, key)
         } else {
-            Entry::SelfEntry
+            Entry::LocalNode
         }
     }
 
@@ -646,7 +646,7 @@ mod tests {
         let local_key = Key::from(PeerId::random());
         let mut table = KBucketsTable::<_, ()>::new(local_key.clone(), Duration::from_secs(5));
         match table.entry(&local_key) {
-            Entry::SelfEntry => (),
+            Entry::LocalNode => (),
             _ => panic!(),
         }
     }
