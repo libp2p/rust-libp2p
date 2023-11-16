@@ -340,7 +340,7 @@ jobs:
       - uses: lycheeverse/lychee-action@2ac9f030ccdea0033e2510a23a67da2a2da98492 # v1.8.0
         with:
           fail: true
-          args: --scheme file # Only lint relative links
+          args: --scheme file . # Only lint relative links
 
   gather_published_crates:
     runs-on: ubuntu-latest
