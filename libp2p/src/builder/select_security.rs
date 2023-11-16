@@ -38,7 +38,7 @@ impl<A, B> SelectSecurityUpgrade<A, B> {
     /// Combines two upgrades into an `SelectUpgrade`.
     ///
     /// The protocols supported by the first element have a higher priority.
-    pub fn new(a: A, b: B) -> Self {
+    pub(crate) fn new(a: A, b: B) -> Self {
         SelectSecurityUpgrade(a, b)
     }
 }

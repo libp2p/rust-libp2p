@@ -29,7 +29,7 @@ use std::iter::{Chain, Map};
 pub struct SelectMuxerUpgrade<A, B>(A, B);
 
 impl<A, B> SelectMuxerUpgrade<A, B> {
-    pub fn new(a: A, b: B) -> Self {
+    pub(crate) fn new(a: A, b: B) -> Self {
         SelectMuxerUpgrade(a, b)
     }
 }
