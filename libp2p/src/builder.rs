@@ -1,7 +1,9 @@
 use std::marker::PhantomData;
 
 mod phase;
+#[cfg(any(feature = "tcp", feature = "relay", feature = "websocket"))]
 mod select_muxer;
+#[cfg(any(feature = "tcp", feature = "relay", feature = "websocket"))]
 mod select_security;
 
 /// Build a [`Swarm`](libp2p_swarm::Swarm) by combining an identity, a set of
