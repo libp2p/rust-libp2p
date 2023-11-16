@@ -126,6 +126,12 @@ where
     ///
     ///   * I/O upgrade: `C -> (PeerId, D)`.
     ///   * Transport output: `C -> (PeerId, D)`
+    ///
+    /// ## Alternative state
+    ///
+    /// This function is an alternative code path to [`Builder::authenticate`]
+    /// given the supplied upgrade implements `SecurityUpgrade` instead of
+    /// `InboundConnectionUpgrade`/`OutboundConnectionUpgrade`.
     pub fn authenticate2<C, D, U, E>(
         self,
         upgrade: U,
@@ -182,7 +188,7 @@ where
 /// An upgrade that authenticates the remote peer, typically
 /// in the context of negotiating a secure channel.
 ///
-/// Configured through [`Builder::authenticate`].
+/// Configured through [`Builder::authenticate2`].
 #[pin_project::pin_project]
 pub struct Authenticate2<C, U>
 where
