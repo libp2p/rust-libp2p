@@ -24,7 +24,10 @@ use futures::future::BoxFuture;
 use futures::AsyncWrite;
 use futures::{AsyncRead, FutureExt};
 use futures_rustls::TlsStream;
-use libp2p_core::upgrade::{InboundConnectionUpgrade, OutboundConnectionUpgrade};
+use libp2p_core::upgrade::{
+    InboundConnectionUpgrade, InboundSecurityUpgrade, OutboundConnectionUpgrade,
+    OutboundSecurityUpgrade,
+};
 use libp2p_core::UpgradeInfo;
 use libp2p_identity as identity;
 use libp2p_identity::PeerId;
@@ -42,6 +45,8 @@ pub enum UpgradeError {
     ClientUpgrade(std::io::Error),
     #[error("Failed to parse certificate")]
     BadCertificate(#[from] certificate::ParseError),
+    #[error("Invalid peer ID (expected {expected:?}, found {found:?})")]
+    PeerIdMismatch { expected: PeerId, found: PeerId },
 }
 
 #[derive(Clone)]
@@ -113,6 +118,63 @@ where
             let peer_id = extract_single_certificate(stream.get_ref().1)?.peer_id();
 
             Ok((peer_id, stream.into()))
+        }
+        .boxed()
+    }
+}
+
+impl<C> InboundSecurityUpgrade<C> for Config
+where
+    C: AsyncRead + AsyncWrite + Send + Unpin + 'static,
+{
+    type Output = TlsStream<C>;
+    type Error = UpgradeError;
+    type Future = BoxFuture<'static, Result<(PeerId, Self::Output), Self::Error>>;
+
+    fn secure_inbound(self, socket: C, _: Self::Info, _: Option<PeerId>) -> Self::Future {
+        async move {
+            let stream = futures_rustls::TlsAcceptor::from(Arc::new(self.server))
+                .accept(socket)
+                .await
+                .map_err(UpgradeError::ServerUpgrade)?;
+
+            let expected = extract_single_certificate(stream.get_ref().1)?.peer_id();
+
+            Ok((expected, stream.into()))
+        }
+        .boxed()
+    }
+}
+
+impl<C> OutboundSecurityUpgrade<C> for Config
+where
+    C: AsyncRead + AsyncWrite + Send + Unpin + 'static,
+{
+    type Output = TlsStream<C>;
+    type Error = UpgradeError;
+    type Future = BoxFuture<'static, Result<(PeerId, Self::Output), Self::Error>>;
+
+    fn secure_outbound(self, socket: C, _: Self::Info, peer_id: Option<PeerId>) -> Self::Future {
+        async move {
+            // Spec: In order to keep this flexibility for future versions, clients that only support
+            // the version of the handshake defined in this document MUST NOT send any value in the
+            // Server Name Indication.
+            // Setting `ServerName` to unspecified will disable the use of the SNI extension.
+            let name = ServerName::IpAddress(IpAddr::V4(Ipv4Addr::UNSPECIFIED));
+
+            let stream = futures_rustls::TlsConnector::from(Arc::new(self.client))
+                .connect(name, socket)
+                .await
+                .map_err(UpgradeError::ClientUpgrade)?;
+
+            let expected = extract_single_certificate(stream.get_ref().1)?.peer_id();
+
+            match peer_id {
+                Some(found) if found != expected => {
+                    Err(UpgradeError::PeerIdMismatch { expected, found })
+                }
+                _ => Ok((expected, stream.into())),
+            }
         }
         .boxed()
     }
