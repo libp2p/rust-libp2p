@@ -22,7 +22,7 @@
 
 use futures::prelude::*;
 use libp2p::{noise, swarm::SwarmEvent, upnp, yamux, Multiaddr};
-use std::error::Error;
+use std::{error::Error, time::Duration};
 use tracing_subscriber::EnvFilter;
 
 #[tokio::main]
@@ -39,6 +39,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
             yamux::Config::default,
         )?
         .with_behaviour(|_| upnp::tokio::Behaviour::default())?
+        .with_swarm_config(|c| c.with_idle_connection_timeout(Duration::from_secs(60)))
         .build();
 
     // Tell the swarm to listen on all interfaces and a random, OS-assigned

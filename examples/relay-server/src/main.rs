@@ -31,8 +31,8 @@ use libp2p::{
     swarm::{NetworkBehaviour, SwarmEvent},
     tcp, yamux,
 };
-use std::error::Error;
 use std::net::{Ipv4Addr, Ipv6Addr};
+use std::{error::Error, time::Duration};
 use tracing_subscriber::EnvFilter;
 
 fn main() -> Result<(), Box<dyn Error>> {
@@ -61,6 +61,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                 key.public(),
             )),
         })?
+        .with_swarm_config(|c| c.with_idle_connection_timeout(Duration::from_secs(60)))
         .build();
 
     // Listen on all interfaces
