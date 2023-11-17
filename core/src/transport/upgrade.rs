@@ -33,9 +33,9 @@ use crate::{
         self, apply_inbound, apply_outbound, InboundConnectionUpgrade, InboundUpgradeApply,
         OutboundConnectionUpgrade, OutboundUpgradeApply, SecurityUpgrade, UpgradeError,
     },
-    Negotiated,
+    Negotiated, UpgradeInfo,
 };
-use futures::{future::LocalBoxFuture, prelude::*, ready};
+use futures::{future::BoxFuture, prelude::*, ready};
 use libp2p_identity::PeerId;
 use multiaddr::Multiaddr;
 use std::{
@@ -138,15 +138,18 @@ where
     ) -> Authenticated<AndThen<T, impl FnOnce(C, ConnectedPoint) -> Authenticate2<C, U> + Clone>>
     where
         T: Transport<Output = C>,
-        C: AsyncRead + AsyncWrite + Unpin + 'static,
+        C: AsyncRead + AsyncWrite + Unpin + Send + 'static,
         D: AsyncRead + AsyncWrite + Unpin,
-        U: SecurityUpgrade<Negotiated<C>, Output = (PeerId, D), Error = E> + Clone + 'static,
+        U: SecurityUpgrade<Negotiated<C>, Output = (PeerId, D), Error = E> + Clone + Send + 'static,
+        <U as UpgradeInfo>::Info: Send,
+        <U as SecurityUpgrade<Negotiated<C>>>::Future: Send,
+        <<U as UpgradeInfo>::InfoIter as std::iter::IntoIterator>::IntoIter: Send,
         E: Error + 'static,
     {
         let version = self.version;
         Authenticated(Builder::new(
             self.inner.and_then(move |conn, endpoint| Authenticate2 {
-                inner: upgrade::secure(conn, upgrade, endpoint, version).boxed_local(),
+                inner: upgrade::secure(conn, upgrade, endpoint, version).boxed(),
             }),
             version,
         ))
@@ -196,7 +199,7 @@ where
     U: SecurityUpgrade<Negotiated<C>>,
 {
     #[pin]
-    inner: LocalBoxFuture<'static, Result<(PeerId, U::Output), UpgradeError<U::Error>>>,
+    inner: BoxFuture<'static, Result<(PeerId, U::Output), UpgradeError<U::Error>>>,
 }
 
 impl<C, U> Future for Authenticate2<C, U>
