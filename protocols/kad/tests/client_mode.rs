@@ -172,10 +172,10 @@ impl MyBehaviour {
         let local_peer_id = k.public().to_peer_id();
 
         Self {
-            identify: identify::Behaviour::new(identify::Config::new(
-                "/test/1.0.0".to_owned(),
-                k.public(),
-            )),
+            identify: identify::Behaviour::new(
+                identify::Config::new("/test/1.0.0".to_owned(), k.public())
+                    .with_push_external_addr_updates(false),
+            ),
             kad: Behaviour::with_config(
                 local_peer_id,
                 MemoryStore::new(local_peer_id),
