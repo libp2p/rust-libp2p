@@ -30,12 +30,13 @@ use crate::{
         TransportError, TransportEvent,
     },
     upgrade::{
-        self, apply_inbound, apply_outbound, InboundConnectionUpgrade, InboundUpgradeApply,
-        OutboundConnectionUpgrade, OutboundUpgradeApply, SecurityUpgrade, UpgradeError,
+        self, apply_inbound, apply_outbound, EitherSecurityFuture, InboundConnectionUpgrade,
+        InboundSecurityUpgrade, InboundUpgradeApply, OutboundConnectionUpgrade,
+        OutboundSecurityUpgrade, OutboundUpgradeApply, UpgradeError,
     },
     Negotiated, UpgradeInfo,
 };
-use futures::{future::BoxFuture, prelude::*, ready};
+use futures::{prelude::*, ready};
 use libp2p_identity::PeerId;
 use multiaddr::Multiaddr;
 use std::{
@@ -140,16 +141,21 @@ where
         T: Transport<Output = C>,
         C: AsyncRead + AsyncWrite + Unpin + Send + 'static,
         D: AsyncRead + AsyncWrite + Unpin,
-        U: SecurityUpgrade<Negotiated<C>, Output = (PeerId, D), Error = E> + Clone + Send + 'static,
-        <U as UpgradeInfo>::Info: Send,
-        <U as SecurityUpgrade<Negotiated<C>>>::Future: Send,
-        <<U as UpgradeInfo>::InfoIter as std::iter::IntoIterator>::IntoIter: Send,
+        U: InboundSecurityUpgrade<Negotiated<C>, Output = (PeerId, D), Error = E> + Send + 'static,
+        U: OutboundSecurityUpgrade<Negotiated<C>, Output = (PeerId, D), Error = E>
+            + Clone
+            + Send
+            + 'static,
         E: Error + 'static,
+        <U as UpgradeInfo>::Info: Send,
+        <U as InboundSecurityUpgrade<Negotiated<C>>>::Future: Send,
+        <U as OutboundSecurityUpgrade<Negotiated<C>>>::Future: Send,
+        <<U as UpgradeInfo>::InfoIter as std::iter::IntoIterator>::IntoIter: Send,
     {
         let version = self.version;
         Authenticated(Builder::new(
             self.inner.and_then(move |conn, endpoint| Authenticate2 {
-                inner: upgrade::secure(conn, upgrade, endpoint, version).boxed(),
+                inner: upgrade::secure(conn, upgrade, endpoint, version),
             }),
             version,
         ))
@@ -196,18 +202,23 @@ where
 pub struct Authenticate2<C, U>
 where
     C: AsyncRead + AsyncWrite + Unpin,
-    U: SecurityUpgrade<Negotiated<C>>,
+    U: InboundSecurityUpgrade<Negotiated<C>> + OutboundSecurityUpgrade<Negotiated<C>>,
 {
     #[pin]
-    inner: BoxFuture<'static, Result<(PeerId, U::Output), UpgradeError<U::Error>>>,
+    inner: EitherSecurityFuture<C, U>,
 }
 
 impl<C, U> Future for Authenticate2<C, U>
 where
     C: AsyncRead + AsyncWrite + Unpin,
-    U: SecurityUpgrade<Negotiated<C>>,
+    U: InboundSecurityUpgrade<Negotiated<C>>
+        + OutboundSecurityUpgrade<
+            Negotiated<C>,
+            Output = <U as InboundSecurityUpgrade<Negotiated<C>>>::Output,
+            Error = <U as InboundSecurityUpgrade<Negotiated<C>>>::Error,
+        >,
 {
-    type Output = Result<(PeerId, U::Output), UpgradeError<U::Error>>;
+    type Output = <EitherSecurityFuture<C, U> as Future>::Output;
 
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         let this = self.project();
