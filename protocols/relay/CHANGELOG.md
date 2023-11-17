@@ -1,5 +1,11 @@
-## 0.17.0
+## 0.17.1
 
+- Automatically register relayed addresses as external addresses.
+  See [PR 4809](https://github.com/libp2p/rust-lib2pp/pulls/4809).
+- Fix an error where performing too many reservations at once could lead to inconsistent internal state.
+  See [PR 4841](https://github.com/libp2p/rust-libp2p/pull/4841).
+
+## 0.17.0
 - Don't close connections on protocol failures within the relay-server.
   To achieve this, error handling was restructured:
   - `libp2p::relay::outbound::stop::FatalUpgradeError` has been removed.

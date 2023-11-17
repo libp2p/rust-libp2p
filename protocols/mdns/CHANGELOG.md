@@ -1,3 +1,8 @@
+## 0.45.1 - unreleased
+
+- Ensure `Multiaddr` handled and returned by `Behaviour` are `/p2p` terminated.
+  See [PR 4596](https://github.com/libp2p/rust-libp2p/pull/4596).
+
 ## 0.45.0
 
 - Don't perform IO in `Behaviour::poll`.

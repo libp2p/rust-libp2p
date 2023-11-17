@@ -110,11 +110,11 @@ fn upgrade_pipeline() {
 
     let server = async move {
         loop {
-            let (upgrade, _send_back_addr) =
-                match listener_transport.select_next_some().await.into_incoming() {
-                    Some(u) => u,
-                    None => continue,
-                };
+            let Some((upgrade, _send_back_addr)) =
+                listener_transport.select_next_some().await.into_incoming()
+            else {
+                continue;
+            };
             let (peer, _mplex) = upgrade.await.unwrap();
             assert_eq!(peer, dialer_id);
         }

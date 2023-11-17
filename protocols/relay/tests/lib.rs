@@ -119,7 +119,7 @@ fn new_reservation_to_same_relay_replaces_old() {
     ));
 
     // Trigger new reservation.
-    let new_listener = client.listen_on(client_addr).unwrap();
+    let new_listener = client.listen_on(client_addr.clone()).unwrap();
 
     // Wait for
     // - listener of old reservation to close
@@ -168,6 +168,12 @@ fn new_reservation_to_same_relay_replaces_old() {
                     if old_listener_closed && new_reservation_accepted {
                         break;
                     }
+                }
+                SwarmEvent::ExternalAddrConfirmed { address } => {
+                    assert_eq!(
+                        address,
+                        client_addr.clone().with(Protocol::P2p(client_peer_id))
+                    );
                 }
                 SwarmEvent::Behaviour(ClientEvent::Ping(_)) => {}
                 e => panic!("{e:?}"),
@@ -521,6 +527,9 @@ async fn wait_for_reservation(
 
     loop {
         match client.select_next_some().await {
+            SwarmEvent::ExternalAddrConfirmed { address } if !is_renewal => {
+                assert_eq!(address, client_addr);
+            }
             SwarmEvent::Behaviour(ClientEvent::Relay(
                 relay::client::Event::ReservationReqAccepted {
                     relay_peer_id: peer_id,
