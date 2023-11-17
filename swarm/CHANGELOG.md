@@ -1,3 +1,8 @@
+## 0.44.1 - unreleased
+
+- Do not generate `NewExternalAddrCandidate` events if there are no listeners.
+  See [PR 4886](https://github.com/libp2p/rust-libp2p/pull/4886).
+
 ## 0.44.0
 
 - Add `#[non_exhaustive]` to `FromSwarm`, `ToSwarm`, `SwarmEvent`, `ConnectionHandlerEvent`, `ConnectionEvent`.

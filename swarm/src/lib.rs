@@ -1118,13 +1118,16 @@ where
                 self.pending_handler_event = Some((peer_id, handler, event));
             }
             ToSwarm::NewExternalAddrCandidate(addr) => {
+                // Unless we have listeners, all candidates are ephemeral and are not reachable externally
+                if self.listeners().next().is_none() {
+                    return;
+                }
+
                 // Apply address translation to the candidate address.
                 // For TCP without port-reuse, the observed address contains an ephemeral port which needs to be replaced by the port of a listen address.
                 let translated_addresses = {
                     let mut addrs: Vec<_> = self
-                        .listened_addrs
-                        .values()
-                        .flatten()
+                        .listeners()
                         .filter_map(|server| self.transport.address_translation(server, &addr))
                         .collect();
 
