@@ -1,5 +1,7 @@
 ## 0.45.2 - unreleased
 
+- Do not insert addresses into Kademlia unless `BucketInserts::OnConnected`.
+  See [PR 4884](https://github.com/libp2p/rust-libp2p/pull/4884).
 - Ensure `Multiaddr` handled and returned by `Behaviour` are `/p2p` terminated.
   See [PR 4596](https://github.com/libp2p/rust-libp2p/pull/4596).
 

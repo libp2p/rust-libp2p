@@ -1224,28 +1224,32 @@ where
                 if old_status != new_status {
                     entry.update(new_status)
                 }
-                if let Some(address) = address {
-                    if entry.value().insert(address) {
-                        self.queued_events.push_back(ToSwarm::GenerateEvent(
-                            Event::RoutingUpdated {
-                                peer,
-                                is_new_peer: false,
-                                addresses: entry.value().clone(),
-                                old_peer: None,
-                                bucket_range: self
-                                    .kbuckets
-                                    .bucket(&key)
-                                    .map(|b| b.range())
-                                    .expect("Not kbucket::Entry::SelfEntry."),
-                            },
-                        ))
+                if matches!(self.kbucket_inserts, BucketInserts::OnConnected) {
+                    if let Some(address) = address {
+                        if entry.value().insert(address) {
+                            self.queued_events.push_back(ToSwarm::GenerateEvent(
+                                Event::RoutingUpdated {
+                                    peer,
+                                    is_new_peer: false,
+                                    addresses: entry.value().clone(),
+                                    old_peer: None,
+                                    bucket_range: self
+                                        .kbuckets
+                                        .bucket(&key)
+                                        .map(|b| b.range())
+                                        .expect("Not kbucket::Entry::SelfEntry."),
+                                },
+                            ))
+                        }
                     }
                 }
             }
 
             kbucket::Entry::Pending(mut entry, old_status) => {
-                if let Some(address) = address {
-                    entry.value().insert(address);
+                if matches!(self.kbucket_inserts, BucketInserts::OnConnected) {
+                    if let Some(address) = address {
+                        entry.value().insert(address);
+                    }
                 }
                 if old_status != new_status {
                     entry.update(new_status);
