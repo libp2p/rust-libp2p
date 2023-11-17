@@ -58,13 +58,17 @@
 mod io;
 mod protocol;
 
+use futures::future::BoxFuture;
 pub use io::Output;
 
 use crate::handshake::State;
 use crate::io::handshake;
 use crate::protocol::{noise_params_into_builder, AuthenticKeypair, Keypair, PARAMS_XX};
 use futures::prelude::*;
-use libp2p_core::upgrade::{InboundConnectionUpgrade, OutboundConnectionUpgrade};
+use libp2p_core::upgrade::{
+    InboundConnectionUpgrade, InboundSecurityUpgrade, OutboundConnectionUpgrade,
+    OutboundSecurityUpgrade,
+};
 use libp2p_core::UpgradeInfo;
 use libp2p_identity as identity;
 use libp2p_identity::PeerId;
@@ -219,6 +223,59 @@ where
     }
 }
 
+impl<T> InboundSecurityUpgrade<T> for Config
+where
+    T: AsyncRead + AsyncWrite + Unpin + Send + 'static,
+{
+    type Output = Output<T>;
+    type Error = Error;
+    type Future = BoxFuture<'static, Result<(PeerId, Self::Output), Self::Error>>;
+
+    fn secure_inbound(self, socket: T, _: Self::Info, _: Option<PeerId>) -> Self::Future {
+        async move {
+            let mut state = self.into_responder(socket)?;
+
+            handshake::recv_empty(&mut state).await?;
+            handshake::send_identity(&mut state).await?;
+            handshake::recv_identity(&mut state).await?;
+
+            let (pk, io) = state.finish()?;
+
+            let expected = pk.to_peer_id();
+            Ok((expected, io))
+        }
+        .boxed()
+    }
+}
+
+impl<T> OutboundSecurityUpgrade<T> for Config
+where
+    T: AsyncRead + AsyncWrite + Unpin + Send + 'static,
+{
+    type Output = Output<T>;
+    type Error = Error;
+    type Future = BoxFuture<'static, Result<(PeerId, Self::Output), Self::Error>>;
+
+    fn secure_outbound(self, socket: T, _: Self::Info, peer_id: Option<PeerId>) -> Self::Future {
+        async move {
+            let mut state = self.into_initiator(socket)?;
+
+            handshake::send_empty(&mut state).await?;
+            handshake::recv_identity(&mut state).await?;
+            handshake::send_identity(&mut state).await?;
+
+            let (pk, io) = state.finish()?;
+
+            let expected = pk.to_peer_id();
+            match peer_id {
+                Some(found) if found != expected => Err(Error::PeerIdMismatch { expected, found }),
+                _ => Ok((expected, io)),
+            }
+        }
+        .boxed()
+    }
+}
+
 /// libp2p_noise error type.
 #[derive(Debug, thiserror::Error)]
 #[non_exhaustive]
@@ -243,6 +300,8 @@ pub enum Error {
     SigningError(#[from] libp2p_identity::SigningError),
     #[error("Expected WebTransport certhashes ({}) are not a subset of received ones ({})", certhashes_to_string(.0), certhashes_to_string(.1))]
     UnknownWebTransportCerthashes(HashSet<Multihash<64>>, HashSet<Multihash<64>>),
+    #[error("Invalid peer ID (expected {expected:?}, found {found:?})")]
+    PeerIdMismatch { expected: PeerId, found: PeerId },
 }
 
 #[derive(Debug, thiserror::Error)]
