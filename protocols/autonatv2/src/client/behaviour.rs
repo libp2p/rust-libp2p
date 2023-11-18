@@ -1,5 +1,5 @@
 use std::{
-    collections::{HashSet, VecDeque},
+    collections::{VecDeque},
     sync::Arc,
     task::{Context, Poll},
 };
@@ -28,14 +28,14 @@ enum Command {
     },
 }
 
-pub struct ReachabilityTestSucc {
-    pub server_peer: PeerId,
-    pub visible_addr: Option<Multiaddr>,
-    pub suspicious_addrs: Vec<Multiaddr>,
+pub(crate) struct ReachabilityTestSucc {
+    pub(crate) server_peer: PeerId,
+    pub(crate) visible_addr: Option<Multiaddr>,
+    pub(crate) suspicious_addrs: Vec<Multiaddr>,
 }
 
 #[derive(Debug, thiserror::Error)]
-pub enum ReachabilityTestErr {
+pub(crate) enum ReachabilityTestErr {
     #[error("Server chose not to dial any provided address. Server peer id: {peer_id}")]
     ServerChoseNotToDialAnyAddress { peer_id: PeerId },
     #[error("Server rejected dial request. Server peer id: {peer_id}")]
@@ -56,7 +56,7 @@ pub enum ReachabilityTestErr {
     },
 }
 
-pub enum Event {
+pub(crate) enum Event {
     CompletedReachabilityTest(Result<ReachabilityTestSucc, ReachabilityTestErr>),
 }
 
@@ -87,8 +87,8 @@ where
         &mut self,
         _connection_id: ConnectionId,
         peer: PeerId,
-        local_addr: &Multiaddr,
-        remote_addr: &Multiaddr,
+        _local_addr: &Multiaddr,
+        _remote_addr: &Multiaddr,
     ) -> Result<Self::ConnectionHandler, ConnectionDenied> {
         Ok(Handler::new(self.accepted_nonce.clone(), peer))
     }
@@ -97,14 +97,14 @@ where
         &mut self,
         _connection_id: ConnectionId,
         peer: PeerId,
-        addr: &Multiaddr,
-        role_override: Endpoint,
-        port_use: PortUse,
+        _addr: &Multiaddr,
+        _role_override: Endpoint,
+        _port_use: PortUse,
     ) -> Result<Self::ConnectionHandler, ConnectionDenied> {
         Ok(Handler::new(self.accepted_nonce.clone(), peer))
     }
 
-    fn on_swarm_event(&mut self, event: FromSwarm) {
+    fn on_swarm_event(&mut self, _event: FromSwarm) {
         todo!()
     }
 
@@ -128,7 +128,7 @@ where
 
     fn poll(
         &mut self,
-        cx: &mut Context<'_>,
+        _cx: &mut Context<'_>,
     ) -> Poll<ToSwarm<Self::ToSwarm, <Self::ConnectionHandler as ConnectionHandler>::FromBehaviour>>
     {
         if let Some(event) = self.pending_events.pop_front() {
@@ -199,7 +199,7 @@ where
                 server_peer,
                 local_addrs,
             } => {
-                let cleaned_local_addrs = local_addrs.iter().filter(|addr| {
+                let _cleaned_local_addrs = local_addrs.iter().filter(|addr| {
                     !addr.iter().any(|p| match p {
                         Protocol::Ip4(ip) if !IpExt::is_global(&ip) => true,
                         Protocol::Ip6(ip) if !IpExt::is_global(&ip) => true,

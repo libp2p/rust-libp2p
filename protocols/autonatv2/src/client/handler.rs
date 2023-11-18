@@ -1,10 +1,18 @@
+// two handlers, share state in behaviour
+// do isolated stuff in async function
+//
+// write basic tests
+// Take a look at rendezvous
+// TODO: tests
+// TODO: Handlers
+
+mod dial_back;
+
 use std::{
     cmp::min,
     collections::VecDeque,
     convert::identity,
-    i8::MAX,
     io,
-    iter::{once, repeat},
     sync::Arc,
     task::Poll,
     time::Duration,
@@ -17,13 +25,13 @@ use libp2p_swarm::{
     handler::{ConnectionEvent, FullyNegotiatedInbound, FullyNegotiatedOutbound, ProtocolsChange},
     ConnectionHandler, ConnectionHandlerEvent, StreamProtocol, SubstreamProtocol,
 };
-use void::Void;
+
 
 use crate::{
     client::ToBehaviour,
     generated::structs::mod_DialResponse::ResponseStatus,
     request_response::{
-        DialBack, DialDataRequest, DialDataResponse, DialRequest, DialResponse, Request, Response,
+        DialBack, DialDataRequest, DialDataResponse, DialRequest, Request, Response,
     },
     DIAL_BACK_PROTOCOL_NAME, REQUEST_PROTOCOL_NAME, REQUEST_UPGRADE,
 };
@@ -93,7 +101,7 @@ impl ConnectionHandler for Handler {
     type InboundProtocol = ReadyUpgrade<StreamProtocol>;
     type OutboundProtocol = ReadyUpgrade<StreamProtocol>;
     type InboundOpenInfo = ();
-    type OutboundOpenInfo = Option<PendingData>;
+    type OutboundOpenInfo = ();
 
     fn listen_protocol(&self) -> SubstreamProtocol<Self::InboundProtocol, Self::InboundOpenInfo> {
         SubstreamProtocol::new(crate::DIAL_BACK_UPGRADE, ())
@@ -209,10 +217,10 @@ impl ConnectionHandler for Handler {
                     println!("Dropping inbound stream because we are at capacity.");
                 }
             }
-            ConnectionEvent::DialUpgradeError(err) => {
+            ConnectionEvent::DialUpgradeError(_err) => {
                 todo!()
             }
-            ConnectionEvent::ListenUpgradeError(err) => {
+            ConnectionEvent::ListenUpgradeError(_err) => {
                 todo!()
             }
             ConnectionEvent::AddressChange(_) => {}

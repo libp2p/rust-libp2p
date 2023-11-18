@@ -1,12 +1,17 @@
-use std::{borrow::Cow, io, sync::OnceLock};
+// change to quick-protobuf-codec
 
-use futures::{AsyncRead, AsyncWrite, AsyncWriteExt};
+use std::{borrow::Cow, io};
+
+use asynchronous_codec::{FramedRead, FramedWrite};
+
+use futures::{AsyncRead, AsyncWrite, SinkExt, StreamExt};
 use libp2p_core::{
     upgrade::{read_length_prefixed, write_length_prefixed},
     Multiaddr,
 };
-use libp2p_swarm::{ConnectionId, NetworkBehaviour, StreamProtocol};
+
 use quick_protobuf::{BytesReader, MessageRead, MessageWrite, Writer};
+use quick_protobuf_codec::Codec;
 use rand::Rng;
 
 use crate::generated::structs as proto;
@@ -28,30 +33,6 @@ macro_rules! check_existence {
     };
 }
 
-macro_rules! read_from {
-    () => {
-        pub(crate) async fn read_from<R>(mut reader: R) -> io::Result<Self>
-        where
-            R: AsyncRead + Unpin,
-        {
-            let bytes = read_length_prefixed(&mut reader, 1024).await?;
-            Self::from_bytes(&bytes)
-        }
-    };
-}
-
-macro_rules! write_into {
-    () => {
-        pub(crate) async fn write_into<W>(self, mut writer: W) -> io::Result<()>
-        where
-            W: AsyncWrite + Unpin,
-        {
-            let bytes = self.into_bytes();
-            write_length_prefixed(&mut writer, bytes).await
-        }
-    };
-}
-
 #[derive(Debug, Clone)]
 pub(crate) enum Request {
     Dial(DialRequest),
@@ -70,12 +51,12 @@ pub(crate) struct DialDataResponse {
 }
 
 impl Request {
-    read_from!();
-
-    fn from_bytes(bytes: &[u8]) -> io::Result<Self> {
-        let mut reader = BytesReader::from_bytes(bytes);
-        let msg = proto::Message::from_reader(&mut reader, bytes)
-            .map_err(|err| io::Error::new(io::ErrorKind::InvalidData, err))?;
+    pub(crate) async fn read_from(io: impl AsyncRead + Unpin) -> io::Result<Self> {
+        let mut framed_io = FramedRead::new(io, Codec::<proto::Message>::new(REQUEST_MAX_SIZE));
+        let msg = framed_io
+            .next()
+            .await
+            .ok_or(io::Error::new(io::ErrorKind::UnexpectedEof, "eof"))??;
         match msg.msg {
             proto::mod_Message::OneOfmsg::dialRequest(proto::DialRequest { addrs, nonce }) => {
                 let addrs: Vec<Multiaddr> = addrs
@@ -100,54 +81,35 @@ impl Request {
         }
     }
 
-    write_into!();
-
-    fn into_bytes(self) -> Cow<'static, [u8]> {
-        fn make_message_bytes(request: Request) -> Vec<u8> {
-            let msg = match request {
-                Request::Dial(DialRequest { addrs, nonce }) => {
-                    let addrs = addrs.iter().map(|e| e.to_vec().into()).collect();
-                    let nonce = Some(nonce);
-                    proto::Message {
-                        msg: proto::mod_Message::OneOfmsg::dialRequest(proto::DialRequest {
-                            addrs,
-                            nonce,
-                        }),
-                    }
+    pub(crate) async fn write_into(self, io: impl AsyncWrite + Unpin) -> io::Result<()> {
+        let msg = match self {
+            Request::Dial(DialRequest { addrs, nonce }) => {
+                let addrs = addrs.iter().map(|e| e.to_vec()).collect();
+                let nonce = Some(nonce);
+                proto::Message {
+                    msg: proto::mod_Message::OneOfmsg::dialRequest(proto::DialRequest {
+                        addrs,
+                        nonce,
+                    }),
                 }
-                Request::Data(DialDataResponse { data_count }) => {
-                    assert!(
-                        data_count <= DATA_FIELD_LEN_UPPER_BOUND,
-                        "data_count too large"
-                    );
-                    static DATA: &[u8] = &[0u8; DATA_FIELD_LEN_UPPER_BOUND];
-                    proto::Message {
-                        msg: proto::mod_Message::OneOfmsg::dialDataResponse(
-                            proto::DialDataResponse {
-                                data: Some(Cow::Borrowed(&DATA[..data_count])),
-                            },
-                        ),
-                    }
+            }
+            Request::Data(DialDataResponse { data_count }) => {
+                debug_assert!(
+                    data_count <= DATA_FIELD_LEN_UPPER_BOUND,
+                    "data_count too large"
+                );
+                static DATA: &[u8] = &[0u8; DATA_FIELD_LEN_UPPER_BOUND];
+                proto::Message {
+                    msg: proto::mod_Message::OneOfmsg::dialDataResponse(proto::DialDataResponse {
+                        data: Some(Cow::Borrowed(&DATA[..data_count])),
+                    }),
                 }
-            };
-            let mut buf = Vec::with_capacity(msg.get_size());
-            let mut writer = Writer::new(&mut buf);
-            msg.write_message(&mut writer).expect("encoding to succeed");
-            buf
-        }
-        // little optimization: if the data is exactly 4096 bytes, we can use a static buffer. It is
-        // likely that this is the case, draining the most performance.
-        if matches!(
-            self,
-            Self::Data(DialDataResponse {
-                data_count: DATA_FIELD_LEN_UPPER_BOUND
-            })
-        ) {
-            static CELL: OnceLock<Vec<u8>> = OnceLock::new();
-            CELL.get_or_init(move || make_message_bytes(self)).into()
-        } else {
-            make_message_bytes(self).into()
-        }
+            }
+        };
+        FramedWrite::new(io, Codec::<proto::Message>::new(REQUEST_MAX_SIZE))
+            .send(msg)
+            .await
+            .map_err(|e| io::Error::new(io::ErrorKind::Other, e))
     }
 }
 
@@ -171,12 +133,11 @@ pub(crate) struct DialResponse {
 }
 
 impl Response {
-    read_from!();
-
-    fn from_bytes(bytes: &[u8]) -> std::io::Result<Self> {
-        let mut reader = BytesReader::from_bytes(bytes);
-        let msg = proto::Message::from_reader(&mut reader, bytes)
-            .map_err(|err| io::Error::new(io::ErrorKind::InvalidData, err))?;
+    pub(crate) async fn read_from(io: impl AsyncRead + Unpin) -> std::io::Result<Self> {
+        let msg = FramedRead::new(io, Codec::<proto::Message>::new(REQUEST_MAX_SIZE))
+            .next()
+            .await
+            .ok_or(io::Error::new(io::ErrorKind::UnexpectedEof, "eof"))??;
 
         match msg.msg {
             proto::mod_Message::OneOfmsg::dialResponse(proto::DialResponse {
@@ -210,9 +171,7 @@ impl Response {
         }
     }
 
-    write_into!();
-
-    fn into_bytes(self) -> Vec<u8> {
+    pub(crate) async fn write_into(self, io: impl AsyncWrite + Unpin) -> io::Result<()> {
         let msg = match self {
             Self::Dial(DialResponse {
                 status,
@@ -235,10 +194,10 @@ impl Response {
                 }),
             },
         };
-        let mut buf = Vec::with_capacity(msg.get_size());
-        let mut writer = Writer::new(&mut buf);
-        msg.write_message(&mut writer).expect("encoding to succeed");
-        buf
+        FramedWrite::new(io, Codec::<proto::Message>::new(REQUEST_MAX_SIZE))
+            .send(msg)
+            .await
+            .map_err(|e| io::Error::new(io::ErrorKind::Other, e))
     }
 }
 
@@ -260,33 +219,28 @@ impl DialDataRequest {
 const DIAL_BACK_MAX_SIZE: usize = 10;
 
 pub(crate) struct DialBack {
-    pub nonce: u64,
+    pub(crate) nonce: u64,
 }
 
 impl DialBack {
-    read_from!();
-
-    fn from_bytes(bytes: &[u8]) -> io::Result<Self> {
-        let mut reader = BytesReader::from_bytes(bytes);
-        let proto::DialBack { nonce } = proto::DialBack::from_reader(&mut reader, bytes)
-            .map_err(|err| new_io_invalid_data_err!(err))?;
+    pub(crate) async fn read_from(io: impl AsyncRead + Unpin) -> io::Result<Self> {
+        let proto::DialBack { nonce } =
+            FramedRead::new(io, Codec::<proto::DialBack>::new(DIAL_BACK_MAX_SIZE))
+                .next()
+                .await
+                .ok_or(io::Error::new(io::ErrorKind::UnexpectedEof, "eof"))??;
         let nonce = check_existence!(nonce)?;
         Ok(Self { nonce })
     }
 
-    pub(crate) async fn write_into<W>(self, mut writer: W) -> io::Result<()>
-    where
-        W: AsyncWrite + Unpin,
-    {
+    pub(crate) async fn write_into(self, io: impl AsyncWrite + Unpin) -> io::Result<()> {
         let msg = proto::DialBack {
             nonce: Some(self.nonce),
         };
-        let mut buf = [0u8; DIAL_BACK_MAX_SIZE];
-        debug_assert!(msg.get_size() <= DIAL_BACK_MAX_SIZE);
-        let mut msg_writer = Writer::new(&mut buf[..]);
-        msg.write_message(&mut msg_writer)
-            .expect("encoding to succeed");
-        write_length_prefixed(&mut writer, &buf[..msg.get_size()]).await
+        FramedWrite::new(io, Codec::<proto::DialBack>::new(DIAL_BACK_MAX_SIZE))
+            .send(msg)
+            .await
+            .map_err(|e| io::Error::new(io::ErrorKind::Other, e))
     }
 }
 

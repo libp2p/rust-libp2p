@@ -9,6 +9,8 @@ rust-version.workspace = true
 [dependencies]
 async-trait = "0.1"
 quick-protobuf = "0.8"
+quick-protobuf-codec = { workspace = true }
+asynchronous-codec = "0.6"
 libp2p-core = { workspace = true }
 rand_core = "0.6"
 rand = { version = "0.8", optional = true }
@@ -21,6 +23,8 @@ either = "1.9.0"
 futures = "0.3.29"
 thiserror = "1.0.50"
 scc = "2.0.3"
+bytes = "1"
+static_assertions = "1.1.0"
 
 [lints]
 workspace = true

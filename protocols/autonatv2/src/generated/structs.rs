@@ -10,6 +10,7 @@
 
 
 use std::borrow::Cow;
+
 use quick_protobuf::{MessageInfo, MessageRead, MessageWrite, BytesReader, Writer, WriterBackend, Result};
 use quick_protobuf::sizeofs::*;
 use super::*;
@@ -54,11 +55,11 @@ impl<'a> From<&'a str> for DialStatus {
 
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Debug, Default, PartialEq, Clone)]
-pub(crate) struct Message<'a> {
-    pub(crate) msg: structs::mod_Message::OneOfmsg<'a>,
+pub(crate) struct Message {
+    pub(crate) msg: structs::mod_Message::OneOfmsg,
 }
 
-impl<'a> MessageRead<'a> for Message<'a> {
+impl<'a> MessageRead<'a> for Message {
     fn from_reader(r: &mut BytesReader, bytes: &'a [u8]) -> Result<Self> {
         let mut msg = Self::default();
         while !r.is_eof() {
@@ -75,7 +76,7 @@ impl<'a> MessageRead<'a> for Message<'a> {
     }
 }
 
-impl<'a> MessageWrite for Message<'a> {
+impl MessageWrite for Message {
     fn get_size(&self) -> usize {
         0
         + match self.msg {
@@ -101,15 +102,15 @@ pub(crate) mod mod_Message {
 use super::*;
 
 #[derive(Debug, PartialEq, Clone)]
-pub(crate) enum OneOfmsg<'a> {
-    dialRequest(structs::DialRequest<'a>),
+pub(crate) enum OneOfmsg {
+    dialRequest(structs::DialRequest),
     dialResponse(structs::DialResponse),
     dialDataRequest(structs::DialDataRequest),
-    dialDataResponse(structs::DialDataResponse<'a>),
+    dialDataResponse(structs::DialDataResponse),
     None,
 }
 
-impl<'a> Default for OneOfmsg<'a> {
+impl Default for OneOfmsg {
     fn default() -> Self {
         OneOfmsg::None
     }
@@ -119,17 +120,17 @@ impl<'a> Default for OneOfmsg<'a> {
 
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Debug, Default, PartialEq, Clone)]
-pub(crate) struct DialRequest<'a> {
-    pub(crate) addrs: Vec<Cow<'a, [u8]>>,
+pub(crate) struct DialRequest {
+    pub(crate) addrs: Vec<Vec<u8>>,
     pub(crate) nonce: Option<u64>,
 }
 
-impl<'a> MessageRead<'a> for DialRequest<'a> {
+impl<'a> MessageRead<'a> for DialRequest {
     fn from_reader(r: &mut BytesReader, bytes: &'a [u8]) -> Result<Self> {
         let mut msg = Self::default();
         while !r.is_eof() {
             match r.next_tag(bytes) {
-                Ok(10) => msg.addrs.push(r.read_bytes(bytes).map(Cow::Borrowed)?),
+                Ok(10) => msg.addrs.push(r.read_bytes(bytes)?.to_owned()),
                 Ok(17) => msg.nonce = Some(r.read_fixed64(bytes)?),
                 Ok(t) => { r.read_unknown(bytes, t)?; }
                 Err(e) => return Err(e),
@@ -139,7 +140,7 @@ impl<'a> MessageRead<'a> for DialRequest<'a> {
     }
 }
 
-impl<'a> MessageWrite for DialRequest<'a> {
+impl MessageWrite for DialRequest {
     fn get_size(&self) -> usize {
         0
         + self.addrs.iter().map(|s| 1 + sizeof_len((s).len())).sum::<usize>()
@@ -274,16 +275,16 @@ impl<'a> From<&'a str> for ResponseStatus {
 
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Debug, Default, PartialEq, Clone)]
-pub(crate) struct DialDataResponse<'a> {
-    pub(crate) data: Option<Cow<'a, [u8]>>,
+pub(crate) struct DialDataResponse {
+    pub(crate) data: Option<Cow<'static, [u8]>>,
 }
 
-impl<'a> MessageRead<'a> for DialDataResponse<'a> {
+impl<'a> MessageRead<'a> for DialDataResponse {
     fn from_reader(r: &mut BytesReader, bytes: &'a [u8]) -> Result<Self> {
         let mut msg = Self::default();
         while !r.is_eof() {
             match r.next_tag(bytes) {
-                Ok(10) => msg.data = Some(r.read_bytes(bytes).map(Cow::Borrowed)?),
+                Ok(10) => msg.data = Some(r.read_bytes(bytes)?.to_owned().into()),
                 Ok(t) => { r.read_unknown(bytes, t)?; }
                 Err(e) => return Err(e),
             }
@@ -292,7 +293,7 @@ impl<'a> MessageRead<'a> for DialDataResponse<'a> {
     }
 }
 
-impl<'a> MessageWrite for DialDataResponse<'a> {
+impl MessageWrite for DialDataResponse {
     fn get_size(&self) -> usize {
         0
         + self.data.as_ref().map_or(0, |m| 1 + sizeof_len((m).len()))
@@ -335,4 +336,3 @@ impl MessageWrite for DialBack {
         Ok(())
     }
 }
-

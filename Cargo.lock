@@ -2452,6 +2452,8 @@ name = "libp2p-autonatv2"
 version = "0.1.0"
 dependencies = [
  "async-trait",
+ "asynchronous-codec 0.6.2",
+ "bytes",
  "either",
  "futures",
  "futures-bounded",
@@ -2460,9 +2462,11 @@ dependencies = [
  "libp2p-identity",
  "libp2p-swarm",
  "quick-protobuf",
+ "quick-protobuf-codec",
  "rand 0.8.5",
  "rand_core 0.6.4",
  "scc",
+ "static_assertions",
  "thiserror",
  "void",
 ]
