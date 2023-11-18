@@ -16,7 +16,7 @@ async fn sends_remaining_events_to_behaviour_on_connection_close() {
     let mut swarm1 = Swarm::new_ephemeral(|_| Behaviour::new(3));
     let mut swarm2 = Swarm::new_ephemeral(|_| Behaviour::new(3));
 
-    swarm2.listen().await;
+    swarm2.listen().with_memory_addr_external().await;
     swarm1.connect(&mut swarm2).await;
 
     swarm1.disconnect_peer_id(*swarm2.local_peer_id()).unwrap();
@@ -96,7 +96,6 @@ impl NetworkBehaviour for Behaviour {
 impl ConnectionHandler for HandlerWithState {
     type FromBehaviour = Void;
     type ToBehaviour = u64;
-    type Error = Void;
     type InboundProtocol = DeniedUpgrade;
     type OutboundProtocol = DeniedUpgrade;
     type InboundOpenInfo = ();
@@ -114,12 +113,7 @@ impl ConnectionHandler for HandlerWithState {
         &mut self,
         _: &mut Context<'_>,
     ) -> Poll<
-        ConnectionHandlerEvent<
-            Self::OutboundProtocol,
-            Self::OutboundOpenInfo,
-            Self::ToBehaviour,
-            Self::Error,
-        >,
+        ConnectionHandlerEvent<Self::OutboundProtocol, Self::OutboundOpenInfo, Self::ToBehaviour>,
     > {
         Poll::Pending
     }

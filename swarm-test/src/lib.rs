@@ -19,19 +19,18 @@
 // DEALINGS IN THE SOFTWARE.
 
 use async_trait::async_trait;
-use futures::future::Either;
-use futures::StreamExt;
+use futures::future::{BoxFuture, Either};
+use futures::{FutureExt, StreamExt};
 use libp2p_core::{
     multiaddr::Protocol, transport::MemoryTransport, upgrade::Version, Multiaddr, Transport,
 };
 use libp2p_identity::{Keypair, PeerId};
 use libp2p_plaintext as plaintext;
 use libp2p_swarm::dial_opts::PeerCondition;
-use libp2p_swarm::{
-    self as swarm, dial_opts::DialOpts, NetworkBehaviour, Swarm, SwarmEvent, THandlerErr,
-};
+use libp2p_swarm::{self as swarm, dial_opts::DialOpts, NetworkBehaviour, Swarm, SwarmEvent};
 use libp2p_yamux as yamux;
 use std::fmt::Debug;
+use std::future::IntoFuture;
 use std::time::Duration;
 
 /// An extension trait for [`Swarm`] that makes it easier to set up a network of [`Swarm`]s for tests.
@@ -49,6 +48,10 @@ pub trait SwarmExt {
         Self: Sized;
 
     /// Establishes a connection to the given [`Swarm`], polling both of them until the connection is established.
+    ///
+    /// This will take addresses from the `other` [`Swarm`] via [`Swarm::external_addresses`].
+    /// By default, this iterator will not yield any addresses.
+    /// To add listen addresses as external addresses, use [`ListenFuture::with_memory_addr_external`] or [`ListenFuture::with_tcp_addr_external`].
     async fn connect<T>(&mut self, other: &mut Swarm<T>)
     where
         T: NetworkBehaviour + Send,
@@ -65,22 +68,18 @@ pub trait SwarmExt {
     /// Wait for specified condition to return `Some`.
     async fn wait<E, P>(&mut self, predicate: P) -> E
     where
-        P: Fn(
-            SwarmEvent<<Self::NB as NetworkBehaviour>::ToSwarm, THandlerErr<Self::NB>>,
-        ) -> Option<E>,
+        P: Fn(SwarmEvent<<Self::NB as NetworkBehaviour>::ToSwarm>) -> Option<E>,
         P: Send;
 
     /// Listens for incoming connections, polling the [`Swarm`] until the transport is ready to accept connections.
     ///
     /// The first address is for the memory transport, the second one for the TCP transport.
-    async fn listen(&mut self) -> (Multiaddr, Multiaddr);
+    fn listen(&mut self) -> ListenFuture<&mut Self>;
 
     /// Returns the next [`SwarmEvent`] or times out after 10 seconds.
     ///
     /// If the 10s timeout does not fit your usecase, please fall back to `StreamExt::next`.
-    async fn next_swarm_event(
-        &mut self,
-    ) -> SwarmEvent<<Self::NB as NetworkBehaviour>::ToSwarm, THandlerErr<Self::NB>>;
+    async fn next_swarm_event(&mut self) -> SwarmEvent<<Self::NB as NetworkBehaviour>::ToSwarm>;
 
     /// Returns the next behaviour event or times out after 10 seconds.
     ///
@@ -137,8 +136,8 @@ where
     TBehaviour2::ToSwarm: Debug,
     TBehaviour1: NetworkBehaviour + Send,
     TBehaviour1::ToSwarm: Debug,
-    SwarmEvent<TBehaviour2::ToSwarm, THandlerErr<TBehaviour2>>: TryIntoOutput<Out1>,
-    SwarmEvent<TBehaviour1::ToSwarm, THandlerErr<TBehaviour1>>: TryIntoOutput<Out2>,
+    SwarmEvent<TBehaviour2::ToSwarm>: TryIntoOutput<Out1>,
+    SwarmEvent<TBehaviour1::ToSwarm>: TryIntoOutput<Out2>,
     Out1: Debug,
     Out2: Debug,
 {
@@ -180,15 +179,15 @@ pub trait TryIntoOutput<O>: Sized {
     fn try_into_output(self) -> Result<O, Self>;
 }
 
-impl<O, THandlerErr> TryIntoOutput<O> for SwarmEvent<O, THandlerErr> {
+impl<O> TryIntoOutput<O> for SwarmEvent<O> {
     fn try_into_output(self) -> Result<O, Self> {
         self.try_into_behaviour_event()
     }
 }
-impl<TBehaviourOutEvent, THandlerErr> TryIntoOutput<SwarmEvent<TBehaviourOutEvent, THandlerErr>>
-    for SwarmEvent<TBehaviourOutEvent, THandlerErr>
+impl<TBehaviourOutEvent> TryIntoOutput<SwarmEvent<TBehaviourOutEvent>>
+    for SwarmEvent<TBehaviourOutEvent>
 {
-    fn try_into_output(self) -> Result<SwarmEvent<TBehaviourOutEvent, THandlerErr>, Self> {
+    fn try_into_output(self) -> Result<SwarmEvent<TBehaviourOutEvent>, Self> {
         Ok(self)
     }
 }
@@ -251,10 +250,16 @@ where
                     listener_done = true;
                 }
                 Either::Left((other, _)) => {
-                    log::debug!("Ignoring event from dialer {:?}", other);
+                    tracing::debug!(
+                        dialer=?other,
+                        "Ignoring event from dialer"
+                    );
                 }
                 Either::Right((other, _)) => {
-                    log::debug!("Ignoring event from listener {:?}", other);
+                    tracing::debug!(
+                        listener=?other,
+                        "Ignoring event from listener"
+                    );
                 }
             }
 
@@ -272,7 +277,10 @@ where
                 endpoint, peer_id, ..
             } => (endpoint.get_remote_address() == &addr).then_some(peer_id),
             other => {
-                log::debug!("Ignoring event from dialer {:?}", other);
+                tracing::debug!(
+                    dialer=?other,
+                    "Ignoring event from dialer"
+                );
                 None
             }
         })
@@ -281,7 +289,7 @@ where
 
     async fn wait<E, P>(&mut self, predicate: P) -> E
     where
-        P: Fn(SwarmEvent<<B as NetworkBehaviour>::ToSwarm, THandlerErr<B>>) -> Option<E>,
+        P: Fn(SwarmEvent<<B as NetworkBehaviour>::ToSwarm>) -> Option<E>,
         P: Send,
     {
         loop {
@@ -292,58 +300,15 @@ where
         }
     }
 
-    async fn listen(&mut self) -> (Multiaddr, Multiaddr) {
-        let memory_addr_listener_id = self.listen_on(Protocol::Memory(0).into()).unwrap();
-
-        // block until we are actually listening
-        let memory_multiaddr = self
-            .wait(|e| match e {
-                SwarmEvent::NewListenAddr {
-                    address,
-                    listener_id,
-                } => (listener_id == memory_addr_listener_id).then_some(address),
-                other => {
-                    log::debug!(
-                        "Ignoring {:?} while waiting for listening to succeed",
-                        other
-                    );
-                    None
-                }
-            })
-            .await;
-
-        // Memory addresses are externally reachable because they all share the same memory-space.
-        self.add_external_address(memory_multiaddr.clone());
-
-        let tcp_addr_listener_id = self
-            .listen_on("/ip4/127.0.0.1/tcp/0".parse().unwrap())
-            .unwrap();
-
-        let tcp_multiaddr = self
-            .wait(|e| match e {
-                SwarmEvent::NewListenAddr {
-                    address,
-                    listener_id,
-                } => (listener_id == tcp_addr_listener_id).then_some(address),
-                other => {
-                    log::debug!(
-                        "Ignoring {:?} while waiting for listening to succeed",
-                        other
-                    );
-                    None
-                }
-            })
-            .await;
-
-        // We purposely don't add the TCP addr as an external one because we want to only use the memory transport for making connections in here.
-        // The TCP transport is only supported for protocols that manage their own connections.
-
-        (memory_multiaddr, tcp_multiaddr)
+    fn listen(&mut self) -> ListenFuture<&mut Self> {
+        ListenFuture {
+            add_memory_external: false,
+            add_tcp_external: false,
+            swarm: self,
+        }
     }
 
-    async fn next_swarm_event(
-        &mut self,
-    ) -> SwarmEvent<<Self::NB as NetworkBehaviour>::ToSwarm, THandlerErr<Self::NB>> {
+    async fn next_swarm_event(&mut self) -> SwarmEvent<<Self::NB as NetworkBehaviour>::ToSwarm> {
         match futures::future::select(
             futures_timer::Delay::new(Duration::from_secs(10)),
             self.select_next_some(),
@@ -352,7 +317,7 @@ where
         {
             Either::Left(((), _)) => panic!("Swarm did not emit an event within 10s"),
             Either::Right((event, _)) => {
-                log::trace!("Swarm produced: {:?}", event);
+                tracing::trace!(?event);
 
                 event
             }
@@ -369,7 +334,91 @@ where
 
     async fn loop_on_next(mut self) {
         while let Some(event) = self.next().await {
-            log::trace!("Swarm produced: {:?}", event);
+            tracing::trace!(?event);
         }
+    }
+}
+
+pub struct ListenFuture<S> {
+    add_memory_external: bool,
+    add_tcp_external: bool,
+    swarm: S,
+}
+
+impl<S> ListenFuture<S> {
+    /// Adds the memory address we are starting to listen on as an external address using [`Swarm::add_external_address`].
+    ///
+    /// This is typically "safe" for tests because within a process, memory addresses are "globally" reachable.
+    /// However, some tests depend on which addresses are external and need this to be configurable so it is not a good default.
+    pub fn with_memory_addr_external(mut self) -> Self {
+        self.add_memory_external = true;
+
+        self
+    }
+
+    /// Adds the TCP address we are starting to listen on as an external address using [`Swarm::add_external_address`].
+    ///
+    /// This is typically "safe" for tests because on the same machine, 127.0.0.1 is reachable for other [`Swarm`]s.
+    /// However, some tests depend on which addresses are external and need this to be configurable so it is not a good default.
+    pub fn with_tcp_addr_external(mut self) -> Self {
+        self.add_tcp_external = true;
+
+        self
+    }
+}
+
+impl<'s, B> IntoFuture for ListenFuture<&'s mut Swarm<B>>
+where
+    B: NetworkBehaviour + Send,
+    <B as NetworkBehaviour>::ToSwarm: Debug,
+{
+    type Output = (Multiaddr, Multiaddr);
+    type IntoFuture = BoxFuture<'s, Self::Output>;
+
+    fn into_future(self) -> Self::IntoFuture {
+        async move {
+            let swarm = self.swarm;
+
+            let memory_addr_listener_id = swarm.listen_on(Protocol::Memory(0).into()).unwrap();
+
+            // block until we are actually listening
+            let memory_multiaddr = swarm
+                .wait(|e| match e {
+                    SwarmEvent::NewListenAddr {
+                        address,
+                        listener_id,
+                    } => (listener_id == memory_addr_listener_id).then_some(address),
+                    other => {
+                        panic!("Unexpected event while waiting for `NewListenAddr`: {other:?}")
+                    }
+                })
+                .await;
+
+            let tcp_addr_listener_id = swarm
+                .listen_on("/ip4/127.0.0.1/tcp/0".parse().unwrap())
+                .unwrap();
+
+            let tcp_multiaddr = swarm
+                .wait(|e| match e {
+                    SwarmEvent::NewListenAddr {
+                        address,
+                        listener_id,
+                    } => (listener_id == tcp_addr_listener_id).then_some(address),
+                    other => {
+                        panic!("Unexpected event while waiting for `NewListenAddr`: {other:?}")
+                    }
+                })
+                .await;
+
+            if self.add_memory_external {
+                swarm.add_external_address(memory_multiaddr.clone());
+            }
+            if self.add_tcp_external {
+                swarm.add_external_address(tcp_multiaddr.clone());
+            }
+
+            (memory_multiaddr, tcp_multiaddr)
+        }
+        .boxed()
     }
 }

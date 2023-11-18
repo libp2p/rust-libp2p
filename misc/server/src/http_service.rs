@@ -21,7 +21,6 @@
 use hyper::http::StatusCode;
 use hyper::service::Service;
 use hyper::{Body, Method, Request, Response, Server};
-use log::info;
 use prometheus_client::encoding::text::encode;
 use prometheus_client::registry::Registry;
 use std::future::Future;
@@ -38,11 +37,7 @@ pub(crate) async fn metrics_server(
     let addr = ([0, 0, 0, 0], 8888).into();
 
     let server = Server::bind(&addr).serve(MakeMetricService::new(registry, metrics_path.clone()));
-    info!(
-        "Metrics server on http://{}{}",
-        server.local_addr(),
-        metrics_path
-    );
+    tracing::info!(metrics_server=%format!("http://{}{}", server.local_addr(), metrics_path));
     server.await?;
     Ok(())
 }

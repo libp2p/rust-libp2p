@@ -81,6 +81,7 @@ where
     type Substream = Stream;
     type Error = Error;
 
+    #[tracing::instrument(level = "trace", name = "StreamMuxer::poll_inbound", skip(self, cx))]
     fn poll_inbound(
         mut self: Pin<&mut Self>,
         cx: &mut Context<'_>,
@@ -97,6 +98,7 @@ where
         Poll::Pending
     }
 
+    #[tracing::instrument(level = "trace", name = "StreamMuxer::poll_outbound", skip(self, cx))]
     fn poll_outbound(
         mut self: Pin<&mut Self>,
         cx: &mut Context<'_>,
@@ -106,12 +108,14 @@ where
         Poll::Ready(Ok(Stream(stream)))
     }
 
+    #[tracing::instrument(level = "trace", name = "StreamMuxer::poll_close", skip(self, cx))]
     fn poll_close(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
         ready!(self.connection.poll_close(cx).map_err(Error)?);
 
         Poll::Ready(Ok(()))
     }
 
+    #[tracing::instrument(level = "trace", name = "StreamMuxer::poll", skip(self, cx))]
     fn poll(
         self: Pin<&mut Self>,
         cx: &mut Context<'_>,
@@ -121,7 +125,10 @@ where
         let inbound_stream = ready!(this.poll_inner(cx))?;
 
         if this.inbound_stream_buffer.len() >= MAX_BUFFERED_INBOUND_STREAMS {
-            log::warn!("dropping {} because buffer is full", inbound_stream.0);
+            tracing::warn!(
+                stream=%inbound_stream.0,
+                "dropping stream because buffer is full"
+            );
             drop(inbound_stream);
         } else {
             this.inbound_stream_buffer.push_back(inbound_stream);

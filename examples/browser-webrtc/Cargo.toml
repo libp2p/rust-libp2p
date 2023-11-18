@@ -17,10 +17,10 @@ crate-type = ["cdylib"]
 
 [dependencies]
 anyhow = "1.0.72"
-env_logger = "0.10"
 futures = "0.3.29"
-log = "0.4"
 rand = "0.8"
+tracing = "0.1.37"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 axum = "0.6.19"
@@ -34,11 +34,11 @@ tower-http = { version = "0.4.0", features = ["cors"] }
 mime_guess = "2.0.4"
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
-js-sys = "0.3.64"
+js-sys = "0.3.65"
 libp2p = { path = "../../libp2p", features = [ "ed25519", "macros", "ping", "wasm-bindgen"] }
 libp2p-webrtc-websys = { workspace = true }
-wasm-bindgen = "0.2.84"
-wasm-bindgen-futures = "0.4.37"
+wasm-bindgen = "0.2.88"
+wasm-bindgen-futures = "0.4.38"
 wasm-logger = { version = "0.2.0" }
 web-sys = { version = "0.3", features = ['Document', 'Element', 'HtmlElement', 'Node', 'Response', 'Window'] }
 

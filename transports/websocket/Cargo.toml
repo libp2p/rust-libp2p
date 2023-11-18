@@ -16,11 +16,11 @@ either = "1.9.0"
 futures = "0.3.29"
 libp2p-core = { workspace = true }
 libp2p-identity = { workspace = true }
-log = "0.4.20"
 parking_lot = "0.12.0"
 pin-project-lite = "0.2.13"
 rw-stream-sink = { workspace = true }
 soketto = "0.7.0"
+tracing = "0.1.37"
 url = "2.4"
 webpki-roots = "0.25"
 
@@ -29,7 +29,7 @@ libp2p-tcp = { workspace = true, features = ["async-io"] }
 libp2p-dns = { workspace = true, features = ["async-std"] }
 libp2p-identity = { workspace = true, features = ["rand"] }
 async-std = { version = "1.6.5", features = ["attributes"] }
-rcgen = "0.11.0"
+rcgen = "0.11.3"
 
 # Passing arguments to the docsrs builder in order to properly document cfg's.
 # More information: https://docs.rs/about/builds#cross-compiling

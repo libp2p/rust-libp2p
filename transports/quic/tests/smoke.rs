@@ -26,6 +26,7 @@ use std::{
     pin::Pin,
     sync::{Arc, Mutex},
 };
+use tracing_subscriber::EnvFilter;
 
 #[cfg(feature = "tokio")]
 #[tokio::test]
@@ -42,7 +43,9 @@ async fn async_std_smoke() {
 #[cfg(feature = "tokio")]
 #[tokio::test]
 async fn endpoint_reuse() {
-    let _ = env_logger::try_init();
+    let _ = tracing_subscriber::fmt()
+        .with_env_filter(EnvFilter::from_default_env())
+        .try_init();
     let (_, mut a_transport) = create_default_transport::<quic::tokio::Provider>();
     let (_, mut b_transport) = create_default_transport::<quic::tokio::Provider>();
 
@@ -67,7 +70,9 @@ async fn endpoint_reuse() {
 #[cfg(feature = "async-std")]
 #[async_std::test]
 async fn ipv4_dial_ipv6() {
-    let _ = env_logger::try_init();
+    let _ = tracing_subscriber::fmt()
+        .with_env_filter(EnvFilter::from_default_env())
+        .try_init();
     let (a_peer_id, mut a_transport) = create_default_transport::<quic::async_std::Provider>();
     let (b_peer_id, mut b_transport) = create_default_transport::<quic::async_std::Provider>();
 
@@ -85,7 +90,9 @@ async fn ipv4_dial_ipv6() {
 #[cfg(feature = "async-std")]
 #[async_std::test]
 async fn wrapped_with_delay() {
-    let _ = env_logger::try_init();
+    let _ = tracing_subscriber::fmt()
+        .with_env_filter(EnvFilter::from_default_env())
+        .try_init();
 
     struct DialDelay(Arc<Mutex<Boxed<(PeerId, StreamMuxerBox)>>>);
 
@@ -253,7 +260,9 @@ async fn tcp_and_quic() {
 #[cfg(feature = "async-std")]
 #[test]
 fn concurrent_connections_and_streams_async_std() {
-    let _ = env_logger::try_init();
+    let _ = tracing_subscriber::fmt()
+        .with_env_filter(EnvFilter::from_default_env())
+        .try_init();
 
     quickcheck::QuickCheck::new()
         .min_tests_passed(1)
@@ -264,7 +273,9 @@ fn concurrent_connections_and_streams_async_std() {
 #[cfg(feature = "tokio")]
 #[test]
 fn concurrent_connections_and_streams_tokio() {
-    let _ = env_logger::try_init();
+    let _ = tracing_subscriber::fmt()
+        .with_env_filter(EnvFilter::from_default_env())
+        .try_init();
 
     let rt = tokio::runtime::Runtime::new().unwrap();
     let _guard = rt.enter();
@@ -281,7 +292,9 @@ async fn draft_29_support() {
     use futures::{future::poll_fn, select};
     use libp2p_core::transport::TransportError;
 
-    let _ = env_logger::try_init();
+    let _ = tracing_subscriber::fmt()
+        .with_env_filter(EnvFilter::from_default_env())
+        .try_init();
 
     let (_, mut a_transport) =
         create_transport::<quic::tokio::Provider>(|cfg| cfg.support_draft_29 = true);
@@ -342,7 +355,9 @@ async fn draft_29_support() {
 #[cfg(feature = "async-std")]
 #[async_std::test]
 async fn backpressure() {
-    let _ = env_logger::try_init();
+    let _ = tracing_subscriber::fmt()
+        .with_env_filter(EnvFilter::from_default_env())
+        .try_init();
     let max_stream_data = quic::Config::new(&generate_tls_keypair()).max_stream_data;
 
     let (mut stream_a, mut stream_b) = build_streams::<quic::async_std::Provider>().await;
@@ -366,7 +381,9 @@ async fn backpressure() {
 #[cfg(feature = "async-std")]
 #[async_std::test]
 async fn read_after_peer_dropped_stream() {
-    let _ = env_logger::try_init();
+    let _ = tracing_subscriber::fmt()
+        .with_env_filter(EnvFilter::from_default_env())
+        .try_init();
     let (mut stream_a, mut stream_b) = build_streams::<quic::async_std::Provider>().await;
 
     let data = vec![0; 10];
@@ -386,7 +403,9 @@ async fn read_after_peer_dropped_stream() {
 #[async_std::test]
 #[should_panic]
 async fn write_after_peer_dropped_stream() {
-    let _ = env_logger::try_init();
+    let _ = tracing_subscriber::fmt()
+        .with_env_filter(EnvFilter::from_default_env())
+        .try_init();
     let (stream_a, mut stream_b) = build_streams::<quic::async_std::Provider>().await;
     drop(stream_a);
     futures_timer::Delay::new(Duration::from_millis(1)).await;
@@ -440,7 +459,9 @@ async fn test_local_listener_reuse() {
 }
 
 async fn smoke<P: Provider>() {
-    let _ = env_logger::try_init();
+    let _ = tracing_subscriber::fmt()
+        .with_env_filter(EnvFilter::from_default_env())
+        .try_init();
 
     let (a_peer_id, mut a_transport) = create_default_transport::<P>();
     let (b_peer_id, mut b_transport) = create_default_transport::<P>();
@@ -562,7 +583,11 @@ fn prop<P: Provider + BlockOn + Spawn>(
 
     let (listeners_tx, mut listeners_rx) = mpsc::channel(number_listeners);
 
-    log::info!("Creating {number_streams} streams on {number_listeners} connections");
+    tracing::info!(
+        stream_count=%number_streams,
+        connection_count=%number_listeners,
+        "Creating streams on connections"
+    );
 
     // Spawn the listener nodes.
     for _ in 0..number_listeners {
@@ -703,7 +728,10 @@ async fn open_outbound_streams<P: Provider + Spawn, const BUFFER_SIZE: usize>(
         });
     }
 
-    log::info!("Created {number_streams} streams");
+    tracing::info!(
+        stream_count=%number_streams,
+        "Created streams"
+    );
 
     while future::poll_fn(|cx| connection.poll_unpin(cx))
         .await

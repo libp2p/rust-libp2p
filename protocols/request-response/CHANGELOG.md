@@ -1,4 +1,4 @@
-## 0.26.0 - unreleased
+## 0.26.0
 
 - Remove `request_response::Config::set_connection_keep_alive` in favor of `SwarmBuilder::idle_connection_timeout`.
   See [PR 4679](https://github.com/libp2p/rust-libp2p/pull/4679).

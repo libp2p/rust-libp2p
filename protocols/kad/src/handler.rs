@@ -33,10 +33,9 @@ use libp2p_swarm::handler::{
     ConnectionEvent, DialUpgradeError, FullyNegotiatedInbound, FullyNegotiatedOutbound,
 };
 use libp2p_swarm::{
-    ConnectionHandler, ConnectionHandlerEvent, ConnectionId, Stream, StreamUpgradeError,
-    SubstreamProtocol, SupportedProtocols,
+    ConnectionHandler, ConnectionHandlerEvent, Stream, StreamUpgradeError, SubstreamProtocol,
+    SupportedProtocols,
 };
-use log::trace;
 use std::collections::VecDeque;
 use std::task::Waker;
 use std::{error, fmt, io, marker::PhantomData, pin::Pin, task::Context, task::Poll};
@@ -84,9 +83,6 @@ pub struct Handler {
     protocol_status: Option<ProtocolStatus>,
 
     remote_supported_protocols: SupportedProtocols,
-
-    /// The ID of this connection.
-    connection_id: ConnectionId,
 }
 
 /// The states of protocol confirmation that a connection
@@ -459,17 +455,20 @@ impl Handler {
         endpoint: ConnectedPoint,
         remote_peer_id: PeerId,
         mode: Mode,
-        connection_id: ConnectionId,
     ) -> Self {
         match &endpoint {
             ConnectedPoint::Dialer { .. } => {
-                log::debug!(
-                    "Operating in {mode}-mode on new outbound connection to {remote_peer_id}"
+                tracing::debug!(
+                    peer=%remote_peer_id,
+                    mode=%mode,
+                    "New outbound connection"
                 );
             }
             ConnectedPoint::Listener { .. } => {
-                log::debug!(
-                    "Operating in {mode}-mode on new inbound connection to {remote_peer_id}"
+                tracing::debug!(
+                    peer=%remote_peer_id,
+                    mode=%mode,
+                    "New inbound connection"
                 );
             }
         }
@@ -486,7 +485,6 @@ impl Handler {
             pending_messages: Default::default(),
             protocol_status: None,
             remote_supported_protocols: Default::default(),
-            connection_id,
         }
     }
 
@@ -550,16 +548,16 @@ impl Handler {
                 )
             }) {
                 *s = InboundSubstreamState::Cancelled;
-                log::debug!(
-                    "New inbound substream to {:?} exceeds inbound substream limit. \
-                    Removed older substream waiting to be reused.",
-                    self.remote_peer_id,
+                tracing::debug!(
+                    peer=?self.remote_peer_id,
+                    "New inbound substream to peer exceeds inbound substream limit. \
+                    Removed older substream waiting to be reused."
                 )
             } else {
-                log::warn!(
-                    "New inbound substream to {:?} exceeds inbound substream limit. \
-                     No older substream waiting to be reused. Dropping new substream.",
-                    self.remote_peer_id,
+                tracing::warn!(
+                    peer=?self.remote_peer_id,
+                    "New inbound substream to peer exceeds inbound substream limit. \
+                     No older substream waiting to be reused. Dropping new substream."
                 );
                 return;
             }
@@ -599,7 +597,6 @@ impl Handler {
 impl ConnectionHandler for Handler {
     type FromBehaviour = HandlerIn;
     type ToBehaviour = HandlerEvent;
-    type Error = io::Error; // TODO: better error type?
     type InboundProtocol = Either<ProtocolConfig, upgrade::DeniedUpgrade>;
     type OutboundProtocol = ProtocolConfig;
     type OutboundOpenInfo = ();
@@ -688,12 +685,18 @@ impl ConnectionHandler for Handler {
 
                 match &self.endpoint {
                     ConnectedPoint::Dialer { .. } => {
-                        log::debug!(
-                            "Now operating in {new_mode}-mode on outbound connection with {peer}"
+                        tracing::debug!(
+                            %peer,
+                            mode=%new_mode,
+                            "Changed mode on outbound connection"
                         )
                     }
                     ConnectedPoint::Listener { local_addr, .. } => {
-                        log::debug!("Now operating in {new_mode}-mode on inbound connection with {peer} assuming that one of our external addresses routes to {local_addr}")
+                        tracing::debug!(
+                            %peer,
+                            mode=%new_mode,
+                            local_address=%local_addr,
+                            "Changed mode on inbound connection assuming that one of our external addresses routes to the local address")
                     }
                 }
 
@@ -702,16 +705,12 @@ impl ConnectionHandler for Handler {
         }
     }
 
+    #[tracing::instrument(level = "trace", name = "ConnectionHandler::poll", skip(self, cx))]
     fn poll(
         &mut self,
         cx: &mut Context<'_>,
     ) -> Poll<
-        ConnectionHandlerEvent<
-            Self::OutboundProtocol,
-            Self::OutboundOpenInfo,
-            Self::ToBehaviour,
-            Self::Error,
-        >,
+        ConnectionHandlerEvent<Self::OutboundProtocol, Self::OutboundOpenInfo, Self::ToBehaviour>,
     > {
         match &mut self.protocol_status {
             Some(status) if !status.reported => {
@@ -772,9 +771,6 @@ impl ConnectionHandler for Handler {
             ConnectionEvent::DialUpgradeError(dial_upgrade_error) => {
                 self.on_dial_upgrade_error(dial_upgrade_error)
             }
-            ConnectionEvent::AddressChange(_)
-            | ConnectionEvent::ListenUpgradeError(_)
-            | ConnectionEvent::LocalProtocolsChange(_) => {}
             ConnectionEvent::RemoteProtocolsChange(change) => {
                 let dirty = self.remote_supported_protocols.on_protocols_change(change);
 
@@ -787,11 +783,10 @@ impl ConnectionHandler for Handler {
                     self.protocol_status = Some(compute_new_protocol_status(
                         remote_supports_our_kademlia_protocols,
                         self.protocol_status,
-                        self.remote_peer_id,
-                        self.connection_id,
                     ))
                 }
             }
+            _ => {}
         }
     }
 }
@@ -799,8 +794,6 @@ impl ConnectionHandler for Handler {
 fn compute_new_protocol_status(
     now_supported: bool,
     current_status: Option<ProtocolStatus>,
-    remote_peer_id: PeerId,
-    connection_id: ConnectionId,
 ) -> ProtocolStatus {
     let current_status = match current_status {
         None => {
@@ -820,9 +813,9 @@ fn compute_new_protocol_status(
     }
 
     if now_supported {
-        log::debug!("Remote {remote_peer_id} now supports our kademlia protocol on connection {connection_id}");
+        tracing::debug!("Remote now supports our kademlia protocol");
     } else {
-        log::debug!("Remote {remote_peer_id} no longer supports our kademlia protocol on connection {connection_id}");
+        tracing::debug!("Remote no longer supports our kademlia protocol");
     }
 
     ProtocolStatus {
@@ -847,7 +840,7 @@ impl Handler {
 }
 
 impl futures::Stream for OutboundSubstreamState {
-    type Item = ConnectionHandlerEvent<ProtocolConfig, (), HandlerEvent, io::Error>;
+    type Item = ConnectionHandlerEvent<ProtocolConfig, (), HandlerEvent>;
 
     fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
         let this = self.get_mut();
@@ -979,7 +972,7 @@ impl futures::Stream for OutboundSubstreamState {
 }
 
 impl futures::Stream for InboundSubstreamState {
-    type Item = ConnectionHandlerEvent<ProtocolConfig, (), HandlerEvent, io::Error>;
+    type Item = ConnectionHandlerEvent<ProtocolConfig, (), HandlerEvent>;
 
     fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
         let this = self.get_mut();
@@ -997,7 +990,7 @@ impl futures::Stream for InboundSubstreamState {
                     mut substream,
                 } => match substream.poll_next_unpin(cx) {
                     Poll::Ready(Some(Ok(KadRequestMsg::Ping))) => {
-                        log::warn!("Kademlia PING messages are unsupported");
+                        tracing::warn!("Kademlia PING messages are unsupported");
 
                         *this = InboundSubstreamState::Closing(substream);
                     }
@@ -1071,7 +1064,7 @@ impl futures::Stream for InboundSubstreamState {
                         return Poll::Ready(None);
                     }
                     Poll::Ready(Some(Err(e))) => {
-                        trace!("Inbound substream error: {:?}", e);
+                        tracing::trace!("Inbound substream error: {:?}", e);
                         return Poll::Ready(None);
                     }
                 },
@@ -1172,6 +1165,7 @@ fn process_kad_response(event: KadResponseMsg, query_id: QueryId) -> HandlerEven
 mod tests {
     use super::*;
     use quickcheck::{Arbitrary, Gen};
+    use tracing_subscriber::EnvFilter;
 
     impl Arbitrary for ProtocolStatus {
         fn arbitrary(g: &mut Gen) -> Self {
@@ -1184,15 +1178,12 @@ mod tests {
 
     #[test]
     fn compute_next_protocol_status_test() {
-        let _ = env_logger::try_init();
+        let _ = tracing_subscriber::fmt()
+            .with_env_filter(EnvFilter::from_default_env())
+            .try_init();
 
         fn prop(now_supported: bool, current: Option<ProtocolStatus>) {
-            let new = compute_new_protocol_status(
-                now_supported,
-                current,
-                PeerId::random(),
-                ConnectionId::new_unchecked(0),
-            );
+            let new = compute_new_protocol_status(now_supported, current);
 
             match current {
                 None => {

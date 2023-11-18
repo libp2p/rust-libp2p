@@ -31,6 +31,7 @@ use libp2p_swarm::{
 };
 use libp2p_swarm::{ConnectionId, THandler, THandlerOutEvent};
 use lru::LruCache;
+use std::collections::hash_map::Entry;
 use std::num::NonZeroUsize;
 use std::{
     collections::{HashMap, HashSet, VecDeque},
@@ -49,6 +50,10 @@ pub struct Behaviour {
     config: Config,
     /// For each peer we're connected to, the observed address to send back to it.
     connected: HashMap<PeerId, HashMap<ConnectionId, Multiaddr>>,
+
+    /// The address a remote observed for us.
+    our_observed_addresses: HashMap<ConnectionId, Multiaddr>,
+
     /// Pending events to be emitted when polled.
     events: VecDeque<ToSwarm<Event, InEvent>>,
     /// The addresses of all peers that we have discovered.
@@ -72,14 +77,6 @@ pub struct Config {
     ///
     /// Defaults to `rust-libp2p/<libp2p-identify-version>`.
     pub agent_version: String,
-    /// The initial delay before the first identification request
-    /// is sent to a remote on a newly established connection.
-    ///
-    /// Defaults to 0ms.
-    #[deprecated(note = "The `initial_delay` is no longer necessary and will be
-                completely removed since a remote should be able to instantly
-                answer to an identify request")]
-    pub initial_delay: Duration,
     /// The interval at which identification requests are sent to
     /// the remote on established connections after the first request,
     /// i.e. the delay between identification requests.
@@ -107,13 +104,11 @@ pub struct Config {
 impl Config {
     /// Creates a new configuration for the identify [`Behaviour`] that
     /// advertises the given protocol version and public key.
-    #[allow(deprecated)]
     pub fn new(protocol_version: String, local_public_key: PublicKey) -> Self {
         Self {
             protocol_version,
             agent_version: format!("rust-libp2p/{}", env!("CARGO_PKG_VERSION")),
             local_public_key,
-            initial_delay: Duration::from_millis(0),
             interval: Duration::from_secs(5 * 60),
             push_listen_addr_updates: false,
             cache_size: 100,
@@ -123,17 +118,6 @@ impl Config {
     /// Configures the agent version sent to peers.
     pub fn with_agent_version(mut self, v: String) -> Self {
         self.agent_version = v;
-        self
-    }
-
-    /// Configures the initial delay before the first identification
-    /// request is sent on a newly established connection to a peer.
-    #[deprecated(note = "The `initial_delay` is no longer necessary and will be
-                completely removed since a remote should be able to instantly
-                answer to an identify request thus also this setter will be removed")]
-    #[allow(deprecated)]
-    pub fn with_initial_delay(mut self, d: Duration) -> Self {
-        self.initial_delay = d;
         self
     }
 
@@ -170,6 +154,7 @@ impl Behaviour {
         Self {
             config,
             connected: HashMap::new(),
+            our_observed_addresses: Default::default(),
             events: VecDeque::new(),
             discovered_peers,
             listen_addresses: Default::default(),
@@ -184,7 +169,7 @@ impl Behaviour {
     {
         for p in peers {
             if !self.connected.contains_key(&p) {
-                log::debug!("Not pushing to {p} because we are not connected");
+                tracing::debug!(peer=%p, "Not pushing to peer because we are not connected");
                 continue;
             }
 
@@ -236,7 +221,6 @@ impl NetworkBehaviour for Behaviour {
     type ConnectionHandler = Handler;
     type ToSwarm = Event;
 
-    #[allow(deprecated)]
     fn handle_established_inbound_connection(
         &mut self,
         _: ConnectionId,
@@ -245,7 +229,6 @@ impl NetworkBehaviour for Behaviour {
         remote_addr: &Multiaddr,
     ) -> Result<THandler<Self>, ConnectionDenied> {
         Ok(Handler::new(
-            self.config.initial_delay,
             self.config.interval,
             peer,
             self.config.local_public_key.clone(),
@@ -256,7 +239,6 @@ impl NetworkBehaviour for Behaviour {
         ))
     }
 
-    #[allow(deprecated)]
     fn handle_established_outbound_connection(
         &mut self,
         _: ConnectionId,
@@ -266,7 +248,6 @@ impl NetworkBehaviour for Behaviour {
         _: PortUse,
     ) -> Result<THandler<Self>, ConnectionDenied> {
         Ok(Handler::new(
-            self.config.initial_delay,
             self.config.interval,
             peer,
             self.config.local_public_key.clone(),
@@ -280,7 +261,7 @@ impl NetworkBehaviour for Behaviour {
     fn on_connection_handler_event(
         &mut self,
         peer_id: PeerId,
-        _: ConnectionId,
+        id: ConnectionId,
         event: THandlerOutEvent<Self>,
     ) {
         match event {
@@ -296,8 +277,28 @@ impl NetworkBehaviour for Behaviour {
                 let observed = info.observed_addr.clone();
                 self.events
                     .push_back(ToSwarm::GenerateEvent(Event::Received { peer_id, info }));
-                self.events
-                    .push_back(ToSwarm::NewExternalAddrCandidate(observed));
+
+                match self.our_observed_addresses.entry(id) {
+                    Entry::Vacant(not_yet_observed) => {
+                        not_yet_observed.insert(observed.clone());
+                        self.events
+                            .push_back(ToSwarm::NewExternalAddrCandidate(observed));
+                    }
+                    Entry::Occupied(already_observed) if already_observed.get() == &observed => {
+                        // No-op, we already observed this address.
+                    }
+                    Entry::Occupied(mut already_observed) => {
+                        tracing::info!(
+                            old_address=%already_observed.get(),
+                            new_address=%observed,
+                            "Our observed address on connection {id} changed",
+                        );
+
+                        *already_observed.get_mut() = observed.clone();
+                        self.events
+                            .push_back(ToSwarm::NewExternalAddrCandidate(observed));
+                    }
+                }
             }
             handler::Event::Identification => {
                 self.events
@@ -314,6 +315,7 @@ impl NetworkBehaviour for Behaviour {
         }
     }
 
+    #[tracing::instrument(level = "trace", name = "NetworkBehaviour::poll", skip(self))]
     fn poll(&mut self, _: &mut Context<'_>) -> Poll<ToSwarm<Self::ToSwarm, THandlerInEvent<Self>>> {
         if let Some(event) = self.events.pop_front() {
             return Poll::Ready(event);
@@ -383,6 +385,8 @@ impl NetworkBehaviour for Behaviour {
                 } else if let Some(addrs) = self.connected.get_mut(&peer_id) {
                     addrs.remove(&connection_id);
                 }
+
+                self.our_observed_addresses.remove(&connection_id);
             }
             FromSwarm::DialFailure(DialFailure { peer_id, error, .. }) => {
                 if let Some(entry) = peer_id.and_then(|id| self.discovered_peers.get_mut(&id)) {
@@ -393,16 +397,7 @@ impl NetworkBehaviour for Behaviour {
                     }
                 }
             }
-            FromSwarm::NewListenAddr(_)
-            | FromSwarm::ExpiredListenAddr(_)
-            | FromSwarm::AddressChange(_)
-            | FromSwarm::ListenFailure(_)
-            | FromSwarm::NewListener(_)
-            | FromSwarm::ListenerError(_)
-            | FromSwarm::ListenerClosed(_)
-            | FromSwarm::NewExternalAddrCandidate(_)
-            | FromSwarm::ExternalAddrExpired(_) => {}
-            FromSwarm::ExternalAddrConfirmed(_) => {}
+            _ => {}
         }
     }
 }

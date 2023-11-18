@@ -33,6 +33,7 @@ use libp2p::{
 };
 use std::{env, error::Error, fs, path::Path, str::FromStr};
 use tokio::{io, io::AsyncBufReadExt, select};
+use tracing_subscriber::EnvFilter;
 
 /// Get the current ipfs repo path, either from the IPFS_PATH environment variable or
 /// from the default $HOME/.ipfs
@@ -87,7 +88,9 @@ fn parse_legacy_multiaddr(text: &str) -> Result<Multiaddr, Box<dyn Error>> {
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
-    env_logger::init();
+    let _ = tracing_subscriber::fmt()
+        .with_env_filter(EnvFilter::from_default_env())
+        .try_init();
 
     let ipfs_path = get_ipfs_path();
     println!("using IPFS_PATH {ipfs_path:?}");

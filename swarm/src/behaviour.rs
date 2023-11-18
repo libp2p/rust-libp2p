@@ -221,6 +221,7 @@ pub trait NetworkBehaviour: 'static {
 ///
 /// [`Swarm`]: super::Swarm
 #[derive(Debug)]
+#[non_exhaustive]
 pub enum ToSwarm<TOutEvent, TInEvent> {
     /// Instructs the `Swarm` to return an event when it is being polled.
     GenerateEvent(TOutEvent),
@@ -265,15 +266,20 @@ pub enum ToSwarm<TOutEvent, TInEvent> {
         event: TInEvent,
     },
 
-    /// Reports a new candidate for an external address to the [`Swarm`](crate::Swarm).
+    /// Reports a **new** candidate for an external address to the [`Swarm`](crate::Swarm).
     ///
+    /// The emphasis on a **new** candidate is important.
+    /// Protocols MUST take care to only emit a candidate once per "source".
+    /// For example, the observed address of a TCP connection does not change throughout its lifetime.
+    /// Thus, only one candidate should be emitted per connection.    
+    ///
+    /// This makes the report frequency of an address a meaningful data-point for consumers of this event.
     /// This address will be shared with all [`NetworkBehaviour`]s via [`FromSwarm::NewExternalAddrCandidate`].
     ///
     /// This address could come from a variety of sources:
     /// - A protocol such as identify obtained it from a remote.
     /// - The user provided it based on configuration.
     /// - We made an educated guess based on one of our listen addresses.
-    /// - We established a new relay connection.
     NewExternalAddrCandidate(Multiaddr),
 
     /// Indicates to the [`Swarm`](crate::Swarm) that the provided address is confirmed to be externally reachable.
@@ -288,16 +294,13 @@ pub enum ToSwarm<TOutEvent, TInEvent> {
     /// This address will be shared with all [`NetworkBehaviour`]s via [`FromSwarm::ExternalAddrExpired`].
     ExternalAddrExpired(Multiaddr),
 
-    /// Instructs the `Swarm` to initiate a graceful close of one or all connections
-    /// with the given peer.
+    /// Instructs the `Swarm` to initiate a graceful close of one or all connections with the given peer.
     ///
-    /// Note: Closing a connection via
-    /// [`ToSwarm::CloseConnection`] does not inform the
-    /// corresponding [`ConnectionHandler`].
-    /// Closing a connection via a [`ConnectionHandler`] can be done
-    /// either in a collaborative manner across [`ConnectionHandler`]s
-    /// with [`ConnectionHandler::connection_keep_alive`] or directly with
-    /// [`ConnectionHandlerEvent::Close`](crate::ConnectionHandlerEvent::Close).
+    /// Closing a connection via [`ToSwarm::CloseConnection`] will poll [`ConnectionHandler::poll_close`] to completion.
+    /// In most cases, stopping to "use" a connection is enough to have it closed.
+    /// The keep-alive algorithm will close a connection automatically once all [`ConnectionHandler`]s are idle.
+    ///
+    /// Use this command if you want to close a connection _despite_ it still being in use by one or more handlers.
     CloseConnection {
         /// The peer to disconnect.
         peer_id: PeerId,
@@ -393,6 +396,7 @@ pub enum CloseConnection {
 /// Enumeration with the list of the possible events
 /// to pass to [`on_swarm_event`](NetworkBehaviour::on_swarm_event).
 #[derive(Debug)]
+#[non_exhaustive]
 pub enum FromSwarm<'a> {
     /// Informs the behaviour about a newly established connection to a peer.
     ConnectionEstablished(ConnectionEstablished<'a>),

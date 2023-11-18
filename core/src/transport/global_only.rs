@@ -22,12 +22,12 @@ use crate::{
     multiaddr::{Multiaddr, Protocol},
     transport::{DialOpts, ListenerId, TransportError, TransportEvent},
 };
-use ip_global::IpExt;
-use log::debug;
+use ip_global::*;
 use std::{
     pin::Pin,
     task::{Context, Poll},
 };
+use tracing::debug;
 
 /// Dropping all dial requests to non-global IP addresses.
 #[derive(Debug, Clone, Default)]
@@ -80,7 +80,7 @@ impl<T: crate::Transport + Unpin> crate::Transport for Transport<T> {
                 self.inner.dial(addr, opts)
             }
             _ => {
-                debug!("Not dialing unsupported Multiaddress {:?}.", addr);
+                tracing::debug!(address=%addr, "Not dialing unsupported Multiaddress");
                 Err(TransportError::MultiaddrNotSupported(addr))
             }
         }

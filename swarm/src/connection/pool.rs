@@ -50,6 +50,7 @@ use std::{
     task::Context,
     task::Poll,
 };
+use tracing::Instrument;
 use void::Void;
 
 mod concurrent_dial;
@@ -132,7 +133,7 @@ where
 
     /// Receivers for events reported from established connections.
     established_connection_events:
-        SelectAll<mpsc::Receiver<task::EstablishedConnectionEvent<THandler>>>,
+        SelectAll<mpsc::Receiver<task::EstablishedConnectionEvent<THandler::ToBehaviour>>>,
 
     /// Receivers for [`NewConnection`] objects that are dropped.
     new_connection_dropped_listeners: FuturesUnordered<oneshot::Receiver<StreamMuxerBox>>,
@@ -226,7 +227,7 @@ impl<THandler: ConnectionHandler> fmt::Debug for Pool<THandler> {
 
 /// Event that can happen on the `Pool`.
 #[derive(Debug)]
-pub(crate) enum PoolEvent<THandler: ConnectionHandler> {
+pub(crate) enum PoolEvent<ToBehaviour> {
     /// A new connection has been established.
     ConnectionEstablished {
         id: ConnectionId,
@@ -258,7 +259,7 @@ pub(crate) enum PoolEvent<THandler: ConnectionHandler> {
         connected: Connected,
         /// The error that occurred, if any. If `None`, the connection
         /// was closed by the local peer.
-        error: Option<ConnectionError<THandler::Error>>,
+        error: Option<ConnectionError>,
         /// The remaining established connections to the same peer.
         remaining_established_connection_ids: Vec<ConnectionId>,
     },
@@ -290,7 +291,7 @@ pub(crate) enum PoolEvent<THandler: ConnectionHandler> {
         id: ConnectionId,
         peer_id: PeerId,
         /// The produced event.
-        event: THandler::ToBehaviour,
+        event: ToBehaviour,
     },
 
     /// The connection to a node has changed its address.
@@ -427,20 +428,22 @@ where
         dial_concurrency_factor_override: Option<NonZeroU8>,
         connection_id: ConnectionId,
     ) {
-        let dial = ConcurrentDial::new(
-            dials,
-            dial_concurrency_factor_override.unwrap_or(self.dial_concurrency_factor),
-        );
+        let concurrency_factor =
+            dial_concurrency_factor_override.unwrap_or(self.dial_concurrency_factor);
+        let span = tracing::debug_span!(parent: tracing::Span::none(), "new_outgoing_connection", %concurrency_factor, num_dials=%dials.len(), id = %connection_id);
+        span.follows_from(tracing::Span::current());
 
         let (abort_notifier, abort_receiver) = oneshot::channel();
 
-        self.executor
-            .spawn(task::new_for_pending_outgoing_connection(
+        self.executor.spawn(
+            task::new_for_pending_outgoing_connection(
                 connection_id,
-                dial,
+                ConcurrentDial::new(dials, concurrency_factor),
                 abort_receiver,
                 self.pending_connection_events_tx.clone(),
-            ));
+            )
+            .instrument(span),
+        );
 
         let endpoint = PendingPoint::Dialer {
             role_override,
@@ -473,13 +476,18 @@ where
 
         let (abort_notifier, abort_receiver) = oneshot::channel();
 
-        self.executor
-            .spawn(task::new_for_pending_incoming_connection(
+        let span = tracing::debug_span!(parent: tracing::Span::none(), "new_incoming_connection", remote_addr = %info.send_back_addr, id = %connection_id);
+        span.follows_from(tracing::Span::current());
+
+        self.executor.spawn(
+            task::new_for_pending_incoming_connection(
                 connection_id,
                 future,
                 abort_receiver,
                 self.pending_connection_events_tx.clone(),
-            ));
+            )
+            .instrument(span),
+        );
 
         self.counters.inc_pending_incoming();
         self.pending.insert(
@@ -502,7 +510,6 @@ where
         handler: THandler,
     ) {
         let connection = connection.extract();
-
         let conns = self.established.entry(obtained_peer_id).or_default();
         self.counters.inc_established(endpoint);
 
@@ -529,17 +536,24 @@ where
             self.idle_connection_timeout,
         );
 
-        self.executor.spawn(task::new_for_established_connection(
-            id,
-            obtained_peer_id,
-            connection,
-            command_receiver,
-            event_sender,
-        ))
+        let span = tracing::debug_span!(parent: tracing::Span::none(), "new_established_connection", remote_addr = %endpoint.get_remote_address(), %id, peer = %obtained_peer_id);
+        span.follows_from(tracing::Span::current());
+
+        self.executor.spawn(
+            task::new_for_established_connection(
+                id,
+                obtained_peer_id,
+                connection,
+                command_receiver,
+                event_sender,
+            )
+            .instrument(span),
+        )
     }
 
     /// Polls the connection pool for events.
-    pub(crate) fn poll(&mut self, cx: &mut Context<'_>) -> Poll<PoolEvent<THandler>>
+    #[tracing::instrument(level = "debug", name = "Pool::poll", skip(self, cx))]
+    pub(crate) fn poll(&mut self, cx: &mut Context<'_>) -> Poll<PoolEvent<THandler::ToBehaviour>>
     where
         THandler: ConnectionHandler + 'static,
         <THandler as ConnectionHandler>::OutboundOpenInfo: Send,
@@ -697,10 +711,10 @@ where
                     if let Err(error) = check_peer_id() {
                         self.executor.spawn(poll_fn(move |cx| {
                             if let Err(e) = ready!(muxer.poll_close_unpin(cx)) {
-                                log::debug!(
-                                    "Failed to close connection {:?} to peer {}: {:?}",
-                                    id,
-                                    obtained_peer_id,
+                                tracing::debug!(
+                                    peer=%obtained_peer_id,
+                                    connection=%id,
+                                    "Failed to close connection to peer: {:?}",
                                     e
                                 );
                             }

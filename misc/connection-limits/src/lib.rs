@@ -340,18 +340,10 @@ impl NetworkBehaviour for Behaviour {
             FromSwarm::DialFailure(DialFailure { connection_id, .. }) => {
                 self.pending_outbound_connections.remove(&connection_id);
             }
-            FromSwarm::AddressChange(_) => {}
             FromSwarm::ListenFailure(ListenFailure { connection_id, .. }) => {
                 self.pending_inbound_connections.remove(&connection_id);
             }
-            FromSwarm::NewListener(_) => {}
-            FromSwarm::NewListenAddr(_) => {}
-            FromSwarm::ExpiredListenAddr(_) => {}
-            FromSwarm::ListenerError(_) => {}
-            FromSwarm::ListenerClosed(_) => {}
-            FromSwarm::NewExternalAddrCandidate(_) => {}
-            FromSwarm::ExternalAddrExpired(_) => {}
-            FromSwarm::ExternalAddrConfirmed(_) => {}
+            _ => {}
         }
     }
 
@@ -448,7 +440,7 @@ mod tests {
             });
 
             async_std::task::block_on(async {
-                let (listen_addr, _) = swarm1.listen().await;
+                let (listen_addr, _) = swarm1.listen().with_memory_addr_external().await;
 
                 for _ in 0..limit {
                     swarm2.connect(&mut swarm1).await;

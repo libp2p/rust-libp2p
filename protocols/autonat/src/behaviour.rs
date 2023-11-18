@@ -435,6 +435,7 @@ impl NetworkBehaviour for Behaviour {
         <request_response::Behaviour<AutoNatCodec> as NetworkBehaviour>::ConnectionHandler;
     type ToSwarm = Event;
 
+    #[tracing::instrument(level = "trace", name = "ConnectionHandler::poll", skip(self, cx))]
     fn poll(
         &mut self,
         cx: &mut Context<'_>,
@@ -592,6 +593,7 @@ impl NetworkBehaviour for Behaviour {
                 self.inner.on_swarm_event(listener_closed)
             }
             confirmed @ FromSwarm::ExternalAddrConfirmed(_) => self.inner.on_swarm_event(confirmed),
+            _ => {}
         }
     }
 

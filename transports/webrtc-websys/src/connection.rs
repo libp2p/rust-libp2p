@@ -47,16 +47,16 @@ impl Connection {
         let (mut tx_ondatachannel, rx_ondatachannel) = mpsc::channel(4); // we may get more than one data channel opened on a single peer connection
 
         let ondatachannel_closure = Closure::new(move |ev: RtcDataChannelEvent| {
-            log::trace!("New data channel");
+            tracing::trace!("New data channel");
 
             if let Err(e) = tx_ondatachannel.try_send(ev.channel()) {
                 if e.is_full() {
-                    log::warn!("Remote is opening too many data channels, we can't keep up!");
+                    tracing::warn!("Remote is opening too many data channels, we can't keep up!");
                     return;
                 }
 
                 if e.is_disconnected() {
-                    log::warn!("Receiver is gone, are we shutting down?");
+                    tracing::warn!("Receiver is gone, are we shutting down?");
                 }
             }
         });
@@ -90,7 +90,7 @@ impl Connection {
     /// if they are used.
     fn close_connection(&mut self) {
         if !self.closed {
-            log::trace!("connection::close_connection");
+            tracing::trace!("connection::close_connection");
             self.inner.inner.close();
             self.closed = true;
         }
@@ -121,7 +121,7 @@ impl StreamMuxer for Connection {
             }
             None => {
                 // This only happens if the [`RtcPeerConnection::ondatachannel`] closure gets freed which means we are most likely shutting down the connection.
-                log::debug!("`Sender` for inbound data channels has been dropped");
+                tracing::debug!("`Sender` for inbound data channels has been dropped");
                 Poll::Ready(Err(Error::Connection("connection closed".to_owned())))
             }
         }
@@ -131,7 +131,7 @@ impl StreamMuxer for Connection {
         mut self: Pin<&mut Self>,
         _: &mut Context<'_>,
     ) -> Poll<Result<Self::Substream, Self::Error>> {
-        log::trace!("Creating outbound data channel");
+        tracing::trace!("Creating outbound data channel");
 
         let data_channel = self.inner.new_regular_data_channel();
         let stream = self.new_stream_from_data_channel(data_channel);
@@ -144,7 +144,7 @@ impl StreamMuxer for Connection {
         mut self: Pin<&mut Self>,
         _cx: &mut Context<'_>,
     ) -> Poll<Result<(), Self::Error>> {
-        log::trace!("connection::poll_close");
+        tracing::trace!("connection::poll_close");
 
         self.close_connection();
         Poll::Ready(Ok(()))
@@ -158,7 +158,7 @@ impl StreamMuxer for Connection {
             match ready!(self.drop_listeners.poll_next_unpin(cx)) {
                 Some(Ok(())) => {}
                 Some(Err(e)) => {
-                    log::debug!("a DropListener failed: {e}")
+                    tracing::debug!("a DropListener failed: {e}")
                 }
                 None => {
                     self.no_drop_listeners_waker = Some(cx.waker().clone());

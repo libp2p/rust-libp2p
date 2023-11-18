@@ -231,23 +231,7 @@ where
         Ok(dummy::ConnectionHandler)
     }
 
-    fn on_swarm_event(&mut self, event: FromSwarm) {
-        match event {
-            FromSwarm::ConnectionClosed(_) => {}
-            FromSwarm::ConnectionEstablished(_) => {}
-            FromSwarm::AddressChange(_) => {}
-            FromSwarm::DialFailure(_) => {}
-            FromSwarm::ListenFailure(_) => {}
-            FromSwarm::NewListener(_) => {}
-            FromSwarm::NewListenAddr(_) => {}
-            FromSwarm::ExpiredListenAddr(_) => {}
-            FromSwarm::ListenerError(_) => {}
-            FromSwarm::ListenerClosed(_) => {}
-            FromSwarm::NewExternalAddrCandidate(_) => {}
-            FromSwarm::ExternalAddrExpired(_) => {}
-            FromSwarm::ExternalAddrConfirmed(_) => {}
-        }
-    }
+    fn on_swarm_event(&mut self, _event: FromSwarm) {}
 
     fn on_connection_handler_event(
         &mut self,
@@ -284,7 +268,7 @@ mod tests {
     async fn cannot_dial_blocked_peer() {
         let mut dialer = Swarm::new_ephemeral(|_| Behaviour::<BlockedPeers>::default());
         let mut listener = Swarm::new_ephemeral(|_| Behaviour::<BlockedPeers>::default());
-        listener.listen().await;
+        listener.listen().with_memory_addr_external().await;
 
         dialer.behaviour_mut().block_peer(*listener.local_peer_id());
 
@@ -298,7 +282,7 @@ mod tests {
     async fn can_dial_unblocked_peer() {
         let mut dialer = Swarm::new_ephemeral(|_| Behaviour::<BlockedPeers>::default());
         let mut listener = Swarm::new_ephemeral(|_| Behaviour::<BlockedPeers>::default());
-        listener.listen().await;
+        listener.listen().with_memory_addr_external().await;
 
         dialer.behaviour_mut().block_peer(*listener.local_peer_id());
         dialer
@@ -312,7 +296,7 @@ mod tests {
     async fn blocked_peer_cannot_dial_us() {
         let mut dialer = Swarm::new_ephemeral(|_| Behaviour::<BlockedPeers>::default());
         let mut listener = Swarm::new_ephemeral(|_| Behaviour::<BlockedPeers>::default());
-        listener.listen().await;
+        listener.listen().with_memory_addr_external().await;
 
         listener.behaviour_mut().block_peer(*dialer.local_peer_id());
         dial(&mut dialer, &listener).unwrap();
@@ -334,7 +318,7 @@ mod tests {
     async fn connections_get_closed_upon_blocked() {
         let mut dialer = Swarm::new_ephemeral(|_| Behaviour::<BlockedPeers>::default());
         let mut listener = Swarm::new_ephemeral(|_| Behaviour::<BlockedPeers>::default());
-        listener.listen().await;
+        listener.listen().with_memory_addr_external().await;
         dialer.connect(&mut listener).await;
 
         dialer.behaviour_mut().block_peer(*listener.local_peer_id());
@@ -360,7 +344,7 @@ mod tests {
     async fn cannot_dial_peer_unless_allowed() {
         let mut dialer = Swarm::new_ephemeral(|_| Behaviour::<AllowedPeers>::default());
         let mut listener = Swarm::new_ephemeral(|_| Behaviour::<AllowedPeers>::default());
-        listener.listen().await;
+        listener.listen().with_memory_addr_external().await;
 
         let DialError::Denied { cause } = dial(&mut dialer, &listener).unwrap_err() else {
             panic!("unexpected dial error")
@@ -375,7 +359,7 @@ mod tests {
     async fn cannot_dial_disallowed_peer() {
         let mut dialer = Swarm::new_ephemeral(|_| Behaviour::<AllowedPeers>::default());
         let mut listener = Swarm::new_ephemeral(|_| Behaviour::<AllowedPeers>::default());
-        listener.listen().await;
+        listener.listen().with_memory_addr_external().await;
 
         dialer.behaviour_mut().allow_peer(*listener.local_peer_id());
         dialer
@@ -392,7 +376,7 @@ mod tests {
     async fn not_allowed_peer_cannot_dial_us() {
         let mut dialer = Swarm::new_ephemeral(|_| Behaviour::<AllowedPeers>::default());
         let mut listener = Swarm::new_ephemeral(|_| Behaviour::<AllowedPeers>::default());
-        listener.listen().await;
+        listener.listen().with_memory_addr_external().await;
 
         dialer
             .dial(
@@ -429,7 +413,7 @@ mod tests {
     async fn connections_get_closed_upon_disallow() {
         let mut dialer = Swarm::new_ephemeral(|_| Behaviour::<AllowedPeers>::default());
         let mut listener = Swarm::new_ephemeral(|_| Behaviour::<AllowedPeers>::default());
-        listener.listen().await;
+        listener.listen().with_memory_addr_external().await;
         dialer.behaviour_mut().allow_peer(*listener.local_peer_id());
         listener.behaviour_mut().allow_peer(*dialer.local_peer_id());
 
