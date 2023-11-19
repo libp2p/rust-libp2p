@@ -231,7 +231,7 @@ where
     type Error = Error;
     type Future = BoxFuture<'static, Result<(PeerId, Self::Output), Self::Error>>;
 
-    fn secure_inbound(self, socket: T, _: Self::Info, _: Option<PeerId>) -> Self::Future {
+    fn secure_inbound(self, socket: T, _: Self::Info) -> Self::Future {
         async move {
             let mut state = self.into_responder(socket)?;
 

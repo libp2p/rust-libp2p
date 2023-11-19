@@ -131,7 +131,7 @@ where
     type Error = UpgradeError;
     type Future = BoxFuture<'static, Result<(PeerId, Self::Output), Self::Error>>;
 
-    fn secure_inbound(self, socket: C, _: Self::Info, _: Option<PeerId>) -> Self::Future {
+    fn secure_inbound(self, socket: C, _: Self::Info) -> Self::Future {
         async move {
             let stream = futures_rustls::TlsAcceptor::from(Arc::new(self.server))
                 .accept(socket)

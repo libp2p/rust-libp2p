@@ -90,7 +90,7 @@ where
                 let (info, stream) =
                     multistream_select::listener_select_proto(conn, up.protocol_info()).await?;
                 let name = info.as_ref().to_owned();
-                match up.secure_inbound(stream, info, None).await {
+                match up.secure_inbound(stream, info).await {
                     Ok(x) => {
                         tracing::trace!(up=%name, "Secured inbound stream");
                         Ok(x)
