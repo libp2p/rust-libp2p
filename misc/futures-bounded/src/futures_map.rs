@@ -1,9 +1,9 @@
 use std::future::Future;
 use std::hash::Hash;
-use std::mem;
 use std::pin::Pin;
 use std::task::{Context, Poll, Waker};
 use std::time::Duration;
+use std::{future, mem};
 
 use futures_timer::Delay;
 use futures_util::future::BoxFuture;
@@ -38,6 +38,7 @@ impl<ID, O> FuturesMap<ID, O> {
 impl<ID, O> FuturesMap<ID, O>
 where
     ID: Clone + Hash + Eq + Send + Unpin + 'static,
+    O: 'static,
 {
     /// Push a future into the map.
     ///
@@ -58,30 +59,28 @@ where
             waker.wake();
         }
 
-        match self.inner.iter_mut().find(|tagged| tagged.tag == future_id) {
-            None => {
-                self.inner.push(TaggedFuture {
-                    tag: future_id,
-                    inner: TimeoutFuture {
-                        inner: future.boxed(),
-                        timeout: Delay::new(self.timeout),
-                    },
-                });
-
-                Ok(())
-            }
-            Some(existing) => {
-                let old_future = mem::replace(
-                    &mut existing.inner,
-                    TimeoutFuture {
-                        inner: future.boxed(),
-                        timeout: Delay::new(self.timeout),
-                    },
-                );
-
-                Err(PushError::Replaced(old_future.inner))
-            }
+        let old = self.remove(future_id.clone());
+        self.inner.push(TaggedFuture {
+            tag: future_id,
+            inner: TimeoutFuture {
+                inner: future.boxed(),
+                timeout: Delay::new(self.timeout),
+                cancelled: false,
+            },
+        });
+        match old {
+            None => Ok(()),
+            Some(old) => Err(PushError::Replaced(old)),
         }
+    }
+
+    pub fn remove(&mut self, id: ID) -> Option<BoxFuture<'static, O>> {
+        let tagged = self.inner.iter_mut().find(|s| s.tag == id)?;
+
+        let inner = mem::replace(&mut tagged.inner.inner, future::pending().boxed());
+        tagged.inner.cancelled = true;
+
+        Some(inner)
     }
 
     pub fn len(&self) -> usize {
@@ -104,15 +103,20 @@ where
     }
 
     pub fn poll_unpin(&mut self, cx: &mut Context<'_>) -> Poll<(ID, Result<O, Timeout>)> {
-        let maybe_result = futures_util::ready!(self.inner.poll_next_unpin(cx));
+        loop {
+            let maybe_result = futures_util::ready!(self.inner.poll_next_unpin(cx));
 
-        match maybe_result {
-            None => {
-                self.empty_waker = Some(cx.waker().clone());
-                Poll::Pending
+            match maybe_result {
+                None => {
+                    self.empty_waker = Some(cx.waker().clone());
+                    return Poll::Pending;
+                }
+                Some((id, Ok(output))) => return Poll::Ready((id, Ok(output))),
+                Some((id, Err(TimeoutError::Timeout))) => {
+                    return Poll::Ready((id, Err(Timeout::new(self.timeout))))
+                }
+                Some((_, Err(TimeoutError::Cancelled))) => continue,
             }
-            Some((id, Ok(output))) => Poll::Ready((id, Ok(output))),
-            Some((id, Err(_timeout))) => Poll::Ready((id, Err(Timeout::new(self.timeout)))),
         }
     }
 }
@@ -120,21 +124,32 @@ where
 struct TimeoutFuture<F> {
     inner: F,
     timeout: Delay,
+
+    cancelled: bool,
 }
 
 impl<F> Future for TimeoutFuture<F>
 where
     F: Future + Unpin,
 {
-    type Output = Result<F::Output, ()>;
+    type Output = Result<F::Output, TimeoutError>;
 
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        if self.cancelled {
+            return Poll::Ready(Err(TimeoutError::Cancelled));
+        }
+
         if self.timeout.poll_unpin(cx).is_ready() {
-            return Poll::Ready(Err(()));
+            return Poll::Ready(Err(TimeoutError::Timeout));
         }
 
         self.inner.poll_unpin(cx).map(Ok)
     }
+}
+
+enum TimeoutError {
+    Timeout,
+    Cancelled,
 }
 
 struct TaggedFuture<T, F> {
@@ -158,6 +173,8 @@ where
 
 #[cfg(test)]
 mod tests {
+    use futures::channel::oneshot;
+    use futures_util::task::noop_waker_ref;
     use std::future::{pending, poll_fn, ready};
     use std::pin::Pin;
     use std::time::Instant;
@@ -195,6 +212,45 @@ mod tests {
         let (_, result) = poll_fn(|cx| futures.poll_unpin(cx)).await;
 
         assert!(result.is_err())
+    }
+
+    #[test]
+    fn resources_of_removed_future_are_cleaned_up() {
+        let mut futures = FuturesMap::new(Duration::from_millis(100), 1);
+
+        let _ = futures.try_push("ID", pending::<()>());
+        futures.remove("ID");
+
+        let poll = futures.poll_unpin(&mut Context::from_waker(noop_waker_ref()));
+        assert!(poll.is_pending());
+
+        assert_eq!(futures.len(), 0);
+    }
+
+    #[tokio::test]
+    async fn replaced_pending_future_is_polled() {
+        let mut streams = FuturesMap::new(Duration::from_millis(100), 3);
+
+        let (_tx1, rx1) = oneshot::channel();
+        let (tx2, rx2) = oneshot::channel();
+
+        let _ = streams.try_push("ID1", rx1);
+        let _ = streams.try_push("ID2", rx2);
+
+        let _ = tx2.send(2);
+        let (id, res) = poll_fn(|cx| streams.poll_unpin(cx)).await;
+        assert_eq!(id, "ID2");
+        assert_eq!(res.unwrap().unwrap(), 2);
+
+        let (new_tx1, new_rx1) = oneshot::channel();
+        let replaced = streams.try_push("ID1", new_rx1);
+        assert!(matches!(replaced.unwrap_err(), PushError::Replaced(_)));
+
+        let _ = new_tx1.send(4);
+        let (id, res) = poll_fn(|cx| streams.poll_unpin(cx)).await;
+
+        assert_eq!(id, "ID1");
+        assert_eq!(res.unwrap().unwrap(), 4);
     }
 
     // Each future causes a delay, `Task` only has a capacity of 1, meaning they must be processed in sequence.
