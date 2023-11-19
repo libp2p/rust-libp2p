@@ -1,7 +1,7 @@
 ## 0.17.1
 
 - Automatically register relayed addresses as external addresses.
-  See [PR 4809](https://github.com/libp2p/rust-libp2p/pulls/4809).
+  See [PR 4809](https://github.com/libp2p/rust-libp2p/pull/4809).
 - Fix an error where performing too many reservations at once could lead to inconsistent internal state.
   See [PR 4841](https://github.com/libp2p/rust-libp2p/pull/4841).
 
@@ -14,7 +14,7 @@
 
   See [PR 4718](https://github.com/libp2p/rust-libp2p/pull/4718).
 - Fix a rare race condition when making a reservation on a relay that could lead to a failed reservation.
-  See [PR 4747](https://github.com/libp2p/rust-libp2p/pulls/4747).
+  See [PR 4747](https://github.com/libp2p/rust-libp2p/pull/4747).
 - Propagate errors of relay client to the listener / dialer.
   A failed reservation will now appear as `SwarmEvent::ListenerClosed` with the `ListenerId` of the corresponding `Swarm::listen_on` call.
   A failed circuit request will now appear as `SwarmEvent::OutgoingConnectionError` with the `ConnectionId` of the corresponding `Swarm::dial` call.
@@ -25,7 +25,7 @@
   - `relay::client::Event::InboundCircuitReqDenied`
   - `relay::client::Event::InboundCircuitReqDenyFailed`
 
-  See [PR 4745](https://github.com/libp2p/rust-libp2p/pulls/4745).
+  See [PR 4745](https://github.com/libp2p/rust-libp2p/pull/4745).
 
 ## 0.16.2
 
