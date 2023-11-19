@@ -15,10 +15,6 @@ pub(crate) const REQUEST_UPGRADE: ReadyUpgrade<StreamProtocol> =
 pub(crate) const DIAL_BACK_UPGRADE: ReadyUpgrade<StreamProtocol> =
     ReadyUpgrade::new(DIAL_BACK_PROTOCOL_NAME);
 
-pub(crate) use request_response::DATA_FIELD_LEN_UPPER_BOUND;
-pub(crate) use request_response::DATA_LEN_LOWER_BOUND;
-pub(crate) use request_response::DATA_LEN_UPPER_BOUND;
-
 pub fn add(left: usize, right: usize) -> usize {
     left + right
 }

@@ -5,8 +5,7 @@
 //!
 //! Unstable tracking issue: [#27709](https://github.com/rust-lang/rust/issues/27709)
 
-
-use std::net::{Ipv4Addr, Ipv6Addr, IpAddr};
+use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
 
 pub trait Ipv4Ext {
     /// Returns [`true`] if this address is reserved by IANA for future use. [IETF RFC 1112]

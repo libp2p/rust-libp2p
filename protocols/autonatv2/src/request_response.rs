@@ -7,7 +7,6 @@ use asynchronous_codec::{FramedRead, FramedWrite};
 use futures::{AsyncRead, AsyncWrite, SinkExt, StreamExt};
 use libp2p_core::Multiaddr;
 
-use quick_protobuf::{BytesReader, MessageRead, MessageWrite, Writer};
 use quick_protobuf_codec::Codec;
 use rand::Rng;
 

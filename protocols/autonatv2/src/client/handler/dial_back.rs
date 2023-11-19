@@ -16,14 +16,14 @@ use crate::request_response::DialBack;
 
 use super::DEFAULT_TIMEOUT;
 
-pub type ToBehaviour = Result<u64, Either<io::Error, Timeout>>;
+pub(crate) type ToBehaviour = Result<u64, Either<io::Error, Timeout>>;
 
-pub struct Handler {
+pub(crate) struct Handler {
     inbound: FuturesSet<io::Result<u64>>,
 }
 
 impl Handler {
-    pub fn new() -> Self {
+    pub(crate) fn new() -> Self {
         Self {
             inbound: FuturesSet::new(DEFAULT_TIMEOUT, 2),
         }

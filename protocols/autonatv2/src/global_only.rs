@@ -1,6 +1,6 @@
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
 
-pub trait Ipv4Ext {
+pub(crate) trait Ipv4Ext {
     /// Returns [`true`] if this address is reserved by IANA for future use. [IETF RFC 1112]
     /// defines the block of reserved addresses as `240.0.0.0/4`. This range normally includes the
     /// broadcast address `255.255.255.255`, but this implementation explicitly excludes it, since
@@ -67,7 +67,7 @@ impl Ipv4Ext for Ipv4Addr {
     }
 }
 
-pub trait Ipv6Ext {
+pub(crate) trait Ipv6Ext {
     /// Returns `true` if the address is a unicast address with link-local scope,
     /// as defined in [RFC 4291].
     ///
@@ -129,7 +129,7 @@ impl Ipv6Ext for Ipv6Addr {
     }
 }
 
-pub trait IpExt {
+pub(crate) trait IpExt {
     /// Returns [`true`] if the address appears to be globally routable.
     ///
     /// See the documentation for [`Ipv4Addr::is_global()`] and Ipv6Addr::is_global() for more details.

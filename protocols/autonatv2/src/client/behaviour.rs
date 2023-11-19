@@ -1,10 +1,10 @@
 use std::{
-    collections::{BTreeMap, HashMap, HashSet, VecDeque},
+    collections::{HashMap, HashSet, VecDeque},
     task::{Context, Poll},
 };
 
 use either::Either;
-use libp2p_core::{multiaddr::Protocol, transport::PortUse, ConnectedPoint, Endpoint, Multiaddr};
+use libp2p_core::{multiaddr::Protocol, transport::PortUse, Endpoint, Multiaddr};
 use libp2p_identity::PeerId;
 use libp2p_swarm::{
     behaviour::ConnectionEstablished,
@@ -21,11 +21,11 @@ use super::handler::{
     new_handler, Handler, RequestError, RequestFromBehaviour, RequestToBehaviour, TestEnd,
 };
 
-pub struct Config {
-    pub test_server_count: usize,
+pub(crate) struct Config {
+    pub(crate) test_server_count: usize,
 }
 
-pub struct Behaviour<R>
+pub(crate) struct Behaviour<R>
 where
     R: RngCore + 'static,
 {

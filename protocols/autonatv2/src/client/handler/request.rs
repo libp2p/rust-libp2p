@@ -1,18 +1,13 @@
-use asynchronous_codec::FramedWrite;
-use futures::{
-    channel::mpsc, pin_mut, select, AsyncRead, AsyncWrite, FutureExt, SinkExt, StreamExt,
-};
-use futures_bounded::{FuturesSet, Timeout};
+use futures::{AsyncRead, AsyncWrite};
+use futures_bounded::FuturesSet;
 use libp2p_core::{
     upgrade::{DeniedUpgrade, ReadyUpgrade},
     Multiaddr,
 };
-use libp2p_identity::PeerId;
+
 use libp2p_swarm::{
-    handler::{
-        ConnectionEvent, DialUpgradeError, FullyNegotiatedOutbound, ProtocolsAdded, ProtocolsChange,
-    },
-    AddressChange, ConnectionHandler, ConnectionHandlerEvent, StreamProtocol, SubstreamProtocol,
+    handler::{ConnectionEvent, DialUpgradeError, FullyNegotiatedOutbound, ProtocolsChange},
+    ConnectionHandler, ConnectionHandlerEvent, StreamProtocol, SubstreamProtocol,
 };
 use scc::hash_cache::DEFAULT_MAXIMUM_CAPACITY;
 use std::{
@@ -20,12 +15,10 @@ use std::{
     convert::identity,
     io,
     iter::{once, repeat},
-    pin::Pin,
     task::{Context, Poll},
 };
 
 use crate::{
-    add,
     generated::structs::{mod_DialResponse::ResponseStatus, DialStatus},
     request_response::{
         DialDataRequest, DialDataResponse, DialRequest, DialResponse, Request, Response,
@@ -37,7 +30,7 @@ use crate::{
 use super::DEFAULT_TIMEOUT;
 
 #[derive(Debug, thiserror::Error)]
-pub enum Error {
+pub(crate) enum Error {
     #[error("io error")]
     Io(#[from] io::Error),
     #[error("invalid referenced address index: {index} (max number of addr: {max})")]
@@ -62,26 +55,25 @@ pub enum Error {
     FailureDuringDialBack { addr: Option<Multiaddr> },
 }
 
-
 #[derive(Debug)]
-pub struct TestEnd {
-    pub dial_request: DialRequest,
-    pub suspicious_addr: Vec<Multiaddr>,
-    pub reachable_addr: Multiaddr,
+pub(crate) struct TestEnd {
+    pub(crate) dial_request: DialRequest,
+    pub(crate) suspicious_addr: Vec<Multiaddr>,
+    pub(crate) reachable_addr: Multiaddr,
 }
 
 #[derive(Debug)]
-pub enum ToBehaviour {
+pub(crate) enum ToBehaviour {
     TestCompleted(Result<TestEnd, Error>),
     PeerHasServerSupport,
 }
 
 #[derive(Debug)]
-pub enum FromBehaviour {
+pub(crate) enum FromBehaviour {
     PerformRequest(DialRequest),
 }
 
-pub struct Handler {
+pub(crate) struct Handler {
     queued_events: VecDeque<
         ConnectionHandlerEvent<
             <Self as ConnectionHandler>::OutboundProtocol,
@@ -94,7 +86,7 @@ pub struct Handler {
 }
 
 impl Handler {
-    pub fn new() -> Self {
+    pub(crate) fn new() -> Self {
         Self {
             queued_events: VecDeque::new(),
             outbound: FuturesSet::new(DEFAULT_TIMEOUT, DEFAULT_MAXIMUM_CAPACITY),
