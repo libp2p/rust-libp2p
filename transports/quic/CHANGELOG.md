@@ -1,3 +1,8 @@
+## 0.10.2 - unreleased
+
+- Fix address translation.
+  See [PR 4896](https://github.com/libp2p/rust-libp2p/pull/4896).
+
 ## 0.10.1
 
 - Allow disabling path MTU discovery.

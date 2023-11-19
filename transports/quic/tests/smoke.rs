@@ -19,6 +19,7 @@ use quic::Provider;
 use rand::RngCore;
 use std::future::Future;
 use std::io;
+use std::net::Ipv4Addr;
 use std::num::NonZeroU8;
 use std::task::Poll;
 use std::time::Duration;
@@ -234,6 +235,57 @@ fn new_tcp_quic_transport() -> (PeerId, Boxed<(PeerId, StreamMuxerBox)>) {
         .boxed();
 
     (peer_id, transport)
+}
+
+#[cfg(feature = "async-std")]
+#[test]
+fn test_address_translation_async_std() {
+    test_address_translation::<quic::async_std::Provider>()
+}
+
+#[cfg(feature = "tokio")]
+#[test]
+fn test_address_translation_tokio() {
+    test_address_translation::<quic::tokio::Provider>()
+}
+
+fn test_address_translation<T>()
+where
+    T: Provider,
+{
+    let (_peer_id, transport) = create_default_transport::<T>();
+
+    let port = 42;
+    let quic_listen_addr = Multiaddr::empty()
+        .with(Protocol::Ip4(Ipv4Addr::new(127, 0, 0, 1)))
+        .with(Protocol::Udp(port))
+        .with(Protocol::QuicV1);
+    let observed_ip = Ipv4Addr::new(123, 45, 67, 8);
+    let quic_observed_addr = Multiaddr::empty()
+        .with(Protocol::Ip4(observed_ip))
+        .with(Protocol::Udp(1))
+        .with(Protocol::QuicV1)
+        .with(Protocol::P2p(PeerId::random()));
+
+    let translated = transport
+        .address_translation(&quic_listen_addr, &quic_observed_addr)
+        .unwrap();
+    let mut iter = translated.iter();
+    assert_eq!(iter.next(), Some(Protocol::Ip4(observed_ip)));
+    assert_eq!(iter.next(), Some(Protocol::Udp(port)));
+    assert_eq!(iter.next(), Some(Protocol::QuicV1));
+    assert_eq!(iter.next(), None);
+
+    let tcp_addr = Multiaddr::empty()
+        .with(Protocol::Ip4(Ipv4Addr::new(87, 65, 43, 21)))
+        .with(Protocol::Tcp(1));
+
+    assert!(transport
+        .address_translation(&quic_listen_addr, &tcp_addr)
+        .is_none());
+    assert!(transport
+        .address_translation(&tcp_addr, &quic_observed_addr)
+        .is_none());
 }
 
 #[cfg(feature = "async-std")]
