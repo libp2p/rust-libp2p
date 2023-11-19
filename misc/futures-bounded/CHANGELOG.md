@@ -1,4 +1,4 @@
-## 0.2.3 - unreleased
+## 0.2.3
 
 - Introduce `FuturesTupleSet`, holding tuples of a `Future` together with an arbitrary piece of data.
   See [PR 4841](https://github.com/libp2p/rust-lib2pp/pulls/4841).
