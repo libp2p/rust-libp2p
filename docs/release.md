@@ -17,21 +17,18 @@ Non-breaking changes are typically merged very quickly and often released as pat
 
 Every crate that we publish on `crates.io` has a `CHANGELOG.md` file.
 Substantial PRs should add an entry to each crate they modify.
-The next unreleased version is tagged with ` - unreleased`, for example: `0.17.0 - unreleased`.
+We have a CI check[^1] that enforces adding a changelog entry if you modify code in a particular crate.
+In case the current version is already released (we also check that in CI), you'll have to add a new header at the top.
+For example, the top-listed version might be `0.17.3` but it is already released.
+In that case, add a new heading `## 0.17.4` with your changelog entry in case it is a non-breaking change.
 
-In case there isn't a version with an ` - unreleased` postfix yet, add one for the next version.
-The next version number depends on the impact of your change (breaking vs non-breaking, see above).
-
-If you are making a non-breaking change, please also bump the version number:
-
-- in the `Cargo.toml` manifest of the respective crate
-- in the `[workspace.dependencies]` section of the workspace `Cargo.toml` manifest
-
-For breaking changes, a changelog entry itself is sufficient.
-Bumping the version in the `Cargo.toml` file would lead to many merge conflicts once we decide to merge them.
-Hence, we are going to bump those versions once we work through the milestone that collects the breaking changes.
+The version in the crate's `Cargo.toml` and the top-most version in the `CHANGELOG.md` file always have to be in sync.
+Additionally, we also enforce that all crates always depend on the latest version of other workspace-crates through workspace inheritance.
+As a consequence, you'll also have to bump the version in `[workspace.dependencies]` in the workspace `Cargo.toml` manifest.
 
 ## Releasing one or more crates
+
+The above changelog-management strategy means `master` is always in a state where we can make a release.
 
 ### Prerequisites
 
@@ -39,21 +36,15 @@ Hence, we are going to bump those versions once we work through the milestone th
 
 ### Steps
 
-1. Remove the ` - unreleased` tag for each crate to be released in the respective `CHANGELOG.md`.
-  Create a pull request with the changes against the rust-libp2p `master` branch.
-
-2. Once merged, run the two commands below on the (squash-) merged commit on the `master` branch.
+1. Run the two commands below on the (squash-) merged commit on the `master` branch.
 
     1. `cargo release publish --execute`
 
     2. `cargo release tag --sign-tag --execute`
 
-3. Confirm that `cargo release` tagged the commit correctly via `git push
-   $YOUR_ORIGIN --tag --dry-run` and then push the new tags via `git push
-   $YOUR_ORIGIN --tag`. Make sure not to push unrelated git tags.
-
-   Note that dropping the `--no-push` flag on `cargo release` might as well do
-   the trick.
+2. Confirm that `cargo release` tagged the commit correctly via `git push $YOUR_ORIGIN --tag --dry-run`
+   Push the new tags via `git push $YOUR_ORIGIN --tag`.
+   Make sure not to push unrelated git tags.
 
 ## Patch release
 
@@ -77,3 +68,5 @@ To avoid accidential breaking changes for our users, we employ the following con
   Example: `0.1.0-alpha` to `0.2.0-alpha`.
 - For a non-breaking change in a crate with an alpha release, bump or append number to the "alpha" tag.
   Example: `0.1.0-alpha` to `0.1.0-alpha.1`.
+
+[^1]: See [ci.yml](../.github/workflows/ci.yml) and look for "Ensure manifest and CHANGELOG are properly updated".
