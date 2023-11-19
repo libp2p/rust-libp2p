@@ -25,6 +25,7 @@ thiserror = "1.0.50"
 scc = "2.0.3"
 bytes = "1"
 static_assertions = "1.1.0"
+tracing = "0.1.40"
 
 [lints]
 workspace = true

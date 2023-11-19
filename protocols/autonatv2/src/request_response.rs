@@ -5,10 +5,7 @@ use std::{borrow::Cow, io};
 use asynchronous_codec::{FramedRead, FramedWrite};
 
 use futures::{AsyncRead, AsyncWrite, SinkExt, StreamExt};
-use libp2p_core::{
-    upgrade::{read_length_prefixed, write_length_prefixed},
-    Multiaddr,
-};
+use libp2p_core::Multiaddr;
 
 use quick_protobuf::{BytesReader, MessageRead, MessageWrite, Writer};
 use quick_protobuf_codec::Codec;

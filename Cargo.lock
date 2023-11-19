@@ -2536,6 +2536,7 @@ dependencies = [
  "scc",
  "static_assertions",
  "thiserror",
+ "tracing",
  "void",
 ]
 

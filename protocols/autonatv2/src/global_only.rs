@@ -1,12 +1,4 @@
-//! This crate provides extension traits for [`Ipv4Addr`], [`Ipv6Addr`] and [`IpAddr`] that provide methods
-//! to check if an address is reserved for special use.
-//!
-//! This is primarily a polyfill for `ip` feature, which is currently unstable.
-//!
-//! Unstable tracking issue: [#27709](https://github.com/rust-lang/rust/issues/27709)
-
-
-use std::net::{Ipv4Addr, Ipv6Addr, IpAddr};
+use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
 
 pub trait Ipv4Ext {
     /// Returns [`true`] if this address is reserved by IANA for future use. [IETF RFC 1112]
