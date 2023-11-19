@@ -131,8 +131,8 @@ where
     /// ## Alternative state
     ///
     /// This function is an alternative code path to [`Builder::authenticate`]
-    /// given the supplied upgrade implements `SecurityUpgrade` instead of
-    /// `InboundConnectionUpgrade`/`OutboundConnectionUpgrade`.
+    /// given the supplied upgrade implements `InboundConnectionUpgrade`/`OutboundSecurityUpgrade`
+    /// instead of `InboundConnectionUpgrade`/`OutboundConnectionUpgrade`.
     #[doc(hidden)]
     pub fn authenticate2<C, D, U, E>(
         self,
