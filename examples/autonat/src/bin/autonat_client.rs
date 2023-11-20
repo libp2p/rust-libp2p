@@ -91,10 +91,9 @@ struct Behaviour {
 impl Behaviour {
     fn new(local_public_key: identity::PublicKey) -> Self {
         Self {
-            identify: identify::Behaviour::new(identify::Config::new(
-                "/ipfs/0.1.0".into(),
-                local_public_key.clone(),
-            )),
+            identify: identify::Behaviour::new(
+                identify::Config::new("/ipfs/0.1.0".into(), local_public_key.clone())
+            ),
             auto_nat: autonat::Behaviour::new(
                 local_public_key.to_peer_id(),
                 autonat::Config {

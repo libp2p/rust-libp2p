@@ -58,11 +58,12 @@ fn build_node() -> (Multiaddr, TestSwarm) {
 fn build_node_with_config(cfg: Config) -> (Multiaddr, TestSwarm) {
     let local_key = identity::Keypair::generate_ed25519();
     let local_public_key = local_key.public();
-    let transport = MemoryTransport::default()
-        .upgrade(upgrade::Version::V1)
-        .authenticate(noise::Config::new(&local_key).unwrap())
-        .multiplex(yamux::Config::default())
-        .boxed();
+    let transport =
+        MemoryTransport::default()
+            .upgrade(upgrade::Version::V1)
+            .authenticate(noise::Config::new(&local_key).unwrap())
+            .multiplex(yamux::Config::default())
+            .boxed();
 
     let local_id = local_public_key.to_peer_id();
     let store = MemoryStore::new(local_id);
@@ -1243,15 +1244,16 @@ fn manual_bucket_inserts() {
     // 1 -> 2 -> [3 -> ...]
     let mut swarms = build_connected_nodes_with_config(3, 1, cfg);
     // The peers and their addresses for which we expect `RoutablePeer` events.
-    let mut expected = swarms
-        .iter()
-        .skip(2)
-        .map(|(a, s)| {
-            let pid = *Swarm::local_peer_id(s);
-            let addr = a.clone().with(Protocol::P2p(pid));
-            (addr, pid)
-        })
-        .collect::<HashMap<_, _>>();
+    let mut expected =
+        swarms
+            .iter()
+            .skip(2)
+            .map(|(a, s)| {
+                let pid = *Swarm::local_peer_id(s);
+                let addr = a.clone().with(Protocol::P2p(pid));
+                (addr, pid)
+            })
+            .collect::<HashMap<_, _>>();
     // We collect the peers for which a `RoutablePeer` event
     // was received in here to check at the end of the test
     // that none of them was inserted into a bucket.
@@ -1265,10 +1267,9 @@ fn manual_bucket_inserts() {
         for (_, swarm) in swarms.iter_mut() {
             loop {
                 match swarm.poll_next_unpin(ctx) {
-                    Poll::Ready(Some(SwarmEvent::Behaviour(Event::RoutablePeer {
-                        peer,
-                        address,
-                    }))) => {
+                    Poll::Ready(
+                        Some(SwarmEvent::Behaviour(Event::RoutablePeer { peer, address }))
+                    ) => {
                         assert_eq!(peer, expected.remove(&address).expect("Missing address"));
                         routable.push(peer);
                         if expected.is_empty() {
@@ -1405,10 +1406,9 @@ fn get_providers_single() {
                         ..
                     }) if id == query_id => {
                         if index.last {
-                            assert!(matches!(
-                                ok,
-                                GetProvidersOk::FinishedWithNoAdditionalRecord { .. }
-                            ));
+                            assert!(
+                                matches!(ok, GetProvidersOk::FinishedWithNoAdditionalRecord { .. })
+                            );
                             break;
                         } else {
                             assert!(matches!(ok, GetProvidersOk::FoundProviders { .. }));

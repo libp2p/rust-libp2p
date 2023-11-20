@@ -49,23 +49,24 @@ async fn main() -> anyhow::Result<()> {
 
     swarm.listen_on(address_webrtc.clone())?;
 
-    let address = loop {
-        if let SwarmEvent::NewListenAddr { address, .. } = swarm.select_next_some().await {
-            if address
-                .iter()
-                .any(|e| e == Protocol::Ip4(Ipv4Addr::LOCALHOST))
-            {
-                tracing::debug!(
-                    "Ignoring localhost address to make sure the example works in Firefox"
-                );
-                continue;
+    let address =
+        loop {
+            if let SwarmEvent::NewListenAddr { address, .. } = swarm.select_next_some().await {
+                if address
+                    .iter()
+                    .any(|e| e == Protocol::Ip4(Ipv4Addr::LOCALHOST))
+                {
+                    tracing::debug!(
+                        "Ignoring localhost address to make sure the example works in Firefox"
+                    );
+                    continue;
+                }
+
+                tracing::info!(%address, "Listening");
+
+                break address;
             }
-
-            tracing::info!(%address, "Listening");
-
-            break address;
-        }
-    };
+        };
 
     let addr = address.with(Protocol::P2p(*swarm.local_peer_id()));
 

@@ -244,9 +244,9 @@ impl<'a> AsClient<'a> {
     // Select a random server for the probe.
     fn random_server(&mut self) -> Option<PeerId> {
         // Update list of throttled servers.
-        let i = self.throttled_servers.partition_point(|(_, time)| {
-            *time + self.config.throttle_server_period < Instant::now()
-        });
+        let i = self.throttled_servers.partition_point(
+            |(_, time)| *time + self.config.throttle_server_period < Instant::now()
+        );
         self.throttled_servers.drain(..i);
 
         let mut servers: Vec<&PeerId> = self.servers.iter().collect();
@@ -281,13 +281,14 @@ impl<'a> AsClient<'a> {
 
         let server = self.random_server().ok_or(OutboundProbeError::NoServer)?;
 
-        let request_id = self.inner.send_request(
-            &server,
-            DialRequest {
-                peer_id: self.local_peer_id,
-                addresses,
-            },
-        );
+        let request_id =
+            self.inner.send_request(
+                &server,
+                DialRequest {
+                    peer_id: self.local_peer_id,
+                    addresses,
+                },
+            );
         self.throttled_servers.push((server, Instant::now()));
         tracing::debug!(peer=%server, "Send dial-back request to peer");
         self.ongoing_outbound.insert(request_id, probe_id);

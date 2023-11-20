@@ -110,10 +110,9 @@ fn build_relay() -> Swarm<Relay> {
                     ..Default::default()
                 },
             ),
-            identify: identify::Behaviour::new(identify::Config::new(
-                "/relay".to_owned(),
-                identity.public(),
-            )),
+            identify: identify::Behaviour::new(
+                identify::Config::new("/relay".to_owned(), identity.public())
+            ),
         }
     })
 }
@@ -144,10 +143,9 @@ fn build_client() -> Swarm<Client> {
         Client {
             relay: behaviour,
             dcutr: dcutr::Behaviour::new(local_peer_id),
-            identify: identify::Behaviour::new(identify::Config::new(
-                "/client".to_owned(),
-                local_key.public(),
-            )),
+            identify: identify::Behaviour::new(
+                identify::Config::new("/client".to_owned(), local_key.public())
+            ),
         },
         local_peer_id,
         Config::with_async_std_executor(),

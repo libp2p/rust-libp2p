@@ -37,17 +37,18 @@ async fn can_establish_connection() {
             };
         }
     };
-    let await_outbound_connection = async {
-        loop {
-            match swarm2.next().await.unwrap() {
-                SwarmEvent::ConnectionEstablished { peer_id, .. } => break peer_id,
-                SwarmEvent::OutgoingConnectionError { error, .. } => {
-                    panic!("Failed to dial: {error}")
-                }
-                _ => continue,
-            };
-        }
-    };
+    let await_outbound_connection =
+        async {
+            loop {
+                match swarm2.next().await.unwrap() {
+                    SwarmEvent::ConnectionEstablished { peer_id, .. } => break peer_id,
+                    SwarmEvent::OutgoingConnectionError { error, .. } => {
+                        panic!("Failed to dial: {error}")
+                    }
+                    _ => continue,
+                };
+            }
+        };
 
     let (inbound_peer_id, outbound_peer_id) =
         future::join(await_inbound_connection, await_outbound_connection).await;

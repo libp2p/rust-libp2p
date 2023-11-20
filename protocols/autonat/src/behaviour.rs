@@ -328,12 +328,13 @@ impl Behaviour {
     ) {
         let connections = self.connected.entry(peer).or_default();
         let addr = endpoint.get_remote_address();
-        let observed_addr =
-            if !endpoint.is_relayed() && (!self.config.only_global_ips || addr.is_global_ip()) {
-                Some(addr.clone())
-            } else {
-                None
-            };
+        let observed_addr = if !endpoint.is_relayed()
+            && (!self.config.only_global_ips || addr.is_global_ip())
+        {
+            Some(addr.clone())
+        } else {
+            None
+        };
         connections.insert(conn, observed_addr);
 
         match endpoint {
@@ -420,12 +421,13 @@ impl Behaviour {
         }
         let connections = self.connected.get_mut(&peer).expect("Peer is connected.");
         let addr = new.get_remote_address();
-        let observed_addr =
-            if !new.is_relayed() && (!self.config.only_global_ips || addr.is_global_ip()) {
-                Some(addr.clone())
-            } else {
-                None
-            };
+        let observed_addr = if !new.is_relayed()
+            && (!self.config.only_global_ips || addr.is_global_ip())
+        {
+            Some(addr.clone())
+        } else {
+            None
+        };
         connections.insert(conn, observed_addr);
     }
 }
@@ -563,11 +565,9 @@ impl NetworkBehaviour for Behaviour {
                 self.as_client().on_new_address();
             }
             FromSwarm::ExpiredListenAddr(ExpiredListenAddr { listener_id, addr }) => {
-                self.inner
-                    .on_swarm_event(FromSwarm::ExpiredListenAddr(ExpiredListenAddr {
-                        listener_id,
-                        addr,
-                    }));
+                self.inner.on_swarm_event(
+                    FromSwarm::ExpiredListenAddr(ExpiredListenAddr { listener_id, addr })
+                );
                 self.as_client().on_expired_address(addr);
             }
             FromSwarm::ExternalAddrExpired(ExternalAddrExpired { addr }) => {
@@ -576,10 +576,9 @@ impl NetworkBehaviour for Behaviour {
                 self.as_client().on_expired_address(addr);
             }
             FromSwarm::NewExternalAddrCandidate(NewExternalAddrCandidate { addr }) => {
-                self.inner
-                    .on_swarm_event(FromSwarm::NewExternalAddrCandidate(
-                        NewExternalAddrCandidate { addr },
-                    ));
+                self.inner.on_swarm_event(
+                    FromSwarm::NewExternalAddrCandidate(NewExternalAddrCandidate { addr })
+                );
                 self.probe_address(addr.to_owned());
             }
             listen_failure @ FromSwarm::ListenFailure(_) => {

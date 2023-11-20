@@ -86,10 +86,9 @@ impl ConnectionHandler for Handler {
         >,
     ) {
         match event {
-            ConnectionEvent::FullyNegotiatedInbound(FullyNegotiatedInbound {
-                protocol,
-                info: _,
-            }) => {
+            ConnectionEvent::FullyNegotiatedInbound(
+                FullyNegotiatedInbound { protocol, info: _ }
+            ) => {
                 if self
                     .inbound
                     .try_push(crate::protocol::receive_send(protocol).boxed())

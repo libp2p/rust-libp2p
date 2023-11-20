@@ -26,20 +26,22 @@ pub async fn run_test(
 
     let test_timeout = Duration::from_secs(test_timeout_seconds);
     let transport = transport.parse().context("Couldn't parse transport")?;
-    let sec_protocol = sec_protocol
-        .map(|sec_protocol| {
-            sec_protocol
-                .parse()
-                .context("Couldn't parse security protocol")
-        })
-        .transpose()?;
-    let muxer = muxer
-        .map(|sec_protocol| {
-            sec_protocol
-                .parse()
-                .context("Couldn't parse muxer protocol")
-        })
-        .transpose()?;
+    let sec_protocol =
+        sec_protocol
+            .map(|sec_protocol| {
+                sec_protocol
+                    .parse()
+                    .context("Couldn't parse security protocol")
+            })
+            .transpose()?;
+    let muxer =
+        muxer
+            .map(|sec_protocol| {
+                sec_protocol
+                    .parse()
+                    .context("Couldn't parse muxer protocol")
+            })
+            .transpose()?;
 
     let redis_client = RedisClient::new(redis_addr).context("Could not connect to redis")?;
 
@@ -51,11 +53,12 @@ pub async fn run_test(
 
     // See https://github.com/libp2p/rust-libp2p/issues/4071.
     #[cfg(not(target_arch = "wasm32"))]
-    let maybe_id = if transport == Transport::WebRtcDirect {
-        Some(swarm.listen_on(local_addr.parse()?)?)
-    } else {
-        None
-    };
+    let maybe_id =
+        if transport == Transport::WebRtcDirect {
+            Some(swarm.listen_on(local_addr.parse()?)?)
+        } else {
+            None
+        };
     #[cfg(target_arch = "wasm32")]
     let maybe_id = None;
 
@@ -76,16 +79,17 @@ pub async fn run_test(
             swarm.dial(other.parse::<Multiaddr>()?)?;
             tracing::info!(listener=%other, "Test instance, dialing multiaddress");
 
-            let rtt = loop {
-                if let Some(SwarmEvent::Behaviour(BehaviourEvent::Ping(ping::Event {
-                    result: Ok(rtt),
-                    ..
-                }))) = swarm.next().await
-                {
-                    tracing::info!(?rtt, "Ping successful");
-                    break rtt.as_micros() as f32 / 1000.;
-                }
-            };
+            let rtt =
+                loop {
+                    if let Some(SwarmEvent::Behaviour(BehaviourEvent::Ping(ping::Event {
+                        result: Ok(rtt),
+                        ..
+                    }))) = swarm.next().await
+                    {
+                        tracing::info!(?rtt, "Ping successful");
+                        break rtt.as_micros() as f32 / 1000.;
+                    }
+                };
 
             let handshake_plus_ping = handshake_start.elapsed().as_micros() as f32 / 1000.;
             Ok(Report {
@@ -96,10 +100,11 @@ pub async fn run_test(
         false => {
             // Listen if we haven't done so already.
             // This is a hack until https://github.com/libp2p/rust-libp2p/issues/4071 is fixed at which point we can do this unconditionally here.
-            let id = match maybe_id {
-                None => swarm.listen_on(local_addr.parse()?)?,
-                Some(id) => id,
-            };
+            let id =
+                match maybe_id {
+                    None => swarm.listen_on(local_addr.parse()?)?,
+                    Some(id) => id,
+                };
 
             tracing::info!(
                 address=%local_addr,
@@ -154,16 +159,17 @@ pub async fn run_test_wasm(
     sec_protocol: Option<String>,
     muxer: Option<String>,
 ) -> Result<(), JsValue> {
-    let result = run_test(
-        transport,
-        ip,
-        is_dialer,
-        test_timeout_secs,
-        base_url,
-        sec_protocol,
-        muxer,
-    )
-    .await;
+    let result =
+        run_test(
+            transport,
+            ip,
+            is_dialer,
+            test_timeout_secs,
+            base_url,
+            sec_protocol,
+            muxer,
+        )
+        .await;
     tracing::info!(?result, "Sending test result");
     reqwest::Client::new()
         .post(&format!("http://{}/results", base_url))
@@ -266,9 +272,8 @@ pub(crate) fn build_behaviour(key: &Keypair) -> Behaviour {
     Behaviour {
         ping: ping::Behaviour::new(ping::Config::new().with_interval(Duration::from_secs(1))),
         // Need to include identify until https://github.com/status-im/nim-libp2p/issues/924 is resolved.
-        identify: identify::Behaviour::new(identify::Config::new(
-            "/interop-tests".to_owned(),
-            key.public(),
-        )),
+        identify: identify::Behaviour::new(
+            identify::Config::new("/interop-tests".to_owned(), key.public())
+        ),
     }
 }

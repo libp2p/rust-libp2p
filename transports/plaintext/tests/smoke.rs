@@ -44,12 +44,13 @@ fn variable_msg_length() {
             let (
                 (received_client_id, mut server_channel),
                 (received_server_id, mut client_channel),
-            ) = futures::future::try_join(
-                plaintext::Config::new(&server_id).upgrade_inbound(server, ""),
-                plaintext::Config::new(&client_id).upgrade_inbound(client, ""),
-            )
-            .await
-            .unwrap();
+            ) =
+                futures::future::try_join(
+                    plaintext::Config::new(&server_id).upgrade_inbound(server, ""),
+                    plaintext::Config::new(&client_id).upgrade_inbound(client, ""),
+                )
+                .await
+                .unwrap();
 
             assert_eq!(received_server_id, server_id.public().to_peer_id());
             assert_eq!(received_client_id, client_id.public().to_peer_id());

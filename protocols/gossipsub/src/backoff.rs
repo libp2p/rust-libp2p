@@ -151,10 +151,11 @@ impl BackoffStorage {
             let slack = self.heartbeat_interval * self.backoff_slack;
             let now = Instant::now();
             s.retain(|(topic, peer)| {
-                let keep = match Self::get_backoff_time_from_backoffs(backoffs, topic, peer) {
-                    Some(backoff_time) => backoff_time + slack > now,
-                    None => false,
-                };
+                let keep =
+                    match Self::get_backoff_time_from_backoffs(backoffs, topic, peer) {
+                        Some(backoff_time) => backoff_time + slack > now,
+                        None => false,
+                    };
                 if !keep {
                     //remove from backoffs
                     if let Entry::Occupied(mut m) = backoffs.entry(topic.clone()) {

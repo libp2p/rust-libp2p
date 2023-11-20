@@ -54,9 +54,9 @@ fn main() -> Result<(), Box<dyn Error>> {
         Command::From { config } => {
             let config = Zeroizing::new(config::Config::from_file(config.as_ref())?);
 
-            let keypair = identity::Keypair::from_protobuf_encoding(&Zeroizing::new(
-                BASE64_STANDARD.decode(config.identity.priv_key.as_bytes())?,
-            ))?;
+            let keypair = identity::Keypair::from_protobuf_encoding(
+                &Zeroizing::new(BASE64_STANDARD.decode(config.identity.priv_key.as_bytes())?)
+            )?;
 
             let peer_id = keypair.public().into();
             assert_eq!(

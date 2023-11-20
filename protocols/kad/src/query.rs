@@ -134,16 +134,15 @@ impl<TInner> QueryPool<TInner> {
         T: Into<KeyBytes> + Clone,
         I: IntoIterator<Item = Key<PeerId>>,
     {
-        let cfg = ClosestPeersIterConfig {
-            num_results: self.config.replication_factor,
-            parallelism: self.config.parallelism,
-            ..ClosestPeersIterConfig::default()
-        };
+        let cfg =
+            ClosestPeersIterConfig {
+                num_results: self.config.replication_factor,
+                parallelism: self.config.parallelism,
+                ..ClosestPeersIterConfig::default()
+            };
 
         let peer_iter = if self.config.disjoint_query_paths {
-            QueryPeerIter::ClosestDisjoint(ClosestDisjointPeersIter::with_config(
-                cfg, target, peers,
-            ))
+            QueryPeerIter::ClosestDisjoint(ClosestDisjointPeersIter::with_config(cfg, target, peers))
         } else {
             QueryPeerIter::Closest(ClosestPeersIter::with_config(cfg, target, peers))
         };

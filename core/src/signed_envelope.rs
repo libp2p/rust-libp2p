@@ -120,14 +120,15 @@ fn signature_payload(domain_separation: String, payload_type: &[u8], payload: &[
     let mut payload_length_buffer = usize_buffer();
     let payload_length = unsigned_varint::encode::usize(payload.len(), &mut payload_length_buffer);
 
-    let mut buffer = Vec::with_capacity(
-        domain_sep_length.len()
-            + domain_separation.len()
-            + payload_type_length.len()
-            + payload_type.len()
-            + payload_length.len()
-            + payload.len(),
-    );
+    let mut buffer =
+        Vec::with_capacity(
+            domain_sep_length.len()
+                + domain_separation.len()
+                + payload_type_length.len()
+                + payload_type.len()
+                + payload_length.len()
+                + payload.len(),
+        );
 
     buffer.extend_from_slice(domain_sep_length);
     buffer.extend_from_slice(domain_separation.as_bytes());

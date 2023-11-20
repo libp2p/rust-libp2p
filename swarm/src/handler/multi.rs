@@ -93,10 +93,9 @@ where
     ) {
         if let Some(h) = self.handlers.get_mut(&key) {
             if let Some(i) = info.take(&key) {
-                h.on_connection_event(ConnectionEvent::ListenUpgradeError(ListenUpgradeError {
-                    info: i,
-                    error,
-                }));
+                h.on_connection_event(
+                    ConnectionEvent::ListenUpgradeError(ListenUpgradeError { info: i, error })
+                );
             }
         }
     }
@@ -182,9 +181,9 @@ where
             }
             ConnectionEvent::AddressChange(AddressChange { new_address }) => {
                 for h in self.handlers.values_mut() {
-                    h.on_connection_event(ConnectionEvent::AddressChange(AddressChange {
-                        new_address,
-                    }));
+                    h.on_connection_event(
+                        ConnectionEvent::AddressChange(AddressChange { new_address })
+                    );
                 }
             }
             ConnectionEvent::DialUpgradeError(DialUpgradeError {
@@ -192,10 +191,9 @@ where
                 error,
             }) => {
                 if let Some(h) = self.handlers.get_mut(&key) {
-                    h.on_connection_event(ConnectionEvent::DialUpgradeError(DialUpgradeError {
-                        info: arg,
-                        error,
-                    }));
+                    h.on_connection_event(
+                        ConnectionEvent::DialUpgradeError(DialUpgradeError { info: arg, error })
+                    );
                 } else {
                     tracing::error!("DialUpgradeError: no handler for protocol")
                 }
@@ -205,16 +203,16 @@ where
             }
             ConnectionEvent::LocalProtocolsChange(supported_protocols) => {
                 for h in self.handlers.values_mut() {
-                    h.on_connection_event(ConnectionEvent::LocalProtocolsChange(
-                        supported_protocols.clone(),
-                    ));
+                    h.on_connection_event(
+                        ConnectionEvent::LocalProtocolsChange(supported_protocols.clone())
+                    );
                 }
             }
             ConnectionEvent::RemoteProtocolsChange(supported_protocols) => {
                 for h in self.handlers.values_mut() {
-                    h.on_connection_event(ConnectionEvent::RemoteProtocolsChange(
-                        supported_protocols.clone(),
-                    ));
+                    h.on_connection_event(
+                        ConnectionEvent::RemoteProtocolsChange(supported_protocols.clone())
+                    );
                 }
             }
         }

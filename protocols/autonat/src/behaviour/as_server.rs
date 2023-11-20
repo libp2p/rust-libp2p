@@ -239,10 +239,12 @@ impl<'a> AsServer<'a> {
                 "Dial-back to peer failed with error {:?}",
                 error
             ),
-            None => tracing::debug!(
-                "Dial-back to non existent peer failed with error {:?}",
-                error
-            ),
+            None => {
+                tracing::debug!(
+                    "Dial-back to non existent peer failed with error {:?}",
+                    error
+                )
+            }
         };
 
         let response_error = ResponseError::DialError;
@@ -266,9 +268,9 @@ impl<'a> AsServer<'a> {
         request: DialRequest,
     ) -> Result<Vec<Multiaddr>, (String, ResponseError)> {
         // Update list of throttled clients.
-        let i = self.throttled_clients.partition_point(|(_, time)| {
-            *time + self.config.throttle_clients_period < Instant::now()
-        });
+        let i = self.throttled_clients.partition_point(
+            |(_, time)| *time + self.config.throttle_clients_period < Instant::now()
+        );
         self.throttled_clients.drain(..i);
 
         if request.peer_id != sender {

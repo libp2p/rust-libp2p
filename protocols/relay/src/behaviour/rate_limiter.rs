@@ -103,13 +103,15 @@ impl<Id: Eq + PartialEq + Hash + Clone> GenericRateLimiter<Id> {
 
         match self.buckets.get_mut(&id) {
             // If the bucket exists, try to take a token.
-            Some(balance) => match balance.checked_sub(1) {
-                Some(a) => {
-                    *balance = a;
-                    true
+            Some(balance) => {
+                match balance.checked_sub(1) {
+                    Some(a) => {
+                        *balance = a;
+                        true
+                    }
+                    None => false,
                 }
-                None => false,
-            },
+            }
             // If the bucket is missing, act like the bucket has `limit` number of tokens. Take one
             // token and track the new bucket balance.
             None => {

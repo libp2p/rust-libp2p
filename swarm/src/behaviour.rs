@@ -320,11 +320,13 @@ impl<TOutEvent, TInEventOld> ToSwarm<TOutEvent, TInEventOld> {
                 peer_id,
                 handler,
                 event,
-            } => ToSwarm::NotifyHandler {
-                peer_id,
-                handler,
-                event: f(event),
-            },
+            } => {
+                ToSwarm::NotifyHandler {
+                    peer_id,
+                    handler,
+                    event: f(event),
+                }
+            }
             ToSwarm::CloseConnection {
                 peer_id,
                 connection,

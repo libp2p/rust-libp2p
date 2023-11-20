@@ -157,18 +157,14 @@ where
     ) {
         match error {
             Either::Left(error) => {
-                self.proto1
-                    .on_connection_event(ConnectionEvent::ListenUpgradeError(ListenUpgradeError {
-                        info: i1,
-                        error,
-                    }));
+                self.proto1.on_connection_event(
+                    ConnectionEvent::ListenUpgradeError(ListenUpgradeError { info: i1, error })
+                );
             }
             Either::Right(error) => {
-                self.proto2
-                    .on_connection_event(ConnectionEvent::ListenUpgradeError(ListenUpgradeError {
-                        info: i2,
-                        error,
-                    }));
+                self.proto2.on_connection_event(
+                    ConnectionEvent::ListenUpgradeError(ListenUpgradeError { info: i2, error })
+                );
             }
         }
     }
@@ -239,9 +235,7 @@ where
 
         match self.proto2.poll(cx) {
             Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(event)) => {
-                return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(Either::Right(
-                    event,
-                )));
+                return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(Either::Right(event)));
             }
             Poll::Ready(ConnectionHandlerEvent::OutboundSubstreamRequest { protocol }) => {
                 return Poll::Ready(ConnectionHandlerEvent::OutboundSubstreamRequest {
@@ -326,24 +320,21 @@ where
                 self.on_listen_upgrade_error(listen_upgrade_error)
             }
             ConnectionEvent::LocalProtocolsChange(supported_protocols) => {
-                self.proto1
-                    .on_connection_event(ConnectionEvent::LocalProtocolsChange(
-                        supported_protocols.clone(),
-                    ));
+                self.proto1.on_connection_event(
+                    ConnectionEvent::LocalProtocolsChange(supported_protocols.clone())
+                );
                 self.proto2
                     .on_connection_event(ConnectionEvent::LocalProtocolsChange(
                         supported_protocols,
                     ));
             }
             ConnectionEvent::RemoteProtocolsChange(supported_protocols) => {
-                self.proto1
-                    .on_connection_event(ConnectionEvent::RemoteProtocolsChange(
-                        supported_protocols.clone(),
-                    ));
-                self.proto2
-                    .on_connection_event(ConnectionEvent::RemoteProtocolsChange(
-                        supported_protocols,
-                    ));
+                self.proto1.on_connection_event(
+                    ConnectionEvent::RemoteProtocolsChange(supported_protocols.clone())
+                );
+                self.proto2.on_connection_event(
+                    ConnectionEvent::RemoteProtocolsChange(supported_protocols)
+                );
             }
         }
     }

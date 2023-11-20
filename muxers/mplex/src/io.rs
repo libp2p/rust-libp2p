@@ -894,10 +894,7 @@ where
     /// has not been reached.
     fn check_max_pending_frames(&mut self) -> io::Result<()> {
         if self.pending_frames.len() >= self.config.max_substreams + EXTRA_PENDING_FRAMES {
-            return self.on_error(io::Error::new(
-                io::ErrorKind::Other,
-                "Too many pending frames.",
-            ));
+            return self.on_error(io::Error::new(io::ErrorKind::Other, "Too many pending frames."));
         }
         Ok(())
     }
@@ -1257,11 +1254,12 @@ mod tests {
             }
 
             // Setup the multiplexed connection.
-            let conn = Connection {
-                r_buf,
-                w_buf: BytesMut::new(),
-                eof: false,
-            };
+            let conn =
+                Connection {
+                    r_buf,
+                    w_buf: BytesMut::new(),
+                    eof: false,
+                };
             let mut m = Multiplexed::new(conn, cfg.clone());
 
             task::block_on(future::poll_fn(move |cx| {

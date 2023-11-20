@@ -862,10 +862,7 @@ where
                 );
 
                 self.pending_events
-                    .push_back(ToSwarm::GenerateEvent(Event::ResponseSent {
-                        peer,
-                        request_id,
-                    }));
+                    .push_back(ToSwarm::GenerateEvent(Event::ResponseSent { peer, request_id }));
             }
             handler::Event::ResponseOmission(request_id) => {
                 let removed = self.remove_pending_inbound_response(&peer, connection, request_id);

@@ -79,17 +79,18 @@ where
             };
         }
     };
-    let await_outbound_connection = async {
-        loop {
-            match swarm2.select_next_some().await {
-                SwarmEvent::ConnectionEstablished { peer_id, .. } => break peer_id,
-                SwarmEvent::OutgoingConnectionError { error, .. } => {
-                    panic!("Failed to dial: {error}")
-                }
-                _ => continue,
-            };
-        }
-    };
+    let await_outbound_connection =
+        async {
+            loop {
+                match swarm2.select_next_some().await {
+                    SwarmEvent::ConnectionEstablished { peer_id, .. } => break peer_id,
+                    SwarmEvent::OutgoingConnectionError { error, .. } => {
+                        panic!("Failed to dial: {error}")
+                    }
+                    _ => continue,
+                };
+            }
+        };
 
     let (inbound_peer_id, outbound_peer_id) =
         future::join(await_inbound_connection, await_outbound_connection).await;

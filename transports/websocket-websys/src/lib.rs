@@ -135,11 +135,12 @@ fn extract_websocket_url(addr: &Multiaddr) -> Option<String> {
         _ => return None,
     };
 
-    let (scheme, wspath) = match protocols.next() {
-        Some(Protocol::Ws(path)) => ("ws", path.into_owned()),
-        Some(Protocol::Wss(path)) => ("wss", path.into_owned()),
-        _ => return None,
-    };
+    let (scheme, wspath) =
+        match protocols.next() {
+            Some(Protocol::Ws(path)) => ("ws", path.into_owned()),
+            Some(Protocol::Wss(path)) => ("wss", path.into_owned()),
+            _ => return None,
+        };
 
     Some(format!("{scheme}://{host_port}{wspath}"))
 }
@@ -258,12 +259,13 @@ impl Connection {
         socket.set_onclose(Some(onclose_closure.as_ref().unchecked_ref()));
 
         let errored = Rc::new(AtomicBool::new(false));
-        let onerror_closure = Closure::<dyn FnMut(_)>::new({
-            let errored = errored.clone();
-            move |_| {
-                errored.store(true, Ordering::SeqCst);
-            }
-        });
+        let onerror_closure =
+            Closure::<dyn FnMut(_)>::new({
+                let errored = errored.clone();
+                move |_| {
+                    errored.store(true, Ordering::SeqCst);
+                }
+            });
         socket.set_onerror(Some(onerror_closure.as_ref().unchecked_ref()));
 
         let read_buffer = Rc::new(Mutex::new(BytesMut::new()));

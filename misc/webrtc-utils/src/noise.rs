@@ -92,12 +92,12 @@ mod tests {
 
     #[test]
     fn noise_prologue_tests() {
-        let a = Fingerprint::raw(hex!(
-            "3e79af40d6059617a0d83b83a52ce73b0c1f37a72c6043ad2969e2351bdca870"
-        ));
-        let b = Fingerprint::raw(hex!(
-            "30fc9f469c207419dfdd0aab5f27a86c973c94e40548db9375cca2e915973b99"
-        ));
+        let a = Fingerprint::raw(
+            hex!("3e79af40d6059617a0d83b83a52ce73b0c1f37a72c6043ad2969e2351bdca870")
+        );
+        let b = Fingerprint::raw(
+            hex!("30fc9f469c207419dfdd0aab5f27a86c973c94e40548db9375cca2e915973b99")
+        );
 
         let prologue1 = noise_prologue(a, b);
         let prologue2 = noise_prologue(b, a);

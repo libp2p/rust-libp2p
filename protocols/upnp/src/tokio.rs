@@ -107,15 +107,16 @@ pub(crate) fn search_gateway() -> oneshot::Receiver<Result<Gateway, Box<dyn Erro
             }
         };
 
-        let external_addr = match gateway.get_external_ip().await {
-            Ok(addr) => addr,
-            Err(err) => {
-                search_result_sender
-                    .send(Err(err.into()))
-                    .expect("receiver shouldn't have been dropped");
-                return;
-            }
-        };
+        let external_addr =
+            match gateway.get_external_ip().await {
+                Ok(addr) => addr,
+                Err(err) => {
+                    search_result_sender
+                        .send(Err(err.into()))
+                        .expect("receiver shouldn't have been dropped");
+                    return;
+                }
+            };
 
         search_result_sender
             .send(Ok(Gateway {

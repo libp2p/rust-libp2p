@@ -211,9 +211,7 @@ fn verify_presented_certs(
     intermediates: &[Certificate],
 ) -> Result<PeerId, rustls::Error> {
     if !intermediates.is_empty() {
-        return Err(rustls::Error::General(
-            "libp2p-tls requires exactly one certificate".into(),
-        ));
+        return Err(rustls::Error::General("libp2p-tls requires exactly one certificate".into()));
     }
 
     let cert = certificate::parse(end_entity)?;

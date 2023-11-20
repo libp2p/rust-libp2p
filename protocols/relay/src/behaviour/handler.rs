@@ -804,9 +804,9 @@ impl ConnectionHandler for Handler {
             .map(|fut| fut.poll_unpin(cx))
         {
             self.active_reservation = None;
-            return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(
-                Event::ReservationTimedOut {},
-            ));
+            return Poll::Ready(
+                ConnectionHandlerEvent::NotifyBehaviour(Event::ReservationTimedOut {})
+            );
         }
 
         // Progress reservation request.

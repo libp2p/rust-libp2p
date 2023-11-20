@@ -56,17 +56,18 @@ pub struct Config {
 impl Config {
     /// Create buckets for the score histograms based on score thresholds.
     pub fn buckets_using_scoring_thresholds(&mut self, params: &crate::PeerScoreThresholds) {
-        self.score_buckets = vec![
-            params.graylist_threshold,
-            params.publish_threshold,
-            params.gossip_threshold,
-            params.gossip_threshold / 2.0,
-            params.gossip_threshold / 4.0,
-            0.0,
-            1.0,
-            10.0,
-            100.0,
-        ];
+        self.score_buckets =
+            vec![
+                params.graylist_threshold,
+                params.publish_threshold,
+                params.gossip_threshold,
+                params.gossip_threshold / 2.0,
+                params.gossip_threshold / 4.0,
+                0.0,
+                1.0,
+                10.0,
+                100.0,
+            ];
     }
 }
 
@@ -76,17 +77,18 @@ impl Default for Config {
         let gossip_threshold = -4000.0;
         let publish_threshold = -8000.0;
         let graylist_threshold = -16000.0;
-        let score_buckets: Vec<f64> = vec![
-            graylist_threshold,
-            publish_threshold,
-            gossip_threshold,
-            gossip_threshold / 2.0,
-            gossip_threshold / 4.0,
-            0.0,
-            1.0,
-            10.0,
-            100.0,
-        ];
+        let score_buckets: Vec<f64> =
+            vec![
+                graylist_threshold,
+                publish_threshold,
+                gossip_threshold,
+                gossip_threshold / 2.0,
+                gossip_threshold / 4.0,
+                0.0,
+                1.0,
+                10.0,
+                100.0,
+            ];
         Config {
             max_topics: DEFAULT_MAX_TOPICS,
             max_never_subscribed_topics: DEFAULT_MAX_NEVER_SUBSCRIBED_TOPICS,
@@ -261,9 +263,10 @@ impl Metrics {
             "Bytes received from gossip messages for each topic"
         );
 
-        let hist_builder = HistBuilder {
-            buckets: score_buckets,
-        };
+        let hist_builder =
+            HistBuilder {
+                buckets: score_buckets,
+            };
 
         let score_per_mesh: Family<_, _, HistBuilder> = Family::new_with_constructor(hist_builder);
         registry.register(

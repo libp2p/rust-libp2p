@@ -42,12 +42,13 @@ pub(crate) fn answer(
 ///
 /// Certificate verification is disabled which is why we hardcode a dummy fingerprint here.
 pub(crate) fn offer(addr: SocketAddr, client_ufrag: &str) -> RTCSessionDescription {
-    let offer = render_description(
-        CLIENT_SESSION_DESCRIPTION,
-        addr,
-        Fingerprint::FF,
-        client_ufrag,
-    );
+    let offer =
+        render_description(
+            CLIENT_SESSION_DESCRIPTION,
+            addr,
+            Fingerprint::FF,
+            client_ufrag,
+        );
 
     tracing::trace!(offer=%offer, "Created SDP offer");
 

@@ -74,10 +74,9 @@ where
 
         loop {
             if this.bytes_sent > this.max_circuit_bytes {
-                return Poll::Ready(Err(io::Error::new(
-                    io::ErrorKind::Other,
-                    "Max circuit bytes reached.",
-                )));
+                return Poll::Ready(Err(
+                    io::Error::new(io::ErrorKind::Other, "Max circuit bytes reached.")
+                ));
             }
 
             enum Status {

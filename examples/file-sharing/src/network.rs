@@ -247,16 +247,16 @@ impl EventLoop {
             SwarmEvent::Behaviour(BehaviourEvent::Kademlia(
                 kad::Event::OutboundQueryProgressed {
                     result:
-                        kad::QueryResult::GetProviders(Ok(
-                            kad::GetProvidersOk::FinishedWithNoAdditionalRecord { .. },
-                        )),
+                        kad::QueryResult::GetProviders(
+                            Ok(kad::GetProvidersOk::FinishedWithNoAdditionalRecord { .. })
+                        ),
                     ..
                 },
             )) => {}
             SwarmEvent::Behaviour(BehaviourEvent::Kademlia(_)) => {}
-            SwarmEvent::Behaviour(BehaviourEvent::RequestResponse(
-                request_response::Event::Message { message, .. },
-            )) => match message {
+            SwarmEvent::Behaviour(
+                BehaviourEvent::RequestResponse(request_response::Event::Message { message, .. })
+            ) => match message {
                 request_response::Message::Request {
                     request, channel, ..
                 } => {
@@ -290,9 +290,9 @@ impl EventLoop {
                     .expect("Request to still be pending.")
                     .send(Err(Box::new(error)));
             }
-            SwarmEvent::Behaviour(BehaviourEvent::RequestResponse(
-                request_response::Event::ResponseSent { .. },
-            )) => {}
+            SwarmEvent::Behaviour(
+                BehaviourEvent::RequestResponse(request_response::Event::ResponseSent { .. })
+            ) => {}
             SwarmEvent::NewListenAddr { address, .. } => {
                 let local_peer_id = *self.swarm.local_peer_id();
                 eprintln!(

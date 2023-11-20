@@ -156,26 +156,26 @@ where
             ConnectionEvent::FullyNegotiatedInbound(fully_negotiated_inbound) => {
                 match (fully_negotiated_inbound.transpose(), self) {
                     (Either::Left(fully_negotiated_inbound), Either::Left(handler)) => handler
-                        .on_connection_event(ConnectionEvent::FullyNegotiatedInbound(
-                            fully_negotiated_inbound,
-                        )),
+                        .on_connection_event(
+                            ConnectionEvent::FullyNegotiatedInbound(fully_negotiated_inbound)
+                        ),
                     (Either::Right(fully_negotiated_inbound), Either::Right(handler)) => handler
-                        .on_connection_event(ConnectionEvent::FullyNegotiatedInbound(
-                            fully_negotiated_inbound,
-                        )),
+                        .on_connection_event(
+                            ConnectionEvent::FullyNegotiatedInbound(fully_negotiated_inbound)
+                        ),
                     _ => unreachable!(),
                 }
             }
             ConnectionEvent::FullyNegotiatedOutbound(fully_negotiated_outbound) => {
                 match (fully_negotiated_outbound.transpose(), self) {
                     (Either::Left(fully_negotiated_outbound), Either::Left(handler)) => handler
-                        .on_connection_event(ConnectionEvent::FullyNegotiatedOutbound(
-                            fully_negotiated_outbound,
-                        )),
+                        .on_connection_event(
+                            ConnectionEvent::FullyNegotiatedOutbound(fully_negotiated_outbound)
+                        ),
                     (Either::Right(fully_negotiated_outbound), Either::Right(handler)) => handler
-                        .on_connection_event(ConnectionEvent::FullyNegotiatedOutbound(
-                            fully_negotiated_outbound,
-                        )),
+                        .on_connection_event(
+                            ConnectionEvent::FullyNegotiatedOutbound(fully_negotiated_outbound)
+                        ),
                     _ => unreachable!(),
                 }
             }
@@ -191,13 +191,13 @@ where
             ConnectionEvent::ListenUpgradeError(listen_upgrade_error) => {
                 match (listen_upgrade_error.transpose(), self) {
                     (Either::Left(listen_upgrade_error), Either::Left(handler)) => handler
-                        .on_connection_event(ConnectionEvent::ListenUpgradeError(
-                            listen_upgrade_error,
-                        )),
+                        .on_connection_event(
+                            ConnectionEvent::ListenUpgradeError(listen_upgrade_error)
+                        ),
                     (Either::Right(listen_upgrade_error), Either::Right(handler)) => handler
-                        .on_connection_event(ConnectionEvent::ListenUpgradeError(
-                            listen_upgrade_error,
-                        )),
+                        .on_connection_event(
+                            ConnectionEvent::ListenUpgradeError(listen_upgrade_error)
+                        ),
                     _ => unreachable!(),
                 }
             }
@@ -210,21 +210,27 @@ where
                 }
             },
             ConnectionEvent::LocalProtocolsChange(supported_protocols) => match self {
-                Either::Left(handler) => handler.on_connection_event(
-                    ConnectionEvent::LocalProtocolsChange(supported_protocols),
-                ),
-                Either::Right(handler) => handler.on_connection_event(
-                    ConnectionEvent::LocalProtocolsChange(supported_protocols),
-                ),
+                Either::Left(handler) => {
+                    handler.on_connection_event(
+                        ConnectionEvent::LocalProtocolsChange(supported_protocols)
+                    )
+                }
+                Either::Right(handler) => {
+                    handler.on_connection_event(
+                        ConnectionEvent::LocalProtocolsChange(supported_protocols)
+                    )
+                }
             },
-            ConnectionEvent::RemoteProtocolsChange(supported_protocols) => match self {
-                Either::Left(handler) => handler.on_connection_event(
-                    ConnectionEvent::RemoteProtocolsChange(supported_protocols),
-                ),
-                Either::Right(handler) => handler.on_connection_event(
-                    ConnectionEvent::RemoteProtocolsChange(supported_protocols),
-                ),
-            },
+            ConnectionEvent::RemoteProtocolsChange(supported_protocols) => {
+                match self {
+                    Either::Left(handler) => handler.on_connection_event(
+                        ConnectionEvent::RemoteProtocolsChange(supported_protocols),
+                    ),
+                    Either::Right(handler) => handler.on_connection_event(
+                        ConnectionEvent::RemoteProtocolsChange(supported_protocols),
+                    ),
+                }
+            }
         }
     }
 }

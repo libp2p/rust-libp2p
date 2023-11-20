@@ -243,15 +243,16 @@ where
     fn start_send(self: Pin<&mut Self>, item: Bytes) -> Result<(), Self::Error> {
         let this = self.project();
 
-        let len = match u16::try_from(item.len()) {
-            Ok(len) if len <= MAX_FRAME_SIZE => len,
-            _ => {
-                return Err(io::Error::new(
-                    io::ErrorKind::InvalidData,
-                    "Maximum frame size exceeded.",
-                ))
-            }
-        };
+        let len =
+            match u16::try_from(item.len()) {
+                Ok(len) if len <= MAX_FRAME_SIZE => len,
+                _ => {
+                    return Err(io::Error::new(
+                        io::ErrorKind::InvalidData,
+                        "Maximum frame size exceeded.",
+                    ))
+                }
+            };
 
         let mut uvi_buf = unsigned_varint::encode::u16_buffer();
         let uvi_len = unsigned_varint::encode::u16(len, &mut uvi_buf);
@@ -491,22 +492,24 @@ mod tests {
 
             async_std::task::block_on(async move {
                 let expected_frames = frames.clone();
-                let server = async_std::task::spawn(async move {
-                    let mut connec =
-                        rw_stream_sink::RwStreamSink::new(LengthDelimited::new(server_connection));
+                let server =
+                    async_std::task::spawn(async move {
+                        let mut connec = rw_stream_sink::RwStreamSink::new(
+                            LengthDelimited::new(server_connection)
+                        );
 
-                    let mut buf = vec![0u8; 0];
-                    for expected in expected_frames {
-                        if expected.is_empty() {
-                            continue;
+                        let mut buf = vec![0u8; 0];
+                        for expected in expected_frames {
+                            if expected.is_empty() {
+                                continue;
+                            }
+                            if buf.len() < expected.len() {
+                                buf.resize(expected.len(), 0);
+                            }
+                            let n = connec.read(&mut buf).await.unwrap();
+                            assert_eq!(&buf[..n], &expected[..]);
                         }
-                        if buf.len() < expected.len() {
-                            buf.resize(expected.len(), 0);
-                        }
-                        let n = connec.read(&mut buf).await.unwrap();
-                        assert_eq!(&buf[..n], &expected[..]);
-                    }
-                });
+                    });
 
                 let client = async_std::task::spawn(async move {
                     let mut connec = LengthDelimited::new(client_connection);

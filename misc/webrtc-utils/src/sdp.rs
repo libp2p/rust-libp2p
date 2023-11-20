@@ -27,12 +27,13 @@ use rand::distributions::Alphanumeric;
 use rand::{thread_rng, Rng};
 
 pub fn answer(addr: SocketAddr, server_fingerprint: Fingerprint, client_ufrag: &str) -> String {
-    let answer = render_description(
-        SERVER_SESSION_DESCRIPTION,
-        addr,
-        server_fingerprint,
-        client_ufrag,
-    );
+    let answer =
+        render_description(
+            SERVER_SESSION_DESCRIPTION,
+            addr,
+            server_fingerprint,
+            client_ufrag,
+        );
 
     tracing::trace!(%answer, "Created SDP answer");
 

@@ -42,14 +42,12 @@ pub fn hello_macro_derive(input: TokenStream) -> TokenStream {
 fn build(ast: &DeriveInput) -> syn::Result<TokenStream> {
     match ast.data {
         Data::Struct(ref s) => build_struct(ast, s),
-        Data::Enum(_) => Err(syn::Error::new_spanned(
-            ast,
-            "Cannot derive `NetworkBehaviour` on enums",
-        )),
-        Data::Union(_) => Err(syn::Error::new_spanned(
-            ast,
-            "Cannot derive `NetworkBehaviour` on union",
-        )),
+        Data::Enum(_) => {
+            Err(syn::Error::new_spanned(ast, "Cannot derive `NetworkBehaviour` on enums"))
+        }
+        Data::Union(_) => {
+            Err(syn::Error::new_spanned(ast, "Cannot derive `NetworkBehaviour` on union"))
+        }
     }
 }
 
@@ -199,27 +197,28 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> syn::Result<Toke
     };
 
     // Build the `where ...` clause of the trait implementation.
-    let where_clause = {
-        let additional = data_struct
-            .fields
-            .iter()
-            .map(|field| {
-                let ty = &field.ty;
-                quote! {#ty: #trait_to_impl}
-            })
-            .chain(out_event_from_clauses)
-            .collect::<Vec<_>>();
+    let where_clause =
+        {
+            let additional = data_struct
+                .fields
+                .iter()
+                .map(|field| {
+                    let ty = &field.ty;
+                    quote! {#ty: #trait_to_impl}
+                })
+                .chain(out_event_from_clauses)
+                .collect::<Vec<_>>();
 
-        if let Some(where_clause) = where_clause {
-            if where_clause.predicates.trailing_punct() {
-                Some(quote! {#where_clause #(#additional),* })
+            if let Some(where_clause) = where_clause {
+                if where_clause.predicates.trailing_punct() {
+                    Some(quote! {#where_clause #(#additional),* })
+                } else {
+                    Some(quote! {#where_clause, #(#additional),*})
+                }
             } else {
-                Some(quote! {#where_clause, #(#additional),*})
+                Some(quote! {where #(#additional),*})
             }
-        } else {
-            Some(quote! {where #(#additional),*})
-        }
-    };
+        };
 
     // Build the list of statements to put in the body of `on_swarm_event()`
     // for the `FromSwarm::ConnectionEstablished` variant.
@@ -252,35 +251,37 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> syn::Result<Toke
 
     // Build the list of statements to put in the body of `on_swarm_event()`
     // for the `FromSwarm::AddressChange variant`.
-    let on_address_change_stmts = {
-        data_struct
-            .fields
-            .iter()
-            .enumerate()
-            .map(|(field_n, field)| match field.ident {
-                Some(ref i) => quote! {
-                self.#i.on_swarm_event(#from_swarm::AddressChange(#address_change {
-                        peer_id,
-                        connection_id,
-                        old,
-                        new,
-                    }));
-                },
-                None => quote! {
-                self.#field_n.on_swarm_event(#from_swarm::AddressChange(#address_change {
-                        peer_id,
-                        connection_id,
-                        old,
-                        new,
-                    }));
-                },
-            })
-    };
+    let on_address_change_stmts =
+        {
+            data_struct
+                .fields
+                .iter()
+                .enumerate()
+                .map(|(field_n, field)| match field.ident {
+                    Some(ref i) => quote! {
+                    self.#i.on_swarm_event(#from_swarm::AddressChange(#address_change {
+                            peer_id,
+                            connection_id,
+                            old,
+                            new,
+                        }));
+                    },
+                    None => quote! {
+                    self.#field_n.on_swarm_event(#from_swarm::AddressChange(#address_change {
+                            peer_id,
+                            connection_id,
+                            old,
+                            new,
+                        }));
+                    },
+                })
+        };
 
     // Build the list of statements to put in the body of `on_swarm_event()`
     // for the `FromSwarm::ConnectionClosed` variant.
-    let on_connection_closed_stmts = {
-        data_struct
+    let on_connection_closed_stmts =
+        {
+            data_struct
             .fields
             .iter()
             .rev()
@@ -309,7 +310,7 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> syn::Result<Toke
                     #inject;
                 }
             })
-    };
+        };
 
     // Build the list of statements to put in the body of `on_swarm_event()`
     // for the `FromSwarm::DialFailure` variant.
@@ -336,28 +337,29 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> syn::Result<Toke
 
     // Build the list of statements to put in the body of `on_swarm_event()`
     // for the `FromSwarm::ListenFailure` variant.
-    let on_listen_failure_stmts = data_struct
-        .fields
-        .iter()
-        .enumerate()
-        .map(|(enum_n, field)| match field.ident {
-            Some(ref i) => quote! {
-                self.#i.on_swarm_event(#from_swarm::ListenFailure(#listen_failure {
-                    local_addr,
-                    send_back_addr,
-                    connection_id,
-                    error
-                }));
-            },
-            None => quote! {
-                self.#enum_n.on_swarm_event(#from_swarm::ListenFailure(#listen_failure {
-                    local_addr,
-                    send_back_addr,
-                    connection_id,
-                    error
-                }));
-            },
-        });
+    let on_listen_failure_stmts =
+        data_struct
+            .fields
+            .iter()
+            .enumerate()
+            .map(|(enum_n, field)| match field.ident {
+                Some(ref i) => quote! {
+                    self.#i.on_swarm_event(#from_swarm::ListenFailure(#listen_failure {
+                        local_addr,
+                        send_back_addr,
+                        connection_id,
+                        error
+                    }));
+                },
+                None => quote! {
+                    self.#enum_n.on_swarm_event(#from_swarm::ListenFailure(#listen_failure {
+                        local_addr,
+                        send_back_addr,
+                        connection_id,
+                        error
+                    }));
+                },
+            });
 
     // Build the list of statements to put in the body of `on_swarm_event()`
     // for the `FromSwarm::NewListener` variant.
@@ -382,26 +384,27 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> syn::Result<Toke
 
     // Build the list of statements to put in the body of `on_swarm_event()`
     // for the `FromSwarm::NewListenAddr` variant.
-    let on_new_listen_addr_stmts = {
-        data_struct
-            .fields
-            .iter()
-            .enumerate()
-            .map(|(field_n, field)| match field.ident {
-                Some(ref i) => quote! {
-                self.#i.on_swarm_event(#from_swarm::NewListenAddr(#new_listen_addr {
-                        listener_id,
-                        addr,
-                    }));
-                },
-                None => quote! {
-                self.#field_n.on_swarm_event(#from_swarm::NewListenAddr(#new_listen_addr {
-                        listener_id,
-                        addr,
-                    }));
-                },
-            })
-    };
+    let on_new_listen_addr_stmts =
+        {
+            data_struct
+                .fields
+                .iter()
+                .enumerate()
+                .map(|(field_n, field)| match field.ident {
+                    Some(ref i) => quote! {
+                    self.#i.on_swarm_event(#from_swarm::NewListenAddr(#new_listen_addr {
+                            listener_id,
+                            addr,
+                        }));
+                    },
+                    None => quote! {
+                    self.#field_n.on_swarm_event(#from_swarm::NewListenAddr(#new_listen_addr {
+                            listener_id,
+                            addr,
+                        }));
+                    },
+                })
+        };
 
     // Build the list of statements to put in the body of `on_swarm_event()`
     // for the `FromSwarm::ExpiredListenAddr` variant.
@@ -491,26 +494,27 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> syn::Result<Toke
 
     // Build the list of statements to put in the body of `on_swarm_event()`
     // for the `FromSwarm::ListenerError` variant.
-    let on_listener_error_stmts = {
-        data_struct
-            .fields
-            .iter()
-            .enumerate()
-            .map(|(field_n, field)| match field.ident {
-                Some(ref i) => quote! {
-                    self.#i.on_swarm_event(#from_swarm::ListenerError(#listener_error {
-                        listener_id,
-                        err,
-                    }));
-                },
-                None => quote! {
-                    self.#field_n.on_swarm_event(#from_swarm::ListenerError(#listener_error {
-                        listener_id,
-                        err,
-                    }));
-                },
-            })
-    };
+    let on_listener_error_stmts =
+        {
+            data_struct
+                .fields
+                .iter()
+                .enumerate()
+                .map(|(field_n, field)| match field.ident {
+                    Some(ref i) => quote! {
+                        self.#i.on_swarm_event(#from_swarm::ListenerError(#listener_error {
+                            listener_id,
+                            err,
+                        }));
+                    },
+                    None => quote! {
+                        self.#field_n.on_swarm_event(#from_swarm::ListenerError(#listener_error {
+                            listener_id,
+                            err,
+                        }));
+                    },
+                })
+        };
 
     // Build the list of statements to put in the body of `on_swarm_event()`
     // for the `FromSwarm::ListenerClosed` variant.

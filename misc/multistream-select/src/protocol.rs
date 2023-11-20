@@ -394,14 +394,15 @@ fn poll_stream<S>(
 where
     S: Stream<Item = Result<Bytes, io::Error>>,
 {
-    let msg = if let Some(msg) = ready!(stream.poll_next(cx)?) {
-        match Message::decode(msg) {
-            Ok(m) => m,
-            Err(err) => return Poll::Ready(Some(Err(err))),
-        }
-    } else {
-        return Poll::Ready(None);
-    };
+    let msg =
+        if let Some(msg) = ready!(stream.poll_next(cx)?) {
+            match Message::decode(msg) {
+                Ok(m) => m,
+                Err(err) => return Poll::Ready(Some(Err(err))),
+            }
+        } else {
+            return Poll::Ready(None);
+        };
 
     tracing::trace!(message=?msg, "Received message");
 

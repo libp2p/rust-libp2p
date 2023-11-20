@@ -398,17 +398,18 @@ where
                 .listen_on("/ip4/127.0.0.1/tcp/0".parse().unwrap())
                 .unwrap();
 
-            let tcp_multiaddr = swarm
-                .wait(|e| match e {
-                    SwarmEvent::NewListenAddr {
-                        address,
-                        listener_id,
-                    } => (listener_id == tcp_addr_listener_id).then_some(address),
-                    other => {
-                        panic!("Unexpected event while waiting for `NewListenAddr`: {other:?}")
-                    }
-                })
-                .await;
+            let tcp_multiaddr =
+                swarm
+                    .wait(|e| match e {
+                        SwarmEvent::NewListenAddr {
+                            address,
+                            listener_id,
+                        } => (listener_id == tcp_addr_listener_id).then_some(address),
+                        other => {
+                            panic!("Unexpected event while waiting for `NewListenAddr`: {other:?}")
+                        }
+                    })
+                    .await;
 
             if self.add_memory_external {
                 swarm.add_external_address(memory_multiaddr.clone());

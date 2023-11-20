@@ -167,25 +167,27 @@ async fn wrapped_with_delay() {
 
     // Spawn A
     let a_addr = start_listening(&mut a_transport, "/ip6/::1/udp/0/quic-v1").await;
-    let listener = async_std::task::spawn(async move {
-        let (upgrade, _) = a_transport
-            .select_next_some()
-            .await
-            .into_incoming()
-            .unwrap();
-        let (peer_id, _) = upgrade.await.unwrap();
+    let listener =
+        async_std::task::spawn(async move {
+            let (upgrade, _) = a_transport
+                .select_next_some()
+                .await
+                .into_incoming()
+                .unwrap();
+            let (peer_id, _) = upgrade.await.unwrap();
 
-        peer_id
-    });
+            peer_id
+        });
 
     // Spawn B
     //
     // Note that the dial is spawned on a different task than the transport allowing the transport
     // task to poll the transport once and then suspend, waiting for the wakeup from the dial.
-    let dial = async_std::task::spawn({
-        let dial = b_transport.dial(a_addr).unwrap();
-        async { dial.await.unwrap().0 }
-    });
+    let dial =
+        async_std::task::spawn({
+            let dial = b_transport.dial(a_addr).unwrap();
+            async { dial.await.unwrap().0 }
+        });
     async_std::task::spawn(async move { b_transport.next().await });
 
     let (a_connected, b_connected) = future::join(listener, dial).await;
@@ -226,12 +228,13 @@ fn new_tcp_quic_transport() -> (PeerId, Boxed<(PeerId, StreamMuxerBox)>) {
         .authenticate(noise::Config::new(&keypair).unwrap())
         .multiplex(yamux::Config::default());
 
-    let transport = OrTransport::new(quic_transport, tcp_transport)
-        .map(|either_output, _| match either_output {
-            Either::Left((peer_id, muxer)) => (peer_id, StreamMuxerBox::new(muxer)),
-            Either::Right((peer_id, muxer)) => (peer_id, StreamMuxerBox::new(muxer)),
-        })
-        .boxed();
+    let transport =
+        OrTransport::new(quic_transport, tcp_transport)
+            .map(|either_output, _| match either_output {
+                Either::Left((peer_id, muxer)) => (peer_id, StreamMuxerBox::new(muxer)),
+                Either::Right((peer_id, muxer)) => (peer_id, StreamMuxerBox::new(muxer)),
+            })
+            .boxed();
 
     (peer_id, transport)
 }
@@ -433,17 +436,18 @@ async fn test_local_listener_reuse() {
         .unwrap();
 
     // wait until a listener reports a loopback address
-    let a_listen_addr = 'outer: loop {
-        let ev = a_transport.next().await.unwrap();
-        let listen_addr = ev.into_new_address().unwrap();
-        for proto in listen_addr.iter() {
-            if let Protocol::Ip4(ip4) = proto {
-                if ip4.is_loopback() {
-                    break 'outer listen_addr;
+    let a_listen_addr =
+        'outer: loop {
+            let ev = a_transport.next().await.unwrap();
+            let listen_addr = ev.into_new_address().unwrap();
+            for proto in listen_addr.iter() {
+                if let Protocol::Ip4(ip4) = proto {
+                    if ip4.is_loopback() {
+                        break 'outer listen_addr;
+                    }
                 }
             }
-        }
-    };
+        };
     // If we do not poll until the end, `NewAddress` events may be `Ready` and `connect` function
     // below will panic due to an unexpected event.
     poll_fn(|cx| {

@@ -371,12 +371,14 @@ fn req_msg_to_proto(kad_msg: KadRequestMsg) -> proto::Message {
             providerPeers: vec![provider.into()],
             ..proto::Message::default()
         },
-        KadRequestMsg::GetValue { key } => proto::Message {
-            type_pb: proto::MessageType::GET_VALUE,
-            clusterLevelRaw: 10,
-            key: key.to_vec(),
-            ..proto::Message::default()
-        },
+        KadRequestMsg::GetValue { key } => {
+            proto::Message {
+                type_pb: proto::MessageType::GET_VALUE,
+                clusterLevelRaw: 10,
+                key: key.to_vec(),
+                ..proto::Message::default()
+            }
+        }
         KadRequestMsg::PutValue { record } => proto::Message {
             type_pb: proto::MessageType::PUT_VALUE,
             key: record.key.to_vec(),
@@ -552,11 +554,12 @@ fn record_from_proto(record: proto::Record) -> Result<Record, io::Error> {
         None
     };
 
-    let expires = if record.ttl > 0 {
-        Some(Instant::now() + Duration::from_secs(record.ttl as u64))
-    } else {
-        None
-    };
+    let expires =
+        if record.ttl > 0 {
+            Some(Instant::now() + Duration::from_secs(record.ttl as u64))
+        } else {
+            None
+        };
 
     Ok(Record {
         key,
@@ -627,11 +630,12 @@ mod tests {
             multiaddr.with_p2p(other_peer_id).unwrap()
         };
 
-        let invalid_multiaddr = {
-            let a = vec![255; 8];
-            assert!(Multiaddr::try_from(a.clone()).is_err());
-            a
-        };
+        let invalid_multiaddr =
+            {
+                let a = vec![255; 8];
+                assert!(Multiaddr::try_from(a.clone()).is_err());
+                a
+            };
 
         let payload = proto::Peer {
             id: peer_id.to_bytes(),

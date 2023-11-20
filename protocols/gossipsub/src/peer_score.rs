@@ -236,27 +236,29 @@ impl PeerScore {
 
                 // P1: time in mesh
                 if let MeshStatus::Active { mesh_time, .. } = topic_stats.mesh_status {
-                    let p1 = {
-                        let v = mesh_time.as_secs_f64()
-                            / topic_params.time_in_mesh_quantum.as_secs_f64();
-                        if v < topic_params.time_in_mesh_cap {
-                            v
-                        } else {
-                            topic_params.time_in_mesh_cap
-                        }
-                    };
+                    let p1 =
+                        {
+                            let v = mesh_time.as_secs_f64()
+                                / topic_params.time_in_mesh_quantum.as_secs_f64();
+                            if v < topic_params.time_in_mesh_cap {
+                                v
+                            } else {
+                                topic_params.time_in_mesh_cap
+                            }
+                        };
                     topic_score += p1 * topic_params.time_in_mesh_weight;
                 }
 
                 // P2: first message deliveries
-                let p2 = {
-                    let v = topic_stats.first_message_deliveries;
-                    if v < topic_params.first_message_deliveries_cap {
-                        v
-                    } else {
-                        topic_params.first_message_deliveries_cap
-                    }
-                };
+                let p2 =
+                    {
+                        let v = topic_stats.first_message_deliveries;
+                        if v < topic_params.first_message_deliveries_cap {
+                            v
+                        } else {
+                            topic_params.first_message_deliveries_cap
+                        }
+                    };
                 topic_score += p2 * topic_params.first_message_deliveries_weight;
 
                 // P3: mesh message deliveries
@@ -643,28 +645,29 @@ impl PeerScore {
             _ => {} // the rest are handled after record creation
         }
 
-        let peers: Vec<_> = {
-            let record = self.deliveries.entry(msg_id.clone()).or_default();
+        let peers: Vec<_> =
+            {
+                let record = self.deliveries.entry(msg_id.clone()).or_default();
 
-            // Multiple peers can now reject the same message as we track which peers send us the
-            // message. If we have already updated the status, return.
-            if record.status != DeliveryStatus::Unknown {
-                return;
-            }
+                // Multiple peers can now reject the same message as we track which peers send us the
+                // message. If we have already updated the status, return.
+                if record.status != DeliveryStatus::Unknown {
+                    return;
+                }
 
-            if let RejectReason::ValidationIgnored = reason {
-                // we were explicitly instructed by the validator to ignore the message but not penalize
-                // the peer
-                record.status = DeliveryStatus::Ignored;
-                record.peers.clear();
-                return;
-            }
+                if let RejectReason::ValidationIgnored = reason {
+                    // we were explicitly instructed by the validator to ignore the message but not penalize
+                    // the peer
+                    record.status = DeliveryStatus::Ignored;
+                    record.peers.clear();
+                    return;
+                }
 
-            // mark the message as invalid and penalize peers that have already forwarded it.
-            record.status = DeliveryStatus::Invalid;
-            // release the delivery time tracking map to free some memory early
-            record.peers.drain().collect()
-        };
+                // mark the message as invalid and penalize peers that have already forwarded it.
+                record.status = DeliveryStatus::Invalid;
+                // release the delivery time tracking map to free some memory early
+                record.peers.drain().collect()
+            };
 
         self.mark_invalid_message_delivery(from, topic_hash);
         for peer_id in peers.iter() {
@@ -806,12 +809,14 @@ impl PeerScore {
                     .get(topic_hash)
                     .expect("Topic must exist if there are known topic_stats")
                     .first_message_deliveries_cap;
-                topic_stats.first_message_deliveries =
-                    if topic_stats.first_message_deliveries + 1f64 > cap {
-                        cap
-                    } else {
-                        topic_stats.first_message_deliveries + 1f64
-                    };
+                topic_stats.first_message_deliveries = if topic_stats.first_message_deliveries
+                    + 1f64
+                    > cap
+                {
+                    cap
+                } else {
+                    topic_stats.first_message_deliveries + 1f64
+                };
 
                 if let MeshStatus::Active { .. } = topic_stats.mesh_status {
                     let cap = self
@@ -821,12 +826,14 @@ impl PeerScore {
                         .expect("Topic must exist if there are known topic_stats")
                         .mesh_message_deliveries_cap;
 
-                    topic_stats.mesh_message_deliveries =
-                        if topic_stats.mesh_message_deliveries + 1f64 > cap {
-                            cap
-                        } else {
-                            topic_stats.mesh_message_deliveries + 1f64
-                        };
+                    topic_stats.mesh_message_deliveries = if topic_stats.mesh_message_deliveries
+                        + 1f64
+                        > cap
+                    {
+                        cap
+                    } else {
+                        topic_stats.mesh_message_deliveries + 1f64
+                    };
                 }
             }
         }
@@ -841,11 +848,12 @@ impl PeerScore {
         validated_time: Option<Instant>,
     ) {
         if let Some(peer_stats) = self.peer_stats.get_mut(peer_id) {
-            let now = if validated_time.is_some() {
-                Some(Instant::now())
-            } else {
-                None
-            };
+            let now =
+                if validated_time.is_some() {
+                    Some(Instant::now())
+                } else {
+                    None
+                };
             if let Some(topic_stats) =
                 peer_stats.stats_or_default_mut(topic_hash.clone(), &self.params)
             {
@@ -874,12 +882,14 @@ impl PeerScore {
 
                     if falls_in_mesh_deliver_window {
                         let cap = topic_params.mesh_message_deliveries_cap;
-                        topic_stats.mesh_message_deliveries =
-                            if topic_stats.mesh_message_deliveries + 1f64 > cap {
-                                cap
-                            } else {
-                                topic_stats.mesh_message_deliveries + 1f64
-                            };
+                        topic_stats.mesh_message_deliveries = if topic_stats.mesh_message_deliveries
+                            + 1f64
+                            > cap
+                        {
+                            cap
+                        } else {
+                            topic_stats.mesh_message_deliveries + 1f64
+                        };
                     }
                 }
             }

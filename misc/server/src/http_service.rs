@@ -70,10 +70,7 @@ impl MetricService {
     fn respond_with_404_not_found(&mut self) -> Response<String> {
         Response::builder()
             .status(StatusCode::NOT_FOUND)
-            .body(format!(
-                "Not found try localhost:[port]/{}",
-                self.metrics_path
-            ))
+            .body(format!("Not found try localhost:[port]/{}", self.metrics_path))
             .unwrap()
     }
 }

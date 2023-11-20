@@ -916,9 +916,9 @@ impl futures::Stream for OutboundSubstreamState {
                             *this = OutboundSubstreamState::Closing(substream);
                             let event = process_kad_response(msg, query_id);
 
-                            return Poll::Ready(Some(ConnectionHandlerEvent::NotifyBehaviour(
-                                event,
-                            )));
+                            return Poll::Ready(
+                                Some(ConnectionHandlerEvent::NotifyBehaviour(event))
+                            );
                         }
                         Poll::Pending => {
                             *this = OutboundSubstreamState::WaitingAnswer(substream, query_id);
@@ -931,9 +931,9 @@ impl futures::Stream for OutboundSubstreamState {
                                 query_id,
                             };
 
-                            return Poll::Ready(Some(ConnectionHandlerEvent::NotifyBehaviour(
-                                event,
-                            )));
+                            return Poll::Ready(
+                                Some(ConnectionHandlerEvent::NotifyBehaviour(event))
+                            );
                         }
                         Poll::Ready(None) => {
                             *this = OutboundSubstreamState::Done;
@@ -942,9 +942,9 @@ impl futures::Stream for OutboundSubstreamState {
                                 query_id,
                             };
 
-                            return Poll::Ready(Some(ConnectionHandlerEvent::NotifyBehaviour(
-                                event,
-                            )));
+                            return Poll::Ready(
+                                Some(ConnectionHandlerEvent::NotifyBehaviour(event))
+                            );
                         }
                     }
                 }
@@ -1140,11 +1140,13 @@ fn process_kad_response(event: KadResponseMsg, query_id: QueryId) -> HandlerEven
         KadResponseMsg::GetProviders {
             closer_peers,
             provider_peers,
-        } => HandlerEvent::GetProvidersRes {
-            closer_peers,
-            provider_peers,
-            query_id,
-        },
+        } => {
+            HandlerEvent::GetProvidersRes {
+                closer_peers,
+                provider_peers,
+                query_id,
+            }
+        }
         KadResponseMsg::GetValue {
             record,
             closer_peers,

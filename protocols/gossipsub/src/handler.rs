@@ -487,10 +487,9 @@ impl ConnectionHandler for Handler {
                 }
 
                 match event {
-                    ConnectionEvent::FullyNegotiatedInbound(FullyNegotiatedInbound {
-                        protocol,
-                        ..
-                    }) => match protocol {
+                    ConnectionEvent::FullyNegotiatedInbound(
+                        FullyNegotiatedInbound { protocol, .. }
+                    ) => match protocol {
                         Either::Left(protocol) => handler.on_fully_negotiated_inbound(protocol),
                         Either::Right(v) => void::unreachable(v),
                     },

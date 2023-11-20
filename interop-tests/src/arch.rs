@@ -167,9 +167,7 @@ pub(crate) mod native {
 
     impl RedisClient {
         pub(crate) fn new(redis_addr: &str) -> Result<Self> {
-            Ok(Self(
-                redis::Client::open(redis_addr).context("Could not connect to redis")?,
-            ))
+            Ok(Self(redis::Client::open(redis_addr).context("Could not connect to redis")?))
         }
 
         pub(crate) async fn blpop(&self, key: &str, timeout: u64) -> Result<Vec<String>> {
@@ -222,9 +220,9 @@ pub(crate) mod wasm {
                 libp2p::SwarmBuilder::with_new_identity()
                     .with_wasm_bindgen()
                     .with_other_transport(|local_key| {
-                        webtransport_websys::Transport::new(webtransport_websys::Config::new(
-                            &local_key,
-                        ))
+                        webtransport_websys::Transport::new(
+                            webtransport_websys::Config::new(&local_key)
+                        )
                     })?
                     .with_behaviour(behaviour_constructor)?
                     .with_swarm_config(|c| c.with_idle_connection_timeout(Duration::from_secs(5)))
@@ -288,16 +286,17 @@ pub(crate) mod wasm {
         }
 
         pub(crate) async fn blpop(&self, key: &str, timeout: u64) -> Result<Vec<String>> {
-            let res = reqwest::Client::new()
-                .post(&format!("http://{}/blpop", self.0))
-                .json(&BlpopRequest {
-                    key: key.to_owned(),
-                    timeout,
-                })
-                .send()
-                .await?
-                .json()
-                .await?;
+            let res =
+                reqwest::Client::new()
+                    .post(&format!("http://{}/blpop", self.0))
+                    .json(&BlpopRequest {
+                        key: key.to_owned(),
+                        timeout,
+                    })
+                    .send()
+                    .await?
+                    .json()
+                    .await?;
             Ok(res)
         }
 

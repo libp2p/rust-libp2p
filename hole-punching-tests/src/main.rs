@@ -98,9 +98,9 @@ async fn main() -> Result<()> {
             id,
         ) {
             (
-                SwarmEvent::Behaviour(BehaviourEvent::RelayClient(
-                    relay::client::Event::ReservationReqAccepted { .. },
-                )),
+                SwarmEvent::Behaviour(
+                    BehaviourEvent::RelayClient(relay::client::Event::ReservationReqAccepted { .. })
+                ),
                 _,
                 _,
             ) => {
@@ -237,27 +237,28 @@ async fn client_setup(
     relay_addr: Multiaddr,
     mode: Mode,
 ) -> Result<Either<ListenerId, ConnectionId>> {
-    let either = match mode {
-        Mode::Listen => {
-            let id = swarm.listen_on(relay_addr.with(Protocol::P2pCircuit))?;
+    let either =
+        match mode {
+            Mode::Listen => {
+                let id = swarm.listen_on(relay_addr.with(Protocol::P2pCircuit))?;
 
-            Either::Left(id)
-        }
-        Mode::Dial => {
-            let remote_peer_id = redis.pop(LISTEN_CLIENT_PEER_ID).await?;
+                Either::Left(id)
+            }
+            Mode::Dial => {
+                let remote_peer_id = redis.pop(LISTEN_CLIENT_PEER_ID).await?;
 
-            let opts = DialOpts::from(
-                relay_addr
-                    .with(Protocol::P2pCircuit)
-                    .with(Protocol::P2p(remote_peer_id)),
-            );
-            let id = opts.connection_id();
+                let opts = DialOpts::from(
+                    relay_addr
+                        .with(Protocol::P2pCircuit)
+                        .with(Protocol::P2p(remote_peer_id)),
+                );
+                let id = opts.connection_id();
 
-            swarm.dial(opts)?;
+                swarm.dial(opts)?;
 
-            Either::Right(id)
-        }
-    };
+                Either::Right(id)
+            }
+        };
 
     Ok(either)
 }
@@ -332,10 +333,7 @@ impl FromStr for TransportProtocol {
         match mode {
             "tcp" => Ok(TransportProtocol::Tcp),
             "quic" => Ok(TransportProtocol::Quic),
-            _ => Err(io::Error::new(
-                io::ErrorKind::Other,
-                "Expected either 'tcp' or 'quic'",
-            )),
+            _ => Err(io::Error::new(io::ErrorKind::Other, "Expected either 'tcp' or 'quic'")),
         }
     }
 }
@@ -352,10 +350,7 @@ impl FromStr for Mode {
         match mode {
             "dial" => Ok(Mode::Dial),
             "listen" => Ok(Mode::Listen),
-            _ => Err(io::Error::new(
-                io::ErrorKind::Other,
-                "Expected either 'dial' or 'listen'",
-            )),
+            _ => Err(io::Error::new(io::ErrorKind::Other, "Expected either 'dial' or 'listen'")),
         }
     }
 }

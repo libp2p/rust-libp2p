@@ -86,10 +86,12 @@ impl From<&PublicKey> for proto::PublicKey {
     fn from(key: &PublicKey) -> Self {
         match &key.publickey {
             #[cfg(feature = "ed25519")]
-            keypair::PublicKeyInner::Ed25519(key) => proto::PublicKey {
-                Type: proto::KeyType::Ed25519,
-                Data: key.to_bytes().to_vec(),
-            },
+            keypair::PublicKeyInner::Ed25519(key) => {
+                proto::PublicKey {
+                    Type: proto::KeyType::Ed25519,
+                    Data: key.to_bytes().to_vec(),
+                }
+            }
             #[cfg(all(feature = "rsa", not(target_arch = "wasm32")))]
             keypair::PublicKeyInner::Rsa(key) => proto::PublicKey {
                 Type: proto::KeyType::RSA,

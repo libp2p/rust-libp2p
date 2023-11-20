@@ -211,30 +211,31 @@ async fn report_inbound_failure_on_write_response() {
     swarm2.connect(&mut swarm1).await;
 
     // Expects OutboundFailure::Io failure with `FailOnWriteResponse` error
-    let server_task = async move {
-        let (peer, req_id, action, resp_channel) = wait_request(&mut swarm1).await.unwrap();
-        assert_eq!(peer, peer2_id);
-        assert_eq!(action, Action::FailOnWriteResponse);
-        swarm1
-            .behaviour_mut()
-            .send_response(resp_channel, Action::FailOnWriteResponse)
-            .unwrap();
+    let server_task =
+        async move {
+            let (peer, req_id, action, resp_channel) = wait_request(&mut swarm1).await.unwrap();
+            assert_eq!(peer, peer2_id);
+            assert_eq!(action, Action::FailOnWriteResponse);
+            swarm1
+                .behaviour_mut()
+                .send_response(resp_channel, Action::FailOnWriteResponse)
+                .unwrap();
 
-        let (peer, req_id_done, error) = wait_inbound_failure(&mut swarm1).await.unwrap();
-        assert_eq!(peer, peer2_id);
-        assert_eq!(req_id_done, req_id);
+            let (peer, req_id_done, error) = wait_inbound_failure(&mut swarm1).await.unwrap();
+            assert_eq!(peer, peer2_id);
+            assert_eq!(req_id_done, req_id);
 
-        let error = match error {
-            InboundFailure::Io(e) => e,
-            e => panic!("Unexpected error: {e:?}"),
+            let error = match error {
+                InboundFailure::Io(e) => e,
+                e => panic!("Unexpected error: {e:?}"),
+            };
+
+            assert_eq!(error.kind(), io::ErrorKind::Other);
+            assert_eq!(
+                error.into_inner().unwrap().to_string(),
+                "FailOnWriteResponse"
+            );
         };
-
-        assert_eq!(error.kind(), io::ErrorKind::Other);
-        assert_eq!(
-            error.into_inner().unwrap().to_string(),
-            "FailOnWriteResponse"
-        );
-    };
 
     // Expects OutboundFailure::ConnectionClosed or io::ErrorKind::UnexpectedEof
     let client_task = async move {

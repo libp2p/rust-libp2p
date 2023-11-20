@@ -190,24 +190,24 @@ impl super::Recorder<libp2p_kad::Event> for Metrics {
                                 .inc();
                         }
                     },
-                    libp2p_kad::QueryResult::GetClosestPeers(result) => match result {
-                        Ok(ok) => self
-                            .query_result_get_closest_peers_ok
-                            .observe(ok.peers.len() as f64),
-                        Err(error) => {
-                            self.query_result_get_closest_peers_error
-                                .get_or_create(&error.into())
-                                .inc();
+                    libp2p_kad::QueryResult::GetClosestPeers(result) => {
+                        match result {
+                            Ok(ok) => self
+                                .query_result_get_closest_peers_ok
+                                .observe(ok.peers.len() as f64),
+                            Err(error) => {
+                                self.query_result_get_closest_peers_error
+                                    .get_or_create(&error.into())
+                                    .inc();
+                            }
                         }
-                    },
+                    }
                     libp2p_kad::QueryResult::GetProviders(result) => match result {
                         Ok(libp2p_kad::GetProvidersOk::FoundProviders { providers, .. }) => {
                             self.query_result_get_providers_ok
                                 .observe(providers.len() as f64);
                         }
-                        Ok(libp2p_kad::GetProvidersOk::FinishedWithNoAdditionalRecord {
-                            ..
-                        }) => {}
+                        Ok(libp2p_kad::GetProvidersOk::FinishedWithNoAdditionalRecord { .. }) => {}
                         Err(error) => {
                             self.query_result_get_providers_error
                                 .get_or_create(&error.into())

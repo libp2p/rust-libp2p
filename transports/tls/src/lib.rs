@@ -51,9 +51,9 @@ pub fn make_client_config(
         .with_safe_default_kx_groups()
         .with_protocol_versions(verifier::PROTOCOL_VERSIONS)
         .expect("Cipher suites and kx groups are configured; qed")
-        .with_custom_certificate_verifier(Arc::new(
-            verifier::Libp2pCertificateVerifier::with_remote_peer_id(remote_peer_id),
-        ))
+        .with_custom_certificate_verifier(
+            Arc::new(verifier::Libp2pCertificateVerifier::with_remote_peer_id(remote_peer_id))
+        )
         .with_client_auth_cert(vec![certificate], private_key)
         .expect("Client cert key DER is valid; qed");
     crypto.alpn_protocols = vec![P2P_ALPN.to_vec()];

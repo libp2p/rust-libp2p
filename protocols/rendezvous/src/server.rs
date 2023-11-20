@@ -161,9 +161,7 @@ impl NetworkBehaviour for Behaviour {
         cx: &mut Context<'_>,
     ) -> Poll<ToSwarm<Self::ToSwarm, THandlerInEvent<Self>>> {
         if let Poll::Ready(ExpiredRegistration(registration)) = self.registrations.poll(cx) {
-            return Poll::Ready(ToSwarm::GenerateEvent(Event::RegistrationExpired(
-                registration,
-            )));
+            return Poll::Ready(ToSwarm::GenerateEvent(Event::RegistrationExpired(registration)));
         }
 
         loop {
@@ -203,16 +201,14 @@ impl NetworkBehaviour for Behaviour {
 
                         continue;
                     }
-                    ToSwarm::GenerateEvent(libp2p_request_response::Event::ResponseSent {
-                        ..
-                    })
+                    ToSwarm::GenerateEvent(libp2p_request_response::Event::ResponseSent { .. })
                     | ToSwarm::GenerateEvent(libp2p_request_response::Event::Message {
                         peer: _,
                         message: libp2p_request_response::Message::Response { .. },
                     })
-                    | ToSwarm::GenerateEvent(libp2p_request_response::Event::OutboundFailure {
-                        ..
-                    }) => {
+                    | ToSwarm::GenerateEvent(
+                        libp2p_request_response::Event::OutboundFailure { .. }
+                    ) => {
                         continue;
                     }
                     ToSwarm::Dial { .. }
@@ -459,10 +455,11 @@ impl Registrations {
             _ => {}
         }
 
-        let mut reggos_of_last_discover = cookie
-            .and_then(|cookie| self.cookies.get(&cookie))
-            .cloned()
-            .unwrap_or_default();
+        let mut reggos_of_last_discover =
+            cookie
+                .and_then(|cookie| self.cookies.get(&cookie))
+                .cloned()
+                .unwrap_or_default();
 
         let ids = self
             .registrations_for_peer

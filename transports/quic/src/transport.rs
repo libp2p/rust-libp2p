@@ -312,9 +312,7 @@ impl<P: Provider> Transport for GenTransport<P> {
 
         let socket = self
             .eligible_listener(&socket_addr)
-            .ok_or(TransportError::Other(
-                Error::NoActiveListenerForDialAsListener,
-            ))?
+            .ok_or(TransportError::Other(Error::NoActiveListenerForDialAsListener))?
             .try_clone_socket()
             .map_err(Self::Error::from)?;
 
@@ -329,9 +327,7 @@ impl<P: Provider> Transport for GenTransport<P> {
                 // Stale senders, i.e. from failed hole punches are not removed.
                 // Thus, we can just overwrite a stale sender.
                 if !sender_entry.get().is_canceled() {
-                    return Err(TransportError::Other(Error::HolePunchInProgress(
-                        socket_addr,
-                    )));
+                    return Err(TransportError::Other(Error::HolePunchInProgress(socket_addr)));
                 }
                 sender_entry.insert(sender);
             }
@@ -741,10 +737,11 @@ fn is_quic_addr(addr: &Multiaddr, support_draft_29: bool) -> bool {
 
 /// Turns an IP address and port into the corresponding QUIC multiaddr.
 fn socketaddr_to_multiaddr(socket_addr: &SocketAddr, version: ProtocolVersion) -> Multiaddr {
-    let quic_proto = match version {
-        ProtocolVersion::V1 => Protocol::QuicV1,
-        ProtocolVersion::Draft29 => Protocol::Quic,
-    };
+    let quic_proto =
+        match version {
+            ProtocolVersion::V1 => Protocol::QuicV1,
+            ProtocolVersion::Draft29 => Protocol::Quic,
+        };
     Multiaddr::empty()
         .with(socket_addr.ip().into())
         .with(Protocol::Udp(socket_addr.port()))
@@ -824,9 +821,9 @@ mod tests {
             ),
             Some((
                 SocketAddr::new(
-                    IpAddr::V6(Ipv6Addr::new(
-                        65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535,
-                    )),
+                    IpAddr::V6(
+                        Ipv6Addr::new(65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535,)
+                    ),
                     8080,
                 ),
                 ProtocolVersion::V1,
@@ -935,10 +932,11 @@ mod tests {
         let keypair = libp2p_identity::Keypair::generate_ed25519();
         let config = Config::new(&keypair);
         let mut transport = crate::tokio::Transport::new(config);
-        let port = {
-            let socket = UdpSocket::bind("127.0.0.1:0").unwrap();
-            socket.local_addr().unwrap().port()
-        };
+        let port =
+            {
+                let socket = UdpSocket::bind("127.0.0.1:0").unwrap();
+                socket.local_addr().unwrap().port()
+            };
 
         transport
             .listen_on(

@@ -303,18 +303,18 @@ where
             remaining_established,
         }: ConnectionClosed,
     ) {
-        let mut other_closed_connections = self
-            .on_connection_established
-            .iter()
-            .rev() // take last to first
-            .filter_map(|(peer, .., remaining_established)| {
-                if &peer_id == peer {
-                    Some(remaining_established)
-                } else {
-                    None
-                }
-            })
-            .take(remaining_established);
+        let mut other_closed_connections =
+            self.on_connection_established
+                .iter()
+                .rev() // take last to first
+                .filter_map(|(peer, .., remaining_established)| {
+                    if &peer_id == peer {
+                        Some(remaining_established)
+                    } else {
+                        None
+                    }
+                })
+                .take(remaining_established);
 
         // We are informed that there are `other_established` additional connections. Ensure that the
         // number of previous connections is consistent with this
@@ -368,11 +368,8 @@ where
         local_addr: &Multiaddr,
         remote_addr: &Multiaddr,
     ) -> Result<(), ConnectionDenied> {
-        self.handle_pending_inbound_connection.push((
-            connection_id,
-            local_addr.clone(),
-            remote_addr.clone(),
-        ));
+        self.handle_pending_inbound_connection
+            .push((connection_id, local_addr.clone(), remote_addr.clone()));
         self.inner
             .handle_pending_inbound_connection(connection_id, local_addr, remote_addr)
     }
@@ -465,26 +462,20 @@ where
             FromSwarm::NewListenAddr(NewListenAddr { listener_id, addr }) => {
                 self.on_new_listen_addr.push((listener_id, addr.clone()));
                 self.inner
-                    .on_swarm_event(FromSwarm::NewListenAddr(NewListenAddr {
-                        listener_id,
-                        addr,
-                    }));
+                    .on_swarm_event(FromSwarm::NewListenAddr(NewListenAddr { listener_id, addr }));
             }
             FromSwarm::ExpiredListenAddr(ExpiredListenAddr { listener_id, addr }) => {
                 self.on_expired_listen_addr
                     .push((listener_id, addr.clone()));
-                self.inner
-                    .on_swarm_event(FromSwarm::ExpiredListenAddr(ExpiredListenAddr {
-                        listener_id,
-                        addr,
-                    }));
+                self.inner.on_swarm_event(
+                    FromSwarm::ExpiredListenAddr(ExpiredListenAddr { listener_id, addr })
+                );
             }
             FromSwarm::NewExternalAddrCandidate(NewExternalAddrCandidate { addr }) => {
                 self.on_new_external_addr.push(addr.clone());
-                self.inner
-                    .on_swarm_event(FromSwarm::NewExternalAddrCandidate(
-                        NewExternalAddrCandidate { addr },
-                    ));
+                self.inner.on_swarm_event(
+                    FromSwarm::NewExternalAddrCandidate(NewExternalAddrCandidate { addr })
+                );
             }
             FromSwarm::ExternalAddrExpired(ExternalAddrExpired { addr }) => {
                 self.on_expired_external_addr.push(addr.clone());

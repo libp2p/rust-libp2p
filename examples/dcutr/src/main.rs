@@ -148,9 +148,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
                 SwarmEvent::Dialing { .. } => {}
                 SwarmEvent::ConnectionEstablished { .. } => {}
                 SwarmEvent::Behaviour(BehaviourEvent::Ping(_)) => {}
-                SwarmEvent::Behaviour(BehaviourEvent::Identify(identify::Event::Sent {
-                    ..
-                })) => {
+                SwarmEvent::Behaviour(BehaviourEvent::Identify(identify::Event::Sent { .. })) => {
                     tracing::info!("Told relay its public address");
                     told_relay_observed_addr = true;
                 }
@@ -193,9 +191,9 @@ async fn main() -> Result<(), Box<dyn Error>> {
                 SwarmEvent::NewListenAddr { address, .. } => {
                     tracing::info!(%address, "Listening on address");
                 }
-                SwarmEvent::Behaviour(BehaviourEvent::RelayClient(
-                    relay::client::Event::ReservationReqAccepted { .. },
-                )) => {
+                SwarmEvent::Behaviour(
+                    BehaviourEvent::RelayClient(relay::client::Event::ReservationReqAccepted { .. })
+                ) => {
                     assert!(opts.mode == Mode::Listen);
                     tracing::info!("Relay accepted our reservation request");
                 }

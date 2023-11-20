@@ -55,18 +55,22 @@ where
         remote_addr: &Multiaddr,
     ) -> Result<THandler<Self>, ConnectionDenied> {
         let handler = match self {
-            Either::Left(inner) => Either::Left(inner.handle_established_inbound_connection(
-                connection_id,
-                peer,
-                local_addr,
-                remote_addr,
-            )?),
-            Either::Right(inner) => Either::Right(inner.handle_established_inbound_connection(
-                connection_id,
-                peer,
-                local_addr,
-                remote_addr,
-            )?),
+            Either::Left(inner) => {
+                Either::Left(inner.handle_established_inbound_connection(
+                    connection_id,
+                    peer,
+                    local_addr,
+                    remote_addr,
+                )?)
+            }
+            Either::Right(inner) => {
+                Either::Right(inner.handle_established_inbound_connection(
+                    connection_id,
+                    peer,
+                    local_addr,
+                    remote_addr,
+                )?)
+            }
         };
 
         Ok(handler)
@@ -105,18 +109,22 @@ where
         role_override: Endpoint,
     ) -> Result<THandler<Self>, ConnectionDenied> {
         let handler = match self {
-            Either::Left(inner) => Either::Left(inner.handle_established_outbound_connection(
-                connection_id,
-                peer,
-                addr,
-                role_override,
-            )?),
-            Either::Right(inner) => Either::Right(inner.handle_established_outbound_connection(
-                connection_id,
-                peer,
-                addr,
-                role_override,
-            )?),
+            Either::Left(inner) => {
+                Either::Left(inner.handle_established_outbound_connection(
+                    connection_id,
+                    peer,
+                    addr,
+                    role_override,
+                )?)
+            }
+            Either::Right(inner) => {
+                Either::Right(inner.handle_established_outbound_connection(
+                    connection_id,
+                    peer,
+                    addr,
+                    role_override,
+                )?)
+            }
         };
 
         Ok(handler)

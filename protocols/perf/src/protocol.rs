@@ -156,12 +156,13 @@ async fn send_receive_inner<S: AsyncRead + AsyncWrite + Unpin + Send + 'static>(
 pub(crate) async fn receive_send<S: AsyncRead + AsyncWrite + Unpin>(
     mut stream: S,
 ) -> Result<Run, std::io::Error> {
-    let to_send = {
-        let mut buf = [0; 8];
-        stream.read_exact(&mut buf).await?;
+    let to_send =
+        {
+            let mut buf = [0; 8];
+            stream.read_exact(&mut buf).await?;
 
-        u64::from_be_bytes(buf) as usize
-    };
+            u64::from_be_bytes(buf) as usize
+        };
 
     let read_start = Instant::now();
 

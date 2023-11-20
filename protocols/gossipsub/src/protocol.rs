@@ -363,36 +363,38 @@ impl Decoder for GossipsubCodec {
             };
 
             // Verify the message source if required
-            let source = if verify_source {
-                if let Some(bytes) = message.from {
-                    if !bytes.is_empty() {
-                        match PeerId::from_bytes(&bytes) {
-                            Ok(peer_id) => Some(peer_id), // valid peer id
-                            Err(_) => {
-                                // invalid peer id, add to invalid messages
-                                tracing::debug!("Message source has an invalid PeerId");
-                                let message = RawMessage {
-                                    source: None, // don't bother inform the application
-                                    data: message.data.unwrap_or_default(),
-                                    sequence_number,
-                                    topic: TopicHash::from_raw(message.topic),
-                                    signature: message.signature, // don't inform the application
-                                    key: message.key,
-                                    validated: false,
-                                };
-                                invalid_messages.push((message, ValidationError::InvalidPeerId));
-                                continue;
+            let source =
+                if verify_source {
+                    if let Some(bytes) = message.from {
+                        if !bytes.is_empty() {
+                            match PeerId::from_bytes(&bytes) {
+                                Ok(peer_id) => Some(peer_id), // valid peer id
+                                Err(_) => {
+                                    // invalid peer id, add to invalid messages
+                                    tracing::debug!("Message source has an invalid PeerId");
+                                    let message = RawMessage {
+                                        source: None, // don't bother inform the application
+                                        data: message.data.unwrap_or_default(),
+                                        sequence_number,
+                                        topic: TopicHash::from_raw(message.topic),
+                                        signature: message.signature, // don't inform the application
+                                        key: message.key,
+                                        validated: false,
+                                    };
+                                    invalid_messages
+                                        .push((message, ValidationError::InvalidPeerId));
+                                    continue;
+                                }
                             }
+                        } else {
+                            None
                         }
                     } else {
                         None
                     }
                 } else {
                     None
-                }
-            } else {
-                None
-            };
+                };
 
             // This message has passed all validation, add it to the validated messages.
             messages.push(RawMessage {
@@ -423,25 +425,27 @@ impl Decoder for GossipsubCodec {
                 })
                 .collect();
 
-            let iwant_msgs: Vec<ControlAction> = rpc_control
-                .iwant
-                .into_iter()
-                .map(|iwant| ControlAction::IWant {
-                    message_ids: iwant
-                        .message_ids
-                        .into_iter()
-                        .map(MessageId::from)
-                        .collect::<Vec<_>>(),
-                })
-                .collect();
+            let iwant_msgs: Vec<ControlAction> =
+                rpc_control
+                    .iwant
+                    .into_iter()
+                    .map(|iwant| ControlAction::IWant {
+                        message_ids: iwant
+                            .message_ids
+                            .into_iter()
+                            .map(MessageId::from)
+                            .collect::<Vec<_>>(),
+                    })
+                    .collect();
 
-            let graft_msgs: Vec<ControlAction> = rpc_control
-                .graft
-                .into_iter()
-                .map(|graft| ControlAction::Graft {
-                    topic_hash: TopicHash::from_raw(graft.topic_id.unwrap_or_default()),
-                })
-                .collect();
+            let graft_msgs: Vec<ControlAction> =
+                rpc_control
+                    .graft
+                    .into_iter()
+                    .map(|graft| ControlAction::Graft {
+                        topic_hash: TopicHash::from_raw(graft.topic_id.unwrap_or_default()),
+                    })
+                    .collect();
 
             let mut prune_msgs = Vec::new();
 
@@ -602,12 +606,13 @@ mod tests {
 
     #[test]
     fn support_floodsub_with_custom_protocol() {
-        let protocol_config = ConfigBuilder::default()
-            .protocol_id("/foosub", Version::V1_1)
-            .support_floodsub()
-            .build()
-            .unwrap()
-            .protocol_config();
+        let protocol_config =
+            ConfigBuilder::default()
+                .protocol_id("/foosub", Version::V1_1)
+                .support_floodsub()
+                .build()
+                .unwrap()
+                .protocol_config();
 
         assert_eq!(protocol_config.protocol_ids[0].protocol, "/foosub");
         assert_eq!(protocol_config.protocol_ids[1].protocol, "/floodsub/1.0.0");

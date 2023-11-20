@@ -31,20 +31,21 @@ async fn main() -> Result<(), Box<dyn Error>> {
         .with_env_filter(EnvFilter::from_default_env())
         .try_init();
 
-    let mut swarm = libp2p::SwarmBuilder::with_new_identity()
-        .with_async_std()
-        .with_tcp(
-            tcp::Config::default(),
-            noise::Config::new,
-            yamux::Config::default,
-        )?
-        .with_behaviour(|key| {
-            identify::Behaviour::new(identify::Config::new(
-                "/ipfs/id/1.0.0".to_string(),
-                key.public(),
-            ))
-        })?
-        .build();
+    let mut swarm =
+        libp2p::SwarmBuilder::with_new_identity()
+            .with_async_std()
+            .with_tcp(
+                tcp::Config::default(),
+                noise::Config::new,
+                yamux::Config::default,
+            )?
+            .with_behaviour(|key| {
+                identify::Behaviour::new(identify::Config::new(
+                    "/ipfs/id/1.0.0".to_string(),
+                    key.public(),
+                ))
+            })?
+            .build();
 
     // Tell the swarm to listen on all interfaces and a random, OS-assigned
     // port.

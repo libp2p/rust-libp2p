@@ -718,14 +718,14 @@ mod tests {
     fn timeout() {
         fn prop(mut iter: ClosestPeersIter) -> bool {
             let mut now = Instant::now();
-            let peer = iter
-                .closest_peers
-                .values()
-                .next()
-                .unwrap()
-                .key
-                .clone()
-                .into_preimage();
+            let peer =
+                iter.closest_peers
+                    .values()
+                    .next()
+                    .unwrap()
+                    .key
+                    .clone()
+                    .into_preimage();
 
             // Poll the iterator for the first peer to be in progress.
             match iter.next(now) {

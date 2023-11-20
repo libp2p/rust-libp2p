@@ -54,13 +54,14 @@ use std::pin::Pin;
 use std::task::{Context, Poll};
 use std::{io, path::PathBuf};
 
-pub type Listener<T> = BoxStream<
-    'static,
-    Result<
-        TransportEvent<<T as Transport>::ListenerUpgrade, <T as Transport>::Error>,
-        Result<(), <T as Transport>::Error>,
-    >,
->;
+pub type Listener<T> =
+    BoxStream<
+        'static,
+        Result<
+            TransportEvent<<T as Transport>::ListenerUpgrade, <T as Transport>::Error>,
+            Result<(), <T as Transport>::Error>,
+        >,
+    >;
 
 macro_rules! codegen {
     ($feature_name:expr, $uds_config:ident, $build_listener:expr, $unix_stream:ty, $($mut_or_not:tt)*) => {
@@ -285,9 +286,8 @@ mod tests {
     fn communicating_between_dialer_and_listener() {
         let temp_dir = tempfile::tempdir().unwrap();
         let socket = temp_dir.path().join("socket");
-        let addr = Multiaddr::from(Protocol::Unix(Cow::Owned(
-            socket.to_string_lossy().into_owned(),
-        )));
+        let addr =
+            Multiaddr::from(Protocol::Unix(Cow::Owned(socket.to_string_lossy().into_owned())));
 
         let (tx, rx) = oneshot::channel();
 

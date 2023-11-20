@@ -228,9 +228,8 @@ mod tests {
         Delay::new(Duration::from_millis(150)).await;
         poll_fn(|cx| streams.poll_next_unpin(cx)).await;
 
-        let poll = streams.poll_next_unpin(&mut Context::from_waker(
-            futures_util::task::noop_waker_ref(),
-        ));
+        let poll =
+            streams.poll_next_unpin(&mut Context::from_waker(futures_util::task::noop_waker_ref()));
         assert!(poll.is_pending())
     }
 
@@ -245,9 +244,8 @@ mod tests {
             assert!(cancelled_stream.is_some());
         }
 
-        let poll = streams.poll_next_unpin(&mut Context::from_waker(
-            futures_util::task::noop_waker_ref(),
-        ));
+        let poll =
+            streams.poll_next_unpin(&mut Context::from_waker(futures_util::task::noop_waker_ref()));
 
         assert!(poll.is_pending());
         assert_eq!(

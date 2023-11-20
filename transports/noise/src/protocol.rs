@@ -31,11 +31,12 @@ use zeroize::Zeroize;
 /// Prefix of static key signatures for domain separation.
 pub(crate) const STATIC_KEY_DOMAIN: &str = "noise-libp2p-static-key:";
 
-pub(crate) static PARAMS_XX: Lazy<NoiseParams> = Lazy::new(|| {
-    "Noise_XX_25519_ChaChaPoly_SHA256"
-        .parse()
-        .expect("Invalid protocol name")
-});
+pub(crate) static PARAMS_XX: Lazy<NoiseParams> =
+    Lazy::new(|| {
+        "Noise_XX_25519_ChaChaPoly_SHA256"
+            .parse()
+            .expect("Invalid protocol name")
+    });
 
 pub(crate) fn noise_params_into_builder<'b>(
     params: NoiseParams,

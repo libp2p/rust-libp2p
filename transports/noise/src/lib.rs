@@ -122,13 +122,14 @@ impl Config {
     }
 
     fn into_responder<S: AsyncRead + AsyncWrite>(self, socket: S) -> Result<State<S>, Error> {
-        let session = noise_params_into_builder(
-            self.params,
-            &self.prologue,
-            self.dh_keys.keypair.secret(),
-            None,
-        )
-        .build_responder()?;
+        let session =
+            noise_params_into_builder(
+                self.params,
+                &self.prologue,
+                self.dh_keys.keypair.secret(),
+                None,
+            )
+            .build_responder()?;
 
         let state = State::new(
             socket,
@@ -142,13 +143,14 @@ impl Config {
     }
 
     fn into_initiator<S: AsyncRead + AsyncWrite>(self, socket: S) -> Result<State<S>, Error> {
-        let session = noise_params_into_builder(
-            self.params,
-            &self.prologue,
-            self.dh_keys.keypair.secret(),
-            None,
-        )
-        .build_initiator()?;
+        let session =
+            noise_params_into_builder(
+                self.params,
+                &self.prologue,
+                self.dh_keys.keypair.secret(),
+                None,
+            )
+            .build_initiator()?;
 
         let state = State::new(
             socket,

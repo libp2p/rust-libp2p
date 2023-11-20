@@ -50,9 +50,9 @@ impl Endpoint {
                     host = Some(domain.to_string())
                 }
                 Protocol::Dnsaddr(_) => {
-                    return Err(Error::InvalidMultiaddr(
-                        "/dnsaddr not supported from within a browser",
-                    ));
+                    return Err(
+                        Error::InvalidMultiaddr("/dnsaddr not supported from within a browser")
+                    );
                 }
                 Protocol::Udp(p) => {
                     if port.is_some() {
@@ -72,9 +72,9 @@ impl Endpoint {
                 }
                 Protocol::WebTransport => {
                     if !found_quic {
-                        return Err(Error::InvalidMultiaddr(
-                            "/quic is not found before /webtransport",
-                        ));
+                        return Err(
+                            Error::InvalidMultiaddr("/quic is not found before /webtransport")
+                        );
                     }
 
                     found_webtransport = true;
@@ -100,9 +100,7 @@ impl Endpoint {
         }
 
         if !found_quic || !found_webtransport {
-            return Err(Error::InvalidMultiaddr(
-                "Not a /quic/webtransport multiaddr",
-            ));
+            return Err(Error::InvalidMultiaddr("Not a /quic/webtransport multiaddr"));
         }
 
         let host = host.ok_or_else(|| Error::InvalidMultiaddr("Host is not defined"))?;
@@ -166,13 +164,13 @@ mod tests {
         assert_eq!(endpoint.port, 44874);
         assert_eq!(endpoint.certhashes.len(), 2);
 
-        assert!(endpoint.certhashes.contains(&multihash_from_str(
-            "uEiCaDd1Ca1A8IVJ3hsIxIyi11cwxaDKqzVrBkGJbKZU5ng"
-        )));
+        assert!(endpoint
+            .certhashes
+            .contains(&multihash_from_str("uEiCaDd1Ca1A8IVJ3hsIxIyi11cwxaDKqzVrBkGJbKZU5ng")));
 
-        assert!(endpoint.certhashes.contains(&multihash_from_str(
-            "uEiDv-VGW8oXxui_G_Kqp-87YjvET-Hr2qYAMYPePJDcsjQ"
-        )));
+        assert!(endpoint
+            .certhashes
+            .contains(&multihash_from_str("uEiDv-VGW8oXxui_G_Kqp-87YjvET-Hr2qYAMYPePJDcsjQ")));
 
         assert_eq!(
             endpoint.remote_peer.unwrap(),

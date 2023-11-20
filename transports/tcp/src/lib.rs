@@ -891,9 +891,7 @@ mod tests {
                     .unwrap()
             ),
             Ok(SocketAddr::new(
-                IpAddr::V6(Ipv6Addr::new(
-                    65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535,
-                )),
+                IpAddr::V6(Ipv6Addr::new(65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535,)),
                 8080,
             ))
         );
@@ -1336,10 +1334,11 @@ mod tests {
 
         #[cfg(feature = "tokio")]
         {
-            let rt = ::tokio::runtime::Builder::new_current_thread()
-                .enable_io()
-                .build()
-                .unwrap();
+            let rt =
+                ::tokio::runtime::Builder::new_current_thread()
+                    .enable_io()
+                    .build()
+                    .unwrap();
             assert!(rt.block_on(cycle_listeners::<tokio::Tcp>()));
         }
     }
@@ -1372,10 +1371,11 @@ mod tests {
         }
         #[cfg(feature = "tokio")]
         {
-            let rt = ::tokio::runtime::Builder::new_current_thread()
-                .enable_io()
-                .build()
-                .unwrap();
+            let rt =
+                ::tokio::runtime::Builder::new_current_thread()
+                    .enable_io()
+                    .build()
+                    .unwrap();
             rt.block_on(async {
                 test::<async_io::Tcp>();
             });
