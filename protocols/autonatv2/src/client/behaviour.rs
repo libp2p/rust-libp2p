@@ -191,8 +191,9 @@ where
         &mut self,
         _cx: &mut Context<'_>,
     ) -> Poll<ToSwarm<Self::ToSwarm, <Handler as ConnectionHandler>::FromBehaviour>> {
-        if let Some(event) = self.pending_events.pop_front() {
-            return Poll::Ready(event);
+        let pending_event = self.poll_pending_events();
+        if pending_event.is_ready() {
+            return pending_event;
         }
         self.pending_req_for_peer.retain(|_, reqs| !reqs.is_empty());
         for (peer, dial_requests) in &mut self.pending_req_for_peer {
@@ -210,8 +211,8 @@ where
                 self.pending_requests.push_front(dial_request);
             } else {
                 let peer = self.known_servers.choose(&mut self.rng).unwrap();
-
                 self.submit_req_for_peer(*peer, dial_request);
+                return self.poll_pending_events();
             }
         }
         Poll::Pending
@@ -253,27 +254,22 @@ where
             .unwrap_or_default()
         {
             if let Some(new_peer) = self.known_servers.choose(&mut self.rng) {
-                if let Some(conn_id) = self.peers_to_handlers.get(new_peer) {
-                    self.pending_events.push_back(ToSwarm::NotifyHandler {
-                        peer_id: *new_peer,
-                        handler: NotifyHandler::One(*conn_id),
-                        event: Either::Left(RequestFromBehaviour::PerformRequest(dial_request)),
-                    })
-                } else {
-                    self.pending_events.push_back(ToSwarm::Dial {
-                        opts: DialOpts::peer_id(*new_peer)
-                            .condition(PeerCondition::DisconnectedAndNotDialing)
-                            .build(),
-                    });
-                    self.pending_req_for_peer
-                        .entry(*new_peer)
-                        .or_default()
-                        .push_back(dial_request);
-                }
+                self.submit_req_for_peer(*new_peer, dial_request);
             } else {
                 self.pending_requests.push_front(dial_request);
             }
         }
+    }
+
+    fn poll_pending_events(
+        &mut self,
+    ) -> Poll<
+        ToSwarm<<Self as NetworkBehaviour>::ToSwarm, <Handler as ConnectionHandler>::FromBehaviour>,
+    > {
+        if let Some(event) = self.pending_events.pop_front() {
+            return Poll::Ready(event);
+        }
+        Poll::Pending
     }
 }
 

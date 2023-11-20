@@ -46,7 +46,7 @@ pub(crate) enum Error {
     #[error("server chose not to dial any provided address")]
     ServerChoseNotToDialAnyAddress,
     #[error("server ran into an internal error")]
-    InternalServerError,
+    InternalServer,
     #[error("server did not respond correctly to dial request")]
     InvalidResponse,
     #[error("server was unable to connect to address: {addr:?}")]
@@ -253,7 +253,7 @@ fn test_end_from_dial_response(
     match (resp.status, resp.dial_status) {
         (ResponseStatus::E_REQUEST_REJECTED, _) => Err(Error::ServerRejectedDialRequest),
         (ResponseStatus::E_DIAL_REFUSED, _) => Err(Error::ServerChoseNotToDialAnyAddress),
-        (ResponseStatus::E_INTERNAL_ERROR, _) => Err(Error::InternalServerError),
+        (ResponseStatus::E_INTERNAL_ERROR, _) => Err(Error::InternalServer),
         (ResponseStatus::OK, DialStatus::UNUSED) => Err(Error::InvalidResponse),
         (ResponseStatus::OK, DialStatus::E_DIAL_ERROR) => {
             Err(Error::UnableToConnectOnSelectedAddress {
