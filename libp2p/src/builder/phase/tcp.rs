@@ -185,7 +185,7 @@ impl<Provider> SwarmBuilder<Provider, TcpPhase> {
 }
 macro_rules! impl_tcp_phase_with_websocket {
     ($providerKebabCase:literal, $providerPascalCase:ty, $websocketStream:ty) => {
-        #[cfg(all(feature = $providerKebabCase, not(target_arch = "wasm32"), feature = "websocket"))]
+        #[cfg(all(feature = $providerKebabCase, not(target_arch = "wasm32"), feature = "websocket", feature = "tcp"))]
         impl SwarmBuilder<$providerPascalCase, TcpPhase> {
             /// See [`SwarmBuilder::with_websocket`].
             pub async fn with_websocket <
