@@ -377,7 +377,7 @@ impl NetworkBehaviour for Behaviour {
         }
 
         if (listen_addr_changed && self.config.push_listen_addr_updates)
-            | (external_addr_changed && self.config.push_external_addr_updates)
+            || (external_addr_changed && self.config.push_external_addr_updates)
         {
             // trigger an identify push for all connected peers
             let push_events = self.connected.keys().map(|peer| ToSwarm::NotifyHandler {
