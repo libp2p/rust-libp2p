@@ -56,13 +56,13 @@ The above changelog-management strategy means `master` is always in a state wher
 
 ## Dealing with alphas
 
-Unfortunately, `cargo` has a rather uninutitive behaviour when it comes to dealing with pre-releases like `0.1.0-alpha`.
+Unfortunately, `cargo` has a rather unintuitive behaviour when it comes to dealing with pre-releases like `0.1.0-alpha`.
 See this internals thread for some context: https://internals.rust-lang.org/t/changing-cargo-semver-compatibility-for-pre-releases
 
 In short, cargo will automatically update from `0.1.0-alpha.1` to `0.1.0-alpha.2` UNLESS you pin the version directly with `=0.1.0-alpha.1`.
 However, from a semver perspective, changes between pre-releases can be breaking.
 
-To avoid accidential breaking changes for our users, we employ the following convention for alpha releases:
+To avoid accidental breaking changes for our users, we employ the following convention for alpha releases:
 
 - For a breaking change in a crate with an alpha release, bump the "minor" version but retain the "alpha" tag.
   Example: `0.1.0-alpha` to `0.2.0-alpha`.
