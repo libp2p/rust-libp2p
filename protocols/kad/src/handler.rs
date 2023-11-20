@@ -67,7 +67,7 @@ pub struct Handler {
 
     /// List of outbound substreams that are waiting to become active next.
     /// Contains the request we want to send, and the user data if we expect an answer.
-    pending_messages: VecDeque<(KadRequestMsg, Option<QueryId>)>,
+    pending_messages: VecDeque<(KadRequestMsg, QueryId)>,
 
     /// List of active inbound substreams with the state they are in.
     inbound_substreams: SelectAll<InboundSubstreamState>,
@@ -101,12 +101,12 @@ enum OutboundSubstreamState {
     PendingSend {
         stream: KadOutStreamSink<Stream>,
         msg: KadRequestMsg,
-        query_id: Option<QueryId>,
+        query_id: QueryId,
     },
     /// Waiting to flush the substream so that the data arrives to the remote.
     PendingFlush {
         stream: KadOutStreamSink<Stream>,
-        query_id: Option<QueryId>,
+        query_id: QueryId,
         /// Whether the sent message has an answer.
         has_answer: bool,
     },
@@ -608,7 +608,7 @@ impl Handler {
         // TODO: cache the fact that the remote doesn't support kademlia at all, so that we don't
         //       continue trying
 
-        if let Some((_, Some(query_id))) = self.pending_messages.pop_front() {
+        if let Some((_, query_id)) = self.pending_messages.pop_front() {
             self.outbound_substreams
                 .push(OutboundSubstreamState::ReportError {
                     error: error.into(),
@@ -653,7 +653,7 @@ impl ConnectionHandler for Handler {
             }
             HandlerIn::FindNodeReq { key, query_id } => {
                 let msg = KadRequestMsg::FindNode { key };
-                self.pending_messages.push_back((msg, Some(query_id)));
+                self.pending_messages.push_back((msg, query_id));
             }
             HandlerIn::FindNodeRes {
                 closer_peers,
@@ -661,7 +661,7 @@ impl ConnectionHandler for Handler {
             } => self.answer_pending_request(request_id, KadResponseMsg::FindNode { closer_peers }),
             HandlerIn::GetProvidersReq { key, query_id } => {
                 let msg = KadRequestMsg::GetProviders { key };
-                self.pending_messages.push_back((msg, Some(query_id)));
+                self.pending_messages.push_back((msg, query_id));
             }
             HandlerIn::GetProvidersRes {
                 closer_peers,
@@ -680,15 +680,15 @@ impl ConnectionHandler for Handler {
                 query_id,
             } => {
                 let msg = KadRequestMsg::AddProvider { key, provider };
-                self.pending_messages.push_back((msg, Some(query_id)));
+                self.pending_messages.push_back((msg, query_id));
             }
             HandlerIn::GetRecord { key, query_id } => {
                 let msg = KadRequestMsg::GetValue { key };
-                self.pending_messages.push_back((msg, Some(query_id)));
+                self.pending_messages.push_back((msg, query_id));
             }
             HandlerIn::PutRecord { record, query_id } => {
                 let msg = KadRequestMsg::PutValue { record };
-                self.pending_messages.push_back((msg, Some(query_id)));
+                self.pending_messages.push_back((msg, query_id));
             }
             HandlerIn::GetRecordRes {
                 record,
@@ -895,16 +895,13 @@ impl futures::Stream for OutboundSubstreamState {
                             }
                             Err(error) => {
                                 *this = OutboundSubstreamState::Done;
-                                let event = query_id.map(|query_id| {
-                                    ConnectionHandlerEvent::NotifyBehaviour(
-                                        HandlerEvent::QueryError {
-                                            error: HandlerQueryErr::Io(error),
-                                            query_id,
-                                        },
-                                    )
-                                });
 
-                                return Poll::Ready(event);
+                                return Poll::Ready(Some(ConnectionHandlerEvent::NotifyBehaviour(
+                                    HandlerEvent::QueryError {
+                                        error: HandlerQueryErr::Io(error),
+                                        query_id,
+                                    },
+                                )));
                             }
                         },
                         Poll::Pending => {
@@ -917,14 +914,13 @@ impl futures::Stream for OutboundSubstreamState {
                         }
                         Poll::Ready(Err(error)) => {
                             *this = OutboundSubstreamState::Done;
-                            let event = query_id.map(|query_id| {
-                                ConnectionHandlerEvent::NotifyBehaviour(HandlerEvent::QueryError {
+
+                            return Poll::Ready(Some(ConnectionHandlerEvent::NotifyBehaviour(
+                                HandlerEvent::QueryError {
                                     error: HandlerQueryErr::Io(error),
                                     query_id,
-                                })
-                            });
-
-                            return Poll::Ready(event);
+                                },
+                            )));
                         }
                     }
                 }
@@ -937,7 +933,7 @@ impl futures::Stream for OutboundSubstreamState {
                         if has_answer {
                             *this = OutboundSubstreamState::WaitingAnswer {
                                 stream: substream,
-                                query_id: query_id.unwrap(),
+                                query_id,
                             };
                         } else {
                             *this = OutboundSubstreamState::Closing { stream: substream };
@@ -953,14 +949,13 @@ impl futures::Stream for OutboundSubstreamState {
                     }
                     Poll::Ready(Err(error)) => {
                         *this = OutboundSubstreamState::Done;
-                        let event = query_id.map(|query_id| {
-                            ConnectionHandlerEvent::NotifyBehaviour(HandlerEvent::QueryError {
+
+                        return Poll::Ready(Some(ConnectionHandlerEvent::NotifyBehaviour(
+                            HandlerEvent::QueryError {
                                 error: HandlerQueryErr::Io(error),
                                 query_id,
-                            })
-                        });
-
-                        return Poll::Ready(event);
+                            },
+                        )));
                     }
                 },
                 OutboundSubstreamState::WaitingAnswer {
