@@ -62,7 +62,6 @@ jobs:
           tool: tomlq
 
       - name: Enforce version in `workspace.dependencies` matches latest version
-        if: env.CRATE != 'libp2p'
         run: |
           PACKAGE_VERSION=$(cargo metadata --format-version=1 --no-deps | jq -e -r '.packages[] | select(.name == "'"$CRATE"'") | .version')
           SPECIFIED_VERSION=$(tomlq "workspace.dependencies.$CRATE.version" --file ./Cargo.toml)
