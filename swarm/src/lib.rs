@@ -1120,6 +1120,7 @@ where
             ToSwarm::NewExternalAddrCandidate(addr) => {
                 // Unless we have listeners, all candidates are ephemeral and are not reachable externally
                 if self.listeners().next().is_none() {
+                    tracing::debug!(%addr, "Discarding external address candidate because we have no listeners");
                     return;
                 }
 
