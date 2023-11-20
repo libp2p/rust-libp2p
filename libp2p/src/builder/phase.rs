@@ -32,7 +32,7 @@ use super::SwarmBuilder;
 use libp2p_core::{muxing::StreamMuxerBox, Transport};
 use libp2p_identity::Keypair;
 
-#[cfg(any(feature = "tcp", feature = "relay", feature = "websocket"))]
+#[allow(unreachable_pub)] // Not meant to be public.
 pub trait IntoSecurityUpgrade<C> {
     type Upgrade;
     type Error;
@@ -40,7 +40,6 @@ pub trait IntoSecurityUpgrade<C> {
     fn into_security_upgrade(self, keypair: &Keypair) -> Result<Self::Upgrade, Self::Error>;
 }
 
-#[cfg(any(feature = "tcp", feature = "relay", feature = "websocket"))]
 impl<C, T, F, E> IntoSecurityUpgrade<C> for F
 where
     F: for<'a> FnOnce(&'a Keypair) -> Result<T, E>,
@@ -53,7 +52,6 @@ where
     }
 }
 
-#[cfg(any(feature = "tcp", feature = "relay", feature = "websocket"))]
 impl<F1, F2, C> IntoSecurityUpgrade<C> for (F1, F2)
 where
     F1: IntoSecurityUpgrade<C>,
@@ -76,14 +74,13 @@ where
     }
 }
 
-#[cfg(any(feature = "tcp", feature = "relay", feature = "websocket"))]
+#[allow(unreachable_pub)] // Not meant to be public.
 pub trait IntoMultiplexerUpgrade<C> {
     type Upgrade;
 
     fn into_multiplexer_upgrade(self) -> Self::Upgrade;
 }
 
-#[cfg(any(feature = "tcp", feature = "relay", feature = "websocket"))]
 impl<C, U, F> IntoMultiplexerUpgrade<C> for F
 where
     F: FnOnce() -> U,
@@ -95,7 +92,6 @@ where
     }
 }
 
-#[cfg(any(feature = "tcp", feature = "relay", feature = "websocket"))]
 impl<C, U1, U2> IntoMultiplexerUpgrade<C> for (U1, U2)
 where
     U1: IntoMultiplexerUpgrade<C>,
