@@ -567,6 +567,7 @@ impl Handler {
             let has_answer = !matches!(msg, KadRequestMsg::AddProvider { .. });
 
             stream.send(msg).await?;
+            stream.close().await?;
 
             if !has_answer {
                 return Ok(None);
