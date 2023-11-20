@@ -191,7 +191,7 @@ jobs:
         with:
           tool: cargo-hack@0.6.13
 
-      - run: cargo hack check --feature-powerset --depth 2 --at-least-one-of async-std,tokio --package libp2p
+      - run: cargo hack check --feature-powerset --depth 3 --at-least-one-of async-std,tokio --package libp2p
 
   check-rustdoc-links:
     name: Check rustdoc intra-doc links
