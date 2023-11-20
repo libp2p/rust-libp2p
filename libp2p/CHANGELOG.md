@@ -1,3 +1,8 @@
+## 0.53.2 - unreleased
+
+- Fix missing feature flags on `SwarmBuilder` for certain transport combinations.
+  See [PR 4880](https://github.com/libp2p/rust-libp2p/pull/4880). 
+
 ## 0.53.1
 
 - Allow `SwarmBuilder::with_quic_config` to be called without `with_tcp` first.
