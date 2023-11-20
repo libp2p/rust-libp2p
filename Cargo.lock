@@ -1657,7 +1657,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "35bd3cf68c183738046838e300353e4716c674dc5e56890de4826801a6622a28"
 dependencies = [
  "futures-io",
- "rustls 0.21.8",
+ "rustls 0.21.9",
 ]
 
 [[package]]
@@ -2977,7 +2977,7 @@ dependencies = [
  "quinn",
  "rand 0.8.5",
  "ring 0.16.20",
- "rustls 0.21.8",
+ "rustls 0.21.9",
  "socket2 0.5.5",
  "thiserror",
  "tokio",
@@ -3185,7 +3185,7 @@ dependencies = [
  "libp2p-yamux",
  "rcgen",
  "ring 0.16.20",
- "rustls 0.21.8",
+ "rustls 0.21.9",
  "rustls-webpki",
  "thiserror",
  "tokio",
@@ -4367,7 +4367,7 @@ dependencies = [
 
 [[package]]
 name = "quick-protobuf-codec"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "asynchronous-codec",
  "bytes",
@@ -4409,7 +4409,7 @@ dependencies = [
  "quinn-proto",
  "quinn-udp",
  "rustc-hash",
- "rustls 0.21.8",
+ "rustls 0.21.9",
  "thiserror",
  "tokio",
  "tracing",
@@ -4425,7 +4425,7 @@ dependencies = [
  "rand 0.8.5",
  "ring 0.16.20",
  "rustc-hash",
- "rustls 0.21.8",
+ "rustls 0.21.9",
  "slab",
  "thiserror",
  "tinyvec",
@@ -4952,9 +4952,9 @@ dependencies = [
 
 [[package]]
 name = "rustls"
-version = "0.21.8"
+version = "0.21.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "446e14c5cda4f3f30fe71863c34ec70f5ac79d6087097ad0bb433e1be5edf04c"
+checksum = "629648aced5775d558af50b2b4c7b02983a04b312126d45eeead26e7caa498b9"
 dependencies = [
  "log",
  "ring 0.17.5",
@@ -6377,7 +6377,7 @@ dependencies = [
  "ring 0.16.20",
  "rtcp",
  "rtp",
- "rustls 0.21.8",
+ "rustls 0.21.9",
  "sdp",
  "serde",
  "serde_json",
@@ -6438,7 +6438,7 @@ dependencies = [
  "rand_core 0.6.4",
  "rcgen",
  "ring 0.16.20",
- "rustls 0.21.8",
+ "rustls 0.21.9",
  "sec1",
  "serde",
  "sha1",
@@ -6783,9 +6783,9 @@ dependencies = [
 
 [[package]]
 name = "zeroize"
-version = "1.6.0"
+version = "1.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2a0956f1ba7c7909bfb66c2e9e4124ab6f6482560f6628b5aaeba39207c9aad9"
+checksum = "525b4ec142c6b68a2d10f01f7bbf6755599ca3f81ea53b8431b7dd348f5fdb2d"
 dependencies = [
  "zeroize_derive",
 ]
