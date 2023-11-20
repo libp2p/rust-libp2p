@@ -534,7 +534,7 @@ where
         }
 
         // send subscription request to all peers
-        for peer in self.peer_topics.keys().cloned().collect::<Vec<_>>() {
+        for peer in self.peer_topics.keys().copied().collect::<Vec<_>>() {
             tracing::debug!(%peer, "Sending SUBSCRIBE to peer");
             let event = RpcOut::Subscribe(topic_hash.clone());
             self.send_message(peer, event);
@@ -561,7 +561,7 @@ where
         }
 
         // announce to all peers
-        for peer in self.peer_topics.keys().cloned().collect::<Vec<_>>() {
+        for peer in self.peer_topics.keys().copied().collect::<Vec<_>>() {
             tracing::debug!(%peer, "Sending UNSUBSCRIBE to peer");
             let event = RpcOut::Unsubscribe(topic_hash.clone());
             self.send_message(peer, event);
@@ -623,14 +623,10 @@ where
         if let Some(set) = self.topic_peers.get(&topic_hash) {
             if self.config.flood_publish() {
                 // Forward to all peers above score and all explicit peers
-                recipient_peers.extend(
-                    set.iter()
-                        .filter(|p| {
-                            self.explicit_peers.contains(*p)
-                                || !self.score_below_threshold(p, |ts| ts.publish_threshold).0
-                        })
-                        .cloned(),
-                );
+                recipient_peers.extend(set.iter().filter(|p| {
+                    self.explicit_peers.contains(*p)
+                        || !self.score_below_threshold(p, |ts| ts.publish_threshold).0
+                }));
             } else {
                 match self.mesh.get(&raw_message.topic) {
                     // Mesh peers
@@ -946,7 +942,7 @@ where
                 "JOIN: Adding {:?} peers from the fanout for topic",
                 add_peers
             );
-            added_peers.extend(peers.iter().cloned().take(add_peers));
+            added_peers.extend(peers.iter().take(add_peers));
 
             self.mesh.insert(
                 topic_hash.clone(),
@@ -2125,7 +2121,7 @@ where
 
                 // shuffle the peers and then sort by score ascending beginning with the worst
                 let mut rng = thread_rng();
-                let mut shuffled = peers.iter().cloned().collect::<Vec<_>>();
+                let mut shuffled = peers.iter().copied().collect::<Vec<_>>();
                 shuffled.shuffle(&mut rng);
                 shuffled.sort_by(|p1, p2| {
                     let score_p1 = *scores.get(p1).unwrap_or(&0.0);
@@ -2814,7 +2810,7 @@ where
 
         tracing::debug!(peer=%peer_id, "New peer connected");
         // We need to send our subscriptions to the newly-connected node.
-        for topic_hash in self.mesh.keys().cloned().collect::<Vec<_>>() {
+        for topic_hash in self.mesh.clone().into_keys() {
             self.send_message(peer_id, RpcOut::Subscribe(topic_hash));
         }
     }
@@ -3278,7 +3274,7 @@ fn get_random_peers_dynamic(
         // if they exist, filter the peers by `f`
         Some(peer_list) => peer_list
             .iter()
-            .cloned()
+            .copied()
             .filter(|p| {
                 f(p) && match connected_peers.get(p) {
                     Some(connections) if connections.kind == PeerKind::Gossipsub => true,
