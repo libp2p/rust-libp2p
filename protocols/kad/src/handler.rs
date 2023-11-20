@@ -25,22 +25,22 @@ use crate::protocol::{
 use crate::record::{self, Record};
 use crate::QueryId;
 use either::Either;
+use futures::channel::oneshot;
 use futures::prelude::*;
 use futures::stream::SelectAll;
 use libp2p_core::{upgrade, ConnectedPoint};
 use libp2p_identity::PeerId;
-use libp2p_swarm::handler::{
-    ConnectionEvent, DialUpgradeError, FullyNegotiatedInbound, FullyNegotiatedOutbound,
-};
+use libp2p_swarm::handler::{ConnectionEvent, FullyNegotiatedInbound, FullyNegotiatedOutbound};
 use libp2p_swarm::{
     ConnectionHandler, ConnectionHandlerEvent, Stream, StreamUpgradeError, SubstreamProtocol,
     SupportedProtocols,
 };
 use std::collections::VecDeque;
 use std::task::Waker;
+use std::time::Duration;
 use std::{error, fmt, io, marker::PhantomData, pin::Pin, task::Context, task::Poll};
 
-const MAX_NUM_SUBSTREAMS: usize = 32;
+const MAX_NUM_STREAMS: usize = 32;
 
 /// Protocol handler that manages substreams for the Kademlia protocol
 /// on a single connection with a peer.
@@ -59,11 +59,12 @@ pub struct Handler {
     /// Next unique ID of a connection.
     next_connec_unique_id: UniqueConnecId,
 
-    /// List of active outbound substreams with the state they are in.
-    outbound_substreams: SelectAll<OutboundSubstreamState>,
+    /// List of active outbound streams.
+    outbound_substreams: futures_bounded::FuturesMap<QueryId, io::Result<Option<KadResponseMsg>>>,
 
-    /// Number of outbound streams being upgraded right now.
-    num_requested_outbound_streams: usize,
+    /// Contains one [`oneshot::Sender`] per outbound stream that we have requested.
+    pending_streams:
+        VecDeque<oneshot::Sender<Result<KadOutStreamSink<Stream>, StreamUpgradeError<io::Error>>>>,
 
     /// List of outbound substreams that are waiting to become active next.
     /// Contains the request we want to send, and the user data if we expect an answer.
@@ -93,41 +94,6 @@ struct ProtocolStatus {
     supported: bool,
     /// Whether we reported the state to the behaviour.
     reported: bool,
-}
-
-/// State of an active outbound substream.
-enum OutboundSubstreamState {
-    /// Waiting to send a message to the remote.
-    PendingSend {
-        stream: KadOutStreamSink<Stream>,
-        msg: KadRequestMsg,
-        query_id: QueryId,
-    },
-    /// Waiting to flush the substream so that the data arrives to the remote.
-    PendingFlush {
-        stream: KadOutStreamSink<Stream>,
-        query_id: QueryId,
-        /// Whether the sent message has an answer.
-        has_answer: bool,
-    },
-    /// Waiting for an answer back from the remote.
-    // TODO: add timeout
-    WaitingAnswer {
-        stream: KadOutStreamSink<Stream>,
-        query_id: QueryId,
-    },
-    /// An error happened on the substream and we should report the error to the user.
-    ReportError {
-        error: HandlerQueryErr,
-        query_id: QueryId,
-    },
-    /// The substream is being closed.
-    Closing {
-        stream: KadOutStreamSink<Stream>,
-    },
-    /// The substream is complete and will not perform any more work.
-    Done,
-    Poisoned,
 }
 
 /// State of an active inbound substream.
@@ -309,8 +275,6 @@ pub enum HandlerEvent {
 /// Error that can happen when requesting an RPC query.
 #[derive(Debug)]
 pub enum HandlerQueryErr {
-    /// Error while trying to perform the query.
-    Upgrade(StreamUpgradeError<io::Error>),
     /// Received an answer that doesn't correspond to the request.
     UnexpectedMessage,
     /// I/O error in the substream.
@@ -320,9 +284,6 @@ pub enum HandlerQueryErr {
 impl fmt::Display for HandlerQueryErr {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            HandlerQueryErr::Upgrade(err) => {
-                write!(f, "Error while performing Kademlia query: {err}")
-            }
             HandlerQueryErr::UnexpectedMessage => {
                 write!(
                     f,
@@ -339,16 +300,9 @@ impl fmt::Display for HandlerQueryErr {
 impl error::Error for HandlerQueryErr {
     fn source(&self) -> Option<&(dyn error::Error + 'static)> {
         match self {
-            HandlerQueryErr::Upgrade(err) => Some(err),
             HandlerQueryErr::UnexpectedMessage => None,
             HandlerQueryErr::Io(err) => Some(err),
         }
-    }
-}
-
-impl From<StreamUpgradeError<io::Error>> for HandlerQueryErr {
-    fn from(err: StreamUpgradeError<io::Error>) -> Self {
-        HandlerQueryErr::Upgrade(err)
     }
 }
 
@@ -499,8 +453,11 @@ impl Handler {
             remote_peer_id,
             next_connec_unique_id: UniqueConnecId(0),
             inbound_substreams: Default::default(),
-            outbound_substreams: Default::default(),
-            num_requested_outbound_streams: 0,
+            outbound_substreams: futures_bounded::FuturesMap::new(
+                Duration::from_secs(30),
+                MAX_NUM_STREAMS,
+            ),
+            pending_streams: Default::default(),
             pending_messages: Default::default(),
             protocol_status: None,
             remote_supported_protocols: Default::default(),
@@ -509,23 +466,17 @@ impl Handler {
 
     fn on_fully_negotiated_outbound(
         &mut self,
-        FullyNegotiatedOutbound { protocol, info: () }: FullyNegotiatedOutbound<
+        FullyNegotiatedOutbound {
+            protocol: stream,
+            info: (),
+        }: FullyNegotiatedOutbound<
             <Self as ConnectionHandler>::OutboundProtocol,
             <Self as ConnectionHandler>::OutboundOpenInfo,
         >,
     ) {
-        if let Some((msg, query_id)) = self.pending_messages.pop_front() {
-            self.outbound_substreams
-                .push(OutboundSubstreamState::PendingSend {
-                    stream: protocol,
-                    msg,
-                    query_id,
-                });
-        } else {
-            debug_assert!(false, "Requested outbound stream without message")
+        if let Some(sender) = self.pending_streams.pop_front() {
+            let _ = sender.send(Ok(stream));
         }
-
-        self.num_requested_outbound_streams -= 1;
 
         if self.protocol_status.is_none() {
             // Upon the first successfully negotiated substream, we know that the
@@ -562,7 +513,7 @@ impl Handler {
             });
         }
 
-        if self.inbound_substreams.len() == MAX_NUM_SUBSTREAMS {
+        if self.inbound_substreams.len() == MAX_NUM_STREAMS {
             if let Some(s) = self.inbound_substreams.iter_mut().find(|s| {
                 matches!(
                     s,
@@ -596,27 +547,40 @@ impl Handler {
             });
     }
 
-    fn on_dial_upgrade_error(
-        &mut self,
-        DialUpgradeError {
-            info: (), error, ..
-        }: DialUpgradeError<
-            <Self as ConnectionHandler>::OutboundOpenInfo,
-            <Self as ConnectionHandler>::OutboundProtocol,
-        >,
-    ) {
-        // TODO: cache the fact that the remote doesn't support kademlia at all, so that we don't
-        //       continue trying
+    fn request_new_stream(&mut self, id: QueryId, msg: KadRequestMsg) {
+        let (sender, receiver) = oneshot::channel();
 
-        if let Some((_, query_id)) = self.pending_messages.pop_front() {
-            self.outbound_substreams
-                .push(OutboundSubstreamState::ReportError {
-                    error: error.into(),
-                    query_id,
-                });
-        }
+        self.pending_streams.push_back(sender);
+        let result = self.outbound_substreams.try_push(id, async move {
+            let mut stream = receiver
+                .await
+                .map_err(|_| io::Error::from(io::ErrorKind::BrokenPipe))?
+                .map_err(|e| match e {
+                    StreamUpgradeError::Timeout => io::ErrorKind::TimedOut.into(),
+                    StreamUpgradeError::Apply(e) => e,
+                    StreamUpgradeError::NegotiationFailed => {
+                        io::Error::new(io::ErrorKind::ConnectionRefused, "protocol not supported")
+                    }
+                    StreamUpgradeError::Io(e) => e,
+                })?;
 
-        self.num_requested_outbound_streams -= 1;
+            let has_answer = !matches!(msg, KadRequestMsg::AddProvider { .. });
+
+            stream.send(msg).await?;
+
+            if !has_answer {
+                return Ok(None);
+            }
+
+            let msg = stream.next().await.ok_or(io::ErrorKind::UnexpectedEof)??;
+
+            Ok(Some(msg))
+        });
+
+        debug_assert!(
+            result.is_ok(),
+            "Expected to not create more streams than allowed"
+        );
     }
 }
 
@@ -742,44 +706,68 @@ impl ConnectionHandler for Handler {
     ) -> Poll<
         ConnectionHandlerEvent<Self::OutboundProtocol, Self::OutboundOpenInfo, Self::ToBehaviour>,
     > {
-        match &mut self.protocol_status {
-            Some(status) if !status.reported => {
-                status.reported = true;
-                let event = if status.supported {
-                    HandlerEvent::ProtocolConfirmed {
-                        endpoint: self.endpoint.clone(),
-                    }
-                } else {
-                    HandlerEvent::ProtocolNotSupported {
-                        endpoint: self.endpoint.clone(),
-                    }
-                };
+        loop {
+            match &mut self.protocol_status {
+                Some(status) if !status.reported => {
+                    status.reported = true;
+                    let event = if status.supported {
+                        HandlerEvent::ProtocolConfirmed {
+                            endpoint: self.endpoint.clone(),
+                        }
+                    } else {
+                        HandlerEvent::ProtocolNotSupported {
+                            endpoint: self.endpoint.clone(),
+                        }
+                    };
 
-                return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(event));
+                    return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(event));
+                }
+                _ => {}
             }
-            _ => {}
-        }
 
-        if let Poll::Ready(Some(event)) = self.outbound_substreams.poll_next_unpin(cx) {
-            return Poll::Ready(event);
-        }
+            match self.outbound_substreams.poll_unpin(cx) {
+                Poll::Ready((query, Ok(Ok(Some(response))))) => {
+                    return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(
+                        process_kad_response(response, query),
+                    ))
+                }
+                Poll::Ready((_, Ok(Ok(None)))) => {
+                    continue;
+                }
+                Poll::Ready((query_id, Ok(Err(e)))) => {
+                    return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(
+                        HandlerEvent::QueryError {
+                            error: HandlerQueryErr::Io(e),
+                            query_id,
+                        },
+                    ))
+                }
+                Poll::Ready((query_id, Err(_timeout))) => {
+                    return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(
+                        HandlerEvent::QueryError {
+                            error: HandlerQueryErr::Io(io::ErrorKind::TimedOut.into()),
+                            query_id,
+                        },
+                    ))
+                }
+                Poll::Pending => {}
+            }
 
-        if let Poll::Ready(Some(event)) = self.inbound_substreams.poll_next_unpin(cx) {
-            return Poll::Ready(event);
-        }
+            if let Poll::Ready(Some(event)) = self.inbound_substreams.poll_next_unpin(cx) {
+                return Poll::Ready(event);
+            }
 
-        let num_in_progress_outbound_substreams =
-            self.outbound_substreams.len() + self.num_requested_outbound_streams;
-        if num_in_progress_outbound_substreams < MAX_NUM_SUBSTREAMS
-            && self.num_requested_outbound_streams < self.pending_messages.len()
-        {
-            self.num_requested_outbound_streams += 1;
-            return Poll::Ready(ConnectionHandlerEvent::OutboundSubstreamRequest {
-                protocol: SubstreamProtocol::new(self.protocol_config.clone(), ()),
-            });
-        }
+            if (self.outbound_substreams.len() + self.pending_streams.len()) < MAX_NUM_STREAMS {
+                if let Some((msg, id)) = self.pending_messages.pop_front() {
+                    self.request_new_stream(id, msg);
+                    return Poll::Ready(ConnectionHandlerEvent::OutboundSubstreamRequest {
+                        protocol: SubstreamProtocol::new(self.protocol_config.clone(), ()),
+                    });
+                }
+            }
 
-        Poll::Pending
+            return Poll::Pending;
+        }
     }
 
     fn on_connection_event(
@@ -798,8 +786,10 @@ impl ConnectionHandler for Handler {
             ConnectionEvent::FullyNegotiatedInbound(fully_negotiated_inbound) => {
                 self.on_fully_negotiated_inbound(fully_negotiated_inbound)
             }
-            ConnectionEvent::DialUpgradeError(dial_upgrade_error) => {
-                self.on_dial_upgrade_error(dial_upgrade_error)
+            ConnectionEvent::DialUpgradeError(ev) => {
+                if let Some(sender) = self.pending_streams.pop_front() {
+                    let _ = sender.send(Err(ev.error));
+                }
             }
             ConnectionEvent::RemoteProtocolsChange(change) => {
                 let dirty = self.remote_supported_protocols.on_protocols_change(change);
@@ -866,156 +856,6 @@ impl Handler {
         }
 
         debug_assert!(false, "Cannot find inbound substream for {request_id:?}")
-    }
-}
-
-impl futures::Stream for OutboundSubstreamState {
-    type Item = ConnectionHandlerEvent<ProtocolConfig, (), HandlerEvent>;
-
-    fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
-        let this = self.get_mut();
-
-        loop {
-            match std::mem::replace(this, OutboundSubstreamState::Poisoned) {
-                OutboundSubstreamState::PendingSend {
-                    stream: mut substream,
-                    msg,
-                    query_id,
-                } => {
-                    let has_answer = !matches!(msg, KadRequestMsg::AddProvider { .. }); // All queries apart from `AddProvider` have an answer.
-
-                    match substream.poll_ready_unpin(cx) {
-                        Poll::Ready(Ok(())) => match substream.start_send_unpin(msg) {
-                            Ok(()) => {
-                                *this = OutboundSubstreamState::PendingFlush {
-                                    stream: substream,
-                                    query_id,
-                                    has_answer,
-                                };
-                            }
-                            Err(error) => {
-                                *this = OutboundSubstreamState::Done;
-
-                                return Poll::Ready(Some(ConnectionHandlerEvent::NotifyBehaviour(
-                                    HandlerEvent::QueryError {
-                                        error: HandlerQueryErr::Io(error),
-                                        query_id,
-                                    },
-                                )));
-                            }
-                        },
-                        Poll::Pending => {
-                            *this = OutboundSubstreamState::PendingSend {
-                                stream: substream,
-                                msg,
-                                query_id,
-                            };
-                            return Poll::Pending;
-                        }
-                        Poll::Ready(Err(error)) => {
-                            *this = OutboundSubstreamState::Done;
-
-                            return Poll::Ready(Some(ConnectionHandlerEvent::NotifyBehaviour(
-                                HandlerEvent::QueryError {
-                                    error: HandlerQueryErr::Io(error),
-                                    query_id,
-                                },
-                            )));
-                        }
-                    }
-                }
-                OutboundSubstreamState::PendingFlush {
-                    stream: mut substream,
-                    query_id,
-                    has_answer,
-                } => match substream.poll_flush_unpin(cx) {
-                    Poll::Ready(Ok(())) => {
-                        if has_answer {
-                            *this = OutboundSubstreamState::WaitingAnswer {
-                                stream: substream,
-                                query_id,
-                            };
-                        } else {
-                            *this = OutboundSubstreamState::Closing { stream: substream };
-                        }
-                    }
-                    Poll::Pending => {
-                        *this = OutboundSubstreamState::PendingFlush {
-                            stream: substream,
-                            query_id,
-                            has_answer,
-                        };
-                        return Poll::Pending;
-                    }
-                    Poll::Ready(Err(error)) => {
-                        *this = OutboundSubstreamState::Done;
-
-                        return Poll::Ready(Some(ConnectionHandlerEvent::NotifyBehaviour(
-                            HandlerEvent::QueryError {
-                                error: HandlerQueryErr::Io(error),
-                                query_id,
-                            },
-                        )));
-                    }
-                },
-                OutboundSubstreamState::WaitingAnswer {
-                    stream: mut substream,
-                    query_id,
-                } => match substream.poll_next_unpin(cx) {
-                    Poll::Ready(Some(Ok(msg))) => {
-                        *this = OutboundSubstreamState::Closing { stream: substream };
-                        let event = process_kad_response(msg, query_id);
-
-                        return Poll::Ready(Some(ConnectionHandlerEvent::NotifyBehaviour(event)));
-                    }
-                    Poll::Pending => {
-                        *this = OutboundSubstreamState::WaitingAnswer {
-                            stream: substream,
-                            query_id,
-                        };
-                        return Poll::Pending;
-                    }
-                    Poll::Ready(Some(Err(error))) => {
-                        *this = OutboundSubstreamState::Done;
-                        let event = HandlerEvent::QueryError {
-                            error: HandlerQueryErr::Io(error),
-                            query_id,
-                        };
-
-                        return Poll::Ready(Some(ConnectionHandlerEvent::NotifyBehaviour(event)));
-                    }
-                    Poll::Ready(None) => {
-                        *this = OutboundSubstreamState::Done;
-                        let event = HandlerEvent::QueryError {
-                            error: HandlerQueryErr::Io(io::ErrorKind::UnexpectedEof.into()),
-                            query_id,
-                        };
-
-                        return Poll::Ready(Some(ConnectionHandlerEvent::NotifyBehaviour(event)));
-                    }
-                },
-                OutboundSubstreamState::ReportError { error, query_id } => {
-                    *this = OutboundSubstreamState::Done;
-                    let event = HandlerEvent::QueryError { error, query_id };
-
-                    return Poll::Ready(Some(ConnectionHandlerEvent::NotifyBehaviour(event)));
-                }
-                OutboundSubstreamState::Closing { mut stream } => {
-                    match stream.poll_close_unpin(cx) {
-                        Poll::Ready(Ok(())) | Poll::Ready(Err(_)) => return Poll::Ready(None),
-                        Poll::Pending => {
-                            *this = OutboundSubstreamState::Closing { stream };
-                            return Poll::Pending;
-                        }
-                    }
-                }
-                OutboundSubstreamState::Done => {
-                    *this = OutboundSubstreamState::Done;
-                    return Poll::Ready(None);
-                }
-                OutboundSubstreamState::Poisoned => unreachable!(),
-            }
-        }
     }
 }
 
