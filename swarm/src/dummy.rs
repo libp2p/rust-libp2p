@@ -56,23 +56,7 @@ impl NetworkBehaviour for Behaviour {
         Poll::Pending
     }
 
-    fn on_swarm_event(&mut self, event: FromSwarm) {
-        match event {
-            FromSwarm::ConnectionEstablished(_)
-            | FromSwarm::ConnectionClosed(_)
-            | FromSwarm::AddressChange(_)
-            | FromSwarm::DialFailure(_)
-            | FromSwarm::ListenFailure(_)
-            | FromSwarm::NewListener(_)
-            | FromSwarm::NewListenAddr(_)
-            | FromSwarm::ExpiredListenAddr(_)
-            | FromSwarm::ListenerError(_)
-            | FromSwarm::ListenerClosed(_)
-            | FromSwarm::NewExternalAddrCandidate(_)
-            | FromSwarm::ExternalAddrExpired(_)
-            | FromSwarm::ExternalAddrConfirmed(_) => {}
-        }
-    }
+    fn on_swarm_event(&mut self, _event: FromSwarm) {}
 }
 
 /// An implementation of [`ConnectionHandler`] that neither handles any protocols nor does it keep the connection alive.
@@ -82,7 +66,6 @@ pub struct ConnectionHandler;
 impl crate::handler::ConnectionHandler for ConnectionHandler {
     type FromBehaviour = Void;
     type ToBehaviour = Void;
-    type Error = Void;
     type InboundProtocol = DeniedUpgrade;
     type OutboundProtocol = DeniedUpgrade;
     type InboundOpenInfo = ();
@@ -100,12 +83,7 @@ impl crate::handler::ConnectionHandler for ConnectionHandler {
         &mut self,
         _: &mut Context<'_>,
     ) -> Poll<
-        ConnectionHandlerEvent<
-            Self::OutboundProtocol,
-            Self::OutboundOpenInfo,
-            Self::ToBehaviour,
-            Self::Error,
-        >,
+        ConnectionHandlerEvent<Self::OutboundProtocol, Self::OutboundOpenInfo, Self::ToBehaviour>,
     > {
         Poll::Pending
     }

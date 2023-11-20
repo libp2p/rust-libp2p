@@ -33,12 +33,18 @@ use libp2p_identity::PeerId;
 use libp2p_ping as ping;
 use libp2p_plaintext as plaintext;
 use libp2p_relay as relay;
-use libp2p_swarm::{Config, NetworkBehaviour, Swarm, SwarmEvent};
+use libp2p_swarm::dial_opts::DialOpts;
+use libp2p_swarm::{Config, DialError, NetworkBehaviour, Swarm, SwarmEvent};
+use libp2p_swarm_test::SwarmExt;
+use std::error::Error;
 use std::time::Duration;
+use tracing_subscriber::EnvFilter;
 
 #[test]
 fn reservation() {
-    let _ = env_logger::try_init();
+    let _ = tracing_subscriber::fmt()
+        .with_env_filter(EnvFilter::from_default_env())
+        .try_init();
     let mut pool = LocalPool::new();
 
     let relay_addr = Multiaddr::empty().with(Protocol::Memory(rand::random::<u64>()));
@@ -79,7 +85,9 @@ fn reservation() {
 
 #[test]
 fn new_reservation_to_same_relay_replaces_old() {
-    let _ = env_logger::try_init();
+    let _ = tracing_subscriber::fmt()
+        .with_env_filter(EnvFilter::from_default_env())
+        .try_init();
     let mut pool = LocalPool::new();
 
     let relay_addr = Multiaddr::empty().with(Protocol::Memory(rand::random::<u64>()));
@@ -170,7 +178,9 @@ fn new_reservation_to_same_relay_replaces_old() {
 
 #[test]
 fn connect() {
-    let _ = env_logger::try_init();
+    let _ = tracing_subscriber::fmt()
+        .with_env_filter(EnvFilter::from_default_env())
+        .try_init();
     let mut pool = LocalPool::new();
 
     let relay_addr = Multiaddr::empty().with(Protocol::Memory(rand::random::<u64>()));
@@ -254,7 +264,9 @@ async fn connection_established_to(
 
 #[test]
 fn handle_dial_failure() {
-    let _ = env_logger::try_init();
+    let _ = tracing_subscriber::fmt()
+        .with_env_filter(EnvFilter::from_default_env())
+        .try_init();
     let mut pool = LocalPool::new();
 
     let relay_addr = Multiaddr::empty().with(Protocol::Memory(rand::random::<u64>()));
@@ -272,8 +284,115 @@ fn handle_dial_failure() {
 }
 
 #[test]
+fn propagate_reservation_error_to_listener() {
+    let _ = tracing_subscriber::fmt()
+        .with_env_filter(EnvFilter::from_default_env())
+        .try_init();
+    let mut pool = LocalPool::new();
+
+    let relay_addr = Multiaddr::empty().with(Protocol::Memory(rand::random::<u64>()));
+    let mut relay = build_relay_with_config(relay::Config {
+        max_reservations: 0, // Will make us fail to make the reservation
+        ..relay::Config::default()
+    });
+    let relay_peer_id = *relay.local_peer_id();
+
+    relay.listen_on(relay_addr.clone()).unwrap();
+    relay.add_external_address(relay_addr.clone());
+    spawn_swarm_on_pool(&pool, relay);
+
+    let client_addr = relay_addr
+        .with(Protocol::P2p(relay_peer_id))
+        .with(Protocol::P2pCircuit);
+    let mut client = build_client();
+
+    let reservation_listener = client.listen_on(client_addr.clone()).unwrap();
+
+    // Wait for connection to relay.
+    assert!(pool.run_until(wait_for_dial(&mut client, relay_peer_id)));
+
+    let error = pool.run_until(client.wait(|e| match e {
+        SwarmEvent::ListenerClosed {
+            listener_id,
+            reason: Err(e),
+            ..
+        } if listener_id == reservation_listener => Some(e),
+        _ => None,
+    }));
+
+    let error = error
+        .source()
+        .unwrap()
+        .downcast_ref::<relay::outbound::hop::ReserveError>()
+        .unwrap();
+
+    assert!(matches!(
+        error,
+        relay::outbound::hop::ReserveError::ResourceLimitExceeded
+    ));
+}
+
+#[test]
+fn propagate_connect_error_to_unknown_peer_to_dialer() {
+    let _ = tracing_subscriber::fmt()
+        .with_env_filter(EnvFilter::from_default_env())
+        .try_init();
+    let mut pool = LocalPool::new();
+
+    let relay_addr = Multiaddr::empty().with(Protocol::Memory(rand::random::<u64>()));
+    let mut relay = build_relay();
+    let relay_peer_id = *relay.local_peer_id();
+
+    relay.listen_on(relay_addr.clone()).unwrap();
+    relay.add_external_address(relay_addr.clone());
+    spawn_swarm_on_pool(&pool, relay);
+
+    let mut src = build_client();
+
+    let dst_peer_id = PeerId::random(); // We don't have a destination peer in this test, so the CONNECT request will fail.
+    let dst_addr = relay_addr
+        .with(Protocol::P2p(relay_peer_id))
+        .with(Protocol::P2pCircuit)
+        .with(Protocol::P2p(dst_peer_id));
+
+    let opts = DialOpts::from(dst_addr.clone());
+    let circuit_connection_id = opts.connection_id();
+
+    src.dial(opts).unwrap();
+
+    let (failed_address, error) = pool.run_until(src.wait(|e| match e {
+        SwarmEvent::OutgoingConnectionError {
+            connection_id,
+            error: DialError::Transport(mut errors),
+            ..
+        } if connection_id == circuit_connection_id => {
+            assert_eq!(errors.len(), 1);
+            Some(errors.remove(0))
+        }
+        _ => None,
+    }));
+
+    // This is a bit wonky but we need to get the _actual_ source error :)
+    let error = error
+        .source()
+        .unwrap()
+        .source()
+        .unwrap()
+        .downcast_ref::<relay::outbound::hop::ConnectError>()
+        .unwrap();
+
+    assert_eq!(failed_address, dst_addr);
+    assert!(matches!(
+        error,
+        relay::outbound::hop::ConnectError::NoReservation
+    ));
+}
+
+#[test]
 fn reuse_connection() {
-    let _ = env_logger::try_init();
+    let _ = tracing_subscriber::fmt()
+        .with_env_filter(EnvFilter::from_default_env())
+        .try_init();
     let mut pool = LocalPool::new();
 
     let relay_addr = Multiaddr::empty().with(Protocol::Memory(rand::random::<u64>()));
@@ -309,6 +428,13 @@ fn reuse_connection() {
 }
 
 fn build_relay() -> Swarm<Relay> {
+    build_relay_with_config(relay::Config {
+        reservation_duration: Duration::from_secs(2),
+        ..Default::default()
+    })
+}
+
+fn build_relay_with_config(config: relay::Config) -> Swarm<Relay> {
     let local_key = identity::Keypair::generate_ed25519();
     let local_peer_id = local_key.public().to_peer_id();
 
@@ -318,13 +444,7 @@ fn build_relay() -> Swarm<Relay> {
         transport,
         Relay {
             ping: ping::Behaviour::new(ping::Config::new()),
-            relay: relay::Behaviour::new(
-                local_peer_id,
-                relay::Config {
-                    reservation_duration: Duration::from_secs(2),
-                    ..Default::default()
-                },
-            ),
+            relay: relay::Behaviour::new(local_peer_id, config),
         },
         local_peer_id,
         Config::with_async_std_executor(),

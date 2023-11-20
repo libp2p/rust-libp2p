@@ -1,4 +1,4 @@
-## 0.45.0 - unreleased
+## 0.45.0
 
 - Remove deprecated `kad::Config::set_connection_idle_timeout` in favor of `SwarmBuilder::idle_connection_timeout`.
   See [PR 4659](https://github.com/libp2p/rust-libp2p/pull/4659).
@@ -10,7 +10,7 @@
   See [PR 4698](https://github.com/libp2p/rust-libp2p/pull/4698).
 - Remove previously deprecated type-aliases.
   Users should follow the convention of importing the `libp2p::kad` module and referring to symbols as `kad::Behaviour` etc.
-  See [PR 4733](https://github.com/libp2p/rust-libp2p/pull/4733). 
+  See [PR 4733](https://github.com/libp2p/rust-libp2p/pull/4733).
 
 ## 0.44.6
 

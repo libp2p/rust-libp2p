@@ -21,6 +21,7 @@
 use crate::handler::{
     ConnectionEvent, ConnectionHandler, ConnectionHandlerEvent, SubstreamProtocol,
 };
+use futures::ready;
 use std::fmt::Debug;
 use std::task::{Context, Poll};
 
@@ -47,7 +48,6 @@ where
 {
     type FromBehaviour = TConnectionHandler::FromBehaviour;
     type ToBehaviour = TNewOut;
-    type Error = TConnectionHandler::Error;
     type InboundProtocol = TConnectionHandler::InboundProtocol;
     type OutboundProtocol = TConnectionHandler::OutboundProtocol;
     type InboundOpenInfo = TConnectionHandler::InboundOpenInfo;
@@ -69,18 +69,12 @@ where
         &mut self,
         cx: &mut Context<'_>,
     ) -> Poll<
-        ConnectionHandlerEvent<
-            Self::OutboundProtocol,
-            Self::OutboundOpenInfo,
-            Self::ToBehaviour,
-            Self::Error,
-        >,
+        ConnectionHandlerEvent<Self::OutboundProtocol, Self::OutboundOpenInfo, Self::ToBehaviour>,
     > {
         self.inner.poll(cx).map(|ev| match ev {
             ConnectionHandlerEvent::NotifyBehaviour(ev) => {
                 ConnectionHandlerEvent::NotifyBehaviour((self.map)(ev))
             }
-            ConnectionHandlerEvent::Close(err) => ConnectionHandlerEvent::Close(err),
             ConnectionHandlerEvent::OutboundSubstreamRequest { protocol } => {
                 ConnectionHandlerEvent::OutboundSubstreamRequest { protocol }
             }
@@ -88,6 +82,14 @@ where
                 ConnectionHandlerEvent::ReportRemoteProtocols(support)
             }
         })
+    }
+
+    fn poll_close(&mut self, cx: &mut Context<'_>) -> Poll<Option<Self::ToBehaviour>> {
+        let Some(e) = ready!(self.inner.poll_close(cx)) else {
+            return Poll::Ready(None);
+        };
+
+        Poll::Ready(Some((self.map)(e)))
     }
 
     fn on_connection_event(

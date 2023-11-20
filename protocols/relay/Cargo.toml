@@ -21,22 +21,24 @@ instant = "0.1.12"
 libp2p-core = { workspace = true }
 libp2p-swarm = { workspace = true }
 libp2p-identity = { workspace = true }
-log = "0.4"
 quick-protobuf = "0.8"
 quick-protobuf-codec = { workspace = true }
 rand = "0.8.4"
 static_assertions = "1"
 thiserror = "1.0"
+tracing = "0.1.37"
 void = "1"
 
 [dev-dependencies]
-env_logger = "0.10.0"
 libp2p-identity = { workspace = true, features = ["rand"] }
 libp2p-ping = { workspace = true }
 libp2p-plaintext = { workspace = true }
 libp2p-swarm = { workspace = true, features = ["macros", "async-std"] }
+libp2p-swarm-test = { workspace = true }
 libp2p-yamux = { workspace = true }
 quickcheck = { workspace = true }
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
 
 # Passing arguments to the docsrs builder in order to properly document cfg's.
 # More information: https://docs.rs/about/builds#cross-compiling

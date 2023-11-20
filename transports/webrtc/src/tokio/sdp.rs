@@ -49,7 +49,7 @@ pub(crate) fn offer(addr: SocketAddr, client_ufrag: &str) -> RTCSessionDescripti
         client_ufrag,
     );
 
-    log::trace!("Created SDP offer: {offer}");
+    tracing::trace!(offer=%offer, "Created SDP offer");
 
     RTCSessionDescription::offer(offer).unwrap()
 }

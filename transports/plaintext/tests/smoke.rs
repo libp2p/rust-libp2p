@@ -22,12 +22,14 @@ use futures::io::{AsyncReadExt, AsyncWriteExt};
 use libp2p_core::upgrade::InboundConnectionUpgrade;
 use libp2p_identity as identity;
 use libp2p_plaintext as plaintext;
-use log::debug;
 use quickcheck::QuickCheck;
+use tracing_subscriber::EnvFilter;
 
 #[test]
 fn variable_msg_length() {
-    let _ = env_logger::try_init();
+    let _ = tracing_subscriber::fmt()
+        .with_env_filter(EnvFilter::from_default_env())
+        .try_init();
 
     fn prop(msg: Vec<u8>) {
         let msg_to_send = msg.clone();
@@ -53,18 +55,18 @@ fn variable_msg_length() {
             assert_eq!(received_client_id, client_id.public().to_peer_id());
 
             let client_fut = async {
-                debug!("Client: writing message.");
+                tracing::debug!("Client: writing message.");
                 client_channel
                     .write_all(&msg_to_send)
                     .await
                     .expect("no error");
-                debug!("Client: flushing channel.");
+                tracing::debug!("Client: flushing channel.");
                 client_channel.flush().await.expect("no error");
             };
 
             let server_fut = async {
                 let mut server_buffer = vec![0; msg_to_receive.len()];
-                debug!("Server: reading message.");
+                tracing::debug!("Server: reading message.");
                 server_channel
                     .read_exact(&mut server_buffer)
                     .await

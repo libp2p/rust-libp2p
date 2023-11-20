@@ -88,6 +88,7 @@ impl PortReuse {
     ///
     /// Has no effect if port reuse is disabled.
     fn register(&mut self, ip: IpAddr, port: Port) {
+        tracing::trace!(%ip, %port, "Registering for port reuse");
         self.listen_addrs
             .write()
             .expect("`register()` and `unregister()` never panic while holding the lock")
@@ -98,7 +99,7 @@ impl PortReuse {
     ///
     /// Has no effect if port reuse is disabled.
     fn unregister(&mut self, ip: IpAddr, port: Port) {
-        log::trace!("Unregistering for port reuse: {}:{}", ip, port);
+        tracing::trace!(%ip, %port, "Unregistering for port reuse");
         self.listen_addrs
             .write()
             .expect("`register()` and `unregister()` never panic while holding the lock")
@@ -351,7 +352,7 @@ where
         } else {
             return Err(TransportError::MultiaddrNotSupported(addr));
         };
-        log::debug!("listening on {}", socket_addr);
+        tracing::debug!(address=%socket_addr, "listening on address");
         let listener = self
             .do_listen(id, socket_addr)
             .map_err(TransportError::Other)?;
@@ -381,7 +382,7 @@ where
         } else {
             return Err(TransportError::MultiaddrNotSupported(addr));
         };
-        log::debug!("dialing {}", socket_addr);
+        tracing::debug!(address=%socket_addr, "dialing address");
 
         let socket = self
             .create_socket(socket_addr, opts.port_use)
@@ -389,7 +390,7 @@ where
 
         match self.port_reuse.local_dial_addr(&socket_addr.ip()) {
             Some(socket_addr) if opts.port_use == PortUse::Reuse => {
-                log::trace!("Binding dial socket to listen socket {}", socket_addr);
+                tracing::trace!(address=%addr, "Binding dial socket to listen socket address");
                 socket
                     .bind(&socket_addr.into())
                     .map_err(TransportError::Other)?;
@@ -447,6 +448,7 @@ where
     }
 
     /// Poll all listeners.
+    #[tracing::instrument(level = "trace", name = "Transport::poll", skip(self, cx))]
     fn poll(
         mut self: Pin<&mut Self>,
         cx: &mut Context<'_>,
@@ -586,7 +588,7 @@ where
                     let ip = inet.addr();
                     if self.listen_addr.is_ipv4() == ip.is_ipv4() {
                         let ma = ip_to_multiaddr(ip, my_listen_addr_port);
-                        log::debug!("New listen address: {}", ma);
+                        tracing::debug!(address=%ma, "New listen address");
                         self.port_reuse.register(ip, my_listen_addr_port);
                         return Poll::Ready(TransportEvent::NewAddress {
                             listener_id: self.listener_id,
@@ -598,7 +600,7 @@ where
                     let ip = inet.addr();
                     if self.listen_addr.is_ipv4() == ip.is_ipv4() {
                         let ma = ip_to_multiaddr(ip, my_listen_addr_port);
-                        log::debug!("Expired listen address: {}", ma);
+                        tracing::debug!(address=%ma, "Expired listen address");
                         self.port_reuse.unregister(ip, my_listen_addr_port);
                         return Poll::Ready(TransportEvent::AddressExpired {
                             listener_id: self.listener_id,
@@ -671,7 +673,11 @@ where
                 let local_addr = ip_to_multiaddr(local_addr.ip(), local_addr.port());
                 let remote_addr = ip_to_multiaddr(remote_addr.ip(), remote_addr.port());
 
-                log::debug!("Incoming connection from {} at {}", remote_addr, local_addr);
+                tracing::debug!(
+                    remote_address=%remote_addr,
+                    local_address=%local_addr,
+                    "Incoming connection from remote at local"
+                );
 
                 return Poll::Ready(Some(TransportEvent::Incoming {
                     listener_id: self.listener_id,
@@ -800,9 +806,7 @@ mod tests {
                     .unwrap()
             ),
             Ok(SocketAddr::new(
-                IpAddr::V6(Ipv6Addr::new(
-                    65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535,
-                )),
+                IpAddr::V6(Ipv6Addr::new(65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535,)),
                 8080,
             ))
         );
@@ -810,7 +814,9 @@ mod tests {
 
     #[test]
     fn communicating_between_dialer_and_listener() {
-        env_logger::try_init().ok();
+        let _ = tracing_subscriber::fmt()
+            .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
+            .try_init();
 
         async fn listener<T: Provider>(addr: Multiaddr, mut ready_tx: mpsc::Sender<Multiaddr>) {
             let mut tcp = Transport::<T>::default().boxed();
@@ -889,7 +895,9 @@ mod tests {
 
     #[test]
     fn wildcard_expansion() {
-        env_logger::try_init().ok();
+        let _ = tracing_subscriber::fmt()
+            .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
+            .try_init();
 
         async fn listener<T: Provider>(addr: Multiaddr, mut ready_tx: mpsc::Sender<Multiaddr>) {
             let mut tcp = Transport::<T>::default().boxed();
@@ -967,7 +975,9 @@ mod tests {
 
     #[test]
     fn port_reuse_dialing() {
-        env_logger::try_init().ok();
+        let _ = tracing_subscriber::fmt()
+            .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
+            .try_init();
 
         async fn listener<T: Provider>(
             addr: Multiaddr,
@@ -1085,6 +1095,10 @@ mod tests {
     #[test]
     fn port_reuse_listening() {
         env_logger::try_init().ok();
+        let _ = tracing_subscriber::fmt()
+            .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
+            .try_init();
+
         async fn listen_twice<T: Provider>(addr: Multiaddr) {
             let mut tcp = Transport::<T>::new(Config::new());
             tcp.listen_on(ListenerId::next(), addr).unwrap();
@@ -1137,7 +1151,9 @@ mod tests {
 
     #[test]
     fn listen_port_0() {
-        env_logger::try_init().ok();
+        let _ = tracing_subscriber::fmt()
+            .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
+            .try_init();
 
         async fn listen<T: Provider>(addr: Multiaddr) -> Multiaddr {
             let mut tcp = Transport::<T>::default().boxed();
@@ -1172,7 +1188,9 @@ mod tests {
 
     #[test]
     fn listen_invalid_addr() {
-        env_logger::try_init().ok();
+        let _ = tracing_subscriber::fmt()
+            .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
+            .try_init();
 
         fn test(addr: Multiaddr) {
             #[cfg(feature = "async-io")]
@@ -1242,7 +1260,9 @@ mod tests {
 
     #[test]
     fn test_remove_listener() {
-        env_logger::try_init().ok();
+        let _ = tracing_subscriber::fmt()
+            .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
+            .try_init();
 
         async fn cycle_listeners<T: Provider>() -> bool {
             let mut tcp = Transport::<T>::default().boxed();
@@ -1259,10 +1279,11 @@ mod tests {
 
         #[cfg(feature = "tokio")]
         {
-            let rt = ::tokio::runtime::Builder::new_current_thread()
-                .enable_io()
-                .build()
-                .unwrap();
+            let rt =
+                ::tokio::runtime::Builder::new_current_thread()
+                    .enable_io()
+                    .build()
+                    .unwrap();
             assert!(rt.block_on(cycle_listeners::<tokio::Tcp>()));
         }
     }
@@ -1295,10 +1316,11 @@ mod tests {
         }
         #[cfg(feature = "tokio")]
         {
-            let rt = ::tokio::runtime::Builder::new_current_thread()
-                .enable_io()
-                .build()
-                .unwrap();
+            let rt =
+                ::tokio::runtime::Builder::new_current_thread()
+                    .enable_io()
+                    .build()
+                    .unwrap();
             rt.block_on(async {
                 test::<tokio::Tcp>();
             });

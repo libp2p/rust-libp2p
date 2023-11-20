@@ -127,7 +127,7 @@ impl Behaviour {
         let stats = match memory_stats::memory_stats() {
             Some(stats) => stats,
             None => {
-                log::warn!("Failed to retrieve process memory stats");
+                tracing::warn!("Failed to retrieve process memory stats");
                 return;
             }
         };

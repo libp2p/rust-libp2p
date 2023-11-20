@@ -27,6 +27,7 @@ use libp2p::swarm::{NetworkBehaviour, SwarmEvent};
 use libp2p::{autonat, identify, identity, noise, tcp, yamux};
 use std::error::Error;
 use std::net::Ipv4Addr;
+use tracing_subscriber::EnvFilter;
 
 #[derive(Debug, Parser)]
 #[clap(name = "libp2p autonat")]
@@ -37,7 +38,9 @@ struct Opt {
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
-    env_logger::init();
+    let _ = tracing_subscriber::fmt()
+        .with_env_filter(EnvFilter::from_default_env())
+        .try_init();
 
     let opt = Opt::parse();
 

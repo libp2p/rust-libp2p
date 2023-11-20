@@ -166,18 +166,9 @@
 //!    [2022-01-30T12:54:10Z INFO  client] Established connection to PeerId("12D3KooWPjceQrSwdWXPyLLeABRXmuqt69Rg3sBYbU1Nft9HyQ6X") via Dialer { address: "/ip4/$RELAY_PEER_ID/tcp/4001/p2p/12D3KooWDpJ7As7BWAwRMfu1VU2WCqNjvq387JEYKDBj4kx6nXTN/p2p-circuit/p2p/12D3KooWPjceQrSwdWXPyLLeABRXmuqt69Rg3sBYbU1Nft9HyQ6X", role_override: Dialer }
 //!    ```
 //!
-//! 2. The listening client initiating a direct connection upgrade for the new relayed connection.
-//!    Reported by [`dcutr`](crate::dcutr) through
-//!    [`Event::RemoteInitiatedDirectConnectionUpgrade`](crate::dcutr::Event::RemoteInitiatedDirectConnectionUpgrade).
+//! 2. The direct connection upgrade, also known as hole punch, succeeding.
+//!    Reported by [`dcutr`](crate::dcutr) through [`Event`](crate::dcutr::Event) containing [`Result::Ok`] with the [`ConnectionId`](libp2p_swarm::ConnectionId) of the new direct connection.
 //!
 //!    ``` ignore
-//!    [2022-01-30T12:54:11Z INFO  client] RemoteInitiatedDirectConnectionUpgrade { remote_peer_id: PeerId("12D3KooWPjceQrSwdWXPyLLeABRXmuqt69Rg3sBYbU1Nft9HyQ6X"), remote_relayed_addr: "/ip4/$RELAY_PEER_ID/tcp/4001/p2p/12D3KooWDpJ7As7BWAwRMfu1VU2WCqNjvq387JEYKDBj4kx6nXTN/p2p-circuit/p2p/12D3KooWPjceQrSwdWXPyLLeABRXmuqt69Rg3sBYbU1Nft9HyQ6X" }
-//!    ```
-//!
-//! 3. The direct connection upgrade, also known as hole punch, succeeding. Reported by
-//!    [`dcutr`](crate::dcutr) through
-//!    [`Event::RemoteInitiatedDirectConnectionUpgrade`](crate::dcutr::Event::DirectConnectionUpgradeSucceeded).
-//!
-//!    ``` ignore
-//!    [2022-01-30T12:54:11Z INFO  client] DirectConnectionUpgradeSucceeded { remote_peer_id: PeerId("12D3KooWPjceQrSwdWXPyLLeABRXmuqt69Rg3sBYbU1Nft9HyQ6X") }
+//!    [2022-01-30T12:54:11Z INFO  client] Event { remote_peer_id: PeerId("12D3KooWPjceQrSwdWXPyLLeABRXmuqt69Rg3sBYbU1Nft9HyQ6X"), result: Ok(2) }
 //!    ```

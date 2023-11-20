@@ -4,17 +4,20 @@ use libp2p_kad::store::MemoryStore;
 use libp2p_kad::{Behaviour, Config, Event, Mode};
 use libp2p_swarm::{Swarm, SwarmEvent};
 use libp2p_swarm_test::SwarmExt;
+use tracing_subscriber::EnvFilter;
 use Event::*;
 use MyBehaviourEvent::*;
 
 #[async_std::test]
 async fn server_gets_added_to_routing_table_by_client() {
-    let _ = env_logger::try_init();
+    let _ = tracing_subscriber::fmt()
+        .with_env_filter(EnvFilter::from_default_env())
+        .try_init();
 
     let mut client = Swarm::new_ephemeral(MyBehaviour::new);
     let mut server = Swarm::new_ephemeral(MyBehaviour::new);
 
-    server.listen().await;
+    server.listen().with_memory_addr_external().await;
     client.connect(&mut server).await;
 
     let server_peer_id = *server.local_peer_id();
@@ -32,12 +35,14 @@ async fn server_gets_added_to_routing_table_by_client() {
 
 #[async_std::test]
 async fn two_servers_add_each_other_to_routing_table() {
-    let _ = env_logger::try_init();
+    let _ = tracing_subscriber::fmt()
+        .with_env_filter(EnvFilter::from_default_env())
+        .try_init();
 
     let mut server1 = Swarm::new_ephemeral(MyBehaviour::new);
     let mut server2 = Swarm::new_ephemeral(MyBehaviour::new);
 
-    server2.listen().await;
+    server2.listen().with_memory_addr_external().await;
     server1.connect(&mut server2).await;
 
     let server1_peer_id = *server1.local_peer_id();
@@ -54,7 +59,7 @@ async fn two_servers_add_each_other_to_routing_table() {
         other => panic!("Unexpected events: {other:?}"),
     }
 
-    server1.listen().await;
+    server1.listen().with_memory_addr_external().await;
     server2.connect(&mut server1).await;
 
     async_std::task::spawn(server1.loop_on_next());
@@ -71,7 +76,9 @@ async fn two_servers_add_each_other_to_routing_table() {
 
 #[async_std::test]
 async fn adding_an_external_addresses_activates_server_mode_on_existing_connections() {
-    let _ = env_logger::try_init();
+    let _ = tracing_subscriber::fmt()
+        .with_env_filter(EnvFilter::from_default_env())
+        .try_init();
 
     let mut client = Swarm::new_ephemeral(MyBehaviour::new);
     let mut server = Swarm::new_ephemeral(MyBehaviour::new);
@@ -79,14 +86,11 @@ async fn adding_an_external_addresses_activates_server_mode_on_existing_connecti
 
     let (memory_addr, _) = server.listen().await;
 
-    // Remove memory address to simulate a server that doesn't know its external address.
-    server.remove_external_address(&memory_addr);
     client.dial(memory_addr.clone()).unwrap();
-    // Do the usual identify send/receive dance. This triggers a mode change to Mode::Client.
+
+    // Do the usual identify send/receive dance.
     match libp2p_swarm_test::drive(&mut client, &mut server).await {
-        ([Identify(_), Identify(_)], [Kad(ModeChanged { new_mode }), Identify(_), Identify(_)]) => {
-            assert_eq!(new_mode, Mode::Client);
-        }
+        ([Identify(_), Identify(_)], [Identify(_), Identify(_)]) => {}
         other => panic!("Unexpected events: {other:?}"),
     }
 
@@ -108,14 +112,16 @@ async fn adding_an_external_addresses_activates_server_mode_on_existing_connecti
 
 #[async_std::test]
 async fn set_client_to_server_mode() {
-    let _ = env_logger::try_init();
+    let _ = tracing_subscriber::fmt()
+        .with_env_filter(EnvFilter::from_default_env())
+        .try_init();
 
     let mut client = Swarm::new_ephemeral(MyBehaviour::new);
     client.behaviour_mut().kad.set_mode(Some(Mode::Client));
 
     let mut server = Swarm::new_ephemeral(MyBehaviour::new);
 
-    server.listen().await;
+    server.listen().with_memory_addr_external().await;
     client.connect(&mut server).await;
 
     let server_peer_id = *server.local_peer_id();
