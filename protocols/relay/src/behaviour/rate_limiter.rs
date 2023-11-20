@@ -126,7 +126,7 @@ impl<Id: Eq + PartialEq + Hash + Clone> GenericRateLimiter<Id> {
         // Note when used with a high number of buckets: This loop refills all the to-be-refilled
         // buckets at once, thus potentially delaying the parent call to `try_next`.
         loop {
-            match self.refill_schedule.get(0) {
+            match self.refill_schedule.front() {
                 // Only continue if (a) there is a bucket and (b) the bucket has not already been
                 // refilled recently.
                 Some((last_refill, _)) if now.duration_since(*last_refill) >= self.interval => {}
