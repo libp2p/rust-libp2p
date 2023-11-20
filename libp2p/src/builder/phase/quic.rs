@@ -212,7 +212,7 @@ impl<T: AuthenticatedMultiplexedTransport> SwarmBuilder<super::provider::Tokio, 
 
 macro_rules! impl_quic_phase_with_websocket {
     ($providerKebabCase:literal, $providerPascalCase:ty, $websocketStream:ty) => {
-        #[cfg(all(feature = $providerKebabCase, not(target_arch = "wasm32"), feature = "websocket", feature = "tcp"))]
+        #[cfg(all(feature = $providerKebabCase, not(target_arch = "wasm32"), feature = "websocket", feature = "tcp", feature = "dns"))]
         impl<T: AuthenticatedMultiplexedTransport> SwarmBuilder<$providerPascalCase, QuicPhase<T>> {
             /// See [`SwarmBuilder::with_websocket`].
             pub async fn with_websocket <

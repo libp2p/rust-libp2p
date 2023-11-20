@@ -215,11 +215,11 @@ impl<Provider, T: AuthenticatedMultiplexedTransport> SwarmBuilder<Provider, Webs
 
 #[derive(Debug, thiserror::Error)]
 #[error(transparent)]
-#[cfg(all(not(target_arch = "wasm32"), feature = "websocket", feature = "tcp"))]
+#[cfg(all(not(target_arch = "wasm32"), feature = "websocket", feature = "tcp", feature = "dns"))]
 pub struct WebsocketError<Sec>(#[from] WebsocketErrorInner<Sec>);
 
 #[derive(Debug, thiserror::Error)]
-#[cfg(all(not(target_arch = "wasm32"), feature = "websocket", feature = "tcp"))]
+#[cfg(all(not(target_arch = "wasm32"), feature = "websocket", feature = "tcp", feature = "dns"))]
 enum WebsocketErrorInner<Sec> {
     #[error("SecurityUpgrade")]
     SecurityUpgrade(Sec),
