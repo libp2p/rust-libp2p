@@ -6,25 +6,15 @@
 // TODO: tests
 // TODO: Handlers
 
-mod dial_back;
-mod request;
+pub(super) mod dial_back;
+pub(super) mod dial_request;
 
+use either::Either;
 use std::time::Duration;
 
-use dial_back::Handler as DialBackHandler;
-use libp2p_swarm::{ConnectionHandler, ConnectionHandlerSelect};
-use request::Handler as RequestHandler;
-
-pub(crate) use request::{
-    Error as RequestError, FromBehaviour as RequestFromBehaviour, TestEnd,
-    ToBehaviour as RequestToBehaviour,
-};
+pub(crate) use dial_request::TestEnd;
 
 const DEFAULT_TIMEOUT: Duration = Duration::from_secs(10);
 const MAX_CONCURRENT_REQUESTS: usize = 10;
 
-pub(crate) type Handler = ConnectionHandlerSelect<RequestHandler, DialBackHandler>;
-
-pub(crate) fn new_handler() -> Handler {
-    RequestHandler::new().select(DialBackHandler::new())
-}
+pub(crate) type Handler = Either<dial_request::Handler, dial_back::Handler>;

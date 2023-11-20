@@ -1,4 +1,5 @@
 use std::{
+    convert::identity,
     io,
     task::{Context, Poll},
 };
@@ -16,7 +17,7 @@ use crate::request_response::DialBack;
 
 use super::DEFAULT_TIMEOUT;
 
-pub(crate) type ToBehaviour = Result<u64, Either<io::Error, Timeout>>;
+pub(crate) type ToBehaviour = Result<u64, io::Error>;
 
 pub(crate) struct Handler {
     inbound: FuturesSet<io::Result<u64>>,
@@ -51,8 +52,8 @@ impl ConnectionHandler for Handler {
         if let Poll::Ready(result) = self.inbound.poll_unpin(cx) {
             return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(
                 result
-                    .map_err(Either::Right)
-                    .and_then(|e| e.map_err(Either::Left)),
+                    .map_err(|timeout| io::Error::new(io::ErrorKind::TimedOut, timeout))
+                    .and_then(identity),
             ));
         }
         Poll::Pending

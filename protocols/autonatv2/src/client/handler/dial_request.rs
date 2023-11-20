@@ -1,4 +1,4 @@
-use futures::{AsyncRead, AsyncWrite};
+use futures::{channel::oneshot, AsyncRead, AsyncWrite};
 use futures_bounded::FuturesSet;
 use libp2p_core::{
     upgrade::{DeniedUpgrade, ReadyUpgrade},
@@ -6,8 +6,12 @@ use libp2p_core::{
 };
 
 use libp2p_swarm::{
-    handler::{ConnectionEvent, DialUpgradeError, FullyNegotiatedOutbound, ProtocolsChange},
-    ConnectionHandler, ConnectionHandlerEvent, StreamProtocol, SubstreamProtocol,
+    handler::{
+        ConnectionEvent, DialUpgradeError, FullyNegotiatedOutbound, OutboundUpgradeSend,
+        ProtocolsChange,
+    },
+    ConnectionHandler, ConnectionHandlerEvent, Stream, StreamProtocol, StreamUpgradeError,
+    SubstreamProtocol,
 };
 use scc::hash_cache::DEFAULT_MAXIMUM_CAPACITY;
 use std::{
@@ -53,6 +57,10 @@ pub(crate) enum Error {
     UnableToConnectOnSelectedAddress { addr: Option<Multiaddr> },
     #[error("server experienced failure during dial back on address: {addr:?}")]
     FailureDuringDialBack { addr: Option<Multiaddr> },
+    #[error("error during substream upgrad")]
+    SubstreamError(
+        #[from] StreamUpgradeError<<ReadyUpgrade<StreamProtocol> as OutboundUpgradeSend>::Error>,
+    ),
 }
 
 #[derive(Debug)]
@@ -82,7 +90,14 @@ pub(crate) struct Handler {
         >,
     >,
     outbound: futures_bounded::FuturesSet<Result<TestEnd, Error>>,
-    queued_requests: VecDeque<DialRequest>,
+    queued_streams: VecDeque<
+        oneshot::Sender<
+            Result<
+                Stream,
+                StreamUpgradeError<<ReadyUpgrade<StreamProtocol> as OutboundUpgradeSend>::Error>,
+            >,
+        >,
+    >,
 }
 
 impl Handler {
@@ -90,7 +105,23 @@ impl Handler {
         Self {
             queued_events: VecDeque::new(),
             outbound: FuturesSet::new(DEFAULT_TIMEOUT, DEFAULT_MAXIMUM_CAPACITY),
-            queued_requests: VecDeque::new(),
+            queued_streams: VecDeque::default(),
+        }
+    }
+
+    fn perform_request(&mut self, req: DialRequest) {
+        let (tx, rx) = oneshot::channel();
+        self.queued_streams.push_back(tx);
+        self.queued_events
+            .push_back(ConnectionHandlerEvent::OutboundSubstreamRequest {
+                protocol: SubstreamProtocol::new(REQUEST_UPGRADE, ()),
+            });
+        if self
+            .outbound
+            .try_push(start_substream_handle(req, rx))
+            .is_err()
+        {
+            tracing::debug!("Dial request dropped, too many requests in flight");
         }
     }
 }
@@ -126,18 +157,13 @@ impl ConnectionHandler for Handler {
                 ToBehaviour::TestCompleted(m.map_err(Error::Timeout).and_then(identity)),
             ));
         }
-        if !self.queued_requests.is_empty() {
-            return Poll::Ready(ConnectionHandlerEvent::OutboundSubstreamRequest {
-                protocol: SubstreamProtocol::new(REQUEST_UPGRADE, ()),
-            });
-        }
         Poll::Pending
     }
 
     fn on_behaviour_event(&mut self, event: Self::FromBehaviour) {
         match event {
             FromBehaviour::PerformRequest(req) => {
-                self.queued_requests.push_back(req);
+                self.perform_request(req);
             }
         }
     }
@@ -154,18 +180,25 @@ impl ConnectionHandler for Handler {
         match event {
             ConnectionEvent::DialUpgradeError(DialUpgradeError { error, .. }) => {
                 tracing::debug!("Dial request failed: {}", error);
+                match self.queued_streams.pop_front() {
+                    Some(stream_tx) => {
+                        if let Err(_) = stream_tx.send(Err(error)) {
+                            tracing::warn!("Failed to send stream to dead handler");
+                        }
+                    }
+                    None => {
+                        tracing::warn!(
+                            "Opened unexpected substream without a pending dial request"
+                        );
+                    }
+                }
             }
             ConnectionEvent::FullyNegotiatedOutbound(FullyNegotiatedOutbound {
                 protocol, ..
-            }) => match self.queued_requests.pop_front() {
-                Some(dial_req) => {
-                    if self
-                        .outbound
-                        .try_push(handle_substream(dial_req.clone(), protocol))
-                        .is_err()
-                    {
-                        tracing::warn!("Dial request dropped, too many requests in flight");
-                        self.queued_requests.push_front(dial_req);
+            }) => match self.queued_streams.pop_front() {
+                Some(stream_tx) => {
+                    if let Err(_) = stream_tx.send(Ok(protocol)) {
+                        tracing::warn!("Failed to send stream to dead handler");
                     }
                 }
                 None => {
@@ -174,14 +207,29 @@ impl ConnectionHandler for Handler {
             },
             ConnectionEvent::RemoteProtocolsChange(ProtocolsChange::Added(mut added)) => {
                 if added.any(|p| p.as_ref() == REQUEST_PROTOCOL_NAME) {
-                    self.queued_events
-                        .push_back(ConnectionHandlerEvent::NotifyBehaviour(
-                            ToBehaviour::PeerHasServerSupport,
-                        ));
+                    self.queued_events.push_back(
+                        ConnectionHandlerEvent::NotifyBehaviour(ToBehaviour::PeerHasServerSupport)
+                    );
                 }
             }
             _ => {}
         }
+    }
+}
+
+async fn start_substream_handle(
+    dial_request: DialRequest,
+    substream_recv: oneshot::Receiver<
+        Result<
+            Stream,
+            StreamUpgradeError<<ReadyUpgrade<StreamProtocol> as OutboundUpgradeSend>::Error>,
+        >,
+    >,
+) -> Result<TestEnd, Error> {
+    match substream_recv.await {
+        Ok(Ok(substream)) => handle_substream(dial_request, substream).await,
+        Ok(Err(err)) => Err(Error::from(err)),
+        Err(_) => Err(Error::InternalServer),
     }
 }
 

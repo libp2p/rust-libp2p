@@ -59,9 +59,9 @@ impl Request {
                     .into_iter()
                     .map(|e| e.to_vec())
                     .map(|e| {
-                        Multiaddr::try_from(e).map_err(|err| {
-                            new_io_invalid_data_err!(format!("invalid multiaddr: {}", err))
-                        })
+                        Multiaddr::try_from(e).map_err(
+                            |err| new_io_invalid_data_err!(format!("invalid multiaddr: {}", err))
+                        )
                     })
                     .collect::<Result<Vec<_>, io::Error>>()?;
                 let nonce = check_existence!(nonce)?;
@@ -83,10 +83,9 @@ impl Request {
                 let addrs = addrs.iter().map(|e| e.to_vec()).collect();
                 let nonce = Some(nonce);
                 proto::Message {
-                    msg: proto::mod_Message::OneOfmsg::dialRequest(proto::DialRequest {
-                        addrs,
-                        nonce,
-                    }),
+                    msg: proto::mod_Message::OneOfmsg::dialRequest(
+                        proto::DialRequest { addrs, nonce }
+                    ),
                 }
             }
             Request::Data(DialDataResponse { data_count }) => {
@@ -150,10 +149,9 @@ impl Response {
                     dial_status,
                 }))
             }
-            proto::mod_Message::OneOfmsg::dialDataRequest(proto::DialDataRequest {
-                addrIdx,
-                numBytes,
-            }) => {
+            proto::mod_Message::OneOfmsg::dialDataRequest(
+                proto::DialDataRequest { addrIdx, numBytes }
+            ) => {
                 let addr_idx = check_existence!(addrIdx)? as usize;
                 let num_bytes = check_existence!(numBytes)? as usize;
                 Ok(Self::Data(DialDataRequest {
@@ -183,12 +181,14 @@ impl Response {
             Self::Data(DialDataRequest {
                 addr_idx,
                 num_bytes,
-            }) => proto::Message {
-                msg: proto::mod_Message::OneOfmsg::dialDataRequest(proto::DialDataRequest {
-                    addrIdx: Some(addr_idx as u32),
-                    numBytes: Some(num_bytes as u64),
-                }),
-            },
+            }) => {
+                proto::Message {
+                    msg: proto::mod_Message::OneOfmsg::dialDataRequest(proto::DialDataRequest {
+                        addrIdx: Some(addr_idx as u32),
+                        numBytes: Some(num_bytes as u64),
+                    }),
+                }
+            }
         };
         FramedWrite::new(io, Codec::<proto::Message>::new(REQUEST_MAX_SIZE))
             .send(msg)

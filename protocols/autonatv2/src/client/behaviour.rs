@@ -1,28 +1,44 @@
 use std::{
     collections::{HashMap, HashSet, VecDeque},
     task::{Context, Poll},
+    time::{Duration, Instant},
 };
 
 use either::Either;
 use libp2p_core::{multiaddr::Protocol, transport::PortUse, Endpoint, Multiaddr};
 use libp2p_identity::PeerId;
 use libp2p_swarm::{
-    behaviour::ConnectionEstablished,
+    behaviour::{ConnectionEstablished, ExternalAddrConfirmed},
     dial_opts::{DialOpts, PeerCondition},
     ConnectionClosed, ConnectionDenied, ConnectionHandler, ConnectionId, DialFailure, FromSwarm,
     NetworkBehaviour, NewExternalAddrCandidate, NotifyHandler, ToSwarm,
 };
-use rand::{seq::SliceRandom, Rng};
+use rand::{distributions::Standard, seq::SliceRandom, Rng};
 use rand_core::RngCore;
 
 use crate::{global_only::IpExt, request_response::DialRequest};
 
-use super::handler::{
-    new_handler, Handler, RequestError, RequestFromBehaviour, RequestToBehaviour, TestEnd,
-};
+use super::handler::{dial_back, dial_request, Handler, TestEnd};
+
+struct IntervalTicker {
+    interval: Duration,
+    last_tick: Instant,
+}
+
+impl IntervalTicker {
+    fn ready(&mut self) -> bool {
+        if self.last_tick.elapsed() >= self.interval {
+            self.last_tick = Instant::now();
+            true
+        } else {
+            false
+        }
+    }
+}
 
 pub(crate) struct Config {
     pub(crate) test_server_count: usize,
+    pub(crate) max_addrs_count: usize,
 }
 
 pub(crate) struct Behaviour<R>
@@ -40,9 +56,9 @@ where
             <<Self as NetworkBehaviour>::ConnectionHandler as ConnectionHandler>::FromBehaviour,
         >,
     >,
+    address_candidates: HashMap<Multiaddr, usize>,
     peers_to_handlers: HashMap<PeerId, ConnectionId>,
-    pending_req_for_peer: HashMap<PeerId, VecDeque<DialRequest>>,
-    pending_requests: VecDeque<DialRequest>,
+    ticker: IntervalTicker,
 }
 
 impl<R> NetworkBehaviour for Behaviour<R>
@@ -63,7 +79,7 @@ where
         if addr_is_local(remote_addr) {
             self.local_peers.insert(connection_id);
         }
-        Ok(new_handler())
+        Ok(Either::Left(dial_request::Handler::new()))
     }
 
     fn handle_established_outbound_connection(
@@ -77,20 +93,16 @@ where
         if addr_is_local(addr) {
             self.local_peers.insert(connection_id);
         }
-        Ok(new_handler())
+        Ok(Either::Right(dial_back::Handler::new()))
     }
 
     fn on_swarm_event(&mut self, event: FromSwarm) {
         match event {
             FromSwarm::NewExternalAddrCandidate(NewExternalAddrCandidate { addr }) => {
-                for _ in 0..self.config.test_server_count {
-                    let nonce = self.rng.gen();
-                    self.pending_requests.push_back(DialRequest {
-                        addrs: vec![addr.clone()],
-                        nonce,
-                    });
-                    self.pending_nonces.insert(nonce);
-                }
+                *self.address_candidates.entry(addr.clone()).or_default() += 1;
+            }
+            FromSwarm::ExternalAddrConfirmed(ExternalAddrConfirmed { addr }) => {
+                self.address_candidates.remove(addr);
             }
             FromSwarm::ConnectionEstablished(ConnectionEstablished {
                 peer_id,
@@ -141,12 +153,12 @@ where
             Either::Right(Err(err)) => {
                 tracing::debug!("Dial back failed: {:?}", err);
             }
-            Either::Left(RequestToBehaviour::PeerHasServerSupport) => {
+            Either::Left(dial_request::ToBehaviour::PeerHasServerSupport) => {
                 if !self.known_servers.contains(&peer_id) {
                     self.known_servers.push(peer_id);
                 }
             }
-            Either::Left(RequestToBehaviour::TestCompleted(Ok(TestEnd {
+            Either::Left(dial_request::ToBehaviour::TestCompleted(Ok(TestEnd {
                 dial_request: DialRequest { nonce, addrs },
                 suspicious_addr,
                 reachable_addr,
@@ -172,16 +184,16 @@ where
                 self.pending_events
                     .push_back(ToSwarm::ExternalAddrConfirmed(reachable_addr));
             }
-            Either::Left(RequestToBehaviour::TestCompleted(Err(
-                RequestError::UnableToConnectOnSelectedAddress { addr: Some(addr) },
-            )))
-            | Either::Left(RequestToBehaviour::TestCompleted(Err(
-                RequestError::FailureDuringDialBack { addr: Some(addr) },
-            ))) => {
+            Either::Left(dial_request::ToBehaviour::TestCompleted(
+                Err(dial_request::Error::UnableToConnectOnSelectedAddress { addr: Some(addr) })
+            ))
+            | Either::Left(dial_request::ToBehaviour::TestCompleted(
+                Err(dial_request::Error::FailureDuringDialBack { addr: Some(addr) })
+            )) => {
                 self.pending_events
                     .push_back(ToSwarm::ExternalAddrExpired(addr));
             }
-            Either::Left(RequestToBehaviour::TestCompleted(Err(err))) => {
+            Either::Left(dial_request::ToBehaviour::TestCompleted(Err(err))) => {
                 tracing::debug!("Test failed: {:?}", err);
             }
         }
@@ -195,24 +207,35 @@ where
         if pending_event.is_ready() {
             return pending_event;
         }
-        self.pending_req_for_peer.retain(|_, reqs| !reqs.is_empty());
-        for (peer, dial_requests) in &mut self.pending_req_for_peer {
-            if let Some(conn_id) = self.peers_to_handlers.get(peer) {
-                let dial_request = dial_requests.pop_front().unwrap();
-                return Poll::Ready(ToSwarm::NotifyHandler {
-                    peer_id: *peer,
-                    handler: NotifyHandler::One(*conn_id),
-                    event: Either::Left(RequestFromBehaviour::PerformRequest(dial_request)),
-                });
-            }
-        }
-        if let Some(dial_request) = self.pending_requests.pop_front() {
-            if self.known_servers.is_empty() {
-                self.pending_requests.push_front(dial_request);
+        if self.ticker.ready() && !self.known_servers.is_empty() {
+            let mut entries = self.address_candidates.drain().collect::<Vec<_>>();
+            entries.sort_unstable_by_key(|(_, count)| *count);
+            let addrs = entries
+                .into_iter()
+                .rev()
+                .map(|(addr, _)| addr)
+                .take(self.config.max_addrs_count)
+                .collect::<Vec<_>>();
+            let peers = if self.known_servers.len() < self.config.test_server_count {
+                self.known_servers.clone()
             } else {
-                let peer = self.known_servers.choose(&mut self.rng).unwrap();
-                self.submit_req_for_peer(*peer, dial_request);
-                return self.poll_pending_events();
+                self.known_servers
+                    .choose_multiple(&mut self.rng, self.config.test_server_count)
+                    .copied()
+                    .collect()
+            };
+            for peer in peers {
+                let nonce = self.rng.gen();
+                let req = DialRequest {
+                    nonce,
+                    addrs: addrs.clone(),
+                };
+                self.pending_nonces.insert(nonce);
+                self.submit_req_for_peer(peer, req);
+            }
+            let pending_event = self.poll_pending_events();
+            if pending_event.is_ready() {
+                return pending_event;
             }
         }
         Poll::Pending
@@ -228,18 +251,13 @@ where
             self.pending_events.push_back(ToSwarm::NotifyHandler {
                 peer_id: peer,
                 handler: NotifyHandler::One(*conn_id),
-                event: Either::Left(RequestFromBehaviour::PerformRequest(req)),
+                event: Either::Left(dial_request::FromBehaviour::PerformRequest(req)),
             });
         } else {
-            self.pending_events.push_back(ToSwarm::Dial {
-                opts: DialOpts::peer_id(peer)
-                    .condition(PeerCondition::DisconnectedAndNotDialing)
-                    .build(),
-            });
-            self.pending_req_for_peer
-                .entry(peer)
-                .or_default()
-                .push_back(req);
+            tracing::debug!(
+                "There should be a connection to {:?}, but there isn't",
+                peer
+            );
         }
     }
 
@@ -248,17 +266,7 @@ where
         {
             self.peers_to_handlers.remove(&peer_id);
         }
-        for dial_request in self
-            .pending_req_for_peer
-            .remove(&peer_id)
-            .unwrap_or_default()
-        {
-            if let Some(new_peer) = self.known_servers.choose(&mut self.rng) {
-                self.submit_req_for_peer(*new_peer, dial_request);
-            } else {
-                self.pending_requests.push_front(dial_request);
-            }
-        }
+        self.known_servers.retain(|p| p != &peer_id);
     }
 
     fn poll_pending_events(
