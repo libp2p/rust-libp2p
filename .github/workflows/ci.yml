@@ -172,8 +172,8 @@ jobs:
 
       - run: cargo +$MSRV check --workspace --all-features
 
-  feature_matrix:
-    name: Compile in feature matrix
+  feature_matrix_identity:
+    name: Compile libp2p-identity in feature matrix
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -191,7 +191,29 @@ jobs:
         with:
           tool: cargo-hack@0.6.13
 
-      - run: cargo hack check --feature-powerset --depth 3 --at-least-one-of async-std,tokio --package libp2p
+      - run: cargo hack check --feature-powerset --package libp2p-identity
+
+  feature_matrix_libp2p_transports:
+    name: Compile libp2p in transport feature matrix
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: r7kamura/rust-problem-matchers@2c2f1016021a7455a6b5b4bbae31145f3b3cd83a #v1.4.0
+
+      - uses: Swatinem/rust-cache@3cf7f8cc28d1b4e7d01e3783be10a97d55d483c8 # v2.7.1
+        with:
+          key: ${{ matrix.features }}
+          save-if: ${{ github.ref == 'refs/heads/master' }}
+
+      - uses: taiki-e/install-action@e2daa7c7c8bc02b4afae53143c6a07d8b916a3f7 # 2.21.12
+        with:
+          tool: cargo-hack@0.6.13
+
+      - run: cargo hack check --package libp2p --feature-powerset --features tokio     --include-features dns,noise,quic,tcp,tls,websocket
+      - run: cargo hack check --package libp2p --feature-powerset --features async-std --include-features dns,noise,quic,tcp,tls,websocket
 
   check-rustdoc-links:
     name: Check rustdoc intra-doc links
