@@ -355,7 +355,7 @@ pub enum HandlerIn {
     FindNodeReq {
         /// Identifier of the node.
         key: Vec<u8>,
-        /// Custom user data. Passed back in the out event when the results arrive.
+        /// ID of the query that generated this request.
         query_id: QueryId,
     },
 
@@ -374,7 +374,7 @@ pub enum HandlerIn {
     GetProvidersReq {
         /// Identifier being searched.
         key: record::Key,
-        /// Custom user data. Passed back in the out event when the results arrive.
+        /// ID of the query that generated this request.
         query_id: QueryId,
     },
 
@@ -399,13 +399,15 @@ pub enum HandlerIn {
         key: record::Key,
         /// Known provider for this key.
         provider: KadPeer,
+        /// ID of the query that generated this request.
+        query_id: QueryId,
     },
 
     /// Request to retrieve a record from the DHT.
     GetRecord {
         /// The key of the record.
         key: record::Key,
-        /// Custom data. Passed back in the out event when the results arrive.
+        /// ID of the query that generated this request.
         query_id: QueryId,
     },
 
@@ -422,7 +424,7 @@ pub enum HandlerIn {
     /// Put a value into the dht records.
     PutRecord {
         record: Record,
-        /// Custom data. Passed back in the out event when the results arrive.
+        /// ID of the query that generated this request.
         query_id: QueryId,
     },
 
@@ -648,9 +650,13 @@ impl ConnectionHandler for Handler {
                     provider_peers,
                 },
             ),
-            HandlerIn::AddProvider { key, provider } => {
+            HandlerIn::AddProvider {
+                key,
+                provider,
+                query_id,
+            } => {
                 let msg = KadRequestMsg::AddProvider { key, provider };
-                self.pending_messages.push_back((msg, None));
+                self.pending_messages.push_back((msg, Some(query_id)));
             }
             HandlerIn::GetRecord { key, query_id } => {
                 let msg = KadRequestMsg::GetValue { key };
