@@ -31,8 +31,8 @@ use libp2p::{
     swarm::{NetworkBehaviour, SwarmEvent},
     tcp, yamux,
 };
+use std::error::Error;
 use std::net::{Ipv4Addr, Ipv6Addr};
-use std::{error::Error, time::Duration};
 use tracing_subscriber::EnvFilter;
 
 fn main() -> Result<(), Box<dyn Error>> {
