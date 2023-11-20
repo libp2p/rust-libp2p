@@ -98,16 +98,31 @@ struct ProtocolStatus {
 /// State of an active outbound substream.
 enum OutboundSubstreamState {
     /// Waiting to send a message to the remote.
-    PendingSend(KadOutStreamSink<Stream>, KadRequestMsg, Option<QueryId>),
+    PendingSend {
+        stream: KadOutStreamSink<Stream>,
+        msg: KadRequestMsg,
+        query_id: Option<QueryId>,
+    },
     /// Waiting to flush the substream so that the data arrives to the remote.
-    PendingFlush(KadOutStreamSink<Stream>, Option<QueryId>),
+    PendingFlush {
+        stream: KadOutStreamSink<Stream>,
+        query_id: Option<QueryId>,
+    },
     /// Waiting for an answer back from the remote.
     // TODO: add timeout
-    WaitingAnswer(KadOutStreamSink<Stream>, QueryId),
+    WaitingAnswer {
+        stream: KadOutStreamSink<Stream>,
+        query_id: QueryId,
+    },
     /// An error happened on the substream and we should report the error to the user.
-    ReportError(HandlerQueryErr, QueryId),
+    ReportError {
+        error: HandlerQueryErr,
+        query_id: QueryId,
+    },
     /// The substream is being closed.
-    Closing(KadOutStreamSink<Stream>),
+    Closing {
+        stream: KadOutStreamSink<Stream>,
+    },
     /// The substream is complete and will not perform any more work.
     Done,
     Poisoned,
@@ -499,7 +514,11 @@ impl Handler {
     ) {
         if let Some((msg, query_id)) = self.pending_messages.pop_front() {
             self.outbound_substreams
-                .push(OutboundSubstreamState::PendingSend(protocol, msg, query_id));
+                .push(OutboundSubstreamState::PendingSend {
+                    stream: protocol,
+                    msg,
+                    query_id,
+                });
         } else {
             debug_assert!(false, "Requested outbound stream without message")
         }
@@ -589,7 +608,10 @@ impl Handler {
 
         if let Some((_, Some(query_id))) = self.pending_messages.pop_front() {
             self.outbound_substreams
-                .push(OutboundSubstreamState::ReportError(error.into(), query_id));
+                .push(OutboundSubstreamState::ReportError {
+                    error: error.into(),
+                    query_id,
+                });
         }
 
         self.num_requested_outbound_streams -= 1;
@@ -853,31 +875,19 @@ impl futures::Stream for OutboundSubstreamState {
 
         loop {
             match std::mem::replace(this, OutboundSubstreamState::Poisoned) {
-                OutboundSubstreamState::PendingSend(mut substream, msg, query_id) => {
-                    match substream.poll_ready_unpin(cx) {
-                        Poll::Ready(Ok(())) => match substream.start_send_unpin(msg) {
-                            Ok(()) => {
-                                *this = OutboundSubstreamState::PendingFlush(substream, query_id);
-                            }
-                            Err(error) => {
-                                *this = OutboundSubstreamState::Done;
-                                let event = query_id.map(|query_id| {
-                                    ConnectionHandlerEvent::NotifyBehaviour(
-                                        HandlerEvent::QueryError {
-                                            error: HandlerQueryErr::Io(error),
-                                            query_id,
-                                        },
-                                    )
-                                });
-
-                                return Poll::Ready(event);
-                            }
-                        },
-                        Poll::Pending => {
-                            *this = OutboundSubstreamState::PendingSend(substream, msg, query_id);
-                            return Poll::Pending;
+                OutboundSubstreamState::PendingSend {
+                    stream: mut substream,
+                    msg,
+                    query_id,
+                } => match substream.poll_ready_unpin(cx) {
+                    Poll::Ready(Ok(())) => match substream.start_send_unpin(msg) {
+                        Ok(()) => {
+                            *this = OutboundSubstreamState::PendingFlush {
+                                stream: substream,
+                                query_id,
+                            };
                         }
-                        Poll::Ready(Err(error)) => {
+                        Err(error) => {
                             *this = OutboundSubstreamState::Done;
                             let event = query_id.map(|query_id| {
                                 ConnectionHandlerEvent::NotifyBehaviour(HandlerEvent::QueryError {
@@ -888,85 +898,111 @@ impl futures::Stream for OutboundSubstreamState {
 
                             return Poll::Ready(event);
                         }
+                    },
+                    Poll::Pending => {
+                        *this = OutboundSubstreamState::PendingSend {
+                            stream: substream,
+                            msg,
+                            query_id,
+                        };
+                        return Poll::Pending;
                     }
-                }
-                OutboundSubstreamState::PendingFlush(mut substream, query_id) => {
-                    match substream.poll_flush_unpin(cx) {
-                        Poll::Ready(Ok(())) => {
-                            if let Some(query_id) = query_id {
-                                *this = OutboundSubstreamState::WaitingAnswer(substream, query_id);
-                            } else {
-                                *this = OutboundSubstreamState::Closing(substream);
-                            }
-                        }
-                        Poll::Pending => {
-                            *this = OutboundSubstreamState::PendingFlush(substream, query_id);
-                            return Poll::Pending;
-                        }
-                        Poll::Ready(Err(error)) => {
-                            *this = OutboundSubstreamState::Done;
-                            let event = query_id.map(|query_id| {
-                                ConnectionHandlerEvent::NotifyBehaviour(HandlerEvent::QueryError {
-                                    error: HandlerQueryErr::Io(error),
-                                    query_id,
-                                })
-                            });
-
-                            return Poll::Ready(event);
-                        }
-                    }
-                }
-                OutboundSubstreamState::WaitingAnswer(mut substream, query_id) => {
-                    match substream.poll_next_unpin(cx) {
-                        Poll::Ready(Some(Ok(msg))) => {
-                            *this = OutboundSubstreamState::Closing(substream);
-                            let event = process_kad_response(msg, query_id);
-
-                            return Poll::Ready(Some(ConnectionHandlerEvent::NotifyBehaviour(
-                                event,
-                            )));
-                        }
-                        Poll::Pending => {
-                            *this = OutboundSubstreamState::WaitingAnswer(substream, query_id);
-                            return Poll::Pending;
-                        }
-                        Poll::Ready(Some(Err(error))) => {
-                            *this = OutboundSubstreamState::Done;
-                            let event = HandlerEvent::QueryError {
+                    Poll::Ready(Err(error)) => {
+                        *this = OutboundSubstreamState::Done;
+                        let event = query_id.map(|query_id| {
+                            ConnectionHandlerEvent::NotifyBehaviour(HandlerEvent::QueryError {
                                 error: HandlerQueryErr::Io(error),
                                 query_id,
-                            };
+                            })
+                        });
 
-                            return Poll::Ready(Some(ConnectionHandlerEvent::NotifyBehaviour(
-                                event,
-                            )));
-                        }
-                        Poll::Ready(None) => {
-                            *this = OutboundSubstreamState::Done;
-                            let event = HandlerEvent::QueryError {
-                                error: HandlerQueryErr::Io(io::ErrorKind::UnexpectedEof.into()),
+                        return Poll::Ready(event);
+                    }
+                },
+                OutboundSubstreamState::PendingFlush {
+                    stream: mut substream,
+                    query_id,
+                } => match substream.poll_flush_unpin(cx) {
+                    Poll::Ready(Ok(())) => {
+                        if let Some(query_id) = query_id {
+                            *this = OutboundSubstreamState::WaitingAnswer {
+                                stream: substream,
                                 query_id,
                             };
-
-                            return Poll::Ready(Some(ConnectionHandlerEvent::NotifyBehaviour(
-                                event,
-                            )));
+                        } else {
+                            *this = OutboundSubstreamState::Closing { stream: substream };
                         }
                     }
-                }
-                OutboundSubstreamState::ReportError(error, query_id) => {
+                    Poll::Pending => {
+                        *this = OutboundSubstreamState::PendingFlush {
+                            stream: substream,
+                            query_id,
+                        };
+                        return Poll::Pending;
+                    }
+                    Poll::Ready(Err(error)) => {
+                        *this = OutboundSubstreamState::Done;
+                        let event = query_id.map(|query_id| {
+                            ConnectionHandlerEvent::NotifyBehaviour(HandlerEvent::QueryError {
+                                error: HandlerQueryErr::Io(error),
+                                query_id,
+                            })
+                        });
+
+                        return Poll::Ready(event);
+                    }
+                },
+                OutboundSubstreamState::WaitingAnswer {
+                    stream: mut substream,
+                    query_id,
+                } => match substream.poll_next_unpin(cx) {
+                    Poll::Ready(Some(Ok(msg))) => {
+                        *this = OutboundSubstreamState::Closing { stream: substream };
+                        let event = process_kad_response(msg, query_id);
+
+                        return Poll::Ready(Some(ConnectionHandlerEvent::NotifyBehaviour(event)));
+                    }
+                    Poll::Pending => {
+                        *this = OutboundSubstreamState::WaitingAnswer {
+                            stream: substream,
+                            query_id,
+                        };
+                        return Poll::Pending;
+                    }
+                    Poll::Ready(Some(Err(error))) => {
+                        *this = OutboundSubstreamState::Done;
+                        let event = HandlerEvent::QueryError {
+                            error: HandlerQueryErr::Io(error),
+                            query_id,
+                        };
+
+                        return Poll::Ready(Some(ConnectionHandlerEvent::NotifyBehaviour(event)));
+                    }
+                    Poll::Ready(None) => {
+                        *this = OutboundSubstreamState::Done;
+                        let event = HandlerEvent::QueryError {
+                            error: HandlerQueryErr::Io(io::ErrorKind::UnexpectedEof.into()),
+                            query_id,
+                        };
+
+                        return Poll::Ready(Some(ConnectionHandlerEvent::NotifyBehaviour(event)));
+                    }
+                },
+                OutboundSubstreamState::ReportError { error, query_id } => {
                     *this = OutboundSubstreamState::Done;
                     let event = HandlerEvent::QueryError { error, query_id };
 
                     return Poll::Ready(Some(ConnectionHandlerEvent::NotifyBehaviour(event)));
                 }
-                OutboundSubstreamState::Closing(mut stream) => match stream.poll_close_unpin(cx) {
-                    Poll::Ready(Ok(())) | Poll::Ready(Err(_)) => return Poll::Ready(None),
-                    Poll::Pending => {
-                        *this = OutboundSubstreamState::Closing(stream);
-                        return Poll::Pending;
+                OutboundSubstreamState::Closing { mut stream } => {
+                    match stream.poll_close_unpin(cx) {
+                        Poll::Ready(Ok(())) | Poll::Ready(Err(_)) => return Poll::Ready(None),
+                        Poll::Pending => {
+                            *this = OutboundSubstreamState::Closing { stream };
+                            return Poll::Pending;
+                        }
                     }
-                },
+                }
                 OutboundSubstreamState::Done => {
                     *this = OutboundSubstreamState::Done;
                     return Poll::Ready(None);
