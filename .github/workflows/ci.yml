@@ -174,7 +174,7 @@ jobs:
       - run: cargo +$MSRV check --workspace --all-features
 
   feature_matrix:
-    name: Compile with select features
+    name: Compile in feature matrix
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

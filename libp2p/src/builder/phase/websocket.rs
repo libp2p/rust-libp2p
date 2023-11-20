@@ -44,7 +44,7 @@ macro_rules! impl_websocket_builder {
         /// # Ok(())
         /// # }
         /// ```
-        #[cfg(all(not(target_arch = "wasm32"), feature = $providerKebabCase, feature = "websocket"))]
+        #[cfg(all(not(target_arch = "wasm32"), feature = $providerKebabCase, feature = "websocket", feature = "dns", feature = "tcp"))]
         impl<T> SwarmBuilder<$providerPascalCase, WebsocketPhase<T>> {
             pub async fn with_websocket<
                 SecUpgrade,
