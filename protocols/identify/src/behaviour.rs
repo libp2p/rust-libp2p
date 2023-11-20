@@ -96,9 +96,9 @@ pub struct Config {
     /// Whether new or changes in external addresses of the local node should
     /// trigger an active push of an identify message to all connected peers.
     ///
-    /// Enabling this option can result in connected peers being informed
-    /// earlier about new or expired external addresses of the local node,
-    /// i.e. before the next periodic identify request with each peer.
+    /// Disabling this option means connected peers are only informed
+    /// about new or expired external addresses of the local node with
+    /// the next periodic identify request with each peer.
     ///
     /// Enabled by default.
     pub push_external_addr_updates: bool,
