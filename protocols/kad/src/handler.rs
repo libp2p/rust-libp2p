@@ -107,6 +107,8 @@ enum OutboundSubstreamState {
     PendingFlush {
         stream: KadOutStreamSink<Stream>,
         query_id: Option<QueryId>,
+        /// Whether the sent message has an answer.
+        has_answer: bool,
     },
     /// Waiting for an answer back from the remote.
     // TODO: add timeout
@@ -879,15 +881,41 @@ impl futures::Stream for OutboundSubstreamState {
                     stream: mut substream,
                     msg,
                     query_id,
-                } => match substream.poll_ready_unpin(cx) {
-                    Poll::Ready(Ok(())) => match substream.start_send_unpin(msg) {
-                        Ok(()) => {
-                            *this = OutboundSubstreamState::PendingFlush {
+                } => {
+                    let has_answer = !matches!(msg, KadRequestMsg::AddProvider { .. }); // All queries apart from `AddProvider` have an answer.
+
+                    match substream.poll_ready_unpin(cx) {
+                        Poll::Ready(Ok(())) => match substream.start_send_unpin(msg) {
+                            Ok(()) => {
+                                *this = OutboundSubstreamState::PendingFlush {
+                                    stream: substream,
+                                    query_id,
+                                    has_answer,
+                                };
+                            }
+                            Err(error) => {
+                                *this = OutboundSubstreamState::Done;
+                                let event = query_id.map(|query_id| {
+                                    ConnectionHandlerEvent::NotifyBehaviour(
+                                        HandlerEvent::QueryError {
+                                            error: HandlerQueryErr::Io(error),
+                                            query_id,
+                                        },
+                                    )
+                                });
+
+                                return Poll::Ready(event);
+                            }
+                        },
+                        Poll::Pending => {
+                            *this = OutboundSubstreamState::PendingSend {
                                 stream: substream,
+                                msg,
                                 query_id,
                             };
+                            return Poll::Pending;
                         }
-                        Err(error) => {
+                        Poll::Ready(Err(error)) => {
                             *this = OutboundSubstreamState::Done;
                             let event = query_id.map(|query_id| {
                                 ConnectionHandlerEvent::NotifyBehaviour(HandlerEvent::QueryError {
@@ -898,36 +926,18 @@ impl futures::Stream for OutboundSubstreamState {
 
                             return Poll::Ready(event);
                         }
-                    },
-                    Poll::Pending => {
-                        *this = OutboundSubstreamState::PendingSend {
-                            stream: substream,
-                            msg,
-                            query_id,
-                        };
-                        return Poll::Pending;
                     }
-                    Poll::Ready(Err(error)) => {
-                        *this = OutboundSubstreamState::Done;
-                        let event = query_id.map(|query_id| {
-                            ConnectionHandlerEvent::NotifyBehaviour(HandlerEvent::QueryError {
-                                error: HandlerQueryErr::Io(error),
-                                query_id,
-                            })
-                        });
-
-                        return Poll::Ready(event);
-                    }
-                },
+                }
                 OutboundSubstreamState::PendingFlush {
                     stream: mut substream,
                     query_id,
+                    has_answer,
                 } => match substream.poll_flush_unpin(cx) {
                     Poll::Ready(Ok(())) => {
-                        if let Some(query_id) = query_id {
+                        if has_answer {
                             *this = OutboundSubstreamState::WaitingAnswer {
                                 stream: substream,
-                                query_id,
+                                query_id: query_id.unwrap(),
                             };
                         } else {
                             *this = OutboundSubstreamState::Closing { stream: substream };
@@ -937,6 +947,7 @@ impl futures::Stream for OutboundSubstreamState {
                         *this = OutboundSubstreamState::PendingFlush {
                             stream: substream,
                             query_id,
+                            has_answer,
                         };
                         return Poll::Pending;
                     }
