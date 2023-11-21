@@ -1,6 +1,6 @@
 [package]
 name = "futures-bounded"
-version = "0.2.1"
+version = "0.2.3"
 edition = "2021"
 rust-version.workspace = true
 license = "MIT"
@@ -17,7 +17,8 @@ futures-util = { version = "0.3.29" }
 futures-timer = "3.0.2"
 
 [dev-dependencies]
-tokio = { version = "1.34.0", features = ["macros", "rt"] }
+tokio = { version = "1.34.0", features = ["macros", "rt", "sync"] }
+futures = "0.3.28"
 
 [lints]
 workspace = true

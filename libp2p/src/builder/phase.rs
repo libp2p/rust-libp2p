@@ -34,6 +34,7 @@ use super::SwarmBuilder;
 use libp2p_core::{muxing::StreamMuxerBox, Transport};
 use libp2p_identity::Keypair;
 
+#[allow(unreachable_pub)]
 pub trait IntoSecurityUpgrade<C> {
     type Upgrade;
     type Error;
@@ -75,6 +76,7 @@ where
     }
 }
 
+#[allow(unreachable_pub)]
 pub trait IntoMultiplexerUpgrade<C> {
     type Upgrade;
 
