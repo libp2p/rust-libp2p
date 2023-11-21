@@ -122,12 +122,13 @@ mod tests {
     #[test]
     #[cfg(all(feature = "tokio", feature = "quic"))]
     fn quic() {
-        let _ = SwarmBuilder::with_new_identity()
-            .with_tokio()
-            .with_quic()
-            .with_behaviour(|_| libp2p_swarm::dummy::Behaviour)
-            .unwrap()
-            .build();
+        let _ =
+            SwarmBuilder::with_new_identity()
+                .with_tokio()
+                .with_quic()
+                .with_behaviour(|_| libp2p_swarm::dummy::Behaviour)
+                .unwrap()
+                .build();
     }
 
     #[test]

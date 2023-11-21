@@ -134,10 +134,7 @@ impl Handler {
         );
         if self
             .outbound_stream
-            .try_push(outbound::handshake(
-                stream,
-                self.holepunch_candidates.clone(),
-            ))
+            .try_push(outbound::handshake(stream, self.holepunch_candidates.clone()))
             .is_err()
         {
             tracing::warn!(
@@ -170,10 +167,9 @@ impl Handler {
             StreamUpgradeError::Timeout => outbound::Error::Io(io::ErrorKind::TimedOut.into()),
         };
 
-        self.queued_events
-            .push_back(ConnectionHandlerEvent::NotifyBehaviour(
-                Event::OutboundConnectFailed { error },
-            ))
+        self.queued_events.push_back(
+            ConnectionHandlerEvent::NotifyBehaviour(Event::OutboundConnectFailed { error })
+        )
     }
 }
 
@@ -242,9 +238,9 @@ impl ConnectionHandler for Handler {
                 ))
             }
             Poll::Ready(Ok(Err(error))) => {
-                return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(
-                    Event::InboundConnectFailed { error },
-                ))
+                return Poll::Ready(
+                    ConnectionHandlerEvent::NotifyBehaviour(Event::InboundConnectFailed { error })
+                )
             }
             Poll::Ready(Err(futures_bounded::Timeout { .. })) => {
                 return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(
@@ -265,9 +261,9 @@ impl ConnectionHandler for Handler {
                 ))
             }
             Poll::Ready(Ok(Err(error))) => {
-                return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(
-                    Event::OutboundConnectFailed { error },
-                ))
+                return Poll::Ready(
+                    ConnectionHandlerEvent::NotifyBehaviour(Event::OutboundConnectFailed { error })
+                )
             }
             Poll::Ready(Err(futures_bounded::Timeout { .. })) => {
                 return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(

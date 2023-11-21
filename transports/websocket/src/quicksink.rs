@@ -183,19 +183,20 @@ where
                         return Poll::Ready(Ok(()));
                     }
                 }
-                State::Sending => match ready!(this.future.as_mut().as_pin_mut().unwrap().poll(cx))
-                {
-                    Ok(p) => {
-                        this.future.set(None);
-                        *this.param = Some(p);
-                        *this.state = State::Empty
+                State::Sending => {
+                    match ready!(this.future.as_mut().as_pin_mut().unwrap().poll(cx)) {
+                        Ok(p) => {
+                            this.future.set(None);
+                            *this.param = Some(p);
+                            *this.state = State::Empty
+                        }
+                        Err(e) => {
+                            this.future.set(None);
+                            *this.state = State::Failed;
+                            return Poll::Ready(Err(e));
+                        }
                     }
-                    Err(e) => {
-                        this.future.set(None);
-                        *this.state = State::Failed;
-                        return Poll::Ready(Err(e));
-                    }
-                },
+                }
                 State::Flushing => {
                     match ready!(this.future.as_mut().as_pin_mut().unwrap().poll(cx)) {
                         Ok(p) => {
@@ -243,19 +244,20 @@ where
                         return Poll::Ready(Ok(()));
                     }
                 }
-                State::Sending => match ready!(this.future.as_mut().as_pin_mut().unwrap().poll(cx))
-                {
-                    Ok(p) => {
-                        this.future.set(None);
-                        *this.param = Some(p);
-                        *this.state = State::Empty
+                State::Sending => {
+                    match ready!(this.future.as_mut().as_pin_mut().unwrap().poll(cx)) {
+                        Ok(p) => {
+                            this.future.set(None);
+                            *this.param = Some(p);
+                            *this.state = State::Empty
+                        }
+                        Err(e) => {
+                            this.future.set(None);
+                            *this.state = State::Failed;
+                            return Poll::Ready(Err(e));
+                        }
                     }
-                    Err(e) => {
-                        this.future.set(None);
-                        *this.state = State::Failed;
-                        return Poll::Ready(Err(e));
-                    }
-                },
+                }
                 State::Flushing => {
                     match ready!(this.future.as_mut().as_pin_mut().unwrap().poll(cx)) {
                         Ok(p) => {

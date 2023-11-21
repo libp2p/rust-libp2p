@@ -116,11 +116,12 @@ impl WebTransportHash {
     }
 
     pub fn algorithm(&mut self, val: &str) -> &mut Self {
-        let r = Reflect::set(
-            self.as_ref(),
-            &JsValue::from("algorithm"),
-            &JsValue::from(val),
-        );
+        let r =
+            Reflect::set(
+                self.as_ref(),
+                &JsValue::from("algorithm"),
+                &JsValue::from(val),
+            );
         debug_assert!(
             r.is_ok(),
             "setting properties should never fail on our dictionary objects"

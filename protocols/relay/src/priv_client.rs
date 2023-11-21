@@ -279,105 +279,108 @@ impl NetworkBehaviour for Behaviour {
             return Poll::Ready(action);
         }
 
-        let action = match ready!(self.from_transport.poll_next_unpin(cx)) {
-            Some(transport::TransportToBehaviourMsg::ListenReq {
-                relay_peer_id,
-                relay_addr,
-                to_listener,
-            }) => {
-                match self
-                    .directly_connected_peers
-                    .get(&relay_peer_id)
-                    .and_then(|cs| cs.first())
-                {
-                    Some(connection_id) => {
-                        self.reservation_addresses.insert(
-                            *connection_id,
-                            (
-                                relay_addr
-                                    .with(Protocol::P2p(relay_peer_id))
-                                    .with(Protocol::P2pCircuit)
-                                    .with(Protocol::P2p(self.local_peer_id)),
-                                ReservationStatus::Pending,
-                            ),
-                        );
+        let action =
+            match ready!(self.from_transport.poll_next_unpin(cx)) {
+                Some(transport::TransportToBehaviourMsg::ListenReq {
+                    relay_peer_id,
+                    relay_addr,
+                    to_listener,
+                }) => {
+                    match self
+                        .directly_connected_peers
+                        .get(&relay_peer_id)
+                        .and_then(|cs| cs.first())
+                    {
+                        Some(connection_id) => {
+                            self.reservation_addresses.insert(
+                                *connection_id,
+                                (
+                                    relay_addr
+                                        .with(Protocol::P2p(relay_peer_id))
+                                        .with(Protocol::P2pCircuit)
+                                        .with(Protocol::P2p(self.local_peer_id)),
+                                    ReservationStatus::Pending,
+                                ),
+                            );
 
-                        ToSwarm::NotifyHandler {
-                            peer_id: relay_peer_id,
-                            handler: NotifyHandler::One(*connection_id),
-                            event: Either::Left(handler::In::Reserve { to_listener }),
+                            ToSwarm::NotifyHandler {
+                                peer_id: relay_peer_id,
+                                handler: NotifyHandler::One(*connection_id),
+                                event: Either::Left(handler::In::Reserve { to_listener }),
+                            }
+                        }
+                        None => {
+                            let opts = DialOpts::peer_id(relay_peer_id)
+                                .addresses(vec![relay_addr.clone()])
+                                .extend_addresses_through_behaviour()
+                                .build();
+                            let relayed_connection_id = opts.connection_id();
+
+                            self.reservation_addresses.insert(
+                                relayed_connection_id,
+                                (
+                                    relay_addr
+                                        .with(Protocol::P2p(relay_peer_id))
+                                        .with(Protocol::P2pCircuit)
+                                        .with(Protocol::P2p(self.local_peer_id)),
+                                    ReservationStatus::Pending,
+                                ),
+                            );
+
+                            self.pending_handler_commands.insert(
+                                relayed_connection_id,
+                                handler::In::Reserve { to_listener },
+                            );
+                            ToSwarm::Dial { opts }
                         }
                     }
-                    None => {
-                        let opts = DialOpts::peer_id(relay_peer_id)
-                            .addresses(vec![relay_addr.clone()])
-                            .extend_addresses_through_behaviour()
-                            .build();
-                        let relayed_connection_id = opts.connection_id();
-
-                        self.reservation_addresses.insert(
-                            relayed_connection_id,
-                            (
-                                relay_addr
-                                    .with(Protocol::P2p(relay_peer_id))
-                                    .with(Protocol::P2pCircuit)
-                                    .with(Protocol::P2p(self.local_peer_id)),
-                                ReservationStatus::Pending,
-                            ),
-                        );
-
-                        self.pending_handler_commands
-                            .insert(relayed_connection_id, handler::In::Reserve { to_listener });
-                        ToSwarm::Dial { opts }
-                    }
                 }
-            }
-            Some(transport::TransportToBehaviourMsg::DialReq {
-                relay_addr,
-                relay_peer_id,
-                dst_peer_id,
-                send_back,
-                ..
-            }) => {
-                match self
-                    .directly_connected_peers
-                    .get(&relay_peer_id)
-                    .and_then(|cs| cs.first())
-                {
-                    Some(connection_id) => ToSwarm::NotifyHandler {
-                        peer_id: relay_peer_id,
-                        handler: NotifyHandler::One(*connection_id),
-                        event: Either::Left(handler::In::EstablishCircuit {
-                            to_dial: send_back,
-                            dst_peer_id,
-                        }),
-                    },
-                    None => {
-                        let opts = DialOpts::peer_id(relay_peer_id)
-                            .addresses(vec![relay_addr])
-                            .extend_addresses_through_behaviour()
-                            .build();
-                        let connection_id = opts.connection_id();
-
-                        self.pending_handler_commands.insert(
-                            connection_id,
-                            handler::In::EstablishCircuit {
+                Some(transport::TransportToBehaviourMsg::DialReq {
+                    relay_addr,
+                    relay_peer_id,
+                    dst_peer_id,
+                    send_back,
+                    ..
+                }) => {
+                    match self
+                        .directly_connected_peers
+                        .get(&relay_peer_id)
+                        .and_then(|cs| cs.first())
+                    {
+                        Some(connection_id) => ToSwarm::NotifyHandler {
+                            peer_id: relay_peer_id,
+                            handler: NotifyHandler::One(*connection_id),
+                            event: Either::Left(handler::In::EstablishCircuit {
                                 to_dial: send_back,
                                 dst_peer_id,
-                            },
-                        );
+                            }),
+                        },
+                        None => {
+                            let opts = DialOpts::peer_id(relay_peer_id)
+                                .addresses(vec![relay_addr])
+                                .extend_addresses_through_behaviour()
+                                .build();
+                            let connection_id = opts.connection_id();
 
-                        ToSwarm::Dial { opts }
+                            self.pending_handler_commands.insert(
+                                connection_id,
+                                handler::In::EstablishCircuit {
+                                    to_dial: send_back,
+                                    dst_peer_id,
+                                },
+                            );
+
+                            ToSwarm::Dial { opts }
+                        }
                     }
                 }
-            }
-            None => unreachable!(
-                "`relay::Behaviour` polled after channel from \
+                None => unreachable!(
+                    "`relay::Behaviour` polled after channel from \
                      `Transport` has been closed. Unreachable under \
                      the assumption that the `client::Behaviour` is never polled after \
                      `client::Transport` is dropped.",
-            ),
-        };
+                ),
+            };
 
         Poll::Ready(action)
     }

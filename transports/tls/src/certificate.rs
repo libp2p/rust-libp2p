@@ -58,10 +58,9 @@ pub fn generate(
     let certificate = {
         let mut params = rcgen::CertificateParams::new(vec![]);
         params.distinguished_name = rcgen::DistinguishedName::new();
-        params.custom_extensions.push(make_libp2p_extension(
-            identity_keypair,
-            &certificate_keypair,
-        )?);
+        params
+            .custom_extensions
+            .push(make_libp2p_extension(identity_keypair, &certificate_keypair)?);
         params.alg = P2P_SIGNATURE_ALGORITHM;
         params.key_pair = Some(certificate_keypair);
         rcgen::Certificate::from_params(params)?
@@ -289,10 +288,11 @@ impl P2pCertificate<'_> {
             _ => return Err(webpki::Error::UnsupportedSignatureAlgorithm),
         };
         let spki = &self.certificate.tbs_certificate.subject_pki;
-        let key = signature::UnparsedPublicKey::new(
-            verification_algorithm,
-            spki.subject_public_key.as_ref(),
-        );
+        let key =
+            signature::UnparsedPublicKey::new(
+                verification_algorithm,
+                spki.subject_public_key.as_ref(),
+            );
 
         Ok(key)
     }

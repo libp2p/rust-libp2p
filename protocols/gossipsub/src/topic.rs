@@ -49,11 +49,12 @@ impl Hasher for Sha256Hash {
     fn hash(topic_string: String) -> TopicHash {
         use quick_protobuf::MessageWrite;
 
-        let topic_descripter = proto::TopicDescriptor {
-            name: Some(topic_string),
-            auth: None,
-            enc: None,
-        };
+        let topic_descripter =
+            proto::TopicDescriptor {
+                name: Some(topic_string),
+                auth: None,
+                enc: None,
+            };
         let mut bytes = Vec::with_capacity(topic_descripter.get_size());
         let mut writer = Writer::new(&mut bytes);
         topic_descripter

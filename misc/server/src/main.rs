@@ -57,21 +57,22 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     let mut metric_registry = Registry::default();
 
-    let local_keypair = {
-        let keypair = identity::Keypair::from_protobuf_encoding(&Zeroizing::new(
-            base64::engine::general_purpose::STANDARD
-                .decode(config.identity.priv_key.as_bytes())?,
-        ))?;
+    let local_keypair =
+        {
+            let keypair = identity::Keypair::from_protobuf_encoding(&Zeroizing::new(
+                base64::engine::general_purpose::STANDARD
+                    .decode(config.identity.priv_key.as_bytes())?,
+            ))?;
 
-        let peer_id = keypair.public().into();
-        assert_eq!(
+            let peer_id = keypair.public().into();
+            assert_eq!(
             PeerId::from_str(&config.identity.peer_id)?,
             peer_id,
             "Expect peer id derived from private key and peer id retrieved from config to match."
         );
 
-        keypair
-    };
+            keypair
+        };
 
     let mut swarm = libp2p::SwarmBuilder::with_existing_identity(local_keypair)
         .with_tokio()
@@ -83,9 +84,9 @@ async fn main() -> Result<(), Box<dyn Error>> {
         .with_quic()
         .with_dns()?
         .with_bandwidth_metrics(&mut metric_registry)
-        .with_behaviour(|key| {
-            behaviour::Behaviour::new(key.public(), opt.enable_kademlia, opt.enable_autonat)
-        })?
+        .with_behaviour(
+            |key| behaviour::Behaviour::new(key.public(), opt.enable_kademlia, opt.enable_autonat)
+        )?
         .build();
 
     if config.addresses.swarm.is_empty() {

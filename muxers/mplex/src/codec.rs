@@ -205,15 +205,17 @@ impl Decoder for Codec {
     fn decode(&mut self, src: &mut BytesMut) -> Result<Option<Self::Item>, Self::Error> {
         loop {
             match mem::replace(&mut self.decoder_state, CodecDecodeState::Poisoned) {
-                CodecDecodeState::Begin => match self.varint_decoder.decode(src)? {
-                    Some(header) => {
-                        self.decoder_state = CodecDecodeState::HasHeader(header);
+                CodecDecodeState::Begin => {
+                    match self.varint_decoder.decode(src)? {
+                        Some(header) => {
+                            self.decoder_state = CodecDecodeState::HasHeader(header);
+                        }
+                        None => {
+                            self.decoder_state = CodecDecodeState::Begin;
+                            return Ok(None);
+                        }
                     }
-                    None => {
-                        self.decoder_state = CodecDecodeState::Begin;
-                        return Ok(None);
-                    }
-                },
+                }
                 CodecDecodeState::HasHeader(header) => match self.varint_decoder.decode(src)? {
                     Some(len) => {
                         if len as usize > MAX_FRAME_SIZE {
@@ -345,10 +347,7 @@ impl Encoder for Codec {
         let data_len_bytes = encode::usize(data_len, &mut data_buf);
 
         if data_len > MAX_FRAME_SIZE {
-            return Err(io::Error::new(
-                io::ErrorKind::InvalidData,
-                "data size exceed maximum",
-            ));
+            return Err(io::Error::new(io::ErrorKind::InvalidData, "data size exceed maximum"));
         }
 
         dst.reserve(header_bytes.len() + data_len_bytes.len() + data_len);

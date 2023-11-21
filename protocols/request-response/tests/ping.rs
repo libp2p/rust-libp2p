@@ -40,15 +40,16 @@ async fn is_response_outbound() {
     let ping = Ping("ping".to_string().into_bytes());
     let offline_peer = PeerId::random();
 
-    let mut swarm1 = Swarm::new_ephemeral(|_| {
-        request_response::cbor::Behaviour::<Ping, Pong>::new(
-            [(
-                StreamProtocol::new("/ping/1"),
-                request_response::ProtocolSupport::Full,
-            )],
-            request_response::Config::default(),
-        )
-    });
+    let mut swarm1 =
+        Swarm::new_ephemeral(|_| {
+            request_response::cbor::Behaviour::<Ping, Pong>::new(
+                [(
+                    StreamProtocol::new("/ping/1"),
+                    request_response::ProtocolSupport::Full,
+                )],
+                request_response::Config::default(),
+            )
+        });
 
     let request_id1 = swarm1
         .behaviour_mut()
@@ -91,13 +92,14 @@ async fn ping_protocol() {
     let protocols = iter::once((StreamProtocol::new("/ping/1"), ProtocolSupport::Full));
     let cfg = request_response::Config::default();
 
-    let mut swarm1 = Swarm::new_ephemeral(|_| {
-        request_response::cbor::Behaviour::<Ping, Pong>::new(protocols.clone(), cfg.clone())
-    });
+    let mut swarm1 =
+        Swarm::new_ephemeral(|_| {
+            request_response::cbor::Behaviour::<Ping, Pong>::new(protocols.clone(), cfg.clone())
+        });
     let peer1_id = *swarm1.local_peer_id();
-    let mut swarm2 = Swarm::new_ephemeral(|_| {
-        request_response::cbor::Behaviour::<Ping, Pong>::new(protocols, cfg)
-    });
+    let mut swarm2 = Swarm::new_ephemeral(
+        |_| request_response::cbor::Behaviour::<Ping, Pong>::new(protocols, cfg)
+    );
     let peer2_id = *swarm2.local_peer_id();
 
     swarm1.listen().with_memory_addr_external().await;
@@ -184,13 +186,14 @@ async fn emits_inbound_connection_closed_failure() {
     let protocols = iter::once((StreamProtocol::new("/ping/1"), ProtocolSupport::Full));
     let cfg = request_response::Config::default();
 
-    let mut swarm1 = Swarm::new_ephemeral(|_| {
-        request_response::cbor::Behaviour::<Ping, Pong>::new(protocols.clone(), cfg.clone())
-    });
+    let mut swarm1 =
+        Swarm::new_ephemeral(|_| {
+            request_response::cbor::Behaviour::<Ping, Pong>::new(protocols.clone(), cfg.clone())
+        });
     let peer1_id = *swarm1.local_peer_id();
-    let mut swarm2 = Swarm::new_ephemeral(|_| {
-        request_response::cbor::Behaviour::<Ping, Pong>::new(protocols, cfg)
-    });
+    let mut swarm2 = Swarm::new_ephemeral(
+        |_| request_response::cbor::Behaviour::<Ping, Pong>::new(protocols, cfg)
+    );
     let peer2_id = *swarm2.local_peer_id();
 
     swarm1.listen().with_memory_addr_external().await;
@@ -249,13 +252,14 @@ async fn emits_inbound_connection_closed_if_channel_is_dropped() {
     let protocols = iter::once((StreamProtocol::new("/ping/1"), ProtocolSupport::Full));
     let cfg = request_response::Config::default();
 
-    let mut swarm1 = Swarm::new_ephemeral(|_| {
-        request_response::cbor::Behaviour::<Ping, Pong>::new(protocols.clone(), cfg.clone())
-    });
+    let mut swarm1 =
+        Swarm::new_ephemeral(|_| {
+            request_response::cbor::Behaviour::<Ping, Pong>::new(protocols.clone(), cfg.clone())
+        });
     let peer1_id = *swarm1.local_peer_id();
-    let mut swarm2 = Swarm::new_ephemeral(|_| {
-        request_response::cbor::Behaviour::<Ping, Pong>::new(protocols, cfg)
-    });
+    let mut swarm2 = Swarm::new_ephemeral(
+        |_| request_response::cbor::Behaviour::<Ping, Pong>::new(protocols, cfg)
+    );
     let peer2_id = *swarm2.local_peer_id();
 
     swarm1.listen().with_memory_addr_external().await;
@@ -264,27 +268,28 @@ async fn emits_inbound_connection_closed_if_channel_is_dropped() {
     swarm2.behaviour_mut().send_request(&peer1_id, ping.clone());
 
     // Wait for swarm 1 to receive request by swarm 2.
-    let event = loop {
-        futures::select!(
-            event = swarm1.select_next_some() => {
-                if let SwarmEvent::Behaviour(request_response::Event::Message {
-                    peer,
-                    message: request_response::Message::Request { request, channel, .. }
-                }) = event {
-                    assert_eq!(&request, &ping);
-                    assert_eq!(&peer, &peer2_id);
+    let event =
+        loop {
+            futures::select!(
+                event = swarm1.select_next_some() => {
+                    if let SwarmEvent::Behaviour(request_response::Event::Message {
+                        peer,
+                        message: request_response::Message::Request { request, channel, .. }
+                    }) = event {
+                        assert_eq!(&request, &ping);
+                        assert_eq!(&peer, &peer2_id);
 
-                    drop(channel);
-                    continue;
-                }
-            },
-            event = swarm2.select_next_some() => {
-                if let SwarmEvent::Behaviour(ev) = event {
-                    break ev;
-                }
-            },
-        )
-    };
+                        drop(channel);
+                        continue;
+                    }
+                },
+                event = swarm2.select_next_some() => {
+                    if let SwarmEvent::Behaviour(ev) = event {
+                        break ev;
+                    }
+                },
+            )
+        };
 
     let error = match event {
         request_response::Event::OutboundFailure { error, .. } => error,

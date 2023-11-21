@@ -62,34 +62,30 @@ pub struct Config {
 
 impl Config {
     pub fn reservation_rate_per_peer(mut self, limit: NonZeroU32, interval: Duration) -> Self {
-        self.reservation_rate_limiters
-            .push(rate_limiter::new_per_peer(
-                rate_limiter::GenericRateLimiterConfig { limit, interval },
-            ));
+        self.reservation_rate_limiters.push(
+            rate_limiter::new_per_peer(rate_limiter::GenericRateLimiterConfig { limit, interval })
+        );
         self
     }
 
     pub fn circuit_src_per_peer(mut self, limit: NonZeroU32, interval: Duration) -> Self {
-        self.circuit_src_rate_limiters
-            .push(rate_limiter::new_per_peer(
-                rate_limiter::GenericRateLimiterConfig { limit, interval },
-            ));
+        self.circuit_src_rate_limiters.push(
+            rate_limiter::new_per_peer(rate_limiter::GenericRateLimiterConfig { limit, interval })
+        );
         self
     }
 
     pub fn reservation_rate_per_ip(mut self, limit: NonZeroU32, interval: Duration) -> Self {
-        self.reservation_rate_limiters
-            .push(rate_limiter::new_per_ip(
-                rate_limiter::GenericRateLimiterConfig { limit, interval },
-            ));
+        self.reservation_rate_limiters.push(
+            rate_limiter::new_per_ip(rate_limiter::GenericRateLimiterConfig { limit, interval })
+        );
         self
     }
 
     pub fn circuit_src_per_ip(mut self, limit: NonZeroU32, interval: Duration) -> Self {
-        self.circuit_src_rate_limiters
-            .push(rate_limiter::new_per_ip(
-                rate_limiter::GenericRateLimiterConfig { limit, interval },
-            ));
+        self.circuit_src_rate_limiters.push(
+            rate_limiter::new_per_ip(rate_limiter::GenericRateLimiterConfig { limit, interval })
+        );
         self
     }
 }

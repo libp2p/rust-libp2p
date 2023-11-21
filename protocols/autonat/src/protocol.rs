@@ -137,16 +137,17 @@ impl DialRequest {
                 .map_err(|_| io::Error::new(io::ErrorKind::InvalidData, "invalid peer id"))?
         };
 
-        let addrs = addrs
-            .into_iter()
-            .filter_map(|a| match Multiaddr::try_from(a.to_vec()) {
-                Ok(a) => Some(a),
-                Err(e) => {
-                    tracing::debug!("Unable to parse multiaddr: {e}");
-                    None
-                }
-            })
-            .collect();
+        let addrs =
+            addrs
+                .into_iter()
+                .filter_map(|a| match Multiaddr::try_from(a.to_vec()) {
+                    Ok(a) => Some(a),
+                    Err(e) => {
+                        tracing::debug!("Unable to parse multiaddr: {e}");
+                        None
+                    }
+                })
+                .collect();
         Ok(Self {
             peer_id,
             addresses: addrs,
@@ -257,18 +258,19 @@ impl DialResponse {
     }
 
     pub fn into_proto(self) -> proto::Message {
-        let dial_response = match self.result {
-            Ok(addr) => proto::DialResponse {
-                status: Some(proto::ResponseStatus::OK),
-                statusText: self.status_text,
-                addr: Some(addr.to_vec()),
-            },
-            Err(error) => proto::DialResponse {
-                status: Some(error.into()),
-                statusText: self.status_text,
-                addr: None,
-            },
-        };
+        let dial_response =
+            match self.result {
+                Ok(addr) => proto::DialResponse {
+                    status: Some(proto::ResponseStatus::OK),
+                    statusText: self.status_text,
+                    addr: Some(addr.to_vec()),
+                },
+                Err(error) => proto::DialResponse {
+                    status: Some(error.into()),
+                    statusText: self.status_text,
+                    addr: None,
+                },
+            };
 
         proto::Message {
             type_pb: Some(proto::MessageType::DIAL_RESPONSE),
@@ -298,10 +300,11 @@ mod tests {
 
     #[test]
     fn test_response_ok_encode_decode() {
-        let response = DialResponse {
-            result: Ok("/ip4/8.8.8.8/tcp/30333".parse().unwrap()),
-            status_text: None,
-        };
+        let response =
+            DialResponse {
+                result: Ok("/ip4/8.8.8.8/tcp/30333".parse().unwrap()),
+                status_text: None,
+            };
         let proto = response.clone().into_proto();
         let response2 = DialResponse::from_proto(proto).unwrap();
         assert_eq!(response, response2);
@@ -323,11 +326,12 @@ mod tests {
         let valid_multiaddr: Multiaddr = "/ip6/2001:db8::/tcp/1234".parse().unwrap();
         let valid_multiaddr_bytes = valid_multiaddr.to_vec();
 
-        let invalid_multiaddr = {
-            let a = vec![255; 8];
-            assert!(Multiaddr::try_from(a.clone()).is_err());
-            a
-        };
+        let invalid_multiaddr =
+            {
+                let a = vec![255; 8];
+                assert!(Multiaddr::try_from(a.clone()).is_err());
+                a
+            };
 
         let msg = proto::Message {
             type_pb: Some(proto::MessageType::DIAL),

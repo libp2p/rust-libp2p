@@ -144,14 +144,15 @@ impl Cookie {
         }
 
         let namespace = bytes.split_off(8);
-        let namespace = if namespace.is_empty() {
-            None
-        } else {
-            Some(
-                Namespace::new(String::from_utf8(namespace).map_err(|_| InvalidCookie)?)
-                    .map_err(|_| InvalidCookie)?,
-            )
-        };
+        let namespace =
+            if namespace.is_empty() {
+                None
+            } else {
+                Some(
+                    Namespace::new(String::from_utf8(namespace).map_err(|_| InvalidCookie)?)
+                        .map_err(|_| InvalidCookie)?,
+                )
+            };
 
         let bytes = <[u8; 8]>::try_from(bytes).map_err(|_| InvalidCookie)?;
         let id = u64::from_be_bytes(bytes);
@@ -450,9 +451,9 @@ impl TryFrom<proto::Message> for Message {
                     .transpose()?
                     .ok_or(ConversionError::MissingNamespace)?,
                 ttl,
-                record: PeerRecord::from_signed_envelope(SignedEnvelope::from_protobuf_encoding(
-                    &signed_peer_record,
-                )?)?,
+                record: PeerRecord::from_signed_envelope(
+                    SignedEnvelope::from_protobuf_encoding(&signed_peer_record)?
+                )?,
             }),
             proto::Message {
                 type_pb: Some(proto::MessageType::REGISTER_RESPONSE),

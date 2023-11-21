@@ -53,9 +53,7 @@ impl Fingerprint {
 
     /// Converts [`Multihash`](multihash::Multihash) to [`Fingerprint`].
     pub fn try_from_multihash(hash: Multihash) -> Option<Self> {
-        Some(Self(libp2p_webrtc_utils::Fingerprint::try_from_multihash(
-            hash,
-        )?))
+        Some(Self(libp2p_webrtc_utils::Fingerprint::try_from_multihash(hash)?))
     }
 
     /// Converts this fingerprint to [`Multihash`](multihash::Multihash).

@@ -96,14 +96,16 @@ impl Provider for Tcp {
             match l.poll_readable(cx) {
                 Poll::Pending => return Poll::Pending,
                 Poll::Ready(Err(err)) => return Poll::Ready(Err(err)),
-                Poll::Ready(Ok(())) => match l.accept().now_or_never() {
-                    Some(Err(e)) => return Poll::Ready(Err(e)),
-                    Some(Ok(res)) => break res,
-                    None => {
-                        // Since it doesn't do any harm, account for false positives of
-                        // `poll_readable` just in case, i.e. try again.
+                Poll::Ready(Ok(())) => {
+                    match l.accept().now_or_never() {
+                        Some(Err(e)) => return Poll::Ready(Err(e)),
+                        Some(Ok(res)) => break res,
+                        None => {
+                            // Since it doesn't do any harm, account for false positives of
+                            // `poll_readable` just in case, i.e. try again.
+                        }
                     }
-                },
+                }
             }
         };
 

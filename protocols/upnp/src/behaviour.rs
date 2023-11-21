@@ -258,13 +258,14 @@ impl NetworkBehaviour for Behaviour {
                 listener_id,
                 addr: multiaddr,
             }) => {
-                let (addr, protocol) = match multiaddr_to_socketaddr_protocol(multiaddr.clone()) {
-                    Ok(addr_port) => addr_port,
-                    Err(()) => {
-                        tracing::debug!("multiaddress not supported for UPnP {multiaddr}");
-                        return;
-                    }
-                };
+                let (addr, protocol) =
+                    match multiaddr_to_socketaddr_protocol(multiaddr.clone()) {
+                        Ok(addr_port) => addr_port,
+                        Err(()) => {
+                            tracing::debug!("multiaddress not supported for UPnP {multiaddr}");
+                            return;
+                        }
+                    };
 
                 if let Some((mapping, _state)) = self
                     .mappings
@@ -409,9 +410,9 @@ impl NetworkBehaviour for Behaviour {
                     if let Poll::Ready(Some(result)) = gateway.receiver.poll_next_unpin(cx) {
                         match result {
                             GatewayEvent::Mapped(mapping) => {
-                                let new_state = MappingState::Active(Delay::new(
-                                    Duration::from_secs(MAPPING_TIMEOUT),
-                                ));
+                                let new_state = MappingState::Active(
+                                    Delay::new(Duration::from_secs(MAPPING_TIMEOUT))
+                                );
 
                                 match self
                                     .mappings

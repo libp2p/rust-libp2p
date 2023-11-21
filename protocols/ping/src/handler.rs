@@ -232,9 +232,9 @@ impl ConnectionHandler for Handler {
             }
             State::Inactive { reported: false } => {
                 self.state = State::Inactive { reported: true };
-                return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(Err(
-                    Failure::Unsupported,
-                )));
+                return Poll::Ready(
+                    ConnectionHandlerEvent::NotifyBehaviour(Err(Failure::Unsupported))
+                );
             }
             State::Active => {}
         }
@@ -298,9 +298,9 @@ impl ConnectionHandler for Handler {
                         break;
                     }
                     Poll::Ready(()) => {
-                        self.outbound = Some(OutboundState::Ping(
-                            send_ping(stream, self.config.timeout).boxed(),
-                        ));
+                        self.outbound = Some(
+                            OutboundState::Ping(send_ping(stream, self.config.timeout).boxed())
+                        );
                     }
                 },
                 Some(OutboundState::OpenStream) => {
@@ -312,9 +312,9 @@ impl ConnectionHandler for Handler {
                     Poll::Ready(()) => {
                         self.outbound = Some(OutboundState::OpenStream);
                         let protocol = SubstreamProtocol::new(ReadyUpgrade::new(PROTOCOL_NAME), ());
-                        return Poll::Ready(ConnectionHandlerEvent::OutboundSubstreamRequest {
-                            protocol,
-                        });
+                        return Poll::Ready(
+                            ConnectionHandlerEvent::OutboundSubstreamRequest { protocol }
+                        );
                     }
                 },
             }
@@ -345,9 +345,8 @@ impl ConnectionHandler for Handler {
                 ..
             }) => {
                 stream.ignore_for_keep_alive();
-                self.outbound = Some(OutboundState::Ping(
-                    send_ping(stream, self.config.timeout).boxed(),
-                ));
+                self.outbound =
+                    Some(OutboundState::Ping(send_ping(stream, self.config.timeout).boxed()));
             }
             ConnectionEvent::DialUpgradeError(dial_upgrade_error) => {
                 self.on_dial_upgrade_error(dial_upgrade_error)

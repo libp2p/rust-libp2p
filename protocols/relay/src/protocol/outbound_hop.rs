@@ -139,14 +139,10 @@ pub(crate) async fn make_reservation(stream: Stream) -> Result<Reservation, Rese
 
     match type_pb {
         proto::HopMessageType::CONNECT => {
-            return Err(ReserveError::Protocol(
-                ProtocolViolation::UnexpectedTypeConnect,
-            ));
+            return Err(ReserveError::Protocol(ProtocolViolation::UnexpectedTypeConnect));
         }
         proto::HopMessageType::RESERVE => {
-            return Err(ReserveError::Protocol(
-                ProtocolViolation::UnexpectedTypeReserve,
-            ));
+            return Err(ReserveError::Protocol(ProtocolViolation::UnexpectedTypeReserve));
         }
         proto::HopMessageType::STATUS => {}
     }
@@ -161,21 +157,14 @@ pub(crate) async fn make_reservation(stream: Stream) -> Result<Reservation, Rese
         proto::Status::RESOURCE_LIMIT_EXCEEDED => {
             return Err(ReserveError::ResourceLimitExceeded);
         }
-        s => {
-            return Err(ReserveError::Protocol(ProtocolViolation::UnexpectedStatus(
-                s,
-            )))
-        }
+        s => return Err(ReserveError::Protocol(ProtocolViolation::UnexpectedStatus(s))),
     }
 
-    let reservation = reservation.ok_or(ReserveError::Protocol(
-        ProtocolViolation::MissingReservationField,
-    ))?;
+    let reservation =
+        reservation.ok_or(ReserveError::Protocol(ProtocolViolation::MissingReservationField))?;
 
     if reservation.addrs.is_empty() {
-        return Err(ReserveError::Protocol(
-            ProtocolViolation::NoAddressesInReservation,
-        ));
+        return Err(ReserveError::Protocol(ProtocolViolation::NoAddressesInReservation));
     }
 
     let addrs = reservation
@@ -197,9 +186,7 @@ pub(crate) async fn make_reservation(stream: Stream) -> Result<Reservation, Rese
         .and_then(|duration| duration.checked_sub(duration / 4))
         .map(Duration::from_secs)
         .map(Delay::new)
-        .ok_or(ReserveError::Protocol(
-            ProtocolViolation::InvalidReservationExpiration,
-        ))?;
+        .ok_or(ReserveError::Protocol(ProtocolViolation::InvalidReservationExpiration))?;
 
     Ok(Reservation {
         renewal_timeout,
@@ -240,14 +227,10 @@ pub(crate) async fn open_circuit(
 
     match type_pb {
         proto::HopMessageType::CONNECT => {
-            return Err(ConnectError::Protocol(
-                ProtocolViolation::UnexpectedTypeConnect,
-            ));
+            return Err(ConnectError::Protocol(ProtocolViolation::UnexpectedTypeConnect));
         }
         proto::HopMessageType::RESERVE => {
-            return Err(ConnectError::Protocol(
-                ProtocolViolation::UnexpectedTypeReserve,
-            ));
+            return Err(ConnectError::Protocol(ProtocolViolation::UnexpectedTypeReserve));
         }
         proto::HopMessageType::STATUS => {}
     }
@@ -267,14 +250,10 @@ pub(crate) async fn open_circuit(
             return Err(ConnectError::PermissionDenied);
         }
         Some(s) => {
-            return Err(ConnectError::Protocol(ProtocolViolation::UnexpectedStatus(
-                s,
-            )));
+            return Err(ConnectError::Protocol(ProtocolViolation::UnexpectedStatus(s)));
         }
         None => {
-            return Err(ConnectError::Protocol(
-                ProtocolViolation::MissingStatusField,
-            ));
+            return Err(ConnectError::Protocol(ProtocolViolation::MissingStatusField));
         }
     }
 

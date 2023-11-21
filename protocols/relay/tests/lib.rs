@@ -241,9 +241,9 @@ async fn connection_established_to(
             SwarmEvent::Behaviour(ClientEvent::Ping(ping::Event { peer, .. })) if peer == other => {
                 break
             }
-            SwarmEvent::Behaviour(ClientEvent::Relay(
-                relay::client::Event::OutboundCircuitEstablished { .. },
-            )) => {}
+            SwarmEvent::Behaviour(
+                ClientEvent::Relay(relay::client::Event::OutboundCircuitEstablished { .. })
+            ) => {}
             SwarmEvent::Behaviour(ClientEvent::Relay(
                 relay::client::Event::InboundCircuitEstablished { src_peer_id, .. },
             )) => {
@@ -317,14 +317,15 @@ fn propagate_reservation_error_to_listener() {
     // Wait for connection to relay.
     assert!(pool.run_until(wait_for_dial(&mut client, relay_peer_id)));
 
-    let error = pool.run_until(client.wait(|e| match e {
-        SwarmEvent::ListenerClosed {
-            listener_id,
-            reason: Err(e),
-            ..
-        } if listener_id == reservation_listener => Some(e),
-        _ => None,
-    }));
+    let error =
+        pool.run_until(client.wait(|e| match e {
+            SwarmEvent::ListenerClosed {
+                listener_id,
+                reason: Err(e),
+                ..
+            } if listener_id == reservation_listener => Some(e),
+            _ => None,
+        }));
 
     let error = error
         .source()
@@ -366,17 +367,18 @@ fn propagate_connect_error_to_unknown_peer_to_dialer() {
 
     src.dial(opts).unwrap();
 
-    let (failed_address, error) = pool.run_until(src.wait(|e| match e {
-        SwarmEvent::OutgoingConnectionError {
-            connection_id,
-            error: DialError::Transport(mut errors),
-            ..
-        } if connection_id == circuit_connection_id => {
-            assert_eq!(errors.len(), 1);
-            Some(errors.remove(0))
-        }
-        _ => None,
-    }));
+    let (failed_address, error) =
+        pool.run_until(src.wait(|e| match e {
+            SwarmEvent::OutgoingConnectionError {
+                connection_id,
+                error: DialError::Transport(mut errors),
+                ..
+            } if connection_id == circuit_connection_id => {
+                assert_eq!(errors.len(), 1);
+                Some(errors.remove(0))
+            }
+            _ => None,
+        }));
 
     // This is a bit wonky but we need to get the _actual_ source error :)
     let error = error
@@ -388,10 +390,7 @@ fn propagate_connect_error_to_unknown_peer_to_dialer() {
         .unwrap();
 
     assert_eq!(failed_address, dst_addr);
-    assert!(matches!(
-        error,
-        relay::outbound::hop::ConnectError::NoReservation
-    ));
+    assert!(matches!(error, relay::outbound::hop::ConnectError::NoReservation));
 }
 
 #[test]
@@ -466,10 +465,11 @@ fn build_client_with_config(config: Config) -> Swarm<Client> {
     let local_peer_id = local_key.public().to_peer_id();
 
     let (relay_transport, behaviour) = relay::client::new(local_peer_id);
-    let transport = upgrade_transport(
-        OrTransport::new(relay_transport, MemoryTransport::default()).boxed(),
-        &local_key,
-    );
+    let transport =
+        upgrade_transport(
+            OrTransport::new(relay_transport, MemoryTransport::default()).boxed(),
+            &local_key,
+        );
 
     Swarm::new(
         transport,

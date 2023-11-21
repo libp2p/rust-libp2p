@@ -150,13 +150,14 @@ where
     // remote's ACK, but it could be that the remote already dropped the stream
     // after finishing their write.
 
-    let info = FramedRead::new(
-        socket,
-        quick_protobuf_codec::Codec::<proto::Identify>::new(MAX_MESSAGE_SIZE_BYTES),
-    )
-    .next()
-    .await
-    .ok_or(UpgradeError::StreamClosed)??;
+    let info =
+        FramedRead::new(
+            socket,
+            quick_protobuf_codec::Codec::<proto::Identify>::new(MAX_MESSAGE_SIZE_BYTES),
+        )
+        .next()
+        .await
+        .ok_or(UpgradeError::StreamClosed)??;
 
     Ok(info)
 }
@@ -273,11 +274,12 @@ mod tests {
         let valid_multiaddr: Multiaddr = "/ip6/2001:db8::/tcp/1234".parse().unwrap();
         let valid_multiaddr_bytes = valid_multiaddr.to_vec();
 
-        let invalid_multiaddr = {
-            let a = vec![255; 8];
-            assert!(Multiaddr::try_from(a.clone()).is_err());
-            a
-        };
+        let invalid_multiaddr =
+            {
+                let a = vec![255; 8];
+                assert!(Multiaddr::try_from(a.clone()).is_err());
+                a
+            };
 
         let payload = proto::Identify {
             agentVersion: None,

@@ -550,22 +550,23 @@ mod tests {
 
         let mut t1 = MemoryTransport::default().boxed();
 
-        let listener = async move {
-            t1.listen_on(ListenerId::next(), t1_addr.clone()).unwrap();
-            let upgrade = loop {
-                let event = t1.select_next_some().await;
-                if let Some(upgrade) = event.into_incoming() {
-                    break upgrade;
-                }
+        let listener =
+            async move {
+                t1.listen_on(ListenerId::next(), t1_addr.clone()).unwrap();
+                let upgrade = loop {
+                    let event = t1.select_next_some().await;
+                    if let Some(upgrade) = event.into_incoming() {
+                        break upgrade;
+                    }
+                };
+
+                let mut socket = upgrade.0.await.unwrap();
+
+                let mut buf = [0; 3];
+                socket.read_exact(&mut buf).await.unwrap();
+
+                assert_eq!(buf, msg);
             };
-
-            let mut socket = upgrade.0.await.unwrap();
-
-            let mut buf = [0; 3];
-            socket.read_exact(&mut buf).await.unwrap();
-
-            assert_eq!(buf, msg);
-        };
 
         // Setup dialer.
 
@@ -605,13 +606,14 @@ mod tests {
             }
         };
 
-        let dialer = async move {
-            MemoryTransport::default()
-                .dial(listener_addr_cloned)
-                .unwrap()
-                .await
-                .unwrap();
-        };
+        let dialer =
+            async move {
+                MemoryTransport::default()
+                    .dial(listener_addr_cloned)
+                    .unwrap()
+                    .await
+                    .unwrap();
+            };
 
         futures::executor::block_on(futures::future::join(listener, dialer));
     }

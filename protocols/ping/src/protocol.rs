@@ -62,10 +62,7 @@ where
     if recv_payload == payload {
         Ok((stream, started.elapsed()))
     } else {
-        Err(io::Error::new(
-            io::ErrorKind::InvalidData,
-            "Ping payload mismatch",
-        ))
+        Err(io::Error::new(io::ErrorKind::InvalidData, "Ping payload mismatch"))
     }
 }
 

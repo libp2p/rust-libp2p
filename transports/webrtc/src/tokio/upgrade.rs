@@ -115,11 +115,12 @@ async fn new_outbound_connection(
     let ufrag = random_ufrag();
     let se = setting_engine(udp_mux, &ufrag, addr);
 
-    let connection = APIBuilder::new()
-        .with_setting_engine(se)
-        .build()
-        .new_peer_connection(config)
-        .await?;
+    let connection =
+        APIBuilder::new()
+            .with_setting_engine(se)
+            .build()
+            .new_peer_connection(config)
+            .await?;
 
     Ok((connection, ufrag))
 }
@@ -141,11 +142,12 @@ async fn new_inbound_connection(
         se.set_answering_dtls_role(DTLSRole::Server)?;
     }
 
-    let connection = APIBuilder::new()
-        .with_setting_engine(se)
-        .build()
-        .new_peer_connection(config)
-        .await?;
+    let connection =
+        APIBuilder::new()
+            .with_setting_engine(se)
+            .build()
+            .new_peer_connection(config)
+            .await?;
 
     Ok(connection)
 }

@@ -88,10 +88,8 @@ fn setup_tracing() -> Result<(), Box<dyn Error>> {
         .tracing()
         .with_exporter(opentelemetry_otlp::new_exporter().tonic())
         .with_trace_config(
-            sdk::trace::Config::default().with_resource(sdk::Resource::new(vec![KeyValue::new(
-                "service.name",
-                "libp2p",
-            )])),
+            sdk::trace::Config::default()
+                .with_resource(sdk::Resource::new(vec![KeyValue::new("service.name", "libp2p")])),
         )
         .install_batch(opentelemetry::runtime::Tokio)?;
 
@@ -118,10 +116,9 @@ impl Behaviour {
     fn new(local_pub_key: identity::PublicKey) -> Self {
         Self {
             ping: ping::Behaviour::default(),
-            identify: identify::Behaviour::new(identify::Config::new(
-                "/ipfs/0.1.0".into(),
-                local_pub_key,
-            )),
+            identify: identify::Behaviour::new(
+                identify::Config::new("/ipfs/0.1.0".into(), local_pub_key)
+            ),
         }
     }
 }

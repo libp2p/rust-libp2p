@@ -40,16 +40,17 @@ use tracing_subscriber::EnvFilter;
 type BenchTransport = transport::Boxed<(PeerId, muxing::StreamMuxerBox)>;
 
 /// The sizes (in bytes) used for the `split_send_size` configuration.
-const BENCH_SIZES: [usize; 8] = [
-    256,
-    512,
-    1024,
-    8 * 1024,
-    16 * 1024,
-    64 * 1024,
-    256 * 1024,
-    1024 * 1024,
-];
+const BENCH_SIZES: [usize; 8] =
+    [
+        256,
+        512,
+        1024,
+        8 * 1024,
+        16 * 1024,
+        64 * 1024,
+        256 * 1024,
+        1024 * 1024,
+    ];
 
 fn prepare(c: &mut Criterion) {
     let _ = tracing_subscriber::fmt()
@@ -174,9 +175,7 @@ fn tcp_transport(split_send_size: usize) -> BenchTransport {
 
     libp2p_tcp::async_io::Transport::new(libp2p_tcp::Config::default().nodelay(true))
         .upgrade(upgrade::Version::V1)
-        .authenticate(plaintext::Config::new(
-            &identity::Keypair::generate_ed25519(),
-        ))
+        .authenticate(plaintext::Config::new(&identity::Keypair::generate_ed25519()))
         .multiplex(mplex)
         .timeout(Duration::from_secs(5))
         .boxed()
@@ -188,9 +187,7 @@ fn mem_transport(split_send_size: usize) -> BenchTransport {
 
     transport::MemoryTransport::default()
         .upgrade(upgrade::Version::V1)
-        .authenticate(plaintext::Config::new(
-            &identity::Keypair::generate_ed25519(),
-        ))
+        .authenticate(plaintext::Config::new(&identity::Keypair::generate_ed25519()))
         .multiplex(mplex)
         .timeout(Duration::from_secs(5))
         .boxed()

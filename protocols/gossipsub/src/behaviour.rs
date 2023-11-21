@@ -536,15 +536,16 @@ where
         // send subscription request to all peers
         let peer_list = self.peer_topics.keys().cloned().collect::<Vec<_>>();
         if !peer_list.is_empty() {
-            let event = Rpc {
-                messages: Vec::new(),
-                subscriptions: vec![Subscription {
-                    topic_hash: topic_hash.clone(),
-                    action: SubscriptionAction::Subscribe,
-                }],
-                control_msgs: Vec::new(),
-            }
-            .into_protobuf();
+            let event =
+                Rpc {
+                    messages: Vec::new(),
+                    subscriptions: vec![Subscription {
+                        topic_hash: topic_hash.clone(),
+                        action: SubscriptionAction::Subscribe,
+                    }],
+                    control_msgs: Vec::new(),
+                }
+                .into_protobuf();
 
             for peer in peer_list {
                 tracing::debug!(%peer, "Sending SUBSCRIBE to peer");
@@ -576,15 +577,16 @@ where
         // announce to all peers
         let peer_list = self.peer_topics.keys().cloned().collect::<Vec<_>>();
         if !peer_list.is_empty() {
-            let event = Rpc {
-                messages: Vec::new(),
-                subscriptions: vec![Subscription {
-                    topic_hash: topic_hash.clone(),
-                    action: SubscriptionAction::Unsubscribe,
-                }],
-                control_msgs: Vec::new(),
-            }
-            .into_protobuf();
+            let event =
+                Rpc {
+                    messages: Vec::new(),
+                    subscriptions: vec![Subscription {
+                        topic_hash: topic_hash.clone(),
+                        action: SubscriptionAction::Unsubscribe,
+                    }],
+                    control_msgs: Vec::new(),
+                }
+                .into_protobuf();
 
             for peer in peer_list {
                 tracing::debug!(%peer, "Sending UNSUBSCRIBE to peer");
@@ -1360,12 +1362,13 @@ where
                 .map(|message| message.topic.clone())
                 .collect::<HashSet<TopicHash>>();
 
-            let message = Rpc {
-                subscriptions: Vec::new(),
-                messages: message_list,
-                control_msgs: Vec::new(),
-            }
-            .into_protobuf();
+            let message =
+                Rpc {
+                    subscriptions: Vec::new(),
+                    messages: message_list,
+                    control_msgs: Vec::new(),
+                }
+                .into_protobuf();
 
             let msg_bytes = message.get_size();
 
@@ -2506,12 +2509,13 @@ where
             }
 
             // dynamic number of peers to gossip based on `gossip_factor` with minimum `gossip_lazy`
-            let n_map = |m| {
-                max(
-                    self.config.gossip_lazy(),
-                    (self.config.gossip_factor() * m as f64) as usize,
-                )
-            };
+            let n_map =
+                |m| {
+                    max(
+                        self.config.gossip_lazy(),
+                        (self.config.gossip_factor() * m as f64) as usize,
+                    )
+                };
             // get gossip_lazy random peers
             let to_msg_peers = get_random_peers_dynamic(
                 &self.topic_peers,
@@ -2578,12 +2582,13 @@ where
                     &self.connected_peers,
                 );
             }
-            let mut control_msgs: Vec<ControlAction> = topics
-                .iter()
-                .map(|topic_hash| ControlAction::Graft {
-                    topic_hash: topic_hash.clone(),
-                })
-                .collect();
+            let mut control_msgs: Vec<ControlAction> =
+                topics
+                    .iter()
+                    .map(|topic_hash| ControlAction::Graft {
+                        topic_hash: topic_hash.clone(),
+                    })
+                    .collect();
 
             // If there are prunes associated with the same peer add them.
             // NOTE: In this case a peer has been added to a topic mesh, and removed from another.
@@ -2718,12 +2723,13 @@ where
 
         // forward the message to peers
         if !recipient_peers.is_empty() {
-            let event = Rpc {
-                subscriptions: Vec::new(),
-                messages: vec![message.clone()],
-                control_msgs: Vec::new(),
-            }
-            .into_protobuf();
+            let event =
+                Rpc {
+                    subscriptions: Vec::new(),
+                    messages: vec![message.clone()],
+                    control_msgs: Vec::new(),
+                }
+                .into_protobuf();
 
             let msg_bytes = event.get_size();
             for peer in recipient_peers.iter() {
@@ -2890,11 +2896,12 @@ where
             return Ok(vec![rpc]);
         }
 
-        let new_rpc = proto::RPC {
-            subscriptions: Vec::new(),
-            publish: Vec::new(),
-            control: None,
-        };
+        let new_rpc =
+            proto::RPC {
+                subscriptions: Vec::new(),
+                publish: Vec::new(),
+                control: None,
+            };
 
         let mut rpc_list = vec![new_rpc.clone()];
 
@@ -3469,14 +3476,15 @@ fn peer_added_to_mesh(
     connections: &HashMap<PeerId, PeerConnections>,
 ) {
     // Ensure there is an active connection
-    let connection_id = {
-        let conn = connections.get(&peer_id).expect("To be connected to peer.");
-        assert!(
-            !conn.connections.is_empty(),
-            "Must have at least one connection"
-        );
-        conn.connections[0]
-    };
+    let connection_id =
+        {
+            let conn = connections.get(&peer_id).expect("To be connected to peer.");
+            assert!(
+                !conn.connections.is_empty(),
+                "Must have at least one connection"
+            );
+            conn.connections[0]
+        };
 
     if let Some(topics) = known_topics {
         for topic in topics {
@@ -3717,11 +3725,12 @@ mod local_test {
     /// Tests RPC message fragmentation
     fn test_message_fragmentation_deterministic() {
         let max_transmit_size = 500;
-        let config = crate::config::ConfigBuilder::default()
-            .max_transmit_size(max_transmit_size)
-            .validation_mode(ValidationMode::Permissive)
-            .build()
-            .unwrap();
+        let config =
+            crate::config::ConfigBuilder::default()
+                .max_transmit_size(max_transmit_size)
+                .validation_mode(ValidationMode::Permissive)
+                .build()
+                .unwrap();
         let gs: Behaviour = Behaviour::new(MessageAuthenticity::RandomAuthor, config).unwrap();
 
         // Message under the limit should be fine.

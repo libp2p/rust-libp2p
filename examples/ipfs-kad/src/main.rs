@@ -119,9 +119,7 @@ async fn main() -> Result<()> {
             }
             SwarmEvent::Behaviour(kad::Event::OutboundQueryProgressed {
                 result:
-                    kad::QueryResult::GetClosestPeers(Err(kad::GetClosestPeersError::Timeout {
-                        ..
-                    })),
+                    kad::QueryResult::GetClosestPeers(Err(kad::GetClosestPeersError::Timeout { .. })),
                 ..
             }) => {
                 bail!("Query for closest peers timed out")

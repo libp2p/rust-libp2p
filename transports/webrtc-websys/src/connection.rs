@@ -46,20 +46,23 @@ impl Connection {
         // An ondatachannel Future enables us to poll for incoming data channel events in poll_incoming
         let (mut tx_ondatachannel, rx_ondatachannel) = mpsc::channel(4); // we may get more than one data channel opened on a single peer connection
 
-        let ondatachannel_closure = Closure::new(move |ev: RtcDataChannelEvent| {
-            tracing::trace!("New data channel");
+        let ondatachannel_closure =
+            Closure::new(move |ev: RtcDataChannelEvent| {
+                tracing::trace!("New data channel");
 
-            if let Err(e) = tx_ondatachannel.try_send(ev.channel()) {
-                if e.is_full() {
-                    tracing::warn!("Remote is opening too many data channels, we can't keep up!");
-                    return;
-                }
+                if let Err(e) = tx_ondatachannel.try_send(ev.channel()) {
+                    if e.is_full() {
+                        tracing::warn!(
+                            "Remote is opening too many data channels, we can't keep up!"
+                        );
+                        return;
+                    }
 
-                if e.is_disconnected() {
-                    tracing::warn!("Receiver is gone, are we shutting down?");
+                    if e.is_disconnected() {
+                        tracing::warn!("Receiver is gone, are we shutting down?");
+                    }
                 }
-            }
-        });
+            });
         peer_connection
             .inner
             .set_ondatachannel(Some(ondatachannel_closure.as_ref().unchecked_ref()));

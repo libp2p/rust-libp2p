@@ -78,16 +78,17 @@ impl StreamInner {
     fn poll_read(&mut self, cx: &mut Context<'_>, buf: &mut [u8]) -> Poll<io::Result<usize>> {
         // If we have leftovers from a previous read, then use them.
         // Otherwise read new data.
-        let data = match self.read_leftovers.take() {
-            Some(data) => data,
-            None => {
-                match ready!(self.poll_reader_read(cx))? {
-                    Some(data) => data,
-                    // EOF
-                    None => return Poll::Ready(Ok(0)),
+        let data =
+            match self.read_leftovers.take() {
+                Some(data) => data,
+                None => {
+                    match ready!(self.poll_reader_read(cx))? {
+                        Some(data) => data,
+                        // EOF
+                        None => return Poll::Ready(Ok(0)),
+                    }
                 }
-            }
-        };
+            };
 
         if data.byte_length() == 0 {
             return Poll::Ready(Ok(0));

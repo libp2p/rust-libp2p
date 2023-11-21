@@ -36,9 +36,8 @@ impl Certificate {
     where
         R: CryptoRng + Rng,
     {
-        let mut params = rcgen::CertificateParams::new(vec![
-            rand::distributions::Alphanumeric.sample_string(&mut rand::thread_rng(), 16)
-        ]);
+        let mut params = rcgen::CertificateParams::new(vec![rand::distributions::Alphanumeric
+            .sample_string(&mut rand::thread_rng(), 16)]);
         params.alg = &rcgen::PKCS_ECDSA_P256_SHA256;
         Ok(Self {
             inner: RTCCertificate::from_params(params).expect("default params to work"),

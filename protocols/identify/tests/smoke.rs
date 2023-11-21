@@ -109,10 +109,11 @@ async fn only_emits_address_candidate_once_per_connection() {
 
     async_std::task::spawn(swarm2.loop_on_next());
 
-    let swarm_events = futures::stream::poll_fn(|cx| swarm1.poll_next_unpin(cx))
-        .take(5)
-        .collect::<Vec<_>>()
-        .await;
+    let swarm_events =
+        futures::stream::poll_fn(|cx| swarm1.poll_next_unpin(cx))
+            .take(5)
+            .collect::<Vec<_>>()
+            .await;
 
     let infos = swarm_events
         .iter()

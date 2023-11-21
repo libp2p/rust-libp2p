@@ -96,13 +96,14 @@ pub struct Handler {
     remote_addr: Multiaddr,
 
     /// Queue of events to return when polled.
-    queued_events: VecDeque<
-        ConnectionHandlerEvent<
-            <Handler as ConnectionHandler>::OutboundProtocol,
-            <Handler as ConnectionHandler>::OutboundOpenInfo,
-            <Handler as ConnectionHandler>::ToBehaviour,
+    queued_events:
+        VecDeque<
+            ConnectionHandlerEvent<
+                <Handler as ConnectionHandler>::OutboundProtocol,
+                <Handler as ConnectionHandler>::OutboundOpenInfo,
+                <Handler as ConnectionHandler>::ToBehaviour,
+            >,
         >,
-    >,
 
     /// We issue a stream upgrade for each pending request.
     pending_requests: VecDeque<PendingRequest>,
@@ -301,11 +302,9 @@ impl ConnectionHandler for Handler {
                     continue;
                 }
                 Poll::Ready((Err(futures_bounded::Timeout { .. }), mut to_listener)) => {
-                    if let Err(e) =
-                        to_listener.try_send(transport::ToListenerMsg::Reservation(Err(
-                            outbound_hop::ReserveError::Io(io::ErrorKind::TimedOut.into()),
-                        )))
-                    {
+                    if let Err(e) = to_listener.try_send(transport::ToListenerMsg::Reservation(
+                        Err(outbound_hop::ReserveError::Io(io::ErrorKind::TimedOut.into())),
+                    )) {
                         tracing::debug!("Unable to send error to listener: {}", e.into_send_error())
                     }
                     self.reservation.failed();
@@ -346,9 +345,7 @@ impl ConnectionHandler for Handler {
                 }
                 Poll::Ready((Err(futures_bounded::Timeout { .. }), to_dialer)) => {
                     if to_dialer
-                        .send(Err(outbound_hop::ConnectError::Io(
-                            io::ErrorKind::TimedOut.into(),
-                        )))
+                        .send(Err(outbound_hop::ConnectError::Io(io::ErrorKind::TimedOut.into())))
                         .is_err()
                     {
                         tracing::debug!("Unable to send error to dialer")
@@ -535,11 +532,12 @@ impl Reservation {
             },
         )));
 
-        *self = Reservation::Accepted {
-            renewal_timeout,
-            pending_msgs,
-            to_listener,
-        };
+        *self =
+            Reservation::Accepted {
+                renewal_timeout,
+                pending_msgs,
+                to_listener,
+            };
 
         Event::ReservationReqAccepted { renewal, limit }
     }

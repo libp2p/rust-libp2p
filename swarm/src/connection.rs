@@ -117,13 +117,14 @@ where
     /// The underlying handler.
     handler: THandler,
     /// Futures that upgrade incoming substreams.
-    negotiating_in: FuturesUnordered<
-        StreamUpgrade<
-            THandler::InboundOpenInfo,
-            <THandler::InboundProtocol as InboundUpgradeSend>::Output,
-            <THandler::InboundProtocol as InboundUpgradeSend>::Error,
+    negotiating_in:
+        FuturesUnordered<
+            StreamUpgrade<
+                THandler::InboundOpenInfo,
+                <THandler::InboundProtocol as InboundUpgradeSend>::Output,
+                <THandler::InboundProtocol as InboundUpgradeSend>::Error,
+            >,
         >,
-    >,
     /// Futures that upgrade outgoing substreams.
     negotiating_out: FuturesUnordered<
         StreamUpgrade<
@@ -320,9 +321,9 @@ where
                     continue;
                 }
                 Poll::Ready(Some((info, Err(error)))) => {
-                    handler.on_connection_event(ConnectionEvent::DialUpgradeError(
-                        DialUpgradeError { info, error },
-                    ));
+                    handler.on_connection_event(
+                        ConnectionEvent::DialUpgradeError(DialUpgradeError { info, error })
+                    );
                     continue;
                 }
             }
@@ -338,9 +339,9 @@ where
                     continue;
                 }
                 Poll::Ready(Some((info, Err(StreamUpgradeError::Apply(error))))) => {
-                    handler.on_connection_event(ConnectionEvent::ListenUpgradeError(
-                        ListenUpgradeError { info, error },
-                    ));
+                    handler.on_connection_event(
+                        ConnectionEvent::ListenUpgradeError(ListenUpgradeError { info, error })
+                    );
                     continue;
                 }
                 Poll::Ready(Some((_, Err(StreamUpgradeError::Io(e))))) => {
@@ -420,11 +421,9 @@ where
                     Poll::Ready(substream) => {
                         let protocol = handler.listen_protocol();
 
-                        negotiating_in.push(StreamUpgrade::new_inbound(
-                            substream,
-                            protocol,
-                            stream_counter.clone(),
-                        ));
+                        negotiating_in.push(
+                            StreamUpgrade::new_inbound(substream, protocol, stream_counter.clone())
+                        );
 
                         continue; // Go back to the top, handler can potentially make progress again.
                     }
@@ -475,10 +474,7 @@ fn compute_new_shutdown(
             let now = Instant::now();
             let safe_keep_alive = checked_add_fraction(now, idle_timeout);
 
-            Some(Shutdown::Later(
-                Delay::new(safe_keep_alive),
-                now + safe_keep_alive,
-            ))
+            Some(Shutdown::Later(Delay::new(safe_keep_alive), now + safe_keep_alive))
         }
         (_, true) => Some(Shutdown::None),
     }
@@ -903,13 +899,14 @@ mod tests {
     async fn idle_timeout_with_keep_alive_no() {
         let idle_timeout = Duration::from_millis(100);
 
-        let mut connection = Connection::new(
-            StreamMuxerBox::new(PendingStreamMuxer),
-            dummy::ConnectionHandler,
-            None,
-            0,
-            idle_timeout,
-        );
+        let mut connection =
+            Connection::new(
+                StreamMuxerBox::new(PendingStreamMuxer),
+                dummy::ConnectionHandler,
+                None,
+                0,
+                idle_timeout,
+            );
 
         assert!(connection.poll_noop_waker().is_pending());
 
@@ -1163,14 +1160,12 @@ mod tests {
             >,
         ) {
             match event {
-                ConnectionEvent::FullyNegotiatedInbound(FullyNegotiatedInbound {
-                    protocol,
-                    ..
-                }) => void::unreachable(protocol),
-                ConnectionEvent::FullyNegotiatedOutbound(FullyNegotiatedOutbound {
-                    protocol,
-                    ..
-                }) => void::unreachable(protocol),
+                ConnectionEvent::FullyNegotiatedInbound(FullyNegotiatedInbound { protocol, .. }) => {
+                    void::unreachable(protocol)
+                }
+                ConnectionEvent::FullyNegotiatedOutbound(
+                    FullyNegotiatedOutbound { protocol, .. }
+                ) => void::unreachable(protocol),
                 ConnectionEvent::DialUpgradeError(DialUpgradeError { error, .. }) => {
                     self.error = Some(error)
                 }

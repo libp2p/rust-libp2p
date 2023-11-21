@@ -61,14 +61,15 @@ impl PollDataChannel {
 
         let write_waker = Rc::new(AtomicWaker::new());
         inner.set_buffered_amount_low_threshold(0);
-        let on_write_closure = Closure::new({
-            let write_waker = write_waker.clone();
+        let on_write_closure =
+            Closure::new({
+                let write_waker = write_waker.clone();
 
-            move |_: Event| {
-                tracing::trace!("DataChannel available for writing (again)");
-                write_waker.wake();
-            }
-        });
+                move |_: Event| {
+                    tracing::trace!("DataChannel available for writing (again)");
+                    write_waker.wake();
+                }
+            });
         inner.set_onbufferedamountlow(Some(on_write_closure.as_ref().unchecked_ref()));
 
         let close_waker = Rc::new(AtomicWaker::new());

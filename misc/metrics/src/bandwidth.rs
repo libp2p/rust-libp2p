@@ -86,12 +86,9 @@ where
 
     fn dial(&mut self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
         let metrics = ConnectionMetrics::from_family_and_addr(&self.metrics, &addr);
-        Ok(self
-            .transport
-            .dial(addr.clone())?
-            .map_ok(Box::new(|(peer_id, stream_muxer)| {
-                (peer_id, Muxer::new(stream_muxer, metrics))
-            })))
+        Ok(self.transport.dial(addr.clone())?.map_ok(
+            Box::new(|(peer_id, stream_muxer)| (peer_id, Muxer::new(stream_muxer, metrics)))
+        ))
     }
 
     fn dial_as_listener(
@@ -99,12 +96,9 @@ where
         addr: Multiaddr,
     ) -> Result<Self::Dial, TransportError<Self::Error>> {
         let metrics = ConnectionMetrics::from_family_and_addr(&self.metrics, &addr);
-        Ok(self
-            .transport
-            .dial_as_listener(addr.clone())?
-            .map_ok(Box::new(|(peer_id, stream_muxer)| {
-                (peer_id, Muxer::new(stream_muxer, metrics))
-            })))
+        Ok(self.transport.dial_as_listener(addr.clone())?.map_ok(
+            Box::new(|(peer_id, stream_muxer)| (peer_id, Muxer::new(stream_muxer, metrics)))
+        ))
     }
 
     fn address_translation(&self, server: &Multiaddr, observed: &Multiaddr) -> Option<Multiaddr> {
@@ -127,9 +121,9 @@ where
                     ConnectionMetrics::from_family_and_addr(this.metrics, &send_back_addr);
                 Poll::Ready(TransportEvent::Incoming {
                     listener_id,
-                    upgrade: upgrade.map_ok(Box::new(|(peer_id, stream_muxer)| {
-                        (peer_id, Muxer::new(stream_muxer, metrics))
-                    })),
+                    upgrade: upgrade.map_ok(Box::new(
+                        |(peer_id, stream_muxer)| (peer_id, Muxer::new(stream_muxer, metrics))
+                    )),
                     local_addr,
                     send_back_addr,
                 })
@@ -162,13 +156,14 @@ impl ConnectionMetrics {
             m.clone()
         };
         // Additional scope to make sure to drop the lock guard from `get_or_create`.
-        let inbound = {
-            let m = family.get_or_create(&Labels {
-                protocols,
-                direction: Direction::Inbound,
-            });
-            m.clone()
-        };
+        let inbound =
+            {
+                let m = family.get_or_create(&Labels {
+                    protocols,
+                    direction: Direction::Inbound,
+                });
+                m.clone()
+            };
         ConnectionMetrics { outbound, inbound }
     }
 }

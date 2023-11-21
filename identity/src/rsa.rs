@@ -269,9 +269,9 @@ impl DerEncodable for Asn1SubjectPublicKey {
 impl DerDecodable<'_> for Asn1SubjectPublicKey {
     fn load(object: DerObject<'_>) -> Result<Self, Asn1DerError> {
         if object.tag() != 3 {
-            return Err(Asn1DerError::new(Asn1DerErrorVariant::InvalidData(
-                "DER object tag is not the bit string tag.",
-            )));
+            return Err(Asn1DerError::new(
+                Asn1DerErrorVariant::InvalidData("DER object tag is not the bit string tag.")
+            ));
         }
 
         let pk_der: Vec<u8> = object.value().iter().skip(1).cloned().collect();

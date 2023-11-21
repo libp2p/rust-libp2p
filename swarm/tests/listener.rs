@@ -19,18 +19,19 @@ async fn behaviour_listener() {
     let addr: Multiaddr = Protocol::Memory(0).into();
     let id = swarm.behaviour_mut().listen(addr.clone());
 
-    let address = swarm
-        .wait(|e| match e {
-            SwarmEvent::NewListenAddr {
-                listener_id,
-                address,
-            } => {
-                assert_eq!(listener_id, id);
-                Some(address)
-            }
-            _ => None,
-        })
-        .await;
+    let address =
+        swarm
+            .wait(|e| match e {
+                SwarmEvent::NewListenAddr {
+                    listener_id,
+                    address,
+                } => {
+                    assert_eq!(listener_id, id);
+                    Some(address)
+                }
+                _ => None,
+            })
+            .await;
 
     swarm.behaviour_mut().stop_listening(id);
 

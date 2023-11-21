@@ -158,22 +158,24 @@ impl MessageCache {
             .iter()
             .fold(vec![], |mut current_entries, entries| {
                 // search for entries with desired topic
-                let mut found_entries: Vec<MessageId> = entries
-                    .iter()
-                    .filter_map(|entry| {
-                        if &entry.topic == topic {
-                            let mid = &entry.mid;
-                            // Only gossip validated messages
-                            if let Some(true) = self.msgs.get(mid).map(|(msg, _)| msg.validated) {
-                                Some(mid.clone())
+                let mut found_entries: Vec<MessageId> =
+                    entries
+                        .iter()
+                        .filter_map(|entry| {
+                            if &entry.topic == topic {
+                                let mid = &entry.mid;
+                                // Only gossip validated messages
+                                if let Some(true) = self.msgs.get(mid).map(|(msg, _)| msg.validated)
+                                {
+                                    Some(mid.clone())
+                                } else {
+                                    None
+                                }
                             } else {
                                 None
                             }
-                        } else {
-                            None
-                        }
-                    })
-                    .collect();
+                        })
+                        .collect();
 
                 // generate the list
                 current_entries.append(&mut found_entries);

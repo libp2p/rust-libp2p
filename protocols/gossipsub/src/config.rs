@@ -869,10 +869,11 @@ mod test {
 
     #[test]
     fn create_config_with_message_id_as_plain_function() {
-        let config = ConfigBuilder::default()
-            .message_id_fn(message_id_plain_function)
-            .build()
-            .unwrap();
+        let config =
+            ConfigBuilder::default()
+                .message_id_fn(message_id_plain_function)
+                .build()
+                .unwrap();
 
         let result = config.message_id(&get_gossipsub_message());
 

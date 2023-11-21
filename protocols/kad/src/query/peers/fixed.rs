@@ -174,10 +174,11 @@ mod test {
 
     #[test]
     fn decrease_num_waiting_on_failure() {
-        let mut iter = FixedPeersIter::new(
-            vec![PeerId::random(), PeerId::random()],
-            NonZeroUsize::new(1).unwrap(),
-        );
+        let mut iter =
+            FixedPeersIter::new(
+                vec![PeerId::random(), PeerId::random()],
+                NonZeroUsize::new(1).unwrap(),
+            );
 
         match iter.next() {
             PeersIterState::Waiting(Some(peer)) => {

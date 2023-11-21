@@ -502,54 +502,58 @@ fn resolve<'a, E: 'a + Send, R: Resolver>(
                 Err(e) => Err(Error::ResolveError(e)),
             })
             .boxed(),
-        Protocol::Dns4(ref name) => resolver
-            .ipv4_lookup(name.clone().into_owned())
-            .map(move |res| match res {
-                Ok(ips) => {
-                    let mut ips = ips.into_iter();
-                    let one = ips
-                        .next()
-                        .expect("If there are no results, `Err(NoRecordsFound)` is expected.");
-                    if let Some(two) = ips.next() {
-                        Ok(Resolved::Many(
-                            iter::once(one)
-                                .chain(iter::once(two))
-                                .chain(ips)
-                                .map(Ipv4Addr::from)
-                                .map(Protocol::from)
-                                .collect(),
-                        ))
-                    } else {
-                        Ok(Resolved::One(Protocol::from(Ipv4Addr::from(one))))
+        Protocol::Dns4(ref name) => {
+            resolver
+                .ipv4_lookup(name.clone().into_owned())
+                .map(move |res| match res {
+                    Ok(ips) => {
+                        let mut ips = ips.into_iter();
+                        let one = ips
+                            .next()
+                            .expect("If there are no results, `Err(NoRecordsFound)` is expected.");
+                        if let Some(two) = ips.next() {
+                            Ok(Resolved::Many(
+                                iter::once(one)
+                                    .chain(iter::once(two))
+                                    .chain(ips)
+                                    .map(Ipv4Addr::from)
+                                    .map(Protocol::from)
+                                    .collect(),
+                            ))
+                        } else {
+                            Ok(Resolved::One(Protocol::from(Ipv4Addr::from(one))))
+                        }
                     }
-                }
-                Err(e) => Err(Error::ResolveError(e)),
-            })
-            .boxed(),
-        Protocol::Dns6(ref name) => resolver
-            .ipv6_lookup(name.clone().into_owned())
-            .map(move |res| match res {
-                Ok(ips) => {
-                    let mut ips = ips.into_iter();
-                    let one = ips
-                        .next()
-                        .expect("If there are no results, `Err(NoRecordsFound)` is expected.");
-                    if let Some(two) = ips.next() {
-                        Ok(Resolved::Many(
-                            iter::once(one)
-                                .chain(iter::once(two))
-                                .chain(ips)
-                                .map(Ipv6Addr::from)
-                                .map(Protocol::from)
-                                .collect(),
-                        ))
-                    } else {
-                        Ok(Resolved::One(Protocol::from(Ipv6Addr::from(one))))
+                    Err(e) => Err(Error::ResolveError(e)),
+                })
+                .boxed()
+        }
+        Protocol::Dns6(ref name) => {
+            resolver
+                .ipv6_lookup(name.clone().into_owned())
+                .map(move |res| match res {
+                    Ok(ips) => {
+                        let mut ips = ips.into_iter();
+                        let one = ips
+                            .next()
+                            .expect("If there are no results, `Err(NoRecordsFound)` is expected.");
+                        if let Some(two) = ips.next() {
+                            Ok(Resolved::Many(
+                                iter::once(one)
+                                    .chain(iter::once(two))
+                                    .chain(ips)
+                                    .map(Ipv6Addr::from)
+                                    .map(Protocol::from)
+                                    .collect(),
+                            ))
+                        } else {
+                            Ok(Resolved::One(Protocol::from(Ipv6Addr::from(one))))
+                        }
                     }
-                }
-                Err(e) => Err(Error::ResolveError(e)),
-            })
-            .boxed(),
+                    Err(e) => Err(Error::ResolveError(e)),
+                })
+                .boxed()
+        }
         Protocol::Dnsaddr(ref name) => {
             let name = [DNSADDR_PREFIX, name].concat();
             resolver

@@ -259,16 +259,17 @@ mod test {
         let mut filter = WhitelistSubscriptionFilter(HashSet::from_iter(vec![t1.clone()]));
 
         let old = Default::default();
-        let subscriptions = vec![
-            Subscription {
-                action: Subscribe,
-                topic_hash: t1,
-            },
-            Subscription {
-                action: Subscribe,
-                topic_hash: t2,
-            },
-        ];
+        let subscriptions =
+            vec![
+                Subscription {
+                    action: Subscribe,
+                    topic_hash: t1,
+                },
+                Subscription {
+                    action: Subscribe,
+                    topic_hash: t2,
+                },
+            ];
 
         let result = filter
             .filter_incoming_subscriptions(&subscriptions, &old)
@@ -387,16 +388,17 @@ mod test {
         let mut filter = CallbackSubscriptionFilter(|h| h.as_str() == "t1");
 
         let old = Default::default();
-        let subscriptions = vec![
-            Subscription {
-                action: Subscribe,
-                topic_hash: t1,
-            },
-            Subscription {
-                action: Subscribe,
-                topic_hash: t2,
-            },
-        ];
+        let subscriptions =
+            vec![
+                Subscription {
+                    action: Subscribe,
+                    topic_hash: t1,
+                },
+                Subscription {
+                    action: Subscribe,
+                    topic_hash: t2,
+                },
+            ];
 
         let result = filter
             .filter_incoming_subscriptions(&subscriptions, &old)

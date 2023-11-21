@@ -359,11 +359,12 @@ impl NetworkBehaviour for Behaviour {
 
         if listen_addr_changed && self.config.push_listen_addr_updates {
             // trigger an identify push for all connected peers
-            let push_events = self.connected.keys().map(|peer| ToSwarm::NotifyHandler {
-                peer_id: *peer,
-                handler: NotifyHandler::Any,
-                event: InEvent::Push,
-            });
+            let push_events =
+                self.connected.keys().map(|peer| ToSwarm::NotifyHandler {
+                    peer_id: *peer,
+                    handler: NotifyHandler::Any,
+                    event: InEvent::Push,
+                });
 
             self.events.extend(push_events);
         }

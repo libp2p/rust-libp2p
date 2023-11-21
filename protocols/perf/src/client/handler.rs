@@ -115,10 +115,9 @@ impl ConnectionHandler for Handler {
             ConnectionEvent::FullyNegotiatedInbound(FullyNegotiatedInbound {
                 protocol, ..
             }) => void::unreachable(protocol),
-            ConnectionEvent::FullyNegotiatedOutbound(FullyNegotiatedOutbound {
-                protocol,
-                info: (),
-            }) => {
+            ConnectionEvent::FullyNegotiatedOutbound(
+                FullyNegotiatedOutbound { protocol, info: () }
+            ) => {
                 let Command { id, params } = self
                     .requested_streams
                     .pop_front()

@@ -212,10 +212,7 @@ where
         U: OutboundConnectionUpgrade<Negotiated<C>, Output = D, Error = E> + Clone,
         E: Error + 'static,
     {
-        Authenticated(Builder::new(
-            Upgrade::new(self.0.inner, upgrade),
-            self.0.version,
-        ))
+        Authenticated(Builder::new(Upgrade::new(self.0.inner, upgrade), self.0.version))
     }
 
     /// Upgrades the transport with a (sub)stream multiplexer.
@@ -524,29 +521,30 @@ where
         let this = &mut *self;
 
         loop {
-            this.upgrade = match this.upgrade {
-                future::Either::Left(ref mut up) => {
-                    let (i, c) = match ready!(TryFuture::try_poll(this.future.as_mut(), cx)
-                        .map_err(TransportUpgradeError::Transport))
-                    {
-                        Ok(v) => v,
-                        Err(err) => return Poll::Ready(Err(err)),
-                    };
-                    let u = up
-                        .take()
-                        .expect("DialUpgradeFuture is constructed with Either::Left(Some).");
-                    future::Either::Right((i, apply_outbound(c, u, upgrade::Version::V1)))
+            this.upgrade =
+                match this.upgrade {
+                    future::Either::Left(ref mut up) => {
+                        let (i, c) = match ready!(TryFuture::try_poll(this.future.as_mut(), cx)
+                            .map_err(TransportUpgradeError::Transport))
+                        {
+                            Ok(v) => v,
+                            Err(err) => return Poll::Ready(Err(err)),
+                        };
+                        let u = up
+                            .take()
+                            .expect("DialUpgradeFuture is constructed with Either::Left(Some).");
+                        future::Either::Right((i, apply_outbound(c, u, upgrade::Version::V1)))
+                    }
+                    future::Either::Right((i, ref mut up)) => {
+                        let d = match ready!(Future::poll(Pin::new(up), cx)
+                            .map_err(TransportUpgradeError::Upgrade))
+                        {
+                            Ok(d) => d,
+                            Err(err) => return Poll::Ready(Err(err)),
+                        };
+                        return Poll::Ready(Ok((i, d)));
+                    }
                 }
-                future::Either::Right((i, ref mut up)) => {
-                    let d = match ready!(
-                        Future::poll(Pin::new(up), cx).map_err(TransportUpgradeError::Upgrade)
-                    ) {
-                        Ok(d) => d,
-                        Err(err) => return Poll::Ready(Err(err)),
-                    };
-                    return Poll::Ready(Ok((i, d)));
-                }
-            }
         }
     }
 }

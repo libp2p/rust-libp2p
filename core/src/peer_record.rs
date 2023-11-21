@@ -171,36 +171,37 @@ mod tests {
 
         let addr: Multiaddr = HOME.parse().unwrap();
 
-        let envelope = {
-            let identity_a = Keypair::generate_ed25519();
-            let identity_b = Keypair::generate_ed25519();
+        let envelope =
+            {
+                let identity_a = Keypair::generate_ed25519();
+                let identity_b = Keypair::generate_ed25519();
 
-            let payload = {
-                let record = proto::PeerRecord {
-                    peer_id: identity_a.public().to_peer_id().to_bytes(),
-                    seq: 0,
-                    addresses: vec![proto::AddressInfo {
-                        multiaddr: addr.to_vec(),
-                    }],
+                let payload = {
+                    let record = proto::PeerRecord {
+                        peer_id: identity_a.public().to_peer_id().to_bytes(),
+                        seq: 0,
+                        addresses: vec![proto::AddressInfo {
+                            multiaddr: addr.to_vec(),
+                        }],
+                    };
+
+                    let mut buf = Vec::with_capacity(record.get_size());
+                    let mut writer = Writer::new(&mut buf);
+                    record
+                        .write_message(&mut writer)
+                        .expect("Encoding to succeed");
+
+                    buf
                 };
 
-                let mut buf = Vec::with_capacity(record.get_size());
-                let mut writer = Writer::new(&mut buf);
-                record
-                    .write_message(&mut writer)
-                    .expect("Encoding to succeed");
-
-                buf
+                SignedEnvelope::new(
+                    &identity_b,
+                    String::from(DOMAIN_SEP),
+                    PAYLOAD_TYPE.as_bytes().to_vec(),
+                    payload,
+                )
+                .unwrap()
             };
-
-            SignedEnvelope::new(
-                &identity_b,
-                String::from(DOMAIN_SEP),
-                PAYLOAD_TYPE.as_bytes().to_vec(),
-                payload,
-            )
-            .unwrap()
-        };
 
         assert!(matches!(
             PeerRecord::from_signed_envelope(envelope),

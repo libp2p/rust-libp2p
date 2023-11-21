@@ -170,9 +170,9 @@ impl Keypair {
     #[cfg(feature = "ed25519")]
     pub fn ed25519_from_bytes(bytes: impl AsMut<[u8]>) -> Result<Keypair, DecodingError> {
         Ok(Keypair {
-            keypair: KeyPairInner::Ed25519(ed25519::Keypair::from(
-                ed25519::SecretKey::try_from_bytes(bytes)?,
-            )),
+            keypair: KeyPairInner::Ed25519(
+                ed25519::Keypair::from(ed25519::SecretKey::try_from_bytes(bytes)?)
+            ),
         })
     }
 
@@ -665,11 +665,13 @@ impl TryFrom<proto::PublicKey> for PublicKey {
     fn try_from(pubkey: proto::PublicKey) -> Result<Self, Self::Error> {
         match pubkey.Type {
             #[cfg(feature = "ed25519")]
-            proto::KeyType::Ed25519 => Ok(ed25519::PublicKey::try_from_bytes(&pubkey.Data).map(
-                |kp| PublicKey {
-                    publickey: PublicKeyInner::Ed25519(kp),
-                },
-            )?),
+            proto::KeyType::Ed25519 => {
+                Ok(
+                    ed25519::PublicKey::try_from_bytes(&pubkey.Data).map(|kp| PublicKey {
+                        publickey: PublicKeyInner::Ed25519(kp),
+                    })?,
+                )
+            }
             #[cfg(not(feature = "ed25519"))]
             proto::KeyType::Ed25519 => {
                 tracing::debug!("support for ed25519 was disabled at compile-time");
@@ -699,11 +701,13 @@ impl TryFrom<proto::PublicKey> for PublicKey {
                 Err(DecodingError::missing_feature("secp256k1"))
             }
             #[cfg(feature = "ecdsa")]
-            proto::KeyType::ECDSA => Ok(ecdsa::PublicKey::try_decode_der(&pubkey.Data).map(
-                |kp| PublicKey {
-                    publickey: PublicKeyInner::Ecdsa(kp),
-                },
-            )?),
+            proto::KeyType::ECDSA => {
+                Ok(
+                    ecdsa::PublicKey::try_decode_der(&pubkey.Data).map(|kp| PublicKey {
+                        publickey: PublicKeyInner::Ecdsa(kp),
+                    })?,
+                )
+            }
             #[cfg(not(feature = "ecdsa"))]
             proto::KeyType::ECDSA => {
                 tracing::debug!("support for ECDSA was disabled at compile-time");

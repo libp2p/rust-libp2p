@@ -113,10 +113,11 @@ impl libp2p_core::Transport for Transport {
 /// See: `<https://bugzilla.mozilla.org/show_bug.cgi?id=1659672>` for more details
 fn maybe_local_firefox() -> bool {
     let window = &web_sys::window().expect("window should be available");
-    let ua = match window.navigator().user_agent() {
-        Ok(agent) => agent.to_lowercase(),
-        Err(_) => return false,
-    };
+    let ua =
+        match window.navigator().user_agent() {
+            Ok(agent) => agent.to_lowercase(),
+            Err(_) => return false,
+        };
 
     let hostname = match window
         .document()

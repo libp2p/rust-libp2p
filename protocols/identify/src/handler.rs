@@ -52,13 +52,14 @@ const MAX_CONCURRENT_STREAMS_PER_CONNECTION: usize = 10;
 pub struct Handler {
     remote_peer_id: PeerId,
     /// Pending events to yield.
-    events: SmallVec<
-        [ConnectionHandlerEvent<
-            Either<ReadyUpgrade<StreamProtocol>, ReadyUpgrade<StreamProtocol>>,
-            (),
-            Event,
-        >; 4],
-    >,
+    events:
+        SmallVec<
+            [ConnectionHandlerEvent<
+                Either<ReadyUpgrade<StreamProtocol>, ReadyUpgrade<StreamProtocol>>,
+                (),
+                Event,
+            >; 4],
+        >,
 
     active_streams: futures_bounded::FuturesSet<Result<Success, UpgradeError>>,
 
@@ -339,28 +340,26 @@ impl ConnectionHandler for Handler {
             Poll::Ready(Ok(Ok(Success::ReceivedIdentify(remote_info)))) => {
                 self.handle_incoming_info(&remote_info);
 
-                return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(Event::Identified(
-                    remote_info,
-                )));
+                return Poll::Ready(
+                    ConnectionHandlerEvent::NotifyBehaviour(Event::Identified(remote_info))
+                );
             }
             Poll::Ready(Ok(Ok(Success::SentIdentifyPush(info)))) => {
-                return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(
-                    Event::IdentificationPushed(info),
-                ));
+                return Poll::Ready(
+                    ConnectionHandlerEvent::NotifyBehaviour(Event::IdentificationPushed(info))
+                );
             }
             Poll::Ready(Ok(Ok(Success::SentIdentify))) => {
-                return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(
-                    Event::Identification,
-                ));
+                return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(Event::Identification));
             }
             Poll::Ready(Ok(Ok(Success::ReceivedIdentifyPush(remote_push_info)))) => {
                 if let Some(mut info) = self.remote_info.clone() {
                     info.merge(remote_push_info);
                     self.handle_incoming_info(&info);
 
-                    return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(
-                        Event::Identified(info),
-                    ));
+                    return Poll::Ready(
+                        ConnectionHandlerEvent::NotifyBehaviour(Event::Identified(info))
+                    );
                 };
             }
             Poll::Ready(Ok(Err(e))) => {

@@ -107,21 +107,23 @@ pub(crate) async fn new_for_pending_outgoing_connection(
         }
         Either::Left((Ok(v), _)) => void::unreachable(v),
         Either::Right((Ok((address, output, errors)), _)) => {
-            let _ = events
-                .send(PendingConnectionEvent::ConnectionEstablished {
-                    id: connection_id,
-                    output,
-                    outgoing: Some((address, errors)),
-                })
-                .await;
+            let _ =
+                events
+                    .send(PendingConnectionEvent::ConnectionEstablished {
+                        id: connection_id,
+                        output,
+                        outgoing: Some((address, errors)),
+                    })
+                    .await;
         }
         Either::Right((Err(e), _)) => {
-            let _ = events
-                .send(PendingConnectionEvent::PendingFailed {
-                    id: connection_id,
-                    error: Either::Left(PendingOutboundConnectionError::Transport(e)),
-                })
-                .await;
+            let _ =
+                events
+                    .send(PendingConnectionEvent::PendingFailed {
+                        id: connection_id,
+                        error: Either::Left(PendingOutboundConnectionError::Transport(e)),
+                    })
+                    .await;
         }
     }
 }
@@ -154,14 +156,15 @@ pub(crate) async fn new_for_pending_incoming_connection<TFut>(
                 .await;
         }
         Either::Right((Err(e), _)) => {
-            let _ = events
-                .send(PendingConnectionEvent::PendingFailed {
-                    id: connection_id,
-                    error: Either::Right(PendingInboundConnectionError::Transport(
-                        TransportError::Other(e),
-                    )),
-                })
-                .await;
+            let _ =
+                events
+                    .send(PendingConnectionEvent::PendingFailed {
+                        id: connection_id,
+                        error: Either::Right(
+                            PendingInboundConnectionError::Transport(TransportError::Other(e))
+                        ),
+                    })
+                    .await;
         }
     }
 }
@@ -200,13 +203,14 @@ pub(crate) async fn new_for_established_connection<THandler>(
 
                     let error = closing_muxer.await.err().map(ConnectionError::IO);
 
-                    let _ = events
-                        .send(EstablishedConnectionEvent::Closed {
-                            id: connection_id,
-                            peer_id,
-                            error,
-                        })
-                        .await;
+                    let _ =
+                        events
+                            .send(EstablishedConnectionEvent::Closed {
+                                id: connection_id,
+                                peer_id,
+                                error,
+                            })
+                            .await;
                     return;
                 }
             },

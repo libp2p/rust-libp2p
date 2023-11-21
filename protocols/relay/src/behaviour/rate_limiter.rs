@@ -103,13 +103,15 @@ impl<Id: Eq + PartialEq + Hash + Clone> GenericRateLimiter<Id> {
 
         match self.buckets.get_mut(&id) {
             // If the bucket exists, try to take a token.
-            Some(balance) => match balance.checked_sub(1) {
-                Some(a) => {
-                    *balance = a;
-                    true
+            Some(balance) => {
+                match balance.checked_sub(1) {
+                    Some(a) => {
+                        *balance = a;
+                        true
+                    }
+                    None => false,
                 }
-                None => false,
-            },
+            }
             // If the bucket is missing, act like the bucket has `limit` number of tokens. Take one
             // token and track the new bucket balance.
             None => {
@@ -124,7 +126,7 @@ impl<Id: Eq + PartialEq + Hash + Clone> GenericRateLimiter<Id> {
         // Note when used with a high number of buckets: This loop refills all the to-be-refilled
         // buckets at once, thus potentially delaying the parent call to `try_next`.
         loop {
-            match self.refill_schedule.get(0) {
+            match self.refill_schedule.front() {
                 // Only continue if (a) there is a bucket and (b) the bucket has not already been
                 // refilled recently.
                 Some((last_refill, _)) if now.duration_since(*last_refill) >= self.interval => {}

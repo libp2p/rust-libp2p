@@ -232,29 +232,30 @@ where
             <Self as ConnectionHandler>::InboundProtocol,
         >,
     ) {
-        let (inner, info) = match (self.inner.as_mut(), info) {
-            (Some(inner), Either::Left(info)) => (inner, info),
-            // Ignore listen upgrade errors in disabled state.
-            (None, Either::Right(())) => return,
-            (Some(_), Either::Right(())) => panic!(
-                "Unexpected `Either::Right` inbound info through \
+        let (inner, info) =
+            match (self.inner.as_mut(), info) {
+                (Some(inner), Either::Left(info)) => (inner, info),
+                // Ignore listen upgrade errors in disabled state.
+                (None, Either::Right(())) => return,
+                (Some(_), Either::Right(())) => panic!(
+                    "Unexpected `Either::Right` inbound info through \
                  `on_listen_upgrade_error` in enabled state.",
-            ),
-            (None, Either::Left(_)) => panic!(
-                "Unexpected `Either::Left` inbound info through \
+                ),
+                (None, Either::Left(_)) => panic!(
+                    "Unexpected `Either::Left` inbound info through \
                  `on_listen_upgrade_error` in disabled state.",
-            ),
-        };
+                ),
+            };
 
         let err = match err {
             Either::Left(e) => e,
             Either::Right(v) => void::unreachable(v),
         };
 
-        inner.on_connection_event(ConnectionEvent::ListenUpgradeError(ListenUpgradeError {
-            info,
-            error: err,
-        }));
+        inner
+            .on_connection_event(
+                ConnectionEvent::ListenUpgradeError(ListenUpgradeError { info, error: err })
+            );
     }
 }
 
@@ -323,16 +324,17 @@ where
             ConnectionEvent::FullyNegotiatedOutbound(FullyNegotiatedOutbound {
                 protocol: out,
                 info,
-            }) => self
-                .inner
-                .as_mut()
-                .expect("Can't receive an outbound substream if disabled; QED")
-                .on_connection_event(ConnectionEvent::FullyNegotiatedOutbound(
-                    FullyNegotiatedOutbound {
-                        protocol: out,
-                        info,
-                    },
-                )),
+            }) => {
+                self.inner
+                    .as_mut()
+                    .expect("Can't receive an outbound substream if disabled; QED")
+                    .on_connection_event(ConnectionEvent::FullyNegotiatedOutbound(
+                        FullyNegotiatedOutbound {
+                            protocol: out,
+                            info,
+                        },
+                    ))
+            }
             ConnectionEvent::AddressChange(address_change) => {
                 if let Some(inner) = self.inner.as_mut() {
                     inner.on_connection_event(ConnectionEvent::AddressChange(AddressChange {
@@ -344,10 +346,9 @@ where
                 .inner
                 .as_mut()
                 .expect("Can't receive an outbound substream if disabled; QED")
-                .on_connection_event(ConnectionEvent::DialUpgradeError(DialUpgradeError {
-                    info,
-                    error: err,
-                })),
+                .on_connection_event(
+                    ConnectionEvent::DialUpgradeError(DialUpgradeError { info, error: err })
+                ),
             ConnectionEvent::ListenUpgradeError(listen_upgrade_error) => {
                 self.on_listen_upgrade_error(listen_upgrade_error)
             }

@@ -230,9 +230,7 @@ impl Floodsub {
             }
             if self.config.subscribe_local_messages {
                 self.events
-                    .push_back(ToSwarm::GenerateEvent(FloodsubEvent::Message(
-                        message.clone(),
-                    )));
+                    .push_back(ToSwarm::GenerateEvent(FloodsubEvent::Message(message.clone())));
             }
         }
         // Don't publish the message if we have to check subscriptions

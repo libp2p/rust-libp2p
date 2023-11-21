@@ -64,17 +64,19 @@ where
 
     requested_outbound: VecDeque<OutboundMessage<TCodec>>,
     /// A channel for receiving inbound requests.
-    inbound_receiver: mpsc::Receiver<(
-        InboundRequestId,
-        TCodec::Request,
-        oneshot::Sender<TCodec::Response>,
-    )>,
+    inbound_receiver:
+        mpsc::Receiver<(
+            InboundRequestId,
+            TCodec::Request,
+            oneshot::Sender<TCodec::Response>,
+        )>,
     /// The [`mpsc::Sender`] for the above receiver. Cloned for each inbound request.
-    inbound_sender: mpsc::Sender<(
-        InboundRequestId,
-        TCodec::Request,
-        oneshot::Sender<TCodec::Response>,
-    )>,
+    inbound_sender:
+        mpsc::Sender<(
+            InboundRequestId,
+            TCodec::Request,
+            oneshot::Sender<TCodec::Response>,
+        )>,
 
     inbound_request_id: Arc<AtomicU64>,
 
@@ -411,14 +413,14 @@ where
                 ));
             }
             Poll::Ready((RequestId::Inbound(id), Err(futures_bounded::Timeout { .. }))) => {
-                return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(
-                    Event::InboundTimeout(id),
-                ));
+                return Poll::Ready(
+                    ConnectionHandlerEvent::NotifyBehaviour(Event::InboundTimeout(id))
+                );
             }
             Poll::Ready((RequestId::Outbound(id), Err(futures_bounded::Timeout { .. }))) => {
-                return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(
-                    Event::OutboundTimeout(id),
-                ));
+                return Poll::Ready(
+                    ConnectionHandlerEvent::NotifyBehaviour(Event::OutboundTimeout(id))
+                );
             }
             Poll::Pending => {}
         }

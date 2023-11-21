@@ -224,7 +224,7 @@ where
             // yield to give the current task a chance to read
             // from the respective substreams.
             if num_buffered == self.config.max_buffer_len {
-                cx.waker().clone().wake();
+                cx.waker().wake_by_ref();
                 return Poll::Pending;
             }
 
@@ -456,7 +456,7 @@ where
             // next frame for `id`, yield to give the current task
             // a chance to read from the other substream(s).
             if num_buffered == self.config.max_buffer_len {
-                cx.waker().clone().wake();
+                cx.waker().wake_by_ref();
                 return Poll::Pending;
             }
 
@@ -663,7 +663,7 @@ where
                     connection=%self.id,
                     "No task to read from blocked stream. Waking current task."
                 );
-                cx.waker().clone().wake();
+                cx.waker().wake_by_ref();
             } else if let Some(id) = stream_id {
                 // We woke some other task, but are still interested in
                 // reading `Data` frames from the current stream when unblocked.
@@ -894,10 +894,7 @@ where
     /// has not been reached.
     fn check_max_pending_frames(&mut self) -> io::Result<()> {
         if self.pending_frames.len() >= self.config.max_substreams + EXTRA_PENDING_FRAMES {
-            return self.on_error(io::Error::new(
-                io::ErrorKind::Other,
-                "Too many pending frames.",
-            ));
+            return self.on_error(io::Error::new(io::ErrorKind::Other, "Too many pending frames."));
         }
         Ok(())
     }
@@ -1257,11 +1254,12 @@ mod tests {
             }
 
             // Setup the multiplexed connection.
-            let conn = Connection {
-                r_buf,
-                w_buf: BytesMut::new(),
-                eof: false,
-            };
+            let conn =
+                Connection {
+                    r_buf,
+                    w_buf: BytesMut::new(),
+                    eof: false,
+                };
             let mut m = Multiplexed::new(conn, cfg.clone());
 
             task::block_on(future::poll_fn(move |cx| {

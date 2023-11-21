@@ -428,16 +428,18 @@ mod tests {
     #[test]
     fn max_established_incoming() {
         fn prop(Limit(limit): Limit) {
-            let mut swarm1 = Swarm::new_ephemeral(|_| {
-                Behaviour::new(
-                    ConnectionLimits::default().with_max_established_incoming(Some(limit)),
-                )
-            });
-            let mut swarm2 = Swarm::new_ephemeral(|_| {
-                Behaviour::new(
-                    ConnectionLimits::default().with_max_established_incoming(Some(limit)),
-                )
-            });
+            let mut swarm1 =
+                Swarm::new_ephemeral(|_| {
+                    Behaviour::new(
+                        ConnectionLimits::default().with_max_established_incoming(Some(limit)),
+                    )
+                });
+            let mut swarm2 =
+                Swarm::new_ephemeral(|_| {
+                    Behaviour::new(
+                        ConnectionLimits::default().with_max_established_incoming(Some(limit)),
+                    )
+                });
 
             async_std::task::block_on(async {
                 let (listen_addr, _) = swarm1.listen().with_memory_addr_external().await;
@@ -485,9 +487,9 @@ mod tests {
     /// ([`SwarmEvent::ConnectionEstablished`]) can the connection be seen as established.
     #[test]
     fn support_other_behaviour_denying_connection() {
-        let mut swarm1 = Swarm::new_ephemeral(|_| {
-            Behaviour::new_with_connection_denier(ConnectionLimits::default())
-        });
+        let mut swarm1 = Swarm::new_ephemeral(
+            |_| Behaviour::new_with_connection_denier(ConnectionLimits::default())
+        );
         let mut swarm2 = Swarm::new_ephemeral(|_| Behaviour::new(ConnectionLimits::default()));
 
         async_std::task::block_on(async {
@@ -497,15 +499,16 @@ mod tests {
             async_std::task::spawn(swarm2.loop_on_next());
 
             // Wait for the ConnectionDenier of swarm1 to deny the established connection.
-            let cause = swarm1
-                .wait(|event| match event {
-                    SwarmEvent::IncomingConnectionError {
-                        error: ListenError::Denied { cause },
-                        ..
-                    } => Some(cause),
-                    _ => None,
-                })
-                .await;
+            let cause =
+                swarm1
+                    .wait(|event| match event {
+                        SwarmEvent::IncomingConnectionError {
+                            error: ListenError::Denied { cause },
+                            ..
+                        } => Some(cause),
+                        _ => None,
+                    })
+                    .await;
 
             cause.downcast::<std::io::Error>().unwrap();
 
@@ -556,10 +559,9 @@ mod tests {
             _local_addr: &Multiaddr,
             _remote_addr: &Multiaddr,
         ) -> Result<THandler<Self>, ConnectionDenied> {
-            Err(ConnectionDenied::new(std::io::Error::new(
-                std::io::ErrorKind::Other,
-                "ConnectionDenier",
-            )))
+            Err(ConnectionDenied::new(
+                std::io::Error::new(std::io::ErrorKind::Other, "ConnectionDenier")
+            ))
         }
 
         fn handle_established_outbound_connection(
@@ -569,10 +571,9 @@ mod tests {
             _addr: &Multiaddr,
             _role_override: Endpoint,
         ) -> Result<THandler<Self>, ConnectionDenied> {
-            Err(ConnectionDenied::new(std::io::Error::new(
-                std::io::ErrorKind::Other,
-                "ConnectionDenier",
-            )))
+            Err(ConnectionDenied::new(
+                std::io::Error::new(std::io::ErrorKind::Other, "ConnectionDenier")
+            ))
         }
 
         fn on_swarm_event(&mut self, _event: FromSwarm) {}

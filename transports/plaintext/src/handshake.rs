@@ -44,28 +44,30 @@ where
         .map_err(DecodeError)?;
 
     tracing::trace!("receiving the remote's exchange");
-    let public_key = match framed_socket
-        .next()
-        .await
-        .transpose()
-        .map_err(DecodeError)?
-    {
-        Some(remote) => {
-            let public_key = PublicKey::try_decode_protobuf(&remote.pubkey.unwrap_or_default())?;
-            let peer_id = PeerId::from_bytes(&remote.id.unwrap_or_default())?;
+    let public_key =
+        match framed_socket
+            .next()
+            .await
+            .transpose()
+            .map_err(DecodeError)?
+        {
+            Some(remote) => {
+                let public_key =
+                    PublicKey::try_decode_protobuf(&remote.pubkey.unwrap_or_default())?;
+                let peer_id = PeerId::from_bytes(&remote.id.unwrap_or_default())?;
 
-            if peer_id != public_key.to_peer_id() {
-                return Err(Error::PeerIdMismatch);
+                if peer_id != public_key.to_peer_id() {
+                    return Err(Error::PeerIdMismatch);
+                }
+
+                public_key
             }
-
-            public_key
-        }
-        None => {
-            tracing::debug!("unexpected eof while waiting for remote's exchange");
-            let err = IoError::new(IoErrorKind::BrokenPipe, "unexpected eof");
-            return Err(err.into());
-        }
-    };
+            None => {
+                tracing::debug!("unexpected eof while waiting for remote's exchange");
+                let err = IoError::new(IoErrorKind::BrokenPipe, "unexpected eof");
+                return Err(err.into());
+            }
+        };
 
     tracing::trace!(?public_key, "received exchange from remote");
 

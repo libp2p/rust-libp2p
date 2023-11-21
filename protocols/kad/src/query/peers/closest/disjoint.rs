@@ -249,9 +249,9 @@ impl ClosestDisjointPeersIter {
                                 // The iterator is the first to contact this peer.
                                 self.contacted_peers
                                     .insert(peer.clone().into_owned(), PeerState::new(i));
-                                return PeersIterState::Waiting(Some(Cow::Owned(
-                                    peer.into_owned(),
-                                )));
+                                return PeersIterState::Waiting(
+                                    Some(Cow::Owned(peer.into_owned())),
+                                );
                             }
                         }
                     }

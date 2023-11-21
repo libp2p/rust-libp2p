@@ -870,11 +870,12 @@ fn test_score_behaviour_penality() {
 
     let topic = Topic::new("test");
     let topic_hash = topic.hash();
-    let mut params = PeerScoreParams {
-        behaviour_penalty_decay,
-        behaviour_penalty_weight,
-        ..Default::default()
-    };
+    let mut params =
+        PeerScoreParams {
+            behaviour_penalty_decay,
+            behaviour_penalty_weight,
+            ..Default::default()
+        };
 
     let topic_params = TopicScoreParams {
         topic_weight: 1.0,

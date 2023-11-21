@@ -595,9 +595,7 @@ where
         }
 
         self.behaviour
-            .on_swarm_event(FromSwarm::NewListener(behaviour::NewListener {
-                listener_id,
-            }));
+            .on_swarm_event(FromSwarm::NewListener(behaviour::NewListener { listener_id }));
 
         Ok(())
     }
@@ -608,9 +606,7 @@ where
     /// The address is broadcast to all [`NetworkBehaviour`]s via [`FromSwarm::ExternalAddrConfirmed`].
     pub fn add_external_address(&mut self, a: Multiaddr) {
         self.behaviour
-            .on_swarm_event(FromSwarm::ExternalAddrConfirmed(ExternalAddrConfirmed {
-                addr: &a,
-            }));
+            .on_swarm_event(FromSwarm::ExternalAddrConfirmed(ExternalAddrConfirmed { addr: &a }));
         self.confirmed_external_addr.insert(a);
     }
 
@@ -1044,9 +1040,9 @@ where
                 );
                 let addrs = self.listened_addrs.remove(&listener_id).unwrap_or_default();
                 for addr in addrs.iter() {
-                    self.behaviour.on_swarm_event(FromSwarm::ExpiredListenAddr(
-                        ExpiredListenAddr { listener_id, addr },
-                    ));
+                    self.behaviour.on_swarm_event(
+                        FromSwarm::ExpiredListenAddr(ExpiredListenAddr { listener_id, addr })
+                    );
                 }
                 self.behaviour
                     .on_swarm_event(FromSwarm::ListenerClosed(ListenerClosed {
@@ -2133,9 +2129,9 @@ mod tests {
             {}
 
             match swarm2.poll_next_unpin(cx) {
-                Poll::Ready(Some(SwarmEvent::OutgoingConnectionError {
-                    peer_id, error, ..
-                })) => Poll::Ready((peer_id, error)),
+                Poll::Ready(Some(SwarmEvent::OutgoingConnectionError { peer_id, error, .. })) => {
+                    Poll::Ready((peer_id, error))
+                }
                 Poll::Ready(x) => panic!("unexpected {x:?}"),
                 Poll::Pending => Poll::Pending,
             }
@@ -2200,9 +2196,7 @@ mod tests {
                             return Poll::Ready(Ok(()));
                         }
                     }
-                    Poll::Ready(Some(SwarmEvent::IncomingConnectionError {
-                        local_addr, ..
-                    })) => {
+                    Poll::Ready(Some(SwarmEvent::IncomingConnectionError { local_addr, .. })) => {
                         assert!(!got_inc_err);
                         assert_eq!(local_addr, local_address);
                         got_inc_err = true;
@@ -2323,10 +2317,9 @@ mod tests {
         // This constitutes a fairly typical error for chained transports.
         let error = DialError::Transport(vec![(
             "/ip4/127.0.0.1/tcp/80".parse().unwrap(),
-            TransportError::Other(io::Error::new(
-                io::ErrorKind::Other,
-                MemoryTransportError::Unreachable,
-            )),
+            TransportError::Other(
+                io::Error::new(io::ErrorKind::Other, MemoryTransportError::Unreachable)
+            ),
         )]);
 
         let string = format!("{error}");

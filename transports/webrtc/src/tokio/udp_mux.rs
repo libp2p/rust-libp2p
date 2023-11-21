@@ -247,13 +247,14 @@ impl UDPMuxNewAddr {
                     continue;
                 }
 
-                let muxed_conn = match self.create_muxed_conn(&ufrag) {
-                    Ok(conn) => conn,
-                    Err(e) => {
-                        let _ = response.send(Err(e));
-                        continue;
-                    }
-                };
+                let muxed_conn =
+                    match self.create_muxed_conn(&ufrag) {
+                        Ok(conn) => conn,
+                        Err(e) => {
+                            let _ = response.send(Err(e));
+                            continue;
+                        }
+                    };
                 let mut close_rx = muxed_conn.close_rx();
 
                 self.close_futures.push({
@@ -437,11 +438,12 @@ impl UdpMuxHandle {
         let (sender2, receiver2) = req_res_chan::new(1);
         let (sender3, receiver3) = req_res_chan::new(1);
 
-        let this = Self {
-            close_sender: sender1,
-            get_conn_sender: sender2,
-            remove_sender: sender3,
-        };
+        let this =
+            Self {
+                close_sender: sender1,
+                get_conn_sender: sender2,
+                remove_sender: sender3,
+            };
 
         (this, receiver1, receiver2, receiver3)
     }
@@ -550,9 +552,9 @@ fn ufrag_from_stun_message(buffer: &[u8], local_ufrag: bool) -> Result<String, E
         match String::from_utf8(attr.value) {
             // Per the RFC this shouldn't happen
             // https://datatracker.ietf.org/doc/html/rfc5389#section-15.3
-            Err(err) => Err(Error::Other(format!(
-                "failed to decode USERNAME from STUN message as UTF-8: {err}"
-            ))),
+            Err(err) => Err(
+                Error::Other(format!("failed to decode USERNAME from STUN message as UTF-8: {err}"))
+            ),
             Ok(s) => {
                 // s is a combination of the local_ufrag and the remote ufrag separated by `:`.
                 let res = if local_ufrag {

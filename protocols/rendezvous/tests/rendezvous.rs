@@ -288,23 +288,26 @@ async fn discover_allows_for_dial_by_peer_id() {
 
     bob.dial(alices_peer_id).unwrap();
 
-    let alice_connected_to = tokio::spawn(async move {
-        loop {
-            if let SwarmEvent::ConnectionEstablished { peer_id, .. } =
-                alice.select_next_some().await
-            {
-                break peer_id;
+    let alice_connected_to =
+        tokio::spawn(async move {
+            loop {
+                if let SwarmEvent::ConnectionEstablished { peer_id, .. } =
+                    alice.select_next_some().await
+                {
+                    break peer_id;
+                }
             }
-        }
-    });
-    let bob_connected_to = tokio::spawn(async move {
-        loop {
-            if let SwarmEvent::ConnectionEstablished { peer_id, .. } = bob.select_next_some().await
-            {
-                break peer_id;
+        });
+    let bob_connected_to =
+        tokio::spawn(async move {
+            loop {
+                if let SwarmEvent::ConnectionEstablished { peer_id, .. } =
+                    bob.select_next_some().await
+                {
+                    break peer_id;
+                }
             }
-        }
-    });
+        });
 
     assert_eq!(alice_connected_to.await.unwrap(), bobs_peer_id);
     assert_eq!(bob_connected_to.await.unwrap(), alices_peer_id);

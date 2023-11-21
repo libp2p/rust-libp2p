@@ -686,19 +686,20 @@ where
     /// The result of this operation is delivered in a
     /// [`Event::OutboundQueryProgressed{QueryResult::GetRecord}`].
     pub fn get_record(&mut self, key: record::Key) -> QueryId {
-        let record = if let Some(record) = self.store.get(&key) {
-            if record.is_expired(Instant::now()) {
-                self.store.remove(&key);
-                None
+        let record =
+            if let Some(record) = self.store.get(&key) {
+                if record.is_expired(Instant::now()) {
+                    self.store.remove(&key);
+                    None
+                } else {
+                    Some(PeerRecord {
+                        peer: None,
+                        record: record.into_owned(),
+                    })
+                }
             } else {
-                Some(PeerRecord {
-                    peer: None,
-                    record: record.into_owned(),
-                })
-            }
-        } else {
-            None
-        };
+                None
+            };
 
         let step = ProgressStep::first();
 
@@ -943,25 +944,26 @@ where
     /// The result of this operation is delivered in a
     /// reported via [`Event::OutboundQueryProgressed{QueryResult::GetProviders}`].
     pub fn get_providers(&mut self, key: record::Key) -> QueryId {
-        let providers: HashSet<_> = self
-            .store
-            .providers(&key)
-            .into_iter()
-            .filter(|p| !p.is_expired(Instant::now()))
-            .map(|p| p.provider)
-            .collect();
+        let providers: HashSet<_> =
+            self.store
+                .providers(&key)
+                .into_iter()
+                .filter(|p| !p.is_expired(Instant::now()))
+                .map(|p| p.provider)
+                .collect();
 
         let step = ProgressStep::first();
 
-        let info = QueryInfo::GetProviders {
-            key: key.clone(),
-            providers_found: providers.len(),
-            step: if providers.is_empty() {
-                step.clone()
-            } else {
-                step.next()
-            },
-        };
+        let info =
+            QueryInfo::GetProviders {
+                key: key.clone(),
+                providers_found: providers.len(),
+                step: if providers.is_empty() {
+                    step.clone()
+                } else {
+                    step.next()
+                },
+            };
 
         let target = kbucket::Key::new(key.clone());
         let peers = self.kbuckets.closest_keys(&target);
@@ -975,10 +977,9 @@ where
             self.queued_events
                 .push_back(ToSwarm::GenerateEvent(Event::OutboundQueryProgressed {
                     id,
-                    result: QueryResult::GetProviders(Ok(GetProvidersOk::FoundProviders {
-                        key,
-                        providers,
-                    })),
+                    result: QueryResult::GetProviders(
+                        Ok(GetProvidersOk::FoundProviders { key, providers })
+                    ),
                     step,
                     stats,
                 }));
@@ -1263,11 +1264,9 @@ where
                             .push_back(ToSwarm::GenerateEvent(Event::UnroutablePeer { peer }));
                     }
                     (Some(a), BucketInserts::Manual) => {
-                        self.queued_events
-                            .push_back(ToSwarm::GenerateEvent(Event::RoutablePeer {
-                                peer,
-                                address: a,
-                            }));
+                        self.queued_events.push_back(
+                            ToSwarm::GenerateEvent(Event::RoutablePeer { peer, address: a })
+                        );
                     }
                     (Some(a), BucketInserts::OnConnected) => {
                         let addresses = Addresses::new(a);
@@ -1503,15 +1502,16 @@ where
                 quorum,
                 phase: PutRecordPhase::GetClosestPeers,
             } => {
-                let info = QueryInfo::PutRecord {
-                    context,
-                    record,
-                    quorum,
-                    phase: PutRecordPhase::PutRecord {
-                        success: vec![],
-                        get_closest_peers_stats: result.stats,
-                    },
-                };
+                let info =
+                    QueryInfo::PutRecord {
+                        context,
+                        record,
+                        quorum,
+                        phase: PutRecordPhase::PutRecord {
+                            success: vec![],
+                            get_closest_peers_stats: result.stats,
+                        },
+                    };
                 let inner = QueryInner::new(info);
                 self.queries.continue_fixed(query_id, result.peers, inner);
                 None
@@ -2131,14 +2131,15 @@ where
         // We should order addresses from decreasing likelyhood of connectivity, so start with
         // the addresses of that peer in the k-buckets.
         let key = kbucket::Key::from(peer_id);
-        let mut peer_addrs =
-            if let kbucket::Entry::Present(mut entry, _) = self.kbuckets.entry(&key) {
-                let addrs = entry.value().iter().cloned().collect::<Vec<_>>();
-                debug_assert!(!addrs.is_empty(), "Empty peer addresses in routing table.");
-                addrs
-            } else {
-                Vec::new()
-            };
+        let mut peer_addrs = if let kbucket::Entry::Present(mut entry, _) =
+            self.kbuckets.entry(&key)
+        {
+            let addrs = entry.value().iter().cloned().collect::<Vec<_>>();
+            debug_assert!(!addrs.is_empty(), "Empty peer addresses in routing table.");
+            addrs
+        } else {
+            Vec::new()
+        };
 
         // We add to that a temporary list of addresses from the ongoing queries.
         for query in self.queries.iter() {
@@ -2347,9 +2348,9 @@ where
                             self.queued_events.push_back(ToSwarm::GenerateEvent(
                                 Event::OutboundQueryProgressed {
                                     id: query_id,
-                                    result: QueryResult::GetRecord(Ok(GetRecordOk::FoundRecord(
-                                        record,
-                                    ))),
+                                    result: QueryResult::GetRecord(
+                                        Ok(GetRecordOk::FoundRecord(record))
+                                    ),
                                     step: step.clone(),
                                     stats,
                                 },
@@ -2443,12 +2444,13 @@ where
             let num = usize::min(JOBS_MAX_NEW_QUERIES, jobs_query_capacity);
             for _ in 0..num {
                 if let Poll::Ready(r) = job.poll(cx, &mut self.store, now) {
-                    let context =
-                        if r.publisher.as_ref() == Some(self.kbuckets.local_key().preimage()) {
-                            PutRecordContext::Republish
-                        } else {
-                            PutRecordContext::Replicate
-                        };
+                    let context = if r.publisher.as_ref()
+                        == Some(self.kbuckets.local_key().preimage())
+                    {
+                        PutRecordContext::Republish
+                    } else {
+                        PutRecordContext::Replicate
+                    };
                     self.start_put_record(r, Quorum::All, context)
                 } else {
                     break;
@@ -3179,16 +3181,20 @@ impl QueryInfo {
                 key: key.clone(),
                 query_id,
             },
-            QueryInfo::PutRecord { record, phase, .. } => match phase {
-                PutRecordPhase::GetClosestPeers => HandlerIn::FindNodeReq {
-                    key: record.key.to_vec(),
-                    query_id,
-                },
-                PutRecordPhase::PutRecord { .. } => HandlerIn::PutRecord {
-                    record: record.clone(),
-                    query_id,
-                },
-            },
+            QueryInfo::PutRecord { record, phase, .. } => {
+                match phase {
+                    PutRecordPhase::GetClosestPeers => HandlerIn::FindNodeReq {
+                        key: record.key.to_vec(),
+                        query_id,
+                    },
+                    PutRecordPhase::PutRecord { .. } => {
+                        HandlerIn::PutRecord {
+                            record: record.clone(),
+                            query_id,
+                        }
+                    }
+                }
+            }
         }
     }
 }

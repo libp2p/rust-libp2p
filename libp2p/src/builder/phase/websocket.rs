@@ -116,9 +116,9 @@ macro_rules! impl_websocket_builder {
 impl_websocket_builder!(
     "async-std",
     super::provider::AsyncStd,
-    libp2p_dns::async_std::Transport::system(libp2p_tcp::async_io::Transport::new(
-        libp2p_tcp::Config::default(),
-    )),
+    libp2p_dns::async_std::Transport::system(
+        libp2p_tcp::async_io::Transport::new(libp2p_tcp::Config::default(),)
+    ),
     rw_stream_sink::RwStreamSink<
         libp2p_websocket::BytesConnection<libp2p_tcp::async_io::TcpStream>,
     >

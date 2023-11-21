@@ -135,9 +135,7 @@ where
         ConnectionHandlerEvent<Self::OutboundProtocol, Self::OutboundOpenInfo, Self::ToBehaviour>,
     > {
         if !self.events_out.is_empty() {
-            return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(
-                self.events_out.remove(0),
-            ));
+            return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(self.events_out.remove(0)));
         } else {
             self.events_out.shrink_to_fit();
         }
@@ -168,16 +166,14 @@ where
         >,
     ) {
         match event {
-            ConnectionEvent::FullyNegotiatedInbound(FullyNegotiatedInbound {
-                protocol: out,
-                ..
-            }) => {
+            ConnectionEvent::FullyNegotiatedInbound(
+                FullyNegotiatedInbound { protocol: out, .. }
+            ) => {
                 self.events_out.push(Ok(out.into()));
             }
-            ConnectionEvent::FullyNegotiatedOutbound(FullyNegotiatedOutbound {
-                protocol: out,
-                ..
-            }) => {
+            ConnectionEvent::FullyNegotiatedOutbound(
+                FullyNegotiatedOutbound { protocol: out, .. }
+            ) => {
                 self.dial_negotiated -= 1;
                 self.events_out.push(Ok(out.into()));
             }
@@ -221,10 +217,11 @@ mod tests {
 
     #[test]
     fn do_not_keep_idle_connection_alive() {
-        let mut handler: OneShotHandler<_, DeniedUpgrade, Void> = OneShotHandler::new(
-            SubstreamProtocol::new(DeniedUpgrade {}, ()),
-            Default::default(),
-        );
+        let mut handler: OneShotHandler<_, DeniedUpgrade, Void> =
+            OneShotHandler::new(
+                SubstreamProtocol::new(DeniedUpgrade {}, ()),
+                Default::default(),
+            );
 
         block_on(poll_fn(|cx| loop {
             if handler.poll(cx).is_pending() {

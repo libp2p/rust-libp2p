@@ -357,14 +357,15 @@ impl Future for ListenUpgrade<'_> {
                     send_back_addr,
                     ..
                 })) => {
-                    self.listener_upgrade_task = Some(
-                        async move {
-                            let (peer, conn) = upgrade.await.unwrap();
+                    self.listener_upgrade_task =
+                        Some(
+                            async move {
+                                let (peer, conn) = upgrade.await.unwrap();
 
-                            (peer, send_back_addr, conn)
-                        }
-                        .boxed(),
-                    );
+                                (peer, send_back_addr, conn)
+                            }
+                            .boxed(),
+                        );
                     continue;
                 }
                 Poll::Ready(None) => unreachable!("stream never ends"),
