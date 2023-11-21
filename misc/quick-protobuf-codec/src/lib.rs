@@ -1,11 +1,10 @@
 #![cfg_attr(docsrs, feature(doc_cfg, doc_auto_cfg))]
 
 use asynchronous_codec::{Decoder, Encoder};
-use bytes::{Buf, BytesMut};
+use bytes::{Buf, BufMut, BytesMut};
 use quick_protobuf::{BytesReader, MessageRead, MessageWrite, Writer, WriterBackend};
 use std::io;
 use std::marker::PhantomData;
-use std::mem::MaybeUninit;
 
 mod generated;
 
@@ -63,31 +62,9 @@ fn write_message(item: &impl MessageWrite, dst: &mut BytesMut) -> io::Result<()>
     // Ensure we have enough capacity to encode our message.
     dst.reserve(message_length);
 
-    let mut written = 0;
-
-    let mut writer = Writer::new(MaybeUninitWriterBackend::new(
-        dst.spare_capacity_mut(),
-        &mut written,
-    ));
+    let mut writer = Writer::new(MaybeUninitWriterBackend::new(dst));
     item.write_message(&mut writer)
         .map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
-
-    // Check that we have written exactly as much as we intended to.
-    {
-        if written != message_length {
-            return Err(io::Error::new(
-                io::ErrorKind::Other,
-                format!(
-                    "expected message to be {message_length} bytes long but was {written} bytes"
-                ),
-            ));
-        }
-
-        // SAFETY: `written` records exactly how many bytes we wrote, hence set them as initialized.
-        unsafe {
-            dst.set_len(dst.len() + written);
-        }
-    }
 
     Ok(())
 }
@@ -138,13 +115,12 @@ where
 }
 
 struct MaybeUninitWriterBackend<'a> {
-    memory: &'a mut [MaybeUninit<u8>],
-    written: &'a mut usize,
+    memory: &'a mut BytesMut,
 }
 
 impl<'a> MaybeUninitWriterBackend<'a> {
-    fn new(memory: &'a mut [MaybeUninit<u8>], written: &'a mut usize) -> Self {
-        Self { memory, written }
+    fn new(memory: &'a mut BytesMut) -> Self {
+        Self { memory }
     }
 }
 
@@ -178,19 +154,7 @@ impl<'a> WriterBackend for MaybeUninitWriterBackend<'a> {
     }
 
     fn pb_write_all(&mut self, buf: &[u8]) -> quick_protobuf::Result<()> {
-        if self.memory.len() - *self.written < buf.len() {
-            return Err(quick_protobuf::errors::Error::UnexpectedEndOfBuffer);
-        }
-
-        // SAFETY: &[u8] and &[MaybeUninit<u8>] have the same layout
-        let uninit_src: &[MaybeUninit<u8>] = unsafe { std::mem::transmute(buf) };
-
-        let start = *self.written;
-        let end = *self.written + buf.len();
-
-        self.memory[start..end].copy_from_slice(uninit_src);
-        *self.written += buf.len();
-
+        self.memory.put(buf);
         Ok(())
     }
 }
