@@ -3280,7 +3280,19 @@ where
         _: &Multiaddr,
         _: &Multiaddr,
     ) -> Result<THandler<Self>, ConnectionDenied> {
-        Ok(Handler::new(self.config.protocol_config()))
+        Ok(Handler::new(
+            self.config.protocol_config(),
+            self.metrics
+                .as_ref()
+                .expect("to be enabled")
+                .messages_added_to_queue
+                .clone(),
+            self.metrics
+                .as_ref()
+                .expect("to be enabled")
+                .messages_removed_from_queue
+                .clone(),
+        ))
     }
 
     fn handle_established_outbound_connection(
@@ -3290,7 +3302,19 @@ where
         _: &Multiaddr,
         _: Endpoint,
     ) -> Result<THandler<Self>, ConnectionDenied> {
-        Ok(Handler::new(self.config.protocol_config()))
+        Ok(Handler::new(
+            self.config.protocol_config(),
+            self.metrics
+                .as_ref()
+                .expect("to be enabled")
+                .messages_added_to_queue
+                .clone(),
+            self.metrics
+                .as_ref()
+                .expect("to be enabled")
+                .messages_removed_from_queue
+                .clone(),
+        ))
     }
 
     fn on_connection_handler_event(
