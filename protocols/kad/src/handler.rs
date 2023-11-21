@@ -454,7 +454,7 @@ impl Handler {
             next_connec_unique_id: UniqueConnecId(0),
             inbound_substreams: Default::default(),
             outbound_substreams: futures_bounded::FuturesMap::new(
-                Duration::from_secs(30),
+                Duration::from_secs(10),
                 MAX_NUM_STREAMS,
             ),
             pending_streams: Default::default(),
