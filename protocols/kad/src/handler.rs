@@ -547,7 +547,8 @@ impl Handler {
             });
     }
 
-    fn request_new_stream(&mut self, id: QueryId, msg: KadRequestMsg) {
+    /// Takes the given [`KadRequestMsg`] and composes it into an outbound request-response protocol handshake using a [`oneshot::channel`].
+    fn queue_new_stream(&mut self, id: QueryId, msg: KadRequestMsg) {
         let (sender, receiver) = oneshot::channel();
 
         self.pending_streams.push_back(sender);
@@ -760,7 +761,7 @@ impl ConnectionHandler for Handler {
 
             if (self.outbound_substreams.len() + self.pending_streams.len()) < MAX_NUM_STREAMS {
                 if let Some((msg, id)) = self.pending_messages.pop_front() {
-                    self.request_new_stream(id, msg);
+                    self.queue_new_stream(id, msg);
                     return Poll::Ready(ConnectionHandlerEvent::OutboundSubstreamRequest {
                         protocol: SubstreamProtocol::new(self.protocol_config.clone(), ()),
                     });
