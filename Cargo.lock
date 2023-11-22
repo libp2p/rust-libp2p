@@ -2720,6 +2720,7 @@ dependencies = [
  "either",
  "fnv",
  "futures",
+ "futures-bounded",
  "futures-timer",
  "instant",
  "libp2p-core",
