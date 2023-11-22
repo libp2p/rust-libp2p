@@ -2623,6 +2623,7 @@ dependencies = [
 name = "libp2p-gossipsub"
 version = "0.46.1"
 dependencies = [
+ "async-channel",
  "async-std",
  "asynchronous-codec",
  "base64 0.21.5",

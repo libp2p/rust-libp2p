@@ -20,12 +20,17 @@
 
 //! A collection of types using the Gossipsub system.
 use crate::TopicHash;
+use async_channel::{Receiver, Sender};
+use futures::Stream;
 use libp2p_identity::PeerId;
 use libp2p_swarm::ConnectionId;
 use prometheus_client::encoding::EncodeLabelValue;
 use quick_protobuf::MessageWrite;
-use std::fmt;
 use std::fmt::Debug;
+use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::Arc;
+use std::task::Poll;
+use std::{fmt, pin::Pin};
 
 use crate::rpc_proto::proto;
 #[cfg(feature = "serde")]
@@ -510,5 +515,101 @@ impl AsRef<str> for PeerKind {
 impl fmt::Display for PeerKind {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str(self.as_ref())
+    }
+}
+
+/// Create `RpcOut` channel that is priority aware.
+pub(crate) fn rpc_channel(cap: usize) -> (RpcSender, RpcReceiver) {
+    let (priority_sender, priority_receiver) = async_channel::unbounded();
+    let (non_priority_sender, non_priority_receiver) = async_channel::bounded(cap / 2);
+    let len = Arc::new(AtomicUsize::new(0));
+    (
+        RpcSender {
+            cap: cap / 2,
+            len: len.clone(),
+            priority: priority_sender,
+            non_priority: non_priority_sender,
+        },
+        RpcReceiver {
+            len,
+            priority: priority_receiver,
+            non_priority: non_priority_receiver,
+        },
+    )
+}
+
+/// `RpcOut` sender that is priority aware.
+pub(crate) struct RpcSender {
+    cap: usize,
+    len: Arc<AtomicUsize>,
+    priority: Sender<RpcOut>,
+    non_priority: Sender<RpcOut>,
+}
+
+impl RpcSender {
+    /// Send `RpcOut`s to the `ConnectionHandler` according to their priority.
+    pub(crate) fn try_send(&mut self, rpc: RpcOut) -> Result<(), ()> {
+        // Forward messages, IWANT and IHAVE control messages are regarded as low priority.
+        match rpc {
+            rpc @ RpcOut::Forward(_)
+            | rpc @ RpcOut::Control(ControlAction::IHave { .. })
+            | rpc @ RpcOut::Control(ControlAction::IWant { .. }) => {
+                if let Err(err) = self.non_priority.try_send(rpc) {
+                    let rpc = err.into_inner();
+                    tracing::trace!("{rpc:?} message dropped, queue is full");
+                }
+            }
+            // GRAFT and PRUNE control messages, Subscription, and Publishes messages.
+            // Publish messages are limited to the capacity of the queue.
+            rpc @ RpcOut::Control(_)
+            | rpc @ RpcOut::Subscribe(_)
+            | rpc @ RpcOut::Unsubscribe(_) => {
+                self.priority.try_send(rpc).expect("Channel is unbounded");
+            }
+            rpc @ RpcOut::Publish(_) => {
+                if self.len.load(Ordering::Relaxed) >= self.cap {
+                    return Err(());
+                }
+                self.priority.try_send(rpc).expect("Channel is unbounded");
+                self.len.fetch_add(1, Ordering::Relaxed);
+            }
+        }
+        Ok(())
+    }
+}
+
+/// `RpcOut` sender that is priority aware.
+pub struct RpcReceiver {
+    len: Arc<AtomicUsize>,
+    pub(crate) priority: Receiver<RpcOut>,
+    pub(crate) non_priority: Receiver<RpcOut>,
+}
+
+impl RpcReceiver {
+    /// Check if both queues are empty.
+    pub(crate) fn is_empty(&self) -> bool {
+        self.priority.is_empty() && self.non_priority.is_empty()
+    }
+}
+
+impl Stream for RpcReceiver {
+    type Item = RpcOut;
+
+    fn poll_next(
+        mut self: std::pin::Pin<&mut Self>,
+        cx: &mut std::task::Context<'_>,
+    ) -> std::task::Poll<Option<Self::Item>> {
+        // The control queue is polled first.
+        if let Poll::Ready(rpc) = Pin::new(&mut self.priority).poll_next(cx) {
+            if let Some(RpcOut::Publish(_)) = rpc {
+                self.len.fetch_sub(1, Ordering::Relaxed);
+            }
+            return Poll::Ready(rpc);
+        }
+        // The priority queue is then polled.
+        if let Poll::Ready(rpc) = Pin::new(&mut self.priority).poll_next(cx) {
+            return Poll::Ready(rpc);
+        }
+        Pin::new(&mut self.non_priority).poll_next(cx)
     }
 }
