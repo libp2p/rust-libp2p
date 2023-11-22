@@ -312,14 +312,18 @@ where
                 }
                 Poll::Ready(Err(err)) if err.kind() == std::io::ErrorKind::WouldBlock => {
                     // No more bytes available on the socket to read
+                    continue;
                 }
                 Poll::Ready(Err(err)) => {
                     tracing::error!("failed reading datagram: {}", err);
+                    return Poll::Ready(());
                 }
                 Poll::Ready(Ok(Err(err))) => {
                     tracing::debug!("Parsing mdns packet failed: {:?}", err);
+                    continue;
                 }
-                Poll::Ready(Ok(Ok(None))) | Poll::Pending => {}
+                Poll::Ready(Ok(Ok(None))) => continue,
+                Poll::Pending => {}
             }
 
             return Poll::Pending;
