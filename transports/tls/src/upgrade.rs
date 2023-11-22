@@ -81,18 +81,8 @@ where
     type Error = UpgradeError;
     type Future = BoxFuture<'static, Result<Self::Output, Self::Error>>;
 
-    fn upgrade_inbound(self, socket: C, _: Self::Info) -> Self::Future {
-        async move {
-            let stream = futures_rustls::TlsAcceptor::from(Arc::new(self.server))
-                .accept(socket)
-                .await
-                .map_err(UpgradeError::ServerUpgrade)?;
-
-            let peer_id = extract_single_certificate(stream.get_ref().1)?.peer_id();
-
-            Ok((peer_id, stream.into()))
-        }
-        .boxed()
+    fn upgrade_inbound(self, socket: C, info: Self::Info) -> Self::Future {
+        InboundSecurityUpgrade::secure_inbound(self, socket, info)
     }
 }
 
@@ -104,22 +94,8 @@ where
     type Error = UpgradeError;
     type Future = BoxFuture<'static, Result<Self::Output, Self::Error>>;
 
-    fn upgrade_outbound(self, socket: C, _: Self::Info) -> Self::Future {
-        async move {
-            // Spec: In order to keep this flexibility for future versions, clients that only support the version of the handshake defined in this document MUST NOT send any value in the Server Name Indication.
-            // Setting `ServerName` to unspecified will disable the use of the SNI extension.
-            let name = ServerName::IpAddress(IpAddr::V4(Ipv4Addr::UNSPECIFIED));
-
-            let stream = futures_rustls::TlsConnector::from(Arc::new(self.client))
-                .connect(name, socket)
-                .await
-                .map_err(UpgradeError::ClientUpgrade)?;
-
-            let peer_id = extract_single_certificate(stream.get_ref().1)?.peer_id();
-
-            Ok((peer_id, stream.into()))
-        }
-        .boxed()
+    fn upgrade_outbound(self, socket: C, info: Self::Info) -> Self::Future {
+        OutboundSecurityUpgrade::secure_outbound(self, socket, info, None)
     }
 }
 

@@ -58,12 +58,12 @@
 mod io;
 mod protocol;
 
-use futures::future::BoxFuture;
 pub use io::Output;
 
 use crate::handshake::State;
 use crate::io::handshake;
 use crate::protocol::{noise_params_into_builder, AuthenticKeypair, Keypair, PARAMS_XX};
+use futures::future::BoxFuture;
 use futures::prelude::*;
 use libp2p_core::upgrade::{
     InboundConnectionUpgrade, InboundSecurityUpgrade, OutboundConnectionUpgrade,
@@ -183,19 +183,8 @@ where
     type Error = Error;
     type Future = Pin<Box<dyn Future<Output = Result<Self::Output, Self::Error>> + Send>>;
 
-    fn upgrade_inbound(self, socket: T, _: Self::Info) -> Self::Future {
-        async move {
-            let mut state = self.into_responder(socket)?;
-
-            handshake::recv_empty(&mut state).await?;
-            handshake::send_identity(&mut state).await?;
-            handshake::recv_identity(&mut state).await?;
-
-            let (pk, io) = state.finish()?;
-
-            Ok((pk.to_peer_id(), io))
-        }
-        .boxed()
+    fn upgrade_inbound(self, socket: T, info: Self::Info) -> Self::Future {
+        InboundSecurityUpgrade::secure_inbound(self, socket, info)
     }
 }
 
@@ -207,19 +196,8 @@ where
     type Error = Error;
     type Future = Pin<Box<dyn Future<Output = Result<Self::Output, Self::Error>> + Send>>;
 
-    fn upgrade_outbound(self, socket: T, _: Self::Info) -> Self::Future {
-        async move {
-            let mut state = self.into_initiator(socket)?;
-
-            handshake::send_empty(&mut state).await?;
-            handshake::recv_identity(&mut state).await?;
-            handshake::send_identity(&mut state).await?;
-
-            let (pk, io) = state.finish()?;
-
-            Ok((pk.to_peer_id(), io))
-        }
-        .boxed()
+    fn upgrade_outbound(self, socket: T, info: Self::Info) -> Self::Future {
+        OutboundSecurityUpgrade::secure_outbound(self, socket, info, None)
     }
 }
 
