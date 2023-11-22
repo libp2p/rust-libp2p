@@ -29,7 +29,8 @@ jobs:
           FLAVOUR: ${{ matrix.flavour }}
 
       - name: Run ${{ matrix.flavour }} tests
-        uses: libp2p/test-plans/.github/actions/run-transport-interop-test@master
+        #uses: libp2p/test-plans/.github/actions/run-transport-interop-test@master
+        uses: andreasbros/test-plans/.github/actions/run-transport-interop-test@feature/rust-libp2p-v0.53
         with:
           test-filter: ${{ matrix.flavour }}-rust-libp2p-head
           extra-versions: ${{ github.workspace }}/interop-tests/${{ matrix.flavour }}-ping-version.json
@@ -46,7 +47,8 @@ jobs:
       - name: Build image
         run: docker buildx build --load -t rust-libp2p-head . -f hole-punching-tests/Dockerfile
       - name: Run tests
-        uses: libp2p/test-plans/.github/actions/run-interop-hole-punch-test@master
+        #uses: libp2p/test-plans/.github/actions/run-interop-hole-punch-test@master
+        uses: andreasbros/test-plans/.github/actions/run-interop-hole-punch-test@feature/rust-libp2p-v0.53
         with:
           test-filter: rust-libp2p-head
           extra-versions: ${{ github.workspace }}/hole-punching-tests/version.json
