@@ -6761,10 +6761,10 @@ dependencies = [
 [[package]]
 name = "yamux"
 version = "0.12.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0329ef377816896f014435162bb3711ea7a07729c23d0960e6f8048b21b8fe91"
+source = "git+https://github.com/mxinden/rust-yamux?branch=dynamic-stream-window#95ab1d340ba4cc5c86a13052f5335d78f0d4300f"
 dependencies = [
  "futures",
+ "futures-timer",
  "log",
  "nohash-hasher",
  "parking_lot",
