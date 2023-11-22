@@ -20,7 +20,7 @@
 
 use crate::protocol::{GossipsubCodec, ProtocolConfig};
 use crate::rpc_proto::proto;
-use crate::types::{PeerKind, RawMessage, Rpc};
+use crate::types::{PeerKind, RawMessage, Rpc, RpcOut};
 use crate::ValidationError;
 use asynchronous_codec::Framed;
 use futures::future::Either;
@@ -58,10 +58,11 @@ pub enum HandlerEvent {
 }
 
 /// A message sent from the behaviour to the handler.
+#[allow(clippy::large_enum_variant)]
 #[derive(Debug)]
 pub enum HandlerIn {
     /// A gossipsub message to send.
-    Message(proto::RPC),
+    Message(RpcOut),
     /// The peer has joined the mesh.
     JoinedMesh,
     /// The peer has left the mesh.
@@ -408,7 +409,7 @@ impl ConnectionHandler for Handler {
     fn on_behaviour_event(&mut self, message: HandlerIn) {
         match self {
             Handler::Enabled(handler) => match message {
-                HandlerIn::Message(m) => handler.send_queue.push(m),
+                HandlerIn::Message(m) => handler.send_queue.push(m.into_protobuf()),
                 HandlerIn::JoinedMesh => {
                     handler.in_mesh = true;
                 }
