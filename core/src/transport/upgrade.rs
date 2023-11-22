@@ -115,7 +115,7 @@ where
         ))
     }
 
-    /// Upgrades the transport to perform authentication of the remote
+    /// Upgrades the transport to perform authentication of the remote.
     ///
     /// The supplied upgrade receives the I/O resource `C` and must
     /// produce a pair `(PeerId, D)`, where `D` is a new I/O resource.
@@ -131,8 +131,8 @@ where
     /// ## Alternative state
     ///
     /// This function is an alternative code path to [`Builder::authenticate`]
-    /// given the supplied upgrade implements `InboundConnectionUpgrade`/`OutboundSecurityUpgrade`
-    /// instead of `InboundConnectionUpgrade`/`OutboundConnectionUpgrade`.
+    /// given the supplied upgrade implements [`InboundSecurityUpgrade`]/[`OutboundSecurityUpgrade`]
+    /// instead of [`InboundConnectionUpgrade`]/[`OutboundConnectionUpgrade`].
     #[doc(hidden)]
     pub fn authenticate2<C, D, U, E>(
         self,

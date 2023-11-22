@@ -1,5 +1,5 @@
-//! After a successful protocol negotiation as part of the upgrade process, the `InboundConnectionUpgrade::secure_inbound`
-//! or `OutboundSecurityUpgrade::secure_outbound` method is called and a [`Future`] that performs a
+//! After a successful protocol negotiation as part of the upgrade process, the [`InboundSecurityUpgrade::secure_inbound`]
+//! or [`OutboundSecurityUpgrade::secure_outbound`] method is called and a [`Future`] that performs a
 //! handshake is returned.
 
 use std::iter::IntoIterator;
