@@ -6761,7 +6761,7 @@ dependencies = [
 [[package]]
 name = "yamux"
 version = "0.12.0"
-source = "git+https://github.com/mxinden/rust-yamux?branch=dynamic-stream-window#97068127f7460db20ea844d746236f4c4a2909fa"
+source = "git+https://github.com/mxinden/rust-yamux?branch=dynamic-stream-window#e6200e79be53b7426b6fffdbedd6b349fca95c96"
 dependencies = [
  "futures",
  "log",
