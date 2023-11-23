@@ -3213,6 +3213,7 @@ impl QueryInfo {
                         multiaddrs: external_addresses.clone(),
                         connection_ty: crate::protocol::ConnectionType::Connected,
                     },
+                    query_id,
                 },
             },
             QueryInfo::GetRecord { key, .. } => HandlerIn::GetRecord {

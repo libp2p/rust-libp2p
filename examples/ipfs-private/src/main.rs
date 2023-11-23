@@ -31,7 +31,7 @@ use libp2p::{
     swarm::{NetworkBehaviour, SwarmEvent},
     tcp, yamux, Multiaddr, Transport,
 };
-use std::{env, error::Error, fs, path::Path, str::FromStr};
+use std::{env, error::Error, fs, path::Path, str::FromStr, time::Duration};
 use tokio::{io, io::AsyncBufReadExt, select};
 use tracing_subscriber::EnvFilter;
 
@@ -151,6 +151,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
                 ping: ping::Behaviour::new(ping::Config::new()),
             })
         })?
+        .with_swarm_config(|c| c.with_idle_connection_timeout(Duration::from_secs(60)))
         .build();
 
     println!("Subscribing to {gossipsub_topic:?}");

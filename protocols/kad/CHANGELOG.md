@@ -1,4 +1,4 @@
-## 0.45.2 - unreleased
+## 0.45.2
 
 - Automatically `bootstrap` every 5 minutes.
   This can be configured using the `bootstrap_interval` config.
