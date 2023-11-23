@@ -22,7 +22,7 @@ yasna = "0.5.2"
 
 # Exposed dependencies. Breaking changes to these are breaking changes to us.
 [dependencies.rustls]
-version = "0.21.8"
+version = "0.21.9"
 default-features = false
 features = ["dangerous_configuration"] # Must enable this to allow for custom verification code.
 
