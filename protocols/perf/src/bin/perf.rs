@@ -76,6 +76,7 @@ async fn main() -> Result<()> {
             .with_env_filter(EnvFilter::try_from_default_env().unwrap_or(
                 "info,yamux=debug".into(),
             ))
+            .with_writer(std::io::stderr)
             .try_init();
 
     let opts = Opts::parse();
