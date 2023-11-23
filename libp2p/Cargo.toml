@@ -58,6 +58,7 @@ dcutr = ["dep:libp2p-dcutr", "libp2p-metrics?/dcutr"]
 dns = ["dep:libp2p-dns"]
 ecdsa = ["libp2p-identity/ecdsa"]
 ed25519 = ["libp2p-identity/ed25519"]
+sr25519 = ["libp2p-identity/sr25519"]
 floodsub = ["dep:libp2p-floodsub"]
 gossipsub = ["dep:libp2p-gossipsub", "libp2p-metrics?/gossipsub"]
 identify = ["dep:libp2p-identify", "libp2p-metrics?/identify"]
@@ -77,7 +78,7 @@ rendezvous = ["dep:libp2p-rendezvous"]
 request-response = ["dep:libp2p-request-response"]
 rsa = ["libp2p-identity/rsa"]
 secp256k1 = ["libp2p-identity/secp256k1"]
-serde = ["libp2p-core/serde", "libp2p-kad?/serde", "libp2p-gossipsub?/serde"]
+serde = ["libp2p-core/serde", "libp2p-kad?/serde", "libp2p-gossipsub?/serde", "libp2p-identity/serde"]
 tcp = ["dep:libp2p-tcp"]
 tls = ["dep:libp2p-tls"]
 tokio = [ "libp2p-swarm/tokio", "libp2p-mdns?/tokio", "libp2p-tcp?/tokio", "libp2p-dns?/tokio", "libp2p-quic?/tokio", "libp2p-upnp?/tokio"]
@@ -107,7 +108,8 @@ libp2p-dcutr = { workspace = true, optional = true }
 libp2p-floodsub = { workspace = true, optional = true }
 libp2p-gossipsub = { workspace = true, optional = true }
 libp2p-identify = { workspace = true, optional = true }
-libp2p-identity = { workspace = true, features = ["rand"] }
+#libp2p-identity = { workspace = true, features = ["rand"] }
+libp2p-identity = { path = "../identity", features = ["rand"] }
 libp2p-kad = { workspace = true, optional = true }
 libp2p-metrics = { workspace = true, optional = true }
 libp2p-noise = { workspace = true, optional = true }
@@ -121,7 +123,34 @@ libp2p-swarm = { workspace = true }
 libp2p-websocket-websys = { workspace = true, optional = true }
 libp2p-webtransport-websys = { workspace = true, optional = true }
 libp2p-yamux = { workspace = true, optional = true }
-multiaddr = { workspace = true }
+#multiaddr = { workspace = true }
+multiaddr = { git = "https://github.com/tari-project/rust-multiaddr.git", branch = "updated-libp2p-identity"}
+
+#libp2p-allow-block-list = { path = "../" }
+#libp2p-autonat = { path = "../autonat", optional = true }
+#libp2p-connection-limits = { path = "../connection-limits" }
+#libp2p-core = { path = "../core" }
+#libp2p-dcutr = { path = "../dcutr", optional = true }
+#libp2p-floodsub = { path = "../floodsub", optional = true }
+#libp2p-gossipsub = { path = "../gossipsub", optional = true }
+#libp2p-identify = { path = "../identify", optional = true }
+#libp2p-kad = { path = "../kad", optional = true }
+#libp2p-metrics = { path = "../metrics", optional = true }
+#libp2p-noise = { path = "../noise", optional = true }
+#libp2p-ping = { path = "../ping", optional = true }
+#libp2p-plaintext = { path = "../plaintext", optional = true }
+#libp2p-pnet = { path = "../pnet", optional = true }
+#libp2p-relay = { path = "../relay", optional = true }
+#libp2p-rendezvous = { path = "../rendezvous", optional = true }
+#libp2p-request-response = { path = "../request-response", optional = true }
+#libp2p-swarm = { path = "../swarm" }
+#libp2p-websocket-websys = { path = "../websocket-websys", optional = true }
+#libp2p-webtransport-websys = { path = "../webtransport-websys", optional = true }
+#libp2p-yamux = { path = "../yamux", optional = true }
+#multiaddr = { workspace = true }
+
+
+
 pin-project = "1.0.0"
 thiserror = "1.0"
 

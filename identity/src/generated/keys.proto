@@ -7,6 +7,7 @@ enum KeyType {
   Ed25519 = 1;
   Secp256k1 = 2;
   ECDSA = 3;
+  Sr25519 = 4;
 }
 
 message PublicKey {

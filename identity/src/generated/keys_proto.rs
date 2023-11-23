@@ -11,6 +11,7 @@
 
 use quick_protobuf::{MessageInfo, MessageRead, MessageWrite, BytesReader, Writer, WriterBackend, Result};
 use quick_protobuf::sizeofs::*;
+use zeroize::{Zeroize, ZeroizeOnDrop};
 use super::*;
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
@@ -19,6 +20,7 @@ pub enum KeyType {
     Ed25519 = 1,
     Secp256k1 = 2,
     ECDSA = 3,
+    Sr25519 = 4,
 }
 
 impl Default for KeyType {
@@ -34,6 +36,7 @@ impl From<i32> for KeyType {
             1 => KeyType::Ed25519,
             2 => KeyType::Secp256k1,
             3 => KeyType::ECDSA,
+            4 => KeyType::Sr25519,
             _ => Self::default(),
         }
     }
@@ -46,6 +49,7 @@ impl<'a> From<&'a str> for KeyType {
             "Ed25519" => KeyType::Ed25519,
             "Secp256k1" => KeyType::Secp256k1,
             "ECDSA" => KeyType::ECDSA,
+            "Sr25519" => KeyType::Sr25519,
             _ => Self::default(),
         }
     }

@@ -39,6 +39,7 @@
     feature = "ecdsa",
     feature = "secp256k1",
     feature = "ed25519",
+    feature = "sr25519",
     feature = "rsa"
 ))]
 mod proto {
@@ -52,6 +53,9 @@ pub mod ecdsa;
 
 #[cfg(feature = "ed25519")]
 pub mod ed25519;
+
+#[cfg(feature = "sr25519")]
+pub mod sr25519;
 
 #[cfg(all(feature = "rsa", not(target_arch = "wasm32")))]
 pub mod rsa;
@@ -68,6 +72,7 @@ mod peer_id;
     feature = "ecdsa",
     feature = "secp256k1",
     feature = "ed25519",
+    feature = "sr25519",
     feature = "rsa"
 ))]
 impl zeroize::Zeroize for proto::PrivateKey {
@@ -80,11 +85,17 @@ impl zeroize::Zeroize for proto::PrivateKey {
     feature = "ecdsa",
     feature = "secp256k1",
     feature = "ed25519",
+    feature = "sr25519",
     feature = "rsa"
 ))]
 impl From<&PublicKey> for proto::PublicKey {
     fn from(key: &PublicKey) -> Self {
         match &key.publickey {
+            #[cfg(feature = "sr25519")]
+            keypair::PublicKeyInner::Sr25519(key) => proto::PublicKey {
+                Type: proto::KeyType::Sr25519,
+                Data: key.to_bytes().to_vec(),
+            },
             #[cfg(feature = "ed25519")]
             keypair::PublicKeyInner::Ed25519(key) => proto::PublicKey {
                 Type: proto::KeyType::Ed25519,
@@ -118,6 +129,7 @@ pub use peer_id::{ParseError, PeerId};
 #[derive(Debug, PartialEq, Eq)]
 #[allow(clippy::upper_case_acronyms)]
 pub enum KeyType {
+    Sr25519,
     Ed25519,
     RSA,
     Secp256k1,
@@ -127,6 +139,7 @@ pub enum KeyType {
 impl std::fmt::Display for KeyType {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
+            KeyType::Sr25519 => f.write_str("Sr25519"),
             KeyType::Ed25519 => f.write_str("Ed25519"),
             KeyType::RSA => f.write_str("RSA"),
             KeyType::Secp256k1 => f.write_str("Secp256k1"),
