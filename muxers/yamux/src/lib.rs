@@ -274,7 +274,7 @@ impl Config {
     }
 
     /// Sets the size (in bytes) of the receive window per substream.
-    pub fn set_receive_window_size(&mut self, num_bytes: usize) -> &mut Self {
+    pub fn set_receive_window_size(&mut self, num_bytes: Option<usize>) -> &mut Self {
         self.inner.set_receive_window(num_bytes);
         self
     }
