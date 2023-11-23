@@ -599,17 +599,14 @@ impl Stream for RpcReceiver {
         mut self: std::pin::Pin<&mut Self>,
         cx: &mut std::task::Context<'_>,
     ) -> std::task::Poll<Option<Self::Item>> {
-        // The control queue is polled first.
+        // The priority queue is first polled.
         if let Poll::Ready(rpc) = Pin::new(&mut self.priority).poll_next(cx) {
             if let Some(RpcOut::Publish(_)) = rpc {
                 self.len.fetch_sub(1, Ordering::Relaxed);
             }
             return Poll::Ready(rpc);
         }
-        // The priority queue is then polled.
-        if let Poll::Ready(rpc) = Pin::new(&mut self.priority).poll_next(cx) {
-            return Poll::Ready(rpc);
-        }
+        // Then we poll the non priority.
         Pin::new(&mut self.non_priority).poll_next(cx)
     }
 }
