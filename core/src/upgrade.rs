@@ -66,18 +66,20 @@ mod ready;
 mod secure;
 mod select;
 
-pub use self::{
-    denied::DeniedUpgrade, pending::PendingUpgrade, ready::ReadyUpgrade, select::SelectUpgrade,
-};
-pub use crate::Negotiated;
 pub(crate) use apply::{
     apply, apply_inbound, apply_outbound, InboundUpgradeApply, OutboundUpgradeApply,
 };
 pub(crate) use error::UpgradeError;
+pub(crate) use secure::{secure, EitherSecurityFuture};
+
 use futures::future::Future;
 use libp2p_identity::PeerId;
+
+pub use self::{
+    denied::DeniedUpgrade, pending::PendingUpgrade, ready::ReadyUpgrade, select::SelectUpgrade,
+};
+pub use crate::Negotiated;
 pub use multistream_select::{NegotiatedComplete, NegotiationError, ProtocolError, Version};
-pub(crate) use secure::{secure, EitherSecurityFuture};
 
 /// Common trait for upgrades that can be applied on inbound substreams, outbound substreams,
 /// or both.
