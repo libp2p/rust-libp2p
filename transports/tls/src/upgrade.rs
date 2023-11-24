@@ -65,6 +65,17 @@ impl Config {
             client: crate::make_client_config(identity, None)?,
         })
     }
+
+    pub(crate) fn with_remote_peer_id(
+        remote_peer_id: Option<PeerId>,
+    ) -> Result<Self, certificate::GenError> {
+        let identity = libp2p_identity::Keypair::generate_ed25519();
+
+        Ok(Self {
+            server: crate::make_server_config(&identity)?,
+            client: crate::make_client_config(&identity, remote_peer_id)?,
+        })
+    }
 }
 
 impl UpgradeInfo for Config {
@@ -117,9 +128,9 @@ where
                 .await
                 .map_err(UpgradeError::ServerUpgrade)?;
 
-            let expected = extract_single_certificate(stream.get_ref().1)?.peer_id();
+            let peer_id = extract_single_certificate(stream.get_ref().1)?.peer_id();
 
-            Ok((expected, stream.into()))
+            Ok((peer_id, stream.into()))
         }
         .boxed()
     }
@@ -134,12 +145,15 @@ where
     type Future = BoxFuture<'static, Result<(PeerId, Self::Output), Self::Error>>;
 
     fn secure_outbound(
-        self,
+        mut self,
         socket: C,
         _: Self::Info,
         remote_peer_id: Option<PeerId>,
     ) -> Self::Future {
         async move {
+            // Create new ad-hoc client and server configuration by passing the remote PeerId
+            self = Self::with_remote_peer_id(remote_peer_id)?;
+
             // Spec: In order to keep this flexibility for future versions, clients that only support
             // the version of the handshake defined in this document MUST NOT send any value in the
             // Server Name Indication.
@@ -153,15 +167,7 @@ where
 
             let peer_id = extract_single_certificate(stream.get_ref().1)?.peer_id();
 
-            match remote_peer_id {
-                Some(remote_peer_id) if remote_peer_id != peer_id => {
-                    Err(UpgradeError::PeerIdMismatch {
-                        peer_id,
-                        remote_peer_id,
-                    })
-                }
-                _ => Ok((peer_id, stream.into())),
-            }
+            Ok((peer_id, stream.into()))
         }
         .boxed()
     }
