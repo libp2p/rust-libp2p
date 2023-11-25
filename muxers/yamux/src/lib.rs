@@ -214,46 +214,6 @@ pub struct Config {
     mode: Option<yamux::Mode>,
 }
 
-/// The window update mode determines when window updates are
-/// sent to the remote, giving it new credit to send more data.
-pub struct WindowUpdateMode(yamux::WindowUpdateMode);
-
-impl WindowUpdateMode {
-    /// The window update mode whereby the remote is given
-    /// new credit via a window update whenever the current
-    /// receive window is exhausted when data is received,
-    /// i.e. this mode cannot exert back-pressure from application
-    /// code that is slow to read from a substream.
-    ///
-    /// > **Note**: The receive buffer may overflow with this
-    /// > strategy if the receiver is too slow in reading the
-    /// > data from the buffer. The maximum receive buffer
-    /// > size must be tuned appropriately for the desired
-    /// > throughput and level of tolerance for (temporarily)
-    /// > slow receivers.
-    pub fn on_receive() -> Self {
-        WindowUpdateMode(yamux::WindowUpdateMode::OnReceive)
-    }
-
-    /// The window update mode whereby the remote is given new
-    /// credit only when the current receive window is exhausted
-    /// when data is read from the substream's receive buffer,
-    /// i.e. application code that is slow to read from a substream
-    /// exerts back-pressure on the remote.
-    ///
-    /// > **Note**: If the receive window of a substream on
-    /// > both peers is exhausted and both peers are blocked on
-    /// > sending data before reading from the stream, a deadlock
-    /// > occurs. To avoid this situation, reading from a substream
-    /// > should never be blocked on writing to the same substream.
-    ///
-    /// > **Note**: With this strategy, there is usually no point in the
-    /// > receive buffer being larger than the window size.
-    pub fn on_read() -> Self {
-        WindowUpdateMode(yamux::WindowUpdateMode::OnRead)
-    }
-}
-
 impl Config {
     /// Creates a new `YamuxConfig` in client mode, regardless of whether
     /// it will be used for an inbound or outbound upgrade.
@@ -273,28 +233,22 @@ impl Config {
         }
     }
 
-    /// Sets the size (in bytes) of the receive window per substream.
-    pub fn set_receive_window_size(&mut self, num_bytes: Option<usize>) -> &mut Self {
-        self.inner.set_receive_window(num_bytes);
+    /// Sets the size (in bytes) of the receive window per stream.
+    pub fn set_max_stream_receive_window(&mut self, num_bytes: Option<u32>) -> &mut Self {
+        self.inner.set_max_stream_receive_window(num_bytes);
         self
     }
 
-    /// Sets the maximum size (in bytes) of the receive buffer per substream.
-    pub fn set_max_buffer_size(&mut self, num_bytes: usize) -> &mut Self {
-        self.inner.set_max_buffer_size(num_bytes);
+    /// Sets the size (in bytes) of the receive window per connection.
+    pub fn set_max_connection_receive_window(&mut self, num_bytes: Option<usize>) -> &mut Self {
+        self.inner
+            .set_max_connection_receive_window(num_bytes.expect("todo"));
         self
     }
 
     /// Sets the maximum number of concurrent substreams.
     pub fn set_max_num_streams(&mut self, num_streams: usize) -> &mut Self {
         self.inner.set_max_num_streams(num_streams);
-        self
-    }
-
-    /// Sets the window update mode that determines when the remote
-    /// is given new credit for sending more data.
-    pub fn set_window_update_mode(&mut self, mode: WindowUpdateMode) -> &mut Self {
-        self.inner.set_window_update_mode(mode.0);
         self
     }
 }
