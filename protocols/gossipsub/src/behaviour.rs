@@ -45,6 +45,7 @@ use libp2p_swarm::{
     THandlerOutEvent, ToSwarm,
 };
 
+use crate::config::{Config, ValidationMode};
 use crate::gossip_promises::GossipPromises;
 use crate::handler::{Handler, HandlerEvent, HandlerIn};
 use crate::mcache::MessageCache;
@@ -61,10 +62,6 @@ use crate::types::{
 };
 use crate::types::{PeerConnections, PeerKind, RpcOut};
 use crate::{backoff::BackoffStorage, types::RpcSender};
-use crate::{
-    config::{Config, ValidationMode},
-    types::rpc_channel,
-};
 use crate::{rpc_proto::proto, TopicScoreParams};
 use crate::{PublishError, SubscriptionError, ValidationError};
 use instant::SystemTime;
@@ -3031,9 +3028,14 @@ where
         _: &Multiaddr,
         _: &Multiaddr,
     ) -> Result<THandler<Self>, ConnectionDenied> {
-        let (sender, receiver) = rpc_channel(self.config.connection_handler_queue_len());
-        self.handler_send_queues.insert(peer_id, sender);
-        Ok(Handler::new(self.config.protocol_config(), receiver))
+        let sender = self
+            .handler_send_queues
+            .entry(peer_id)
+            .or_insert_with(|| RpcSender::new(peer_id, self.config.connection_handler_queue_len()));
+        Ok(Handler::new(
+            self.config.protocol_config(),
+            sender.new_receiver(),
+        ))
     }
 
     fn handle_established_outbound_connection(
@@ -3043,9 +3045,14 @@ where
         _: &Multiaddr,
         _: Endpoint,
     ) -> Result<THandler<Self>, ConnectionDenied> {
-        let (sender, receiver) = rpc_channel(self.config.connection_handler_queue_len());
-        self.handler_send_queues.insert(peer_id, sender);
-        Ok(Handler::new(self.config.protocol_config(), receiver))
+        let sender = self
+            .handler_send_queues
+            .entry(peer_id)
+            .or_insert_with(|| RpcSender::new(peer_id, self.config.connection_handler_queue_len()));
+        Ok(Handler::new(
+            self.config.protocol_config(),
+            sender.new_receiver(),
+        ))
     }
 
     fn on_connection_handler_event(

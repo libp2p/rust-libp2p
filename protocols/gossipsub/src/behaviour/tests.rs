@@ -23,7 +23,7 @@
 use super::*;
 use crate::subscription_filter::WhitelistSubscriptionFilter;
 use crate::transform::{DataTransform, IdentityTransform};
-use crate::types::RpcReceiver;
+use crate::types::{RpcOut, RpcReceiver};
 use crate::ValidationError;
 use crate::{
     config::Config, config::ConfigBuilder, types::Rpc, IdentTopic as Topic, TopicScoreParams,
@@ -230,7 +230,8 @@ where
         }
     };
 
-    let (sender, receiver) = rpc_channel(100);
+    let sender = RpcSender::new(peer, 100);
+    let receiver = sender.new_receiver();
     gs.handler_send_queues.insert(peer, sender);
 
     gs.on_swarm_event(FromSwarm::ConnectionEstablished(ConnectionEstablished {

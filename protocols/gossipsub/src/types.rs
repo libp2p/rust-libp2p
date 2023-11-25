@@ -518,35 +518,43 @@ impl fmt::Display for PeerKind {
     }
 }
 
-/// Create `RpcOut` channel that is priority aware.
-pub(crate) fn rpc_channel(cap: usize) -> (RpcSender, RpcReceiver) {
-    let (priority_sender, priority_receiver) = async_channel::unbounded();
-    let (non_priority_sender, non_priority_receiver) = async_channel::bounded(cap / 2);
-    let len = Arc::new(AtomicUsize::new(0));
-    (
-        RpcSender {
-            cap: cap / 2,
-            len: len.clone(),
-            priority: priority_sender,
-            non_priority: non_priority_sender,
-        },
-        RpcReceiver {
-            len,
-            priority: priority_receiver,
-            non_priority: non_priority_receiver,
-        },
-    )
-}
-
 /// `RpcOut` sender that is priority aware.
+#[derive(Debug, Clone)]
 pub(crate) struct RpcSender {
+    peer_id: PeerId,
     cap: usize,
     len: Arc<AtomicUsize>,
     priority: Sender<RpcOut>,
     non_priority: Sender<RpcOut>,
+    receiver: RpcReceiver,
 }
 
 impl RpcSender {
+    /// Create a RpcSender.
+    pub(crate) fn new(peer_id: PeerId, cap: usize) -> RpcSender {
+        let (priority_sender, priority_receiver) = async_channel::unbounded();
+        let (non_priority_sender, non_priority_receiver) = async_channel::bounded(cap / 2);
+        let len = Arc::new(AtomicUsize::new(0));
+        let receiver = RpcReceiver {
+            len: len.clone(),
+            priority: priority_receiver,
+            non_priority: non_priority_receiver,
+        };
+        RpcSender {
+            peer_id,
+            cap: cap / 2,
+            len,
+            priority: priority_sender,
+            non_priority: non_priority_sender,
+            receiver: receiver.clone(),
+        }
+    }
+
+    /// Create a new Receiver to the sender.
+    pub(crate) fn new_receiver(&self) -> RpcReceiver {
+        self.receiver.clone()
+    }
+
     /// Send `RpcOut`s to the `ConnectionHandler` according to their priority.
     pub(crate) fn try_send(&mut self, rpc: RpcOut) -> Result<(), ()> {
         // Forward messages, IWANT and IHAVE control messages are regarded as low priority.
@@ -579,6 +587,7 @@ impl RpcSender {
 }
 
 /// `RpcOut` sender that is priority aware.
+#[derive(Debug, Clone)]
 pub struct RpcReceiver {
     len: Arc<AtomicUsize>,
     pub(crate) priority: Receiver<RpcOut>,
