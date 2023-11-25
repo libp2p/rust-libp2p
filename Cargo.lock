@@ -4369,11 +4369,14 @@ dependencies = [
 
 [[package]]
 name = "quick-protobuf-codec"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
  "asynchronous-codec",
  "bytes",
+ "criterion",
+ "futures",
  "quick-protobuf",
+ "quickcheck-ext",
  "thiserror",
  "unsigned-varint 0.8.0",
 ]
