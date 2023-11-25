@@ -19,6 +19,7 @@
 // DEALINGS IN THE SOFTWARE.
 
 //! A collection of types using the Gossipsub system.
+use crate::metrics::Metrics;
 use crate::TopicHash;
 use async_channel::{Receiver, Sender};
 use futures::Stream;
@@ -555,34 +556,68 @@ impl RpcSender {
         self.receiver.clone()
     }
 
-    /// Send `RpcOut`s to the `ConnectionHandler` according to their priority.
-    pub(crate) fn try_send(&mut self, rpc: RpcOut) -> Result<(), ()> {
-        // Forward messages, IWANT and IHAVE control messages are regarded as low priority.
-        match rpc {
-            rpc @ RpcOut::Forward(_)
-            | rpc @ RpcOut::Control(ControlAction::IHave { .. })
-            | rpc @ RpcOut::Control(ControlAction::IWant { .. }) => {
-                if let Err(err) = self.non_priority.try_send(rpc) {
-                    let rpc = err.into_inner();
-                    tracing::trace!("{rpc:?} message dropped, queue is full");
-                }
-            }
-            // GRAFT and PRUNE control messages, Subscription, and Publishes messages.
-            // Publish messages are limited to the capacity of the queue.
-            rpc @ RpcOut::Control(_)
-            | rpc @ RpcOut::Subscribe(_)
-            | rpc @ RpcOut::Unsubscribe(_) => {
-                self.priority.try_send(rpc).expect("Channel is unbounded");
-            }
-            rpc @ RpcOut::Publish(_) => {
-                if self.len.load(Ordering::Relaxed) >= self.cap {
-                    return Err(());
-                }
-                self.priority.try_send(rpc).expect("Channel is unbounded");
-                self.len.fetch_add(1, Ordering::Relaxed);
-            }
+    /// Send a `RpcOut::Control` message to the `RpcReceiver`
+    /// this is high priority.
+    pub(crate) fn control(&mut self, control: ControlAction) {
+        self.priority
+            .try_send(RpcOut::Control(control))
+            .expect("Channel is unbounded and should always be open");
+    }
+
+    /// Send a `RpcOut::Subscribe` message to the `RpcReceiver`
+    /// this is high priority.
+    pub(crate) fn subscribe(&mut self, topic: TopicHash) {
+        self.priority
+            .try_send(RpcOut::Subscribe(topic))
+            .expect("Channel is unbounded and should always be open");
+    }
+
+    /// Send a `RpcOut::Unsubscribe` message to the `RpcReceiver`
+    /// this is high priority.
+    pub(crate) fn unsubscribe(&mut self, topic: TopicHash) {
+        self.priority
+            .try_send(RpcOut::Unsubscribe(topic))
+            .expect("Channel is unbounded and should always be open");
+    }
+
+    /// Send a `RpcOut::Publish` message to the `RpcReceiver`
+    /// this is high priority. If message sending fails, an `Err` is returned.
+    pub(crate) fn publish(
+        &mut self,
+        message: RawMessage,
+        metrics: Option<&mut Metrics>,
+    ) -> Result<(), ()> {
+        if self.len.load(Ordering::Relaxed) >= self.cap {
+            return Err(());
         }
+        self.priority
+            .try_send(RpcOut::Publish(message.clone()))
+            .expect("Channel is unbounded and Should always be open");
+        self.len.fetch_add(1, Ordering::Relaxed);
+
+        if let Some(m) = metrics {
+            m.msg_sent(&message.topic, message.raw_protobuf_len());
+        }
+
         Ok(())
+    }
+
+    /// Send a `RpcOut::Forward` message to the `RpcReceiver`
+    /// this is high priority. If the queue is full the message is discarded.
+    pub(crate) fn forward(&mut self, message: RawMessage, metrics: Option<&mut Metrics>) {
+        if let Err(err) = self.non_priority.try_send(RpcOut::Forward(message.clone())) {
+            let rpc = err.into_inner();
+            tracing::trace!(
+                "{:?} message to peer {} dropped, queue is full",
+                rpc,
+                self.peer_id
+            );
+            return;
+        }
+
+        if let Some(m) = metrics {
+            m.msg_sent(&message.topic, message.raw_protobuf_len());
+        }
     }
 }
 
