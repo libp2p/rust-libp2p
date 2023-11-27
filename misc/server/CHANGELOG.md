@@ -1,3 +1,10 @@
+## 0.12.5
+
+### Added
+
+- Add `/wss` support.
+  See [PR XXX](https://github.com/libp2p/rust-libp2p/pull/XXX).
+
 ## 0.12.4
 
 ### Added
