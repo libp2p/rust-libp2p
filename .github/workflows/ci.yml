@@ -220,7 +220,7 @@ jobs:
         rust-version: [
           # 1.72.0, # current stable
           # beta,
-          nightly-2023-09-10
+          nightly-2023-11-26
         ]
     steps:
       - uses: actions/checkout@v4
