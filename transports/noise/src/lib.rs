@@ -238,7 +238,7 @@ where
         self,
         socket: T,
         _: Self::Info,
-        remote_peer_id: Option<PeerId>,
+        expected_peer_id: Option<PeerId>,
     ) -> Self::Future {
         async move {
             let mut state = self.into_initiator(socket)?;
@@ -250,11 +250,13 @@ where
             let (pk, io) = state.finish()?;
 
             let peer_id = pk.to_peer_id();
-            match remote_peer_id {
-                Some(remote_peer_id) if remote_peer_id != peer_id => Err(Error::PeerIdMismatch {
-                    peer_id,
-                    remote_peer_id,
-                }),
+            match expected_peer_id {
+                Some(expected_peer_id) if expected_peer_id != peer_id => {
+                    Err(Error::PeerIdMismatch {
+                        peer_id,
+                        expected_peer_id,
+                    })
+                }
                 _ => Ok((peer_id, io)),
             }
         }
@@ -286,10 +288,10 @@ pub enum Error {
     SigningError(#[from] libp2p_identity::SigningError),
     #[error("Expected WebTransport certhashes ({}) are not a subset of received ones ({})", certhashes_to_string(.0), certhashes_to_string(.1))]
     UnknownWebTransportCerthashes(HashSet<Multihash<64>>, HashSet<Multihash<64>>),
-    #[error("Invalid peer ID (actual {peer_id:?}, remote {remote_peer_id:?})")]
+    #[error("Invalid peer ID (actual {peer_id:?}, expected {expected_peer_id:?})")]
     PeerIdMismatch {
         peer_id: PeerId,
-        remote_peer_id: PeerId,
+        expected_peer_id: PeerId,
     },
 }
 

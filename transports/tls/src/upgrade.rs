@@ -45,10 +45,10 @@ pub enum UpgradeError {
     ClientUpgrade(std::io::Error),
     #[error("Failed to parse certificate")]
     BadCertificate(#[from] certificate::ParseError),
-    #[error("Invalid peer ID (actual {peer_id:?}, remote {remote_peer_id:?})")]
+    #[error("Invalid peer ID (actual {peer_id:?}, expected {expected_peer_id:?})")]
     PeerIdMismatch {
         peer_id: PeerId,
-        remote_peer_id: PeerId,
+        expected_peer_id: PeerId,
     },
 }
 
@@ -66,14 +66,14 @@ impl Config {
         })
     }
 
-    pub(crate) fn with_remote_peer_id(
-        remote_peer_id: Option<PeerId>,
+    pub(crate) fn with_expected_peer_id(
+        expected_peer_id: Option<PeerId>,
     ) -> Result<Self, certificate::GenError> {
         let identity = libp2p_identity::Keypair::generate_ed25519();
 
         Ok(Self {
             server: crate::make_server_config(&identity)?,
-            client: crate::make_client_config(&identity, remote_peer_id)?,
+            client: crate::make_client_config(&identity, expected_peer_id)?,
         })
     }
 }
@@ -148,11 +148,11 @@ where
         mut self,
         socket: C,
         _: Self::Info,
-        remote_peer_id: Option<PeerId>,
+        expected_peer_id: Option<PeerId>,
     ) -> Self::Future {
         async move {
-            // Create new ad-hoc client and server configuration by passing the remote PeerId
-            self = Self::with_remote_peer_id(remote_peer_id)?;
+            // Create new ad-hoc client and server configuration by passing the expected PeerId
+            self = Self::with_expected_peer_id(expected_peer_id)?;
 
             // Spec: In order to keep this flexibility for future versions, clients that only support
             // the version of the handshake defined in this document MUST NOT send any value in the

@@ -186,12 +186,12 @@ pub trait OutboundSecurityUpgrade<T>: UpgradeInfo {
     /// method is called to start the handshake.
     ///
     /// The `info` is the identifier of the protocol, as produced by `protocol_info`. Security
-    /// transports use the optional `remote_peer_id` parameter on outgoing upgrades to validate the
-    /// expected `PeerId`.
+    /// transports use the optional `expected_peer_id` parameter on outgoing upgrades to validate
+    /// the expected `PeerId`.
     fn secure_outbound(
         self,
         socket: T,
         info: Self::Info,
-        remote_peer_id: Option<PeerId>,
+        expected_peer_id: Option<PeerId>,
     ) -> Self::Future;
 }
