@@ -231,7 +231,9 @@ impl WindowUpdateMode {
     /// > size must be tuned appropriately for the desired
     /// > throughput and level of tolerance for (temporarily)
     /// > slow receivers.
+    #[deprecated(note = "Use `WindowUpdateMode::on_read` instead.")]
     pub fn on_receive() -> Self {
+        #[allow(deprecated)]
         WindowUpdateMode(yamux::WindowUpdateMode::OnReceive)
     }
 
