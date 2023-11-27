@@ -165,7 +165,7 @@ impl Config {
     pub fn new() -> Self {
         Self {
             ttl: None,
-            nodelay: Some(true), //Enable Nagle's algorithm by default
+            nodelay: Some(true), // Disable Nagle's algorithm by default
             backlog: 1024,
             enable_port_reuse: false,
         }
