@@ -56,6 +56,7 @@ pub enum UpgradeError {
 pub struct Config {
     server: rustls::ServerConfig,
     client: rustls::ClientConfig,
+    keypair: identity::Keypair,
 }
 
 impl Config {
@@ -63,17 +64,7 @@ impl Config {
         Ok(Self {
             server: crate::make_server_config(identity)?,
             client: crate::make_client_config(identity, None)?,
-        })
-    }
-
-    pub(crate) fn with_expected_peer_id(
-        expected_peer_id: Option<PeerId>,
-    ) -> Result<Self, certificate::GenError> {
-        let identity = libp2p_identity::Keypair::generate_ed25519();
-
-        Ok(Self {
-            server: crate::make_server_config(&identity)?,
-            client: crate::make_client_config(&identity, expected_peer_id)?,
+            keypair: identity.clone(),
         })
     }
 }
@@ -152,7 +143,10 @@ where
     ) -> Self::Future {
         async move {
             // Create new ad-hoc client and server configuration by passing the expected PeerId
-            self = Self::with_expected_peer_id(expected_peer_id)?;
+            let keypair = libp2p_identity::Keypair::generate_ed25519();
+            self.server = crate::make_server_config(&keypair)?;
+            self.client = crate::make_client_config(&keypair, expected_peer_id)?;
+            self.keypair = keypair;
 
             // Spec: In order to keep this flexibility for future versions, clients that only support
             // the version of the handshake defined in this document MUST NOT send any value in the
