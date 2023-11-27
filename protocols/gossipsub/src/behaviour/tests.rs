@@ -421,7 +421,7 @@ fn test_subscribe() {
         .fold(0, |mut collected_subscriptions, c| {
             while !c.priority.is_empty() {
                 if let Ok(RpcOut::Subscribe(_)) = c.priority.try_recv() {
-                    collected_subscriptions = collected_subscriptions + 1
+                    collected_subscriptions += 1
                 }
             }
             collected_subscriptions
@@ -479,7 +479,7 @@ fn test_unsubscribe() {
         .fold(0, |mut collected_subscriptions, c| {
             while !c.priority.is_empty() {
                 if let Ok(RpcOut::Subscribe(_)) = c.priority.try_recv() {
-                    collected_subscriptions = collected_subscriptions + 1
+                    collected_subscriptions += 1
                 }
             }
             collected_subscriptions
@@ -1334,12 +1334,12 @@ fn count_control_msgs<D: DataTransform, F: TopicSubscriptionFilter>(
                 while !c.priority.is_empty() || !c.non_priority.is_empty() {
                     if let Ok(RpcOut::Control(action)) = c.priority.try_recv() {
                         if filter(peer_id, &action) {
-                            collected_messages = collected_messages + 1;
+                            collected_messages += 1;
                         }
                     }
                     if let Ok(RpcOut::Control(action)) = c.non_priority.try_recv() {
                         if filter(peer_id, &action) {
-                            collected_messages = collected_messages + 1;
+                            collected_messages += 1;
                         }
                     }
                 }
@@ -1559,7 +1559,7 @@ fn do_forward_messages_to_explicit_peers() {
         queues.into_iter().fold(0, |mut fwds, (peer_id, c)| {
             while !c.non_priority.is_empty() {
                 if matches!(c.non_priority.try_recv(), Ok(RpcOut::Forward(m)) if peer_id == peers[0] && m.data == message.data) {
-        fwds = fwds +1;
+        fwds +=1;
         }
                 }
             fwds
@@ -4394,8 +4394,8 @@ fn test_ignore_too_many_iwants_from_same_peer_for_same_message() {
     assert_eq!(
         queues.into_values().fold(0, |mut fwds, c| {
             while !c.non_priority.is_empty() {
-                if let Ok(RpcOut::Forward(_)) = dbg!(c.non_priority.try_recv()) {
-                    fwds = fwds + 1;
+                if let Ok(RpcOut::Forward(_)) = c.non_priority.try_recv() {
+                    fwds += 1;
                 }
             }
             fwds
@@ -4808,7 +4808,7 @@ fn test_publish_to_floodsub_peers_without_flood_publish() {
                 if matches!(c.priority.try_recv(),
             Ok(RpcOut::Publish(_)) if peer_id == &p1 || peer_id == &p2)
                 {
-                    collected_publish = collected_publish + 1;
+                    collected_publish += 1;
                 }
             }
             collected_publish
@@ -4863,7 +4863,7 @@ fn test_do_not_use_floodsub_in_fanout() {
                 if matches!(c.priority.try_recv(),
             Ok(RpcOut::Publish(_)) if peer_id == &p1 || peer_id == &p2)
                 {
-                    collected_publish = collected_publish + 1;
+                    collected_publish += 1;
                 }
             }
             collected_publish
