@@ -23,7 +23,7 @@ tracing = "0.1.37"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
-axum = "0.6.19"
+axum = "0.7.1"
 libp2p = { path = "../../libp2p", features = [ "ed25519", "macros", "ping", "wasm-bindgen", "tokio"] }
 libp2p-webrtc = { workspace = true, features = ["tokio"] }
 rust-embed = { version = "8.0.0", features = ["include-exclude", "interpolate-folder-path"] }
