@@ -175,6 +175,17 @@ impl ClosestPeersIter {
             },
         }
 
+        let mut cur_range = distance;
+        let mut index = 0;
+        for (dist, _state) in self.closest_peers.iter() {
+            if index < self.config.num_results.get() {
+                index += 1;
+                cur_range = *dist;
+            } else {
+                break;
+            }
+        }
+
         // Incorporate the reported closer peers into the iterator.
         //
         // The iterator makes progress if:
@@ -192,7 +203,7 @@ impl ClosestPeersIter {
             };
             self.closest_peers.entry(distance).or_insert(peer);
 
-            progress = self.closest_peers.keys().next() == Some(&distance) || progress;
+            progress = distance < cur_range || progress;
         }
 
         // Update the iterator state.
