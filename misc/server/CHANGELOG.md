@@ -3,7 +3,7 @@
 ### Added
 
 - Add `/wss` support.
-  See [PR XXX](https://github.com/libp2p/rust-libp2p/pull/XXX).
+  See [PR 4937](https://github.com/libp2p/rust-libp2p/pull/4937).
 
 ## 0.12.4
 

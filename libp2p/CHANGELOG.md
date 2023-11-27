@@ -1,7 +1,7 @@
 ## 0.53.2
 
 - Allow `SwarmBuilder::with_bandwidth_metrics` after `SwarmBuilder::with_websocket`.
-  See [PR XXX](https://github.com/libp2p/rust-libp2p/pull/XXX).
+  See [PR 4937](https://github.com/libp2p/rust-libp2p/pull/4937).
 
 ## 0.53.1
 
