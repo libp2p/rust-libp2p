@@ -575,6 +575,7 @@ where
                 };
                 match entry.insert(addresses.clone(), status) {
                     kbucket::InsertResult::Inserted => {
+                        self.on_new_kademlia_node();
                         self.queued_events.push_back(ToSwarm::GenerateEvent(
                             Event::RoutingUpdated {
                                 peer: *peer,
@@ -1302,6 +1303,7 @@ where
                         let addresses = Addresses::new(a);
                         match entry.insert(addresses.clone(), new_status) {
                             kbucket::InsertResult::Inserted => {
+                                self.on_new_kademlia_node();
                                 let event = Event::RoutingUpdated {
                                     peer,
                                     is_new_peer: true,
@@ -2063,6 +2065,10 @@ where
             self.connection_updated(peer_id, None, NodeStatus::Disconnected);
             self.connected_peers.remove(&peer_id);
         }
+    }
+
+    fn on_new_kademlia_node(&mut self) {
+        let _ = self.bootstrap();
     }
 
     /// Preloads a new [`Handler`] with requests that are waiting to be sent to the newly connected peer.
