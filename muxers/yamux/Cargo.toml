@@ -3,7 +3,7 @@ name = "libp2p-yamux"
 edition = "2021"
 rust-version = { workspace = true }
 description = "Yamux multiplexing protocol for libp2p"
-version = "0.45.0"
+version = "0.45.1"
 authors = ["Parity Technologies <admin@parity.io>"]
 license = "MIT"
 repository = "https://github.com/libp2p/rust-libp2p"
