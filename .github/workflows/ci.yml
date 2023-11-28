@@ -79,6 +79,8 @@ jobs:
 
       - name: Enforce version in CHANGELOG.md matches version in manifest
         run: |
+          MANIFEST_PATH=$(cargo metadata --format-version=1 --no-deps | jq -e -r '.packages[] | select(.name == "'"$CRATE"'") | .manifest_path')
+          DIR_TO_CRATE=$(dirname "$MANIFEST_PATH")
           VERSION_IN_CHANGELOG=$(awk -F' ' '/^## [0-9]+\.[0-9]+\.[0-9]+/{print $2; exit}' "$DIR_TO_CRATE/CHANGELOG.md")
 
           echo "Package version: $CRATE_VERSION";
