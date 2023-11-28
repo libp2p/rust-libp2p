@@ -84,6 +84,7 @@ pub mod derive_prelude {
     pub use crate::behaviour::ListenerClosed;
     pub use crate::behaviour::ListenerError;
     pub use crate::behaviour::NewExternalAddrCandidate;
+    pub use crate::behaviour::NewExternalAddrOfPeer;
     pub use crate::behaviour::NewListenAddr;
     pub use crate::behaviour::NewListener;
     pub use crate::connection::ConnectionId;
@@ -108,8 +109,8 @@ pub mod derive_prelude {
 pub use behaviour::{
     AddressChange, CloseConnection, ConnectionClosed, DialFailure, ExpiredListenAddr,
     ExternalAddrExpired, ExternalAddresses, FromSwarm, ListenAddresses, ListenFailure,
-    ListenerClosed, ListenerError, NetworkBehaviour, NewExternalAddrCandidate, NewListenAddr,
-    NotifyHandler, ToSwarm,
+    ListenerClosed, ListenerError, NetworkBehaviour, NewExternalAddrCandidate,
+    NewExternalAddrOfPeer, NewListenAddr, NotifyHandler, ToSwarm,
 };
 pub use connection::pool::ConnectionCounters;
 pub use connection::{ConnectionError, ConnectionId, SupportedProtocols};
@@ -1176,6 +1177,13 @@ where
                     self.pool.disconnect(peer_id);
                 }
             },
+            ToSwarm::NewExternalAddrOfPeer { addr, peer_id } => {
+                self.behaviour
+                    .on_swarm_event(FromSwarm::NewExternalAddrOfPeer(NewExternalAddrOfPeer {
+                        peer_id,
+                        addr: &addr,
+                    }))
+            }
         }
     }
 

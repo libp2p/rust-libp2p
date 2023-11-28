@@ -1,3 +1,8 @@
+## 0.44.2 - unreleased
+
+- Add `FromSwarm::NewExternalAddrOfPeer` event.
+  See [PR 4371](https://github.com/libp2p/rust-libp2p/pull/4371)
+
 ## 0.44.1
 
 - Implement `Clone` & `Copy` for `FromSwarm.
