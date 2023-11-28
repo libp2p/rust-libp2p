@@ -1,4 +1,4 @@
-## 0.54.0
+## 0.41.0
 - `TCP_NODELAY` disabled by default.
   See [PR 4916](https://github.com/libp2p/rust-libp2p/pull/4916)
 
