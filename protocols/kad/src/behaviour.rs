@@ -125,6 +125,9 @@ pub struct Behaviour<TStore> {
 
     /// The timer used to poll [`Behaviour::bootstrap`].
     bootstrap_timer: Option<Delay>,
+
+    /// Tracks if the latest bootstrap was successfull.
+    initial_bootstrap: Option<InitialBootstrap>,
 }
 
 /// The configurable strategies for the insertion of peers
@@ -474,6 +477,7 @@ where
             no_events_waker: None,
             bootstrap_interval: config.bootstrap_interval,
             bootstrap_timer,
+            initial_bootstrap: None,
         }
     }
 
@@ -575,7 +579,7 @@ where
                 };
                 match entry.insert(addresses.clone(), status) {
                     kbucket::InsertResult::Inserted => {
-                        self.on_new_kademlia_node();
+                        self.handle_bootstrap();
                         self.queued_events.push_back(ToSwarm::GenerateEvent(
                             Event::RoutingUpdated {
                                 peer: *peer,
@@ -894,7 +898,9 @@ where
     ///
     /// > **Note**: Bootstrapping requires at least one node of the DHT to be known.
     /// > See [`Behaviour::add_address`].
-    /// > **Note**: The bootstrapping interval is used to call bootstrap periodically
+    /// > **Note**: Bootstrap does not require to be called manually. It is automatically
+    /// invoked at regular intervals based on the configured bootstrapping interval.
+    /// The bootstrapping interval is used to call bootstrap periodically
     /// to ensure a healthy routing table.
     /// > See bootstrap_interval field in Config.
     pub fn bootstrap(&mut self) -> Result<QueryId, NoKnownPeers> {
@@ -909,7 +915,8 @@ where
             Err(NoKnownPeers())
         } else {
             let inner = QueryInner::new(info);
-            Ok(self.queries.add_iter_closest(local_key, peers, inner))
+            let query_id = self.queries.add_iter_closest(local_key, peers, inner);
+            Ok(query_id)
         }
     }
 
@@ -1303,7 +1310,7 @@ where
                         let addresses = Addresses::new(a);
                         match entry.insert(addresses.clone(), new_status) {
                             kbucket::InsertResult::Inserted => {
-                                self.on_new_kademlia_node();
+                                self.handle_bootstrap();
                                 let event = Event::RoutingUpdated {
                                     peer,
                                     is_new_peer: true,
@@ -2067,8 +2074,13 @@ where
         }
     }
 
-    fn on_new_kademlia_node(&mut self) {
-        let _ = self.bootstrap();
+    fn handle_bootstrap(&mut self) {
+        if self.initial_bootstrap.is_none() {
+            match self.bootstrap() {
+                Ok(query_id) => self.initial_bootstrap = Some(InitialBootstrap::Active(query_id)),
+                Err(_) => self.initial_bootstrap = None,
+            }
+        }
     }
 
     /// Preloads a new [`Handler`] with requests that are waiting to be sent to the newly connected peer.
@@ -2497,7 +2509,7 @@ where
             if let Poll::Ready(()) = Pin::new(&mut bootstrap_timer).poll(cx) {
                 if let Some(interval) = self.bootstrap_interval {
                     bootstrap_timer.reset(interval);
-                    let _ = self.bootstrap();
+                    self.handle_bootstrap();
                 }
             }
             self.bootstrap_timer = Some(bootstrap_timer);
@@ -3383,4 +3395,10 @@ where
         .map(|addr| addr.to_string())
         .collect::<Vec<_>>()
         .join(", ")
+}
+
+#[derive(PartialEq)]
+pub enum InitialBootstrap {
+    Active(QueryId),
+    Completed,
 }
