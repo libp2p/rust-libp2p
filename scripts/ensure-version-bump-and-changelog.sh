@@ -24,6 +24,11 @@ if [ -z "$SRC_DIFF_TO_BASE" ]; then
   exit 0;
 fi
 
+# Exit early if we shouldn't assert for an updated changelog entry.
+if [ "$ASSERT_CHANGELOG_UPDATED" == "false" ]; then
+  exit 0;
+fi
+
 # Code was touched, ensure changelog is updated too.
 if [ -z "$CHANGELOG_DIFF" ]; then
     echo "Files in $DIR_TO_CRATE have changed, please write a changelog entry in $DIR_TO_CRATE/CHANGELOG.md"
