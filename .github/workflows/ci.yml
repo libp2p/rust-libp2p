@@ -341,8 +341,6 @@ jobs:
           ALL_FEATURES=$(cargo metadata --format-version=1 --no-deps | jq -r '.packages[] | select(.name == "libp2p") | .features | keys | map(select(. != "full")) | sort | join(" ")')
           FULL_FEATURE=$(cargo metadata --format-version=1 --no-deps | jq -r '.packages[] | select(.name == "libp2p") | .features["full"] | sort | join(" ")')
 
-          test "$ALL_FEATURES = $FULL_FEATURE"
-
           echo "$ALL_FEATURES";
           echo "$FULL_FEATURE";
 
