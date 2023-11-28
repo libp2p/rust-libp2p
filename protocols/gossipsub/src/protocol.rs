@@ -577,7 +577,7 @@ mod tests {
             let message = message.0;
 
             let rpc = Rpc {
-                messages: vec![message],
+                messages: vec![message.clone()],
                 subscriptions: vec![],
                 control_msgs: vec![],
             };
@@ -591,7 +591,7 @@ mod tests {
                 HandlerEvent::Message { mut rpc, .. } => {
                     rpc.messages[0].validated = true;
 
-                    assert_eq!(rpc, rpc);
+                    assert_eq!(vec![message], rpc.messages);
                 }
                 _ => panic!("Must decode a message"),
             }

@@ -7,4 +7,4 @@ if [[ $header == $prefix* ]]; then
   exit
 fi
 
-sed -i "1i ## ${NEW_VERSION} - unreleased\n\n" "$CRATE_ROOT/CHANGELOG.md"
+sed -i "1i ## ${NEW_VERSION}\n\n" "$CRATE_ROOT/CHANGELOG.md"
