@@ -81,7 +81,6 @@ impl Behaviour {
     }
 
     fn check_limit(
-        &mut self,
         limit: Option<u32>,
         current: usize,
         kind: Kind,
@@ -210,7 +209,7 @@ impl NetworkBehaviour for Behaviour {
         _: &Multiaddr,
         _: &Multiaddr,
     ) -> Result<(), ConnectionDenied> {
-        self.check_limit(
+        Self::check_limit(
             self.limits.max_pending_incoming,
             self.pending_inbound_connections.len(),
             Kind::PendingIncoming,
@@ -230,12 +229,12 @@ impl NetworkBehaviour for Behaviour {
     ) -> Result<THandler<Self>, ConnectionDenied> {
         self.pending_inbound_connections.remove(&connection_id);
 
-        self.check_limit(
+        Self::check_limit(
             self.limits.max_established_incoming,
             self.established_inbound_connections.len(),
             Kind::EstablishedIncoming,
         )?;
-        self.check_limit(
+        Self::check_limit(
             self.limits.max_established_per_peer,
             self.established_per_peer
                 .get(&peer)
@@ -243,7 +242,7 @@ impl NetworkBehaviour for Behaviour {
                 .unwrap_or(0),
             Kind::EstablishedPerPeer,
         )?;
-        self.check_limit(
+        Self::check_limit(
             self.limits.max_established_total,
             self.established_inbound_connections.len()
                 + self.established_outbound_connections.len(),
@@ -260,7 +259,7 @@ impl NetworkBehaviour for Behaviour {
         _: &[Multiaddr],
         _: Endpoint,
     ) -> Result<Vec<Multiaddr>, ConnectionDenied> {
-        self.check_limit(
+        Self::check_limit(
             self.limits.max_pending_outgoing,
             self.pending_outbound_connections.len(),
             Kind::PendingOutgoing,
@@ -280,12 +279,12 @@ impl NetworkBehaviour for Behaviour {
     ) -> Result<THandler<Self>, ConnectionDenied> {
         self.pending_outbound_connections.remove(&connection_id);
 
-        self.check_limit(
+        Self::check_limit(
             self.limits.max_established_outgoing,
             self.established_outbound_connections.len(),
             Kind::EstablishedOutgoing,
         )?;
-        self.check_limit(
+        Self::check_limit(
             self.limits.max_established_per_peer,
             self.established_per_peer
                 .get(&peer)
@@ -293,7 +292,7 @@ impl NetworkBehaviour for Behaviour {
                 .unwrap_or(0),
             Kind::EstablishedPerPeer,
         )?;
-        self.check_limit(
+        Self::check_limit(
             self.limits.max_established_total,
             self.established_inbound_connections.len()
                 + self.established_outbound_connections.len(),
