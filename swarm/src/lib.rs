@@ -624,6 +624,17 @@ where
         self.confirmed_external_addr.remove(addr);
     }
 
+    /// Add peer's new external address.
+    ///
+    /// The address is broadcast to all [`NetworkBehaviour`]s via [`FromSwarm::NewExternalAddrOfPeer`].
+    pub fn add_peer_address(&mut self, peer_id: PeerId, addr: Multiaddr) {
+        self.behaviour
+            .on_swarm_event(FromSwarm::NewExternalAddrOfPeer(NewExternalAddrOfPeer {
+                peer_id,
+                addr: &addr,
+            }))
+    }
+
     /// Disconnects a peer by its peer ID, closing all connections to said peer.
     ///
     /// Returns `Ok(())` if there was one or more established connections to the peer.

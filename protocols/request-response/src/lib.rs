@@ -470,6 +470,7 @@ where
     ///
     /// Returns true if the address was added, false otherwise (i.e. if the
     /// address is already in the list).
+    #[deprecated(note = "Use `libp2p_swarm::add_address` instead.")]
     pub fn add_address(&mut self, peer: &PeerId, address: Multiaddr) -> bool {
         self.addresses.entry(*peer).or_default().insert(address)
     }
