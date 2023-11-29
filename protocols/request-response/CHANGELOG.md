@@ -1,3 +1,7 @@
+## 0.26.1 - unreleased
+- Derive `PartialOrd` and `Ord` for {Outbound,Inbound}RequestId.
+  See [PR XXXX](https://github.com/libp2p/rust-libp2p/pull/XXXX).
+
 ## 0.26.0
 
 - Remove `request_response::Config::set_connection_keep_alive` in favor of `SwarmBuilder::idle_connection_timeout`.
