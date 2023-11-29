@@ -13,7 +13,7 @@ use web_sys::{Document, HtmlElement};
 
 #[wasm_bindgen]
 pub async fn run(libp2p_endpoint: String) -> Result<(), JsError> {
-    wasm_logger::init(wasm_logger::Config::default());
+    tracing_wasm::set_as_global_default();
 
     let body = Body::from_current_window()?;
     body.append_p("Let's ping the WebRTC Server!")?;
