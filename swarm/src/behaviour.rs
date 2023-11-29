@@ -21,10 +21,12 @@
 mod either;
 mod external_addresses;
 mod listen_addresses;
+mod peer_addresses;
 pub mod toggle;
 
 pub use external_addresses::ExternalAddresses;
 pub use listen_addresses::ListenAddresses;
+pub use peer_addresses::PeerAddresses;
 
 use crate::connection::ConnectionId;
 use crate::dial_opts::DialOpts;
