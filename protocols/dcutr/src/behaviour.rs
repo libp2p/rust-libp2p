@@ -104,33 +104,27 @@ impl Behaviour {
             ..
         }: DialFailure,
     ) {
-        let peer_id = if let Some(peer_id) = peer_id {
-            peer_id
-        } else {
+        let Some(peer_id) = peer_id else {
             return;
         };
 
-        let relayed_connection_id = if let Some(relayed_connection_id) = self
+        let Some(relayed_connection_id) = self
             .direct_to_relayed_connections
             .get(&failed_direct_connection)
-        {
-            *relayed_connection_id
-        } else {
+        else {
             return;
         };
 
-        let attempt = if let Some(attempt) = self
+        let Some(attempt) = self
             .outgoing_direct_connection_attempts
-            .get(&(relayed_connection_id, peer_id))
-        {
-            *attempt
-        } else {
+            .get(&(*relayed_connection_id, peer_id))
+        else {
             return;
         };
 
-        if attempt < MAX_NUMBER_OF_UPGRADE_ATTEMPTS {
+        if *attempt < MAX_NUMBER_OF_UPGRADE_ATTEMPTS {
             self.queued_events.push_back(ToSwarm::NotifyHandler {
-                handler: NotifyHandler::One(relayed_connection_id),
+                handler: NotifyHandler::One(*relayed_connection_id),
                 peer_id,
                 event: Either::Left(handler::relayed::Command::Connect),
             })
@@ -245,7 +239,6 @@ impl NetworkBehaviour for Behaviour {
                 result: Ok(connection_id),
             })]);
         }
-
         Ok(Either::Right(dummy::ConnectionHandler))
     }
 
@@ -300,7 +293,7 @@ impl NetworkBehaviour for Behaviour {
                 // Maybe treat these as transient and retry?
             }
             Either::Left(handler::relayed::Event::OutboundConnectNegotiated { remote_addrs }) => {
-                tracing::debug!(target=%event_source, addresses=?remote_addrs, "Attempting to hole-punch as dialer");
+                tracing::debug!(target=%event_source, addresses=?remote_addrs, "Attempting to hole-punch as listener");
 
                 let opts = DialOpts::peer_id(event_source)
                     .condition(dial_opts::PeerCondition::Always)

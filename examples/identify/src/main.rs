@@ -22,7 +22,7 @@
 
 use futures::StreamExt;
 use libp2p::{core::multiaddr::Multiaddr, identify, noise, swarm::SwarmEvent, tcp, yamux};
-use std::error::Error;
+use std::{error::Error, time::Duration};
 use tracing_subscriber::EnvFilter;
 
 #[async_std::main]
@@ -44,6 +44,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
                 key.public(),
             ))
         })?
+        .with_swarm_config(|c| c.with_idle_connection_timeout(Duration::from_secs(60)))
         .build();
 
     // Tell the swarm to listen on all interfaces and a random, OS-assigned

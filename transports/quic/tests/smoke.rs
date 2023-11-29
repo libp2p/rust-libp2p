@@ -653,15 +653,13 @@ async fn answer_inbound_streams<P: Provider + Spawn, const BUFFER_SIZE: usize>(
     mut connection: StreamMuxerBox,
 ) {
     loop {
-        let mut inbound_stream = match future::poll_fn(|cx| {
+        let Ok(mut inbound_stream) = future::poll_fn(|cx| {
             let _ = connection.poll_unpin(cx)?;
-
             connection.poll_inbound_unpin(cx)
         })
         .await
-        {
-            Ok(s) => s,
-            Err(_) => return,
+        else {
+            return;
         };
 
         P::spawn(async move {
