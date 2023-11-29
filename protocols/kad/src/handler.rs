@@ -68,7 +68,7 @@ pub struct Handler {
 
     /// List of outbound substreams that are waiting to become active next.
     /// Contains the request we want to send, and the user data if we expect an answer.
-    pending_messages: VecDeque<(KadRequestMsg, QueryId)>,
+    pending_messages: WakeableVecDeque<(KadRequestMsg, QueryId)>,
 
     /// List of active inbound substreams with the state they are in.
     inbound_substreams: SelectAll<InboundSubstreamState>,
@@ -760,7 +760,7 @@ impl ConnectionHandler for Handler {
             }
 
             if self.outbound_substreams.len() < MAX_NUM_STREAMS {
-                if let Some((msg, id)) = self.pending_messages.pop_front() {
+                if let Poll::Ready((msg, id)) = self.pending_messages.poll_unpin(cx) {
                     self.queue_new_stream(id, msg);
                     return Poll::Ready(ConnectionHandlerEvent::OutboundSubstreamRequest {
                         protocol: SubstreamProtocol::new(self.protocol_config.clone(), ()),
@@ -1048,6 +1048,41 @@ fn process_kad_response(event: KadResponseMsg, query_id: QueryId) -> HandlerEven
             value,
             query_id,
         },
+    }
+}
+
+struct WakeableVecDeque<T> {
+    inner: VecDeque<T>,
+    empty_waker: Option<Waker>,
+}
+
+impl<T> Default for WakeableVecDeque<T> {
+    fn default() -> Self {
+        Self {
+            inner: Default::default(),
+            empty_waker: Default::default(),
+        }
+    }
+}
+
+impl<T> WakeableVecDeque<T> {
+    fn push_back(&mut self, value: T) {
+        self.inner.push_back(value);
+
+        if let Some(waker) = self.empty_waker.take() {
+            waker.wake();
+        }
+    }
+
+    #[allow(unknown_lints, clippy::needless_pass_by_ref_mut)] // &mut Context is idiomatic.
+    fn poll_unpin(&mut self, cx: &mut Context<'_>) -> Poll<T> {
+        match self.inner.pop_front() {
+            Some(value) => Poll::Ready(value),
+            None => {
+                self.empty_waker = Some(cx.waker().clone());
+                Poll::Pending
+            }
+        }
     }
 }
 
