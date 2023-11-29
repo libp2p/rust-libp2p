@@ -579,10 +579,21 @@ impl Handler {
             Ok(Some(msg))
         });
 
-        debug_assert!(
-            result.is_ok(),
-            "Expected to not create more streams than allowed"
-        );
+        match result {
+            Ok(()) => {}
+            Err(futures_bounded::PushError::Replaced(_)) => {
+                debug_assert!(
+                    false,
+                    "Expected QueryIds to be unique but already have a request for query {id}"
+                )
+            }
+            Err(futures_bounded::PushError::BeyondCapacity(_)) => {
+                debug_assert!(
+                    false,
+                    "Expected to not create more than {MAX_NUM_STREAMS} requests at a time"
+                )
+            }
+        }
     }
 }
 
