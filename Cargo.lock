@@ -3232,7 +3232,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-webrtc"
-version = "0.6.1-alpha"
+version = "0.7.0-alpha"
 dependencies = [
  "async-trait",
  "bytes",
@@ -3283,7 +3283,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-webrtc-websys"
-version = "0.2.0-alpha"
+version = "0.3.0-alpha"
 dependencies = [
  "bytes",
  "futures",
