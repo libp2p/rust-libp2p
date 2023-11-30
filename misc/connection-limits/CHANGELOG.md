@@ -1,9 +1,7 @@
-## 0.3.1
-- Adds `Behaviour::limits_mut`.
+## 0.3.1 - unreleased
 
-  See [PR XXXX].
-
-[PR XXXX]: https://github.com/libp2p/rust-libp2p/pull/XXXX
+- Add function to mutate `ConnectionLimits`.
+  See [PR XXXX](https://github.com/libp2p/rust-libp2p/pull/XXXX).
 
 ## 0.3.0
 
