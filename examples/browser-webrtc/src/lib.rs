@@ -24,8 +24,9 @@ pub async fn run(libp2p_endpoint: String) -> Result<(), JsError> {
             webrtc_websys::Transport::new(webrtc_websys::Config::new(&key))
         })?
         .with_behaviour(|_| ping::Behaviour::new(ping::Config::new()))?
-        // Ping does not KeepAlive, so we set the idle connection timeout to the maximum u64 value
-        .with_swarm_config(|c| c.with_idle_connection_timeout(Duration::from_secs(u64::MAX)))
+        // Ping does not KeepAlive, so we set the idle connection timeout to 32_212_254u64,
+        // which is the largest value that works with the wasm32 target.
+        .with_swarm_config(|c| c.with_idle_connection_timeout(Duration::from_secs(32_212_254u64)))
         .build();
 
     let addr = libp2p_endpoint.parse::<Multiaddr>()?;
