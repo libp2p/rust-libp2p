@@ -24,7 +24,7 @@ pub async fn run(libp2p_endpoint: String) -> Result<(), JsError> {
             webrtc_websys::Transport::new(webrtc_websys::Config::new(&key))
         })?
         .with_behaviour(|_| ping::Behaviour::new(ping::Config::new()))?
-        .with_swarm_config(|c| c.with_idle_connection_timeout(Duration::from_secs(5)))
+        .with_swarm_config(|c| c.with_idle_connection_timeout(Duration::from_secs(20)))
         .build();
 
     let addr = libp2p_endpoint.parse::<Multiaddr>()?;
