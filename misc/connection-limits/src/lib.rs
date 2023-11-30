@@ -229,36 +229,6 @@ impl ConnectionLimits {
     pub fn max_established_per_peer(&self) -> Option<u32> {
         self.max_established_per_peer
     }
-
-    pub fn set_max_pending_incoming(&mut self, limit: Option<u32>) -> &mut Self {
-        self.max_pending_incoming = limit;
-        self
-    }
-
-    pub fn set_max_pending_outgoing(&mut self, limit: Option<u32>) -> &mut Self {
-        self.max_pending_outgoing = limit;
-        self
-    }
-
-    pub fn set_max_established_incoming(&mut self, limit: Option<u32>) -> &mut Self {
-        self.max_established_incoming = limit;
-        self
-    }
-
-    pub fn set_max_established_outgoing(&mut self, limit: Option<u32>) -> &mut Self {
-        self.max_established_outgoing = limit;
-        self
-    }
-
-    pub fn set_max_established(&mut self, limit: Option<u32>) -> &mut Self {
-        self.max_established_total = limit;
-        self
-    }
-
-    pub fn set_max_established_per_peer(&mut self, limit: Option<u32>) -> &mut Self {
-        self.max_established_per_peer = limit;
-        self
-    }
 }
 
 impl NetworkBehaviour for Behaviour {
