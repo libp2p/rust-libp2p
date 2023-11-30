@@ -1,7 +1,7 @@
 ## 0.3.0-alpha
 
 - Bump version in order to publish a new version dependent on latest `libp2p-core`.
-  See [PR 4959](https://github.com/libp2p/rust-libp2p/pull/4959)
+  See [PR 4959](https://github.com/libp2p/rust-libp2p/pull/4959).
 
 ## 0.2.0-alpha
 
