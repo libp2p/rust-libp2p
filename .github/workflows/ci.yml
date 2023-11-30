@@ -307,6 +307,15 @@ jobs:
 
   semver:
     runs-on: ubuntu-latest
+    env:
+      # Unset the global `RUSTFLAGS` env to allow warnings.
+      # cargo-semver-checks intentionally re-locks dependency versions
+      # before checking, and we shouldn't fail here if a dep has a warning.
+      #
+      # More context:
+      # https://github.com/libp2p/rust-libp2p/pull/4932#issuecomment-1829014527
+      # https://github.com/obi1kenobi/cargo-semver-checks/issues/589
+      RUSTFLAGS: ''
     steps:
       - uses: actions/checkout@v4
       - run: wget -q -O- https://github.com/obi1kenobi/cargo-semver-checks/releases/download/v0.25.0/cargo-semver-checks-x86_64-unknown-linux-gnu.tar.gz | tar -xz -C ~/.cargo/bin
