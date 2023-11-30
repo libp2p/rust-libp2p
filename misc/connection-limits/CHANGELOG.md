@@ -1,7 +1,7 @@
 ## 0.3.1 - unreleased
 
 - Add function to mutate `ConnectionLimits`.
-  See [PR XXXX](https://github.com/libp2p/rust-libp2p/pull/XXXX).
+  See [PR 4964](https://github.com/libp2p/rust-libp2p/pull/4964).
 
 ## 0.3.0
 
