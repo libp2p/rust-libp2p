@@ -1,4 +1,4 @@
-## 0.46.1 - unreleased
+## 0.46.1
 
 - Deprecate `Rpc` in preparation for removing it from the public API because it is an internal type.
   See [PR 4833](https://github.com/libp2p/rust-libp2p/pull/4833). 
@@ -10,9 +10,9 @@
 - Remove deprecated `gossipsub::Config::idle_timeout` in favor of `SwarmBuilder::idle_connection_timeout`.
   See [PR 4642](https://github.com/libp2p/rust-libp2p/pull/4642).
 - Return typed error from config builder.
-  See [PR 4445].
-
-[PR 4445]: https://github.com/libp2p/rust-libp2p/pull/4445
+  See [PR 4445](https://github.com/libp2p/rust-libp2p/pull/4445).
+- Process outbound stream before inbound stream in `EnabledHandler::poll(..)`.
+  See [PR 4778](https://github.com/libp2p/rust-libp2p/pull/4778).
 
 ## 0.45.2
 

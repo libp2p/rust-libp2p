@@ -47,7 +47,7 @@ pub enum ConnectError {
     #[error("Remote does not support the `{HOP_PROTOCOL_NAME}` protocol")]
     Unsupported,
     #[error("IO error")]
-    Io(#[source] io::Error),
+    Io(#[from] io::Error),
     #[error("Protocol error")]
     Protocol(#[from] ProtocolViolation),
 }
@@ -61,7 +61,7 @@ pub enum ReserveError {
     #[error("Remote does not support the `{HOP_PROTOCOL_NAME}` protocol")]
     Unsupported,
     #[error("IO error")]
-    Io(#[source] io::Error),
+    Io(#[from] io::Error),
     #[error("Protocol error")]
     Protocol(#[from] ProtocolViolation),
 }

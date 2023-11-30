@@ -70,7 +70,8 @@ resolver = "2"
 rust-version = "1.73.0"
 
 [workspace.dependencies]
-futures-bounded = { version = "0.2.1", path = "misc/futures-bounded" }
+asynchronous-codec = { version = "0.7.0" }
+futures-bounded = { version = "0.2.3", path = "misc/futures-bounded" }
 libp2p = { version = "0.53.0", path = "libp2p" }
 libp2p-allow-block-list = { version = "0.3.0", path = "misc/allow-block-list" }
 libp2p-autonat = { version = "0.12.0", path = "protocols/autonat" }
@@ -109,16 +110,17 @@ libp2p-webrtc = { version = "0.6.1-alpha", path = "transports/webrtc" }
 libp2p-webrtc-utils = { version = "0.1.0", path = "misc/webrtc-utils" }
 libp2p-webrtc-websys = { version = "0.2.0-alpha", path = "transports/webrtc-websys" }
 libp2p-websocket = { version = "0.43.0", path = "transports/websocket" }
-libp2p-websocket-websys = { version = "0.3.0", path = "transports/websocket-websys" }
+libp2p-websocket-websys = { version = "0.3.1", path = "transports/websocket-websys" }
 libp2p-webtransport-websys = { version = "0.2.0", path = "transports/webtransport-websys" }
-libp2p-yamux = { version = "0.45.0", path = "muxers/yamux" }
+libp2p-yamux = { version = "0.45.1", path = "muxers/yamux" }
 multiaddr = "0.18.1"
 multihash = "0.19.1"
 multistream-select = { version = "0.13.0", path = "misc/multistream-select" }
 prometheus-client = "0.22.0"
-quick-protobuf-codec = { version = "0.2.0", path = "misc/quick-protobuf-codec" }
+quick-protobuf-codec = { version = "0.3.1", path = "misc/quick-protobuf-codec" }
 quickcheck = { package = "quickcheck-ext", path = "misc/quickcheck-ext" }
 rw-stream-sink = { version = "0.4.0", path = "misc/rw-stream-sink" }
+unsigned-varint = { version = "0.8.0" }
 
 [patch.crates-io]
 
@@ -135,6 +137,7 @@ clippy.used_underscore_binding = "warn"
 clippy.pedantic = "allow"
 clippy.type_complexity = "allow"
 clippy.unnecessary_wraps = "warn"
+clippy.manual_let_else = "warn"
 clippy.dbg_macro = "warn"
 
 [workspace.metadata.release]

@@ -9,10 +9,19 @@ updates:
       prefix: "deps"
     rebase-strategy: "disabled"
     groups:
-      trust-dns:
+      hickory-dns:
         patterns:
-          - "trust-dns-*"
+          - "hickory-*"
           - "async-std-resolver"
+      opentelemetry:
+        patterns:
+          - "opentelemetry*"
+          - "tracing-opentelemetry"
+      axum:
+        patterns:
+          - "axum"
+          - "tower"
+          - "tower-http"
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
