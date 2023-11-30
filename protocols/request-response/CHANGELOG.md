@@ -1,6 +1,7 @@
-## 0.26.1 - unreleased
-- Derive `PartialOrd` and `Ord` for {Outbound,Inbound}RequestId.
-  See [PR XXXX](https://github.com/libp2p/rust-libp2p/pull/XXXX).
+## 0.26.1
+
+- Derive `PartialOrd` and `Ord` for `{Out,In}boundRequestId`.
+  See [PR 4956](https://github.com/libp2p/rust-libp2p/pull/4956).
 
 ## 0.26.0
 
