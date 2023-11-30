@@ -1,4 +1,4 @@
-## 0.7.1-alpha
+## 0.7.0-alpha
 
 - Bump version in order to publish a new version dependent on latest `libp2p-core`.
   See [PR 4959](https://github.com/libp2p/rust-libp2p/pull/4959)

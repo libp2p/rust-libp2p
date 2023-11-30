@@ -3232,7 +3232,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-webrtc"
-version = "0.7.1-alpha"
+version = "0.7.0-alpha"
 dependencies = [
  "async-trait",
  "bytes",
