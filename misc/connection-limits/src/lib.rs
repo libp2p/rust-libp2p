@@ -80,6 +80,7 @@ impl Behaviour {
         }
     }
 
+    /// Returns a mutable reference to [`ConnectionLimits`].
     pub fn limits_mut(&mut self) -> &mut ConnectionLimits {
         &mut self.limits
     }
@@ -199,6 +200,62 @@ impl ConnectionLimits {
     /// Configures the maximum number of concurrent established connections per peer,
     /// regardless of direction (incoming or outgoing).
     pub fn with_max_established_per_peer(mut self, limit: Option<u32>) -> Self {
+        self.max_established_per_peer = limit;
+        self
+    }
+}
+
+impl ConnectionLimits {
+    pub fn max_pending_incoming(&self) -> Option<u32> {
+        self.max_pending_incoming
+    }
+
+    pub fn max_pending_outgoing(&self) -> Option<u32> {
+        self.max_pending_outgoing
+    }
+
+    pub fn max_established_incoming(&self) -> Option<u32> {
+        self.max_established_incoming
+    }
+
+    pub fn max_established_outgoing(&self) -> Option<u32> {
+        self.max_established_outgoing
+    }
+
+    pub fn max_established(&self) -> Option<u32> {
+        self.max_established_total
+    }
+
+    pub fn max_established_per_peer(&self) -> Option<u32> {
+        self.max_established_per_peer
+    }
+
+    pub fn set_max_pending_incoming(&mut self, limit: Option<u32>) -> &mut Self {
+        self.max_pending_incoming = limit;
+        self
+    }
+
+    pub fn set_max_pending_outgoing(&mut self, limit: Option<u32>) -> &mut Self {
+        self.max_pending_outgoing = limit;
+        self
+    }
+
+    pub fn set_max_established_incoming(&mut self, limit: Option<u32>) -> &mut Self {
+        self.max_established_incoming = limit;
+        self
+    }
+
+    pub fn set_max_established_outgoing(&mut self, limit: Option<u32>) -> &mut Self {
+        self.max_established_outgoing = limit;
+        self
+    }
+
+    pub fn set_max_established(&mut self, limit: Option<u32>) -> &mut Self {
+        self.max_established_total = limit;
+        self
+    }
+
+    pub fn set_max_established_per_peer(&mut self, limit: Option<u32>) -> &mut Self {
         self.max_established_per_peer = limit;
         self
     }
