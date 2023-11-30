@@ -1,4 +1,4 @@
-## 0.44.1 - unreleased
+## 0.44.1
 
 - Implement `Clone` & `Copy` for `FromSwarm.
   This makes it easier to forward these events when wrapping other behaviours.
