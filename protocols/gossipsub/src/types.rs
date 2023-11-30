@@ -19,13 +19,19 @@
 // DEALINGS IN THE SOFTWARE.
 
 //! A collection of types using the Gossipsub system.
+use crate::metrics::Metrics;
 use crate::TopicHash;
+use async_channel::{Receiver, Sender};
+use futures::Stream;
 use libp2p_identity::PeerId;
 use libp2p_swarm::ConnectionId;
 use prometheus_client::encoding::EncodeLabelValue;
 use quick_protobuf::MessageWrite;
-use std::fmt;
 use std::fmt::Debug;
+use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::Arc;
+use std::task::Poll;
+use std::{fmt, pin::Pin};
 
 use crate::rpc_proto::proto;
 #[cfg(feature = "serde")]
@@ -510,5 +516,141 @@ impl AsRef<str> for PeerKind {
 impl fmt::Display for PeerKind {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str(self.as_ref())
+    }
+}
+
+/// `RpcOut` sender that is priority aware.
+#[derive(Debug, Clone)]
+pub(crate) struct RpcSender {
+    peer_id: PeerId,
+    cap: usize,
+    len: Arc<AtomicUsize>,
+    priority: Sender<RpcOut>,
+    non_priority: Sender<RpcOut>,
+    receiver: RpcReceiver,
+}
+
+impl RpcSender {
+    /// Create a RpcSender.
+    pub(crate) fn new(peer_id: PeerId, cap: usize) -> RpcSender {
+        let (priority_sender, priority_receiver) = async_channel::unbounded();
+        let (non_priority_sender, non_priority_receiver) = async_channel::bounded(cap / 2);
+        let len = Arc::new(AtomicUsize::new(0));
+        let receiver = RpcReceiver {
+            len: len.clone(),
+            priority: priority_receiver,
+            non_priority: non_priority_receiver,
+        };
+        RpcSender {
+            peer_id,
+            cap: cap / 2,
+            len,
+            priority: priority_sender,
+            non_priority: non_priority_sender,
+            receiver: receiver.clone(),
+        }
+    }
+
+    /// Create a new Receiver to the sender.
+    pub(crate) fn new_receiver(&self) -> RpcReceiver {
+        self.receiver.clone()
+    }
+
+    /// Send a `RpcOut::Control` message to the `RpcReceiver`
+    /// this is high priority.
+    pub(crate) fn control(&mut self, control: ControlAction) {
+        self.priority
+            .try_send(RpcOut::Control(control))
+            .expect("Channel is unbounded and should always be open");
+    }
+
+    /// Send a `RpcOut::Subscribe` message to the `RpcReceiver`
+    /// this is high priority.
+    pub(crate) fn subscribe(&mut self, topic: TopicHash) {
+        self.priority
+            .try_send(RpcOut::Subscribe(topic))
+            .expect("Channel is unbounded and should always be open");
+    }
+
+    /// Send a `RpcOut::Unsubscribe` message to the `RpcReceiver`
+    /// this is high priority.
+    pub(crate) fn unsubscribe(&mut self, topic: TopicHash) {
+        self.priority
+            .try_send(RpcOut::Unsubscribe(topic))
+            .expect("Channel is unbounded and should always be open");
+    }
+
+    /// Send a `RpcOut::Publish` message to the `RpcReceiver`
+    /// this is high priority. If message sending fails, an `Err` is returned.
+    pub(crate) fn publish(
+        &mut self,
+        message: RawMessage,
+        metrics: Option<&mut Metrics>,
+    ) -> Result<(), ()> {
+        if self.len.load(Ordering::Relaxed) >= self.cap {
+            return Err(());
+        }
+        self.priority
+            .try_send(RpcOut::Publish(message.clone()))
+            .expect("Channel is unbounded and should always be open");
+        self.len.fetch_add(1, Ordering::Relaxed);
+
+        if let Some(m) = metrics {
+            m.msg_sent(&message.topic, message.raw_protobuf_len());
+        }
+
+        Ok(())
+    }
+
+    /// Send a `RpcOut::Forward` message to the `RpcReceiver`
+    /// this is high priority. If the queue is full the message is discarded.
+    pub(crate) fn forward(&mut self, message: RawMessage, metrics: Option<&mut Metrics>) {
+        if let Err(err) = self.non_priority.try_send(RpcOut::Forward(message.clone())) {
+            let rpc = err.into_inner();
+            tracing::trace!(
+                "{:?} message to peer {} dropped, queue is full",
+                rpc,
+                self.peer_id
+            );
+            return;
+        }
+
+        if let Some(m) = metrics {
+            m.msg_sent(&message.topic, message.raw_protobuf_len());
+        }
+    }
+}
+
+/// `RpcOut` sender that is priority aware.
+#[derive(Debug, Clone)]
+pub struct RpcReceiver {
+    len: Arc<AtomicUsize>,
+    pub(crate) priority: Receiver<RpcOut>,
+    pub(crate) non_priority: Receiver<RpcOut>,
+}
+
+impl RpcReceiver {
+    /// Check if both queues are empty.
+    pub(crate) fn is_empty(&self) -> bool {
+        self.priority.is_empty() && self.non_priority.is_empty()
+    }
+}
+
+impl Stream for RpcReceiver {
+    type Item = RpcOut;
+
+    fn poll_next(
+        mut self: std::pin::Pin<&mut Self>,
+        cx: &mut std::task::Context<'_>,
+    ) -> std::task::Poll<Option<Self::Item>> {
+        // The priority queue is first polled.
+        if let Poll::Ready(rpc) = Pin::new(&mut self.priority).poll_next(cx) {
+            if let Some(RpcOut::Publish(_)) = rpc {
+                self.len.fetch_sub(1, Ordering::Relaxed);
+            }
+            return Poll::Ready(rpc);
+        }
+        // Then we poll the non priority.
+        Pin::new(&mut self.non_priority).poll_next(cx)
     }
 }

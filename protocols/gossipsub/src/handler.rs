@@ -20,7 +20,7 @@
 
 use crate::protocol::{GossipsubCodec, ProtocolConfig};
 use crate::rpc_proto::proto;
-use crate::types::{PeerKind, RawMessage, Rpc, RpcOut};
+use crate::types::{PeerKind, RawMessage, Rpc, RpcReceiver};
 use crate::ValidationError;
 use asynchronous_codec::Framed;
 use futures::future::Either;
@@ -33,7 +33,6 @@ use libp2p_swarm::handler::{
     FullyNegotiatedInbound, FullyNegotiatedOutbound, StreamUpgradeError, SubstreamProtocol,
 };
 use libp2p_swarm::Stream;
-use smallvec::SmallVec;
 use std::{
     pin::Pin,
     task::{Context, Poll},
@@ -61,8 +60,6 @@ pub enum HandlerEvent {
 #[allow(clippy::large_enum_variant)]
 #[derive(Debug)]
 pub enum HandlerIn {
-    /// A gossipsub message to send.
-    Message(RpcOut),
     /// The peer has joined the mesh.
     JoinedMesh,
     /// The peer has left the mesh.
@@ -94,8 +91,8 @@ pub struct EnabledHandler {
     /// The single long-lived inbound substream.
     inbound_substream: Option<InboundSubstreamState>,
 
-    /// Queue of values that we want to send to the remote.
-    send_queue: SmallVec<[proto::RPC; 16]>,
+    /// Queue of values that we want to send to the remote
+    send_queue: RpcReceiver,
 
     /// Flag indicating that an outbound substream is being established to prevent duplicate
     /// requests.
@@ -159,7 +156,7 @@ enum OutboundSubstreamState {
 
 impl Handler {
     /// Builds a new [`Handler`].
-    pub fn new(protocol_config: ProtocolConfig) -> Self {
+    pub fn new(protocol_config: ProtocolConfig, message_queue: RpcReceiver) -> Self {
         Handler::Enabled(EnabledHandler {
             listen_protocol: protocol_config,
             inbound_substream: None,
@@ -167,11 +164,11 @@ impl Handler {
             outbound_substream_establishing: false,
             outbound_substream_attempts: 0,
             inbound_substream_attempts: 0,
-            send_queue: SmallVec::new(),
             peer_kind: None,
             peer_kind_sent: false,
             last_io_activity: Instant::now(),
             in_mesh: false,
+            send_queue: message_queue,
         })
     }
 }
@@ -250,10 +247,11 @@ impl EnabledHandler {
             ) {
                 // outbound idle state
                 Some(OutboundSubstreamState::WaitingOutput(substream)) => {
-                    if let Some(message) = self.send_queue.pop() {
-                        self.send_queue.shrink_to_fit();
-                        self.outbound_substream =
-                            Some(OutboundSubstreamState::PendingSend(substream, message));
+                    if let Poll::Ready(Some(message)) = self.send_queue.poll_next_unpin(cx) {
+                        self.outbound_substream = Some(OutboundSubstreamState::PendingSend(
+                            substream,
+                            message.into_protobuf(),
+                        ));
                         continue;
                     }
 
@@ -409,7 +407,6 @@ impl ConnectionHandler for Handler {
     fn on_behaviour_event(&mut self, message: HandlerIn) {
         match self {
             Handler::Enabled(handler) => match message {
-                HandlerIn::Message(m) => handler.send_queue.push(m.into_protobuf()),
                 HandlerIn::JoinedMesh => {
                     handler.in_mesh = true;
                 }

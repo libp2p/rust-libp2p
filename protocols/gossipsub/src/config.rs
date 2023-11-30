@@ -95,6 +95,7 @@ pub struct Config {
     max_ihave_messages: usize,
     iwant_followup_time: Duration,
     published_message_ids_cache_time: Duration,
+    connection_handler_queue_len: usize,
 }
 
 impl Config {
@@ -350,6 +351,11 @@ impl Config {
     pub fn published_message_ids_cache_time(&self) -> Duration {
         self.published_message_ids_cache_time
     }
+
+    /// The max number of messages a `ConnectionHandler` can buffer.
+    pub fn connection_handler_queue_len(&self) -> usize {
+        self.connection_handler_queue_len
+    }
 }
 
 impl Default for Config {
@@ -417,6 +423,7 @@ impl Default for ConfigBuilder {
                 max_ihave_messages: 10,
                 iwant_followup_time: Duration::from_secs(3),
                 published_message_ids_cache_time: Duration::from_secs(10),
+                connection_handler_queue_len: 100,
             },
             invalid_protocol: false,
         }
@@ -780,6 +787,10 @@ impl ConfigBuilder {
     ) -> &mut Self {
         self.config.published_message_ids_cache_time = published_message_ids_cache_time;
         self
+    }
+
+    pub fn connection_handler_queue_len(&mut self, len: usize) {
+        self.config.connection_handler_queue_len = len;
     }
 
     /// Constructs a [`Config`] from the given configuration and validates the settings.
