@@ -205,32 +205,6 @@ impl ConnectionLimits {
     }
 }
 
-impl ConnectionLimits {
-    pub fn max_pending_incoming(&self) -> Option<u32> {
-        self.max_pending_incoming
-    }
-
-    pub fn max_pending_outgoing(&self) -> Option<u32> {
-        self.max_pending_outgoing
-    }
-
-    pub fn max_established_incoming(&self) -> Option<u32> {
-        self.max_established_incoming
-    }
-
-    pub fn max_established_outgoing(&self) -> Option<u32> {
-        self.max_established_outgoing
-    }
-
-    pub fn max_established(&self) -> Option<u32> {
-        self.max_established_total
-    }
-
-    pub fn max_established_per_peer(&self) -> Option<u32> {
-        self.max_established_per_peer
-    }
-}
-
 impl NetworkBehaviour for Behaviour {
     type ConnectionHandler = dummy::ConnectionHandler;
     type ToSwarm = Void;
