@@ -1,6 +1,6 @@
 [package]
 name = "libp2p-webrtc"
-version = "0.6.1-alpha"
+version = "0.7.0-alpha"
 authors = ["Parity Technologies <admin@parity.io>"]
 description = "WebRTC transport for libp2p"
 repository = "https://github.com/libp2p/rust-libp2p"
@@ -16,7 +16,7 @@ bytes = "1"
 futures = "0.3"
 futures-timer = "3"
 hex = "0.4"
-if-watch = "3.1"
+if-watch = "3.2"
 libp2p-core = { workspace = true }
 libp2p-noise = { workspace = true }
 libp2p-identity = { workspace = true }
