@@ -220,7 +220,6 @@
 //!             libp2p_yamux::Config::default,
 //!         )?
 //!         .with_behaviour(|_| ping::Behaviour::default())?
-//!         .with_swarm_config(|cfg| cfg.with_idle_connection_timeout(Duration::from_secs(30))) // Allows us to observe pings for 30 seconds.
 //!         .build();
 //!
 //!     Ok(())
@@ -271,7 +270,6 @@
 //!             libp2p_yamux::Config::default,
 //!         )?
 //!         .with_behaviour(|_| ping::Behaviour::default())?
-//!         .with_swarm_config(|cfg| cfg.with_idle_connection_timeout(Duration::from_secs(30))) // Allows us to observe pings for 30 seconds.
 //!         .build();
 //!
 //!     // Tell the swarm to listen on all interfaces and a random, OS-assigned
@@ -316,7 +314,6 @@
 //!             libp2p_yamux::Config::default,
 //!         )?
 //!         .with_behaviour(|_| ping::Behaviour::default())?
-//!         .with_swarm_config(|cfg| cfg.with_idle_connection_timeout(Duration::from_secs(30))) // Allows us to observe pings for 30 seconds.
 //!         .build();
 //!
 //!     // Tell the swarm to listen on all interfaces and a random, OS-assigned

@@ -69,6 +69,6 @@ fn make_swarm() -> Swarm<dummy::Behaviour> {
         transport,
         dummy::Behaviour,
         identity.public().to_peer_id(),
-        Config::with_tokio_executor().with_idle_connection_timeout(Duration::from_secs(60)),
+        Config::with_tokio_executor(),
     )
 }

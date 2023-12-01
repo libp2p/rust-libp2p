@@ -76,7 +76,6 @@ async fn main() -> Result<(), Box<dyn Error>> {
                 mdns::tokio::Behaviour::new(mdns::Config::default(), key.public().to_peer_id())?;
             Ok(MyBehaviour { gossipsub, mdns })
         })?
-        .with_swarm_config(|c| c.with_idle_connection_timeout(Duration::from_secs(60)))
         .build();
 
     // Create a Gossipsub topic
