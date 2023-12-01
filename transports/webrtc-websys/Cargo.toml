@@ -20,7 +20,6 @@ hex = "0.4.3"
 js-sys = { version = "0.3" }
 libp2p-core = { workspace = true }
 libp2p-identity = { workspace = true }
-libp2p-noise = { workspace = true }
 libp2p-webrtc-utils = { workspace = true }
 send_wrapper = { version = "0.6.0", features = ["futures"] }
 serde = { version = "1.0", features = ["derive"] }
