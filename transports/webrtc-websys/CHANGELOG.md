@@ -3,6 +3,7 @@
 - Bump version in order to publish a new version dependent on latest `libp2p-core`.
   See [PR 4959](https://github.com/libp2p/rust-libp2p/pull/4959).
 - Remove `libp2p_noise` from the public API.
+  See [PR 4969](https://github.com/libp2p/rust-libp2p/pull/4969).
 
 ## 0.2.0-alpha
 
