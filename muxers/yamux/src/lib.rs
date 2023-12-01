@@ -243,6 +243,64 @@ impl Default for Config {
     }
 }
 
+#[derive(Debug, Clone)]
+struct Config012 {
+    inner: yamux012::Config,
+    mode: Option<yamux012::Mode>,
+}
+
+impl Default for Config012 {
+    fn default() -> Self {
+        let mut inner = yamux012::Config::default();
+        // For conformity with mplex, read-after-close on a multiplexed
+        // connection is never permitted and not configurable.
+        inner.set_read_after_close(false);
+        Self { inner, mode: None }
+    }
+}
+
+/// The window update mode determines when window updates are
+/// sent to the remote, giving it new credit to send more data.
+pub struct WindowUpdateMode(yamux012::WindowUpdateMode);
+
+impl WindowUpdateMode {
+    /// The window update mode whereby the remote is given
+    /// new credit via a window update whenever the current
+    /// receive window is exhausted when data is received,
+    /// i.e. this mode cannot exert back-pressure from application
+    /// code that is slow to read from a substream.
+    ///
+    /// > **Note**: The receive buffer may overflow with this
+    /// > strategy if the receiver is too slow in reading the
+    /// > data from the buffer. The maximum receive buffer
+    /// > size must be tuned appropriately for the desired
+    /// > throughput and level of tolerance for (temporarily)
+    /// > slow receivers.
+    #[deprecated(note = "Use `WindowUpdateMode::on_read` instead.")]
+    pub fn on_receive() -> Self {
+        #[allow(deprecated)]
+        WindowUpdateMode(yamux012::WindowUpdateMode::OnReceive)
+    }
+
+    /// The window update mode whereby the remote is given new
+    /// credit only when the current receive window is exhausted
+    /// when data is read from the substream's receive buffer,
+    /// i.e. application code that is slow to read from a substream
+    /// exerts back-pressure on the remote.
+    ///
+    /// > **Note**: If the receive window of a substream on
+    /// > both peers is exhausted and both peers are blocked on
+    /// > sending data before reading from the stream, a deadlock
+    /// > occurs. To avoid this situation, reading from a substream
+    /// > should never be blocked on writing to the same substream.
+    ///
+    /// > **Note**: With this strategy, there is usually no point in the
+    /// > receive buffer being larger than the window size.
+    pub fn on_read() -> Self {
+        WindowUpdateMode(yamux012::WindowUpdateMode::OnRead)
+    }
+}
+
 impl Config {
     // TODO: deprecate
     /// Creates a new `YamuxConfig` in client mode, regardless of whether
@@ -357,64 +415,6 @@ where
         };
 
         future::ready(Ok(Muxer::new(connection)))
-    }
-}
-
-#[derive(Debug, Clone)]
-struct Config012 {
-    inner: yamux012::Config,
-    mode: Option<yamux012::Mode>,
-}
-
-impl Default for Config012 {
-    fn default() -> Self {
-        let mut inner = yamux012::Config::default();
-        // For conformity with mplex, read-after-close on a multiplexed
-        // connection is never permitted and not configurable.
-        inner.set_read_after_close(false);
-        Self { inner, mode: None }
-    }
-}
-
-/// The window update mode determines when window updates are
-/// sent to the remote, giving it new credit to send more data.
-pub struct WindowUpdateMode(yamux012::WindowUpdateMode);
-
-impl WindowUpdateMode {
-    /// The window update mode whereby the remote is given
-    /// new credit via a window update whenever the current
-    /// receive window is exhausted when data is received,
-    /// i.e. this mode cannot exert back-pressure from application
-    /// code that is slow to read from a substream.
-    ///
-    /// > **Note**: The receive buffer may overflow with this
-    /// > strategy if the receiver is too slow in reading the
-    /// > data from the buffer. The maximum receive buffer
-    /// > size must be tuned appropriately for the desired
-    /// > throughput and level of tolerance for (temporarily)
-    /// > slow receivers.
-    #[deprecated(note = "Use `WindowUpdateMode::on_read` instead.")]
-    pub fn on_receive() -> Self {
-        #[allow(deprecated)]
-        WindowUpdateMode(yamux012::WindowUpdateMode::OnReceive)
-    }
-
-    /// The window update mode whereby the remote is given new
-    /// credit only when the current receive window is exhausted
-    /// when data is read from the substream's receive buffer,
-    /// i.e. application code that is slow to read from a substream
-    /// exerts back-pressure on the remote.
-    ///
-    /// > **Note**: If the receive window of a substream on
-    /// > both peers is exhausted and both peers are blocked on
-    /// > sending data before reading from the stream, a deadlock
-    /// > occurs. To avoid this situation, reading from a substream
-    /// > should never be blocked on writing to the same substream.
-    ///
-    /// > **Note**: With this strategy, there is usually no point in the
-    /// > receive buffer being larger than the window size.
-    pub fn on_read() -> Self {
-        WindowUpdateMode(yamux012::WindowUpdateMode::OnRead)
     }
 }
 
