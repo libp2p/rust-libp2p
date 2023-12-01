@@ -21,7 +21,6 @@ members = [
     "misc/allow-block-list",
     "misc/connection-limits",
     "misc/futures-bounded",
-    "misc/ip-global",
     "misc/keygen",
     "misc/memory-connection-limits",
     "misc/metrics",
