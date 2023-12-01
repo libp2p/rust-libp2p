@@ -1,3 +1,7 @@
+## 0.2.0
+
+- Update to latest version of `libp2p-noise`.
+
 ## 0.1.0
 
 - Initial release.
