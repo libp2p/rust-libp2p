@@ -1,6 +1,7 @@
 #![allow(unused_imports)]
 
 mod bandwidth_logging;
+mod bandwidth_metrics;
 mod behaviour;
 mod build;
 mod dns;
@@ -14,6 +15,7 @@ mod tcp;
 mod websocket;
 
 use bandwidth_logging::*;
+use bandwidth_metrics::*;
 use behaviour::*;
 use build::*;
 use dns::*;
@@ -32,6 +34,7 @@ use super::SwarmBuilder;
 use libp2p_core::{muxing::StreamMuxerBox, Transport};
 use libp2p_identity::Keypair;
 
+#[allow(unreachable_pub)]
 pub trait IntoSecurityUpgrade<C> {
     type Upgrade;
     type Error;
@@ -73,6 +76,7 @@ where
     }
 }
 
+#[allow(unreachable_pub)]
 pub trait IntoMultiplexerUpgrade<C> {
     type Upgrade;
 

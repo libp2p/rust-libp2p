@@ -468,6 +468,7 @@ impl PeerCache {
             Some(cache) => cache,
         };
 
+        let addresses = addresses.filter_map(|a| a.with_p2p(peer).ok());
         cache.put(peer, HashSet::from_iter(addresses));
     }
 

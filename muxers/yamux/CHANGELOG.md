@@ -1,3 +1,10 @@
+## 0.45.1
+
+- Deprecate `WindowUpdateMode::on_receive`.
+  It does not enforce flow-control, i.e. breaks backpressure.
+  Use `WindowUpdateMode::on_read` instead.
+  See `yamux` crate version `v0.12.1` and [Yamux PR #177](https://github.com/libp2p/rust-yamux/pull/177).
+
 ## 0.45.0
 
 - Migrate to `{In,Out}boundConnectionUpgrade` traits.

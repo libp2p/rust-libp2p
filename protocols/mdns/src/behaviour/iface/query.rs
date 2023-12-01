@@ -156,9 +156,8 @@ impl MdnsResponse {
                     return None;
                 }
 
-                let record_value = match record.data() {
-                    Some(RData::PTR(record)) => record,
-                    _ => return None,
+                let RData::PTR(record_value) = record.data()? else {
+                    return None;
                 };
 
                 MdnsPeer::new(packet, record_value, record.ttl())
@@ -181,6 +180,7 @@ impl MdnsResponse {
 
                 peer.addresses().iter().filter_map(move |address| {
                     let new_addr = address_translation(address, &observed)?;
+                    let new_addr = new_addr.with_p2p(*peer.id()).ok()?;
 
                     Some((*peer.id(), new_addr, new_expiration))
                 })
@@ -247,21 +247,14 @@ impl MdnsPeer {
             .flat_map(|txt| txt.iter())
             .filter_map(|txt| {
                 // TODO: wrong, txt can be multiple character strings
-                let addr = match dns::decode_character_string(txt) {
-                    Ok(a) => a,
-                    Err(_) => return None,
-                };
+                let addr = dns::decode_character_string(txt).ok()?;
+
                 if !addr.starts_with(b"dnsaddr=") {
                     return None;
                 }
-                let addr = match str::from_utf8(&addr[8..]) {
-                    Ok(a) => a,
-                    Err(_) => return None,
-                };
-                let mut addr = match addr.parse::<Multiaddr>() {
-                    Ok(a) => a,
-                    Err(_) => return None,
-                };
+
+                let mut addr = str::from_utf8(&addr[8..]).ok()?.parse::<Multiaddr>().ok()?;
+
                 match addr.pop() {
                     Some(Protocol::P2p(peer_id)) => {
                         if let Some(pid) = &my_peer_id {
@@ -344,9 +337,8 @@ mod tests {
                     if record.name().to_utf8() != SERVICE_NAME_FQDN {
                         return None;
                     }
-                    let record_value = match record.data() {
-                        Some(RData::PTR(record)) => record,
-                        _ => return None,
+                    let Some(RData::PTR(record_value)) = record.data() else {
+                        return None;
                     };
                     Some(record_value)
                 })
