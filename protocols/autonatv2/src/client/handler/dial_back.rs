@@ -13,14 +13,14 @@ use libp2p_swarm::{
     ConnectionHandler, ConnectionHandlerEvent, StreamProtocol, SubstreamProtocol,
 };
 
-use crate::request_response::DialBack;
+use crate::{request_response::DialBack, Nonce};
 
 use super::DEFAULT_TIMEOUT;
 
-pub(crate) type ToBehaviour = Result<u64, io::Error>;
+pub(crate) type ToBehaviour = io::Result<Nonce>;
 
 pub(crate) struct Handler {
-    inbound: FuturesSet<io::Result<u64>>,
+    inbound: FuturesSet<io::Result<Nonce>>,
 }
 
 impl Handler {

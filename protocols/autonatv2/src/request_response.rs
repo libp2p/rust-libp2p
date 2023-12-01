@@ -10,7 +10,7 @@ use libp2p_core::Multiaddr;
 use quick_protobuf_codec::Codec;
 use rand::Rng;
 
-use crate::generated::structs as proto;
+use crate::{generated::structs as proto, Nonce};
 
 const REQUEST_MAX_SIZE: usize = 4104;
 pub(super) const DATA_LEN_LOWER_BOUND: usize = 30_000u32 as usize;
@@ -59,9 +59,9 @@ impl Request {
                     .into_iter()
                     .map(|e| e.to_vec())
                     .map(|e| {
-                        Multiaddr::try_from(e).map_err(
-                            |err| new_io_invalid_data_err!(format!("invalid multiaddr: {}", err))
-                        )
+                        Multiaddr::try_from(e).map_err(|err| {
+                            new_io_invalid_data_err!(format!("invalid multiaddr: {}", err))
+                        })
                     })
                     .collect::<Result<Vec<_>, io::Error>>()?;
                 let nonce = check_existence!(nonce)?;
@@ -83,9 +83,10 @@ impl Request {
                 let addrs = addrs.iter().map(|e| e.to_vec()).collect();
                 let nonce = Some(nonce);
                 proto::Message {
-                    msg: proto::mod_Message::OneOfmsg::dialRequest(
-                        proto::DialRequest { addrs, nonce }
-                    ),
+                    msg: proto::mod_Message::OneOfmsg::dialRequest(proto::DialRequest {
+                        addrs,
+                        nonce,
+                    }),
                 }
             }
             Request::Data(DialDataResponse { data_count }) => {
@@ -149,9 +150,10 @@ impl Response {
                     dial_status,
                 }))
             }
-            proto::mod_Message::OneOfmsg::dialDataRequest(
-                proto::DialDataRequest { addrIdx, numBytes }
-            ) => {
+            proto::mod_Message::OneOfmsg::dialDataRequest(proto::DialDataRequest {
+                addrIdx,
+                numBytes,
+            }) => {
                 let addr_idx = check_existence!(addrIdx)? as usize;
                 let num_bytes = check_existence!(numBytes)? as usize;
                 Ok(Self::Data(DialDataRequest {
@@ -181,14 +183,12 @@ impl Response {
             Self::Data(DialDataRequest {
                 addr_idx,
                 num_bytes,
-            }) => {
-                proto::Message {
-                    msg: proto::mod_Message::OneOfmsg::dialDataRequest(proto::DialDataRequest {
-                        addrIdx: Some(addr_idx as u32),
-                        numBytes: Some(num_bytes as u64),
-                    }),
-                }
-            }
+            }) => proto::Message {
+                msg: proto::mod_Message::OneOfmsg::dialDataRequest(proto::DialDataRequest {
+                    addrIdx: Some(addr_idx as u32),
+                    numBytes: Some(num_bytes as u64),
+                }),
+            },
         };
         FramedWrite::new(io, Codec::<proto::Message>::new(REQUEST_MAX_SIZE))
             .send(msg)
@@ -215,7 +215,7 @@ impl DialDataRequest {
 const DIAL_BACK_MAX_SIZE: usize = 10;
 
 pub(crate) struct DialBack {
-    pub(crate) nonce: u64,
+    pub(crate) nonce: Nonce,
 }
 
 impl DialBack {
