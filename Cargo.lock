@@ -3057,7 +3057,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-request-response"
-version = "0.26.0"
+version = "0.26.1"
 dependencies = [
  "anyhow",
  "async-std",
@@ -3261,7 +3261,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-webrtc-utils"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "asynchronous-codec",
  "bytes",
