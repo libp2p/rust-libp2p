@@ -50,18 +50,19 @@ mod codec {
     use serde::{de::DeserializeOwned, Serialize};
     use std::{io, marker::PhantomData};
 
-    /// Max request size in bytes
-    const REQUEST_SIZE_MAXIMUM: u64 = 1024 * 1024;
-    /// Max response size in bytes
-    const RESPONSE_SIZE_MAXIMUM: u64 = 10 * 1024 * 1024;
-
     pub struct Codec<Req, Resp> {
+        /// Max request size in bytes
+        request_size_maximum: u64,
+        /// Max response size in bytes
+        response_size_maximum: u64,
         phantom: PhantomData<(Req, Resp)>,
     }
 
     impl<Req, Resp> Default for Codec<Req, Resp> {
         fn default() -> Self {
             Codec {
+                request_size_maximum: 1024 * 1024,
+                response_size_maximum: 10 * 1024 * 1024,
                 phantom: PhantomData,
             }
         }
@@ -69,7 +70,21 @@ mod codec {
 
     impl<Req, Resp> Clone for Codec<Req, Resp> {
         fn clone(&self) -> Self {
-            Self::default()
+            Self {
+                request_size_maximum: self.request_size_maximum,
+                response_size_maximum: self.response_size_maximum,
+                phantom: self.phantom,
+            }
+        }
+    }
+
+    impl<Req, Resp> Codec<Req, Resp> {
+        pub fn new(request_size_maximum: u64, response_size_maximum: u64) -> Self {
+            Self {
+                request_size_maximum,
+                response_size_maximum,
+                ..Default::default()
+            }
         }
     }
 
@@ -89,7 +104,9 @@ mod codec {
         {
             let mut vec = Vec::new();
 
-            io.take(REQUEST_SIZE_MAXIMUM).read_to_end(&mut vec).await?;
+            io.take(self.request_size_maximum)
+                .read_to_end(&mut vec)
+                .await?;
 
             Ok(serde_json::from_slice(vec.as_slice())?)
         }
@@ -100,7 +117,9 @@ mod codec {
         {
             let mut vec = Vec::new();
 
-            io.take(RESPONSE_SIZE_MAXIMUM).read_to_end(&mut vec).await?;
+            io.take(self.response_size_maximum)
+                .read_to_end(&mut vec)
+                .await?;
 
             Ok(serde_json::from_slice(vec.as_slice())?)
         }

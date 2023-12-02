@@ -1,5 +1,7 @@
 ## 0.26.1
 
+- Allow configurable request and response sizes for `json` and `cbor` codec.
+  See [PR XXXX](https://github.com/libp2p/rust-libp2p/pull/XXXX).
 - Derive `PartialOrd` and `Ord` for `{Out,In}boundRequestId`.
   See [PR 4956](https://github.com/libp2p/rust-libp2p/pull/4956).
 
