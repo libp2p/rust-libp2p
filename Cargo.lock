@@ -2422,7 +2422,7 @@ checksum = "89d92a4743f9a61002fae18374ed11e7973f530cb3a3255fb354818118b2203c"
 
 [[package]]
 name = "libp2p"
-version = "0.53.1"
+version = "0.53.2"
 dependencies = [
  "async-std",
  "async-trait",
@@ -2527,7 +2527,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-core"
-version = "0.41.1"
+version = "0.41.2"
 dependencies = [
  "async-std",
  "either",
@@ -2720,7 +2720,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-kad"
-version = "0.45.2"
+version = "0.45.3"
 dependencies = [
  "arrayvec",
  "async-std",
@@ -2969,7 +2969,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-quic"
-version = "0.10.1"
+version = "0.10.2"
 dependencies = [
  "async-std",
  "bytes",
@@ -3057,7 +3057,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-request-response"
-version = "0.26.0"
+version = "0.26.1"
 dependencies = [
  "anyhow",
  "async-std",
@@ -3086,7 +3086,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-server"
-version = "0.12.4"
+version = "0.12.5"
 dependencies = [
  "base64 0.21.5",
  "clap",
@@ -3261,7 +3261,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-webrtc-utils"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "asynchronous-codec",
  "bytes",
@@ -3294,7 +3294,6 @@ dependencies = [
  "js-sys",
  "libp2p-core",
  "libp2p-identity",
- "libp2p-noise",
  "libp2p-ping",
  "libp2p-swarm",
  "libp2p-webrtc-utils",
