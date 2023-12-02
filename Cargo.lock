@@ -2422,7 +2422,7 @@ checksum = "89d92a4743f9a61002fae18374ed11e7973f530cb3a3255fb354818118b2203c"
 
 [[package]]
 name = "libp2p"
-version = "0.53.1"
+version = "0.53.2"
 dependencies = [
  "async-std",
  "async-trait",
@@ -3086,7 +3086,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-server"
-version = "0.12.5"
+version = "0.12.6"
 dependencies = [
  "base64 0.21.5",
  "clap",

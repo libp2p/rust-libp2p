@@ -77,6 +77,8 @@ async fn main() -> Result<(), Box<dyn Error>> {
         )?
         .with_quic()
         .with_dns()?
+        .with_websocket(noise::Config::new, yamux::Config::default)
+        .await?
         .with_bandwidth_metrics(&mut metric_registry)
         .with_behaviour(|key| {
             behaviour::Behaviour::new(key.public(), opt.enable_kademlia, opt.enable_autonat)

@@ -1,8 +1,16 @@
-## 0.12.5
+## 0.12.6
+
 ### Changed
 
 - Remove `Behaviour::bootstrap` polling.
   See [PR 4838](https://github.com/libp2p/rust-libp2p/pull/4838).
+
+## 0.12.5
+
+### Added
+
+- Add `/wss` support.
+  See [PR 4937](https://github.com/libp2p/rust-libp2p/pull/4937).
 
 ## 0.12.4
 

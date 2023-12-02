@@ -1,6 +1,6 @@
 [package]
 name = "libp2p-server"
-version = "0.12.5"
+version = "0.12.6"
 authors = ["Max Inden <mail@max-inden.de>"]
 edition = "2021"
 repository = "https://github.com/libp2p/rust-libp2p"
@@ -16,7 +16,7 @@ clap = { version = "4.4.10", features = ["derive"] }
 futures = "0.3"
 futures-timer = "3"
 hyper = { version = "0.14", features = ["server", "tcp", "http1"] }
-libp2p = { workspace = true, features = ["autonat", "dns", "tokio", "noise", "tcp", "yamux", "identify", "kad", "ping", "relay", "metrics", "rsa", "macros", "quic"] }
+libp2p = { workspace = true, features = ["autonat", "dns", "tokio", "noise", "tcp", "yamux", "identify", "kad", "ping", "relay", "metrics", "rsa", "macros", "quic", "websocket"] }
 prometheus-client = { workspace = true }
 serde = "1.0.193"
 serde_derive = "1.0.125"
