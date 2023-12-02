@@ -908,7 +908,7 @@ where
     /// invoked at regular intervals based on the configured bootstrapping interval.
     /// The bootstrapping interval is used to call bootstrap periodically
     /// to ensure a healthy routing table.
-    /// > See bootstrap_interval field in Config.
+    /// > See [`Config::bootstrap_interval`] field in Config.
     pub fn bootstrap(&mut self) -> Result<QueryId, NoKnownPeers> {
         let local_key = self.kbuckets.local_key().clone();
         let info = QueryInfo::Bootstrap {
@@ -1434,6 +1434,8 @@ where
                 } else {
                     step.last = true;
                 };
+
+                self.any_bootstrap_successful = true;
 
                 Some(Event::OutboundQueryProgressed {
                     id: query_id,
@@ -2084,10 +2086,7 @@ where
     fn maybe_bootstrap(&mut self) {
         if self.current_automated_bootstrap.is_none() {
             match self.bootstrap() {
-                Ok(query_id) => {
-                    self.current_automated_bootstrap = Some(query_id);
-                    self.any_bootstrap_successful = true;
-                }
+                Ok(query_id) => self.current_automated_bootstrap = Some(query_id),
                 Err(_) => self.current_automated_bootstrap = None,
             }
         }
@@ -2519,9 +2518,7 @@ where
             if let Poll::Ready(()) = Pin::new(&mut bootstrap_timer).poll(cx) {
                 if let Some(interval) = self.bootstrap_interval {
                     bootstrap_timer.reset(interval);
-                    if !self.any_bootstrap_successful {
-                        self.maybe_bootstrap();
-                    }
+                    self.maybe_bootstrap();
                 }
             }
             self.bootstrap_timer = Some(bootstrap_timer);
