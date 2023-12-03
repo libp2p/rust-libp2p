@@ -3,7 +3,7 @@ name = "quick-protobuf-codec"
 edition = "2021"
 rust-version = { workspace = true }
 description = "Asynchronous de-/encoding of Protobuf structs using asynchronous-codec, unsigned-varint and quick-protobuf."
-version = "0.2.0"
+version = "0.3.1"
 authors = ["Max Inden <mail@max-inden.de>"]
 license = "MIT"
 repository = "https://github.com/libp2p/rust-libp2p"
@@ -14,8 +14,17 @@ categories = ["asynchronous"]
 asynchronous-codec = { workspace = true }
 bytes = { version = "1" }
 thiserror = "1.0"
-unsigned-varint = { workspace = true, features = ["asynchronous_codec"] }
+unsigned-varint = { workspace = true, features = ["std"] }
 quick-protobuf = "0.8"
+
+[dev-dependencies]
+criterion = "0.5.1"
+futures = "0.3.28"
+quickcheck = { workspace = true }
+
+[[bench]]
+name = "codec"
+harness = false
 
 # Passing arguments to the docsrs builder in order to properly document cfg's.
 # More information: https://docs.rs/about/builds#cross-compiling

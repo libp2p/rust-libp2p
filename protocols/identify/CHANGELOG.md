@@ -1,4 +1,4 @@
-## 0.44.1 - unreleased
+## 0.44.1
 
 - Ensure `Multiaddr` handled and returned by `Behaviour` are `/p2p` terminated.
   See [PR 4596](https://github.com/libp2p/rust-libp2p/pull/4596).

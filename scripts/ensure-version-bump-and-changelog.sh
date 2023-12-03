@@ -10,15 +10,6 @@ MERGE_BASE=$(git merge-base "$HEAD_SHA" "$PR_BASE") # Find the merge base. This 
 SRC_DIFF_TO_BASE=$(git diff "$HEAD_SHA".."$MERGE_BASE" --name-status -- "$DIR_TO_CRATE/src" "$DIR_TO_CRATE/Cargo.toml")
 CHANGELOG_DIFF=$(git diff "$HEAD_SHA".."$MERGE_BASE" --name-only -- "$DIR_TO_CRATE/CHANGELOG.md")
 
-VERSION_IN_CHANGELOG=$(awk -F' ' '/^## [0-9]+\.[0-9]+\.[0-9]+/{print $2; exit}' "$DIR_TO_CRATE/CHANGELOG.md")
-VERSION_IN_MANIFEST=$(cargo metadata --format-version=1 --no-deps | jq -e -r '.packages[] | select(.name == "'"$CRATE"'") | .version')
-
-# First, ensure version in Cargo.toml and CHANGELOG are in sync. This should always hold, regardless of whether the code in the crate was modified.
-if [[ "$VERSION_IN_CHANGELOG" != "$VERSION_IN_MANIFEST" ]]; then
-    echo "Version in Cargo.toml ($VERSION_IN_MANIFEST) does not match version in CHANGELOG ($VERSION_IN_CHANGELOG)"
-    exit 1
-fi
-
 # If the source files of this crate weren't touched in this PR, exit early.
 if [ -z "$SRC_DIFF_TO_BASE" ]; then
   exit 0;
@@ -31,7 +22,7 @@ if [ -z "$CHANGELOG_DIFF" ]; then
 fi
 
 # Code was touched, ensure the version used in the manifest hasn't been released yet.
-if git tag | grep -q "^$CRATE-v${VERSION_IN_MANIFEST}$"; then
-    echo "v$VERSION_IN_MANIFEST of '$CRATE' has already been released, please bump the version."
+if git tag | grep -q "^$CRATE-v${CRATE_VERSION}$"; then
+    echo "v$CRATE_VERSION of '$CRATE' has already been released, please bump the version."
     exit 1
 fi

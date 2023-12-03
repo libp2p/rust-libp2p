@@ -42,7 +42,7 @@ The main components of this repository are structured as follows:
 
   * `transports/`: Implementations of transport protocols (e.g. TCP) and protocol upgrades
     (e.g. for authenticated encryption, compression, ...) based on the `libp2p-core` `Transport`
-    API .
+    API.
 
   * `muxers/`: Implementations of the `StreamMuxer` interface of `libp2p-core`,
     e.g. (sub)stream multiplexing protocols on top of (typically TCP) connections.
