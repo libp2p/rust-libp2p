@@ -2084,12 +2084,19 @@ where
     }
 
     fn maybe_bootstrap(&mut self) {
-        if self.current_automated_bootstrap.is_none() {
-            match self.bootstrap() {
-                Ok(query_id) => self.current_automated_bootstrap = Some(query_id),
-                Err(_) => self.current_automated_bootstrap = None,
-            }
+        if self.current_automated_bootstrap.is_some() {
+            return;
         }
+
+        let query_id = match self.bootstrap() {
+            Ok(id) => id,
+            Err(e) => {
+                tracing::warn!("skipping automated bootstrap: {e}");
+                return;
+            }
+        };
+
+        self.current_automated_bootstrap = Some(query_id);
     }
 
     /// Preloads a new [`Handler`] with requests that are waiting to be sent to the newly connected peer.
