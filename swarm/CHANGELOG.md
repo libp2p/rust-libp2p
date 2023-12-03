@@ -2,6 +2,9 @@
 
 - Do not generate `NewExternalAddrCandidate` events if there are no listeners.
   See [PR 4886](https://github.com/libp2p/rust-libp2p/pull/4886).
+- Implement `Clone` & `Copy` for `FromSwarm.
+  This makes it easier to forward these events when wrapping other behaviours.
+  See [PR 4825](https://github.com/libp2p/rust-libp2p/pull/4825).
 
 ## 0.44.0
 
