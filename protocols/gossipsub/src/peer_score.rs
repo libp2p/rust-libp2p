@@ -89,7 +89,7 @@ impl Default for PeerStats {
             known_ips: HashSet::new(),
             behaviour_penalty: 0f64,
             application_score: 0f64,
-            slow_peer_penalty: 6f64,
+            slow_peer_penalty: 0f64,
         }
     }
 }
@@ -476,7 +476,7 @@ impl PeerScore {
     pub(crate) fn expired_message(&mut self, peer_id: &PeerId) {
         if let Some(peer_stats) = self.peer_stats.get_mut(peer_id) {
             peer_stats.slow_peer_penalty += 1.0;
-            tracing::trace!(peer=%peer_id, %peer_stats.slow_peer_penalty, "Added another count to slow peer score.");
+            tracing::debug!(peer=%peer_id, %peer_stats.slow_peer_penalty, "[Penalty] Expired message penalty.");
         }
     }
 
