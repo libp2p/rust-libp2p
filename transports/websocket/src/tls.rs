@@ -94,9 +94,9 @@ fn client_root_store() -> rustls::RootCertStore {
     let mut client_root_store = rustls::RootCertStore::empty();
     client_root_store.add_trust_anchors(webpki_roots::TLS_SERVER_ROOTS.iter().map(|ta| {
         rustls::OwnedTrustAnchor::from_subject_spki_name_constraints(
-            ta.subject,
-            ta.spki,
-            ta.name_constraints,
+            ta.subject.to_vec(),
+            ta.subject_public_key_info.to_vec(),
+            ta.name_constraints.as_ref().map(|n| n.to_vec()),
         )
     }));
     client_root_store
