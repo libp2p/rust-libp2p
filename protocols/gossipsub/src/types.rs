@@ -23,6 +23,8 @@ use crate::metrics::Metrics;
 use crate::TopicHash;
 use async_channel::{Receiver, Sender};
 use futures::Stream;
+use futures_timer::Delay;
+use instant::Duration;
 use libp2p_identity::PeerId;
 use libp2p_swarm::ConnectionId;
 use prometheus_client::encoding::EncodeLabelValue;
@@ -240,12 +242,14 @@ pub enum ControlAction {
 }
 
 /// A Gossipsub RPC message sent.
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug)]
 pub enum RpcOut {
-    /// Publish a Gossipsub message on network.
-    Publish(RawMessage),
-    /// Forward a Gossipsub message to the network.
-    Forward(RawMessage),
+    /// Publish a Gossipsub message on network. The [`Delay`] tags the time we attempted to
+    /// send it.
+    Publish { message: RawMessage, timeout: Delay },
+    /// Forward a Gossipsub message to the network. The [`Delay`] tags the time we attempted to
+    /// send it.
+    Forward { message: RawMessage, timeout: Delay },
     /// Subscribe a topic.
     Subscribe(TopicHash),
     /// Unsubscribe a topic.
@@ -266,12 +270,18 @@ impl From<RpcOut> for proto::RPC {
     /// Converts the RPC into protobuf format.
     fn from(rpc: RpcOut) -> Self {
         match rpc {
-            RpcOut::Publish(message) => proto::RPC {
+            RpcOut::Publish {
+                message,
+                timeout: _,
+            } => proto::RPC {
                 subscriptions: Vec::new(),
                 publish: vec![message.into()],
                 control: None,
             },
-            RpcOut::Forward(message) => proto::RPC {
+            RpcOut::Forward {
+                message,
+                timeout: _,
+            } => proto::RPC {
                 publish: vec![message.into()],
                 subscriptions: Vec::new(),
                 control: None,
@@ -537,7 +547,7 @@ impl RpcSender {
         let (non_priority_sender, non_priority_receiver) = async_channel::bounded(cap / 2);
         let len = Arc::new(AtomicUsize::new(0));
         let receiver = RpcReceiver {
-            len: len.clone(),
+            priority_len: len.clone(),
             priority: priority_receiver,
             non_priority: non_priority_receiver,
         };
@@ -585,13 +595,17 @@ impl RpcSender {
     pub(crate) fn publish(
         &mut self,
         message: RawMessage,
+        timeout: Duration,
         metrics: Option<&mut Metrics>,
     ) -> Result<(), ()> {
         if self.len.load(Ordering::Relaxed) >= self.cap {
             return Err(());
         }
         self.priority
-            .try_send(RpcOut::Publish(message.clone()))
+            .try_send(RpcOut::Publish {
+                message: message.clone(),
+                timeout: Delay::new(timeout),
+            })
             .expect("Channel is unbounded and should always be open");
         self.len.fetch_add(1, Ordering::Relaxed);
 
@@ -604,8 +618,16 @@ impl RpcSender {
 
     /// Send a `RpcOut::Forward` message to the `RpcReceiver`
     /// this is high priority. If the queue is full the message is discarded.
-    pub(crate) fn forward(&mut self, message: RawMessage, metrics: Option<&mut Metrics>) {
-        if let Err(err) = self.non_priority.try_send(RpcOut::Forward(message.clone())) {
+    pub(crate) fn forward(
+        &mut self,
+        message: RawMessage,
+        timeout: Duration,
+        metrics: Option<&mut Metrics>,
+    ) {
+        if let Err(err) = self.non_priority.try_send(RpcOut::Forward {
+            message: message.clone(),
+            timeout: Delay::new(timeout),
+        }) {
             let rpc = err.into_inner();
             tracing::trace!(
                 "{:?} message to peer {} dropped, queue is full",
@@ -624,8 +646,11 @@ impl RpcSender {
 /// `RpcOut` sender that is priority aware.
 #[derive(Debug, Clone)]
 pub struct RpcReceiver {
-    len: Arc<AtomicUsize>,
+    /// The maximum length of the priority queue.
+    priority_len: Arc<AtomicUsize>,
+    /// The priority queue receiver.
     pub(crate) priority: Receiver<RpcOut>,
+    /// The non priority queue receiver.
     pub(crate) non_priority: Receiver<RpcOut>,
 }
 
@@ -645,8 +670,8 @@ impl Stream for RpcReceiver {
     ) -> std::task::Poll<Option<Self::Item>> {
         // The priority queue is first polled.
         if let Poll::Ready(rpc) = Pin::new(&mut self.priority).poll_next(cx) {
-            if let Some(RpcOut::Publish(_)) = rpc {
-                self.len.fetch_sub(1, Ordering::Relaxed);
+            if let Some(RpcOut::Publish { .. }) = rpc {
+                self.priority_len.fetch_sub(1, Ordering::Relaxed);
             }
             return Poll::Ready(rpc);
         }

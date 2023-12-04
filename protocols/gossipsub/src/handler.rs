@@ -20,7 +20,7 @@
 
 use crate::protocol::{GossipsubCodec, ProtocolConfig};
 use crate::rpc_proto::proto;
-use crate::types::{PeerKind, RawMessage, Rpc, RpcReceiver};
+use crate::types::{PeerKind, RawMessage, Rpc, RpcOut, RpcReceiver};
 use crate::ValidationError;
 use asynchronous_codec::Framed;
 use futures::future::Either;
@@ -54,6 +54,8 @@ pub enum HandlerEvent {
     /// An inbound or outbound substream has been established with the peer and this informs over
     /// which protocol. This message only occurs once per connection.
     PeerKind(PeerKind),
+    /// A message to be published was dropped because it could not be sent in time.
+    MessageDropped(RpcOut),
 }
 
 /// A message sent from the behaviour to the handler.
@@ -239,6 +241,10 @@ impl EnabledHandler {
             });
         }
 
+        // We may need to inform the behviour if we have a dropped a message. This gets set if that
+        // is the case.
+        let mut dropped_message = None;
+
         // process outbound stream
         loop {
             match std::mem::replace(
@@ -247,7 +253,26 @@ impl EnabledHandler {
             ) {
                 // outbound idle state
                 Some(OutboundSubstreamState::WaitingOutput(substream)) => {
-                    if let Poll::Ready(Some(message)) = self.send_queue.poll_next_unpin(cx) {
+                    if let Poll::Ready(Some(mut message)) = self.send_queue.poll_next_unpin(cx) {
+                        match message {
+                            RpcOut::Publish {
+                                message: _,
+                                ref mut timeout,
+                            }
+                            | RpcOut::Forward {
+                                message: _,
+                                ref mut timeout,
+                            } => {
+                                if Pin::new(timeout).poll(cx).is_ready() {
+                                    // Inform the behaviour and end the poll.
+                                    dropped_message = Some(HandlerEvent::MessageDropped(message));
+                                    self.outbound_substream =
+                                        Some(OutboundSubstreamState::WaitingOutput(substream));
+                                    break;
+                                }
+                            }
+                            _ => {} // All other messages are not time-bound.
+                        }
                         self.outbound_substream = Some(OutboundSubstreamState::PendingSend(
                             substream,
                             message.into_protobuf(),
@@ -317,6 +342,13 @@ impl EnabledHandler {
             }
         }
 
+        // If there was a timeout in sending a message, inform the behaviour before restarting the
+        // poll
+        if let Some(handler_event) = dropped_message {
+            return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(handler_event));
+        }
+
+        // Handle inbound messages
         loop {
             match std::mem::replace(
                 &mut self.inbound_substream,

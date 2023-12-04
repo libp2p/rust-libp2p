@@ -127,6 +127,10 @@ pub(crate) struct Metrics {
     ignored_messages: Family<TopicHash, Counter>,
     /// The number of messages rejected by the application (validation result).
     rejected_messages: Family<TopicHash, Counter>,
+    /// The number of publish messages dropped by the sender.
+    publish_messages_dropped: Family<TopicHash, Counter>,
+    /// The number of forward messages dropped by the sender.
+    forward_messages_dropped: Family<TopicHash, Counter>,
 
     /* Metrics regarding mesh state */
     /// Number of peers in our mesh. This metric should be updated with the count of peers for a
@@ -222,6 +226,16 @@ impl Metrics {
             "Number of rejected messages received for each topic"
         );
 
+        let publish_messages_dropped = register_family!(
+            "publish_messages_dropped_per_topic",
+            "Number of publish messages dropped per topic"
+        );
+
+        let forward_messages_dropped = register_family!(
+            "forward_messages_dropped_per_topic",
+            "Number of forward messages dropped per topic"
+        );
+
         let mesh_peer_counts = register_family!(
             "mesh_peer_counts",
             "Number of peers in each topic in our mesh"
@@ -312,6 +326,8 @@ impl Metrics {
             accepted_messages,
             ignored_messages,
             rejected_messages,
+            publish_messages_dropped,
+            forward_messages_dropped,
             mesh_peer_counts,
             mesh_peer_inclusion_events,
             mesh_peer_churn_events,
@@ -449,6 +465,20 @@ impl Metrics {
             self.topic_msg_sent_bytes
                 .get_or_create(topic)
                 .inc_by(bytes as u64);
+        }
+    }
+
+    /// Register sending a message over a topic.
+    pub(crate) fn publish_msg_dropped(&mut self, topic: &TopicHash) {
+        if self.register_topic(topic).is_ok() {
+            self.publish_messages_dropped.get_or_create(topic).inc();
+        }
+    }
+
+    /// Register dropping a message over a topic.
+    pub(crate) fn forward_msg_dropped(&mut self, topic: &TopicHash) {
+        if self.register_topic(topic).is_ok() {
+            self.forward_messages_dropped.get_or_create(topic).inc();
         }
     }
 

@@ -230,7 +230,7 @@ where
         }
     };
 
-    let sender = RpcSender::new(peer, 100);
+    let sender = RpcSender::new(peer, gs.config.connection_handler_queue_len());
     let receiver = sender.new_receiver();
     gs.handler_send_queues.insert(peer, sender);
 
@@ -669,7 +669,7 @@ fn test_publish_without_flood_publishing() {
         .into_values()
         .fold(vec![], |mut collected_publish, c| {
             while !c.priority.is_empty() {
-                if let Ok(RpcOut::Publish(message)) = c.priority.try_recv() {
+                if let Ok(RpcOut::Publish { message, .. }) = c.priority.try_recv() {
                     collected_publish.push(message);
                 }
             }
@@ -753,7 +753,7 @@ fn test_fanout() {
         .into_values()
         .fold(vec![], |mut collected_publish, c| {
             while !c.priority.is_empty() {
-                if let Ok(RpcOut::Publish(message)) = c.priority.try_recv() {
+                if let Ok(RpcOut::Publish { message, .. }) = c.priority.try_recv() {
                     collected_publish.push(message);
                 }
             }
@@ -1035,8 +1035,8 @@ fn test_handle_iwant_msg_cached() {
         .into_values()
         .fold(vec![], |mut collected_messages, c| {
             while !c.non_priority.is_empty() {
-                if let Ok(RpcOut::Forward(msg)) = c.non_priority.try_recv() {
-                    collected_messages.push(msg)
+                if let Ok(RpcOut::Forward { message, .. }) = c.non_priority.try_recv() {
+                    collected_messages.push(message)
                 }
             }
             collected_messages
@@ -1090,7 +1090,7 @@ fn test_handle_iwant_msg_cached_shifted() {
         let message_exists = queues.values().any(|c| {
             let mut out = false;
             while !c.non_priority.is_empty() {
-                if matches!(c.non_priority.try_recv(), Ok(RpcOut::Forward(message)) if
+                if matches!(c.non_priority.try_recv(), Ok(RpcOut::Forward{message, timeout: _ }) if
                         gs.config.message_id(
                             &gs.data_transform
                                 .inbound_transform(message.clone())
@@ -1558,7 +1558,7 @@ fn do_forward_messages_to_explicit_peers() {
     assert_eq!(
         queues.into_iter().fold(0, |mut fwds, (peer_id, c)| {
             while !c.non_priority.is_empty() {
-                if matches!(c.non_priority.try_recv(), Ok(RpcOut::Forward(m)) if peer_id == peers[0] && m.data == message.data) {
+                if matches!(c.non_priority.try_recv(), Ok(RpcOut::Forward{message: m, timeout: _}) if peer_id == peers[0] && m.data == message.data) {
         fwds +=1;
         }
                 }
@@ -2113,7 +2113,7 @@ fn test_flood_publish() {
         .into_values()
         .fold(vec![], |mut collected_publish, c| {
             while !c.priority.is_empty() {
-                if let Ok(RpcOut::Publish(message)) = c.priority.try_recv() {
+                if let Ok(RpcOut::Publish { message, .. }) = c.priority.try_recv() {
                     collected_publish.push(message);
                 }
             }
@@ -2672,7 +2672,7 @@ fn test_iwant_msg_from_peer_below_gossip_threshold_gets_ignored() {
         .into_iter()
         .fold(vec![], |mut collected_messages, (peer_id, c)| {
             while !c.non_priority.is_empty() {
-                if let Ok(RpcOut::Forward(message)) = c.non_priority.try_recv() {
+                if let Ok(RpcOut::Forward { message, .. }) = c.non_priority.try_recv() {
                     collected_messages.push((peer_id, message));
                 }
             }
@@ -2817,7 +2817,7 @@ fn test_do_not_publish_to_peer_below_publish_threshold() {
         .into_iter()
         .fold(vec![], |mut collected_publish, (peer_id, c)| {
             while !c.priority.is_empty() {
-                if let Ok(RpcOut::Publish(message)) = c.priority.try_recv() {
+                if let Ok(RpcOut::Publish { message, .. }) = c.priority.try_recv() {
                     collected_publish.push((peer_id, message));
                 }
             }
@@ -2871,7 +2871,7 @@ fn test_do_not_flood_publish_to_peer_below_publish_threshold() {
         .into_iter()
         .fold(vec![], |mut collected_publish, (peer_id, c)| {
             while !c.priority.is_empty() {
-                if let Ok(RpcOut::Publish(message)) = c.priority.try_recv() {
+                if let Ok(RpcOut::Publish { message, .. }) = c.priority.try_recv() {
                     collected_publish.push((peer_id, message))
                 }
             }
@@ -4394,7 +4394,7 @@ fn test_ignore_too_many_iwants_from_same_peer_for_same_message() {
     assert_eq!(
         queues.into_values().fold(0, |mut fwds, c| {
             while !c.non_priority.is_empty() {
-                if let Ok(RpcOut::Forward(_)) = c.non_priority.try_recv() {
+                if let Ok(RpcOut::Forward { .. }) = c.non_priority.try_recv() {
                     fwds += 1;
                 }
             }
@@ -4806,7 +4806,7 @@ fn test_publish_to_floodsub_peers_without_flood_publish() {
         .fold(0, |mut collected_publish, (peer_id, c)| {
             while !c.priority.is_empty() {
                 if matches!(c.priority.try_recv(),
-            Ok(RpcOut::Publish(_)) if peer_id == &p1 || peer_id == &p2)
+            Ok(RpcOut::Publish{..}) if peer_id == &p1 || peer_id == &p2)
                 {
                     collected_publish += 1;
                 }
@@ -4861,7 +4861,7 @@ fn test_do_not_use_floodsub_in_fanout() {
         .fold(0, |mut collected_publish, (peer_id, c)| {
             while !c.priority.is_empty() {
                 if matches!(c.priority.try_recv(),
-            Ok(RpcOut::Publish(_)) if peer_id == &p1 || peer_id == &p2)
+            Ok(RpcOut::Publish{..}) if peer_id == &p1 || peer_id == &p2)
                 {
                     collected_publish += 1;
                 }

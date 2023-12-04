@@ -2642,6 +2642,7 @@ dependencies = [
  "fnv",
  "futures",
  "futures-ticker",
+ "futures-timer",
  "getrandom 0.2.11",
  "hex",
  "hex_fmt",

@@ -45,7 +45,6 @@ use libp2p_swarm::{
     THandlerOutEvent, ToSwarm,
 };
 
-use crate::config::{Config, ValidationMode};
 use crate::gossip_promises::GossipPromises;
 use crate::handler::{Handler, HandlerEvent, HandlerIn};
 use crate::mcache::MessageCache;
@@ -62,6 +61,10 @@ use crate::types::{
 };
 use crate::types::{PeerConnections, PeerKind};
 use crate::{backoff::BackoffStorage, types::RpcSender};
+use crate::{
+    config::{Config, ValidationMode},
+    types::RpcOut,
+};
 use crate::{rpc_proto::proto, TopicScoreParams};
 use crate::{PublishError, SubscriptionError, ValidationError};
 use instant::SystemTime;
@@ -732,7 +735,11 @@ where
                 .expect("Peerid should exist");
 
             if sender
-                .publish(raw_message.clone(), self.metrics.as_mut())
+                .publish(
+                    raw_message.clone(),
+                    self.config.publish_queue_duration(),
+                    self.metrics.as_mut(),
+                )
                 .is_err()
             {
                 errors += 1;
@@ -1342,7 +1349,11 @@ where
                         .get_mut(peer_id)
                         .expect("Peerid should exist");
 
-                    sender.forward(msg, self.metrics.as_mut());
+                    sender.forward(
+                        msg,
+                        self.config.forward_queue_duration(),
+                        self.metrics.as_mut(),
+                    );
                 }
             }
         }
@@ -2660,7 +2671,11 @@ where
                     .handler_send_queues
                     .get_mut(peer)
                     .expect("Peerid should exist");
-                sender.forward(message.clone(), self.metrics.as_mut());
+                sender.forward(
+                    message.clone(),
+                    self.config.forward_queue_duration(),
+                    self.metrics.as_mut(),
+                );
             }
             tracing::debug!("Completed forwarding message");
             Ok(true)
@@ -3115,6 +3130,21 @@ where
                     }
                 }
             }
+            HandlerEvent::MessageDropped(rpc) => {
+                // TODO:
+                // * Build scoring logic to handle peers that are dropping messages
+                if let Some(metrics) = self.metrics.as_mut() {
+                    match rpc {
+                        RpcOut::Publish { message, .. } => {
+                            metrics.publish_msg_dropped(&message.topic);
+                        }
+                        RpcOut::Forward { message, .. } => {
+                            metrics.forward_msg_dropped(&message.topic);
+                        }
+                        _ => {}
+                    }
+                }
+            }
             HandlerEvent::Message {
                 rpc,
                 invalid_messages,
@@ -3436,45 +3466,6 @@ impl fmt::Debug for PublishConfig {
             }
             PublishConfig::RandomAuthor => f.write_fmt(format_args!("PublishConfig::RandomAuthor")),
             PublishConfig::Anonymous => f.write_fmt(format_args!("PublishConfig::Anonymous")),
-        }
-    }
-}
-
-#[cfg(test)]
-mod local_test {
-    use super::*;
-    use crate::{types::RpcOut, IdentTopic};
-    use quickcheck::*;
-
-    fn test_message() -> RawMessage {
-        RawMessage {
-            source: Some(PeerId::random()),
-            data: vec![0; 100],
-            sequence_number: None,
-            topic: TopicHash::from_raw("test_topic"),
-            signature: None,
-            key: None,
-            validated: false,
-        }
-    }
-
-    fn test_control() -> ControlAction {
-        ControlAction::IHave {
-            topic_hash: IdentTopic::new("TestTopic").hash(),
-            message_ids: vec![MessageId(vec![12u8]); 5],
-        }
-    }
-
-    impl Arbitrary for RpcOut {
-        fn arbitrary(g: &mut Gen) -> Self {
-            match u8::arbitrary(g) % 5 {
-                0 => RpcOut::Subscribe(IdentTopic::new("TestTopic").hash()),
-                1 => RpcOut::Unsubscribe(IdentTopic::new("TestTopic").hash()),
-                2 => RpcOut::Publish(test_message()),
-                3 => RpcOut::Forward(test_message()),
-                4 => RpcOut::Control(test_control()),
-                _ => panic!("outside range"),
-            }
         }
     }
 }

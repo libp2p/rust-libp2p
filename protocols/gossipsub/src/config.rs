@@ -96,6 +96,8 @@ pub struct Config {
     iwant_followup_time: Duration,
     published_message_ids_cache_time: Duration,
     connection_handler_queue_len: usize,
+    connection_handler_publish_duration: Duration,
+    connection_handler_forward_duration: Duration,
 }
 
 impl Config {
@@ -352,9 +354,21 @@ impl Config {
         self.published_message_ids_cache_time
     }
 
-    /// The max number of messages a `ConnectionHandler` can buffer.
+    /// The max number of messages a `ConnectionHandler` can buffer. The default is 5000.
     pub fn connection_handler_queue_len(&self) -> usize {
         self.connection_handler_queue_len
+    }
+
+    /// The duration a message to be published can wait to be sent before it is abandoned. The
+    /// default is 5 seconds.
+    pub fn publish_queue_duration(&self) -> Duration {
+        self.connection_handler_publish_duration
+    }
+
+    /// The duration a message to be forwarded can wait to be sent before it is abandoned. The
+    /// default is 500ms.
+    pub fn forward_queue_duration(&self) -> Duration {
+        self.connection_handler_forward_duration
     }
 }
 
@@ -423,7 +437,9 @@ impl Default for ConfigBuilder {
                 max_ihave_messages: 10,
                 iwant_followup_time: Duration::from_secs(3),
                 published_message_ids_cache_time: Duration::from_secs(10),
-                connection_handler_queue_len: 100,
+                connection_handler_queue_len: 5000,
+                connection_handler_publish_duration: Duration::from_secs(5),
+                connection_handler_forward_duration: Duration::from_millis(500),
             },
             invalid_protocol: false,
         }
@@ -789,8 +805,21 @@ impl ConfigBuilder {
         self
     }
 
+    /// The max number of messages a `ConnectionHandler` can buffer. The default is 5000.
     pub fn connection_handler_queue_len(&mut self, len: usize) {
         self.config.connection_handler_queue_len = len;
+    }
+
+    /// The duration a message to be published can wait to be sent before it is abandoned. The
+    /// default is 5 seconds.
+    pub fn publish_queue_duration(&mut self, duration: Duration) {
+        self.config.connection_handler_publish_duration = duration;
+    }
+
+    /// The duration a message to be forwarded can wait to be sent before it is abandoned. The
+    /// default is 500ms.
+    pub fn forward_queue_duration(&mut self, duration: Duration) {
+        self.config.connection_handler_forward_duration = duration;
     }
 
     /// Constructs a [`Config`] from the given configuration and validates the settings.
