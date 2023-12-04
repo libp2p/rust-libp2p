@@ -81,6 +81,7 @@ impl Behaviour {
     }
 
     /// Returns a mutable reference to [`ConnectionLimits`].
+    /// > **Note**: A new limit will not be enforced against existing connections.
     pub fn limits_mut(&mut self) -> &mut ConnectionLimits {
         &mut self.limits
     }
