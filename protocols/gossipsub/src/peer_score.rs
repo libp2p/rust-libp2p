@@ -67,6 +67,8 @@ struct PeerStats {
     behaviour_penalty: f64,
     /// Application specific score. Can be manipulated by calling PeerScore::set_application_score
     application_score: f64,
+    /// Scoring based on how whether this peer consumes messages fast enough or not.
+    slow_peer_penalty: f64,
 }
 
 enum ConnectionStatus {
@@ -87,6 +89,7 @@ impl Default for PeerStats {
             known_ips: HashSet::new(),
             behaviour_penalty: 0f64,
             application_score: 0f64,
+            slow_peer_penalty: 6f64,
         }
     }
 }
@@ -339,6 +342,13 @@ impl PeerScore {
             let p7 = excess * excess;
             score += p7 * self.params.behaviour_penalty_weight;
         }
+
+        // Slow peer weighting
+        if peer_stats.slow_peer_penalty > self.params.slow_peer_threshold {
+            let excess = peer_stats.slow_peer_penalty - self.params.slow_peer_threshold;
+            score += excess * self.params.slow_peer_weight;
+        }
+
         score
     }
 
@@ -428,6 +438,13 @@ impl PeerScore {
             if peer_stats.behaviour_penalty < params_ref.decay_to_zero {
                 peer_stats.behaviour_penalty = 0.0;
             }
+
+            // decay slow peer score
+            peer_stats.slow_peer_penalty *= params_ref.slow_peer_decay;
+            if peer_stats.slow_peer_penalty < params_ref.decay_to_zero {
+                peer_stats.slow_peer_penalty = 0.0;
+            }
+
             true
         });
     }
@@ -453,6 +470,14 @@ impl PeerScore {
         // Insert the ip
         peer_stats.known_ips.insert(ip);
         self.peer_ips.entry(ip).or_default().insert(*peer_id);
+    }
+
+    /// Indicate that a peer has been too slow to consume a message.
+    pub(crate) fn expired_message(&mut self, peer_id: &PeerId) {
+        if let Some(peer_stats) = self.peer_stats.get_mut(peer_id) {
+            peer_stats.slow_peer_penalty += 1.0;
+            tracing::trace!(peer=%peer_id, %peer_stats.slow_peer_penalty, "Added another count to slow peer score.");
+        }
     }
 
     /// Removes an ip from a peer

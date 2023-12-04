@@ -2456,6 +2456,7 @@ where
 
         // Report expired messages
         for (peer_id, expired_messages) in self.expired_messages.drain() {
+            tracing::debug!("Peer couldn't consume messages: {:?}", expired_messages);
             self.events
                 .push_back(ToSwarm::GenerateEvent(Event::SlowPeer {
                     peer_id,
@@ -3151,8 +3152,10 @@ where
                 }
             }
             HandlerEvent::MessageDropped(rpc) => {
-                // TODO:
-                // * Build scoring logic to handle peers that are dropping messages
+                // Account for this in the scoring logic
+                if let Some((peer_score, _, _, _)) = &mut self.peer_score {
+                    peer_score.expired_message(&propagation_source);
+                }
 
                 // Keep track of expired messages for the application layer.
                 match rpc {
