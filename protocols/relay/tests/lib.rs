@@ -414,10 +414,7 @@ fn reuse_connection() {
         .with(Protocol::P2p(relay_peer_id))
         .with(Protocol::P2pCircuit);
 
-    // To reuse the connection, we need to ensure it is not shut down due to being idle.
-    let mut client = build_client_with_config(
-        Config::with_async_std_executor().with_idle_connection_timeout(Duration::from_secs(1)),
-    );
+    let mut client = build_client();
     let client_peer_id = *client.local_peer_id();
 
     client.dial(relay_addr).unwrap();

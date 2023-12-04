@@ -105,7 +105,6 @@ async fn main() -> Result<(), Box<dyn Error>> {
                 )),
                 dcutr: dcutr::Behaviour::new(keypair.public().to_peer_id()),
             })?
-            .with_swarm_config(|c| c.with_idle_connection_timeout(Duration::from_secs(60)))
             .build();
 
     swarm

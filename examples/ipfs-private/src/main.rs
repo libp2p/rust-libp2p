@@ -151,7 +151,6 @@ async fn main() -> Result<(), Box<dyn Error>> {
                 ping: ping::Behaviour::new(ping::Config::new()),
             })
         })?
-        .with_swarm_config(|c| c.with_idle_connection_timeout(Duration::from_secs(60)))
         .build();
 
     println!("Subscribing to {gossipsub_topic:?}");
