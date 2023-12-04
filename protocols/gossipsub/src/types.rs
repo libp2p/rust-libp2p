@@ -39,6 +39,32 @@ use crate::rpc_proto::proto;
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 
+/// The kind of message a peer is unable to download in time.
+#[derive(Clone, Debug, Default)]
+pub struct ExpiredMessages {
+    /// The number of publish messages that failed to be published in a heartbeat.
+    pub publish: usize,
+    /// The number of forward messages that failed to be published in a heartbeat.
+    pub forward: usize,
+}
+
+impl ExpiredMessages {
+    /// Increments the number of expired publish messages.
+    pub fn increment_publish(&mut self) {
+        self.publish += 1;
+    }
+
+    /// Increments the number of expired forward messages.
+    pub fn increment_forward(&mut self) {
+        self.forward += 1;
+    }
+
+    /// Provides the total expired messages.
+    pub fn total(&self) -> usize {
+        self.publish + self.forward
+    }
+}
+
 #[derive(Debug)]
 /// Validation kinds from the application for received messages.
 pub enum MessageAcceptance {

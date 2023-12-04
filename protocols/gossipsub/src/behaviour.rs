@@ -55,6 +55,7 @@ use crate::subscription_filter::{AllowAllSubscriptionFilter, TopicSubscriptionFi
 use crate::time_cache::DuplicateCache;
 use crate::topic::{Hasher, Topic, TopicHash};
 use crate::transform::{DataTransform, IdentityTransform};
+use crate::types::ExpiredMessages;
 use crate::types::{
     ControlAction, Message, MessageAcceptance, MessageId, PeerInfo, RawMessage, Subscription,
     SubscriptionAction,
@@ -147,6 +148,11 @@ pub enum Event {
     },
     /// A peer that does not support gossipsub has connected.
     GossipsubNotSupported { peer_id: PeerId },
+    /// A peer is not able to download messages in time.
+    SlowPeer {
+        peer_id: PeerId,
+        expired_messages: ExpiredMessages,
+    },
 }
 
 /// A data structure for storing configuration for publishing messages. See [`MessageAuthenticity`]
@@ -338,6 +344,9 @@ pub struct Behaviour<D = IdentityTransform, F = AllowAllSubscriptionFilter> {
 
     /// Connection handler message queue channels.
     handler_send_queues: HashMap<PeerId, RpcSender>,
+
+    /// Tracks the numbers of failed messages per peer-id.
+    expired_messages: HashMap<PeerId, ExpiredMessages>,
 }
 
 impl<D, F> Behaviour<D, F>
@@ -478,6 +487,7 @@ where
             subscription_filter,
             data_transform,
             handler_send_queues: Default::default(),
+            expired_messages: Default::default(),
         })
     }
 }
@@ -2444,6 +2454,16 @@ where
         // shift the memcache
         self.mcache.shift();
 
+        // Report expired messages
+        for (peer_id, expired_messages) in self.expired_messages.drain() {
+            self.events
+                .push_back(ToSwarm::GenerateEvent(Event::SlowPeer {
+                    peer_id,
+                    expired_messages,
+                }));
+        }
+        self.expired_messages.shrink_to_fit();
+
         tracing::debug!("Completed Heartbeat");
         if let Some(metrics) = self.metrics.as_mut() {
             let duration = u64::try_from(start.elapsed().as_millis()).unwrap_or(u64::MAX);
@@ -3133,6 +3153,25 @@ where
             HandlerEvent::MessageDropped(rpc) => {
                 // TODO:
                 // * Build scoring logic to handle peers that are dropping messages
+
+                // Keep track of expired messages for the application layer.
+                match rpc {
+                    RpcOut::Publish { .. } => {
+                        self.expired_messages
+                            .entry(propagation_source)
+                            .or_default()
+                            .increment_publish();
+                    }
+                    RpcOut::Forward { .. } => {
+                        self.expired_messages
+                            .entry(propagation_source)
+                            .or_default()
+                            .increment_forward();
+                    }
+                    _ => {} //
+                }
+
+                // Record metrics on the failure.
                 if let Some(metrics) = self.metrics.as_mut() {
                     match rpc {
                         RpcOut::Publish { message, .. } => {
