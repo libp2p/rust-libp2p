@@ -220,6 +220,7 @@ where
 }
 
 /// The yamux configuration.
+#[derive(Debug, Clone)]
 pub struct Config(Either<Config012, Config013>);
 
 impl Default for Config {
