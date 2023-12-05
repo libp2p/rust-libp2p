@@ -103,26 +103,23 @@ where
         mut self: Pin<&mut Self>,
         cx: &mut Context<'_>,
     ) -> Poll<Result<Self::Substream, Self::Error>> {
-        let stream = ready!(either::for_both!(
-            self.connection.as_mut(),
-            c => c
-                .poll_new_outbound(cx)
-                .map_err(Error::from)
-                .map_ok(Stream::from)
-        )?);
+        let stream = match self.connection.as_mut() {
+            Either::Left(c) => ready!(c.poll_new_outbound(cx))
+                .map_err(|e| Error(Either::Left(e)))
+                .map(|s| Stream(Either::Left(s))),
+            Either::Right(c) => ready!(c.poll_new_outbound(cx))
+                .map_err(|e| Error(Either::Right(e)))
+                .map(|s| Stream(Either::Right(s))),
+        }?;
         Poll::Ready(Ok(stream))
     }
 
     #[tracing::instrument(level = "trace", name = "StreamMuxer::poll_close", skip(self, cx))]
     fn poll_close(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
-        ready!(either::for_both!(
-            self.connection.as_mut(),
-            c => c
-                .poll_close(cx)
-                .map_err(Error::from)
-        )?);
-
-        Poll::Ready(Ok(()))
+        match self.connection.as_mut() {
+            Either::Left(c) => c.poll_close(cx).map_err(|e| Error(Either::Left(e))),
+            Either::Right(c) => c.poll_close(cx).map_err(|e| Error(Either::Right(e))),
+        }
     }
 
     #[tracing::instrument(level = "trace", name = "StreamMuxer::poll", skip(self, cx))]
@@ -157,18 +154,6 @@ where
 /// A stream produced by the yamux multiplexer.
 #[derive(Debug)]
 pub struct Stream(Either<yamux012::Stream, yamux013::Stream>);
-
-impl From<yamux012::Stream> for Stream {
-    fn from(value: yamux012::Stream) -> Self {
-        Self(Either::Left(value))
-    }
-}
-
-impl From<yamux013::Stream> for Stream {
-    fn from(value: yamux013::Stream) -> Self {
-        Self(Either::Right(value))
-    }
-}
 
 impl AsyncRead for Stream {
     fn poll_read(
@@ -221,13 +206,13 @@ where
     fn poll_inner(&mut self, cx: &mut Context<'_>) -> Poll<Result<Stream, Error>> {
         let stream = match self.connection.as_mut() {
             Either::Left(c) => ready!(c.poll_next_inbound(cx))
-                .ok_or(Error::from(yamux012::ConnectionError::Closed))?
-                .map_err(Error::from)
-                .map(Stream::from)?,
+                .ok_or(Error(Either::Left(yamux012::ConnectionError::Closed)))?
+                .map_err(|e| Error(Either::Left(e)))
+                .map(|s| Stream(Either::Left(s)))?,
             Either::Right(c) => ready!(c.poll_next_inbound(cx))
-                .ok_or(Error::from(yamux013::ConnectionError::Closed))?
-                .map_err(Error::from)
-                .map(Stream::from)?,
+                .ok_or(Error(Either::Right(yamux013::ConnectionError::Closed)))?
+                .map_err(|e| Error(Either::Right(e)))
+                .map(|s| Stream(Either::Right(s)))?,
         };
 
         Poll::Ready(Ok(stream))
@@ -435,18 +420,6 @@ impl Default for Config013 {
 #[derive(Debug, Error)]
 #[error(transparent)]
 pub struct Error(Either<yamux012::ConnectionError, yamux013::ConnectionError>);
-
-impl From<yamux012::ConnectionError> for Error {
-    fn from(value: yamux012::ConnectionError) -> Self {
-        Error(Either::Left(value))
-    }
-}
-
-impl From<yamux013::ConnectionError> for Error {
-    fn from(value: yamux013::ConnectionError) -> Self {
-        Error(Either::Right(value))
-    }
-}
 
 impl From<Error> for io::Error {
     fn from(err: Error) -> Self {
