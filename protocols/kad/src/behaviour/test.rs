@@ -174,6 +174,7 @@ fn bootstrap() {
         let num_group = rng.gen_range(1..(num_total % K_VALUE.get()) + 2);
 
         let mut cfg = Config::default();
+        cfg.bootstrap_interval = None;
         if rng.gen() {
             cfg.disjoint_query_paths(true);
         }
@@ -252,7 +253,9 @@ fn query_iter() {
 
     fn run(rng: &mut impl Rng) {
         let num_total = rng.gen_range(2..20);
-        let mut swarms = build_connected_nodes(num_total, 1)
+        let mut config = Config::default();
+        config.bootstrap_interval = None;
+        let mut swarms = build_connected_nodes_with_config(num_total, 1, config)
             .into_iter()
             .map(|(_a, s)| s)
             .collect::<Vec<_>>();
@@ -500,6 +503,7 @@ fn put_record() {
 
         let mut config = Config::default();
         config.set_replication_factor(replication_factor);
+        config.bootstrap_interval = None;
         if rng.gen() {
             config.disjoint_query_paths(true);
         }
@@ -869,6 +873,7 @@ fn add_provider() {
 
         let mut config = Config::default();
         config.set_replication_factor(replication_factor);
+        config.bootstrap_interval = None;
         if rng.gen() {
             config.disjoint_query_paths(true);
         }
@@ -1094,6 +1099,7 @@ fn disjoint_query_does_not_finish_before_all_paths_did() {
     config.disjoint_query_paths(true);
     // I.e. setting the amount disjoint paths to be explored to 2.
     config.set_parallelism(NonZeroUsize::new(2).unwrap());
+    config.bootstrap_interval = None;
 
     let mut alice = build_node_with_config(config);
     let mut trudy = build_node(); // Trudy the intrudor, an adversary.
