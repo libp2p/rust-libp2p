@@ -4,6 +4,8 @@
   For this work, the address cache must be enabled via `identify::Config::with_cache_size`.
   The default is 0, i.e. disabled.
   See [PR 4371](https://github.com/libp2p/rust-libp2p/pull/4371).
+- Add `ConnectionId` in `Event`.
+  See [PR 4981](https://github.com/libp2p/rust-libp2p/pull/4981).
 
 ## 0.44.1
 
