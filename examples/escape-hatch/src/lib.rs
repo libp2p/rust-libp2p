@@ -1,10 +1,14 @@
 
-use std::{collections::VecDeque, io, task::Poll, time::{Duration, Instant}};
+use std::{collections::VecDeque, io, task::Poll, time::{Duration, Instant}, pin::Pin};
 use futures::{prelude::*, future::Either};
 use libp2p::{PeerId, Stream, StreamProtocol, quic::Connection};
 use libp2p_core::{Multiaddr, transport::MemoryTransport, Transport};
 use rand::{distributions, prelude::*};
 use futures_timer::Delay;
+use std::task::{Context};
+use futures::future::poll_fn;
+use tokio::{net::TcpStream, io::AsyncWrite};
+
 
 pub const PROTOCOL_NAME: StreamProtocol = StreamProtocol::new("/ipfs/ping/1.0.0");
 
@@ -38,6 +42,7 @@ pub struct Config {
 }
 
 pub struct IncomingStreams {
+    stream: Option<TcpStream>,
     /// Queue of events to yield to the swarm.
     events: VecDeque<Event>,
 }
@@ -56,8 +61,19 @@ impl IncomingStreams {
         todo!()
     }
 
-    pub fn poll_next(&mut self) -> Poll<(PeerId, Stream)> {
+    pub fn poll_next(&mut self, cx: &mut Context<'_>) -> Poll<(PeerId, Stream)> {
+
+        let ping_message = "Ping\n";
+
+        // TODO remove unwrap
+        let stream_ref = self.stream.as_mut().unwrap();
+
         if let Some(e) = self.events.pop_back() {
+            let result = match Pin::new(stream_ref).poll_write(cx, ping_message.as_bytes()) {
+                Poll::Ready(Ok(_)) => Poll::Pending,
+                Poll::Ready(Err(e)) => Poll::Ready(()),
+                Poll::Pending => Poll::Pending,
+            };
         } else {
         }
 
@@ -78,6 +94,7 @@ impl Behaviour {
             },
             Control {},
             IncomingStreams {
+                stream: None,
                 events: VecDeque::new()
             },
         )
