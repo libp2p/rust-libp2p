@@ -317,7 +317,7 @@ impl Config {
             }
         };
 
-        f(&mut cfg012);
+        f(cfg012);
 
         self
     }
