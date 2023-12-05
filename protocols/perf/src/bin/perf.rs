@@ -71,13 +71,10 @@ impl FromStr for Transport {
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    let _ =
-        tracing_subscriber::fmt()
-            .with_env_filter(EnvFilter::try_from_default_env().unwrap_or(
-                "info,yamux=debug".into(),
-            ))
-            .with_writer(std::io::stderr)
-            .try_init();
+    let _ = tracing_subscriber::fmt()
+        .with_env_filter(EnvFilter::try_from_default_env().unwrap_or("info,yamux=debug".into()))
+        .with_writer(std::io::stderr)
+        .try_init();
 
     let opts = Opts::parse();
     match opts {
