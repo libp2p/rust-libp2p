@@ -154,6 +154,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
                             protocols,
                             ..
                         },
+                    ..
                 } = e
                 {
                     if protocols.iter().any(|p| *p == kad::PROTOCOL_NAME) {
