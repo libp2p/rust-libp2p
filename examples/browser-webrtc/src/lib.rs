@@ -60,9 +60,8 @@ pub async fn run(libp2p_endpoint: String) -> Result<(), JsError> {
                     body.append_p("All done with pinging! ")?;
 
                     break;
-                } else {
-                    body.append_p(&format!("Connection closed due to: {:?}", cause))?;
                 }
+                body.append_p(&format!("Connection closed due to: {:?}", cause))?;
             }
             evt => tracing::info!("Swarm event: {:?}", evt),
         }
