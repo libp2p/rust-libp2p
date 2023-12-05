@@ -309,7 +309,7 @@ impl Config {
     }
 
     fn set(&mut self, f: impl FnOnce(&mut yamux012::Config) -> &mut yamux012::Config) -> &mut Self {
-        let mut cfg012 = match self.0.as_mut() {
+        let cfg012 = match self.0.as_mut() {
             Either::Left(c) => &mut c.inner,
             Either::Right(_) => {
                 self.0 = Either::Left(Config012::default());
