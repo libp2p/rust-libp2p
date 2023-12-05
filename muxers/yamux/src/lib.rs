@@ -288,9 +288,9 @@ impl WindowUpdateMode {
 }
 
 impl Config {
-    // TODO: deprecate
     /// Creates a new `YamuxConfig` in client mode, regardless of whether
     /// it will be used for an inbound or outbound upgrade.
+    #[deprecated(note = "Will be removed with the next breaking release.")]
     pub fn client() -> Self {
         Self(Either::Left(Config012 {
             mode: Some(yamux012::Mode::Client),
@@ -298,9 +298,9 @@ impl Config {
         }))
     }
 
-    // TODO: deprecate
     /// Creates a new `YamuxConfig` in server mode, regardless of whether
     /// it will be used for an inbound or outbound upgrade.
+    #[deprecated(note = "Will be removed with the next breaking release.")]
     pub fn server() -> Self {
         Self(Either::Left(Config012 {
             mode: Some(yamux012::Mode::Server),
@@ -322,14 +322,16 @@ impl Config {
         self
     }
 
-    // TODO: deprecate
     /// Sets the size (in bytes) of the receive w``indow per substream.
+    #[deprecated(
+        note = "Will be replaced in the next breaking release with a connection receive window size limit."
+    )]
     pub fn set_receive_window_size(&mut self, num_bytes: u32) -> &mut Self {
         self.set(|cfg| cfg.set_receive_window(num_bytes))
     }
 
-    // TODO: deprecate
     /// Sets the maximum size (in bytes) of the receive buffer per substream.
+    #[deprecated(note = "Will be removed with the next breaking release.")]
     pub fn set_max_buffer_size(&mut self, num_bytes: usize) -> &mut Self {
         self.set(|cfg| cfg.set_max_buffer_size(num_bytes))
     }
@@ -339,9 +341,9 @@ impl Config {
         self.set(|cfg| cfg.set_max_num_streams(num_streams))
     }
 
-    // TODO: deprecate
     /// Sets the window update mode that determines when the remote
     /// is given new credit for sending more data.
+    #[deprecated(note = "Will be removed with the next breaking release.")]
     pub fn set_window_update_mode(&mut self, mode: WindowUpdateMode) -> &mut Self {
         self.set(|cfg| cfg.set_window_update_mode(mode.0))
     }
