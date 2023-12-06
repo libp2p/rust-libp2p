@@ -11,7 +11,8 @@ use libp2p_swarm::{
     ConnectionDenied, ConnectionHandler, ConnectionId, FromSwarm, NetworkBehaviour, NotifyHandler,
     ToSwarm,
 };
-use rand_core::RngCore;
+use rand_core::{OsRng, RngCore};
+use libp2p_core::multiaddr::Protocol;
 
 use super::handler::{
     dial_back,
@@ -19,7 +20,7 @@ use super::handler::{
     Handler,
 };
 
-pub struct Behaviour<R>
+pub struct Behaviour<R = OsRng>
 where
     R: Clone + Send + RngCore + 'static,
 {
@@ -35,11 +36,17 @@ where
     rng: R,
 }
 
+impl Default for Behaviour<OsRng> {
+    fn default() -> Self {
+        Self::new(OsRng)
+    }
+}
+
 impl<R> Behaviour<R>
 where
     R: RngCore + Send + Clone + 'static,
 {
-    pub(crate) fn new(rng: R) -> Self {
+    pub fn new(rng: R) -> Self {
         Self {
             handlers: HashMap::new(),
             pending_dial_back: HashMap::new(),
@@ -95,7 +102,7 @@ where
         port_use: PortUse,
     ) -> Result<<Self as NetworkBehaviour>::ConnectionHandler, ConnectionDenied> {
         if port_use == PortUse::New {
-            self.handlers.insert((addr.clone(), peer), connection_id);
+            self.handlers.insert((addr.iter().filter(|e| !matches!(e, Protocol::P2p(_))).collect(), peer), connection_id);
         }
         Ok(Either::Left(dial_back::Handler::new()))
     }

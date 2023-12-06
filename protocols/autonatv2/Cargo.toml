@@ -21,10 +21,16 @@ void = "1.0.2"
 either = "1.9.0"
 futures = "0.3.29"
 thiserror = "1.0.50"
-scc = "2.0.3"
 bytes = "1"
 static_assertions = "1.1.0"
 tracing = "0.1.40"
+
+[dev-dependencies]
+tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
+libp2p-swarm-test = { workspace = true }
+libp2p-identify = { workspace = true }
+libp2p-swarm = { workspace = true, features = ["macros"] }
+tracing-subscriber = { version = "0.3", features = ["env-filter"]}
 
 [lints]
 workspace = true

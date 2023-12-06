@@ -19,7 +19,7 @@ use super::DEFAULT_TIMEOUT;
 
 pub(crate) type ToBehaviour = io::Result<Nonce>;
 
-pub(crate) struct Handler {
+pub struct Handler {
     inbound: FuturesSet<io::Result<Nonce>>,
 }
 

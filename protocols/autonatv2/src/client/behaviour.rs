@@ -14,7 +14,7 @@ use libp2p_swarm::{
     NetworkBehaviour, NewExternalAddrCandidate, NotifyHandler, ToSwarm,
 };
 use rand::{distributions::Standard, seq::SliceRandom, Rng};
-use rand_core::RngCore;
+use rand_core::{OsRng, RngCore};
 
 use crate::{global_only::IpExt, request_response::DialRequest};
 
@@ -36,12 +36,21 @@ impl IntervalTicker {
     }
 }
 
-pub(crate) struct Config {
+pub struct Config {
     pub(crate) test_server_count: usize,
     pub(crate) max_addrs_count: usize,
 }
 
-pub(crate) struct Behaviour<R>
+impl Default for Config {
+    fn default() -> Self {
+        Self {
+            test_server_count: 3,
+            max_addrs_count: 10,
+        }
+    }
+}
+
+pub struct Behaviour<R = OsRng>
 where
     R: RngCore + 'static,
 {
@@ -79,7 +88,7 @@ where
         if addr_is_local(remote_addr) {
             self.local_peers.insert(connection_id);
         }
-        Ok(Either::Left(dial_request::Handler::new()))
+        Ok(Either::Right(dial_back::Handler::new()))
     }
 
     fn handle_established_outbound_connection(
@@ -93,7 +102,7 @@ where
         if addr_is_local(addr) {
             self.local_peers.insert(connection_id);
         }
-        Ok(Either::Right(dial_back::Handler::new()))
+        Ok(Either::Left(dial_request::Handler::new()))
     }
 
     fn on_swarm_event(&mut self, event: FromSwarm) {
@@ -139,9 +148,11 @@ where
         connection_id: ConnectionId,
         event: <Handler as ConnectionHandler>::ToBehaviour,
     ) {
-        self.peers_to_handlers
-            .entry(peer_id)
-            .or_insert(connection_id);
+        if matches!(event, Either::Left(_)) {
+            self.peers_to_handlers
+                .entry(peer_id)
+                .or_insert(connection_id);
+        }
         match event {
             Either::Right(Ok(nonce)) => {
                 if self.pending_nonces.remove(&nonce) {
@@ -184,12 +195,12 @@ where
                 self.pending_events
                     .push_back(ToSwarm::ExternalAddrConfirmed(reachable_addr));
             }
-            Either::Left(dial_request::ToBehaviour::TestCompleted(
-                Err(dial_request::Error::UnableToConnectOnSelectedAddress { addr: Some(addr) })
-            ))
-            | Either::Left(dial_request::ToBehaviour::TestCompleted(
-                Err(dial_request::Error::FailureDuringDialBack { addr: Some(addr) })
-            )) => {
+            Either::Left(dial_request::ToBehaviour::TestCompleted(Err(
+                dial_request::Error::UnableToConnectOnSelectedAddress { addr: Some(addr) },
+            )))
+            | Either::Left(dial_request::ToBehaviour::TestCompleted(Err(
+                dial_request::Error::FailureDuringDialBack { addr: Some(addr) },
+            ))) => {
                 self.pending_events
                     .push_back(ToSwarm::ExternalAddrExpired(addr));
             }
@@ -207,7 +218,7 @@ where
         if pending_event.is_ready() {
             return pending_event;
         }
-        if self.ticker.ready() && !self.known_servers.is_empty() {
+        if self.ticker.ready() && !self.known_servers.is_empty() && !self.address_candidates.is_empty() {
             let mut entries = self.address_candidates.drain().collect::<Vec<_>>();
             entries.sort_unstable_by_key(|(_, count)| *count);
             let addrs = entries
@@ -246,6 +257,23 @@ impl<R> Behaviour<R>
 where
     R: RngCore + 'static,
 {
+    pub fn new(rng: R, config: Config) -> Self {
+        Self {
+            local_peers: HashSet::new(),
+            pending_nonces: HashSet::new(),
+            known_servers: Vec::new(),
+            rng,
+            config,
+            pending_events: VecDeque::new(),
+            address_candidates: HashMap::new(),
+            peers_to_handlers: HashMap::new(),
+            ticker: IntervalTicker {
+                interval: Duration::from_secs(0),
+                last_tick: Instant::now(),
+            },
+        }
+    }
+
     fn submit_req_for_peer(&mut self, peer: PeerId, req: DialRequest) {
         if let Some(conn_id) = self.peers_to_handlers.get(&peer) {
             self.pending_events.push_back(ToSwarm::NotifyHandler {
@@ -253,6 +281,9 @@ where
                 handler: NotifyHandler::One(*conn_id),
                 event: Either::Left(dial_request::FromBehaviour::PerformRequest(req)),
             });
+            if self.pending_events.is_empty() {
+                println!("is empty")
+            }
         } else {
             tracing::debug!(
                 "There should be a connection to {:?}, but there isn't",
@@ -278,6 +309,12 @@ where
             return Poll::Ready(event);
         }
         Poll::Pending
+    }
+}
+
+impl Default for Behaviour<OsRng> {
+    fn default() -> Self {
+        Self::new(OsRng, Config::default())
     }
 }
 

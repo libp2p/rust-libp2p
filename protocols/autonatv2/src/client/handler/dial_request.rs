@@ -1,4 +1,4 @@
-use futures::{channel::oneshot, AsyncRead, AsyncWrite};
+use futures::{channel::oneshot, AsyncRead, AsyncWrite, AsyncWriteExt};
 use futures_bounded::FuturesSet;
 use libp2p_core::{
     upgrade::{DeniedUpgrade, ReadyUpgrade},
@@ -13,7 +13,6 @@ use libp2p_swarm::{
     ConnectionHandler, ConnectionHandlerEvent, Stream, StreamProtocol, StreamUpgradeError,
     SubstreamProtocol,
 };
-use scc::hash_cache::DEFAULT_MAXIMUM_CAPACITY;
 use std::{
     collections::VecDeque,
     convert::identity,
@@ -64,24 +63,24 @@ pub(crate) enum Error {
 }
 
 #[derive(Debug)]
-pub(crate) struct TestEnd {
+pub struct TestEnd {
     pub(crate) dial_request: DialRequest,
     pub(crate) suspicious_addr: Vec<Multiaddr>,
     pub(crate) reachable_addr: Multiaddr,
 }
 
 #[derive(Debug)]
-pub(crate) enum ToBehaviour {
+pub enum ToBehaviour {
     TestCompleted(Result<TestEnd, Error>),
     PeerHasServerSupport,
 }
 
 #[derive(Debug)]
-pub(crate) enum FromBehaviour {
+pub enum FromBehaviour {
     PerformRequest(DialRequest),
 }
 
-pub(crate) struct Handler {
+pub struct Handler {
     queued_events: VecDeque<
         ConnectionHandlerEvent<
             <Self as ConnectionHandler>::OutboundProtocol,
@@ -104,7 +103,7 @@ impl Handler {
     pub(crate) fn new() -> Self {
         Self {
             queued_events: VecDeque::new(),
-            outbound: FuturesSet::new(DEFAULT_TIMEOUT, DEFAULT_MAXIMUM_CAPACITY),
+            outbound: FuturesSet::new(DEFAULT_TIMEOUT, 10),
             queued_streams: VecDeque::default(),
         }
     }
@@ -207,9 +206,10 @@ impl ConnectionHandler for Handler {
             },
             ConnectionEvent::RemoteProtocolsChange(ProtocolsChange::Added(mut added)) => {
                 if added.any(|p| p.as_ref() == REQUEST_PROTOCOL_NAME) {
-                    self.queued_events.push_back(
-                        ConnectionHandlerEvent::NotifyBehaviour(ToBehaviour::PeerHasServerSupport)
-                    );
+                    self.queued_events
+                        .push_back(ConnectionHandlerEvent::NotifyBehaviour(
+                            ToBehaviour::PeerHasServerSupport,
+                        ));
                 }
             }
             _ => {}
@@ -281,6 +281,7 @@ async fn handle_substream(
                 send_aap_data(&mut substream, num_bytes).await?;
             }
             Response::Dial(dial_response) => {
+                substream.close().await?;
                 return test_end_from_dial_response(dial_request, dial_response, suspicious_addr);
             }
         }

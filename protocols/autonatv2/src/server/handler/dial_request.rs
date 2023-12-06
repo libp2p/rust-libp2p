@@ -7,8 +7,9 @@ use std::{
 
 use futures::{
     channel::{mpsc, oneshot},
-    AsyncRead, AsyncWrite, SinkExt, StreamExt,
+    AsyncRead, AsyncWrite, AsyncWriteExt, SinkExt, StreamExt,
 };
+use futures::future::FusedFuture;
 use futures_bounded::FuturesSet;
 use libp2p_core::{
     upgrade::{DeniedUpgrade, ReadyUpgrade},
@@ -60,7 +61,7 @@ where
             observed_multiaddr,
             dial_back_cmd_sender,
             dial_back_cmd_receiver,
-            inbound: FuturesSet::new(Duration::from_secs(10), 2),
+            inbound: FuturesSet::new(Duration::from_secs(1000), 2),
             rng,
         }
     }
@@ -105,6 +106,7 @@ where
             Poll::Pending => {}
         }
         if let Poll::Ready(Some(cmd)) = self.dial_back_cmd_receiver.poll_next_unpin(cx) {
+
             return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(Ok(cmd)));
         }
         Poll::Pending
@@ -145,6 +147,10 @@ where
             }
             _ => {}
         }
+    }
+
+    fn connection_keep_alive(&self) -> bool {
+        true
     }
 }
 
@@ -233,7 +239,12 @@ async fn handle_request_internal(
             .send(dial_back_cmd)
             .await
             .map_err(|_| HandleFail::InternalError(idx))?;
-        let dial_back = rx.await.map_err(|_| HandleFail::InternalError(idx))?;
+        if rx.is_terminated() {
+            println!("is terminated");
+        }
+        let dial_back = rx.await.map_err(|e| {
+            HandleFail::InternalError(idx)
+        })?;
         if dial_back != DialBack::Ok {
             return Err(HandleFail::DialBack {
                 idx,
@@ -260,5 +271,6 @@ async fn handle_request(
             .await
             .unwrap_or_else(|e| e.into());
     Response::Dial(response).write_into(&mut stream).await?;
+    stream.close().await?;
     Ok(())
 }

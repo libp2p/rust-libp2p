@@ -1,8 +1,8 @@
 use libp2p_core::upgrade::ReadyUpgrade;
 use libp2p_swarm::StreamProtocol;
 
-mod client;
-mod server;
+pub mod client;
+pub mod server;
 mod generated;
 mod global_only;
 pub(crate) mod request_response;

@@ -32,7 +32,7 @@ impl Handler {
         Self {
             pending_nonce: VecDeque::new(),
             requested_substream_nonce: VecDeque::new(),
-            outbound: FuturesSet::new(Duration::from_secs(10), 2),
+            outbound: FuturesSet::new(Duration::from_secs(10000), 2),
         }
     }
 }
@@ -105,7 +105,6 @@ impl ConnectionHandler for Handler {
             }
             _ => {}
         }
-        todo!()
     }
 }
 

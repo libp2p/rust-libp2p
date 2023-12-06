@@ -6,15 +6,15 @@
 // TODO: tests
 // TODO: Handlers
 
-pub(super) mod dial_back;
-pub(super) mod dial_request;
+pub mod dial_back;
+pub mod dial_request;
 
 use either::Either;
 use std::time::Duration;
 
 pub(crate) use dial_request::TestEnd;
 
-const DEFAULT_TIMEOUT: Duration = Duration::from_secs(10);
+const DEFAULT_TIMEOUT: Duration = Duration::from_secs(10000);
 const MAX_CONCURRENT_REQUESTS: usize = 10;
 
-pub(crate) type Handler = Either<dial_request::Handler, dial_back::Handler>;
+pub type Handler = Either<dial_request::Handler, dial_back::Handler>;
