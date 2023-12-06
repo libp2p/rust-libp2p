@@ -130,7 +130,6 @@ unsigned-varint = { version = "0.8.0" }
 # we import via `rust-multiaddr`.
 # This is expected to stay here until we move `libp2p-identity` to a separate repository which makes the dependency relationship more obvious.
 libp2p-identity = { path = "identity" }
-yamux = { git = "https://github.com/libp2p/rust-yamux", branch = "dynamic-stream-window" }
 
 [workspace.lints]
 rust.unreachable_pub = "warn"

@@ -6867,7 +6867,8 @@ dependencies = [
 [[package]]
 name = "yamux"
 version = "0.13.0"
-source = "git+https://github.com/libp2p/rust-yamux?branch=dynamic-stream-window#6b64a9fad14b6744e817e0fbc92f2c6126461f71"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "38b70d98d58bf69f92db870a8ce039c0d39af78a3405ff1d28c58ec406b8eea4"
 dependencies = [
  "futures",
  "log",
