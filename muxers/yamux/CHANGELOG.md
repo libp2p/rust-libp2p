@@ -4,6 +4,12 @@
   It does not enforce flow-control, i.e. breaks backpressure.
   Use `WindowUpdateMode::on_read` instead.
   See `yamux` crate version `v0.12.1` and [Yamux PR #177](https://github.com/libp2p/rust-yamux/pull/177).
+- `yamux` `v0.13` enables auto-tuning for the Yamux stream receive window.
+  While preserving small buffers on low-latency and/or low-bandwidth connections, this change allows for high-latency and/or high-bandwidth connections to exhaust the available bandwidth on a single stream.
+  Have `libp2p-yamux` use `yamux` `v0.13` (new version) by default and fall back to `yamux` `v0.12` (old version) when setting any configuration options.
+  Thus default users benefit from the increased performance, while power users with custom configurations maintain the old behavior.
+  `libp2p-yamux` will switch over to `yamux` `v0.13` entirely with the next breaking release.
+  See [PR 4970](https://github.com/libp2p/rust-libp2p/pull/4970).
 
 ## 0.45.0
 
