@@ -1,3 +1,9 @@
+## 0.51.4
+
+- Don't include `webrtc` into `tokio` by default [PR 4962].
+
+[PR 4962]: https://github.com/libp2p/rust-libp2p/pull/4962
+
 ## 0.51.3
 
 - Deprecate the `mplex` feature.
