@@ -18,6 +18,7 @@ use libp2p_webrtc as webrtc;
 use rand::thread_rng;
 use std::net::{Ipv4Addr, SocketAddr};
 use std::time::Duration;
+use tokio::net::TcpListener;
 use tower_http::cors::{Any, CorsLayer};
 
 #[tokio::main]
@@ -112,10 +113,12 @@ pub(crate) async fn serve(libp2p_transport: Multiaddr) {
 
     tracing::info!(url=%format!("http://{addr}"), "Serving client files at url");
 
-    axum::Server::bind(&addr)
-        .serve(server.into_make_service())
-        .await
-        .unwrap();
+    axum::serve(
+        TcpListener::bind((listen_addr, 8080)).await.unwrap(),
+        server.into_make_service(),
+    )
+    .await
+    .unwrap();
 }
 
 #[derive(Clone)]
