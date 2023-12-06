@@ -1,14 +1,18 @@
 
 use std::{collections::VecDeque, io, task::Poll, time::{Duration, Instant}, pin::Pin};
-use futures::{prelude::*, future::Either};
-use libp2p::{PeerId, Stream, StreamProtocol, quic::Connection};
-use libp2p_core::{Multiaddr, transport::MemoryTransport, Transport};
+use futures::{prelude::*, future::Either, ready};
+use libp2p::{PeerId, Stream, StreamProtocol, quic::Connection, noise, yamux, identity, tcp::tokio::TcpStream};
+use libp2p_core::{Multiaddr, transport::{MemoryTransport, ListenerId}, Transport, upgrade};
 use rand::{distributions, prelude::*};
 use futures_timer::Delay;
 use std::task::{Context};
 use futures::future::poll_fn;
-use tokio::{net::TcpStream, io::AsyncWrite};
+use tokio::{ io::AsyncWrite, net::tcp};
+use libp2p_core::{
+    multiaddr::multiaddr,
+}
 
+// TODO remove unneeded dependencies
 
 pub const PROTOCOL_NAME: StreamProtocol = StreamProtocol::new("/ipfs/ping/1.0.0");
 
@@ -102,7 +106,8 @@ impl Behaviour {
 }
 
 impl Control {
-    pub async fn open_stream(&self, peer: PeerId) -> Result<Stream, Error> {
-        todo!()
+    pub async fn open_stream(&self, peer: PeerId) -> Result<TcpStream, Error> {    
+        let stream =  tokio::net::TcpStream::connect("/ip4/0.0.0.0/tcp/0").await.unwrap();
+        Ok( TcpStream(stream))
     }
 }
