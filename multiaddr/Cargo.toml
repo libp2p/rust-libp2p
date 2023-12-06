@@ -1,0 +1,36 @@
+[package]
+authors = ["dignifiedquire <dignifiedquire@gmail.com>", "Parity Technologies <admin@parity.io>"]
+description = "Implementation of the multiaddr format"
+edition = "2021"
+rust-version = "1.59.0"
+homepage = "https://github.com/multiformats/rust-multiaddr"
+keywords = ["multiaddr", "ipfs"]
+license = "MIT"
+name = "multiaddr"
+readme = "README.md"
+version = "0.18.1"
+
+[features]
+default = ["url"]
+
+[dependencies]
+arrayref = "0.3"
+byteorder = "1.3.1"
+data-encoding = "2.1"
+multibase = "0.9.1"
+multihash = "0.19"
+percent-encoding = "2.1.0"
+serde = "1.0.70"
+static_assertions = "1.1"
+unsigned-varint = "0.7"
+url = { version = "2.1.0", optional = true, default-features = false }
+libp2p-identity = { path = "../identity" }
+
+[dev-dependencies]
+bincode = "1"
+quickcheck = { version = "1.0.3", default-features = false }
+rand = "0.8.4"
+serde_json = "1.0"
+
+#[patch.crates-io]
+#libp2p-identity = { path = "../rust-libp2p/identity" }

@@ -19,7 +19,7 @@ instant = "0.1.12"
 #libp2p-identity = { workspace = true, features = ["peerid", "ed25519"] }
 libp2p-identity = { path = "../identity", features = ["peerid", "ed25519"] }
 #multiaddr = { workspace = true }
-multiaddr = { git = "https://github.com/tari-project/rust-multiaddr.git", branch = "updated-libp2p-identity"}
+multiaddr = { workspace = true }
 multihash = { workspace = true }
 multistream-select = { workspace = true }
 once_cell = "1.19.0"
