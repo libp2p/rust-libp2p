@@ -23,6 +23,7 @@
 mod test;
 
 use crate::addresses::Addresses;
+use crate::bootstrap::Status;
 use crate::handler::{Handler, HandlerEvent, HandlerIn, RequestId};
 use crate::jobs::*;
 use crate::kbucket::{self, Distance, KBucketsTable, NodeStatus};
@@ -33,10 +34,8 @@ use crate::record::{
     store::{self, RecordStore},
     ProviderRecord, Record,
 };
-use crate::K_VALUE;
+use crate::{bootstrap, K_VALUE};
 use fnv::{FnvHashMap, FnvHashSet};
-use futures::Future;
-use futures_timer::Delay;
 use instant::Instant;
 use libp2p_core::{ConnectedPoint, Endpoint, Multiaddr};
 use libp2p_identity::PeerId;
@@ -53,7 +52,6 @@ use smallvec::SmallVec;
 use std::collections::{BTreeMap, HashMap, HashSet, VecDeque};
 use std::fmt;
 use std::num::NonZeroUsize;
-use std::pin::Pin;
 use std::task::{Context, Poll, Waker};
 use std::time::Duration;
 use std::vec;
@@ -121,7 +119,7 @@ pub struct Behaviour<TStore> {
     store: TStore,
 
     /// Tracks the status of the current bootstrap.
-    bootstrap_status: BootstrapStatus,
+    bootstrap_status: bootstrap::Status,
 }
 
 /// The configurable strategies for the insertion of peers
@@ -464,7 +462,7 @@ where
             mode: Mode::Client,
             auto_mode: true,
             no_events_waker: None,
-            bootstrap_status: BootstrapStatus::new(config.bootstrap_interval),
+            bootstrap_status: Status::new(config.bootstrap_interval),
         }
     }
 
@@ -566,7 +564,7 @@ where
                 };
                 match entry.insert(addresses.clone(), status) {
                     kbucket::InsertResult::Inserted => {
-                        self.trigger_optional_bootstrap();
+                        self.bootstrap_status.on_new_peer_in_routing_table();
                         self.queued_events.push_back(ToSwarm::GenerateEvent(
                             Event::RoutingUpdated {
                                 peer: *peer,
@@ -891,7 +889,6 @@ where
     /// to ensure a healthy routing table.
     /// > See [`Config::set_bootstrap_interval`] for details.
     pub fn bootstrap(&mut self) -> Result<QueryId, NoKnownPeers> {
-        self.bootstrap_status.bootstrap_started();
         let local_key = self.kbuckets.local_key().clone();
         let info = QueryInfo::Bootstrap {
             peer: *local_key.preimage(),
@@ -900,11 +897,15 @@ where
         };
         let peers = self.kbuckets.closest_keys(&local_key).collect::<Vec<_>>();
         if peers.is_empty() {
-            Err(NoKnownPeers())
-        } else {
-            let inner = QueryInner::new(info);
-            Ok(self.queries.add_iter_closest(local_key, peers, inner))
+            return Err(NoKnownPeers());
         }
+
+        let inner = QueryInner::new(info);
+        let id = self.queries.add_iter_closest(local_key, peers, inner);
+
+        self.bootstrap_status.on_started();
+
+        Ok(id)
     }
 
     /// Establishes the local node as a provider of a value for the given key.
@@ -1297,7 +1298,7 @@ where
                         let addresses = Addresses::new(a);
                         match entry.insert(addresses.clone(), new_status) {
                             kbucket::InsertResult::Inserted => {
-                                self.trigger_optional_bootstrap();
+                                self.bootstrap_status.on_new_peer_in_routing_table();
                                 let event = Event::RoutingUpdated {
                                     peer,
                                     is_new_peer: true,
@@ -1413,11 +1414,7 @@ where
                         .continue_iter_closest(query_id, target.clone(), peers, inner);
                 } else {
                     step.last = true;
-                    if result.stats.num_successes() > 0 {
-                        self.bootstrap_status.bootstrap_succeeded();
-                    } else {
-                        self.bootstrap_status.bootstrap_failed();
-                    }
+                    self.bootstrap_status.on_result(&result.stats);
                 };
 
                 Some(Event::OutboundQueryProgressed {
@@ -1620,11 +1617,7 @@ where
                         .continue_iter_closest(query_id, target.clone(), peers, inner);
                 } else {
                     step.last = true;
-                    if result.stats.num_successes() > 0 {
-                        self.bootstrap_status.bootstrap_succeeded();
-                    } else {
-                        self.bootstrap_status.bootstrap_failed();
-                    }
+                    self.bootstrap_status.on_result(&result.stats);
                 }
 
                 Some(Event::OutboundQueryProgressed {
@@ -2071,15 +2064,6 @@ where
         }
     }
 
-    fn trigger_optional_bootstrap(&mut self) {
-        if self.bootstrap_status.can_bootstrap() {
-            if let Err(err) = self.bootstrap() {
-                tracing::warn!("Failed to trigger bootstrap: {err}");
-                self.bootstrap_status.bootstrap_failed();
-            };
-        }
-    }
-
     /// Preloads a new [`Handler`] with requests that are waiting to be sent to the newly connected peer.
     fn preload_new_handler(
         &mut self,
@@ -2502,10 +2486,9 @@ where
         }
 
         // Poll bootstrap periodically.
-        if let Poll::Ready(()) = self.bootstrap_status.poll(cx) {
-            if let Err(err) = self.bootstrap() {
-                tracing::warn!("Failed to trigger bootstrap: {err}");
-                self.bootstrap_status.bootstrap_failed();
+        if let Poll::Ready(()) = self.bootstrap_status.poll_next_bootstrap(cx) {
+            if let Err(e) = self.bootstrap() {
+                tracing::warn!("Failed to trigger bootstrap: {e}");
             }
         }
 
@@ -3389,81 +3372,4 @@ where
         .map(|addr| addr.to_string())
         .collect::<Vec<_>>()
         .join(", ")
-}
-
-#[derive(Debug)]
-enum BootstrapStatus {
-    DoBootstrapOnNewConnection(Option<Duration>),
-    InitialBootstrapRunning(Option<Duration>),
-    Periodic(Duration, Pin<Box<Delay>>),
-    Manual,
-}
-
-impl BootstrapStatus {
-    fn new(interval: Option<Duration>) -> Self {
-        match interval.is_some() {
-            true => Self::DoBootstrapOnNewConnection(interval),
-            false => Self::Manual,
-        }
-    }
-
-    fn can_bootstrap(&self) -> bool {
-        match self {
-            Self::DoBootstrapOnNewConnection(_) => true,
-            Self::InitialBootstrapRunning(_) | Self::Periodic(_, _) | Self::Manual => false,
-        }
-    }
-
-    fn bootstrap_succeeded(&mut self) {
-        match self {
-            Self::DoBootstrapOnNewConnection(interval)
-            | Self::InitialBootstrapRunning(interval) => {
-                *self = match *interval {
-                    Some(interval) => Self::Periodic(interval, Box::pin(Delay::new(interval))),
-                    None => Self::Manual,
-                };
-            }
-            Self::Periodic(_, _) => {
-                // bootstrap is already running periodicaly and everything is fine.
-            }
-            Self::Manual => {
-                // bootstrap was user triggered so the user should handle it.
-            }
-        }
-    }
-
-    fn bootstrap_failed(&mut self) {
-        match self {
-            Self::DoBootstrapOnNewConnection(_) => {}
-            Self::InitialBootstrapRunning(interval) => {
-                *self = Self::DoBootstrapOnNewConnection(*interval);
-            }
-            Self::Periodic(_, _) => {
-                // in future improvements, we could start an exponential backoff.
-            }
-            Self::Manual => {
-                // bootstrap was user triggered so the user should handle it.
-            }
-        }
-    }
-
-    fn bootstrap_started(&mut self) {
-        match self {
-            Self::DoBootstrapOnNewConnection(interval) => {
-                *self = Self::InitialBootstrapRunning(*interval);
-            }
-            Self::InitialBootstrapRunning(_) | Self::Periodic(_, _) | Self::Manual => {}
-        }
-    }
-
-    fn poll(&mut self, cx: &mut Context<'_>) -> Poll<()> {
-        if let Self::Periodic(interval, delay) = self {
-            if let Poll::Ready(()) = delay.as_mut().poll(cx) {
-                delay.reset(*interval);
-                return Poll::Ready(());
-            }
-        }
-
-        Poll::Pending
-    }
 }
