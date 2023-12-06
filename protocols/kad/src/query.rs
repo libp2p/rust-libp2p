@@ -225,6 +225,12 @@ impl<TInner> QueryPool<TInner> {
 #[derive(Debug, Copy, Clone, Hash, PartialEq, Eq)]
 pub struct QueryId(usize);
 
+impl std::fmt::Display for QueryId {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
 /// The configuration for queries in a `QueryPool`.
 #[derive(Debug, Clone)]
 pub(crate) struct QueryConfig {

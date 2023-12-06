@@ -155,6 +155,7 @@ impl NetworkBehaviour for Behaviour {
             .on_connection_handler_event(peer_id, connection, event);
     }
 
+    #[tracing::instrument(level = "trace", name = "NetworkBehaviour::poll", skip(self, cx))]
     fn poll(
         &mut self,
         cx: &mut Context<'_>,
@@ -214,20 +215,12 @@ impl NetworkBehaviour for Behaviour {
                     }) => {
                         continue;
                     }
-                    ToSwarm::Dial { .. }
-                    | ToSwarm::ListenOn { .. }
-                    | ToSwarm::RemoveListener { .. }
-                    | ToSwarm::NotifyHandler { .. }
-                    | ToSwarm::NewExternalAddrCandidate(_)
-                    | ToSwarm::ExternalAddrConfirmed(_)
-                    | ToSwarm::ExternalAddrExpired(_)
-                    | ToSwarm::CloseConnection { .. } => {
-                        let new_to_swarm = to_swarm
+                    other => {
+                        let new_to_swarm = other
                             .map_out(|_| unreachable!("we manually map `GenerateEvent` variants"));
 
                         return Poll::Ready(new_to_swarm);
                     }
-                    _ => {}
                 };
             }
 

@@ -20,7 +20,7 @@
 
 use crate::protocol::{GossipsubCodec, ProtocolConfig};
 use crate::rpc_proto::proto;
-use crate::types::{PeerKind, RawMessage, Rpc};
+use crate::types::{PeerKind, RawMessage, Rpc, RpcOut};
 use crate::ValidationError;
 use asynchronous_codec::Framed;
 use futures::future::Either;
@@ -58,10 +58,11 @@ pub enum HandlerEvent {
 }
 
 /// A message sent from the behaviour to the handler.
+#[allow(clippy::large_enum_variant)]
 #[derive(Debug)]
 pub enum HandlerIn {
     /// A gossipsub message to send.
-    Message(proto::RPC),
+    Message(RpcOut),
     /// The peer has joined the mesh.
     JoinedMesh,
     /// The peer has left the mesh.
@@ -241,70 +242,6 @@ impl EnabledHandler {
             });
         }
 
-        loop {
-            match std::mem::replace(
-                &mut self.inbound_substream,
-                Some(InboundSubstreamState::Poisoned),
-            ) {
-                // inbound idle state
-                Some(InboundSubstreamState::WaitingInput(mut substream)) => {
-                    match substream.poll_next_unpin(cx) {
-                        Poll::Ready(Some(Ok(message))) => {
-                            self.last_io_activity = Instant::now();
-                            self.inbound_substream =
-                                Some(InboundSubstreamState::WaitingInput(substream));
-                            return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(message));
-                        }
-                        Poll::Ready(Some(Err(error))) => {
-                            tracing::debug!("Failed to read from inbound stream: {error}");
-                            // Close this side of the stream. If the
-                            // peer is still around, they will re-establish their
-                            // outbound stream i.e. our inbound stream.
-                            self.inbound_substream =
-                                Some(InboundSubstreamState::Closing(substream));
-                        }
-                        // peer closed the stream
-                        Poll::Ready(None) => {
-                            tracing::debug!("Inbound stream closed by remote");
-                            self.inbound_substream =
-                                Some(InboundSubstreamState::Closing(substream));
-                        }
-                        Poll::Pending => {
-                            self.inbound_substream =
-                                Some(InboundSubstreamState::WaitingInput(substream));
-                            break;
-                        }
-                    }
-                }
-                Some(InboundSubstreamState::Closing(mut substream)) => {
-                    match Sink::poll_close(Pin::new(&mut substream), cx) {
-                        Poll::Ready(res) => {
-                            if let Err(e) = res {
-                                // Don't close the connection but just drop the inbound substream.
-                                // In case the remote has more to send, they will open up a new
-                                // substream.
-                                tracing::debug!("Inbound substream error while closing: {e}");
-                            }
-                            self.inbound_substream = None;
-                            break;
-                        }
-                        Poll::Pending => {
-                            self.inbound_substream =
-                                Some(InboundSubstreamState::Closing(substream));
-                            break;
-                        }
-                    }
-                }
-                None => {
-                    self.inbound_substream = None;
-                    break;
-                }
-                Some(InboundSubstreamState::Poisoned) => {
-                    unreachable!("Error occurred during inbound stream processing")
-                }
-            }
-        }
-
         // process outbound stream
         loop {
             match std::mem::replace(
@@ -382,6 +319,70 @@ impl EnabledHandler {
             }
         }
 
+        loop {
+            match std::mem::replace(
+                &mut self.inbound_substream,
+                Some(InboundSubstreamState::Poisoned),
+            ) {
+                // inbound idle state
+                Some(InboundSubstreamState::WaitingInput(mut substream)) => {
+                    match substream.poll_next_unpin(cx) {
+                        Poll::Ready(Some(Ok(message))) => {
+                            self.last_io_activity = Instant::now();
+                            self.inbound_substream =
+                                Some(InboundSubstreamState::WaitingInput(substream));
+                            return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(message));
+                        }
+                        Poll::Ready(Some(Err(error))) => {
+                            tracing::debug!("Failed to read from inbound stream: {error}");
+                            // Close this side of the stream. If the
+                            // peer is still around, they will re-establish their
+                            // outbound stream i.e. our inbound stream.
+                            self.inbound_substream =
+                                Some(InboundSubstreamState::Closing(substream));
+                        }
+                        // peer closed the stream
+                        Poll::Ready(None) => {
+                            tracing::debug!("Inbound stream closed by remote");
+                            self.inbound_substream =
+                                Some(InboundSubstreamState::Closing(substream));
+                        }
+                        Poll::Pending => {
+                            self.inbound_substream =
+                                Some(InboundSubstreamState::WaitingInput(substream));
+                            break;
+                        }
+                    }
+                }
+                Some(InboundSubstreamState::Closing(mut substream)) => {
+                    match Sink::poll_close(Pin::new(&mut substream), cx) {
+                        Poll::Ready(res) => {
+                            if let Err(e) = res {
+                                // Don't close the connection but just drop the inbound substream.
+                                // In case the remote has more to send, they will open up a new
+                                // substream.
+                                tracing::debug!("Inbound substream error while closing: {e}");
+                            }
+                            self.inbound_substream = None;
+                            break;
+                        }
+                        Poll::Pending => {
+                            self.inbound_substream =
+                                Some(InboundSubstreamState::Closing(substream));
+                            break;
+                        }
+                    }
+                }
+                None => {
+                    self.inbound_substream = None;
+                    break;
+                }
+                Some(InboundSubstreamState::Poisoned) => {
+                    unreachable!("Error occurred during inbound stream processing")
+                }
+            }
+        }
+
         Poll::Pending
     }
 }
@@ -408,7 +409,7 @@ impl ConnectionHandler for Handler {
     fn on_behaviour_event(&mut self, message: HandlerIn) {
         match self {
             Handler::Enabled(handler) => match message {
-                HandlerIn::Message(m) => handler.send_queue.push(m),
+                HandlerIn::Message(m) => handler.send_queue.push(m.into_protobuf()),
                 HandlerIn::JoinedMesh => {
                     handler.in_mesh = true;
                 }

@@ -15,6 +15,7 @@ use libp2p::StreamProtocol;
 use serde::{Deserialize, Serialize};
 use std::collections::{hash_map, HashMap, HashSet};
 use std::error::Error;
+use std::time::Duration;
 
 /// Creates the network components, namely:
 ///
@@ -58,6 +59,7 @@ pub(crate) async fn new(
                 request_response::Config::default(),
             ),
         })?
+        .with_swarm_config(|c| c.with_idle_connection_timeout(Duration::from_secs(60)))
         .build();
 
     swarm

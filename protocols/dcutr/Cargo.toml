@@ -11,7 +11,7 @@ keywords = ["peer-to-peer", "libp2p", "networking"]
 categories = ["network-programming", "asynchronous"]
 
 [dependencies]
-asynchronous-codec = "0.6"
+asynchronous-codec = { workspace = true }
 either = "1.9.0"
 futures = "0.3.29"
 futures-timer = "3.0"
@@ -24,12 +24,12 @@ quick-protobuf-codec = { workspace = true }
 thiserror = "1.0"
 tracing = "0.1.37"
 void = "1"
-lru = "0.11.1"
+lru = "0.12.1"
 futures-bounded = { workspace = true }
 
 [dev-dependencies]
 async-std = { version = "1.12.0", features = ["attributes"] }
-clap = { version = "4.4.7", features = ["derive"] }
+clap = { version = "4.4.10", features = ["derive"] }
 libp2p-dns = { workspace = true, features = ["async-std"] }
 libp2p-identify = { workspace = true }
 libp2p-noise = { workspace = true }

@@ -3,7 +3,7 @@ name = "libp2p-request-response"
 edition = "2021"
 rust-version = { workspace = true }
 description = "Generic Request/Response Protocols"
-version = "0.26.0"
+version = "0.26.1"
 authors = ["Parity Technologies <admin@parity.io>"]
 license = "MIT"
 repository = "https://github.com/libp2p/rust-libp2p"
@@ -12,7 +12,7 @@ categories = ["network-programming", "asynchronous"]
 
 [dependencies]
 async-trait = "0.1"
-cbor4ii = { version = "0.3.1", features = ["serde1", "use_std"], optional = true }
+cbor4ii = { version = "0.3.2", features = ["serde1", "use_std"], optional = true }
 futures = "0.3.29"
 instant = "0.1.12"
 libp2p-core = { workspace = true }
@@ -21,7 +21,7 @@ libp2p-identity = { workspace = true }
 rand = "0.8"
 serde = { version = "1.0", optional = true}
 serde_json = { version = "1.0.108", optional = true }
-smallvec = "1.11.1"
+smallvec = "1.11.2"
 tracing = "0.1.37"
 void = "1.0.2"
 futures-timer = "3.0.2"

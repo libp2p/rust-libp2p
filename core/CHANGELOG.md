@@ -1,4 +1,9 @@
-## 0.41.1 - unreleased
+## 0.41.2
+
+- Implement `std::fmt::Display` on `ListenerId`.
+  See [PR 4936](https://github.com/libp2p/rust-libp2p/pull/4936).
+
+## 0.41.1
 
 - Implement `{In,Out}boundConnectionUpgrade` for `SelectUpgrade`.
   See [PR 4812](https://github.com/libp2p/rust-libp2p/pull/4812).

@@ -18,7 +18,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use quinn::VarInt;
+use quinn::{MtuDiscoveryConfig, VarInt};
 use std::{sync::Arc, time::Duration};
 
 /// Config for the transport.
@@ -63,6 +63,9 @@ pub struct Config {
     server_tls_config: Arc<rustls::ServerConfig>,
     /// Libp2p identity of the node.
     keypair: libp2p_identity::Keypair,
+
+    /// Parameters governing MTU discovery. See [`MtuDiscoveryConfig`] for details.
+    mtu_discovery_config: Option<MtuDiscoveryConfig>,
 }
 
 impl Config {
@@ -75,15 +78,22 @@ impl Config {
             server_tls_config,
             support_draft_29: false,
             handshake_timeout: Duration::from_secs(5),
-            max_idle_timeout: 30 * 1000,
+            max_idle_timeout: 10 * 1000,
             max_concurrent_stream_limit: 256,
-            keep_alive_interval: Duration::from_secs(15),
+            keep_alive_interval: Duration::from_secs(5),
             max_connection_data: 15_000_000,
 
             // Ensure that one stream is not consuming the whole connection.
             max_stream_data: 10_000_000,
             keypair: keypair.clone(),
+            mtu_discovery_config: Some(Default::default()),
         }
+    }
+
+    /// Disable MTU path discovery (it is enabled by default).
+    pub fn disable_path_mtu_discovery(mut self) -> Self {
+        self.mtu_discovery_config = None;
+        self
     }
 }
 
@@ -108,6 +118,7 @@ impl From<Config> for QuinnConfig {
             support_draft_29,
             handshake_timeout: _,
             keypair,
+            mtu_discovery_config,
         } = config;
         let mut transport = quinn::TransportConfig::default();
         // Disable uni-directional streams.
@@ -120,6 +131,7 @@ impl From<Config> for QuinnConfig {
         transport.allow_spin(false);
         transport.stream_receive_window(max_stream_data.into());
         transport.receive_window(max_connection_data.into());
+        transport.mtu_discovery_config(mtu_discovery_config);
         let transport = Arc::new(transport);
 
         let mut server_config = quinn::ServerConfig::with_crypto(server_tls_config);

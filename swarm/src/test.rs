@@ -445,6 +445,8 @@ where
     }
 
     fn on_swarm_event(&mut self, event: FromSwarm) {
+        self.inner.on_swarm_event(event);
+
         match event {
             FromSwarm::ConnectionEstablished(connection_established) => {
                 self.on_connection_established(connection_established)
@@ -452,68 +454,33 @@ where
             FromSwarm::ConnectionClosed(connection_closed) => {
                 self.on_connection_closed(connection_closed)
             }
-            FromSwarm::DialFailure(DialFailure {
-                peer_id,
-                connection_id,
-                error,
-            }) => {
+            FromSwarm::DialFailure(DialFailure { peer_id, .. }) => {
                 self.on_dial_failure.push(peer_id);
-                self.inner
-                    .on_swarm_event(FromSwarm::DialFailure(DialFailure {
-                        peer_id,
-                        connection_id,
-                        error,
-                    }));
             }
             FromSwarm::NewListener(NewListener { listener_id }) => {
                 self.on_new_listener.push(listener_id);
-                self.inner
-                    .on_swarm_event(FromSwarm::NewListener(NewListener { listener_id }));
             }
             FromSwarm::NewListenAddr(NewListenAddr { listener_id, addr }) => {
                 self.on_new_listen_addr.push((listener_id, addr.clone()));
-                self.inner
-                    .on_swarm_event(FromSwarm::NewListenAddr(NewListenAddr {
-                        listener_id,
-                        addr,
-                    }));
             }
             FromSwarm::ExpiredListenAddr(ExpiredListenAddr { listener_id, addr }) => {
                 self.on_expired_listen_addr
                     .push((listener_id, addr.clone()));
-                self.inner
-                    .on_swarm_event(FromSwarm::ExpiredListenAddr(ExpiredListenAddr {
-                        listener_id,
-                        addr,
-                    }));
             }
             FromSwarm::NewExternalAddrCandidate(NewExternalAddrCandidate { addr }) => {
                 self.on_new_external_addr.push(addr.clone());
-                self.inner
-                    .on_swarm_event(FromSwarm::NewExternalAddrCandidate(
-                        NewExternalAddrCandidate { addr },
-                    ));
             }
             FromSwarm::ExternalAddrExpired(ExternalAddrExpired { addr }) => {
                 self.on_expired_external_addr.push(addr.clone());
-                self.inner
-                    .on_swarm_event(FromSwarm::ExternalAddrExpired(ExternalAddrExpired { addr }));
             }
-            FromSwarm::ListenerError(ListenerError { listener_id, err }) => {
+            FromSwarm::ListenerError(ListenerError { listener_id, .. }) => {
                 self.on_listener_error.push(listener_id);
-                self.inner
-                    .on_swarm_event(FromSwarm::ListenerError(ListenerError { listener_id, err }));
             }
             FromSwarm::ListenerClosed(ListenerClosed {
                 listener_id,
                 reason,
             }) => {
                 self.on_listener_closed.push((listener_id, reason.is_ok()));
-                self.inner
-                    .on_swarm_event(FromSwarm::ListenerClosed(ListenerClosed {
-                        listener_id,
-                        reason,
-                    }));
             }
             _ => {}
         }

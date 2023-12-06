@@ -18,6 +18,8 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
+#![allow(unreachable_pub)]
+
 use either::Either;
 use futures::future;
 use libp2p_core::either::EitherFuture;
