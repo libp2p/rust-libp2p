@@ -6867,7 +6867,8 @@ dependencies = [
 [[package]]
 name = "yamux"
 version = "0.13.1"
-source = "git+https://github.com/mxinden/rust-yamux?branch=wasm-instant#3e8d47fbfb09fa636993325c4f633da5b00494a7"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ad1d0148b89300047e72994bee99ecdabd15a9166a7b70c8b8c37c314dcc9002"
 dependencies = [
  "futures",
  "instant",
