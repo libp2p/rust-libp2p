@@ -308,21 +308,7 @@ impl Config {
         }))
     }
 
-    fn set(&mut self, f: impl FnOnce(&mut yamux012::Config) -> &mut yamux012::Config) -> &mut Self {
-        let cfg012 = match self.0.as_mut() {
-            Either::Left(c) => &mut c.inner,
-            Either::Right(_) => {
-                self.0 = Either::Left(Config012::default());
-                &mut self.0.as_mut().unwrap_left().inner
-            }
-        };
-
-        f(cfg012);
-
-        self
-    }
-
-    /// Sets the size (in bytes) of the receive w``indow per substream.
+    /// Sets the size (in bytes) of the receive window per substream.
     #[deprecated(
         note = "Will be replaced in the next breaking release with a connection receive window size limit."
     )]
@@ -343,9 +329,25 @@ impl Config {
 
     /// Sets the window update mode that determines when the remote
     /// is given new credit for sending more data.
-    #[deprecated(note = "Will be removed with the next breaking release.")]
+    #[deprecated(
+        note = "`WindowUpdate::OnRead` is the default. `WindowUpdate::OnReceive` breaks backpressure, is thus not recommended, and will be removed in the next breaking release. Thus this method becomes obsolete and will be removed with the next breaking release."
+    )]
     pub fn set_window_update_mode(&mut self, mode: WindowUpdateMode) -> &mut Self {
         self.set(|cfg| cfg.set_window_update_mode(mode.0))
+    }
+
+    fn set(&mut self, f: impl FnOnce(&mut yamux012::Config) -> &mut yamux012::Config) -> &mut Self {
+        let cfg012 = match self.0.as_mut() {
+            Either::Left(c) => &mut c.inner,
+            Either::Right(_) => {
+                self.0 = Either::Left(Config012::default());
+                &mut self.0.as_mut().unwrap_left().inner
+            }
+        };
+
+        f(cfg012);
+
+        self
     }
 }
 
