@@ -3,7 +3,7 @@ name = "libp2p-connection-limits"
 edition = "2021"
 rust-version = { workspace = true }
 description = "Connection limits for libp2p."
-version = "0.3.0"
+version = "0.3.1"
 license = "MIT"
 repository = "https://github.com/libp2p/rust-libp2p"
 keywords = ["peer-to-peer", "libp2p", "networking"]

@@ -391,7 +391,7 @@ pub enum CloseConnection {
 
 /// Enumeration with the list of the possible events
 /// to pass to [`on_swarm_event`](NetworkBehaviour::on_swarm_event).
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 #[non_exhaustive]
 pub enum FromSwarm<'a> {
     /// Informs the behaviour about a newly established connection to a peer.
@@ -449,7 +449,7 @@ pub struct ConnectionEstablished<'a> {
 /// This event is always paired with an earlier
 /// [`FromSwarm::ConnectionEstablished`] with the same peer ID, connection ID
 /// and endpoint.
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 pub struct ConnectionClosed<'a> {
     pub peer_id: PeerId,
     pub connection_id: ConnectionId,
