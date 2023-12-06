@@ -175,10 +175,14 @@ impl ClosestPeersIter {
             },
         }
 
-        let num_closest = self.closest_peers.len();
-        let mut progress = false;
-
         // Incorporate the reported closer peers into the iterator.
+        //
+        // The iterator makes progress if:
+        //     1, the iterator did not yet accumulate enough closest peers.
+        //   OR
+        //     2, any of the new peers is closer to the target than any peer seen so far
+        //        (i.e. is the first entry after being incorporated)
+        let mut progress = self.closest_peers.len() < self.config.num_results.get();
         for peer in closer_peers {
             let key = peer.into();
             let distance = self.target.distance(&key);
@@ -187,11 +191,8 @@ impl ClosestPeersIter {
                 state: PeerState::NotContacted,
             };
             self.closest_peers.entry(distance).or_insert(peer);
-            // The iterator makes progress if the new peer is either closer to the target
-            // than any peer seen so far (i.e. is the first entry), or the iterator did
-            // not yet accumulate enough closest peers.
-            progress = self.closest_peers.keys().next() == Some(&distance)
-                || num_closest < self.config.num_results.get();
+
+            progress = self.closest_peers.keys().next() == Some(&distance) || progress;
         }
 
         // Update the iterator state.

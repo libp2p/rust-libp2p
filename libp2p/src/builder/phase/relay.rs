@@ -116,11 +116,28 @@ impl<Provider, T> SwarmBuilder<Provider, RelayPhase<T>> {
 }
 
 // Shortcuts
+#[cfg(feature = "metrics")]
+impl<Provider, T: AuthenticatedMultiplexedTransport> SwarmBuilder<Provider, RelayPhase<T>> {
+    pub fn with_bandwidth_metrics(
+        self,
+        registry: &mut libp2p_metrics::Registry,
+    ) -> SwarmBuilder<
+        Provider,
+        BehaviourPhase<impl AuthenticatedMultiplexedTransport, NoRelayBehaviour>,
+    > {
+        self.without_relay()
+            .without_bandwidth_logging()
+            .with_bandwidth_metrics(registry)
+    }
+}
 impl<Provider, T: AuthenticatedMultiplexedTransport> SwarmBuilder<Provider, RelayPhase<T>> {
     pub fn with_behaviour<B, R: TryIntoBehaviour<B>>(
         self,
         constructor: impl FnOnce(&libp2p_identity::Keypair) -> R,
     ) -> Result<SwarmBuilder<Provider, SwarmPhase<T, B>>, R::Error> {
-        self.without_relay().with_behaviour(constructor)
+        self.without_relay()
+            .without_bandwidth_logging()
+            .without_bandwidth_metrics()
+            .with_behaviour(constructor)
     }
 }

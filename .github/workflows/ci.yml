@@ -61,16 +61,32 @@ jobs:
         with:
           tool: tomlq
 
+      - name: Extract version from manifest
+        run: |
+          CRATE_VERSION=$(cargo metadata --format-version=1 --no-deps | jq -e -r '.packages[] | select(.name == "'"$CRATE"'") | .version')
+          
+          echo "CRATE_VERSION=$CRATE_VERSION" >> $GITHUB_ENV
+
       - name: Enforce version in `workspace.dependencies` matches latest version
         if: env.CRATE != 'libp2p'
         run: |
-          PACKAGE_VERSION=$(cargo metadata --format-version=1 --no-deps | jq -e -r '.packages[] | select(.name == "'"$CRATE"'") | .version')
           SPECIFIED_VERSION=$(tomlq "workspace.dependencies.$CRATE.version" --file ./Cargo.toml)
 
-          echo "Package version: $PACKAGE_VERSION";
+          echo "Package version: $CRATE_VERSION";
           echo "Specified version: $SPECIFIED_VERSION";
 
-          test "$PACKAGE_VERSION" = "$SPECIFIED_VERSION" || test "=$PACKAGE_VERSION" = "$SPECIFIED_VERSION"
+          test "$CRATE_VERSION" = "$SPECIFIED_VERSION" || test "=$CRATE_VERSION" = "$SPECIFIED_VERSION"
+
+      - name: Enforce version in CHANGELOG.md matches version in manifest
+        run: |
+          MANIFEST_PATH=$(cargo metadata --format-version=1 --no-deps | jq -e -r '.packages[] | select(.name == "'"$CRATE"'") | .manifest_path')
+          DIR_TO_CRATE=$(dirname "$MANIFEST_PATH")
+          VERSION_IN_CHANGELOG=$(awk -F' ' '/^## [0-9]+\.[0-9]+\.[0-9]+/{print $2; exit}' "$DIR_TO_CRATE/CHANGELOG.md")
+
+          echo "Package version: $CRATE_VERSION";
+          echo "Changelog version: $VERSION_IN_CHANGELOG";
+
+          test "$CRATE_VERSION" = "$VERSION_IN_CHANGELOG"
 
       - name: Ensure manifest and CHANGELOG are properly updated
         if: >
@@ -291,6 +307,15 @@ jobs:
 
   semver:
     runs-on: ubuntu-latest
+    env:
+      # Unset the global `RUSTFLAGS` env to allow warnings.
+      # cargo-semver-checks intentionally re-locks dependency versions
+      # before checking, and we shouldn't fail here if a dep has a warning.
+      #
+      # More context:
+      # https://github.com/libp2p/rust-libp2p/pull/4932#issuecomment-1829014527
+      # https://github.com/obi1kenobi/cargo-semver-checks/issues/589
+      RUSTFLAGS: ''
     steps:
       - uses: actions/checkout@v4
       - run: wget -q -O- https://github.com/obi1kenobi/cargo-semver-checks/releases/download/v0.25.0/cargo-semver-checks-x86_64-unknown-linux-gnu.tar.gz | tar -xz -C ~/.cargo/bin
@@ -324,8 +349,6 @@ jobs:
         run: |
           ALL_FEATURES=$(cargo metadata --format-version=1 --no-deps | jq -r '.packages[] | select(.name == "libp2p") | .features | keys | map(select(. != "full")) | sort | join(" ")')
           FULL_FEATURE=$(cargo metadata --format-version=1 --no-deps | jq -r '.packages[] | select(.name == "libp2p") | .features["full"] | sort | join(" ")')
-
-          test "$ALL_FEATURES = $FULL_FEATURE"
 
           echo "$ALL_FEATURES";
           echo "$FULL_FEATURE";

@@ -274,6 +274,12 @@ impl ListenerId {
     }
 }
 
+impl std::fmt::Display for ListenerId {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
 /// Event produced by [`Transport`]s.
 pub enum TransportEvent<TUpgr, TErr> {
     /// A new address is being listened on.

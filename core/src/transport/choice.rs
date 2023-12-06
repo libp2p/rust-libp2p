@@ -24,7 +24,6 @@ use either::Either;
 use futures::future;
 use multiaddr::Multiaddr;
 use std::{pin::Pin, task::Context, task::Poll};
-use tracing::{debug, trace};
 
 /// Struct returned by `or_transport()`.
 #[derive(Debug, Copy, Clone)]
@@ -98,18 +97,18 @@ where
         addr: Multiaddr,
         opts: DialOpts,
     ) -> Result<Self::Dial, TransportError<Self::Error>> {
-        trace!(
-            "Attempting to dial {} using {}",
-            addr,
+        tracing::trace!(
+            address=%addr,
+            "Attempting to dial using {}",
             std::any::type_name::<A>()
         );
         let addr = match self.0.dial(addr, opts) {
             Ok(connec) => return Ok(EitherFuture::First(connec)),
             Err(TransportError::MultiaddrNotSupported(addr)) => {
-                debug!(
-                    "Failed to dial {} using {}",
-                    addr,
-                    std::any::type_name::<A>()
+                tracing::debug!(
+                    address=%addr,
+                    "Failed to dial using {}",
+                    std::any::type_name::<B>(),
                 );
                 addr
             }
@@ -118,18 +117,18 @@ where
             }
         };
 
-        trace!(
-            "Attempting to dial {} using {}",
-            addr,
+        tracing::trace!(
+            address=%addr,
+            "Attempting to dial {}",
             std::any::type_name::<A>()
         );
         let addr = match self.1.dial(addr, opts) {
             Ok(connec) => return Ok(EitherFuture::Second(connec)),
             Err(TransportError::MultiaddrNotSupported(addr)) => {
-                debug!(
-                    "Failed to dial {} using {}",
-                    addr,
-                    std::any::type_name::<A>()
+                tracing::debug!(
+                    address=%addr,
+                    "Failed to dial using {}",
+                    std::any::type_name::<B>(),
                 );
                 addr
             }
