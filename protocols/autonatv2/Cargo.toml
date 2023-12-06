@@ -24,6 +24,7 @@ thiserror = "1.0.50"
 bytes = "1"
 static_assertions = "1.1.0"
 tracing = "0.1.40"
+unsigned-varint = { workspace = true, features = ["futures"] }
 
 [dev-dependencies]
 tokio = { version = "1", features = ["macros", "rt-multi-thread"] }

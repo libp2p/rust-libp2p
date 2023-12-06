@@ -4,9 +4,8 @@ use std::{
     task::{Context, Poll},
 };
 
-use either::Either;
 use futures::{AsyncRead, AsyncWrite, AsyncWriteExt};
-use futures_bounded::{FuturesSet, Timeout};
+use futures_bounded::FuturesSet;
 use libp2p_core::upgrade::{DeniedUpgrade, ReadyUpgrade};
 use libp2p_swarm::{
     handler::{ConnectionEvent, FullyNegotiatedInbound, ListenUpgradeError},
@@ -15,7 +14,7 @@ use libp2p_swarm::{
 
 use crate::{request_response::DialBack, Nonce};
 
-use super::DEFAULT_TIMEOUT;
+use super::{DEFAULT_TIMEOUT, MAX_CONCURRENT_REQUESTS};
 
 pub(crate) type ToBehaviour = io::Result<Nonce>;
 
@@ -26,7 +25,7 @@ pub struct Handler {
 impl Handler {
     pub(crate) fn new() -> Self {
         Self {
-            inbound: FuturesSet::new(DEFAULT_TIMEOUT, 2),
+            inbound: FuturesSet::new(DEFAULT_TIMEOUT, MAX_CONCURRENT_REQUESTS),
         }
     }
 }
@@ -83,6 +82,10 @@ impl ConnectionHandler for Handler {
             }
             _ => {}
         }
+    }
+
+    fn connection_keep_alive(&self) -> bool {
+        false
     }
 }
 

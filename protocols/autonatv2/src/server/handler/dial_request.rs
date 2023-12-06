@@ -1,15 +1,14 @@
 use std::{
-    convert::identity,
     io,
     task::{Context, Poll},
     time::Duration,
 };
 
+use futures::future::FusedFuture;
 use futures::{
     channel::{mpsc, oneshot},
     AsyncRead, AsyncWrite, AsyncWriteExt, SinkExt, StreamExt,
 };
-use futures::future::FusedFuture;
 use futures_bounded::FuturesSet;
 use libp2p_core::{
     upgrade::{DeniedUpgrade, ReadyUpgrade},
@@ -21,6 +20,7 @@ use libp2p_swarm::{
 };
 use rand_core::RngCore;
 
+use crate::request_response::Coder;
 use crate::{
     generated::structs::{mod_DialResponse::ResponseStatus, DialStatus},
     request_response::{
@@ -31,6 +31,7 @@ use crate::{
 
 #[derive(Debug, PartialEq)]
 pub(crate) enum DialBack {
+    #[allow(unused)]
     Dial,
     DialBack,
     Ok,
@@ -61,7 +62,7 @@ where
             observed_multiaddr,
             dial_back_cmd_sender,
             dial_back_cmd_receiver,
-            inbound: FuturesSet::new(Duration::from_secs(1000), 2),
+            inbound: FuturesSet::new(Duration::from_secs(10), 10),
             rng,
         }
     }
@@ -106,7 +107,6 @@ where
             Poll::Pending => {}
         }
         if let Poll::Ready(Some(cmd)) = self.dial_back_cmd_receiver.poll_next_unpin(cx) {
-
             return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(Ok(cmd)));
         }
         Poll::Pending
@@ -192,13 +192,17 @@ impl From<HandleFail> for DialResponse {
     }
 }
 
-async fn handle_request_internal(
-    mut stream: impl AsyncRead + AsyncWrite + Unpin,
+async fn handle_request_internal<I>(
+    coder: &mut Coder<I>,
     observed_multiaddr: Multiaddr,
     dial_back_cmd_sender: mpsc::Sender<DialBackCommand>,
     mut rng: impl RngCore,
-) -> Result<DialResponse, HandleFail> {
-    let DialRequest { addrs, nonce } = match Request::read_from(&mut stream)
+) -> Result<DialResponse, HandleFail>
+where
+    I: AsyncRead + AsyncWrite + Unpin,
+{
+    let DialRequest { addrs, nonce } = match coder
+        .next_request()
         .await
         .map_err(|_| HandleFail::InternalError(0))?
     {
@@ -207,24 +211,29 @@ async fn handle_request_internal(
             return Err(HandleFail::RequestRejected);
         }
     };
+    println!("incoming addr: {addrs:?}");
     for (idx, addr) in addrs.into_iter().enumerate() {
         if addr != observed_multiaddr {
             let dial_data_request = DialDataRequest::from_rng(idx, &mut rng);
             let mut rem_data = dial_data_request.num_bytes;
-            Response::Data(dial_data_request)
-                .write_into(&mut stream)
+            coder
+                .send_response(Response::Data(dial_data_request))
                 .await
                 .map_err(|_| HandleFail::InternalError(idx))?;
             while rem_data > 0 {
-                let DialDataResponse { data_count } = match Request::read_from(&mut stream)
-                    .await
-                    .map_err(|_| HandleFail::InternalError(idx))?
-                {
-                    Request::Dial(_) => {
-                        return Err(HandleFail::RequestRejected);
-                    }
-                    Request::Data(dial_data_response) => dial_data_response,
-                };
+                let DialDataResponse { data_count } =
+                    match coder.next_request().await.map_err(|e| {
+                        println!("err: {e:?}");
+                        HandleFail::InternalError(idx)
+                    })? {
+                        Request::Dial(_) => {
+                            return Err(HandleFail::RequestRejected);
+                        }
+                        Request::Data(dial_data_response) => {
+                            println!("Dial data response: {dial_data_response:?}");
+                            dial_data_response
+                        }
+                    };
                 rem_data = rem_data.saturating_sub(data_count);
             }
         }
@@ -242,9 +251,7 @@ async fn handle_request_internal(
         if rx.is_terminated() {
             println!("is terminated");
         }
-        let dial_back = rx.await.map_err(|e| {
-            HandleFail::InternalError(idx)
-        })?;
+        let dial_back = rx.await.map_err(|_e| HandleFail::InternalError(idx))?;
         if dial_back != DialBack::Ok {
             return Err(HandleFail::DialBack {
                 idx,
@@ -261,16 +268,18 @@ async fn handle_request_internal(
 }
 
 async fn handle_request(
-    mut stream: impl AsyncRead + AsyncWrite + Unpin,
+    stream: impl AsyncRead + AsyncWrite + Unpin,
     observed_multiaddr: Multiaddr,
     dial_back_cmd_sender: mpsc::Sender<DialBackCommand>,
     rng: impl RngCore,
 ) -> io::Result<()> {
+    let mut coder = Coder::new(stream);
     let response =
-        handle_request_internal(&mut stream, observed_multiaddr, dial_back_cmd_sender, rng)
+        handle_request_internal(&mut coder, observed_multiaddr, dial_back_cmd_sender, rng)
             .await
             .unwrap_or_else(|e| e.into());
-    Response::Dial(response).write_into(&mut stream).await?;
-    stream.close().await?;
+    println!("Response: {response:?}");
+    coder.send_response(Response::Dial(response)).await?;
+    coder.close().await?;
     Ok(())
 }

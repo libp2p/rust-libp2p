@@ -1,10 +1,11 @@
 // change to quick-protobuf-codec
 
+use std::io::ErrorKind;
 use std::{borrow::Cow, io};
 
-use asynchronous_codec::{FramedRead, FramedWrite};
+use asynchronous_codec::{Framed, FramedRead, FramedWrite};
 
-use futures::{AsyncRead, AsyncWrite, SinkExt, StreamExt};
+use futures::{AsyncRead, AsyncWrite, AsyncWriteExt, SinkExt, StreamExt};
 use libp2p_core::Multiaddr;
 
 use quick_protobuf_codec::Codec;
@@ -29,30 +30,82 @@ macro_rules! check_existence {
     };
 }
 
-#[derive(Debug, Clone)]
+pub(crate) struct Coder<I> {
+    inner: Framed<I, Codec<proto::Message>>,
+}
+
+impl<I> Coder<I>
+where
+    I: AsyncWrite + AsyncRead + Unpin,
+{
+    pub(crate) fn new(io: I) -> Self {
+        Self {
+            inner: Framed::new(io, Codec::new(REQUEST_MAX_SIZE)),
+        }
+    }
+    pub(crate) async fn close(self) -> io::Result<()> {
+        let mut stream = self.inner.into_inner();
+        stream.close().await?;
+        Ok(())
+    }
+}
+
+impl<I> Coder<I>
+where
+    I: AsyncRead + Unpin,
+{
+    async fn next_msg(&mut self) -> io::Result<proto::Message> {
+        self.inner
+            .next()
+            .await
+            .ok_or(io::Error::new(ErrorKind::Other, "no request to read"))?
+            .map_err(|e| io::Error::new(ErrorKind::InvalidData, e))
+    }
+    pub(crate) async fn next_request(&mut self) -> io::Result<Request> {
+        Request::from_proto(self.next_msg().await?)
+    }
+    pub(crate) async fn next_response(&mut self) -> io::Result<Response> {
+        Response::from_proto(self.next_msg().await?)
+    }
+}
+
+impl<I> Coder<I>
+where
+    I: AsyncWrite + Unpin,
+{
+    async fn send_msg(&mut self, msg: proto::Message) -> io::Result<()> {
+        self.inner.send(msg).await?;
+        Ok(())
+    }
+
+    pub(crate) async fn send_request(&mut self, request: Request) -> io::Result<()> {
+        self.send_msg(request.into_proto()).await
+    }
+
+    pub(crate) async fn send_response(&mut self, response: Response) -> io::Result<()> {
+        self.send_msg(response.into_proto()).await
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
 pub(crate) enum Request {
     Dial(DialRequest),
     Data(DialDataResponse),
 }
 
-#[derive(Debug, Clone)]
-pub(crate) struct DialRequest {
+#[derive(Debug, Clone, PartialEq)]
+pub struct DialRequest {
     pub(crate) addrs: Vec<Multiaddr>,
     pub(crate) nonce: u64,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub(crate) struct DialDataResponse {
     pub(crate) data_count: usize,
 }
 
 impl Request {
-    pub(crate) async fn read_from(io: impl AsyncRead + Unpin) -> io::Result<Self> {
-        let mut framed_io = FramedRead::new(io, Codec::<proto::Message>::new(REQUEST_MAX_SIZE));
-        let msg = framed_io
-            .next()
-            .await
-            .ok_or(io::Error::new(io::ErrorKind::UnexpectedEof, "eof"))??;
+    pub(crate) fn from_proto(msg: proto::Message) -> io::Result<Self> {
         match msg.msg {
             proto::mod_Message::OneOfmsg::dialRequest(proto::DialRequest { addrs, nonce }) => {
                 let addrs: Vec<Multiaddr> = addrs
@@ -77,8 +130,8 @@ impl Request {
         }
     }
 
-    pub(crate) async fn write_into(self, io: impl AsyncWrite + Unpin) -> io::Result<()> {
-        let msg = match self {
+    pub(crate) fn into_proto(self) -> proto::Message {
+        match self {
             Request::Dial(DialRequest { addrs, nonce }) => {
                 let addrs = addrs.iter().map(|e| e.to_vec()).collect();
                 let nonce = Some(nonce);
@@ -101,11 +154,7 @@ impl Request {
                     }),
                 }
             }
-        };
-        FramedWrite::new(io, Codec::<proto::Message>::new(REQUEST_MAX_SIZE))
-            .send(msg)
-            .await
-            .map_err(|e| io::Error::new(io::ErrorKind::Other, e))
+        }
     }
 }
 
@@ -129,12 +178,7 @@ pub(crate) struct DialResponse {
 }
 
 impl Response {
-    pub(crate) async fn read_from(io: impl AsyncRead + Unpin) -> std::io::Result<Self> {
-        let msg = FramedRead::new(io, Codec::<proto::Message>::new(REQUEST_MAX_SIZE))
-            .next()
-            .await
-            .ok_or(io::Error::new(io::ErrorKind::UnexpectedEof, "eof"))??;
-
+    pub(crate) fn from_proto(msg: proto::Message) -> std::io::Result<Self> {
         match msg.msg {
             proto::mod_Message::OneOfmsg::dialResponse(proto::DialResponse {
                 status,
@@ -167,8 +211,8 @@ impl Response {
         }
     }
 
-    pub(crate) async fn write_into(self, io: impl AsyncWrite + Unpin) -> io::Result<()> {
-        let msg = match self {
+    pub(crate) fn into_proto(self) -> proto::Message {
+        match self {
             Self::Dial(DialResponse {
                 status,
                 addr_idx,
@@ -189,11 +233,7 @@ impl Response {
                     numBytes: Some(num_bytes as u64),
                 }),
             },
-        };
-        FramedWrite::new(io, Codec::<proto::Message>::new(REQUEST_MAX_SIZE))
-            .send(msg)
-            .await
-            .map_err(|e| io::Error::new(io::ErrorKind::Other, e))
+        }
     }
 }
 
@@ -204,11 +244,6 @@ impl DialDataRequest {
             addr_idx,
             num_bytes,
         }
-    }
-
-    #[cfg(any(doc, feature = "rand"))]
-    pub(crate) fn new(addr_idx: usize) -> Self {
-        Self::from_rng(addr_idx, rand::thread_rng())
     }
 }
 
@@ -242,12 +277,18 @@ impl DialBack {
 
 #[cfg(test)]
 mod tests {
-    use crate::generated::structs::{mod_Message::OneOfmsg, DialDataResponse, Message};
+    use crate::generated::structs::{
+        mod_Message::OneOfmsg, DialDataResponse as GenDialDataResponse, Message,
+    };
+    use crate::request_response::{Coder, DialDataResponse, Request};
+    use futures::io::Cursor;
+
+    use rand::{thread_rng, Rng};
 
     #[test]
     fn message_correct_max_size() {
         let message_bytes = quick_protobuf::serialize_into_vec(&Message {
-            msg: OneOfmsg::dialDataResponse(DialDataResponse {
+            msg: OneOfmsg::dialDataResponse(GenDialDataResponse {
                 data: Some(vec![0; 4096].into()),
             }),
         })
@@ -270,5 +311,26 @@ mod tests {
         };
         let buf = quick_protobuf::serialize_into_vec(&dial_back_max_nonce).unwrap();
         assert!(buf.len() <= super::DIAL_BACK_MAX_SIZE);
+    }
+
+    #[tokio::test]
+    async fn write_read_request() {
+        let mut buf = Cursor::new(Vec::new());
+        let mut coder = Coder::new(&mut buf);
+        let mut all_req = Vec::with_capacity(100);
+        for _ in 0..100 {
+            let data_request: Request = Request::Data(DialDataResponse {
+                data_count: thread_rng().gen_range(0..4000),
+            });
+            all_req.push(data_request.clone());
+            coder.send_request(data_request.clone()).await.unwrap();
+        }
+        let inner = coder.inner.into_inner();
+        inner.set_position(0);
+        let mut coder = Coder::new(inner);
+        for i in 0..100 {
+            let read_data_request = coder.next_request().await.unwrap();
+            assert_eq!(read_data_request, all_req[i]);
+        }
     }
 }

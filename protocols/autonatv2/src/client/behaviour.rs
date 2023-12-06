@@ -9,11 +9,10 @@ use libp2p_core::{multiaddr::Protocol, transport::PortUse, Endpoint, Multiaddr};
 use libp2p_identity::PeerId;
 use libp2p_swarm::{
     behaviour::{ConnectionEstablished, ExternalAddrConfirmed},
-    dial_opts::{DialOpts, PeerCondition},
     ConnectionClosed, ConnectionDenied, ConnectionHandler, ConnectionId, DialFailure, FromSwarm,
     NetworkBehaviour, NewExternalAddrCandidate, NotifyHandler, ToSwarm,
 };
-use rand::{distributions::Standard, seq::SliceRandom, Rng};
+use rand::{seq::SliceRandom, Rng};
 use rand_core::{OsRng, RngCore};
 
 use crate::{global_only::IpExt, request_response::DialRequest};
@@ -66,6 +65,7 @@ where
         >,
     >,
     address_candidates: HashMap<Multiaddr, usize>,
+    already_tested: HashSet<Multiaddr>,
     peers_to_handlers: HashMap<PeerId, ConnectionId>,
     ticker: IntervalTicker,
 }
@@ -108,7 +108,10 @@ where
     fn on_swarm_event(&mut self, event: FromSwarm) {
         match event {
             FromSwarm::NewExternalAddrCandidate(NewExternalAddrCandidate { addr }) => {
-                *self.address_candidates.entry(addr.clone()).or_default() += 1;
+                if !self.already_tested.contains(addr) {
+                    println!("external addr: {addr}");
+                    *self.address_candidates.entry(addr.clone()).or_default() += 1;
+                }
             }
             FromSwarm::ExternalAddrConfirmed(ExternalAddrConfirmed { addr }) => {
                 self.address_candidates.remove(addr);
@@ -218,7 +221,10 @@ where
         if pending_event.is_ready() {
             return pending_event;
         }
-        if self.ticker.ready() && !self.known_servers.is_empty() && !self.address_candidates.is_empty() {
+        if self.ticker.ready()
+            && !self.known_servers.is_empty()
+            && !self.address_candidates.is_empty()
+        {
             let mut entries = self.address_candidates.drain().collect::<Vec<_>>();
             entries.sort_unstable_by_key(|(_, count)| *count);
             let addrs = entries
@@ -227,6 +233,7 @@ where
                 .map(|(addr, _)| addr)
                 .take(self.config.max_addrs_count)
                 .collect::<Vec<_>>();
+            self.already_tested.extend(addrs.iter().cloned());
             let peers = if self.known_servers.len() < self.config.test_server_count {
                 self.known_servers.clone()
             } else {
@@ -267,6 +274,7 @@ where
             pending_events: VecDeque::new(),
             address_candidates: HashMap::new(),
             peers_to_handlers: HashMap::new(),
+            already_tested: HashSet::new(),
             ticker: IntervalTicker {
                 interval: Duration::from_secs(0),
                 last_tick: Instant::now(),
@@ -309,6 +317,10 @@ where
             return Poll::Ready(event);
         }
         Poll::Pending
+    }
+
+    pub fn inject_test_addr(&mut self, addr: Multiaddr) {
+        *self.address_candidates.entry(addr).or_default() += 1;
     }
 }
 

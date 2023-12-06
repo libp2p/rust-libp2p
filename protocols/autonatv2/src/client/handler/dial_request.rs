@@ -21,6 +21,7 @@ use std::{
     task::{Context, Poll},
 };
 
+use crate::request_response::Coder;
 use crate::{
     generated::structs::{mod_DialResponse::ResponseStatus, DialStatus},
     request_response::{
@@ -30,10 +31,10 @@ use crate::{
     REQUEST_PROTOCOL_NAME, REQUEST_UPGRADE,
 };
 
-use super::DEFAULT_TIMEOUT;
+use super::{DEFAULT_TIMEOUT, MAX_CONCURRENT_REQUESTS};
 
 #[derive(Debug, thiserror::Error)]
-pub(crate) enum Error {
+pub enum Error {
     #[error("io error")]
     Io(#[from] io::Error),
     #[error("invalid referenced address index: {index} (max number of addr: {max})")]
@@ -103,12 +104,13 @@ impl Handler {
     pub(crate) fn new() -> Self {
         Self {
             queued_events: VecDeque::new(),
-            outbound: FuturesSet::new(DEFAULT_TIMEOUT, 10),
+            outbound: FuturesSet::new(DEFAULT_TIMEOUT, MAX_CONCURRENT_REQUESTS),
             queued_streams: VecDeque::default(),
         }
     }
 
     fn perform_request(&mut self, req: DialRequest) {
+        println!("{req:?}");
         let (tx, rx) = oneshot::channel();
         self.queued_streams.push_back(tx);
         self.queued_events
@@ -235,14 +237,15 @@ async fn start_substream_handle(
 
 async fn handle_substream(
     dial_request: DialRequest,
-    mut substream: impl AsyncRead + AsyncWrite + Unpin,
+    substream: impl AsyncRead + AsyncWrite + Unpin,
 ) -> Result<TestEnd, Error> {
-    Request::Dial(dial_request.clone())
-        .write_into(&mut substream)
+    let mut coder = Coder::new(substream);
+    coder
+        .send_request(Request::Dial(dial_request.clone()))
         .await?;
     let mut suspicious_addr = Vec::new();
     loop {
-        match Response::read_from(&mut substream).await? {
+        match coder.next_response().await? {
             Response::Data(DialDataRequest {
                 addr_idx,
                 num_bytes,
@@ -278,10 +281,11 @@ async fn handle_substream(
                     }
                 }
 
-                send_aap_data(&mut substream, num_bytes).await?;
+                println!("Time to bpay the tribute");
+                send_aap_data(&mut coder, num_bytes).await?;
             }
             Response::Dial(dial_response) => {
-                substream.close().await?;
+                coder.close().await?;
                 return test_end_from_dial_response(dial_request, dial_response, suspicious_addr);
             }
         }
@@ -328,7 +332,10 @@ fn test_end_from_dial_response(
     }
 }
 
-async fn send_aap_data(mut substream: impl AsyncWrite + Unpin, num_bytes: usize) -> io::Result<()> {
+async fn send_aap_data<I>(substream: &mut Coder<I>, num_bytes: usize) -> io::Result<()>
+where
+    I: AsyncWrite + Unpin,
+{
     let count_full = num_bytes / DATA_FIELD_LEN_UPPER_BOUND;
     let partial_len = num_bytes % DATA_FIELD_LEN_UPPER_BOUND;
     for req in repeat(DATA_FIELD_LEN_UPPER_BOUND)
@@ -337,7 +344,8 @@ async fn send_aap_data(mut substream: impl AsyncWrite + Unpin, num_bytes: usize)
         .filter(|e| *e > 0)
         .map(|data_count| Request::Data(DialDataResponse { data_count }))
     {
-        req.write_into(&mut substream).await?;
+        println!("Data req: {req:?}");
+        substream.send_request(req).await?;
     }
     Ok(())
 }

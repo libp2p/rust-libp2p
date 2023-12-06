@@ -2,10 +2,10 @@ use libp2p_core::upgrade::ReadyUpgrade;
 use libp2p_swarm::StreamProtocol;
 
 pub mod client;
-pub mod server;
 mod generated;
 mod global_only;
 pub(crate) mod request_response;
+pub mod server;
 
 pub(crate) const REQUEST_PROTOCOL_NAME: StreamProtocol =
     StreamProtocol::new("/libp2p/autonat/2/dial-request");

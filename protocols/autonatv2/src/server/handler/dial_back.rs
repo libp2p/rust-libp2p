@@ -10,16 +10,16 @@ use futures::{AsyncWrite, AsyncWriteExt};
 use futures_bounded::FuturesSet;
 use libp2p_core::upgrade::{DeniedUpgrade, ReadyUpgrade};
 use libp2p_swarm::{
-    handler::{ConnectionEvent, DialUpgradeError, FullyNegotiatedOutbound},
+    handler::{ConnectionEvent, DialUpgradeError, FullyNegotiatedOutbound, ProtocolsChange},
     ConnectionHandler, ConnectionHandlerEvent, StreamProtocol, SubstreamProtocol,
 };
 
-use crate::{request_response::DialBack, Nonce, DIAL_BACK_UPGRADE};
+use crate::{request_response::DialBack, Nonce, DIAL_BACK_PROTOCOL_NAME, DIAL_BACK_UPGRADE};
 
 use super::dial_request::{DialBack as DialBackRes, DialBackCommand};
 
-pub type ToBehaviour = io::Result<()>;
-pub type FromBehaviour = DialBackCommand;
+pub(crate) type ToBehaviour = io::Result<()>;
+pub(crate) type FromBehaviour = DialBackCommand;
 
 pub struct Handler {
     pending_nonce: VecDeque<DialBackCommand>,
@@ -103,7 +103,14 @@ impl ConnectionHandler for Handler {
             ConnectionEvent::DialUpgradeError(DialUpgradeError { error, .. }) => {
                 tracing::debug!("Dial back failed: {:?}", error);
             }
-            _ => {}
+            ConnectionEvent::RemoteProtocolsChange(ProtocolsChange::Added(mut protocols)) => {
+                if !protocols.any(|p| p == &DIAL_BACK_PROTOCOL_NAME) {
+                    todo!("handle when dialed back but not supporting protocol");
+                }
+            }
+            e => {
+                println!("e: {:?}", e);
+            }
         }
     }
 }

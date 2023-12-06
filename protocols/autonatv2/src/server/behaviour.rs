@@ -3,16 +3,16 @@ use std::{
     task::{Context, Poll},
 };
 
+use crate::server::handler::dial_request::DialBack;
 use either::Either;
+use libp2p_core::multiaddr::Protocol;
 use libp2p_core::{transport::PortUse, Endpoint, Multiaddr};
 use libp2p_identity::PeerId;
 use libp2p_swarm::{
-    dial_opts::{DialOpts, PeerCondition},
-    ConnectionDenied, ConnectionHandler, ConnectionId, FromSwarm, NetworkBehaviour, NotifyHandler,
-    ToSwarm,
+    dial_opts::DialOpts, ConnectionDenied, ConnectionHandler, ConnectionId, DialError, DialFailure,
+    FromSwarm, NetworkBehaviour, NotifyHandler, ToSwarm,
 };
 use rand_core::{OsRng, RngCore};
-use libp2p_core::multiaddr::Protocol;
 
 use super::handler::{
     dial_back,
@@ -25,7 +25,6 @@ where
     R: Clone + Send + RngCore + 'static,
 {
     handlers: HashMap<(Multiaddr, PeerId), ConnectionId>,
-    pending_dial_back: HashMap<(Multiaddr, PeerId), VecDeque<DialBackCommand>>,
     dialing_dial_back: HashMap<(Multiaddr, PeerId), VecDeque<DialBackCommand>>,
     pending_events: VecDeque<
         ToSwarm<
@@ -49,7 +48,6 @@ where
     pub fn new(rng: R) -> Self {
         Self {
             handlers: HashMap::new(),
-            pending_dial_back: HashMap::new(),
             dialing_dial_back: HashMap::new(),
             pending_events: VecDeque::new(),
             rng,
@@ -58,7 +56,7 @@ where
 
     fn poll_pending_events(
         &mut self,
-        cx: &mut Context<'_>,
+        _cx: &mut Context<'_>,
     ) -> Poll<
         ToSwarm<
             <Self as NetworkBehaviour>::ToSwarm,
@@ -98,16 +96,47 @@ where
         connection_id: ConnectionId,
         peer: PeerId,
         addr: &Multiaddr,
-        role_override: Endpoint,
+        _role_override: Endpoint,
         port_use: PortUse,
     ) -> Result<<Self as NetworkBehaviour>::ConnectionHandler, ConnectionDenied> {
         if port_use == PortUse::New {
-            self.handlers.insert((addr.iter().filter(|e| !matches!(e, Protocol::P2p(_))).collect(), peer), connection_id);
+            self.handlers.insert(
+                (
+                    addr.iter()
+                        .filter(|e| !matches!(e, Protocol::P2p(_)))
+                        .collect(),
+                    peer,
+                ),
+                connection_id,
+            );
+            println!("Found handler");
         }
         Ok(Either::Left(dial_back::Handler::new()))
     }
 
-    fn on_swarm_event(&mut self, event: FromSwarm) {}
+    fn on_swarm_event(&mut self, event: FromSwarm) {
+        println!("EVENT: {event:?}");
+        match event {
+            FromSwarm::DialFailure(DialFailure {
+                error: DialError::Transport(pairs),
+                ..
+            }) => {
+                println!("Failed to dial");
+                for (addr, _) in pairs.iter() {
+                    if let Some((_, p)) = self.dialing_dial_back.keys().find(|(a, _)| a == addr) {
+                        let cmds = self.dialing_dial_back.remove(&(addr.clone(), *p)).unwrap();
+                        for cmd in cmds {
+                            let _ = cmd.back_channel.send(DialBack::Dial);
+                        }
+                    }
+                }
+            }
+            FromSwarm::DialFailure(m) => {
+                println!("{m:?}");
+            }
+            _ => {}
+        }
+    }
 
     fn on_connection_handler_event(
         &mut self,
@@ -132,9 +161,14 @@ where
                             pending.push_back(cmd);
                         } else {
                             self.pending_events.push_back(ToSwarm::Dial {
-                                opts: DialOpts::peer_id(peer_id.clone())
-                                    .condition(PeerCondition::Always)
-                                    .addresses(vec![addr.clone()])
+                                /*                                opts: DialOpts::peer_id(peer_id)
+                                                                    .addresses(Vec::from([addr.clone()]))
+                                                                    .condition(PeerCondition::Always)
+                                                                    .allocate_new_port()
+                                                                    .build(),
+                                */
+                                opts: DialOpts::unknown_peer_id()
+                                    .address(addr.clone())
                                     .allocate_new_port()
                                     .build(),
                             });
