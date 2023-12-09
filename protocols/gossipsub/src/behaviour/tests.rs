@@ -823,7 +823,6 @@ async fn test_inject_connected() {
             .map(|(peer_id, receiver)| stream::repeat(peer_id).zip(receiver)),
     )
     .filter_map(|(peer_id, e)| async move {
-        dbg!(peer_id, &e);
         match e {
             RpcOut::Subscribe(topic) => Some((peer_id, topic)),
             _ => None,
@@ -1365,7 +1364,7 @@ async fn count_control_msgs<D: DataTransform, F: TopicSubscriptionFilter>(
     for (peer_id, receiver) in receivers.iter_mut() {
         while !poll_fn(|cx| Poll::Ready(receiver.poll_is_empty(cx))).await {
             if let Some(RpcOut::Control(action)) = receiver.next().await {
-                if filter(&peer_id, &action) {
+                if filter(peer_id, &action) {
                     collected_messages += 1
                 }
             }
