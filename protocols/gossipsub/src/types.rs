@@ -21,16 +21,16 @@
 //! A collection of types using the Gossipsub system.
 use crate::metrics::Metrics;
 use crate::TopicHash;
-use async_channel::{Receiver, Sender};
+use futures::channel::mpsc::{Receiver, Sender};
+use futures::stream::Peekable;
 use futures::Stream;
 use libp2p_identity::PeerId;
 use libp2p_swarm::ConnectionId;
 use prometheus_client::encoding::EncodeLabelValue;
 use quick_protobuf::MessageWrite;
+use std::collections::HashMap;
 use std::fmt::Debug;
-use std::sync::atomic::{AtomicUsize, Ordering};
-use std::sync::Arc;
-use std::task::Poll;
+use std::task::{Context, Poll};
 use std::{fmt, pin::Pin};
 
 use crate::rpc_proto::proto;
@@ -77,12 +77,115 @@ impl std::fmt::Debug for MessageId {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone)]
 pub(crate) struct PeerConnections {
     /// The kind of protocol the peer supports.
     pub(crate) kind: PeerKind,
     /// Its current connections.
-    pub(crate) connections: Vec<ConnectionId>,
+    pub(crate) connections: HashMap<ConnectionId, RpcSender>,
+}
+
+impl PeerConnections {
+    /// Send a `RpcOut::Control` message to the `RpcReceiver`
+    /// this is high priority. By cloning `futures::channel::mpsc::Sender`
+    /// we get one extra slot in the channel's capacity.
+    pub(crate) fn control(&mut self, control: ControlAction) {
+        let mut rpc = RpcOut::Control(control);
+        for sender in self.connections.values_mut() {
+            match sender.priority.clone().try_send(rpc) {
+                Ok(_) => {
+                    return;
+                }
+                Err(err) => {
+                    rpc = err.into_inner();
+                }
+            }
+        }
+    }
+
+    /// Send a `RpcOut::Subscribe` message to the `RpcReceiver`
+    /// this is high priority. By cloning `futures::channel::mpsc::Sender`
+    /// we get one extra slot in the channel's capacity.
+    pub(crate) fn subscribe(&mut self, topic: TopicHash) {
+        let mut rpc = RpcOut::Subscribe(topic);
+        for sender in self.connections.values_mut() {
+            match sender.priority.clone().try_send(rpc) {
+                Ok(_) => {
+                    return;
+                }
+                Err(err) => {
+                    rpc = err.into_inner();
+                }
+            }
+        }
+    }
+
+    /// Send a `RpcOut::Unsubscribe` message to the `RpcReceiver`
+    /// this is high priority. By cloning `futures::channel::mpsc::Sender`
+    /// we get one extra slot in the channel's capacity.
+    pub(crate) fn unsubscribe(&mut self, topic: TopicHash) {
+        let mut rpc = RpcOut::Unsubscribe(topic);
+        for sender in self.connections.values_mut() {
+            match sender.priority.clone().try_send(rpc) {
+                Ok(_) => {
+                    return;
+                }
+                Err(err) => {
+                    rpc = err.into_inner();
+                }
+            }
+        }
+    }
+
+    /// Send a `RpcOut::Publish` message to the `RpcReceiver`
+    /// this is high priority. If message sending fails, an `Err` is returned.
+    pub(crate) fn publish(
+        &mut self,
+        message: RawMessage,
+        metrics: Option<&mut Metrics>,
+    ) -> Result<(), ()> {
+        let mut rpc = RpcOut::Publish(message.clone());
+        for sender in self.connections.values_mut() {
+            match sender.priority.try_send(rpc) {
+                Ok(_) => {
+                    if let Some(m) = metrics {
+                        m.msg_sent(&message.topic, message.raw_protobuf_len());
+                    }
+                    return Ok(());
+                }
+                Err(err) if err.is_full() => return Err(()),
+                // Channel is closed, try another sender.
+                Err(err) => {
+                    rpc = err.into_inner();
+                }
+            }
+        }
+        unreachable!("At least one peer should be available");
+    }
+
+    /// Send a `RpcOut::Forward` message to the `RpcReceiver`
+    /// this is low priority. If the queue is full the message is discarded.
+    pub(crate) fn forward(&mut self, message: RawMessage, metrics: Option<&mut Metrics>) {
+        let mut rpc = RpcOut::Forward(message.clone());
+        for sender in self.connections.values_mut() {
+            match sender.non_priority.try_send(rpc) {
+                Ok(_) => {
+                    if let Some(m) = metrics {
+                        m.msg_sent(&message.topic, message.raw_protobuf_len());
+                    }
+                    return;
+                }
+                Err(err) if err.is_full() => {
+                    tracing::trace!("Queue is full, dropped Forward message");
+                    return;
+                }
+                // Channel is closed, try another sender.
+                Err(err) => {
+                    rpc = err.into_inner();
+                }
+            }
+        }
+    }
 }
 
 /// Describes the types of peers that can exist in the gossipsub context.
@@ -522,117 +625,26 @@ impl fmt::Display for PeerKind {
 /// `RpcOut` sender that is priority aware.
 #[derive(Debug, Clone)]
 pub(crate) struct RpcSender {
-    peer_id: PeerId,
-    cap: usize,
-    len: Arc<AtomicUsize>,
-    priority: Sender<RpcOut>,
-    non_priority: Sender<RpcOut>,
-    receiver: RpcReceiver,
-}
-
-impl RpcSender {
-    /// Create a RpcSender.
-    pub(crate) fn new(peer_id: PeerId, cap: usize) -> RpcSender {
-        let (priority_sender, priority_receiver) = async_channel::unbounded();
-        let (non_priority_sender, non_priority_receiver) = async_channel::bounded(cap / 2);
-        let len = Arc::new(AtomicUsize::new(0));
-        let receiver = RpcReceiver {
-            len: len.clone(),
-            priority: priority_receiver,
-            non_priority: non_priority_receiver,
-        };
-        RpcSender {
-            peer_id,
-            cap: cap / 2,
-            len,
-            priority: priority_sender,
-            non_priority: non_priority_sender,
-            receiver: receiver.clone(),
-        }
-    }
-
-    /// Create a new Receiver to the sender.
-    pub(crate) fn new_receiver(&self) -> RpcReceiver {
-        self.receiver.clone()
-    }
-
-    /// Send a `RpcOut::Control` message to the `RpcReceiver`
-    /// this is high priority.
-    pub(crate) fn control(&mut self, control: ControlAction) {
-        self.priority
-            .try_send(RpcOut::Control(control))
-            .expect("Channel is unbounded and should always be open");
-    }
-
-    /// Send a `RpcOut::Subscribe` message to the `RpcReceiver`
-    /// this is high priority.
-    pub(crate) fn subscribe(&mut self, topic: TopicHash) {
-        self.priority
-            .try_send(RpcOut::Subscribe(topic))
-            .expect("Channel is unbounded and should always be open");
-    }
-
-    /// Send a `RpcOut::Unsubscribe` message to the `RpcReceiver`
-    /// this is high priority.
-    pub(crate) fn unsubscribe(&mut self, topic: TopicHash) {
-        self.priority
-            .try_send(RpcOut::Unsubscribe(topic))
-            .expect("Channel is unbounded and should always be open");
-    }
-
-    /// Send a `RpcOut::Publish` message to the `RpcReceiver`
-    /// this is high priority. If message sending fails, an `Err` is returned.
-    pub(crate) fn publish(
-        &mut self,
-        message: RawMessage,
-        metrics: Option<&mut Metrics>,
-    ) -> Result<(), ()> {
-        if self.len.load(Ordering::Relaxed) >= self.cap {
-            return Err(());
-        }
-        self.priority
-            .try_send(RpcOut::Publish(message.clone()))
-            .expect("Channel is unbounded and Should always be open");
-        self.len.fetch_add(1, Ordering::Relaxed);
-
-        if let Some(m) = metrics {
-            m.msg_sent(&message.topic, message.raw_protobuf_len());
-        }
-
-        Ok(())
-    }
-
-    /// Send a `RpcOut::Forward` message to the `RpcReceiver`
-    /// this is high priority. If the queue is full the message is discarded.
-    pub(crate) fn forward(&mut self, message: RawMessage, metrics: Option<&mut Metrics>) {
-        if let Err(err) = self.non_priority.try_send(RpcOut::Forward(message.clone())) {
-            let rpc = err.into_inner();
-            tracing::trace!(
-                "{:?} message to peer {} dropped, queue is full",
-                rpc,
-                self.peer_id
-            );
-            return;
-        }
-
-        if let Some(m) = metrics {
-            m.msg_sent(&message.topic, message.raw_protobuf_len());
-        }
-    }
+    pub(crate) priority: Sender<RpcOut>,
+    pub(crate) non_priority: Sender<RpcOut>,
 }
 
 /// `RpcOut` sender that is priority aware.
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct RpcReceiver {
-    len: Arc<AtomicUsize>,
-    pub(crate) priority: Receiver<RpcOut>,
-    pub(crate) non_priority: Receiver<RpcOut>,
+    pub(crate) priority: Peekable<Receiver<RpcOut>>,
+    pub(crate) non_priority: Peekable<Receiver<RpcOut>>,
 }
 
 impl RpcReceiver {
-    /// Check if both queues are empty.
-    pub(crate) fn is_empty(&self) -> bool {
-        self.priority.is_empty() && self.non_priority.is_empty()
+    pub(crate) fn poll_is_empty(&mut self, cx: &mut Context<'_>) -> bool {
+        if let Poll::Ready(Some(_)) = Pin::new(&mut self.priority).poll_peek(cx) {
+            return false;
+        }
+        if let Poll::Ready(Some(_)) = Pin::new(&mut self.non_priority).poll_peek(cx) {
+            return false;
+        }
+        true
     }
 }
 
@@ -644,11 +656,8 @@ impl Stream for RpcReceiver {
         cx: &mut std::task::Context<'_>,
     ) -> std::task::Poll<Option<Self::Item>> {
         // The priority queue is first polled.
-        if let Poll::Ready(rpc) = Pin::new(&mut self.priority).poll_next(cx) {
-            if let Some(RpcOut::Publish(_)) = rpc {
-                self.len.fetch_sub(1, Ordering::Relaxed);
-            }
-            return Poll::Ready(rpc);
+        if let Poll::Ready(Some(rpc)) = Pin::new(&mut self.priority).poll_next(cx) {
+            return Poll::Ready(Some(rpc));
         }
         // Then we poll the non priority.
         Pin::new(&mut self.non_priority).poll_next(cx)

@@ -43,7 +43,7 @@ async-channel = "1.9.0"
 prometheus-client = { workspace = true }
 
 [dev-dependencies]
-async-std = { version = "1.6.3", features = ["unstable"] }
+async-std = { version = "1.6.3", features = ["unstable", "attributes"] }
 hex = "0.4.2"
 libp2p-core = { workspace = true }
 libp2p-yamux = { workspace = true }

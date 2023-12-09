@@ -229,7 +229,7 @@ impl EnabledHandler {
         }
 
         // determine if we need to create the outbound stream
-        if !self.send_queue.is_empty()
+        if !self.send_queue.poll_is_empty(cx)
             && self.outbound_substream.is_none()
             && !self.outbound_substream_establishing
         {
