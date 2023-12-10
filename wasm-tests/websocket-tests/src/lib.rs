@@ -23,15 +23,15 @@ wasm_bindgen_test_configure!(run_in_browser);
 #[derive(NetworkBehaviour)]
 #[behaviour(prelude = "libp2p::swarm::derive_prelude")]
 pub(crate) struct Behaviour {
-    identify: identify::Behaviour,
+    identify: identify::Behaviour
 }
 
 fn build_behaviour(key: &Keypair) -> Behaviour {
     Behaviour {
         identify: identify::Behaviour::new(identify::Config::new(
-            "ipfs/0.1.0".to_owned(),
+            "/ipfs/id/1.0.0".to_owned(),
             key.public(),
-        )),
+        ))
     }
 }
 
@@ -45,12 +45,12 @@ async fn connect() -> Result<(), Box<dyn Error>> {
         .with_websocket(noise::Config::new, yamux::Config::default)
         .await?;
 
-    #[cfg(target_arch = "wasm32")]
+    //#[cfg(target_arch = "wasm32")]
     let swarm_builder = SwarmBuilder::with_new_identity()
         .with_wasm_bindgen()
         .with_other_transport(|local_key| {
             Ok(libp2p_websocket_websys::Transport::default()
-                .upgrade(libp2p_core::upgrade::Version::V1Lazy)
+                .upgrade(libp2p_core::upgrade::Version::V1)
                 .authenticate(
                     noise::Config::new(&local_key)
                         .context("failed to initialise noise")?,
@@ -80,15 +80,15 @@ async fn connect() -> Result<(), Box<dyn Error>> {
             event = swarm.next() => {
                 match event {
                     Some(SwarmEvent::ConnectionEstablished { peer_id, .. }) => {
-                        log::debug!("Connection established with {:?}", peer_id);
+                        tracing::info!("Connection established with {:?}", peer_id);
                     },
                     Some(SwarmEvent::Behaviour(BehaviourEvent::Identify(event))) => {
-                        log::debug!("Identify event: {:?}", event);
+                        tracing::info!("Identify event: {:?}", event);
                         is_successful = true;
                         break;
                     },
                     Some(other_event) => {
-                        log::debug!("Other event received: {:?}", other_event);
+                        tracing::info!("Other event received: {:?}", other_event);
                     },
                     None => break,  // In case the stream ends
                 }

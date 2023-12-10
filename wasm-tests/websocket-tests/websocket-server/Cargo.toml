@@ -8,11 +8,13 @@ publish = false
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+anyhow = "1"
 base64 = "0.21"
 clap = { version = "4.4.7", features = ["derive"] }
 futures = "0.3"
 futures-timer = "3"
 libp2p = { workspace = true, features = ["dns", "identify", "kad", "macros", "noise", "tokio", "relay", "request-response", "tcp", "wasm-bindgen", "websocket-websys", "websocket", "yamux", "autonat", "ping"] }
+libp2p-core = { workspace = true }
 serde = "1.0.190"
 serde_derive = "1.0.125"
 serde_json = "1.0"

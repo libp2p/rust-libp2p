@@ -6748,11 +6748,13 @@ dependencies = [
 name = "websocket-server"
 version = "0.1.0"
 dependencies = [
+ "anyhow",
  "base64 0.21.5",
  "clap",
  "futures",
  "futures-timer",
  "libp2p",
+ "libp2p-core",
  "serde",
  "serde_derive",
  "serde_json",

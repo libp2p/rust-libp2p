@@ -61,7 +61,7 @@ use std::{
 };
 
 /// The configuration for a TCP/IP transport capability for libp2p.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Copy)]
 pub struct Config {
     /// TTL to set for opened sockets, or `None` to keep default.
     ttl: Option<u32>,

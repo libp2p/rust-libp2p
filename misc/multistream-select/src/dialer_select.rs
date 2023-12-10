@@ -192,7 +192,10 @@ where
                             let protocol = this.protocols.next().ok_or(NegotiationError::Failed)?;
                             *this.state = State::SendProtocol { io, protocol }
                         }
-                        _ => return Poll::Ready(Err(ProtocolError::InvalidMessage.into())),
+                        _ => {
+                            tracing::error!("Dialer: Protocol error because received invalid message");
+                            return Poll::Ready(Err(ProtocolError::InvalidMessage.into()))
+                        },
                     }
                 }
 

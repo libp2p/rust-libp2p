@@ -1,15 +1,14 @@
 use std::env;
+use anyhow::Context;
 use futures::stream::StreamExt;
-use futures_timer::Delay;
 use libp2p::identity::{ed25519, Keypair};
-use libp2p::kad;
 use libp2p::swarm::SwarmEvent;
-use libp2p::{identify, noise, yamux, Multiaddr};
+use libp2p::{noise, yamux, Multiaddr, tcp, websocket};
 use std::error::Error;
-use std::task::Poll;
 use std::time::Duration;
 use sha2::{Digest as ShaDigestTrait, Sha256};
 use tracing_subscriber::EnvFilter;
+use libp2p_core::Transport;
 
 mod behaviour;
 
@@ -36,11 +35,28 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let local_keypair = generate_keypair(KEYPAIR_SEED_PHRASE)?;
     tracing::info!("Local peer id: {:?}", local_keypair.public());
 
+    let tcp_config = tcp::Config::new().nodelay(false).port_reuse(true);
+
+    let wss_transport = {
+        let ws_trans = websocket::WsConfig::new(tcp::tokio::Transport::new(tcp_config.clone()))
+            .or_transport(tcp::tokio::Transport::new(tcp_config));
+
+        libp2p::dns::tokio::Transport::system(ws_trans)?.boxed()
+    };
+
     let mut swarm = libp2p::SwarmBuilder::with_existing_identity(local_keypair)
         .with_tokio()
-        .with_websocket(noise::Config::new, yamux::Config::default).await?
+        .with_other_transport(|local_key| {
+            Ok(wss_transport
+                .upgrade(libp2p_core::upgrade::Version::V1)
+                .authenticate(
+                    noise::Config::new(&local_key)
+                        .context("failed to initialise noise")?,
+                )
+                .multiplex(yamux::Config::default()))
+        })?
         .with_behaviour(|key| {
-            behaviour::Behaviour::new(key.public(), false, false)
+            behaviour::Behaviour::new(key.public())
         })?
         .with_swarm_config(|c| c.with_idle_connection_timeout(Duration::from_secs(60)))
         .build();
@@ -61,56 +77,13 @@ async fn main() -> Result<(), Box<dyn Error>> {
         swarm.external_addresses().collect::<Vec<_>>()
     );
 
-    let mut bootstrap_timer = Delay::new(BOOTSTRAP_INTERVAL);
-
     loop {
-        if let Poll::Ready(()) = futures::poll!(&mut bootstrap_timer) {
-            bootstrap_timer.reset(BOOTSTRAP_INTERVAL);
-            let _ = swarm
-                .behaviour_mut()
-                .kademlia
-                .as_mut()
-                .map(|k| k.bootstrap());
-        }
 
         let event = swarm.next().await.expect("Swarm not to terminate.");
         tracing::debug!("Event: {:?}", event);
 
         match event {
             SwarmEvent::Behaviour(behaviour::BehaviourEvent::Identify(e)) => {
-                tracing::debug!("{:?}", e);
-
-                if let identify::Event::Received {
-                    peer_id,
-                    info:
-                        identify::Info {
-                            listen_addrs,
-                            protocols,
-                            ..
-                        },
-                } = e
-                {
-                    if protocols.iter().any(|p| *p == kad::PROTOCOL_NAME) {
-                        for addr in listen_addrs {
-                            swarm
-                                .behaviour_mut()
-                                .kademlia
-                                .as_mut()
-                                .map(|k| k.add_address(&peer_id, addr));
-                        }
-                    }
-                }
-            }
-            SwarmEvent::Behaviour(behaviour::BehaviourEvent::Ping(e)) => {
-                tracing::debug!("{:?}", e);
-            }
-            SwarmEvent::Behaviour(behaviour::BehaviourEvent::Kademlia(e)) => {
-                tracing::debug!("{:?}", e);
-            }
-            SwarmEvent::Behaviour(behaviour::BehaviourEvent::Relay(e)) => {
-                tracing::info!("{:?}", e);
-            }
-            SwarmEvent::Behaviour(behaviour::BehaviourEvent::Autonat(e)) => {
                 tracing::info!("{:?}", e);
             }
             SwarmEvent::NewListenAddr { address, .. } => {

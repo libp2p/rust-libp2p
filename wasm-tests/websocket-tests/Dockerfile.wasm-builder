@@ -11,8 +11,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     chromium-driver
 
 # 1001 app user id
-RUN groupadd docker -g 1337 && \
-    useradd -u 1001 -G docker,sudo -ms /bin/bash app && \
+RUN groupadd docker -g 1001 && \
+    useradd -u 1000 -G docker,sudo -ms /bin/bash app && \
     echo '%sudo ALL=(ALL) NOPASSWD:ALL' >> /etc/sudoers
 
 USER app
