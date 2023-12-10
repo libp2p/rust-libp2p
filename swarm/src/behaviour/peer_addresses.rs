@@ -65,6 +65,18 @@ impl PeerAddresses {
             .unwrap_or_default()
     }
 
+    /// Removes address from peer addresses cache.
+    /// Returns true if the address was removed.
+    pub fn pop(&mut self, peer: &PeerId, address: &Multiaddr) -> bool {
+        self.get_mut(peer).map_or_else(
+            || false,
+            |addrs| {
+                let address = Self::prepare_addr(peer, address);
+                addrs.remove(&address)
+            },
+        )
+    }
+
     fn prepare_addr(peer: &PeerId, addr: &Multiaddr) -> Multiaddr {
         let addr = addr.clone();
         addr.clone().with_p2p(*peer).unwrap_or(addr)
@@ -117,7 +129,11 @@ mod tests {
         let addr1 = MEMORY_ADDR_1000.clone().with_p2p(peer_id).unwrap();
         let addr2 = MEMORY_ADDR_2000.clone().with_p2p(peer_id).unwrap();
 
-        assert_eq!(cache.get(&peer_id).sort(), vec![addr1, addr2].sort());
+        assert!(cache.get(&peer_id).contains(&addr1));
+        assert!(cache.get(&peer_id).contains(&addr2));
+
+        assert_eq!(cache.get(&peer_id).len(), 2);
+
         assert!(changed);
     }
 
@@ -136,7 +152,7 @@ mod tests {
         let addr1 = MEMORY_ADDR_1000.clone().with_p2p(peer_id).unwrap();
         let changed = cache.on_swarm_event(&event);
         assert!(!changed);
-        assert_eq!(cache.get(&peer_id), vec![addr1]);
+        assert_eq!(cache.get(&peer_id), [addr1]);
     }
 
     #[test]
@@ -150,7 +166,36 @@ mod tests {
         let changed = cache.on_swarm_event(&event);
 
         assert!(changed);
-        assert_eq!(cache.get(&peer_id), vec![]);
+        assert_eq!(cache.get(&peer_id), []);
+    }
+
+    #[test]
+    fn pop_removes_address_if_present() {
+        let mut cache = PeerAddresses::default();
+        let peer_id = PeerId::random();
+        let addr: Multiaddr = "/ip4/127.0.0.1/tcp/8080".parse().unwrap();
+
+        cache.put(peer_id, std::iter::once(addr.clone()));
+
+        assert!(cache.pop(&peer_id, &addr));
+    }
+
+    #[test]
+    fn pop_returns_false_if_address_not_present() {
+        let mut cache = PeerAddresses::default();
+        let peer_id = PeerId::random();
+        let addr: Multiaddr = "/ip4/127.0.0.1/tcp/8080".parse().unwrap();
+
+        assert!(!cache.pop(&peer_id, &addr));
+    }
+
+    #[test]
+    fn pop_returns_false_if_peer_not_present() {
+        let mut cache = PeerAddresses::default();
+        let peer_id = PeerId::random();
+        let addr: Multiaddr = "/ip4/127.0.0.1/tcp/8080".parse().unwrap();
+
+        assert!(!cache.pop(&peer_id, &addr));
     }
 
     fn new_external_addr_of_peer1(peer_id: PeerId) -> FromSwarm<'static> {
