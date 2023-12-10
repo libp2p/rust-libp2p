@@ -341,9 +341,6 @@ where
     /// Multiaddresses that our listeners are listening on,
     listened_addrs: HashMap<ListenerId, SmallVec<[Multiaddr; 1]>>,
 
-    /// Cache of peers with their known external addresses.
-    peer_addrs: PeerAddresses,
-
     /// Pending event to be delivered to connection handlers
     /// (or dropped if the peer disconnected) before the `behaviour`
     /// can be polled again.
@@ -376,7 +373,6 @@ where
             supported_protocols: Default::default(),
             confirmed_external_addr: Default::default(),
             listened_addrs: HashMap::new(),
-            peer_addrs: Default::default(),
             pending_handler_event: None,
             pending_swarm_events: VecDeque::default(),
         }
@@ -583,11 +579,6 @@ where
     /// List all **confirmed** external address for the local node.
     pub fn external_addresses(&self) -> impl Iterator<Item = &Multiaddr> {
         self.confirmed_external_addr.iter()
-    }
-
-    /// List external addresses of a known peer.
-    pub fn peer_addresses(&self, peer_id: &PeerId) -> Option<&Vec<Multiaddr>> {
-        self.peer_addrs.peer_addrs(peer_id)
     }
 
     fn add_listener(&mut self, opts: ListenOpts) -> Result<(), TransportError<io::Error>> {

@@ -26,15 +26,14 @@ use libp2p_identity::PublicKey;
 use libp2p_swarm::behaviour::{ConnectionClosed, ConnectionEstablished, DialFailure, FromSwarm};
 use libp2p_swarm::{
     ConnectionDenied, DialError, ExternalAddresses, ListenAddresses, NetworkBehaviour,
-    NotifyHandler, StreamUpgradeError, THandlerInEvent, ToSwarm,
+    NotifyHandler, PeerAddresses, StreamUpgradeError, THandlerInEvent, ToSwarm,
 };
 use libp2p_swarm::{ConnectionId, THandler, THandlerOutEvent};
-use lru::LruCache;
+
 use std::collections::hash_map::Entry;
 use std::num::NonZeroUsize;
 use std::{
     collections::{HashMap, HashSet, VecDeque},
-    iter::FromIterator,
     task::Context,
     task::Poll,
     time::Duration,
@@ -445,7 +444,7 @@ fn multiaddr_matches_peer_id(addr: &Multiaddr, peer_id: &PeerId) -> bool {
     true
 }
 
-struct PeerCache(Option<LruCache<PeerId, HashSet<Multiaddr>>>);
+struct PeerCache(Option<PeerAddresses>);
 
 impl PeerCache {
     fn disabled() -> Self {
@@ -453,7 +452,7 @@ impl PeerCache {
     }
 
     fn enabled(size: NonZeroUsize) -> Self {
-        Self(Some(LruCache::new(size)))
+        Self(Some(PeerAddresses::new(size)))
     }
 
     fn get_mut(&mut self, peer: &PeerId) -> Option<&mut HashSet<Multiaddr>> {
@@ -461,26 +460,17 @@ impl PeerCache {
     }
 
     fn put(&mut self, peer: PeerId, addresses: impl Iterator<Item = Multiaddr>) {
-        let cache = match self.0.as_mut() {
-            None => return,
-            Some(cache) => cache,
-        };
-
-        let addresses = addresses.filter_map(|a| a.with_p2p(peer).ok());
-        cache.put(peer, HashSet::from_iter(addresses));
+        if let Some(cache) = self.0.as_mut() {
+            cache.put(peer, addresses);
+        }
     }
 
     fn get(&mut self, peer: &PeerId) -> Vec<Multiaddr> {
-        let cache = match self.0.as_mut() {
-            None => return Vec::new(),
-            Some(cache) => cache,
-        };
-
-        cache
-            .get(peer)
-            .cloned()
-            .map(Vec::from_iter)
-            .unwrap_or_default()
+        if let Some(cache) = self.0.as_mut() {
+            cache.get(peer)
+        } else {
+            Vec::new()
+        }
     }
 }
 
