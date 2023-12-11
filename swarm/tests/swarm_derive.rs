@@ -444,6 +444,8 @@ fn with_generics_constrained() {
 
     /// A struct which uses the above, inheriting the generic constraint,
     /// for which we want to derive the `NetworkBehaviour`.
+    ///
+    /// Using a where clause instead of inline constraint.
     #[allow(dead_code)]
     #[derive(NetworkBehaviour)]
     #[behaviour(prelude = "libp2p_swarm::derive_prelude")]
