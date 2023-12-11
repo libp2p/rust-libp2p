@@ -467,7 +467,7 @@ impl PeerCache {
 
     fn get(&mut self, peer: &PeerId) -> Vec<Multiaddr> {
         if let Some(cache) = self.0.as_mut() {
-            cache.get(peer)
+            cache.get(peer).collect()
         } else {
             Vec::new()
         }

@@ -21,25 +21,21 @@ impl PeerAddresses {
         match event {
             FromSwarm::NewExternalAddrOfPeer(NewExternalAddrOfPeer { peer_id, addr }) => {
                 if let Some(peer_addrs) = self.get_mut(peer_id) {
-                    let addr = Self::prepare_addr(peer_id, addr);
-                    return peer_addrs.insert(addr);
+                    let addr = prepare_addr(peer_id, addr);
+                    peer_addrs.insert(addr)
                 } else {
-                    let addr = Self::prepare_addr(peer_id, addr);
+                    let addr = prepare_addr(peer_id, addr);
                     self.put(*peer_id, std::iter::once(addr));
-                    return true;
+                    true
                 }
             }
-            FromSwarm::DialFailure(DialFailure { peer_id, error, .. }) => {
-                if let Some(peer_id) = peer_id {
-                    match error {
-                        DialError::NoAddresses => return self.0.pop(peer_id).is_some(),
-                        _ => return false,
-                    }
-                }
-            }
-            _ => return false,
-        };
-        false
+            FromSwarm::DialFailure(DialFailure {
+                peer_id: Some(peer_id),
+                error: DialError::NoAddresses,
+                ..
+            }) => self.0.pop(peer_id).is_some(),
+            _ => false,
+        }
     }
 
     pub fn new(cache_size: NonZeroUsize) -> Self {
@@ -57,30 +53,31 @@ impl PeerAddresses {
     }
 
     /// Returns peer's external addresses.
-    pub fn get(&mut self, peer: &PeerId) -> Vec<Multiaddr> {
+    pub fn get(&mut self, peer: &PeerId) -> impl Iterator<Item = Multiaddr> {
         self.0
             .get(peer)
             .cloned()
             .map(Vec::from_iter)
             .unwrap_or_default()
+            .into_iter()
     }
 
     /// Removes address from peer addresses cache.
     /// Returns true if the address was removed.
-    pub fn pop(&mut self, peer: &PeerId, address: &Multiaddr) -> bool {
+    pub fn remove(&mut self, peer: &PeerId, address: &Multiaddr) -> bool {
         self.get_mut(peer).map_or_else(
             || false,
             |addrs| {
-                let address = Self::prepare_addr(peer, address);
+                let address = prepare_addr(peer, address);
                 addrs.remove(&address)
             },
         )
     }
+}
 
-    fn prepare_addr(peer: &PeerId, addr: &Multiaddr) -> Multiaddr {
-        let addr = addr.clone();
-        addr.clone().with_p2p(*peer).unwrap_or(addr)
-    }
+fn prepare_addr(peer: &PeerId, addr: &Multiaddr) -> Multiaddr {
+    let addr = addr.clone();
+    addr.clone().with_p2p(*peer).unwrap_or(addr)
 }
 
 impl Default for PeerAddresses {
@@ -121,7 +118,8 @@ mod tests {
         assert!(changed);
 
         let addr1 = MEMORY_ADDR_1000.clone().with_p2p(peer_id).unwrap();
-        assert_eq!(cache.get(&peer_id), vec![addr1]);
+        let expected = cache.get(&peer_id).collect::<Vec<Multiaddr>>();
+        assert_eq!(expected, vec![addr1]);
 
         let event = new_external_addr_of_peer2(peer_id);
         let changed = cache.on_swarm_event(&event);
@@ -129,10 +127,12 @@ mod tests {
         let addr1 = MEMORY_ADDR_1000.clone().with_p2p(peer_id).unwrap();
         let addr2 = MEMORY_ADDR_2000.clone().with_p2p(peer_id).unwrap();
 
-        assert!(cache.get(&peer_id).contains(&addr1));
-        assert!(cache.get(&peer_id).contains(&addr2));
+        let expected_addrs = cache.get(&peer_id).collect::<Vec<Multiaddr>>();
+        assert!(expected_addrs.contains(&addr1));
+        assert!(expected_addrs.contains(&addr2));
 
-        assert_eq!(cache.get(&peer_id).len(), 2);
+        let expected = cache.get(&peer_id).collect::<Vec<Multiaddr>>().len();
+        assert_eq!(expected, 2);
 
         assert!(changed);
     }
@@ -146,13 +146,15 @@ mod tests {
 
         let addr1 = MEMORY_ADDR_1000.clone().with_p2p(peer_id).unwrap();
         let changed = cache.on_swarm_event(&event);
+        let expected = cache.get(&peer_id).collect::<Vec<Multiaddr>>();
         assert!(changed);
-        assert_eq!(cache.get(&peer_id), vec![addr1]);
+        assert_eq!(expected, vec![addr1]);
 
         let addr1 = MEMORY_ADDR_1000.clone().with_p2p(peer_id).unwrap();
         let changed = cache.on_swarm_event(&event);
+        let expected = cache.get(&peer_id).collect::<Vec<Multiaddr>>();
         assert!(!changed);
-        assert_eq!(cache.get(&peer_id), [addr1]);
+        assert_eq!(expected, [addr1]);
     }
 
     #[test]
@@ -166,7 +168,8 @@ mod tests {
         let changed = cache.on_swarm_event(&event);
 
         assert!(changed);
-        assert_eq!(cache.get(&peer_id), []);
+        let expected = cache.get(&peer_id).collect::<Vec<Multiaddr>>();
+        assert_eq!(expected, []);
     }
 
     #[test]
@@ -177,7 +180,7 @@ mod tests {
 
         cache.put(peer_id, std::iter::once(addr.clone()));
 
-        assert!(cache.pop(&peer_id, &addr));
+        assert!(cache.remove(&peer_id, &addr));
     }
 
     #[test]
@@ -186,7 +189,7 @@ mod tests {
         let peer_id = PeerId::random();
         let addr: Multiaddr = "/ip4/127.0.0.1/tcp/8080".parse().unwrap();
 
-        assert!(!cache.pop(&peer_id, &addr));
+        assert!(!cache.remove(&peer_id, &addr));
     }
 
     #[test]
@@ -195,7 +198,7 @@ mod tests {
         let peer_id = PeerId::random();
         let addr: Multiaddr = "/ip4/127.0.0.1/tcp/8080".parse().unwrap();
 
-        assert!(!cache.pop(&peer_id, &addr));
+        assert!(!cache.remove(&peer_id, &addr));
     }
 
     fn new_external_addr_of_peer1(peer_id: PeerId) -> FromSwarm<'static> {

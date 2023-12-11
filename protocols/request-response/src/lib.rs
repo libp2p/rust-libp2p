@@ -477,7 +477,7 @@ where
 
     /// Removes an address of a peer previously added via [`Behaviour::add_address`].
     pub fn remove_address(&mut self, peer: &PeerId, address: &Multiaddr) {
-        self.addresses.pop(peer, address);
+        self.addresses.remove(peer, address);
     }
 
     /// Checks whether a peer is currently connected.
@@ -760,7 +760,7 @@ where
         }
 
         let cached_addrs = self.addresses.get(&peer);
-        addresses.extend(cached_addrs.iter().cloned());
+        addresses.extend(cached_addrs);
 
         Ok(addresses)
     }
@@ -791,19 +791,14 @@ where
     }
 
     fn on_swarm_event(&mut self, event: FromSwarm) {
+        self.addresses.on_swarm_event(&event);
         match event {
             FromSwarm::ConnectionEstablished(_) => {}
             FromSwarm::ConnectionClosed(connection_closed) => {
                 self.on_connection_closed(connection_closed)
             }
             FromSwarm::AddressChange(address_change) => self.on_address_change(address_change),
-            FromSwarm::DialFailure(dial_failure) => {
-                self.on_dial_failure(dial_failure);
-                self.addresses.on_swarm_event(&event);
-            }
-            FromSwarm::NewExternalAddrOfPeer(_) => {
-                self.addresses.on_swarm_event(&event);
-            }
+            FromSwarm::DialFailure(dial_failure) => self.on_dial_failure(dial_failure),
             _ => {}
         }
     }
