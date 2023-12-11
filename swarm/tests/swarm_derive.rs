@@ -372,6 +372,83 @@ fn with_generics_mixed() {
 }
 
 #[test]
+fn with_generics_constrained() {
+    trait Mark {}
+    struct Marked;
+    impl Mark for Marked {}
+
+    /// A struct with a generic constraint, for which we manually implement `NetworkBehaviour`.
+    #[allow(dead_code)]
+    struct Bar<A: Mark> {
+        a: A,
+    }
+
+    enum BarEvent {}
+
+    impl<A: Mark + 'static> NetworkBehaviour for Bar<A> {
+        // Doesn't matter for the test, just using something to satisfy the compiler.
+        type ConnectionHandler =
+            <libp2p_identify::Behaviour as NetworkBehaviour>::ConnectionHandler;
+
+        type ToSwarm = BarEvent;
+
+        fn handle_established_inbound_connection(
+            &mut self,
+            _connection_id: libp2p_swarm::ConnectionId,
+            _peer: libp2p_identity::PeerId,
+            _local_addr: &Multiaddr,
+            _remote_addr: &Multiaddr,
+        ) -> Result<THandler<Self>, ConnectionDenied> {
+            unreachable!()
+        }
+
+        fn handle_established_outbound_connection(
+            &mut self,
+            _connection_id: libp2p_swarm::ConnectionId,
+            _peer: libp2p_identity::PeerId,
+            _addr: &Multiaddr,
+            _role_override: Endpoint,
+        ) -> Result<THandler<Self>, ConnectionDenied> {
+            unreachable!()
+        }
+
+        fn on_swarm_event(&mut self, _event: FromSwarm) {
+            unreachable!()
+        }
+
+        fn on_connection_handler_event(
+            &mut self,
+            _peer_id: libp2p_identity::PeerId,
+            _connection_id: libp2p_swarm::ConnectionId,
+            _event: THandlerOutEvent<Self>,
+        ) {
+            unreachable!()
+        }
+
+        fn poll(
+            &mut self,
+            _cx: &mut std::task::Context<'_>,
+        ) -> std::task::Poll<libp2p_swarm::ToSwarm<Self::ToSwarm, THandlerInEvent<Self>>> {
+            unreachable!()
+        }
+    }
+
+    /// A struct which uses the above, inheriting the generic constraint,
+    /// for which we want to derive the `NetworkBehaviour`.
+    #[allow(dead_code)]
+    #[derive(NetworkBehaviour)]
+    #[behaviour(prelude = "libp2p_swarm::derive_prelude")]
+    struct Foo<A: Mark> {
+        bar: Bar<A>,
+    }
+
+    #[allow(dead_code)]
+    fn foo() {
+        require_net_behaviour::<Foo<Marked>>();
+    }
+}
+
+#[test]
 fn custom_event_with_either() {
     use either::Either;
 
