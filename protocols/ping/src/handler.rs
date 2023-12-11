@@ -46,6 +46,9 @@ pub struct Config {
     timeout: Duration,
     /// The duration between outbound pings.
     interval: Duration,
+    /// Whether to ignore the first ping error or not. It is necessary to ignore it to
+    /// be interoperable with other libp2p implementations (ex: JS).
+    silent_first_error: bool,
 }
 
 impl Config {
@@ -63,6 +66,7 @@ impl Config {
         Self {
             timeout: Duration::from_secs(20),
             interval: Duration::from_secs(15),
+            silent_first_error: true,
         }
     }
 
@@ -75,6 +79,12 @@ impl Config {
     /// Sets the ping interval.
     pub fn with_interval(mut self, d: Duration) -> Self {
         self.interval = d;
+        self
+    }
+
+    /// Sets whether to ignore the first ping error or not.
+    pub fn with_silent_first_error(mut self, silent_first_error: bool) -> Self {
+        self.silent_first_error = silent_first_error;
         self
     }
 }
@@ -263,12 +273,12 @@ impl ConnectionHandler for Handler {
 
                 self.failures += 1;
 
-                // Note: For backward-compatibility the first failure is always "free"
+                // Note: For backward-compatibility the first failure can be "free"
                 // and silent. This allows peers who use a new substream
                 // for each ping to have successful ping exchanges with peers
                 // that use a single substream, since every successful ping
                 // resets `failures` to `0`.
-                if self.failures > 1 {
+                if !self.config.silent_first_error || self.failures > 1 {
                     return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(Err(error)));
                 }
             }
