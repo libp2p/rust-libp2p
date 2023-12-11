@@ -438,13 +438,26 @@ fn with_generics_constrained() {
     #[allow(dead_code)]
     #[derive(NetworkBehaviour)]
     #[behaviour(prelude = "libp2p_swarm::derive_prelude")]
-    struct Foo<A: Mark> {
+    struct Foo1<A: Mark> {
+        bar: Bar<A>,
+    }
+
+    /// A struct which uses the above, inheriting the generic constraint,
+    /// for which we want to derive the `NetworkBehaviour`.
+    #[allow(dead_code)]
+    #[derive(NetworkBehaviour)]
+    #[behaviour(prelude = "libp2p_swarm::derive_prelude")]
+    struct Foo2<A>
+    where
+        A: Mark,
+    {
         bar: Bar<A>,
     }
 
     #[allow(dead_code)]
     fn foo() {
-        require_net_behaviour::<Foo<Marked>>();
+        require_net_behaviour::<Foo1<Marked>>();
+        require_net_behaviour::<Foo2<Marked>>();
     }
 }
 
