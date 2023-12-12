@@ -373,6 +373,7 @@ fn with_generics_mixed() {
 
 #[test]
 fn with_generics_constrained() {
+    use std::task::{Context, Poll};
     trait Mark {}
     struct Marked;
     impl Mark for Marked {}
@@ -383,53 +384,45 @@ fn with_generics_constrained() {
         a: A,
     }
 
-    enum BarEvent {}
-
     impl<A: Mark + 'static> NetworkBehaviour for Bar<A> {
-        // Doesn't matter for the test, just using something to satisfy the compiler.
-        type ConnectionHandler =
-            <libp2p_identify::Behaviour as NetworkBehaviour>::ConnectionHandler;
-
-        type ToSwarm = BarEvent;
+        type ConnectionHandler = dummy::ConnectionHandler;
+        type ToSwarm = void::Void;
 
         fn handle_established_inbound_connection(
             &mut self,
-            _connection_id: libp2p_swarm::ConnectionId,
-            _peer: libp2p_identity::PeerId,
-            _local_addr: &Multiaddr,
-            _remote_addr: &Multiaddr,
+            _: libp2p_swarm::ConnectionId,
+            _: libp2p_identity::PeerId,
+            _: &Multiaddr,
+            _: &Multiaddr,
         ) -> Result<THandler<Self>, ConnectionDenied> {
-            unreachable!()
+            Ok(dummy::ConnectionHandler)
         }
 
         fn handle_established_outbound_connection(
             &mut self,
-            _connection_id: libp2p_swarm::ConnectionId,
-            _peer: libp2p_identity::PeerId,
-            _addr: &Multiaddr,
-            _role_override: Endpoint,
+            _: libp2p_swarm::ConnectionId,
+            _: libp2p_identity::PeerId,
+            _: &Multiaddr,
+            _: Endpoint,
         ) -> Result<THandler<Self>, ConnectionDenied> {
-            unreachable!()
+            Ok(dummy::ConnectionHandler)
         }
 
-        fn on_swarm_event(&mut self, _event: FromSwarm) {
-            unreachable!()
-        }
+        fn on_swarm_event(&mut self, _event: FromSwarm) {}
 
         fn on_connection_handler_event(
             &mut self,
-            _peer_id: libp2p_identity::PeerId,
-            _connection_id: libp2p_swarm::ConnectionId,
-            _event: THandlerOutEvent<Self>,
+            _: libp2p_identity::PeerId,
+            _: libp2p_swarm::ConnectionId,
+            _: THandlerOutEvent<Self>,
         ) {
-            unreachable!()
         }
 
         fn poll(
             &mut self,
-            _cx: &mut std::task::Context<'_>,
-        ) -> std::task::Poll<libp2p_swarm::ToSwarm<Self::ToSwarm, THandlerInEvent<Self>>> {
-            unreachable!()
+            _: &mut Context<'_>,
+        ) -> Poll<libp2p_swarm::ToSwarm<Self::ToSwarm, THandlerInEvent<Self>>> {
+            Poll::Pending
         }
     }
 
