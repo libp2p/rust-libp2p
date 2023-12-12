@@ -17,7 +17,11 @@ use rand_core::{OsRng, RngCore};
 
 use crate::{global_only::IpExt, request_response::DialRequest};
 
-use super::handler::{dial_back, dial_request, Handler, TestEnd};
+use super::handler::{
+    dial_back,
+    dial_request::{self, StatusUpdate},
+    Handler, TestEnd,
+};
 
 struct IntervalTicker {
     interval: Duration,
@@ -49,6 +53,12 @@ impl Default for Config {
     }
 }
 
+#[derive(Debug)]
+pub struct Report {
+    pub update: StatusUpdate,
+    pub peer_id: PeerId,
+}
+
 pub struct Behaviour<R = OsRng>
 where
     R: RngCore + 'static,
@@ -76,7 +86,7 @@ where
 {
     type ConnectionHandler = Handler;
 
-    type ToSwarm = ();
+    type ToSwarm = Report;
 
     fn handle_established_inbound_connection(
         &mut self,
@@ -209,6 +219,9 @@ where
             Either::Left(dial_request::ToBehaviour::TestCompleted(Err(err))) => {
                 tracing::debug!("Test failed: {:?}", err);
             }
+            Either::Left(dial_request::ToBehaviour::StatusUpdate(update)) => self
+                .pending_events
+                .push_back(ToSwarm::GenerateEvent(Report { update, peer_id })),
         }
     }
 

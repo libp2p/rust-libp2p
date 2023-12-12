@@ -139,10 +139,19 @@ where
                 ..
             }) => {
                 for (addr, _) in pairs.iter() {
-                    if let Some((_, p)) = self.dialing_dial_back.keys().find(|(a, _)| a == addr) {
-                        let cmds = self.dialing_dial_back.remove(&(addr.clone(), *p)).unwrap();
-                        for cmd in cmds {
-                            let _ = cmd.back_channel.send(DialBack::Dial);
+                    let cleaned_addr: Multiaddr = addr
+                        .iter()
+                        .filter(|p| !matches!(p, Protocol::P2p(_)))
+                        .collect();
+                    let peer_id_opt = addr.iter().find_map(|p| match p {
+                        Protocol::P2p(peer) => Some(peer),
+                        _ => None,
+                    });
+                    if let Some(peer_id) = peer_id_opt {
+                        if let Some(cmd) = self.dialing_dial_back.remove(&(cleaned_addr, peer_id)) {
+                            for cmd in cmd {
+                                let _ = cmd.back_channel.send(DialBack::Dial);
+                            }
                         }
                     }
                 }
@@ -167,27 +176,20 @@ where
                             handler: NotifyHandler::One(*connection_id),
                             event: Either::Left(cmd),
                         });
+                    } else if let Some(pending) =
+                        self.dialing_dial_back.get_mut(&(addr.clone(), peer_id))
+                    {
+                        pending.push_back(cmd);
                     } else {
-                        if let Some(pending) =
-                            self.dialing_dial_back.get_mut(&(addr.clone(), peer_id))
-                        {
-                            pending.push_back(cmd);
-                        } else {
-                            self.pending_events.push_back(ToSwarm::Dial {
-                                opts: DialOpts::peer_id(peer_id)
-                                    .addresses(Vec::from([addr.clone()]))
-                                    .condition(PeerCondition::Always)
-                                    .allocate_new_port()
-                                    .build(),
-                                /*                                opts: DialOpts::unknown_peer_id()
-                                                                    .address(addr.clone())
-                                                                    .allocate_new_port()
-                                                                    .build(),
-                                */
-                            });
-                            self.dialing_dial_back
-                                .insert((addr, peer_id), VecDeque::from([cmd]));
-                        }
+                        self.pending_events.push_back(ToSwarm::Dial {
+                            opts: DialOpts::peer_id(peer_id)
+                                .addresses(Vec::from([addr.clone()]))
+                                .condition(PeerCondition::Always)
+                                .allocate_new_port()
+                                .build(),
+                        });
+                        self.dialing_dial_back
+                            .insert((addr, peer_id), VecDeque::from([cmd]));
                     }
                 }
                 Err(e) => {
