@@ -1,3 +1,8 @@
+## 0.53.2
+
+- Allow `SwarmBuilder::with_bandwidth_metrics` after `SwarmBuilder::with_websocket`.
+  See [PR 4937](https://github.com/libp2p/rust-libp2p/pull/4937).
+
 ## 0.53.1
 
 - Allow `SwarmBuilder::with_quic_config` to be called without `with_tcp` first.

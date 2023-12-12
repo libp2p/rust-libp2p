@@ -15,7 +15,7 @@ categories = ["network-programming", "asynchronous"]
 
 [dependencies]
 futures = "0.3.29"
-js-sys = "0.3.65"
+js-sys = "0.3.66"
 libp2p-core = { workspace = true }
 libp2p-identity = { workspace = true }
 libp2p-noise = { workspace = true }
@@ -24,9 +24,9 @@ multihash = { workspace = true }
 send_wrapper = { version = "0.6.0", features = ["futures"] }
 thiserror = "1.0.50"
 tracing = "0.1.37"
-wasm-bindgen = "0.2.88"
-wasm-bindgen-futures = "0.4.38"
-web-sys = { version = "0.3.65", features = [
+wasm-bindgen = "0.2.89"
+wasm-bindgen-futures = "0.4.39"
+web-sys = { version = "0.3.66", features = [
     "ReadableStreamDefaultReader",
     "WebTransport",
     "WebTransportBidirectionalStream",

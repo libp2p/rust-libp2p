@@ -1,3 +1,8 @@
+## 0.10.2
+
+- Change `max_idle_timeout`to 10s.
+  See [PR 4965](https://github.com/libp2p/rust-libp2p/pull/4965).
+
 ## 0.10.1
 
 - Allow disabling path MTU discovery.
