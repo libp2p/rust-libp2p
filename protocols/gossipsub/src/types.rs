@@ -629,7 +629,7 @@ pub(crate) struct RpcSender {
     pub(crate) non_priority: Sender<RpcOut>,
 }
 
-/// `RpcOut` sender that is priority aware.
+/// `RpcOut` receiver that is priority aware.
 #[derive(Debug)]
 pub struct RpcReceiver {
     pub(crate) priority: Peekable<Receiver<RpcOut>>,

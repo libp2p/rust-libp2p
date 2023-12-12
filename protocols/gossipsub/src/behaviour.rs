@@ -336,9 +336,6 @@ pub struct Behaviour<D = IdentityTransform, F = AllowAllSubscriptionFilter> {
 
     /// Keep track of a set of internal metrics relating to gossipsub.
     metrics: Option<Metrics>,
-
-    /// Connection handler message queue channels.
-    handler_send_queues: HashMap<PeerId, RpcSender>,
 }
 
 impl<D, F> Behaviour<D, F>
@@ -478,7 +475,6 @@ where
             config,
             subscription_filter,
             data_transform,
-            handler_send_queues: Default::default(),
         })
     }
 }
@@ -2839,11 +2835,10 @@ where
 
         tracing::debug!(peer=%peer_id, "New peer connected");
         // We need to send our subscriptions to the newly-connected node.
-        let mut sender = self
+        let sender = self
             .connected_peers
             .get_mut(&peer_id)
-            .expect("Peerid should exist")
-            .clone();
+            .expect("Peerid should exist");
 
         for topic_hash in self.mesh.clone().into_keys() {
             sender.subscribe(topic_hash);
@@ -2969,7 +2964,6 @@ where
             }
 
             self.connected_peers.remove(&peer_id);
-            self.handler_send_queues.remove(&peer_id);
 
             if let Some((peer_score, ..)) = &mut self.peer_score {
                 peer_score.remove_peer(&peer_id);
