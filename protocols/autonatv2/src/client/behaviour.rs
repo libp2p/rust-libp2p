@@ -109,7 +109,6 @@ where
         match event {
             FromSwarm::NewExternalAddrCandidate(NewExternalAddrCandidate { addr }) => {
                 if !self.already_tested.contains(addr) {
-                    println!("external addr: {addr}");
                     *self.address_candidates.entry(addr.clone()).or_default() += 1;
                 }
             }
@@ -289,9 +288,6 @@ where
                 handler: NotifyHandler::One(*conn_id),
                 event: Either::Left(dial_request::FromBehaviour::PerformRequest(req)),
             });
-            if self.pending_events.is_empty() {
-                println!("is empty")
-            }
         } else {
             tracing::debug!(
                 "There should be a connection to {:?}, but there isn't",

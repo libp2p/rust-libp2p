@@ -1,3 +1,4 @@
+use std::fmt::Debug;
 use std::{
     collections::{HashMap, VecDeque},
     task::{Context, Poll},
@@ -8,6 +9,7 @@ use either::Either;
 use libp2p_core::multiaddr::Protocol;
 use libp2p_core::{transport::PortUse, Endpoint, Multiaddr};
 use libp2p_identity::PeerId;
+use libp2p_swarm::dial_opts::PeerCondition;
 use libp2p_swarm::{
     dial_opts::DialOpts, ConnectionDenied, ConnectionHandler, ConnectionId, DialError, DialFailure,
     FromSwarm, NetworkBehaviour, NotifyHandler, ToSwarm,
@@ -109,19 +111,33 @@ where
                 ),
                 connection_id,
             );
-            println!("Found handler");
         }
         Ok(Either::Left(dial_back::Handler::new()))
     }
 
     fn on_swarm_event(&mut self, event: FromSwarm) {
-        println!("EVENT: {event:?}");
         match event {
+            FromSwarm::DialFailure(DialFailure {
+                error: DialError::WrongPeerId { .. },
+                peer_id: Some(peer_id),
+                ..
+            }) => {
+                if let Some(key) = self
+                    .dialing_dial_back
+                    .keys()
+                    .find(|(_, p)| *p == peer_id)
+                    .cloned()
+                {
+                    let cmds = self.dialing_dial_back.remove(&key).unwrap();
+                    for cmd in cmds {
+                        let _ = cmd.back_channel.send(DialBack::Dial);
+                    }
+                }
+            }
             FromSwarm::DialFailure(DialFailure {
                 error: DialError::Transport(pairs),
                 ..
             }) => {
-                println!("Failed to dial");
                 for (addr, _) in pairs.iter() {
                     if let Some((_, p)) = self.dialing_dial_back.keys().find(|(a, _)| a == addr) {
                         let cmds = self.dialing_dial_back.remove(&(addr.clone(), *p)).unwrap();
@@ -130,9 +146,6 @@ where
                         }
                     }
                 }
-            }
-            FromSwarm::DialFailure(m) => {
-                println!("{m:?}");
             }
             _ => {}
         }
@@ -161,16 +174,16 @@ where
                             pending.push_back(cmd);
                         } else {
                             self.pending_events.push_back(ToSwarm::Dial {
-                                /*                                opts: DialOpts::peer_id(peer_id)
-                                                                    .addresses(Vec::from([addr.clone()]))
-                                                                    .condition(PeerCondition::Always)
+                                opts: DialOpts::peer_id(peer_id)
+                                    .addresses(Vec::from([addr.clone()]))
+                                    .condition(PeerCondition::Always)
+                                    .allocate_new_port()
+                                    .build(),
+                                /*                                opts: DialOpts::unknown_peer_id()
+                                                                    .address(addr.clone())
                                                                     .allocate_new_port()
                                                                     .build(),
                                 */
-                                opts: DialOpts::unknown_peer_id()
-                                    .address(addr.clone())
-                                    .allocate_new_port()
-                                    .build(),
                             });
                             self.dialing_dial_back
                                 .insert((addr, peer_id), VecDeque::from([cmd]));

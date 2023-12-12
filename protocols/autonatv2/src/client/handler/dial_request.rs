@@ -110,7 +110,6 @@ impl Handler {
     }
 
     fn perform_request(&mut self, req: DialRequest) {
-        println!("{req:?}");
         let (tx, rx) = oneshot::channel();
         self.queued_streams.push_back(tx);
         self.queued_events
@@ -281,7 +280,6 @@ async fn handle_substream(
                     }
                 }
 
-                println!("Time to bpay the tribute");
                 send_aap_data(&mut coder, num_bytes).await?;
             }
             Response::Dial(dial_response) => {
@@ -344,7 +342,6 @@ where
         .filter(|e| *e > 0)
         .map(|data_count| Request::Data(DialDataResponse { data_count }))
     {
-        println!("Data req: {req:?}");
         substream.send_request(req).await?;
     }
     Ok(())

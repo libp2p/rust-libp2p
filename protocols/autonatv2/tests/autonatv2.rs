@@ -101,32 +101,26 @@ async fn dial_back_to_not_supporting() {
         e => panic!("unknown events {e:#?}"),
     }
 
-    println!("Standard succeed");
-
     let mut hannes = new_dummy().await;
     let unreachable_address = hannes.external_addresses().next().unwrap().clone();
     bob.behaviour_mut()
         .autonat
         .inject_test_addr(unreachable_address.clone());
 
-    tokio::spawn(async move {
+    let handler = tokio::spawn(async move {
         loop {
-            let hannes_event = hannes.next_swarm_event().await;
-            println!("Hannes: {hannes_event:?}");
+            hannes.next_swarm_event().await;
         }
     });
 
-    tokio::spawn(async move {
-        loop {
-            let bob_event = bob.next_swarm_event().await;
-            println!("Bob: {bob_event:?}");
-        }
-    });
-
-    loop {
-        let alice_event = alice.next_swarm_event().await;
-        println!("Alice: {alice_event:?}");
+    match libp2p_swarm_test::drive(&mut alice, &mut bob).await {
+        (
+            [SwarmEvent::Dialing { .. }, SwarmEvent::OutgoingConnectionError { .. }],
+            [SwarmEvent::ExternalAddrExpired { .. }],
+        ) => {}
+        e => panic!("unknown events {e:#?}"),
     }
+    handler.abort();
 }
 
 async fn new_server() -> Swarm<CombinedServer> {

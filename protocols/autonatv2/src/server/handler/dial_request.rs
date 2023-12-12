@@ -211,7 +211,6 @@ where
             return Err(HandleFail::RequestRejected);
         }
     };
-    println!("incoming addr: {addrs:?}");
     for (idx, addr) in addrs.into_iter().enumerate() {
         if addr != observed_multiaddr {
             let dial_data_request = DialDataRequest::from_rng(idx, &mut rng);
@@ -221,19 +220,16 @@ where
                 .await
                 .map_err(|_| HandleFail::InternalError(idx))?;
             while rem_data > 0 {
-                let DialDataResponse { data_count } =
-                    match coder.next_request().await.map_err(|e| {
-                        println!("err: {e:?}");
-                        HandleFail::InternalError(idx)
-                    })? {
-                        Request::Dial(_) => {
-                            return Err(HandleFail::RequestRejected);
-                        }
-                        Request::Data(dial_data_response) => {
-                            println!("Dial data response: {dial_data_response:?}");
-                            dial_data_response
-                        }
-                    };
+                let DialDataResponse { data_count } = match coder
+                    .next_request()
+                    .await
+                    .map_err(|e| HandleFail::InternalError(idx))?
+                {
+                    Request::Dial(_) => {
+                        return Err(HandleFail::RequestRejected);
+                    }
+                    Request::Data(dial_data_response) => dial_data_response,
+                };
                 rem_data = rem_data.saturating_sub(data_count);
             }
         }
@@ -248,9 +244,6 @@ where
             .send(dial_back_cmd)
             .await
             .map_err(|_| HandleFail::InternalError(idx))?;
-        if rx.is_terminated() {
-            println!("is terminated");
-        }
         let dial_back = rx.await.map_err(|_e| HandleFail::InternalError(idx))?;
         if dial_back != DialBack::Ok {
             return Err(HandleFail::DialBack {
@@ -278,7 +271,6 @@ async fn handle_request(
         handle_request_internal(&mut coder, observed_multiaddr, dial_back_cmd_sender, rng)
             .await
             .unwrap_or_else(|e| e.into());
-    println!("Response: {response:?}");
     coder.send_response(Response::Dial(response)).await?;
     coder.close().await?;
     Ok(())

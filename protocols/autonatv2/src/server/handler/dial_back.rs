@@ -11,7 +11,8 @@ use futures_bounded::FuturesSet;
 use libp2p_core::upgrade::{DeniedUpgrade, ReadyUpgrade};
 use libp2p_swarm::{
     handler::{ConnectionEvent, DialUpgradeError, FullyNegotiatedOutbound, ProtocolsChange},
-    ConnectionHandler, ConnectionHandlerEvent, StreamProtocol, SubstreamProtocol,
+    ConnectionHandler, ConnectionHandlerEvent, StreamProtocol, StreamUpgradeError,
+    SubstreamProtocol,
 };
 
 use crate::{request_response::DialBack, Nonce, DIAL_BACK_PROTOCOL_NAME, DIAL_BACK_UPGRADE};
@@ -100,17 +101,19 @@ impl ConnectionHandler for Handler {
                     tracing::warn!("received dial back substream without nonce");
                 }
             }
-            ConnectionEvent::DialUpgradeError(DialUpgradeError { error, .. }) => {
-                tracing::debug!("Dial back failed: {:?}", error);
-            }
-            ConnectionEvent::RemoteProtocolsChange(ProtocolsChange::Added(mut protocols)) => {
-                if !protocols.any(|p| p == &DIAL_BACK_PROTOCOL_NAME) {
-                    todo!("handle when dialed back but not supporting protocol");
+            ConnectionEvent::DialUpgradeError(DialUpgradeError {
+                error: StreamUpgradeError::NegotiationFailed,
+                ..
+            })
+            | ConnectionEvent::DialUpgradeError(DialUpgradeError {
+                error: StreamUpgradeError::Timeout,
+                ..
+            }) => {
+                if let Some(cmd) = self.requested_substream_nonce.pop_front() {
+                    let _ = cmd.back_channel.send(DialBackRes::DialBack);
                 }
             }
-            e => {
-                println!("e: {:?}", e);
-            }
+            _ => {}
         }
     }
 }
