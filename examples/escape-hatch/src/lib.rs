@@ -1,3 +1,4 @@
+use futures::channel::oneshot;
 use handler::Connection;
 use libp2p::swarm::{
     ConnectionDenied, ConnectionId, FromSwarm, SubstreamProtocol, THandler, THandlerOutEvent,
@@ -8,6 +9,7 @@ use libp2p_core::upgrade::ReadyUpgrade;
 use libp2p_core::{Endpoint, Multiaddr};
 use std::task::Context;
 use std::{collections::VecDeque, io, task::Poll, time::Duration};
+use std::sync::mpsc;
 
 mod handler;
 
@@ -49,6 +51,11 @@ pub struct Config {
     interval: Duration,
 }
 
+struct StreamMessage {
+    peer_id: PeerId, // Assuming PeerId is a type representing a peer
+    response_channel: oneshot::Sender<Result<Stream, Error>>, // For sending back the result
+}
+
 pub struct IncomingStreams {
     stream: Option<TcpStream>,
     /// Queue of events to yield to the swarm.
@@ -57,7 +64,9 @@ pub struct IncomingStreams {
 
 /// A control acts as a "remote" that allows users to request streams without interacting with the `Swarm` directly.
 #[derive(Clone)]
-pub struct Control {}
+pub struct Control {
+    sender: mpsc::Sender<StreamMessage>,
+}
 
 impl IncomingStreams {
     pub async fn next(&mut self) -> (PeerId, Stream) {
@@ -96,9 +105,15 @@ impl Behaviour {
 }
 
 impl Control {
-    pub async fn open_stream(&self, peer: PeerId) -> Result<Stream, Error> {
-        let stream = SubstreamProtocol::new(ReadyUpgrade::new(PROTOCOL_NAME), ());
-        todo!()
+    pub async fn open_stream(&self, peer_id: PeerId) -> Result<Stream, Error> {
+        let (response_tx, response_rx) = oneshot::channel();
+        let message = StreamMessage {
+            peer_id,
+            response_channel: response_tx,
+        };
+        // Send the message to NetworkBehaviour
+        self.sender.send(message).expect("Failed to send message");
+        response_rx.await.expect("Failed to receive response")
     }
 }
 
