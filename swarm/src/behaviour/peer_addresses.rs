@@ -20,7 +20,7 @@ impl PeerAddresses {
     pub fn on_swarm_event(&mut self, event: &FromSwarm) -> bool {
         match event {
             FromSwarm::NewExternalAddrOfPeer(NewExternalAddrOfPeer { peer_id, addr }) => {
-                if let Some(peer_addrs) = self.get_mut(peer_id) {
+                if let Some(peer_addrs) = self.0.get_mut(peer_id) {
                     let addr = prepare_addr(peer_id, addr);
                     peer_addrs.insert(addr)
                 } else {
@@ -42,10 +42,6 @@ impl PeerAddresses {
         Self(LruCache::new(cache_size))
     }
 
-    pub fn get_mut(&mut self, peer: &PeerId) -> Option<&mut HashSet<Multiaddr>> {
-        self.0.get_mut(peer)
-    }
-
     pub fn put(&mut self, peer: PeerId, addresses: impl Iterator<Item = Multiaddr>) -> bool {
         let addresses = addresses.filter_map(|a| a.with_p2p(peer).ok());
         self.0.put(peer, HashSet::from_iter(addresses));
@@ -65,7 +61,7 @@ impl PeerAddresses {
     /// Removes address from peer addresses cache.
     /// Returns true if the address was removed.
     pub fn remove(&mut self, peer: &PeerId, address: &Multiaddr) -> bool {
-        self.get_mut(peer).map_or_else(
+        self.0.get_mut(peer).map_or_else(
             || false,
             |addrs| {
                 let address = prepare_addr(peer, address);

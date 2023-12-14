@@ -199,9 +199,9 @@ impl Behaviour {
             .or_default()
             .insert(conn, addr);
 
-        if let Some(entry) = self.discovered_peers.get_mut(&peer_id) {
+        if let Some(cache) = self.discovered_peers.0.as_mut() {
             for addr in failed_addresses {
-                entry.remove(addr);
+                cache.remove(&peer_id, addr);
             }
         }
     }
@@ -386,11 +386,11 @@ impl NetworkBehaviour for Behaviour {
                 self.our_observed_addresses.remove(&connection_id);
             }
             FromSwarm::DialFailure(DialFailure { peer_id, error, .. }) => {
-                if let Some(entry) = peer_id.and_then(|id| self.discovered_peers.get_mut(&id)) {
-                    if let DialError::Transport(errors) = error {
-                        for (addr, _error) in errors {
-                            entry.remove(addr);
-                        }
+                if let (Some(peer_id), Some(cache), DialError::Transport(errors)) =
+                    (peer_id, self.discovered_peers.0.as_mut(), error)
+                {
+                    for (addr, _error) in errors {
+                        cache.remove(&peer_id, addr);
                     }
                 }
             }
@@ -453,10 +453,6 @@ impl PeerCache {
 
     fn enabled(size: NonZeroUsize) -> Self {
         Self(Some(PeerAddresses::new(size)))
-    }
-
-    fn get_mut(&mut self, peer: &PeerId) -> Option<&mut HashSet<Multiaddr>> {
-        self.0.as_mut()?.get_mut(peer)
     }
 
     fn put(&mut self, peer: PeerId, addresses: impl Iterator<Item = Multiaddr>) {
