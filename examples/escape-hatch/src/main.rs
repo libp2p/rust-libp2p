@@ -1,4 +1,4 @@
-
+use escape_hatch::Behaviour;
 use futures::prelude::*;
 use futures::StreamExt;
 use libp2p::StreamProtocol;
@@ -7,7 +7,6 @@ use libp2p_core::{
     transport::{memory::MemoryTransport, ListenerId, Transport},
 };
 use rand::{thread_rng, Rng};
-use escape_hatch::Behaviour;
 
 #[tokio::main]
 async fn main() {
