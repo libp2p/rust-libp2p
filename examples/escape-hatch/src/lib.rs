@@ -57,15 +57,15 @@ struct StreamMessage {
 }
 
 pub struct IncomingStreams {
-    stream: Option<TcpStream>,
     /// Queue of events to yield to the swarm.
     events: VecDeque<Event>,
 }
 
 /// A control acts as a "remote" that allows users to request streams without interacting with the `Swarm` directly.
-#[derive(Clone)]
+
 pub struct Control {
     sender: mpsc::Sender<StreamMessage>,
+    receiver: mpsc::Receiver<StreamMessage>
 }
 
 impl IncomingStreams {
@@ -84,6 +84,7 @@ impl IncomingStreams {
 
 impl Behaviour {
     pub fn new(protocol: StreamProtocol) -> (Self, Control, IncomingStreams) {
+        let (sender, receiver) = mpsc::channel::<StreamMessage>();
         let behaviour = Self {
             config: Config {
                 timeout: Duration::from_secs(1),
@@ -95,9 +96,11 @@ impl Behaviour {
 
         (
             behaviour,
-            Control {},
+            Control {
+                sender,
+                receiver
+            },
             IncomingStreams {
-                stream: None,
                 events: VecDeque::new(),
             },
         )
