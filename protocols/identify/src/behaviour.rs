@@ -273,7 +273,19 @@ impl NetworkBehaviour for Behaviour {
 
                 let observed = info.observed_addr.clone();
                 self.events
-                    .push_back(ToSwarm::GenerateEvent(Event::Received { peer_id, info }));
+                    .push_back(ToSwarm::GenerateEvent(Event::Received {
+                        peer_id,
+                        info: info.clone(),
+                    }));
+
+                filter_new_external_addrs(&self.discovered_peers.get(&peer_id), &info.listen_addrs)
+                    .iter()
+                    .for_each(|address| {
+                        self.events.push_back(ToSwarm::NewExternalAddrOfPeer {
+                            peer_id,
+                            addr: address.clone(),
+                        })
+                    });
 
                 match self.our_observed_addresses.entry(id) {
                     Entry::Vacant(not_yet_observed) => {
@@ -444,6 +456,20 @@ fn multiaddr_matches_peer_id(addr: &Multiaddr, peer_id: &PeerId) -> bool {
     true
 }
 
+fn filter_new_external_addrs(
+    cached_addrs: &[Multiaddr],
+    listen_addrs: &Vec<Multiaddr>,
+) -> Vec<Multiaddr> {
+    let mut new_addresses = Vec::<Multiaddr>::new();
+
+    for address in listen_addrs {
+        if !cached_addrs.contains(address) {
+            new_addresses.push(address.clone());
+        }
+    }
+    new_addresses
+}
+
 struct PeerCache(Option<PeerAddresses>);
 
 impl PeerCache {
@@ -494,5 +520,51 @@ mod tests {
             &peer_id
         ));
         assert!(multiaddr_matches_peer_id(&addr_without_peer_id, &peer_id));
+    }
+
+    #[test]
+    fn filter_new_external_addrs_leaves_new_addrs() {
+        let addr: Multiaddr = "/ip4/147.75.69.143/tcp/4001"
+            .parse()
+            .expect("failed to parse multiaddr");
+
+        let addr1: Multiaddr = "/ip4/147.75.69.143/tcp/4002"
+            .parse()
+            .expect("failed to parse multiaddr");
+
+        let old_addr: Multiaddr = "/memory/1234".parse().unwrap();
+        let old_addr1: Multiaddr = "/memory/1233".parse().unwrap();
+        let old_addr2: Multiaddr = "/memory/1235".parse().unwrap();
+
+        let old_addrs: Vec<Multiaddr> = [old_addr, old_addr1, old_addr2].to_vec();
+
+        let new_addrs = Vec::from([addr, addr1]);
+
+        assert_eq!(
+            filter_new_external_addrs(&old_addrs, &new_addrs),
+            new_addrs.clone(),
+        );
+    }
+
+    #[test]
+    fn filter_new_external_addrs_filter_duplicates() {
+        let addr: Multiaddr = "/ip4/147.75.69.143/tcp/4001"
+            .parse()
+            .expect("failed to parse multiaddr");
+
+        let addr1: Multiaddr = "/ip4/147.75.69.143/tcp/4002"
+            .parse()
+            .expect("failed to parse multiaddr");
+
+        let old_addr: Multiaddr = "/memory/1234".parse().unwrap();
+        let old_addr1: Multiaddr = "/memory/1233".parse().unwrap();
+        let old_addr2: Multiaddr = "/memory/1235".parse().unwrap();
+
+        let mut old_addrs: Vec<Multiaddr> = [old_addr, old_addr1, old_addr2].to_vec();
+
+        let new_addrs = Vec::from([addr.clone(), addr1.clone()]);
+        old_addrs.append(&mut new_addrs.clone());
+
+        assert_eq!(filter_new_external_addrs(&old_addrs, &new_addrs), [])
     }
 }

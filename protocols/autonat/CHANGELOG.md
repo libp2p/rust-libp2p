@@ -1,3 +1,8 @@
+## 0.12.1 - unreleased
+
+- Allow temporary use of deprecated `libp2p_request_response::add_address`.
+  See [PR 4371](https://github.com/libp2p/rust-libp2p/pull/4371)
+
 ## 0.12.0
 
 - Remove `Clone`, `PartialEq` and `Eq` implementations on `Event` and its sub-structs.

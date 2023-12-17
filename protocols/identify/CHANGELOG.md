@@ -1,3 +1,8 @@
+## 0.45.0 - unreleased
+
+- Emit `ToSwarm::NewExternalAddrOfPeer` when identified new peer. `PeerCache` uses `libp2p_swarm::PeerAddresses`
+  See [PR 4371](https://github.com/libp2p/rust-libp2p/pull/4371)
+
 ## 0.44.1
 
 - Ensure `Multiaddr` handled and returned by `Behaviour` are `/p2p` terminated.
