@@ -181,10 +181,11 @@ pub struct Config {
     provider_publication_interval: Option<Duration>,
     kbucket_inserts: BucketInserts,
     caching: Caching,
+    protocol_name: String,
 }
 
-impl Default for Config {
-    fn default() -> Self {
+impl Config {
+    pub fn new(protocol_name: String) -> Self {
         Config {
             kbucket_pending_timeout: Duration::from_secs(60),
             query_config: QueryConfig::default(),
@@ -197,6 +198,7 @@ impl Default for Config {
             provider_record_ttl: Some(Duration::from_secs(24 * 60 * 60)),
             kbucket_inserts: BucketInserts::OnConnected,
             caching: Caching::Enabled { max_peers: 1 },
+            protocol_name,
         }
     }
 }
