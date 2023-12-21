@@ -13,7 +13,7 @@ async-std = { version = "1.12", features = ["attributes"] }
 async-trait = "0.1"
 futures = "0.3.29"
 futures-timer = "3.0.2"
-libp2p = { path = "../../libp2p", features = [ "async-std", "dns", "kad", "mdns", "noise", "macros", "tcp", "yamux"] }
+libp2p = { path = "../../libp2p", features = [ "async-std", "ping"] }
 libp2p-core = { workspace = true }
 rand = "0.8"
 tokio = { version = "1.33", features = ["macros", "net", "rt", "signal"] }

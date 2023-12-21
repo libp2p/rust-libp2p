@@ -63,6 +63,16 @@ impl ConnectionHandler for Connection {
             Self::OutboundOpenInfo,
         >,
     ) {
+        match event {
+            libp2p::swarm::handler::ConnectionEvent::FullyNegotiatedInbound(_) => todo!(),
+            libp2p::swarm::handler::ConnectionEvent::FullyNegotiatedOutbound(_) => todo!(),
+            libp2p::swarm::handler::ConnectionEvent::AddressChange(_) => todo!(),
+            libp2p::swarm::handler::ConnectionEvent::DialUpgradeError(_) => todo!(),
+            libp2p::swarm::handler::ConnectionEvent::ListenUpgradeError(_) => todo!(),
+            libp2p::swarm::handler::ConnectionEvent::LocalProtocolsChange(_) => todo!(),
+            libp2p::swarm::handler::ConnectionEvent::RemoteProtocolsChange(_) => todo!(),
+            _ => todo!(),
+        }
         todo!()
     }
 }
