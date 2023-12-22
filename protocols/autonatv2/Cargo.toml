@@ -25,9 +25,10 @@ bytes = "1"
 static_assertions = "1.1.0"
 tracing = "0.1.40"
 unsigned-varint = { workspace = true, features = ["futures"] }
+futures-timer = "3.0.2"
 
 [dev-dependencies]
-tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
+tokio = { version = "1", features = ["macros", "rt-multi-thread", "sync"] }
 libp2p-swarm-test = { workspace = true }
 libp2p-identify = { workspace = true }
 libp2p-swarm = { workspace = true, features = ["macros"] }

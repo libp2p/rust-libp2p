@@ -249,7 +249,7 @@ mod ip {
                     // AS112-v6 (`2001:4:112::/48`)
                     || matches!(self.segments(), [0x2001, 4, 0x112, _, _, _, _, _])
                     // ORCHIDv2 (`2001:20::/28`)
-                    || matches!(self.segments(), [0x2001, b, _, _, _, _, _, _] if b >= 0x20 && b <= 0x2F)
+                    || matches!(self.segments(), [0x2001, b, _, _, _, _, _, _] if (0x20..=0x2f).contains(&b))
                 ))
             || Ipv6Ext::is_documentation(self)
             || Ipv6Ext::is_unique_local(self)

@@ -1,5 +1,4 @@
 use std::{
-    collections::VecDeque,
     convert::identity,
     io,
     task::{Context, Poll},
@@ -10,36 +9,41 @@ use futures::{AsyncWrite, AsyncWriteExt};
 use futures_bounded::FuturesSet;
 use libp2p_core::upgrade::{DeniedUpgrade, ReadyUpgrade};
 use libp2p_swarm::{
-    handler::{ConnectionEvent, DialUpgradeError, FullyNegotiatedOutbound, ProtocolsChange},
+    handler::{ConnectionEvent, DialUpgradeError, FullyNegotiatedOutbound},
     ConnectionHandler, ConnectionHandlerEvent, StreamProtocol, StreamUpgradeError,
     SubstreamProtocol,
 };
 
-use crate::{request_response::DialBack, Nonce, DIAL_BACK_PROTOCOL_NAME, DIAL_BACK_UPGRADE};
+use crate::{request_response::DialBack, Nonce, DIAL_BACK_UPGRADE};
 
-use super::dial_request::{DialBack as DialBackRes, DialBackCommand};
+use super::dial_request::{DialBackCommand, DialBackStatus as DialBackRes};
 
 pub(crate) type ToBehaviour = io::Result<()>;
-pub(crate) type FromBehaviour = DialBackCommand;
 
 pub struct Handler {
-    pending_nonce: VecDeque<DialBackCommand>,
-    requested_substream_nonce: VecDeque<DialBackCommand>,
+    pending_nonce: Option<DialBackCommand>,
+    requested_substream_nonce: Option<DialBackCommand>,
     outbound: FuturesSet<ToBehaviour>,
 }
 
 impl Handler {
-    pub(crate) fn new() -> Self {
+    pub(crate) fn new(cmd: DialBackCommand) -> Self {
+        let mut ret = Self::empty();
+        ret.pending_nonce = Some(cmd);
+        ret
+    }
+
+    pub(crate) fn empty() -> Self {
         Self {
-            pending_nonce: VecDeque::new(),
-            requested_substream_nonce: VecDeque::new(),
+            pending_nonce: None,
+            requested_substream_nonce: None,
             outbound: FuturesSet::new(Duration::from_secs(10000), 2),
         }
     }
 }
 
 impl ConnectionHandler for Handler {
-    type FromBehaviour = FromBehaviour;
+    type FromBehaviour = ();
     type ToBehaviour = ToBehaviour;
     type InboundProtocol = DeniedUpgrade;
     type OutboundProtocol = ReadyUpgrade<StreamProtocol>;
@@ -63,8 +67,8 @@ impl ConnectionHandler for Handler {
                     .and_then(identity),
             ));
         }
-        if let Some(cmd) = self.pending_nonce.pop_front() {
-            self.requested_substream_nonce.push_back(cmd);
+        if let Some(cmd) = self.pending_nonce.take() {
+            self.requested_substream_nonce = Some(cmd);
             return Poll::Ready(ConnectionHandlerEvent::OutboundSubstreamRequest {
                 protocol: SubstreamProtocol::new(DIAL_BACK_UPGRADE, ()),
             });
@@ -72,9 +76,7 @@ impl ConnectionHandler for Handler {
         Poll::Pending
     }
 
-    fn on_behaviour_event(&mut self, event: Self::FromBehaviour) {
-        self.pending_nonce.push_back(event);
-    }
+    fn on_behaviour_event(&mut self, _event: Self::FromBehaviour) {}
 
     fn on_connection_event(
         &mut self,
@@ -89,7 +91,7 @@ impl ConnectionHandler for Handler {
             ConnectionEvent::FullyNegotiatedOutbound(FullyNegotiatedOutbound {
                 protocol, ..
             }) => {
-                if let Some(cmd) = self.requested_substream_nonce.pop_front() {
+                if let Some(cmd) = self.requested_substream_nonce.take() {
                     if self
                         .outbound
                         .try_push(perform_dial_back(protocol, cmd))
@@ -109,8 +111,8 @@ impl ConnectionHandler for Handler {
                 error: StreamUpgradeError::Timeout,
                 ..
             }) => {
-                if let Some(cmd) = self.requested_substream_nonce.pop_front() {
-                    let _ = cmd.back_channel.send(DialBackRes::DialBack);
+                if let Some(cmd) = self.requested_substream_nonce.take() {
+                    let _ = cmd.back_channel.send(DialBackRes::DialBackErr);
                 }
             }
             _ => {}
@@ -128,7 +130,7 @@ async fn perform_dial_back(
 ) -> io::Result<()> {
     let res = perform_dial_back_inner(&mut stream, nonce)
         .await
-        .map_err(|_| DialBackRes::DialBack)
+        .map_err(|_| DialBackRes::DialBackErr)
         .map(|_| DialBackRes::Ok)
         .unwrap_or_else(|e| e);
     back_channel

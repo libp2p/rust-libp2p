@@ -1,8 +1,15 @@
-use futures::StreamExt;
-use libp2p_autonatv2::client::{Report, StatusUpdate};
-use libp2p_core::{multiaddr::Protocol, Multiaddr};
-use libp2p_swarm::{DialError, NetworkBehaviour, Swarm, SwarmEvent};
+use libp2p_autonatv2::client::{self, Config};
+use libp2p_autonatv2::server;
+use libp2p_core::transport::TransportError;
+use libp2p_core::Multiaddr;
+use libp2p_swarm::{
+    DialError, FromSwarm, NetworkBehaviour, NewExternalAddrCandidate, Swarm, SwarmEvent,
+};
 use libp2p_swarm_test::SwarmExt;
+use rand_core::OsRng;
+use std::sync::Arc;
+use std::time::Duration;
+use tokio::sync::oneshot;
 use tracing_subscriber::EnvFilter;
 
 #[tokio::test]
@@ -20,40 +27,102 @@ async fn dial_back_to_unsupported_protocol() {
         .try_init();
     let (mut alice, mut bob) = bootstrap().await;
 
-    let test_addr: Multiaddr = "/ip4/127.0.0.1/udp/1234/quic/webtransport".parse().unwrap();
+    let alice_peer_id = *alice.local_peer_id();
 
+    let test_addr: Multiaddr = "/ip4/127.0.0.1/udp/1234/quic/webtransport".parse().unwrap();
+    let bob_test_addr = test_addr.clone();
     bob.behaviour_mut()
         .autonat
-        .inject_test_addr(test_addr.clone());
+        .on_swarm_event(FromSwarm::NewExternalAddrCandidate(
+            NewExternalAddrCandidate { addr: &test_addr },
+        ));
 
-    match libp2p_swarm_test::drive(&mut alice, &mut bob).await {
-        (
-            [SwarmEvent::Dialing { .. }, SwarmEvent::OutgoingConnectionError {
-                error: DialError::Transport(_),
-                ..
-            }],
-            [SwarmEvent::Behaviour(CombinedClientEvent::Autonat(Report {
-                update:
-                    StatusUpdate::GotDialDataReq {
-                        addr: addr_0,
-                        num_bytes: req_num,
-                    },
-                ..
-            })), SwarmEvent::Behaviour(CombinedClientEvent::Autonat(Report {
-                update:
-                    StatusUpdate::CompletedDialData {
-                        addr: addr_1,
-                        num_bytes: done_num,
-                    },
-                ..
-            })), SwarmEvent::ExternalAddrExpired { .. }],
-        ) => {
-            assert_eq!(addr_0, test_addr);
-            assert_eq!(addr_1, test_addr);
-            assert_eq!(req_num, done_num);
+    let (bob_done_tx, bob_done_rx) = oneshot::channel();
+
+    let alice_task = async move {
+        let (alice_dialing_peer, alice_conn_id) = alice
+            .wait(|event| match event {
+                SwarmEvent::Dialing {
+                    peer_id,
+                    connection_id,
+                } => peer_id.map(|e| (e, connection_id)),
+                _ => None,
+            })
+            .await;
+        let mut outgoing_conn_error = alice
+            .wait(|event| match event {
+                SwarmEvent::OutgoingConnectionError {
+                    connection_id,
+                    peer_id: Some(peer_id),
+                    error: DialError::Transport(transport_errs),
+                } if connection_id == alice_conn_id && alice_dialing_peer == peer_id => {
+                    Some(transport_errs)
+                }
+                _ => None,
+            })
+            .await;
+        if let Some((multiaddr, TransportError::MultiaddrNotSupported(not_supported_addr))) =
+            outgoing_conn_error.pop()
+        {
+            assert_eq!(
+                multiaddr,
+                test_addr.clone().with_p2p(alice_dialing_peer).unwrap()
+            );
+            assert_eq!(not_supported_addr, multiaddr,);
+        } else {
+            panic!("Peers are empty");
         }
-        e => panic!("unknown events {e:#?}"),
-    }
+        assert_eq!(outgoing_conn_error.len(), 0);
+        let data_amount = alice
+            .wait(|event| match event {
+                SwarmEvent::Behaviour(CombinedServerEvent::Autonat(server::StatusUpdate {
+                    all_addrs,
+                    tested_addr: Some(tested_addr),
+                    client,
+                    data_amount,
+                    result: Ok(()),
+                })) if all_addrs == vec![test_addr.clone()]
+                    && tested_addr == test_addr.clone()
+                    && client == alice_dialing_peer =>
+                {
+                    Some(data_amount)
+                }
+                _ => None,
+            })
+            .await;
+
+        tokio::select! {
+            _ = bob_done_rx => {
+                return data_amount;
+            }
+            _ = alice.loop_on_next() => {
+                unreachable!();
+            }
+        }
+    };
+
+    let bob_task = async move {
+        bob.wait(|event| match event {
+            SwarmEvent::ExternalAddrExpired { address } if address == bob_test_addr => Some(()),
+            _ => None,
+        })
+        .await;
+        let data_amount = bob
+            .wait(|event| match event {
+                SwarmEvent::Behaviour(CombinedClientEvent::Autonat(client::StatusUpdate {
+                    tested_addr: Some(tested_addr),
+                    data_amount,
+                    server,
+                    result: Err(_),
+                })) if server == alice_peer_id && tested_addr == bob_test_addr => Some(data_amount),
+                _ => None,
+            })
+            .await;
+        bob_done_tx.send(()).unwrap();
+        data_amount
+    };
+    let (alice_amount, bob_amount) = tokio::join!(alice_task, bob_task);
+    assert_eq!(alice_amount, bob_amount);
 }
 
 #[tokio::test]
@@ -62,49 +131,99 @@ async fn dial_back_to_non_libp2p() {
         .with_env_filter(EnvFilter::from_default_env())
         .try_init();
     let (mut alice, mut bob) = bootstrap().await;
+    let alice_peer_id = *alice.local_peer_id();
 
     for addr_str in [
-        "/dns4/umgefahren.xyz/tcp/809",
         "/ip4/169.150.247.38/tcp/32",
         "/ip6/2400:52e0:1e02::1187:1/tcp/1000",
     ] {
         let addr: Multiaddr = addr_str.parse().unwrap();
-        bob.behaviour_mut().autonat.inject_test_addr(addr.clone());
+        let bob_addr = addr.clone();
+        bob.behaviour_mut()
+            .autonat
+            .on_swarm_event(FromSwarm::NewExternalAddrCandidate(
+                NewExternalAddrCandidate { addr: &addr },
+            ));
 
-        match libp2p_swarm_test::drive(&mut alice, &mut bob).await {
-            (
-                [SwarmEvent::Dialing { .. }, SwarmEvent::OutgoingConnectionError {
-                    error: DialError::Transport(mut peers),
-                    ..
-                }],
-                [SwarmEvent::Behaviour(CombinedClientEvent::Autonat(Report {
-                    update:
-                        StatusUpdate::GotDialDataReq {
-                            addr: addr_0,
-                            num_bytes: req_num,
-                        },
-                    ..
-                })), SwarmEvent::Behaviour(CombinedClientEvent::Autonat(Report {
-                    update:
-                        StatusUpdate::CompletedDialData {
-                            addr: addr_1,
-                            num_bytes: done_num,
-                        },
-                    ..
-                })), SwarmEvent::ExternalAddrExpired { .. }],
-            ) => {
-                let (peer_addr, _) = peers.pop().unwrap();
-                let cleaned_addr: Multiaddr = peer_addr
-                    .iter()
-                    .filter(|p| !matches!(p, Protocol::P2p(_)))
-                    .collect();
-                assert_eq!(addr, cleaned_addr);
-                assert_eq!(addr_0, cleaned_addr);
-                assert_eq!(addr_1, cleaned_addr);
-                assert_eq!(req_num, done_num);
+        let alice_task = async move {
+            let (alice_dialing_peer, alice_conn_id) = alice
+                .wait(|event| match event {
+                    SwarmEvent::Dialing {
+                        peer_id,
+                        connection_id,
+                    } => peer_id.map(|p| (p, connection_id)),
+                    _ => None,
+                })
+                .await;
+            let mut outgoing_conn_error = alice
+                .wait(|event| match event {
+                    SwarmEvent::OutgoingConnectionError {
+                        connection_id,
+                        peer_id: Some(peer_id),
+                        error: DialError::Transport(peers),
+                    } if connection_id == alice_conn_id && peer_id == alice_dialing_peer => {
+                        Some(peers)
+                    }
+                    _ => None,
+                })
+                .await;
+
+            if let Some((multiaddr, TransportError::Other(o))) = outgoing_conn_error.pop() {
+                assert_eq!(
+                    multiaddr,
+                    addr.clone().with_p2p(alice_dialing_peer).unwrap()
+                );
+                let error_string = o.to_string();
+                assert!(
+                    error_string.contains("Connection refused"),
+                    "Coorect error string: {error_string}"
+                );
+            } else {
+                panic!("No outgoing connection errors");
             }
-            e => panic!("unknown events {e:#?}"),
-        }
+
+            let data_amount = alice
+                .wait(|event| match event {
+                    SwarmEvent::Behaviour(CombinedServerEvent::Autonat(server::StatusUpdate {
+                        all_addrs,
+                        tested_addr: Some(tested_addr),
+                        client,
+                        data_amount,
+                        result: Ok(()),
+                    })) if all_addrs == vec![addr.clone()]
+                        && tested_addr == addr
+                        && alice_dialing_peer == client =>
+                    {
+                        Some(data_amount)
+                    }
+                    _ => None,
+                })
+                .await;
+            (alice, data_amount)
+        };
+        let bob_task = async move {
+            bob.wait(|event| match event {
+                SwarmEvent::ExternalAddrExpired { address } if address == bob_addr => Some(()),
+                _ => None,
+            })
+            .await;
+            let data_amount = bob
+                .wait(|event| match event {
+                    SwarmEvent::Behaviour(CombinedClientEvent::Autonat(client::StatusUpdate {
+                        tested_addr: Some(tested_addr),
+                        data_amount,
+                        server,
+                        result: Err(_),
+                    })) if tested_addr == bob_addr && server == alice_peer_id => Some(data_amount),
+                    _ => None,
+                })
+                .await;
+            (bob, data_amount)
+        };
+
+        let ((a, alice_data_amount), (b, bob_data_amount)) = tokio::join!(alice_task, bob_task);
+        (alice, bob) = (a, b);
+        assert_eq!(alice_data_amount, bob_data_amount);
     }
 }
 
@@ -115,44 +234,104 @@ async fn dial_back_to_not_supporting() {
         .try_init();
 
     let (mut alice, mut bob) = bootstrap().await;
+    let alice_peer_id = *alice.local_peer_id();
 
-    let mut hannes = new_dummy().await;
+    let (bob_done_tx, bob_done_rx) = oneshot::channel();
+
+    let hannes = new_dummy().await;
+    let hannes_peer_id = *hannes.local_peer_id();
     let unreachable_address = hannes.external_addresses().next().unwrap().clone();
+    let bob_unreachable_address = unreachable_address.clone();
     bob.behaviour_mut()
         .autonat
-        .inject_test_addr(unreachable_address.clone());
+        .on_swarm_event(FromSwarm::NewExternalAddrCandidate(
+            NewExternalAddrCandidate {
+                addr: &unreachable_address,
+            },
+        ));
 
-    let handler = tokio::spawn(async move {
-        loop {
-            hannes.next_swarm_event().await;
-        }
-    });
+    let handler = tokio::spawn(async move { hannes.loop_on_next().await });
 
-    match libp2p_swarm_test::drive(&mut alice, &mut bob).await {
-        (
-            [SwarmEvent::Dialing { .. }, SwarmEvent::OutgoingConnectionError { .. }],
-            [SwarmEvent::Behaviour(CombinedClientEvent::Autonat(Report {
-                update:
-                    StatusUpdate::GotDialDataReq {
-                        addr: addr_0,
-                        num_bytes: req_num,
-                    },
-                ..
-            })), SwarmEvent::Behaviour(CombinedClientEvent::Autonat(Report {
-                update:
-                    StatusUpdate::CompletedDialData {
-                        addr: addr_1,
-                        num_bytes: done_num,
-                    },
-                ..
-            })), SwarmEvent::ExternalAddrExpired { .. }],
-        ) => {
-            assert_eq!(addr_0, unreachable_address);
-            assert_eq!(addr_1, unreachable_address);
-            assert_eq!(req_num, done_num);
+    let alice_task = async move {
+        let (alice_dialing_peer, alice_conn_id) = alice
+            .wait(|event| match event {
+                SwarmEvent::Dialing {
+                    peer_id,
+                    connection_id,
+                } => peer_id.map(|p| (p, connection_id)),
+                _ => None,
+            })
+            .await;
+        alice
+            .wait(|event| match event {
+                SwarmEvent::OutgoingConnectionError {
+                    connection_id,
+                    peer_id: Some(peer_id),
+                    error: DialError::WrongPeerId { obtained, .. },
+                } if connection_id == alice_conn_id
+                    && peer_id == alice_dialing_peer
+                    && obtained == hannes_peer_id =>
+                {
+                    Some(())
+                }
+                _ => None,
+            })
+            .await;
+
+        let data_amount = alice
+            .wait(|event| match event {
+                SwarmEvent::Behaviour(CombinedServerEvent::Autonat(server::StatusUpdate {
+                    all_addrs,
+                    tested_addr: Some(tested_addr),
+                    client,
+                    data_amount,
+                    result: Ok(()),
+                })) if all_addrs == vec![unreachable_address.clone()]
+                    && tested_addr == unreachable_address
+                    && alice_dialing_peer == client =>
+                {
+                    Some(data_amount)
+                }
+                _ => None,
+            })
+            .await;
+        tokio::select! {
+            _ = bob_done_rx => {
+                return data_amount;
+            }
+            _ = alice.loop_on_next() => {
+                unreachable!();
+            }
         }
-        e => panic!("unknown events {e:#?}"),
-    }
+    };
+
+    let bob_task = async move {
+        bob.wait(|event| match event {
+            SwarmEvent::ExternalAddrExpired { address } if address == bob_unreachable_address => {
+                Some(())
+            }
+            _ => None,
+        })
+        .await;
+        let data_amount = bob
+            .wait(|event| match event {
+                SwarmEvent::Behaviour(CombinedClientEvent::Autonat(client::StatusUpdate {
+                    tested_addr: Some(tested_addr),
+                    data_amount,
+                    server,
+                    result: Err(_),
+                })) if tested_addr == bob_unreachable_address && server == alice_peer_id => {
+                    Some(data_amount)
+                }
+                _ => None,
+            })
+            .await;
+        bob_done_tx.send(()).unwrap();
+        data_amount
+    };
+
+    let (alice_data_amount, bob_data_amount) = tokio::join!(alice_task, bob_task);
+    assert_eq!(alice_data_amount, bob_data_amount);
     handler.abort();
 }
 
@@ -171,7 +350,10 @@ async fn new_server() -> Swarm<CombinedServer> {
 
 async fn new_client() -> Swarm<CombinedClient> {
     let mut node = Swarm::new_ephemeral(|identity| CombinedClient {
-        autonat: libp2p_autonatv2::client::Behaviour::default(),
+        autonat: libp2p_autonatv2::client::Behaviour::new(
+            OsRng,
+            Config::default().with_recheck_interval(Duration::from_nanos(0)),
+        ),
         identify: libp2p_identify::Behaviour::new(libp2p_identify::Config::new(
             "/libp2p-test/1.0.0".into(),
             identity.public().clone(),
@@ -211,44 +393,124 @@ async fn bootstrap() -> (Swarm<CombinedServer>, Swarm<CombinedClient>) {
     let cor_server_peer = alice.local_peer_id().clone();
     let mut bob = new_client().await;
     let cor_client_peer = bob.local_peer_id().clone();
+
+    let bob_external_addrs = Arc::new(bob.external_addresses().cloned().collect::<Vec<_>>());
+    let alice_bob_external_addrs = bob_external_addrs.clone();
+
     bob.connect(&mut alice).await;
 
-    match libp2p_swarm_test::drive(&mut alice, &mut bob).await {
-        (
-            [SwarmEvent::Behaviour(CombinedServerEvent::Identify(libp2p_identify::Event::Sent {
-                peer_id: client_peer_sent,
-            })), SwarmEvent::Behaviour(CombinedServerEvent::Identify(
-                libp2p_identify::Event::Received {
-                    peer_id: client_peer_recv,
-                    ..
-                },
-            )), SwarmEvent::NewExternalAddrCandidate { .. }],
-            [SwarmEvent::Behaviour(CombinedClientEvent::Identify(libp2p_identify::Event::Sent {
-                peer_id: server_peer_sent,
-            })), SwarmEvent::Behaviour(CombinedClientEvent::Identify(
-                libp2p_identify::Event::Received {
-                    peer_id: server_peer_recv,
-                    ..
-                },
-            ))],
-        ) => {
-            assert_eq!(server_peer_sent, cor_server_peer);
-            assert_eq!(client_peer_sent, cor_client_peer);
-            assert_eq!(server_peer_recv, cor_server_peer);
-            assert_eq!(client_peer_recv, cor_client_peer);
-        }
-        e => panic!("unexpected events: {e:#?}"),
-    }
+    let (tx, rx) = oneshot::channel();
 
-    match libp2p_swarm_test::drive(&mut alice, &mut bob).await {
-        (
-            [SwarmEvent::Dialing { .. }, SwarmEvent::ConnectionEstablished { .. }, SwarmEvent::Behaviour(CombinedServerEvent::Identify(_)), SwarmEvent::Behaviour(CombinedServerEvent::Identify(_)), SwarmEvent::NewExternalAddrCandidate { .. }],
-            [SwarmEvent::NewExternalAddrCandidate { address: addr_new }, SwarmEvent::IncomingConnection { .. }, SwarmEvent::ConnectionEstablished { .. }, SwarmEvent::Behaviour(CombinedClientEvent::Identify(_)), SwarmEvent::Behaviour(CombinedClientEvent::Identify(_)), SwarmEvent::NewExternalAddrCandidate { address: addr_snd }, SwarmEvent::ExternalAddrConfirmed { address: addr_ok }],
-        ) => {
-            assert_eq!(addr_new, addr_snd);
-            assert_eq!(addr_snd, addr_ok);
-        }
-        e => panic!("unknown events {e:#?}"),
-    }
-    (alice, bob)
+    let alice_task = async move {
+        let _ = alice
+            .wait(|event| match event {
+                SwarmEvent::NewExternalAddrCandidate { .. } => Some(()),
+                _ => None,
+            })
+            .await;
+
+        let (dialed_peer_id, dialed_connection_id) = alice
+            .wait(|event| match event {
+                SwarmEvent::Dialing {
+                    peer_id,
+                    connection_id,
+                    ..
+                } => peer_id.map(|peer_id| (peer_id, connection_id)),
+                _ => None,
+            })
+            .await;
+
+        assert_eq!(dialed_peer_id, cor_client_peer);
+
+        let _ = alice
+            .wait(|event| match event {
+                SwarmEvent::ConnectionEstablished {
+                    peer_id,
+                    connection_id,
+                    ..
+                } if peer_id == dialed_peer_id
+                    && peer_id == cor_client_peer
+                    && connection_id == dialed_connection_id =>
+                {
+                    Some(())
+                }
+                _ => None,
+            })
+            .await;
+
+        let server::StatusUpdate {
+            all_addrs,
+            tested_addr,
+            client,
+            data_amount,
+            result,
+        } = alice
+            .wait(|event| match event {
+                SwarmEvent::Behaviour(CombinedServerEvent::Autonat(status_update)) => {
+                    Some(status_update)
+                }
+                _ => None,
+            })
+            .await;
+
+        assert_eq!(tested_addr, bob_external_addrs.get(0).cloned());
+        assert_eq!(data_amount, 0);
+        assert_eq!(client, cor_client_peer);
+        assert_eq!(&all_addrs[..], &bob_external_addrs[..]);
+        assert!(result.is_ok(), "Result: {result:?}");
+
+        rx.await.unwrap();
+        alice
+    };
+
+    let bob_task = async move {
+        let address_candidate = bob
+            .wait(|event| match event {
+                SwarmEvent::NewExternalAddrCandidate { address } => Some(address),
+                _ => None,
+            })
+            .await;
+        let incoming_conn_id = bob
+            .wait(|event| match event {
+                SwarmEvent::IncomingConnection { connection_id, .. } => Some(connection_id),
+                _ => None,
+            })
+            .await;
+
+        let _ = bob.wait(|event| match event {
+            SwarmEvent::ConnectionEstablished {
+                connection_id,
+                peer_id,
+                ..
+            } if incoming_conn_id == connection_id && peer_id == cor_server_peer => Some(()),
+            _ => None,
+        });
+
+        let client::StatusUpdate {
+            tested_addr,
+            data_amount,
+            server,
+            result,
+        } = bob
+            .wait(|event| match event {
+                SwarmEvent::Behaviour(CombinedClientEvent::Autonat(status_update)) => {
+                    Some(status_update)
+                }
+                SwarmEvent::ExternalAddrConfirmed { address } => {
+                    assert_eq!(address, address_candidate);
+                    None
+                }
+                _ => None,
+            })
+            .await;
+        assert_eq!(tested_addr, alice_bob_external_addrs.get(0).cloned());
+        assert_eq!(data_amount, 0);
+        assert_eq!(server, cor_server_peer);
+        assert!(result.is_ok(), "Result is {result:?}");
+
+        tx.send(()).unwrap();
+        bob
+    };
+
+    tokio::join!(alice_task, bob_task)
 }

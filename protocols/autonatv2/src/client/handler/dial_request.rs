@@ -1,6 +1,6 @@
 use futures::{
     channel::{mpsc, oneshot},
-    AsyncRead, AsyncWrite, AsyncWriteExt, SinkExt, StreamExt,
+    AsyncRead, AsyncWrite, SinkExt, StreamExt,
 };
 use futures_bounded::FuturesSet;
 use libp2p_core::{
@@ -8,6 +8,7 @@ use libp2p_core::{
     Multiaddr,
 };
 
+use libp2p_identity::PeerId;
 use libp2p_swarm::{
     handler::{
         ConnectionEvent, DialUpgradeError, FullyNegotiatedOutbound, OutboundUpgradeSend,
@@ -21,6 +22,7 @@ use std::{
     convert::identity,
     io,
     iter::{once, repeat},
+    sync::Arc,
     task::{Context, Poll},
 };
 
@@ -37,7 +39,7 @@ use crate::{
 use super::{DEFAULT_TIMEOUT, MAX_CONCURRENT_REQUESTS};
 
 #[derive(Debug, thiserror::Error)]
-pub enum Error {
+pub(crate) enum InternalError {
     #[error("io error")]
     Io(#[from] io::Error),
     #[error("invalid referenced address index: {index} (max number of addr: {max})")]
@@ -69,21 +71,22 @@ pub enum Error {
 #[derive(Debug)]
 pub struct TestEnd {
     pub(crate) dial_request: DialRequest,
-    pub(crate) suspicious_addr: Vec<Multiaddr>,
     pub(crate) reachable_addr: Multiaddr,
 }
 
 #[derive(Debug)]
 pub enum ToBehaviour {
-    TestCompleted(Result<TestEnd, Error>),
+    TestCompleted(Result<TestEnd, super::Error>),
     StatusUpdate(StatusUpdate),
     PeerHasServerSupport,
 }
 
 #[derive(Debug)]
-pub enum StatusUpdate {
-    GotDialDataReq { addr: Multiaddr, num_bytes: usize },
-    CompletedDialData { addr: Multiaddr, num_bytes: usize },
+pub struct StatusUpdate {
+    pub tested_addr: Option<Multiaddr>,
+    pub data_amount: usize,
+    pub server: PeerId,
+    pub result: Result<(), crate::client::handler::Error>,
 }
 
 #[derive(Debug)]
@@ -99,7 +102,7 @@ pub struct Handler {
             <Self as ConnectionHandler>::ToBehaviour,
         >,
     >,
-    outbound: futures_bounded::FuturesSet<Result<TestEnd, Error>>,
+    outbound: futures_bounded::FuturesSet<Result<TestEnd, crate::client::handler::Error>>,
     queued_streams: VecDeque<
         oneshot::Sender<
             Result<
@@ -110,10 +113,11 @@ pub struct Handler {
     >,
     status_update_rx: mpsc::Receiver<StatusUpdate>,
     status_update_tx: mpsc::Sender<StatusUpdate>,
+    server: PeerId,
 }
 
 impl Handler {
-    pub(crate) fn new() -> Self {
+    pub(crate) fn new(server: PeerId) -> Self {
         let (status_update_tx, status_update_rx) = mpsc::channel(10);
         Self {
             queued_events: VecDeque::new(),
@@ -121,6 +125,7 @@ impl Handler {
             queued_streams: VecDeque::default(),
             status_update_tx,
             status_update_rx,
+            server,
         }
     }
 
@@ -134,6 +139,7 @@ impl Handler {
         if self
             .outbound
             .try_push(start_substream_handle(
+                self.server,
                 req,
                 rx,
                 self.status_update_tx.clone(),
@@ -173,7 +179,12 @@ impl ConnectionHandler for Handler {
         }
         if let Poll::Ready(m) = self.outbound.poll_unpin(cx) {
             return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(
-                ToBehaviour::TestCompleted(m.map_err(Error::Timeout).and_then(identity)),
+                ToBehaviour::TestCompleted(
+                    m.map_err(InternalError::Timeout)
+                        .map_err(Into::into)
+                        .and_then(identity)
+                        .map_err(Into::into),
+                ),
             ));
         }
         if let Poll::Ready(Some(status_update)) = self.status_update_rx.poll_next_unpin(cx) {
@@ -206,7 +217,7 @@ impl ConnectionHandler for Handler {
                 tracing::debug!("Dial request failed: {}", error);
                 match self.queued_streams.pop_front() {
                     Some(stream_tx) => {
-                        if let Err(_) = stream_tx.send(Err(error)) {
+                        if stream_tx.send(Err(error)).is_err() {
                             tracing::warn!("Failed to send stream to dead handler");
                         }
                     }
@@ -221,7 +232,7 @@ impl ConnectionHandler for Handler {
                 protocol, ..
             }) => match self.queued_streams.pop_front() {
                 Some(stream_tx) => {
-                    if let Err(_) = stream_tx.send(Ok(protocol)) {
+                    if stream_tx.send(Ok(protocol)).is_err() {
                         tracing::warn!("Failed to send stream to dead handler");
                     }
                 }
@@ -243,6 +254,7 @@ impl ConnectionHandler for Handler {
 }
 
 async fn start_substream_handle(
+    server: PeerId,
     dial_request: DialRequest,
     substream_recv: oneshot::Receiver<
         Result<
@@ -250,77 +262,82 @@ async fn start_substream_handle(
             StreamUpgradeError<<ReadyUpgrade<StreamProtocol> as OutboundUpgradeSend>::Error>,
         >,
     >,
-    status_update_tx: mpsc::Sender<StatusUpdate>,
-) -> Result<TestEnd, Error> {
-    match substream_recv.await {
-        Ok(Ok(substream)) => handle_substream(dial_request, substream, status_update_tx).await,
-        Ok(Err(err)) => Err(Error::from(err)),
-        Err(_) => Err(Error::InternalServer),
-    }
+    mut status_update_tx: mpsc::Sender<StatusUpdate>,
+) -> Result<TestEnd, crate::client::handler::Error> {
+    let substream = match substream_recv.await {
+        Ok(Ok(substream)) => substream,
+        Ok(Err(err)) => return Err(InternalError::from(err).into()),
+        Err(_) => return Err(InternalError::InternalServer.into()),
+    };
+    let mut data_amount = 0;
+    let mut checked_addr_idx = None;
+    let addrs = dial_request.addrs.clone();
+    let res = handle_substream(
+        dial_request,
+        substream,
+        &mut data_amount,
+        &mut checked_addr_idx,
+    )
+    .await
+    .map_err(Arc::new)
+    .map_err(crate::client::handler::Error::from);
+    let status_update = StatusUpdate {
+        tested_addr: checked_addr_idx.and_then(|idx| addrs.get(idx).cloned()),
+        data_amount,
+        server,
+        result: res.as_ref().map(|_| ()).map_err(|e| e.clone()),
+    };
+    let _ = status_update_tx.send(status_update).await;
+    res
 }
 
 async fn handle_substream(
     dial_request: DialRequest,
     substream: impl AsyncRead + AsyncWrite + Unpin,
-    mut status_update_tx: mpsc::Sender<StatusUpdate>,
-) -> Result<TestEnd, Error> {
+    data_amount: &mut usize,
+    checked_addr_idx: &mut Option<usize>,
+) -> Result<TestEnd, InternalError> {
     let mut coder = Coder::new(substream);
     coder
         .send_request(Request::Dial(dial_request.clone()))
         .await?;
-    let mut suspicious_addr = Vec::new();
-    loop {
-        match coder.next_response().await? {
-            Response::Data(DialDataRequest {
-                addr_idx,
-                num_bytes,
-            }) => {
-                if addr_idx >= dial_request.addrs.len() {
-                    return Err(Error::InvalidReferencedAddress {
-                        index: addr_idx,
-                        max: dial_request.addrs.len(),
-                    });
-                }
-                if num_bytes > DATA_LEN_UPPER_BOUND {
-                    return Err(Error::DataRequestTooLarge {
-                        len: num_bytes,
-                        max: DATA_LEN_UPPER_BOUND,
-                    });
-                }
-                if num_bytes < DATA_LEN_LOWER_BOUND {
-                    return Err(Error::DataRequestTooSmall {
-                        len: num_bytes,
-                        min: DATA_LEN_LOWER_BOUND,
-                    });
-                }
-                let addr = match dial_request.addrs.get(addr_idx).cloned() {
-                    Some(addr) => {
-                        tracing::trace!("the address {addr} is suspicious to the server, sending {num_bytes} bytes of data");
-                        suspicious_addr.push(addr.clone());
-                        addr
-                    }
-                    None => {
-                        return Err(Error::InvalidReferencedAddress {
-                            index: addr_idx,
-                            max: dial_request.addrs.len(),
-                        });
-                    }
-                };
-
-                let _ = status_update_tx
-                    .send(StatusUpdate::GotDialDataReq {
-                        addr: addr.clone(),
-                        num_bytes,
-                    })
-                    .await;
-                let status_update = StatusUpdate::CompletedDialData { addr, num_bytes };
-                send_aap_data(&mut coder, num_bytes).await?;
-                let _ = status_update_tx.send(status_update).await;
+    match coder.next_response().await? {
+        Response::Data(DialDataRequest {
+            addr_idx,
+            num_bytes,
+        }) => {
+            if addr_idx >= dial_request.addrs.len() {
+                return Err(InternalError::InvalidReferencedAddress {
+                    index: addr_idx,
+                    max: dial_request.addrs.len(),
+                });
             }
-            Response::Dial(dial_response) => {
+            if num_bytes > DATA_LEN_UPPER_BOUND {
+                return Err(InternalError::DataRequestTooLarge {
+                    len: num_bytes,
+                    max: DATA_LEN_UPPER_BOUND,
+                });
+            }
+            if num_bytes < DATA_LEN_LOWER_BOUND {
+                return Err(InternalError::DataRequestTooSmall {
+                    len: num_bytes,
+                    min: DATA_LEN_LOWER_BOUND,
+                });
+            }
+            *checked_addr_idx = Some(addr_idx);
+            send_aap_data(&mut coder, num_bytes, data_amount).await?;
+            if let Response::Dial(dial_response) = coder.next_response().await? {
+                *checked_addr_idx = Some(dial_response.addr_idx);
                 coder.close().await?;
-                return test_end_from_dial_response(dial_request, dial_response, suspicious_addr);
+                test_end_from_dial_response(dial_request, dial_response)
+            } else {
+                Err(InternalError::InternalServer)
             }
+        }
+        Response::Dial(dial_response) => {
+            *checked_addr_idx = Some(dial_response.addr_idx);
+            coder.close().await?;
+            test_end_from_dial_response(dial_request, dial_response)
         }
     }
 }
@@ -328,55 +345,60 @@ async fn handle_substream(
 fn test_end_from_dial_response(
     req: DialRequest,
     resp: DialResponse,
-    suspicious_addr: Vec<Multiaddr>,
-) -> Result<TestEnd, Error> {
+) -> Result<TestEnd, InternalError> {
     if resp.addr_idx >= req.addrs.len() {
-        return Err(Error::InvalidReferencedAddress {
+        return Err(InternalError::InvalidReferencedAddress {
             index: resp.addr_idx,
             max: req.addrs.len(),
         });
     }
     match (resp.status, resp.dial_status) {
-        (ResponseStatus::E_REQUEST_REJECTED, _) => Err(Error::ServerRejectedDialRequest),
-        (ResponseStatus::E_DIAL_REFUSED, _) => Err(Error::ServerChoseNotToDialAnyAddress),
-        (ResponseStatus::E_INTERNAL_ERROR, _) => Err(Error::InternalServer),
-        (ResponseStatus::OK, DialStatus::UNUSED) => Err(Error::InvalidResponse),
+        (ResponseStatus::E_REQUEST_REJECTED, _) => Err(InternalError::ServerRejectedDialRequest),
+        (ResponseStatus::E_DIAL_REFUSED, _) => Err(InternalError::ServerChoseNotToDialAnyAddress),
+        (ResponseStatus::E_INTERNAL_ERROR, _) => Err(InternalError::InternalServer),
+        (ResponseStatus::OK, DialStatus::UNUSED) => Err(InternalError::InvalidResponse),
         (ResponseStatus::OK, DialStatus::E_DIAL_ERROR) => {
-            Err(Error::UnableToConnectOnSelectedAddress {
+            Err(InternalError::UnableToConnectOnSelectedAddress {
                 addr: req.addrs.get(resp.addr_idx).cloned(),
             })
         }
-        (ResponseStatus::OK, DialStatus::E_DIAL_BACK_ERROR) => Err(Error::FailureDuringDialBack {
-            addr: req.addrs.get(resp.addr_idx).cloned(),
-        }),
+        (ResponseStatus::OK, DialStatus::E_DIAL_BACK_ERROR) => {
+            Err(InternalError::FailureDuringDialBack {
+                addr: req.addrs.get(resp.addr_idx).cloned(),
+            })
+        }
         (ResponseStatus::OK, DialStatus::OK) => req
             .addrs
             .get(resp.addr_idx)
-            .ok_or(Error::InvalidReferencedAddress {
+            .ok_or(InternalError::InvalidReferencedAddress {
                 index: resp.addr_idx,
                 max: req.addrs.len(),
             })
             .cloned()
             .map(|reachable_addr| TestEnd {
                 dial_request: req,
-                suspicious_addr,
                 reachable_addr,
             }),
     }
 }
 
-async fn send_aap_data<I>(substream: &mut Coder<I>, num_bytes: usize) -> io::Result<()>
+async fn send_aap_data<I>(
+    substream: &mut Coder<I>,
+    num_bytes: usize,
+    data_amount: &mut usize,
+) -> io::Result<()>
 where
     I: AsyncWrite + Unpin,
 {
     let count_full = num_bytes / DATA_FIELD_LEN_UPPER_BOUND;
     let partial_len = num_bytes % DATA_FIELD_LEN_UPPER_BOUND;
-    for req in repeat(DATA_FIELD_LEN_UPPER_BOUND)
+    for (data_count, req) in repeat(DATA_FIELD_LEN_UPPER_BOUND)
         .take(count_full)
         .chain(once(partial_len))
         .filter(|e| *e > 0)
-        .map(|data_count| Request::Data(DialDataResponse { data_count }))
+        .map(|data_count| (data_count, Request::Data(DialDataResponse { data_count })))
     {
+        *data_amount += data_count;
         substream.send_request(req).await?;
     }
     Ok(())

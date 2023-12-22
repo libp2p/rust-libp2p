@@ -1,10 +1,12 @@
 use std::{
     collections::{HashMap, HashSet, VecDeque},
     task::{Context, Poll},
-    time::{Duration, Instant},
+    time::Duration,
 };
 
 use either::Either;
+use futures::FutureExt;
+use futures_timer::Delay;
 use libp2p_core::{multiaddr::Protocol, transport::PortUse, Endpoint, Multiaddr};
 use libp2p_identity::PeerId;
 use libp2p_swarm::{
@@ -23,25 +25,34 @@ use super::handler::{
     Handler, TestEnd,
 };
 
-struct IntervalTicker {
-    interval: Duration,
-    last_tick: Instant,
-}
-
-impl IntervalTicker {
-    fn ready(&mut self) -> bool {
-        if self.last_tick.elapsed() >= self.interval {
-            self.last_tick = Instant::now();
-            true
-        } else {
-            false
-        }
-    }
-}
-
+#[derive(Debug, Clone, Copy)]
 pub struct Config {
     pub(crate) test_server_count: usize,
     pub(crate) max_addrs_count: usize,
+    pub(crate) recheck_interval: Duration,
+}
+
+impl Config {
+    pub fn with_test_server_count(self, test_server_count: usize) -> Self {
+        Self {
+            test_server_count,
+            ..self
+        }
+    }
+
+    pub fn with_max_addrs_count(self, max_addrs_count: usize) -> Self {
+        Self {
+            max_addrs_count,
+            ..self
+        }
+    }
+
+    pub fn with_recheck_interval(self, recheck_interval: Duration) -> Self {
+        Self {
+            recheck_interval,
+            ..self
+        }
+    }
 }
 
 impl Default for Config {
@@ -49,16 +60,10 @@ impl Default for Config {
         Self {
             test_server_count: 3,
             max_addrs_count: 10,
+            recheck_interval: Duration::from_secs(5),
         }
     }
 }
-
-#[derive(Debug)]
-pub struct Report {
-    pub update: StatusUpdate,
-    pub peer_id: PeerId,
-}
-
 pub struct Behaviour<R = OsRng>
 where
     R: RngCore + 'static,
@@ -77,7 +82,7 @@ where
     address_candidates: HashMap<Multiaddr, usize>,
     already_tested: HashSet<Multiaddr>,
     peers_to_handlers: HashMap<PeerId, ConnectionId>,
-    ticker: IntervalTicker,
+    next_tick: Delay,
 }
 
 impl<R> NetworkBehaviour for Behaviour<R>
@@ -86,7 +91,7 @@ where
 {
     type ConnectionHandler = Handler;
 
-    type ToSwarm = Report;
+    type ToSwarm = StatusUpdate;
 
     fn handle_established_inbound_connection(
         &mut self,
@@ -104,7 +109,7 @@ where
     fn handle_established_outbound_connection(
         &mut self,
         connection_id: ConnectionId,
-        _peer: PeerId,
+        peer: PeerId,
         addr: &Multiaddr,
         _role_override: Endpoint,
         _port_use: PortUse,
@@ -112,7 +117,7 @@ where
         if addr_is_local(addr) {
             self.local_peers.insert(connection_id);
         }
-        Ok(Either::Left(dial_request::Handler::new()))
+        Ok(Either::Left(dial_request::Handler::new(peer)))
     }
 
     fn on_swarm_event(&mut self, event: FromSwarm) {
@@ -183,7 +188,6 @@ where
             }
             Either::Left(dial_request::ToBehaviour::TestCompleted(Ok(TestEnd {
                 dial_request: DialRequest { nonce, addrs },
-                suspicious_addr,
                 reachable_addr,
             }))) => {
                 if self.pending_nonces.remove(&nonce) {
@@ -191,12 +195,6 @@ where
                         "server reported reachbility, but didn't actually reached this node."
                     );
                     return;
-                }
-                if !suspicious_addr.is_empty() {
-                    tracing::trace!(
-                        "server reported suspicious addresses: {:?}",
-                        suspicious_addr
-                    );
                 }
                 self.pending_events.extend(
                     addrs
@@ -207,33 +205,35 @@ where
                 self.pending_events
                     .push_back(ToSwarm::ExternalAddrConfirmed(reachable_addr));
             }
-            Either::Left(dial_request::ToBehaviour::TestCompleted(Err(
-                dial_request::Error::UnableToConnectOnSelectedAddress { addr: Some(addr) },
-            )))
-            | Either::Left(dial_request::ToBehaviour::TestCompleted(Err(
-                dial_request::Error::FailureDuringDialBack { addr: Some(addr) },
-            ))) => {
-                self.pending_events
-                    .push_back(ToSwarm::ExternalAddrExpired(addr));
-            }
             Either::Left(dial_request::ToBehaviour::TestCompleted(Err(err))) => {
-                tracing::debug!("Test failed: {:?}", err);
+                match err.internal.as_ref() {
+                    dial_request::InternalError::FailureDuringDialBack { addr: Some(addr) }
+                    | dial_request::InternalError::UnableToConnectOnSelectedAddress {
+                        addr: Some(addr),
+                    } => {
+                        self.pending_events
+                            .push_back(ToSwarm::ExternalAddrExpired(addr.clone()));
+                    }
+                    _ => {
+                        tracing::debug!("Test failed: {:?}", err);
+                    }
+                }
             }
             Either::Left(dial_request::ToBehaviour::StatusUpdate(update)) => self
                 .pending_events
-                .push_back(ToSwarm::GenerateEvent(Report { update, peer_id })),
+                .push_back(ToSwarm::GenerateEvent(update)),
         }
     }
 
     fn poll(
         &mut self,
-        _cx: &mut Context<'_>,
+        cx: &mut Context<'_>,
     ) -> Poll<ToSwarm<Self::ToSwarm, <Handler as ConnectionHandler>::FromBehaviour>> {
         let pending_event = self.poll_pending_events();
         if pending_event.is_ready() {
             return pending_event;
         }
-        if self.ticker.ready()
+        if self.next_tick.poll_unpin(cx).is_ready()
             && !self.known_servers.is_empty()
             && !self.address_candidates.is_empty()
         {
@@ -282,15 +282,12 @@ where
             pending_nonces: HashSet::new(),
             known_servers: Vec::new(),
             rng,
+            next_tick: Delay::new(config.recheck_interval),
             config,
             pending_events: VecDeque::new(),
             address_candidates: HashMap::new(),
             peers_to_handlers: HashMap::new(),
             already_tested: HashSet::new(),
-            ticker: IntervalTicker {
-                interval: Duration::from_secs(0),
-                last_tick: Instant::now(),
-            },
         }
     }
 
@@ -326,10 +323,6 @@ where
             return Poll::Ready(event);
         }
         Poll::Pending
-    }
-
-    pub fn inject_test_addr(&mut self, addr: Multiaddr) {
-        *self.address_candidates.entry(addr).or_default() += 1;
     }
 }
 
