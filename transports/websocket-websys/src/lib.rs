@@ -7,8 +7,8 @@
 // copies of the Software, and to permit persons to whom the Software is
 // furnished to do so, subject to the following conditions:
 //
-// The above copyright notice and this permission notice shall be included in all
-// copies or substantial portions of the Software.
+// The above copyright notice and this permission notice shall be included in
+// all copies or substantial portions of the Software.
 //
 // THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
 // IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
@@ -22,24 +22,27 @@
 
 mod web_context;
 
-use bytes::BytesMut;
-use futures::task::AtomicWaker;
-use futures::{future::Ready, io, prelude::*};
-use js_sys::Array;
-use libp2p_core::{
-    multiaddr::{Multiaddr, Protocol},
-    transport::{ListenerId, TransportError, TransportEvent},
-};
-use send_wrapper::SendWrapper;
 use std::cmp::min;
+use std::pin::Pin;
 use std::rc::Rc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Mutex;
-use std::{pin::Pin, task::Context, task::Poll};
-use wasm_bindgen::{prelude::*, JsCast};
+use std::task::{Context, Poll};
+
+use bytes::BytesMut;
+use futures::future::Ready;
+use futures::io;
+use futures::prelude::*;
+use futures::task::AtomicWaker;
+use js_sys::Array;
+use libp2p_core::multiaddr::{Multiaddr, Protocol};
+use libp2p_core::transport::{ListenerId, TransportError, TransportEvent};
+use send_wrapper::SendWrapper;
+use wasm_bindgen::prelude::*;
+use wasm_bindgen::JsCast;
 use web_sys::{CloseEvent, Event, MessageEvent, WebSocket};
 
-use crate::web_context::WebContext;
+use crate::web_context::{IntervalHandle, WebContext};
 
 /// A Websocket transport that can be used in a wasm environment.
 ///
@@ -59,20 +62,20 @@ use crate::web_context::WebContext;
 ///     .multiplex(yamux::Config::default())
 ///     .boxed();
 /// ```
-///
 #[derive(Default)]
 pub struct Transport {
     _private: (),
 }
 
-/// Arbitrary, maximum amount we are willing to buffer before we throttle our user.
+/// Arbitrary, maximum amount we are willing to buffer before we throttle our
+/// user.
 const MAX_BUFFER: usize = 1024 * 1024;
 
 impl libp2p_core::Transport for Transport {
-    type Output = Connection;
+    type Dial = Pin<Box<dyn Future<Output = Result<Self::Output, Self::Error>> + Send>>;
     type Error = Error;
     type ListenerUpgrade = Ready<Result<Self::Output, Self::Error>>;
-    type Dial = Pin<Box<dyn Future<Output = Result<Self::Output, Self::Error>> + Send>>;
+    type Output = Connection;
 
     fn listen_on(
         &mut self,
@@ -176,7 +179,8 @@ struct Inner {
     /// Waker for when we are waiting for the WebSocket to be opened.
     open_waker: Rc<AtomicWaker>,
 
-    /// Waker for when we are waiting to write (again) to the WebSocket because we previously exceeded the [`MAX_BUFFER`] threshold.
+    /// Waker for when we are waiting to write (again) to the WebSocket because
+    /// we previously exceeded the [`MAX_BUFFER`] threshold.
     write_waker: Rc<AtomicWaker>,
 
     /// Waker for when we are waiting for the WebSocket to be closed.
@@ -192,7 +196,7 @@ struct Inner {
     _on_close_closure: Rc<Closure<dyn FnMut(CloseEvent)>>,
     _on_error_closure: Rc<Closure<dyn FnMut(CloseEvent)>>,
     _on_message_closure: Rc<Closure<dyn FnMut(MessageEvent)>>,
-    buffered_amount_low_interval: i32,
+    buffered_amount_low_interval: IntervalHandle,
 }
 
 impl Inner {
@@ -306,9 +310,10 @@ impl Connection {
         });
         let buffered_amount_low_interval = WebContext::new()
             .expect("to have a window or worker context")
-            .set_interval_with_callback_and_timeout_and_arguments(
+            .set_interval(
                 on_buffered_amount_low_closure.as_ref().unchecked_ref(),
-                100, // Chosen arbitrarily and likely worth tuning. Due to low impact of the /ws transport, no further effort was invested at the time.
+                100, /* Chosen arbitrarily and likely worth tuning. Due to low impact of the /ws
+                      * transport, no further effort was invested at the time. */
                 &Array::new(),
             )
             .expect("to be able to set an interval");
@@ -445,6 +450,6 @@ impl Drop for Connection {
 
         WebContext::new()
             .expect("to have a window or worker context")
-            .clear_interval_with_handle(self.inner.buffered_amount_low_interval);
+            .clear_interval(self.inner.buffered_amount_low_interval);
     }
 }
