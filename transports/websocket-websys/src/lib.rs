@@ -44,6 +44,14 @@ use web_sys::{CloseEvent, Event, MessageEvent, WebSocket};
 
 use crate::web_context::{IntervalHandle, WebContext};
 
+fn ensure_websocket_supported() {
+    if !WebContext::is_websocket_supported() {
+        panic!(
+            "Websockets are not supported in this environment, you can use the `isomorphic-ws` npm package to polyfill `global.WebSocket` to enable support."
+        );
+    }
+}
+
 /// A Websocket transport that can be used in a wasm environment.
 ///
 /// ## Example
@@ -92,6 +100,8 @@ impl libp2p_core::Transport for Transport {
     fn dial(&mut self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
         let url = extract_websocket_url(&addr)
             .ok_or_else(|| TransportError::MultiaddrNotSupported(addr))?;
+
+        ensure_websocket_supported();
 
         Ok(async move {
             let socket = match WebSocket::new(&url) {

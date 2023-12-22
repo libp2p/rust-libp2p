@@ -1,4 +1,5 @@
 use std::fmt::Debug;
+use std::sync::atomic::{AtomicU8, Ordering};
 
 use wasm_bindgen::prelude::*;
 use wasm_bindgen::JsCast;
@@ -65,6 +66,38 @@ fn has(value: &JsValue, key: &str) -> bool {
     js_sys::Reflect::has(value, &JsValue::from_str(key)).unwrap_or(false)
 }
 
+/// A wrapper around a `u8` that is used to indicate whether the `WebSocket`
+/// API is supported.
+///
+/// * 0x00: Not yet checked
+/// * 0x01: Supported
+/// * 0x02: Not supported
+/// * other: Unknown -> fallback to `0x00`
+struct WebSocketSupport(AtomicU8);
+
+impl WebSocketSupport {
+    const fn new() -> Self {
+        Self(AtomicU8::new(0))
+    }
+
+    fn is_supported(&self) -> bool {
+        match self.0.load(Ordering::SeqCst) {
+            0x01 => true,
+            0x02 => false,
+            _ => {
+                let global = js_sys::global();
+                let is_supported = has(&global, "WebSocket");
+
+                let value = if is_supported { 0x01 } else { 0x02 };
+
+                self.0.store(value, Ordering::SeqCst);
+
+                is_supported
+            }
+        }
+    }
+}
+
 /// Web context that abstract the window vs web worker API
 #[derive(Debug)]
 pub(crate) enum WebContext {
@@ -91,6 +124,12 @@ impl WebContext {
         }
 
         None
+    }
+
+    pub(crate) fn is_websocket_supported() -> bool {
+        static SUPPORT: WebSocketSupport = WebSocketSupport::new();
+
+        SUPPORT.is_supported()
     }
 
     /// The `setInterval()` method.
