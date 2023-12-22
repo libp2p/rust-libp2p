@@ -99,7 +99,7 @@ libp2p-rendezvous = { version = "0.14.0", path = "protocols/rendezvous" }
 libp2p-request-response = { version = "0.26.1", path = "protocols/request-response" }
 libp2p-server = { version = "0.12.5", path = "misc/server" }
 libp2p-swarm = { version = "0.44.1", path = "swarm" }
-libp2p-swarm-derive = { version = "=0.34.1", path = "swarm-derive" } # `libp2p-swarm-derive` may not be compatible with different `libp2p-swarm` non-breaking releases. E.g. `libp2p-swarm` might introduce a new enum variant `FromSwarm` (which is `#[non-exhaustive]`) in a non-breaking release. Older versions of `libp2p-swarm-derive` would not forward this enum variant within the `NetworkBehaviour` hierarchy. Thus the version pinning is required.
+libp2p-swarm-derive = { version = "=0.34.2", path = "swarm-derive" } # `libp2p-swarm-derive` may not be compatible with different `libp2p-swarm` non-breaking releases. E.g. `libp2p-swarm` might introduce a new enum variant `FromSwarm` (which is `#[non-exhaustive]`) in a non-breaking release. Older versions of `libp2p-swarm-derive` would not forward this enum variant within the `NetworkBehaviour` hierarchy. Thus the version pinning is required.
 libp2p-swarm-test = { version = "0.3.0", path = "swarm-test" }
 libp2p-tcp = { version = "0.41.0", path = "transports/tcp" }
 libp2p-tls = { version = "0.3.0", path = "transports/tls" }
