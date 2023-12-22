@@ -24,7 +24,7 @@ extern "C" {
     fn clear_interval(this: &Global, handle: JsValue) -> Result<(), JsValue>;
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 enum HandleValue {
     Numeric(i32),
     Opaque(JsValue),
