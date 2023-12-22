@@ -1,5 +1,4 @@
 use std::{
-    convert::identity,
     io,
     task::{Context, Poll},
 };
@@ -11,12 +10,11 @@ use libp2p_swarm::{
     handler::{ConnectionEvent, FullyNegotiatedInbound, ListenUpgradeError},
     ConnectionHandler, ConnectionHandlerEvent, StreamProtocol, SubstreamProtocol,
 };
+use void::Void;
 
-use crate::{request_response::DialBack, Nonce};
+use crate::{request_response::DialBack, Nonce, DIAL_BACK_PROTOCOL_NAME};
 
 use super::{DEFAULT_TIMEOUT, MAX_CONCURRENT_REQUESTS};
-
-pub(crate) type ToBehaviour = io::Result<Nonce>;
 
 pub struct Handler {
     inbound: FuturesSet<io::Result<Nonce>>,
@@ -31,15 +29,15 @@ impl Handler {
 }
 
 impl ConnectionHandler for Handler {
-    type FromBehaviour = ();
-    type ToBehaviour = ToBehaviour;
+    type FromBehaviour = Void;
+    type ToBehaviour = Nonce;
     type InboundProtocol = ReadyUpgrade<StreamProtocol>;
     type OutboundProtocol = DeniedUpgrade;
     type InboundOpenInfo = ();
     type OutboundOpenInfo = ();
 
     fn listen_protocol(&self) -> SubstreamProtocol<Self::InboundProtocol, Self::InboundOpenInfo> {
-        SubstreamProtocol::new(crate::DIAL_BACK_UPGRADE, ())
+        SubstreamProtocol::new(ReadyUpgrade::new(DIAL_BACK_PROTOCOL_NAME), ())
     }
 
     fn poll(
@@ -49,11 +47,13 @@ impl ConnectionHandler for Handler {
         ConnectionHandlerEvent<Self::OutboundProtocol, Self::OutboundOpenInfo, Self::ToBehaviour>,
     > {
         if let Poll::Ready(result) = self.inbound.poll_unpin(cx) {
-            return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(
-                result
-                    .map_err(|timeout| io::Error::new(io::ErrorKind::TimedOut, timeout))
-                    .and_then(identity),
-            ));
+            match result {
+                Ok(Ok(nonce)) => {
+                    return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(nonce))
+                }
+                Ok(Err(err)) => tracing::debug!("Dial back handler failed with: {err:?}"),
+                Err(err) => tracing::debug!("Dial back handler timed out with: {err:?}"),
+            }
         }
         Poll::Pending
     }
@@ -82,10 +82,6 @@ impl ConnectionHandler for Handler {
             }
             _ => {}
         }
-    }
-
-    fn connection_keep_alive(&self) -> bool {
-        false
     }
 }
 

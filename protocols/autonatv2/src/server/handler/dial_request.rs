@@ -22,14 +22,12 @@ use libp2p_swarm::{
 };
 use rand_core::RngCore;
 
-use crate::request_response::Coder;
 use crate::{
     generated::structs::{mod_DialResponse::ResponseStatus, DialStatus},
-    request_response::{
-        DialDataRequest, DialDataResponse, DialRequest, DialResponse, Request, Response,
-    },
-    Nonce, REQUEST_UPGRADE,
+    request_response::{DialDataRequest, DialRequest, DialResponse, Request, Response},
+    Nonce,
 };
+use crate::{request_response::Coder, REQUEST_PROTOCOL_NAME};
 
 #[derive(Clone, Debug)]
 pub struct StatusUpdate {
@@ -104,7 +102,7 @@ where
     type OutboundOpenInfo = ();
 
     fn listen_protocol(&self) -> SubstreamProtocol<Self::InboundProtocol, Self::InboundOpenInfo> {
-        SubstreamProtocol::new(REQUEST_UPGRADE, ())
+        SubstreamProtocol::new(ReadyUpgrade::new(REQUEST_PROTOCOL_NAME), ())
     }
 
     fn poll(
@@ -178,10 +176,6 @@ where
             _ => {}
         }
     }
-
-    fn connection_keep_alive(&self) -> bool {
-        true
-    }
 }
 
 enum HandleFail {
@@ -235,7 +229,7 @@ where
     I: AsyncRead + AsyncWrite + Unpin,
 {
     let DialRequest { mut addrs, nonce } = match coder
-        .next_request()
+        .next()
         .await
         .map_err(|_| HandleFail::InternalError(0))?
     {
@@ -253,19 +247,19 @@ where
         let dial_data_request = DialDataRequest::from_rng(idx, &mut rng);
         let mut rem_data = dial_data_request.num_bytes;
         coder
-            .send_response(Response::Data(dial_data_request))
+            .send(Response::Data(dial_data_request))
             .await
             .map_err(|_| HandleFail::InternalError(idx))?;
         while rem_data > 0 {
-            let DialDataResponse { data_count } = match coder
-                .next_request()
+            let data_count = match coder
+                .next()
                 .await
                 .map_err(|_e| HandleFail::InternalError(idx))?
             {
                 Request::Dial(_) => {
                     return Err(HandleFail::RequestRejected);
                 }
-                Request::Data(dial_data_response) => dial_data_response,
+                Request::Data(dial_data_response) => dial_data_response.get_data_count(),
             };
             rem_data = rem_data.saturating_sub(data_count);
             *data_amount += data_count;
@@ -322,7 +316,7 @@ async fn handle_request(
     )
     .await
     .unwrap_or_else(|e| e.into());
-    coder.send_response(Response::Dial(response)).await?;
+    coder.send(Response::Dial(response)).await?;
     coder.close().await?;
     Ok(())
 }

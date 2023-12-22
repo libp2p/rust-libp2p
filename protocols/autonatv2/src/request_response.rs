@@ -18,15 +18,13 @@ pub(super) const DATA_LEN_LOWER_BOUND: usize = 30_000u32 as usize;
 pub(super) const DATA_LEN_UPPER_BOUND: usize = 100_000u32 as usize;
 pub(super) const DATA_FIELD_LEN_UPPER_BOUND: usize = 4096;
 
-macro_rules! new_io_invalid_data_err {
-    ($msg:expr) => {
-        io::Error::new(io::ErrorKind::InvalidData, $msg)
-    };
+fn new_io_invalid_data_err(msg: impl Into<String>) -> io::Error {
+    io::Error::new(io::ErrorKind::InvalidData, msg.into())
 }
 
-macro_rules! check_existence {
+macro_rules! ok_or_invalid_data {
     ($field:ident) => {
-        $field.ok_or_else(|| new_io_invalid_data_err!(concat!(stringify!($field), " is missing")))
+        $field.ok_or_else(|| new_io_invalid_data_err(concat!(stringify!($field), " is missing")))
     };
 }
 
@@ -43,9 +41,8 @@ where
             inner: Framed::new(io, Codec::new(REQUEST_MAX_SIZE)),
         }
     }
-    pub(crate) async fn close(self) -> io::Result<()> {
-        let mut stream = self.inner.into_inner();
-        stream.close().await?;
+    pub(crate) async fn close(mut self) -> io::Result<()> {
+        self.inner.close().await?;
         Ok(())
     }
 }
@@ -54,18 +51,23 @@ impl<I> Coder<I>
 where
     I: AsyncRead + Unpin,
 {
+    pub(crate) async fn next<M, E>(&mut self) -> io::Result<M>
+    where
+        proto::Message: TryInto<M, Error = E>,
+        io::Error: From<E>,
+    {
+        Ok(self.next_msg().await?.try_into()?)
+    }
+
     async fn next_msg(&mut self) -> io::Result<proto::Message> {
         self.inner
             .next()
             .await
-            .ok_or(io::Error::new(ErrorKind::Other, "no request to read"))?
+            .ok_or(io::Error::new(
+                ErrorKind::UnexpectedEof,
+                "no request to read",
+            ))?
             .map_err(|e| io::Error::new(ErrorKind::InvalidData, e))
-    }
-    pub(crate) async fn next_request(&mut self) -> io::Result<Request> {
-        Request::from_proto(self.next_msg().await?)
-    }
-    pub(crate) async fn next_response(&mut self) -> io::Result<Response> {
-        Response::from_proto(self.next_msg().await?)
     }
 }
 
@@ -73,17 +75,12 @@ impl<I> Coder<I>
 where
     I: AsyncWrite + Unpin,
 {
-    async fn send_msg(&mut self, msg: proto::Message) -> io::Result<()> {
-        self.inner.send(msg).await?;
+    pub(crate) async fn send<M>(&mut self, msg: M) -> io::Result<()>
+    where
+        M: Into<proto::Message>,
+    {
+        self.inner.send(msg.into()).await?;
         Ok(())
-    }
-
-    pub(crate) async fn send_request(&mut self, request: Request) -> io::Result<()> {
-        self.send_msg(request.into_proto()).await
-    }
-
-    pub(crate) async fn send_response(&mut self, response: Response) -> io::Result<()> {
-        self.send_msg(response.into_proto()).await
     }
 }
 
@@ -101,36 +98,54 @@ pub struct DialRequest {
 
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) struct DialDataResponse {
-    pub(crate) data_count: usize,
+    data_count: usize,
 }
 
-impl Request {
-    pub(crate) fn from_proto(msg: proto::Message) -> io::Result<Self> {
+impl DialDataResponse {
+    pub(crate) fn new(data_count: usize) -> Option<Self> {
+        if data_count <= DATA_FIELD_LEN_UPPER_BOUND {
+            Some(Self { data_count })
+        } else {
+            None
+        }
+    }
+
+    pub(crate) fn get_data_count(&self) -> usize {
+        self.data_count
+    }
+}
+
+impl TryFrom<proto::Message> for Request {
+    type Error = io::Error;
+
+    fn try_from(msg: proto::Message) -> Result<Self, Self::Error> {
         match msg.msg {
             proto::mod_Message::OneOfmsg::dialRequest(proto::DialRequest { addrs, nonce }) => {
-                let addrs: Vec<Multiaddr> = addrs
+                let addrs = addrs
                     .into_iter()
                     .map(|e| e.to_vec())
                     .map(|e| {
                         Multiaddr::try_from(e).map_err(|err| {
-                            new_io_invalid_data_err!(format!("invalid multiaddr: {}", err))
+                            new_io_invalid_data_err(format!("invalid multiaddr: {}", err))
                         })
                     })
                     .collect::<Result<Vec<_>, io::Error>>()?;
-                let nonce = check_existence!(nonce)?;
+                let nonce = ok_or_invalid_data!(nonce)?;
                 Ok(Self::Dial(DialRequest { addrs, nonce }))
             }
             proto::mod_Message::OneOfmsg::dialDataResponse(proto::DialDataResponse { data }) => {
-                let data_count = check_existence!(data)?.len();
+                let data_count = ok_or_invalid_data!(data)?.len();
                 Ok(Self::Data(DialDataResponse { data_count }))
             }
-            _ => Err(new_io_invalid_data_err!(
-                "invalid message type, expected dialRequest or dialDataResponse"
+            _ => Err(new_io_invalid_data_err(
+                "expected dialResponse or dialDataRequest",
             )),
         }
     }
+}
 
-    pub(crate) fn into_proto(self) -> proto::Message {
+impl Into<proto::Message> for Request {
+    fn into(self) -> proto::Message {
         match self {
             Request::Dial(DialRequest { addrs, nonce }) => {
                 let addrs = addrs.iter().map(|e| e.to_vec()).collect();
@@ -177,18 +192,20 @@ pub(crate) struct DialResponse {
     pub(crate) dial_status: proto::DialStatus,
 }
 
-impl Response {
-    pub(crate) fn from_proto(msg: proto::Message) -> std::io::Result<Self> {
+impl TryFrom<proto::Message> for Response {
+    type Error = io::Error;
+
+    fn try_from(msg: proto::Message) -> Result<Self, Self::Error> {
         match msg.msg {
             proto::mod_Message::OneOfmsg::dialResponse(proto::DialResponse {
                 status,
                 addrIdx,
                 dialStatus,
             }) => {
-                let status = check_existence!(status)?;
-                let addr_idx = check_existence!(addrIdx)? as usize;
-                let dial_status = check_existence!(dialStatus)?;
-                Ok(Self::Dial(DialResponse {
+                let status = ok_or_invalid_data!(status)?;
+                let addr_idx = ok_or_invalid_data!(addrIdx)? as usize;
+                let dial_status = ok_or_invalid_data!(dialStatus)?;
+                Ok(Response::Dial(DialResponse {
                     status,
                     addr_idx,
                     dial_status,
@@ -198,20 +215,22 @@ impl Response {
                 addrIdx,
                 numBytes,
             }) => {
-                let addr_idx = check_existence!(addrIdx)? as usize;
-                let num_bytes = check_existence!(numBytes)? as usize;
+                let addr_idx = ok_or_invalid_data!(addrIdx)? as usize;
+                let num_bytes = ok_or_invalid_data!(numBytes)? as usize;
                 Ok(Self::Data(DialDataRequest {
                     addr_idx,
                     num_bytes,
                 }))
             }
-            _ => Err(new_io_invalid_data_err!(
-                "invalid message type, expected dialResponse or dialDataRequest"
+            _ => Err(new_io_invalid_data_err(
+                "invalid message type, expected dialResponse or dialDataRequest",
             )),
         }
     }
+}
 
-    pub(crate) fn into_proto(self) -> proto::Message {
+impl Into<proto::Message> for Response {
+    fn into(self) -> proto::Message {
         match self {
             Self::Dial(DialResponse {
                 status,
@@ -260,11 +279,11 @@ impl DialBack {
                 .next()
                 .await
                 .ok_or(io::Error::new(io::ErrorKind::UnexpectedEof, "eof"))??;
-        let nonce = check_existence!(nonce)?;
+        let nonce = ok_or_invalid_data!(nonce)?;
         Ok(Self { nonce })
     }
 
-    pub(crate) async fn write_into(self, io: impl AsyncWrite + Unpin) -> io::Result<()> {
+    async fn write_into(self, io: impl AsyncWrite + Unpin) -> io::Result<()> {
         let msg = proto::DialBack {
             nonce: Some(self.nonce),
         };
@@ -273,6 +292,12 @@ impl DialBack {
             .await
             .map_err(|e| io::Error::new(io::ErrorKind::Other, e))
     }
+}
+
+pub(crate) async fn write_nonce(mut stream: impl AsyncWrite + Unpin, nonce: Nonce) -> io::Result<()> {
+    let dial_back = DialBack { nonce };
+    dial_back.write_into(&mut stream).await?;
+    stream.close().await
 }
 
 #[cfg(test)]
@@ -323,13 +348,13 @@ mod tests {
                 data_count: thread_rng().gen_range(0..4000),
             });
             all_req.push(data_request.clone());
-            coder.send_request(data_request.clone()).await.unwrap();
+            coder.send(data_request.clone()).await.unwrap();
         }
         let inner = coder.inner.into_inner();
         inner.set_position(0);
         let mut coder = Coder::new(inner);
         for i in 0..100 {
-            let read_data_request = coder.next_request().await.unwrap();
+            let read_data_request: Request = coder.next().await.unwrap();
             assert_eq!(read_data_request, all_req[i]);
         }
     }

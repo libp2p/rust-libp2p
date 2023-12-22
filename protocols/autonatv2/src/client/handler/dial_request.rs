@@ -33,7 +33,7 @@ use crate::{
         DialDataRequest, DialDataResponse, DialRequest, DialResponse, Request, Response,
         DATA_FIELD_LEN_UPPER_BOUND, DATA_LEN_LOWER_BOUND, DATA_LEN_UPPER_BOUND,
     },
-    REQUEST_PROTOCOL_NAME, REQUEST_UPGRADE,
+    REQUEST_PROTOCOL_NAME,
 };
 
 use super::{DEFAULT_TIMEOUT, MAX_CONCURRENT_REQUESTS};
@@ -89,11 +89,6 @@ pub struct StatusUpdate {
     pub result: Result<(), crate::client::handler::Error>,
 }
 
-#[derive(Debug)]
-pub enum FromBehaviour {
-    PerformRequest(DialRequest),
-}
-
 pub struct Handler {
     queued_events: VecDeque<
         ConnectionHandlerEvent<
@@ -134,7 +129,7 @@ impl Handler {
         self.queued_streams.push_back(tx);
         self.queued_events
             .push_back(ConnectionHandlerEvent::OutboundSubstreamRequest {
-                protocol: SubstreamProtocol::new(REQUEST_UPGRADE, ()),
+                protocol: SubstreamProtocol::new(ReadyUpgrade::new(REQUEST_PROTOCOL_NAME), ()),
             });
         if self
             .outbound
@@ -152,16 +147,11 @@ impl Handler {
 }
 
 impl ConnectionHandler for Handler {
-    type FromBehaviour = FromBehaviour;
-
+    type FromBehaviour = DialRequest;
     type ToBehaviour = ToBehaviour;
-
     type InboundProtocol = DeniedUpgrade;
-
     type OutboundProtocol = ReadyUpgrade<StreamProtocol>;
-
     type InboundOpenInfo = ();
-
     type OutboundOpenInfo = ();
 
     fn listen_protocol(&self) -> SubstreamProtocol<Self::InboundProtocol, Self::InboundOpenInfo> {
@@ -196,11 +186,7 @@ impl ConnectionHandler for Handler {
     }
 
     fn on_behaviour_event(&mut self, event: Self::FromBehaviour) {
-        match event {
-            FromBehaviour::PerformRequest(req) => {
-                self.perform_request(req);
-            }
-        }
+        self.perform_request(event);
     }
 
     fn on_connection_event(
@@ -272,6 +258,7 @@ async fn start_substream_handle(
     let mut data_amount = 0;
     let mut checked_addr_idx = None;
     let addrs = dial_request.addrs.clone();
+    assert_ne!(addrs, vec![]);
     let res = handle_substream(
         dial_request,
         substream,
@@ -298,10 +285,8 @@ async fn handle_substream(
     checked_addr_idx: &mut Option<usize>,
 ) -> Result<TestEnd, InternalError> {
     let mut coder = Coder::new(substream);
-    coder
-        .send_request(Request::Dial(dial_request.clone()))
-        .await?;
-    match coder.next_response().await? {
+    coder.send(Request::Dial(dial_request.clone())).await?;
+    match coder.next().await? {
         Response::Data(DialDataRequest {
             addr_idx,
             num_bytes,
@@ -326,7 +311,7 @@ async fn handle_substream(
             }
             *checked_addr_idx = Some(addr_idx);
             send_aap_data(&mut coder, num_bytes, data_amount).await?;
-            if let Response::Dial(dial_response) = coder.next_response().await? {
+            if let Response::Dial(dial_response) = coder.next().await? {
                 *checked_addr_idx = Some(dial_response.addr_idx);
                 coder.close().await?;
                 test_end_from_dial_response(dial_request, dial_response)
@@ -396,10 +381,17 @@ where
         .take(count_full)
         .chain(once(partial_len))
         .filter(|e| *e > 0)
-        .map(|data_count| (data_count, Request::Data(DialDataResponse { data_count })))
+        .map(|data_count| {
+            (
+                data_count,
+                Request::Data(
+                    DialDataResponse::new(data_count).expect("data count is unexpectedly too big"),
+                ),
+            )
+        })
     {
         *data_amount += data_count;
-        substream.send_request(req).await?;
+        substream.send(req).await?;
     }
     Ok(())
 }

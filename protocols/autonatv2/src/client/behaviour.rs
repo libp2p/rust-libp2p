@@ -22,7 +22,7 @@ use crate::{global_only::IpExt, request_response::DialRequest};
 use super::handler::{
     dial_back,
     dial_request::{self, StatusUpdate},
-    Handler, TestEnd,
+    TestEnd,
 };
 
 #[derive(Debug, Clone, Copy)]
@@ -89,7 +89,7 @@ impl<R> NetworkBehaviour for Behaviour<R>
 where
     R: RngCore + 'static,
 {
-    type ConnectionHandler = Handler;
+    type ConnectionHandler = Either<dial_request::Handler, dial_back::Handler>;
 
     type ToSwarm = StatusUpdate;
 
@@ -123,9 +123,7 @@ where
     fn on_swarm_event(&mut self, event: FromSwarm) {
         match event {
             FromSwarm::NewExternalAddrCandidate(NewExternalAddrCandidate { addr }) => {
-                if !self.already_tested.contains(addr) {
-                    *self.address_candidates.entry(addr.clone()).or_default() += 1;
-                }
+                *self.address_candidates.entry(addr.clone()).or_default() += 1;
             }
             FromSwarm::ExternalAddrConfirmed(ExternalAddrConfirmed { addr }) => {
                 self.address_candidates.remove(addr);
@@ -144,7 +142,6 @@ where
                 connection_id,
                 ..
             }) => {
-                tracing::trace!("connection with {peer_id:?} closed");
                 self.handle_no_connection(peer_id, connection_id);
             }
             FromSwarm::DialFailure(DialFailure {
@@ -163,7 +160,7 @@ where
         &mut self,
         peer_id: PeerId,
         connection_id: ConnectionId,
-        event: <Handler as ConnectionHandler>::ToBehaviour,
+        event: <Self::ConnectionHandler as ConnectionHandler>::ToBehaviour,
     ) {
         if matches!(event, Either::Left(_)) {
             self.peers_to_handlers
@@ -171,15 +168,12 @@ where
                 .or_insert(connection_id);
         }
         match event {
-            Either::Right(Ok(nonce)) => {
+            Either::Right(nonce) => {
                 if self.pending_nonces.remove(&nonce) {
                     tracing::trace!("Received pending nonce from {peer_id:?}");
                 } else {
                     tracing::warn!("Received unexpected nonce from {peer_id:?}, this means that another node tried to be reachable on an address this node is reachable on.");
                 }
-            }
-            Either::Right(Err(err)) => {
-                tracing::debug!("Dial back failed: {:?}", err);
             }
             Either::Left(dial_request::ToBehaviour::PeerHasServerSupport) => {
                 if !self.known_servers.contains(&peer_id) {
@@ -228,7 +222,8 @@ where
     fn poll(
         &mut self,
         cx: &mut Context<'_>,
-    ) -> Poll<ToSwarm<Self::ToSwarm, <Handler as ConnectionHandler>::FromBehaviour>> {
+    ) -> Poll<ToSwarm<Self::ToSwarm, <Self::ConnectionHandler as ConnectionHandler>::FromBehaviour>>
+    {
         let pending_event = self.poll_pending_events();
         if pending_event.is_ready() {
             return pending_event;
@@ -237,12 +232,19 @@ where
             && !self.known_servers.is_empty()
             && !self.address_candidates.is_empty()
         {
-            let mut entries = self.address_candidates.drain().collect::<Vec<_>>();
+            let mut entries = self
+                .address_candidates
+                .iter()
+                .filter(|(addr, _)| !self.already_tested.contains(addr))
+                .collect::<Vec<_>>();
+            if entries.is_empty() {
+                return Poll::Pending;
+            }
             entries.sort_unstable_by_key(|(_, count)| *count);
             let addrs = entries
                 .into_iter()
                 .rev()
-                .map(|(addr, _)| addr)
+                .map(|(addr, _)| addr.clone())
                 .take(self.config.max_addrs_count)
                 .collect::<Vec<_>>();
             self.already_tested.extend(addrs.iter().cloned());
@@ -296,7 +298,7 @@ where
             self.pending_events.push_back(ToSwarm::NotifyHandler {
                 peer_id: peer,
                 handler: NotifyHandler::One(*conn_id),
-                event: Either::Left(dial_request::FromBehaviour::PerformRequest(req)),
+                event: Either::Left(req),
             });
         } else {
             tracing::debug!(
@@ -317,7 +319,10 @@ where
     fn poll_pending_events(
         &mut self,
     ) -> Poll<
-        ToSwarm<<Self as NetworkBehaviour>::ToSwarm, <Handler as ConnectionHandler>::FromBehaviour>,
+        ToSwarm<
+            <Self as NetworkBehaviour>::ToSwarm,
+            <<Self as NetworkBehaviour>::ConnectionHandler as ConnectionHandler>::FromBehaviour,
+        >,
     > {
         if let Some(event) = self.pending_events.pop_front() {
             return Poll::Ready(event);

@@ -5,7 +5,7 @@ use std::{
     time::Duration,
 };
 
-use futures::{AsyncWrite, AsyncWriteExt};
+use futures::AsyncWrite;
 use futures_bounded::FuturesSet;
 use libp2p_core::upgrade::{DeniedUpgrade, ReadyUpgrade};
 use libp2p_swarm::{
@@ -14,7 +14,7 @@ use libp2p_swarm::{
     SubstreamProtocol,
 };
 
-use crate::{request_response::DialBack, Nonce, DIAL_BACK_UPGRADE};
+use crate::{request_response::write_nonce, DIAL_BACK_PROTOCOL_NAME};
 
 use super::dial_request::{DialBackCommand, DialBackStatus as DialBackRes};
 
@@ -70,7 +70,7 @@ impl ConnectionHandler for Handler {
         if let Some(cmd) = self.pending_nonce.take() {
             self.requested_substream_nonce = Some(cmd);
             return Poll::Ready(ConnectionHandlerEvent::OutboundSubstreamRequest {
-                protocol: SubstreamProtocol::new(DIAL_BACK_UPGRADE, ()),
+                protocol: SubstreamProtocol::new(ReadyUpgrade::new(DIAL_BACK_PROTOCOL_NAME), ()),
             });
         }
         Poll::Pending
@@ -104,11 +104,7 @@ impl ConnectionHandler for Handler {
                 }
             }
             ConnectionEvent::DialUpgradeError(DialUpgradeError {
-                error: StreamUpgradeError::NegotiationFailed,
-                ..
-            })
-            | ConnectionEvent::DialUpgradeError(DialUpgradeError {
-                error: StreamUpgradeError::Timeout,
+                error: StreamUpgradeError::NegotiationFailed | StreamUpgradeError::Timeout,
                 ..
             }) => {
                 if let Some(cmd) = self.requested_substream_nonce.take() {
@@ -121,14 +117,14 @@ impl ConnectionHandler for Handler {
 }
 
 async fn perform_dial_back(
-    mut stream: impl AsyncWrite + Unpin,
+    stream: impl AsyncWrite + Unpin,
     DialBackCommand {
         nonce,
         back_channel,
         ..
     }: DialBackCommand,
 ) -> io::Result<()> {
-    let res = perform_dial_back_inner(&mut stream, nonce)
+    let res = write_nonce(stream, nonce)
         .await
         .map_err(|_| DialBackRes::DialBackErr)
         .map(|_| DialBackRes::Ok)
@@ -136,15 +132,5 @@ async fn perform_dial_back(
     back_channel
         .send(res)
         .map_err(|_| io::Error::new(io::ErrorKind::Other, "send error"))?;
-    Ok(())
-}
-
-async fn perform_dial_back_inner(
-    mut stream: impl AsyncWrite + Unpin,
-    nonce: Nonce,
-) -> io::Result<()> {
-    let dial_back = DialBack { nonce };
-    dial_back.write_into(&mut stream).await?;
-    stream.close().await?;
     Ok(())
 }

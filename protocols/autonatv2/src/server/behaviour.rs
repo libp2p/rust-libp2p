@@ -14,7 +14,7 @@ use libp2p_swarm::{
 use libp2p_swarm::{dial_opts::PeerCondition, ConnectionClosed};
 use rand_core::{OsRng, RngCore};
 
-use super::handler::{
+use crate::server::handler::{
     dial_back,
     dial_request::{self, DialBackCommand},
     Handler,
@@ -50,21 +50,6 @@ where
             pending_events: VecDeque::new(),
             rng,
         }
-    }
-
-    fn poll_pending_events(
-        &mut self,
-        _cx: &mut Context<'_>,
-    ) -> Poll<
-        ToSwarm<
-            <Self as NetworkBehaviour>::ToSwarm,
-            <<Self as NetworkBehaviour>::ConnectionHandler as ConnectionHandler>::FromBehaviour,
-        >,
-    > {
-        if let Some(event) = self.pending_events.pop_front() {
-            return Poll::Ready(event);
-        }
-        Poll::Pending
     }
 }
 
@@ -154,11 +139,10 @@ where
 
     fn poll(
         &mut self,
-        cx: &mut Context<'_>,
+        _cx: &mut Context<'_>,
     ) -> Poll<ToSwarm<Self::ToSwarm, <Handler<R> as ConnectionHandler>::FromBehaviour>> {
-        let pending_event = self.poll_pending_events(cx);
-        if pending_event.is_ready() {
-            return pending_event;
+        if let Some(event) = self.pending_events.pop_front() {
+            return Poll::Ready(event);
         }
         Poll::Pending
     }
