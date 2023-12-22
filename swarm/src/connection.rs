@@ -32,7 +32,7 @@ pub use supported_protocols::SupportedProtocols;
 use crate::handler::{
     AddressChange, ConnectionEvent, ConnectionHandler, DialUpgradeError, FullyNegotiatedInbound,
     FullyNegotiatedOutbound, ListenUpgradeError, ProtocolSupport, ProtocolsAdded, ProtocolsChange,
-    UpgradeInfoSend,
+    ProtocolsRemoved, UpgradeInfoSend,
 };
 use crate::stream::ActiveStreamCounter;
 use crate::upgrade::{InboundUpgradeSend, OutboundUpgradeSend};
@@ -153,8 +153,10 @@ where
         SubstreamRequested<THandler::OutboundOpenInfo, THandler::OutboundProtocol>,
     >,
 
-    local_supported_protocols: HashSet<StreamProtocol>,
+    local_supported_protocols: Vec<<THandler::InboundProtocol as UpgradeInfoSend>::Info>,
     remote_supported_protocols: HashSet<StreamProtocol>,
+    temp_protocols: Vec<StreamProtocol>,
+
     idle_timeout: Duration,
     stream_counter: ActiveStreamCounter,
 }
@@ -186,10 +188,21 @@ where
         max_negotiating_inbound_streams: usize,
         idle_timeout: Duration,
     ) -> Self {
-        let initial_protocols = gather_supported_protocols(&handler);
-        if !initial_protocols.is_empty() {
+        let local_supported_protocols = handler
+            .listen_protocol()
+            .upgrade()
+            .protocol_info()
+            .collect::<Vec<_>>();
+
+        if !local_supported_protocols.is_empty() {
+            let temp = local_supported_protocols
+                .iter()
+                .filter_map(|i| StreamProtocol::try_from_owned(i.as_ref().to_owned()).ok())
+                .collect::<Vec<_>>();
             handler.on_connection_event(ConnectionEvent::LocalProtocolsChange(
-                ProtocolsChange::Added(ProtocolsAdded::from_set(&initial_protocols)),
+                ProtocolsChange::Added(ProtocolsAdded {
+                    protocols: temp.iter(),
+                }),
             ));
         }
         Connection {
@@ -201,8 +214,9 @@ where
             substream_upgrade_protocol_override,
             max_negotiating_inbound_streams,
             requested_substreams: Default::default(),
-            local_supported_protocols: initial_protocols,
+            local_supported_protocols,
             remote_supported_protocols: Default::default(),
+            temp_protocols: Default::default(),
             idle_timeout,
             stream_counter: ActiveStreamCounter::default(),
         }
@@ -250,6 +264,7 @@ where
             substream_upgrade_protocol_override,
             local_supported_protocols: supported_protocols,
             remote_supported_protocols,
+            temp_protocols,
             idle_timeout,
             stream_counter,
             ..
@@ -286,11 +301,17 @@ where
                 Poll::Ready(ConnectionHandlerEvent::ReportRemoteProtocols(
                     ProtocolSupport::Added(protocols),
                 )) => {
-                    if let Some(added) =
-                        ProtocolsChange::add(remote_supported_protocols, &protocols)
-                    {
-                        handler.on_connection_event(ConnectionEvent::RemoteProtocolsChange(added));
-                        remote_supported_protocols.extend(protocols);
+                    let added = protocols
+                        .into_iter()
+                        .filter(|i| remote_supported_protocols.insert(i.clone()))
+                        .collect::<Vec<_>>();
+
+                    if !added.is_empty() {
+                        handler.on_connection_event(ConnectionEvent::RemoteProtocolsChange(
+                            ProtocolsChange::Added(ProtocolsAdded {
+                                protocols: added.iter(),
+                            }),
+                        ));
                     }
 
                     continue;
@@ -298,12 +319,17 @@ where
                 Poll::Ready(ConnectionHandlerEvent::ReportRemoteProtocols(
                     ProtocolSupport::Removed(protocols),
                 )) => {
-                    if let Some(removed) =
-                        ProtocolsChange::remove(remote_supported_protocols, &protocols)
-                    {
-                        handler
-                            .on_connection_event(ConnectionEvent::RemoteProtocolsChange(removed));
-                        remote_supported_protocols.retain(|p| !protocols.contains(p));
+                    let removed = protocols
+                        .into_iter()
+                        .filter_map(|i| remote_supported_protocols.take(&i))
+                        .collect::<Vec<_>>();
+
+                    if !removed.is_empty() {
+                        handler.on_connection_event(ConnectionEvent::RemoteProtocolsChange(
+                            ProtocolsChange::Removed(ProtocolsRemoved {
+                                protocols: removed.iter(),
+                            }),
+                        ));
                     }
 
                     continue;
@@ -431,17 +457,18 @@ where
                 }
             }
 
-            let new_protocols = gather_supported_protocols(handler);
-            let changes = ProtocolsChange::from_full_sets(supported_protocols, &new_protocols);
-
-            if !changes.is_empty() {
-                for change in changes {
-                    handler.on_connection_event(ConnectionEvent::LocalProtocolsChange(change));
-                }
-
-                *supported_protocols = new_protocols;
-
-                continue; // Go back to the top, handler can potentially make progress again.
+            let current_proocols = supported_protocols.len();
+            supported_protocols.extend(handler.listen_protocol().upgrade().protocol_info());
+            let (old, new) = supported_protocols.split_at(current_proocols);
+            let changes = ProtocolsChange::from_full_sets(old, new, temp_protocols);
+            supported_protocols.drain(..current_proocols);
+            let mut has_changes = false;
+            for change in changes {
+                handler.on_connection_event(ConnectionEvent::LocalProtocolsChange(change));
+                has_changes = true;
+            }
+            if has_changes {
+                continue;
             }
 
             return Poll::Pending; // Nothing can make progress, return `Pending`.
@@ -452,15 +479,6 @@ where
     fn poll_noop_waker(&mut self) -> Poll<Result<Event<THandler::ToBehaviour>, ConnectionError>> {
         Pin::new(self).poll(&mut Context::from_waker(futures::task::noop_waker_ref()))
     }
-}
-
-fn gather_supported_protocols(handler: &impl ConnectionHandler) -> HashSet<StreamProtocol> {
-    handler
-        .listen_protocol()
-        .upgrade()
-        .protocol_info()
-        .filter_map(|i| StreamProtocol::try_from_owned(i.as_ref().to_owned()).ok())
-        .collect()
 }
 
 fn compute_new_shutdown(
