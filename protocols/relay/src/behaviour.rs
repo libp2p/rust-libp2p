@@ -202,12 +202,12 @@ pub enum Event {
         dst_peer_id: PeerId,
         error: inbound_hop::Error,
     },
-    /// An inbound cirucit request has been accepted.
+    /// An inbound circuit request has been accepted.
     CircuitReqAccepted {
         src_peer_id: PeerId,
         dst_peer_id: PeerId,
     },
-    /// An outbound connect for an inbound cirucit request failed.
+    /// An outbound connect for an inbound circuit request failed.
     #[deprecated(
         note = "Will be removed in favor of logging them internally, see <https://github.com/libp2p/rust-libp2p/issues/4757> for details."
     )]
