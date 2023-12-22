@@ -18,13 +18,14 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use quinn::{MtuDiscoveryConfig, VarInt};
+use quinn::{MtuDiscoveryConfig, TransportConfig, VarInt};
 use std::{sync::Arc, time::Duration};
 use libp2p_core::multihash::Multihash;
-use crate::webtransport::fingerprint::Fingerprint;
+use libp2p_tls::certificate;
+use crate::certificate_manager::ServerCertManager;
 
 /// Config for the transport.
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct Config {
     /// Timeout for the initial handshake when establishing a connection.
     /// The actual timeout is the minimum of this and the [`Config::max_idle_timeout`].
@@ -63,16 +64,14 @@ pub struct Config {
 
     /// TLS client config for the inner [`quinn::ClientConfig`].
     client_tls_config: Arc<rustls::ClientConfig>,
-    //todo At first boot of the node, it creates one self-signed certificate with a validity of 14 days,
-    // starting immediately, and another certificate with the 14 day validity period starting on
-    // the expiry date of the first certificate.
-    // The node advertises a multiaddress containing the certificate hashes of these two certificates.
-    // Once the first certificate has expired, the node starts using the already generated next certificate.
-    // At the same time, it again generates a new certificate for the following period and updates
-    // the multiaddress it advertises.
-    /// TLS server config for the inner [`quinn::ServerConfig`].
-    server_tls_config: Arc<rustls::ServerConfig>,
-    pub(crate) cert_hash: Multihash<64>,
+
+    transport: Arc<TransportConfig>,
+
+    endpoint_config: quinn::EndpointConfig,
+
+    /// TLS server config manager for the inner [`quinn::ServerConfig`] and
+    /// self-signed certificate hashes.
+    cert_manager: ServerCertManager,
 
     /// Libp2p identity of the node.
     keypair: libp2p_identity::Keypair,
@@ -86,93 +85,26 @@ impl Config {
     pub fn new(keypair: &libp2p_identity::Keypair) -> Self {
         let client_tls_config = Arc::new(libp2p_tls::make_client_config(keypair, None).unwrap());
 
-        //todo set up cert's dates
-        let (cert, private_key) = libp2p_tls::certificate::generate(keypair).unwrap();
+        let max_concurrent_stream_limit = 256;
+        let keep_alive_interval = Duration::from_secs(5);
+        let max_idle_timeout = 10 * 1000;
+        let max_stream_data = 10_000_000;
+        let max_connection_data = 15_000_000;
+        let mtu_discovery_config = Some(Default::default());
+        let support_draft_29 = false;
 
-        let server_tls_config = Arc::new(
-            libp2p_tls::make_server_config_with_cert(
-                cert.clone(), private_key, vec![
-                    b"libp2p".to_vec(),
-                    b"h3".to_vec(),
-                    b"h3-32".to_vec(),
-                    b"h3-31".to_vec(),
-                    b"h3-30".to_vec(),
-                    b"h3-29".to_vec(),
-                ]
-            ).unwrap()
-        );
-        Self {
-            client_tls_config,
-            server_tls_config,
-            cert_hash: Fingerprint::from_certificate(cert.as_ref()).to_multihash(),
-            support_draft_29: false,
-            handshake_timeout: Duration::from_secs(5),
-            max_idle_timeout: 10 * 1000,
-            max_concurrent_stream_limit: 256,
-            keep_alive_interval: Duration::from_secs(5),
-            max_connection_data: 15_000_000,
-
-            // Ensure that one stream is not consuming the whole connection.
-            max_stream_data: 10_000_000,
-            keypair: keypair.clone(),
-            mtu_discovery_config: Some(Default::default()),
-        }
-    }
-
-    /// Disable MTU path discovery (it is enabled by default).
-    pub fn disable_path_mtu_discovery(mut self) -> Self {
-        self.mtu_discovery_config = None;
-        self
-    }
-}
-
-/// Represents the inner configuration for [`quinn`].
-#[derive(Debug, Clone)]
-pub(crate) struct QuinnConfig {
-    pub(crate) client_config: quinn::ClientConfig,
-    pub(crate) server_config: quinn::ServerConfig,
-    pub(crate) endpoint_config: quinn::EndpointConfig,
-}
-
-impl From<Config> for QuinnConfig {
-    fn from(config: Config) -> QuinnConfig {
-        let Config {
-            client_tls_config,
-            server_tls_config,
-            cert_hash: _,
-            max_idle_timeout,
-            max_concurrent_stream_limit,
-            keep_alive_interval,
-            max_connection_data,
-            max_stream_data,
-            support_draft_29,
-            handshake_timeout: _,
-            keypair,
-            mtu_discovery_config,
-        } = config;
         let mut transport = quinn::TransportConfig::default();
         // Disable uni-directional streams.
         transport.max_concurrent_uni_streams(0u32.into());
         transport.max_concurrent_bidi_streams(max_concurrent_stream_limit.into());
         // Disable datagrams.
         transport.datagram_receive_buffer_size(None);
-        transport.keep_alive_interval(Some(keep_alive_interval));
+        transport.keep_alive_interval(Some(keep_alive_interval.clone()));
         transport.max_idle_timeout(Some(VarInt::from_u32(max_idle_timeout).into()));
         transport.allow_spin(false);
         transport.stream_receive_window(max_stream_data.into());
         transport.receive_window(max_connection_data.into());
-        transport.mtu_discovery_config(mtu_discovery_config);
-        let transport = Arc::new(transport);
-
-        let mut server_config = quinn::ServerConfig::with_crypto(server_tls_config);
-        server_config.transport = Arc::clone(&transport);
-        // Disables connection migration.
-        // Long-term this should be enabled, however we then need to handle address change
-        // on connections in the `Connection`.
-        server_config.migration(false);
-
-        let mut client_config = quinn::ClientConfig::new(client_tls_config);
-        client_config.transport_config(transport);
+        transport.mtu_discovery_config(mtu_discovery_config.clone());
 
         let mut endpoint_config = keypair
             .derive_secret(b"libp2p quic stateless reset key")
@@ -186,10 +118,58 @@ impl From<Config> for QuinnConfig {
             endpoint_config.supported_versions(vec![1]);
         }
 
-        QuinnConfig {
-            client_config,
-            server_config,
+        Self {
+            keypair: keypair.clone(),
+            client_tls_config,
+            transport: Arc::new(transport),
             endpoint_config,
+            cert_manager: ServerCertManager::new(keypair.clone()),
+            support_draft_29,
+            handshake_timeout: Duration::from_secs(5),
+            max_idle_timeout,
+            max_concurrent_stream_limit,
+            keep_alive_interval,
+            max_connection_data,
+            // Ensure that one stream is not consuming the whole connection.
+            max_stream_data,
+            mtu_discovery_config,
         }
+    }
+
+    /// Disable MTU path discovery (it is enabled by default).
+    pub fn disable_path_mtu_discovery(mut self) -> Self {
+        self.mtu_discovery_config = None;
+        self
+    }
+
+    pub fn server_quinn_config(&mut self
+    ) -> Result<(quinn::ServerConfig, libp2p_noise::Config, Vec<Multihash<64>>), certificate::GenError> {
+        let (server_tls_config, cert_hashes) = self.cert_manager.get_config()?;
+
+        let mut server_config = quinn::ServerConfig::with_crypto(server_tls_config);
+        server_config.transport = Arc::clone(&self.transport);
+        // Disables connection migration.
+        // Long-term this should be enabled, however we then need to handle address change
+        // on connections in the `Connection`.
+        server_config.migration(false);
+
+        let mut noise = libp2p_noise::Config::new(&self.keypair)
+            .expect("Gets noise config");
+        noise = noise.with_webtransport_certhashes(
+            cert_hashes.clone().into_iter().collect()
+        );
+
+        Ok((server_config, noise, cert_hashes))
+    }
+
+    pub fn endpoint_config(&self) -> quinn::EndpointConfig {
+        self.endpoint_config.clone()
+    }
+
+    pub fn client_quinn_config(&self) -> quinn::ClientConfig {
+        let mut client_config = quinn::ClientConfig::new(self.client_tls_config.clone());
+        client_config.transport_config(Arc::clone(&self.transport));
+
+        client_config
     }
 }

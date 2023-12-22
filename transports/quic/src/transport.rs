@@ -18,7 +18,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::config::{Config, QuinnConfig};
+use crate::config::Config;
 use crate::hole_punching::hole_puncher;
 use crate::provider::Provider;
 use crate::{ConnectError, Connecting, Error, webtransport};
@@ -60,16 +60,8 @@ use libp2p_core::multihash::Multihash;
 /// See <https://github.com/multiformats/multiaddr/issues/145>.
 #[derive(Debug)]
 pub struct GenTransport<P: Provider> {
-    /// Config for the inner [`quinn`] structs.
-    quinn_config: QuinnConfig,
-    /// Timeout for the [`Connecting`] future.
-    handshake_timeout: Duration,
-
-    // todo Temporary solution
-    cert_hash: Multihash<64>,
-
-    /// Whether draft-29 is supported for dialing and listening.
-    support_draft_29: bool,
+    /// Config for the transport.
+    config: Config,
     /// Streams of active [`Listener`]s.
     listeners: SelectAll<Listener<P>>,
     /// Dialer for each socket family if no matching listener exists.
@@ -88,19 +80,12 @@ pub struct GenTransport<P: Provider> {
 impl<P: Provider> GenTransport<P> {
     /// Create a new [`GenTransport`] with the given [`Config`].
     pub fn new(config: Config) -> Self {
-        let handshake_timeout = config.handshake_timeout;
-        let support_draft_29 = config.support_draft_29;
-        let cert_hash = config.cert_hash;
-        let quinn_config = config.into();
         Self {
+            config: config.clone(),
             listeners: SelectAll::new(),
-            quinn_config,
-            handshake_timeout,
             dialer: HashMap::new(),
             waker: None,
-            support_draft_29,
             hole_punch_attempts: Default::default(),
-            cert_hash,
         }
     }
 
@@ -145,13 +130,13 @@ impl<P: Provider> GenTransport<P> {
         (SocketAddr, ProtocolVersion, Option<PeerId>, bool),
         TransportError<<Self as Transport>::Error>,
     > {
-        let (socket_addr, version, peer_id, wt) = multiaddr_to_socketaddr(&addr, self.support_draft_29)
+        let (socket_addr, version, peer_id, is_webtransport_addr) = multiaddr_to_socketaddr(&addr, self.config.support_draft_29)
             .ok_or_else(|| TransportError::MultiaddrNotSupported(addr.clone()))?;
         if check_unspecified_addr && (socket_addr.port() == 0 || socket_addr.ip().is_unspecified())
         {
             return Err(TransportError::MultiaddrNotSupported(addr));
         }
-        Ok((socket_addr, version, peer_id, wt))
+        Ok((socket_addr, version, peer_id, is_webtransport_addr))
     }
 
     /// Pick any listener to use for dialing.
@@ -216,21 +201,27 @@ impl<P: Provider> Transport for GenTransport<P> {
         listener_id: ListenerId,
         addr: Multiaddr,
     ) -> Result<(), TransportError<Self::Error>> {
-        let (socket_addr, version, _peer_id, wt) = self.remote_multiaddr_to_socketaddr(addr, false)?;
-        let endpoint_config = self.quinn_config.endpoint_config.clone();
-        let server_config = self.quinn_config.server_config.clone();
+        let (socket_addr, version, _peer_id, is_webtransport_addr) = self.remote_multiaddr_to_socketaddr(addr, false)?;
+
+        let (server_config, noise, cert_hashes) = self.config.server_quinn_config()
+            .map_err(|e| Error::CertificateGenerationError(e))?;
+
         let socket = self.create_socket(socket_addr).map_err(Self::Error::from)?;
 
         let socket_c = socket.try_clone().map_err(Self::Error::from)?;
-        let endpoint = Self::new_endpoint(endpoint_config, Some(server_config), socket)?;
+        let endpoint = Self::new_endpoint(self.config.endpoint_config(), Some(server_config), socket)?;
+        let webtransport = WebTransport {
+            in_use: is_webtransport_addr,
+            cert_hashes,
+            noise,
+        };
         let listener = Listener::new(
             listener_id,
             socket_c,
             endpoint,
-            self.handshake_timeout,
+            self.config.handshake_timeout.clone(),
             version,
-            wt,
-            self.cert_hash,
+            webtransport
         )?;
         self.listeners.push(listener);
 
@@ -258,8 +249,8 @@ impl<P: Provider> Transport for GenTransport<P> {
     }
 
     fn address_translation(&self, listen: &Multiaddr, observed: &Multiaddr) -> Option<Multiaddr> {
-        if !is_quic_addr(listen, self.support_draft_29)
-            || !is_quic_addr(observed, self.support_draft_29)
+        if !is_quic_addr(listen, self.config.support_draft_29)
+            || !is_quic_addr(observed, self.config.support_draft_29)
         {
             return None;
         }
@@ -267,7 +258,12 @@ impl<P: Provider> Transport for GenTransport<P> {
     }
 
     fn dial(&mut self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
-        let (socket_addr, version, _peer_id, wt) = self.remote_multiaddr_to_socketaddr(addr, true)?;
+        let (socket_addr, version, _peer_id, is_webtransport) = self.remote_multiaddr_to_socketaddr(addr.clone(), true)?;
+
+        if is_webtransport {
+            // WebTransport implementation doesn't support dialling.
+            return Err(TransportError::MultiaddrNotSupported(addr));
+        }
 
         let endpoint = match self.eligible_listener(&socket_addr) {
             None => {
@@ -285,8 +281,7 @@ impl<P: Provider> Transport for GenTransport<P> {
                         };
                         let socket =
                             UdpSocket::bind(listen_socket_addr).map_err(Self::Error::from)?;
-                        let endpoint_config = self.quinn_config.endpoint_config.clone();
-                        let endpoint = Self::new_endpoint(endpoint_config, None, socket)?;
+                        let endpoint = Self::new_endpoint(self.config.endpoint_config(), None, socket)?;
 
                         vacant.insert(endpoint.clone());
                         endpoint
@@ -296,8 +291,8 @@ impl<P: Provider> Transport for GenTransport<P> {
             }
             Some(listener) => listener.endpoint.clone(),
         };
-        let handshake_timeout = self.handshake_timeout;
-        let mut client_config = self.quinn_config.client_config.clone();
+        let handshake_timeout = self.config.handshake_timeout;
+        let mut client_config = self.config.client_quinn_config();
         if version == ProtocolVersion::Draft29 {
             client_config.version(0xff00_001d);
         }
@@ -308,13 +303,9 @@ impl<P: Provider> Transport for GenTransport<P> {
         let connecting = endpoint
             .connect_with(client_config, socket_addr, "l")
             .map_err(ConnectError).unwrap(); // todo should be `?`
+
         Ok(Box::pin(async move {
-            if wt {
-                todo!("Here should be part that creates connection to a WT server")
-                //webtransport::Connecting::new(connecting, handshake_timeout).await
-            } else {
-                Connecting::new(connecting, handshake_timeout).await
-            }
+            Connecting::new(connecting, handshake_timeout).await
         }))
     }
 
@@ -322,7 +313,7 @@ impl<P: Provider> Transport for GenTransport<P> {
         &mut self,
         addr: Multiaddr,
     ) -> Result<Self::Dial, TransportError<Self::Error>> {
-        let (socket_addr, _version, peer_id, _wt) =
+        let (socket_addr, _version, peer_id, _is_webtransport) =
             self.remote_multiaddr_to_socketaddr(addr.clone(), true)?;
         let peer_id = peer_id.ok_or(TransportError::MultiaddrNotSupported(addr.clone()))?;
 
@@ -336,7 +327,7 @@ impl<P: Provider> Transport for GenTransport<P> {
 
         tracing::debug!("Preparing for hole-punch from {addr}");
 
-        let hole_puncher = hole_puncher::<P>(socket, socket_addr, self.handshake_timeout);
+        let hole_puncher = hole_puncher::<P>(socket, socket_addr, self.config.handshake_timeout);
 
         let (sender, receiver) = oneshot::channel();
 
@@ -391,7 +382,7 @@ impl<P: Provider> Transport for GenTransport<P> {
                     send_back_addr,
                 } => {
                     let socket_addr =
-                        multiaddr_to_socketaddr(&send_back_addr, self.support_draft_29)
+                        multiaddr_to_socketaddr(&send_back_addr, self.config.support_draft_29)
                             .unwrap()
                             .0;
 
@@ -440,8 +431,7 @@ struct Listener<P: Provider> {
     /// An underlying copy of the socket to be able to hole punch with
     socket: UdpSocket,
 
-    web_transport_addr: bool,
-    cert_hash: Multihash<64>,
+    webtransport: WebTransport,
 
     /// A future to poll new incoming connections.
     accept: BoxFuture<'static, Option<quinn::Connecting>>,
@@ -472,8 +462,7 @@ impl<P: Provider> Listener<P> {
         endpoint: quinn::Endpoint,
         handshake_timeout: Duration,
         version: ProtocolVersion,
-        web_transport_addr: bool,
-        cert_hash: Multihash<64>,
+        webtransport: WebTransport,
     ) -> Result<Self, Error> {
         let if_watcher;
         let pending_event;
@@ -485,7 +474,9 @@ impl<P: Provider> Listener<P> {
         } else {
             if_watcher = None;
             listening_addresses.insert(local_addr.ip());
-            let ma = socketaddr_to_multiaddr(&local_addr, version, web_transport_addr, Some(cert_hash));
+            let mut ma = socketaddr_to_multiaddr(&local_addr, version);
+            ma = webtransport.update_multiaddr(ma);
+
             pending_event = Some(TransportEvent::NewAddress {
                 listener_id,
                 listen_addr: ma,
@@ -507,8 +498,7 @@ impl<P: Provider> Listener<P> {
             pending_event,
             close_listener_waker: None,
             listening_addresses,
-            web_transport_addr,
-            cert_hash,
+            webtransport,
         })
     }
 
@@ -551,10 +541,11 @@ impl<P: Provider> Listener<P> {
         loop {
             match ready!(P::poll_if_event(if_watcher, cx)) {
                 Ok(IfEvent::Up(inet)) => {
-                    if let Some(listen_addr) =
-                        ip_to_listenaddr(&endpoint_addr, inet.addr(), self.version,
-                                         self.web_transport_addr, Some(self.cert_hash))
+                    if let Some(mut listen_addr) =
+                        ip_to_listenaddr(&endpoint_addr, inet.addr(), self.version)
                     {
+                        listen_addr = self.webtransport.update_multiaddr(listen_addr);
+
                         tracing::debug!(
                             address=%listen_addr,
                             "New listen address"
@@ -567,10 +558,10 @@ impl<P: Provider> Listener<P> {
                     }
                 }
                 Ok(IfEvent::Down(inet)) => {
-                    if let Some(listen_addr) =
-                        ip_to_listenaddr(&endpoint_addr, inet.addr(), self.version,
-                                         self.web_transport_addr, Some(self.cert_hash))
+                    if let Some(mut listen_addr) =
+                        ip_to_listenaddr(&endpoint_addr, inet.addr(), self.version)
                     {
+                        listen_addr = self.webtransport.update_multiaddr(listen_addr);
                         tracing::debug!(
                             address=%listen_addr,
                             "Expired listen address"
@@ -612,25 +603,30 @@ impl<P: Provider> Stream for Listener<P> {
                     let endpoint = self.endpoint.clone();
                     self.accept = async move { endpoint.accept().await }.boxed();
 
-                    let local_addr = socketaddr_to_multiaddr(
+                    let mut local_addr = socketaddr_to_multiaddr(
                         &self.socket_addr(),
                         self.version,
-                        self.web_transport_addr,
-                        Some(self.cert_hash),
                     );
+                    local_addr = self.webtransport.update_multiaddr(local_addr);
+
                     let remote_addr = connecting.remote_address();
+
                     //todo It's unclear should I add anything to a send_back_addr?
+
                     let send_back_addr = socketaddr_to_multiaddr(
                         &remote_addr,
                         self.version,
-                        false,
-                        None,
                     );
 
                     let timeout = self.handshake_timeout.clone();
-                    let fut = if self.web_transport_addr {
+                    let noise = self.webtransport.noise.clone();
+                    let fut = if self.webtransport.in_use {
                         async move {
-                            webtransport::Connecting::new(connecting, timeout).await
+                            webtransport::Connecting::new(
+                                noise,
+                                connecting,
+                                timeout,
+                            ).await
                         }.boxed()
                     } else {
                         async move {
@@ -713,15 +709,14 @@ fn ip_to_listenaddr(
     endpoint_addr: &SocketAddr,
     ip: IpAddr,
     version: ProtocolVersion,
-    wt: bool,
-    cert_hash: Option<Multihash<64>>,
 ) -> Option<Multiaddr> {
     // True if either both addresses are Ipv4 or both Ipv6.
     if !SocketFamily::is_same(&endpoint_addr.ip(), &ip) {
         return None;
     }
     let socket_addr = SocketAddr::new(ip, endpoint_addr.port());
-    Some(socketaddr_to_multiaddr(&socket_addr, version, wt, cert_hash))
+
+    Some(socketaddr_to_multiaddr(&socket_addr, version))
 }
 
 /// Tries to turn a QUIC multiaddress into a UDP [`SocketAddr`]. Returns None if the format
@@ -734,7 +729,8 @@ fn multiaddr_to_socketaddr(
     let proto1 = iter.next()?;
     let proto2 = iter.next()?;
     let proto3 = iter.next()?;
-    let proto4 = iter.next()?;
+    let proto4 = iter.next();
+    let proto5 = iter.next();
 
     let mut peer_id = None;
     for proto in iter {
@@ -751,14 +747,22 @@ fn multiaddr_to_socketaddr(
         _ => return None,
     };
 
-    let wt = proto4 == Protocol::WebTransport;
+    let is_webtransport = match proto4 {
+        Some(Protocol::WebTransport) => {
+            if let Some(Protocol::Certhash(_)) = proto5 {
+                panic!("Cannot listen on a specific certhash for WebTransport addr {addr}");
+            }
+            true
+        }
+        _ => false,
+    };
 
     match (proto1, proto2) {
         (Protocol::Ip4(ip), Protocol::Udp(port)) => {
-            Some((SocketAddr::new(ip.into(), port), version, peer_id, wt))
+            Some((SocketAddr::new(ip.into(), port), version, peer_id, is_webtransport))
         }
         (Protocol::Ip6(ip), Protocol::Udp(port)) => {
-            Some((SocketAddr::new(ip.into(), port), version, peer_id, wt))
+            Some((SocketAddr::new(ip.into(), port), version, peer_id, is_webtransport))
         }
         _ => None,
     }
@@ -795,26 +799,36 @@ fn is_quic_addr(addr: &Multiaddr, support_draft_29: bool) -> bool {
 fn socketaddr_to_multiaddr(
     socket_addr: &SocketAddr,
     version: ProtocolVersion,
-    web_transport_addr: bool,
-    cert_hash: Option<Multihash<64>>,
 ) -> Multiaddr {
     let quic_proto = match version {
         ProtocolVersion::V1 => Protocol::QuicV1,
         ProtocolVersion::Draft29 => Protocol::Quic,
     };
-    let mut res = Multiaddr::empty()
+    Multiaddr::empty()
         .with(socket_addr.ip().into())
         .with(Protocol::Udp(socket_addr.port()))
-        .with(quic_proto);
+        .with(quic_proto)
+}
 
-    if web_transport_addr {
-        res = res.with(Protocol::WebTransport);
-        if let Some(hash) = cert_hash {
-            res = res.with(Protocol::Certhash(hash.clone()));
+struct WebTransport {
+    in_use: bool,
+
+    cert_hashes: Vec<Multihash<64>>,
+    noise: libp2p_noise::Config,
+}
+
+impl WebTransport {
+    pub(crate) fn update_multiaddr(&self, addr: Multiaddr) -> Multiaddr {
+        if self.in_use {
+            let mut vec = self.cert_hashes.clone();
+
+            return addr.with(Protocol::WebTransport)
+                .with(Protocol::Certhash(vec.pop().expect("Gets the last element")))
+                .with(Protocol::Certhash(vec.pop().expect("Gets the last element")));
         }
-    }
 
-    res
+        addr
+    }
 }
 
 #[cfg(test)]

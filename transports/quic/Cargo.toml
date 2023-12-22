@@ -30,10 +30,11 @@ sha2 = "0.10.7"
 hex = "0.4"
 
 # WebTransport
-http = "0.2.11"
+http = "1.0.0"
 h3 = { git = "https://github.com/hyperium/h3" }
 h3-quinn = { git = "https://github.com/hyperium/h3" }
 h3-webtransport = { git = "https://github.com/hyperium/h3" }
+libp2p-noise = { workspace = true }
 rcgen = "0.11.3"
 time = "0.3"
 
@@ -52,7 +53,6 @@ rustc-args = ["--cfg", "docsrs"]
 async-std = { version = "1.12.0", features = ["attributes"] }
 libp2p-identity = { workspace = true, features = ["rand"] }
 libp2p-muxer-test-harness = { path = "../../muxers/test-harness" }
-libp2p-noise = { workspace = true }
 libp2p-tcp = { workspace = true, features = ["async-io"] }
 libp2p-yamux = { workspace = true }
 quickcheck = "1"

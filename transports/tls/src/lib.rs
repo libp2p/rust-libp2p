@@ -27,18 +27,17 @@
 
 pub mod certificate;
 mod upgrade;
-mod verifier;
+pub mod verifier;
 
 use libp2p_identity::Keypair;
 use libp2p_identity::PeerId;
 use std::sync::Arc;
 
 pub use futures_rustls::TlsStream;
-use rustls::{Certificate, PrivateKey};
 pub use upgrade::Config;
 pub use upgrade::UpgradeError;
 
-const P2P_ALPN: [u8; 6] = *b"libp2p";
+pub const P2P_ALPN: [u8; 6] = *b"libp2p";
 
 /// Create a TLS client configuration for libp2p.
 pub fn make_client_config(
@@ -77,26 +76,6 @@ pub fn make_server_config(
         .with_single_cert(vec![certificate], private_key)
         .expect("Server cert key DER is valid; qed");
     crypto.alpn_protocols = vec![P2P_ALPN.to_vec()];
-
-    Ok(crypto)
-}
-
-/// Create a TLS server configuration for libp2p.
-pub fn make_server_config_with_cert(
-    certificate: Certificate,
-    private_key: PrivateKey,
-    alpn: Vec<Vec<u8>>
-) -> Result<rustls::ServerConfig, certificate::GenError> {
-    let mut crypto = rustls::ServerConfig::builder()
-        .with_cipher_suites(verifier::CIPHERSUITES)
-        .with_safe_default_kx_groups()
-        .with_protocol_versions(verifier::PROTOCOL_VERSIONS)
-        .expect("Cipher suites and kx groups are configured; qed")
-        .with_client_cert_verifier(Arc::new(verifier::Libp2pCertificateVerifier::new()))
-        .with_single_cert(vec![certificate], private_key)
-        .expect("Server cert key DER is valid; qed");
-
-    crypto.alpn_protocols = alpn;
 
     Ok(crypto)
 }

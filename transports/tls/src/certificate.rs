@@ -24,7 +24,10 @@
 
 use libp2p_identity as identity;
 use libp2p_identity::PeerId;
-use x509_parser::{prelude::*, signature_algorithm::SignatureAlgorithm};
+use x509_parser::{
+    der_parser, prelude::{oid_registry, X509Certificate, FromDer},
+    signature_algorithm::SignatureAlgorithm,
+};
 
 /// The libp2p Public Key Extension is a X.509 extension
 /// with the Object Identier 1.3.6.1.4.1.53594.1.1,
@@ -64,6 +67,36 @@ pub fn generate(
         )?);
         params.alg = P2P_SIGNATURE_ALGORITHM;
         params.key_pair = Some(certificate_keypair);
+        rcgen::Certificate::from_params(params)?
+    };
+
+    let rustls_certificate = rustls::Certificate(certificate.serialize_der()?);
+
+    Ok((rustls_certificate, rustls_key))
+}
+
+/// Generates a self-signed TLS certificate with passed `not_before` and `not_after` dates
+/// that includes a libp2p-specific certificate extension containing
+/// the public key of the given keypair.
+pub fn generate_webtransport_certificate(
+    identity_keypair: &identity::Keypair,
+    not_before: time::OffsetDateTime,
+    not_after: time::OffsetDateTime,
+) -> Result<(rustls::Certificate, rustls::PrivateKey), GenError> {
+    let certificate_keypair = rcgen::KeyPair::generate(P2P_SIGNATURE_ALGORITHM)?;
+    let rustls_key = rustls::PrivateKey(certificate_keypair.serialize_der());
+
+    let certificate = {
+        let mut params = rcgen::CertificateParams::new(vec![]);
+        params.distinguished_name = rcgen::DistinguishedName::new();
+        params.custom_extensions.push(make_libp2p_extension(
+            identity_keypair,
+            &certificate_keypair,
+        )?);
+        params.alg = P2P_SIGNATURE_ALGORITHM;
+        params.key_pair = Some(certificate_keypair);
+        params.not_before = not_before.into();
+        params.not_after = not_after.into();
         rcgen::Certificate::from_params(params)?
     };
 

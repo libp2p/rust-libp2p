@@ -1,3 +1,23 @@
+// Copyright 2020 Parity Technologies (UK) Ltd.
+//
+// Permission is hereby granted, free of charge, to any person obtaining a
+// copy of this software and associated documentation files (the "Software"),
+// to deal in the Software without restriction, including without limitation
+// the rights to use, copy, modify, merge, publish, distribute, sublicense,
+// and/or sell copies of the Software, and to permit persons to whom the
+// Software is furnished to do so, subject to the following conditions:
+//
+// The above copyright notice and this permission notice shall be included in
+// all copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
+// OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+// FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
+// DEALINGS IN THE SOFTWARE.
+
 use h3_quinn::Connection as Http3Connection;
 use h3_webtransport::server::WebTransportSession;
 use bytes::Bytes;
@@ -8,13 +28,14 @@ use std::{
     pin::Pin,
     task::{Context, Poll},
 };
+use std::sync::Arc;
 use h3::quic::BidiStream;
 use crate::webtransport::stream::Stream;
 
 /// State for a single opened WebTransport session.
 pub struct Connection {
     /// Underlying connection.
-    session: WebTransportSession<Http3Connection, Bytes>,
+    session: Arc<WebTransportSession<Http3Connection, Bytes>>,
     /// Future for accepting a new incoming bidirectional stream.
     incoming: Option<
         BoxFuture<'static, (h3_webtransport::stream::SendStream<h3_quinn::SendStream<Bytes>, Bytes>,
@@ -36,7 +57,7 @@ impl Connection {
     /// its methods has ever been called. Failure to comply might lead to logic errors and panics.
     pub(crate) fn new(session: WebTransportSession<Http3Connection, Bytes>) -> Self {
         Self {
-            session,
+            session: Arc::new(session),
             incoming: None,
             outgoing: None,
             closing: None,
@@ -53,11 +74,10 @@ impl StreamMuxer for Connection {
         cx: &mut Context<'_>,
     ) -> Poll<Result<Self::Substream, Self::Error>> {
         let this = self.get_mut();
-
+        let t_session = Arc::clone(&this.session);
         let incoming = this.incoming.get_or_insert_with(|| {
-            let accept = this.session.accept_bi();
             async move {
-                let res = accept.await.unwrap();
+                let res = t_session.accept_bi().await.unwrap();
                 match res {
                     Some(h3_webtransport::server::AcceptedBi::BidiStream(_, stream)) => {
                         stream.split()
@@ -80,14 +100,13 @@ impl StreamMuxer for Connection {
         let this = self.get_mut();
 
         let session_id = this.session.session_id();
-        let open_bi = this.session.open_bi(session_id);
+        let t_session = Arc::clone(&this.session);
 
         let outgoing = this.outgoing.get_or_insert_with(|| {
             async move {
-                // let stream = open_bi.await.unwrap();
-                //
-                // stream.split()
-                unreachable!("fix me!")
+                let stream = t_session.open_bi(session_id).await.unwrap();
+
+                stream.split()
             }.boxed()
         });
 
