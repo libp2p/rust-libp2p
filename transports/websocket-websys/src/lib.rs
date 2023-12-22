@@ -19,6 +19,19 @@
 // SOFTWARE.
 
 //! Libp2p websocket transports built on [web-sys](https://rustwasm.github.io/wasm-bindgen/web-sys/index.html).
+//!
+//! # Node.JS
+//!
+//! This crate will not work out of the box in a Node.JS environment, as there
+//! is no built-in WebSocket implementation, you can fix this by adding the
+//! following line to your project:
+//!
+//! ```js
+//! global.WebSocket = require('isomorphic-ws');
+//! ```
+//!
+//! This will polyfill the `WebSocket` global variable with the `isomorphic-ws`
+//! package.
 
 mod web_context;
 
