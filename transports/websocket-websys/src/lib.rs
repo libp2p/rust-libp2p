@@ -196,7 +196,7 @@ struct Inner {
     _on_close_closure: Rc<Closure<dyn FnMut(CloseEvent)>>,
     _on_error_closure: Rc<Closure<dyn FnMut(CloseEvent)>>,
     _on_message_closure: Rc<Closure<dyn FnMut(MessageEvent)>>,
-    buffered_amount_low_interval: IntervalHandle,
+    buffered_amount_low_interval: Option<IntervalHandle>,
 }
 
 impl Inner {
@@ -332,7 +332,7 @@ impl Connection {
                 _on_close_closure: Rc::new(onclose_closure),
                 _on_error_closure: Rc::new(onerror_closure),
                 _on_message_closure: Rc::new(onmessage_closure),
-                buffered_amount_low_interval,
+                buffered_amount_low_interval: Some(buffered_amount_low_interval),
             }),
         }
     }
@@ -448,8 +448,10 @@ impl Drop for Connection {
                 .close_with_code_and_reason(GO_AWAY_STATUS_CODE, "connection dropped");
         }
 
-        WebContext::new()
-            .expect("to have a window or worker context")
-            .clear_interval(self.inner.buffered_amount_low_interval);
+        if let Some(handle) = self.inner.buffered_amount_low_interval.take() {
+            WebContext::new()
+                .expect("to have a window or worker context")
+                .clear_interval(handle);
+        }
     }
 }
