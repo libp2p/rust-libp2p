@@ -1,5 +1,5 @@
 use std::{
-    collections::HashMap,
+    collections::{hash_map::Entry, HashMap},
     io,
     task::{Context, Poll},
 };
@@ -80,21 +80,33 @@ impl ConnectionHandler for Handler {
         match self.receiver.poll_next_unpin(cx) {
             Poll::Ready(Some(new_stream)) => {
                 self.pending_upgrade = Some((new_stream.protocol.clone(), new_stream.sender));
-                Poll::Ready(swarm::ConnectionHandlerEvent::OutboundSubstreamRequest {
+                return Poll::Ready(swarm::ConnectionHandlerEvent::OutboundSubstreamRequest {
                     protocol: swarm::SubstreamProtocol::new(
                         Upgrade {
                             supported_protocols: vec![new_stream.protocol],
                         },
                         (),
                     ),
-                })
+                });
             }
-            Poll::Ready(None) => {
-                // Sender is gone, no more work to do.
-                Poll::Pending
-            }
-            Poll::Pending => Poll::Pending,
+            Poll::Ready(None) => {} // Sender is gone, no more work to do.
+            Poll::Pending => {}
         }
+
+        let cancelled_protocols = self
+            .supported_protocols
+            .iter_mut()
+            .filter_map(|(protocol, sender)| match sender.poll_ready(cx) {
+                Poll::Ready(Err(e)) if e.is_disconnected() => Some(protocol.clone()),
+                _ => None,
+            })
+            .collect::<Vec<_>>(); // In most cases, this won't allocate because the `Vec` will be empty.
+
+        for p in cancelled_protocols {
+            self.supported_protocols.remove(&p);
+        }
+
+        Poll::Pending
     }
 
     fn on_behaviour_event(&mut self, event: Self::FromBehaviour) {
@@ -115,28 +127,24 @@ impl ConnectionHandler for Handler {
             ConnectionEvent::FullyNegotiatedInbound(FullyNegotiatedInbound {
                 protocol: (stream, protocol),
                 info: (),
-            }) => {
-                match self.supported_protocols.get_mut(&protocol) {
-                    Some(sender) => match sender.try_send((self.remote, stream)) {
+            }) => match self.supported_protocols.entry(protocol.clone()) {
+                Entry::Occupied(mut entry) => {
+                    match entry.get_mut().try_send((self.remote, stream)) {
                         Ok(()) => {}
                         Err(e) if e.is_full() => {
                             tracing::debug!(%protocol, "channel is full, dropping inbound stream");
                         }
                         Err(e) if e.is_disconnected() => {
-                            // TODO: Remove the sender from the hashmap here?
                             tracing::debug!(%protocol, "channel is gone, dropping inbound stream");
+                            entry.remove();
                         }
-                        _ => unreachable!(),
-                    },
-                    None => {
-                        // TODO: Can this be hit if the hashmap gets updated whilst we are negotiating?
-                        debug_assert!(
-                            false,
-                            "Negotiated an inbound stream for {protocol} without having a sender"
-                        );
+                        _ => {}
                     }
                 }
-            }
+                Entry::Vacant(_) => {
+                    tracing::debug!(%protocol, "channel is gone, dropping inbound stream");
+                }
+            },
             ConnectionEvent::FullyNegotiatedOutbound(FullyNegotiatedOutbound {
                 protocol: (stream, actual_protocol),
                 info: (),
