@@ -20,7 +20,7 @@ async fn main() -> Result<()> {
         .init();
 
     let maybe_address = std::env::args()
-        .next()
+        .nth(1)
         .map(|arg| arg.parse::<Multiaddr>())
         .transpose()
         .context("Failed to parse argument as `Multiaddr`")?;
@@ -32,8 +32,10 @@ async fn main() -> Result<()> {
         .with_swarm_config(|c| c.with_idle_connection_timeout(Duration::from_secs(10)))
         .build();
 
+    swarm.listen_on("/ip4/127.0.0.1/udp/0/quic-v1".parse()?)?;
+
     // Register our custom protocol with the behaviour.
-    let (control, mut incoming_streams) = swarm.behaviour_mut().register(PROTOCOL);
+    let (control, mut incoming_streams) = swarm.behaviour_mut().register(PROTOCOL).unwrap();
 
     // Deal with incoming streams.
     // Spawning a dedicated task is just one way of doing this.
@@ -44,12 +46,14 @@ async fn main() -> Result<()> {
         // You can also spawn a dedicated task per stream if you want to.
         // Be aware that this breaks backpressure though as spawning new tasks is equivalent to an unbounded buffer.
         // Each task needs memory meaning an aggressive remote peer may force you OOM this way.
-        loop {
-            let (peer, stream) = incoming_streams.next().await;
 
+        while let Some((peer, stream)) = incoming_streams.next().await {
             if let Err(e) = inbound_ping(stream).await {
                 tracing::warn!(%peer, "Ping protocol failed: {e}");
+                continue;
             }
+
+            tracing::info!(%peer, "Handled inbound ping!");
         }
     });
 
@@ -68,7 +72,13 @@ async fn main() -> Result<()> {
     loop {
         let event = swarm.next().await.expect("never terminates");
 
-        tracing::trace!(?event);
+        match event {
+            libp2p::swarm::SwarmEvent::NewListenAddr { address, .. } => {
+                let listen_address = address.with_p2p(*swarm.local_peer_id()).unwrap();
+                tracing::info!(%listen_address);
+            }
+            event => tracing::trace!(?event),
+        }
     }
 }
 
@@ -95,7 +105,10 @@ async fn connection_handler(peer: PeerId, mut control: stream::Control) {
 
         if let Err(e) = outbound_ping(stream).await {
             tracing::warn!(%peer, "Ping protocol failed: {e}");
+            continue;
         }
+
+        tracing::info!(%peer, "Successful ping!")
     }
 }
 
