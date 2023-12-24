@@ -56,10 +56,24 @@ impl Default for Behaviour {
 }
 
 impl Behaviour {
-    pub fn register(
+    /// Obtain a new [`Control`] for the provided protocol.
+    ///
+    /// A [`Control`] only deals with the _outbound_ side of a protocol.
+    /// To accept inbound streams for a protocol, use [`Behaviour::accept`].
+    pub fn new_control(&self, protocol: StreamProtocol) -> Control {
+        Control {
+            protocol,
+            sender: self.sender.clone(),
+        }
+    }
+
+    /// Accept inbound streams for the provided protocol.
+    ///
+    /// To stop accepting streams, simply drop the returned [`IncomingStreams`] handle.
+    pub fn accept(
         &mut self,
         protocol: StreamProtocol,
-    ) -> Result<(Control, IncomingStreams), AlreadyRegistered> {
+    ) -> Result<IncomingStreams, AlreadyRegistered> {
         if self.supported_protocols.contains_key(&protocol) {
             return Err(AlreadyRegistered);
         }
@@ -88,13 +102,7 @@ impl Behaviour {
             self.active_connections.len()
         );
 
-        Ok((
-            Control {
-                sender: self.sender.clone(),
-                protocol: protocol,
-            },
-            IncomingStreams { receiver },
-        ))
+        Ok(IncomingStreams { receiver })
     }
 }
 

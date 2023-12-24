@@ -78,16 +78,19 @@ pub enum Error {
     Io(std::io::Error),
 }
 
+/// A handle to inbound streams for a particular protocol.
+#[must_use = "Streams do nothing unless polled."]
 pub struct IncomingStreams {
     receiver: mpsc::Receiver<(PeerId, Stream)>,
 }
 
-impl IncomingStreams {
-    pub async fn next(&mut self) -> Option<(PeerId, Stream)> {
-        self.receiver.next().await
-    }
+impl futures::Stream for IncomingStreams {
+    type Item = (PeerId, Stream);
 
-    pub fn poll_next(&mut self, cx: &mut Context<'_>) -> Poll<Option<(PeerId, Stream)>> {
+    fn poll_next(
+        mut self: std::pin::Pin<&mut Self>,
+        cx: &mut Context<'_>,
+    ) -> Poll<Option<Self::Item>> {
         self.receiver.poll_next_unpin(cx)
     }
 }

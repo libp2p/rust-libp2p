@@ -34,8 +34,7 @@ async fn main() -> Result<()> {
 
     swarm.listen_on("/ip4/127.0.0.1/udp/0/quic-v1".parse()?)?;
 
-    // Register our custom protocol with the behaviour.
-    let (control, mut incoming_streams) = swarm.behaviour_mut().register(PROTOCOL).unwrap();
+    let mut incoming_streams = swarm.behaviour_mut().accept(PROTOCOL).unwrap();
 
     // Deal with incoming streams.
     // Spawning a dedicated task is just one way of doing this.
@@ -65,7 +64,10 @@ async fn main() -> Result<()> {
 
         swarm.dial(address)?;
 
-        tokio::spawn(connection_handler(peer_id, control));
+        tokio::spawn(connection_handler(
+            peer_id,
+            swarm.behaviour().new_control(PROTOCOL),
+        ));
     }
 
     // Poll the swarm to make progress.
