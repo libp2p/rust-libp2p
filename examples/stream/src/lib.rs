@@ -1,3 +1,5 @@
+use std::io;
+
 use libp2p::{
     swarm::{dummy, NetworkBehaviour},
     PeerId, Stream, StreamProtocol,
@@ -16,9 +18,17 @@ impl Behaviour {
 pub struct Control {}
 
 impl Control {
+    pub async fn peer(&mut self, _peer: PeerId) -> io::Result<PeerControl> {
+        todo!()
+    }
+}
+
+pub struct PeerControl {}
+
+impl PeerControl {
     // TOOD: Things that we could make configurable:
-    // Timeout for opening a new stream
-    pub async fn open_stream(&mut self, _peer: PeerId) -> Result<Stream, Error> {
+    // - Timeout for opening a new stream
+    pub async fn open_stream(&mut self) -> Result<Stream, Error> {
         todo!()
     }
 }

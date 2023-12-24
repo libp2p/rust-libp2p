@@ -73,13 +73,13 @@ async fn main() -> Result<()> {
 }
 
 /// A very simple, `async fn`-based connection handler for our custom ping protocol.
-///
-/// Given a [`PeerId`], it will
 async fn connection_handler(peer: PeerId, mut control: stream::Control) {
+    let mut peer_control = control.peer(peer).await.unwrap();
+
     loop {
         tokio::time::sleep(Duration::from_secs(1)).await; // Wait a second between pings.
 
-        let stream = match control.open_stream(peer).await {
+        let stream = match peer_control.open_stream().await {
             Ok(stream) => stream,
             Err(stream::Error::UnsupportedProtocol) => {
                 tracing::info!(%peer, %PROTOCOL, "Peer does not support protocol");
