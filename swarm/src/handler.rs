@@ -46,6 +46,7 @@ mod one_shot;
 mod pending;
 mod select;
 
+use crate::connection::AsStrHashEq;
 pub use crate::upgrade::{InboundUpgradeSend, OutboundUpgradeSend, SendWrapper, UpgradeInfoSend};
 pub use map_in::MapInEvent;
 pub use map_out::MapOutEvent;
@@ -332,26 +333,22 @@ pub enum ProtocolsChange<'a> {
 impl<'a> ProtocolsChange<'a> {
     /// Compute the [`ProtocolsChange`]s required to go from `existing_protocols` to `new_protocols`.
     pub(crate) fn from_full_sets<T: AsRef<str>>(
-        existing_protocols: &[T],
-        new_protocols: &[T],
+        existing_protocols: &HashSet<AsStrHashEq<T>>,
+        new_protocols: &HashSet<AsStrHashEq<T>>,
         temp_owner: &'a mut Vec<StreamProtocol>,
     ) -> impl Iterator<Item = Self> {
-        fn push_difference<'a, T: AsRef<str>>(
-            a: &'a [T],
-            b: &'a [T],
-            buffer: &mut Vec<StreamProtocol>,
-        ) {
-            let iter = a
-                .iter()
-                .filter(|a| b.iter().all(|b| b.as_ref() != a.as_ref()))
-                .filter_map(|p| StreamProtocol::try_from_owned(p.as_ref().to_string()).ok());
-            buffer.extend(iter);
-        }
-
         temp_owner.clear();
-        push_difference(new_protocols, existing_protocols, temp_owner);
+        temp_owner.extend(
+            new_protocols
+                .difference(existing_protocols)
+                .find_map(|p| StreamProtocol::try_from_owned(p.0.as_ref().to_owned()).ok()),
+        );
         let added_count = temp_owner.len();
-        push_difference(existing_protocols, new_protocols, temp_owner);
+        temp_owner.extend(
+            existing_protocols
+                .difference(new_protocols)
+                .find_map(|p| StreamProtocol::try_from_owned(p.0.as_ref().to_owned()).ok()),
+        );
 
         let (added, removed) = temp_owner.split_at(added_count);
         added

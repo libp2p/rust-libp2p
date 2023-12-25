@@ -153,8 +153,10 @@ where
         SubstreamRequested<THandler::OutboundOpenInfo, THandler::OutboundProtocol>,
     >,
 
-    local_supported_protocols: Vec<<THandler::InboundProtocol as UpgradeInfoSend>::Info>,
+    local_supported_protocols:
+        HashSet<AsStrHashEq<<THandler::InboundProtocol as UpgradeInfoSend>::Info>>,
     remote_supported_protocols: HashSet<StreamProtocol>,
+    temp_protocols_set: HashSet<AsStrHashEq<<THandler::InboundProtocol as UpgradeInfoSend>::Info>>,
     temp_protocols: Vec<StreamProtocol>,
 
     idle_timeout: Duration,
@@ -192,12 +194,13 @@ where
             .listen_protocol()
             .upgrade()
             .protocol_info()
-            .collect::<Vec<_>>();
+            .map(AsStrHashEq)
+            .collect::<HashSet<_>>();
 
         if !local_supported_protocols.is_empty() {
             let temp = local_supported_protocols
                 .iter()
-                .filter_map(|i| StreamProtocol::try_from_owned(i.as_ref().to_owned()).ok())
+                .filter_map(|i| StreamProtocol::try_from_owned(i.0.as_ref().to_owned()).ok())
                 .collect::<Vec<_>>();
             handler.on_connection_event(ConnectionEvent::LocalProtocolsChange(
                 ProtocolsChange::Added(ProtocolsAdded {
@@ -216,6 +219,7 @@ where
             requested_substreams: Default::default(),
             local_supported_protocols,
             remote_supported_protocols: Default::default(),
+            temp_protocols_set: Default::default(),
             temp_protocols: Default::default(),
             idle_timeout,
             stream_counter: ActiveStreamCounter::default(),
@@ -264,6 +268,7 @@ where
             substream_upgrade_protocol_override,
             local_supported_protocols: supported_protocols,
             remote_supported_protocols,
+            temp_protocols_set,
             temp_protocols,
             idle_timeout,
             stream_counter,
@@ -457,17 +462,26 @@ where
                 }
             }
 
-            let current_proocols = supported_protocols.len();
-            supported_protocols.extend(handler.listen_protocol().upgrade().protocol_info());
-            let (old, new) = supported_protocols.split_at(current_proocols);
-            let changes = ProtocolsChange::from_full_sets(old, new, temp_protocols);
-            supported_protocols.drain(..current_proocols);
+            temp_protocols_set.clear();
+            temp_protocols_set.extend(
+                handler
+                    .listen_protocol()
+                    .upgrade()
+                    .protocol_info()
+                    .map(AsStrHashEq),
+            );
+            let changes = ProtocolsChange::from_full_sets(
+                supported_protocols,
+                temp_protocols_set,
+                temp_protocols,
+            );
             let mut has_changes = false;
             for change in changes {
                 handler.on_connection_event(ConnectionEvent::LocalProtocolsChange(change));
                 has_changes = true;
             }
             if has_changes {
+                std::mem::swap(supported_protocols, temp_protocols_set);
                 continue;
             }
 
@@ -1367,5 +1381,21 @@ impl From<ConnectedPoint> for PendingPoint {
                 send_back_addr,
             },
         }
+    }
+}
+
+pub(crate) struct AsStrHashEq<T>(pub(crate) T);
+
+impl<T: AsRef<str>> Eq for AsStrHashEq<T> {}
+
+impl<T: AsRef<str>> PartialEq for AsStrHashEq<T> {
+    fn eq(&self, other: &Self) -> bool {
+        self.0.as_ref() == other.0.as_ref()
+    }
+}
+
+impl<T: AsRef<str>> std::hash::Hash for AsStrHashEq<T> {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.0.as_ref().hash(state)
     }
 }
