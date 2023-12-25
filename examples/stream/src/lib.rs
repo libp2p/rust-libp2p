@@ -43,14 +43,13 @@ impl Control {
     }
 }
 
+/// TODO: Keep connection alive whilst `PeerControl` is active.
 pub struct PeerControl {
     protocol: StreamProtocol,
     sender: SendSink<'static, NewStream>,
 }
 
 impl PeerControl {
-    // TOOD: Things that we could make configurable:
-    // - Timeout for opening a new stream
     pub async fn open_stream(&mut self) -> Result<Stream, Error> {
         let (sender, receiver) = oneshot::channel();
 
