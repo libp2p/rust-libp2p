@@ -139,6 +139,20 @@ impl<P: Provider> GenTransport<P> {
         Ok((socket_addr, version, peer_id, is_webtransport_addr))
     }
 
+    /// Gets an endpoint with the same `socket_addr`.
+    /// To check that an endpoint uses the same cert we can compare cert hashes.
+    fn get_existed_endpoint(&mut self, socket_addr: &SocketAddr, cert_hashes: &Vec<Multihash<64>>) -> Option<quinn::Endpoint> {
+        if let Some(listener) = self.listeners
+            .iter_mut()
+            .find(|l| {
+                !l.is_closed && &l.socket_addr() == socket_addr && l.same_cert_hashes(cert_hashes)
+            }) {
+            return Some(listener.endpoint.clone())
+        }
+
+        None
+    }
+
     /// Pick any listener to use for dialing.
     fn eligible_listener(&mut self, socket_addr: &SocketAddr) -> Option<&mut Listener<P>> {
         let mut listeners: Vec<_> = self
@@ -203,18 +217,23 @@ impl<P: Provider> Transport for GenTransport<P> {
     ) -> Result<(), TransportError<Self::Error>> {
         let (socket_addr, version, _peer_id, is_webtransport_addr) = self.remote_multiaddr_to_socketaddr(addr, false)?;
 
+        let socket = self.create_socket(socket_addr).map_err(Self::Error::from)?;
+        let socket_c = socket.try_clone().map_err(Self::Error::from)?;
+
         let (server_config, noise, cert_hashes) = self.config.server_quinn_config()
             .map_err(|e| Error::CertificateGenerationError(e))?;
 
-        let socket = self.create_socket(socket_addr).map_err(Self::Error::from)?;
+        let endpoint = match self.get_existed_endpoint(&socket_addr, &cert_hashes) {
+            Some(res) => res,
+            None => Self::new_endpoint(self.config.endpoint_config(), Some(server_config), socket)?,
+        };
 
-        let socket_c = socket.try_clone().map_err(Self::Error::from)?;
-        let endpoint = Self::new_endpoint(self.config.endpoint_config(), Some(server_config), socket)?;
         let webtransport = WebTransport {
             in_use: is_webtransport_addr,
             cert_hashes,
             noise,
         };
+
         let listener = Listener::new(
             listener_id,
             socket_c,
@@ -531,6 +550,19 @@ impl<P: Provider> Listener<P> {
             .expect("Cannot fail because the socket is bound")
     }
 
+    fn same_cert_hashes(&self, cert_hashes: &Vec<Multihash<64>>) -> bool {
+        if self.webtransport.cert_hashes.len() != cert_hashes.len() {
+            return false
+        }
+        let mut set: HashSet<Multihash<64>> = self.webtransport.cert_hashes
+            .clone().into_iter().collect();
+        for hash in cert_hashes {
+            set.remove(hash);
+        }
+
+        set.is_empty()
+    }
+
     /// Poll for a next If Event.
     fn poll_if_addr(&mut self, cx: &mut Context<'_>) -> Poll<<Self as Stream>::Item> {
         let endpoint_addr = self.socket_addr();
@@ -609,17 +641,15 @@ impl<P: Provider> Stream for Listener<P> {
                     local_addr = self.webtransport.update_multiaddr(local_addr);
 
                     let remote_addr = connecting.remote_address();
-
-                    //todo It's unclear should I add anything to a send_back_addr?
-
                     let send_back_addr = socketaddr_to_multiaddr(
                         &remote_addr,
                         self.version,
                     );
 
                     let timeout = self.handshake_timeout.clone();
-                    let noise = self.webtransport.noise.clone();
                     let fut = if self.webtransport.in_use {
+                        let noise = self.webtransport.noise.clone();
+
                         async move {
                             webtransport::Connecting::new(
                                 noise,
