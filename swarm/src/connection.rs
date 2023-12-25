@@ -924,8 +924,20 @@ mod tests {
     #[ignore]
     fn repoll_with_active_protocols() {
         fn run_benchmark(protcol_count: usize, iters: usize) {
-            const PROTOCOLS: &str =
-                "/a /b /c /d /e /f /g /h /i /j /k /l /m /n /o /p /q /r /s /t /u /v /w /x /y /z";
+            // we need longer protocol names
+            macro_rules! protocols {
+                ($($name:ident)*) => {
+                    concat!(
+                        $(
+                            "/",
+                            stringify!($name),
+                            "ffffffffffffffffffffff ",
+                        )*
+                    )
+                }
+            }
+
+            const PROTOCOLS: &str = protocols!(a b c d e f g h i j k l m n o p q r s t u v);
             let protocols = PROTOCOLS.split(' ').collect::<Vec<_>>();
 
             let mut connection = Connection::new(

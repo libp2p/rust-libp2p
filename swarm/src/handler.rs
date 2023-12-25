@@ -338,22 +338,31 @@ impl<'a> ProtocolsChange<'a> {
         temp_owner: &'a mut Vec<StreamProtocol>,
     ) -> impl Iterator<Item = Self> {
         temp_owner.clear();
-        existing_protocols.values_mut().for_each(|v| *v = false);
+        // to avoid looping trough the map to just set the booleans we use the fact that all of
+        // the booleans in the map have same value
+        let valid_value = !existing_protocols.values().next().copied().unwrap_or(false);
+        let mut count = Some(existing_protocols.len());
         for new_protocol in new_protocols {
             *existing_protocols
                 .entry(AsStrHashEq(new_protocol))
                 .or_insert_with_key(|k| {
                     temp_owner.extend(StreamProtocol::try_from_owned(k.0.as_ref().to_owned()).ok());
+                    count = None;
                     false
-                }) = true;
+                }) = valid_value;
+            count = count.map(|c| c - 1);
+        }
+
+        if count == Some(0) {
+            return None.into_iter().chain(None);
         }
 
         let added_count = temp_owner.len();
         existing_protocols.retain(|k, v| {
-            if !*v {
+            if *v != valid_value {
                 temp_owner.push(StreamProtocol::try_from_owned(k.0.as_ref().to_owned()).unwrap());
             }
-            *v
+            *v == valid_value
         });
 
         let (added, removed) = temp_owner.split_at(added_count);
