@@ -30,21 +30,19 @@ use std::{
 };
 use std::sync::Arc;
 use h3::quic::BidiStream;
+use libp2p_core::upgrade::InboundConnectionUpgrade;
+use libp2p_noise::Output;
 use crate::webtransport::stream::Stream;
 
 /// State for a single opened WebTransport session.
-pub struct Connection {
+pub(crate) struct Connection {
     /// Underlying connection.
     session: Arc<WebTransportSession<Http3Connection, Bytes>>,
+    //Noise config to auth incoming connections.
+    noise: libp2p_noise::Config,
     /// Future for accepting a new incoming bidirectional stream.
     incoming: Option<
-        BoxFuture<'static, (h3_webtransport::stream::SendStream<h3_quinn::SendStream<Bytes>, Bytes>,
-                            h3_webtransport::stream::RecvStream<h3_quinn::RecvStream, Bytes>)>,
-    >,
-    /// Future for opening a new outgoing bidirectional stream.
-    outgoing: Option<
-        BoxFuture<'static, (h3_webtransport::stream::SendStream<h3_quinn::SendStream<Bytes>, Bytes>,
-                            h3_webtransport::stream::RecvStream<h3_quinn::RecvStream, Bytes>)>,
+        BoxFuture<'static, Output<Stream>>,
     >,
     /// Future to wait for the connection to be closed.
     closing: Option<BoxFuture<'static, h3::Error>>,
@@ -55,18 +53,21 @@ impl Connection {
     ///
     /// This function assumes that the [`quinn::Connection`] is completely fresh and none of
     /// its methods has ever been called. Failure to comply might lead to logic errors and panics.
-    pub(crate) fn new(session: WebTransportSession<Http3Connection, Bytes>) -> Self {
+    pub(crate) fn new(
+        session: WebTransportSession<Http3Connection, Bytes>,
+        noise: libp2p_noise::Config,
+    ) -> Self {
         Self {
             session: Arc::new(session),
+            noise,
             incoming: None,
-            outgoing: None,
             closing: None,
         }
     }
 }
 
 impl StreamMuxer for Connection {
-    type Substream = Stream;
+    type Substream = Output<Stream>;
     type Error = Error;
 
     fn poll_inbound(
@@ -75,45 +76,35 @@ impl StreamMuxer for Connection {
     ) -> Poll<Result<Self::Substream, Self::Error>> {
         let this = self.get_mut();
         let t_session = Arc::clone(&this.session);
+        let t_noise = this.noise.clone();
         let incoming = this.incoming.get_or_insert_with(|| {
             async move {
                 let res = t_session.accept_bi().await.unwrap();
                 match res {
                     Some(h3_webtransport::server::AcceptedBi::BidiStream(_, stream)) => {
-                        stream.split()
+                        let (send, recv) = stream.split();
+                        let stream = Stream::new(send, recv);
+
+                        // todo should we apply `handshake_timeout` here?
+                        let (_peer_id, out) = t_noise.upgrade_inbound(stream, "").await.unwrap();
+
+                        out
                     }
                     _ => unreachable!("fix me!")
                 }
             }.boxed()
         });
 
-        let (send, recv) = futures::ready!(incoming.poll_unpin(cx));
+        let res = futures::ready!(incoming.poll_unpin(cx));
         this.incoming.take();
-        let stream = Stream::new(send, recv);
-        Poll::Ready(Ok(stream))
+        Poll::Ready(Ok(res))
     }
 
     fn poll_outbound(
         self: Pin<&mut Self>,
-        cx: &mut Context<'_>,
+        _cx: &mut Context<'_>,
     ) -> Poll<Result<Self::Substream, Self::Error>> {
-        let this = self.get_mut();
-
-        let session_id = this.session.session_id();
-        let t_session = Arc::clone(&this.session);
-
-        let outgoing = this.outgoing.get_or_insert_with(|| {
-            async move {
-                let stream = t_session.open_bi(session_id).await.unwrap();
-
-                stream.split()
-            }.boxed()
-        });
-
-        let (send, recv) = futures::ready!(outgoing.poll_unpin(cx));
-        this.outgoing.take();
-        let stream = Stream::new(send, recv);
-        Poll::Ready(Ok(stream))
+        panic!("WebTransport implementation doesn't support outbound streams.")
     }
 
     fn poll(
@@ -125,7 +116,7 @@ impl StreamMuxer for Connection {
         Poll::Pending
     }
 
-    fn poll_close(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
+    fn poll_close(self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
         /*let this = self.get_mut();
 
         let closing = this.closing.get_or_insert_with(|| {

@@ -27,7 +27,7 @@ use bytes::Bytes;
 use futures::{AsyncRead, AsyncWrite};
 
 /// A single stream on a connection
-pub struct Stream {
+pub(crate) struct Stream {
     /// A send part of the stream
     send: h3_webtransport::stream::SendStream<h3_quinn::SendStream<Bytes>, Bytes>,
     /// A receive part of the stream

@@ -39,7 +39,6 @@ use h3_webtransport::server::WebTransportSession;
 use http::{Method, Request};
 
 use libp2p_core::muxing::StreamMuxerBox;
-use libp2p_core::upgrade::InboundConnectionUpgrade;
 use libp2p_identity::PeerId;
 
 use crate::{Error, webtransport};
@@ -49,7 +48,7 @@ const WEBTRANSPORT_PATH: &str = "/.well-known/libp2p-webtransport";
 const NOISE_QUERY: &str = "type=noise";
 
 // #[derive(Debug)]
-pub struct Connecting {
+pub(crate) struct Connecting {
     connecting: Select<
         BoxFuture<'static, Result<(PeerId, StreamMuxerBox), WebTransportError>>,
         Delay
@@ -96,10 +95,9 @@ fn remote_peer_id(connection: &quinn::Connection) -> PeerId {
     p2p_cert.peer_id()
 }
 
-async fn web_transport_connection(connecting: quinn::Connecting, _noise: libp2p_noise::Config)
+async fn web_transport_connection(connecting: quinn::Connecting, noise: libp2p_noise::Config)
                                   -> Result<(PeerId, StreamMuxerBox), WebTransportError> {
-    let quic_conn = connecting.await
-        .map_err(|e| WebTransportError::ConnectionError(e))?;
+    let quic_conn = connecting.await?;
 
     // info!("new http3 established");
 
@@ -123,9 +121,7 @@ async fn web_transport_connection(connecting: quinn::Connecting, _noise: libp2p_
                 if check_request(&request) {
                     let session = WebTransportSession::accept(request, stream, h3_conn)
                         .await?;
-                    let connection = webtransport::Connection::new(session);
-
-                    // let (_, out) = noise.upgrade_inbound(muxer, "").await?;
+                    let connection = webtransport::Connection::new(session, noise);
 
                     Ok((peer_id, StreamMuxerBox::new(connection)))
                 } else {
@@ -149,7 +145,7 @@ fn check_request(req: &Request<()>) -> bool {
 }
 
 // #[derive(Debug)]
-pub enum WebTransportError {
+pub(crate) enum WebTransportError {
     UnexpectedProtocol(Option<Protocol>),
     BadRequest(Method),
     ConnectionError(quinn::ConnectionError),

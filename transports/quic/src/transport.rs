@@ -297,14 +297,13 @@ impl<P: Provider> Transport for GenTransport<P> {
             client_config.version(0xff00_001d);
         }
 
-        // This `"l"` seems necessary because an empty string is an invalid domain
-        // name. While we don't use domain names, the underlying rustls library
-        // is based upon the assumption that we do.
-        let connecting = endpoint
-            .connect_with(client_config, socket_addr, "l")
-            .map_err(ConnectError).unwrap(); // todo should be `?`
-
         Ok(Box::pin(async move {
+            // This `"l"` seems necessary because an empty string is an invalid domain
+            // name. While we don't use domain names, the underlying rustls library
+            // is based upon the assumption that we do.
+            let connecting = endpoint
+                .connect_with(client_config, socket_addr, "l")
+                .map_err(ConnectError)?;
             Connecting::new(connecting, handshake_timeout).await
         }))
     }

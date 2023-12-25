@@ -29,7 +29,6 @@ use libp2p_tls::{
     certificate, P2P_ALPN, verifier,
 };
 
-const SHA256: &str = "sha-256";
 const MULTIHASH_SHA256_CODE: u64 = 0x12;
 const CERT_VALID_PERIOD: Duration = Duration::days(14);
 
