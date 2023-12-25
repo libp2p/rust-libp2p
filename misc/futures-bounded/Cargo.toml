@@ -13,7 +13,7 @@ publish = true
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-futures-util = { version = "0.3.29" }
+futures-util = { version = "0.3.30" }
 futures-timer = "3.0.2"
 
 [dev-dependencies]
