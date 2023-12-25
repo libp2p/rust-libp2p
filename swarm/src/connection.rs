@@ -955,13 +955,14 @@ mod tests {
                 let _ = connection.poll_noop_waker();
             }
             let elapsed = now.elapsed();
-            println!("{elapsed:?}");
+            println!("{protcol_count} {elapsed:?}");
         }
 
-        run_benchmark(2, 100_000);
-        run_benchmark(4, 100_000);
-        run_benchmark(10, 100_000);
-        run_benchmark(20, 100_000);
+        let iters = 3_000_000;
+        run_benchmark(2, iters);
+        run_benchmark(4, iters);
+        run_benchmark(10, iters);
+        run_benchmark(20, iters);
     }
 
     #[test]
