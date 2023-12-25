@@ -57,7 +57,7 @@ pub use select::ConnectionHandlerSelect;
 use crate::StreamProtocol;
 use core::slice;
 use libp2p_core::Multiaddr;
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::ops::Not;
 use std::{error, fmt, io, task::Context, task::Poll, time::Duration};
 
@@ -333,22 +333,28 @@ pub enum ProtocolsChange<'a> {
 impl<'a> ProtocolsChange<'a> {
     /// Compute the [`ProtocolsChange`]s required to go from `existing_protocols` to `new_protocols`.
     pub(crate) fn from_full_sets<T: AsRef<str>>(
-        existing_protocols: &HashSet<AsStrHashEq<T>>,
-        new_protocols: &HashSet<AsStrHashEq<T>>,
+        existing_protocols: &mut HashMap<AsStrHashEq<T>, bool>,
+        new_protocols: impl IntoIterator<Item = T>,
         temp_owner: &'a mut Vec<StreamProtocol>,
     ) -> impl Iterator<Item = Self> {
         temp_owner.clear();
-        temp_owner.extend(
-            new_protocols
-                .difference(existing_protocols)
-                .find_map(|p| StreamProtocol::try_from_owned(p.0.as_ref().to_owned()).ok()),
-        );
+        existing_protocols.values_mut().for_each(|v| *v = false);
+        for new_protocol in new_protocols {
+            *existing_protocols
+                .entry(AsStrHashEq(new_protocol))
+                .or_insert_with_key(|k| {
+                    temp_owner.extend(StreamProtocol::try_from_owned(k.0.as_ref().to_owned()).ok());
+                    false
+                }) = true;
+        }
+
         let added_count = temp_owner.len();
-        temp_owner.extend(
-            existing_protocols
-                .difference(new_protocols)
-                .find_map(|p| StreamProtocol::try_from_owned(p.0.as_ref().to_owned()).ok()),
-        );
+        existing_protocols.retain(|k, v| {
+            if !*v {
+                temp_owner.push(StreamProtocol::try_from_owned(k.0.as_ref().to_owned()).unwrap());
+            }
+            *v
+        });
 
         let (added, removed) = temp_owner.split_at(added_count);
         added

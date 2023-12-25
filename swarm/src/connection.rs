@@ -52,7 +52,7 @@ use libp2p_core::upgrade;
 use libp2p_core::upgrade::{NegotiationError, ProtocolError};
 use libp2p_core::Endpoint;
 use libp2p_identity::PeerId;
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::fmt::{Display, Formatter};
 use std::future::Future;
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -154,9 +154,8 @@ where
     >,
 
     local_supported_protocols:
-        HashSet<AsStrHashEq<<THandler::InboundProtocol as UpgradeInfoSend>::Info>>,
+        HashMap<AsStrHashEq<<THandler::InboundProtocol as UpgradeInfoSend>::Info>, bool>,
     remote_supported_protocols: HashSet<StreamProtocol>,
-    temp_protocols_set: HashSet<AsStrHashEq<<THandler::InboundProtocol as UpgradeInfoSend>::Info>>,
     temp_protocols: Vec<StreamProtocol>,
 
     idle_timeout: Duration,
@@ -194,12 +193,12 @@ where
             .listen_protocol()
             .upgrade()
             .protocol_info()
-            .map(AsStrHashEq)
-            .collect::<HashSet<_>>();
+            .map(|i| (AsStrHashEq(i), true))
+            .collect::<HashMap<_, _>>();
 
         if !local_supported_protocols.is_empty() {
             let temp = local_supported_protocols
-                .iter()
+                .keys()
                 .filter_map(|i| StreamProtocol::try_from_owned(i.0.as_ref().to_owned()).ok())
                 .collect::<Vec<_>>();
             handler.on_connection_event(ConnectionEvent::LocalProtocolsChange(
@@ -219,7 +218,6 @@ where
             requested_substreams: Default::default(),
             local_supported_protocols,
             remote_supported_protocols: Default::default(),
-            temp_protocols_set: Default::default(),
             temp_protocols: Default::default(),
             idle_timeout,
             stream_counter: ActiveStreamCounter::default(),
@@ -268,7 +266,6 @@ where
             substream_upgrade_protocol_override,
             local_supported_protocols: supported_protocols,
             remote_supported_protocols,
-            temp_protocols_set,
             temp_protocols,
             idle_timeout,
             stream_counter,
@@ -462,17 +459,9 @@ where
                 }
             }
 
-            temp_protocols_set.clear();
-            temp_protocols_set.extend(
-                handler
-                    .listen_protocol()
-                    .upgrade()
-                    .protocol_info()
-                    .map(AsStrHashEq),
-            );
             let changes = ProtocolsChange::from_full_sets(
                 supported_protocols,
-                temp_protocols_set,
+                handler.listen_protocol().upgrade().protocol_info(),
                 temp_protocols,
             );
             let mut has_changes = false;
@@ -481,7 +470,6 @@ where
                 has_changes = true;
             }
             if has_changes {
-                std::mem::swap(supported_protocols, temp_protocols_set);
                 continue;
             }
 
