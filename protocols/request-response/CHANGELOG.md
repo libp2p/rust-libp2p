@@ -1,4 +1,4 @@
-## 0.27.0 - unreleased
+## 0.26.2 - unreleased
 
 - Deprecate `libp2p_request_response::add_address`. `Behaviour` `addresses` field uses `libp2p_swarm::PeerAddresses`.
   See [PR 4371](https://github.com/libp2p/rust-libp2p/pull/4371)

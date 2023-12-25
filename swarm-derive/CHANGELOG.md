@@ -1,4 +1,4 @@
-## 0.35.0 - unreleased
+## 0.34.3 - unreleased
 
 - Generate code for `libp2p-swarm`'s `from_swarm::NewExternalAddrOfPeer` enum variant.
   See [PR 4371](https://github.com/libp2p/rust-libp2p/pull/4371)
