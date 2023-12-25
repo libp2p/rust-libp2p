@@ -769,6 +769,58 @@ enum Shutdown {
     Later(Delay, Instant),
 }
 
+/// The endpoint roles associated with a pending peer-to-peer connection.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+enum PendingPoint {
+    /// The socket comes from a dialer.
+    ///
+    /// There is no single address associated with the Dialer of a pending
+    /// connection. Addresses are dialed in parallel. Only once the first dial
+    /// is successful is the address of the connection known.
+    Dialer {
+        /// Same as [`ConnectedPoint::Dialer`] `role_override`.
+        role_override: Endpoint,
+    },
+    /// The socket comes from a listener.
+    Listener {
+        /// Local connection address.
+        local_addr: Multiaddr,
+        /// Address used to send back data to the remote.
+        send_back_addr: Multiaddr,
+    },
+}
+
+impl From<ConnectedPoint> for PendingPoint {
+    fn from(endpoint: ConnectedPoint) -> Self {
+        match endpoint {
+            ConnectedPoint::Dialer { role_override, .. } => PendingPoint::Dialer { role_override },
+            ConnectedPoint::Listener {
+                local_addr,
+                send_back_addr,
+            } => PendingPoint::Listener {
+                local_addr,
+                send_back_addr,
+            },
+        }
+    }
+}
+
+pub(crate) struct AsStrHashEq<T>(pub(crate) T);
+
+impl<T: AsRef<str>> Eq for AsStrHashEq<T> {}
+
+impl<T: AsRef<str>> PartialEq for AsStrHashEq<T> {
+    fn eq(&self, other: &Self) -> bool {
+        self.0.as_ref() == other.0.as_ref()
+    }
+}
+
+impl<T: AsRef<str>> std::hash::Hash for AsStrHashEq<T> {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.0.as_ref().hash(state)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -878,6 +930,38 @@ mod tests {
             vec![vec!["/foo"], vec!["/bar"]]
         );
         assert_eq!(connection.handler.local_removed, vec![vec!["/foo"]]);
+    }
+
+    #[test]
+    #[ignore]
+    fn repoll_with_active_protocols() {
+        fn run_benchmark(protcol_count: usize, iters: usize) {
+            const PROTOCOLS: &str =
+                "/a /b /c /d /e /f /g /h /i /j /k /l /m /n /o /p /q /r /s /t /u /v /w /x /y /z";
+            let protocols = PROTOCOLS.split(' ').collect::<Vec<_>>();
+
+            let mut connection = Connection::new(
+                StreamMuxerBox::new(PendingStreamMuxer),
+                ConfigurableProtocolConnectionHandler::default(),
+                None,
+                0,
+                Duration::ZERO,
+            );
+
+            connection.handler.listen_on(&protocols[..protcol_count]);
+
+            let now = Instant::now();
+            for _ in 0..iters {
+                let _ = connection.poll_noop_waker();
+            }
+            let elapsed = now.elapsed();
+            println!("{elapsed:?}");
+        }
+
+        run_benchmark(2, 100_000);
+        run_benchmark(4, 100_000);
+        run_benchmark(10, 100_000);
+        run_benchmark(20, 100_000);
     }
 
     #[test]
@@ -1345,57 +1429,5 @@ mod tests {
         fn upgrade_outbound(self, stream: C, _: Self::Info) -> Self::Future {
             future::ready(Ok(stream))
         }
-    }
-}
-
-/// The endpoint roles associated with a pending peer-to-peer connection.
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-enum PendingPoint {
-    /// The socket comes from a dialer.
-    ///
-    /// There is no single address associated with the Dialer of a pending
-    /// connection. Addresses are dialed in parallel. Only once the first dial
-    /// is successful is the address of the connection known.
-    Dialer {
-        /// Same as [`ConnectedPoint::Dialer`] `role_override`.
-        role_override: Endpoint,
-    },
-    /// The socket comes from a listener.
-    Listener {
-        /// Local connection address.
-        local_addr: Multiaddr,
-        /// Address used to send back data to the remote.
-        send_back_addr: Multiaddr,
-    },
-}
-
-impl From<ConnectedPoint> for PendingPoint {
-    fn from(endpoint: ConnectedPoint) -> Self {
-        match endpoint {
-            ConnectedPoint::Dialer { role_override, .. } => PendingPoint::Dialer { role_override },
-            ConnectedPoint::Listener {
-                local_addr,
-                send_back_addr,
-            } => PendingPoint::Listener {
-                local_addr,
-                send_back_addr,
-            },
-        }
-    }
-}
-
-pub(crate) struct AsStrHashEq<T>(pub(crate) T);
-
-impl<T: AsRef<str>> Eq for AsStrHashEq<T> {}
-
-impl<T: AsRef<str>> PartialEq for AsStrHashEq<T> {
-    fn eq(&self, other: &Self) -> bool {
-        self.0.as_ref() == other.0.as_ref()
-    }
-}
-
-impl<T: AsRef<str>> std::hash::Hash for AsStrHashEq<T> {
-    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
-        self.0.as_ref().hash(state)
     }
 }
