@@ -1,5 +1,6 @@
 use std::{
     io,
+    pin::Pin,
     task::{Context, Poll},
 };
 
@@ -86,10 +87,7 @@ pub struct IncomingStreams {
 impl futures::Stream for IncomingStreams {
     type Item = (PeerId, Stream);
 
-    fn poll_next(
-        mut self: std::pin::Pin<&mut Self>,
-        cx: &mut Context<'_>,
-    ) -> Poll<Option<Self::Item>> {
+    fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
         self.receiver.poll_next_unpin(cx)
     }
 }
