@@ -180,7 +180,7 @@ mod tests {
     }
 
     #[test]
-    fn pop_removes_address_if_present() {
+    fn remove_removes_address_if_present() {
         let mut cache = PeerAddresses::default();
         let peer_id = PeerId::random();
         let addr: Multiaddr = "/ip4/127.0.0.1/tcp/8080".parse().unwrap();
@@ -191,7 +191,7 @@ mod tests {
     }
 
     #[test]
-    fn pop_returns_false_if_address_not_present() {
+    fn remove_returns_false_if_address_not_present() {
         let mut cache = PeerAddresses::default();
         let peer_id = PeerId::random();
         let addr: Multiaddr = "/ip4/127.0.0.1/tcp/8080".parse().unwrap();
@@ -200,12 +200,35 @@ mod tests {
     }
 
     #[test]
-    fn pop_returns_false_if_peer_not_present() {
+    fn remove_returns_false_if_peer_not_present() {
         let mut cache = PeerAddresses::default();
         let peer_id = PeerId::random();
         let addr: Multiaddr = "/ip4/127.0.0.1/tcp/8080".parse().unwrap();
 
         assert!(!cache.remove(&peer_id, &addr));
+    }
+
+    #[test]
+    fn remove_removes_address_provided_in_param() {
+        let mut cache = PeerAddresses::default();
+        let peer_id = PeerId::random();
+        let addr: Multiaddr = "/ip4/127.0.0.1/tcp/8080".parse().unwrap();
+        let addr2: Multiaddr = "/ip4/127.0.0.1/tcp/8081".parse().unwrap();
+        let addr3: Multiaddr = "/ip4/127.0.0.1/tcp/8082".parse().unwrap();
+
+        cache.put(
+            peer_id,
+            [addr.clone(), addr2.clone(), addr3.clone()].into_iter(),
+        );
+
+        assert!(cache.remove(&peer_id, &addr2));
+
+        let mut cached = cache.get(&peer_id).collect::<Vec<Multiaddr>>();
+        cached.sort();
+
+        let expected = prepare_expected_addrs(peer_id, [addr, addr3].into_iter());
+
+        assert_eq!(cached, expected);
     }
 
     #[test]
