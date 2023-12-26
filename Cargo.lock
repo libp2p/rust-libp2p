@@ -3250,10 +3250,13 @@ name = "libp2p-server"
 version = "0.12.7"
 dependencies = [
  "base64 0.21.7",
+ "bytes",
  "clap",
  "futures",
  "futures-timer",
- "hyper 0.14.28",
+ "http-body-util",
+ "hyper 1.2.0",
+ "hyper-util",
  "libp2p",
  "prometheus-client",
  "serde",
