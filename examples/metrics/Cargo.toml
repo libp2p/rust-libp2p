@@ -10,7 +10,9 @@ release = false
 
 [dependencies]
 futures = "0.3.30"
-hyper = { version = "0.14", features = ["server", "tcp", "http1"] }
+hyper = { version = "1", features = ["full"]}
+http-body-util = "0.1"
+hyper-util = { version = "0.1", features = ["full"] }
 libp2p = { path = "../../libp2p", features = ["tokio", "metrics", "ping", "noise", "identify", "tcp", "yamux", "macros"] }
 opentelemetry = { version = "0.22.0", features = ["metrics"] }
 opentelemetry-otlp = { version = "0.15.0", features = ["metrics"] }
