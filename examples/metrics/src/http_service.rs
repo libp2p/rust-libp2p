@@ -18,42 +18,57 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
+use bytes::Bytes;
+use http_body_util::Full;
 use hyper::http::StatusCode;
+use hyper::server::conn::http1;
 use hyper::service::Service;
-use hyper::{Body, Method, Request, Response, Server};
+use hyper::{body::Incoming as IncomingBody, Method, Request, Response};
+use hyper_util::rt::TokioIo;
 use prometheus_client::encoding::text::encode;
 use prometheus_client::registry::Registry;
 use std::future::Future;
+use std::net::SocketAddr;
 use std::pin::Pin;
 use std::sync::{Arc, Mutex};
-use std::task::{Context, Poll};
+use tokio::net::TcpListener;
 
 const METRICS_CONTENT_TYPE: &str = "application/openmetrics-text;charset=utf-8;version=1.0.0";
 
 pub(crate) async fn metrics_server(registry: Registry) -> Result<(), std::io::Error> {
     // Serve on localhost.
-    let addr = ([127, 0, 0, 1], 0).into();
-
-    let server = Server::bind(&addr).serve(MakeMetricService::new(registry));
-    tracing::info!(metrics_server=%format!("http://{}/metrics", server.local_addr()));
-    if let Err(e) = server.await {
-        tracing::error!("server error: {}", e);
+    let addr: SocketAddr = ([127, 0, 0, 1], 0).into();
+    tracing::info!(metrics_server=%format!("http://{:?}/metrics", addr));
+    let make_metrics_service = MakeMetricService::new(registry);
+    let listener = TcpListener::bind(addr).await?;
+    loop {
+        let (stream, _) = listener.accept().await?;
+        let io = TokioIo::new(stream);
+        let make_metrics_service_clone = make_metrics_service.clone();
+        tokio::task::spawn(async move {
+            if let Err(err) = http1::Builder::new()
+                .serve_connection(io, make_metrics_service_clone)
+                .await
+            {
+                tracing::error!("server error: {}", err);
+            }
+        });
     }
-    Ok(())
-}
-
-pub(crate) struct MetricService {
-    reg: Arc<Mutex<Registry>>,
 }
 
 type SharedRegistry = Arc<Mutex<Registry>>;
+
+#[derive(Debug, Clone)]
+pub(crate) struct MetricService {
+    reg: SharedRegistry,
+}
 
 impl MetricService {
     fn get_reg(&mut self) -> SharedRegistry {
         Arc::clone(&self.reg)
     }
-    fn respond_with_metrics(&mut self) -> Response<String> {
-        let mut response: Response<String> = Response::default();
+    fn respond_with_metrics(&mut self) -> Response<Full<Bytes>> {
+        let mut response: Response<Full<Bytes>> = Response::default();
 
         response.headers_mut().insert(
             hyper::header::CONTENT_TYPE,
@@ -61,42 +76,44 @@ impl MetricService {
         );
 
         let reg = self.get_reg();
-        encode(&mut response.body_mut(), &reg.lock().unwrap()).unwrap();
+        let mut inner_str = String::new();
+        encode(&mut inner_str, &reg.lock().unwrap()).unwrap();
+        *response.body_mut() = Full::new(Bytes::from(inner_str));
 
         *response.status_mut() = StatusCode::OK;
 
         response
     }
-    fn respond_with_404_not_found(&mut self) -> Response<String> {
+
+    fn respond_with_404_not_found(&mut self) -> Response<Full<Bytes>> {
         Response::builder()
             .status(StatusCode::NOT_FOUND)
-            .body("Not found try localhost:[port]/metrics".to_string())
+            .body(Full::new(Bytes::from(
+                "Not found try localhost:[port]/metrics".to_string(),
+            )))
             .unwrap()
     }
 }
 
-impl Service<Request<Body>> for MetricService {
-    type Response = Response<String>;
+impl Service<Request<IncomingBody>> for MetricService {
+    type Response = Response<Full<Bytes>>;
     type Error = hyper::Error;
     type Future = Pin<Box<dyn Future<Output = Result<Self::Response, Self::Error>> + Send>>;
 
-    fn poll_ready(&mut self, _cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
-        Poll::Ready(Ok(()))
-    }
-
-    fn call(&mut self, req: Request<Body>) -> Self::Future {
+    fn call(&self, req: Request<IncomingBody>) -> Self::Future {
         let req_path = req.uri().path();
         let req_method = req.method();
         let resp = if (req_method == Method::GET) && (req_path == "/metrics") {
             // Encode and serve metrics from registry.
-            self.respond_with_metrics()
+            self.clone().respond_with_metrics()
         } else {
-            self.respond_with_404_not_found()
+            self.clone().respond_with_404_not_found()
         };
         Box::pin(async { Ok(resp) })
     }
 }
 
+#[derive(Debug, Clone)]
 pub(crate) struct MakeMetricService {
     reg: SharedRegistry,
 }
@@ -109,18 +126,14 @@ impl MakeMetricService {
     }
 }
 
-impl<T> Service<T> for MakeMetricService {
-    type Response = MetricService;
+impl Service<Request<IncomingBody>> for MakeMetricService {
+    type Response = Response<Full<Bytes>>;
     type Error = hyper::Error;
     type Future = Pin<Box<dyn Future<Output = Result<Self::Response, Self::Error>> + Send>>;
 
-    fn poll_ready(&mut self, _: &mut Context) -> Poll<Result<(), Self::Error>> {
-        Poll::Ready(Ok(()))
-    }
-
-    fn call(&mut self, _: T) -> Self::Future {
+    fn call(&self, req: Request<IncomingBody>) -> Self::Future {
         let reg = self.reg.clone();
-        let fut = async move { Ok(MetricService { reg }) };
+        let fut = async move { Ok(MetricService { reg }.call(req).await.unwrap()) };
         Box::pin(fut)
     }
 }
