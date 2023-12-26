@@ -14,6 +14,11 @@ use std::num::NonZeroUsize;
 pub struct PeerAddresses(LruCache<PeerId, HashSet<Multiaddr>>);
 
 impl PeerAddresses {
+    /// Creates cache with capacity of `cache_size`.
+    pub fn new(cache_size: NonZeroUsize) -> Self {
+        Self(LruCache::new(cache_size))
+    }
+
     /// Feed a [`FromSwarm`] event to this struct.
     ///
     /// Returns whether the event changed peer's known external addresses.
@@ -38,24 +43,30 @@ impl PeerAddresses {
         }
     }
 
-    pub fn new(cache_size: NonZeroUsize) -> Self {
-        Self(LruCache::new(cache_size))
-    }
-
+    /// Adds addresses to cache.
+    /// Appends addresses to the existing set if peer addresses already exist.
+    /// Creates a new cache entry for peer_id if no addresses are present.
+    /// Returns true if the newly added addresses were not previously in the cache.
     pub fn put(&mut self, peer: PeerId, addresses: impl Iterator<Item = Multiaddr>) -> bool {
         let addresses = addresses.filter_map(|a| a.with_p2p(peer).ok());
-        self.0.put(peer, HashSet::from_iter(addresses));
-        true
+        if let Some(cached) = self.0.get_mut(&peer) {
+            let mut inserted_any = false;
+            for addr in addresses {
+                if cached.insert(addr) {
+                    inserted_any = true;
+                }
+            }
+
+            inserted_any
+        } else {
+            self.0.put(peer, HashSet::from_iter(addresses));
+            true
+        }
     }
 
     /// Returns peer's external addresses.
     pub fn get(&mut self, peer: &PeerId) -> impl Iterator<Item = Multiaddr> {
-        self.0
-            .get(peer)
-            .cloned()
-            .map(Vec::from_iter)
-            .unwrap_or_default()
-            .into_iter()
+        self.0.get(peer).cloned().unwrap_or_default().into_iter()
     }
 
     /// Removes address from peer addresses cache.
@@ -195,6 +206,52 @@ mod tests {
         let addr: Multiaddr = "/ip4/127.0.0.1/tcp/8080".parse().unwrap();
 
         assert!(!cache.remove(&peer_id, &addr));
+    }
+
+    #[test]
+    fn put_adds_new_address_to_cache() {
+        let mut cache = PeerAddresses::default();
+        let peer_id = PeerId::random();
+        let addr: Multiaddr = "/ip4/127.0.0.1/tcp/8080".parse().unwrap();
+
+        assert!(cache.put(peer_id, [addr.clone()].into_iter()));
+
+        let mut cached = cache.get(&peer_id).collect::<Vec<Multiaddr>>();
+        cached.sort();
+        let expected = prepare_expected_addrs(peer_id, [addr].into_iter());
+
+        assert_eq!(cached, expected);
+    }
+
+    #[test]
+    fn put_adds_address_to_cache_to_existing_key() {
+        let mut cache = PeerAddresses::default();
+        let peer_id = PeerId::random();
+        let addr: Multiaddr = "/ip4/127.0.0.1/tcp/8080".parse().unwrap();
+        let addr2: Multiaddr = "/ip4/127.0.0.1/tcp/8081".parse().unwrap();
+        let addr3: Multiaddr = "/ip4/127.0.0.1/tcp/8082".parse().unwrap();
+
+        assert!(cache.put(peer_id, [addr.clone()].into_iter()));
+
+        cache.put(peer_id, [addr2.clone(), addr3.clone()].into_iter());
+
+        let expected = prepare_expected_addrs(peer_id, [addr, addr2, addr3].into_iter());
+
+        let mut cached = cache.get(&peer_id).collect::<Vec<Multiaddr>>();
+        cached.sort();
+
+        assert_eq!(cached, expected);
+    }
+
+    fn prepare_expected_addrs(
+        peer_id: PeerId,
+        addrs: impl Iterator<Item = Multiaddr>,
+    ) -> Vec<Multiaddr> {
+        let mut addrs = addrs
+            .filter_map(|a| a.with_p2p(peer_id).ok())
+            .collect::<Vec<Multiaddr>>();
+        addrs.sort();
+        addrs
     }
 
     fn new_external_addr_of_peer1(peer_id: PeerId) -> FromSwarm<'static> {
