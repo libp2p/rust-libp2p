@@ -1,5 +1,6 @@
 #![doc = include_str!("../README.md")]
 
+use core::fmt;
 use std::{
     io,
     pin::Pin,
@@ -46,15 +47,25 @@ impl Control {
         Ok(PeerControl {
             protocol: self.protocol.clone(),
             sender: new_stream_sink,
+            peer,
         })
     }
 }
 
-/// TODO: Keep connection alive whilst `PeerControl` is active.
 #[derive(Clone)]
 pub struct PeerControl {
+    peer: PeerId,
     protocol: StreamProtocol,
     sender: SendSink<'static, NewStream>,
+}
+
+impl fmt::Debug for PeerControl {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("PeerControl")
+            .field("peer", &self.peer)
+            .field("protocol", &self.protocol)
+            .finish()
+    }
 }
 
 impl PeerControl {

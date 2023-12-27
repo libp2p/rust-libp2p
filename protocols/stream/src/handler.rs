@@ -4,6 +4,7 @@ use std::{
     task::{Context, Poll},
 };
 
+use flume::{r#async::RecvStream, Receiver};
 use futures::{
     channel::{mpsc, oneshot},
     StreamExt as _,
@@ -21,7 +22,8 @@ pub struct Handler {
     remote: PeerId,
     supported_protocols: HashMap<StreamProtocol, mpsc::Sender<(PeerId, Stream)>>,
 
-    receiver: flume::r#async::RecvStream<'static, NewStream>,
+    receiver: Receiver<NewStream>,
+    receive_stream: RecvStream<'static, NewStream>,
     pending_upgrade: Option<(
         StreamProtocol,
         oneshot::Sender<Result<Stream, OpenStreamError>>,
@@ -32,10 +34,11 @@ impl Handler {
     pub(crate) fn new(
         remote: PeerId,
         supported_protocols: HashMap<StreamProtocol, mpsc::Sender<(PeerId, Stream)>>,
-        receiver: flume::r#async::RecvStream<'static, NewStream>,
+        receiver: Receiver<NewStream>,
     ) -> Self {
         Self {
             supported_protocols,
+            receive_stream: receiver.clone().into_stream(),
             receiver,
             pending_upgrade: None,
             remote,
@@ -76,7 +79,7 @@ impl ConnectionHandler for Handler {
             return Poll::Pending;
         }
 
-        match self.receiver.poll_next_unpin(cx) {
+        match self.receive_stream.poll_next_unpin(cx) {
             Poll::Ready(Some(new_stream)) => {
                 self.pending_upgrade = Some((new_stream.protocol.clone(), new_stream.sender));
                 return Poll::Ready(swarm::ConnectionHandlerEvent::OutboundSubstreamRequest {
@@ -102,6 +105,8 @@ impl ConnectionHandler for Handler {
             .collect::<Vec<_>>(); // In most cases, this won't allocate because the `Vec` will be empty.
 
         for p in cancelled_protocols {
+            tracing::debug!(protocol = %p, "Stream receiver was dropped");
+
             self.supported_protocols.remove(&p);
         }
 
@@ -183,6 +188,16 @@ impl ConnectionHandler for Handler {
             }
             _ => {}
         }
+    }
+
+    fn connection_keep_alive(&self) -> bool {
+        let any_peer_controls_alive = dbg!(self.receiver.sender_count()) > 1; // The behaviour always owns a copy of the sender.
+        let any_stream_receiver_alive = self
+            .supported_protocols
+            .values()
+            .any(|s| !dbg!(s.is_closed()));
+
+        any_peer_controls_alive || any_stream_receiver_alive
     }
 }
 

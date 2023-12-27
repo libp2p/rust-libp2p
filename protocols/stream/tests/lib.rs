@@ -5,11 +5,22 @@ use libp2p_stream as stream;
 use libp2p_swarm::{StreamProtocol, Swarm};
 use libp2p_swarm_test::SwarmExt as _;
 use stream::OpenStreamError;
+use tracing::level_filters::LevelFilter;
+use tracing_subscriber::EnvFilter;
 
 const PROTOCOL: StreamProtocol = StreamProtocol::new("/test");
 
 #[tokio::test]
 async fn dropping_incoming_streams_deregisters() {
+    tracing_subscriber::fmt()
+        .with_env_filter(
+            EnvFilter::builder()
+                .with_default_directive(LevelFilter::DEBUG.into())
+                .from_env()
+                .unwrap(),
+        )
+        .init();
+
     let mut swarm1 = Swarm::new_ephemeral(|_| stream::Behaviour::default());
     let mut swarm2 = Swarm::new_ephemeral(|_| stream::Behaviour::default());
 
@@ -44,7 +55,7 @@ async fn dropping_incoming_streams_deregisters() {
 }
 
 #[tokio::test]
-async fn peer_control_keeps_connection_alive() {
+async fn peer_control_keep_alive() {
     let mut swarm1 = Swarm::new_ephemeral(|_| stream::Behaviour::default());
     let mut swarm2 = Swarm::new_ephemeral(|_| stream::Behaviour::default());
 
@@ -56,7 +67,7 @@ async fn peer_control_keeps_connection_alive() {
 
     let swarm2_peer_id = *swarm2.local_peer_id();
 
-    tokio::spawn(async move {
+    let handle = tokio::spawn(async move {
         while let Some((_, mut stream)) = incoming.next().await {
             stream.write_all(&[42]).await.unwrap();
             stream.close().await.unwrap();
@@ -76,4 +87,14 @@ async fn peer_control_keeps_connection_alive() {
     let mut buf = [0u8; 1];
     stream.read_exact(&mut buf).await.unwrap();
     assert_eq!([42], buf);
+
+    handle.abort();
+    handle.await.unwrap_err();
+    drop(peer_control);
+
+    // The idle timeout in `new_ephemeral` is 5 seconds.
+    // Hence, if the keep-alive using `PeerControl` does not work, we would fail after this.
+    tokio::time::sleep(Duration::from_secs(6)).await;
+
+    let error = control.peer(swarm2_peer_id).await.unwrap_err();
 }

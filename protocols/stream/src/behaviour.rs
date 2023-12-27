@@ -147,7 +147,7 @@ impl NetworkBehaviour for Behaviour {
         Ok(Handler::new(
             peer,
             self.supported_protocols.clone(),
-            receiver.clone().into_stream(),
+            receiver.clone(),
         ))
     }
 
@@ -168,7 +168,7 @@ impl NetworkBehaviour for Behaviour {
         Ok(Handler::new(
             peer,
             self.supported_protocols.clone(),
-            receiver.clone().into_stream(),
+            receiver.clone(),
         ))
     }
 
