@@ -624,7 +624,7 @@ where
         self.confirmed_external_addr.remove(addr);
     }
 
-    /// Add peer's new external address.
+    /// Add a new external address of a remote peer.
     ///
     /// The address is broadcast to all [`NetworkBehaviour`]s via [`FromSwarm::NewExternalAddrOfPeer`].
     pub fn add_peer_address(&mut self, peer_id: PeerId, addr: Multiaddr) {

@@ -1,10 +1,10 @@
-## 0.44.2 - unreleased
+## 0.44.2
 
-- Add `FromSwarm::NewExternalAddrOfPeer` event.
-- Add `libp2p::swarm::add_peer_address` that broadcasts address through `FromSwarm::NewExternalAddrOfPeer`.
-- Add `libp2p_swarm::behaviour::PeerAddresses` which is used as a cache for storing known addresses
-  of connected peers.
-  See [PR 4371](https://github.com/libp2p/rust-libp2p/pull/4371)
+- Allow `NetworkBehaviour`s to share addresses of peers.
+  This is enabled via the new `ToSwarm::NewExternalAddrOfPeer` event.
+  The address is broadcast to all behaviours via `FromSwarm::NewExternalAddrOfPeer`.
+  Protocols that want to collect these addresses can use the new `PeerAddresses` utility.
+  See [PR 4371](https://github.com/libp2p/rust-libp2p/pull/4371).
 
 ## 0.44.1
 
