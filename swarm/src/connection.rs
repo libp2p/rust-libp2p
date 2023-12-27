@@ -381,6 +381,9 @@ where
                     },
                 }
             } else {
+                if matches!(shutdown, Shutdown::Later(..)) {
+                    tracing::debug!("Aborting scheduled connection shutdown");
+                }
                 *shutdown = Shutdown::None;
             }
 
@@ -474,6 +477,8 @@ fn compute_new_shutdown(
         (_, false) => {
             let now = Instant::now();
             let safe_keep_alive = checked_add_fraction(now, idle_timeout);
+
+            tracing::debug!(shutdown_in = ?safe_keep_alive, "Connection is idle");
 
             Some(Shutdown::Later(
                 Delay::new(safe_keep_alive),

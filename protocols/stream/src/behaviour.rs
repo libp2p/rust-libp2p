@@ -142,7 +142,7 @@ impl NetworkBehaviour for Behaviour {
         let (_, receiver) = self
             .connections_by_peer_id
             .entry(peer)
-            .or_insert_with(|| flume::bounded(10));
+            .or_insert_with(|| flume::bounded(0));
 
         self.active_connections.insert((peer, connection_id));
 
@@ -163,7 +163,7 @@ impl NetworkBehaviour for Behaviour {
         let (_, receiver) = self
             .connections_by_peer_id
             .entry(peer)
-            .or_insert_with(|| flume::bounded(10));
+            .or_insert_with(|| flume::bounded(0));
 
         self.active_connections.insert((peer, connection_id));
 

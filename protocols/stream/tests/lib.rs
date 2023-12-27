@@ -70,13 +70,18 @@ async fn peer_control_keep_alive() {
     let mut swarm1 = Swarm::new_ephemeral(|_| stream::Behaviour::default());
     let mut swarm2 = Swarm::new_ephemeral(|_| stream::Behaviour::default());
 
-    let mut control = swarm1.behaviour_mut().new_control(PROTOCOL);
+    let mut control1 = swarm1.behaviour_mut().new_control(PROTOCOL);
+    let mut control2 = swarm2.behaviour_mut().new_control(PROTOCOL);
     let mut incoming = swarm2.behaviour_mut().accept(PROTOCOL).unwrap();
 
     swarm2.listen().with_memory_addr_external().await;
     swarm1.connect(&mut swarm2).await;
 
+    let swarm1_peer_id = *swarm1.local_peer_id();
     let swarm2_peer_id = *swarm2.local_peer_id();
+
+    let mut peer_control1 = control1.peer(swarm2_peer_id).await.unwrap();
+    let peer_control2 = control2.peer(swarm1_peer_id).await.unwrap();
 
     let handle = tokio::spawn(async move {
         while let Some((_, mut stream)) = incoming.next().await {
@@ -87,25 +92,22 @@ async fn peer_control_keep_alive() {
     tokio::spawn(swarm1.loop_on_next());
     tokio::spawn(swarm2.loop_on_next());
 
-    let mut peer_control = control.peer(swarm2_peer_id).await.unwrap();
-
     // The idle timeout in `new_ephemeral` is 5 seconds.
     // Hence, if the keep-alive using `PeerControl` does not work, we would fail after this.
     tokio::time::sleep(Duration::from_secs(6)).await;
 
-    let mut stream = peer_control.open_stream().await.unwrap();
+    let mut stream = peer_control1.open_stream().await.unwrap();
 
     let mut buf = [0u8; 1];
     stream.read_exact(&mut buf).await.unwrap();
     assert_eq!([42], buf);
 
-    handle.abort();
-    handle.await.unwrap_err();
-    drop(peer_control);
+    drop(peer_control1);
+    drop(peer_control2);
 
     // The idle timeout in `new_ephemeral` is 5 seconds.
     // Hence, if the keep-alive using `PeerControl` does not work, we would fail after this.
     tokio::time::sleep(Duration::from_secs(10)).await;
 
-    let error = control.peer(swarm2_peer_id).await.unwrap_err();
+    let error = control1.peer(swarm2_peer_id).await.unwrap_err();
 }

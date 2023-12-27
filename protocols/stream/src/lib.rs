@@ -111,9 +111,3 @@ impl futures::Stream for IncomingStreams {
         self.receiver.poll_next_unpin(cx)
     }
 }
-
-impl Drop for IncomingStreams {
-    fn drop(&mut self) {
-        tracing::warn!("DROPPING NOW");
-    }
-}

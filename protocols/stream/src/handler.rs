@@ -95,21 +95,6 @@ impl ConnectionHandler for Handler {
             Poll::Pending => {}
         }
 
-        let cancelled_protocols = self
-            .supported_protocols
-            .iter_mut()
-            .filter_map(|(protocol, sender)| match sender.poll_ready_unpin(cx) {
-                Poll::Ready(Err(_)) => Some(protocol.clone()),
-                _ => None,
-            })
-            .collect::<Vec<_>>(); // In most cases, this won't allocate because the `Vec` will be empty.
-
-        for p in &cancelled_protocols {
-            tracing::debug!(protocol = %p, "Stream receiver was dropped");
-
-            self.supported_protocols.remove(p);
-        }
-
         Poll::Pending
     }
 
@@ -190,13 +175,11 @@ impl ConnectionHandler for Handler {
     }
 
     fn connection_keep_alive(&self) -> bool {
-        let any_peer_controls_alive = self.receiver.sender_count() > 1; // The behaviour always owns a copy of the sender.
-        let any_stream_receiver_alive = self
-            .supported_protocols
-            .values()
-            .any(|s| !s.is_disconnected());
+        tracing::debug!(sender_count = %self.receiver.sender_count());
 
-        any_peer_controls_alive || any_stream_receiver_alive
+        let any_peer_controls_alive = self.receiver.sender_count() > 1; // The behaviour always owns a copy of the sender.
+
+        any_peer_controls_alive
     }
 }
 
