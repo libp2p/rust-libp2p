@@ -1,6 +1,7 @@
 use std::{
     io,
     task::{Context, Poll},
+    time::Duration,
 };
 
 use futures::{AsyncRead, AsyncWrite, AsyncWriteExt};
@@ -12,9 +13,7 @@ use libp2p_swarm::{
 };
 use void::Void;
 
-use crate::{request_response::DialBack, Nonce, DIAL_BACK_PROTOCOL_NAME};
-
-use super::{DEFAULT_TIMEOUT, MAX_CONCURRENT_REQUESTS};
+use crate::{protocol::DialBack, Nonce, DIAL_BACK_PROTOCOL_NAME};
 
 pub struct Handler {
     inbound: FuturesSet<io::Result<Nonce>>,
@@ -23,7 +22,7 @@ pub struct Handler {
 impl Handler {
     pub(crate) fn new() -> Self {
         Self {
-            inbound: FuturesSet::new(DEFAULT_TIMEOUT, MAX_CONCURRENT_REQUESTS),
+            inbound: FuturesSet::new(Duration::from_secs(5), 2),
         }
     }
 }
@@ -78,7 +77,7 @@ impl ConnectionHandler for Handler {
                 }
             }
             ConnectionEvent::ListenUpgradeError(ListenUpgradeError { error, .. }) => {
-                tracing::debug!("Dial back request failed: {:?}", error);
+                void::unreachable(error);
             }
             _ => {}
         }

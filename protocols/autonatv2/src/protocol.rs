@@ -284,7 +284,7 @@ impl DialBack {
             FramedRead::new(io, Codec::<proto::DialBack>::new(DIAL_BACK_MAX_SIZE))
                 .next()
                 .await
-                .ok_or(io::Error::new(io::ErrorKind::UnexpectedEof, "eof"))??;
+                .ok_or(io::Error::from(io::ErrorKind::UnexpectedEof))??;
         let nonce = ok_or_invalid_data!(nonce)?;
         Ok(Self { nonce })
     }
@@ -305,7 +305,7 @@ mod tests {
     use crate::generated::structs::{
         mod_Message::OneOfmsg, DialDataResponse as GenDialDataResponse, Message,
     };
-    use crate::request_response::{Coder, DialDataResponse, Request};
+    use crate::protocol::{Coder, DialDataResponse, Request};
     use futures::io::Cursor;
 
     use rand::{thread_rng, Rng};

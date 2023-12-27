@@ -24,7 +24,7 @@ use rand_core::RngCore;
 
 use crate::{
     generated::structs::{mod_DialResponse::ResponseStatus, DialStatus},
-    request_response::{Coder, DialDataRequest, DialRequest, DialResponse, Request, Response},
+    protocol::{Coder, DialDataRequest, DialRequest, DialResponse, Request, Response},
     server::behaviour::StatusUpdate,
     Nonce, REQUEST_PROTOCOL_NAME,
 };

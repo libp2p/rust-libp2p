@@ -24,20 +24,19 @@ use std::{
     iter::{once, repeat},
     sync::Arc,
     task::{Context, Poll},
+    time::Duration,
 };
 
 use crate::client::behaviour::Error;
 use crate::{
     client::behaviour::Event,
     generated::structs::{mod_DialResponse::ResponseStatus, DialStatus},
-    request_response::{
+    protocol::{
         Coder, DialDataRequest, DialDataResponse, DialRequest, DialResponse, Request, Response,
         DATA_FIELD_LEN_UPPER_BOUND, DATA_LEN_LOWER_BOUND, DATA_LEN_UPPER_BOUND,
     },
     REQUEST_PROTOCOL_NAME,
 };
-
-use super::{DEFAULT_TIMEOUT, MAX_CONCURRENT_REQUESTS};
 
 #[derive(Debug, thiserror::Error)]
 pub(crate) enum InternalError {
@@ -49,8 +48,6 @@ pub(crate) enum InternalError {
     DataRequestTooLarge { len: usize, max: usize },
     #[error("data request too small: {len} (min: {min})")]
     DataRequestTooSmall { len: usize, min: usize },
-    #[error("timeout")]
-    Timeout(#[from] futures_bounded::Timeout),
     #[error("server rejected dial request")]
     ServerRejectedDialRequest,
     #[error("server chose not to dial any provided address")]
@@ -63,10 +60,6 @@ pub(crate) enum InternalError {
     UnableToConnectOnSelectedAddress { addr: Option<Multiaddr> },
     #[error("server experienced failure during dial back on address: {addr:?}")]
     FailureDuringDialBack { addr: Option<Multiaddr> },
-    #[error("error during substream upgrad")]
-    Substream(
-        #[from] StreamUpgradeError<<ReadyUpgrade<StreamProtocol> as OutboundUpgradeSend>::Error>,
-    ),
 }
 
 #[derive(Debug)]
@@ -109,7 +102,7 @@ impl Handler {
         let (status_update_tx, status_update_rx) = mpsc::channel(10);
         Self {
             queued_events: VecDeque::new(),
-            outbound: FuturesSet::new(DEFAULT_TIMEOUT, MAX_CONCURRENT_REQUESTS),
+            outbound: FuturesSet::new(Duration::from_secs(10), 10),
             queued_streams: VecDeque::default(),
             status_update_tx,
             status_update_rx,
@@ -126,7 +119,7 @@ impl Handler {
             });
         if self
             .outbound
-            .try_push(start_substream_handle(
+            .try_push(start_stream_handle(
                 self.server,
                 req,
                 rx,
@@ -163,7 +156,7 @@ impl ConnectionHandler for Handler {
         if let Poll::Ready(m) = self.outbound.poll_unpin(cx) {
             return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(
                 ToBehaviour::TestCompleted(
-                    m.map_err(InternalError::Timeout)
+                    m.map_err(|_| InternalError::Io(io::Error::from(io::ErrorKind::TimedOut)))
                         .map_err(Into::into)
                         .and_then(identity)
                         .map_err(Into::into),
@@ -196,9 +189,7 @@ impl ConnectionHandler for Handler {
                 tracing::debug!("Dial request failed: {}", error);
                 match self.queued_streams.pop_front() {
                     Some(stream_tx) => {
-                        if stream_tx.send(Err(error)).is_err() {
-                            tracing::warn!("Failed to send stream to dead handler");
-                        }
+                        let _ = stream_tx.send(Err(error));
                     }
                     None => {
                         tracing::warn!(
@@ -232,10 +223,10 @@ impl ConnectionHandler for Handler {
     }
 }
 
-async fn start_substream_handle(
+async fn start_stream_handle(
     server: PeerId,
     dial_request: DialRequest,
-    substream_recv: oneshot::Receiver<
+    stream_recv: oneshot::Receiver<
         Result<
             Stream,
             StreamUpgradeError<<ReadyUpgrade<StreamProtocol> as OutboundUpgradeSend>::Error>,
@@ -243,16 +234,31 @@ async fn start_substream_handle(
     >,
     mut status_update_tx: mpsc::Sender<Event>,
 ) -> Result<TestEnd, crate::client::behaviour::Error> {
-    let substream = match substream_recv.await {
+    let substream = match stream_recv.await {
         Ok(Ok(substream)) => substream,
-        Ok(Err(err)) => return Err(InternalError::from(err).into()),
+        Ok(Err(StreamUpgradeError::Io(io))) => return Err(InternalError::from(io).into()),
+        Ok(Err(StreamUpgradeError::Timeout)) => {
+            return Err(InternalError::Io(io::Error::from(io::ErrorKind::TimedOut)).into())
+        }
+        Ok(Err(StreamUpgradeError::Apply(upgrade_error))) => {
+            return Err(
+                InternalError::Io(io::Error::new(io::ErrorKind::Other, upgrade_error)).into(),
+            )
+        }
+        Ok(Err(StreamUpgradeError::NegotiationFailed)) => {
+            return Err(InternalError::Io(io::Error::new(
+                io::ErrorKind::Other,
+                "negotiation failed",
+            ))
+            .into())
+        }
         Err(_) => return Err(InternalError::InternalServer.into()),
     };
     let mut data_amount = 0;
     let mut checked_addr_idx = None;
     let addrs = dial_request.addrs.clone();
     assert_ne!(addrs, vec![]);
-    let res = handle_substream(
+    let res = handle_stream(
         dial_request,
         substream,
         &mut data_amount,
@@ -271,13 +277,13 @@ async fn start_substream_handle(
     res
 }
 
-async fn handle_substream(
+async fn handle_stream(
     dial_request: DialRequest,
-    substream: impl AsyncRead + AsyncWrite + Unpin,
+    stream: impl AsyncRead + AsyncWrite + Unpin,
     data_amount: &mut usize,
     checked_addr_idx: &mut Option<usize>,
 ) -> Result<TestEnd, InternalError> {
-    let mut coder = Coder::new(substream);
+    let mut coder = Coder::new(stream);
     coder.send(Request::Dial(dial_request.clone())).await?;
     match coder.next().await? {
         Response::Data(DialDataRequest {
@@ -361,7 +367,7 @@ fn test_end_from_dial_response(
 }
 
 async fn send_aap_data<I>(
-    substream: &mut Coder<I>,
+    stream: &mut Coder<I>,
     num_bytes: usize,
     data_amount: &mut usize,
 ) -> io::Result<()>
@@ -384,7 +390,7 @@ where
         })
     {
         *data_amount += data_count;
-        substream.send(req).await?;
+        stream.send(req).await?;
     }
     Ok(())
 }
