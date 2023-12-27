@@ -3266,7 +3266,10 @@ dependencies = [
  "libp2p-core",
  "libp2p-identity",
  "libp2p-swarm",
+ "libp2p-swarm-test",
+ "tokio",
  "tracing",
+ "tracing-subscriber",
  "void",
 ]
 

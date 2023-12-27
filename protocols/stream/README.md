@@ -8,14 +8,17 @@ To accept streams for a particular [`StreamProtocol`] using this module, use [`B
 
 ### Example
 
-```rust,norun
+```rust,no_run
 # fn main() {
+# use libp2p_swarm::{Swarm, StreamProtocol};
+# use libp2p_stream as stream;
+# use futures::StreamExt as _;
 let mut swarm: Swarm<stream::Behaviour> = todo!();
 
-let incoming = swarm.behaviour_mut().accept(StreamProtocol::new("/my-protocol")).unwrap();
+let mut incoming = swarm.behaviour_mut().accept(StreamProtocol::new("/my-protocol")).unwrap();
 
 let handler_future = async move {
-    while let Some((peer, stream)) = incoming_streams.next().await {
+    while let Some((peer, stream)) = incoming.next().await {
         // Execute your protocol using `stream`.
     }
 };
@@ -46,12 +49,15 @@ This function is `async` and will block until we have a connection to the given 
 
 ### Example
 
-```rust,norun
+```rust,no_run
 # fn main() {
+# use libp2p_swarm::{Swarm, StreamProtocol};
+# use libp2p_stream as stream;
+# use libp2p_identity::PeerId;
 let mut swarm: Swarm<stream::Behaviour> = todo!();
 let peer_id: PeerId = todo!();
 
-let control = swarm.behaviour().new_control(StreamProtocol::new("/my-protocol"));
+let mut control = swarm.behaviour().new_control(StreamProtocol::new("/my-protocol"));
 
 let protocol_future = async move {
     let stream = control.peer(peer_id).await.unwrap().open_stream().await.unwrap();

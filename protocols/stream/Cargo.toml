@@ -10,10 +10,15 @@ rust-version.workspace = true
 flume = "0.11.0"
 futures = "0.3.29"
 libp2p-core = { workspace = true }
-libp2p-identity = { workspace = true, features = ["peerid"]}
+libp2p-identity = { workspace = true, features = ["peerid"] }
 libp2p-swarm = { workspace = true }
 tracing = "0.1.37"
 void = "1"
+
+[dev-dependencies]
+libp2p-swarm-test = { workspace = true }
+tokio = { version = "1", features = ["full"] }
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 
 [lints]
 workspace = true
