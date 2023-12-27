@@ -26,11 +26,12 @@ use std::{
     task::{Context, Poll},
 };
 
-use crate::request_response::Coder;
+use crate::client::behaviour::Error;
 use crate::{
+    client::behaviour::Event,
     generated::structs::{mod_DialResponse::ResponseStatus, DialStatus},
     request_response::{
-        DialDataRequest, DialDataResponse, DialRequest, DialResponse, Request, Response,
+        Coder, DialDataRequest, DialDataResponse, DialRequest, DialResponse, Request, Response,
         DATA_FIELD_LEN_UPPER_BOUND, DATA_LEN_LOWER_BOUND, DATA_LEN_UPPER_BOUND,
     },
     REQUEST_PROTOCOL_NAME,
@@ -76,17 +77,9 @@ pub struct TestEnd {
 
 #[derive(Debug)]
 pub enum ToBehaviour {
-    TestCompleted(Result<TestEnd, super::Error>),
-    StatusUpdate(StatusUpdate),
+    TestCompleted(Result<TestEnd, Error>),
+    StatusUpdate(Event),
     PeerHasServerSupport,
-}
-
-#[derive(Debug)]
-pub struct StatusUpdate {
-    pub tested_addr: Option<Multiaddr>,
-    pub data_amount: usize,
-    pub server: PeerId,
-    pub result: Result<(), crate::client::handler::Error>,
 }
 
 pub struct Handler {
@@ -97,7 +90,7 @@ pub struct Handler {
             <Self as ConnectionHandler>::ToBehaviour,
         >,
     >,
-    outbound: futures_bounded::FuturesSet<Result<TestEnd, crate::client::handler::Error>>,
+    outbound: futures_bounded::FuturesSet<Result<TestEnd, crate::client::behaviour::Error>>,
     queued_streams: VecDeque<
         oneshot::Sender<
             Result<
@@ -106,8 +99,8 @@ pub struct Handler {
             >,
         >,
     >,
-    status_update_rx: mpsc::Receiver<StatusUpdate>,
-    status_update_tx: mpsc::Sender<StatusUpdate>,
+    status_update_rx: mpsc::Receiver<Event>,
+    status_update_tx: mpsc::Sender<Event>,
     server: PeerId,
 }
 
@@ -248,8 +241,8 @@ async fn start_substream_handle(
             StreamUpgradeError<<ReadyUpgrade<StreamProtocol> as OutboundUpgradeSend>::Error>,
         >,
     >,
-    mut status_update_tx: mpsc::Sender<StatusUpdate>,
-) -> Result<TestEnd, crate::client::handler::Error> {
+    mut status_update_tx: mpsc::Sender<Event>,
+) -> Result<TestEnd, crate::client::behaviour::Error> {
     let substream = match substream_recv.await {
         Ok(Ok(substream)) => substream,
         Ok(Err(err)) => return Err(InternalError::from(err).into()),
@@ -267,12 +260,12 @@ async fn start_substream_handle(
     )
     .await
     .map_err(Arc::new)
-    .map_err(crate::client::handler::Error::from);
-    let status_update = StatusUpdate {
+    .map_err(crate::client::behaviour::Error::from);
+    let status_update = Event {
         tested_addr: checked_addr_idx.and_then(|idx| addrs.get(idx).cloned()),
         data_amount,
         server,
-        result: res.as_ref().map(|_| ()).map_err(|e| e.clone()),
+        result: res.as_ref().map(|_| ()).map_err(|e| e.duplicate()),
     };
     let _ = status_update_tx.send(status_update).await;
     res

@@ -16,12 +16,15 @@ use libp2p_swarm::{
 };
 use rand::{seq::SliceRandom, Rng};
 use rand_core::{OsRng, RngCore};
+use std::fmt::{Debug, Display, Formatter};
+use std::sync::Arc;
 
+use crate::client::handler::dial_request::InternalError;
 use crate::{global_only::IpExt, request_response::DialRequest};
 
 use super::handler::{
     dial_back,
-    dial_request::{self, StatusUpdate},
+    dial_request::{self},
     TestEnd,
 };
 
@@ -91,7 +94,7 @@ where
 {
     type ConnectionHandler = Either<dial_request::Handler, dial_back::Handler>;
 
-    type ToSwarm = StatusUpdate;
+    type ToSwarm = Event;
 
     fn handle_established_inbound_connection(
         &mut self,
@@ -335,6 +338,68 @@ impl Default for Behaviour<OsRng> {
     fn default() -> Self {
         Self::new(OsRng, Config::default())
     }
+}
+
+pub struct Error {
+    pub(crate) internal: Arc<InternalError>,
+}
+
+impl Error {
+    pub(crate) fn duplicate(&self) -> Self {
+        Self {
+            internal: Arc::clone(&self.internal),
+        }
+    }
+}
+
+impl From<InternalError> for Error {
+    fn from(value: InternalError) -> Self {
+        Self {
+            internal: Arc::new(value),
+        }
+    }
+}
+
+impl From<Arc<InternalError>> for Error {
+    fn from(value: Arc<InternalError>) -> Self {
+        Self { internal: value }
+    }
+}
+
+impl From<&Arc<InternalError>> for Error {
+    fn from(value: &Arc<InternalError>) -> Self {
+        Self {
+            internal: Arc::clone(value),
+        }
+    }
+}
+
+impl Display for Error {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        Display::fmt(&self.internal, f)
+    }
+}
+
+impl Debug for Error {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        Debug::fmt(&self.internal, f)
+    }
+}
+
+#[derive(Debug)]
+pub struct Event {
+    /// The address that was selected for testing.
+    /// Is `None` in the case that the server respond with something unexpected.
+    pub tested_addr: Option<Multiaddr>,
+    /// The amount of data that was sent to the server.
+    /// Is 0 if it wasn't necessary to send any data.
+    /// Otherwise it's a number between 30.000 and 100.000.
+    pub data_amount: usize,
+    /// The peer id of the server that was selected for testing.
+    pub server: PeerId,
+    /// The result of the test. If the test was successful, this is `Ok(())`.
+    /// Otherwise it's an error.
+    pub result: Result<(), Error>,
 }
 
 fn addr_is_local(addr: &Multiaddr) -> bool {

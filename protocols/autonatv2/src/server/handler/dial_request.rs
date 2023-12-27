@@ -24,19 +24,10 @@ use rand_core::RngCore;
 
 use crate::{
     generated::structs::{mod_DialResponse::ResponseStatus, DialStatus},
-    request_response::{DialDataRequest, DialRequest, DialResponse, Request, Response},
-    Nonce,
+    request_response::{Coder, DialDataRequest, DialRequest, DialResponse, Request, Response},
+    server::behaviour::StatusUpdate,
+    Nonce, REQUEST_PROTOCOL_NAME,
 };
-use crate::{request_response::Coder, REQUEST_PROTOCOL_NAME};
-
-#[derive(Clone, Debug)]
-pub struct StatusUpdate {
-    pub all_addrs: Vec<Multiaddr>,
-    pub tested_addr: Option<Multiaddr>,
-    pub client: PeerId,
-    pub data_amount: usize,
-    pub result: Result<(), Arc<io::Error>>,
-}
 
 #[derive(Debug, PartialEq)]
 pub(crate) enum DialBackStatus {
@@ -280,7 +271,6 @@ where
             err: DialBackStatus::DialErr,
         })?;
 
-    // TODO: add timeout
     let dial_back = rx.await.map_err(|_e| HandleFail::InternalError(idx))?;
     if dial_back != DialBackStatus::Ok {
         return Err(HandleFail::DialBack {

@@ -1,5 +1,6 @@
 use std::{
     collections::{HashMap, VecDeque},
+    io,
     task::{Context, Poll},
 };
 
@@ -13,6 +14,7 @@ use libp2p_swarm::{
 };
 use libp2p_swarm::{dial_opts::PeerCondition, ConnectionClosed};
 use rand_core::{OsRng, RngCore};
+use std::sync::Arc;
 
 use crate::server::handler::{
     dial_back,
@@ -59,7 +61,7 @@ where
 {
     type ConnectionHandler = Handler<R>;
 
-    type ToSwarm = crate::server::handler::dial_request::StatusUpdate;
+    type ToSwarm = StatusUpdate;
 
     fn handle_established_inbound_connection(
         &mut self,
@@ -146,4 +148,19 @@ where
         }
         Poll::Pending
     }
+}
+
+#[derive(Debug)]
+pub struct StatusUpdate {
+    /// All address that were submitted for testing.
+    pub all_addrs: Vec<Multiaddr>,
+    /// The address that was eventually tested.
+    /// This is `None` if the client send and unexpected message.
+    pub tested_addr: Option<Multiaddr>,
+    /// The peer id of the client that submitted addresses for testing.
+    pub client: PeerId,
+    /// The amount of data that was requested by the server and was transmitted.
+    pub data_amount: usize,
+    /// The result of the test.
+    pub result: Result<(), Arc<io::Error>>,
 }

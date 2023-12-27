@@ -14,7 +14,7 @@ use libp2p_swarm::{
     SubstreamProtocol,
 };
 
-use crate::{request_response::write_nonce, DIAL_BACK_PROTOCOL_NAME};
+use crate::{request_response::dial_back, DIAL_BACK_PROTOCOL_NAME};
 
 use super::dial_request::{DialBackCommand, DialBackStatus as DialBackRes};
 
@@ -124,7 +124,7 @@ async fn perform_dial_back(
         ..
     }: DialBackCommand,
 ) -> io::Result<()> {
-    let res = write_nonce(stream, nonce)
+    let res = dial_back(stream, nonce)
         .await
         .map_err(|_| DialBackRes::DialBackErr)
         .map(|_| DialBackRes::Ok)

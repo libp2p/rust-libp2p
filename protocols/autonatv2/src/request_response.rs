@@ -266,6 +266,12 @@ impl DialDataRequest {
     }
 }
 
+pub(crate) async fn dial_back(mut stream: impl AsyncWrite + Unpin, nonce: Nonce) -> io::Result<()> {
+    let dial_back = DialBack { nonce };
+    dial_back.write_into(&mut stream).await?;
+    stream.close().await
+}
+
 const DIAL_BACK_MAX_SIZE: usize = 10;
 
 pub(crate) struct DialBack {
@@ -292,12 +298,6 @@ impl DialBack {
             .await
             .map_err(|e| io::Error::new(io::ErrorKind::Other, e))
     }
-}
-
-pub(crate) async fn write_nonce(mut stream: impl AsyncWrite + Unpin, nonce: Nonce) -> io::Result<()> {
-    let dial_back = DialBack { nonce };
-    dial_back.write_into(&mut stream).await?;
-    stream.close().await
 }
 
 #[cfg(test)]

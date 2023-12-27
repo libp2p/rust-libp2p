@@ -17,7 +17,119 @@ async fn confirm_successful() {
     let _ = tracing_subscriber::fmt()
         .with_env_filter(EnvFilter::from_default_env())
         .try_init();
-    let (_alice, _bob) = bootstrap().await;
+    let (mut alice, mut bob) = start_and_connect().await;
+
+    let cor_server_peer = alice.local_peer_id().clone();
+    let cor_client_peer = bob.local_peer_id().clone();
+    let bob_external_addrs = Arc::new(bob.external_addresses().cloned().collect::<Vec<_>>());
+    let alice_bob_external_addrs = bob_external_addrs.clone();
+
+    let alice_task = async {
+        let _ = alice
+            .wait(|event| match event {
+                SwarmEvent::NewExternalAddrCandidate { .. } => Some(()),
+                _ => None,
+            })
+            .await;
+
+        let (dialed_peer_id, dialed_connection_id) = alice
+            .wait(|event| match event {
+                SwarmEvent::Dialing {
+                    peer_id,
+                    connection_id,
+                    ..
+                } => peer_id.map(|peer_id| (peer_id, connection_id)),
+                _ => None,
+            })
+            .await;
+
+        assert_eq!(dialed_peer_id, cor_client_peer);
+
+        let _ = alice
+            .wait(|event| match event {
+                SwarmEvent::ConnectionEstablished {
+                    peer_id,
+                    connection_id,
+                    ..
+                } if peer_id == dialed_peer_id
+                    && peer_id == cor_client_peer
+                    && connection_id == dialed_connection_id =>
+                {
+                    Some(())
+                }
+                _ => None,
+            })
+            .await;
+
+        let server::StatusUpdate {
+            all_addrs,
+            tested_addr,
+            client,
+            data_amount,
+            result,
+        } = alice
+            .wait(|event| match event {
+                SwarmEvent::Behaviour(CombinedServerEvent::Autonat(status_update)) => {
+                    Some(status_update)
+                }
+                _ => None,
+            })
+            .await;
+
+        assert_eq!(tested_addr, bob_external_addrs.get(0).cloned());
+        assert_eq!(data_amount, 0);
+        assert_eq!(client, cor_client_peer);
+        assert_eq!(&all_addrs[..], &bob_external_addrs[..]);
+        assert!(result.is_ok(), "Result: {result:?}");
+    };
+
+    let bob_task = async {
+        let address_candidate = bob
+            .wait(|event| match event {
+                SwarmEvent::NewExternalAddrCandidate { address } => Some(address),
+                _ => None,
+            })
+            .await;
+        let incoming_conn_id = bob
+            .wait(|event| match event {
+                SwarmEvent::IncomingConnection { connection_id, .. } => Some(connection_id),
+                _ => None,
+            })
+            .await;
+
+        let _ = bob.wait(|event| match event {
+            SwarmEvent::ConnectionEstablished {
+                connection_id,
+                peer_id,
+                ..
+            } if incoming_conn_id == connection_id && peer_id == cor_server_peer => Some(()),
+            _ => None,
+        });
+
+        let client::Event {
+            tested_addr,
+            data_amount,
+            server,
+            result,
+        } = bob
+            .wait(|event| match event {
+                SwarmEvent::Behaviour(CombinedClientEvent::Autonat(status_update)) => {
+                    Some(status_update)
+                }
+                SwarmEvent::ExternalAddrConfirmed { address } => {
+                    assert_eq!(address, address_candidate);
+                    None
+                }
+                _ => None,
+            })
+            .await;
+        assert_eq!(tested_addr, alice_bob_external_addrs.get(0).cloned());
+        assert_eq!(data_amount, 0);
+        assert_eq!(server, cor_server_peer);
+        assert!(result.is_ok(), "Result is {result:?}");
+    };
+
+    tokio::join!(alice_task, bob_task);
 }
 
 #[tokio::test]
@@ -39,7 +151,7 @@ async fn dial_back_to_unsupported_protocol() {
 
     let (bob_done_tx, bob_done_rx) = oneshot::channel();
 
-    let alice_task = async move {
+    let alice_task = async {
         let (alice_dialing_peer, alice_conn_id) = alice
             .wait(|event| match event {
                 SwarmEvent::Dialing {
@@ -101,7 +213,7 @@ async fn dial_back_to_unsupported_protocol() {
         }
     };
 
-    let bob_task = async move {
+    let bob_task = async {
         bob.wait(|event| match event {
             SwarmEvent::ExternalAddrExpired { address } if address == bob_test_addr => Some(()),
             _ => None,
@@ -109,7 +221,7 @@ async fn dial_back_to_unsupported_protocol() {
         .await;
         let data_amount = bob
             .wait(|event| match event {
-                SwarmEvent::Behaviour(CombinedClientEvent::Autonat(client::StatusUpdate {
+                SwarmEvent::Behaviour(CombinedClientEvent::Autonat(client::Event {
                     tested_addr: Some(tested_addr),
                     data_amount,
                     server,
@@ -145,7 +257,7 @@ async fn dial_back_to_non_libp2p() {
                 NewExternalAddrCandidate { addr: &addr },
             ));
 
-        let alice_task = async move {
+        let alice_task = async {
             let (alice_dialing_peer, alice_conn_id) = alice
                 .wait(|event| match event {
                     SwarmEvent::Dialing {
@@ -199,9 +311,9 @@ async fn dial_back_to_non_libp2p() {
                     _ => None,
                 })
                 .await;
-            (alice, data_amount)
+            data_amount
         };
-        let bob_task = async move {
+        let bob_task = async {
             bob.wait(|event| match event {
                 SwarmEvent::ExternalAddrExpired { address } if address == bob_addr => Some(()),
                 _ => None,
@@ -209,7 +321,7 @@ async fn dial_back_to_non_libp2p() {
             .await;
             let data_amount = bob
                 .wait(|event| match event {
-                    SwarmEvent::Behaviour(CombinedClientEvent::Autonat(client::StatusUpdate {
+                    SwarmEvent::Behaviour(CombinedClientEvent::Autonat(client::Event {
                         tested_addr: Some(tested_addr),
                         data_amount,
                         server,
@@ -218,11 +330,10 @@ async fn dial_back_to_non_libp2p() {
                     _ => None,
                 })
                 .await;
-            (bob, data_amount)
+            data_amount
         };
 
-        let ((a, alice_data_amount), (b, bob_data_amount)) = tokio::join!(alice_task, bob_task);
-        (alice, bob) = (a, b);
+        let (alice_data_amount, bob_data_amount) = tokio::join!(alice_task, bob_task);
         assert_eq!(alice_data_amount, bob_data_amount);
     }
 }
@@ -250,9 +361,9 @@ async fn dial_back_to_not_supporting() {
             },
         ));
 
-    let handler = tokio::spawn(async move { hannes.loop_on_next().await });
+    let handler = tokio::spawn(async { hannes.loop_on_next().await });
 
-    let alice_task = async move {
+    let alice_task = async {
         let (alice_dialing_peer, alice_conn_id) = alice
             .wait(|event| match event {
                 SwarmEvent::Dialing {
@@ -305,7 +416,7 @@ async fn dial_back_to_not_supporting() {
         }
     };
 
-    let bob_task = async move {
+    let bob_task = async {
         bob.wait(|event| match event {
             SwarmEvent::ExternalAddrExpired { address } if address == bob_unreachable_address => {
                 Some(())
@@ -315,7 +426,7 @@ async fn dial_back_to_not_supporting() {
         .await;
         let data_amount = bob
             .wait(|event| match event {
-                SwarmEvent::Behaviour(CombinedClientEvent::Autonat(client::StatusUpdate {
+                SwarmEvent::Behaviour(CombinedClientEvent::Autonat(client::Event {
                     tested_addr: Some(tested_addr),
                     data_amount,
                     server,
@@ -388,20 +499,21 @@ async fn new_dummy() -> Swarm<libp2p_identify::Behaviour> {
     node
 }
 
-async fn bootstrap() -> (Swarm<CombinedServer>, Swarm<CombinedClient>) {
+async fn start_and_connect() -> (Swarm<CombinedServer>, Swarm<CombinedClient>) {
     let mut alice = new_server().await;
-    let cor_server_peer = alice.local_peer_id().clone();
     let mut bob = new_client().await;
-    let cor_client_peer = bob.local_peer_id().clone();
-
-    let bob_external_addrs = Arc::new(bob.external_addresses().cloned().collect::<Vec<_>>());
-    let alice_bob_external_addrs = bob_external_addrs.clone();
 
     bob.connect(&mut alice).await;
+    (alice, bob)
+}
 
-    let (tx, rx) = oneshot::channel();
+async fn bootstrap() -> (Swarm<CombinedServer>, Swarm<CombinedClient>) {
+    let (mut alice, mut bob) = start_and_connect().await;
 
-    let alice_task = async move {
+    let cor_server_peer = alice.local_peer_id().clone();
+    let cor_client_peer = bob.local_peer_id().clone();
+
+    let alice_task = async {
         let _ = alice
             .wait(|event| match event {
                 SwarmEvent::NewExternalAddrCandidate { .. } => Some(()),
@@ -420,8 +532,6 @@ async fn bootstrap() -> (Swarm<CombinedServer>, Swarm<CombinedClient>) {
             })
             .await;
 
-        assert_eq!(dialed_peer_id, cor_client_peer);
-
         let _ = alice
             .wait(|event| match event {
                 SwarmEvent::ConnectionEstablished {
@@ -438,38 +548,20 @@ async fn bootstrap() -> (Swarm<CombinedServer>, Swarm<CombinedClient>) {
             })
             .await;
 
-        let server::StatusUpdate {
-            all_addrs,
-            tested_addr,
-            client,
-            data_amount,
-            result,
-        } = alice
+        alice
             .wait(|event| match event {
-                SwarmEvent::Behaviour(CombinedServerEvent::Autonat(status_update)) => {
-                    Some(status_update)
-                }
+                SwarmEvent::Behaviour(CombinedServerEvent::Autonat(_)) => Some(()),
                 _ => None,
             })
             .await;
-
-        assert_eq!(tested_addr, bob_external_addrs.get(0).cloned());
-        assert_eq!(data_amount, 0);
-        assert_eq!(client, cor_client_peer);
-        assert_eq!(&all_addrs[..], &bob_external_addrs[..]);
-        assert!(result.is_ok(), "Result: {result:?}");
-
-        rx.await.unwrap();
-        alice
     };
 
-    let bob_task = async move {
-        let address_candidate = bob
-            .wait(|event| match event {
-                SwarmEvent::NewExternalAddrCandidate { address } => Some(address),
-                _ => None,
-            })
-            .await;
+    let bob_task = async {
+        bob.wait(|event| match event {
+            SwarmEvent::NewExternalAddrCandidate { address } => Some(address),
+            _ => None,
+        })
+        .await;
         let incoming_conn_id = bob
             .wait(|event| match event {
                 SwarmEvent::IncomingConnection { connection_id, .. } => Some(connection_id),
@@ -486,31 +578,14 @@ async fn bootstrap() -> (Swarm<CombinedServer>, Swarm<CombinedClient>) {
             _ => None,
         });
 
-        let client::StatusUpdate {
-            tested_addr,
-            data_amount,
-            server,
-            result,
-        } = bob
-            .wait(|event| match event {
-                SwarmEvent::Behaviour(CombinedClientEvent::Autonat(status_update)) => {
-                    Some(status_update)
-                }
-                SwarmEvent::ExternalAddrConfirmed { address } => {
-                    assert_eq!(address, address_candidate);
-                    None
-                }
-                _ => None,
-            })
-            .await;
-        assert_eq!(tested_addr, alice_bob_external_addrs.get(0).cloned());
-        assert_eq!(data_amount, 0);
-        assert_eq!(server, cor_server_peer);
-        assert!(result.is_ok(), "Result is {result:?}");
-
-        tx.send(()).unwrap();
-        bob
+        bob.wait(|event| match event {
+            SwarmEvent::Behaviour(CombinedClientEvent::Autonat(_)) => Some(()),
+            SwarmEvent::ExternalAddrConfirmed { .. } => None,
+            _ => None,
+        })
+        .await;
     };
 
-    tokio::join!(alice_task, bob_task)
+    tokio::join!(alice_task, bob_task);
+    (alice, bob)
 }
