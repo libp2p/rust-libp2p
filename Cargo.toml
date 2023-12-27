@@ -74,7 +74,7 @@ asynchronous-codec = { version = "0.7.0" }
 futures-bounded = { version = "0.2.3", path = "misc/futures-bounded" }
 libp2p = { version = "0.53.2", path = "libp2p" }
 libp2p-allow-block-list = { version = "0.3.0", path = "misc/allow-block-list" }
-libp2p-autonat = { version = "0.12.1", path = "protocols/autonat" }
+libp2p-autonat = { version = "0.12.0", path = "protocols/autonat" }
 libp2p-connection-limits = { version = "0.3.1", path = "misc/connection-limits" }
 libp2p-core = { version = "0.41.2", path = "core" }
 libp2p-dcutr = { version = "0.11.0", path = "protocols/dcutr" }
