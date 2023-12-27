@@ -21,14 +21,12 @@
 use crate::behaviour::FromSwarm;
 use crate::connection::ConnectionId;
 use crate::handler::{
-    AddressChange, ConnectionEvent, ConnectionHandler, ConnectionHandlerEvent,
-    ConnectionHandlerUpgrErr, DialUpgradeError, FullyNegotiatedInbound, FullyNegotiatedOutbound,
-    KeepAlive, ListenUpgradeError, SubstreamProtocol,
+    AddressChange, ConnectionEvent, ConnectionHandler, ConnectionHandlerEvent, DialUpgradeError,
+    FullyNegotiatedInbound, FullyNegotiatedOutbound, ListenUpgradeError, SubstreamProtocol,
 };
 use crate::upgrade::SendWrapper;
 use crate::{
-    ConnectionDenied, NetworkBehaviour, PollParameters, THandler, THandlerInEvent,
-    THandlerOutEvent, ToSwarm,
+    ConnectionDenied, NetworkBehaviour, THandler, THandlerInEvent, THandlerOutEvent, ToSwarm,
 };
 use either::Either;
 use futures::future;
@@ -71,7 +69,7 @@ where
     TBehaviour: NetworkBehaviour,
 {
     type ConnectionHandler = ToggleConnectionHandler<THandler<TBehaviour>>;
-    type OutEvent = TBehaviour::OutEvent;
+    type ToSwarm = TBehaviour::ToSwarm;
 
     fn handle_pending_inbound_connection(
         &mut self,
@@ -159,11 +157,9 @@ where
         })
     }
 
-    fn on_swarm_event(&mut self, event: FromSwarm<Self::ConnectionHandler>) {
+    fn on_swarm_event(&mut self, event: FromSwarm) {
         if let Some(behaviour) = &mut self.inner {
-            if let Some(event) = event.maybe_map_handler(|h| h.inner) {
-                behaviour.on_swarm_event(event);
-            }
+            behaviour.on_swarm_event(event);
         }
     }
 
@@ -181,10 +177,9 @@ where
     fn poll(
         &mut self,
         cx: &mut Context<'_>,
-        params: &mut impl PollParameters,
-    ) -> Poll<ToSwarm<Self::OutEvent, THandlerInEvent<Self>>> {
+    ) -> Poll<ToSwarm<Self::ToSwarm, THandlerInEvent<Self>>> {
         if let Some(inner) = self.inner.as_mut() {
-            inner.poll(cx, params)
+            inner.poll(cx)
         } else {
             Poll::Pending
         }
@@ -252,14 +247,8 @@ where
         };
 
         let err = match err {
-            ConnectionHandlerUpgrErr::Timeout => ConnectionHandlerUpgrErr::Timeout,
-            ConnectionHandlerUpgrErr::Timer => ConnectionHandlerUpgrErr::Timer,
-            ConnectionHandlerUpgrErr::Upgrade(err) => {
-                ConnectionHandlerUpgrErr::Upgrade(err.map_err(|err| match err {
-                    Either::Left(e) => e,
-                    Either::Right(v) => void::unreachable(v),
-                }))
-            }
+            Either::Left(e) => e,
+            Either::Right(v) => void::unreachable(v),
         };
 
         inner.on_connection_event(ConnectionEvent::ListenUpgradeError(ListenUpgradeError {
@@ -273,9 +262,8 @@ impl<TInner> ConnectionHandler for ToggleConnectionHandler<TInner>
 where
     TInner: ConnectionHandler,
 {
-    type InEvent = TInner::InEvent;
-    type OutEvent = TInner::OutEvent;
-    type Error = TInner::Error;
+    type FromBehaviour = TInner::FromBehaviour;
+    type ToBehaviour = TInner::ToBehaviour;
     type InboundProtocol = Either<SendWrapper<TInner::InboundProtocol>, SendWrapper<DeniedUpgrade>>;
     type OutboundProtocol = TInner::OutboundProtocol;
     type OutboundOpenInfo = TInner::OutboundOpenInfo;
@@ -292,30 +280,25 @@ where
         }
     }
 
-    fn on_behaviour_event(&mut self, event: Self::InEvent) {
+    fn on_behaviour_event(&mut self, event: Self::FromBehaviour) {
         self.inner
             .as_mut()
             .expect("Can't receive events if disabled; QED")
             .on_behaviour_event(event)
     }
 
-    fn connection_keep_alive(&self) -> KeepAlive {
+    fn connection_keep_alive(&self) -> bool {
         self.inner
             .as_ref()
             .map(|h| h.connection_keep_alive())
-            .unwrap_or(KeepAlive::No)
+            .unwrap_or(false)
     }
 
     fn poll(
         &mut self,
         cx: &mut Context<'_>,
     ) -> Poll<
-        ConnectionHandlerEvent<
-            Self::OutboundProtocol,
-            Self::OutboundOpenInfo,
-            Self::OutEvent,
-            Self::Error,
-        >,
+        ConnectionHandlerEvent<Self::OutboundProtocol, Self::OutboundOpenInfo, Self::ToBehaviour>,
     > {
         if let Some(inner) = self.inner.as_mut() {
             inner.poll(cx)
@@ -368,36 +351,24 @@ where
             ConnectionEvent::ListenUpgradeError(listen_upgrade_error) => {
                 self.on_listen_upgrade_error(listen_upgrade_error)
             }
+            ConnectionEvent::LocalProtocolsChange(change) => {
+                if let Some(inner) = self.inner.as_mut() {
+                    inner.on_connection_event(ConnectionEvent::LocalProtocolsChange(change));
+                }
+            }
+            ConnectionEvent::RemoteProtocolsChange(change) => {
+                if let Some(inner) = self.inner.as_mut() {
+                    inner.on_connection_event(ConnectionEvent::RemoteProtocolsChange(change));
+                }
+            }
         }
     }
-}
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::dummy;
+    fn poll_close(&mut self, cx: &mut Context<'_>) -> Poll<Option<Self::ToBehaviour>> {
+        let Some(inner) = self.inner.as_mut() else {
+            return Poll::Ready(None);
+        };
 
-    /// A disabled [`ToggleConnectionHandler`] can receive listen upgrade errors in
-    /// the following two cases:
-    ///
-    /// 1. Protocol negotiation on an incoming stream failed with no protocol
-    ///    being agreed on.
-    ///
-    /// 2. When combining [`ConnectionHandler`] implementations a single
-    ///    [`ConnectionHandler`] might be notified of an inbound upgrade error
-    ///    unrelated to its own upgrade logic. For example when nesting a
-    ///    [`ToggleConnectionHandler`] in a
-    ///    [`ConnectionHandlerSelect`](crate::connection_handler::ConnectionHandlerSelect)
-    ///    the former might receive an inbound upgrade error even when disabled.
-    ///
-    /// [`ToggleConnectionHandler`] should ignore the error in both of these cases.
-    #[test]
-    fn ignore_listen_upgrade_error_when_disabled() {
-        let mut handler = ToggleConnectionHandler::<dummy::ConnectionHandler> { inner: None };
-
-        handler.on_connection_event(ConnectionEvent::ListenUpgradeError(ListenUpgradeError {
-            info: Either::Right(()),
-            error: ConnectionHandlerUpgrErr::Timeout,
-        }));
+        inner.poll_close(cx)
     }
 }

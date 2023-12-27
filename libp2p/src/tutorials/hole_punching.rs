@@ -25,7 +25,7 @@
 //! post](https://blog.ipfs.io/2022-01-20-libp2p-hole-punching/) to familiarize yourself with libp2p's hole
 //! punching mechanism on a conceptual level.
 //!
-//! We will be using the [Circuit Relay v2](crate::relay::v2) and the [Direct Connection
+//! We will be using the [Circuit Relay](crate::relay) and the [Direct Connection
 //! Upgrade through Relay (DCUtR)](crate::dcutr) protocol.
 //!
 //! You will need 3 machines for this tutorial:
@@ -54,16 +54,16 @@
 //!
 //! ``` bash
 //! ## Inside the rust-libp2p repository.
-//! cargo build --example relay_v2 -p libp2p-relay
+//! cargo build --bin relay-server-example
 //! ```
 //!
-//! You can find the binary at `target/debug/examples/relay_v2`. In case you built it locally, copy
+//! You can find the binary at `target/debug/relay-server-example`. In case you built it locally, copy
 //! it to your server.
 //!
 //! On your server, start the relay server binary:
 //!
 //! ``` bash
-//! ./relay_v2 --port 4001 --secret-key-seed 0
+//! ./relay-server-example --port 4001 --secret-key-seed 0
 //! ```
 //!
 //! Now let's make sure that the server is public, in other words let's make sure one can reach it
@@ -122,16 +122,16 @@
 //!
 //! ``` bash
 //! ## Inside the rust-libp2p repository.
-//! cargo build --example client -p libp2p-dcutr
+//! cargo build --bin dcutr-example
 //! ```
 //!
-//! You can find the binary at `target/debug/examples/client`. In case you built it locally, copy
+//! You can find the binary at `target/debug/dcutr-example`. In case you built it locally, copy
 //! it to your listening client machine.
 //!
 //! On the listening client machine:
 //!
 //! ``` bash
-//! RUST_LOG=info ./client --secret-key-seed 1 --mode listen --relay-address /ip4/$RELAY_SERVER_IP/tcp/4001/p2p/12D3KooWDpJ7As7BWAwRMfu1VU2WCqNjvq387JEYKDBj4kx6nXTN
+//! RUST_LOG=info ./dcutr-example --secret-key-seed 1 --mode listen --relay-address /ip4/$RELAY_SERVER_IP/tcp/4001/p2p/12D3KooWDpJ7As7BWAwRMfu1VU2WCqNjvq387JEYKDBj4kx6nXTN
 //!
 //! [2022-05-11T10:38:52Z INFO  client] Local peer id: PeerId("XXX")
 //! [2022-05-11T10:38:52Z INFO  client] Listening on "/ip4/127.0.0.1/tcp/44703"
@@ -153,7 +153,7 @@
 //! ## Connecting to the listening client from the dialing client
 //!
 //! ``` bash
-//! RUST_LOG=info ./client --secret-key-seed 2 --mode dial --relay-address /ip4/$RELAY_SERVER_IP/tcp/4001/p2p/12D3KooWDpJ7As7BWAwRMfu1VU2WCqNjvq387JEYKDBj4kx6nXTN --remote-peer-id 12D3KooWPjceQrSwdWXPyLLeABRXmuqt69Rg3sBYbU1Nft9HyQ6X
+//! RUST_LOG=info ./dcutr-example --secret-key-seed 2 --mode dial --relay-address /ip4/$RELAY_SERVER_IP/tcp/4001/p2p/12D3KooWDpJ7As7BWAwRMfu1VU2WCqNjvq387JEYKDBj4kx6nXTN --remote-peer-id 12D3KooWPjceQrSwdWXPyLLeABRXmuqt69Rg3sBYbU1Nft9HyQ6X
 //! ```
 //!
 //! You should see the following logs appear:
@@ -166,18 +166,9 @@
 //!    [2022-01-30T12:54:10Z INFO  client] Established connection to PeerId("12D3KooWPjceQrSwdWXPyLLeABRXmuqt69Rg3sBYbU1Nft9HyQ6X") via Dialer { address: "/ip4/$RELAY_PEER_ID/tcp/4001/p2p/12D3KooWDpJ7As7BWAwRMfu1VU2WCqNjvq387JEYKDBj4kx6nXTN/p2p-circuit/p2p/12D3KooWPjceQrSwdWXPyLLeABRXmuqt69Rg3sBYbU1Nft9HyQ6X", role_override: Dialer }
 //!    ```
 //!
-//! 2. The listening client initiating a direct connection upgrade for the new relayed connection.
-//!    Reported by [`dcutr`](crate::dcutr) through
-//!    [`Event::RemoteInitiatedDirectConnectionUpgrade`](crate::dcutr::Event::RemoteInitiatedDirectConnectionUpgrade).
+//! 2. The direct connection upgrade, also known as hole punch, succeeding.
+//!    Reported by [`dcutr`](crate::dcutr) through [`Event`](crate::dcutr::Event) containing [`Result::Ok`] with the [`ConnectionId`](libp2p_swarm::ConnectionId) of the new direct connection.
 //!
 //!    ``` ignore
-//!    [2022-01-30T12:54:11Z INFO  client] RemoteInitiatedDirectConnectionUpgrade { remote_peer_id: PeerId("12D3KooWPjceQrSwdWXPyLLeABRXmuqt69Rg3sBYbU1Nft9HyQ6X"), remote_relayed_addr: "/ip4/$RELAY_PEER_ID/tcp/4001/p2p/12D3KooWDpJ7As7BWAwRMfu1VU2WCqNjvq387JEYKDBj4kx6nXTN/p2p-circuit/p2p/12D3KooWPjceQrSwdWXPyLLeABRXmuqt69Rg3sBYbU1Nft9HyQ6X" }
-//!    ```
-//!
-//! 3. The direct connection upgrade, also known as hole punch, succeeding. Reported by
-//!    [`dcutr`](crate::dcutr) through
-//!    [`Event::RemoteInitiatedDirectConnectionUpgrade`](crate::dcutr::Event::DirectConnectionUpgradeSucceeded).
-//!
-//!    ``` ignore
-//!    [2022-01-30T12:54:11Z INFO  client] DirectConnectionUpgradeSucceeded { remote_peer_id: PeerId("12D3KooWPjceQrSwdWXPyLLeABRXmuqt69Rg3sBYbU1Nft9HyQ6X") }
+//!    [2022-01-30T12:54:11Z INFO  client] Event { remote_peer_id: PeerId("12D3KooWPjceQrSwdWXPyLLeABRXmuqt69Rg3sBYbU1Nft9HyQ6X"), result: Ok(2) }
 //!    ```

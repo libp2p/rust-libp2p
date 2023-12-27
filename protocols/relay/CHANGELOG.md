@@ -1,4 +1,50 @@
-## 0.16.0 - unreleased
+## 0.17.1
+
+- Automatically register relayed addresses as external addresses.
+  See [PR 4809](https://github.com/libp2p/rust-libp2p/pull/4809).
+- Fix an error where performing too many reservations at once could lead to inconsistent internal state.
+  See [PR 4841](https://github.com/libp2p/rust-libp2p/pull/4841).
+
+## 0.17.0
+- Don't close connections on protocol failures within the relay-server.
+  To achieve this, error handling was restructured:
+  - `libp2p::relay::outbound::stop::FatalUpgradeError` has been removed.
+  - `libp2p::relay::outbound::stop::{Error, ProtocolViolation}` have been introduced.
+  - Several variants of `libp2p::relay::Event` have been deprecated.
+
+  See [PR 4718](https://github.com/libp2p/rust-libp2p/pull/4718).
+- Fix a rare race condition when making a reservation on a relay that could lead to a failed reservation.
+  See [PR 4747](https://github.com/libp2p/rust-libp2p/pull/4747).
+- Propagate errors of relay client to the listener / dialer.
+  A failed reservation will now appear as `SwarmEvent::ListenerClosed` with the `ListenerId` of the corresponding `Swarm::listen_on` call.
+  A failed circuit request will now appear as `SwarmEvent::OutgoingConnectionError` with the `ConnectionId` of the corresponding `Swarm::dial` call.
+  Lastly, a failed reservation or circuit request will **no longer** close the underlying relay connection.
+  As a result, we remove the following enum variants:
+  - `relay::client::Event::ReservationReqFailed`
+  - `relay::client::Event::OutboundCircuitReqFailed`
+  - `relay::client::Event::InboundCircuitReqDenied`
+  - `relay::client::Event::InboundCircuitReqDenyFailed`
+
+  See [PR 4745](https://github.com/libp2p/rust-libp2p/pull/4745).
+
+## 0.16.2
+
+## 0.16.1
+
+- Export `RateLimiter` type.
+  See [PR 3742].
+
+- Add functions to access data within `Limit`.
+  See [PR 4162].
+
+- Remove unconditional `async-std` dependency.
+  See [PR 4283].
+
+[PR 3742]: https://github.com/libp2p/rust-libp2p/pull/3742
+[PR 4162]: https://github.com/libp2p/rust-libp2p/pull/4162
+[PR 4283]: https://github.com/libp2p/rust-libp2p/pull/4283
+
+## 0.16.0
 
 - Raise MSRV to 1.65.
   See [PR 3715].
@@ -6,8 +52,16 @@
 - Hide internals of `Connection` and expose only `AsyncRead` and `AsyncWrite`.
   See [PR 3829].
 
+- Remove `Event::CircuitReqReceiveFailed` and `Event::InboundCircuitReqFailed` variants.
+  These variants are no longer constructed.
+  See [PR 3605].
+
+- Remove deprecated items. See [PR 3948].
+
+[PR 3605]: https://github.com/libp2p/rust-libp2p/pull/3605
 [PR 3715]: https://github.com/libp2p/rust-libp2p/pull/3715
 [PR 3829]: https://github.com/libp2p/rust-libp2p/pull/3829
+[PR 3948]: https://github.com/libp2p/rust-libp2p/pull/3948
 
 ## 0.15.2
 

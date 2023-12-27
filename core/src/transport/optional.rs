@@ -60,9 +60,13 @@ where
     type ListenerUpgrade = T::ListenerUpgrade;
     type Dial = T::Dial;
 
-    fn listen_on(&mut self, addr: Multiaddr) -> Result<ListenerId, TransportError<Self::Error>> {
+    fn listen_on(
+        &mut self,
+        id: ListenerId,
+        addr: Multiaddr,
+    ) -> Result<(), TransportError<Self::Error>> {
         if let Some(inner) = self.0.as_mut() {
-            inner.listen_on(addr)
+            inner.listen_on(id, addr)
         } else {
             Err(TransportError::MultiaddrNotSupported(addr))
         }

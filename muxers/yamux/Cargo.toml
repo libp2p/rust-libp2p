@@ -3,7 +3,7 @@ name = "libp2p-yamux"
 edition = "2021"
 rust-version = { workspace = true }
 description = "Yamux multiplexing protocol for libp2p"
-version = "0.44.0"
+version = "0.45.1"
 authors = ["Parity Technologies <admin@parity.io>"]
 license = "MIT"
 repository = "https://github.com/libp2p/rust-libp2p"
@@ -11,15 +11,17 @@ keywords = ["peer-to-peer", "libp2p", "networking"]
 categories = ["network-programming", "asynchronous"]
 
 [dependencies]
-futures = "0.3.28"
+either = "1"
+futures = "0.3.30"
 libp2p-core = { workspace = true }
 thiserror = "1.0"
-yamux = "0.10.0"
-log = "0.4"
+yamux012 = { version = "0.12.1", package = "yamux" }
+yamux013 = { version = "0.13.1", package = "yamux" }
+tracing = "0.1.37"
 
 [dev-dependencies]
 async-std = { version = "1.7.0", features = ["attributes"] }
-libp2p-muxer-test-harness = { workspace = true }
+libp2p-muxer-test-harness = { path = "../test-harness" }
 
 # Passing arguments to the docsrs builder in order to properly document cfg's.
 # More information: https://docs.rs/about/builds#cross-compiling
@@ -27,3 +29,6 @@ libp2p-muxer-test-harness = { workspace = true }
 all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
 rustc-args = ["--cfg", "docsrs"]
+
+[lints]
+workspace = true

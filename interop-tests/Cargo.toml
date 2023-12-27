@@ -5,16 +5,51 @@ version = "0.1.0"
 publish = false
 license = "MIT"
 
+[package.metadata.release]
+release = false
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
 [dependencies]
 anyhow = "1"
-either = "1.8.0"
-env_logger = "0.10.0"
-futures = "0.3.28"
-libp2p = { path = "../libp2p", features = ["websocket", "yamux", "tcp", "tokio", "ping", "noise", "tls", "dns", "rsa", "macros"] }
-libp2p-quic = { workspace = true, features = ["tokio"] }
-libp2p-webrtc = { workspace = true, features = ["tokio"] }
-libp2p-mplex = { path = "../muxers/mplex" }
-log = "0.4"
+either = "1.9.0"
+futures = "0.3.30"
 rand = "0.8.5"
-redis = { version = "0.23.0", default-features = false, features = ["tokio-comp"] }
-tokio = { version = "1.28.0", features = ["full"] }
+serde = { version = "1", features = ["derive"] }
+tracing = "0.1.37"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+axum = "0.7"
+libp2p = { path = "../libp2p", features = [ "ping", "noise", "tls", "rsa", "macros", "websocket", "tokio", "yamux", "tcp", "dns", "identify", "quic"] }
+libp2p-mplex = { path = "../muxers/mplex" }
+libp2p-noise = { workspace = true }
+libp2p-tls = { workspace = true }
+libp2p-webrtc = { workspace = true, features = ["tokio"] }
+mime_guess = "2.0"
+redis = { version = "0.23.3", default-features = false, features = [
+    "tokio-comp",
+] }
+rust-embed = "8.1"
+serde_json = "1"
+thirtyfour = "=0.32.0-rc.8" # https://github.com/stevepryde/thirtyfour/issues/169
+tokio = { version = "1.35.1", features = ["full"] }
+tower-http = { version = "0.5", features = ["cors", "fs", "trace"] }
+tracing = "0.1.37"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+libp2p = { path = "../libp2p", features = [ "ping", "macros", "webtransport-websys", "wasm-bindgen", "identify", "websocket-websys", "yamux", "noise"] }
+libp2p-mplex = { path = "../muxers/mplex" }
+libp2p-webrtc-websys = { workspace = true }
+wasm-bindgen = { version = "0.2" }
+wasm-bindgen-futures = { version = "0.4" }
+wasm-logger = { version = "0.2.0" }
+instant = "0.1.12"
+reqwest = { version = "0.11", features = ["json"] }
+console_error_panic_hook = { version = "0.1.7" }
+futures-timer = "3.0.2"
+
+[lints]
+workspace = true

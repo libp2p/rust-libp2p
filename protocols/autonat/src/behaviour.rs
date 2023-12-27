@@ -32,15 +32,12 @@ use instant::Instant;
 use libp2p_core::{multiaddr::Protocol, ConnectedPoint, Endpoint, Multiaddr};
 use libp2p_identity::PeerId;
 use libp2p_request_response::{
-    self as request_response, ProtocolSupport, RequestId, ResponseChannel,
+    self as request_response, InboundRequestId, OutboundRequestId, ProtocolSupport, ResponseChannel,
 };
 use libp2p_swarm::{
-    behaviour::{
-        AddressChange, ConnectionClosed, ConnectionEstablished, DialFailure, ExpiredExternalAddr,
-        ExpiredListenAddr, FromSwarm,
-    },
-    ConnectionDenied, ConnectionId, ExternalAddresses, ListenAddresses, NetworkBehaviour,
-    PollParameters, THandler, THandlerInEvent, THandlerOutEvent, ToSwarm,
+    behaviour::{AddressChange, ConnectionClosed, ConnectionEstablished, DialFailure, FromSwarm},
+    ConnectionDenied, ConnectionId, ListenAddresses, NetworkBehaviour, THandler, THandlerInEvent,
+    THandlerOutEvent, ToSwarm,
 };
 use std::{
     collections::{HashMap, HashSet, VecDeque},
@@ -133,7 +130,7 @@ impl ProbeId {
 }
 
 /// Event produced by [`Behaviour`].
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug)]
 pub enum Event {
     /// Event on an inbound probe.
     InboundProbe(InboundProbeEvent),
@@ -187,14 +184,14 @@ pub struct Behaviour {
         PeerId,
         (
             ProbeId,
-            RequestId,
+            InboundRequestId,
             Vec<Multiaddr>,
             ResponseChannel<DialResponse>,
         ),
     >,
 
     // Ongoing outbound probes and mapped to the inner request id.
-    ongoing_outbound: HashMap<RequestId, ProbeId>,
+    ongoing_outbound: HashMap<OutboundRequestId, ProbeId>,
 
     // Connected peers with the observed address of each connection.
     // If the endpoint of a connection is relayed or not global (in case of Config::only_global_ips),
@@ -209,20 +206,22 @@ pub struct Behaviour {
 
     last_probe: Option<Instant>,
 
-    pending_actions: VecDeque<ToSwarm<<Self as NetworkBehaviour>::OutEvent, THandlerInEvent<Self>>>,
+    pending_actions: VecDeque<ToSwarm<<Self as NetworkBehaviour>::ToSwarm, THandlerInEvent<Self>>>,
 
     probe_id: ProbeId,
 
     listen_addresses: ListenAddresses,
-    external_addresses: ExternalAddresses,
+    other_candidates: HashSet<Multiaddr>,
 }
 
 impl Behaviour {
     pub fn new(local_peer_id: PeerId, config: Config) -> Self {
         let protocols = iter::once((DEFAULT_PROTOCOL_NAME, ProtocolSupport::Full));
-        let mut cfg = request_response::Config::default();
-        cfg.set_request_timeout(config.timeout);
-        let inner = request_response::Behaviour::new(AutoNatCodec, protocols, cfg);
+        let inner = request_response::Behaviour::with_codec(
+            AutoNatCodec,
+            protocols,
+            request_response::Config::default().with_request_timeout(config.timeout),
+        );
         Self {
             local_peer_id,
             inner,
@@ -240,7 +239,7 @@ impl Behaviour {
             pending_actions: VecDeque::new(),
             probe_id: ProbeId(0),
             listen_addresses: Default::default(),
-            external_addresses: Default::default(),
+            other_candidates: Default::default(),
         }
     }
 
@@ -279,6 +278,12 @@ impl Behaviour {
         self.servers.retain(|p| p != peer);
     }
 
+    /// Explicitly probe the provided address for external reachability.
+    pub fn probe_address(&mut self, candidate: Multiaddr) {
+        self.other_candidates.insert(candidate);
+        self.as_client().on_new_address();
+    }
+
     fn as_client(&mut self) -> AsClient {
         AsClient {
             inner: &mut self.inner,
@@ -294,7 +299,7 @@ impl Behaviour {
             last_probe: &mut self.last_probe,
             schedule_probe: &mut self.schedule_probe,
             listen_addresses: &self.listen_addresses,
-            external_addresses: &self.external_addresses,
+            other_candidates: &self.other_candidates,
         }
     }
 
@@ -355,20 +360,10 @@ impl Behaviour {
         ConnectionClosed {
             peer_id,
             connection_id,
-            endpoint,
-            handler,
             remaining_established,
-        }: ConnectionClosed<<Self as NetworkBehaviour>::ConnectionHandler>,
+            ..
+        }: ConnectionClosed,
     ) {
-        self.inner
-            .on_swarm_event(FromSwarm::ConnectionClosed(ConnectionClosed {
-                peer_id,
-                connection_id,
-                endpoint,
-                handler,
-                remaining_established,
-            }));
-
         if remaining_established == 0 {
             self.connected.remove(&peer_id);
         } else {
@@ -380,20 +375,7 @@ impl Behaviour {
         }
     }
 
-    fn on_dial_failure(
-        &mut self,
-        DialFailure {
-            peer_id,
-            connection_id,
-            error,
-        }: DialFailure,
-    ) {
-        self.inner
-            .on_swarm_event(FromSwarm::DialFailure(DialFailure {
-                peer_id,
-                connection_id,
-                error,
-            }));
+    fn on_dial_failure(&mut self, DialFailure { peer_id, error, .. }: DialFailure) {
         if let Some(event) = self.as_server().on_outbound_dial_error(peer_id, error) {
             self.pending_actions
                 .push_back(ToSwarm::GenerateEvent(Event::InboundProbe(event)));
@@ -427,15 +409,19 @@ impl Behaviour {
 impl NetworkBehaviour for Behaviour {
     type ConnectionHandler =
         <request_response::Behaviour<AutoNatCodec> as NetworkBehaviour>::ConnectionHandler;
-    type OutEvent = Event;
+    type ToSwarm = Event;
 
-    fn poll(&mut self, cx: &mut Context<'_>, params: &mut impl PollParameters) -> Poll<Action> {
+    #[tracing::instrument(level = "trace", name = "NetworkBehaviour::poll", skip(self, cx))]
+    fn poll(
+        &mut self,
+        cx: &mut Context<'_>,
+    ) -> Poll<ToSwarm<Self::ToSwarm, THandlerInEvent<Self>>> {
         loop {
             if let Some(event) = self.pending_actions.pop_front() {
                 return Poll::Ready(event);
             }
 
-            match self.inner.poll(cx, params) {
+            match self.inner.poll(cx) {
                 Poll::Ready(ToSwarm::GenerateEvent(event)) => {
                     let actions = match event {
                         request_response::Event::Message {
@@ -443,14 +429,14 @@ impl NetworkBehaviour for Behaviour {
                             ..
                         }
                         | request_response::Event::OutboundFailure { .. } => {
-                            self.as_client().handle_event(params, event)
+                            self.as_client().handle_event(event)
                         }
                         request_response::Event::Message {
                             message: request_response::Message::Request { .. },
                             ..
                         }
                         | request_response::Event::InboundFailure { .. } => {
-                            self.as_server().handle_event(params, event)
+                            self.as_server().handle_event(event)
                         }
                         request_response::Event::ResponseSent { .. } => VecDeque::new(),
                     };
@@ -530,56 +516,28 @@ impl NetworkBehaviour for Behaviour {
             .handle_established_outbound_connection(connection_id, peer, addr, role_override)
     }
 
-    fn on_swarm_event(&mut self, event: FromSwarm<Self::ConnectionHandler>) {
+    fn on_swarm_event(&mut self, event: FromSwarm) {
         self.listen_addresses.on_swarm_event(&event);
-        self.external_addresses.on_swarm_event(&event);
+        self.inner.on_swarm_event(event);
 
         match event {
-            FromSwarm::ConnectionEstablished(connection_established) => {
-                self.inner
-                    .on_swarm_event(FromSwarm::ConnectionEstablished(connection_established));
-                self.on_connection_established(connection_established)
-            }
-            FromSwarm::ConnectionClosed(connection_closed) => {
-                self.on_connection_closed(connection_closed)
-            }
-            FromSwarm::DialFailure(dial_failure) => self.on_dial_failure(dial_failure),
-            FromSwarm::AddressChange(address_change) => {
-                self.inner
-                    .on_swarm_event(FromSwarm::AddressChange(address_change));
-                self.on_address_change(address_change)
-            }
-            listen_addr @ FromSwarm::NewListenAddr(_) => {
-                self.inner.on_swarm_event(listen_addr);
+            FromSwarm::ConnectionEstablished(e) => self.on_connection_established(e),
+            FromSwarm::ConnectionClosed(e) => self.on_connection_closed(e),
+            FromSwarm::DialFailure(e) => self.on_dial_failure(e),
+            FromSwarm::AddressChange(e) => self.on_address_change(e),
+            FromSwarm::NewListenAddr(_) => {
                 self.as_client().on_new_address();
             }
-            FromSwarm::ExpiredListenAddr(ExpiredListenAddr { listener_id, addr }) => {
-                self.inner
-                    .on_swarm_event(FromSwarm::ExpiredListenAddr(ExpiredListenAddr {
-                        listener_id,
-                        addr,
-                    }));
-                self.as_client().on_expired_address(addr);
+            FromSwarm::ExpiredListenAddr(e) => {
+                self.as_client().on_expired_address(e.addr);
             }
-            FromSwarm::ExpiredExternalAddr(ExpiredExternalAddr { addr }) => {
-                self.inner
-                    .on_swarm_event(FromSwarm::ExpiredExternalAddr(ExpiredExternalAddr { addr }));
-                self.as_client().on_expired_address(addr);
+            FromSwarm::ExternalAddrExpired(e) => {
+                self.as_client().on_expired_address(e.addr);
             }
-            external_addr @ FromSwarm::NewExternalAddr(_) => {
-                self.inner.on_swarm_event(external_addr);
-                self.as_client().on_new_address();
+            FromSwarm::NewExternalAddrCandidate(e) => {
+                self.probe_address(e.addr.to_owned());
             }
-            listen_failure @ FromSwarm::ListenFailure(_) => {
-                self.inner.on_swarm_event(listen_failure)
-            }
-            new_listener @ FromSwarm::NewListener(_) => self.inner.on_swarm_event(new_listener),
-            listener_error @ FromSwarm::ListenerError(_) => {
-                self.inner.on_swarm_event(listener_error)
-            }
-            listener_closed @ FromSwarm::ListenerClosed(_) => {
-                self.inner.on_swarm_event(listener_closed)
-            }
+            _ => {}
         }
     }
 
@@ -594,13 +552,12 @@ impl NetworkBehaviour for Behaviour {
     }
 }
 
-type Action = ToSwarm<<Behaviour as NetworkBehaviour>::OutEvent, THandlerInEvent<Behaviour>>;
+type Action = ToSwarm<<Behaviour as NetworkBehaviour>::ToSwarm, THandlerInEvent<Behaviour>>;
 
 // Trait implemented for `AsClient` and `AsServer` to handle events from the inner [`request_response::Behaviour`] Protocol.
 trait HandleInnerEvent {
     fn handle_event(
         &mut self,
-        params: &mut impl PollParameters,
         event: request_response::Event<DialRequest, DialResponse>,
     ) -> VecDeque<Action>;
 }

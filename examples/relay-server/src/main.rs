@@ -19,67 +19,80 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
+#![doc = include_str!("../README.md")]
+
 use clap::Parser;
 use futures::executor::block_on;
 use futures::stream::StreamExt;
 use libp2p::{
     core::multiaddr::Protocol,
-    core::upgrade,
-    core::{Multiaddr, Transport},
-    identify, identity,
-    identity::PeerId,
-    noise, ping, relay,
-    swarm::{NetworkBehaviour, SwarmBuilder, SwarmEvent},
-    tcp,
+    core::Multiaddr,
+    identify, identity, noise, ping, relay,
+    swarm::{NetworkBehaviour, SwarmEvent},
+    tcp, yamux,
 };
 use std::error::Error;
 use std::net::{Ipv4Addr, Ipv6Addr};
+use tracing_subscriber::EnvFilter;
 
 fn main() -> Result<(), Box<dyn Error>> {
-    env_logger::init();
+    let _ = tracing_subscriber::fmt()
+        .with_env_filter(EnvFilter::from_default_env())
+        .try_init();
 
     let opt = Opt::parse();
-    println!("opt: {opt:?}");
 
     // Create a static known PeerId based on given secret
     let local_key: identity::Keypair = generate_ed25519(opt.secret_key_seed);
-    let local_peer_id = PeerId::from(local_key.public());
-    println!("Local peer id: {local_peer_id:?}");
 
-    let tcp_transport = tcp::async_io::Transport::default();
-
-    let transport = tcp_transport
-        .upgrade(upgrade::Version::V1Lazy)
-        .authenticate(
-            noise::Config::new(&local_key).expect("Signing libp2p-noise static DH keypair failed."),
-        )
-        .multiplex(libp2p::yamux::Config::default())
-        .boxed();
-
-    let behaviour = Behaviour {
-        relay: relay::Behaviour::new(local_peer_id, Default::default()),
-        ping: ping::Behaviour::new(ping::Config::new()),
-        identify: identify::Behaviour::new(identify::Config::new(
-            "/TODO/0.0.1".to_string(),
-            local_key.public(),
-        )),
-    };
-
-    let mut swarm = SwarmBuilder::without_executor(transport, behaviour, local_peer_id).build();
+    let mut swarm = libp2p::SwarmBuilder::with_existing_identity(local_key)
+        .with_async_std()
+        .with_tcp(
+            tcp::Config::default(),
+            noise::Config::new,
+            yamux::Config::default,
+        )?
+        .with_quic()
+        .with_behaviour(|key| Behaviour {
+            relay: relay::Behaviour::new(key.public().to_peer_id(), Default::default()),
+            ping: ping::Behaviour::new(ping::Config::new()),
+            identify: identify::Behaviour::new(identify::Config::new(
+                "/TODO/0.0.1".to_string(),
+                key.public(),
+            )),
+        })?
+        .build();
 
     // Listen on all interfaces
-    let listen_addr = Multiaddr::empty()
+    let listen_addr_tcp = Multiaddr::empty()
         .with(match opt.use_ipv6 {
             Some(true) => Protocol::from(Ipv6Addr::UNSPECIFIED),
             _ => Protocol::from(Ipv4Addr::UNSPECIFIED),
         })
         .with(Protocol::Tcp(opt.port));
-    swarm.listen_on(listen_addr)?;
+    swarm.listen_on(listen_addr_tcp)?;
+
+    let listen_addr_quic = Multiaddr::empty()
+        .with(match opt.use_ipv6 {
+            Some(true) => Protocol::from(Ipv6Addr::UNSPECIFIED),
+            _ => Protocol::from(Ipv4Addr::UNSPECIFIED),
+        })
+        .with(Protocol::Udp(opt.port))
+        .with(Protocol::QuicV1);
+    swarm.listen_on(listen_addr_quic)?;
 
     block_on(async {
         loop {
             match swarm.next().await.expect("Infinite Stream.") {
                 SwarmEvent::Behaviour(event) => {
+                    if let BehaviourEvent::Identify(identify::Event::Received {
+                        info: identify::Info { observed_addr, .. },
+                        ..
+                    }) = &event
+                    {
+                        swarm.add_external_address(observed_addr.clone());
+                    }
+
                     println!("{event:?}")
                 }
                 SwarmEvent::NewListenAddr { address, .. } => {

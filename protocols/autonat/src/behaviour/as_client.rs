@@ -29,10 +29,8 @@ use futures_timer::Delay;
 use instant::Instant;
 use libp2p_core::Multiaddr;
 use libp2p_identity::PeerId;
-use libp2p_request_response::{self as request_response, OutboundFailure, RequestId};
-use libp2p_swarm::{
-    AddressScore, ConnectionId, ExternalAddresses, ListenAddresses, PollParameters, ToSwarm,
-};
+use libp2p_request_response::{self as request_response, OutboundFailure, OutboundRequestId};
+use libp2p_swarm::{ConnectionId, ListenAddresses, ToSwarm};
 use rand::{seq::SliceRandom, thread_rng};
 use std::{
     collections::{HashMap, HashSet, VecDeque},
@@ -41,7 +39,7 @@ use std::{
 };
 
 /// Outbound probe failed or was aborted.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug)]
 pub enum OutboundProbeError {
     /// Probe was aborted because no server is known, or all servers
     /// are throttled through [`Config::throttle_server_period`].
@@ -55,7 +53,7 @@ pub enum OutboundProbeError {
     Response(ResponseError),
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug)]
 pub enum OutboundProbeEvent {
     /// A dial-back request was sent to a remote peer.
     Request {
@@ -93,17 +91,16 @@ pub(crate) struct AsClient<'a> {
     pub(crate) throttled_servers: &'a mut Vec<(PeerId, Instant)>,
     pub(crate) nat_status: &'a mut NatStatus,
     pub(crate) confidence: &'a mut usize,
-    pub(crate) ongoing_outbound: &'a mut HashMap<RequestId, ProbeId>,
+    pub(crate) ongoing_outbound: &'a mut HashMap<OutboundRequestId, ProbeId>,
     pub(crate) last_probe: &'a mut Option<Instant>,
     pub(crate) schedule_probe: &'a mut Delay,
     pub(crate) listen_addresses: &'a ListenAddresses,
-    pub(crate) external_addresses: &'a ExternalAddresses,
+    pub(crate) other_candidates: &'a HashSet<Multiaddr>,
 }
 
 impl<'a> HandleInnerEvent for AsClient<'a> {
     fn handle_event(
         &mut self,
-        params: &mut impl PollParameters,
         event: request_response::Event<DialRequest, DialResponse>,
     ) -> VecDeque<Action> {
         match event {
@@ -115,12 +112,12 @@ impl<'a> HandleInnerEvent for AsClient<'a> {
                         response,
                     },
             } => {
-                log::debug!("Outbound dial-back request returned {:?}.", response);
+                tracing::debug!(?response, "Outbound dial-back request returned response");
 
                 let probe_id = self
                     .ongoing_outbound
                     .remove(&request_id)
-                    .expect("RequestId exists.");
+                    .expect("OutboundRequestId exists.");
 
                 let event = match response.result.clone() {
                     Ok(address) => OutboundProbeEvent::Response {
@@ -147,19 +144,7 @@ impl<'a> HandleInnerEvent for AsClient<'a> {
                 }
 
                 if let Ok(address) = response.result {
-                    // Update observed address score if it is finite.
-                    #[allow(deprecated)]
-                    // TODO: Fix once we report `AddressScore` through `FromSwarm` event.
-                    let score = params
-                        .external_addresses()
-                        .find_map(|r| (r.addr == address).then_some(r.score))
-                        .unwrap_or(AddressScore::Finite(0));
-                    if let AddressScore::Finite(finite_score) = score {
-                        actions.push_back(ToSwarm::ReportObservedAddr {
-                            address,
-                            score: AddressScore::Finite(finite_score + 1),
-                        });
-                    }
+                    actions.push_back(ToSwarm::ExternalAddrConfirmed(address));
                 }
 
                 actions
@@ -169,10 +154,10 @@ impl<'a> HandleInnerEvent for AsClient<'a> {
                 error,
                 request_id,
             } => {
-                log::debug!(
-                    "Outbound Failure {} when on dial-back request to peer {}.",
+                tracing::debug!(
+                    %peer,
+                    "Outbound Failure {} when on dial-back request to peer.",
                     error,
-                    peer
                 );
                 let probe_id = self
                     .ongoing_outbound
@@ -201,7 +186,7 @@ impl<'a> AsClient<'a> {
                 self.schedule_probe.reset(self.config.retry_interval);
 
                 let addresses = self
-                    .external_addresses
+                    .other_candidates
                     .iter()
                     .chain(self.listen_addresses.iter())
                     .cloned()
@@ -290,16 +275,12 @@ impl<'a> AsClient<'a> {
     ) -> Result<PeerId, OutboundProbeError> {
         let _ = self.last_probe.insert(Instant::now());
         if addresses.is_empty() {
-            log::debug!("Outbound dial-back request aborted: No dial-back addresses.");
+            tracing::debug!("Outbound dial-back request aborted: No dial-back addresses");
             return Err(OutboundProbeError::NoAddresses);
         }
-        let server = match self.random_server() {
-            Some(s) => s,
-            None => {
-                log::debug!("Outbound dial-back request aborted: No qualified server.");
-                return Err(OutboundProbeError::NoServer);
-            }
-        };
+
+        let server = self.random_server().ok_or(OutboundProbeError::NoServer)?;
+
         let request_id = self.inner.send_request(
             &server,
             DialRequest {
@@ -308,7 +289,7 @@ impl<'a> AsClient<'a> {
             },
         );
         self.throttled_servers.push((server, Instant::now()));
-        log::debug!("Send dial-back request to peer {}.", server);
+        tracing::debug!(peer=%server, "Send dial-back request to peer");
         self.ongoing_outbound.insert(request_id, probe_id);
         Ok(server)
     }
@@ -316,11 +297,8 @@ impl<'a> AsClient<'a> {
     // Set the delay to the next probe based on the time of our last probe
     // and the specified delay.
     fn schedule_next_probe(&mut self, delay: Duration) {
-        let last_probe_instant = match self.last_probe {
-            Some(instant) => instant,
-            None => {
-                return;
-            }
+        let Some(last_probe_instant) = self.last_probe else {
+            return;
         };
         let schedule_next = *last_probe_instant + delay;
         self.schedule_probe
@@ -359,10 +337,10 @@ impl<'a> AsClient<'a> {
             return None;
         }
 
-        log::debug!(
-            "Flipped assumed NAT status from {:?} to {:?}",
-            self.nat_status,
-            reported_status
+        tracing::debug!(
+            old_status=?self.nat_status,
+            new_status=?reported_status,
+            "Flipped assumed NAT status"
         );
 
         let old_status = self.nat_status.clone();

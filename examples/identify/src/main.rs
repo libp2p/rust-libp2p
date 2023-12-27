@@ -18,53 +18,34 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-//! identify example
-//!
-//! In the first terminal window, run:
-//!
-//! ```sh
-//! cargo run
-//! ```
-//! It will print the [`PeerId`] and the listening addresses, e.g. `Listening on
-//! "/ip4/127.0.0.1/tcp/24915"`
-//!
-//! In the second terminal window, start a new instance of the example with:
-//!
-//! ```sh
-//! cargo run -- /ip4/127.0.0.1/tcp/24915
-//! ```
-//! The two nodes establish a connection, negotiate the identify protocol
-//! and will send each other identify info which is then printed to the console.
+#![doc = include_str!("../README.md")]
 
-use futures::prelude::*;
-use libp2p::{
-    core::{multiaddr::Multiaddr, upgrade::Version},
-    identify, identity, noise,
-    swarm::{SwarmBuilder, SwarmEvent},
-    tcp, yamux, PeerId, Transport,
-};
-use std::error::Error;
+use futures::StreamExt;
+use libp2p::{core::multiaddr::Multiaddr, identify, noise, swarm::SwarmEvent, tcp, yamux};
+use std::{error::Error, time::Duration};
+use tracing_subscriber::EnvFilter;
 
 #[async_std::main]
 async fn main() -> Result<(), Box<dyn Error>> {
-    let local_key = identity::Keypair::generate_ed25519();
-    let local_peer_id = PeerId::from(local_key.public());
-    println!("Local peer id: {local_peer_id:?}");
+    let _ = tracing_subscriber::fmt()
+        .with_env_filter(EnvFilter::from_default_env())
+        .try_init();
 
-    let transport = tcp::async_io::Transport::default()
-        .upgrade(Version::V1Lazy)
-        .authenticate(noise::Config::new(&local_key).unwrap())
-        .multiplex(yamux::Config::default())
-        .boxed();
-
-    // Create a identify network behaviour.
-    let behaviour = identify::Behaviour::new(identify::Config::new(
-        "/ipfs/id/1.0.0".to_string(),
-        local_key.public(),
-    ));
-
-    let mut swarm =
-        SwarmBuilder::with_async_std_executor(transport, behaviour, local_peer_id).build();
+    let mut swarm = libp2p::SwarmBuilder::with_new_identity()
+        .with_async_std()
+        .with_tcp(
+            tcp::Config::default(),
+            noise::Config::new,
+            yamux::Config::default,
+        )?
+        .with_behaviour(|key| {
+            identify::Behaviour::new(identify::Config::new(
+                "/ipfs/id/1.0.0".to_string(),
+                key.public(),
+            ))
+        })?
+        .with_swarm_config(|c| c.with_idle_connection_timeout(Duration::from_secs(60)))
+        .build();
 
     // Tell the swarm to listen on all interfaces and a random, OS-assigned
     // port.

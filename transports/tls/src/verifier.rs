@@ -30,11 +30,11 @@ use rustls::{
         TLS13_AES_128_GCM_SHA256, TLS13_AES_256_GCM_SHA384, TLS13_CHACHA20_POLY1305_SHA256,
     },
     client::{HandshakeSignatureValid, ServerCertVerified, ServerCertVerifier},
-    internal::msgs::handshake::DigitallySignedStruct,
     server::{ClientCertVerified, ClientCertVerifier},
-    Certificate, DistinguishedNames, SignatureScheme, SupportedCipherSuite,
-    SupportedProtocolVersion,
+    Certificate, CertificateError, DigitallySignedStruct, DistinguishedName, SignatureScheme,
+    SupportedCipherSuite, SupportedProtocolVersion,
 };
+use std::sync::Arc;
 
 /// The protocol versions supported by this verifier.
 ///
@@ -118,8 +118,8 @@ impl ServerCertVerifier for Libp2pCertificateVerifier {
             // the certificate matches the peer ID they intended to connect to,
             // and MUST abort the connection if there is a mismatch.
             if remote_peer_id != peer_id {
-                return Err(rustls::Error::PeerMisbehavedError(
-                    "Wrong peer ID in p2p extension".to_string(),
+                return Err(rustls::Error::InvalidCertificate(
+                    CertificateError::ApplicationVerificationFailure,
                 ));
             }
         }
@@ -162,8 +162,8 @@ impl ClientCertVerifier for Libp2pCertificateVerifier {
         true
     }
 
-    fn client_auth_root_subjects(&self) -> Option<DistinguishedNames> {
-        Some(vec![])
+    fn client_auth_root_subjects(&self) -> &[DistinguishedName] {
+        &[]
     }
 
     fn verify_client_cert(
@@ -236,8 +236,8 @@ impl From<certificate::ParseError> for rustls::Error {
     fn from(certificate::ParseError(e): certificate::ParseError) -> Self {
         use webpki::Error::*;
         match e {
-            BadDer => rustls::Error::InvalidCertificateEncoding,
-            e => rustls::Error::InvalidCertificateData(format!("invalid peer certificate: {e}")),
+            BadDer => rustls::Error::InvalidCertificate(CertificateError::BadEncoding),
+            e => rustls::Error::InvalidCertificate(CertificateError::Other(Arc::new(e))),
         }
     }
 }
@@ -245,11 +245,10 @@ impl From<certificate::VerificationError> for rustls::Error {
     fn from(certificate::VerificationError(e): certificate::VerificationError) -> Self {
         use webpki::Error::*;
         match e {
-            InvalidSignatureForPublicKey => rustls::Error::InvalidCertificateSignature,
-            UnsupportedSignatureAlgorithm | UnsupportedSignatureAlgorithmForPublicKey => {
-                rustls::Error::InvalidCertificateSignatureType
+            InvalidSignatureForPublicKey => {
+                rustls::Error::InvalidCertificate(CertificateError::BadSignature)
             }
-            e => rustls::Error::InvalidCertificateData(format!("invalid peer certificate: {e}")),
+            other => rustls::Error::InvalidCertificate(CertificateError::Other(Arc::new(other))),
         }
     }
 }

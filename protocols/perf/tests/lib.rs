@@ -19,24 +19,27 @@
 // DEALINGS IN THE SOFTWARE.
 
 use libp2p_perf::{
-    client::{self, RunParams},
-    server,
+    client::{self},
+    server, RunParams,
 };
 use libp2p_swarm::{Swarm, SwarmEvent};
 use libp2p_swarm_test::SwarmExt;
+use tracing_subscriber::EnvFilter;
 
-#[async_std::test]
+#[tokio::test]
 async fn perf() {
-    let _ = env_logger::try_init();
+    let _ = tracing_subscriber::fmt()
+        .with_env_filter(EnvFilter::from_default_env())
+        .try_init();
 
     let mut server = Swarm::new_ephemeral(|_| server::Behaviour::new());
     let server_peer_id = *server.local_peer_id();
     let mut client = Swarm::new_ephemeral(|_| client::Behaviour::new());
 
-    server.listen().await;
+    server.listen().with_memory_addr_external().await;
     client.connect(&mut server).await;
 
-    async_std::task::spawn(server.loop_on_next());
+    tokio::task::spawn(server.loop_on_next());
 
     client
         .behaviour_mut()
@@ -53,7 +56,7 @@ async fn perf() {
         .wait(|e| match e {
             SwarmEvent::IncomingConnection { .. } => panic!(),
             SwarmEvent::ConnectionEstablished { .. } => None,
-            SwarmEvent::Dialing(_) => None,
+            SwarmEvent::Dialing { .. } => None,
             SwarmEvent::Behaviour(client::Event { result, .. }) => Some(result),
             e => panic!("{e:?}"),
         })

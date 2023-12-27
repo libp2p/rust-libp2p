@@ -115,10 +115,6 @@ impl FixedPeersIter {
         false
     }
 
-    pub(crate) fn is_waiting(&self, peer: &PeerId) -> bool {
-        self.peers.get(peer) == Some(&PeerState::Waiting)
-    }
-
     pub(crate) fn finish(&mut self) {
         if let State::Waiting { .. } = self.state {
             self.state = State::Finished

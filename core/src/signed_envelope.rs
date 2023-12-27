@@ -97,8 +97,7 @@ impl SignedEnvelope {
         use quick_protobuf::MessageRead;
 
         let mut reader = BytesReader::from_bytes(bytes);
-        let envelope =
-            proto::Envelope::from_reader(&mut reader, bytes).map_err(DecodeError::from)?;
+        let envelope = proto::Envelope::from_reader(&mut reader, bytes).map_err(DecodeError)?;
 
         Ok(Self {
             key: PublicKey::try_decode_protobuf(&envelope.public_key)?,

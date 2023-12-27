@@ -3,7 +3,7 @@ name = "libp2p-autonat"
 edition = "2021"
 rust-version = { workspace = true }
 description = "NAT and firewall detection for libp2p"
-version = "0.11.0"
+version = "0.12.0"
 authors = ["David Craven <david@craven.ch>", "Elena Frank <elena.frank@protonmail.com>"]
 license = "MIT"
 repository = "https://github.com/libp2p/rust-libp2p"
@@ -19,14 +19,16 @@ libp2p-core = { workspace = true }
 libp2p-swarm = { workspace = true }
 libp2p-request-response = { workspace = true }
 libp2p-identity = { workspace = true }
-log = "0.4"
-rand = "0.8"
 quick-protobuf = "0.8"
+rand = "0.8"
+tracing = "0.1.37"
+quick-protobuf-codec = { workspace = true }
+asynchronous-codec = { workspace = true }
 
 [dev-dependencies]
 async-std = { version = "1.10", features = ["attributes"] }
-env_logger = "0.10"
-libp2p-swarm-test = { workspace = true }
+libp2p-swarm-test = { path = "../../swarm-test" }
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 
 # Passing arguments to the docsrs builder in order to properly document cfg's.
 # More information: https://docs.rs/about/builds#cross-compiling
@@ -34,3 +36,6 @@ libp2p-swarm-test = { workspace = true }
 all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
 rustc-args = ["--cfg", "docsrs"]
+
+[lints]
+workspace = true

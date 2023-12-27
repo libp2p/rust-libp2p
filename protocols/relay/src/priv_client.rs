@@ -20,28 +20,27 @@
 
 //! [`NetworkBehaviour`] to act as a circuit relay v2 **client**.
 
-mod handler;
+pub(crate) mod handler;
 pub(crate) mod transport;
 
 use crate::multiaddr_ext::MultiaddrExt;
 use crate::priv_client::handler::Handler;
-use crate::protocol::{self, inbound_stop, outbound_hop};
+use crate::protocol::{self, inbound_stop};
 use bytes::Bytes;
 use either::Either;
 use futures::channel::mpsc::Receiver;
-use futures::channel::oneshot;
 use futures::future::{BoxFuture, FutureExt};
 use futures::io::{AsyncRead, AsyncWrite};
 use futures::ready;
 use futures::stream::StreamExt;
+use libp2p_core::multiaddr::Protocol;
 use libp2p_core::{Endpoint, Multiaddr};
 use libp2p_identity::PeerId;
 use libp2p_swarm::behaviour::{ConnectionClosed, ConnectionEstablished, FromSwarm};
 use libp2p_swarm::dial_opts::DialOpts;
 use libp2p_swarm::{
-    dummy, ConnectionDenied, ConnectionHandler, ConnectionHandlerUpgrErr, ConnectionId,
-    DialFailure, NegotiatedSubstream, NetworkBehaviour, NotifyHandler, PollParameters, THandler,
-    THandlerInEvent, THandlerOutEvent, ToSwarm,
+    dummy, ConnectionDenied, ConnectionHandler, ConnectionId, DialFailure, NetworkBehaviour,
+    NotifyHandler, Stream, THandler, THandlerInEvent, THandlerOutEvent, ToSwarm,
 };
 use std::collections::{hash_map, HashMap, VecDeque};
 use std::io::{Error, ErrorKind, IoSlice};
@@ -60,36 +59,21 @@ pub enum Event {
         renewal: bool,
         limit: Option<protocol::Limit>,
     },
-    ReservationReqFailed {
-        relay_peer_id: PeerId,
-        /// Indicates whether the request replaces an existing reservation.
-        renewal: bool,
-        error: ConnectionHandlerUpgrErr<outbound_hop::ReservationFailedReason>,
-    },
     OutboundCircuitEstablished {
         relay_peer_id: PeerId,
         limit: Option<protocol::Limit>,
-    },
-    OutboundCircuitReqFailed {
-        relay_peer_id: PeerId,
-        error: ConnectionHandlerUpgrErr<outbound_hop::CircuitFailedReason>,
     },
     /// An inbound circuit has been established.
     InboundCircuitEstablished {
         src_peer_id: PeerId,
         limit: Option<protocol::Limit>,
     },
-    InboundCircuitReqFailed {
-        relay_peer_id: PeerId,
-        error: ConnectionHandlerUpgrErr<void::Void>,
-    },
-    /// An inbound circuit request has been denied.
-    InboundCircuitReqDenied { src_peer_id: PeerId },
-    /// Denying an inbound circuit request failed.
-    InboundCircuitReqDenyFailed {
-        src_peer_id: PeerId,
-        error: inbound_stop::UpgradeError,
-    },
+}
+
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+enum ReservationStatus {
+    Pending,
+    Confirmed,
 }
 
 /// [`NetworkBehaviour`] implementation of the relay client
@@ -101,6 +85,11 @@ pub struct Behaviour {
     /// Set of directly connected peers, i.e. not connected via a relayed
     /// connection.
     directly_connected_peers: HashMap<PeerId, Vec<ConnectionId>>,
+
+    /// Stores the address of a pending or confirmed reservation.
+    ///
+    /// This is indexed by the [`ConnectionId`] to a relay server and the address is the `/p2p-circuit` address we reserved on it.
+    reservation_addresses: HashMap<ConnectionId, (Multiaddr, ReservationStatus)>,
 
     /// Queue of actions to return when polled.
     queued_actions: VecDeque<ToSwarm<Event, Either<handler::In, Void>>>,
@@ -115,6 +104,7 @@ pub fn new(local_peer_id: PeerId) -> (Transport, Behaviour) {
         local_peer_id,
         from_transport,
         directly_connected_peers: Default::default(),
+        reservation_addresses: Default::default(),
         queued_actions: Default::default(),
         pending_handler_commands: Default::default(),
     };
@@ -122,11 +112,6 @@ pub fn new(local_peer_id: PeerId) -> (Transport, Behaviour) {
 }
 
 impl Behaviour {
-    #[deprecated(since = "0.15.0", note = "Use libp2p_relay::client::new instead.")]
-    pub fn new_transport_and_behaviour(local_peer_id: PeerId) -> (transport::Transport, Self) {
-        new(local_peer_id)
-    }
-
     fn on_connection_closed(
         &mut self,
         ConnectionClosed {
@@ -134,7 +119,7 @@ impl Behaviour {
             connection_id,
             endpoint,
             ..
-        }: ConnectionClosed<<Self as NetworkBehaviour>::ConnectionHandler>,
+        }: ConnectionClosed,
     ) {
         if !endpoint.is_relayed() {
             match self.directly_connected_peers.entry(peer_id) {
@@ -154,13 +139,19 @@ impl Behaviour {
                     unreachable!("`on_connection_closed` for unconnected peer.")
                 }
             };
+            if let Some((addr, ReservationStatus::Confirmed)) =
+                self.reservation_addresses.remove(&connection_id)
+            {
+                self.queued_actions
+                    .push_back(ToSwarm::ExternalAddrExpired(addr));
+            }
         }
     }
 }
 
 impl NetworkBehaviour for Behaviour {
     type ConnectionHandler = Either<Handler, dummy::ConnectionHandler>;
-    type OutEvent = Event;
+    type ToSwarm = Event;
 
     fn handle_established_inbound_connection(
         &mut self,
@@ -172,7 +163,6 @@ impl NetworkBehaviour for Behaviour {
         if local_addr.is_relayed() {
             return Ok(Either::Right(dummy::ConnectionHandler));
         }
-
         let mut handler = Handler::new(self.local_peer_id, peer, remote_addr.clone());
 
         if let Some(event) = self.pending_handler_commands.remove(&connection_id) {
@@ -202,7 +192,7 @@ impl NetworkBehaviour for Behaviour {
         Ok(Either::Left(handler))
     }
 
-    fn on_swarm_event(&mut self, event: FromSwarm<Self::ConnectionHandler>) {
+    fn on_swarm_event(&mut self, event: FromSwarm) {
         match event {
             FromSwarm::ConnectionEstablished(ConnectionEstablished {
                 peer_id,
@@ -229,24 +219,17 @@ impl NetworkBehaviour for Behaviour {
                 self.on_connection_closed(connection_closed)
             }
             FromSwarm::DialFailure(DialFailure { connection_id, .. }) => {
+                self.reservation_addresses.remove(&connection_id);
                 self.pending_handler_commands.remove(&connection_id);
             }
-            FromSwarm::AddressChange(_)
-            | FromSwarm::ListenFailure(_)
-            | FromSwarm::NewListener(_)
-            | FromSwarm::NewListenAddr(_)
-            | FromSwarm::ExpiredListenAddr(_)
-            | FromSwarm::ListenerError(_)
-            | FromSwarm::ListenerClosed(_)
-            | FromSwarm::NewExternalAddr(_)
-            | FromSwarm::ExpiredExternalAddr(_) => {}
+            _ => {}
         }
     }
 
     fn on_connection_handler_event(
         &mut self,
         event_source: PeerId,
-        _connection: ConnectionId,
+        connection: ConnectionId,
         handler_event: THandlerOutEvent<Self>,
     ) {
         let handler_event = match handler_event {
@@ -256,17 +239,21 @@ impl NetworkBehaviour for Behaviour {
 
         let event = match handler_event {
             handler::Event::ReservationReqAccepted { renewal, limit } => {
+                let (addr, status) = self
+                    .reservation_addresses
+                    .get_mut(&connection)
+                    .expect("Relay connection exist");
+
+                if !renewal && *status == ReservationStatus::Pending {
+                    *status = ReservationStatus::Confirmed;
+                    self.queued_actions
+                        .push_back(ToSwarm::ExternalAddrConfirmed(addr.clone()));
+                }
+
                 Event::ReservationReqAccepted {
                     relay_peer_id: event_source,
                     renewal,
                     limit,
-                }
-            }
-            handler::Event::ReservationReqFailed { renewal, error } => {
-                Event::ReservationReqFailed {
-                    relay_peer_id: event_source,
-                    renewal,
-                    error,
                 }
             }
             handler::Event::OutboundCircuitEstablished { limit } => {
@@ -275,33 +262,19 @@ impl NetworkBehaviour for Behaviour {
                     limit,
                 }
             }
-            handler::Event::OutboundCircuitReqFailed { error } => Event::OutboundCircuitReqFailed {
-                relay_peer_id: event_source,
-                error,
-            },
             handler::Event::InboundCircuitEstablished { src_peer_id, limit } => {
                 Event::InboundCircuitEstablished { src_peer_id, limit }
             }
-            handler::Event::InboundCircuitReqFailed { error } => Event::InboundCircuitReqFailed {
-                relay_peer_id: event_source,
-                error,
-            },
-            handler::Event::InboundCircuitReqDenied { src_peer_id } => {
-                Event::InboundCircuitReqDenied { src_peer_id }
-            }
-            handler::Event::InboundCircuitReqDenyFailed { src_peer_id, error } => {
-                Event::InboundCircuitReqDenyFailed { src_peer_id, error }
-            }
         };
 
-        self.queued_actions.push_back(ToSwarm::GenerateEvent(event))
+        self.queued_actions.push_back(ToSwarm::GenerateEvent(event));
     }
 
+    #[tracing::instrument(level = "trace", name = "NetworkBehaviour::poll", skip(self, cx))]
     fn poll(
         &mut self,
         cx: &mut Context<'_>,
-        _poll_parameters: &mut impl PollParameters,
-    ) -> Poll<ToSwarm<Self::OutEvent, THandlerInEvent<Self>>> {
+    ) -> Poll<ToSwarm<Self::ToSwarm, THandlerInEvent<Self>>> {
         if let Some(action) = self.queued_actions.pop_front() {
             return Poll::Ready(action);
         }
@@ -315,19 +288,43 @@ impl NetworkBehaviour for Behaviour {
                 match self
                     .directly_connected_peers
                     .get(&relay_peer_id)
-                    .and_then(|cs| cs.get(0))
+                    .and_then(|cs| cs.first())
                 {
-                    Some(connection_id) => ToSwarm::NotifyHandler {
-                        peer_id: relay_peer_id,
-                        handler: NotifyHandler::One(*connection_id),
-                        event: Either::Left(handler::In::Reserve { to_listener }),
-                    },
+                    Some(connection_id) => {
+                        self.reservation_addresses.insert(
+                            *connection_id,
+                            (
+                                relay_addr
+                                    .with(Protocol::P2p(relay_peer_id))
+                                    .with(Protocol::P2pCircuit)
+                                    .with(Protocol::P2p(self.local_peer_id)),
+                                ReservationStatus::Pending,
+                            ),
+                        );
+
+                        ToSwarm::NotifyHandler {
+                            peer_id: relay_peer_id,
+                            handler: NotifyHandler::One(*connection_id),
+                            event: Either::Left(handler::In::Reserve { to_listener }),
+                        }
+                    }
                     None => {
                         let opts = DialOpts::peer_id(relay_peer_id)
-                            .addresses(vec![relay_addr])
+                            .addresses(vec![relay_addr.clone()])
                             .extend_addresses_through_behaviour()
                             .build();
                         let relayed_connection_id = opts.connection_id();
+
+                        self.reservation_addresses.insert(
+                            relayed_connection_id,
+                            (
+                                relay_addr
+                                    .with(Protocol::P2p(relay_peer_id))
+                                    .with(Protocol::P2pCircuit)
+                                    .with(Protocol::P2p(self.local_peer_id)),
+                                ReservationStatus::Pending,
+                            ),
+                        );
 
                         self.pending_handler_commands
                             .insert(relayed_connection_id, handler::In::Reserve { to_listener });
@@ -345,13 +342,13 @@ impl NetworkBehaviour for Behaviour {
                 match self
                     .directly_connected_peers
                     .get(&relay_peer_id)
-                    .and_then(|cs| cs.get(0))
+                    .and_then(|cs| cs.first())
                 {
                     Some(connection_id) => ToSwarm::NotifyHandler {
                         peer_id: relay_peer_id,
                         handler: NotifyHandler::One(*connection_id),
                         event: Either::Left(handler::In::EstablishCircuit {
-                            send_back,
+                            to_dial: send_back,
                             dst_peer_id,
                         }),
                     },
@@ -365,7 +362,7 @@ impl NetworkBehaviour for Behaviour {
                         self.pending_handler_commands.insert(
                             connection_id,
                             handler::In::EstablishCircuit {
-                                send_back,
+                                to_dial: send_back,
                                 dst_peer_id,
                             },
                         );
@@ -390,32 +387,23 @@ impl NetworkBehaviour for Behaviour {
 ///
 /// Internally, this uses a stream to the relay.
 pub struct Connection {
-    state: ConnectionState,
+    pub(crate) state: ConnectionState,
 }
 
-enum ConnectionState {
+pub(crate) enum ConnectionState {
     InboundAccepting {
         accept: BoxFuture<'static, Result<ConnectionState, Error>>,
     },
     Operational {
         read_buffer: Bytes,
-        substream: NegotiatedSubstream,
-        /// "Drop notifier" pattern to signal to the transport that the connection has been dropped.
-        ///
-        /// This is flagged as "dead-code" by the compiler because we never read from it here.
-        /// However, it is actual use is to trigger the `Canceled` error in the `Transport` when this `Sender` is dropped.
-        #[allow(dead_code)]
-        drop_notifier: oneshot::Sender<void::Void>,
+        substream: Stream,
     },
 }
 
 impl Unpin for ConnectionState {}
 
 impl ConnectionState {
-    pub(crate) fn new_inbound(
-        circuit: inbound_stop::Circuit,
-        drop_notifier: oneshot::Sender<void::Void>,
-    ) -> Self {
+    pub(crate) fn new_inbound(circuit: inbound_stop::Circuit) -> Self {
         ConnectionState::InboundAccepting {
             accept: async {
                 let (substream, read_buffer) = circuit
@@ -425,22 +413,16 @@ impl ConnectionState {
                 Ok(ConnectionState::Operational {
                     read_buffer,
                     substream,
-                    drop_notifier,
                 })
             }
             .boxed(),
         }
     }
 
-    pub(crate) fn new_outbound(
-        substream: NegotiatedSubstream,
-        read_buffer: Bytes,
-        drop_notifier: oneshot::Sender<void::Void>,
-    ) -> Self {
+    pub(crate) fn new_outbound(substream: Stream, read_buffer: Bytes) -> Self {
         ConnectionState::Operational {
             substream,
             read_buffer,
-            drop_notifier,
         }
     }
 }

@@ -33,6 +33,7 @@ pub struct DecodingError {
 }
 
 impl DecodingError {
+    #[allow(dead_code)]
     pub(crate) fn missing_feature(feature_name: &'static str) -> Self {
         Self {
             msg: format!("cargo feature `{feature_name}` is not enabled"),
@@ -77,13 +78,6 @@ impl DecodingError {
         }
     }
 
-    pub(crate) fn decoding_unsupported(key_type: &'static str) -> Self {
-        Self {
-            msg: format!("decoding {key_type} key from Protobuf is unsupported"),
-            source: None,
-        }
-    }
-
     #[cfg(all(feature = "rsa", not(target_arch = "wasm32")))]
     pub(crate) fn encoding_unsupported(key_type: &'static str) -> Self {
         Self {
@@ -114,11 +108,19 @@ pub struct SigningError {
 
 /// An error during encoding of key material.
 impl SigningError {
-    #[cfg(any(feature = "secp256k1", feature = "rsa"))]
-    pub(crate) fn new<S: ToString>(msg: S, source: Option<Box<dyn Error + Send + Sync>>) -> Self {
+    #[cfg(all(feature = "rsa", not(target_arch = "wasm32")))]
+    pub(crate) fn new<S: ToString>(msg: S) -> Self {
         Self {
             msg: msg.to_string(),
-            source,
+            source: None,
+        }
+    }
+
+    #[cfg(all(feature = "rsa", not(target_arch = "wasm32")))]
+    pub(crate) fn source(self, source: impl Error + Send + Sync + 'static) -> Self {
+        Self {
+            source: Some(Box::new(source)),
+            ..self
         }
     }
 }

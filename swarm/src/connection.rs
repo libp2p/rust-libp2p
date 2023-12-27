@@ -21,30 +21,39 @@
 mod error;
 
 pub(crate) mod pool;
+mod supported_protocols;
 
 pub use error::ConnectionError;
 pub(crate) use error::{
     PendingConnectionError, PendingInboundConnectionError, PendingOutboundConnectionError,
 };
+pub use supported_protocols::SupportedProtocols;
 
 use crate::handler::{
     AddressChange, ConnectionEvent, ConnectionHandler, DialUpgradeError, FullyNegotiatedInbound,
-    FullyNegotiatedOutbound, ListenUpgradeError,
+    FullyNegotiatedOutbound, ListenUpgradeError, ProtocolSupport, ProtocolsAdded, ProtocolsChange,
+    UpgradeInfoSend,
 };
-use crate::upgrade::{InboundUpgradeSend, OutboundUpgradeSend, SendWrapper};
-use crate::{ConnectionHandlerEvent, ConnectionHandlerUpgrErr, KeepAlive, SubstreamProtocol};
+use crate::stream::ActiveStreamCounter;
+use crate::upgrade::{InboundUpgradeSend, OutboundUpgradeSend};
+use crate::{
+    ConnectionHandlerEvent, Stream, StreamProtocol, StreamUpgradeError, SubstreamProtocol,
+};
+use futures::future::BoxFuture;
 use futures::stream::FuturesUnordered;
-use futures::FutureExt;
 use futures::StreamExt;
+use futures::{stream, FutureExt};
 use futures_timer::Delay;
 use instant::Instant;
 use libp2p_core::connection::ConnectedPoint;
 use libp2p_core::multiaddr::Multiaddr;
 use libp2p_core::muxing::{StreamMuxerBox, StreamMuxerEvent, StreamMuxerExt, SubstreamBox};
-use libp2p_core::upgrade::{InboundUpgradeApply, OutboundUpgradeApply};
+use libp2p_core::upgrade;
+use libp2p_core::upgrade::{NegotiationError, ProtocolError};
 use libp2p_core::Endpoint;
-use libp2p_core::{upgrade, UpgradeError};
 use libp2p_identity::PeerId;
+use std::collections::HashSet;
+use std::fmt::{Display, Formatter};
 use std::future::Future;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::task::Waker;
@@ -58,15 +67,6 @@ static NEXT_CONNECTION_ID: AtomicUsize = AtomicUsize::new(1);
 pub struct ConnectionId(usize);
 
 impl ConnectionId {
-    /// A "dummy" [`ConnectionId`].
-    ///
-    /// Really, you should not use this, not even for testing but it is here if you need it.
-    #[deprecated(
-        since = "0.42.0",
-        note = "Don't use this, it will be removed at a later stage again."
-    )]
-    pub const DUMMY: ConnectionId = ConnectionId(0);
-
     /// Creates an _unchecked_ [`ConnectionId`].
     ///
     /// [`Swarm`](crate::Swarm) enforces that [`ConnectionId`]s are unique and not reused.
@@ -80,6 +80,12 @@ impl ConnectionId {
     /// Returns the next available [`ConnectionId`].
     pub(crate) fn next() -> Self {
         Self(NEXT_CONNECTION_ID.fetch_add(1, Ordering::SeqCst))
+    }
+}
+
+impl Display for ConnectionId {
+    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
+        write!(f, "{}", self.0)
     }
 }
 
@@ -112,16 +118,18 @@ where
     handler: THandler,
     /// Futures that upgrade incoming substreams.
     negotiating_in: FuturesUnordered<
-        SubstreamUpgrade<
+        StreamUpgrade<
             THandler::InboundOpenInfo,
-            InboundUpgradeApply<SubstreamBox, SendWrapper<THandler::InboundProtocol>>,
+            <THandler::InboundProtocol as InboundUpgradeSend>::Output,
+            <THandler::InboundProtocol as InboundUpgradeSend>::Error,
         >,
     >,
     /// Futures that upgrade outgoing substreams.
     negotiating_out: FuturesUnordered<
-        SubstreamUpgrade<
+        StreamUpgrade<
             THandler::OutboundOpenInfo,
-            OutboundUpgradeApply<SubstreamBox, SendWrapper<THandler::OutboundProtocol>>,
+            <THandler::OutboundProtocol as OutboundUpgradeSend>::Output,
+            <THandler::OutboundProtocol as OutboundUpgradeSend>::Error,
         >,
     >,
     /// The currently planned connection & handler shutdown.
@@ -135,8 +143,7 @@ where
     /// Note: This only enforces a limit on the number of concurrently
     /// negotiating inbound streams. The total number of inbound streams on a
     /// connection is the sum of negotiating and negotiated streams. A limit on
-    /// the total number of streams can be enforced at the
-    /// [`StreamMuxerBox`](libp2p_core::muxing::StreamMuxerBox) level.
+    /// the total number of streams can be enforced at the [`StreamMuxerBox`] level.
     max_negotiating_inbound_streams: usize,
     /// Contains all upgrades that are waiting for a new outbound substream.
     ///
@@ -145,6 +152,11 @@ where
     requested_substreams: FuturesUnordered<
         SubstreamRequested<THandler::OutboundOpenInfo, THandler::OutboundProtocol>,
     >,
+
+    local_supported_protocols: HashSet<StreamProtocol>,
+    remote_supported_protocols: HashSet<StreamProtocol>,
+    idle_timeout: Duration,
+    stream_counter: ActiveStreamCounter,
 }
 
 impl<THandler> fmt::Debug for Connection<THandler>
@@ -169,10 +181,17 @@ where
     /// and connection handler.
     pub(crate) fn new(
         muxer: StreamMuxerBox,
-        handler: THandler,
+        mut handler: THandler,
         substream_upgrade_protocol_override: Option<upgrade::Version>,
         max_negotiating_inbound_streams: usize,
+        idle_timeout: Duration,
     ) -> Self {
+        let initial_protocols = gather_supported_protocols(&handler);
+        if !initial_protocols.is_empty() {
+            handler.on_connection_event(ConnectionEvent::LocalProtocolsChange(
+                ProtocolsChange::Added(ProtocolsAdded::from_set(&initial_protocols)),
+            ));
+        }
         Connection {
             muxing: muxer,
             handler,
@@ -182,26 +201,44 @@ where
             substream_upgrade_protocol_override,
             max_negotiating_inbound_streams,
             requested_substreams: Default::default(),
+            local_supported_protocols: initial_protocols,
+            remote_supported_protocols: Default::default(),
+            idle_timeout,
+            stream_counter: ActiveStreamCounter::default(),
         }
     }
 
     /// Notifies the connection handler of an event.
-    pub(crate) fn on_behaviour_event(&mut self, event: THandler::InEvent) {
+    pub(crate) fn on_behaviour_event(&mut self, event: THandler::FromBehaviour) {
         self.handler.on_behaviour_event(event);
     }
 
-    /// Begins an orderly shutdown of the connection, returning the connection
-    /// handler and a `Future` that resolves when connection shutdown is complete.
-    pub(crate) fn close(self) -> (THandler, impl Future<Output = io::Result<()>>) {
-        (self.handler, self.muxing.close())
+    /// Begins an orderly shutdown of the connection, returning a stream of final events and a `Future` that resolves when connection shutdown is complete.
+    pub(crate) fn close(
+        self,
+    ) -> (
+        impl futures::Stream<Item = THandler::ToBehaviour>,
+        impl Future<Output = io::Result<()>>,
+    ) {
+        let Connection {
+            mut handler,
+            muxing,
+            ..
+        } = self;
+
+        (
+            stream::poll_fn(move |cx| handler.poll_close(cx)),
+            muxing.close(),
+        )
     }
 
     /// Polls the handler and the substream, forwarding events from the former to the latter and
     /// vice versa.
+    #[tracing::instrument(level = "debug", name = "Connection::poll", skip(self, cx))]
     pub(crate) fn poll(
         self: Pin<&mut Self>,
         cx: &mut Context<'_>,
-    ) -> Poll<Result<Event<THandler::OutEvent>, ConnectionError<THandler::Error>>> {
+    ) -> Poll<Result<Event<THandler::ToBehaviour>, ConnectionError>> {
         let Self {
             requested_substreams,
             muxing,
@@ -211,6 +248,11 @@ where
             shutdown,
             max_negotiating_inbound_streams,
             substream_upgrade_protocol_override,
+            local_supported_protocols: supported_protocols,
+            remote_supported_protocols,
+            idle_timeout,
+            stream_counter,
+            ..
         } = self.get_mut();
 
         loop {
@@ -220,7 +262,7 @@ where
                     handler.on_connection_event(ConnectionEvent::DialUpgradeError(
                         DialUpgradeError {
                             info,
-                            error: ConnectionHandlerUpgrErr::Timeout,
+                            error: StreamUpgradeError::Timeout,
                         },
                     ));
                     continue;
@@ -238,11 +280,33 @@ where
                     requested_substreams.push(SubstreamRequested::new(user_data, timeout, upgrade));
                     continue; // Poll handler until exhausted.
                 }
-                Poll::Ready(ConnectionHandlerEvent::Custom(event)) => {
+                Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(event)) => {
                     return Poll::Ready(Ok(Event::Handler(event)));
                 }
-                Poll::Ready(ConnectionHandlerEvent::Close(err)) => {
-                    return Poll::Ready(Err(ConnectionError::Handler(err)));
+                Poll::Ready(ConnectionHandlerEvent::ReportRemoteProtocols(
+                    ProtocolSupport::Added(protocols),
+                )) => {
+                    if let Some(added) =
+                        ProtocolsChange::add(remote_supported_protocols, &protocols)
+                    {
+                        handler.on_connection_event(ConnectionEvent::RemoteProtocolsChange(added));
+                        remote_supported_protocols.extend(protocols);
+                    }
+
+                    continue;
+                }
+                Poll::Ready(ConnectionHandlerEvent::ReportRemoteProtocols(
+                    ProtocolSupport::Removed(protocols),
+                )) => {
+                    if let Some(removed) =
+                        ProtocolsChange::remove(remote_supported_protocols, &protocols)
+                    {
+                        handler
+                            .on_connection_event(ConnectionEvent::RemoteProtocolsChange(removed));
+                        remote_supported_protocols.retain(|p| !protocols.contains(p));
+                    }
+
+                    continue;
                 }
             }
 
@@ -273,41 +337,39 @@ where
                     ));
                     continue;
                 }
-                Poll::Ready(Some((info, Err(error)))) => {
+                Poll::Ready(Some((info, Err(StreamUpgradeError::Apply(error))))) => {
                     handler.on_connection_event(ConnectionEvent::ListenUpgradeError(
                         ListenUpgradeError { info, error },
                     ));
                     continue;
                 }
+                Poll::Ready(Some((_, Err(StreamUpgradeError::Io(e))))) => {
+                    tracing::debug!("failed to upgrade inbound stream: {e}");
+                    continue;
+                }
+                Poll::Ready(Some((_, Err(StreamUpgradeError::NegotiationFailed)))) => {
+                    tracing::debug!("no protocol could be agreed upon for inbound stream");
+                    continue;
+                }
+                Poll::Ready(Some((_, Err(StreamUpgradeError::Timeout)))) => {
+                    tracing::debug!("inbound stream upgrade timed out");
+                    continue;
+                }
             }
 
-            // Ask the handler whether it wants the connection (and the handler itself)
-            // to be kept alive, which determines the planned shutdown, if any.
-            let keep_alive = handler.connection_keep_alive();
-            match (&mut *shutdown, keep_alive) {
-                (Shutdown::Later(timer, deadline), KeepAlive::Until(t)) => {
-                    if *deadline != t {
-                        *deadline = t;
-                        if let Some(dur) = deadline.checked_duration_since(Instant::now()) {
-                            timer.reset(dur)
-                        }
-                    }
-                }
-                (_, KeepAlive::Until(t)) => {
-                    if let Some(dur) = t.checked_duration_since(Instant::now()) {
-                        *shutdown = Shutdown::Later(Delay::new(dur), t)
-                    }
-                }
-                (_, KeepAlive::No) => *shutdown = Shutdown::Asap,
-                (_, KeepAlive::Yes) => *shutdown = Shutdown::None,
-            };
-
             // Check if the connection (and handler) should be shut down.
-            // As long as we're still negotiating substreams, shutdown is always postponed.
+            // As long as we're still negotiating substreams or have any active streams shutdown is always postponed.
             if negotiating_in.is_empty()
                 && negotiating_out.is_empty()
                 && requested_substreams.is_empty()
+                && stream_counter.has_no_active_streams()
             {
+                if let Some(new_timeout) =
+                    compute_new_shutdown(handler.connection_keep_alive(), shutdown, *idle_timeout)
+                {
+                    *shutdown = new_timeout;
+                }
+
                 match shutdown {
                     Shutdown::None => {}
                     Shutdown::Asap => return Poll::Ready(Err(ConnectionError::KeepAliveTimeout)),
@@ -318,6 +380,8 @@ where
                         Poll::Pending => {}
                     },
                 }
+            } else {
+                *shutdown = Shutdown::None;
             }
 
             match muxing.poll_unpin(cx)? {
@@ -336,12 +400,13 @@ where
                     Poll::Ready(substream) => {
                         let (user_data, timeout, upgrade) = requested_substream.extract();
 
-                        negotiating_out.push(SubstreamUpgrade::new_outbound(
+                        negotiating_out.push(StreamUpgrade::new_outbound(
                             substream,
                             user_data,
                             timeout,
                             upgrade,
                             *substream_upgrade_protocol_override,
+                            stream_counter.clone(),
                         ));
 
                         continue; // Go back to the top, handler can potentially make progress again.
@@ -355,16 +420,82 @@ where
                     Poll::Ready(substream) => {
                         let protocol = handler.listen_protocol();
 
-                        negotiating_in.push(SubstreamUpgrade::new_inbound(substream, protocol));
+                        negotiating_in.push(StreamUpgrade::new_inbound(
+                            substream,
+                            protocol,
+                            stream_counter.clone(),
+                        ));
 
                         continue; // Go back to the top, handler can potentially make progress again.
                     }
                 }
             }
 
+            let new_protocols = gather_supported_protocols(handler);
+            let changes = ProtocolsChange::from_full_sets(supported_protocols, &new_protocols);
+
+            if !changes.is_empty() {
+                for change in changes {
+                    handler.on_connection_event(ConnectionEvent::LocalProtocolsChange(change));
+                }
+
+                *supported_protocols = new_protocols;
+
+                continue; // Go back to the top, handler can potentially make progress again.
+            }
+
             return Poll::Pending; // Nothing can make progress, return `Pending`.
         }
     }
+
+    #[cfg(test)]
+    fn poll_noop_waker(&mut self) -> Poll<Result<Event<THandler::ToBehaviour>, ConnectionError>> {
+        Pin::new(self).poll(&mut Context::from_waker(futures::task::noop_waker_ref()))
+    }
+}
+
+fn gather_supported_protocols(handler: &impl ConnectionHandler) -> HashSet<StreamProtocol> {
+    handler
+        .listen_protocol()
+        .upgrade()
+        .protocol_info()
+        .filter_map(|i| StreamProtocol::try_from_owned(i.as_ref().to_owned()).ok())
+        .collect()
+}
+
+fn compute_new_shutdown(
+    handler_keep_alive: bool,
+    current_shutdown: &Shutdown,
+    idle_timeout: Duration,
+) -> Option<Shutdown> {
+    match (current_shutdown, handler_keep_alive) {
+        (_, false) if idle_timeout == Duration::ZERO => Some(Shutdown::Asap),
+        (Shutdown::Later(_, _), false) => None, // Do nothing, i.e. let the shutdown timer continue to tick.
+        (_, false) => {
+            let now = Instant::now();
+            let safe_keep_alive = checked_add_fraction(now, idle_timeout);
+
+            Some(Shutdown::Later(
+                Delay::new(safe_keep_alive),
+                now + safe_keep_alive,
+            ))
+        }
+        (_, true) => Some(Shutdown::None),
+    }
+}
+
+/// Repeatedly halves and adds the [`Duration`] to the [`Instant`] until [`Instant::checked_add`] succeeds.
+///
+/// [`Instant`] depends on the underlying platform and has a limit of which points in time it can represent.
+/// The [`Duration`] computed by the this function may not be the longest possible that we can add to `now` but it will work.
+fn checked_add_fraction(start: Instant, mut duration: Duration) -> Duration {
+    while start.checked_add(duration).is_none() {
+        tracing::debug!(start=?start, duration=?duration, "start + duration cannot be presented, halving duration");
+
+        duration /= 2;
+    }
+
+    duration
 }
 
 /// Borrowed information about an incoming connection currently being negotiated.
@@ -386,52 +517,27 @@ impl<'a> IncomingInfo<'a> {
     }
 }
 
-/// Information about a connection limit.
-#[deprecated(note = "Use `libp2p::connection_limits` instead.", since = "0.42.1")]
-#[derive(Debug, Clone, Copy)]
-pub struct ConnectionLimit {
-    /// The maximum number of connections.
-    pub limit: u32,
-    /// The current number of connections.
-    pub current: u32,
-}
-
-#[allow(deprecated)]
-impl fmt::Display for ConnectionLimit {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(
-            f,
-            "connection limit exceeded ({}/{})",
-            self.current, self.limit
-        )
-    }
-}
-
-/// A `ConnectionLimit` can represent an error if it has been exceeded.
-#[allow(deprecated)]
-impl std::error::Error for ConnectionLimit {}
-
-struct SubstreamUpgrade<UserData, Upgrade> {
+struct StreamUpgrade<UserData, TOk, TErr> {
     user_data: Option<UserData>,
     timeout: Delay,
-    upgrade: Upgrade,
+    upgrade: BoxFuture<'static, Result<TOk, StreamUpgradeError<TErr>>>,
 }
 
-impl<UserData, Upgrade>
-    SubstreamUpgrade<UserData, OutboundUpgradeApply<SubstreamBox, SendWrapper<Upgrade>>>
-where
-    Upgrade: Send + OutboundUpgradeSend,
-{
-    fn new_outbound(
+impl<UserData, TOk, TErr> StreamUpgrade<UserData, TOk, TErr> {
+    fn new_outbound<Upgrade>(
         substream: SubstreamBox,
         user_data: UserData,
         timeout: Delay,
         upgrade: Upgrade,
         version_override: Option<upgrade::Version>,
-    ) -> Self {
+        counter: ActiveStreamCounter,
+    ) -> Self
+    where
+        Upgrade: OutboundUpgradeSend<Output = TOk, Error = TErr>,
+    {
         let effective_version = match version_override {
             Some(version_override) if version_override != upgrade::Version::default() => {
-                log::debug!(
+                tracing::debug!(
                     "Substream upgrade protocol override: {:?} -> {:?}",
                     upgrade::Version::default(),
                     version_override
@@ -441,45 +547,78 @@ where
             }
             _ => upgrade::Version::default(),
         };
+        let protocols = upgrade.protocol_info();
 
         Self {
             user_data: Some(user_data),
             timeout,
-            upgrade: upgrade::apply_outbound(substream, SendWrapper(upgrade), effective_version),
+            upgrade: Box::pin(async move {
+                let (info, stream) = multistream_select::dialer_select_proto(
+                    substream,
+                    protocols,
+                    effective_version,
+                )
+                .await
+                .map_err(to_stream_upgrade_error)?;
+
+                let output = upgrade
+                    .upgrade_outbound(Stream::new(stream, counter), info)
+                    .await
+                    .map_err(StreamUpgradeError::Apply)?;
+
+                Ok(output)
+            }),
         }
     }
 }
 
-impl<UserData, Upgrade>
-    SubstreamUpgrade<UserData, InboundUpgradeApply<SubstreamBox, SendWrapper<Upgrade>>>
-where
-    Upgrade: Send + InboundUpgradeSend,
-{
-    fn new_inbound(
+impl<UserData, TOk, TErr> StreamUpgrade<UserData, TOk, TErr> {
+    fn new_inbound<Upgrade>(
         substream: SubstreamBox,
         protocol: SubstreamProtocol<Upgrade, UserData>,
-    ) -> Self {
+        counter: ActiveStreamCounter,
+    ) -> Self
+    where
+        Upgrade: InboundUpgradeSend<Output = TOk, Error = TErr>,
+    {
         let timeout = *protocol.timeout();
         let (upgrade, open_info) = protocol.into_upgrade();
+        let protocols = upgrade.protocol_info();
 
         Self {
             user_data: Some(open_info),
             timeout: Delay::new(timeout),
-            upgrade: upgrade::apply_inbound(substream, SendWrapper(upgrade)),
+            upgrade: Box::pin(async move {
+                let (info, stream) =
+                    multistream_select::listener_select_proto(substream, protocols)
+                        .await
+                        .map_err(to_stream_upgrade_error)?;
+
+                let output = upgrade
+                    .upgrade_inbound(Stream::new(stream, counter), info)
+                    .await
+                    .map_err(StreamUpgradeError::Apply)?;
+
+                Ok(output)
+            }),
         }
     }
 }
 
-impl<UserData, Upgrade> Unpin for SubstreamUpgrade<UserData, Upgrade> {}
+fn to_stream_upgrade_error<T>(e: NegotiationError) -> StreamUpgradeError<T> {
+    match e {
+        NegotiationError::Failed => StreamUpgradeError::NegotiationFailed,
+        NegotiationError::ProtocolError(ProtocolError::IoError(e)) => StreamUpgradeError::Io(e),
+        NegotiationError::ProtocolError(other) => {
+            StreamUpgradeError::Io(io::Error::new(io::ErrorKind::Other, other))
+        }
+    }
+}
 
-impl<UserData, Upgrade, UpgradeOutput, TUpgradeError> Future for SubstreamUpgrade<UserData, Upgrade>
-where
-    Upgrade: Future<Output = Result<UpgradeOutput, UpgradeError<TUpgradeError>>> + Unpin,
-{
-    type Output = (
-        UserData,
-        Result<UpgradeOutput, ConnectionHandlerUpgrErr<TUpgradeError>>,
-    );
+impl<UserData, TOk, TErr> Unpin for StreamUpgrade<UserData, TOk, TErr> {}
+
+impl<UserData, TOk, TErr> Future for StreamUpgrade<UserData, TOk, TErr> {
+    type Output = (UserData, Result<TOk, StreamUpgradeError<TErr>>);
 
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Self::Output> {
         match self.timeout.poll_unpin(cx) {
@@ -488,28 +627,20 @@ where
                     self.user_data
                         .take()
                         .expect("Future not to be polled again once ready."),
-                    Err(ConnectionHandlerUpgrErr::Timeout),
+                    Err(StreamUpgradeError::Timeout),
                 ))
             }
 
             Poll::Pending => {}
         }
 
-        match self.upgrade.poll_unpin(cx) {
-            Poll::Ready(Ok(upgrade)) => Poll::Ready((
-                self.user_data
-                    .take()
-                    .expect("Future not to be polled again once ready."),
-                Ok(upgrade),
-            )),
-            Poll::Ready(Err(err)) => Poll::Ready((
-                self.user_data
-                    .take()
-                    .expect("Future not to be polled again once ready."),
-                Err(ConnectionHandlerUpgrErr::Upgrade(err)),
-            )),
-            Poll::Pending => Poll::Pending,
-        }
+        let result = futures::ready!(self.upgrade.poll_unpin(cx));
+        let user_data = self
+            .user_data
+            .take()
+            .expect("Future not to be polled again once ready.");
+
+        Poll::Ready((user_data, result))
     }
 }
 
@@ -609,33 +740,39 @@ enum Shutdown {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::keep_alive;
+    use crate::dummy;
+    use futures::future;
     use futures::AsyncRead;
     use futures::AsyncWrite;
-    use libp2p_core::upgrade::DeniedUpgrade;
+    use libp2p_core::upgrade::{DeniedUpgrade, InboundUpgrade, OutboundUpgrade, UpgradeInfo};
     use libp2p_core::StreamMuxer;
     use quickcheck::*;
     use std::sync::{Arc, Weak};
+    use std::time::Instant;
+    use tracing_subscriber::EnvFilter;
     use void::Void;
 
     #[test]
     fn max_negotiating_inbound_streams() {
+        let _ = tracing_subscriber::fmt()
+            .with_env_filter(EnvFilter::from_default_env())
+            .try_init();
+
         fn prop(max_negotiating_inbound_streams: u8) {
             let max_negotiating_inbound_streams: usize = max_negotiating_inbound_streams.into();
 
             let alive_substream_counter = Arc::new(());
-
             let mut connection = Connection::new(
                 StreamMuxerBox::new(DummyStreamMuxer {
                     counter: alive_substream_counter.clone(),
                 }),
-                keep_alive::ConnectionHandler,
+                MockConnectionHandler::new(Duration::from_secs(10)),
                 None,
                 max_negotiating_inbound_streams,
+                Duration::ZERO,
             );
 
-            let result = Pin::new(&mut connection)
-                .poll(&mut Context::from_waker(futures::task::noop_waker_ref()));
+            let result = connection.poll_noop_waker();
 
             assert!(result.is_pending());
             assert_eq!(
@@ -656,21 +793,199 @@ mod tests {
             MockConnectionHandler::new(upgrade_timeout),
             None,
             2,
+            Duration::ZERO,
         );
 
         connection.handler.open_new_outbound();
-        let _ = Pin::new(&mut connection)
-            .poll(&mut Context::from_waker(futures::task::noop_waker_ref()));
+        let _ = connection.poll_noop_waker();
 
         std::thread::sleep(upgrade_timeout + Duration::from_secs(1));
 
-        let _ = Pin::new(&mut connection)
-            .poll(&mut Context::from_waker(futures::task::noop_waker_ref()));
+        let _ = connection.poll_noop_waker();
 
         assert!(matches!(
             connection.handler.error.unwrap(),
-            ConnectionHandlerUpgrErr::Timeout
+            StreamUpgradeError::Timeout
         ))
+    }
+
+    #[test]
+    fn propagates_changes_to_supported_inbound_protocols() {
+        let mut connection = Connection::new(
+            StreamMuxerBox::new(PendingStreamMuxer),
+            ConfigurableProtocolConnectionHandler::default(),
+            None,
+            0,
+            Duration::ZERO,
+        );
+
+        // First, start listening on a single protocol.
+        connection.handler.listen_on(&["/foo"]);
+        let _ = connection.poll_noop_waker();
+
+        assert_eq!(connection.handler.local_added, vec![vec!["/foo"]]);
+        assert!(connection.handler.local_removed.is_empty());
+
+        // Second, listen on two protocols.
+        connection.handler.listen_on(&["/foo", "/bar"]);
+        let _ = connection.poll_noop_waker();
+
+        assert_eq!(
+            connection.handler.local_added,
+            vec![vec!["/foo"], vec!["/bar"]],
+            "expect to only receive an event for the newly added protocols"
+        );
+        assert!(connection.handler.local_removed.is_empty());
+
+        // Third, stop listening on the first protocol.
+        connection.handler.listen_on(&["/bar"]);
+        let _ = connection.poll_noop_waker();
+
+        assert_eq!(
+            connection.handler.local_added,
+            vec![vec!["/foo"], vec!["/bar"]]
+        );
+        assert_eq!(connection.handler.local_removed, vec![vec!["/foo"]]);
+    }
+
+    #[test]
+    fn only_propagtes_actual_changes_to_remote_protocols_to_handler() {
+        let mut connection = Connection::new(
+            StreamMuxerBox::new(PendingStreamMuxer),
+            ConfigurableProtocolConnectionHandler::default(),
+            None,
+            0,
+            Duration::ZERO,
+        );
+
+        // First, remote supports a single protocol.
+        connection.handler.remote_adds_support_for(&["/foo"]);
+        let _ = connection.poll_noop_waker();
+
+        assert_eq!(connection.handler.remote_added, vec![vec!["/foo"]]);
+        assert!(connection.handler.remote_removed.is_empty());
+
+        // Second, it adds a protocol but also still includes the first one.
+        connection
+            .handler
+            .remote_adds_support_for(&["/foo", "/bar"]);
+        let _ = connection.poll_noop_waker();
+
+        assert_eq!(
+            connection.handler.remote_added,
+            vec![vec!["/foo"], vec!["/bar"]],
+            "expect to only receive an event for the newly added protocol"
+        );
+        assert!(connection.handler.remote_removed.is_empty());
+
+        // Third, stop listening on a protocol it never advertised (we can't control what handlers do so this needs to be handled gracefully).
+        connection.handler.remote_removes_support_for(&["/baz"]);
+        let _ = connection.poll_noop_waker();
+
+        assert_eq!(
+            connection.handler.remote_added,
+            vec![vec!["/foo"], vec!["/bar"]]
+        );
+        assert!(&connection.handler.remote_removed.is_empty());
+
+        // Fourth, stop listening on a protocol that was previously supported
+        connection.handler.remote_removes_support_for(&["/bar"]);
+        let _ = connection.poll_noop_waker();
+
+        assert_eq!(
+            connection.handler.remote_added,
+            vec![vec!["/foo"], vec!["/bar"]]
+        );
+        assert_eq!(connection.handler.remote_removed, vec![vec!["/bar"]]);
+    }
+
+    #[tokio::test]
+    async fn idle_timeout_with_keep_alive_no() {
+        let idle_timeout = Duration::from_millis(100);
+
+        let mut connection = Connection::new(
+            StreamMuxerBox::new(PendingStreamMuxer),
+            dummy::ConnectionHandler,
+            None,
+            0,
+            idle_timeout,
+        );
+
+        assert!(connection.poll_noop_waker().is_pending());
+
+        tokio::time::sleep(idle_timeout).await;
+
+        assert!(matches!(
+            connection.poll_noop_waker(),
+            Poll::Ready(Err(ConnectionError::KeepAliveTimeout))
+        ));
+    }
+
+    #[test]
+    fn checked_add_fraction_can_add_u64_max() {
+        let _ = tracing_subscriber::fmt()
+            .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
+            .try_init();
+        let start = Instant::now();
+
+        let duration = checked_add_fraction(start, Duration::from_secs(u64::MAX));
+
+        assert!(start.checked_add(duration).is_some())
+    }
+
+    #[test]
+    fn compute_new_shutdown_does_not_panic() {
+        let _ = tracing_subscriber::fmt()
+            .with_env_filter(EnvFilter::from_default_env())
+            .try_init();
+
+        #[derive(Debug)]
+        struct ArbitraryShutdown(Shutdown);
+
+        impl Clone for ArbitraryShutdown {
+            fn clone(&self) -> Self {
+                let shutdown = match self.0 {
+                    Shutdown::None => Shutdown::None,
+                    Shutdown::Asap => Shutdown::Asap,
+                    Shutdown::Later(_, instant) => Shutdown::Later(
+                        // compute_new_shutdown does not touch the delay. Delay does not
+                        // implement Clone. Thus use a placeholder delay.
+                        Delay::new(Duration::from_secs(1)),
+                        instant,
+                    ),
+                };
+
+                ArbitraryShutdown(shutdown)
+            }
+        }
+
+        impl Arbitrary for ArbitraryShutdown {
+            fn arbitrary(g: &mut Gen) -> Self {
+                let shutdown = match g.gen_range(1u8..4) {
+                    1 => Shutdown::None,
+                    2 => Shutdown::Asap,
+                    3 => Shutdown::Later(
+                        Delay::new(Duration::from_secs(u32::arbitrary(g) as u64)),
+                        Instant::now()
+                            .checked_add(Duration::arbitrary(g))
+                            .unwrap_or(Instant::now()),
+                    ),
+                    _ => unreachable!(),
+                };
+
+                Self(shutdown)
+            }
+        }
+
+        fn prop(
+            handler_keep_alive: bool,
+            current_shutdown: ArbitraryShutdown,
+            idle_timeout: Duration,
+        ) {
+            compute_new_shutdown(handler_keep_alive, &current_shutdown.0, idle_timeout);
+        }
+
+        QuickCheck::new().quickcheck(prop as fn(_, _, _));
     }
 
     struct DummyStreamMuxer {
@@ -772,7 +1087,7 @@ mod tests {
 
     struct MockConnectionHandler {
         outbound_requested: bool,
-        error: Option<ConnectionHandlerUpgrErr<Void>>,
+        error: Option<StreamUpgradeError<Void>>,
         upgrade_timeout: Duration,
     }
 
@@ -790,10 +1105,43 @@ mod tests {
         }
     }
 
+    #[derive(Default)]
+    struct ConfigurableProtocolConnectionHandler {
+        events: Vec<ConnectionHandlerEvent<DeniedUpgrade, (), Void>>,
+        active_protocols: HashSet<StreamProtocol>,
+        local_added: Vec<Vec<StreamProtocol>>,
+        local_removed: Vec<Vec<StreamProtocol>>,
+        remote_added: Vec<Vec<StreamProtocol>>,
+        remote_removed: Vec<Vec<StreamProtocol>>,
+    }
+
+    impl ConfigurableProtocolConnectionHandler {
+        fn listen_on(&mut self, protocols: &[&'static str]) {
+            self.active_protocols = protocols.iter().copied().map(StreamProtocol::new).collect();
+        }
+
+        fn remote_adds_support_for(&mut self, protocols: &[&'static str]) {
+            self.events
+                .push(ConnectionHandlerEvent::ReportRemoteProtocols(
+                    ProtocolSupport::Added(
+                        protocols.iter().copied().map(StreamProtocol::new).collect(),
+                    ),
+                ));
+        }
+
+        fn remote_removes_support_for(&mut self, protocols: &[&'static str]) {
+            self.events
+                .push(ConnectionHandlerEvent::ReportRemoteProtocols(
+                    ProtocolSupport::Removed(
+                        protocols.iter().copied().map(StreamProtocol::new).collect(),
+                    ),
+                ));
+        }
+    }
+
     impl ConnectionHandler for MockConnectionHandler {
-        type InEvent = Void;
-        type OutEvent = Void;
-        type Error = Void;
+        type FromBehaviour = Void;
+        type ToBehaviour = Void;
         type InboundProtocol = DeniedUpgrade;
         type OutboundProtocol = DeniedUpgrade;
         type InboundOpenInfo = ();
@@ -826,16 +1174,19 @@ mod tests {
                 ConnectionEvent::DialUpgradeError(DialUpgradeError { error, .. }) => {
                     self.error = Some(error)
                 }
-                ConnectionEvent::AddressChange(_) | ConnectionEvent::ListenUpgradeError(_) => {}
+                ConnectionEvent::AddressChange(_)
+                | ConnectionEvent::ListenUpgradeError(_)
+                | ConnectionEvent::LocalProtocolsChange(_)
+                | ConnectionEvent::RemoteProtocolsChange(_) => {}
             }
         }
 
-        fn on_behaviour_event(&mut self, event: Self::InEvent) {
+        fn on_behaviour_event(&mut self, event: Self::FromBehaviour) {
             void::unreachable(event)
         }
 
-        fn connection_keep_alive(&self) -> KeepAlive {
-            KeepAlive::Yes
+        fn connection_keep_alive(&self) -> bool {
+            true
         }
 
         fn poll(
@@ -845,8 +1196,7 @@ mod tests {
             ConnectionHandlerEvent<
                 Self::OutboundProtocol,
                 Self::OutboundOpenInfo,
-                Self::OutEvent,
-                Self::Error,
+                Self::ToBehaviour,
             >,
         > {
             if self.outbound_requested {
@@ -858,6 +1208,110 @@ mod tests {
             }
 
             Poll::Pending
+        }
+    }
+
+    impl ConnectionHandler for ConfigurableProtocolConnectionHandler {
+        type FromBehaviour = Void;
+        type ToBehaviour = Void;
+        type InboundProtocol = ManyProtocolsUpgrade;
+        type OutboundProtocol = DeniedUpgrade;
+        type InboundOpenInfo = ();
+        type OutboundOpenInfo = ();
+
+        fn listen_protocol(
+            &self,
+        ) -> SubstreamProtocol<Self::InboundProtocol, Self::InboundOpenInfo> {
+            SubstreamProtocol::new(
+                ManyProtocolsUpgrade {
+                    protocols: Vec::from_iter(self.active_protocols.clone()),
+                },
+                (),
+            )
+        }
+
+        fn on_connection_event(
+            &mut self,
+            event: ConnectionEvent<
+                Self::InboundProtocol,
+                Self::OutboundProtocol,
+                Self::InboundOpenInfo,
+                Self::OutboundOpenInfo,
+            >,
+        ) {
+            match event {
+                ConnectionEvent::LocalProtocolsChange(ProtocolsChange::Added(added)) => {
+                    self.local_added.push(added.cloned().collect())
+                }
+                ConnectionEvent::LocalProtocolsChange(ProtocolsChange::Removed(removed)) => {
+                    self.local_removed.push(removed.cloned().collect())
+                }
+                ConnectionEvent::RemoteProtocolsChange(ProtocolsChange::Added(added)) => {
+                    self.remote_added.push(added.cloned().collect())
+                }
+                ConnectionEvent::RemoteProtocolsChange(ProtocolsChange::Removed(removed)) => {
+                    self.remote_removed.push(removed.cloned().collect())
+                }
+                _ => {}
+            }
+        }
+
+        fn on_behaviour_event(&mut self, event: Self::FromBehaviour) {
+            void::unreachable(event)
+        }
+
+        fn connection_keep_alive(&self) -> bool {
+            true
+        }
+
+        fn poll(
+            &mut self,
+            _: &mut Context<'_>,
+        ) -> Poll<
+            ConnectionHandlerEvent<
+                Self::OutboundProtocol,
+                Self::OutboundOpenInfo,
+                Self::ToBehaviour,
+            >,
+        > {
+            if let Some(event) = self.events.pop() {
+                return Poll::Ready(event);
+            }
+
+            Poll::Pending
+        }
+    }
+
+    struct ManyProtocolsUpgrade {
+        protocols: Vec<StreamProtocol>,
+    }
+
+    impl UpgradeInfo for ManyProtocolsUpgrade {
+        type Info = StreamProtocol;
+        type InfoIter = std::vec::IntoIter<Self::Info>;
+
+        fn protocol_info(&self) -> Self::InfoIter {
+            self.protocols.clone().into_iter()
+        }
+    }
+
+    impl<C> InboundUpgrade<C> for ManyProtocolsUpgrade {
+        type Output = C;
+        type Error = Void;
+        type Future = future::Ready<Result<Self::Output, Self::Error>>;
+
+        fn upgrade_inbound(self, stream: C, _: Self::Info) -> Self::Future {
+            future::ready(Ok(stream))
+        }
+    }
+
+    impl<C> OutboundUpgrade<C> for ManyProtocolsUpgrade {
+        type Output = C;
+        type Error = Void;
+        type Future = future::Ready<Result<Self::Output, Self::Error>>;
+
+        fn upgrade_outbound(self, stream: C, _: Self::Info) -> Self::Future {
+            future::ready(Ok(stream))
         }
     }
 }

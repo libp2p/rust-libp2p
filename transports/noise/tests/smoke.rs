@@ -20,16 +20,17 @@
 
 use futures::prelude::*;
 use libp2p_core::transport::{MemoryTransport, Transport};
-use libp2p_core::{upgrade, InboundUpgrade, OutboundUpgrade};
+use libp2p_core::upgrade;
+use libp2p_core::upgrade::{InboundConnectionUpgrade, OutboundConnectionUpgrade};
 use libp2p_identity as identity;
 use libp2p_noise as noise;
-use log::info;
 use quickcheck::*;
 use std::{convert::TryInto, io};
+use tracing_subscriber::EnvFilter;
 
 #[allow(dead_code)]
 fn core_upgrade_compat() {
-    // Tests API compaibility with the libp2p-core upgrade API,
+    // Tests API compatibility with the libp2p-core upgrade API,
     // i.e. if it compiles, the "test" is considered a success.
     let id_keys = identity::Keypair::generate_ed25519();
     let noise = noise::Config::new(&id_keys).unwrap();
@@ -40,7 +41,9 @@ fn core_upgrade_compat() {
 
 #[test]
 fn xx() {
-    let _ = env_logger::try_init();
+    let _ = tracing_subscriber::fmt()
+        .with_env_filter(EnvFilter::from_default_env())
+        .try_init();
     fn prop(mut messages: Vec<Message>) -> bool {
         messages.truncate(5);
         let server_id = identity::Keypair::generate_ed25519();
@@ -50,8 +53,8 @@ fn xx() {
 
         futures::executor::block_on(async move {
             let (
-                (reported_client_id, mut client_session),
-                (reported_server_id, mut server_session),
+                (reported_client_id, mut server_session),
+                (reported_server_id, mut client_session),
             ) = futures::future::try_join(
                 noise::Config::new(&server_id)
                     .unwrap()
@@ -85,7 +88,7 @@ fn xx() {
                             Err(e) => panic!("error reading len: {e}"),
                         }
                     };
-                    info!("server: reading message ({} bytes)", len);
+                    tracing::info!(bytes=%len, "server: reading message");
                     let mut server_buffer = vec![0; len.try_into().unwrap()];
                     server_session
                         .read_exact(&mut server_buffer)

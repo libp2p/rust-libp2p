@@ -26,7 +26,7 @@ use peers::closest::{
 use peers::fixed::FixedPeersIter;
 use peers::PeersIterState;
 
-use crate::kbucket_priv::{Key, KeyBytes};
+use crate::kbucket::{Key, KeyBytes};
 use crate::{ALPHA_VALUE, K_VALUE};
 use either::Either;
 use fnv::FnvHashMap;
@@ -225,24 +225,30 @@ impl<TInner> QueryPool<TInner> {
 #[derive(Debug, Copy, Clone, Hash, PartialEq, Eq)]
 pub struct QueryId(usize);
 
+impl std::fmt::Display for QueryId {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
 /// The configuration for queries in a `QueryPool`.
 #[derive(Debug, Clone)]
 pub(crate) struct QueryConfig {
     /// Timeout of a single query.
     ///
-    /// See [`crate::behaviour::KademliaConfig::set_query_timeout`] for details.
+    /// See [`crate::behaviour::Config::set_query_timeout`] for details.
     pub(crate) timeout: Duration,
     /// The replication factor to use.
     ///
-    /// See [`crate::behaviour::KademliaConfig::set_replication_factor`] for details.
+    /// See [`crate::behaviour::Config::set_replication_factor`] for details.
     pub(crate) replication_factor: NonZeroUsize,
     /// Allowed level of parallelism for iterative queries.
     ///
-    /// See [`crate::behaviour::KademliaConfig::set_parallelism`] for details.
+    /// See [`crate::behaviour::Config::set_parallelism`] for details.
     pub(crate) parallelism: NonZeroUsize,
     /// Whether to use disjoint paths on iterative lookups.
     ///
-    /// See [`crate::behaviour::KademliaConfig::disjoint_query_paths`] for details.
+    /// See [`crate::behaviour::Config::disjoint_query_paths`] for details.
     pub(crate) disjoint_query_paths: bool,
 }
 
@@ -323,15 +329,6 @@ impl<TInner> Query<TInner> {
         };
         if updated {
             self.stats.success += 1;
-        }
-    }
-
-    /// Checks whether the query is currently waiting for a result from `peer`.
-    pub(crate) fn is_waiting(&self, peer: &PeerId) -> bool {
-        match &self.peer_iter {
-            QueryPeerIter::Closest(iter) => iter.is_waiting(peer),
-            QueryPeerIter::ClosestDisjoint(iter) => iter.is_waiting(peer),
-            QueryPeerIter::Fixed(iter) => iter.is_waiting(peer),
         }
     }
 

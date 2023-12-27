@@ -46,14 +46,42 @@ where
     type ListenerUpgrade = EitherFuture<A::ListenerUpgrade, B::ListenerUpgrade>;
     type Dial = EitherFuture<A::Dial, B::Dial>;
 
-    fn listen_on(&mut self, addr: Multiaddr) -> Result<ListenerId, TransportError<Self::Error>> {
-        let addr = match self.0.listen_on(addr) {
-            Err(TransportError::MultiaddrNotSupported(addr)) => addr,
+    fn listen_on(
+        &mut self,
+        id: ListenerId,
+        addr: Multiaddr,
+    ) -> Result<(), TransportError<Self::Error>> {
+        tracing::trace!(
+            address=%addr,
+            "Attempting to listen on address using {}",
+            std::any::type_name::<A>()
+        );
+        let addr = match self.0.listen_on(id, addr) {
+            Err(TransportError::MultiaddrNotSupported(addr)) => {
+                tracing::debug!(
+                    address=%addr,
+                    "Failed to listen on address using {}",
+                    std::any::type_name::<A>()
+                );
+                addr
+            }
             res => return res.map_err(|err| err.map(Either::Left)),
         };
 
-        let addr = match self.1.listen_on(addr) {
-            Err(TransportError::MultiaddrNotSupported(addr)) => addr,
+        tracing::trace!(
+            address=%addr,
+            "Attempting to listen on address using {}",
+            std::any::type_name::<B>()
+        );
+        let addr = match self.1.listen_on(id, addr) {
+            Err(TransportError::MultiaddrNotSupported(addr)) => {
+                tracing::debug!(
+                    address=%addr,
+                    "Failed to listen on address using {}",
+                    std::any::type_name::<B>()
+                );
+                addr
+            }
             res => return res.map_err(|err| err.map(Either::Right)),
         };
 
@@ -65,17 +93,41 @@ where
     }
 
     fn dial(&mut self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
+        tracing::trace!(
+            address=%addr,
+            "Attempting to dial address using {}",
+            std::any::type_name::<A>()
+        );
         let addr = match self.0.dial(addr) {
             Ok(connec) => return Ok(EitherFuture::First(connec)),
-            Err(TransportError::MultiaddrNotSupported(addr)) => addr,
+            Err(TransportError::MultiaddrNotSupported(addr)) => {
+                tracing::debug!(
+                    address=%addr,
+                    "Failed to dial address using {}",
+                    std::any::type_name::<A>()
+                );
+                addr
+            }
             Err(TransportError::Other(err)) => {
                 return Err(TransportError::Other(Either::Left(err)))
             }
         };
 
+        tracing::trace!(
+            address=%addr,
+            "Attempting to dial address using {}",
+            std::any::type_name::<A>()
+        );
         let addr = match self.1.dial(addr) {
             Ok(connec) => return Ok(EitherFuture::Second(connec)),
-            Err(TransportError::MultiaddrNotSupported(addr)) => addr,
+            Err(TransportError::MultiaddrNotSupported(addr)) => {
+                tracing::debug!(
+                    address=%addr,
+                    "Failed to dial address using {}",
+                    std::any::type_name::<A>()
+                );
+                addr
+            }
             Err(TransportError::Other(err)) => {
                 return Err(TransportError::Other(Either::Right(err)))
             }

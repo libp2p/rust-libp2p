@@ -24,6 +24,7 @@
 
 pub mod error;
 pub mod framed;
+mod quicksink;
 pub mod tls;
 
 use error::Error;
@@ -52,13 +53,19 @@ use std::{
 ///
 /// If you don't need Secure Websocket's support, use a plain TCP transport as an inner transport.
 ///
+/// # Dependencies
+///
+/// This transport requires the `zlib` shared library to be installed on the system.
+///
+/// Future releases might lift this requirement, see <https://github.com/paritytech/soketto/issues/72>.
+///
 /// # Examples
 ///
 /// Secure Websocket transport:
 ///
 /// ```
 /// # use futures::future;
-/// # use libp2p_core::Transport;
+/// # use libp2p_core::{transport::ListenerId, Transport};
 /// # use libp2p_dns as dns;
 /// # use libp2p_tcp as tcp;
 /// # use libp2p_websocket as websocket;
@@ -68,7 +75,7 @@ use std::{
 /// # #[async_std::main]
 /// # async fn main() {
 ///
-/// let mut transport = websocket::WsConfig::new(dns::DnsConfig::system(
+/// let mut transport = websocket::WsConfig::new(dns::async_std::Transport::system(
 ///     tcp::async_io::Transport::new(tcp::Config::default()),
 /// ).await.unwrap());
 ///
@@ -77,7 +84,7 @@ use std::{
 /// let cert = websocket::tls::Certificate::new(rcgen_cert.serialize_der().unwrap());
 /// transport.set_tls_config(websocket::tls::Config::new(priv_key, vec![cert]).unwrap());
 ///
-/// let id = transport.listen_on("/ip4/127.0.0.1/tcp/0/wss".parse().unwrap()).unwrap();
+/// let id = transport.listen_on(ListenerId::next(), "/ip4/127.0.0.1/tcp/0/wss".parse().unwrap()).unwrap();
 ///
 /// let addr = future::poll_fn(|cx| Pin::new(&mut transport).poll(cx)).await.into_new_address().unwrap();
 /// println!("Listening on {addr}");
@@ -89,7 +96,7 @@ use std::{
 ///
 /// ```
 /// # use futures::future;
-/// # use libp2p_core::Transport;
+/// # use libp2p_core::{transport::ListenerId, Transport};
 /// # use libp2p_dns as dns;
 /// # use libp2p_tcp as tcp;
 /// # use libp2p_websocket as websocket;
@@ -102,7 +109,7 @@ use std::{
 ///     tcp::async_io::Transport::new(tcp::Config::default()),
 /// );
 ///
-/// let id = transport.listen_on("/ip4/127.0.0.1/tcp/0/ws".parse().unwrap()).unwrap();
+/// let id = transport.listen_on(ListenerId::next(), "/ip4/127.0.0.1/tcp/0/ws".parse().unwrap()).unwrap();
 ///
 /// let addr = future::poll_fn(|cx| Pin::new(&mut transport).poll(cx)).await.into_new_address().unwrap();
 /// println!("Listening on {addr}");
@@ -168,12 +175,6 @@ where
         self.transport.inner_mut().set_tls_config(c);
         self
     }
-
-    /// Should the deflate extension (RFC 7692) be used if supported?
-    pub fn use_deflate(&mut self, flag: bool) -> &mut Self {
-        self.transport.inner_mut().use_deflate(flag);
-        self
-    }
 }
 
 impl<T> Transport for WsConfig<T>
@@ -189,8 +190,12 @@ where
     type ListenerUpgrade = MapFuture<InnerFuture<T::Output, T::Error>, WrapperFn<T::Output>>;
     type Dial = MapFuture<InnerFuture<T::Output, T::Error>, WrapperFn<T::Output>>;
 
-    fn listen_on(&mut self, addr: Multiaddr) -> Result<ListenerId, TransportError<Self::Error>> {
-        self.transport.listen_on(addr)
+    fn listen_on(
+        &mut self,
+        id: ListenerId,
+        addr: Multiaddr,
+    ) -> Result<(), TransportError<Self::Error>> {
+        self.transport.listen_on(id, addr)
     }
 
     fn remove_listener(&mut self, id: ListenerId) -> bool {
@@ -287,7 +292,7 @@ where
 mod tests {
     use super::WsConfig;
     use futures::prelude::*;
-    use libp2p_core::{multiaddr::Protocol, Multiaddr, Transport};
+    use libp2p_core::{multiaddr::Protocol, transport::ListenerId, Multiaddr, Transport};
     use libp2p_identity::PeerId;
     use libp2p_tcp as tcp;
 
@@ -309,7 +314,9 @@ mod tests {
 
     async fn connect(listen_addr: Multiaddr) {
         let mut ws_config = new_ws_config().boxed();
-        ws_config.listen_on(listen_addr).expect("listener");
+        ws_config
+            .listen_on(ListenerId::next(), listen_addr)
+            .expect("listener");
 
         let addr = ws_config
             .next()
@@ -332,7 +339,7 @@ mod tests {
 
         let outbound = new_ws_config()
             .boxed()
-            .dial(addr.with(Protocol::P2p(PeerId::random().into())))
+            .dial(addr.with(Protocol::P2p(PeerId::random())))
             .unwrap();
 
         let (a, b) = futures::join!(inbound, outbound);

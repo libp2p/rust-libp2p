@@ -18,7 +18,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::{error::Error, tls};
+use crate::{error::Error, quicksink, tls};
 use either::Either;
 use futures::{future::BoxFuture, prelude::*, ready, stream::BoxStream};
 use futures_rustls::{client, rustls, server};
@@ -28,11 +28,9 @@ use libp2p_core::{
     transport::{ListenerId, TransportError, TransportEvent},
     Transport,
 };
-use log::{debug, trace};
 use parking_lot::Mutex;
 use soketto::{
     connection::{self, CloseReason},
-    extension::deflate::Deflate,
     handshake,
 };
 use std::{collections::HashMap, ops::DerefMut, sync::Arc};
@@ -51,7 +49,6 @@ pub struct WsConfig<T> {
     max_data_size: usize,
     tls_config: tls::Config,
     max_redirects: u8,
-    use_deflate: bool,
     /// Websocket protocol of the inner listener.
     ///
     /// This is the suffix of the address provided in `listen_on`.
@@ -59,7 +56,10 @@ pub struct WsConfig<T> {
     listener_protos: HashMap<ListenerId, Protocol<'static>>,
 }
 
-impl<T> WsConfig<T> {
+impl<T> WsConfig<T>
+where
+    T: Send,
+{
     /// Create a new websocket transport based on another transport.
     pub fn new(transport: T) -> Self {
         WsConfig {
@@ -67,7 +67,6 @@ impl<T> WsConfig<T> {
             max_data_size: MAX_DATA_SIZE,
             tls_config: tls::Config::client(),
             max_redirects: 0,
-            use_deflate: false,
             listener_protos: HashMap::new(),
         }
     }
@@ -99,12 +98,6 @@ impl<T> WsConfig<T> {
         self.tls_config = c;
         self
     }
-
-    /// Should the deflate extension (RFC 7692) be used if supported?
-    pub fn use_deflate(&mut self, flag: bool) -> &mut Self {
-        self.use_deflate = flag;
-        self
-    }
 }
 
 type TlsOrPlain<T> = future::Either<future::Either<client::TlsStream<T>, server::TlsStream<T>>, T>;
@@ -122,27 +115,31 @@ where
     type ListenerUpgrade = BoxFuture<'static, Result<Self::Output, Self::Error>>;
     type Dial = BoxFuture<'static, Result<Self::Output, Self::Error>>;
 
-    fn listen_on(&mut self, addr: Multiaddr) -> Result<ListenerId, TransportError<Self::Error>> {
+    fn listen_on(
+        &mut self,
+        id: ListenerId,
+        addr: Multiaddr,
+    ) -> Result<(), TransportError<Self::Error>> {
         let mut inner_addr = addr.clone();
         let proto = match inner_addr.pop() {
             Some(p @ Protocol::Wss(_)) => {
                 if self.tls_config.server.is_some() {
                     p
                 } else {
-                    debug!("/wss address but TLS server support is not configured");
+                    tracing::debug!("/wss address but TLS server support is not configured");
                     return Err(TransportError::MultiaddrNotSupported(addr));
                 }
             }
             Some(p @ Protocol::Ws(_)) => p,
             _ => {
-                debug!("{} is not a websocket multiaddr", addr);
+                tracing::debug!(address=%addr, "Address is not a websocket multiaddr");
                 return Err(TransportError::MultiaddrNotSupported(addr));
             }
         };
-        match self.transport.lock().listen_on(inner_addr) {
-            Ok(id) => {
+        match self.transport.lock().listen_on(id, inner_addr) {
+            Ok(()) => {
                 self.listener_protos.insert(id, proto);
-                Ok(id)
+                Ok(())
             }
             Err(e) => Err(e.map(Error::Transport)),
         }
@@ -189,7 +186,7 @@ where
                     .get(&listener_id)
                     .expect("Protocol was inserted in Transport::listen_on.");
                 listen_addr.push(proto.clone());
-                debug!("Listening on {}", listen_addr);
+                tracing::debug!(address=%listen_addr, "Listening on address");
                 TransportEvent::NewAddress {
                     listener_id,
                     listen_addr,
@@ -281,23 +278,16 @@ where
 
         let transport = self.transport.clone();
         let tls_config = self.tls_config.clone();
-        let use_deflate = self.use_deflate;
         let max_redirects = self.max_redirects;
 
         let future = async move {
             loop {
-                match Self::dial_once(
-                    transport.clone(),
-                    addr,
-                    tls_config.clone(),
-                    use_deflate,
-                    role_override,
-                )
-                .await
+                match Self::dial_once(transport.clone(), addr, tls_config.clone(), role_override)
+                    .await
                 {
                     Ok(Either::Left(redirect)) => {
                         if remaining_redirects == 0 {
-                            debug!("Too many redirects (> {})", max_redirects);
+                            tracing::debug!(%max_redirects, "Too many redirects");
                             return Err(Error::TooManyRedirects);
                         }
                         remaining_redirects -= 1;
@@ -317,10 +307,9 @@ where
         transport: Arc<Mutex<T>>,
         addr: WsAddress,
         tls_config: tls::Config,
-        use_deflate: bool,
         role_override: Endpoint,
     ) -> Result<Either<String, Connection<T::Output>>, Error<T::Error>> {
-        trace!("Dialing websocket address: {:?}", addr);
+        tracing::trace!(address=?addr, "Dialing websocket address");
 
         let dial = match role_override {
             Endpoint::Dialer => transport.lock().dial(addr.tcp_addr),
@@ -332,19 +321,19 @@ where
         })?;
 
         let stream = dial.map_err(Error::Transport).await?;
-        trace!("TCP connection to {} established.", addr.host_port);
+        tracing::trace!(port=%addr.host_port, "TCP connection established");
 
         let stream = if addr.use_tls {
             // begin TLS session
             let dns_name = addr
                 .dns_name
                 .expect("for use_tls we have checked that dns_name is some");
-            trace!("Starting TLS handshake with {:?}", dns_name);
+            tracing::trace!(?dns_name, "Starting TLS handshake");
             let stream = tls_config
                 .client
                 .connect(dns_name.clone(), stream)
                 .map_err(|e| {
-                    debug!("TLS handshake with {:?} failed: {}", dns_name, e);
+                    tracing::debug!(?dns_name, "TLS handshake failed: {}", e);
                     Error::Tls(tls::Error::from(e))
                 })
                 .await?;
@@ -356,13 +345,9 @@ where
             future::Either::Right(stream)
         };
 
-        trace!("Sending websocket handshake to {}", addr.host_port);
+        tracing::trace!(port=%addr.host_port, "Sending websocket handshake");
 
         let mut client = handshake::Client::new(stream, &addr.host_port, addr.path.as_ref());
-
-        if use_deflate {
-            client.add_extension(Box::new(Deflate::new(connection::Mode::Client)));
-        }
 
         match client
             .handshake()
@@ -373,9 +358,10 @@ where
                 status_code,
                 location,
             } => {
-                debug!(
-                    "received redirect ({}); location: {}",
-                    status_code, location
+                tracing::debug!(
+                    %status_code,
+                    %location,
+                    "received redirect"
                 );
                 Ok(Either::Left(location))
             }
@@ -384,7 +370,7 @@ where
                 Err(Error::Handshake(msg.into()))
             }
             handshake::ServerResponse::Accepted { .. } => {
-                trace!("websocket handshake with {} successful", addr.host_port);
+                tracing::trace!(port=%addr.host_port, "websocket handshake successful");
                 Ok(Either::Right(Connection::new(client.into_builder())))
             }
         }
@@ -399,11 +385,10 @@ where
         let remote_addr2 = remote_addr.clone(); // used for logging
         let tls_config = self.tls_config.clone();
         let max_size = self.max_data_size;
-        let use_deflate = self.use_deflate;
 
         async move {
             let stream = upgrade.map_err(Error::Transport).await?;
-            trace!("incoming connection from {}", remote_addr);
+            tracing::trace!(address=%remote_addr, "incoming connection from address");
 
             let stream = if use_tls {
                 // begin TLS session
@@ -411,12 +396,12 @@ where
                     .server
                     .expect("for use_tls we checked server is not none");
 
-                trace!("awaiting TLS handshake with {}", remote_addr);
+                tracing::trace!(address=%remote_addr, "awaiting TLS handshake with address");
 
                 let stream = server
                     .accept(stream)
                     .map_err(move |e| {
-                        debug!("TLS handshake with {} failed: {}", remote_addr, e);
+                        tracing::debug!(address=%remote_addr, "TLS handshake with address failed: {}", e);
                         Error::Tls(tls::Error::from(e))
                     })
                     .await?;
@@ -429,16 +414,12 @@ where
                 future::Either::Right(stream)
             };
 
-            trace!(
-                "receiving websocket handshake request from {}",
-                remote_addr2
+            tracing::trace!(
+                address=%remote_addr2,
+                "receiving websocket handshake request from address"
             );
 
             let mut server = handshake::Server::new(stream);
-
-            if use_deflate {
-                server.add_extension(Box::new(Deflate::new(connection::Mode::Server)));
-            }
 
             let ws_key = {
                 let request = server
@@ -448,9 +429,9 @@ where
                 request.key()
             };
 
-            trace!(
-                "accepting websocket handshake request from {}",
-                remote_addr2
+            tracing::trace!(
+                address=%remote_addr2,
+                "accepting websocket handshake request from address"
             );
 
             let response = handshake::server::Response::Accept {
@@ -530,7 +511,7 @@ fn parse_ws_dial_addr<T>(addr: Multiaddr) -> Result<WsAddress, Error<T>> {
             Some(Protocol::Ws(path)) => break (false, path.into_owned()),
             Some(Protocol::Wss(path)) => {
                 if dns_name.is_none() {
-                    debug!("Missing DNS name in WSS address: {}", addr);
+                    tracing::debug!(addrress=%addr, "Missing DNS name in WSS address");
                     return Err(Error::InvalidMultiaddr(addr));
                 }
                 break (true, path.into_owned());
@@ -575,13 +556,13 @@ fn location_to_multiaddr<T>(location: &str) -> Result<Multiaddr, Error<T>> {
             } else if s.eq_ignore_ascii_case("http") | s.eq_ignore_ascii_case("ws") {
                 a.push(Protocol::Ws(url.path().into()))
             } else {
-                debug!("unsupported scheme: {}", s);
+                tracing::debug!(scheme=%s, "unsupported scheme");
                 return Err(Error::InvalidRedirectLocation);
             }
             Ok(a)
         }
         Err(e) => {
-            debug!("failed to parse url as multi-address: {:?}", e);
+            tracing::debug!("failed to parse url as multi-address: {:?}", e);
             Err(Error::InvalidRedirectLocation)
         }
     }

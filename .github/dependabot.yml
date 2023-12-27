@@ -8,6 +8,20 @@ updates:
     commit-message:
       prefix: "deps"
     rebase-strategy: "disabled"
+    groups:
+      hickory-dns:
+        patterns:
+          - "hickory-*"
+          - "async-std-resolver"
+      opentelemetry:
+        patterns:
+          - "opentelemetry*"
+          - "tracing-opentelemetry"
+      axum:
+        patterns:
+          - "axum"
+          - "tower"
+          - "tower-http"
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:

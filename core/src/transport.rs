@@ -31,12 +31,14 @@ use std::{
     error::Error,
     fmt,
     pin::Pin,
+    sync::atomic::{AtomicUsize, Ordering},
     task::{Context, Poll},
 };
 
 pub mod and_then;
 pub mod choice;
 pub mod dummy;
+pub mod global_only;
 pub mod map;
 pub mod map_err;
 pub mod memory;
@@ -53,6 +55,8 @@ pub use self::choice::OrTransport;
 pub use self::memory::MemoryTransport;
 pub use self::optional::OptionalTransport;
 pub use self::upgrade::Upgrade;
+
+static NEXT_LISTENER_ID: AtomicUsize = AtomicUsize::new(1);
 
 /// A transport provides connection-oriented communication between two peers
 /// through ordered streams of data (i.e. connections).
@@ -108,8 +112,12 @@ pub trait Transport {
     /// obtained from [dialing](Transport::dial).
     type Dial: Future<Output = Result<Self::Output, Self::Error>>;
 
-    /// Listens on the given [`Multiaddr`] for inbound connections.
-    fn listen_on(&mut self, addr: Multiaddr) -> Result<ListenerId, TransportError<Self::Error>>;
+    /// Listens on the given [`Multiaddr`] for inbound connections with a provided [`ListenerId`].
+    fn listen_on(
+        &mut self,
+        id: ListenerId,
+        addr: Multiaddr,
+    ) -> Result<(), TransportError<Self::Error>>;
 
     /// Remove a listener.
     ///
@@ -127,7 +135,7 @@ pub trait Transport {
     ///
     /// This option is needed for NAT and firewall hole punching.
     ///
-    /// See [`ConnectedPoint::Dialer`](crate::connection::ConnectedPoint::Dialer) for related option.
+    /// See [`ConnectedPoint::Dialer`] for related option.
     fn dial_as_listener(
         &mut self,
         addr: Multiaddr,
@@ -227,8 +235,7 @@ pub trait Transport {
         and_then::AndThen::new(self, f)
     }
 
-    /// Begins a series of protocol upgrades via an
-    /// [`upgrade::Builder`](upgrade::Builder).
+    /// Begins a series of protocol upgrades via an [`upgrade::Builder`].
     fn upgrade(self, version: upgrade::Version) -> upgrade::Builder<Self>
     where
         Self: Sized,
@@ -240,18 +247,18 @@ pub trait Transport {
 
 /// The ID of a single listener.
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
-pub struct ListenerId(u64);
+pub struct ListenerId(usize);
 
 impl ListenerId {
     /// Creates a new `ListenerId`.
-    pub fn new() -> Self {
-        ListenerId(rand::random())
+    pub fn next() -> Self {
+        ListenerId(NEXT_LISTENER_ID.fetch_add(1, Ordering::SeqCst))
     }
 }
 
-impl Default for ListenerId {
-    fn default() -> Self {
-        Self::new()
+impl std::fmt::Display for ListenerId {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.0)
     }
 }
 
@@ -400,16 +407,16 @@ impl<TUpgr, TErr> TransportEvent<TUpgr, TErr> {
     /// Returns `None` if the event is not actually an incoming connection,
     /// otherwise the upgrade and the remote address.
     pub fn into_incoming(self) -> Option<(TUpgr, Multiaddr)> {
-        if let TransportEvent::Incoming {
+        let TransportEvent::Incoming {
             upgrade,
             send_back_addr,
             ..
         } = self
-        {
-            Some((upgrade, send_back_addr))
-        } else {
-            None
-        }
+        else {
+            return None;
+        };
+
+        Some((upgrade, send_back_addr))
     }
 
     /// Returns `true` if this is a [`TransportEvent::NewAddress`].

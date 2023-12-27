@@ -1,14 +1,22 @@
 [package]
-name = "dcutr"
+name = "dcutr-example"
 version = "0.1.0"
 edition = "2021"
 publish = false
 license = "MIT"
 
+[package.metadata.release]
+release = false
+
 [dependencies]
-clap = { version = "4.2.7", features = ["derive"] }
-env_logger = "0.10.0"
-futures = "0.3.28"
+clap = { version = "4.4.11", features = ["derive"] }
+futures = "0.3.30"
 futures-timer = "3.0"
-libp2p = { path = "../../libp2p", features = ["async-std", "dns", "dcutr", "identify", "macros", "noise", "ping", "relay", "rendezvous", "tcp", "tokio", "yamux"] }
+libp2p = { path = "../../libp2p", features = [ "dns", "dcutr", "identify", "macros", "noise", "ping", "quic", "relay", "rendezvous", "tcp", "tokio", "yamux"] }
 log = "0.4"
+tokio = { version = "1.35", features = ["macros", "net", "rt", "signal"] }
+tracing = "0.1.37"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+[lints]
+workspace = true

@@ -1,9 +1,26 @@
-## 0.42.0 - unreleased
+## 0.43.0
+
+
+## 0.42.1
+
+- Bump `futures-rustls` to `0.24.0`.
+  This is a part of the resolution of the [RUSTSEC-2023-0052].
+  See [PR 4378].
+
+[PR 4378]: https://github.com/libp2p/rust-libp2p/pull/4378
+[RUSTSEC-2023-0052]: https://rustsec.org/advisories/RUSTSEC-2023-0052.html
+
+## 0.42.0
 
 - Raise MSRV to 1.65.
   See [PR 3715].
 
+- Remove `WsConfig::use_deflate` option.
+  This allows us to remove the dependency on the `zlib` shared library.
+  See [PR 3949].
+
 [PR 3715]: https://github.com/libp2p/rust-libp2p/pull/3715
+[PR 3949]: https://github.com/libp2p/rust-libp2p/pull/3949
 
 ## 0.41.0
 

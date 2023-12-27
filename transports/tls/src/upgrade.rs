@@ -24,7 +24,8 @@ use futures::future::BoxFuture;
 use futures::AsyncWrite;
 use futures::{AsyncRead, FutureExt};
 use futures_rustls::TlsStream;
-use libp2p_core::{InboundUpgrade, OutboundUpgrade, UpgradeInfo};
+use libp2p_core::upgrade::{InboundConnectionUpgrade, OutboundConnectionUpgrade};
+use libp2p_core::UpgradeInfo;
 use libp2p_identity as identity;
 use libp2p_identity::PeerId;
 use rustls::{CommonState, ServerName};
@@ -67,7 +68,7 @@ impl UpgradeInfo for Config {
     }
 }
 
-impl<C> InboundUpgrade<C> for Config
+impl<C> InboundConnectionUpgrade<C> for Config
 where
     C: AsyncRead + AsyncWrite + Send + Unpin + 'static,
 {
@@ -90,7 +91,7 @@ where
     }
 }
 
-impl<C> OutboundUpgrade<C> for Config
+impl<C> OutboundConnectionUpgrade<C> for Config
 where
     C: AsyncRead + AsyncWrite + Send + Unpin + 'static,
 {
@@ -120,12 +121,8 @@ where
 fn extract_single_certificate(
     state: &CommonState,
 ) -> Result<P2pCertificate<'_>, certificate::ParseError> {
-    let cert = match state
-        .peer_certificates()
-        .expect("config enforces presence of certificates")
-    {
-        [single] => single,
-        _ => panic!("config enforces exactly one certificate"),
+    let Some([cert]) = state.peer_certificates() else {
+        panic!("config enforces exactly one certificate");
     };
 
     certificate::parse(cert)

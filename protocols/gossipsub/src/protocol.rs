@@ -34,10 +34,8 @@ use futures::prelude::*;
 use libp2p_core::{InboundUpgrade, OutboundUpgrade, UpgradeInfo};
 use libp2p_identity::{PeerId, PublicKey};
 use libp2p_swarm::StreamProtocol;
-use log::{debug, warn};
 use quick_protobuf::Writer;
 use std::pin::Pin;
-use unsigned_varint::codec;
 use void::Void;
 
 pub(crate) const SIGNING_PREFIX: &[u8] = b"libp2p-pubsub:";
@@ -109,12 +107,10 @@ where
     type Future = Pin<Box<dyn Future<Output = Result<Self::Output, Self::Error>> + Send>>;
 
     fn upgrade_inbound(self, socket: TSocket, protocol_id: Self::Info) -> Self::Future {
-        let mut length_codec = codec::UviBytes::default();
-        length_codec.set_max_len(self.max_transmit_size);
         Box::pin(future::ok((
             Framed::new(
                 socket,
-                GossipsubCodec::new(length_codec, self.validation_mode),
+                GossipsubCodec::new(self.max_transmit_size, self.validation_mode),
             ),
             protocol_id.kind,
         )))
@@ -130,12 +126,10 @@ where
     type Future = Pin<Box<dyn Future<Output = Result<Self::Output, Self::Error>> + Send>>;
 
     fn upgrade_outbound(self, socket: TSocket, protocol_id: Self::Info) -> Self::Future {
-        let mut length_codec = codec::UviBytes::default();
-        length_codec.set_max_len(self.max_transmit_size);
         Box::pin(future::ok((
             Framed::new(
                 socket,
-                GossipsubCodec::new(length_codec, self.validation_mode),
+                GossipsubCodec::new(self.max_transmit_size, self.validation_mode),
             ),
             protocol_id.kind,
         )))
@@ -152,8 +146,8 @@ pub struct GossipsubCodec {
 }
 
 impl GossipsubCodec {
-    pub fn new(length_codec: codec::UviBytes, validation_mode: ValidationMode) -> GossipsubCodec {
-        let codec = quick_protobuf_codec::Codec::new(length_codec.max_len());
+    pub fn new(max_length: usize, validation_mode: ValidationMode) -> GossipsubCodec {
+        let codec = quick_protobuf_codec::Codec::new(max_length);
         GossipsubCodec {
             validation_mode,
             codec,
@@ -166,28 +160,19 @@ impl GossipsubCodec {
     fn verify_signature(message: &proto::Message) -> bool {
         use quick_protobuf::MessageWrite;
 
-        let from = match message.from.as_ref() {
-            Some(v) => v,
-            None => {
-                debug!("Signature verification failed: No source id given");
-                return false;
-            }
+        let Some(from) = message.from.as_ref() else {
+            tracing::debug!("Signature verification failed: No source id given");
+            return false;
         };
 
-        let source = match PeerId::from_bytes(from) {
-            Ok(v) => v,
-            Err(_) => {
-                debug!("Signature verification failed: Invalid Peer Id");
-                return false;
-            }
+        let Ok(source) = PeerId::from_bytes(from) else {
+            tracing::debug!("Signature verification failed: Invalid Peer Id");
+            return false;
         };
 
-        let signature = match message.signature.as_ref() {
-            Some(v) => v,
-            None => {
-                debug!("Signature verification failed: No signature provided");
-                return false;
-            }
+        let Some(signature) = message.signature.as_ref() else {
+            tracing::debug!("Signature verification failed: No signature provided");
+            return false;
         };
 
         // If there is a key value in the protobuf, use that key otherwise the key must be
@@ -197,7 +182,7 @@ impl GossipsubCodec {
             _ => match PublicKey::try_decode_protobuf(&source.to_bytes()[2..]) {
                 Ok(v) => v,
                 Err(_) => {
-                    warn!("Signature verification failed: No valid public key supplied");
+                    tracing::warn!("Signature verification failed: No valid public key supplied");
                     return false;
                 }
             },
@@ -205,7 +190,9 @@ impl GossipsubCodec {
 
         // The key must match the peer_id
         if source != public_key.to_peer_id() {
-            warn!("Signature verification failed: Public key doesn't match source peer id");
+            tracing::warn!(
+                "Signature verification failed: Public key doesn't match source peer id"
+            );
             return false;
         }
 
@@ -225,10 +212,10 @@ impl GossipsubCodec {
 }
 
 impl Encoder for GossipsubCodec {
-    type Item = proto::RPC;
+    type Item<'a> = proto::RPC;
     type Error = quick_protobuf_codec::Error;
 
-    fn encode(&mut self, item: Self::Item, dst: &mut BytesMut) -> Result<(), Self::Error> {
+    fn encode(&mut self, item: Self::Item<'_>, dst: &mut BytesMut) -> Result<(), Self::Error> {
         self.codec.encode(item, dst)
     }
 }
@@ -238,11 +225,9 @@ impl Decoder for GossipsubCodec {
     type Error = quick_protobuf_codec::Error;
 
     fn decode(&mut self, src: &mut BytesMut) -> Result<Option<Self::Item>, Self::Error> {
-        let rpc = match self.codec.decode(src)? {
-            Some(p) => p,
-            None => return Ok(None),
+        let Some(rpc) = self.codec.decode(src)? else {
+            return Ok(None);
         };
-
         // Store valid messages.
         let mut messages = Vec::with_capacity(rpc.publish.len());
         // Store any invalid messages.
@@ -276,13 +261,17 @@ impl Decoder for GossipsubCodec {
                 }
                 ValidationMode::Anonymous => {
                     if message.signature.is_some() {
-                        warn!("Signature field was non-empty and anonymous validation mode is set");
+                        tracing::warn!(
+                            "Signature field was non-empty and anonymous validation mode is set"
+                        );
                         invalid_kind = Some(ValidationError::SignaturePresent);
                     } else if message.seqno.is_some() {
-                        warn!("Sequence number was non-empty and anonymous validation mode is set");
+                        tracing::warn!(
+                            "Sequence number was non-empty and anonymous validation mode is set"
+                        );
                         invalid_kind = Some(ValidationError::SequenceNumberPresent);
                     } else if message.from.is_some() {
-                        warn!("Message dropped. Message source was non-empty and anonymous validation mode is set");
+                        tracing::warn!("Message dropped. Message source was non-empty and anonymous validation mode is set");
                         invalid_kind = Some(ValidationError::MessageSourcePresent);
                     }
                 }
@@ -308,7 +297,7 @@ impl Decoder for GossipsubCodec {
 
             // verify message signatures if required
             if verify_signature && !GossipsubCodec::verify_signature(&message) {
-                warn!("Invalid signature for received message");
+                tracing::warn!("Invalid signature for received message");
 
                 // Build the invalid message (ignoring further validation of sequence number
                 // and source)
@@ -332,10 +321,10 @@ impl Decoder for GossipsubCodec {
                     if seq_no.is_empty() {
                         None
                     } else if seq_no.len() != 8 {
-                        debug!(
-                            "Invalid sequence number length for received message. SeqNo: {:?} Size: {}",
-                            seq_no,
-                            seq_no.len()
+                        tracing::debug!(
+                            sequence_number=?seq_no,
+                            sequence_length=%seq_no.len(),
+                            "Invalid sequence number length for received message"
                         );
                         let message = RawMessage {
                             source: None, // don't bother inform the application
@@ -355,7 +344,7 @@ impl Decoder for GossipsubCodec {
                     }
                 } else {
                     // sequence number was not present
-                    debug!("Sequence number not present but expected");
+                    tracing::debug!("Sequence number not present but expected");
                     let message = RawMessage {
                         source: None, // don't bother inform the application
                         data: message.data.unwrap_or_default(),
@@ -381,7 +370,7 @@ impl Decoder for GossipsubCodec {
                             Ok(peer_id) => Some(peer_id), // valid peer id
                             Err(_) => {
                                 // invalid peer id, add to invalid messages
-                                debug!("Message source has an invalid PeerId");
+                                tracing::debug!("Message source has an invalid PeerId");
                                 let message = RawMessage {
                                     source: None, // don't bother inform the application
                                     data: message.data.unwrap_or_default(),
@@ -515,7 +504,7 @@ mod tests {
     use crate::config::Config;
     use crate::{Behaviour, ConfigBuilder};
     use crate::{IdentTopic as Topic, Version};
-    use libp2p_core::identity::Keypair;
+    use libp2p_identity::Keypair;
     use quickcheck::*;
 
     #[derive(Clone, Debug)]
@@ -588,12 +577,12 @@ mod tests {
             let message = message.0;
 
             let rpc = Rpc {
-                messages: vec![message],
+                messages: vec![message.clone()],
                 subscriptions: vec![],
                 control_msgs: vec![],
             };
 
-            let mut codec = GossipsubCodec::new(codec::UviBytes::default(), ValidationMode::Strict);
+            let mut codec = GossipsubCodec::new(u32::MAX as usize, ValidationMode::Strict);
             let mut buf = BytesMut::new();
             codec.encode(rpc.into_protobuf(), &mut buf).unwrap();
             let decoded_rpc = codec.decode(&mut buf).unwrap().unwrap();
@@ -602,7 +591,7 @@ mod tests {
                 HandlerEvent::Message { mut rpc, .. } => {
                     rpc.messages[0].validated = true;
 
-                    assert_eq!(rpc, rpc);
+                    assert_eq!(vec![message], rpc.messages);
                 }
                 _ => panic!("Must decode a message"),
             }

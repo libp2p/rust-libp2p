@@ -21,32 +21,11 @@
 mod behaviour;
 mod handler;
 
-use instant::Instant;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 pub use behaviour::{Behaviour, Event};
-
-/// Parameters for a single run, i.e. one stream, sending and receiving data.
-#[derive(Debug, Clone, Copy)]
-pub struct RunParams {
-    pub to_send: usize,
-    pub to_receive: usize,
-}
-
-/// Timers for a single run, i.e. one stream, sending and receiving data.
-#[derive(Debug, Clone, Copy)]
-pub struct RunTimers {
-    pub write_start: Instant,
-    pub write_done: Instant,
-    pub read_done: Instant,
-}
-
-/// Statistics for a single run, i.e. one stream, sending and receiving data.
-#[derive(Debug)]
-pub struct RunStats {
-    pub params: RunParams,
-    pub timers: RunTimers,
-}
+use libp2p_swarm::StreamUpgradeError;
+use void::Void;
 
 static NEXT_RUN_ID: AtomicUsize = AtomicUsize::new(1);
 
@@ -59,4 +38,12 @@ impl RunId {
     pub(crate) fn next() -> Self {
         Self(NEXT_RUN_ID.fetch_add(1, Ordering::SeqCst))
     }
+}
+
+#[derive(thiserror::Error, Debug)]
+pub enum RunError {
+    #[error(transparent)]
+    Upgrade(#[from] StreamUpgradeError<Void>),
+    #[error("Failed to execute perf run: {0}")]
+    Io(#[from] std::io::Error),
 }

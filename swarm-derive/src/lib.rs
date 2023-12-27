@@ -21,43 +21,46 @@
 #![recursion_limit = "256"]
 #![cfg_attr(docsrs, feature(doc_cfg, doc_auto_cfg))]
 
+mod syn_ext;
+
+use crate::syn_ext::RequireStrLit;
 use heck::ToUpperCamelCase;
 use proc_macro::TokenStream;
 use quote::quote;
 use syn::punctuated::Punctuated;
-use syn::{
-    parse_macro_input, Data, DataStruct, DeriveInput, Expr, ExprLit, Lit, Meta, MetaNameValue,
-    Token,
-};
+use syn::{parse_macro_input, Data, DataStruct, DeriveInput, Meta, Token};
 
 /// Generates a delegating `NetworkBehaviour` implementation for the struct this is used for. See
 /// the trait documentation for better description.
 #[proc_macro_derive(NetworkBehaviour, attributes(behaviour))]
 pub fn hello_macro_derive(input: TokenStream) -> TokenStream {
     let ast = parse_macro_input!(input as DeriveInput);
-    build(&ast)
+    build(&ast).unwrap_or_else(|e| e.to_compile_error().into())
 }
 
 /// The actual implementation.
-fn build(ast: &DeriveInput) -> TokenStream {
+fn build(ast: &DeriveInput) -> syn::Result<TokenStream> {
     match ast.data {
         Data::Struct(ref s) => build_struct(ast, s),
-        Data::Enum(_) => unimplemented!("Deriving NetworkBehaviour is not implemented for enums"),
-        Data::Union(_) => unimplemented!("Deriving NetworkBehaviour is not implemented for unions"),
+        Data::Enum(_) => Err(syn::Error::new_spanned(
+            ast,
+            "Cannot derive `NetworkBehaviour` on enums",
+        )),
+        Data::Union(_) => Err(syn::Error::new_spanned(
+            ast,
+            "Cannot derive `NetworkBehaviour` on union",
+        )),
     }
 }
 
 /// The version for structs
-fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
+fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> syn::Result<TokenStream> {
     let name = &ast.ident;
     let (_, ty_generics, where_clause) = ast.generics.split_for_impl();
     let BehaviourAttributes {
         prelude_path,
         user_specified_out_event,
-    } = match parse_attributes(ast) {
-        Ok(attrs) => attrs,
-        Err(e) => return e,
-    };
+    } = parse_attributes(ast)?;
 
     let multiaddr = quote! { #prelude_path::Multiaddr };
     let trait_to_impl = quote! { #prelude_path::NetworkBehaviour };
@@ -67,20 +70,7 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
     let proto_select_ident = quote! { #prelude_path::ConnectionHandlerSelect };
     let peer_id = quote! { #prelude_path::PeerId };
     let connection_id = quote! { #prelude_path::ConnectionId };
-    let poll_parameters = quote! { #prelude_path::PollParameters };
     let from_swarm = quote! { #prelude_path::FromSwarm };
-    let connection_established = quote! { #prelude_path::ConnectionEstablished };
-    let address_change = quote! { #prelude_path::AddressChange };
-    let connection_closed = quote! { #prelude_path::ConnectionClosed };
-    let dial_failure = quote! { #prelude_path::DialFailure };
-    let listen_failure = quote! { #prelude_path::ListenFailure };
-    let new_listener = quote! { #prelude_path::NewListener };
-    let new_listen_addr = quote! { #prelude_path::NewListenAddr };
-    let expired_listen_addr = quote! { #prelude_path::ExpiredListenAddr };
-    let new_external_addr = quote! { #prelude_path::NewExternalAddr };
-    let expired_external_addr = quote! { #prelude_path::ExpiredExternalAddr };
-    let listener_error = quote! { #prelude_path::ListenerError };
-    let listener_closed = quote! { #prelude_path::ListenerClosed };
     let t_handler = quote! { #prelude_path::THandler };
     let t_handler_in_event = quote! { #prelude_path::THandlerInEvent };
     let t_handler_out_event = quote! { #prelude_path::THandlerOutEvent };
@@ -96,11 +86,11 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
     };
 
     let (out_event_name, out_event_definition, out_event_from_clauses) = {
-        // If we find a `#[behaviour(out_event = "Foo")]` attribute on the
-        // struct, we set `Foo` as the out event. If not, the `OutEvent` is
+        // If we find a `#[behaviour(to_swarm = "Foo")]` attribute on the
+        // struct, we set `Foo` as the out event. If not, the `ToSwarm` is
         // generated.
         match user_specified_out_event {
-            // User provided `OutEvent`.
+            // User provided `ToSwarm`.
             Some(name) => {
                 let definition = None;
                 let from_clauses = data_struct
@@ -108,12 +98,12 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
                     .iter()
                     .map(|field| {
                         let ty = &field.ty;
-                        quote! {#name: From< <#ty as #trait_to_impl>::OutEvent >}
+                        quote! {#name: From< <#ty as #trait_to_impl>::ToSwarm >}
                     })
                     .collect::<Vec<_>>();
                 (name, definition, from_clauses)
             }
-            // User did not provide `OutEvent`. Generate it.
+            // User did not provide `ToSwarm`. Generate it.
             None => {
                 let enum_name_str = ast.ident.to_string() + "Event";
                 let enum_name: syn::Type =
@@ -135,7 +125,7 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
 
                     let enum_variants = fields
                         .clone()
-                        .map(|(variant, ty)| quote! {#variant(<#ty as #trait_to_impl>::OutEvent)});
+                        .map(|(variant, ty)| quote! {#variant(<#ty as #trait_to_impl>::ToSwarm)});
 
                     let visibility = &ast.vis;
 
@@ -146,7 +136,7 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
 
                     let additional_debug = fields
                         .clone()
-                        .map(|(_variant, ty)| quote! { <#ty as #trait_to_impl>::OutEvent : ::core::fmt::Debug })
+                        .map(|(_variant, ty)| quote! { <#ty as #trait_to_impl>::ToSwarm : ::core::fmt::Debug })
                         .collect::<Vec<_>>();
 
                     let where_clause = {
@@ -168,11 +158,11 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
                         .map(|where_clause| quote! {#where_clause, #(#additional_debug),*});
 
                     let match_variants = fields.map(|(variant, _ty)| variant);
-                    let msg = format!("`NetworkBehaviour::OutEvent` produced by {name}.");
+                    let msg = format!("`NetworkBehaviour::ToSwarm` produced by {name}.");
 
                     Some(quote! {
                         #[doc = #msg]
-                        #visibility enum #enum_name #ty_generics
+                        #visibility enum #enum_name #impl_generics
                             #where_clause
                         {
                             #(#enum_variants),*
@@ -218,308 +208,18 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
         }
     };
 
-    // Build the list of statements to put in the body of `on_swarm_event()`
-    // for the `FromSwarm::ConnectionEstablished` variant.
-    let on_connection_established_stmts = {
+    // Build the list of statements to put in the body of `on_swarm_event()`.
+    let on_swarm_event_stmts = {
         data_struct
             .fields
             .iter()
             .enumerate()
             .map(|(field_n, field)| match field.ident {
                 Some(ref i) => quote! {
-                    self.#i.on_swarm_event(#from_swarm::ConnectionEstablished(#connection_established {
-                        peer_id,
-                        connection_id,
-                        endpoint,
-                        failed_addresses,
-                        other_established,
-                    }));
+                    self.#i.on_swarm_event(event);
                 },
                 None => quote! {
-                    self.#field_n.on_swarm_event(#from_swarm::ConnectionEstablished(#connection_established {
-                        peer_id,
-                        connection_id,
-                        endpoint,
-                        failed_addresses,
-                        other_established,
-                    }));
-                },
-            })
-    };
-
-    // Build the list of statements to put in the body of `on_swarm_event()`
-    // for the `FromSwarm::AddressChange variant`.
-    let on_address_change_stmts = {
-        data_struct
-            .fields
-            .iter()
-            .enumerate()
-            .map(|(field_n, field)| match field.ident {
-                Some(ref i) => quote! {
-                self.#i.on_swarm_event(#from_swarm::AddressChange(#address_change {
-                        peer_id,
-                        connection_id,
-                        old,
-                        new,
-                    }));
-                },
-                None => quote! {
-                self.#field_n.on_swarm_event(#from_swarm::AddressChange(#address_change {
-                        peer_id,
-                        connection_id,
-                        old,
-                        new,
-                    }));
-                },
-            })
-    };
-
-    // Build the list of statements to put in the body of `on_swarm_event()`
-    // for the `FromSwarm::ConnectionClosed` variant.
-    let on_connection_closed_stmts = {
-        data_struct
-            .fields
-            .iter()
-            .enumerate()
-            // The outmost handler belongs to the last behaviour.
-            .rev()
-            .enumerate()
-            .map(|(enum_n, (field_n, field))| {
-                let handler = if field_n == 0 {
-                    // Given that the iterator is reversed, this is the innermost handler only.
-                    quote! { let handler = handlers }
-                } else {
-                    quote! {
-                        let (handlers, handler) = handlers.into_inner()
-                    }
-                };
-                let inject = match field.ident {
-                    Some(ref i) => quote! {
-                    self.#i.on_swarm_event(#from_swarm::ConnectionClosed(#connection_closed {
-                            peer_id,
-                            connection_id,
-                            endpoint,
-                            handler,
-                            remaining_established,
-                        }));
-                    },
-                    None => quote! {
-                    self.#enum_n.on_swarm_event(#from_swarm::ConnectionClosed(#connection_closed {
-                            peer_id,
-                            connection_id,
-                            endpoint,
-                            handler,
-                            remaining_established,
-                        }));
-                    },
-                };
-
-                quote! {
-                    #handler;
-                    #inject;
-                }
-            })
-    };
-
-    // Build the list of statements to put in the body of `on_swarm_event()`
-    // for the `FromSwarm::DialFailure` variant.
-    let on_dial_failure_stmts = data_struct
-        .fields
-        .iter()
-        .enumerate()
-        .map(|(enum_n, field)| match field.ident {
-            Some(ref i) => quote! {
-                self.#i.on_swarm_event(#from_swarm::DialFailure(#dial_failure {
-                    peer_id,
-                    connection_id,
-                    error,
-                }));
-            },
-            None => quote! {
-                self.#enum_n.on_swarm_event(#from_swarm::DialFailure(#dial_failure {
-                    peer_id,
-                    connection_id,
-                    error,
-                }));
-            },
-        });
-
-    // Build the list of statements to put in the body of `on_swarm_event()`
-    // for the `FromSwarm::ListenFailure` variant.
-    let on_listen_failure_stmts = data_struct
-        .fields
-        .iter()
-        .enumerate()
-        .map(|(enum_n, field)| match field.ident {
-            Some(ref i) => quote! {
-                self.#i.on_swarm_event(#from_swarm::ListenFailure(#listen_failure {
-                    local_addr,
-                    send_back_addr,
-                    connection_id,
-                    error
-                }));
-            },
-            None => quote! {
-                self.#enum_n.on_swarm_event(#from_swarm::ListenFailure(#listen_failure {
-                    local_addr,
-                    send_back_addr,
-                    connection_id,
-                    error
-                }));
-            },
-        });
-
-    // Build the list of statements to put in the body of `on_swarm_event()`
-    // for the `FromSwarm::NewListener` variant.
-    let on_new_listener_stmts = {
-        data_struct
-            .fields
-            .iter()
-            .enumerate()
-            .map(|(field_n, field)| match field.ident {
-                Some(ref i) => quote! {
-                self.#i.on_swarm_event(#from_swarm::NewListener(#new_listener {
-                        listener_id,
-                    }));
-                },
-                None => quote! {
-                self.#field_n.on_swarm_event(#from_swarm::NewListener(#new_listener {
-                        listener_id,
-                    }));
-                },
-            })
-    };
-
-    // Build the list of statements to put in the body of `on_swarm_event()`
-    // for the `FromSwarm::NewListenAddr` variant.
-    let on_new_listen_addr_stmts = {
-        data_struct
-            .fields
-            .iter()
-            .enumerate()
-            .map(|(field_n, field)| match field.ident {
-                Some(ref i) => quote! {
-                self.#i.on_swarm_event(#from_swarm::NewListenAddr(#new_listen_addr {
-                        listener_id,
-                        addr,
-                    }));
-                },
-                None => quote! {
-                self.#field_n.on_swarm_event(#from_swarm::NewListenAddr(#new_listen_addr {
-                        listener_id,
-                        addr,
-                    }));
-                },
-            })
-    };
-
-    // Build the list of statements to put in the body of `on_swarm_event()`
-    // for the `FromSwarm::ExpiredListenAddr` variant.
-    let on_expired_listen_addr_stmts = {
-        data_struct
-            .fields
-            .iter()
-            .enumerate()
-            .map(|(field_n, field)| match field.ident {
-                Some(ref i) => quote! {
-                self.#i.on_swarm_event(#from_swarm::ExpiredListenAddr(#expired_listen_addr {
-                        listener_id,
-                        addr,
-                    }));
-                },
-                None => quote! {
-                self.#field_n.on_swarm_event(#from_swarm::ExpiredListenAddr(#expired_listen_addr {
-                        listener_id,
-                        addr,
-                    }));
-                },
-            })
-    };
-
-    // Build the list of statements to put in the body of `on_swarm_event()`
-    // for the `FromSwarm::NewExternalAddr` variant.
-    let on_new_external_addr_stmts = {
-        data_struct
-            .fields
-            .iter()
-            .enumerate()
-            .map(|(field_n, field)| match field.ident {
-                Some(ref i) => quote! {
-                self.#i.on_swarm_event(#from_swarm::NewExternalAddr(#new_external_addr {
-                        addr,
-                    }));
-                },
-                None => quote! {
-                self.#field_n.on_swarm_event(#from_swarm::NewExternalAddr(#new_external_addr {
-                        addr,
-                    }));
-                },
-            })
-    };
-
-    // Build the list of statements to put in the body of `on_swarm_event()`
-    // for the `FromSwarm::ExpiredExternalAddr` variant.
-    let on_expired_external_addr_stmts = {
-        data_struct
-            .fields
-            .iter()
-            .enumerate()
-            .map(|(field_n, field)| match field.ident {
-                Some(ref i) => quote! {
-                self.#i.on_swarm_event(#from_swarm::ExpiredExternalAddr(#expired_external_addr {
-                        addr,
-                    }));
-                },
-                None => quote! {
-                self.#field_n.on_swarm_event(#from_swarm::ExpiredExternalAddr(#expired_external_addr {
-                        addr,
-                    }));
-                },
-            })
-    };
-
-    // Build the list of statements to put in the body of `on_swarm_event()`
-    // for the `FromSwarm::ListenerError` variant.
-    let on_listener_error_stmts = {
-        data_struct
-            .fields
-            .iter()
-            .enumerate()
-            .map(|(field_n, field)| match field.ident {
-                Some(ref i) => quote! {
-                    self.#i.on_swarm_event(#from_swarm::ListenerError(#listener_error {
-                        listener_id,
-                        err,
-                    }));
-                },
-                None => quote! {
-                    self.#field_n.on_swarm_event(#from_swarm::ListenerError(#listener_error {
-                        listener_id,
-                        err,
-                    }));
-                },
-            })
-    };
-
-    // Build the list of statements to put in the body of `on_swarm_event()`
-    // for the `FromSwarm::ListenerClosed` variant.
-    let on_listener_closed_stmts = {
-        data_struct
-            .fields
-            .iter()
-            .enumerate()
-            .map(|(field_n, field)| match field.ident {
-                Some(ref i) => quote! {
-                self.#i.on_swarm_event(#from_swarm::ListenerClosed(#listener_closed {
-                        listener_id,
-                        reason,
-                    }));
-                },
-                None => quote! {
-                self.#field_n.on_swarm_event(#from_swarm::ListenerClosed(#listener_closed {
-                        listener_id,
-                        reason,
-                    }));
+                    self.#field_n.on_swarm_event(event);
                 },
             })
     };
@@ -661,67 +361,47 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
     // List of statements to put in `poll()`.
     //
     // We poll each child one by one and wrap around the output.
-    let poll_stmts = data_struct.fields.iter().enumerate().map(|(field_n, field)| {
-        let field = field
-            .ident
-            .clone()
-            .expect("Fields of NetworkBehaviour implementation to be named.");
+    let poll_stmts = data_struct
+        .fields
+        .iter()
+        .enumerate()
+        .map(|(field_n, field)| {
+            let field = field
+                .ident
+                .clone()
+                .expect("Fields of NetworkBehaviour implementation to be named.");
 
-        let mut wrapped_event = if field_n != 0 {
-            quote!{ #either_ident::Right(event) }
-        } else {
-            quote!{ event }
-        };
-        for _ in 0 .. data_struct.fields.len() - 1 - field_n {
-            wrapped_event = quote!{ #either_ident::Left(#wrapped_event) };
-        }
-
-        let generate_event_match_arm =  {
-            // If the `NetworkBehaviour`'s `OutEvent` is generated by the derive macro, wrap the sub
-            // `NetworkBehaviour` `OutEvent` in the variant of the generated `OutEvent`. If the
-            // `NetworkBehaviour`'s `OutEvent` is provided by the user, use the corresponding `From`
-            // implementation.
-            let into_out_event = if out_event_definition.is_some() {
-                let event_variant: syn::Variant = syn::parse_str(
-                    &field
-                        .to_string()
-                        .to_upper_camel_case()
-                ).expect("uppercased field name to be a valid enum variant name");
-                quote! { #out_event_name::#event_variant(event) }
+            let mut wrapped_event = if field_n != 0 {
+                quote! { #either_ident::Right(event) }
             } else {
-                quote! { event.into() }
+                quote! { event }
+            };
+            for _ in 0..data_struct.fields.len() - 1 - field_n {
+                wrapped_event = quote! { #either_ident::Left(#wrapped_event) };
+            }
+
+            // If the `NetworkBehaviour`'s `ToSwarm` is generated by the derive macro, wrap the sub
+            // `NetworkBehaviour` `ToSwarm` in the variant of the generated `ToSwarm`. If the
+            // `NetworkBehaviour`'s `ToSwarm` is provided by the user, use the corresponding `From`
+            // implementation.
+            let map_out_event = if out_event_definition.is_some() {
+                let event_variant: syn::Variant =
+                    syn::parse_str(&field.to_string().to_upper_camel_case())
+                        .expect("uppercased field name to be a valid enum variant name");
+                quote! { #out_event_name::#event_variant }
+            } else {
+                quote! { |e| e.into() }
             };
 
-            quote! {
-                std::task::Poll::Ready(#network_behaviour_action::GenerateEvent(event)) => {
-                    return std::task::Poll::Ready(#network_behaviour_action::GenerateEvent(#into_out_event))
-                }
-            }
-        };
+            let map_in_event = quote! { |event| #wrapped_event };
 
-        quote!{
-            match #trait_to_impl::poll(&mut self.#field, cx, poll_params) {
-                #generate_event_match_arm
-                std::task::Poll::Ready(#network_behaviour_action::Dial { opts }) => {
-                    return std::task::Poll::Ready(#network_behaviour_action::Dial { opts });
+            quote! {
+                match #trait_to_impl::poll(&mut self.#field, cx) {
+                    std::task::Poll::Ready(e) => return std::task::Poll::Ready(e.map_out(#map_out_event).map_in(#map_in_event)),
+                    std::task::Poll::Pending => {},
                 }
-                std::task::Poll::Ready(#network_behaviour_action::NotifyHandler { peer_id, handler, event }) => {
-                    return std::task::Poll::Ready(#network_behaviour_action::NotifyHandler {
-                        peer_id,
-                        handler,
-                        event: #wrapped_event,
-                    });
-                }
-                std::task::Poll::Ready(#network_behaviour_action::ReportObservedAddr { address, score }) => {
-                    return std::task::Poll::Ready(#network_behaviour_action::ReportObservedAddr { address, score });
-                }
-                std::task::Poll::Ready(#network_behaviour_action::CloseConnection { peer_id, connection }) => {
-                    return std::task::Poll::Ready(#network_behaviour_action::CloseConnection { peer_id, connection });
-                }
-                std::task::Poll::Pending => {},
             }
-        }
-    });
+        });
 
     let out_event_reference = if out_event_definition.is_some() {
         quote! { #out_event_name #ty_generics }
@@ -737,7 +417,7 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
         #where_clause
         {
             type ConnectionHandler = #connection_handler_ty;
-            type OutEvent = #out_event_reference;
+            type ToSwarm = #out_event_reference;
 
             #[allow(clippy::needless_question_mark)]
             fn handle_pending_inbound_connection(
@@ -795,57 +475,18 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
                 }
             }
 
-            fn poll(&mut self, cx: &mut std::task::Context, poll_params: &mut impl #poll_parameters) -> std::task::Poll<#network_behaviour_action<Self::OutEvent, #t_handler_in_event<Self>>> {
-                use #prelude_path::futures::*;
+            fn poll(&mut self, cx: &mut std::task::Context) -> std::task::Poll<#network_behaviour_action<Self::ToSwarm, #t_handler_in_event<Self>>> {
                 #(#poll_stmts)*
                 std::task::Poll::Pending
             }
 
-            fn on_swarm_event(&mut self, event: #from_swarm<Self::ConnectionHandler>) {
-                match event {
-                    #from_swarm::ConnectionEstablished(
-                        #connection_established { peer_id, connection_id, endpoint, failed_addresses, other_established })
-                    => { #(#on_connection_established_stmts)* }
-                    #from_swarm::AddressChange(
-                        #address_change { peer_id, connection_id, old, new })
-                    => { #(#on_address_change_stmts)* }
-                    #from_swarm::ConnectionClosed(
-                        #connection_closed { peer_id, connection_id, endpoint, handler: handlers, remaining_established })
-                    => { #(#on_connection_closed_stmts)* }
-                    #from_swarm::DialFailure(
-                        #dial_failure { peer_id, connection_id, error })
-                    => { #(#on_dial_failure_stmts)* }
-                    #from_swarm::ListenFailure(
-                        #listen_failure { local_addr, send_back_addr, connection_id, error })
-                    => { #(#on_listen_failure_stmts)* }
-                    #from_swarm::NewListener(
-                        #new_listener { listener_id })
-                    => { #(#on_new_listener_stmts)* }
-                    #from_swarm::NewListenAddr(
-                        #new_listen_addr { listener_id, addr })
-                    => { #(#on_new_listen_addr_stmts)* }
-                    #from_swarm::ExpiredListenAddr(
-                        #expired_listen_addr { listener_id, addr })
-                    => { #(#on_expired_listen_addr_stmts)* }
-                    #from_swarm::NewExternalAddr(
-                        #new_external_addr { addr })
-                    => { #(#on_new_external_addr_stmts)* }
-                    #from_swarm::ExpiredExternalAddr(
-                        #expired_external_addr { addr })
-                    => { #(#on_expired_external_addr_stmts)* }
-                    #from_swarm::ListenerError(
-                        #listener_error { listener_id, err })
-                    => { #(#on_listener_error_stmts)* }
-                    #from_swarm::ListenerClosed(
-                        #listener_closed { listener_id, reason })
-                    => { #(#on_listener_closed_stmts)* }
-                    _ => {}
-                }
+            fn on_swarm_event(&mut self, event: #from_swarm) {
+                #(#on_swarm_event_stmts)*
             }
         }
     };
 
-    final_quote.into()
+    Ok(final_quote.into())
 }
 
 struct BehaviourAttributes {
@@ -854,7 +495,7 @@ struct BehaviourAttributes {
 }
 
 /// Parses the `value` of a key=value pair in the `#[behaviour]` attribute into the requested type.
-fn parse_attributes(ast: &DeriveInput) -> Result<BehaviourAttributes, TokenStream> {
+fn parse_attributes(ast: &DeriveInput) -> syn::Result<BehaviourAttributes> {
     let mut attributes = BehaviourAttributes {
         prelude_path: syn::parse_quote! { ::libp2p::swarm::derive_prelude },
         user_specified_out_event: None,
@@ -865,61 +506,21 @@ fn parse_attributes(ast: &DeriveInput) -> Result<BehaviourAttributes, TokenStrea
         .iter()
         .filter(|attr| attr.path().is_ident("behaviour"))
     {
-        let nested = attr
-            .parse_args_with(Punctuated::<Meta, Token![,]>::parse_terminated)
-            .expect("`parse_args_with` never fails when parsing nested meta");
+        let nested = attr.parse_args_with(Punctuated::<Meta, Token![,]>::parse_terminated)?;
 
         for meta in nested {
             if meta.path().is_ident("prelude") {
-                match meta {
-                    Meta::Path(_) => unimplemented!(),
-                    Meta::List(_) => unimplemented!(),
-                    Meta::NameValue(MetaNameValue {
-                        value:
-                            Expr::Lit(ExprLit {
-                                lit: Lit::Str(s), ..
-                            }),
-                        ..
-                    }) => {
-                        attributes.prelude_path = syn::parse_str(&s.value()).unwrap();
-                    }
-                    Meta::NameValue(name_value) => {
-                        return Err(syn::Error::new_spanned(
-                            name_value.value,
-                            "`prelude` value must be a quoted path",
-                        )
-                        .to_compile_error()
-                        .into());
-                    }
-                }
+                let value = meta.require_name_value()?.value.require_str_lit()?;
+
+                attributes.prelude_path = syn::parse_str(&value)?;
 
                 continue;
             }
 
-            if meta.path().is_ident("out_event") {
-                match meta {
-                    Meta::Path(_) => unimplemented!(),
-                    Meta::List(_) => unimplemented!(),
+            if meta.path().is_ident("to_swarm") || meta.path().is_ident("out_event") {
+                let value = meta.require_name_value()?.value.require_str_lit()?;
 
-                    Meta::NameValue(MetaNameValue {
-                        value:
-                            Expr::Lit(ExprLit {
-                                lit: Lit::Str(s), ..
-                            }),
-                        ..
-                    }) => {
-                        attributes.user_specified_out_event =
-                            Some(syn::parse_str(&s.value()).unwrap());
-                    }
-                    Meta::NameValue(name_value) => {
-                        return Err(syn::Error::new_spanned(
-                            name_value.value,
-                            "`out_event` value must be a quoted type",
-                        )
-                        .to_compile_error()
-                        .into());
-                    }
-                }
+                attributes.user_specified_out_event = Some(syn::parse_str(&value)?);
 
                 continue;
             }

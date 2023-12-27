@@ -1,4 +1,10 @@
-## 0.11.0 - unreleased
+## 0.12.0
+
+- Remove `Clone`, `PartialEq` and `Eq` implementations on `Event` and its sub-structs.
+  The `Event` also contains errors which are not clonable or comparable.
+  See [PR 3914](https://github.com/libp2p/rust-libp2p/pull/3914).
+
+## 0.11.0
 
 - Raise MSRV to 1.65.
   See [PR 3715].

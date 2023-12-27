@@ -24,7 +24,7 @@ use libp2p_autonat::{
 use libp2p_core::{multiaddr::Protocol, ConnectedPoint, Endpoint, Multiaddr};
 use libp2p_identity::PeerId;
 use libp2p_swarm::DialError;
-use libp2p_swarm::{AddressScore, Swarm, SwarmEvent};
+use libp2p_swarm::{Swarm, SwarmEvent};
 use libp2p_swarm_test::SwarmExt as _;
 use std::{num::NonZeroU32, time::Duration};
 
@@ -69,7 +69,7 @@ async fn test_dial_back() {
     let expect_addr = Multiaddr::empty()
         .with(Protocol::Ip4(observed_client_ip))
         .with(Protocol::Tcp(client_port))
-        .with(Protocol::P2p(client_id.into()));
+        .with(Protocol::P2p(client_id));
     let request_probe_id = match server.next_behaviour_event().await {
         Event::InboundProbe(InboundProbeEvent::Request {
             peer,
@@ -96,6 +96,7 @@ async fn test_dial_back() {
                 num_established,
                 concurrent_dial_errors,
                 established_in: _,
+                connection_id: _,
             } => {
                 assert_eq!(peer_id, client_id);
                 assert_eq!(num_established, NonZeroU32::new(2).unwrap());
@@ -103,7 +104,10 @@ async fn test_dial_back() {
                 assert_eq!(address, expect_addr);
                 break;
             }
-            SwarmEvent::Dialing(peer) => assert_eq!(peer, client_id),
+            SwarmEvent::Dialing {
+                peer_id: Some(peer),
+                ..
+            } => assert_eq!(peer, client_id),
             SwarmEvent::NewListenAddr { .. } | SwarmEvent::ExpiredListenAddr { .. } => {}
             other => panic!("Unexpected swarm event: {other:?}."),
         }
@@ -127,10 +131,9 @@ async fn test_dial_back() {
 async fn test_dial_error() {
     let (mut server, server_id, server_addr) = new_server_swarm(None).await;
     let (mut client, client_id) = new_client_swarm(server_id, server_addr).await;
-    client.add_external_address(
-        "/ip4/127.0.0.1/tcp/12345".parse().unwrap(),
-        AddressScore::Infinite,
-    );
+    client
+        .behaviour_mut()
+        .probe_address("/ip4/127.0.0.1/tcp/12345".parse().unwrap());
     async_std::task::spawn(client.loop_on_next());
 
     let request_probe_id = match server.next_behaviour_event().await {
@@ -143,12 +146,15 @@ async fn test_dial_error() {
 
     loop {
         match server.next_swarm_event().await {
-            SwarmEvent::OutgoingConnectionError { peer_id, error } => {
+            SwarmEvent::OutgoingConnectionError { peer_id, error, .. } => {
                 assert_eq!(peer_id.unwrap(), client_id);
                 assert!(matches!(error, DialError::Transport(_)));
                 break;
             }
-            SwarmEvent::Dialing(peer) => assert_eq!(peer, client_id),
+            SwarmEvent::Dialing {
+                peer_id: Some(peer),
+                ..
+            } => assert_eq!(peer, client_id),
             SwarmEvent::NewListenAddr { .. } | SwarmEvent::ExpiredListenAddr { .. } => {}
             other => panic!("Unexpected swarm event: {other:?}."),
         }
@@ -162,7 +168,10 @@ async fn test_dial_error() {
         }) => {
             assert_eq!(probe_id, request_probe_id);
             assert_eq!(peer, client_id);
-            assert_eq!(error, InboundProbeError::Response(ResponseError::DialError));
+            assert!(matches!(
+                error,
+                InboundProbeError::Response(ResponseError::DialError)
+            ));
         }
         other => panic!("Unexpected behaviour event: {other:?}."),
     }
@@ -246,10 +255,10 @@ async fn test_throttle_peer_max() {
         }) => {
             assert_eq!(client_id, peer);
             assert_ne!(first_probe_id, probe_id);
-            assert_eq!(
+            assert!(matches!(
                 error,
                 InboundProbeError::Response(ResponseError::DialRefused)
-            )
+            ));
         }
         other => panic!("Unexpected behaviour event: {other:?}."),
     };
@@ -267,10 +276,9 @@ async fn test_dial_multiple_addr() {
 
     let (mut client, client_id) = new_client_swarm(server_id, server_addr.clone()).await;
     client.listen().await;
-    client.add_external_address(
-        "/ip4/127.0.0.1/tcp/12345".parse().unwrap(),
-        AddressScore::Infinite,
-    );
+    client
+        .behaviour_mut()
+        .probe_address("/ip4/127.0.0.1/tcp/12345".parse().unwrap());
     async_std::task::spawn(client.loop_on_next());
 
     let dial_addresses = match server.next_behaviour_event().await {
@@ -300,14 +308,17 @@ async fn test_dial_multiple_addr() {
                 let dial_errors = concurrent_dial_errors.unwrap();
 
                 // The concurrent dial might not be fast enough to produce a dial error.
-                if let Some((addr, _)) = dial_errors.get(0) {
+                if let Some((addr, _)) = dial_errors.first() {
                     assert_eq!(addr, &dial_addresses[0]);
                 }
 
                 assert_eq!(address, dial_addresses[1]);
                 break;
             }
-            SwarmEvent::Dialing(peer) => assert_eq!(peer, client_id),
+            SwarmEvent::Dialing {
+                peer_id: Some(peer),
+                ..
+            } => assert_eq!(peer, client_id),
             SwarmEvent::NewListenAddr { .. } | SwarmEvent::ExpiredListenAddr { .. } => {}
             other => panic!("Unexpected swarm event: {other:?}."),
         }

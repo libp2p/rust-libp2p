@@ -28,7 +28,6 @@ mod copy_future;
 mod multiaddr_ext;
 mod priv_client;
 mod protocol;
-pub mod v2;
 
 mod proto {
     #![allow(unreachable_pub)]
@@ -40,26 +39,26 @@ mod proto {
     };
 }
 
-pub use behaviour::{Behaviour, CircuitId, Config, Event};
+pub use behaviour::{rate_limiter::RateLimiter, Behaviour, CircuitId, Config, Event};
 pub use protocol::{HOP_PROTOCOL_NAME, STOP_PROTOCOL_NAME};
 
 /// Types related to the relay protocol inbound.
 pub mod inbound {
     pub mod hop {
-        pub use crate::protocol::inbound_hop::FatalUpgradeError;
-    }
-    pub mod stop {
-        pub use crate::protocol::inbound_stop::FatalUpgradeError;
+        #[deprecated(note = "Renamed to `Error`.")]
+        pub type FatalUpgradeError = Error;
+
+        pub use crate::protocol::inbound_hop::Error;
     }
 }
 
 /// Types related to the relay protocol outbound.
 pub mod outbound {
     pub mod hop {
-        pub use crate::protocol::outbound_hop::FatalUpgradeError;
+        pub use crate::protocol::outbound_hop::{ConnectError, ProtocolViolation, ReserveError};
     }
     pub mod stop {
-        pub use crate::protocol::outbound_stop::FatalUpgradeError;
+        pub use crate::protocol::outbound_stop::{Error, ProtocolViolation};
     }
 }
 

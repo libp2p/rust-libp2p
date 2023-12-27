@@ -403,7 +403,7 @@ where
         return Poll::Ready(None);
     };
 
-    log::trace!("Received message: {:?}", msg);
+    tracing::trace!(message=?msg, "Received message");
 
     Poll::Ready(Some(Ok(msg)))
 }

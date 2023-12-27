@@ -20,17 +20,17 @@
 
 use super::dns;
 use crate::{META_QUERY_SERVICE_FQDN, SERVICE_NAME_FQDN};
+use hickory_proto::{
+    op::Message,
+    rr::{Name, RData},
+};
 use libp2p_core::{
     address_translation,
     multiaddr::{Multiaddr, Protocol},
 };
 use libp2p_identity::PeerId;
 use std::time::Instant;
-use std::{convert::TryFrom, fmt, net::SocketAddr, str, time::Duration};
-use trust_dns_proto::{
-    op::Message,
-    rr::{Name, RData},
-};
+use std::{fmt, net::SocketAddr, str, time::Duration};
 
 /// A valid mDNS packet received by the service.
 #[derive(Debug)]
@@ -47,7 +47,7 @@ impl MdnsPacket {
     pub(crate) fn new_from_bytes(
         buf: &[u8],
         from: SocketAddr,
-    ) -> Result<Option<MdnsPacket>, trust_dns_proto::error::ProtoError> {
+    ) -> Result<Option<MdnsPacket>, hickory_proto::error::ProtoError> {
         let packet = Message::from_vec(buf)?;
 
         if packet.query().is_none() {
@@ -156,9 +156,8 @@ impl MdnsResponse {
                     return None;
                 }
 
-                let record_value = match record.data() {
-                    Some(RData::PTR(record)) => record,
-                    _ => return None,
+                let RData::PTR(record_value) = record.data()? else {
+                    return None;
                 };
 
                 MdnsPeer::new(packet, record_value, record.ttl())
@@ -181,6 +180,7 @@ impl MdnsResponse {
 
                 peer.addresses().iter().filter_map(move |address| {
                     let new_addr = address_translation(address, &observed)?;
+                    let new_addr = new_addr.with_p2p(*peer.id()).ok()?;
 
                     Some((*peer.id(), new_addr, new_expiration))
                 })
@@ -247,33 +247,22 @@ impl MdnsPeer {
             .flat_map(|txt| txt.iter())
             .filter_map(|txt| {
                 // TODO: wrong, txt can be multiple character strings
-                let addr = match dns::decode_character_string(txt) {
-                    Ok(a) => a,
-                    Err(_) => return None,
-                };
+                let addr = dns::decode_character_string(txt).ok()?;
+
                 if !addr.starts_with(b"dnsaddr=") {
                     return None;
                 }
-                let addr = match str::from_utf8(&addr[8..]) {
-                    Ok(a) => a,
-                    Err(_) => return None,
-                };
-                let mut addr = match addr.parse::<Multiaddr>() {
-                    Ok(a) => a,
-                    Err(_) => return None,
-                };
+
+                let mut addr = str::from_utf8(&addr[8..]).ok()?.parse::<Multiaddr>().ok()?;
+
                 match addr.pop() {
                     Some(Protocol::P2p(peer_id)) => {
-                        if let Ok(peer_id) = PeerId::try_from(peer_id) {
-                            if let Some(pid) = &my_peer_id {
-                                if peer_id != *pid {
-                                    return None;
-                                }
-                            } else {
-                                my_peer_id.replace(peer_id);
+                        if let Some(pid) = &my_peer_id {
+                            if peer_id != *pid {
+                                return None;
                             }
                         } else {
-                            return None;
+                            my_peer_id.replace(peer_id);
                         }
                     }
                     _ => return None,
@@ -329,8 +318,8 @@ mod tests {
 
         let mut addr1: Multiaddr = "/ip4/1.2.3.4/tcp/5000".parse().expect("bad multiaddress");
         let mut addr2: Multiaddr = "/ip6/::1/udp/10000".parse().expect("bad multiaddress");
-        addr1.push(Protocol::P2p(peer_id.into()));
-        addr2.push(Protocol::P2p(peer_id.into()));
+        addr1.push(Protocol::P2p(peer_id));
+        addr2.push(Protocol::P2p(peer_id));
 
         let packets = build_query_response(
             0xf8f8,
@@ -348,9 +337,8 @@ mod tests {
                     if record.name().to_utf8() != SERVICE_NAME_FQDN {
                         return None;
                     }
-                    let record_value = match record.data() {
-                        Some(RData::PTR(record)) => record,
-                        _ => return None,
+                    let Some(RData::PTR(record_value)) = record.data() else {
+                        return None;
                     };
                     Some(record_value)
                 })

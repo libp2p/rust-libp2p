@@ -10,4 +10,5 @@ fn using_keypair(kp: Keypair) {
     let _ = kp.encode_protobuf();
     let _ = kp.sign(&[]);
     let _ = kp.public();
+    let _: Option<[u8; 32]> = kp.derive_secret(b"foobar");
 }

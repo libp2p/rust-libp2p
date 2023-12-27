@@ -18,21 +18,17 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-//! Basic example for a AutoNAT server that supports the /libp2p/autonat/1.0.0 and "/ipfs/0.1.0" protocols.
-//!
-//! To start the server run:
-//! ```sh
-//! cargo run --bin autonat_server -- --listen-port <port>
-//! ```
-//! The `listen-port` parameter is optional and allows to set a fixed port at which the local peer should listen.
+#![doc = include_str!("../../README.md")]
 
 use clap::Parser;
-use futures::prelude::*;
-use libp2p::core::{multiaddr::Protocol, upgrade::Version, Multiaddr, Transport};
-use libp2p::swarm::{NetworkBehaviour, SwarmBuilder, SwarmEvent};
-use libp2p::{autonat, identify, identity, noise, tcp, yamux, PeerId};
+use futures::StreamExt;
+use libp2p::core::{multiaddr::Protocol, Multiaddr};
+use libp2p::swarm::{NetworkBehaviour, SwarmEvent};
+use libp2p::{autonat, identify, identity, noise, tcp, yamux};
 use std::error::Error;
 use std::net::Ipv4Addr;
+use std::time::Duration;
+use tracing_subscriber::EnvFilter;
 
 #[derive(Debug, Parser)]
 #[clap(name = "libp2p autonat")]
@@ -41,26 +37,25 @@ struct Opt {
     listen_port: Option<u16>,
 }
 
-#[async_std::main]
+#[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
-    env_logger::init();
+    let _ = tracing_subscriber::fmt()
+        .with_env_filter(EnvFilter::from_default_env())
+        .try_init();
 
     let opt = Opt::parse();
 
-    let local_key = identity::Keypair::generate_ed25519();
-    let local_peer_id = PeerId::from(local_key.public());
-    println!("Local peer id: {local_peer_id:?}");
+    let mut swarm = libp2p::SwarmBuilder::with_new_identity()
+        .with_tokio()
+        .with_tcp(
+            tcp::Config::default(),
+            noise::Config::new,
+            yamux::Config::default,
+        )?
+        .with_behaviour(|key| Behaviour::new(key.public()))?
+        .with_swarm_config(|c| c.with_idle_connection_timeout(Duration::from_secs(60)))
+        .build();
 
-    let transport = tcp::async_io::Transport::default()
-        .upgrade(Version::V1Lazy)
-        .authenticate(noise::Config::new(&local_key)?)
-        .multiplex(yamux::Config::default())
-        .boxed();
-
-    let behaviour = Behaviour::new(local_key.public());
-
-    let mut swarm =
-        SwarmBuilder::with_async_std_executor(transport, behaviour, local_peer_id).build();
     swarm.listen_on(
         Multiaddr::empty()
             .with(Protocol::Ip4(Ipv4Addr::UNSPECIFIED))

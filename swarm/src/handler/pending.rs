@@ -21,7 +21,7 @@
 
 use crate::handler::{
     ConnectionEvent, ConnectionHandler, ConnectionHandlerEvent, FullyNegotiatedInbound,
-    FullyNegotiatedOutbound, KeepAlive, SubstreamProtocol,
+    FullyNegotiatedOutbound, SubstreamProtocol,
 };
 use libp2p_core::upgrade::PendingUpgrade;
 use std::task::{Context, Poll};
@@ -40,9 +40,8 @@ impl PendingConnectionHandler {
 }
 
 impl ConnectionHandler for PendingConnectionHandler {
-    type InEvent = Void;
-    type OutEvent = Void;
-    type Error = Void;
+    type FromBehaviour = Void;
+    type ToBehaviour = Void;
     type InboundProtocol = PendingUpgrade<String>;
     type OutboundProtocol = PendingUpgrade<String>;
     type OutboundOpenInfo = Void;
@@ -52,24 +51,15 @@ impl ConnectionHandler for PendingConnectionHandler {
         SubstreamProtocol::new(PendingUpgrade::new(self.protocol_name.clone()), ())
     }
 
-    fn on_behaviour_event(&mut self, v: Self::InEvent) {
+    fn on_behaviour_event(&mut self, v: Self::FromBehaviour) {
         void::unreachable(v)
-    }
-
-    fn connection_keep_alive(&self) -> KeepAlive {
-        KeepAlive::No
     }
 
     fn poll(
         &mut self,
         _: &mut Context<'_>,
     ) -> Poll<
-        ConnectionHandlerEvent<
-            Self::OutboundProtocol,
-            Self::OutboundOpenInfo,
-            Self::OutEvent,
-            Self::Error,
-        >,
+        ConnectionHandlerEvent<Self::OutboundProtocol, Self::OutboundOpenInfo, Self::ToBehaviour>,
     > {
         Poll::Pending
     }
@@ -99,7 +89,9 @@ impl ConnectionHandler for PendingConnectionHandler {
             }
             ConnectionEvent::AddressChange(_)
             | ConnectionEvent::DialUpgradeError(_)
-            | ConnectionEvent::ListenUpgradeError(_) => {}
+            | ConnectionEvent::ListenUpgradeError(_)
+            | ConnectionEvent::LocalProtocolsChange(_)
+            | ConnectionEvent::RemoteProtocolsChange(_) => {}
         }
     }
 }

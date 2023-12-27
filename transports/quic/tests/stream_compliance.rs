@@ -1,5 +1,6 @@
 use futures::channel::oneshot;
 use futures::StreamExt;
+use libp2p_core::transport::ListenerId;
 use libp2p_core::Transport;
 use libp2p_quic as quic;
 use std::time::Duration;
@@ -23,7 +24,10 @@ async fn connected_peers() -> (quic::Connection, quic::Connection) {
     let mut listener = new_transport().boxed();
 
     listener
-        .listen_on("/ip4/127.0.0.1/udp/0/quic-v1".parse().unwrap())
+        .listen_on(
+            ListenerId::next(),
+            "/ip4/127.0.0.1/udp/0/quic-v1".parse().unwrap(),
+        )
         .unwrap();
     let listen_address = listener.next().await.unwrap().into_new_address().unwrap();
 

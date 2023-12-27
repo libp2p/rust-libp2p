@@ -54,7 +54,6 @@ enum EventType {
     ReservationReqDenied,
     ReservationReqDenyFailed,
     ReservationTimedOut,
-    CircuitReqReceiveFailed,
     CircuitReqDenied,
     CircuitReqDenyFailed,
     CircuitReqOutboundConnectFailed,
@@ -67,23 +66,25 @@ impl From<&libp2p_relay::Event> for EventType {
     fn from(event: &libp2p_relay::Event) -> Self {
         match event {
             libp2p_relay::Event::ReservationReqAccepted { .. } => EventType::ReservationReqAccepted,
+            #[allow(deprecated)]
             libp2p_relay::Event::ReservationReqAcceptFailed { .. } => {
                 EventType::ReservationReqAcceptFailed
             }
             libp2p_relay::Event::ReservationReqDenied { .. } => EventType::ReservationReqDenied,
+            #[allow(deprecated)]
             libp2p_relay::Event::ReservationReqDenyFailed { .. } => {
                 EventType::ReservationReqDenyFailed
             }
             libp2p_relay::Event::ReservationTimedOut { .. } => EventType::ReservationTimedOut,
-            libp2p_relay::Event::CircuitReqReceiveFailed { .. } => {
-                EventType::CircuitReqReceiveFailed
-            }
             libp2p_relay::Event::CircuitReqDenied { .. } => EventType::CircuitReqDenied,
+            #[allow(deprecated)]
             libp2p_relay::Event::CircuitReqOutboundConnectFailed { .. } => {
                 EventType::CircuitReqOutboundConnectFailed
             }
+            #[allow(deprecated)]
             libp2p_relay::Event::CircuitReqDenyFailed { .. } => EventType::CircuitReqDenyFailed,
             libp2p_relay::Event::CircuitReqAccepted { .. } => EventType::CircuitReqAccepted,
+            #[allow(deprecated)]
             libp2p_relay::Event::CircuitReqAcceptFailed { .. } => EventType::CircuitReqAcceptFailed,
             libp2p_relay::Event::CircuitClosed { .. } => EventType::CircuitClosed,
         }

@@ -26,16 +26,21 @@
 //!
 //! # Usage
 //!
-//! The [`Behaviour`] struct implements the [`NetworkBehaviour`] trait. When used with a [`Swarm`],
-//! it will respond to inbound ping requests and as necessary periodically send outbound
-//! ping requests on every established connection. If a configurable number of consecutive
-//! pings fail, the connection will be closed.
+//! The [`Behaviour`] struct implements the [`NetworkBehaviour`] trait.
+//! It will respond to inbound ping requests and periodically send outbound ping requests on every established connection.
 //!
-//! The [`Behaviour`] network behaviour produces [`Event`]s, which may be consumed from the [`Swarm`]
-//! by an application, e.g. to collect statistics.
+//! It is up to the user to implement a health-check / connection management policy based on the ping protocol.
 //!
-//! > **Note**: The ping protocol does not keep otherwise idle connections alive
-//! > by default, see [`Config::with_keep_alive`] for changing this behaviour.
+//! For example:
+//!
+//! - Disconnect from peers with an RTT > 200ms
+//! - Disconnect from peers which don't support the ping protocol
+//! - Disconnect from peers upon the first ping failure
+//!
+//! Users should inspect emitted [`Event`]s and call APIs on [`Swarm`]:
+//!
+//! - [`Swarm::close_connection`](libp2p_swarm::Swarm::close_connection) to close a specific connection
+//! - [`Swarm::disconnect_peer_id`](libp2p_swarm::Swarm::disconnect_peer_id) to close all connections to a peer
 //!
 //! [`Swarm`]: libp2p_swarm::Swarm
 //! [`Transport`]: libp2p_core::Transport
@@ -46,40 +51,20 @@ mod handler;
 mod protocol;
 
 use handler::Handler;
-pub use handler::{Config, Failure, Success};
 use libp2p_core::{Endpoint, Multiaddr};
 use libp2p_identity::PeerId;
 use libp2p_swarm::{
-    behaviour::FromSwarm, ConnectionDenied, ConnectionId, NetworkBehaviour, PollParameters,
-    THandler, THandlerInEvent, THandlerOutEvent, ToSwarm,
+    behaviour::FromSwarm, ConnectionDenied, ConnectionId, NetworkBehaviour, THandler,
+    THandlerInEvent, THandlerOutEvent, ToSwarm,
 };
+use std::time::Duration;
 use std::{
     collections::VecDeque,
     task::{Context, Poll},
 };
 
-#[deprecated(since = "0.39.1", note = "Use libp2p::ping::Config instead.")]
-pub type PingConfig = Config;
-
-#[deprecated(since = "0.39.1", note = "Use libp2p::ping::Event instead.")]
-pub type PingEvent = Event;
-
-#[deprecated(since = "0.39.1", note = "Use libp2p::ping::Success instead.")]
-pub type PingSuccess = Success;
-
-#[deprecated(since = "0.39.1", note = "Use libp2p::ping::Failure instead.")]
-pub type PingFailure = Failure;
-
-#[deprecated(since = "0.39.1", note = "Use libp2p::ping::Result instead.")]
-pub type PingResult = Result;
-
-#[deprecated(since = "0.39.1", note = "Use libp2p::ping::Behaviour instead.")]
-pub type Ping = Behaviour;
-
 pub use self::protocol::PROTOCOL_NAME;
-
-/// The result of an inbound or outbound ping.
-pub type Result = std::result::Result<Success, Failure>;
+pub use handler::{Config, Failure};
 
 /// A [`NetworkBehaviour`] that responds to inbound pings and
 /// periodically sends outbound pings on every established connection.
@@ -97,8 +82,10 @@ pub struct Behaviour {
 pub struct Event {
     /// The peer ID of the remote.
     pub peer: PeerId,
+    /// The connection the ping was executed on.
+    pub connection: ConnectionId,
     /// The result of an inbound or outbound ping.
-    pub result: Result,
+    pub result: Result<Duration, Failure>,
 }
 
 impl Behaviour {
@@ -119,7 +106,7 @@ impl Default for Behaviour {
 
 impl NetworkBehaviour for Behaviour {
     type ConnectionHandler = Handler;
-    type OutEvent = Event;
+    type ToSwarm = Event;
 
     fn handle_established_inbound_connection(
         &mut self,
@@ -127,7 +114,7 @@ impl NetworkBehaviour for Behaviour {
         _: PeerId,
         _: &Multiaddr,
         _: &Multiaddr,
-    ) -> std::result::Result<THandler<Self>, ConnectionDenied> {
+    ) -> Result<THandler<Self>, ConnectionDenied> {
         Ok(Handler::new(self.config.clone()))
     }
 
@@ -137,56 +124,31 @@ impl NetworkBehaviour for Behaviour {
         _: PeerId,
         _: &Multiaddr,
         _: Endpoint,
-    ) -> std::result::Result<THandler<Self>, ConnectionDenied> {
+    ) -> Result<THandler<Self>, ConnectionDenied> {
         Ok(Handler::new(self.config.clone()))
     }
 
     fn on_connection_handler_event(
         &mut self,
         peer: PeerId,
-        _: ConnectionId,
+        connection: ConnectionId,
         result: THandlerOutEvent<Self>,
     ) {
-        self.events.push_front(Event { peer, result })
+        self.events.push_front(Event {
+            peer,
+            connection,
+            result,
+        })
     }
 
-    fn poll(
-        &mut self,
-        _: &mut Context<'_>,
-        _: &mut impl PollParameters,
-    ) -> Poll<ToSwarm<Self::OutEvent, THandlerInEvent<Self>>> {
+    #[tracing::instrument(level = "trace", name = "NetworkBehaviour::poll", skip(self))]
+    fn poll(&mut self, _: &mut Context<'_>) -> Poll<ToSwarm<Self::ToSwarm, THandlerInEvent<Self>>> {
         if let Some(e) = self.events.pop_back() {
-            let Event { result, peer } = &e;
-
-            match result {
-                Ok(Success::Ping { .. }) => log::debug!("Ping sent to {:?}", peer),
-                Ok(Success::Pong) => log::debug!("Ping received from {:?}", peer),
-                _ => {}
-            }
-
             Poll::Ready(ToSwarm::GenerateEvent(e))
         } else {
             Poll::Pending
         }
     }
 
-    fn on_swarm_event(
-        &mut self,
-        event: libp2p_swarm::behaviour::FromSwarm<Self::ConnectionHandler>,
-    ) {
-        match event {
-            FromSwarm::ConnectionEstablished(_)
-            | FromSwarm::ConnectionClosed(_)
-            | FromSwarm::AddressChange(_)
-            | FromSwarm::DialFailure(_)
-            | FromSwarm::ListenFailure(_)
-            | FromSwarm::NewListener(_)
-            | FromSwarm::NewListenAddr(_)
-            | FromSwarm::ExpiredListenAddr(_)
-            | FromSwarm::ListenerError(_)
-            | FromSwarm::ListenerClosed(_)
-            | FromSwarm::NewExternalAddr(_)
-            | FromSwarm::ExpiredExternalAddr(_) => {}
-        }
-    }
+    fn on_swarm_event(&mut self, _event: FromSwarm) {}
 }

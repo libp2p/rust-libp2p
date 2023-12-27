@@ -19,25 +19,24 @@
 // DEALINGS IN THE SOFTWARE.
 
 use futures::io::{AsyncReadExt, AsyncWriteExt};
-use libp2p_core::InboundUpgrade;
+use libp2p_core::upgrade::InboundConnectionUpgrade;
 use libp2p_identity as identity;
-use libp2p_plaintext::PlainText2Config;
-use log::debug;
+use libp2p_plaintext as plaintext;
 use quickcheck::QuickCheck;
+use tracing_subscriber::EnvFilter;
 
 #[test]
 fn variable_msg_length() {
-    let _ = env_logger::try_init();
+    let _ = tracing_subscriber::fmt()
+        .with_env_filter(EnvFilter::from_default_env())
+        .try_init();
 
     fn prop(msg: Vec<u8>) {
         let msg_to_send = msg.clone();
         let msg_to_receive = msg;
 
         let server_id = identity::Keypair::generate_ed25519();
-        let server_id_public = server_id.public();
-
         let client_id = identity::Keypair::generate_ed25519();
-        let client_id_public = client_id.public();
 
         let (server, client) = futures_ringbuf::Endpoint::pair(100, 100);
 
@@ -46,14 +45,8 @@ fn variable_msg_length() {
                 (received_client_id, mut server_channel),
                 (received_server_id, mut client_channel),
             ) = futures::future::try_join(
-                PlainText2Config {
-                    local_public_key: server_id_public,
-                }
-                .upgrade_inbound(server, ""),
-                PlainText2Config {
-                    local_public_key: client_id_public,
-                }
-                .upgrade_inbound(client, ""),
+                plaintext::Config::new(&server_id).upgrade_inbound(server, ""),
+                plaintext::Config::new(&client_id).upgrade_inbound(client, ""),
             )
             .await
             .unwrap();
@@ -62,18 +55,18 @@ fn variable_msg_length() {
             assert_eq!(received_client_id, client_id.public().to_peer_id());
 
             let client_fut = async {
-                debug!("Client: writing message.");
+                tracing::debug!("Client: writing message.");
                 client_channel
                     .write_all(&msg_to_send)
                     .await
                     .expect("no error");
-                debug!("Client: flushing channel.");
+                tracing::debug!("Client: flushing channel.");
                 client_channel.flush().await.expect("no error");
             };
 
             let server_fut = async {
                 let mut server_buffer = vec![0; msg_to_receive.len()];
-                debug!("Server: reading message.");
+                tracing::debug!("Server: reading message.");
                 server_channel
                     .read_exact(&mut server_buffer)
                     .await

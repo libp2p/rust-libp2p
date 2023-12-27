@@ -51,42 +51,42 @@ impl Metrics {
         let query_result_get_record_ok = Counter::default();
         sub_registry.register(
             "query_result_get_record_ok",
-            "Number of records returned by a successful Kademlia get record query.",
+            "Number of records returned by a successful Kademlia get record query",
             query_result_get_record_ok.clone(),
         );
 
         let query_result_get_record_error = Family::default();
         sub_registry.register(
             "query_result_get_record_error",
-            "Number of failed Kademlia get record queries.",
+            "Number of failed Kademlia get record queries",
             query_result_get_record_error.clone(),
         );
 
         let query_result_get_closest_peers_ok = Histogram::new(exponential_buckets(1.0, 2.0, 10));
         sub_registry.register(
             "query_result_get_closest_peers_ok",
-            "Number of closest peers returned by a successful Kademlia get closest peers query.",
+            "Number of closest peers returned by a successful Kademlia get closest peers query",
             query_result_get_closest_peers_ok.clone(),
         );
 
         let query_result_get_closest_peers_error = Family::default();
         sub_registry.register(
             "query_result_get_closest_peers_error",
-            "Number of failed Kademlia get closest peers queries.",
+            "Number of failed Kademlia get closest peers queries",
             query_result_get_closest_peers_error.clone(),
         );
 
         let query_result_get_providers_ok = Histogram::new(exponential_buckets(1.0, 2.0, 10));
         sub_registry.register(
             "query_result_get_providers_ok",
-            "Number of providers returned by a successful Kademlia get providers query.",
+            "Number of providers returned by a successful Kademlia get providers query",
             query_result_get_providers_ok.clone(),
         );
 
         let query_result_get_providers_error = Family::default();
         sub_registry.register(
             "query_result_get_providers_error",
-            "Number of failed Kademlia get providers queries.",
+            "Number of failed Kademlia get providers queries",
             query_result_get_providers_error.clone(),
         );
 
@@ -94,7 +94,7 @@ impl Metrics {
             Family::new_with_constructor(|| Histogram::new(exponential_buckets(1.0, 2.0, 10)));
         sub_registry.register(
             "query_result_num_requests",
-            "Number of requests started for a Kademlia query.",
+            "Number of requests started for a Kademlia query",
             query_result_num_requests.clone(),
         );
 
@@ -102,7 +102,7 @@ impl Metrics {
             Family::new_with_constructor(|| Histogram::new(exponential_buckets(1.0, 2.0, 10)));
         sub_registry.register(
             "query_result_num_success",
-            "Number of successful requests of a Kademlia query.",
+            "Number of successful requests of a Kademlia query",
             query_result_num_success.clone(),
         );
 
@@ -110,7 +110,7 @@ impl Metrics {
             Family::new_with_constructor(|| Histogram::new(exponential_buckets(1.0, 2.0, 10)));
         sub_registry.register(
             "query_result_num_failure",
-            "Number of failed requests of a Kademlia query.",
+            "Number of failed requests of a Kademlia query",
             query_result_num_failure.clone(),
         );
 
@@ -118,7 +118,7 @@ impl Metrics {
             Family::new_with_constructor(|| Histogram::new(exponential_buckets(0.1, 2.0, 10)));
         sub_registry.register_with_unit(
             "query_result_duration",
-            "Duration of a Kademlia query.",
+            "Duration of a Kademlia query",
             Unit::Seconds,
             query_result_duration.clone(),
         );
@@ -159,10 +159,10 @@ impl Metrics {
     }
 }
 
-impl super::Recorder<libp2p_kad::KademliaEvent> for Metrics {
-    fn record(&self, event: &libp2p_kad::KademliaEvent) {
+impl super::Recorder<libp2p_kad::Event> for Metrics {
+    fn record(&self, event: &libp2p_kad::Event) {
         match event {
-            libp2p_kad::KademliaEvent::OutboundQueryProgressed { result, stats, .. } => {
+            libp2p_kad::Event::OutboundQueryProgressed { result, stats, .. } => {
                 self.query_result_num_requests
                     .get_or_create(&result.into())
                     .observe(stats.num_requests().into());
@@ -217,7 +217,7 @@ impl super::Recorder<libp2p_kad::KademliaEvent> for Metrics {
                     _ => {}
                 }
             }
-            libp2p_kad::KademliaEvent::RoutingUpdated {
+            libp2p_kad::Event::RoutingUpdated {
                 is_new_peer,
                 old_peer,
                 bucket_range: (low, _high),
@@ -250,7 +250,7 @@ impl super::Recorder<libp2p_kad::KademliaEvent> for Metrics {
                 }
             }
 
-            libp2p_kad::KademliaEvent::InboundRequest { request } => {
+            libp2p_kad::Event::InboundRequest { request } => {
                 self.inbound_requests.get_or_create(&request.into()).inc();
             }
             _ => {}

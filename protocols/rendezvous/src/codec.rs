@@ -19,16 +19,24 @@
 // DEALINGS IN THE SOFTWARE.
 
 use crate::DEFAULT_TTL;
+use async_trait::async_trait;
 use asynchronous_codec::{BytesMut, Decoder, Encoder};
+use asynchronous_codec::{FramedRead, FramedWrite};
+use futures::{AsyncRead, AsyncWrite, SinkExt, StreamExt};
 use libp2p_core::{peer_record, signed_envelope, PeerRecord, SignedEnvelope};
+use libp2p_swarm::StreamProtocol;
+use quick_protobuf_codec::Codec as ProtobufCodec;
 use rand::RngCore;
 use std::convert::{TryFrom, TryInto};
-use std::fmt;
+use std::{fmt, io};
 
 pub type Ttl = u64;
+pub(crate) type Limit = u64;
+
+const MAX_MESSAGE_LEN_BYTES: usize = 1024 * 1024;
 
 #[allow(clippy::large_enum_variant)]
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum Message {
     Register(NewRegistration),
     RegisterResponse(Result<Ttl, ErrorCode>),
@@ -36,7 +44,7 @@ pub enum Message {
     Discover {
         namespace: Option<Namespace>,
         cookie: Option<Cookie>,
-        limit: Option<Ttl>,
+        limit: Option<Limit>,
     },
     DiscoverResponse(Result<(Vec<Registration>, Cookie), ErrorCode>),
 }
@@ -49,7 +57,7 @@ impl Namespace {
     ///
     /// This will panic if the namespace is too long. We accepting panicking in this case because we are enforcing a `static lifetime which means this value can only be a constant in the program and hence we hope the developer checked that it is of an acceptable length.
     pub fn from_static(value: &'static str) -> Self {
-        if value.len() > 255 {
+        if value.len() > crate::MAX_NAMESPACE {
             panic!("Namespace '{value}' is too long!")
         }
 
@@ -57,7 +65,7 @@ impl Namespace {
     }
 
     pub fn new(value: String) -> Result<Self, NamespaceTooLong> {
-        if value.len() > 255 {
+        if value.len() > crate::MAX_NAMESPACE {
             return Err(NamespaceTooLong);
         }
 
@@ -160,7 +168,7 @@ impl Cookie {
 #[error("The cookie was malformed")]
 pub struct InvalidCookie;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct NewRegistration {
     pub namespace: Namespace,
     pub record: PeerRecord,
@@ -199,40 +207,97 @@ pub enum ErrorCode {
     Unavailable,
 }
 
-pub struct RendezvousCodec {
-    inner: quick_protobuf_codec::Codec<proto::Message>,
-}
-
-impl Default for RendezvousCodec {
-    fn default() -> Self {
-        Self {
-            inner: quick_protobuf_codec::Codec::new(1024 * 1024), // 1MB
-        }
-    }
-}
-
-impl Encoder for RendezvousCodec {
-    type Item = Message;
+impl Encoder for Codec {
+    type Item<'a> = Message;
     type Error = Error;
 
-    fn encode(&mut self, item: Self::Item, dst: &mut BytesMut) -> Result<(), Self::Error> {
-        self.inner.encode(proto::Message::from(item), dst)?;
+    fn encode(&mut self, item: Self::Item<'_>, dst: &mut BytesMut) -> Result<(), Self::Error> {
+        let mut pb: ProtobufCodec<proto::Message> = ProtobufCodec::new(MAX_MESSAGE_LEN_BYTES);
+
+        pb.encode(proto::Message::from(item), dst)?;
 
         Ok(())
     }
 }
 
-impl Decoder for RendezvousCodec {
+impl Decoder for Codec {
     type Item = Message;
     type Error = Error;
 
     fn decode(&mut self, src: &mut BytesMut) -> Result<Option<Self::Item>, Self::Error> {
-        let message = match self.inner.decode(src)? {
-            Some(p) => p,
-            None => return Ok(None),
+        let mut pb: ProtobufCodec<proto::Message> = ProtobufCodec::new(MAX_MESSAGE_LEN_BYTES);
+
+        let Some(message) = pb.decode(src)? else {
+            return Ok(None);
         };
 
         Ok(Some(message.try_into()?))
+    }
+}
+
+#[derive(Clone, Default)]
+pub struct Codec {}
+
+#[async_trait]
+impl libp2p_request_response::Codec for Codec {
+    type Protocol = StreamProtocol;
+    type Request = Message;
+    type Response = Message;
+
+    async fn read_request<T>(&mut self, _: &Self::Protocol, io: &mut T) -> io::Result<Self::Request>
+    where
+        T: AsyncRead + Unpin + Send,
+    {
+        let message = FramedRead::new(io, self.clone())
+            .next()
+            .await
+            .ok_or(io::ErrorKind::UnexpectedEof)??;
+
+        Ok(message)
+    }
+
+    async fn read_response<T>(
+        &mut self,
+        _: &Self::Protocol,
+        io: &mut T,
+    ) -> io::Result<Self::Response>
+    where
+        T: AsyncRead + Unpin + Send,
+    {
+        let message = FramedRead::new(io, self.clone())
+            .next()
+            .await
+            .ok_or(io::ErrorKind::UnexpectedEof)??;
+
+        Ok(message)
+    }
+
+    async fn write_request<T>(
+        &mut self,
+        _: &Self::Protocol,
+        io: &mut T,
+        req: Self::Request,
+    ) -> io::Result<()>
+    where
+        T: AsyncWrite + Unpin + Send,
+    {
+        FramedWrite::new(io, self.clone()).send(req).await?;
+
+        Ok(())
+    }
+
+    async fn write_response<T>(
+        &mut self,
+        _: &Self::Protocol,
+        io: &mut T,
+        res: Self::Response,
+    ) -> io::Result<()>
+    where
+        T: AsyncWrite + Unpin + Send,
+    {
+        FramedWrite::new(io, self.clone()).send(res).await?;
+
+        Ok(())
     }
 }
 
@@ -244,6 +309,16 @@ pub enum Error {
     Io(#[from] std::io::Error),
     #[error("Failed to convert wire message to internal data model")]
     Conversion(#[from] ConversionError),
+}
+
+impl From<Error> for std::io::Error {
+    fn from(value: Error) -> Self {
+        match value {
+            Error::Io(e) => e,
+            Error::Codec(e) => io::Error::from(e),
+            Error::Conversion(e) => io::Error::new(io::ErrorKind::InvalidInput, e),
+        }
+    }
 }
 
 impl From<Message> for proto::Message {
@@ -528,7 +603,7 @@ impl TryFrom<proto::ResponseStatus> for ErrorCode {
             E_UNAVAILABLE => ErrorCode::Unavailable,
         };
 
-        Result::Ok(code)
+        Ok(code)
     }
 }
 
@@ -567,6 +642,7 @@ mod proto {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::Namespace;
 
     #[test]
     fn cookie_wire_encoding_roundtrip() {

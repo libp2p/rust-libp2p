@@ -23,7 +23,7 @@ use futures::future::{BoxFuture, Either};
 use futures::stream::StreamExt;
 use futures::{future, ready, AsyncReadExt, AsyncWriteExt, FutureExt, SinkExt};
 use libp2p_core::muxing::{StreamMuxerBox, StreamMuxerExt};
-use libp2p_core::transport::{Boxed, TransportEvent};
+use libp2p_core::transport::{Boxed, ListenerId, TransportEvent};
 use libp2p_core::{Multiaddr, Transport};
 use libp2p_identity::PeerId;
 use libp2p_webrtc as webrtc;
@@ -33,10 +33,13 @@ use std::num::NonZeroU8;
 use std::pin::Pin;
 use std::task::{Context, Poll};
 use std::time::Duration;
+use tracing_subscriber::EnvFilter;
 
 #[tokio::test]
 async fn smoke() {
-    let _ = env_logger::try_init();
+    let _ = tracing_subscriber::fmt()
+        .with_env_filter(EnvFilter::from_default_env())
+        .try_init();
 
     let (a_peer_id, mut a_transport) = create_transport();
     let (b_peer_id, mut b_transport) = create_transport();
@@ -53,7 +56,9 @@ async fn smoke() {
 // Note: This test should likely be ported to the muxer compliance test suite.
 #[test]
 fn concurrent_connections_and_streams_tokio() {
-    let _ = env_logger::try_init();
+    let _ = tracing_subscriber::fmt()
+        .with_env_filter(EnvFilter::from_default_env())
+        .try_init();
 
     let rt = tokio::runtime::Runtime::new().unwrap();
     let _guard = rt.enter();
@@ -81,7 +86,9 @@ fn create_transport() -> (PeerId, Boxed<(PeerId, StreamMuxerBox)>) {
 }
 
 async fn start_listening(transport: &mut Boxed<(PeerId, StreamMuxerBox)>, addr: &str) -> Multiaddr {
-    transport.listen_on(addr.parse().unwrap()).unwrap();
+    transport
+        .listen_on(ListenerId::next(), addr.parse().unwrap())
+        .unwrap();
     match transport.next().await {
         Some(TransportEvent::NewAddress { listen_addr, .. }) => listen_addr,
         e => panic!("{e:?}"),
@@ -100,7 +107,11 @@ fn prop(number_listeners: NonZeroU8, number_streams: NonZeroU8) -> quickcheck::T
 
     let (listeners_tx, mut listeners_rx) = mpsc::channel(number_listeners);
 
-    log::info!("Creating {number_streams} streams on {number_listeners} connections");
+    tracing::info!(
+        stream_count=%number_streams,
+        connection_count=%number_listeners,
+        "Creating streams on connections"
+    );
 
     // Spawn the listener nodes.
     for _ in 0..number_listeners {
@@ -167,15 +178,13 @@ fn prop(number_listeners: NonZeroU8, number_streams: NonZeroU8) -> quickcheck::T
 
 async fn answer_inbound_streams<const BUFFER_SIZE: usize>(mut connection: StreamMuxerBox) {
     loop {
-        let mut inbound_stream = match future::poll_fn(|cx| {
+        let Ok(mut inbound_stream) = future::poll_fn(|cx| {
             let _ = connection.poll_unpin(cx)?;
-
             connection.poll_inbound_unpin(cx)
         })
         .await
-        {
-            Ok(s) => s,
-            Err(_) => return,
+        else {
+            return;
         };
 
         tokio::spawn(async move {
@@ -242,7 +251,7 @@ async fn open_outbound_streams<const BUFFER_SIZE: usize>(
         });
     }
 
-    log::info!("Created {number_streams} streams");
+    tracing::info!(stream_count=%number_streams, "Created streams");
 
     while future::poll_fn(|cx| connection.poll_unpin(cx))
         .await
@@ -342,7 +351,7 @@ impl Future for ListenUpgrade<'_> {
 
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         loop {
-            match dbg!(self.listener.poll_next_unpin(cx)) {
+            match self.listener.poll_next_unpin(cx) {
                 Poll::Ready(Some(TransportEvent::Incoming {
                     upgrade,
                     send_back_addr,

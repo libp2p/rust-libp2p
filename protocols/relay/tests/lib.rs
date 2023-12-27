@@ -30,16 +30,21 @@ use libp2p_core::transport::{Boxed, MemoryTransport, Transport};
 use libp2p_core::upgrade;
 use libp2p_identity as identity;
 use libp2p_identity::PeerId;
-use libp2p_identity::PublicKey;
 use libp2p_ping as ping;
-use libp2p_plaintext::PlainText2Config;
+use libp2p_plaintext as plaintext;
 use libp2p_relay as relay;
-use libp2p_swarm::{AddressScore, NetworkBehaviour, Swarm, SwarmBuilder, SwarmEvent};
+use libp2p_swarm::dial_opts::DialOpts;
+use libp2p_swarm::{Config, DialError, NetworkBehaviour, Swarm, SwarmEvent};
+use libp2p_swarm_test::SwarmExt;
+use std::error::Error;
 use std::time::Duration;
+use tracing_subscriber::EnvFilter;
 
 #[test]
 fn reservation() {
-    let _ = env_logger::try_init();
+    let _ = tracing_subscriber::fmt()
+        .with_env_filter(EnvFilter::from_default_env())
+        .try_init();
     let mut pool = LocalPool::new();
 
     let relay_addr = Multiaddr::empty().with(Protocol::Memory(rand::random::<u64>()));
@@ -47,11 +52,11 @@ fn reservation() {
     let relay_peer_id = *relay.local_peer_id();
 
     relay.listen_on(relay_addr.clone()).unwrap();
-    relay.add_external_address(relay_addr.clone(), AddressScore::Infinite);
+    relay.add_external_address(relay_addr.clone());
     spawn_swarm_on_pool(&pool, relay);
 
     let client_addr = relay_addr
-        .with(Protocol::P2p(relay_peer_id.into()))
+        .with(Protocol::P2p(relay_peer_id))
         .with(Protocol::P2pCircuit);
     let mut client = build_client();
     let client_peer_id = *client.local_peer_id();
@@ -64,9 +69,7 @@ fn reservation() {
     // Wait for initial reservation.
     pool.run_until(wait_for_reservation(
         &mut client,
-        client_addr
-            .clone()
-            .with(Protocol::P2p(client_peer_id.into())),
+        client_addr.clone().with(Protocol::P2p(client_peer_id)),
         relay_peer_id,
         false, // No renewal.
     ));
@@ -74,7 +77,7 @@ fn reservation() {
     // Wait for renewal.
     pool.run_until(wait_for_reservation(
         &mut client,
-        client_addr.with(Protocol::P2p(client_peer_id.into())),
+        client_addr.with(Protocol::P2p(client_peer_id)),
         relay_peer_id,
         true, // Renewal.
     ));
@@ -82,7 +85,9 @@ fn reservation() {
 
 #[test]
 fn new_reservation_to_same_relay_replaces_old() {
-    let _ = env_logger::try_init();
+    let _ = tracing_subscriber::fmt()
+        .with_env_filter(EnvFilter::from_default_env())
+        .try_init();
     let mut pool = LocalPool::new();
 
     let relay_addr = Multiaddr::empty().with(Protocol::Memory(rand::random::<u64>()));
@@ -90,17 +95,15 @@ fn new_reservation_to_same_relay_replaces_old() {
     let relay_peer_id = *relay.local_peer_id();
 
     relay.listen_on(relay_addr.clone()).unwrap();
-    relay.add_external_address(relay_addr.clone(), AddressScore::Infinite);
+    relay.add_external_address(relay_addr.clone());
     spawn_swarm_on_pool(&pool, relay);
 
     let mut client = build_client();
     let client_peer_id = *client.local_peer_id();
     let client_addr = relay_addr
-        .with(Protocol::P2p(relay_peer_id.into()))
+        .with(Protocol::P2p(relay_peer_id))
         .with(Protocol::P2pCircuit);
-    let client_addr_with_peer_id = client_addr
-        .clone()
-        .with(Protocol::P2p(client_peer_id.into()));
+    let client_addr_with_peer_id = client_addr.clone().with(Protocol::P2p(client_peer_id));
 
     let old_listener = client.listen_on(client_addr.clone()).unwrap();
 
@@ -116,7 +119,7 @@ fn new_reservation_to_same_relay_replaces_old() {
     ));
 
     // Trigger new reservation.
-    let new_listener = client.listen_on(client_addr).unwrap();
+    let new_listener = client.listen_on(client_addr.clone()).unwrap();
 
     // Wait for
     // - listener of old reservation to close
@@ -166,6 +169,12 @@ fn new_reservation_to_same_relay_replaces_old() {
                         break;
                     }
                 }
+                SwarmEvent::ExternalAddrConfirmed { address } => {
+                    assert_eq!(
+                        address,
+                        client_addr.clone().with(Protocol::P2p(client_peer_id))
+                    );
+                }
                 SwarmEvent::Behaviour(ClientEvent::Ping(_)) => {}
                 e => panic!("{e:?}"),
             }
@@ -175,7 +184,9 @@ fn new_reservation_to_same_relay_replaces_old() {
 
 #[test]
 fn connect() {
-    let _ = env_logger::try_init();
+    let _ = tracing_subscriber::fmt()
+        .with_env_filter(EnvFilter::from_default_env())
+        .try_init();
     let mut pool = LocalPool::new();
 
     let relay_addr = Multiaddr::empty().with(Protocol::Memory(rand::random::<u64>()));
@@ -183,15 +194,15 @@ fn connect() {
     let relay_peer_id = *relay.local_peer_id();
 
     relay.listen_on(relay_addr.clone()).unwrap();
-    relay.add_external_address(relay_addr.clone(), AddressScore::Infinite);
+    relay.add_external_address(relay_addr.clone());
     spawn_swarm_on_pool(&pool, relay);
 
     let mut dst = build_client();
     let dst_peer_id = *dst.local_peer_id();
     let dst_addr = relay_addr
-        .with(Protocol::P2p(relay_peer_id.into()))
+        .with(Protocol::P2p(relay_peer_id))
         .with(Protocol::P2pCircuit)
-        .with(Protocol::P2p(dst_peer_id.into()));
+        .with(Protocol::P2p(dst_peer_id));
 
     dst.listen_on(dst_addr.clone()).unwrap();
 
@@ -222,7 +233,10 @@ async fn connection_established_to(
 ) {
     loop {
         match swarm.select_next_some().await {
-            SwarmEvent::Dialing(peer_id) if peer_id == relay_peer_id => {}
+            SwarmEvent::Dialing {
+                peer_id: Some(peer_id),
+                ..
+            } if peer_id == relay_peer_id => {}
             SwarmEvent::ConnectionEstablished { peer_id, .. } if peer_id == relay_peer_id => {}
             SwarmEvent::Behaviour(ClientEvent::Ping(ping::Event { peer, .. })) if peer == other => {
                 break
@@ -239,8 +253,13 @@ async fn connection_established_to(
                 if peer == relay_peer_id => {}
             SwarmEvent::ConnectionEstablished { peer_id, .. } if peer_id == other => break,
             SwarmEvent::IncomingConnection { send_back_addr, .. } => {
-                let peer_id_from_addr =
-                    PeerId::try_from_multiaddr(&send_back_addr).expect("to have /p2p");
+                let peer_id_from_addr = send_back_addr
+                    .iter()
+                    .find_map(|protocol| match protocol {
+                        Protocol::P2p(peer_id) => Some(peer_id),
+                        _ => None,
+                    })
+                    .expect("to have /p2p");
 
                 assert_eq!(peer_id_from_addr, other)
             }
@@ -251,7 +270,9 @@ async fn connection_established_to(
 
 #[test]
 fn handle_dial_failure() {
-    let _ = env_logger::try_init();
+    let _ = tracing_subscriber::fmt()
+        .with_env_filter(EnvFilter::from_default_env())
+        .try_init();
     let mut pool = LocalPool::new();
 
     let relay_addr = Multiaddr::empty().with(Protocol::Memory(rand::random::<u64>()));
@@ -260,17 +281,68 @@ fn handle_dial_failure() {
     let mut client = build_client();
     let client_peer_id = *client.local_peer_id();
     let client_addr = relay_addr
-        .with(Protocol::P2p(relay_peer_id.into()))
+        .with(Protocol::P2p(relay_peer_id))
         .with(Protocol::P2pCircuit)
-        .with(Protocol::P2p(client_peer_id.into()));
+        .with(Protocol::P2p(client_peer_id));
 
     client.listen_on(client_addr).unwrap();
     assert!(!pool.run_until(wait_for_dial(&mut client, relay_peer_id)));
 }
 
 #[test]
-fn reuse_connection() {
-    let _ = env_logger::try_init();
+fn propagate_reservation_error_to_listener() {
+    let _ = tracing_subscriber::fmt()
+        .with_env_filter(EnvFilter::from_default_env())
+        .try_init();
+    let mut pool = LocalPool::new();
+
+    let relay_addr = Multiaddr::empty().with(Protocol::Memory(rand::random::<u64>()));
+    let mut relay = build_relay_with_config(relay::Config {
+        max_reservations: 0, // Will make us fail to make the reservation
+        ..relay::Config::default()
+    });
+    let relay_peer_id = *relay.local_peer_id();
+
+    relay.listen_on(relay_addr.clone()).unwrap();
+    relay.add_external_address(relay_addr.clone());
+    spawn_swarm_on_pool(&pool, relay);
+
+    let client_addr = relay_addr
+        .with(Protocol::P2p(relay_peer_id))
+        .with(Protocol::P2pCircuit);
+    let mut client = build_client();
+
+    let reservation_listener = client.listen_on(client_addr.clone()).unwrap();
+
+    // Wait for connection to relay.
+    assert!(pool.run_until(wait_for_dial(&mut client, relay_peer_id)));
+
+    let error = pool.run_until(client.wait(|e| match e {
+        SwarmEvent::ListenerClosed {
+            listener_id,
+            reason: Err(e),
+            ..
+        } if listener_id == reservation_listener => Some(e),
+        _ => None,
+    }));
+
+    let error = error
+        .source()
+        .unwrap()
+        .downcast_ref::<relay::outbound::hop::ReserveError>()
+        .unwrap();
+
+    assert!(matches!(
+        error,
+        relay::outbound::hop::ReserveError::ResourceLimitExceeded
+    ));
+}
+
+#[test]
+fn propagate_connect_error_to_unknown_peer_to_dialer() {
+    let _ = tracing_subscriber::fmt()
+        .with_env_filter(EnvFilter::from_default_env())
+        .try_init();
     let mut pool = LocalPool::new();
 
     let relay_addr = Multiaddr::empty().with(Protocol::Memory(rand::random::<u64>()));
@@ -278,14 +350,74 @@ fn reuse_connection() {
     let relay_peer_id = *relay.local_peer_id();
 
     relay.listen_on(relay_addr.clone()).unwrap();
-    relay.add_external_address(relay_addr.clone(), AddressScore::Infinite);
+    relay.add_external_address(relay_addr.clone());
+    spawn_swarm_on_pool(&pool, relay);
+
+    let mut src = build_client();
+
+    let dst_peer_id = PeerId::random(); // We don't have a destination peer in this test, so the CONNECT request will fail.
+    let dst_addr = relay_addr
+        .with(Protocol::P2p(relay_peer_id))
+        .with(Protocol::P2pCircuit)
+        .with(Protocol::P2p(dst_peer_id));
+
+    let opts = DialOpts::from(dst_addr.clone());
+    let circuit_connection_id = opts.connection_id();
+
+    src.dial(opts).unwrap();
+
+    let (failed_address, error) = pool.run_until(src.wait(|e| match e {
+        SwarmEvent::OutgoingConnectionError {
+            connection_id,
+            error: DialError::Transport(mut errors),
+            ..
+        } if connection_id == circuit_connection_id => {
+            assert_eq!(errors.len(), 1);
+            Some(errors.remove(0))
+        }
+        _ => None,
+    }));
+
+    // This is a bit wonky but we need to get the _actual_ source error :)
+    let error = error
+        .source()
+        .unwrap()
+        .source()
+        .unwrap()
+        .downcast_ref::<relay::outbound::hop::ConnectError>()
+        .unwrap();
+
+    assert_eq!(failed_address, dst_addr);
+    assert!(matches!(
+        error,
+        relay::outbound::hop::ConnectError::NoReservation
+    ));
+}
+
+#[test]
+fn reuse_connection() {
+    let _ = tracing_subscriber::fmt()
+        .with_env_filter(EnvFilter::from_default_env())
+        .try_init();
+    let mut pool = LocalPool::new();
+
+    let relay_addr = Multiaddr::empty().with(Protocol::Memory(rand::random::<u64>()));
+    let mut relay = build_relay();
+    let relay_peer_id = *relay.local_peer_id();
+
+    relay.listen_on(relay_addr.clone()).unwrap();
+    relay.add_external_address(relay_addr.clone());
     spawn_swarm_on_pool(&pool, relay);
 
     let client_addr = relay_addr
         .clone()
-        .with(Protocol::P2p(relay_peer_id.into()))
+        .with(Protocol::P2p(relay_peer_id))
         .with(Protocol::P2pCircuit);
-    let mut client = build_client();
+
+    // To reuse the connection, we need to ensure it is not shut down due to being idle.
+    let mut client = build_client_with_config(
+        Config::with_async_std_executor().with_idle_connection_timeout(Duration::from_secs(1)),
+    );
     let client_peer_id = *client.local_peer_id();
 
     client.dial(relay_addr).unwrap();
@@ -295,68 +427,71 @@ fn reuse_connection() {
 
     pool.run_until(wait_for_reservation(
         &mut client,
-        client_addr.with(Protocol::P2p(client_peer_id.into())),
+        client_addr.with(Protocol::P2p(client_peer_id)),
         relay_peer_id,
         false, // No renewal.
     ));
 }
 
 fn build_relay() -> Swarm<Relay> {
+    build_relay_with_config(relay::Config {
+        reservation_duration: Duration::from_secs(2),
+        ..Default::default()
+    })
+}
+
+fn build_relay_with_config(config: relay::Config) -> Swarm<Relay> {
     let local_key = identity::Keypair::generate_ed25519();
-    let local_public_key = local_key.public();
-    let local_peer_id = local_public_key.to_peer_id();
+    let local_peer_id = local_key.public().to_peer_id();
 
-    let transport = upgrade_transport(MemoryTransport::default().boxed(), local_public_key);
+    let transport = upgrade_transport(MemoryTransport::default().boxed(), &local_key);
 
-    SwarmBuilder::with_async_std_executor(
+    Swarm::new(
         transport,
         Relay {
             ping: ping::Behaviour::new(ping::Config::new()),
-            relay: relay::Behaviour::new(
-                local_peer_id,
-                relay::Config {
-                    reservation_duration: Duration::from_secs(2),
-                    ..Default::default()
-                },
-            ),
+            relay: relay::Behaviour::new(local_peer_id, config),
         },
         local_peer_id,
+        Config::with_async_std_executor(),
     )
-    .build()
 }
 
 fn build_client() -> Swarm<Client> {
+    build_client_with_config(Config::with_async_std_executor())
+}
+
+fn build_client_with_config(config: Config) -> Swarm<Client> {
     let local_key = identity::Keypair::generate_ed25519();
-    let local_public_key = local_key.public();
-    let local_peer_id = local_public_key.to_peer_id();
+    let local_peer_id = local_key.public().to_peer_id();
 
     let (relay_transport, behaviour) = relay::client::new(local_peer_id);
     let transport = upgrade_transport(
         OrTransport::new(relay_transport, MemoryTransport::default()).boxed(),
-        local_public_key,
+        &local_key,
     );
 
-    SwarmBuilder::with_async_std_executor(
+    Swarm::new(
         transport,
         Client {
             ping: ping::Behaviour::new(ping::Config::new()),
             relay: behaviour,
         },
         local_peer_id,
+        config,
     )
-    .build()
 }
 
 fn upgrade_transport<StreamSink>(
     transport: Boxed<StreamSink>,
-    local_public_key: PublicKey,
+    identity: &identity::Keypair,
 ) -> Boxed<(PeerId, StreamMuxerBox)>
 where
     StreamSink: AsyncRead + AsyncWrite + Send + Unpin + 'static,
 {
     transport
         .upgrade(upgrade::Version::V1)
-        .authenticate(PlainText2Config { local_public_key })
+        .authenticate(plaintext::Config::new(identity))
         .multiplex(libp2p_yamux::Config::default())
         .boxed()
 }
@@ -392,6 +527,9 @@ async fn wait_for_reservation(
 
     loop {
         match client.select_next_some().await {
+            SwarmEvent::ExternalAddrConfirmed { address } if !is_renewal => {
+                assert_eq!(address, client_addr);
+            }
             SwarmEvent::Behaviour(ClientEvent::Relay(
                 relay::client::Event::ReservationReqAccepted {
                     relay_peer_id: peer_id,
@@ -419,7 +557,10 @@ async fn wait_for_reservation(
 async fn wait_for_dial(client: &mut Swarm<Client>, remote: PeerId) -> bool {
     loop {
         match client.select_next_some().await {
-            SwarmEvent::Dialing(peer_id) if peer_id == remote => {}
+            SwarmEvent::Dialing {
+                peer_id: Some(peer_id),
+                ..
+            } if peer_id == remote => {}
             SwarmEvent::ConnectionEstablished { peer_id, .. } if peer_id == remote => return true,
             SwarmEvent::OutgoingConnectionError { peer_id, .. } if peer_id == Some(remote) => {
                 return false

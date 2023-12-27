@@ -3,7 +3,8 @@ use futures::{future, AsyncRead, AsyncWrite};
 use futures::{AsyncReadExt, Stream};
 use futures::{AsyncWriteExt, StreamExt};
 use libp2p_core::muxing::StreamMuxerExt;
-use libp2p_core::{InboundUpgrade, OutboundUpgrade, StreamMuxer, UpgradeInfo};
+use libp2p_core::upgrade::{InboundConnectionUpgrade, OutboundConnectionUpgrade};
+use libp2p_core::{StreamMuxer, UpgradeInfo};
 use std::future::Future;
 use std::pin::Pin;
 use std::task::{Context, Poll};
@@ -12,15 +13,15 @@ use std::{fmt, mem};
 
 pub async fn connected_muxers_on_memory_ring_buffer<MC, M, E>() -> (M, M)
 where
-    MC: InboundUpgrade<futures_ringbuf::Endpoint, Error = E, Output = M>
-        + OutboundUpgrade<futures_ringbuf::Endpoint, Error = E, Output = M>
+    MC: InboundConnectionUpgrade<futures_ringbuf::Endpoint, Error = E, Output = M>
+        + OutboundConnectionUpgrade<futures_ringbuf::Endpoint, Error = E, Output = M>
         + Send
         + 'static
         + Default,
     <MC as UpgradeInfo>::Info: Send,
     <<MC as UpgradeInfo>::InfoIter as IntoIterator>::IntoIter: Send,
-    <MC as InboundUpgrade<futures_ringbuf::Endpoint>>::Future: Send,
-    <MC as OutboundUpgrade<futures_ringbuf::Endpoint>>::Future: Send,
+    <MC as InboundConnectionUpgrade<futures_ringbuf::Endpoint>>::Future: Send,
+    <MC as OutboundConnectionUpgrade<futures_ringbuf::Endpoint>>::Future: Send,
     E: std::error::Error + Send + Sync + 'static,
 {
     let (alice, bob) = futures_ringbuf::Endpoint::pair(100, 100);
@@ -148,20 +149,20 @@ async fn run<A, B, S, E, F1, F2>(
     loop {
         match futures::future::select(dialer.next(), listener.next()).await {
             Either::Left((Some(Event::SetupComplete), _)) => {
-                log::info!("Dialer opened outbound stream");
+                tracing::info!("Dialer opened outbound stream");
             }
             Either::Left((Some(Event::ProtocolComplete), _)) => {
-                log::info!("Dialer completed protocol");
+                tracing::info!("Dialer completed protocol");
                 dialer_complete = true
             }
             Either::Left((Some(Event::Timeout), _)) => {
                 panic!("Dialer protocol timed out");
             }
             Either::Right((Some(Event::SetupComplete), _)) => {
-                log::info!("Listener received inbound stream");
+                tracing::info!("Listener received inbound stream");
             }
             Either::Right((Some(Event::ProtocolComplete), _)) => {
-                log::info!("Listener completed protocol");
+                tracing::info!("Listener completed protocol");
                 listener_complete = true
             }
             Either::Right((Some(Event::Timeout), _)) => {

@@ -49,8 +49,6 @@ struct EventLabels {
 
 #[derive(Debug, Clone, Hash, PartialEq, Eq, EncodeLabelValue)]
 enum EventType {
-    InitiateDirectConnectionUpgrade,
-    RemoteInitiatedDirectConnectionUpgrade,
     DirectConnectionUpgradeSucceeded,
     DirectConnectionUpgradeFailed,
 }
@@ -58,20 +56,13 @@ enum EventType {
 impl From<&libp2p_dcutr::Event> for EventType {
     fn from(event: &libp2p_dcutr::Event) -> Self {
         match event {
-            libp2p_dcutr::Event::InitiatedDirectConnectionUpgrade {
+            libp2p_dcutr::Event {
                 remote_peer_id: _,
-                local_relayed_addr: _,
-            } => EventType::InitiateDirectConnectionUpgrade,
-            libp2p_dcutr::Event::RemoteInitiatedDirectConnectionUpgrade {
+                result: Ok(_),
+            } => EventType::DirectConnectionUpgradeSucceeded,
+            libp2p_dcutr::Event {
                 remote_peer_id: _,
-                remote_relayed_addr: _,
-            } => EventType::RemoteInitiatedDirectConnectionUpgrade,
-            libp2p_dcutr::Event::DirectConnectionUpgradeSucceeded { remote_peer_id: _ } => {
-                EventType::DirectConnectionUpgradeSucceeded
-            }
-            libp2p_dcutr::Event::DirectConnectionUpgradeFailed {
-                remote_peer_id: _,
-                error: _,
+                result: Err(_),
             } => EventType::DirectConnectionUpgradeFailed,
         }
     }

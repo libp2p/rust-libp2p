@@ -1,0 +1,51 @@
+[package]
+name = "libp2p-webtransport-websys"
+edition = "2021"
+rust-version = { workspace = true }
+description = "WebTransport for libp2p under WASM environment"
+version = "0.2.0"
+authors = [
+    "Yiannis Marangos <yiannis@eiger.co>",
+    "oblique <psyberbits@gmail.com>",
+]
+license = "MIT"
+repository = "https://github.com/libp2p/rust-libp2p"
+keywords = ["peer-to-peer", "libp2p", "networking"]
+categories = ["network-programming", "asynchronous"]
+
+[dependencies]
+futures = "0.3.30"
+js-sys = "0.3.66"
+libp2p-core = { workspace = true }
+libp2p-identity = { workspace = true }
+libp2p-noise = { workspace = true }
+multiaddr = { workspace = true }
+multihash = { workspace = true }
+send_wrapper = { version = "0.6.0", features = ["futures"] }
+thiserror = "1.0.51"
+tracing = "0.1.37"
+wasm-bindgen = "0.2.89"
+wasm-bindgen-futures = "0.4.39"
+web-sys = { version = "0.3.66", features = [
+    "ReadableStreamDefaultReader",
+    "WebTransport",
+    "WebTransportBidirectionalStream",
+    "WebTransportHash",
+    "WebTransportOptions",
+    "WebTransportReceiveStream",
+    "WebTransportSendStream",
+    "WritableStreamDefaultWriter",
+] }
+
+[dev-dependencies]
+multibase = "0.9.1"
+
+# Passing arguments to the docsrs builder in order to properly document cfg's.
+# More information: https://docs.rs/about/builds#cross-compiling
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
+rustc-args = ["--cfg", "docsrs"]
+
+[lints]
+workspace = true

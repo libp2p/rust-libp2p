@@ -21,39 +21,46 @@
 use crate::protocol_stack;
 use libp2p_identity::PeerId;
 use libp2p_swarm::StreamProtocol;
-use prometheus_client::encoding::{EncodeLabelSet, EncodeMetric, MetricEncoder};
+use prometheus_client::collector::Collector;
+use prometheus_client::encoding::{DescriptorEncoder, EncodeLabelSet, EncodeMetric};
 use prometheus_client::metrics::counter::Counter;
-use prometheus_client::metrics::family::Family;
-use prometheus_client::metrics::histogram::{exponential_buckets, Histogram};
+use prometheus_client::metrics::gauge::ConstGauge;
 use prometheus_client::metrics::MetricType;
 use prometheus_client::registry::Registry;
 use std::collections::HashMap;
-use std::iter;
 use std::sync::{Arc, Mutex};
 
+const ALLOWED_PROTOCOLS: &[StreamProtocol] = &[
+    #[cfg(feature = "dcutr")]
+    libp2p_dcutr::PROTOCOL_NAME,
+    // #[cfg(feature = "gossipsub")]
+    // TODO: Add Gossipsub protocol name
+    libp2p_identify::PROTOCOL_NAME,
+    libp2p_identify::PUSH_PROTOCOL_NAME,
+    #[cfg(feature = "kad")]
+    libp2p_kad::PROTOCOL_NAME,
+    #[cfg(feature = "ping")]
+    libp2p_ping::PROTOCOL_NAME,
+    #[cfg(feature = "relay")]
+    libp2p_relay::STOP_PROTOCOL_NAME,
+    #[cfg(feature = "relay")]
+    libp2p_relay::HOP_PROTOCOL_NAME,
+];
+
 pub(crate) struct Metrics {
-    protocols: Protocols,
+    peers: Peers,
     error: Counter,
     pushed: Counter,
     received: Counter,
-    received_info_listen_addrs: Histogram,
-    received_info_protocols: Histogram,
     sent: Counter,
-    listen_addresses: Family<AddressLabels, Counter>,
 }
 
 impl Metrics {
     pub(crate) fn new(registry: &mut Registry) -> Self {
         let sub_registry = registry.sub_registry_with_prefix("identify");
 
-        let protocols = Protocols::default();
-        sub_registry.register(
-            "protocols",
-            "Number of connected nodes supporting a specific protocol, with \
-             \"unrecognized\" for each peer supporting one or more unrecognized \
-             protocols",
-            protocols.clone(),
-        );
+        let peers = Peers::default();
+        sub_registry.register_collector(Box::new(peers.clone()));
 
         let error = Counter::default();
         sub_registry.register(
@@ -78,24 +85,6 @@ impl Metrics {
             received.clone(),
         );
 
-        let received_info_listen_addrs =
-            Histogram::new(iter::once(0.0).chain(exponential_buckets(1.0, 2.0, 9)));
-        sub_registry.register(
-            "received_info_listen_addrs",
-            "Number of listen addresses for remote peer received in \
-             identification information",
-            received_info_listen_addrs.clone(),
-        );
-
-        let received_info_protocols =
-            Histogram::new(iter::once(0.0).chain(exponential_buckets(1.0, 2.0, 9)));
-        sub_registry.register(
-            "received_info_protocols",
-            "Number of protocols supported by the remote peer received in \
-             identification information",
-            received_info_protocols.clone(),
-        );
-
         let sent = Counter::default();
         sub_registry.register(
             "sent",
@@ -104,22 +93,12 @@ impl Metrics {
             sent.clone(),
         );
 
-        let listen_addresses = Family::default();
-        sub_registry.register(
-            "listen_addresses",
-            "Number of listen addresses for remote peer per protocol stack",
-            listen_addresses.clone(),
-        );
-
         Self {
-            protocols,
+            peers,
             error,
             pushed,
             received,
-            received_info_listen_addrs,
-            received_info_protocols,
             sent,
-            listen_addresses,
         }
     }
 }
@@ -134,58 +113,8 @@ impl super::Recorder<libp2p_identify::Event> for Metrics {
                 self.pushed.inc();
             }
             libp2p_identify::Event::Received { peer_id, info, .. } => {
-                {
-                    let mut protocols = info
-                        .protocols
-                        .iter()
-                        .filter(|p| {
-                            let allowed_protocols: &[StreamProtocol] = &[
-                                #[cfg(feature = "dcutr")]
-                                libp2p_dcutr::PROTOCOL_NAME,
-                                // #[cfg(feature = "gossipsub")]
-                                // #[cfg(not(target_os = "unknown"))]
-                                // TODO: Add Gossipsub protocol name
-                                libp2p_identify::PROTOCOL_NAME,
-                                libp2p_identify::PUSH_PROTOCOL_NAME,
-                                #[cfg(feature = "kad")]
-                                libp2p_kad::protocol::DEFAULT_PROTO_NAME,
-                                #[cfg(feature = "ping")]
-                                libp2p_ping::PROTOCOL_NAME,
-                                #[cfg(feature = "relay")]
-                                libp2p_relay::STOP_PROTOCOL_NAME,
-                                #[cfg(feature = "relay")]
-                                libp2p_relay::HOP_PROTOCOL_NAME,
-                            ];
-
-                            allowed_protocols.contains(p)
-                        })
-                        .map(|p| p.to_string())
-                        .collect::<Vec<_>>();
-
-                    // Signal via an additional label value that one or more
-                    // protocols of the remote peer have not been recognized.
-                    if protocols.len() < info.protocols.len() {
-                        protocols.push("unrecognized".to_string());
-                    }
-
-                    protocols.sort_unstable();
-                    protocols.dedup();
-
-                    self.protocols.add(*peer_id, protocols);
-                }
-
                 self.received.inc();
-                self.received_info_protocols
-                    .observe(info.protocols.len() as f64);
-                self.received_info_listen_addrs
-                    .observe(info.listen_addrs.len() as f64);
-                for listen_addr in &info.listen_addrs {
-                    self.listen_addresses
-                        .get_or_create(&AddressLabels {
-                            protocols: protocol_stack::as_string(listen_addr),
-                        })
-                        .inc();
-                }
+                self.peers.record(*peer_id, info.clone());
             }
             libp2p_identify::Event::Sent { .. } => {
                 self.sent.inc();
@@ -194,8 +123,8 @@ impl super::Recorder<libp2p_identify::Event> for Metrics {
     }
 }
 
-impl<TBvEv, THandleErr> super::Recorder<libp2p_swarm::SwarmEvent<TBvEv, THandleErr>> for Metrics {
-    fn record(&self, event: &libp2p_swarm::SwarmEvent<TBvEv, THandleErr>) {
+impl<TBvEv> super::Recorder<libp2p_swarm::SwarmEvent<TBvEv>> for Metrics {
+    fn record(&self, event: &libp2p_swarm::SwarmEvent<TBvEv>) {
         if let libp2p_swarm::SwarmEvent::ConnectionClosed {
             peer_id,
             num_established,
@@ -203,7 +132,7 @@ impl<TBvEv, THandleErr> super::Recorder<libp2p_swarm::SwarmEvent<TBvEv, THandleE
         } = event
         {
             if *num_established == 0 {
-                self.protocols.remove(*peer_id)
+                self.peers.remove(*peer_id);
             }
         }
     }
@@ -214,55 +143,113 @@ struct AddressLabels {
     protocols: String,
 }
 
-#[derive(Default, Clone, Debug)]
-struct Protocols {
-    peers: Arc<Mutex<HashMap<PeerId, Vec<String>>>>,
-}
+#[derive(Default, Debug, Clone)]
+struct Peers(Arc<Mutex<HashMap<PeerId, libp2p_identify::Info>>>);
 
-impl Protocols {
-    fn add(&self, peer: PeerId, protocols: Vec<String>) {
-        self.peers
-            .lock()
-            .expect("Lock not to be poisoned")
-            .insert(peer, protocols);
+impl Peers {
+    fn record(&self, peer_id: PeerId, info: libp2p_identify::Info) {
+        self.0.lock().unwrap().insert(peer_id, info);
     }
 
-    fn remove(&self, peer: PeerId) {
-        self.peers
-            .lock()
-            .expect("Lock not to be poisoned")
-            .remove(&peer);
+    fn remove(&self, peer_id: PeerId) {
+        self.0.lock().unwrap().remove(&peer_id);
     }
 }
 
-impl EncodeMetric for Protocols {
-    fn encode(&self, mut encoder: MetricEncoder) -> Result<(), std::fmt::Error> {
-        let count_by_protocol = self
-            .peers
-            .lock()
-            .expect("Lock not to be poisoned")
-            .iter()
-            .fold(
-                HashMap::<String, i64>::default(),
-                |mut acc, (_, protocols)| {
-                    for protocol in protocols {
-                        let count = acc.entry(protocol.to_string()).or_default();
-                        *count += 1;
-                    }
-                    acc
-                },
-            );
+impl Collector for Peers {
+    fn encode(&self, mut encoder: DescriptorEncoder) -> Result<(), std::fmt::Error> {
+        let mut count_by_protocols: HashMap<String, i64> = Default::default();
+        let mut count_by_listen_addresses: HashMap<String, i64> = Default::default();
+        let mut count_by_observed_addresses: HashMap<String, i64> = Default::default();
 
-        for (protocol, count) in count_by_protocol {
-            encoder
-                .encode_family(&[("protocol", protocol)])?
-                .encode_gauge(&count)?;
+        for (_, peer_info) in self.0.lock().unwrap().iter() {
+            {
+                let mut protocols: Vec<_> = peer_info
+                    .protocols
+                    .iter()
+                    .map(|p| {
+                        if ALLOWED_PROTOCOLS.contains(p) {
+                            p.to_string()
+                        } else {
+                            "unrecognized".to_string()
+                        }
+                    })
+                    .collect();
+                protocols.sort();
+                protocols.dedup();
+
+                for protocol in protocols.into_iter() {
+                    let count = count_by_protocols.entry(protocol).or_default();
+                    *count += 1;
+                }
+            }
+
+            {
+                let mut addrs: Vec<_> = peer_info
+                    .listen_addrs
+                    .iter()
+                    .map(protocol_stack::as_string)
+                    .collect();
+                addrs.sort();
+                addrs.dedup();
+
+                for addr in addrs {
+                    let count = count_by_listen_addresses.entry(addr).or_default();
+                    *count += 1;
+                }
+            }
+
+            {
+                let count = count_by_observed_addresses
+                    .entry(protocol_stack::as_string(&peer_info.observed_addr))
+                    .or_default();
+                *count += 1;
+            }
+        }
+
+        {
+            let mut family_encoder = encoder.encode_descriptor(
+                "remote_protocols",
+                "Number of connected nodes supporting a specific protocol, with \"unrecognized\" for each peer supporting one or more unrecognized protocols",
+                None,
+                MetricType::Gauge,
+            )?;
+            for (protocol, count) in count_by_protocols.into_iter() {
+                let labels = [("protocol", protocol)];
+                let metric_encoder = family_encoder.encode_family(&labels)?;
+                let metric = ConstGauge::new(count);
+                metric.encode(metric_encoder)?;
+            }
+        }
+
+        {
+            let mut family_encoder = encoder.encode_descriptor(
+                "remote_listen_addresses",
+                "Number of connected nodes advertising a specific listen address",
+                None,
+                MetricType::Gauge,
+            )?;
+            for (protocol, count) in count_by_listen_addresses.into_iter() {
+                let labels = [("listen_address", protocol)];
+                let metric_encoder = family_encoder.encode_family(&labels)?;
+                ConstGauge::new(count).encode(metric_encoder)?;
+            }
+        }
+
+        {
+            let mut family_encoder = encoder.encode_descriptor(
+                "local_observed_addresses",
+                "Number of connected nodes observing the local node at a specific address",
+                None,
+                MetricType::Gauge,
+            )?;
+            for (protocol, count) in count_by_observed_addresses.into_iter() {
+                let labels = [("observed_address", protocol)];
+                let metric_encoder = family_encoder.encode_family(&labels)?;
+                ConstGauge::new(count).encode(metric_encoder)?;
+            }
         }
 
         Ok(())
-    }
-
-    fn metric_type(&self) -> MetricType {
-        MetricType::Gauge
     }
 }

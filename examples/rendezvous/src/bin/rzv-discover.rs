@@ -20,43 +20,41 @@
 
 use futures::StreamExt;
 use libp2p::{
-    core::transport::upgrade::Version,
-    identity,
     multiaddr::Protocol,
     noise, ping, rendezvous,
-    swarm::{keep_alive, NetworkBehaviour, SwarmBuilder, SwarmEvent},
-    tcp, yamux, Multiaddr, PeerId, Transport,
+    swarm::{NetworkBehaviour, SwarmEvent},
+    tcp, yamux, Multiaddr,
 };
+use std::error::Error;
 use std::time::Duration;
+use tracing_subscriber::EnvFilter;
 
 const NAMESPACE: &str = "rendezvous";
 
 #[tokio::main]
-async fn main() {
-    env_logger::init();
+async fn main() -> Result<(), Box<dyn Error>> {
+    let _ = tracing_subscriber::fmt()
+        .with_env_filter(EnvFilter::from_default_env())
+        .try_init();
 
-    let key_pair = identity::Keypair::generate_ed25519();
     let rendezvous_point_address = "/ip4/127.0.0.1/tcp/62649".parse::<Multiaddr>().unwrap();
     let rendezvous_point = "12D3KooWDpJ7As7BWAwRMfu1VU2WCqNjvq387JEYKDBj4kx6nXTN"
         .parse()
         .unwrap();
 
-    let mut swarm = SwarmBuilder::with_tokio_executor(
-        tcp::tokio::Transport::default()
-            .upgrade(Version::V1Lazy)
-            .authenticate(noise::Config::new(&key_pair).unwrap())
-            .multiplex(yamux::Config::default())
-            .boxed(),
-        MyBehaviour {
-            rendezvous: rendezvous::client::Behaviour::new(key_pair.clone()),
+    let mut swarm = libp2p::SwarmBuilder::with_new_identity()
+        .with_tokio()
+        .with_tcp(
+            tcp::Config::default(),
+            noise::Config::new,
+            yamux::Config::default,
+        )?
+        .with_behaviour(|key| MyBehaviour {
+            rendezvous: rendezvous::client::Behaviour::new(key.clone()),
             ping: ping::Behaviour::new(ping::Config::new().with_interval(Duration::from_secs(1))),
-            keep_alive: keep_alive::Behaviour,
-        },
-        PeerId::from(key_pair.public()),
-    )
-    .build();
-
-    log::info!("Local peer id: {}", swarm.local_peer_id());
+        })?
+        .with_swarm_config(|cfg| cfg.with_idle_connection_timeout(Duration::from_secs(5)))
+        .build();
 
     swarm.dial(rendezvous_point_address.clone()).unwrap();
 
@@ -67,7 +65,7 @@ async fn main() {
         tokio::select! {
                 event = swarm.select_next_some() => match event {
                     SwarmEvent::ConnectionEstablished { peer_id, .. } if peer_id == rendezvous_point => {
-                        log::info!(
+                        tracing::info!(
                             "Connected to rendezvous point, discovering nodes in '{}' namespace ...",
                             NAMESPACE
                         );
@@ -89,9 +87,9 @@ async fn main() {
                         for registration in registrations {
                             for address in registration.record.addresses() {
                                 let peer = registration.record.peer_id();
-                                log::info!("Discovered peer {} at {}", peer, address);
+                                tracing::info!(%peer, %address, "Discovered peer");
 
-                                let p2p_suffix = Protocol::P2p(*peer.as_ref());
+                                let p2p_suffix = Protocol::P2p(peer);
                                 let address_with_p2p =
                                     if !address.ends_with(&Multiaddr::empty().with(p2p_suffix.clone())) {
                                         address.clone().with(p2p_suffix)
@@ -105,12 +103,13 @@ async fn main() {
                     }
                     SwarmEvent::Behaviour(MyBehaviourEvent::Ping(ping::Event {
                         peer,
-                        result: Ok(ping::Success::Ping { rtt }),
+                        result: Ok(rtt),
+                        ..
                     })) if peer != rendezvous_point => {
-                        log::info!("Ping to {} is {}ms", peer, rtt.as_millis())
+                        tracing::info!(%peer, "Ping is {}ms", rtt.as_millis())
                     }
                     other => {
-                        log::debug!("Unhandled {:?}", other);
+                        tracing::debug!("Unhandled {:?}", other);
                     }
             },
             _ = discover_tick.tick(), if cookie.is_some() =>
@@ -128,5 +127,4 @@ async fn main() {
 struct MyBehaviour {
     rendezvous: rendezvous::client::Behaviour,
     ping: ping::Behaviour,
-    keep_alive: keep_alive::Behaviour,
 }

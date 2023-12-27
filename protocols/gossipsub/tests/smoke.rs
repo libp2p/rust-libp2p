@@ -25,11 +25,10 @@ use libp2p_gossipsub as gossipsub;
 use libp2p_gossipsub::{MessageAuthenticity, ValidationMode};
 use libp2p_swarm::Swarm;
 use libp2p_swarm_test::SwarmExt as _;
-use log::debug;
 use quickcheck::{QuickCheck, TestResult};
 use rand::{seq::SliceRandom, SeedableRng};
 use std::{task::Poll, time::Duration};
-
+use tracing_subscriber::EnvFilter;
 struct Graph {
     nodes: SelectAll<Swarm<gossipsub::Behaviour>>,
 }
@@ -122,21 +121,23 @@ async fn build_node() -> Swarm<gossipsub::Behaviour> {
             .unwrap();
         gossipsub::Behaviour::new(MessageAuthenticity::Author(peer_id), config).unwrap()
     });
-    swarm.listen().await;
+    swarm.listen().with_memory_addr_external().await;
 
     swarm
 }
 
 #[test]
 fn multi_hop_propagation() {
-    let _ = env_logger::try_init();
+    let _ = tracing_subscriber::fmt()
+        .with_env_filter(EnvFilter::from_default_env())
+        .try_init();
 
     fn prop(num_nodes: u8, seed: u64) -> TestResult {
         if !(2..=50).contains(&num_nodes) {
             return TestResult::discard();
         }
 
-        debug!("number nodes: {:?}, seed: {:?}", num_nodes, seed);
+        tracing::debug!(number_of_nodes=%num_nodes, seed=%seed);
 
         async_std::task::block_on(async move {
             let mut graph = Graph::new_connected(num_nodes as usize, seed).await;

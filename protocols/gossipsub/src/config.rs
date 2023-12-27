@@ -22,8 +22,9 @@ use std::borrow::Cow;
 use std::sync::Arc;
 use std::time::Duration;
 
+use crate::error::ConfigBuilderError;
 use crate::protocol::{ProtocolConfig, ProtocolId, FLOODSUB_PROTOCOL};
-use crate::types::{FastMessageId, Message, MessageId, PeerKind, RawMessage};
+use crate::types::{Message, MessageId, PeerKind};
 
 use libp2p_identity::PeerId;
 use libp2p_swarm::StreamProtocol;
@@ -74,11 +75,9 @@ pub struct Config {
     heartbeat_interval: Duration,
     fanout_ttl: Duration,
     check_explicit_peers_ticks: u64,
-    idle_timeout: Duration,
     duplicate_cache_time: Duration,
     validate_messages: bool,
     message_id_fn: Arc<dyn Fn(&Message) -> MessageId + Send + Sync + 'static>,
-    fast_message_id_fn: Option<Arc<dyn Fn(&RawMessage) -> FastMessageId + Send + Sync + 'static>>,
     allow_self_origin: bool,
     do_px: bool,
     prune_peers: usize,
@@ -183,13 +182,6 @@ impl Config {
         self.protocol.max_transmit_size
     }
 
-    /// The time a connection is maintained to a peer without being in the mesh and without
-    /// send/receiving a message from. Connections that idle beyond this timeout are disconnected.
-    /// Default is 120 seconds.
-    pub fn idle_timeout(&self) -> Duration {
-        self.idle_timeout
-    }
-
     /// Duplicates are prevented by storing message id's of known messages in an LRU time cache.
     /// This settings sets the time period that messages are stored in the cache. Duplicates can be
     /// received if duplicate messages are sent at a time greater than this setting apart. The
@@ -223,20 +215,6 @@ impl Config {
     /// the message id.
     pub fn message_id(&self, message: &Message) -> MessageId {
         (self.message_id_fn)(message)
-    }
-
-    /// A user-defined optional function that computes fast ids from raw messages. This can be used
-    /// to avoid possibly expensive transformations from [`RawMessage`] to
-    /// [`Message`] for duplicates. Two semantically different messages must always
-    /// have different fast message ids, but it is allowed that two semantically identical messages
-    /// have different fast message ids as long as the message_id_fn produces the same id for them.
-    ///
-    /// The function takes a [`RawMessage`] as input and outputs a String to be
-    /// interpreted as the fast message id. Default is None.
-    pub fn fast_message_id(&self, message: &RawMessage) -> Option<FastMessageId> {
-        self.fast_message_id_fn
-            .as_ref()
-            .map(|fast_message_id_fn| fast_message_id_fn(message))
     }
 
     /// By default, gossipsub will reject messages that are sent to us that have the same message
@@ -406,7 +384,6 @@ impl Default for ConfigBuilder {
                 heartbeat_interval: Duration::from_secs(1),
                 fanout_ttl: Duration::from_secs(60),
                 check_explicit_peers_ticks: 300,
-                idle_timeout: Duration::from_secs(120),
                 duplicate_cache_time: Duration::from_secs(60),
                 validate_messages: false,
                 message_id_fn: Arc::new(|message| {
@@ -423,7 +400,6 @@ impl Default for ConfigBuilder {
                         .push_str(&message.sequence_number.unwrap_or_default().to_string());
                     MessageId::from(source_string)
                 }),
-                fast_message_id_fn: None,
                 allow_self_origin: false,
                 do_px: false,
                 prune_peers: 0, // NOTE: Increasing this currently has little effect until Signed records are implemented.
@@ -601,14 +577,6 @@ impl ConfigBuilder {
         self
     }
 
-    /// The time a connection is maintained to a peer without being in the mesh and without
-    /// send/receiving a message from. Connections that idle beyond this timeout are disconnected.
-    /// Default is 120 seconds.
-    pub fn idle_timeout(&mut self, idle_timeout: Duration) -> &mut Self {
-        self.config.idle_timeout = idle_timeout;
-        self
-    }
-
     /// Duplicates are prevented by storing message id's of known messages in an LRU time cache.
     /// This settings sets the time period that messages are stored in the cache. Duplicates can be
     /// received if duplicate messages are sent at a time greater than this setting apart. The
@@ -647,22 +615,6 @@ impl ConfigBuilder {
         F: Fn(&Message) -> MessageId + Send + Sync + 'static,
     {
         self.config.message_id_fn = Arc::new(id_fn);
-        self
-    }
-
-    /// A user-defined optional function that computes fast ids from raw messages. This can be used
-    /// to avoid possibly expensive transformations from [`RawMessage`] to
-    /// [`Message`] for duplicates. Two semantically different messages must always
-    /// have different fast message ids, but it is allowed that two semantically identical messages
-    /// have different fast message ids as long as the message_id_fn produces the same id for them.
-    ///
-    /// The function takes a [`Message`] as input and outputs a String to be interpreted
-    /// as the fast message id. Default is None.
-    pub fn fast_message_id_fn<F>(&mut self, fast_id_fn: F) -> &mut Self
-    where
-        F: Fn(&RawMessage) -> FastMessageId + Send + Sync + 'static,
-    {
-        self.config.fast_message_id_fn = Some(Arc::new(fast_id_fn));
         self
     }
 
@@ -831,40 +783,34 @@ impl ConfigBuilder {
     }
 
     /// Constructs a [`Config`] from the given configuration and validates the settings.
-    pub fn build(&self) -> Result<Config, &'static str> {
+    pub fn build(&self) -> Result<Config, ConfigBuilderError> {
         // check all constraints on config
 
         if self.config.protocol.max_transmit_size < 100 {
-            return Err("The maximum transmission size must be greater than 100 to permit basic control messages");
+            return Err(ConfigBuilderError::MaxTransmissionSizeTooSmall);
         }
 
         if self.config.history_length < self.config.history_gossip {
-            return Err(
-                "The history_length must be greater than or equal to the history_gossip \
-                length",
-            );
+            return Err(ConfigBuilderError::HistoryLengthTooSmall);
         }
 
         if !(self.config.mesh_outbound_min <= self.config.mesh_n_low
             && self.config.mesh_n_low <= self.config.mesh_n
             && self.config.mesh_n <= self.config.mesh_n_high)
         {
-            return Err("The following inequality doesn't hold \
-                mesh_outbound_min <= mesh_n_low <= mesh_n <= mesh_n_high");
+            return Err(ConfigBuilderError::MeshParametersInvalid);
         }
 
         if self.config.mesh_outbound_min * 2 > self.config.mesh_n {
-            return Err(
-                "The following inequality doesn't hold mesh_outbound_min <= self.config.mesh_n / 2",
-            );
+            return Err(ConfigBuilderError::MeshOutboundInvalid);
         }
 
         if self.config.unsubscribe_backoff.as_millis() == 0 {
-            return Err("The unsubscribe_backoff parameter should be positive.");
+            return Err(ConfigBuilderError::UnsubscribeBackoffIsZero);
         }
 
         if self.invalid_protocol {
-            return Err("The provided protocol is invalid, it must start with a forward-slash");
+            return Err(ConfigBuilderError::InvalidProtocol);
         }
 
         Ok(self.config.clone())
@@ -886,7 +832,6 @@ impl std::fmt::Debug for Config {
         let _ = builder.field("heartbeat_initial_delay", &self.heartbeat_initial_delay);
         let _ = builder.field("heartbeat_interval", &self.heartbeat_interval);
         let _ = builder.field("fanout_ttl", &self.fanout_ttl);
-        let _ = builder.field("idle_timeout", &self.idle_timeout);
         let _ = builder.field("duplicate_cache_time", &self.duplicate_cache_time);
         let _ = builder.field("validate_messages", &self.validate_messages);
         let _ = builder.field("allow_self_origin", &self.allow_self_origin);

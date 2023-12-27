@@ -20,13 +20,13 @@
 
 //! Data structure for efficiently storing known back-off's when pruning peers.
 use crate::topic::TopicHash;
+use instant::Instant;
 use libp2p_identity::PeerId;
 use std::collections::{
     hash_map::{Entry, HashMap},
     HashSet,
 };
 use std::time::Duration;
-use wasm_timer::Instant;
 
 #[derive(Copy, Clone)]
 struct HeartbeatIndex(usize);
@@ -86,12 +86,7 @@ impl BackoffStorage {
                 backoffs_by_heartbeat[index].insert(pair);
                 HeartbeatIndex(index)
             };
-        match self
-            .backoffs
-            .entry(topic.clone())
-            .or_insert_with(HashMap::new)
-            .entry(*peer)
-        {
+        match self.backoffs.entry(topic.clone()).or_default().entry(*peer) {
             Entry::Occupied(mut o) => {
                 let (backoff, index) = o.get();
                 if backoff < &instant {

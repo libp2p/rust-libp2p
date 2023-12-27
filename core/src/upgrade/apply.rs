@@ -18,10 +18,9 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::upgrade::{InboundUpgrade, OutboundUpgrade, UpgradeError};
+use crate::upgrade::{InboundConnectionUpgrade, OutboundConnectionUpgrade, UpgradeError};
 use crate::{connection::ConnectedPoint, Negotiated};
 use futures::{future::Either, prelude::*};
-use log::debug;
 use multistream_select::{self, DialerSelectFuture, ListenerSelectFuture};
 use std::{mem, pin::Pin, task::Context, task::Poll};
 
@@ -29,7 +28,7 @@ pub(crate) use multistream_select::Version;
 
 // TODO: Still needed?
 /// Applies an upgrade to the inbound and outbound direction of a connection or substream.
-pub fn apply<C, U>(
+pub(crate) fn apply<C, U>(
     conn: C,
     up: U,
     cp: ConnectedPoint,
@@ -37,7 +36,7 @@ pub fn apply<C, U>(
 ) -> Either<InboundUpgradeApply<C, U>, OutboundUpgradeApply<C, U>>
 where
     C: AsyncRead + AsyncWrite + Unpin,
-    U: InboundUpgrade<Negotiated<C>> + OutboundUpgrade<Negotiated<C>>,
+    U: InboundConnectionUpgrade<Negotiated<C>> + OutboundConnectionUpgrade<Negotiated<C>>,
 {
     match cp {
         ConnectedPoint::Dialer { role_override, .. } if role_override.is_dialer() => {
@@ -48,24 +47,24 @@ where
 }
 
 /// Tries to perform an upgrade on an inbound connection or substream.
-pub fn apply_inbound<C, U>(conn: C, up: U) -> InboundUpgradeApply<C, U>
+pub(crate) fn apply_inbound<C, U>(conn: C, up: U) -> InboundUpgradeApply<C, U>
 where
     C: AsyncRead + AsyncWrite + Unpin,
-    U: InboundUpgrade<Negotiated<C>>,
+    U: InboundConnectionUpgrade<Negotiated<C>>,
 {
     InboundUpgradeApply {
         inner: InboundUpgradeApplyState::Init {
-            future: multistream_select::listener_select_proto(conn, up.protocol_info().into_iter()),
+            future: multistream_select::listener_select_proto(conn, up.protocol_info()),
             upgrade: up,
         },
     }
 }
 
 /// Tries to perform an upgrade on an outbound connection or substream.
-pub fn apply_outbound<C, U>(conn: C, up: U, v: Version) -> OutboundUpgradeApply<C, U>
+pub(crate) fn apply_outbound<C, U>(conn: C, up: U, v: Version) -> OutboundUpgradeApply<C, U>
 where
     C: AsyncRead + AsyncWrite + Unpin,
-    U: OutboundUpgrade<Negotiated<C>>,
+    U: OutboundConnectionUpgrade<Negotiated<C>>,
 {
     OutboundUpgradeApply {
         inner: OutboundUpgradeApplyState::Init {
@@ -79,7 +78,7 @@ where
 pub struct InboundUpgradeApply<C, U>
 where
     C: AsyncRead + AsyncWrite + Unpin,
-    U: InboundUpgrade<Negotiated<C>>,
+    U: InboundConnectionUpgrade<Negotiated<C>>,
 {
     inner: InboundUpgradeApplyState<C, U>,
 }
@@ -88,7 +87,7 @@ where
 enum InboundUpgradeApplyState<C, U>
 where
     C: AsyncRead + AsyncWrite + Unpin,
-    U: InboundUpgrade<Negotiated<C>>,
+    U: InboundConnectionUpgrade<Negotiated<C>>,
 {
     Init {
         future: ListenerSelectFuture<C, U::Info>,
@@ -104,14 +103,14 @@ where
 impl<C, U> Unpin for InboundUpgradeApply<C, U>
 where
     C: AsyncRead + AsyncWrite + Unpin,
-    U: InboundUpgrade<Negotiated<C>>,
+    U: InboundConnectionUpgrade<Negotiated<C>>,
 {
 }
 
 impl<C, U> Future for InboundUpgradeApply<C, U>
 where
     C: AsyncRead + AsyncWrite + Unpin,
-    U: InboundUpgrade<Negotiated<C>>,
+    U: InboundConnectionUpgrade<Negotiated<C>>,
 {
     type Output = Result<U::Output, UpgradeError<U::Error>>;
 
@@ -141,11 +140,11 @@ where
                             return Poll::Pending;
                         }
                         Poll::Ready(Ok(x)) => {
-                            log::trace!("Upgraded inbound stream to {name}");
+                            tracing::trace!(upgrade=%name, "Upgraded inbound stream");
                             return Poll::Ready(Ok(x));
                         }
                         Poll::Ready(Err(e)) => {
-                            debug!("Failed to upgrade inbound stream to {name}");
+                            tracing::debug!(upgrade=%name, "Failed to upgrade inbound stream");
                             return Poll::Ready(Err(UpgradeError::Apply(e)));
                         }
                     }
@@ -162,7 +161,7 @@ where
 pub struct OutboundUpgradeApply<C, U>
 where
     C: AsyncRead + AsyncWrite + Unpin,
-    U: OutboundUpgrade<Negotiated<C>>,
+    U: OutboundConnectionUpgrade<Negotiated<C>>,
 {
     inner: OutboundUpgradeApplyState<C, U>,
 }
@@ -170,7 +169,7 @@ where
 enum OutboundUpgradeApplyState<C, U>
 where
     C: AsyncRead + AsyncWrite + Unpin,
-    U: OutboundUpgrade<Negotiated<C>>,
+    U: OutboundConnectionUpgrade<Negotiated<C>>,
 {
     Init {
         future: DialerSelectFuture<C, <U::InfoIter as IntoIterator>::IntoIter>,
@@ -186,14 +185,14 @@ where
 impl<C, U> Unpin for OutboundUpgradeApply<C, U>
 where
     C: AsyncRead + AsyncWrite + Unpin,
-    U: OutboundUpgrade<Negotiated<C>>,
+    U: OutboundConnectionUpgrade<Negotiated<C>>,
 {
 }
 
 impl<C, U> Future for OutboundUpgradeApply<C, U>
 where
     C: AsyncRead + AsyncWrite + Unpin,
-    U: OutboundUpgrade<Negotiated<C>>,
+    U: OutboundConnectionUpgrade<Negotiated<C>>,
 {
     type Output = Result<U::Output, UpgradeError<U::Error>>;
 
@@ -223,11 +222,11 @@ where
                             return Poll::Pending;
                         }
                         Poll::Ready(Ok(x)) => {
-                            log::trace!("Upgraded outbound stream to {name}",);
+                            tracing::trace!(upgrade=%name, "Upgraded outbound stream");
                             return Poll::Ready(Ok(x));
                         }
                         Poll::Ready(Err(e)) => {
-                            debug!("Failed to upgrade outbound stream to {name}",);
+                            tracing::debug!(upgrade=%name, "Failed to upgrade outbound stream",);
                             return Poll::Ready(Err(UpgradeError::Apply(e)));
                         }
                     }

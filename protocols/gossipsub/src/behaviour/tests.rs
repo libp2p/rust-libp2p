@@ -21,20 +21,16 @@
 // Collection of tests for the gossipsub network behaviour
 
 use super::*;
-use crate::protocol::ProtocolConfig;
 use crate::subscription_filter::WhitelistSubscriptionFilter;
 use crate::transform::{DataTransform, IdentityTransform};
-use crate::types::FastMessageId;
 use crate::ValidationError;
 use crate::{
-    config::Config, config::ConfigBuilder, IdentTopic as Topic, Message, TopicScoreParams,
+    config::Config, config::ConfigBuilder, types::Rpc, IdentTopic as Topic, TopicScoreParams,
 };
 use async_std::net::Ipv4Addr;
 use byteorder::{BigEndian, ByteOrder};
 use libp2p_core::{ConnectedPoint, Endpoint};
 use rand::Rng;
-use std::collections::hash_map::DefaultHasher;
-use std::hash::{Hash, Hasher};
 use std::thread::sleep;
 use std::time::Duration;
 
@@ -272,13 +268,10 @@ where
         for connection_id in peer_connections.connections.clone() {
             active_connections = active_connections.checked_sub(1).unwrap();
 
-            let dummy_handler = Handler::new(ProtocolConfig::default(), Duration::ZERO);
-
             gs.on_swarm_event(FromSwarm::ConnectionClosed(ConnectionClosed {
                 peer_id: *peer_id,
                 connection_id,
                 endpoint: &fake_endpoint,
-                handler: dummy_handler,
                 remaining_established: active_connections,
             }));
         }
@@ -411,26 +404,19 @@ fn test_subscribe() {
     let subscriptions = gs
         .events
         .iter()
-        .fold(vec![], |mut collected_subscriptions, e| match e {
-            ToSwarm::NotifyHandler {
-                event: HandlerIn::Message(ref message),
-                ..
-            } => {
-                for s in &message.subscriptions {
-                    if let Some(true) = s.subscribe {
-                        collected_subscriptions.push(s.clone())
-                    };
+        .filter(|e| {
+            matches!(
+                e,
+                ToSwarm::NotifyHandler {
+                    event: HandlerIn::Message(RpcOut::Subscribe(_)),
+                    ..
                 }
-                collected_subscriptions
-            }
-            _ => collected_subscriptions,
-        });
+            )
+        })
+        .count();
 
     // we sent a subscribe to all known peers
-    assert!(
-        subscriptions.len() == 20,
-        "Should send a subscription to all known peers"
-    );
+    assert_eq!(subscriptions, 20);
 }
 
 #[test]
@@ -479,26 +465,16 @@ fn test_unsubscribe() {
     let subscriptions = gs
         .events
         .iter()
-        .fold(vec![], |mut collected_subscriptions, e| match e {
+        .fold(0, |collected_subscriptions, e| match e {
             ToSwarm::NotifyHandler {
-                event: HandlerIn::Message(ref message),
+                event: HandlerIn::Message(RpcOut::Subscribe(_)),
                 ..
-            } => {
-                for s in &message.subscriptions {
-                    if let Some(true) = s.subscribe {
-                        collected_subscriptions.push(s.clone())
-                    };
-                }
-                collected_subscriptions
-            }
+            } => collected_subscriptions + 1,
             _ => collected_subscriptions,
         });
 
     // we sent a unsubscribe to all known peers, for two topics
-    assert!(
-        subscriptions.len() == 40,
-        "Should send an unsubscribe event to all known peers"
-    );
+    assert_eq!(subscriptions, 40);
 
     // check we clean up internal structures
     for topic_hash in &topic_hashes {
@@ -666,16 +642,13 @@ fn test_publish_without_flood_publishing() {
     // Collect all publish messages
     let publishes = gs
         .events
-        .iter()
+        .into_iter()
         .fold(vec![], |mut collected_publish, e| match e {
             ToSwarm::NotifyHandler {
-                event: HandlerIn::Message(ref message),
+                event: HandlerIn::Message(RpcOut::Publish(message)),
                 ..
             } => {
-                let event = proto_to_message(message);
-                for s in &event.messages {
-                    collected_publish.push(s.clone());
-                }
+                collected_publish.push(message);
                 collected_publish
             }
             _ => collected_publish,
@@ -756,16 +729,13 @@ fn test_fanout() {
     // Collect all publish messages
     let publishes = gs
         .events
-        .iter()
+        .into_iter()
         .fold(vec![], |mut collected_publish, e| match e {
             ToSwarm::NotifyHandler {
-                event: HandlerIn::Message(ref message),
+                event: HandlerIn::Message(RpcOut::Publish(message)),
                 ..
             } => {
-                let event = proto_to_message(message);
-                for s in &event.messages {
-                    collected_publish.push(s.clone());
-                }
+                collected_publish.push(message);
                 collected_publish
             }
             _ => collected_publish,
@@ -807,37 +777,36 @@ fn test_inject_connected() {
 
     // check that our subscriptions are sent to each of the peers
     // collect all the SendEvents
-    let send_events: Vec<_> = gs
+    let subscriptions = gs
         .events
-        .iter()
-        .filter(|e| match e {
+        .into_iter()
+        .filter_map(|e| match e {
             ToSwarm::NotifyHandler {
-                event: HandlerIn::Message(ref m),
+                event: HandlerIn::Message(RpcOut::Subscribe(topic)),
+                peer_id,
                 ..
-            } => !m.subscriptions.is_empty(),
-            _ => false,
+            } => Some((peer_id, topic)),
+            _ => None,
         })
-        .collect();
+        .fold(
+            HashMap::<PeerId, Vec<String>>::new(),
+            |mut subs, (peer, sub)| {
+                let mut peer_subs = subs.remove(&peer).unwrap_or_default();
+                peer_subs.push(sub.into_string());
+                subs.insert(peer, peer_subs);
+                subs
+            },
+        );
 
     // check that there are two subscriptions sent to each peer
-    for sevent in send_events.clone() {
-        if let ToSwarm::NotifyHandler {
-            event: HandlerIn::Message(ref m),
-            ..
-        } = sevent
-        {
-            assert!(
-                m.subscriptions.len() == 2,
-                "There should be two subscriptions sent to each peer (1 for each topic)."
-            );
-        };
+    for peer_subs in subscriptions.values() {
+        assert!(peer_subs.contains(&String::from("topic1")));
+        assert!(peer_subs.contains(&String::from("topic2")));
+        assert_eq!(peer_subs.len(), 2);
     }
 
     // check that there are 20 send events created
-    assert!(
-        send_events.len() == 20,
-        "There should be a subscription event sent to each peer."
-    );
+    assert_eq!(subscriptions.len(), 20);
 
     // should add the new peers to `peer_topics` with an empty vec as a gossipsub node
     for peer in peers {
@@ -858,7 +827,7 @@ fn test_handle_received_subscriptions() {
     // UNSUBSCRIBE  - Remove topic from peer_topics for peer.
     //              - Remove peer from topic_peers.
 
-    let topics = vec!["topic1", "topic2", "topic3", "topic4"]
+    let topics = ["topic1", "topic2", "topic3", "topic4"]
         .iter()
         .map(|&t| String::from(t))
         .collect();
@@ -1050,21 +1019,18 @@ fn test_handle_iwant_msg_cached() {
     gs.handle_iwant(&peers[7], vec![msg_id.clone()]);
 
     // the messages we are sending
-    let sent_messages = gs
-        .events
-        .iter()
-        .fold(vec![], |mut collected_messages, e| match e {
+    let sent_messages = gs.events.into_iter().fold(
+        Vec::<RawMessage>::new(),
+        |mut collected_messages, e| match e {
             ToSwarm::NotifyHandler { event, .. } => {
-                if let HandlerIn::Message(ref m) = event {
-                    let event = proto_to_message(m);
-                    for c in &event.messages {
-                        collected_messages.push(c.clone())
-                    }
+                if let HandlerIn::Message(RpcOut::Forward(message)) = event {
+                    collected_messages.push(message);
                 }
                 collected_messages
             }
             _ => collected_messages,
-        });
+        },
+    );
 
     assert!(
         sent_messages
@@ -1113,15 +1079,14 @@ fn test_handle_iwant_msg_cached_shifted() {
         // is the message is being sent?
         let message_exists = gs.events.iter().any(|e| match e {
             ToSwarm::NotifyHandler {
-                event: HandlerIn::Message(ref m),
+                event: HandlerIn::Message(RpcOut::Forward(message)),
                 ..
             } => {
-                let event = proto_to_message(m);
-                event
-                    .messages
-                    .iter()
-                    .map(|msg| gs.data_transform.inbound_transform(msg.clone()).unwrap())
-                    .any(|msg| gs.config.message_id(&msg) == msg_id)
+                gs.config.message_id(
+                    &gs.data_transform
+                        .inbound_transform(message.clone())
+                        .unwrap(),
+                ) == msg_id
             }
             _ => false,
         });
@@ -1280,7 +1245,7 @@ fn test_handle_graft_is_not_subscribed() {
 #[test]
 // tests multiple topics in a single graft message
 fn test_handle_graft_multiple_topics() {
-    let topics: Vec<String> = vec!["topic1", "topic2", "topic3", "topic4"]
+    let topics: Vec<String> = ["topic1", "topic2", "topic3", "topic4"]
         .iter()
         .map(|&t| String::from(t))
         .collect();
@@ -1352,22 +1317,15 @@ fn count_control_msgs<D: DataTransform, F: TopicSubscriptionFilter>(
         .sum::<usize>()
         + gs.events
             .iter()
-            .map(|e| match e {
+            .filter(|e| match e {
                 ToSwarm::NotifyHandler {
                     peer_id,
-                    event: HandlerIn::Message(ref m),
+                    event: HandlerIn::Message(RpcOut::Control(action)),
                     ..
-                } => {
-                    let event = proto_to_message(m);
-                    event
-                        .control_msgs
-                        .iter()
-                        .filter(|m| filter(peer_id, m))
-                        .count()
-                }
-                _ => 0,
+                } => filter(peer_id, action),
+                _ => false,
             })
-            .sum::<usize>()
+            .count()
 }
 
 fn flush_events<D: DataTransform, F: TopicSubscriptionFilter>(gs: &mut Behaviour<D, F>) {
@@ -1418,7 +1376,7 @@ fn test_explicit_peer_reconnects() {
         .gs_config(config)
         .create_network();
 
-    let peer = others.get(0).unwrap();
+    let peer = others.first().unwrap();
 
     //add peer as explicit peer
     gs.add_explicit_peer(peer);
@@ -1469,7 +1427,7 @@ fn test_handle_graft_explicit_peer() {
         .explicit(1)
         .create_network();
 
-    let peer = peers.get(0).unwrap();
+    let peer = peers.first().unwrap();
 
     gs.handle_graft(peer, topic_hashes.clone());
 
@@ -1576,17 +1534,10 @@ fn do_forward_messages_to_explicit_peers() {
             .filter(|e| match e {
                 ToSwarm::NotifyHandler {
                     peer_id,
-                    event: HandlerIn::Message(ref m),
+                    event: HandlerIn::Message(RpcOut::Forward(m)),
                     ..
                 } => {
-                    let event = proto_to_message(m);
-                    peer_id == &peers[0]
-                        && event
-                            .messages
-                            .iter()
-                            .filter(|m| m.data == message.data)
-                            .count()
-                            > 0
+                    peer_id == &peers[0] && m.data == message.data
                 }
                 _ => false,
             })
@@ -2120,14 +2071,11 @@ fn test_flood_publish() {
     // Collect all publish messages
     let publishes = gs
         .events
-        .iter()
+        .into_iter()
         .fold(vec![], |mut collected_publish, e| match e {
             ToSwarm::NotifyHandler { event, .. } => {
-                if let HandlerIn::Message(ref m) = event {
-                    let event = proto_to_message(m);
-                    for s in &event.messages {
-                        collected_publish.push(s.clone());
-                    }
+                if let HandlerIn::Message(RpcOut::Publish(message)) = event {
+                    collected_publish.push(message);
                 }
                 collected_publish
             }
@@ -2681,14 +2629,11 @@ fn test_iwant_msg_from_peer_below_gossip_threshold_gets_ignored() {
     // the messages we are sending
     let sent_messages = gs
         .events
-        .iter()
+        .into_iter()
         .fold(vec![], |mut collected_messages, e| match e {
             ToSwarm::NotifyHandler { event, peer_id, .. } => {
-                if let HandlerIn::Message(ref m) = event {
-                    let event = proto_to_message(m);
-                    for c in &event.messages {
-                        collected_messages.push((*peer_id, c.clone()))
-                    }
+                if let HandlerIn::Message(RpcOut::Forward(message)) = event {
+                    collected_messages.push((peer_id, message));
                 }
                 collected_messages
             }
@@ -2829,14 +2774,11 @@ fn test_do_not_publish_to_peer_below_publish_threshold() {
     // Collect all publish messages
     let publishes = gs
         .events
-        .iter()
+        .into_iter()
         .fold(vec![], |mut collected_publish, e| match e {
             ToSwarm::NotifyHandler { event, peer_id, .. } => {
-                if let HandlerIn::Message(ref m) = event {
-                    let event = proto_to_message(m);
-                    for s in &event.messages {
-                        collected_publish.push((*peer_id, s.clone()));
-                    }
+                if let HandlerIn::Message(RpcOut::Publish(message)) = event {
+                    collected_publish.push((peer_id, message));
                 }
                 collected_publish
             }
@@ -2886,14 +2828,11 @@ fn test_do_not_flood_publish_to_peer_below_publish_threshold() {
     // Collect all publish messages
     let publishes = gs
         .events
-        .iter()
+        .into_iter()
         .fold(vec![], |mut collected_publish, e| match e {
             ToSwarm::NotifyHandler { event, peer_id, .. } => {
-                if let HandlerIn::Message(ref m) = event {
-                    let event = proto_to_message(m);
-                    for s in &event.messages {
-                        collected_publish.push((*peer_id, s.clone()));
-                    }
+                if let HandlerIn::Message(RpcOut::Publish(message)) = event {
+                    collected_publish.push((peer_id, message));
                 }
                 collected_publish
             }
@@ -4412,17 +4351,14 @@ fn test_ignore_too_many_iwants_from_same_peer_for_same_message() {
     assert_eq!(
         gs.events
             .iter()
-            .map(|e| match e {
+            .filter(|e| matches!(
+                e,
                 ToSwarm::NotifyHandler {
-                    event: HandlerIn::Message(ref m),
+                    event: HandlerIn::Message(RpcOut::Forward(_)),
                     ..
-                } => {
-                    let event = proto_to_message(m);
-                    event.messages.len()
                 }
-                _ => 0,
-            })
-            .sum::<usize>(),
+            ))
+            .count(),
         config.gossip_retransimission() as usize,
         "not more then gossip_retransmission many messages get sent back"
     );
@@ -4665,7 +4601,10 @@ fn test_limit_number_of_message_ids_inside_ihave() {
 
 #[test]
 fn test_iwant_penalties() {
-    let _ = env_logger::try_init();
+    use tracing_subscriber::EnvFilter;
+    let _ = tracing_subscriber::fmt()
+        .with_env_filter(EnvFilter::from_default_env())
+        .try_init();
 
     let config = ConfigBuilder::default()
         .iwant_followup_time(Duration::from_secs(4))
@@ -4821,11 +4760,8 @@ fn test_publish_to_floodsub_peers_without_flood_publish() {
         .fold(vec![], |mut collected_publish, e| match e {
             ToSwarm::NotifyHandler { peer_id, event, .. } => {
                 if peer_id == &p1 || peer_id == &p2 {
-                    if let HandlerIn::Message(ref m) = event {
-                        let event = proto_to_message(m);
-                        for s in &event.messages {
-                            collected_publish.push(s.clone());
-                        }
+                    if let HandlerIn::Message(RpcOut::Publish(message)) = event {
+                        collected_publish.push(message);
                     }
                 }
                 collected_publish
@@ -4878,11 +4814,8 @@ fn test_do_not_use_floodsub_in_fanout() {
         .fold(vec![], |mut collected_publish, e| match e {
             ToSwarm::NotifyHandler { peer_id, event, .. } => {
                 if peer_id == &p1 || peer_id == &p2 {
-                    if let HandlerIn::Message(ref m) = event {
-                        let event = proto_to_message(m);
-                        for s in &event.messages {
-                            collected_publish.push(s.clone());
-                        }
+                    if let HandlerIn::Message(RpcOut::Publish(message)) = event {
+                        collected_publish.push(message);
                     }
                 }
                 collected_publish
@@ -5065,86 +4998,6 @@ fn test_public_api() {
 }
 
 #[test]
-fn test_msg_id_fn_only_called_once_with_fast_message_ids() {
-    struct Pointers {
-        slow_counter: u32,
-        fast_counter: u32,
-    }
-
-    let mut counters = Pointers {
-        slow_counter: 0,
-        fast_counter: 0,
-    };
-
-    let counters_pointer: *mut Pointers = &mut counters;
-
-    let counters_address = counters_pointer as u64;
-
-    macro_rules! get_counters_pointer {
-        ($m: expr) => {{
-            let mut address_bytes: [u8; 8] = Default::default();
-            address_bytes.copy_from_slice($m.as_slice());
-            let address = u64::from_be_bytes(address_bytes);
-            address as *mut Pointers
-        }};
-    }
-
-    macro_rules! get_counters_and_hash {
-        ($m: expr) => {{
-            let mut hasher = DefaultHasher::new();
-            $m.hash(&mut hasher);
-            let id = hasher.finish().to_be_bytes().into();
-            (id, get_counters_pointer!($m))
-        }};
-    }
-
-    let message_id_fn = |m: &Message| -> MessageId {
-        let (mut id, mut counters_pointer): (MessageId, *mut Pointers) =
-            get_counters_and_hash!(&m.data);
-        unsafe {
-            (*counters_pointer).slow_counter += 1;
-        }
-        id.0.reverse();
-        id
-    };
-    let fast_message_id_fn = |m: &RawMessage| -> FastMessageId {
-        let (id, mut counters_pointer) = get_counters_and_hash!(&m.data);
-        unsafe {
-            (*counters_pointer).fast_counter += 1;
-        }
-        id
-    };
-    let config = ConfigBuilder::default()
-        .message_id_fn(message_id_fn)
-        .fast_message_id_fn(fast_message_id_fn)
-        .build()
-        .unwrap();
-    let (mut gs, _, topic_hashes) = inject_nodes1()
-        .peer_no(0)
-        .topics(vec![String::from("topic1")])
-        .to_subscribe(true)
-        .gs_config(config)
-        .create_network();
-
-    let message = RawMessage {
-        source: None,
-        data: counters_address.to_be_bytes().to_vec(),
-        sequence_number: None,
-        topic: topic_hashes[0].clone(),
-        signature: None,
-        key: None,
-        validated: true,
-    };
-
-    for _ in 0..5 {
-        gs.handle_received_message(message.clone(), &PeerId::random());
-    }
-
-    assert_eq!(counters.fast_counter, 5);
-    assert_eq!(counters.slow_counter, 1);
-}
-
-#[test]
 fn test_subscribe_to_invalid_topic() {
     let t1 = Topic::new("t1");
     let t2 = Topic::new("t2");
@@ -5208,7 +5061,7 @@ fn test_subscribe_and_graft_with_negative_score() {
                 p2,
                 connection_id,
                 HandlerEvent::Message {
-                    rpc: proto_to_message(&message),
+                    rpc: proto_to_message(&message.into_protobuf()),
                     invalid_messages: vec![],
                 },
             );

@@ -64,18 +64,15 @@ mod error;
 mod pending;
 mod ready;
 mod select;
-mod transfer;
 
+pub(crate) use apply::{
+    apply, apply_inbound, apply_outbound, InboundUpgradeApply, OutboundUpgradeApply,
+};
+pub(crate) use error::UpgradeError;
 use futures::future::Future;
 
 pub use self::{
-    apply::{apply, apply_inbound, apply_outbound, InboundUpgradeApply, OutboundUpgradeApply},
-    denied::DeniedUpgrade,
-    error::UpgradeError,
-    pending::PendingUpgrade,
-    ready::ReadyUpgrade,
-    select::SelectUpgrade,
-    transfer::{read_length_prefixed, read_varint, write_length_prefixed, write_varint},
+    denied::DeniedUpgrade, pending::PendingUpgrade, ready::ReadyUpgrade, select::SelectUpgrade,
 };
 pub use crate::Negotiated;
 pub use multistream_select::{NegotiatedComplete, NegotiationError, ProtocolError, Version};
@@ -122,4 +119,36 @@ pub trait OutboundUpgrade<C>: UpgradeInfo {
     ///
     /// The `info` is the identifier of the protocol, as produced by `protocol_info`.
     fn upgrade_outbound(self, socket: C, info: Self::Info) -> Self::Future;
+}
+
+/// Possible upgrade on an inbound connection
+pub trait InboundConnectionUpgrade<T>: UpgradeInfo {
+    /// Output after the upgrade has been successfully negotiated and the handshake performed.
+    type Output;
+    /// Possible error during the handshake.
+    type Error;
+    /// Future that performs the handshake with the remote.
+    type Future: Future<Output = Result<Self::Output, Self::Error>>;
+
+    /// After we have determined that the remote supports one of the protocols we support, this
+    /// method is called to start the handshake.
+    ///
+    /// The `info` is the identifier of the protocol, as produced by `protocol_info`.
+    fn upgrade_inbound(self, socket: T, info: Self::Info) -> Self::Future;
+}
+
+/// Possible upgrade on an outbound connection
+pub trait OutboundConnectionUpgrade<T>: UpgradeInfo {
+    /// Output after the upgrade has been successfully negotiated and the handshake performed.
+    type Output;
+    /// Possible error during the handshake.
+    type Error;
+    /// Future that performs the handshake with the remote.
+    type Future: Future<Output = Result<Self::Output, Self::Error>>;
+
+    /// After we have determined that the remote supports one of the protocols we support, this
+    /// method is called to start the handshake.
+    ///
+    /// The `info` is the identifier of the protocol, as produced by `protocol_info`.
+    fn upgrade_outbound(self, socket: T, info: Self::Info) -> Self::Future;
 }

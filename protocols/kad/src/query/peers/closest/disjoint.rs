@@ -19,7 +19,7 @@
 // DEALINGS IN THE SOFTWARE.
 
 use super::*;
-use crate::kbucket_priv::{Key, KeyBytes};
+use crate::kbucket::{Key, KeyBytes};
 use instant::Instant;
 use libp2p_identity::PeerId;
 use std::{
@@ -31,7 +31,6 @@ use std::{
 /// Wraps around a set of [`ClosestPeersIter`], enforcing a disjoint discovery
 /// path per configured parallelism according to the S/Kademlia paper.
 pub(crate) struct ClosestDisjointPeersIter {
-    config: ClosestPeersIterConfig,
     target: KeyBytes,
 
     /// The set of wrapped [`ClosestPeersIter`].
@@ -51,6 +50,7 @@ pub(crate) struct ClosestDisjointPeersIter {
 
 impl ClosestDisjointPeersIter {
     /// Creates a new iterator with a default configuration.
+    #[cfg(test)]
     pub(crate) fn new<I>(target: KeyBytes, known_closest_peers: I) -> Self
     where
         I: IntoIterator<Item = Key<PeerId>>,
@@ -88,7 +88,6 @@ impl ClosestDisjointPeersIter {
         let iters_len = iters.len();
 
         ClosestDisjointPeersIter {
-            config,
             target: target.into(),
             iters,
             iter_order: (0..iters_len)
@@ -188,10 +187,6 @@ impl ClosestDisjointPeersIter {
         }
 
         updated
-    }
-
-    pub(crate) fn is_waiting(&self, peer: &PeerId) -> bool {
-        self.iters.iter().any(|i| i.is_waiting(peer))
     }
 
     pub(crate) fn next(&mut self, now: Instant) -> PeersIterState<'_> {
@@ -411,9 +406,8 @@ impl<I: Iterator<Item = Key<PeerId>>> Iterator for ResultIter<I> {
             .iter_mut()
             // Find the iterator with the next closest peer.
             .fold(Option::<&mut Peekable<_>>::None, |iter_a, iter_b| {
-                let iter_a = match iter_a {
-                    Some(iter_a) => iter_a,
-                    None => return Some(iter_b),
+                let Some(iter_a) = iter_a else {
+                    return Some(iter_b);
                 };
 
                 match (iter_a.peek(), iter_b.peek()) {

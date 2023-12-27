@@ -21,10 +21,9 @@
 use crate::peer_score::RejectReason;
 use crate::MessageId;
 use crate::ValidationError;
+use instant::Instant;
 use libp2p_identity::PeerId;
-use log::debug;
 use std::collections::HashMap;
-use wasm_timer::Instant;
 
 /// Tracks recently sent `IWANT` messages and checks if peers respond to them.
 #[derive(Default)]
@@ -48,7 +47,7 @@ impl GossipPromises {
             // If a promise for this message id and peer already exists we don't update the expiry!
             self.promises
                 .entry(message_id.clone())
-                .or_insert_with(HashMap::new)
+                .or_default()
                 .entry(peer)
                 .or_insert(expires);
         }
@@ -85,9 +84,10 @@ impl GossipPromises {
                 if *expires < now {
                     let count = result.entry(*peer_id).or_insert(0);
                     *count += 1;
-                    debug!(
-                        "[Penalty] The peer {} broke the promise to deliver message {} in time!",
-                        peer_id, msg
+                    tracing::debug!(
+                        peer=%peer_id,
+                        message=%msg,
+                        "[Penalty] The peer broke the promise to deliver message in time!"
                     );
                     false
                 } else {

@@ -1,4 +1,81 @@
-## 0.52.0 - unreleased
+## 0.53.2
+
+- Allow `SwarmBuilder::with_bandwidth_metrics` after `SwarmBuilder::with_websocket`.
+  See [PR 4937](https://github.com/libp2p/rust-libp2p/pull/4937).
+
+## 0.53.1
+
+- Allow `SwarmBuilder::with_quic_config` to be called without `with_tcp` first.
+  See [PR 4821](https://github.com/libp2p/rust-libp2p/pull/4821).
+- Introduce `SwarmBuilder::with_dns_config`.
+  See [PR 4808](https://github.com/libp2p/rust-libp2p/pull/4808).
+
+## 0.53.0
+
+- Raise MSRV to 1.73.
+  See [PR 4692](https://github.com/libp2p/rust-libp2p/pull/4692).
+- Remove deprecated `libp2p-wasm-ext`.
+  Users should use `libp2p-websocket-websys` instead.
+  See [PR 4694](https://github.com/libp2p/rust-libp2p/pull/4694).
+- Remove deprecated `libp2p-deflate`.
+  See [issue 4522](https://github.com/libp2p/rust-libp2p/issues/4522) for details.
+  See [PR 4729](https://github.com/libp2p/rust-libp2p/pull/4729).
+- Remove deprecated `development_transport`.
+  Use `libp2p::SwarmBuilder` instead.
+  See [PR 4732](https://github.com/libp2p/rust-libp2p/pull/4732).
+- Introduce `SwarmBuilder::with_bandwidth_metrics` exposing Prometheus bandwidth metrics per transport protocol stack and direction (in-/ outbound).
+  Deprecate `Transport::with_bandwidth_logging` and `SwarmBuilder::with_bandwidth_logging` in favor of the new `SwarmBuilder::with_bandwidth_metrics`.
+  See [PR 4727](https://github.com/libp2p/rust-libp2p/pull/4727).
+
+## 0.52.4
+
+- Introduce `libp2p::websocket_websys` module behind `websocket-websys` feature flag.
+  This supersedes the existing `libp2p::wasm_ext` module which is now deprecated.
+  See [PR 3679].
+
+- Introduce a new `libp2p::SwarmBuilder` in favor of the now deprecated `libp2p::swarm::SwarmBuilder`.
+  See `libp2p::SwarmBuilder` docs on how to use the new builder.
+  Also see [PR 4120].
+
+- Update `libp2p-identity` version to 0.2.6.
+  Under the hood, we feature-flagged `libp2p-identity`'s `rand` dependency but it is enabled by default when using `libp2p`.
+  See [PR 4349].
+
+[PR 3679]: https://github.com/libp2p/rust-libp2p/pull/3679
+[PR 4120]: https://github.com/libp2p/rust-libp2p/pull/4120
+[PR 4349]: https://github.com/libp2p/rust-libp2p/pull/4349
+
+## 0.52.3
+
+- Add `libp2p-quic` stable release.
+
+## 0.52.2
+
+- Include gossipsub when compiling for wasm.
+  See [PR 4217].
+
+- Add `json` feature which exposes `request_response::json`.
+  See [PR 4188].
+
+- Add support for UPnP via the IGD protocol.
+  See [PR 4156].
+
+- Add `libp2p-memory-connection-limits` providing memory usage based connection limit configurations.
+  See [PR 4281].
+
+[PR 4188]: https://github.com/libp2p/rust-libp2p/pull/4188
+[PR 4156]: https://github.com/libp2p/rust-libp2p/pull/4156
+[PR 4217]: https://github.com/libp2p/rust-libp2p/pull/4217
+[PR 4281]: https://github.com/libp2p/rust-libp2p/pull/4281
+
+## 0.52.1
+
+- Add `libp2p-webtransport-websys` providing WebTransport for WASM environments.
+  See [PR 4015].
+
+[PR 4015]: https://github.com/libp2p/rust-libp2p/pull/4015
+
+## 0.52.0
 
 - Raise MSRV to 1.65.
   See [PR 3715].
@@ -10,14 +87,32 @@
   We encourage users to use `StreamProtocol` when implementing `UpgradeInfo`.
   See [PR 3746].
 
-[PR 3746]: https://github.com/libp2p/rust-libp2p/pull/3746
+- Rename `NetworkBehaviour::OutEvent` to `NetworkBehaviour::ToSwarm`, `ConnectionHandler::InEvent` to `ConnectionHandler::FromBehaviour`, `ConnectionHandler::OutEvent` to `ConnectionHandler::ToBehaviour`. See [PR 3848].
+
+- Remove deprecated `mplex` module.
+  You can still depend on `libp2p-mplex` directly but we strongly encourage to migrate to `yamux`.
+  This also removes `mplex` from the `development_transport` and `tokio_development_transport` functions.
+  See [PR 3920].
+
+- Remove `libp2p-perf` protocol. To use `libp2p-perf` one needs to import it directly.
+  See [PR 3990].
+
+- Remove `libp2p-quic` and `libp2p-webrtc` protocols.
+  These are in alpha status and should be depended on directly.
+  See [PR 4041].
+
 [PR 3715]: https://github.com/libp2p/rust-libp2p/pull/3715
+[PR 3746]: https://github.com/libp2p/rust-libp2p/pull/3746
+[PR 3848]: https://github.com/libp2p/rust-libp2p/pull/3848
+[PR 3920]: https://github.com/libp2p/rust-libp2p/pull/3920
+[PR 3990]: https://github.com/libp2p/rust-libp2p/pull/3990
+[PR 4041]: https://github.com/libp2p/rust-libp2p/pull/4041
 
 ## 0.51.3
 
 - Deprecate the `mplex` feature.
-The recommended baseline stream multiplexer is `yamux`.
-See [PR 3689].
+  The recommended baseline stream multiplexer is `yamux`.
+  See [PR 3689].
 
 [PR 3689]: https://github.com/libp2p/rust-libp2p/pull/3689
 

@@ -1,8 +1,24 @@
-## 0.13.0 - unreleased
+## 0.14.0
+
+
+## 0.13.1
+- Refresh registration upon a change in external addresses.
+  See [PR 4629].
+
+[PR 4629]: https://github.com/libp2p/rust-libp2p/pull/4629
+
+## 0.13.0
+
+- Changed the signature of the function `client::Behavior::register()`,
+  it returns `Result<(), RegisterError>` now.
+  Remove the `Remote` variant from `RegisterError` and instead put the information from `Remote`
+  directly into the variant from the `Event` enum.
+  See [PR 4073].
 
 - Raise MSRV to 1.65.
   See [PR 3715].
 
+[PR 4073]: https://github.com/libp2p/rust-libp2p/pull/4073
 [PR 3715]: https://github.com/libp2p/rust-libp2p/pull/3715
 
 ## 0.12.1
@@ -25,7 +41,7 @@
 
 - Update to `libp2p-swarm` `v0.41.0`.
 
-- Replace `Client` and `Server`'s `NetworkBehaviour` implemention `inject_*` methods with the new `on_*` methods.
+- Replace `Client` and `Server`'s `NetworkBehaviour` implementation `inject_*` methods with the new `on_*` methods.
   See [PR 3011].
 
 - Update `rust-version` to reflect the actual MSRV: 1.62.0. See [PR 3090].

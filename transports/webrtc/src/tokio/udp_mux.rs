@@ -175,7 +175,7 @@ impl UDPMuxNewAddr {
                 None
             }
             Err(e) => {
-                log::debug!("{} (addr={})", e, addr);
+                tracing::debug!(address=%addr, "{}", e);
                 None
             }
         }
@@ -337,12 +337,12 @@ impl UDPMuxNewAddr {
 
                             let conn = match conn {
                                 // If we couldn't find the connection based on source address, see if
-                                // this is a STUN mesage and if so if we can find the connection based on ufrag.
+                                // this is a STUN message and if so if we can find the connection based on ufrag.
                                 None if is_stun_message(read.filled()) => {
                                     match self.conn_from_stun_message(read.filled(), &addr) {
                                         Some(Ok(s)) => Some(s),
                                         Some(Err(e)) => {
-                                            log::debug!("addr={}: Error when querying existing connections: {}", &addr, e);
+                                            tracing::debug!(address=%&addr, "Error when querying existing connections: {}", e);
                                             continue;
                                         }
                                         None => None,
@@ -357,20 +357,20 @@ impl UDPMuxNewAddr {
                                     if !self.new_addrs.contains(&addr) {
                                         match ufrag_from_stun_message(read.filled(), false) {
                                             Ok(ufrag) => {
-                                                log::trace!(
-                                                "Notifying about new address addr={} from ufrag={}",
-                                                &addr,
-                                                ufrag
-                                            );
+                                                tracing::trace!(
+                                                    address=%&addr,
+                                                    %ufrag,
+                                                    "Notifying about new address from ufrag",
+                                                );
                                                 self.new_addrs.insert(addr);
                                                 return Poll::Ready(UDPMuxEvent::NewAddr(
                                                     NewAddr { addr, ufrag },
                                                 ));
                                             }
                                             Err(e) => {
-                                                log::debug!(
-                                                    "Unknown address addr={} (non STUN packet: {})",
-                                                    &addr,
+                                                tracing::debug!(
+                                                    address=%&addr,
+                                                    "Unknown address (non STUN packet: {})",
                                                     e
                                                 );
                                             }
@@ -384,10 +384,10 @@ impl UDPMuxNewAddr {
                                         async move {
                                             if let Err(err) = conn.write_packet(&packet, addr).await
                                             {
-                                                log::error!(
-                                                    "Failed to write packet: {} (addr={})",
+                                                tracing::error!(
+                                                    address=%addr,
+                                                    "Failed to write packet: {}",
                                                     err,
-                                                    addr
                                                 );
                                             }
                                         }
@@ -401,10 +401,10 @@ impl UDPMuxNewAddr {
                         Poll::Pending => {}
                         Poll::Ready(Err(err)) if err.kind() == ErrorKind::TimedOut => {}
                         Poll::Ready(Err(err)) if err.kind() == ErrorKind::ConnectionReset => {
-                            log::debug!("ConnectionReset by remote client {err:?}")
+                            tracing::debug!("ConnectionReset by remote client {err:?}")
                         }
                         Poll::Ready(Err(err)) => {
-                            log::error!("Could not read udp packet: {}", err);
+                            tracing::error!("Could not read udp packet: {}", err);
                             return Poll::Ready(UDPMuxEvent::Error(err));
                         }
                     }
@@ -470,7 +470,7 @@ impl UDPMux for UdpMuxHandle {
 
     async fn remove_conn_by_ufrag(&self, ufrag: &str) {
         if let Err(e) = self.remove_sender.send(ufrag.to_owned()).await {
-            log::debug!("Failed to send message through channel: {:?}", e);
+            tracing::debug!("Failed to send message through channel: {:?}", e);
         }
     }
 }
@@ -511,12 +511,12 @@ impl UDPMuxWriter for UdpMuxWriterHandle {
         {
             Ok(()) => {}
             Err(e) => {
-                log::debug!("Failed to send message through channel: {:?}", e);
+                tracing::debug!("Failed to send message through channel: {:?}", e);
                 return;
             }
         }
 
-        log::debug!("Registered {} for {}", addr, conn.key());
+        tracing::debug!(address=%addr, connection=%conn.key(), "Registered address for connection");
     }
 
     async fn send_to(&self, buf: &[u8], target: &SocketAddr) -> Result<usize, Error> {

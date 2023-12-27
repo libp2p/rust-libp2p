@@ -18,8 +18,6 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-#[allow(deprecated)]
-use crate::connection::ConnectionLimit;
 use crate::transport::TransportError;
 use crate::Multiaddr;
 use crate::{ConnectedPoint, PeerId};
@@ -27,47 +25,36 @@ use std::{fmt, io};
 
 /// Errors that can occur in the context of an established `Connection`.
 #[derive(Debug)]
-pub enum ConnectionError<THandlerErr> {
+pub enum ConnectionError {
     /// An I/O error occurred on the connection.
     // TODO: Eventually this should also be a custom error?
     IO(io::Error),
 
     /// The connection keep-alive timeout expired.
     KeepAliveTimeout,
-
-    /// The connection handler produced an error.
-    Handler(THandlerErr),
 }
 
-impl<THandlerErr> fmt::Display for ConnectionError<THandlerErr>
-where
-    THandlerErr: fmt::Display,
-{
+impl fmt::Display for ConnectionError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             ConnectionError::IO(err) => write!(f, "Connection error: I/O error: {err}"),
             ConnectionError::KeepAliveTimeout => {
                 write!(f, "Connection closed due to expired keep-alive timeout.")
             }
-            ConnectionError::Handler(err) => write!(f, "Connection error: Handler error: {err}"),
         }
     }
 }
 
-impl<THandlerErr> std::error::Error for ConnectionError<THandlerErr>
-where
-    THandlerErr: std::error::Error + 'static,
-{
+impl std::error::Error for ConnectionError {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self {
             ConnectionError::IO(err) => Some(err),
             ConnectionError::KeepAliveTimeout => None,
-            ConnectionError::Handler(err) => Some(err),
         }
     }
 }
 
-impl<THandlerErr> From<io::Error> for ConnectionError<THandlerErr> {
+impl From<io::Error> for ConnectionError {
     fn from(error: io::Error) -> Self {
         ConnectionError::IO(error)
     }
@@ -90,15 +77,6 @@ pub enum PendingConnectionError<TTransErr> {
     /// An error occurred while negotiating the transport protocol(s) on a connection.
     Transport(TTransErr),
 
-    /// The connection was dropped because the connection limit
-    /// for a peer has been reached.
-    #[deprecated(
-        note = "Use `libp2p::connection_limits` instead and handle `{Dial,Listen}Error::Denied::cause`.",
-        since = "0.42.1"
-    )]
-    #[allow(deprecated)]
-    ConnectionLimit(ConnectionLimit),
-
     /// Pending connection attempt has been aborted.
     Aborted,
 
@@ -117,10 +95,6 @@ impl<T> PendingConnectionError<T> {
     pub fn map<U>(self, f: impl FnOnce(T) -> U) -> PendingConnectionError<U> {
         match self {
             PendingConnectionError::Transport(t) => PendingConnectionError::Transport(f(t)),
-            #[allow(deprecated)]
-            PendingConnectionError::ConnectionLimit(l) => {
-                PendingConnectionError::ConnectionLimit(l)
-            }
             PendingConnectionError::Aborted => PendingConnectionError::Aborted,
             PendingConnectionError::WrongPeerId { obtained, endpoint } => {
                 PendingConnectionError::WrongPeerId { obtained, endpoint }
@@ -145,10 +119,6 @@ where
                     "Pending connection: Transport error on connection: {err}"
                 )
             }
-            #[allow(deprecated)]
-            PendingConnectionError::ConnectionLimit(l) => {
-                write!(f, "Connection error: Connection limit: {l}.")
-            }
             PendingConnectionError::WrongPeerId { obtained, endpoint } => {
                 write!(
                     f,
@@ -172,8 +142,6 @@ where
             PendingConnectionError::WrongPeerId { .. } => None,
             PendingConnectionError::LocalPeerId { .. } => None,
             PendingConnectionError::Aborted => None,
-            #[allow(deprecated)]
-            PendingConnectionError::ConnectionLimit(..) => None,
         }
     }
 }

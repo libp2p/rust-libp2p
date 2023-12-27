@@ -57,10 +57,8 @@ use std::pin::Pin;
 
 pub use self::boxed::StreamMuxerBox;
 pub use self::boxed::SubstreamBox;
-pub use self::singleton::SingletonMuxer;
 
 mod boxed;
-mod singleton;
 
 /// Provides multiplexing for a connection by allowing users to open substreams.
 ///
@@ -114,6 +112,7 @@ pub trait StreamMuxer {
 }
 
 /// An event produced by a [`StreamMuxer`].
+#[derive(Debug)]
 pub enum StreamMuxerEvent {
     /// The address of the remote has changed.
     AddressChange(Multiaddr),

@@ -27,7 +27,7 @@ use libp2p_identity::PeerId;
 use x509_parser::{prelude::*, signature_algorithm::SignatureAlgorithm};
 
 /// The libp2p Public Key Extension is a X.509 extension
-/// with the Object Identier 1.3.6.1.4.1.53594.1.1,
+/// with the Object Identifier 1.3.6.1.4.1.53594.1.1,
 /// allocated by IANA to the libp2p project at Protocol Labs.
 const P2P_EXT_OID: [u64; 9] = [1, 3, 6, 1, 4, 1, 53594, 1, 1];
 
@@ -286,7 +286,7 @@ impl P2pCertificate<'_> {
             // In particular, MD5 and SHA1 MUST NOT be used.
             RSA_PKCS1_SHA1 => return Err(webpki::Error::UnsupportedSignatureAlgorithm),
             ECDSA_SHA1_Legacy => return Err(webpki::Error::UnsupportedSignatureAlgorithm),
-            Unknown(_) => return Err(webpki::Error::UnsupportedSignatureAlgorithm),
+            _ => return Err(webpki::Error::UnsupportedSignatureAlgorithm),
         };
         let spki = &self.certificate.tbs_certificate.subject_pki;
         let key = signature::UnparsedPublicKey::new(
@@ -374,7 +374,7 @@ impl P2pCertificate<'_> {
             }
             if signature_algorithm.algorithm == OID_PKCS1_RSASSAPSS {
                 // According to https://datatracker.ietf.org/doc/html/rfc4055#section-3.1:
-                // Inside of params there shuld be a sequence of:
+                // Inside of params there should be a sequence of:
                 // - Hash Algorithm
                 // - Mask Algorithm
                 // - Salt Length

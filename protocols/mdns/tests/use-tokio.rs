@@ -19,20 +19,25 @@
 // DEALINGS IN THE SOFTWARE.use futures::StreamExt;
 use futures::future::Either;
 use libp2p_mdns::{tokio::Behaviour, Config, Event};
-use libp2p_swarm::Swarm;
+use libp2p_swarm::{Swarm, SwarmEvent};
 use libp2p_swarm_test::SwarmExt as _;
 use std::time::Duration;
+use tracing_subscriber::EnvFilter;
 
 #[tokio::test]
 async fn test_discovery_tokio_ipv4() {
-    env_logger::try_init().ok();
+    let _ = tracing_subscriber::fmt()
+        .with_env_filter(EnvFilter::from_default_env())
+        .try_init();
 
     run_discovery_test(Config::default()).await
 }
 
 #[tokio::test]
 async fn test_discovery_tokio_ipv6() {
-    env_logger::try_init().ok();
+    let _ = tracing_subscriber::fmt()
+        .with_env_filter(EnvFilter::from_default_env())
+        .try_init();
 
     let config = Config {
         enable_ipv6: true,
@@ -43,7 +48,9 @@ async fn test_discovery_tokio_ipv6() {
 
 #[tokio::test]
 async fn test_expired_tokio() {
-    env_logger::try_init().ok();
+    let _ = tracing_subscriber::fmt()
+        .with_env_filter(EnvFilter::from_default_env())
+        .try_init();
 
     let config = Config {
         ttl: Duration::from_secs(1),
@@ -104,7 +111,20 @@ async fn run_discovery_test(config: Config) {
 async fn create_swarm(config: Config) -> Swarm<Behaviour> {
     let mut swarm =
         Swarm::new_ephemeral(|key| Behaviour::new(config, key.public().to_peer_id()).unwrap());
-    swarm.listen().await;
+
+    // Manually listen on all interfaces because mDNS only works for non-loopback addresses.
+    let expected_listener_id = swarm
+        .listen_on("/ip4/0.0.0.0/tcp/0".parse().unwrap())
+        .unwrap();
+
+    swarm
+        .wait(|e| match e {
+            SwarmEvent::NewListenAddr { listener_id, .. } => {
+                (listener_id == expected_listener_id).then_some(())
+            }
+            _ => None,
+        })
+        .await;
 
     swarm
 }

@@ -27,18 +27,16 @@ use std::{
 
 use libp2p_identity::PeerId;
 use libp2p_swarm::{
-    ConnectionId, FromSwarm, NetworkBehaviour, PollParameters, THandlerInEvent, THandlerOutEvent,
-    ToSwarm,
+    ConnectionId, FromSwarm, NetworkBehaviour, THandlerInEvent, THandlerOutEvent, ToSwarm,
 };
 
 use crate::server::handler::Handler;
-
-use super::RunStats;
+use crate::Run;
 
 #[derive(Debug)]
 pub struct Event {
     pub remote_peer_id: PeerId,
-    pub stats: RunStats,
+    pub stats: Run,
 }
 
 #[derive(Default)]
@@ -55,7 +53,7 @@ impl Behaviour {
 
 impl NetworkBehaviour for Behaviour {
     type ConnectionHandler = Handler;
-    type OutEvent = Event;
+    type ToSwarm = Event;
 
     fn handle_established_inbound_connection(
         &mut self,
@@ -77,22 +75,7 @@ impl NetworkBehaviour for Behaviour {
         Ok(Handler::default())
     }
 
-    fn on_swarm_event(&mut self, event: FromSwarm<Self::ConnectionHandler>) {
-        match event {
-            FromSwarm::ConnectionEstablished(_) => {}
-            FromSwarm::ConnectionClosed(_) => {}
-            FromSwarm::AddressChange(_) => {}
-            FromSwarm::DialFailure(_) => {}
-            FromSwarm::ListenFailure(_) => {}
-            FromSwarm::NewListener(_) => {}
-            FromSwarm::NewListenAddr(_) => {}
-            FromSwarm::ExpiredListenAddr(_) => {}
-            FromSwarm::ListenerError(_) => {}
-            FromSwarm::ListenerClosed(_) => {}
-            FromSwarm::NewExternalAddr(_) => {}
-            FromSwarm::ExpiredExternalAddr(_) => {}
-        }
-    }
+    fn on_swarm_event(&mut self, _event: FromSwarm) {}
 
     fn on_connection_handler_event(
         &mut self,
@@ -106,11 +89,8 @@ impl NetworkBehaviour for Behaviour {
         }))
     }
 
-    fn poll(
-        &mut self,
-        _cx: &mut Context<'_>,
-        _: &mut impl PollParameters,
-    ) -> Poll<ToSwarm<Self::OutEvent, THandlerInEvent<Self>>> {
+    #[tracing::instrument(level = "trace", name = "NetworkBehaviour::poll", skip(self))]
+    fn poll(&mut self, _: &mut Context<'_>) -> Poll<ToSwarm<Self::ToSwarm, THandlerInEvent<Self>>> {
         if let Some(event) = self.queued_events.pop_front() {
             return Poll::Ready(event);
         }

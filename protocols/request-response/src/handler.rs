@@ -23,18 +23,17 @@ pub(crate) mod protocol;
 pub use protocol::ProtocolSupport;
 
 use crate::codec::Codec;
-use crate::handler::protocol::{RequestProtocol, ResponseProtocol};
-use crate::{RequestId, EMPTY_QUEUE_SHRINK_THRESHOLD};
+use crate::handler::protocol::Protocol;
+use crate::{InboundRequestId, OutboundRequestId, EMPTY_QUEUE_SHRINK_THRESHOLD};
 
-use futures::{channel::oneshot, future::BoxFuture, prelude::*, stream::FuturesUnordered};
-use instant::Instant;
-use libp2p_core::upgrade::{NegotiationError, UpgradeError};
+use futures::channel::mpsc;
+use futures::{channel::oneshot, prelude::*};
 use libp2p_swarm::handler::{
     ConnectionEvent, DialUpgradeError, FullyNegotiatedInbound, FullyNegotiatedOutbound,
     ListenUpgradeError,
 };
 use libp2p_swarm::{
-    handler::{ConnectionHandler, ConnectionHandlerEvent, ConnectionHandlerUpgrErr, KeepAlive},
+    handler::{ConnectionHandler, ConnectionHandlerEvent, StreamUpgradeError},
     SubstreamProtocol,
 };
 use smallvec::SmallVec;
@@ -58,34 +57,34 @@ where
     inbound_protocols: SmallVec<[TCodec::Protocol; 2]>,
     /// The request/response message codec.
     codec: TCodec,
-    /// The keep-alive timeout of idle connections. A connection is considered
-    /// idle if there are no outbound substreams.
-    keep_alive_timeout: Duration,
-    /// The timeout for inbound and outbound substreams (i.e. request
-    /// and response processing).
-    substream_timeout: Duration,
-    /// The current connection keep-alive.
-    keep_alive: KeepAlive,
-    /// A pending fatal error that results in the connection being closed.
-    pending_error: Option<ConnectionHandlerUpgrErr<io::Error>>,
     /// Queue of events to emit in `poll()`.
     pending_events: VecDeque<Event<TCodec>>,
     /// Outbound upgrades waiting to be emitted as an `OutboundSubstreamRequest`.
-    outbound: VecDeque<RequestProtocol<TCodec>>,
-    /// Inbound upgrades waiting for the incoming request.
-    inbound: FuturesUnordered<
-        BoxFuture<
-            'static,
-            Result<
-                (
-                    (RequestId, TCodec::Request),
-                    oneshot::Sender<TCodec::Response>,
-                ),
-                oneshot::Canceled,
-            >,
-        >,
-    >,
+    pending_outbound: VecDeque<OutboundMessage<TCodec>>,
+
+    requested_outbound: VecDeque<OutboundMessage<TCodec>>,
+    /// A channel for receiving inbound requests.
+    inbound_receiver: mpsc::Receiver<(
+        InboundRequestId,
+        TCodec::Request,
+        oneshot::Sender<TCodec::Response>,
+    )>,
+    /// The [`mpsc::Sender`] for the above receiver. Cloned for each inbound request.
+    inbound_sender: mpsc::Sender<(
+        InboundRequestId,
+        TCodec::Request,
+        oneshot::Sender<TCodec::Response>,
+    )>,
+
     inbound_request_id: Arc<AtomicU64>,
+
+    worker_streams: futures_bounded::FuturesMap<RequestId, Result<Event<TCodec>, io::Error>>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+enum RequestId {
+    Inbound(InboundRequestId),
+    Outbound(OutboundRequestId),
 }
 
 impl<TCodec> Handler<TCodec>
@@ -95,96 +94,164 @@ where
     pub(super) fn new(
         inbound_protocols: SmallVec<[TCodec::Protocol; 2]>,
         codec: TCodec,
-        keep_alive_timeout: Duration,
         substream_timeout: Duration,
         inbound_request_id: Arc<AtomicU64>,
+        max_concurrent_streams: usize,
     ) -> Self {
+        let (inbound_sender, inbound_receiver) = mpsc::channel(0);
         Self {
             inbound_protocols,
             codec,
-            keep_alive: KeepAlive::Yes,
-            keep_alive_timeout,
-            substream_timeout,
-            outbound: VecDeque::new(),
-            inbound: FuturesUnordered::new(),
+            pending_outbound: VecDeque::new(),
+            requested_outbound: Default::default(),
+            inbound_receiver,
+            inbound_sender,
             pending_events: VecDeque::new(),
-            pending_error: None,
             inbound_request_id,
+            worker_streams: futures_bounded::FuturesMap::new(
+                substream_timeout,
+                max_concurrent_streams,
+            ),
         }
+    }
+
+    /// Returns the next inbound request ID.
+    fn next_inbound_request_id(&mut self) -> InboundRequestId {
+        InboundRequestId(self.inbound_request_id.fetch_add(1, Ordering::Relaxed))
     }
 
     fn on_fully_negotiated_inbound(
         &mut self,
         FullyNegotiatedInbound {
-            protocol: sent,
-            info: request_id,
+            protocol: (mut stream, protocol),
+            info: (),
         }: FullyNegotiatedInbound<
             <Self as ConnectionHandler>::InboundProtocol,
             <Self as ConnectionHandler>::InboundOpenInfo,
         >,
     ) {
-        if sent {
-            self.pending_events
-                .push_back(Event::ResponseSent(request_id))
-        } else {
-            self.pending_events
-                .push_back(Event::ResponseOmission(request_id))
+        let mut codec = self.codec.clone();
+        let request_id = self.next_inbound_request_id();
+        let mut sender = self.inbound_sender.clone();
+
+        let recv = async move {
+            // A channel for notifying the inbound upgrade when the
+            // response is sent.
+            let (rs_send, rs_recv) = oneshot::channel();
+
+            let read = codec.read_request(&protocol, &mut stream);
+            let request = read.await?;
+            sender
+                .send((request_id, request, rs_send))
+                .await
+                .expect("`ConnectionHandler` owns both ends of the channel");
+            drop(sender);
+
+            if let Ok(response) = rs_recv.await {
+                let write = codec.write_response(&protocol, &mut stream, response);
+                write.await?;
+
+                stream.close().await?;
+                Ok(Event::ResponseSent(request_id))
+            } else {
+                stream.close().await?;
+                Ok(Event::ResponseOmission(request_id))
+            }
+        };
+
+        if self
+            .worker_streams
+            .try_push(RequestId::Inbound(request_id), recv.boxed())
+            .is_err()
+        {
+            tracing::warn!("Dropping inbound stream because we are at capacity")
+        }
+    }
+
+    fn on_fully_negotiated_outbound(
+        &mut self,
+        FullyNegotiatedOutbound {
+            protocol: (mut stream, protocol),
+            info: (),
+        }: FullyNegotiatedOutbound<
+            <Self as ConnectionHandler>::OutboundProtocol,
+            <Self as ConnectionHandler>::OutboundOpenInfo,
+        >,
+    ) {
+        let message = self
+            .requested_outbound
+            .pop_front()
+            .expect("negotiated a stream without a pending message");
+
+        let mut codec = self.codec.clone();
+        let request_id = message.request_id;
+
+        let send = async move {
+            let write = codec.write_request(&protocol, &mut stream, message.request);
+            write.await?;
+            stream.close().await?;
+            let read = codec.read_response(&protocol, &mut stream);
+            let response = read.await?;
+
+            Ok(Event::Response {
+                request_id,
+                response,
+            })
+        };
+
+        if self
+            .worker_streams
+            .try_push(RequestId::Outbound(request_id), send.boxed())
+            .is_err()
+        {
+            tracing::warn!("Dropping outbound stream because we are at capacity")
         }
     }
 
     fn on_dial_upgrade_error(
         &mut self,
-        DialUpgradeError { info, error }: DialUpgradeError<
+        DialUpgradeError { error, info: () }: DialUpgradeError<
             <Self as ConnectionHandler>::OutboundOpenInfo,
             <Self as ConnectionHandler>::OutboundProtocol,
         >,
     ) {
+        let message = self
+            .requested_outbound
+            .pop_front()
+            .expect("negotiated a stream without a pending message");
+
         match error {
-            ConnectionHandlerUpgrErr::Timeout => {
-                self.pending_events.push_back(Event::OutboundTimeout(info));
+            StreamUpgradeError::Timeout => {
+                self.pending_events
+                    .push_back(Event::OutboundTimeout(message.request_id));
             }
-            ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Select(NegotiationError::Failed)) => {
+            StreamUpgradeError::NegotiationFailed => {
                 // The remote merely doesn't support the protocol(s) we requested.
                 // This is no reason to close the connection, which may
                 // successfully communicate with other protocols already.
                 // An event is reported to permit user code to react to the fact that
                 // the remote peer does not support the requested protocol(s).
                 self.pending_events
-                    .push_back(Event::OutboundUnsupportedProtocols(info));
+                    .push_back(Event::OutboundUnsupportedProtocols(message.request_id));
             }
-            _ => {
-                // Anything else is considered a fatal error or misbehaviour of
-                // the remote peer and results in closing the connection.
-                self.pending_error = Some(error);
+            StreamUpgradeError::Apply(e) => void::unreachable(e),
+            StreamUpgradeError::Io(e) => {
+                tracing::debug!(
+                    "outbound stream for request {} failed: {e}, retrying",
+                    message.request_id
+                );
+                self.requested_outbound.push_back(message);
             }
         }
     }
     fn on_listen_upgrade_error(
         &mut self,
-        ListenUpgradeError { info, error }: ListenUpgradeError<
+        ListenUpgradeError { error, .. }: ListenUpgradeError<
             <Self as ConnectionHandler>::InboundOpenInfo,
             <Self as ConnectionHandler>::InboundProtocol,
         >,
     ) {
-        match error {
-            ConnectionHandlerUpgrErr::Timeout => {
-                self.pending_events.push_back(Event::InboundTimeout(info))
-            }
-            ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Select(NegotiationError::Failed)) => {
-                // The local peer merely doesn't support the protocol(s) requested.
-                // This is no reason to close the connection, which may
-                // successfully communicate with other protocols already.
-                // An event is reported to permit user code to react to the fact that
-                // the local peer does not support the requested protocol(s).
-                self.pending_events
-                    .push_back(Event::InboundUnsupportedProtocols(info));
-            }
-            _ => {
-                // Anything else is considered a fatal error or misbehaviour of
-                // the remote peer and results in closing the connection.
-                self.pending_error = Some(error);
-            }
-        }
+        void::unreachable(error)
     }
 }
 
@@ -195,30 +262,36 @@ where
 {
     /// A request has been received.
     Request {
-        request_id: RequestId,
+        request_id: InboundRequestId,
         request: TCodec::Request,
         sender: oneshot::Sender<TCodec::Response>,
     },
     /// A response has been received.
     Response {
-        request_id: RequestId,
+        request_id: OutboundRequestId,
         response: TCodec::Response,
     },
     /// A response to an inbound request has been sent.
-    ResponseSent(RequestId),
+    ResponseSent(InboundRequestId),
     /// A response to an inbound request was omitted as a result
     /// of dropping the response `sender` of an inbound `Request`.
-    ResponseOmission(RequestId),
+    ResponseOmission(InboundRequestId),
     /// An outbound request timed out while sending the request
     /// or waiting for the response.
-    OutboundTimeout(RequestId),
+    OutboundTimeout(OutboundRequestId),
     /// An outbound request failed to negotiate a mutually supported protocol.
-    OutboundUnsupportedProtocols(RequestId),
+    OutboundUnsupportedProtocols(OutboundRequestId),
+    OutboundStreamFailed {
+        request_id: OutboundRequestId,
+        error: io::Error,
+    },
     /// An inbound request timed out while waiting for the request
     /// or sending the response.
-    InboundTimeout(RequestId),
-    /// An inbound request failed to negotiate a mutually supported protocol.
-    InboundUnsupportedProtocols(RequestId),
+    InboundTimeout(InboundRequestId),
+    InboundStreamFailed {
+        request_id: InboundRequestId,
+        error: io::Error,
+    },
 }
 
 impl<TCodec: Codec> fmt::Debug for Event<TCodec> {
@@ -255,15 +328,36 @@ impl<TCodec: Codec> fmt::Debug for Event<TCodec> {
                 .debug_tuple("Event::OutboundUnsupportedProtocols")
                 .field(request_id)
                 .finish(),
+            Event::OutboundStreamFailed { request_id, error } => f
+                .debug_struct("Event::OutboundStreamFailed")
+                .field("request_id", &request_id)
+                .field("error", &error)
+                .finish(),
             Event::InboundTimeout(request_id) => f
                 .debug_tuple("Event::InboundTimeout")
                 .field(request_id)
                 .finish(),
-            Event::InboundUnsupportedProtocols(request_id) => f
-                .debug_tuple("Event::InboundUnsupportedProtocols")
-                .field(request_id)
+            Event::InboundStreamFailed { request_id, error } => f
+                .debug_struct("Event::InboundStreamFailed")
+                .field("request_id", &request_id)
+                .field("error", &error)
                 .finish(),
         }
+    }
+}
+
+pub struct OutboundMessage<TCodec: Codec> {
+    pub(crate) request_id: OutboundRequestId,
+    pub(crate) request: TCodec::Request,
+    pub(crate) protocols: SmallVec<[TCodec::Protocol; 2]>,
+}
+
+impl<TCodec> fmt::Debug for OutboundMessage<TCodec>
+where
+    TCodec: Codec,
+{
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("OutboundMessage").finish_non_exhaustive()
     }
 }
 
@@ -271,116 +365,96 @@ impl<TCodec> ConnectionHandler for Handler<TCodec>
 where
     TCodec: Codec + Send + Clone + 'static,
 {
-    type InEvent = RequestProtocol<TCodec>;
-    type OutEvent = Event<TCodec>;
-    type Error = ConnectionHandlerUpgrErr<io::Error>;
-    type InboundProtocol = ResponseProtocol<TCodec>;
-    type OutboundProtocol = RequestProtocol<TCodec>;
-    type OutboundOpenInfo = RequestId;
-    type InboundOpenInfo = RequestId;
+    type FromBehaviour = OutboundMessage<TCodec>;
+    type ToBehaviour = Event<TCodec>;
+    type InboundProtocol = Protocol<TCodec::Protocol>;
+    type OutboundProtocol = Protocol<TCodec::Protocol>;
+    type OutboundOpenInfo = ();
+    type InboundOpenInfo = ();
 
     fn listen_protocol(&self) -> SubstreamProtocol<Self::InboundProtocol, Self::InboundOpenInfo> {
-        // A channel for notifying the handler when the inbound
-        // upgrade received the request.
-        let (rq_send, rq_recv) = oneshot::channel();
-
-        // A channel for notifying the inbound upgrade when the
-        // response is sent.
-        let (rs_send, rs_recv) = oneshot::channel();
-
-        let request_id = RequestId(self.inbound_request_id.fetch_add(1, Ordering::Relaxed));
-
-        // By keeping all I/O inside the `ResponseProtocol` and thus the
-        // inbound substream upgrade via above channels, we ensure that it
-        // is all subject to the configured timeout without extra bookkeeping
-        // for inbound substreams as well as their timeouts and also make the
-        // implementation of inbound and outbound upgrades symmetric in
-        // this sense.
-        let proto = ResponseProtocol {
-            protocols: self.inbound_protocols.clone(),
-            codec: self.codec.clone(),
-            request_sender: rq_send,
-            response_receiver: rs_recv,
-            request_id,
-        };
-
-        // The handler waits for the request to come in. It then emits
-        // `Event::Request` together with a
-        // `ResponseChannel`.
-        self.inbound
-            .push(rq_recv.map_ok(move |rq| (rq, rs_send)).boxed());
-
-        SubstreamProtocol::new(proto, request_id).with_timeout(self.substream_timeout)
+        SubstreamProtocol::new(
+            Protocol {
+                protocols: self.inbound_protocols.clone(),
+            },
+            (),
+        )
     }
 
-    fn on_behaviour_event(&mut self, request: Self::InEvent) {
-        self.keep_alive = KeepAlive::Yes;
-        self.outbound.push_back(request);
+    fn on_behaviour_event(&mut self, request: Self::FromBehaviour) {
+        self.pending_outbound.push_back(request);
     }
 
-    fn connection_keep_alive(&self) -> KeepAlive {
-        self.keep_alive
-    }
-
+    #[tracing::instrument(level = "trace", name = "ConnectionHandler::poll", skip(self, cx))]
     fn poll(
         &mut self,
         cx: &mut Context<'_>,
-    ) -> Poll<ConnectionHandlerEvent<RequestProtocol<TCodec>, RequestId, Self::OutEvent, Self::Error>>
-    {
-        // Check for a pending (fatal) error.
-        if let Some(err) = self.pending_error.take() {
-            // The handler will not be polled again by the `Swarm`.
-            return Poll::Ready(ConnectionHandlerEvent::Close(err));
+    ) -> Poll<ConnectionHandlerEvent<Protocol<TCodec::Protocol>, (), Self::ToBehaviour>> {
+        match self.worker_streams.poll_unpin(cx) {
+            Poll::Ready((_, Ok(Ok(event)))) => {
+                return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(event));
+            }
+            Poll::Ready((RequestId::Inbound(id), Ok(Err(e)))) => {
+                return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(
+                    Event::InboundStreamFailed {
+                        request_id: id,
+                        error: e,
+                    },
+                ));
+            }
+            Poll::Ready((RequestId::Outbound(id), Ok(Err(e)))) => {
+                return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(
+                    Event::OutboundStreamFailed {
+                        request_id: id,
+                        error: e,
+                    },
+                ));
+            }
+            Poll::Ready((RequestId::Inbound(id), Err(futures_bounded::Timeout { .. }))) => {
+                return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(
+                    Event::InboundTimeout(id),
+                ));
+            }
+            Poll::Ready((RequestId::Outbound(id), Err(futures_bounded::Timeout { .. }))) => {
+                return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(
+                    Event::OutboundTimeout(id),
+                ));
+            }
+            Poll::Pending => {}
         }
 
-        // Drain pending events.
+        // Drain pending events that were produced by `worker_streams`.
         if let Some(event) = self.pending_events.pop_front() {
-            return Poll::Ready(ConnectionHandlerEvent::Custom(event));
+            return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(event));
         } else if self.pending_events.capacity() > EMPTY_QUEUE_SHRINK_THRESHOLD {
             self.pending_events.shrink_to_fit();
         }
 
         // Check for inbound requests.
-        while let Poll::Ready(Some(result)) = self.inbound.poll_next_unpin(cx) {
-            match result {
-                Ok(((id, rq), rs_sender)) => {
-                    // We received an inbound request.
-                    self.keep_alive = KeepAlive::Yes;
-                    return Poll::Ready(ConnectionHandlerEvent::Custom(Event::Request {
-                        request_id: id,
-                        request: rq,
-                        sender: rs_sender,
-                    }));
-                }
-                Err(oneshot::Canceled) => {
-                    // The inbound upgrade has errored or timed out reading
-                    // or waiting for the request. The handler is informed
-                    // via `on_connection_event` call with `ConnectionEvent::ListenUpgradeError`.
-                }
-            }
+        if let Poll::Ready(Some((id, rq, rs_sender))) = self.inbound_receiver.poll_next_unpin(cx) {
+            // We received an inbound request.
+
+            return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(Event::Request {
+                request_id: id,
+                request: rq,
+                sender: rs_sender,
+            }));
         }
 
         // Emit outbound requests.
-        if let Some(request) = self.outbound.pop_front() {
-            let info = request.request_id;
+        if let Some(request) = self.pending_outbound.pop_front() {
+            let protocols = request.protocols.clone();
+            self.requested_outbound.push_back(request);
+
             return Poll::Ready(ConnectionHandlerEvent::OutboundSubstreamRequest {
-                protocol: SubstreamProtocol::new(request, info)
-                    .with_timeout(self.substream_timeout),
+                protocol: SubstreamProtocol::new(Protocol { protocols }, ()),
             });
         }
 
-        debug_assert!(self.outbound.is_empty());
+        debug_assert!(self.pending_outbound.is_empty());
 
-        if self.outbound.capacity() > EMPTY_QUEUE_SHRINK_THRESHOLD {
-            self.outbound.shrink_to_fit();
-        }
-
-        if self.inbound.is_empty() && self.keep_alive.is_yes() {
-            // No new inbound or outbound requests. However, we may just have
-            // started the latest inbound or outbound upgrade(s), so make sure
-            // the keep-alive timeout is preceded by the substream timeout.
-            let until = Instant::now() + self.substream_timeout + self.keep_alive_timeout;
-            self.keep_alive = KeepAlive::Until(until);
+        if self.pending_outbound.capacity() > EMPTY_QUEUE_SHRINK_THRESHOLD {
+            self.pending_outbound.shrink_to_fit();
         }
 
         Poll::Pending
@@ -399,14 +473,8 @@ where
             ConnectionEvent::FullyNegotiatedInbound(fully_negotiated_inbound) => {
                 self.on_fully_negotiated_inbound(fully_negotiated_inbound)
             }
-            ConnectionEvent::FullyNegotiatedOutbound(FullyNegotiatedOutbound {
-                protocol: response,
-                info: request_id,
-            }) => {
-                self.pending_events.push_back(Event::Response {
-                    request_id,
-                    response,
-                });
+            ConnectionEvent::FullyNegotiatedOutbound(fully_negotiated_outbound) => {
+                self.on_fully_negotiated_outbound(fully_negotiated_outbound)
             }
             ConnectionEvent::DialUpgradeError(dial_upgrade_error) => {
                 self.on_dial_upgrade_error(dial_upgrade_error)
@@ -414,7 +482,7 @@ where
             ConnectionEvent::ListenUpgradeError(listen_upgrade_error) => {
                 self.on_listen_upgrade_error(listen_upgrade_error)
             }
-            ConnectionEvent::AddressChange(_) => {}
+            _ => {}
         }
     }
 }

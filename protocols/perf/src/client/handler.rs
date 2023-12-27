@@ -21,22 +21,23 @@
 use std::{
     collections::VecDeque,
     task::{Context, Poll},
-    time::{Duration, Instant},
 };
 
-use futures::{future::BoxFuture, stream::FuturesUnordered, FutureExt, StreamExt, TryFutureExt};
+use futures::{
+    stream::{BoxStream, SelectAll},
+    StreamExt,
+};
 use libp2p_core::upgrade::{DeniedUpgrade, ReadyUpgrade};
 use libp2p_swarm::{
     handler::{
         ConnectionEvent, DialUpgradeError, FullyNegotiatedInbound, FullyNegotiatedOutbound,
         ListenUpgradeError,
     },
-    ConnectionHandler, ConnectionHandlerEvent, ConnectionHandlerUpgrErr, KeepAlive, StreamProtocol,
-    SubstreamProtocol,
+    ConnectionHandler, ConnectionHandlerEvent, StreamProtocol, SubstreamProtocol,
 };
-use void::Void;
 
-use super::{RunId, RunParams, RunStats};
+use crate::client::{RunError, RunId};
+use crate::{RunParams, RunUpdate};
 
 #[derive(Debug)]
 pub struct Command {
@@ -47,7 +48,7 @@ pub struct Command {
 #[derive(Debug)]
 pub struct Event {
     pub(crate) id: RunId,
-    pub(crate) result: Result<RunStats, ConnectionHandlerUpgrErr<Void>>,
+    pub(crate) result: Result<RunUpdate, RunError>,
 }
 
 pub struct Handler {
@@ -56,16 +57,13 @@ pub struct Handler {
         ConnectionHandlerEvent<
             <Self as ConnectionHandler>::OutboundProtocol,
             <Self as ConnectionHandler>::OutboundOpenInfo,
-            <Self as ConnectionHandler>::OutEvent,
-            <Self as ConnectionHandler>::Error,
+            <Self as ConnectionHandler>::ToBehaviour,
         >,
     >,
 
     requested_streams: VecDeque<Command>,
 
-    outbound: FuturesUnordered<BoxFuture<'static, Result<Event, std::io::Error>>>,
-
-    keep_alive: KeepAlive,
+    outbound: SelectAll<BoxStream<'static, (RunId, Result<crate::RunUpdate, std::io::Error>)>>,
 }
 
 impl Handler {
@@ -74,7 +72,6 @@ impl Handler {
             queued_events: Default::default(),
             requested_streams: Default::default(),
             outbound: Default::default(),
-            keep_alive: KeepAlive::Yes,
         }
     }
 }
@@ -86,9 +83,8 @@ impl Default for Handler {
 }
 
 impl ConnectionHandler for Handler {
-    type InEvent = Command;
-    type OutEvent = Event;
-    type Error = Void;
+    type FromBehaviour = Command;
+    type ToBehaviour = Event;
     type InboundProtocol = DeniedUpgrade;
     type OutboundProtocol = ReadyUpgrade<StreamProtocol>;
     type OutboundOpenInfo = ();
@@ -98,7 +94,7 @@ impl ConnectionHandler for Handler {
         SubstreamProtocol::new(DeniedUpgrade, ())
     }
 
-    fn on_behaviour_event(&mut self, command: Self::InEvent) {
+    fn on_behaviour_event(&mut self, command: Self::FromBehaviour) {
         self.requested_streams.push_back(command);
         self.queued_events
             .push_back(ConnectionHandlerEvent::OutboundSubstreamRequest {
@@ -129,78 +125,48 @@ impl ConnectionHandler for Handler {
                     .expect("opened a stream without a pending command");
                 self.outbound.push(
                     crate::protocol::send_receive(params, protocol)
-                        .map_ok(move |timers| Event {
-                            id,
-                            result: Ok(RunStats { params, timers }),
-                        })
+                        .map(move |result| (id, result))
                         .boxed(),
                 );
             }
 
-            ConnectionEvent::AddressChange(_) => {}
+            ConnectionEvent::AddressChange(_)
+            | ConnectionEvent::LocalProtocolsChange(_)
+            | ConnectionEvent::RemoteProtocolsChange(_) => {}
             ConnectionEvent::DialUpgradeError(DialUpgradeError { info: (), error }) => {
                 let Command { id, .. } = self
                     .requested_streams
                     .pop_front()
                     .expect("requested stream without pending command");
                 self.queued_events
-                    .push_back(ConnectionHandlerEvent::Custom(Event {
+                    .push_back(ConnectionHandlerEvent::NotifyBehaviour(Event {
                         id,
-                        result: Err(error),
+                        result: Err(error.into()),
                     }));
             }
             ConnectionEvent::ListenUpgradeError(ListenUpgradeError { info: (), error }) => {
-                match error {
-                    ConnectionHandlerUpgrErr::Timeout => {}
-                    ConnectionHandlerUpgrErr::Timer => {}
-                    ConnectionHandlerUpgrErr::Upgrade(error) => match error {
-                        libp2p_core::UpgradeError::Select(_) => {}
-                        libp2p_core::UpgradeError::Apply(v) => void::unreachable(v),
-                    },
-                }
+                void::unreachable(error)
             }
+            _ => {}
         }
     }
 
-    fn connection_keep_alive(&self) -> KeepAlive {
-        self.keep_alive
-    }
-
+    #[tracing::instrument(level = "trace", name = "ConnectionHandler::poll", skip(self, cx))]
     fn poll(
         &mut self,
         cx: &mut Context<'_>,
     ) -> Poll<
-        ConnectionHandlerEvent<
-            Self::OutboundProtocol,
-            Self::OutboundOpenInfo,
-            Self::OutEvent,
-            Self::Error,
-        >,
+        ConnectionHandlerEvent<Self::OutboundProtocol, Self::OutboundOpenInfo, Self::ToBehaviour>,
     > {
-        // Return queued events.
         if let Some(event) = self.queued_events.pop_front() {
             return Poll::Ready(event);
         }
 
-        while let Poll::Ready(Some(result)) = self.outbound.poll_next_unpin(cx) {
-            match result {
-                Ok(event) => return Poll::Ready(ConnectionHandlerEvent::Custom(event)),
-                Err(e) => {
-                    panic!("{e:?}")
-                }
-            }
-        }
-
-        if self.outbound.is_empty() {
-            match self.keep_alive {
-                KeepAlive::Yes => {
-                    self.keep_alive = KeepAlive::Until(Instant::now() + Duration::from_secs(10));
-                }
-                KeepAlive::Until(_) => {}
-                KeepAlive::No => panic!("Handler never sets KeepAlive::No."),
-            }
-        } else {
-            self.keep_alive = KeepAlive::Yes
+        if let Poll::Ready(Some((id, result))) = self.outbound.poll_next_unpin(cx) {
+            return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(Event {
+                id,
+                result: result.map_err(Into::into),
+            }));
         }
 
         Poll::Pending

@@ -1,9 +1,43 @@
-## 0.44.0 - unreleased
+## 0.45.1
+
+- Deprecate `WindowUpdateMode::on_receive`.
+  It does not enforce flow-control, i.e. breaks backpressure.
+  Use `WindowUpdateMode::on_read` instead.
+  See `yamux` crate version `v0.12.1` and [Yamux PR #177](https://github.com/libp2p/rust-yamux/pull/177).
+- `yamux` `v0.13` enables auto-tuning for the Yamux stream receive window.
+  While preserving small buffers on low-latency and/or low-bandwidth connections, this change allows for high-latency and/or high-bandwidth connections to exhaust the available bandwidth on a single stream.
+  Have `libp2p-yamux` use `yamux` `v0.13` (new version) by default and fall back to `yamux` `v0.12` (old version) when setting any configuration options.
+  Thus default users benefit from the increased performance, while power users with custom configurations maintain the old behavior.
+  `libp2p-yamux` will switch over to `yamux` `v0.13` entirely with the next breaking release.
+  See [PR 4970](https://github.com/libp2p/rust-libp2p/pull/4970).
+
+## 0.45.0
+
+- Migrate to `{In,Out}boundConnectionUpgrade` traits.
+  See [PR 4695](https://github.com/libp2p/rust-libp2p/pull/4695).
+
+## 0.44.1
+
+- Update to `yamux` `v0.12` which brings performance improvements and introduces an ACK backlog of 256 inbound streams.
+  When interacting with other libp2p nodes that are also running this or a newer version, the creation of inbound streams will be backpressured once the ACK backlog is hit.
+  See [PR 3013].
+
+[PR 3013]: https://github.com/libp2p/rust-libp2p/pull/3013
+
+## 0.44.0
 
 - Raise MSRV to 1.65.
   See [PR 3715].
 
+- Remove deprecated items.
+  See [PR 3897].
+
+- Remove `Incoming`, `LocalIncoming` and `LocalConfig` as well as anything from the underlying `yamux` crate from the public API.
+  See [PR 3908].
+
 [PR 3715]: https://github.com/libp2p/rust-libp2p/pull/3715
+[PR 3897]: https://github.com/libp2p/rust-libp2p/pull/3897
+[PR 3908]: https://github.com/libp2p/rust-libp2p/pull/3908
 
 ## 0.43.1
 

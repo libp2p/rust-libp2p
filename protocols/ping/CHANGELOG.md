@@ -1,9 +1,29 @@
-## 0.43.0 - unreleased
+## 0.44.0
+
+
+## 0.43.1
+
+- Honor ping interval in case of errors.
+  Previously, we would immediately open another ping stream if the current one failed.
+  See [PR 4423].
+
+[PR 4423]: https://github.com/libp2p/rust-libp2p/pull/4423
+
+## 0.43.0
 
 - Raise MSRV to 1.65.
   See [PR 3715].
 
+- Remove deprecated items. See [PR 3702].
+
+- Don't close connections on ping failures.
+  To restore the previous behaviour, users should call `Swarm::close_connection` upon receiving a `ping::Event` with a `ping::Failure`.
+  This also removes the `max_failures` config option.
+  See [PR 3947].
+
 [PR 3715]: https://github.com/libp2p/rust-libp2p/pull/3715
+[PR 3702]: https://github.com/libp2p/rust-libp2p/pull/3702
+[PR 3947]: https://github.com/libp2p/rust-libp2p/pull/3947
 
 ## 0.42.0
 

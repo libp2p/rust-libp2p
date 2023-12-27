@@ -1,0 +1,31 @@
+[package]
+authors = ["Doug Anderson <DougAnderson444@peerpiper.io>"]
+categories = ["asynchronous", "network-programming", "wasm", "web-programming"]
+description = "WebRTC for libp2p under WASM environment"
+edition = "2021"
+keywords = ["libp2p", "networking", "peer-to-peer"]
+license = "MIT"
+name = "libp2p-webrtc-websys"
+repository = "https://github.com/libp2p/rust-libp2p"
+rust-version = { workspace = true }
+version = "0.3.0-alpha"
+publish = true
+
+[dependencies]
+bytes = "1"
+futures = "0.3"
+getrandom = { version = "0.2.11", features = ["js"] }
+hex = "0.4.3"
+js-sys = { version = "0.3" }
+libp2p-core = { workspace = true }
+libp2p-identity = { workspace = true }
+libp2p-webrtc-utils = { workspace = true }
+send_wrapper = { version = "0.6.0", features = ["futures"] }
+thiserror = "1"
+tracing = "0.1.37"
+wasm-bindgen = { version = "0.2.89" }
+wasm-bindgen-futures = { version = "0.4.39" }
+web-sys = { version = "0.3.66", features = ["Document", "Location", "MessageEvent", "Navigator", "RtcCertificate", "RtcConfiguration", "RtcDataChannel", "RtcDataChannelEvent", "RtcDataChannelInit", "RtcDataChannelState", "RtcDataChannelType", "RtcPeerConnection", "RtcSdpType", "RtcSessionDescription", "RtcSessionDescriptionInit", "Window"] }
+
+[lints]
+workspace = true

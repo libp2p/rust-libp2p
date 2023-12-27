@@ -1,4 +1,46 @@
-## 0.45.0 - unreleased
+## 0.46.1
+
+- Deprecate `Rpc` in preparation for removing it from the public API because it is an internal type.
+  See [PR 4833](https://github.com/libp2p/rust-libp2p/pull/4833). 
+
+## 0.46.0
+
+- Remove `fast_message_id_fn` mechanism from `Config`.
+  See [PR 4285](https://github.com/libp2p/rust-libp2p/pull/4285).
+- Remove deprecated `gossipsub::Config::idle_timeout` in favor of `SwarmBuilder::idle_connection_timeout`.
+  See [PR 4642](https://github.com/libp2p/rust-libp2p/pull/4642).
+- Return typed error from config builder.
+  See [PR 4445](https://github.com/libp2p/rust-libp2p/pull/4445).
+- Process outbound stream before inbound stream in `EnabledHandler::poll(..)`.
+  See [PR 4778](https://github.com/libp2p/rust-libp2p/pull/4778).
+
+## 0.45.2
+
+- Deprecate `gossipsub::Config::idle_timeout` in favor of `SwarmBuilder::idle_connection_timeout`.
+  See [PR 4648].
+
+<!-- Interal changes:
+
+- Allow new clippy lint.
+
+-->
+
+[PR 4648]: (https://github.com/libp2p/rust-libp2p/pull/4648)
+
+<!-- Internal changes
+
+- Allow deprecated usage of `KeepAlive::Until`
+
+-->
+
+## 0.45.1
+
+- Add getter function to o  btain `TopicScoreParams`.
+  See [PR 4231].
+
+[PR 4231]: https://github.com/libp2p/rust-libp2p/pull/4231
+
+## 0.45.0
 
 - Raise MSRV to 1.65.
   See [PR 3715].

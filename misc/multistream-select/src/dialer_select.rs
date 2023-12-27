@@ -131,7 +131,7 @@ where
                     if let Err(err) = Pin::new(&mut io).start_send(Message::Protocol(p.clone())) {
                         return Poll::Ready(Err(From::from(err)));
                     }
-                    log::debug!("Dialer: Proposed protocol: {}", p);
+                    tracing::debug!(protocol=%p, "Dialer: Proposed protocol");
 
                     if this.protocols.peek().is_some() {
                         *this.state = State::FlushProtocol { io, protocol }
@@ -143,7 +143,7 @@ where
                             // the dialer supports for this negotiation. Notably,
                             // the dialer expects a regular `V1` response.
                             Version::V1Lazy => {
-                                log::debug!("Dialer: Expecting proposed protocol: {}", p);
+                                tracing::debug!(protocol=%p, "Dialer: Expecting proposed protocol");
                                 let hl = HeaderLine::from(Version::V1Lazy);
                                 let io = Negotiated::expecting(io.into_reader(), p, Some(hl));
                                 return Poll::Ready(Ok((protocol, io)));
@@ -180,14 +180,14 @@ where
                             *this.state = State::AwaitProtocol { io, protocol };
                         }
                         Message::Protocol(ref p) if p.as_ref() == protocol.as_ref() => {
-                            log::debug!("Dialer: Received confirmation for protocol: {}", p);
+                            tracing::debug!(protocol=%p, "Dialer: Received confirmation for protocol");
                             let io = Negotiated::completed(io.into_inner());
                             return Poll::Ready(Ok((protocol, io)));
                         }
                         Message::NotAvailable => {
-                            log::debug!(
-                                "Dialer: Received rejection of protocol: {}",
-                                protocol.as_ref()
+                            tracing::debug!(
+                                protocol=%protocol.as_ref(),
+                                "Dialer: Received rejection of protocol"
                             );
                             let protocol = this.protocols.next().ok_or(NegotiationError::Failed)?;
                             *this.state = State::SendProtocol { io, protocol }
@@ -198,6 +198,207 @@ where
 
                 State::Done => panic!("State::poll called after completion"),
             }
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::listener_select_proto;
+    use async_std::future::timeout;
+    use async_std::net::{TcpListener, TcpStream};
+    use quickcheck::{Arbitrary, Gen, GenRange};
+    use std::time::Duration;
+    use tracing::metadata::LevelFilter;
+    use tracing_subscriber::EnvFilter;
+
+    #[test]
+    fn select_proto_basic() {
+        async fn run(version: Version) {
+            let (client_connection, server_connection) = futures_ringbuf::Endpoint::pair(100, 100);
+
+            let server = async_std::task::spawn(async move {
+                let protos = vec!["/proto1", "/proto2"];
+                let (proto, mut io) = listener_select_proto(server_connection, protos)
+                    .await
+                    .unwrap();
+                assert_eq!(proto, "/proto2");
+
+                let mut out = vec![0; 32];
+                let n = io.read(&mut out).await.unwrap();
+                out.truncate(n);
+                assert_eq!(out, b"ping");
+
+                io.write_all(b"pong").await.unwrap();
+                io.flush().await.unwrap();
+            });
+
+            let client = async_std::task::spawn(async move {
+                let protos = vec!["/proto3", "/proto2"];
+                let (proto, mut io) = dialer_select_proto(client_connection, protos, version)
+                    .await
+                    .unwrap();
+                assert_eq!(proto, "/proto2");
+
+                io.write_all(b"ping").await.unwrap();
+                io.flush().await.unwrap();
+
+                let mut out = vec![0; 32];
+                let n = io.read(&mut out).await.unwrap();
+                out.truncate(n);
+                assert_eq!(out, b"pong");
+            });
+
+            server.await;
+            client.await;
+        }
+
+        async_std::task::block_on(run(Version::V1));
+        async_std::task::block_on(run(Version::V1Lazy));
+    }
+
+    /// Tests the expected behaviour of failed negotiations.
+    #[test]
+    fn negotiation_failed() {
+        fn prop(
+            version: Version,
+            DialerProtos(dial_protos): DialerProtos,
+            ListenerProtos(listen_protos): ListenerProtos,
+            DialPayload(dial_payload): DialPayload,
+        ) {
+            let _ = tracing_subscriber::fmt()
+                .with_env_filter(
+                    EnvFilter::builder()
+                        .with_default_directive(LevelFilter::DEBUG.into())
+                        .from_env_lossy(),
+                )
+                .try_init();
+
+            async_std::task::block_on(async move {
+                let listener = TcpListener::bind("0.0.0.0:0").await.unwrap();
+                let addr = listener.local_addr().unwrap();
+
+                let server = async_std::task::spawn(async move {
+                    let server_connection = listener.accept().await.unwrap().0;
+
+                    let io = match timeout(
+                        Duration::from_secs(2),
+                        listener_select_proto(server_connection, listen_protos),
+                    )
+                    .await
+                    .unwrap()
+                    {
+                        Ok((_, io)) => io,
+                        Err(NegotiationError::Failed) => return,
+                        Err(NegotiationError::ProtocolError(e)) => {
+                            panic!("Unexpected protocol error {e}")
+                        }
+                    };
+                    match io.complete().await {
+                        Err(NegotiationError::Failed) => {}
+                        _ => panic!(),
+                    }
+                });
+
+                let client = async_std::task::spawn(async move {
+                    let client_connection = TcpStream::connect(addr).await.unwrap();
+
+                    let mut io = match timeout(
+                        Duration::from_secs(2),
+                        dialer_select_proto(client_connection, dial_protos, version),
+                    )
+                    .await
+                    .unwrap()
+                    {
+                        Err(NegotiationError::Failed) => return,
+                        Ok((_, io)) => io,
+                        Err(_) => panic!(),
+                    };
+                    // The dialer may write a payload that is even sent before it
+                    // got confirmation of the last proposed protocol, when `V1Lazy`
+                    // is used.
+
+                    tracing::info!("Writing early data");
+
+                    io.write_all(&dial_payload).await.unwrap();
+                    match io.complete().await {
+                        Err(NegotiationError::Failed) => {}
+                        _ => panic!(),
+                    }
+                });
+
+                server.await;
+                client.await;
+
+                tracing::info!("---------------------------------------")
+            });
+        }
+
+        quickcheck::QuickCheck::new()
+            .tests(1000)
+            .quickcheck(prop as fn(_, _, _, _));
+    }
+
+    #[async_std::test]
+    async fn v1_lazy_do_not_wait_for_negotiation_on_poll_close() {
+        let (client_connection, _server_connection) =
+            futures_ringbuf::Endpoint::pair(1024 * 1024, 1);
+
+        let client = async_std::task::spawn(async move {
+            // Single protocol to allow for lazy (or optimistic) protocol negotiation.
+            let protos = vec!["/proto1"];
+            let (proto, mut io) = dialer_select_proto(client_connection, protos, Version::V1Lazy)
+                .await
+                .unwrap();
+            assert_eq!(proto, "/proto1");
+
+            // client can close the connection even though protocol negotiation is not yet done, i.e.
+            // `_server_connection` had been untouched.
+            io.close().await.unwrap();
+        });
+
+        async_std::future::timeout(Duration::from_secs(10), client)
+            .await
+            .unwrap();
+    }
+
+    #[derive(Clone, Debug)]
+    struct DialerProtos(Vec<&'static str>);
+
+    impl Arbitrary for DialerProtos {
+        fn arbitrary(g: &mut Gen) -> Self {
+            if bool::arbitrary(g) {
+                DialerProtos(vec!["/proto1"])
+            } else {
+                DialerProtos(vec!["/proto1", "/proto2"])
+            }
+        }
+    }
+
+    #[derive(Clone, Debug)]
+    struct ListenerProtos(Vec<&'static str>);
+
+    impl Arbitrary for ListenerProtos {
+        fn arbitrary(g: &mut Gen) -> Self {
+            if bool::arbitrary(g) {
+                ListenerProtos(vec!["/proto3"])
+            } else {
+                ListenerProtos(vec!["/proto3", "/proto4"])
+            }
+        }
+    }
+
+    #[derive(Clone, Debug)]
+    struct DialPayload(Vec<u8>);
+
+    impl Arbitrary for DialPayload {
+        fn arbitrary(g: &mut Gen) -> Self {
+            DialPayload(
+                (0..g.gen_range(0..2u8))
+                    .map(|_| g.gen_range(1..255)) // We can generate 0 as that will produce a different error.
+                    .collect(),
+            )
         }
     }
 }

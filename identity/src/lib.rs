@@ -60,20 +60,6 @@ pub mod rsa;
 pub mod secp256k1;
 
 mod error;
-#[cfg(any(
-    feature = "ecdsa",
-    feature = "secp256k1",
-    feature = "ed25519",
-    feature = "rsa"
-))]
-mod keypair;
-#[cfg(all(
-    not(feature = "ecdsa"),
-    not(feature = "secp256k1"),
-    not(feature = "ed25519"),
-    not(feature = "rsa")
-))]
-#[path = "./keypair_dummy.rs"]
 mod keypair;
 #[cfg(feature = "peerid")]
 mod peer_id;
@@ -98,25 +84,24 @@ impl zeroize::Zeroize for proto::PrivateKey {
 ))]
 impl From<&PublicKey> for proto::PublicKey {
     fn from(key: &PublicKey) -> Self {
-        #[allow(deprecated)]
-        match key {
+        match &key.publickey {
             #[cfg(feature = "ed25519")]
-            PublicKey::Ed25519(key) => proto::PublicKey {
+            keypair::PublicKeyInner::Ed25519(key) => proto::PublicKey {
                 Type: proto::KeyType::Ed25519,
                 Data: key.to_bytes().to_vec(),
             },
             #[cfg(all(feature = "rsa", not(target_arch = "wasm32")))]
-            PublicKey::Rsa(key) => proto::PublicKey {
+            keypair::PublicKeyInner::Rsa(key) => proto::PublicKey {
                 Type: proto::KeyType::RSA,
                 Data: key.encode_x509(),
             },
             #[cfg(feature = "secp256k1")]
-            PublicKey::Secp256k1(key) => proto::PublicKey {
+            keypair::PublicKeyInner::Secp256k1(key) => proto::PublicKey {
                 Type: proto::KeyType::Secp256k1,
                 Data: key.to_bytes().to_vec(),
             },
             #[cfg(feature = "ecdsa")]
-            PublicKey::Ecdsa(key) => proto::PublicKey {
+            keypair::PublicKeyInner::Ecdsa(key) => proto::PublicKey {
                 Type: proto::KeyType::ECDSA,
                 Data: key.encode_der(),
             },
@@ -131,6 +116,7 @@ pub use peer_id::{ParseError, PeerId};
 
 /// The type of key a `KeyPair` is holding.
 #[derive(Debug, PartialEq, Eq)]
+#[allow(clippy::upper_case_acronyms)]
 pub enum KeyType {
     Ed25519,
     RSA,

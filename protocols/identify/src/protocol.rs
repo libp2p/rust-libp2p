@@ -20,20 +20,14 @@
 
 use crate::proto;
 use asynchronous_codec::{FramedRead, FramedWrite};
-use futures::{future::BoxFuture, prelude::*};
-use libp2p_core::{
-    multiaddr,
-    upgrade::{InboundUpgrade, OutboundUpgrade, UpgradeInfo},
-    Multiaddr,
-};
+use futures::prelude::*;
+use libp2p_core::{multiaddr, Multiaddr};
 use libp2p_identity as identity;
 use libp2p_identity::PublicKey;
-use libp2p_swarm::{ConnectionId, StreamProtocol};
-use log::{debug, trace};
+use libp2p_swarm::StreamProtocol;
 use std::convert::TryFrom;
-use std::{io, iter, pin::Pin};
+use std::io;
 use thiserror::Error;
-use void::Void;
 
 const MAX_MESSAGE_SIZE_BYTES: usize = 4096;
 
@@ -41,36 +35,7 @@ pub const PROTOCOL_NAME: StreamProtocol = StreamProtocol::new("/ipfs/id/1.0.0");
 
 pub const PUSH_PROTOCOL_NAME: StreamProtocol = StreamProtocol::new("/ipfs/id/push/1.0.0");
 
-/// The type of the Substream protocol.
-#[derive(Debug, PartialEq, Eq)]
-pub enum Protocol {
-    Identify(ConnectionId),
-    Push,
-}
-
-/// Substream upgrade protocol for `/ipfs/id/1.0.0`.
-#[derive(Debug, Clone)]
-pub struct Identify;
-
-/// Substream upgrade protocol for `/ipfs/id/push/1.0.0`.
-#[derive(Debug, Clone)]
-pub struct Push<T>(T);
-pub struct InboundPush();
-pub struct OutboundPush(Info);
-
-impl Push<InboundPush> {
-    pub fn inbound() -> Self {
-        Push(InboundPush())
-    }
-}
-
-impl Push<OutboundPush> {
-    pub fn outbound(info: Info) -> Self {
-        Push(OutboundPush(info))
-    }
-}
-
-/// Information of a peer sent in protocol messages.
+/// Identify information of a peer sent in protocol messages.
 #[derive(Debug, Clone)]
 pub struct Info {
     /// The public key of the local peer.
@@ -89,95 +54,58 @@ pub struct Info {
     pub observed_addr: Multiaddr,
 }
 
-impl UpgradeInfo for Identify {
-    type Info = StreamProtocol;
-    type InfoIter = iter::Once<Self::Info>;
-
-    fn protocol_info(&self) -> Self::InfoIter {
-        iter::once(PROTOCOL_NAME)
+impl Info {
+    pub fn merge(&mut self, info: PushInfo) {
+        if let Some(public_key) = info.public_key {
+            self.public_key = public_key;
+        }
+        if let Some(protocol_version) = info.protocol_version {
+            self.protocol_version = protocol_version;
+        }
+        if let Some(agent_version) = info.agent_version {
+            self.agent_version = agent_version;
+        }
+        if !info.listen_addrs.is_empty() {
+            self.listen_addrs = info.listen_addrs;
+        }
+        if !info.protocols.is_empty() {
+            self.protocols = info.protocols;
+        }
+        if let Some(observed_addr) = info.observed_addr {
+            self.observed_addr = observed_addr;
+        }
     }
 }
 
-impl<C> InboundUpgrade<C> for Identify {
-    type Output = C;
-    type Error = UpgradeError;
-    type Future = future::Ready<Result<Self::Output, UpgradeError>>;
-
-    fn upgrade_inbound(self, socket: C, _: Self::Info) -> Self::Future {
-        future::ok(socket)
-    }
+/// Identify push information of a peer sent in protocol messages.
+/// Note that missing fields should be ignored, as peers may choose to send partial updates containing only the fields whose values have changed.
+#[derive(Debug, Clone)]
+pub struct PushInfo {
+    pub public_key: Option<PublicKey>,
+    pub protocol_version: Option<String>,
+    pub agent_version: Option<String>,
+    pub listen_addrs: Vec<Multiaddr>,
+    pub protocols: Vec<StreamProtocol>,
+    pub observed_addr: Option<Multiaddr>,
 }
 
-impl<C> OutboundUpgrade<C> for Identify
-where
-    C: AsyncRead + AsyncWrite + Unpin + Send + 'static,
-{
-    type Output = Info;
-    type Error = UpgradeError;
-    type Future = Pin<Box<dyn Future<Output = Result<Self::Output, Self::Error>> + Send>>;
-
-    fn upgrade_outbound(self, socket: C, _: Self::Info) -> Self::Future {
-        recv(socket).boxed()
-    }
-}
-
-impl<T> UpgradeInfo for Push<T> {
-    type Info = StreamProtocol;
-    type InfoIter = iter::Once<Self::Info>;
-
-    fn protocol_info(&self) -> Self::InfoIter {
-        iter::once(PUSH_PROTOCOL_NAME)
-    }
-}
-
-impl<C> InboundUpgrade<C> for Push<InboundPush>
-where
-    C: AsyncRead + AsyncWrite + Unpin + Send + 'static,
-{
-    type Output = BoxFuture<'static, Result<Info, UpgradeError>>;
-    type Error = Void;
-    type Future = future::Ready<Result<Self::Output, Self::Error>>;
-
-    fn upgrade_inbound(self, socket: C, _: Self::Info) -> Self::Future {
-        // Lazily upgrade stream, thus allowing upgrade to happen within identify's handler.
-        future::ok(recv(socket).boxed())
-    }
-}
-
-impl<C> OutboundUpgrade<C> for Push<OutboundPush>
-where
-    C: AsyncWrite + Unpin + Send + 'static,
-{
-    type Output = ();
-    type Error = UpgradeError;
-    type Future = Pin<Box<dyn Future<Output = Result<Self::Output, Self::Error>> + Send>>;
-
-    fn upgrade_outbound(self, socket: C, _: Self::Info) -> Self::Future {
-        send(socket, self.0 .0).boxed()
-    }
-}
-
-pub(crate) async fn send<T>(io: T, info: Info) -> Result<(), UpgradeError>
+pub(crate) async fn send_identify<T>(io: T, info: Info) -> Result<Info, UpgradeError>
 where
     T: AsyncWrite + Unpin,
 {
-    trace!("Sending: {:?}", info);
+    tracing::trace!("Sending: {:?}", info);
 
-    let listen_addrs = info
-        .listen_addrs
-        .into_iter()
-        .map(|addr| addr.to_vec())
-        .collect();
+    let listen_addrs = info.listen_addrs.iter().map(|addr| addr.to_vec()).collect();
 
     let pubkey_bytes = info.public_key.encode_protobuf();
 
     let message = proto::Identify {
-        agentVersion: Some(info.agent_version),
-        protocolVersion: Some(info.protocol_version),
+        agentVersion: Some(info.agent_version.clone()),
+        protocolVersion: Some(info.protocol_version.clone()),
         publicKey: Some(pubkey_bytes),
         listenAddrs: listen_addrs,
         observedAddr: Some(info.observed_addr.to_vec()),
-        protocols: info.protocols.into_iter().map(|p| p.to_string()).collect(),
+        protocols: info.protocols.iter().map(|p| p.to_string()).collect(),
     };
 
     let mut framed_io = FramedWrite::new(
@@ -188,10 +116,32 @@ where
     framed_io.send(message).await?;
     framed_io.close().await?;
 
-    Ok(())
+    Ok(info)
 }
 
-async fn recv<T>(socket: T) -> Result<Info, UpgradeError>
+pub(crate) async fn recv_push<T>(socket: T) -> Result<PushInfo, UpgradeError>
+where
+    T: AsyncRead + AsyncWrite + Unpin,
+{
+    let info = recv(socket).await?.try_into()?;
+
+    tracing::trace!(?info, "Received");
+
+    Ok(info)
+}
+
+pub(crate) async fn recv_identify<T>(socket: T) -> Result<Info, UpgradeError>
+where
+    T: AsyncRead + AsyncWrite + Unpin,
+{
+    let info = recv(socket).await?.try_into()?;
+
+    tracing::trace!(?info, "Received");
+
+    Ok(info)
+}
+
+async fn recv<T>(socket: T) -> Result<proto::Identify, UpgradeError>
 where
     T: AsyncRead + AsyncWrite + Unpin,
 {
@@ -206,61 +156,93 @@ where
     )
     .next()
     .await
-    .ok_or(UpgradeError::StreamClosed)??
-    .try_into()?;
-
-    trace!("Received: {:?}", info);
+    .ok_or(UpgradeError::StreamClosed)??;
 
     Ok(info)
+}
+
+fn parse_listen_addrs(listen_addrs: Vec<Vec<u8>>) -> Vec<Multiaddr> {
+    listen_addrs
+        .into_iter()
+        .filter_map(|bytes| match Multiaddr::try_from(bytes) {
+            Ok(a) => Some(a),
+            Err(e) => {
+                tracing::debug!("Unable to parse multiaddr: {e:?}");
+                None
+            }
+        })
+        .collect()
+}
+
+fn parse_protocols(protocols: Vec<String>) -> Vec<StreamProtocol> {
+    protocols
+        .into_iter()
+        .filter_map(|p| match StreamProtocol::try_from_owned(p) {
+            Ok(p) => Some(p),
+            Err(e) => {
+                tracing::debug!("Received invalid protocol from peer: {e}");
+                None
+            }
+        })
+        .collect()
+}
+
+fn parse_public_key(public_key: Option<Vec<u8>>) -> Option<PublicKey> {
+    public_key.and_then(|key| match PublicKey::try_decode_protobuf(&key) {
+        Ok(k) => Some(k),
+        Err(e) => {
+            tracing::debug!("Unable to decode public key: {e:?}");
+            None
+        }
+    })
+}
+
+fn parse_observed_addr(observed_addr: Option<Vec<u8>>) -> Option<Multiaddr> {
+    observed_addr.and_then(|bytes| match Multiaddr::try_from(bytes) {
+        Ok(a) => Some(a),
+        Err(e) => {
+            tracing::debug!("Unable to parse observed multiaddr: {e:?}");
+            None
+        }
+    })
 }
 
 impl TryFrom<proto::Identify> for Info {
     type Error = UpgradeError;
 
     fn try_from(msg: proto::Identify) -> Result<Self, Self::Error> {
-        fn parse_multiaddr(bytes: Vec<u8>) -> Result<Multiaddr, multiaddr::Error> {
-            Multiaddr::try_from(bytes)
-        }
-
-        let listen_addrs = {
-            let mut addrs = Vec::new();
-            for addr in msg.listenAddrs.into_iter() {
-                match parse_multiaddr(addr) {
-                    Ok(a) => addrs.push(a),
-                    Err(e) => {
-                        debug!("Unable to parse multiaddr: {e:?}");
-                    }
-                }
-            }
-            addrs
-        };
-
-        let public_key = PublicKey::try_decode_protobuf(&msg.publicKey.unwrap_or_default())?;
-
-        let observed_addr = match parse_multiaddr(msg.observedAddr.unwrap_or_default()) {
-            Ok(a) => a,
-            Err(e) => {
-                debug!("Unable to parse multiaddr: {e:?}");
-                Multiaddr::empty()
+        let public_key = {
+            match parse_public_key(msg.publicKey) {
+                Some(key) => key,
+                // This will always produce a DecodingError if the public key is missing.
+                None => PublicKey::try_decode_protobuf(Default::default())?,
             }
         };
+
         let info = Info {
             public_key,
             protocol_version: msg.protocolVersion.unwrap_or_default(),
             agent_version: msg.agentVersion.unwrap_or_default(),
-            listen_addrs,
-            protocols: msg
-                .protocols
-                .into_iter()
-                .filter_map(|p| match StreamProtocol::try_from_owned(p) {
-                    Ok(p) => Some(p),
-                    Err(e) => {
-                        debug!("Received invalid protocol from peer: {e}");
-                        None
-                    }
-                })
-                .collect(),
-            observed_addr,
+            listen_addrs: parse_listen_addrs(msg.listenAddrs),
+            protocols: parse_protocols(msg.protocols),
+            observed_addr: parse_observed_addr(msg.observedAddr).unwrap_or(Multiaddr::empty()),
+        };
+
+        Ok(info)
+    }
+}
+
+impl TryFrom<proto::Identify> for PushInfo {
+    type Error = UpgradeError;
+
+    fn try_from(msg: proto::Identify) -> Result<Self, Self::Error> {
+        let info = PushInfo {
+            public_key: parse_public_key(msg.publicKey),
+            protocol_version: msg.protocolVersion,
+            agent_version: msg.agentVersion,
+            listen_addrs: parse_listen_addrs(msg.listenAddrs),
+            protocols: parse_protocols(msg.protocols),
+            observed_addr: parse_observed_addr(msg.observedAddr),
         };
 
         Ok(info)
@@ -284,97 +266,7 @@ pub enum UpgradeError {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use futures::channel::oneshot;
-    use libp2p_core::{
-        upgrade::{self, apply_inbound, apply_outbound},
-        Transport,
-    };
     use libp2p_identity as identity;
-    use libp2p_tcp as tcp;
-
-    #[test]
-    fn correct_transfer() {
-        // We open a server and a client, send info from the server to the client, and check that
-        // they were successfully received.
-        let send_pubkey = identity::Keypair::generate_ed25519().public();
-        let recv_pubkey = send_pubkey.clone();
-
-        let (tx, rx) = oneshot::channel();
-
-        let bg_task = async_std::task::spawn(async move {
-            let mut transport = tcp::async_io::Transport::default().boxed();
-
-            transport
-                .listen_on("/ip4/127.0.0.1/tcp/0".parse().unwrap())
-                .unwrap();
-
-            let addr = transport
-                .next()
-                .await
-                .expect("some event")
-                .into_new_address()
-                .expect("listen address");
-            tx.send(addr).unwrap();
-
-            let socket = transport
-                .next()
-                .await
-                .expect("some event")
-                .into_incoming()
-                .unwrap()
-                .0
-                .await
-                .unwrap();
-
-            let sender = apply_inbound(socket, Identify).await.unwrap();
-
-            send(
-                sender,
-                Info {
-                    public_key: send_pubkey,
-                    protocol_version: "proto_version".to_owned(),
-                    agent_version: "agent_version".to_owned(),
-                    listen_addrs: vec![
-                        "/ip4/80.81.82.83/tcp/500".parse().unwrap(),
-                        "/ip6/::1/udp/1000".parse().unwrap(),
-                    ],
-                    protocols: vec![
-                        StreamProtocol::new("/proto1"),
-                        StreamProtocol::new("/proto2"),
-                    ],
-                    observed_addr: "/ip4/100.101.102.103/tcp/5000".parse().unwrap(),
-                },
-            )
-            .await
-            .unwrap();
-        });
-
-        async_std::task::block_on(async move {
-            let mut transport = tcp::async_io::Transport::default();
-
-            let socket = transport.dial(rx.await.unwrap()).unwrap().await.unwrap();
-            let info = apply_outbound(socket, Identify, upgrade::Version::V1)
-                .await
-                .unwrap();
-            assert_eq!(
-                info.observed_addr,
-                "/ip4/100.101.102.103/tcp/5000".parse().unwrap()
-            );
-            assert_eq!(info.public_key, recv_pubkey);
-            assert_eq!(info.protocol_version, "proto_version");
-            assert_eq!(info.agent_version, "agent_version");
-            assert_eq!(
-                info.listen_addrs,
-                &[
-                    "/ip4/80.81.82.83/tcp/500".parse().unwrap(),
-                    "/ip6/::1/udp/1000".parse().unwrap()
-                ]
-            );
-            assert_eq!(info.protocols, &["/proto1", "/proto2"]);
-
-            bg_task.await;
-        });
-    }
 
     #[test]
     fn skip_invalid_multiaddr() {
@@ -400,7 +292,7 @@ mod tests {
             ),
         };
 
-        let info = Info::try_from(payload).expect("not to fail");
+        let info = PushInfo::try_from(payload).expect("not to fail");
 
         assert_eq!(info.listen_addrs, vec![valid_multiaddr])
     }
