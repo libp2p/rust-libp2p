@@ -1,4 +1,4 @@
-## 0.44.2 - unreleased
+## 0.44.2
 
 - Emit `ToSwarm::NewExternalAddrOfPeer` for all external addresses of remote peers.
   See [PR 4371](https://github.com/libp2p/rust-libp2p/pull/4371).
