@@ -23,7 +23,6 @@ mod upgrade;
 pub use behaviour::{AlreadyRegistered, Behaviour};
 
 /// A (remote) control for opening new streams for a particular protocol.
-// TODO: On `Drop`, we need to de-register the protocol.
 #[derive(Clone)]
 pub struct Control {
     protocol: StreamProtocol,
