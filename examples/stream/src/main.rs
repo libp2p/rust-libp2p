@@ -93,11 +93,11 @@ async fn connection_handler(peer: PeerId, mut control: stream::Control) {
 
         let stream = match peer_control.open_stream().await {
             Ok(stream) => stream,
-            Err(stream::Error::UnsupportedProtocol) => {
+            Err(stream::OpenStreamError::UnsupportedProtocol) => {
                 tracing::info!(%peer, %PROTOCOL, "Peer does not support protocol");
                 return;
             }
-            Err(stream::Error::Io(e)) => {
+            Err(stream::OpenStreamError::Io(e)) => {
                 // IO errors may be temporary.
                 // In production, something like an exponential backoff / circuit-breaker may be more appropriate.
                 tracing::debug!(%peer, "IO error when opening stream: {e}");

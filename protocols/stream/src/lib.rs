@@ -60,7 +60,7 @@ pub struct PeerControl {
 
 impl PeerControl {
     /// Open a new stream.
-    pub async fn open_stream(&mut self) -> Result<Stream, Error> {
+    pub async fn open_stream(&mut self) -> Result<Stream, OpenStreamError> {
         let (sender, receiver) = oneshot::channel();
 
         self.sender
@@ -69,11 +69,11 @@ impl PeerControl {
                 sender,
             })
             .await
-            .map_err(|e| Error::Io(io::Error::new(io::ErrorKind::BrokenPipe, e)))?;
+            .map_err(|e| OpenStreamError::Io(io::Error::new(io::ErrorKind::BrokenPipe, e)))?;
 
         let stream = receiver
             .await
-            .map_err(|e| Error::Io(io::Error::new(io::ErrorKind::BrokenPipe, e)))??;
+            .map_err(|e| OpenStreamError::Io(io::Error::new(io::ErrorKind::BrokenPipe, e)))??;
 
         Ok(stream)
     }
@@ -81,7 +81,7 @@ impl PeerControl {
 
 /// Errors while opening a new stream.
 #[derive(Debug)]
-pub enum Error {
+pub enum OpenStreamError {
     /// The remote does not support the requested protocol.
     UnsupportedProtocol,
     /// IO Error that occurred during the protocol handshake.

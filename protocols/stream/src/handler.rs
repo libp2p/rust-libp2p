@@ -15,14 +15,17 @@ use libp2p_swarm::{
     ConnectionHandler, Stream, StreamProtocol,
 };
 
-use crate::{upgrade::Upgrade, Error};
+use crate::{upgrade::Upgrade, OpenStreamError};
 
 pub struct Handler {
     remote: PeerId,
     supported_protocols: HashMap<StreamProtocol, mpsc::Sender<(PeerId, Stream)>>,
 
     receiver: flume::r#async::RecvStream<'static, NewStream>,
-    pending_upgrade: Option<(StreamProtocol, oneshot::Sender<Result<Stream, Error>>)>,
+    pending_upgrade: Option<(
+        StreamProtocol,
+        oneshot::Sender<Result<Stream, OpenStreamError>>,
+    )>,
 }
 
 impl Handler {
@@ -167,11 +170,13 @@ impl ConnectionHandler for Handler {
 
                 let error = match error {
                     swarm::StreamUpgradeError::Timeout => {
-                        Error::Io(io::Error::from(io::ErrorKind::TimedOut))
+                        OpenStreamError::Io(io::Error::from(io::ErrorKind::TimedOut))
                     }
                     swarm::StreamUpgradeError::Apply(v) => void::unreachable(v),
-                    swarm::StreamUpgradeError::NegotiationFailed => Error::UnsupportedProtocol,
-                    swarm::StreamUpgradeError::Io(io) => Error::Io(io),
+                    swarm::StreamUpgradeError::NegotiationFailed => {
+                        OpenStreamError::UnsupportedProtocol
+                    }
+                    swarm::StreamUpgradeError::Io(io) => OpenStreamError::Io(io),
                 };
 
                 let _ = sender.send(Err(error));
@@ -184,7 +189,7 @@ impl ConnectionHandler for Handler {
 /// Message from a [`PeerControl`] to a [`ConnectionHandler`] to negotiate a new outbound stream.
 pub(crate) struct NewStream {
     pub(crate) protocol: StreamProtocol,
-    pub(crate) sender: oneshot::Sender<Result<Stream, Error>>,
+    pub(crate) sender: oneshot::Sender<Result<Stream, OpenStreamError>>,
 }
 
 pub(crate) enum ToHandler {
