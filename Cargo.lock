@@ -3258,6 +3258,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "libp2p-stream"
+version = "0.1.0-alpha"
+dependencies = [
+ "flume",
+ "futures",
+ "libp2p-core",
+ "libp2p-identity",
+ "libp2p-swarm",
+ "tracing",
+ "void",
+]
+
+[[package]]
 name = "libp2p-swarm"
 version = "0.44.1"
 dependencies = [
@@ -5605,14 +5618,13 @@ name = "stream-example"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "flume",
  "futures",
  "libp2p",
+ "libp2p-stream",
  "rand 0.8.5",
  "tokio",
  "tracing",
  "tracing-subscriber",
- "void",
 ]
 
 [[package]]

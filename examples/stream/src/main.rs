@@ -3,7 +3,7 @@ use std::{io, time::Duration};
 use anyhow::{Context, Result};
 use futures::{AsyncReadExt, AsyncWriteExt, StreamExt};
 use libp2p::{multiaddr::Protocol, Multiaddr, PeerId, Stream, StreamProtocol};
-use stream_example as stream;
+use libp2p_stream as stream;
 use tracing::level_filters::LevelFilter;
 use tracing_subscriber::EnvFilter;
 

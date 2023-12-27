@@ -46,6 +46,7 @@ members = [
     "protocols/relay",
     "protocols/rendezvous",
     "protocols/request-response",
+    "protocols/stream",
     "protocols/upnp",
     "swarm-derive",
     "swarm-test",

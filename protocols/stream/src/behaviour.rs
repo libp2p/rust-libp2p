@@ -9,13 +9,12 @@ use futures::{
     channel::{mpsc, oneshot},
     StreamExt as _,
 };
-use libp2p::{
-    swarm::{
-        self, behaviour::ConnectionEstablished, dial_opts::DialOpts, ConnectionClosed,
-        ConnectionDenied, ConnectionId, FromSwarm, NetworkBehaviour, THandler, THandlerInEvent,
-        THandlerOutEvent, ToSwarm,
-    },
-    Multiaddr, PeerId, Stream, StreamProtocol,
+use libp2p_core::{Endpoint, Multiaddr};
+use libp2p_identity::PeerId;
+use libp2p_swarm::{
+    self as swarm, behaviour::ConnectionEstablished, dial_opts::DialOpts, ConnectionClosed,
+    ConnectionDenied, ConnectionId, FromSwarm, NetworkBehaviour, Stream, StreamProtocol, THandler,
+    THandlerInEvent, THandlerOutEvent, ToSwarm,
 };
 
 use crate::{
@@ -146,7 +145,7 @@ impl NetworkBehaviour for Behaviour {
         connection_id: ConnectionId,
         peer: PeerId,
         _: &Multiaddr,
-        _: libp2p::core::Endpoint,
+        _: Endpoint,
     ) -> Result<THandler<Self>, ConnectionDenied> {
         let (_, receiver) = self
             .connections_by_peer_id

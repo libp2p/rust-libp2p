@@ -1,6 +1,7 @@
 use std::future::{ready, Ready};
 
-use libp2p::{core::UpgradeInfo, InboundUpgrade, OutboundUpgrade, Stream, StreamProtocol};
+use libp2p_core::{InboundUpgrade, OutboundUpgrade, UpgradeInfo};
+use libp2p_swarm::{Stream, StreamProtocol};
 
 pub struct Upgrade {
     pub(crate) supported_protocols: Vec<StreamProtocol>,

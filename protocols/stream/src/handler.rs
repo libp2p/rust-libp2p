@@ -8,15 +8,11 @@ use futures::{
     channel::{mpsc, oneshot},
     StreamExt as _,
 };
-use libp2p::{
-    swarm::{
-        self,
-        handler::{
-            ConnectionEvent, DialUpgradeError, FullyNegotiatedInbound, FullyNegotiatedOutbound,
-        },
-        ConnectionHandler,
-    },
-    PeerId, Stream, StreamProtocol,
+use libp2p_identity::PeerId;
+use libp2p_swarm::{
+    self as swarm,
+    handler::{ConnectionEvent, DialUpgradeError, FullyNegotiatedInbound, FullyNegotiatedOutbound},
+    ConnectionHandler, Stream, StreamProtocol,
 };
 
 use crate::{upgrade::Upgrade, Error};

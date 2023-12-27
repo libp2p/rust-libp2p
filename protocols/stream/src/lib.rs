@@ -11,7 +11,8 @@ use futures::{
     SinkExt as _, StreamExt as _,
 };
 use handler::NewStream;
-use libp2p::{PeerId, Stream, StreamProtocol};
+use libp2p_identity::PeerId;
+use libp2p_swarm::{Stream, StreamProtocol};
 
 mod behaviour;
 mod handler;
