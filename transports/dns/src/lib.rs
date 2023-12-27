@@ -148,9 +148,8 @@ pub mod tokio {
 use async_trait::async_trait;
 use futures::{future::BoxFuture, prelude::*};
 use libp2p_core::{
-    connection::Endpoint,
     multiaddr::{Multiaddr, Protocol},
-    transport::{ListenerId, TransportError, TransportEvent},
+    transport::{DialOpts, ListenerId, TransportError, TransportEvent},
 };
 use parking_lot::Mutex;
 use smallvec::SmallVec;
@@ -231,15 +230,12 @@ where
         self.inner.lock().remove_listener(id)
     }
 
-    fn dial(&mut self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
-        self.do_dial(addr, Endpoint::Dialer)
-    }
-
-    fn dial_as_listener(
+    fn dial(
         &mut self,
         addr: Multiaddr,
+        dial_opts: DialOpts,
     ) -> Result<Self::Dial, TransportError<Self::Error>> {
-        self.do_dial(addr, Endpoint::Listener)
+        self.do_dial(addr, dial_opts)
     }
 
     fn address_translation(&self, server: &Multiaddr, observed: &Multiaddr) -> Option<Multiaddr> {
@@ -269,7 +265,7 @@ where
     fn do_dial(
         &mut self,
         addr: Multiaddr,
-        role_override: Endpoint,
+        dial_opts: DialOpts,
     ) -> Result<
         <Self as libp2p_core::Transport>::Dial,
         TransportError<<Self as libp2p_core::Transport>::Error>,
@@ -358,10 +354,7 @@ where
                     tracing::debug!(address=%addr, "Dialing address");
 
                     let transport = inner.clone();
-                    let dial = match role_override {
-                        Endpoint::Dialer => transport.lock().dial(addr),
-                        Endpoint::Listener => transport.lock().dial_as_listener(addr),
-                    };
+                    let dial = transport.lock().dial(addr, dial_opts);
                     let result = match dial {
                         Ok(out) => {
                             // We only count attempts that the inner transport
