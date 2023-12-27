@@ -278,14 +278,15 @@ impl NetworkBehaviour for Behaviour {
                         info: info.clone(),
                     }));
 
-                filter_new_external_addrs(&self.discovered_peers.get(&peer_id), &info.listen_addrs)
-                    .iter()
-                    .for_each(|address| {
-                        self.events.push_back(ToSwarm::NewExternalAddrOfPeer {
-                            peer_id,
-                            addr: address.clone(),
-                        })
+                for address in filter_new_external_addrs(
+                    &self.discovered_peers.get(&peer_id),
+                    &info.listen_addrs,
+                ) {
+                    self.events.push_back(ToSwarm::NewExternalAddrOfPeer {
+                        peer_id,
+                        addr: address.clone(),
                     });
+                }
 
                 match self.our_observed_addresses.entry(id) {
                     Entry::Vacant(not_yet_observed) => {
