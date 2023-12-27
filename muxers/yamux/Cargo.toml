@@ -12,7 +12,7 @@ categories = ["network-programming", "asynchronous"]
 
 [dependencies]
 either = "1"
-futures = "0.3.29"
+futures = "0.3.30"
 libp2p-core = { workspace = true }
 thiserror = "1.0"
 yamux012 = { version = "0.12.1", package = "yamux" }
