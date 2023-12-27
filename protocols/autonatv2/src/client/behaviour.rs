@@ -284,6 +284,9 @@ where
             .filter(|(addr, _)| !self.already_tested.contains(addr))
             .map(|(addr, count)| (addr.clone(), *count))
             .collect::<Vec<_>>();
+        if entries.is_empty() {
+            return;
+        }
         entries.sort_unstable_by_key(|(_, count)| *count);
         let addrs = entries
             .iter()
