@@ -7,7 +7,7 @@ use libp2p_stream as stream;
 use tracing::level_filters::LevelFilter;
 use tracing_subscriber::EnvFilter;
 
-const PROTOCOL: StreamProtocol = StreamProtocol::new("/my-ping-protocol");
+const PROTOCOL: StreamProtocol = StreamProtocol::new("/my-ping-protocol"); // TODO: Change to echo protocol.
 
 #[tokio::main]
 async fn main() -> Result<()> {

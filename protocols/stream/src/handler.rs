@@ -175,7 +175,7 @@ impl ConnectionHandler for Handler {
     }
 
     fn connection_keep_alive(&self) -> bool {
-        tracing::debug!(sender_count = %self.receiver.sender_count());
+        tracing::debug!(sender_count = %self.receiver.sender_count()); // TODO: Remove this once debugging is complete.
 
         let any_peer_controls_alive = self.receiver.sender_count() > 1; // The behaviour always owns a copy of the sender.
 
