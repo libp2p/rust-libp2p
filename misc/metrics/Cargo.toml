@@ -19,7 +19,7 @@ ping = ["libp2p-ping"]
 relay = ["libp2p-relay"]
 
 [dependencies]
-futures = "0.3.26"
+futures = "0.3.30"
 instant = "0.1.12"
 libp2p-core = { workspace = true }
 libp2p-dcutr =  { workspace = true, optional = true }
