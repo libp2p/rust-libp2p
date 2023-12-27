@@ -8,7 +8,7 @@ use std::{
 };
 
 use behaviour::NewPeerControl;
-use flume::r#async::SendSink;
+use flume::r#async::{RecvStream, SendSink};
 use futures::{
     channel::{mpsc, oneshot},
     SinkExt as _, StreamExt as _,
@@ -101,7 +101,7 @@ pub enum OpenStreamError {
 /// A handle to inbound streams for a particular protocol.
 #[must_use = "Streams do nothing unless polled."]
 pub struct IncomingStreams {
-    receiver: mpsc::Receiver<(PeerId, Stream)>,
+    receiver: RecvStream<'static, (PeerId, Stream)>,
 }
 
 impl futures::Stream for IncomingStreams {
@@ -109,5 +109,11 @@ impl futures::Stream for IncomingStreams {
 
     fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
         self.receiver.poll_next_unpin(cx)
+    }
+}
+
+impl Drop for IncomingStreams {
+    fn drop(&mut self) {
+        tracing::warn!("DROPPING NOW");
     }
 }

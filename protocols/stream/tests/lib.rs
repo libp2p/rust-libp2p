@@ -12,14 +12,15 @@ const PROTOCOL: StreamProtocol = StreamProtocol::new("/test");
 
 #[tokio::test]
 async fn dropping_incoming_streams_deregisters() {
-    tracing_subscriber::fmt()
+    let _ = tracing_subscriber::fmt()
         .with_env_filter(
             EnvFilter::builder()
                 .with_default_directive(LevelFilter::DEBUG.into())
                 .from_env()
                 .unwrap(),
         )
-        .init();
+        .with_test_writer()
+        .try_init();
 
     let mut swarm1 = Swarm::new_ephemeral(|_| stream::Behaviour::default());
     let mut swarm2 = Swarm::new_ephemeral(|_| stream::Behaviour::default());
@@ -56,6 +57,16 @@ async fn dropping_incoming_streams_deregisters() {
 
 #[tokio::test]
 async fn peer_control_keep_alive() {
+    let _ = tracing_subscriber::fmt()
+        .with_env_filter(
+            EnvFilter::builder()
+                .with_default_directive(LevelFilter::DEBUG.into())
+                .from_env()
+                .unwrap(),
+        )
+        .with_test_writer()
+        .try_init();
+
     let mut swarm1 = Swarm::new_ephemeral(|_| stream::Behaviour::default());
     let mut swarm2 = Swarm::new_ephemeral(|_| stream::Behaviour::default());
 
@@ -94,7 +105,7 @@ async fn peer_control_keep_alive() {
 
     // The idle timeout in `new_ephemeral` is 5 seconds.
     // Hence, if the keep-alive using `PeerControl` does not work, we would fail after this.
-    tokio::time::sleep(Duration::from_secs(6)).await;
+    tokio::time::sleep(Duration::from_secs(10)).await;
 
     let error = control.peer(swarm2_peer_id).await.unwrap_err();
 }

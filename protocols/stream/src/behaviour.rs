@@ -28,7 +28,7 @@ pub struct Behaviour {
     sender: mpsc::Sender<NewPeerControl>,
     receiver: mpsc::Receiver<NewPeerControl>,
 
-    supported_protocols: HashMap<StreamProtocol, mpsc::Sender<(PeerId, Stream)>>,
+    supported_protocols: HashMap<StreamProtocol, SendSink<'static, (PeerId, Stream)>>,
     active_connections: HashSet<(PeerId, ConnectionId)>,
 
     // Note: Connections will perform work-stealing on answering `NewStream` messages.
@@ -79,9 +79,9 @@ impl Behaviour {
             return Err(AlreadyRegistered);
         }
 
-        let (sender, receiver) = mpsc::channel(10);
+        let (sender, receiver) = flume::bounded(0);
         self.supported_protocols
-            .insert(protocol.clone(), sender.clone());
+            .insert(protocol.clone(), sender.clone().into_sink());
 
         self.events
             .extend(
@@ -92,7 +92,7 @@ impl Behaviour {
                         handler: swarm::NotifyHandler::One(*conn),
                         event: ToHandler::RegisterProtocol(RegisterProtocol {
                             protocol: protocol.clone(),
-                            sender: sender.clone(),
+                            sender: sender.clone().into_sink(),
                         }),
                     }),
             );
@@ -103,7 +103,9 @@ impl Behaviour {
             self.active_connections.len()
         );
 
-        Ok(IncomingStreams { receiver })
+        Ok(IncomingStreams {
+            receiver: receiver.into_stream(),
+        })
     }
 }
 

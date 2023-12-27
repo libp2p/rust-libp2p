@@ -4,11 +4,11 @@ use std::{
     task::{Context, Poll},
 };
 
-use flume::{r#async::RecvStream, Receiver};
-use futures::{
-    channel::{mpsc, oneshot},
-    StreamExt as _,
+use flume::{
+    r#async::{RecvStream, SendSink},
+    Receiver,
 };
+use futures::{channel::oneshot, SinkExt, StreamExt as _};
 use libp2p_identity::PeerId;
 use libp2p_swarm::{
     self as swarm,
@@ -20,7 +20,7 @@ use crate::{upgrade::Upgrade, OpenStreamError};
 
 pub struct Handler {
     remote: PeerId,
-    supported_protocols: HashMap<StreamProtocol, mpsc::Sender<(PeerId, Stream)>>,
+    supported_protocols: HashMap<StreamProtocol, SendSink<'static, (PeerId, Stream)>>,
 
     receiver: Receiver<NewStream>,
     receive_stream: RecvStream<'static, NewStream>,
@@ -33,7 +33,7 @@ pub struct Handler {
 impl Handler {
     pub(crate) fn new(
         remote: PeerId,
-        supported_protocols: HashMap<StreamProtocol, mpsc::Sender<(PeerId, Stream)>>,
+        supported_protocols: HashMap<StreamProtocol, SendSink<'static, (PeerId, Stream)>>,
         receiver: Receiver<NewStream>,
     ) -> Self {
         Self {
@@ -98,16 +98,16 @@ impl ConnectionHandler for Handler {
         let cancelled_protocols = self
             .supported_protocols
             .iter_mut()
-            .filter_map(|(protocol, sender)| match sender.poll_ready(cx) {
-                Poll::Ready(Err(e)) if e.is_disconnected() => Some(protocol.clone()),
+            .filter_map(|(protocol, sender)| match sender.poll_ready_unpin(cx) {
+                Poll::Ready(Err(_)) => Some(protocol.clone()),
                 _ => None,
             })
             .collect::<Vec<_>>(); // In most cases, this won't allocate because the `Vec` will be empty.
 
-        for p in cancelled_protocols {
+        for p in &cancelled_protocols {
             tracing::debug!(protocol = %p, "Stream receiver was dropped");
 
-            self.supported_protocols.remove(&p);
+            self.supported_protocols.remove(p);
         }
 
         Poll::Pending
@@ -133,16 +133,15 @@ impl ConnectionHandler for Handler {
                 info: (),
             }) => match self.supported_protocols.entry(protocol.clone()) {
                 Entry::Occupied(mut entry) => {
-                    match entry.get_mut().try_send((self.remote, stream)) {
+                    match entry.get_mut().sender().try_send((self.remote, stream)) {
                         Ok(()) => {}
-                        Err(e) if e.is_full() => {
+                        Err(flume::TrySendError::Full(_)) => {
                             tracing::debug!(%protocol, "channel is full, dropping inbound stream");
                         }
-                        Err(e) if e.is_disconnected() => {
+                        Err(flume::TrySendError::Disconnected(_)) => {
                             tracing::debug!(%protocol, "channel is gone, dropping inbound stream");
                             entry.remove();
                         }
-                        _ => {}
                     }
                 }
                 Entry::Vacant(_) => {
@@ -191,11 +190,11 @@ impl ConnectionHandler for Handler {
     }
 
     fn connection_keep_alive(&self) -> bool {
-        let any_peer_controls_alive = dbg!(self.receiver.sender_count()) > 1; // The behaviour always owns a copy of the sender.
+        let any_peer_controls_alive = self.receiver.sender_count() > 1; // The behaviour always owns a copy of the sender.
         let any_stream_receiver_alive = self
             .supported_protocols
             .values()
-            .any(|s| !dbg!(s.is_closed()));
+            .any(|s| !s.is_disconnected());
 
         any_peer_controls_alive || any_stream_receiver_alive
     }
@@ -211,8 +210,15 @@ pub(crate) enum ToHandler {
     RegisterProtocol(RegisterProtocol),
 }
 
-#[derive(Debug)]
 pub struct RegisterProtocol {
     pub(crate) protocol: StreamProtocol,
-    pub(crate) sender: mpsc::Sender<(PeerId, Stream)>,
+    pub(crate) sender: SendSink<'static, (PeerId, Stream)>,
+}
+
+impl std::fmt::Debug for RegisterProtocol {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("RegisterProtocol")
+            .field("protocol", &self.protocol)
+            .finish()
+    }
 }
