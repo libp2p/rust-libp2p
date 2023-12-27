@@ -1,3 +1,4 @@
+use core::fmt;
 use std::{
     collections::{HashMap, HashSet, VecDeque},
     io,
@@ -22,6 +23,7 @@ use crate::{
     Control, IncomingStreams,
 };
 
+/// A generic protocol for stream-oriented protocols.
 pub struct Behaviour {
     sender: mpsc::Sender<NewPeerControl>,
     receiver: mpsc::Receiver<NewPeerControl>,
@@ -105,8 +107,17 @@ impl Behaviour {
     }
 }
 
+/// The protocol is already registered.
 #[derive(Debug)]
 pub struct AlreadyRegistered;
+
+impl fmt::Display for AlreadyRegistered {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "The protocol is already registered")
+    }
+}
+
+impl std::error::Error for AlreadyRegistered {}
 
 /// Message from a [`Control`] to the [`Behaviour`] to construct a new [`PeerControl`].
 pub(crate) struct NewPeerControl {

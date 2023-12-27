@@ -1,3 +1,5 @@
+#![doc = include_str!("../README.md")]
+
 use std::{
     io,
     pin::Pin,
@@ -20,6 +22,7 @@ mod upgrade;
 
 pub use behaviour::{AlreadyRegistered, Behaviour};
 
+/// A (remote) control for opening new streams for a particular protocol.
 // TODO: On `Drop`, we need to de-register the protocol.
 #[derive(Clone)]
 pub struct Control {
@@ -28,6 +31,9 @@ pub struct Control {
 }
 
 impl Control {
+    /// Obtain a [`PeerControl`] for the given [`PeerId`].
+    ///
+    /// This function will block until we have a connection to the given peer.
     pub async fn peer(&mut self, peer: PeerId) -> io::Result<PeerControl> {
         let (sender, receiver) = oneshot::channel();
         self.sender
@@ -46,12 +52,14 @@ impl Control {
 }
 
 /// TODO: Keep connection alive whilst `PeerControl` is active.
+#[derive(Clone)]
 pub struct PeerControl {
     protocol: StreamProtocol,
     sender: SendSink<'static, NewStream>,
 }
 
 impl PeerControl {
+    /// Open a new stream.
     pub async fn open_stream(&mut self) -> Result<Stream, Error> {
         let (sender, receiver) = oneshot::channel();
 
@@ -71,6 +79,7 @@ impl PeerControl {
     }
 }
 
+/// Errors while opening a new stream.
 #[derive(Debug)]
 pub enum Error {
     /// The remote does not support the requested protocol.
