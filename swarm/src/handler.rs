@@ -59,7 +59,6 @@ use crate::StreamProtocol;
 use core::slice;
 use libp2p_core::Multiaddr;
 use std::collections::{HashMap, HashSet};
-use std::ops::Not;
 use std::{error, fmt, io, task::Context, task::Poll, time::Duration};
 
 /// A handler for a set of protocols used on a connection with a remote.
@@ -336,15 +335,15 @@ impl<'a> ProtocolsChange<'a> {
     ///
     /// Returns `None` if the change is a no-op, i.e. `to_add` is a subset of `existing_protocols`.
     pub(crate) fn add(
-        protocols: HashSet<StreamProtocol>,
-        remote_supported_protocols: &HashSet<StreamProtocol>,
+        to_add: HashSet<StreamProtocol>,
+        existing_protocols: &HashSet<StreamProtocol>,
         temp_protocols: &'a mut Vec<StreamProtocol>,
     ) -> Option<Self> {
         temp_protocols.clear();
         temp_protocols.extend(
-            protocols
+            to_add
                 .into_iter()
-                .filter(|i| !remote_supported_protocols.contains(i)),
+                .filter(|i| !existing_protocols.contains(i)),
         );
 
         if temp_protocols.is_empty() {
@@ -356,19 +355,19 @@ impl<'a> ProtocolsChange<'a> {
         }))
     }
 
-    /// Compute the [`ProtocolsChange`] that results from removing `to_remove` from `existing_protocols`.
+    /// Compute the [`ProtocolsChange`] that results from removing `to_remove` from `existing_protocols`. Removes the protocols from `existing_protocols`.
     ///
     /// Returns `None` if the change is a no-op, i.e. none of the protocols in `to_remove` are in `existing_protocols`.
     pub(crate) fn remove(
-        protocols: HashSet<StreamProtocol>,
-        remote_supported_protocols: &HashSet<StreamProtocol>,
+        to_remove: HashSet<StreamProtocol>,
+        existing_protocols: &mut HashSet<StreamProtocol>,
         temp_protocols: &'a mut Vec<StreamProtocol>,
     ) -> Option<Self> {
         temp_protocols.clear();
         temp_protocols.extend(
-            protocols
+            to_remove
                 .into_iter()
-                .filter_map(|i| remote_supported_protocols.take(&i)),
+                .filter_map(|i| existing_protocols.take(&i)),
         );
 
         if temp_protocols.is_empty() {

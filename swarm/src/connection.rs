@@ -32,7 +32,7 @@ pub use supported_protocols::SupportedProtocols;
 use crate::handler::{
     AddressChange, ConnectionEvent, ConnectionHandler, DialUpgradeError, FullyNegotiatedInbound,
     FullyNegotiatedOutbound, ListenUpgradeError, ProtocolSupport, ProtocolsAdded, ProtocolsChange,
-    ProtocolsRemoved, UpgradeInfoSend,
+    UpgradeInfoSend,
 };
 use crate::stream::ActiveStreamCounter;
 use crate::upgrade::{InboundUpgradeSend, OutboundUpgradeSend};
@@ -453,13 +453,14 @@ where
                 temp_protocols,
             );
 
-            if changes.is_empty() {
-                return Poll::Pending;
+            if !changes.is_empty() {
+                for change in changes {
+                    handler.on_connection_event(ConnectionEvent::LocalProtocolsChange(change));
+                }
+                continue;
             }
 
-            for change in changes {
-                handler.on_connection_event(ConnectionEvent::LocalProtocolsChange(change));
-            }
+            return Poll::Pending;
         }
     }
 
@@ -874,22 +875,6 @@ mod tests {
     #[ignore]
     fn repoll_with_active_protocols() {
         fn run_benchmark(protcol_count: usize, iters: usize) {
-            // we need longer protocol names
-            macro_rules! protocols {
-                ($($name:ident)*) => {
-                    concat!(
-                        $(
-                            "/",
-                            stringify!($name),
-                            "ffffffffffffffffffffff ",
-                        )*
-                    )
-                }
-            }
-
-            const PROTOCOLS: &str = protocols!(a b c d e f g h i j k l m n o p q r s t u v);
-            let protocols = PROTOCOLS.split(' ').collect::<Vec<_>>();
-
             let mut connection = Connection::new(
                 StreamMuxerBox::new(PendingStreamMuxer),
                 ConfigurableProtocolConnectionHandler::default(),
@@ -898,7 +883,10 @@ mod tests {
                 Duration::ZERO,
             );
 
-            connection.handler.listen_on(&protocols[..protcol_count]);
+            let protocols = (0..protcol_count)
+                .map(|i| &*format!("/protocol-ffffffff/{}", i).leak())
+                .collect::<Vec<_>>();
+            connection.handler.listen_on(&protocols);
 
             let now = Instant::now();
             for _ in 0..iters {
@@ -913,6 +901,7 @@ mod tests {
         run_benchmark(4, iters);
         run_benchmark(10, iters);
         run_benchmark(20, iters);
+        run_benchmark(1000, iters / 10);
     }
 
     #[test]
