@@ -303,37 +303,25 @@ where
                 Poll::Ready(ConnectionHandlerEvent::ReportRemoteProtocols(
                     ProtocolSupport::Added(protocols),
                 )) => {
-                    let added = protocols
-                        .into_iter()
-                        .filter(|i| remote_supported_protocols.insert(i.clone()))
-                        .collect::<Vec<_>>();
-
-                    if !added.is_empty() {
-                        handler.on_connection_event(ConnectionEvent::RemoteProtocolsChange(
-                            ProtocolsChange::Added(ProtocolsAdded {
-                                protocols: added.iter(),
-                            }),
-                        ));
+                    if let Some(added) =
+                        ProtocolsChange::add(protocols, remote_supported_protocols, temp_protocols)
+                    {
+                        handler.on_connection_event(ConnectionEvent::RemoteProtocolsChange(added));
+                        remote_supported_protocols.extend(temp_protocols.drain(..));
                     }
-
                     continue;
                 }
                 Poll::Ready(ConnectionHandlerEvent::ReportRemoteProtocols(
                     ProtocolSupport::Removed(protocols),
                 )) => {
-                    let removed = protocols
-                        .into_iter()
-                        .filter_map(|i| remote_supported_protocols.take(&i))
-                        .collect::<Vec<_>>();
-
-                    if !removed.is_empty() {
-                        handler.on_connection_event(ConnectionEvent::RemoteProtocolsChange(
-                            ProtocolsChange::Removed(ProtocolsRemoved {
-                                protocols: removed.iter(),
-                            }),
-                        ));
+                    if let Some(removed) = ProtocolsChange::remove(
+                        protocols,
+                        remote_supported_protocols,
+                        temp_protocols,
+                    ) {
+                        handler
+                            .on_connection_event(ConnectionEvent::RemoteProtocolsChange(removed));
                     }
-
                     continue;
                 }
             }
@@ -464,16 +452,14 @@ where
                 handler.listen_protocol().upgrade().protocol_info(),
                 temp_protocols,
             );
-            let mut has_changes = false;
-            for change in changes {
-                handler.on_connection_event(ConnectionEvent::LocalProtocolsChange(change));
-                has_changes = true;
-            }
-            if has_changes {
-                continue;
+
+            if changes.is_empty() {
+                return Poll::Pending;
             }
 
-            return Poll::Pending; // Nothing can make progress, return `Pending`.
+            for change in changes {
+                handler.on_connection_event(ConnectionEvent::LocalProtocolsChange(change));
+            }
         }
     }
 
@@ -755,42 +741,6 @@ enum Shutdown {
     Asap,
     /// A shut down is planned for when a `Delay` has elapsed.
     Later(Delay, Instant),
-}
-
-/// The endpoint roles associated with a pending peer-to-peer connection.
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-enum PendingPoint {
-    /// The socket comes from a dialer.
-    ///
-    /// There is no single address associated with the Dialer of a pending
-    /// connection. Addresses are dialed in parallel. Only once the first dial
-    /// is successful is the address of the connection known.
-    Dialer {
-        /// Same as [`ConnectedPoint::Dialer`] `role_override`.
-        role_override: Endpoint,
-    },
-    /// The socket comes from a listener.
-    Listener {
-        /// Local connection address.
-        local_addr: Multiaddr,
-        /// Address used to send back data to the remote.
-        send_back_addr: Multiaddr,
-    },
-}
-
-impl From<ConnectedPoint> for PendingPoint {
-    fn from(endpoint: ConnectedPoint) -> Self {
-        match endpoint {
-            ConnectedPoint::Dialer { role_override, .. } => PendingPoint::Dialer { role_override },
-            ConnectedPoint::Listener {
-                local_addr,
-                send_back_addr,
-            } => PendingPoint::Listener {
-                local_addr,
-                send_back_addr,
-            },
-        }
-    }
 }
 
 pub(crate) struct AsStrHashEq<T>(pub(crate) T);
@@ -1429,6 +1379,42 @@ mod tests {
 
         fn upgrade_outbound(self, stream: C, _: Self::Info) -> Self::Future {
             future::ready(Ok(stream))
+        }
+    }
+}
+
+/// The endpoint roles associated with a pending peer-to-peer connection.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+enum PendingPoint {
+    /// The socket comes from a dialer.
+    ///
+    /// There is no single address associated with the Dialer of a pending
+    /// connection. Addresses are dialed in parallel. Only once the first dial
+    /// is successful is the address of the connection known.
+    Dialer {
+        /// Same as [`ConnectedPoint::Dialer`] `role_override`.
+        role_override: Endpoint,
+    },
+    /// The socket comes from a listener.
+    Listener {
+        /// Local connection address.
+        local_addr: Multiaddr,
+        /// Address used to send back data to the remote.
+        send_back_addr: Multiaddr,
+    },
+}
+
+impl From<ConnectedPoint> for PendingPoint {
+    fn from(endpoint: ConnectedPoint) -> Self {
+        match endpoint {
+            ConnectedPoint::Dialer { role_override, .. } => PendingPoint::Dialer { role_override },
+            ConnectedPoint::Listener {
+                local_addr,
+                send_back_addr,
+            } => PendingPoint::Listener {
+                local_addr,
+                send_back_addr,
+            },
         }
     }
 }

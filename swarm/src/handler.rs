@@ -53,6 +53,7 @@ pub use map_out::MapOutEvent;
 pub use one_shot::{OneShotHandler, OneShotHandlerConfig};
 pub use pending::PendingConnectionHandler;
 pub use select::ConnectionHandlerSelect;
+use smallvec::{smallvec, SmallVec};
 
 use crate::StreamProtocol;
 use core::slice;
@@ -331,12 +332,60 @@ pub enum ProtocolsChange<'a> {
 }
 
 impl<'a> ProtocolsChange<'a> {
+    /// Compute the [`ProtocolsChange`] that results from adding `to_add` to `existing_protocols`.
+    ///
+    /// Returns `None` if the change is a no-op, i.e. `to_add` is a subset of `existing_protocols`.
+    pub(crate) fn add(
+        protocols: HashSet<StreamProtocol>,
+        remote_supported_protocols: &HashSet<StreamProtocol>,
+        temp_protocols: &'a mut Vec<StreamProtocol>,
+    ) -> Option<Self> {
+        temp_protocols.clear();
+        temp_protocols.extend(
+            protocols
+                .into_iter()
+                .filter(|i| !remote_supported_protocols.contains(i)),
+        );
+
+        if temp_protocols.is_empty() {
+            return None;
+        }
+
+        Some(Self::Added(ProtocolsAdded {
+            protocols: temp_protocols.iter(),
+        }))
+    }
+
+    /// Compute the [`ProtocolsChange`] that results from removing `to_remove` from `existing_protocols`.
+    ///
+    /// Returns `None` if the change is a no-op, i.e. none of the protocols in `to_remove` are in `existing_protocols`.
+    pub(crate) fn remove(
+        protocols: HashSet<StreamProtocol>,
+        remote_supported_protocols: &HashSet<StreamProtocol>,
+        temp_protocols: &'a mut Vec<StreamProtocol>,
+    ) -> Option<Self> {
+        temp_protocols.clear();
+        temp_protocols.extend(
+            protocols
+                .into_iter()
+                .filter_map(|i| remote_supported_protocols.take(&i)),
+        );
+
+        if temp_protocols.is_empty() {
+            return None;
+        }
+
+        Some(Self::Removed(ProtocolsRemoved {
+            protocols: temp_protocols.iter(),
+        }))
+    }
+
     /// Compute the [`ProtocolsChange`]s required to go from `existing_protocols` to `new_protocols`.
     pub(crate) fn from_full_sets<T: AsRef<str>>(
         existing_protocols: &mut HashMap<AsStrHashEq<T>, bool>,
         new_protocols: impl IntoIterator<Item = T>,
         temp_owner: &'a mut Vec<StreamProtocol>,
-    ) -> impl Iterator<Item = Self> {
+    ) -> SmallVec<[Self; 2]> {
         temp_owner.clear();
         // to avoid looping trough the map to just set the booleans we use the fact that all of
         // the booleans in the map have same value
@@ -354,7 +403,7 @@ impl<'a> ProtocolsChange<'a> {
         }
 
         if count == Some(0) {
-            return None.into_iter().chain(None);
+            return smallvec![];
         }
 
         let added_count = temp_owner.len();
@@ -366,21 +415,18 @@ impl<'a> ProtocolsChange<'a> {
         });
 
         let (added, removed) = temp_owner.split_at(added_count);
-        added
-            .is_empty()
-            .not()
-            .then_some(ProtocolsChange::Added(ProtocolsAdded {
+        let mut res = smallvec![];
+        if !added.is_empty() {
+            res.push(ProtocolsChange::Added(ProtocolsAdded {
                 protocols: added.iter(),
-            }))
-            .into_iter()
-            .chain(
-                removed
-                    .is_empty()
-                    .not()
-                    .then_some(ProtocolsChange::Removed(ProtocolsRemoved {
-                        protocols: removed.iter(),
-                    })),
-            )
+            }));
+        }
+        if !removed.is_empty() {
+            res.push(ProtocolsChange::Removed(ProtocolsRemoved {
+                protocols: removed.iter(),
+            }));
+        }
+        res
     }
 }
 
