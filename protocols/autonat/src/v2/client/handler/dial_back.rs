@@ -12,7 +12,7 @@ use libp2p_swarm::{
 };
 use void::Void;
 
-use crate::{protocol, Nonce, DIAL_BACK_PROTOCOL_NAME};
+use crate::v2::{protocol, Nonce, DIAL_BACK_PROTOCOL_NAME};
 
 pub struct Handler {
     inbound: FuturesSet<io::Result<Nonce>>,

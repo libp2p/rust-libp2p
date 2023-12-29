@@ -22,8 +22,8 @@ use std::{
     time::Duration,
 };
 
-use crate::client::behaviour::Error;
-use crate::{
+use crate::v2::{
+    client::behaviour::Error,
     generated::structs::{mod_DialResponse::ResponseStatus, DialStatus},
     protocol::{
         Coder, DialDataRequest, DialDataResponse, DialRequest, DialResponse, Request, Response,
@@ -268,7 +268,7 @@ async fn start_stream_handle(
         &mut checked_addr_idx,
     )
     .await
-    .map_err(crate::client::behaviour::Error::from);
+    .map_err(crate::v2::client::behaviour::Error::from);
     InternalStatusUpdate {
         tested_addr: checked_addr_idx.and_then(|idx| addrs.get(idx).cloned()),
         bytes_sent: data_amount,

@@ -21,7 +21,7 @@ use libp2p_swarm::{
 };
 use rand_core::RngCore;
 
-use crate::{
+use crate::v2::{
     generated::structs::{mod_DialResponse::ResponseStatus, DialStatus},
     protocol::{Coder, DialDataRequest, DialRequest, DialResponse, Request, Response},
     server::behaviour::StatusUpdate,

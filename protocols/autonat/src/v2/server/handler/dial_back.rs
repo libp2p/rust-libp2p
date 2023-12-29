@@ -14,7 +14,7 @@ use libp2p_swarm::{
     SubstreamProtocol,
 };
 
-use crate::{protocol::dial_back, DIAL_BACK_PROTOCOL_NAME};
+use crate::v2::{protocol::dial_back, DIAL_BACK_PROTOCOL_NAME};
 
 use super::dial_request::{DialBackCommand, DialBackStatus as DialBackRes};
 

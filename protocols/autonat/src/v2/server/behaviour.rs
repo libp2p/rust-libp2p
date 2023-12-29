@@ -4,7 +4,7 @@ use std::{
     task::{Context, Poll},
 };
 
-use crate::server::handler::dial_request::DialBackStatus;
+use crate::v2::server::handler::dial_request::DialBackStatus;
 use either::Either;
 use libp2p_core::{transport::PortUse, Endpoint, Multiaddr};
 use libp2p_identity::PeerId;
@@ -15,7 +15,7 @@ use libp2p_swarm::{
 use libp2p_swarm::{dial_opts::PeerCondition, ConnectionClosed};
 use rand_core::{OsRng, RngCore};
 
-use crate::server::handler::{
+use crate::v2::server::handler::{
     dial_back,
     dial_request::{self, DialBackCommand},
     Handler,

@@ -11,7 +11,7 @@ use libp2p_core::Multiaddr;
 use quick_protobuf_codec::Codec;
 use rand::Rng;
 
-use crate::{generated::structs as proto, Nonce};
+use crate::v2::{generated::structs as proto, Nonce};
 
 const REQUEST_MAX_SIZE: usize = 4104;
 pub(super) const DATA_LEN_LOWER_BOUND: usize = 30_000u32 as usize;
@@ -310,10 +310,10 @@ impl DialBack {
 
 #[cfg(test)]
 mod tests {
-    use crate::generated::structs::{
+    use crate::v2::generated::structs::{
         mod_Message::OneOfmsg, DialDataResponse as GenDialDataResponse, Message,
     };
-    use crate::protocol::{Coder, DialDataResponse, Request};
+    use crate::v2::protocol::{Coder, DialDataResponse, Request};
     use futures::io::Cursor;
 
     use rand::{thread_rng, Rng};

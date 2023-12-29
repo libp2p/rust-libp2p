@@ -18,8 +18,8 @@ use rand::prelude::*;
 use rand_core::OsRng;
 use std::fmt::{Debug, Display, Formatter};
 
-use crate::client::handler::dial_request::InternalError;
-use crate::{global_only::IpExt, protocol::DialRequest};
+use crate::v2::client::handler::dial_request::InternalError;
+use crate::v2::{global_only::IpExt, protocol::DialRequest};
 
 use super::handler::{
     dial_back,
@@ -254,7 +254,7 @@ where
                         }
                     },
                 }
-                let event = crate::client::Event {
+                let event = crate::v2::client::Event {
                     tested_addr,
                     bytes_sent: data_amount,
                     server: server.unwrap_or(peer_id),

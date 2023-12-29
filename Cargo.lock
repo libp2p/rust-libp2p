@@ -476,6 +476,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "autonatv2"
+version = "0.1.0"
+
+[[package]]
 name = "axum"
 version = "0.6.20"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2629,30 +2633,9 @@ dependencies = [
 
 [[package]]
 name = "libp2p-autonat"
-version = "0.12.0"
+version = "0.13.0"
 dependencies = [
  "async-std",
- "async-trait",
- "asynchronous-codec",
- "futures",
- "futures-timer",
- "instant",
- "libp2p-core",
- "libp2p-identity",
- "libp2p-request-response",
- "libp2p-swarm",
- "libp2p-swarm-test",
- "quick-protobuf",
- "quick-protobuf-codec",
- "rand 0.8.5",
- "tracing",
- "tracing-subscriber",
-]
-
-[[package]]
-name = "libp2p-autonatv2"
-version = "0.1.0"
-dependencies = [
  "async-trait",
  "asynchronous-codec",
  "bytes",
@@ -2660,21 +2643,21 @@ dependencies = [
  "futures",
  "futures-bounded",
  "futures-timer",
+ "instant",
  "libp2p-core",
  "libp2p-identify",
  "libp2p-identity",
+ "libp2p-request-response",
  "libp2p-swarm",
  "libp2p-swarm-test",
  "quick-protobuf",
  "quick-protobuf-codec",
  "rand 0.8.5",
  "rand_core 0.6.4",
- "static_assertions",
  "thiserror",
  "tokio",
  "tracing",
  "tracing-subscriber",
- "unsigned-varint 0.8.0",
  "void",
 ]
 
@@ -5792,18 +5775,18 @@ dependencies = [
 
 [[package]]
 name = "thiserror"
-version = "1.0.51"
+version = "1.0.52"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f11c217e1416d6f036b870f14e0413d480dbf28edbee1f877abaf0206af43bb7"
+checksum = "83a48fd946b02c0a526b2e9481c8e2a17755e47039164a86c4070446e3a4614d"
 dependencies = [
  "thiserror-impl",
 ]
 
 [[package]]
 name = "thiserror-impl"
-version = "1.0.51"
+version = "1.0.52"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "01742297787513b79cf8e29d1056ede1313e2420b7b3b15d0a768b4921f549df"
+checksum = "e7fbe9b594d6568a6a1443250a7e67d80b74e1e96f6d1715e1e21cc1888291d3"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -6268,8 +6251,6 @@ checksum = "eb066959b24b5196ae73cb057f45598450d2c5f71460e98c49b738086eff9c06"
 dependencies = [
  "asynchronous-codec",
  "bytes",
- "futures-io",
- "futures-util",
 ]
 
 [[package]]

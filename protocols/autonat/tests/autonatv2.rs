@@ -1,5 +1,5 @@
-use libp2p_autonatv2::client::{self, Config};
-use libp2p_autonatv2::server;
+use libp2p_autonat::v2::client::{self, Config};
+use libp2p_autonat::v2::server;
 use libp2p_core::transport::TransportError;
 use libp2p_core::Multiaddr;
 use libp2p_swarm::{
@@ -430,7 +430,7 @@ async fn dial_back_to_not_supporting() {
 
 async fn new_server() -> Swarm<CombinedServer> {
     let mut node = Swarm::new_ephemeral(|identity| CombinedServer {
-        autonat: libp2p_autonatv2::server::Behaviour::default(),
+        autonat: libp2p_autonat::v2::server::Behaviour::default(),
         identify: libp2p_identify::Behaviour::new(libp2p_identify::Config::new(
             "/libp2p-test/1.0.0".into(),
             identity.public().clone(),
@@ -443,7 +443,7 @@ async fn new_server() -> Swarm<CombinedServer> {
 
 async fn new_client() -> Swarm<CombinedClient> {
     let mut node = Swarm::new_ephemeral(|identity| CombinedClient {
-        autonat: libp2p_autonatv2::client::Behaviour::new(
+        autonat: libp2p_autonat::v2::client::Behaviour::new(
             OsRng,
             Config::default().with_recheck_interval(Duration::from_millis(100)),
         ),
@@ -459,14 +459,14 @@ async fn new_client() -> Swarm<CombinedClient> {
 #[derive(libp2p_swarm::NetworkBehaviour)]
 #[behaviour(prelude = "libp2p_swarm::derive_prelude")]
 struct CombinedServer {
-    autonat: libp2p_autonatv2::server::Behaviour,
+    autonat: libp2p_autonat::v2::server::Behaviour,
     identify: libp2p_identify::Behaviour,
 }
 
 #[derive(libp2p_swarm::NetworkBehaviour)]
 #[behaviour(prelude = "libp2p_swarm::derive_prelude")]
 struct CombinedClient {
-    autonat: libp2p_autonatv2::client::Behaviour,
+    autonat: libp2p_autonat::v2::client::Behaviour,
     identify: libp2p_identify::Behaviour,
 }
 
