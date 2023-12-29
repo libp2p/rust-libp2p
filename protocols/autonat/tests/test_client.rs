@@ -19,7 +19,7 @@
 // DEALINGS IN THE SOFTWARE.
 
 use async_std::task::JoinHandle;
-use libp2p_autonat::{
+use libp2p_autonat::v1::{
     Behaviour, Config, Event, NatStatus, OutboundProbeError, OutboundProbeEvent, ResponseError,
 };
 use libp2p_core::Multiaddr;

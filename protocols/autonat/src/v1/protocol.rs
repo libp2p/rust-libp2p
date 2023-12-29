@@ -18,7 +18,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::proto;
+use crate::v1::proto;
 use async_trait::async_trait;
 use asynchronous_codec::{FramedRead, FramedWrite};
 use futures::io::{AsyncRead, AsyncWrite};
