@@ -1,7 +1,4 @@
-use futures::{
-    channel::{mpsc, oneshot},
-    AsyncRead, AsyncWrite, SinkExt, StreamExt,
-};
+use futures::{channel::oneshot, AsyncRead, AsyncWrite};
 use futures_bounded::FuturesSet;
 use libp2p_core::{
     upgrade::{DeniedUpgrade, ReadyUpgrade},
@@ -19,17 +16,14 @@ use libp2p_swarm::{
 };
 use std::{
     collections::VecDeque,
-    convert::identity,
     io,
     iter::{once, repeat},
-    sync::Arc,
     task::{Context, Poll},
     time::Duration,
 };
 
 use crate::client::behaviour::Error;
 use crate::{
-    client::behaviour::Event,
     generated::structs::{mod_DialResponse::ResponseStatus, DialStatus},
     protocol::{
         Coder, DialDataRequest, DialDataResponse, DialRequest, DialResponse, Request, Response,
@@ -63,6 +57,15 @@ pub(crate) enum InternalError {
 }
 
 #[derive(Debug)]
+pub struct InternalStatusUpdate {
+    pub(crate) tested_addr: Option<Multiaddr>,
+    pub(crate) bytes_sent: usize,
+    pub(crate) server: Option<PeerId>,
+    pub result: Result<TestEnd, Error>,
+    pub(crate) server_no_support: bool,
+}
+
+#[derive(Debug)]
 pub struct TestEnd {
     pub(crate) dial_request: DialRequest,
     pub(crate) reachable_addr: Multiaddr,
@@ -70,8 +73,7 @@ pub struct TestEnd {
 
 #[derive(Debug)]
 pub enum ToBehaviour {
-    TestCompleted(Result<TestEnd, Error>),
-    StatusUpdate(Event),
+    TestCompleted(InternalStatusUpdate),
     PeerHasServerSupport,
 }
 
@@ -83,7 +85,7 @@ pub struct Handler {
             <Self as ConnectionHandler>::ToBehaviour,
         >,
     >,
-    outbound: futures_bounded::FuturesSet<Result<TestEnd, crate::client::behaviour::Error>>,
+    outbound: futures_bounded::FuturesSet<InternalStatusUpdate>,
     queued_streams: VecDeque<
         oneshot::Sender<
             Result<
@@ -92,20 +94,15 @@ pub struct Handler {
             >,
         >,
     >,
-    status_update_rx: mpsc::Receiver<Event>,
-    status_update_tx: mpsc::Sender<Event>,
     server: PeerId,
 }
 
 impl Handler {
     pub(crate) fn new(server: PeerId) -> Self {
-        let (status_update_tx, status_update_rx) = mpsc::channel(10);
         Self {
             queued_events: VecDeque::new(),
             outbound: FuturesSet::new(Duration::from_secs(10), 10),
             queued_streams: VecDeque::default(),
-            status_update_tx,
-            status_update_rx,
             server,
         }
     }
@@ -119,12 +116,7 @@ impl Handler {
             });
         if self
             .outbound
-            .try_push(start_stream_handle(
-                self.server,
-                req,
-                rx,
-                self.status_update_tx.clone(),
-            ))
+            .try_push(start_stream_handle(self.server, req, rx))
             .is_err()
         {
             tracing::debug!("Dial request dropped, too many requests in flight");
@@ -154,18 +146,20 @@ impl ConnectionHandler for Handler {
             return Poll::Ready(event);
         }
         if let Poll::Ready(m) = self.outbound.poll_unpin(cx) {
+            let status_update = match m {
+                Ok(ok) => ok,
+                Err(_) => InternalStatusUpdate {
+                    tested_addr: None,
+                    bytes_sent: 0,
+                    server: None,
+                    result: Err(Error {
+                        internal: InternalError::Io(io::Error::from(io::ErrorKind::TimedOut)),
+                    }),
+                    server_no_support: false,
+                },
+            };
             return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(
-                ToBehaviour::TestCompleted(
-                    m.map_err(|_| InternalError::Io(io::Error::from(io::ErrorKind::TimedOut)))
-                        .map_err(Into::into)
-                        .and_then(identity)
-                        .map_err(Into::into),
-                ),
-            ));
-        }
-        if let Poll::Ready(Some(status_update)) = self.status_update_rx.poll_next_unpin(cx) {
-            return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(
-                ToBehaviour::StatusUpdate(status_update),
+                ToBehaviour::TestCompleted(status_update),
             ));
         }
         Poll::Pending
@@ -232,49 +226,56 @@ async fn start_stream_handle(
             StreamUpgradeError<<ReadyUpgrade<StreamProtocol> as OutboundUpgradeSend>::Error>,
         >,
     >,
-    mut status_update_tx: mpsc::Sender<Event>,
-) -> Result<TestEnd, crate::client::behaviour::Error> {
-    let substream = match stream_recv.await {
-        Ok(Ok(substream)) => substream,
-        Ok(Err(StreamUpgradeError::Io(io))) => return Err(InternalError::from(io).into()),
+) -> InternalStatusUpdate {
+    let mut server_no_support = false;
+    let substream_result = match stream_recv.await {
+        Ok(Ok(substream)) => Ok(substream),
+        Ok(Err(StreamUpgradeError::Io(io))) => Err(InternalError::from(io).into()),
         Ok(Err(StreamUpgradeError::Timeout)) => {
-            return Err(InternalError::Io(io::Error::from(io::ErrorKind::TimedOut)).into())
+            Err(InternalError::Io(io::Error::from(io::ErrorKind::TimedOut)).into())
         }
-        Ok(Err(StreamUpgradeError::Apply(upgrade_error))) => {
-            return Err(
-                InternalError::Io(io::Error::new(io::ErrorKind::Other, upgrade_error)).into(),
+        Ok(Err(StreamUpgradeError::Apply(upgrade_error))) => void::unreachable(upgrade_error),
+        Ok(Err(StreamUpgradeError::NegotiationFailed)) => {
+            server_no_support = true;
+            Err(
+                InternalError::Io(io::Error::new(io::ErrorKind::Other, "negotiation failed"))
+                    .into(),
             )
         }
-        Ok(Err(StreamUpgradeError::NegotiationFailed)) => {
-            return Err(InternalError::Io(io::Error::new(
-                io::ErrorKind::Other,
-                "negotiation failed",
-            ))
-            .into())
+        Err(_) => Err(InternalError::InternalServer.into()),
+    };
+    let substream = match substream_result {
+        Ok(substream) => substream,
+        Err(err) => {
+            let status_update = InternalStatusUpdate {
+                tested_addr: None,
+                bytes_sent: 0,
+                server: Some(server),
+                result: Err(err),
+                server_no_support,
+            };
+            return status_update;
         }
-        Err(_) => return Err(InternalError::InternalServer.into()),
     };
     let mut data_amount = 0;
     let mut checked_addr_idx = None;
     let addrs = dial_request.addrs.clone();
     assert_ne!(addrs, vec![]);
-    let res = handle_stream(
+    let result = handle_stream(
         dial_request,
         substream,
         &mut data_amount,
         &mut checked_addr_idx,
     )
     .await
-    .map_err(Arc::new)
     .map_err(crate::client::behaviour::Error::from);
-    let status_update = Event {
+    InternalStatusUpdate {
         tested_addr: checked_addr_idx.and_then(|idx| addrs.get(idx).cloned()),
-        data_amount,
-        server,
-        result: res.as_ref().map(|_| ()).map_err(|e| e.duplicate()),
-    };
-    let _ = status_update_tx.send(status_update).await;
-    res
+        bytes_sent: data_amount,
+        server: Some(server),
+        result,
+        server_no_support,
+    }
 }
 
 async fn handle_stream(

@@ -14,7 +14,6 @@ use libp2p_swarm::{
 };
 use libp2p_swarm::{dial_opts::PeerCondition, ConnectionClosed};
 use rand_core::{OsRng, RngCore};
-use std::sync::Arc;
 
 use crate::server::handler::{
     dial_back,
@@ -156,11 +155,11 @@ pub struct StatusUpdate {
     pub all_addrs: Vec<Multiaddr>,
     /// The address that was eventually tested.
     /// This is `None` if the client send and unexpected message.
-    pub tested_addr: Option<Multiaddr>,
+    pub tested_addr: Multiaddr,
     /// The peer id of the client that submitted addresses for testing.
     pub client: PeerId,
     /// The amount of data that was requested by the server and was transmitted.
     pub data_amount: usize,
     /// The result of the test.
-    pub result: Result<(), Arc<io::Error>>,
+    pub result: Result<(), io::Error>,
 }

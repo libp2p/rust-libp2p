@@ -76,7 +76,7 @@ async fn confirm_successful() {
             })
             .await;
 
-        assert_eq!(tested_addr, bob_external_addrs.get(0).cloned());
+        assert_eq!(tested_addr, bob_external_addrs.get(0).cloned().unwrap());
         assert_eq!(data_amount, 0);
         assert_eq!(client, cor_client_peer);
         assert_eq!(&all_addrs[..], &bob_external_addrs[..]);
@@ -108,7 +108,7 @@ async fn confirm_successful() {
 
         let client::Event {
             tested_addr,
-            data_amount,
+            bytes_sent,
             server,
             result,
         } = bob
@@ -124,7 +124,7 @@ async fn confirm_successful() {
             })
             .await;
         assert_eq!(tested_addr, alice_bob_external_addrs.get(0).cloned());
-        assert_eq!(data_amount, 0);
+        assert_eq!(bytes_sent, 0);
         assert_eq!(server, cor_server_peer);
         assert!(result.is_ok(), "Result is {result:?}");
     };
@@ -189,7 +189,7 @@ async fn dial_back_to_unsupported_protocol() {
             .wait(|event| match event {
                 SwarmEvent::Behaviour(CombinedServerEvent::Autonat(server::StatusUpdate {
                     all_addrs,
-                    tested_addr: Some(tested_addr),
+                    tested_addr,
                     client,
                     data_amount,
                     result: Ok(()),
@@ -203,30 +203,23 @@ async fn dial_back_to_unsupported_protocol() {
             })
             .await;
 
-        tokio::select! {
-            _ = bob_done_rx => {
-                return data_amount;
-            }
-            _ = alice.loop_on_next() => {
-                unreachable!();
-            }
-        }
+        let handler = tokio::spawn(async move {
+            alice.loop_on_next().await;
+        });
+        let _ = bob_done_rx.await;
+        handler.abort();
+        data_amount
     };
 
     let bob_task = async {
-        bob.wait(|event| match event {
-            SwarmEvent::ExternalAddrExpired { address } if address == bob_test_addr => Some(()),
-            _ => None,
-        })
-        .await;
         let data_amount = bob
             .wait(|event| match event {
                 SwarmEvent::Behaviour(CombinedClientEvent::Autonat(client::Event {
                     tested_addr: Some(tested_addr),
-                    data_amount,
+                    bytes_sent,
                     server,
                     result: Err(_),
-                })) if server == alice_peer_id && tested_addr == bob_test_addr => Some(data_amount),
+                })) if server == alice_peer_id && tested_addr == bob_test_addr => Some(bytes_sent),
                 _ => None,
             })
             .await;
@@ -298,7 +291,7 @@ async fn dial_back_to_non_libp2p() {
                 .wait(|event| match event {
                     SwarmEvent::Behaviour(CombinedServerEvent::Autonat(server::StatusUpdate {
                         all_addrs,
-                        tested_addr: Some(tested_addr),
+                        tested_addr,
                         client,
                         data_amount,
                         result: Ok(()),
@@ -314,27 +307,23 @@ async fn dial_back_to_non_libp2p() {
             data_amount
         };
         let bob_task = async {
-            bob.wait(|event| match event {
-                SwarmEvent::ExternalAddrExpired { address } if address == bob_addr => Some(()),
-                _ => None,
-            })
-            .await;
             let data_amount = bob
                 .wait(|event| match event {
                     SwarmEvent::Behaviour(CombinedClientEvent::Autonat(client::Event {
                         tested_addr: Some(tested_addr),
-                        data_amount,
+                        bytes_sent,
                         server,
                         result: Err(_),
-                    })) if tested_addr == bob_addr && server == alice_peer_id => Some(data_amount),
+                    })) if tested_addr == bob_addr && server == alice_peer_id => Some(bytes_sent),
                     _ => None,
                 })
                 .await;
             data_amount
         };
 
-        let (alice_data_amount, bob_data_amount) = tokio::join!(alice_task, bob_task);
-        assert_eq!(alice_data_amount, bob_data_amount);
+        let (alice_bytes_sent, bob_bytes_sent) = tokio::join!(alice_task, bob_task);
+        assert_eq!(alice_bytes_sent, bob_bytes_sent);
+        bob.behaviour_mut().autonat.validate_addr(&addr);
     }
 }
 
@@ -393,7 +382,7 @@ async fn dial_back_to_not_supporting() {
             .wait(|event| match event {
                 SwarmEvent::Behaviour(CombinedServerEvent::Autonat(server::StatusUpdate {
                     all_addrs,
-                    tested_addr: Some(tested_addr),
+                    tested_addr,
                     client,
                     data_amount,
                     result: Ok(()),
@@ -417,32 +406,25 @@ async fn dial_back_to_not_supporting() {
     };
 
     let bob_task = async {
-        bob.wait(|event| match event {
-            SwarmEvent::ExternalAddrExpired { address } if address == bob_unreachable_address => {
-                Some(())
-            }
-            _ => None,
-        })
-        .await;
-        let data_amount = bob
+        let bytes_sent = bob
             .wait(|event| match event {
                 SwarmEvent::Behaviour(CombinedClientEvent::Autonat(client::Event {
                     tested_addr: Some(tested_addr),
-                    data_amount,
+                    bytes_sent,
                     server,
                     result: Err(_),
                 })) if tested_addr == bob_unreachable_address && server == alice_peer_id => {
-                    Some(data_amount)
+                    Some(bytes_sent)
                 }
                 _ => None,
             })
             .await;
         bob_done_tx.send(()).unwrap();
-        data_amount
+        bytes_sent
     };
 
-    let (alice_data_amount, bob_data_amount) = tokio::join!(alice_task, bob_task);
-    assert_eq!(alice_data_amount, bob_data_amount);
+    let (alice_bytes_sent, bob_bytes_sent) = tokio::join!(alice_task, bob_task);
+    assert_eq!(alice_bytes_sent, bob_bytes_sent);
     handler.abort();
 }
 
@@ -463,7 +445,7 @@ async fn new_client() -> Swarm<CombinedClient> {
     let mut node = Swarm::new_ephemeral(|identity| CombinedClient {
         autonat: libp2p_autonatv2::client::Behaviour::new(
             OsRng,
-            Config::default().with_recheck_interval(Duration::from_nanos(0)),
+            Config::default().with_recheck_interval(Duration::from_millis(100)),
         ),
         identify: libp2p_identify::Behaviour::new(libp2p_identify::Config::new(
             "/libp2p-test/1.0.0".into(),

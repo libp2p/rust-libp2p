@@ -14,35 +14,26 @@ use libp2p_swarm::{
     ConnectionClosed, ConnectionDenied, ConnectionHandler, ConnectionId, DialFailure, FromSwarm,
     NetworkBehaviour, NewExternalAddrCandidate, NotifyHandler, ToSwarm,
 };
-use rand::{seq::SliceRandom, Rng};
-use rand_core::{OsRng, RngCore};
+use rand::prelude::*;
+use rand_core::OsRng;
 use std::fmt::{Debug, Display, Formatter};
-use std::sync::Arc;
 
-use crate::{client::handler::dial_request::InternalError, Nonce};
+use crate::client::handler::dial_request::InternalError;
 use crate::{global_only::IpExt, protocol::DialRequest};
 
 use super::handler::{
     dial_back,
-    dial_request::{self},
+    dial_request::{self, InternalStatusUpdate},
     TestEnd,
 };
 
 #[derive(Debug, Clone, Copy)]
 pub struct Config {
-    pub(crate) test_server_count: usize,
     pub(crate) max_addrs_count: usize,
     pub(crate) recheck_interval: Duration,
 }
 
 impl Config {
-    pub fn with_test_server_count(self, test_server_count: usize) -> Self {
-        Self {
-            test_server_count,
-            ..self
-        }
-    }
-
     pub fn with_max_addrs_count(self, max_addrs_count: usize) -> Self {
         Self {
             max_addrs_count,
@@ -61,19 +52,17 @@ impl Config {
 impl Default for Config {
     fn default() -> Self {
         Self {
-            test_server_count: 3,
             max_addrs_count: 10,
             recheck_interval: Duration::from_secs(5),
         }
     }
 }
+
 pub struct Behaviour<R = OsRng>
 where
     R: RngCore + 'static,
 {
-    local_peers: HashSet<ConnectionId>,
-    pending_nonces: HashSet<u64>,
-    known_servers: Vec<PeerId>,
+    pending_nonces: HashMap<u64, NonceStatus>,
     rng: R,
     config: Config,
     pending_events: VecDeque<
@@ -82,10 +71,10 @@ where
             <<Self as NetworkBehaviour>::ConnectionHandler as ConnectionHandler>::FromBehaviour,
         >,
     >,
-    address_candidates: HashMap<Multiaddr, usize>,
+    address_candidates: HashMap<Multiaddr, AddressInfo>,
     already_tested: HashSet<Multiaddr>,
-    peers_to_handlers: HashMap<PeerId, ConnectionId>,
     next_tick: Delay,
+    peer_info: HashMap<ConnectionId, ConnectionInfo>,
 }
 
 impl<R> NetworkBehaviour for Behaviour<R>
@@ -99,12 +88,19 @@ where
     fn handle_established_inbound_connection(
         &mut self,
         connection_id: ConnectionId,
-        _peer: PeerId,
+        peer_id: PeerId,
         _local_addr: &Multiaddr,
         remote_addr: &Multiaddr,
     ) -> Result<<Self as NetworkBehaviour>::ConnectionHandler, ConnectionDenied> {
         if addr_is_local(remote_addr) {
-            self.local_peers.insert(connection_id);
+            self.peer_info
+                .entry(connection_id)
+                .or_insert(ConnectionInfo {
+                    peer_id,
+                    supports_autonat: false,
+                    is_local: true,
+                })
+                .is_local = true;
         }
         Ok(Either::Right(dial_back::Handler::new()))
     }
@@ -112,33 +108,49 @@ where
     fn handle_established_outbound_connection(
         &mut self,
         connection_id: ConnectionId,
-        peer: PeerId,
+        peer_id: PeerId,
         addr: &Multiaddr,
         _role_override: Endpoint,
         _port_use: PortUse,
     ) -> Result<<Self as NetworkBehaviour>::ConnectionHandler, ConnectionDenied> {
         if addr_is_local(addr) {
-            self.local_peers.insert(connection_id);
+            self.peer_info
+                .entry(connection_id)
+                .or_insert(ConnectionInfo {
+                    peer_id,
+                    supports_autonat: false,
+                    is_local: true,
+                })
+                .is_local = true;
         }
-        Ok(Either::Left(dial_request::Handler::new(peer)))
+        Ok(Either::Left(dial_request::Handler::new(peer_id)))
     }
 
     fn on_swarm_event(&mut self, event: FromSwarm) {
         match event {
             FromSwarm::NewExternalAddrCandidate(NewExternalAddrCandidate { addr }) => {
-                self.inject_address_candiate(addr.clone())
+                self.address_candidates
+                    .entry(addr.clone())
+                    .or_default()
+                    .score += 1;
             }
             FromSwarm::ExternalAddrConfirmed(ExternalAddrConfirmed { addr }) => {
-                self.address_candidates.remove(addr);
+                if let Some(info) = self.address_candidates.get_mut(addr) {
+                    info.is_tested = true;
+                }
             }
             FromSwarm::ConnectionEstablished(ConnectionEstablished {
                 peer_id,
                 connection_id,
                 ..
             }) => {
-                self.peers_to_handlers
-                    .entry(peer_id)
-                    .or_insert(connection_id);
+                self.peer_info
+                    .entry(connection_id)
+                    .or_insert(ConnectionInfo {
+                        peer_id,
+                        supports_autonat: false,
+                        is_local: false,
+                    });
             }
             FromSwarm::ConnectionClosed(ConnectionClosed {
                 peer_id,
@@ -149,10 +161,9 @@ where
             }
             FromSwarm::DialFailure(DialFailure {
                 peer_id: Some(peer_id),
-                error,
                 connection_id,
+                ..
             }) => {
-                tracing::trace!("dialing {peer_id:?} failed: {error:?}");
                 self.handle_no_connection(peer_id, connection_id);
             }
             _ => {}
@@ -165,61 +176,92 @@ where
         connection_id: ConnectionId,
         event: <Self::ConnectionHandler as ConnectionHandler>::ToBehaviour,
     ) {
-        if matches!(event, Either::Left(_)) {
-            self.peers_to_handlers
-                .entry(peer_id)
-                .or_insert(connection_id);
-        }
         match event {
             Either::Right(nonce) => {
-                if self.pending_nonces.remove(&nonce) {
+                if let Some(status) = self.pending_nonces.get_mut(&nonce) {
+                    *status = NonceStatus::Received;
                     tracing::trace!("Received pending nonce from {peer_id:?}");
                 } else {
                     tracing::warn!("Received unexpected nonce from {peer_id:?}, this means that another node tried to be reachable on an address this node is reachable on.");
                 }
             }
             Either::Left(dial_request::ToBehaviour::PeerHasServerSupport) => {
-                self.inject_kown_server(peer_id);
+                self.peer_info
+                    .values_mut()
+                    .filter(|info| info.peer_id == peer_id)
+                    .for_each(|info| {
+                        info.supports_autonat = true;
+                    });
+                self.peer_info
+                    .entry(connection_id)
+                    .or_insert(ConnectionInfo {
+                        peer_id,
+                        supports_autonat: true,
+                        is_local: false,
+                    })
+                    .supports_autonat = true;
             }
-            Either::Left(dial_request::ToBehaviour::TestCompleted(Ok(TestEnd {
-                dial_request: DialRequest { nonce, .. },
-                reachable_addr,
-            }))) => {
-                if self.pending_nonces.remove(&nonce) {
-                    tracing::debug!(
-                        "server reported reachbility, but didn't actually reached this node."
-                    );
-                    return;
+            Either::Left(dial_request::ToBehaviour::TestCompleted(InternalStatusUpdate {
+                tested_addr,
+                bytes_sent: data_amount,
+                server,
+                result,
+                server_no_support,
+            })) => {
+                if server_no_support {
+                    self.peer_info
+                        .values_mut()
+                        .filter(|info| info.peer_id == peer_id)
+                        .for_each(|info| {
+                            info.supports_autonat = false;
+                        });
                 }
-                self.pending_events
-                    .push_back(ToSwarm::ExternalAddrConfirmed(reachable_addr));
-            }
-            Either::Left(dial_request::ToBehaviour::TestCompleted(Err(err))) => {
-                match err.internal.as_ref() {
-                    dial_request::InternalError::FailureDuringDialBack { addr: Some(addr) }
-                    | dial_request::InternalError::UnableToConnectOnSelectedAddress {
-                        addr: Some(addr),
-                    } => {
-                        self.pending_events
-                            .push_back(ToSwarm::ExternalAddrExpired(addr.clone()));
+                match result {
+                    Ok(TestEnd {
+                        dial_request: DialRequest { nonce, .. },
+                        ref reachable_addr,
+                    }) => {
+                        if !matches!(self.pending_nonces.get(&nonce), Some(NonceStatus::Received)) {
+                            tracing::debug!(
+                            "server reported reachbility, but didn't actually reached this node."
+                        );
+                        } else {
+                            self.pending_events
+                                .push_back(ToSwarm::ExternalAddrConfirmed(reachable_addr.clone()));
+                        }
                     }
-                    dial_request::InternalError::InternalServer
-                    | dial_request::InternalError::DataRequestTooLarge { .. }
-                    | dial_request::InternalError::DataRequestTooSmall { .. }
-                    | dial_request::InternalError::InvalidResponse
-                    | dial_request::InternalError::ServerRejectedDialRequest
-                    | dial_request::InternalError::InvalidReferencedAddress { .. }
-                    | dial_request::InternalError::ServerChoseNotToDialAnyAddress => {
-                        self.handle_no_connection(peer_id, connection_id);
-                    }
-                    _ => {
-                        tracing::debug!("Test failed: {:?}", err);
-                    }
+                    Err(ref err) => match &err.internal {
+                        dial_request::InternalError::FailureDuringDialBack { addr: Some(addr) }
+                        | dial_request::InternalError::UnableToConnectOnSelectedAddress {
+                            addr: Some(addr),
+                        } => {
+                            if let Some(peer_info) = self.address_candidates.get_mut(addr) {
+                                peer_info.is_tested = true;
+                            }
+                            tracing::debug!(addr = %addr, "Was unable to connect to the server on the selected address.")
+                        }
+                        dial_request::InternalError::InternalServer
+                        | dial_request::InternalError::DataRequestTooLarge { .. }
+                        | dial_request::InternalError::DataRequestTooSmall { .. }
+                        | dial_request::InternalError::InvalidResponse
+                        | dial_request::InternalError::ServerRejectedDialRequest
+                        | dial_request::InternalError::InvalidReferencedAddress { .. }
+                        | dial_request::InternalError::ServerChoseNotToDialAnyAddress => {
+                            self.handle_no_connection(peer_id, connection_id);
+                        }
+                        _ => {
+                            tracing::debug!("Test failed: {:?}", err);
+                        }
+                    },
                 }
+                let event = crate::client::Event {
+                    tested_addr,
+                    bytes_sent: data_amount,
+                    server: server.unwrap_or(peer_id),
+                    result: result.map(|_| ()),
+                };
+                self.pending_events.push_back(ToSwarm::GenerateEvent(event));
             }
-            Either::Left(dial_request::ToBehaviour::StatusUpdate(update)) => self
-                .pending_events
-                .push_back(ToSwarm::GenerateEvent(update)),
         }
     }
 
@@ -247,40 +289,32 @@ where
 {
     pub fn new(rng: R, config: Config) -> Self {
         Self {
-            local_peers: HashSet::new(),
-            pending_nonces: HashSet::new(),
-            known_servers: Vec::new(),
+            pending_nonces: HashMap::new(),
             rng,
             next_tick: Delay::new(config.recheck_interval),
             config,
             pending_events: VecDeque::new(),
             address_candidates: HashMap::new(),
-            peers_to_handlers: HashMap::new(),
             already_tested: HashSet::new(),
+            peer_info: HashMap::new(),
         }
-    }
-
-    /// Injects a known server into the behaviour. It's mostly useful if you are not using identify
-    /// or for testing purposes.
-    pub fn inject_kown_server(&mut self, peer: PeerId) {
-        if !self.known_servers.contains(&peer) {
-            self.known_servers.push(peer);
-        }
-    }
-
-    /// Inject a new address candidate into the behaviour.
-    pub fn inject_address_candiate(&mut self, addr: Multiaddr) {
-        *self.address_candidates.entry(addr).or_default() += 1;
     }
 
     /// Inject an immediate test for all pending address candidates.
-    pub fn inject_address_candiate_test(&mut self) {
-        if self.known_servers.is_empty() || self.address_candidates.is_empty() {
+    fn inject_address_candiate_test(&mut self) {
+        if self.peer_info.values().all(|info| !info.supports_autonat) {
+            return;
+        }
+        if self.address_candidates.is_empty() {
+            return;
+        }
+        if self.address_candidates.values().all(|info| info.is_tested) {
             return;
         }
         let mut entries = self
             .address_candidates
             .iter()
+            .filter(|(_, info)| !info.is_tested)
             .filter(|(addr, _)| !self.already_tested.contains(addr))
             .map(|(addr, count)| (addr.clone(), *count))
             .collect::<Vec<_>>();
@@ -294,52 +328,68 @@ where
             .map(|(addr, _)| addr)
             .take(self.config.max_addrs_count)
             .cloned()
-            .collect::<Vec<_>>();
-        self.already_tested.extend(addrs.iter().cloned());
-        let peers = if self.known_servers.len() < self.config.test_server_count {
-            self.known_servers.clone()
-        } else {
-            self.known_servers
-                .choose_multiple(&mut self.rng, self.config.test_server_count)
-                .copied()
-                .collect()
-        };
-        for peer in peers {
-            let mut remaining_entries = entries.clone();
-            let mut addrs = Vec::with_capacity(self.config.max_addrs_count);
-            while !remaining_entries.is_empty() && addrs.len() < self.config.max_addrs_count {
-                let addr = remaining_entries
-                    .choose_weighted(&mut self.rng, |item| item.1)
-                    .unwrap()
-                    .0
-                    .clone();
-                remaining_entries.retain(|(a, _)| a != &addr);
-                addrs.push(addr);
-            }
-            let nonce = self.rng.gen();
-            let req = DialRequest { nonce, addrs };
-            self.submit_req_for_peer(peer, req, nonce);
+            .collect();
+        if let Some(ConnectionInfo { peer_id, .. }) = self
+            .peer_info
+            .values()
+            .filter(|e| e.supports_autonat)
+            .choose(&mut self.rng)
+        {
+            self.submit_req_for_peer(*peer_id, addrs);
         }
         self.next_tick.reset(self.config.recheck_interval);
     }
 
-    fn submit_req_for_peer(&mut self, peer: PeerId, req: DialRequest, nonce: Nonce) {
-        self.pending_nonces.insert(nonce);
-        if let Some(conn_id) = self.peers_to_handlers.get(&peer) {
+    fn submit_req_for_peer(&mut self, peer: PeerId, addrs: Vec<Multiaddr>) {
+        let nonce = self.rng.gen();
+        let req = DialRequest { nonce, addrs };
+        self.pending_nonces.insert(nonce, NonceStatus::Pending);
+        if let Some(conn_id) = self
+            .peer_info
+            .iter()
+            .filter(|(_, info)| info.supports_autonat)
+            .find(|(_, info)| info.peer_id == peer)
+            .map(|(id, _)| *id)
+        {
             self.pending_events.push_back(ToSwarm::NotifyHandler {
                 peer_id: peer,
-                handler: NotifyHandler::One(*conn_id),
+                handler: NotifyHandler::One(conn_id),
                 event: Either::Left(req),
             });
         }
     }
 
     fn handle_no_connection(&mut self, peer_id: PeerId, connection_id: ConnectionId) {
-        if matches!(self.peers_to_handlers.get(&peer_id), Some(conn_id) if *conn_id == connection_id)
-        {
-            self.peers_to_handlers.remove(&peer_id);
+        let removeable_conn_ids = self
+            .peer_info
+            .iter()
+            .filter(|(conn_id, info)| info.peer_id == peer_id && **conn_id == connection_id)
+            .map(|(id, _)| *id)
+            .collect::<Vec<_>>();
+        for conn_id in removeable_conn_ids {
+            self.peer_info.remove(&conn_id);
         }
-        self.known_servers.retain(|p| p != &peer_id);
+        let known_servers_n = self
+            .peer_info
+            .values()
+            .filter(|info| info.supports_autonat)
+            .count();
+        let changed_n = self
+            .peer_info
+            .values_mut()
+            .filter(|info| info.supports_autonat)
+            .filter(|info| info.peer_id == peer_id)
+            .map(|info| info.supports_autonat = false)
+            .count();
+        if known_servers_n != changed_n {
+            tracing::trace!(server = %peer_id, "Removing potential Autonat server due to dial failure");
+        }
+    }
+
+    pub fn validate_addr(&mut self, addr: &Multiaddr) {
+        if let Some(info) = self.address_candidates.get_mut(addr) {
+            info.is_tested = true;
+        }
     }
 }
 
@@ -350,36 +400,12 @@ impl Default for Behaviour<OsRng> {
 }
 
 pub struct Error {
-    pub(crate) internal: Arc<InternalError>,
-}
-
-impl Error {
-    pub(crate) fn duplicate(&self) -> Self {
-        Self {
-            internal: Arc::clone(&self.internal),
-        }
-    }
+    pub(crate) internal: InternalError,
 }
 
 impl From<InternalError> for Error {
-    fn from(value: InternalError) -> Self {
-        Self {
-            internal: Arc::new(value),
-        }
-    }
-}
-
-impl From<Arc<InternalError>> for Error {
-    fn from(value: Arc<InternalError>) -> Self {
-        Self { internal: value }
-    }
-}
-
-impl From<&Arc<InternalError>> for Error {
-    fn from(value: &Arc<InternalError>) -> Self {
-        Self {
-            internal: Arc::clone(value),
-        }
+    fn from(internal: InternalError) -> Self {
+        Self { internal }
     }
 }
 
@@ -403,7 +429,7 @@ pub struct Event {
     /// The amount of data that was sent to the server.
     /// Is 0 if it wasn't necessary to send any data.
     /// Otherwise it's a number between 30.000 and 100.000.
-    pub data_amount: usize,
+    pub bytes_sent: usize,
     /// The peer id of the server that was selected for testing.
     pub server: PeerId,
     /// The result of the test. If the test was successful, this is `Ok(())`.
@@ -413,12 +439,45 @@ pub struct Event {
 
 fn addr_is_local(addr: &Multiaddr) -> bool {
     addr.iter().any(|c| match c {
-        Protocol::Dns(addr)
-        | Protocol::Dns4(addr)
-        | Protocol::Dns6(addr)
-        | Protocol::Dnsaddr(addr) => addr.ends_with(".local"),
         Protocol::Ip4(ip) => !IpExt::is_global(&ip),
         Protocol::Ip6(ip) => !IpExt::is_global(&ip),
         _ => false,
     })
 }
+
+enum NonceStatus {
+    Pending,
+    Received,
+}
+
+struct ConnectionInfo {
+    peer_id: PeerId,
+    supports_autonat: bool,
+    is_local: bool,
+}
+
+#[derive(Copy, Clone, Default)]
+struct AddressInfo {
+    score: usize,
+    is_tested: bool,
+}
+
+impl PartialOrd for AddressInfo {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.score.cmp(&other.score))
+    }
+}
+
+impl PartialEq for AddressInfo {
+    fn eq(&self, other: &Self) -> bool {
+        self.score == other.score
+    }
+}
+
+impl Ord for AddressInfo {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        self.score.cmp(&other.score)
+    }
+}
+
+impl Eq for AddressInfo {}

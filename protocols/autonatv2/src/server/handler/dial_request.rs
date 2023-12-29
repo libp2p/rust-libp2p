@@ -1,6 +1,5 @@
 use std::{
     io,
-    sync::Arc,
     task::{Context, Poll},
     time::Duration,
 };
@@ -52,7 +51,7 @@ pub struct Handler<R> {
     dial_back_cmd_receiver: mpsc::Receiver<DialBackCommand>,
     status_update_sender: mpsc::Sender<StatusUpdate>,
     status_update_receiver: mpsc::Receiver<StatusUpdate>,
-    inbound: FuturesSet<Result<(), Arc<io::Error>>>,
+    inbound: FuturesSet<Result<(), io::Error>>,
     rng: R,
 }
 
@@ -82,7 +81,7 @@ where
 {
     type FromBehaviour = ();
 
-    type ToBehaviour = Either<Result<DialBackCommand, Arc<io::Error>>, StatusUpdate>;
+    type ToBehaviour = Either<io::Result<DialBackCommand>, StatusUpdate>;
 
     type InboundProtocol = ReadyUpgrade<StreamProtocol>;
 
@@ -110,7 +109,7 @@ where
             }
             Poll::Ready(Err(e)) => {
                 return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(Either::Left(Err(
-                    Arc::new(io::Error::new(io::ErrorKind::TimedOut, e)),
+                    io::Error::new(io::ErrorKind::TimedOut, e),
                 ))));
             }
             Poll::Ready(Ok(Ok(_))) => {}
@@ -318,11 +317,11 @@ async fn start_handle_request(
     dial_back_cmd_sender: mpsc::Sender<DialBackCommand>,
     mut status_update_sender: mpsc::Sender<StatusUpdate>,
     rng: impl RngCore,
-) -> Result<(), Arc<io::Error>> {
+) -> io::Result<()> {
     let mut all_addrs = Vec::new();
     let mut tested_addrs = None;
     let mut data_amount = 0;
-    let res = handle_request(
+    let result = handle_request(
         stream,
         observed_multiaddr,
         dial_back_cmd_sender,
@@ -331,15 +330,18 @@ async fn start_handle_request(
         &mut tested_addrs,
         &mut data_amount,
     )
-    .await
-    .map_err(Arc::new);
+    .await;
+    if tested_addrs.is_none() {
+        tracing::warn!("client violated the protocol");
+        return Err(io::Error::from(io::ErrorKind::InvalidData));
+    }
     let status_update = StatusUpdate {
         all_addrs,
-        tested_addr: tested_addrs,
+        tested_addr: tested_addrs.unwrap(),
         client,
         data_amount,
-        result: res.as_ref().map_err(Arc::clone).map(|_| ()),
+        result,
     };
     let _ = status_update_sender.send(status_update).await;
-    res
+    Ok(())
 }

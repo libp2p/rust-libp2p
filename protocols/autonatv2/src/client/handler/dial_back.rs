@@ -4,7 +4,6 @@ use std::{
     time::Duration,
 };
 
-use futures::{AsyncRead, AsyncWrite, AsyncWriteExt};
 use futures_bounded::FuturesSet;
 use libp2p_core::upgrade::{DeniedUpgrade, ReadyUpgrade};
 use libp2p_swarm::{
@@ -13,7 +12,7 @@ use libp2p_swarm::{
 };
 use void::Void;
 
-use crate::{protocol::DialBack, Nonce, DIAL_BACK_PROTOCOL_NAME};
+use crate::{protocol, Nonce, DIAL_BACK_PROTOCOL_NAME};
 
 pub struct Handler {
     inbound: FuturesSet<io::Result<Nonce>>,
@@ -45,16 +44,20 @@ impl ConnectionHandler for Handler {
     ) -> Poll<
         ConnectionHandlerEvent<Self::OutboundProtocol, Self::OutboundOpenInfo, Self::ToBehaviour>,
     > {
-        if let Poll::Ready(result) = self.inbound.poll_unpin(cx) {
-            match result {
-                Ok(Ok(nonce)) => {
-                    return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(nonce))
-                }
-                Ok(Err(err)) => tracing::debug!("Dial back handler failed with: {err:?}"),
-                Err(err) => tracing::debug!("Dial back handler timed out with: {err:?}"),
+        match self.inbound.poll_unpin(cx) {
+            Poll::Ready(Ok(Ok(nonce))) => {
+                Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(nonce))
             }
+            Poll::Ready(Ok(Err(err))) => {
+                tracing::debug!("Dial back handler failed with: {err:?}");
+                Poll::Pending
+            }
+            Poll::Ready(Err(err)) => {
+                tracing::debug!("Dial back handler timed out with: {err:?}");
+                Poll::Pending
+            }
+            Poll::Pending => Poll::Pending,
         }
-        Poll::Pending
     }
 
     fn on_behaviour_event(&mut self, _event: Self::FromBehaviour) {}
@@ -72,7 +75,11 @@ impl ConnectionHandler for Handler {
             ConnectionEvent::FullyNegotiatedInbound(FullyNegotiatedInbound {
                 protocol, ..
             }) => {
-                if self.inbound.try_push(perform_dial_back(protocol)).is_err() {
+                if self
+                    .inbound
+                    .try_push(protocol::recv_dial_back(protocol))
+                    .is_err()
+                {
                     tracing::warn!("Dial back request dropped, too many requests in flight");
                 }
             }
@@ -82,10 +89,4 @@ impl ConnectionHandler for Handler {
             _ => {}
         }
     }
-}
-
-async fn perform_dial_back(mut stream: impl AsyncRead + AsyncWrite + Unpin) -> io::Result<u64> {
-    let DialBack { nonce } = DialBack::read_from(&mut stream).await?;
-    stream.close().await?;
-    Ok(nonce)
 }

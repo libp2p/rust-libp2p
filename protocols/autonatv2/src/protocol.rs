@@ -272,6 +272,14 @@ pub(crate) async fn dial_back(mut stream: impl AsyncWrite + Unpin, nonce: Nonce)
     stream.close().await
 }
 
+pub(crate) async fn recv_dial_back(
+    mut stream: impl AsyncRead + AsyncWrite + Unpin,
+) -> io::Result<Nonce> {
+    let DialBack { nonce } = DialBack::read_from(&mut stream).await?;
+    stream.close().await?;
+    Ok(nonce)
+}
+
 const DIAL_BACK_MAX_SIZE: usize = 10;
 
 pub(crate) struct DialBack {
