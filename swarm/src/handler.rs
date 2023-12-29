@@ -335,23 +335,23 @@ impl<'a> ProtocolsChange<'a> {
     ///
     /// Returns `None` if the change is a no-op, i.e. `to_add` is a subset of `existing_protocols`.
     pub(crate) fn add(
-        to_add: HashSet<StreamProtocol>,
         existing_protocols: &HashSet<StreamProtocol>,
-        temp_protocols: &'a mut Vec<StreamProtocol>,
+        to_add: HashSet<StreamProtocol>,
+        buffer: &'a mut Vec<StreamProtocol>,
     ) -> Option<Self> {
-        temp_protocols.clear();
-        temp_protocols.extend(
+        buffer.clear();
+        buffer.extend(
             to_add
                 .into_iter()
                 .filter(|i| !existing_protocols.contains(i)),
         );
 
-        if temp_protocols.is_empty() {
+        if buffer.is_empty() {
             return None;
         }
 
         Some(Self::Added(ProtocolsAdded {
-            protocols: temp_protocols.iter(),
+            protocols: buffer.iter(),
         }))
     }
 
@@ -359,23 +359,23 @@ impl<'a> ProtocolsChange<'a> {
     ///
     /// Returns `None` if the change is a no-op, i.e. none of the protocols in `to_remove` are in `existing_protocols`.
     pub(crate) fn remove(
-        to_remove: HashSet<StreamProtocol>,
         existing_protocols: &mut HashSet<StreamProtocol>,
-        temp_protocols: &'a mut Vec<StreamProtocol>,
+        to_remove: HashSet<StreamProtocol>,
+        buffer: &'a mut Vec<StreamProtocol>,
     ) -> Option<Self> {
-        temp_protocols.clear();
-        temp_protocols.extend(
+        buffer.clear();
+        buffer.extend(
             to_remove
                 .into_iter()
                 .filter_map(|i| existing_protocols.take(&i)),
         );
 
-        if temp_protocols.is_empty() {
+        if buffer.is_empty() {
             return None;
         }
 
         Some(Self::Removed(ProtocolsRemoved {
-            protocols: temp_protocols.iter(),
+            protocols: buffer.iter(),
         }))
     }
 
@@ -383,49 +383,49 @@ impl<'a> ProtocolsChange<'a> {
     pub(crate) fn from_full_sets<T: AsRef<str>>(
         existing_protocols: &mut HashMap<AsStrHashEq<T>, bool>,
         new_protocols: impl IntoIterator<Item = T>,
-        temp_owner: &'a mut Vec<StreamProtocol>,
+        buffer: &'a mut Vec<StreamProtocol>,
     ) -> SmallVec<[Self; 2]> {
-        temp_owner.clear();
-        // to avoid looping trough the map to just set the booleans we use the fact that all of
-        // the booleans in the map have same value
-        let valid_value = !existing_protocols.values().next().copied().unwrap_or(false);
-        let mut count = Some(existing_protocols.len());
+        buffer.clear();
+        // this is used as mark-and-sweep flag, we assume all values in the existing_protocols are
+        // same, since later `retain` ensures that
+        let keep_marker = !existing_protocols.values().next().copied().unwrap_or(false);
+        let mut new_protocol_count = 0;
         for new_protocol in new_protocols {
-            *existing_protocols
+            existing_protocols
                 .entry(AsStrHashEq(new_protocol))
+                .and_modify(|v| *v = keep_marker)
                 .or_insert_with_key(|k| {
-                    temp_owner.extend(StreamProtocol::try_from_owned(k.0.as_ref().to_owned()).ok());
-                    count = None;
-                    false
-                }) = valid_value;
-            count = count.map(|c| c - 1);
+                    buffer.extend(StreamProtocol::try_from_owned(k.0.as_ref().to_owned()).ok());
+                    keep_marker
+                });
+            new_protocol_count += 1;
         }
 
-        if count == Some(0) {
-            return smallvec![];
+        if new_protocol_count == existing_protocols.len() && buffer.is_empty() {
+            return SmallVec::new();
         }
 
-        let added_count = temp_owner.len();
+        let added_count = buffer.len();
         existing_protocols.retain(|k, v| {
-            if *v != valid_value {
-                temp_owner.push(StreamProtocol::try_from_owned(k.0.as_ref().to_owned()).unwrap());
+            if *v != keep_marker {
+                buffer.extend(StreamProtocol::try_from_owned(k.0.as_ref().to_owned()).ok());
             }
-            *v == valid_value
+            *v == keep_marker
         });
 
-        let (added, removed) = temp_owner.split_at(added_count);
-        let mut res = smallvec![];
+        let (added, removed) = buffer.split_at(added_count);
+        let mut changes = SmallVec::new();
         if !added.is_empty() {
-            res.push(ProtocolsChange::Added(ProtocolsAdded {
+            changes.push(ProtocolsChange::Added(ProtocolsAdded {
                 protocols: added.iter(),
             }));
         }
         if !removed.is_empty() {
-            res.push(ProtocolsChange::Removed(ProtocolsRemoved {
+            changes.push(ProtocolsChange::Removed(ProtocolsRemoved {
                 protocols: removed.iter(),
             }));
         }
-        res
+        changes
     }
 }
 

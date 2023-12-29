@@ -189,12 +189,7 @@ where
         max_negotiating_inbound_streams: usize,
         idle_timeout: Duration,
     ) -> Self {
-        let local_supported_protocols = handler
-            .listen_protocol()
-            .upgrade()
-            .protocol_info()
-            .map(|i| (AsStrHashEq(i), true))
-            .collect::<HashMap<_, _>>();
+        let local_supported_protocols = gather_supported_protocols(&handler);
 
         if !local_supported_protocols.is_empty() {
             let temp = local_supported_protocols
@@ -304,7 +299,7 @@ where
                     ProtocolSupport::Added(protocols),
                 )) => {
                     if let Some(added) =
-                        ProtocolsChange::add(protocols, remote_supported_protocols, temp_protocols)
+                        ProtocolsChange::add(remote_supported_protocols, protocols, temp_protocols)
                     {
                         handler.on_connection_event(ConnectionEvent::RemoteProtocolsChange(added));
                         remote_supported_protocols.extend(temp_protocols.drain(..));
@@ -315,8 +310,8 @@ where
                     ProtocolSupport::Removed(protocols),
                 )) => {
                     if let Some(removed) = ProtocolsChange::remove(
-                        protocols,
                         remote_supported_protocols,
+                        protocols,
                         temp_protocols,
                     ) {
                         handler
@@ -457,10 +452,10 @@ where
                 for change in changes {
                     handler.on_connection_event(ConnectionEvent::LocalProtocolsChange(change));
                 }
-                continue;
+                continue; // Go back to the top, handler can potentially make progress again.
             }
 
-            return Poll::Pending;
+            return Poll::Pending; // Nothing can make progress, return `Pending`.
         }
     }
 
@@ -468,6 +463,17 @@ where
     fn poll_noop_waker(&mut self) -> Poll<Result<Event<THandler::ToBehaviour>, ConnectionError>> {
         Pin::new(self).poll(&mut Context::from_waker(futures::task::noop_waker_ref()))
     }
+}
+
+fn gather_supported_protocols<C: ConnectionHandler>(
+    handler: &C,
+) -> HashMap<AsStrHashEq<<C::InboundProtocol as UpgradeInfoSend>::Info>, bool> {
+    handler
+        .listen_protocol()
+        .upgrade()
+        .protocol_info()
+        .map(|info| (AsStrHashEq(info), true))
+        .collect()
 }
 
 fn compute_new_shutdown(
@@ -871,38 +877,38 @@ mod tests {
         assert_eq!(connection.handler.local_removed, vec![vec!["/foo"]]);
     }
 
-    #[test]
-    #[ignore]
-    fn repoll_with_active_protocols() {
-        fn run_benchmark(protcol_count: usize, iters: usize) {
-            let mut connection = Connection::new(
-                StreamMuxerBox::new(PendingStreamMuxer),
-                ConfigurableProtocolConnectionHandler::default(),
-                None,
-                0,
-                Duration::ZERO,
-            );
+    // #[test]
+    // #[ignore]
+    // fn repoll_with_active_protocols() {
+    //     fn run_benchmark(protcol_count: usize, iters: usize) {
+    //         let mut connection = Connection::new(
+    //             StreamMuxerBox::new(PendingStreamMuxer),
+    //             ConfigurableProtocolConnectionHandler::default(),
+    //             None,
+    //             0,
+    //             Duration::ZERO,
+    //         );
 
-            let protocols = (0..protcol_count)
-                .map(|i| &*format!("/protocol-ffffffff/{}", i).leak())
-                .collect::<Vec<_>>();
-            connection.handler.listen_on(&protocols);
+    //         let protocols = (0..protcol_count)
+    //             .map(|i| &*format!("/protocol-ffffffff/{}", i).leak())
+    //             .collect::<Vec<_>>();
+    //         connection.handler.listen_on(&protocols);
 
-            let now = Instant::now();
-            for _ in 0..iters {
-                let _ = connection.poll_noop_waker();
-            }
-            let elapsed = now.elapsed();
-            println!("{protcol_count} {elapsed:?}");
-        }
+    //         let now = Instant::now();
+    //         for _ in 0..iters {
+    //             let _ = connection.poll_noop_waker();
+    //         }
+    //         let elapsed = now.elapsed().checked_div(iters as u32).unwrap();
+    //         println!("{protcol_count} {elapsed:?}");
+    //     }
 
-        let iters = 3_000_000;
-        run_benchmark(2, iters);
-        run_benchmark(4, iters);
-        run_benchmark(10, iters);
-        run_benchmark(20, iters);
-        run_benchmark(1000, iters / 10);
-    }
+    //     let iters = 3_000_000;
+    //     run_benchmark(2, iters);
+    //     run_benchmark(4, iters);
+    //     run_benchmark(10, iters);
+    //     run_benchmark(20, iters);
+    //     run_benchmark(1000, iters / 10);
+    // }
 
     #[test]
     fn only_propagtes_actual_changes_to_remote_protocols_to_handler() {
