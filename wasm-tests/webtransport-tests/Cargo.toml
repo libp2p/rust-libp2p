@@ -9,7 +9,7 @@ publish = false
 release = false
 
 [dependencies]
-futures = "0.3.29"
+futures = "0.3.30"
 getrandom = { version = "0.2.11", features = ["js"] }
 libp2p-core = { workspace = true }
 libp2p-identity = { workspace = true, features = ["rand"] }
