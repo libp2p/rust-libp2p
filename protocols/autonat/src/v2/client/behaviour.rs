@@ -251,6 +251,8 @@ where
             }
 
             if self.next_tick.poll_unpin(cx).is_ready() {
+                self.next_tick.reset(self.config.probe_interval);
+
                 self.inject_address_candiate_test();
                 continue;
             }
@@ -307,7 +309,6 @@ where
         {
             self.submit_req_for_peer(*peer_id, addrs);
         }
-        self.next_tick.reset(self.config.probe_interval);
     }
 
     fn submit_req_for_peer(&mut self, peer: PeerId, addrs: Vec<Multiaddr>) {
