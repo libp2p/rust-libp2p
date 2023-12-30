@@ -1,14 +1,13 @@
 #![doc = include_str!("../README.md")]
 
-use core::fmt;
 use std::{
     io,
     pin::Pin,
+    sync::{Arc, Mutex},
     task::{Context, Poll},
 };
 
-use behaviour::NewPeerControl;
-use flume::r#async::{RecvStream, SendSink};
+use behaviour::Shared;
 use futures::{
     channel::{mpsc, oneshot},
     SinkExt as _, StreamExt as _,
@@ -27,63 +26,31 @@ pub use behaviour::{AlreadyRegistered, Behaviour};
 #[derive(Clone)]
 pub struct Control {
     protocol: StreamProtocol,
-    sender: mpsc::Sender<NewPeerControl>,
+    shared: Arc<Mutex<Shared>>,
 }
 
 impl Control {
     /// Obtain a [`PeerControl`] for the given [`PeerId`].
     ///
     /// This function will block until we have a connection to the given peer.
-    pub async fn peer(&mut self, peer: PeerId) -> io::Result<PeerControl> {
-        let (sender, receiver) = oneshot::channel();
-        self.sender
-            .send(NewPeerControl { peer, sender })
-            .await
-            .map_err(|e| io::Error::new(io::ErrorKind::ConnectionReset, e))?;
-        let new_stream_sink = receiver
-            .await
-            .map_err(|e| io::Error::new(io::ErrorKind::ConnectionReset, e))??;
+    pub async fn open_stream(&mut self, peer: PeerId) -> Result<Stream, OpenStreamError> {
+        tracing::debug!(%peer, "Requesting new stream");
 
-        Ok(PeerControl {
-            protocol: self.protocol.clone(),
-            sender: new_stream_sink,
-            peer,
-        })
-    }
-}
+        let mut new_stream_sender = self.shared.lock().unwrap().sender(peer);
 
-#[derive(Clone)]
-pub struct PeerControl {
-    peer: PeerId,
-    protocol: StreamProtocol,
-    sender: SendSink<'static, NewStream>,
-}
-
-impl fmt::Debug for PeerControl {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("PeerControl")
-            .field("peer", &self.peer)
-            .field("protocol", &self.protocol)
-            .finish()
-    }
-}
-
-impl PeerControl {
-    /// Open a new stream.
-    pub async fn open_stream(&mut self) -> Result<Stream, OpenStreamError> {
         let (sender, receiver) = oneshot::channel();
 
-        self.sender
+        new_stream_sender
             .send(NewStream {
                 protocol: self.protocol.clone(),
                 sender,
             })
             .await
-            .map_err(|e| OpenStreamError::Io(io::Error::new(io::ErrorKind::BrokenPipe, e)))?;
+            .map_err(|e| io::Error::new(io::ErrorKind::ConnectionReset, e))?;
 
         let stream = receiver
             .await
-            .map_err(|e| OpenStreamError::Io(io::Error::new(io::ErrorKind::BrokenPipe, e)))??;
+            .map_err(|e| io::Error::new(io::ErrorKind::ConnectionReset, e))??;
 
         Ok(stream)
     }
@@ -98,10 +65,16 @@ pub enum OpenStreamError {
     Io(std::io::Error),
 }
 
+impl From<std::io::Error> for OpenStreamError {
+    fn from(v: std::io::Error) -> Self {
+        Self::Io(v)
+    }
+}
+
 /// A handle to inbound streams for a particular protocol.
 #[must_use = "Streams do nothing unless polled."]
 pub struct IncomingStreams {
-    receiver: RecvStream<'static, (PeerId, Stream)>,
+    receiver: mpsc::Receiver<(PeerId, Stream)>,
 }
 
 impl futures::Stream for IncomingStreams {

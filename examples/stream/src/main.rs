@@ -28,7 +28,7 @@ async fn main() -> Result<()> {
     let mut swarm = libp2p::SwarmBuilder::with_new_identity()
         .with_tokio()
         .with_quic()
-        .with_behaviour(|_| stream::Behaviour::default())?
+        .with_behaviour(|_| stream::Behaviour::new())?
         .with_swarm_config(|c| c.with_idle_connection_timeout(Duration::from_secs(10)))
         .build();
 
@@ -86,12 +86,10 @@ async fn main() -> Result<()> {
 
 /// A very simple, `async fn`-based connection handler for our custom ping protocol.
 async fn connection_handler(peer: PeerId, mut control: stream::Control) {
-    let mut peer_control = control.peer(peer).await.unwrap();
-
     loop {
         tokio::time::sleep(Duration::from_secs(1)).await; // Wait a second between pings.
 
-        let stream = match peer_control.open_stream().await {
+        let stream = match control.open_stream(peer).await {
             Ok(stream) => stream,
             Err(stream::OpenStreamError::UnsupportedProtocol) => {
                 tracing::info!(%peer, %PROTOCOL, "Peer does not support protocol");

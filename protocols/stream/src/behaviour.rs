@@ -1,62 +1,113 @@
 use core::fmt;
 use std::{
-    collections::{HashMap, HashSet, VecDeque},
+    collections::{HashMap, VecDeque},
     io,
+    sync::{Arc, Mutex},
     task::{Context, Poll},
 };
 
-use flume::r#async::SendSink;
-use futures::{
-    channel::{mpsc, oneshot},
-    StreamExt as _,
-};
+use futures::{channel::mpsc, StreamExt};
 use libp2p_core::{Endpoint, Multiaddr};
 use libp2p_identity::PeerId;
 use libp2p_swarm::{
-    self as swarm, behaviour::ConnectionEstablished, dial_opts::DialOpts, ConnectionClosed,
-    ConnectionDenied, ConnectionId, FromSwarm, NetworkBehaviour, Stream, StreamProtocol, THandler,
-    THandlerInEvent, THandlerOutEvent, ToSwarm,
+    self as swarm, dial_opts::DialOpts, ConnectionDenied, ConnectionId, FromSwarm,
+    NetworkBehaviour, Stream, StreamProtocol, THandler, THandlerInEvent, THandlerOutEvent, ToSwarm,
+};
+use rand::seq::IteratorRandom;
+use swarm::{
+    behaviour::ConnectionEstablished, dial_opts::PeerCondition, ConnectionClosed, DialError,
+    DialFailure,
 };
 
 use crate::{
-    handler::{Handler, NewStream, RegisterProtocol, ToHandler},
+    handler::{Handler, NewStream, RegisterProtocol},
     Control, IncomingStreams,
 };
 
-/// A generic protocol for stream-oriented protocols.
+/// A generic behaviour for stream-oriented protocols.
 pub struct Behaviour {
-    sender: mpsc::Sender<NewPeerControl>,
-    receiver: mpsc::Receiver<NewPeerControl>,
+    shared: Arc<Mutex<Shared>>,
+    receiver: mpsc::Receiver<PeerId>,
+    supported_protocols: HashMap<StreamProtocol, mpsc::Sender<(PeerId, Stream)>>,
 
-    supported_protocols: HashMap<StreamProtocol, SendSink<'static, (PeerId, Stream)>>,
-    active_connections: HashSet<(PeerId, ConnectionId)>,
-
-    // Note: Connections will perform work-stealing on answering `NewStream` messages.
-    connections_by_peer_id: HashMap<PeerId, (flume::Sender<NewStream>, flume::Receiver<NewStream>)>,
-
-    events: VecDeque<ToSwarm<(), ToHandler>>,
-
-    pending_connections:
-        HashMap<PeerId, Vec<oneshot::Sender<io::Result<SendSink<'static, NewStream>>>>>,
+    events: VecDeque<ToSwarm<(), RegisterProtocol>>,
 }
 
-impl Default for Behaviour {
-    fn default() -> Self {
-        let (sender, receiver) = mpsc::channel(0);
+pub(crate) struct Shared {
+    connections: HashMap<ConnectionId, PeerId>,
+    senders: HashMap<ConnectionId, mpsc::Sender<NewStream>>,
 
+    pending_channels: HashMap<PeerId, (mpsc::Sender<NewStream>, mpsc::Receiver<NewStream>)>,
+
+    dial_sender: mpsc::Sender<PeerId>,
+}
+
+impl Shared {
+    pub(crate) fn new(dial_sender: mpsc::Sender<PeerId>) -> Self {
         Self {
-            sender,
-            receiver,
-            connections_by_peer_id: HashMap::default(),
-            active_connections: HashSet::default(),
-            events: VecDeque::default(),
-            supported_protocols: HashMap::default(),
-            pending_connections: HashMap::default(),
+            connections: Default::default(),
+            senders: Default::default(),
+            pending_channels: Default::default(),
+            dial_sender,
         }
+    }
+
+    pub(crate) fn sender(&mut self, peer: PeerId) -> mpsc::Sender<NewStream> {
+        let maybe_sender = self
+            .connections
+            .iter()
+            .filter_map(|(c, p)| (p == &peer).then_some(c))
+            .choose(&mut rand::thread_rng())
+            .and_then(|c| self.senders.get(c));
+
+        match maybe_sender {
+            Some(sender) => {
+                tracing::debug!("Returning sender to existing connection");
+
+                sender.clone()
+            }
+            None => {
+                let (sender, _) = self
+                    .pending_channels
+                    .entry(peer)
+                    .or_insert_with(|| mpsc::channel(0));
+
+                let _ = self.dial_sender.try_send(peer);
+
+                sender.clone()
+            }
+        }
+    }
+
+    fn receiver(&mut self, peer: PeerId, connection: ConnectionId) -> mpsc::Receiver<NewStream> {
+        if let Some((sender, receiver)) = self.pending_channels.remove(&peer) {
+            tracing::debug!(%peer, %connection, "Returning existing pending receiver");
+
+            self.senders.insert(connection, sender);
+            return receiver;
+        }
+
+        tracing::debug!(%peer, %connection, "Creating new channel pair");
+
+        let (sender, receiver) = mpsc::channel(0);
+        self.senders.insert(connection, sender);
+
+        receiver
     }
 }
 
 impl Behaviour {
+    pub fn new() -> Self {
+        let (sender, receiver) = mpsc::channel(0);
+
+        Self {
+            shared: Arc::new(Mutex::new(Shared::new(sender))),
+            receiver,
+            supported_protocols: Default::default(),
+            events: Default::default(),
+        }
+    }
+
     /// Obtain a new [`Control`] for the provided protocol.
     ///
     /// A [`Control`] only deals with the _outbound_ side of a protocol.
@@ -64,7 +115,7 @@ impl Behaviour {
     pub fn new_control(&self, protocol: StreamProtocol) -> Control {
         Control {
             protocol,
-            sender: self.sender.clone(),
+            shared: self.shared.clone(),
         }
     }
 
@@ -79,33 +130,32 @@ impl Behaviour {
             return Err(AlreadyRegistered);
         }
 
-        let (sender, receiver) = flume::bounded(0);
+        let (sender, receiver) = mpsc::channel(0);
         self.supported_protocols
-            .insert(protocol.clone(), sender.clone().into_sink());
+            .insert(protocol.clone(), sender.clone());
 
-        self.events
-            .extend(
-                self.active_connections
-                    .iter()
-                    .map(|(peer, conn)| ToSwarm::NotifyHandler {
-                        peer_id: *peer,
-                        handler: swarm::NotifyHandler::One(*conn),
-                        event: ToHandler::RegisterProtocol(RegisterProtocol {
-                            protocol: protocol.clone(),
-                            sender: sender.clone().into_sink(),
-                        }),
-                    }),
-            );
+        let connections = self.shared.lock().unwrap().connections.clone();
+        let num_handlers = connections.len();
+
+        self.events.extend(
+            connections
+                .into_iter()
+                .map(|(conn, peer_id)| ToSwarm::NotifyHandler {
+                    peer_id,
+                    handler: swarm::NotifyHandler::One(conn),
+                    event: RegisterProtocol {
+                        protocol: protocol.clone(),
+                        sender: sender.clone(),
+                    },
+                }),
+        );
 
         tracing::debug!(
             %protocol,
-            "Registering protocol with {} existing handlers",
-            self.active_connections.len()
+            "Registering protocol with {num_handlers} existing handlers"
         );
 
-        Ok(IncomingStreams {
-            receiver: receiver.into_stream(),
-        })
+        Ok(IncomingStreams { receiver })
     }
 }
 
@@ -121,12 +171,6 @@ impl fmt::Display for AlreadyRegistered {
 
 impl std::error::Error for AlreadyRegistered {}
 
-/// Message from a [`Control`] to the [`Behaviour`] to construct a new [`PeerControl`].
-pub(crate) struct NewPeerControl {
-    pub(crate) peer: PeerId,
-    pub(crate) sender: oneshot::Sender<io::Result<SendSink<'static, NewStream>>>,
-}
-
 impl NetworkBehaviour for Behaviour {
     type ConnectionHandler = Handler;
 
@@ -139,17 +183,12 @@ impl NetworkBehaviour for Behaviour {
         _: &Multiaddr,
         _: &Multiaddr,
     ) -> Result<THandler<Self>, ConnectionDenied> {
-        let (_, receiver) = self
-            .connections_by_peer_id
-            .entry(peer)
-            .or_insert_with(|| flume::bounded(0));
-
-        self.active_connections.insert((peer, connection_id));
+        let receiver = self.shared.lock().unwrap().receiver(peer, connection_id);
 
         Ok(Handler::new(
             peer,
             self.supported_protocols.clone(),
-            receiver.clone(),
+            receiver,
         ))
     }
 
@@ -160,51 +199,64 @@ impl NetworkBehaviour for Behaviour {
         _: &Multiaddr,
         _: Endpoint,
     ) -> Result<THandler<Self>, ConnectionDenied> {
-        let (_, receiver) = self
-            .connections_by_peer_id
-            .entry(peer)
-            .or_insert_with(|| flume::bounded(0));
-
-        self.active_connections.insert((peer, connection_id));
+        let receiver = self.shared.lock().unwrap().receiver(peer, connection_id);
 
         Ok(Handler::new(
             peer,
             self.supported_protocols.clone(),
-            receiver.clone(),
+            receiver,
         ))
     }
 
     fn on_swarm_event(&mut self, event: FromSwarm) {
         match event {
-            FromSwarm::ConnectionEstablished(ConnectionEstablished { peer_id, .. }) => {
-                let (new_stream_sender, _) = self
-                    .connections_by_peer_id
-                    .get(&peer_id)
-                    .expect("inconsistent state");
-
-                for pending_sender in self
-                    .pending_connections
-                    .entry(peer_id)
-                    .or_default()
-                    .drain(..)
-                {
-                    let _ = pending_sender.send(Ok(new_stream_sender.clone().into_sink()));
-                }
-            }
-            FromSwarm::ConnectionClosed(ConnectionClosed {
+            FromSwarm::ConnectionEstablished(ConnectionEstablished {
                 peer_id,
                 connection_id,
-                remaining_established,
                 ..
             }) => {
-                self.active_connections.remove(&(peer_id, connection_id));
+                self.shared
+                    .lock()
+                    .unwrap()
+                    .connections
+                    .insert(connection_id, peer_id);
+            }
+            FromSwarm::ConnectionClosed(ConnectionClosed { connection_id, .. }) => {
+                self.shared
+                    .lock()
+                    .unwrap()
+                    .connections
+                    .remove(&connection_id);
+            }
+            FromSwarm::DialFailure(DialFailure {
+                peer_id: Some(peer_id),
+                error:
+                    error @ (DialError::Transport(_)
+                    | DialError::Denied { .. }
+                    | DialError::NoAddresses
+                    | DialError::WrongPeerId { .. }),
+                ..
+            }) => {
+                let Some((_, mut receiver)) = self
+                    .shared
+                    .lock()
+                    .unwrap()
+                    .pending_channels
+                    .remove(&peer_id)
+                else {
+                    return;
+                };
 
-                // If the last connection goes away, clean up the state.
-                if remaining_established == 0 {
-                    self.connections_by_peer_id.remove(&peer_id);
+                while let Ok(Some(new_stream)) = receiver.try_next() {
+                    let _ =
+                        new_stream
+                            .sender
+                            .send(Err(crate::OpenStreamError::Io(io::Error::new(
+                                io::ErrorKind::NotConnected,
+                                error.to_string(),
+                            ))));
                 }
             }
-            // TODO: Handle `DialFailure`
             _ => {}
         }
     }
@@ -222,29 +274,14 @@ impl NetworkBehaviour for Behaviour {
         &mut self,
         cx: &mut Context<'_>,
     ) -> Poll<ToSwarm<Self::ToSwarm, THandlerInEvent<Self>>> {
-        loop {
-            match self.receiver.poll_next_unpin(cx) {
-                Poll::Ready(Some(NewPeerControl { peer, sender })) => {
-                    match self.connections_by_peer_id.get(&peer) {
-                        Some((new_stream_sender, _)) => {
-                            let _ = sender.send(Ok(new_stream_sender.clone().into_sink()));
-                        }
-                        None => {
-                            self.pending_connections
-                                .entry(peer)
-                                .or_default()
-                                .push(sender);
-                            return Poll::Ready(ToSwarm::Dial {
-                                opts: DialOpts::peer_id(peer).build(),
-                            });
-                        }
-                    }
-
-                    continue;
-                }
-                Poll::Ready(None) => unreachable!("we own both sender and receiver"),
-                Poll::Pending => return Poll::Pending,
-            };
+        if let Poll::Ready(Some(peer)) = self.receiver.poll_next_unpin(cx) {
+            return Poll::Ready(ToSwarm::Dial {
+                opts: DialOpts::peer_id(peer)
+                    .condition(PeerCondition::DisconnectedAndNotDialing)
+                    .build(),
+            });
         }
+
+        Poll::Pending
     }
 }

@@ -7,13 +7,13 @@ rust-version.workspace = true
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-flume = "0.11.0"
 futures = "0.3.29"
 libp2p-core = { workspace = true }
 libp2p-identity = { workspace = true, features = ["peerid"] }
 libp2p-swarm = { workspace = true }
 tracing = "0.1.37"
 void = "1"
+rand = "0.8"
 
 [dev-dependencies]
 libp2p-swarm-test = { workspace = true }
