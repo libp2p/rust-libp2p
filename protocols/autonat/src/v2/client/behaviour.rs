@@ -246,16 +246,18 @@ where
         cx: &mut Context<'_>,
     ) -> Poll<ToSwarm<Self::ToSwarm, <Self::ConnectionHandler as ConnectionHandler>::FromBehaviour>>
     {
-        if let Some(event) = self.pending_events.pop_front() {
-            return Poll::Ready(event);
-        }
-        if self.next_tick.poll_unpin(cx).is_ready() {
-            self.inject_address_candiate_test();
+        loop {
             if let Some(event) = self.pending_events.pop_front() {
                 return Poll::Ready(event);
             }
+
+            if self.next_tick.poll_unpin(cx).is_ready() {
+                self.inject_address_candiate_test();
+                continue;
+            }
+
+            return Poll::Pending;
         }
-        Poll::Pending
     }
 }
 
