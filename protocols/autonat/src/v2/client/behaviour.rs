@@ -29,21 +29,24 @@ use super::handler::{
 
 #[derive(Debug, Clone, Copy)]
 pub struct Config {
-    pub(crate) max_addrs_count: usize,
-    pub(crate) recheck_interval: Duration,
+    /// How many candidates we will test at most.
+    pub(crate) max_candidates: usize,
+
+    /// The interval at which we will attempt to confirm candidates as external addresses.
+    pub(crate) probe_interval: Duration,
 }
 
 impl Config {
-    pub fn with_max_addrs_count(self, max_addrs_count: usize) -> Self {
+    pub fn with_max_candidates(self, max_candidates: usize) -> Self {
         Self {
-            max_addrs_count,
+            max_candidates,
             ..self
         }
     }
 
-    pub fn with_recheck_interval(self, recheck_interval: Duration) -> Self {
+    pub fn with_probe_interval(self, probe_interval: Duration) -> Self {
         Self {
-            recheck_interval,
+            probe_interval,
             ..self
         }
     }
@@ -52,8 +55,8 @@ impl Config {
 impl Default for Config {
     fn default() -> Self {
         Self {
-            max_addrs_count: 10,
-            recheck_interval: Duration::from_secs(5),
+            max_candidates: 10,
+            probe_interval: Duration::from_secs(5),
         }
     }
 }
@@ -291,7 +294,7 @@ where
         Self {
             pending_nonces: HashMap::new(),
             rng,
-            next_tick: Delay::new(config.recheck_interval),
+            next_tick: Delay::new(config.probe_interval),
             config,
             pending_events: VecDeque::new(),
             address_candidates: HashMap::new(),
@@ -326,7 +329,7 @@ where
             .iter()
             .rev()
             .map(|(addr, _)| addr)
-            .take(self.config.max_addrs_count)
+            .take(self.config.max_candidates)
             .cloned()
             .collect();
         if let Some(ConnectionInfo { peer_id, .. }) = self
@@ -337,7 +340,7 @@ where
         {
             self.submit_req_for_peer(*peer_id, addrs);
         }
-        self.next_tick.reset(self.config.recheck_interval);
+        self.next_tick.reset(self.config.probe_interval);
     }
 
     fn submit_req_for_peer(&mut self, peer: PeerId, addrs: Vec<Multiaddr>) {
