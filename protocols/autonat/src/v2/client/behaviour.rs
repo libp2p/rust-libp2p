@@ -281,12 +281,7 @@ where
         if self.peer_info.values().all(|info| !info.supports_autonat) {
             return;
         }
-        if self.address_candidates.is_empty() {
-            return;
-        }
-        if self.address_candidates.values().all(|info| info.is_tested) {
-            return;
-        }
+
         let mut entries = self
             .address_candidates
             .iter()
