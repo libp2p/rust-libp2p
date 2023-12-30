@@ -21,6 +21,7 @@
 //! Implementation of the [AutoNAT](https://github.com/libp2p/specs/blob/master/autonat/README.md) protocol.
 
 #![cfg_attr(docsrs, feature(doc_cfg, doc_auto_cfg))]
+#![deprecated(note = "Please use `v2` module instead.")]
 
 mod behaviour;
 mod protocol;
