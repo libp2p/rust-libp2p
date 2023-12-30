@@ -16,8 +16,8 @@ release = false
 crate-type = ["cdylib"]
 
 [dependencies]
-anyhow = "1.0.72"
-futures = "0.3.29"
+anyhow = "1.0.76"
+futures = "0.3.30"
 rand = "0.8"
 tracing = "0.1.37"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }

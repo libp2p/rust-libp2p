@@ -277,7 +277,7 @@ where
         let resolver = self.resolver.clone();
         let inner = self.inner.clone();
 
-        // Asynchronlously resolve all DNS names in the address before proceeding
+        // Asynchronously resolve all DNS names in the address before proceeding
         // with dialing on the underlying transport.
         Ok(async move {
             let mut last_err = None;

@@ -13,7 +13,7 @@ categories = ["network-programming", "asynchronous"]
 [dependencies]
 async-trait = "0.1"
 cbor4ii = { version = "0.3.2", features = ["serde1", "use_std"], optional = true }
-futures = "0.3.29"
+futures = "0.3.30"
 instant = "0.1.12"
 libp2p-core = { workspace = true }
 libp2p-swarm = { workspace = true }
@@ -32,7 +32,7 @@ json = ["dep:serde", "dep:serde_json", "libp2p-swarm/macros"]
 cbor = ["dep:serde", "dep:cbor4ii", "libp2p-swarm/macros"]
 
 [dev-dependencies]
-anyhow = "1.0.75"
+anyhow = "1.0.76"
 async-std = { version = "1.6.2", features = ["attributes"] }
 libp2p-noise = { workspace = true }
 libp2p-tcp = { workspace = true, features = ["async-io"] }
