@@ -234,9 +234,8 @@ jobs:
       fail-fast: false
       matrix:
         rust-version: [
-          # 1.72.0, # current stable
-          # beta,
-          nightly-2023-09-10
+          1.75.0, # current stable
+          beta,
         ]
     steps:
       - uses: actions/checkout@v4
