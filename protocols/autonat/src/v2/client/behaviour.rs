@@ -127,13 +127,14 @@ where
                 endpoint,
                 ..
             }) => {
-                self.peer_info
-                    .entry(connection_id)
-                    .or_insert(ConnectionInfo {
+                self.peer_info.insert(
+                    connection_id,
+                    ConnectionInfo {
                         peer_id,
                         supports_autonat: false,
                         is_local: addr_is_local(endpoint.get_remote_address()),
-                    });
+                    },
+                );
             }
             FromSwarm::ConnectionClosed(ConnectionClosed {
                 peer_id,
