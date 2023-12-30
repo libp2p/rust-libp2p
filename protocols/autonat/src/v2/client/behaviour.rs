@@ -1,5 +1,5 @@
 use std::{
-    collections::{HashMap, HashSet, VecDeque},
+    collections::{HashMap, VecDeque},
     task::{Context, Poll},
     time::Duration,
 };
@@ -75,7 +75,6 @@ where
         >,
     >,
     address_candidates: HashMap<Multiaddr, AddressInfo>,
-    already_tested: HashSet<Multiaddr>,
     next_tick: Delay,
     peer_info: HashMap<ConnectionId, ConnectionInfo>,
 }
@@ -273,7 +272,6 @@ where
             config,
             pending_events: VecDeque::new(),
             address_candidates: HashMap::new(),
-            already_tested: HashSet::new(),
             peer_info: HashMap::new(),
         }
     }
@@ -293,7 +291,6 @@ where
             .address_candidates
             .iter()
             .filter(|(_, info)| !info.is_tested)
-            .filter(|(addr, _)| !self.already_tested.contains(addr))
             .map(|(addr, count)| (addr.clone(), *count))
             .collect::<Vec<_>>();
         if entries.is_empty() {
