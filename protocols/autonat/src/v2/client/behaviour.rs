@@ -329,7 +329,7 @@ where
 
         entries
             .into_iter()
-            .rev()
+            .rev() // `sort_unstable` is ascending
             .take(self.config.max_candidates)
             .map(|(addr, _)| addr)
     }
