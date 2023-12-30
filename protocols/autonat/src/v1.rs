@@ -23,8 +23,8 @@
 #![cfg_attr(docsrs, feature(doc_cfg, doc_auto_cfg))]
 #![deprecated(note = "Please use `v2` module instead.")]
 
-mod behaviour;
-mod protocol;
+pub(crate) mod behaviour;
+pub(crate) mod protocol;
 
 pub use self::{
     behaviour::{
@@ -35,7 +35,7 @@ pub use self::{
 };
 pub use libp2p_request_response::{InboundFailure, OutboundFailure};
 
-mod proto {
+pub(crate) mod proto {
     #![allow(unreachable_pub)]
     include!("v1/generated/mod.rs");
     pub(crate) use self::structs::{mod_Message::*, Message};
