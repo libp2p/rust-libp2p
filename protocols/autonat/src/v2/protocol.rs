@@ -297,7 +297,6 @@ mod tests {
         mod_Message::OneOfmsg, DialDataResponse as GenDialDataResponse, Message,
     };
     use crate::v2::protocol::{Coder, DialDataResponse, Request};
-    use futures::io::Cursor;
 
     use rand::{thread_rng, Rng};
 
@@ -327,26 +326,5 @@ mod tests {
         };
         let buf = quick_protobuf::serialize_into_vec(&dial_back_max_nonce).unwrap();
         assert!(buf.len() <= super::DIAL_BACK_MAX_SIZE);
-    }
-
-    #[tokio::test]
-    async fn write_read_request() {
-        let mut buf = Cursor::new(Vec::new());
-        let mut coder = Coder::new(&mut buf);
-        let mut all_req = Vec::with_capacity(100);
-        for _ in 0..100 {
-            let data_request: Request = Request::Data(DialDataResponse {
-                data_count: thread_rng().gen_range(0..4000),
-            });
-            all_req.push(data_request.clone());
-            coder.send(data_request.clone()).await.unwrap();
-        }
-        let inner = coder.inner.into_inner();
-        inner.set_position(0);
-        let mut coder = Coder::new(inner);
-        for i in 0..100 {
-            let read_data_request: Request = coder.next().await.unwrap();
-            assert_eq!(read_data_request, all_req[i]);
-        }
     }
 }

@@ -34,14 +34,13 @@ pub(crate) enum DialBackStatus {
     DialErr,
     /// Failure during dial back
     DialBackErr,
-    Ok,
 }
 
 #[derive(Debug)]
 pub struct DialBackCommand {
     pub(crate) addr: Multiaddr,
     pub(crate) nonce: Nonce,
-    pub(crate) back_channel: oneshot::Sender<DialBackStatus>,
+    pub(crate) back_channel: oneshot::Sender<Result<(), DialBackStatus>>,
 }
 
 pub struct Handler<R> {
@@ -172,7 +171,10 @@ enum HandleFail {
     InternalError(usize),
     RequestRejected,
     DialRefused,
-    DialBack { idx: usize, err: DialBackStatus },
+    DialBack {
+        idx: usize,
+        result: Result<(), DialBackStatus>,
+    },
 }
 
 impl From<HandleFail> for DialResponse {
@@ -193,13 +195,13 @@ impl From<HandleFail> for DialResponse {
                 addr_idx: 0,
                 dial_status: DialStatus::UNUSED,
             },
-            HandleFail::DialBack { idx, err } => Self {
+            HandleFail::DialBack { idx, result } => Self {
                 status: ResponseStatus::OK,
                 addr_idx: idx,
-                dial_status: match err {
-                    DialBackStatus::DialErr => DialStatus::E_DIAL_ERROR,
-                    DialBackStatus::DialBackErr => DialStatus::E_DIAL_BACK_ERROR,
-                    DialBackStatus::Ok => DialStatus::OK,
+                dial_status: match result {
+                    Err(DialBackStatus::DialErr) => DialStatus::E_DIAL_ERROR,
+                    Err(DialBackStatus::DialBackErr) => DialStatus::E_DIAL_BACK_ERROR,
+                    Ok(()) => DialStatus::OK,
                 },
             },
         }
@@ -267,14 +269,14 @@ where
         .await
         .map_err(|_| HandleFail::DialBack {
             idx,
-            err: DialBackStatus::DialErr,
+            result: Err(DialBackStatus::DialErr),
         })?;
 
     let dial_back = rx.await.map_err(|_e| HandleFail::InternalError(idx))?;
-    if dial_back != DialBackStatus::Ok {
+    if let Err(err) = dial_back {
         return Err(HandleFail::DialBack {
             idx,
-            err: dial_back,
+            result: Err(err),
         });
     }
     Ok(DialResponse {

@@ -123,7 +123,10 @@ async fn confirm_successful() {
                 _ => None,
             })
             .await;
-        assert_eq!(tested_addr, alice_bob_external_addrs.get(0).cloned());
+        assert_eq!(
+            tested_addr,
+            alice_bob_external_addrs.get(0).cloned().unwrap()
+        );
         assert_eq!(bytes_sent, 0);
         assert_eq!(server, cor_server_peer);
         assert!(result.is_ok(), "Result is {result:?}");
@@ -215,7 +218,7 @@ async fn dial_back_to_unsupported_protocol() {
         let data_amount = bob
             .wait(|event| match event {
                 SwarmEvent::Behaviour(CombinedClientEvent::Autonat(client::Event {
-                    tested_addr: Some(tested_addr),
+                    tested_addr,
                     bytes_sent,
                     server,
                     result: Err(_),
@@ -310,7 +313,7 @@ async fn dial_back_to_non_libp2p() {
             let data_amount = bob
                 .wait(|event| match event {
                     SwarmEvent::Behaviour(CombinedClientEvent::Autonat(client::Event {
-                        tested_addr: Some(tested_addr),
+                        tested_addr,
                         bytes_sent,
                         server,
                         result: Err(_),
@@ -409,7 +412,7 @@ async fn dial_back_to_not_supporting() {
         let bytes_sent = bob
             .wait(|event| match event {
                 SwarmEvent::Behaviour(CombinedClientEvent::Autonat(client::Event {
-                    tested_addr: Some(tested_addr),
+                    tested_addr,
                     bytes_sent,
                     server,
                     result: Err(_),

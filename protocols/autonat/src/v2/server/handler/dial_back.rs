@@ -108,7 +108,7 @@ impl ConnectionHandler for Handler {
                 ..
             }) => {
                 if let Some(cmd) = self.requested_substream_nonce.take() {
-                    let _ = cmd.back_channel.send(DialBackRes::DialBackErr);
+                    let _ = cmd.back_channel.send(Err(DialBackRes::DialBackErr));
                 }
             }
             _ => {}
@@ -124,11 +124,11 @@ async fn perform_dial_back(
         ..
     }: DialBackCommand,
 ) -> io::Result<()> {
+    futures_time::task::sleep(futures_time::time::Duration::from_millis(100)).await;
     let res = dial_back(stream, nonce)
         .await
         .map_err(|_| DialBackRes::DialBackErr)
-        .map(|_| DialBackRes::Ok)
-        .unwrap_or_else(|e| e);
+        .map(|_| ());
     back_channel
         .send(res)
         .map_err(|_| io::Error::new(io::ErrorKind::Other, "send error"))?;

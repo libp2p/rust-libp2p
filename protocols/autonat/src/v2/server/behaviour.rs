@@ -100,7 +100,7 @@ where
                 if let Some(DialBackCommand { back_channel, .. }) =
                     self.dialing_dial_back.remove(&connection_id)
                 {
-                    let _ = back_channel.send(DialBackStatus::DialErr);
+                    let _ = back_channel.send(Err(DialBackStatus::DialErr));
                 }
             }
             _ => {}

@@ -347,6 +347,7 @@ where
     }
 
     // FIXME: We don't want test-only APIs in our public API.
+    #[doc(hidden)]
     pub fn validate_addr(&mut self, addr: &Multiaddr) {
         if let Some(info) = self.address_candidates.get_mut(addr) {
             info.status = TestStatus::Received(self.rng.next_u64());
