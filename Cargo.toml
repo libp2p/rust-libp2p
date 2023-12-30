@@ -2,6 +2,7 @@
 members = [
     "core",
     "examples/autonat",
+    "examples/autonatv2",
     "examples/browser-webrtc",
     "examples/chat",
     "examples/dcutr",
@@ -46,9 +47,9 @@ members = [
     "protocols/rendezvous",
     "protocols/request-response",
     "protocols/upnp",
-    "swarm",
     "swarm-derive",
     "swarm-test",
+    "swarm",
     "transports/dns",
     "transports/noise",
     "transports/plaintext",
@@ -57,12 +58,12 @@ members = [
     "transports/tcp",
     "transports/tls",
     "transports/uds",
-    "transports/webrtc",
     "transports/webrtc-websys",
+    "transports/webrtc",
+    "transports/websocket-websys",
     "transports/websocket",
     "transports/webtransport-websys",
-    "transports/websocket-websys",
-    "wasm-tests/webtransport-tests", "examples/autonatv2",
+    "wasm-tests/webtransport-tests",
 ]
 resolver = "2"
 
