@@ -162,12 +162,13 @@ where
     ) {
         match event {
             Either::Right(nonce) => {
-                if let Some(status) = self.pending_nonces.get_mut(&nonce) {
-                    *status = NonceStatus::Received;
-                    tracing::trace!("Received pending nonce from {peer_id:?}");
-                } else {
-                    tracing::warn!("Received unexpected nonce from {peer_id:?}, this means that another node tried to be reachable on an address this node is reachable on.");
-                }
+                let Some(status) = self.pending_nonces.get_mut(&nonce) else {
+                    tracing::warn!(%peer_id, %nonce, "Received unexpected nonce");
+                    return;
+                };
+
+                *status = NonceStatus::Received;
+                tracing::debug!(%peer_id, %nonce, "Successful dial-back");
             }
             Either::Left(dial_request::ToBehaviour::PeerHasServerSupport) => {
                 self.peer_info
