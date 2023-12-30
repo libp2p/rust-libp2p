@@ -196,13 +196,16 @@ where
                         ref reachable_addr,
                     }) => {
                         if !matches!(self.pending_nonces.get(&nonce), Some(NonceStatus::Received)) {
-                            tracing::debug!(
-                            "server reported reachbility, but didn't actually reached this node."
-                        );
-                        } else {
-                            self.pending_events
-                                .push_back(ToSwarm::ExternalAddrConfirmed(reachable_addr.clone()));
+                            tracing::warn!(
+                                %peer_id,
+                                %nonce,
+                                "Server reported reachbility but we never received a dial-back"
+                            );
+                            return;
                         }
+
+                        self.pending_events
+                            .push_back(ToSwarm::ExternalAddrConfirmed(reachable_addr.clone()));
                     }
                     Err(ref err) => match &err.internal {
                         dial_request::InternalError::FailureDuringDialBack { addr: Some(addr) }
