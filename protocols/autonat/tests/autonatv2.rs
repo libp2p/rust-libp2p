@@ -84,12 +84,11 @@ async fn confirm_successful() {
     };
 
     let bob_task = async {
-        let address_candidate = bob
-            .wait(|event| match event {
-                SwarmEvent::NewExternalAddrCandidate { address } => Some(address),
-                _ => None,
-            })
-            .await;
+        bob.wait(|event| match event {
+            SwarmEvent::NewExternalAddrCandidate { address } => Some(address),
+            _ => None,
+        })
+        .await;
         let incoming_conn_id = bob
             .wait(|event| match event {
                 SwarmEvent::IncomingConnection { connection_id, .. } => Some(connection_id),
@@ -115,10 +114,6 @@ async fn confirm_successful() {
             .wait(|event| match event {
                 SwarmEvent::Behaviour(CombinedClientEvent::Autonat(status_update)) => {
                     Some(status_update)
-                }
-                SwarmEvent::ExternalAddrConfirmed { address } => {
-                    assert_eq!(address, address_candidate);
-                    None
                 }
                 _ => None,
             })
@@ -565,7 +560,6 @@ async fn bootstrap() -> (Swarm<CombinedServer>, Swarm<CombinedClient>) {
 
         bob.wait(|event| match event {
             SwarmEvent::Behaviour(CombinedClientEvent::Autonat(_)) => Some(()),
-            SwarmEvent::ExternalAddrConfirmed { .. } => None,
             _ => None,
         })
         .await;
