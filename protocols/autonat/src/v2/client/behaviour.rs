@@ -216,14 +216,20 @@ where
                             }
                             tracing::debug!(%peer_id, %addr, "Server failed to dial address, candidate is not a public address")
                         }
-                        dial_request::InternalError::InternalServer
+                        e @ (dial_request::InternalError::InternalServer
                         | dial_request::InternalError::DataRequestTooLarge { .. }
                         | dial_request::InternalError::DataRequestTooSmall { .. }
                         | dial_request::InternalError::InvalidResponse
                         | dial_request::InternalError::ServerRejectedDialRequest
                         | dial_request::InternalError::InvalidReferencedAddress { .. }
-                        | dial_request::InternalError::ServerChoseNotToDialAnyAddress => {
-                            self.handle_no_connection(peer_id, connection_id);
+                        | dial_request::InternalError::ServerChoseNotToDialAnyAddress) => {
+                            // Disable this server for future requests.
+                            self.peer_info
+                                .get_mut(&connection_id)
+                                .expect("inconsistent state")
+                                .supports_autonat = false;
+
+                            tracing::debug!(%peer_id, %connection_id, %e, "Disabling server for future AutoNAT requests");
                         }
                         _ => {
                             tracing::debug!("Test failed: {err}");
@@ -337,33 +343,6 @@ where
             .choose(&mut self.rng)?;
 
         Some((*conn_id, info.peer_id))
-    }
-
-    fn handle_no_connection(&mut self, peer_id: PeerId, connection_id: ConnectionId) {
-        let removeable_conn_ids = self
-            .peer_info
-            .iter()
-            .filter(|(conn_id, info)| info.peer_id == peer_id && **conn_id == connection_id)
-            .map(|(id, _)| *id)
-            .collect::<Vec<_>>();
-        for conn_id in removeable_conn_ids {
-            self.peer_info.remove(&conn_id);
-        }
-        let known_servers_n = self
-            .peer_info
-            .values()
-            .filter(|info| info.supports_autonat)
-            .count();
-        let changed_n = self
-            .peer_info
-            .values_mut()
-            .filter(|info| info.supports_autonat)
-            .filter(|info| info.peer_id == peer_id)
-            .map(|info| info.supports_autonat = false)
-            .count();
-        if known_servers_n != changed_n {
-            tracing::trace!(server = %peer_id, "Removing potential Autonat server due to dial failure");
-        }
     }
 
     pub fn validate_addr(&mut self, addr: &Multiaddr) {
