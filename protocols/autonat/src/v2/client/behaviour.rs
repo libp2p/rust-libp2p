@@ -280,54 +280,51 @@ where
 
     /// Inject an immediate test for all pending address candidates.
     fn inject_address_candiate_test(&mut self) {
-        if self.peer_info.values().all(|info| !info.supports_autonat) {
-            return;
-        }
+        for addr in self.untested_candidates() {
+            let Some((conn_id, peer_id)) = self.random_autonat_server() else {
+                tracing::debug!("Not connected to any AutoNAT servers");
+                return;
+            };
 
+            let nonce = self.rng.gen();
+            self.pending_nonces.insert(nonce, NonceStatus::Pending);
+
+            self.pending_events.push_back(ToSwarm::NotifyHandler {
+                peer_id,
+                handler: NotifyHandler::One(conn_id),
+                event: Either::Left(DialRequest {
+                    nonce,
+                    addrs: vec![addr],
+                }),
+            });
+        }
+    }
+
+    fn untested_candidates(&self) -> impl Iterator<Item = Multiaddr> {
         let mut entries = self
             .address_candidates
             .iter()
             .filter(|(_, info)| !info.is_tested)
             .map(|(addr, count)| (addr.clone(), *count))
             .collect::<Vec<_>>();
-        if entries.is_empty() {
-            return;
-        }
+
         entries.sort_unstable_by_key(|(_, count)| *count);
-        let addrs = entries
-            .iter()
+
+        entries
+            .into_iter()
             .rev()
-            .map(|(addr, _)| addr)
             .take(self.config.max_candidates)
-            .cloned()
-            .collect();
-        if let Some(ConnectionInfo { peer_id, .. }) = self
-            .peer_info
-            .values()
-            .filter(|e| e.supports_autonat)
-            .choose(&mut self.rng)
-        {
-            self.submit_req_for_peer(*peer_id, addrs);
-        }
+            .map(|(addr, _)| addr)
     }
 
-    fn submit_req_for_peer(&mut self, peer: PeerId, addrs: Vec<Multiaddr>) {
-        let nonce = self.rng.gen();
-        let req = DialRequest { nonce, addrs };
-        self.pending_nonces.insert(nonce, NonceStatus::Pending);
-        if let Some(conn_id) = self
+    fn random_autonat_server(&mut self) -> Option<(ConnectionId, PeerId)> {
+        let (conn_id, info) = self
             .peer_info
             .iter()
             .filter(|(_, info)| info.supports_autonat)
-            .find(|(_, info)| info.peer_id == peer)
-            .map(|(id, _)| *id)
-        {
-            self.pending_events.push_back(ToSwarm::NotifyHandler {
-                peer_id: peer,
-                handler: NotifyHandler::One(conn_id),
-                event: Either::Left(req),
-            });
-        }
+            .choose(&mut self.rng)?;
+
+        Some((*conn_id, info.peer_id))
     }
 
     fn handle_no_connection(&mut self, peer_id: PeerId, connection_id: ConnectionId) {
@@ -421,6 +418,7 @@ enum NonceStatus {
     Received,
 }
 
+#[derive(Clone, Copy)]
 struct ConnectionInfo {
     peer_id: PeerId,
     supports_autonat: bool,
