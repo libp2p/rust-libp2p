@@ -321,7 +321,7 @@ where
             .map(|(addr, count)| (addr.clone(), *count))
             .collect::<Vec<_>>();
 
-        entries.sort_unstable_by_key(|(_, count)| *count);
+        entries.sort_unstable_by_key(|(_, info)| info.score);
 
         if entries.is_empty() {
             tracing::debug!("No untested address candidates");
@@ -420,23 +420,3 @@ struct AddressInfo {
     score: usize,
     is_tested: bool,
 }
-
-impl PartialOrd for AddressInfo {
-    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-        Some(self.score.cmp(&other.score))
-    }
-}
-
-impl PartialEq for AddressInfo {
-    fn eq(&self, other: &Self) -> bool {
-        self.score == other.score
-    }
-}
-
-impl Ord for AddressInfo {
-    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
-        self.score.cmp(&other.score)
-    }
-}
-
-impl Eq for AddressInfo {}
