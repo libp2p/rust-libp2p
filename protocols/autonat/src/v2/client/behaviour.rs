@@ -212,8 +212,8 @@ where
                         | dial_request::InternalError::UnableToConnectOnSelectedAddress {
                             addr: Some(addr),
                         } => {
-                            if let Some(peer_info) = self.address_candidates.get_mut(addr) {
-                                peer_info.is_tested = true;
+                            if let Some(address_info) = self.address_candidates.get_mut(addr) {
+                                address_info.is_tested = true;
                             }
                             tracing::debug!(%addr, "Was unable to connect to the server on the selected address.")
                         }
