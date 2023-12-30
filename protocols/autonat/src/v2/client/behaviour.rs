@@ -215,7 +215,7 @@ where
                             if let Some(peer_info) = self.address_candidates.get_mut(addr) {
                                 peer_info.is_tested = true;
                             }
-                            tracing::debug!(addr = %addr, "Was unable to connect to the server on the selected address.")
+                            tracing::debug!(%addr, "Was unable to connect to the server on the selected address.")
                         }
                         dial_request::InternalError::InternalServer
                         | dial_request::InternalError::DataRequestTooLarge { .. }
