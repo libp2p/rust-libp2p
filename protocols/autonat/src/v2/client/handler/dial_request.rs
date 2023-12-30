@@ -5,7 +5,6 @@ use libp2p_core::{
     Multiaddr,
 };
 
-use libp2p_identity::PeerId;
 use libp2p_swarm::{
     handler::{
         ConnectionEvent, DialUpgradeError, FullyNegotiatedOutbound, OutboundUpgradeSend,
@@ -60,7 +59,6 @@ pub(crate) enum InternalError {
 pub struct InternalStatusUpdate {
     pub(crate) tested_addr: Option<Multiaddr>,
     pub(crate) bytes_sent: usize,
-    pub(crate) server: Option<PeerId>,
     pub result: Result<TestEnd, Error>,
     pub(crate) server_no_support: bool,
 }
@@ -94,16 +92,14 @@ pub struct Handler {
             >,
         >,
     >,
-    server: PeerId,
 }
 
 impl Handler {
-    pub(crate) fn new(server: PeerId) -> Self {
+    pub(crate) fn new() -> Self {
         Self {
             queued_events: VecDeque::new(),
             outbound: FuturesSet::new(Duration::from_secs(10), 10),
             queued_streams: VecDeque::default(),
-            server,
         }
     }
 
@@ -116,7 +112,7 @@ impl Handler {
             });
         if self
             .outbound
-            .try_push(start_stream_handle(self.server, req, rx))
+            .try_push(start_stream_handle(req, rx))
             .is_err()
         {
             tracing::debug!("Dial request dropped, too many requests in flight");
@@ -151,7 +147,6 @@ impl ConnectionHandler for Handler {
                 Err(_) => InternalStatusUpdate {
                     tested_addr: None,
                     bytes_sent: 0,
-                    server: None,
                     result: Err(Error {
                         internal: InternalError::Io(io::Error::from(io::ErrorKind::TimedOut)),
                     }),
@@ -218,7 +213,6 @@ impl ConnectionHandler for Handler {
 }
 
 async fn start_stream_handle(
-    server: PeerId,
     dial_request: DialRequest,
     stream_recv: oneshot::Receiver<
         Result<
@@ -250,7 +244,6 @@ async fn start_stream_handle(
             let status_update = InternalStatusUpdate {
                 tested_addr: None,
                 bytes_sent: 0,
-                server: Some(server),
                 result: Err(err),
                 server_no_support,
             };
@@ -272,7 +265,6 @@ async fn start_stream_handle(
     InternalStatusUpdate {
         tested_addr: checked_addr_idx.and_then(|idx| addrs.get(idx).cloned()),
         bytes_sent: data_amount,
-        server: Some(server),
         result,
         server_no_support,
     }

@@ -101,12 +101,12 @@ where
     fn handle_established_outbound_connection(
         &mut self,
         _: ConnectionId,
-        peer_id: PeerId,
+        _: PeerId,
         _: &Multiaddr,
         _: Endpoint,
         _: PortUse,
     ) -> Result<<Self as NetworkBehaviour>::ConnectionHandler, ConnectionDenied> {
-        Ok(Either::Left(dial_request::Handler::new(peer_id)))
+        Ok(Either::Left(dial_request::Handler::new()))
     }
 
     fn on_swarm_event(&mut self, event: FromSwarm) {
@@ -179,7 +179,6 @@ where
             Either::Left(dial_request::ToBehaviour::TestCompleted(InternalStatusUpdate {
                 tested_addr,
                 bytes_sent: data_amount,
-                server,
                 result,
                 server_no_support,
             })) => {
@@ -234,7 +233,7 @@ where
                 let event = crate::v2::client::Event {
                     tested_addr,
                     bytes_sent: data_amount,
-                    server: server.unwrap_or(peer_id),
+                    server: peer_id,
                     result: result.map(|_| ()),
                 };
                 self.pending_events.push_back(ToSwarm::GenerateEvent(event));
