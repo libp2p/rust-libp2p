@@ -445,7 +445,7 @@ async fn new_client() -> Swarm<CombinedClient> {
     let mut node = Swarm::new_ephemeral(|identity| CombinedClient {
         autonat: libp2p_autonat::v2::client::Behaviour::new(
             OsRng,
-            Config::default().with_recheck_interval(Duration::from_millis(100)),
+            Config::default().with_probe_interval(Duration::from_millis(100)),
         ),
         identify: libp2p_identify::Behaviour::new(libp2p_identify::Config::new(
             "/libp2p-test/1.0.0".into(),

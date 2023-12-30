@@ -25,7 +25,7 @@ use crate::v2::{
     generated::structs::{mod_DialResponse::ResponseStatus, DialStatus},
     protocol::{Coder, DialDataRequest, DialRequest, DialResponse, Request, Response},
     server::behaviour::StatusUpdate,
-    Nonce, REQUEST_PROTOCOL_NAME,
+    Nonce, DIAL_REQUEST_PROTOCOL,
 };
 
 #[derive(Debug, PartialEq)]
@@ -92,7 +92,7 @@ where
     type OutboundOpenInfo = ();
 
     fn listen_protocol(&self) -> SubstreamProtocol<Self::InboundProtocol, Self::InboundOpenInfo> {
-        SubstreamProtocol::new(ReadyUpgrade::new(REQUEST_PROTOCOL_NAME), ())
+        SubstreamProtocol::new(ReadyUpgrade::new(DIAL_REQUEST_PROTOCOL), ())
     }
 
     fn poll(

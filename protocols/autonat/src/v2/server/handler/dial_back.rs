@@ -14,7 +14,7 @@ use libp2p_swarm::{
     SubstreamProtocol,
 };
 
-use crate::v2::{protocol::dial_back, DIAL_BACK_PROTOCOL_NAME};
+use crate::v2::{protocol::dial_back, DIAL_BACK_PROTOCOL};
 
 use super::dial_request::{DialBackCommand, DialBackStatus as DialBackRes};
 
@@ -70,7 +70,7 @@ impl ConnectionHandler for Handler {
         if let Some(cmd) = self.pending_nonce.take() {
             self.requested_substream_nonce = Some(cmd);
             return Poll::Ready(ConnectionHandlerEvent::OutboundSubstreamRequest {
-                protocol: SubstreamProtocol::new(ReadyUpgrade::new(DIAL_BACK_PROTOCOL_NAME), ()),
+                protocol: SubstreamProtocol::new(ReadyUpgrade::new(DIAL_BACK_PROTOCOL), ()),
             });
         }
         Poll::Pending

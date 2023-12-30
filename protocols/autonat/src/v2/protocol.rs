@@ -5,7 +5,7 @@ use std::{borrow::Cow, io};
 
 use asynchronous_codec::{Framed, FramedRead, FramedWrite};
 
-use futures::{AsyncRead, AsyncWrite, AsyncWriteExt, SinkExt, StreamExt};
+use futures::{AsyncRead, AsyncWrite, SinkExt, StreamExt};
 use libp2p_core::Multiaddr;
 
 use quick_protobuf_codec::Codec;
@@ -90,6 +90,32 @@ pub(crate) enum Request {
     Data(DialDataResponse),
 }
 
+impl From<DialRequest> for proto::Message {
+    fn from(val: DialRequest) -> Self {
+        let addrs = val.addrs.iter().map(|e| e.to_vec()).collect();
+        let nonce = Some(val.nonce);
+
+        proto::Message {
+            msg: proto::mod_Message::OneOfmsg::dialRequest(proto::DialRequest { addrs, nonce }),
+        }
+    }
+}
+
+impl From<DialDataResponse> for proto::Message {
+    fn from(val: DialDataResponse) -> Self {
+        debug_assert!(
+            val.data_count <= DATA_FIELD_LEN_UPPER_BOUND,
+            "data_count too large"
+        );
+        static DATA: &[u8] = &[0u8; DATA_FIELD_LEN_UPPER_BOUND];
+        proto::Message {
+            msg: proto::mod_Message::OneOfmsg::dialDataResponse(proto::DialDataResponse {
+                data: Some(Cow::Borrowed(&DATA[..val.data_count])),
+            }),
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct DialRequest {
     pub(crate) addrs: Vec<Multiaddr>,
@@ -140,35 +166,6 @@ impl TryFrom<proto::Message> for Request {
             _ => Err(new_io_invalid_data_err(
                 "expected dialResponse or dialDataRequest",
             )),
-        }
-    }
-}
-
-impl Into<proto::Message> for Request {
-    fn into(self) -> proto::Message {
-        match self {
-            Request::Dial(DialRequest { addrs, nonce }) => {
-                let addrs = addrs.iter().map(|e| e.to_vec()).collect();
-                let nonce = Some(nonce);
-                proto::Message {
-                    msg: proto::mod_Message::OneOfmsg::dialRequest(proto::DialRequest {
-                        addrs,
-                        nonce,
-                    }),
-                }
-            }
-            Request::Data(DialDataResponse { data_count }) => {
-                debug_assert!(
-                    data_count <= DATA_FIELD_LEN_UPPER_BOUND,
-                    "data_count too large"
-                );
-                static DATA: &[u8] = &[0u8; DATA_FIELD_LEN_UPPER_BOUND];
-                proto::Message {
-                    msg: proto::mod_Message::OneOfmsg::dialDataResponse(proto::DialDataResponse {
-                        data: Some(Cow::Borrowed(&DATA[..data_count])),
-                    }),
-                }
-            }
         }
     }
 }
@@ -266,46 +263,32 @@ impl DialDataRequest {
     }
 }
 
-pub(crate) async fn dial_back(mut stream: impl AsyncWrite + Unpin, nonce: Nonce) -> io::Result<()> {
-    let dial_back = DialBack { nonce };
-    dial_back.write_into(&mut stream).await?;
-    stream.close().await
+const DIAL_BACK_MAX_SIZE: usize = 10;
+
+pub(crate) async fn dial_back(stream: impl AsyncWrite + Unpin, nonce: Nonce) -> io::Result<()> {
+    let msg = proto::DialBack { nonce: Some(nonce) };
+    let mut framed = FramedWrite::new(stream, Codec::<proto::DialBack>::new(DIAL_BACK_MAX_SIZE));
+
+    framed
+        .send(msg)
+        .await
+        .map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
+    framed.close().await?;
+
+    Ok(())
 }
 
 pub(crate) async fn recv_dial_back(
-    mut stream: impl AsyncRead + AsyncWrite + Unpin,
+    stream: impl AsyncRead + AsyncWrite + Unpin,
 ) -> io::Result<Nonce> {
-    let DialBack { nonce } = DialBack::read_from(&mut stream).await?;
-    stream.close().await?;
+    let framed = &mut FramedRead::new(stream, Codec::<proto::DialBack>::new(DIAL_BACK_MAX_SIZE));
+    let proto::DialBack { nonce } = framed
+        .next()
+        .await
+        .ok_or(io::Error::from(io::ErrorKind::UnexpectedEof))??;
+    let nonce = ok_or_invalid_data!(nonce)?;
+
     Ok(nonce)
-}
-
-const DIAL_BACK_MAX_SIZE: usize = 10;
-
-pub(crate) struct DialBack {
-    pub(crate) nonce: Nonce,
-}
-
-impl DialBack {
-    pub(crate) async fn read_from(io: impl AsyncRead + Unpin) -> io::Result<Self> {
-        let proto::DialBack { nonce } =
-            FramedRead::new(io, Codec::<proto::DialBack>::new(DIAL_BACK_MAX_SIZE))
-                .next()
-                .await
-                .ok_or(io::Error::from(io::ErrorKind::UnexpectedEof))??;
-        let nonce = ok_or_invalid_data!(nonce)?;
-        Ok(Self { nonce })
-    }
-
-    async fn write_into(self, io: impl AsyncWrite + Unpin) -> io::Result<()> {
-        let msg = proto::DialBack {
-            nonce: Some(self.nonce),
-        };
-        FramedWrite::new(io, Codec::<proto::DialBack>::new(DIAL_BACK_MAX_SIZE))
-            .send(msg)
-            .await
-            .map_err(|e| io::Error::new(io::ErrorKind::Other, e))
-    }
 }
 
 #[cfg(test)]

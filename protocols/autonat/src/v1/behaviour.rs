@@ -21,8 +21,8 @@
 mod as_client;
 mod as_server;
 
-use crate::v1::protocol::{AutoNatCodec, DialRequest, DialResponse, ResponseError};
-use crate::v1::DEFAULT_PROTOCOL_NAME;
+use crate::protocol::{AutoNatCodec, DialRequest, DialResponse, ResponseError};
+use crate::DEFAULT_PROTOCOL_NAME;
 use as_client::AsClient;
 pub use as_client::{OutboundProbeError, OutboundProbeEvent};
 use as_server::AsServer;

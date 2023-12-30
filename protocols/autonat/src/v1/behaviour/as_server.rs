@@ -135,7 +135,6 @@ impl<'a> HandleInnerEvent for AsServer<'a> {
                                         NonZeroU8::new(1).expect("1 > 0"),
                                     )
                                     .addresses(addrs)
-                                    .allocate_new_port()
                                     .build(),
                             },
                         ])
