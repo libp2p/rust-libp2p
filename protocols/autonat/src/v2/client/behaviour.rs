@@ -10,15 +10,14 @@ use futures_timer::Delay;
 use libp2p_core::{multiaddr::Protocol, transport::PortUse, Endpoint, Multiaddr};
 use libp2p_identity::PeerId;
 use libp2p_swarm::{
-    behaviour::{ConnectionEstablished, ExternalAddrConfirmed},
-    ConnectionClosed, ConnectionDenied, ConnectionHandler, ConnectionId, FromSwarm,
-    NetworkBehaviour, NewExternalAddrCandidate, NotifyHandler, ToSwarm,
+    behaviour::ConnectionEstablished, ConnectionClosed, ConnectionDenied, ConnectionHandler,
+    ConnectionId, FromSwarm, NetworkBehaviour, NewExternalAddrCandidate, NotifyHandler, ToSwarm,
 };
 use rand::prelude::*;
 use rand_core::OsRng;
 use std::fmt::{Debug, Display, Formatter};
 
-use crate::v2::{global_only::IpExt, protocol::DialRequest};
+use crate::v2::{global_only::IpExt, protocol::DialRequest, Nonce};
 
 use super::handler::{dial_back, dial_request};
 
@@ -60,7 +59,6 @@ pub struct Behaviour<R = OsRng>
 where
     R: RngCore + 'static,
 {
-    pending_nonces: HashMap<u64, NonceStatus>,
     rng: R,
     config: Config,
     pending_events: VecDeque<
@@ -111,11 +109,6 @@ where
                     .or_default()
                     .score += 1;
             }
-            FromSwarm::ExternalAddrConfirmed(ExternalAddrConfirmed { addr }) => {
-                if let Some(info) = self.address_candidates.get_mut(addr) {
-                    info.status = TestStatus::Tested;
-                }
-            }
             FromSwarm::ConnectionEstablished(ConnectionEstablished {
                 peer_id,
                 connection_id,
@@ -157,13 +150,18 @@ where
     ) {
         let (nonce, outcome) = match event {
             Either::Right(nonce) => {
-                let Some(status) = self.pending_nonces.get_mut(&nonce) else {
+                let Some((_, info)) = self
+                    .address_candidates
+                    .iter_mut()
+                    .find(|(_, info)| info.is_pending_with_nonce(nonce))
+                else {
                     tracing::warn!(%peer_id, %nonce, "Received unexpected nonce");
                     return;
                 };
 
-                *status = NonceStatus::Received;
+                info.status = TestStatus::Received(nonce);
                 tracing::debug!(%peer_id, %nonce, "Successful dial-back");
+
                 return;
             }
             Either::Left(dial_request::ToBehaviour::PeerHasServerSupport) => {
@@ -178,11 +176,14 @@ where
             }
         };
 
-        let nonce_status = self.pending_nonces.remove(&nonce);
-
         let ((tested_addr, bytes_sent), result) = match outcome {
             Ok(address) => {
-                if nonce_status != Some(NonceStatus::Received) {
+                let received_dial_back = self
+                    .address_candidates
+                    .iter_mut()
+                    .any(|(_, info)| info.is_received_with_nonce(nonce));
+
+                if !received_dial_back {
                     tracing::warn!(
                         %peer_id,
                         %nonce,
@@ -198,6 +199,9 @@ where
                     .get_mut(&connection_id)
                     .expect("inconsistent state")
                     .supports_autonat = false;
+
+                self.reset_status_to(nonce, TestStatus::Untested); // Reset so it will be tried again.
+
                 return;
             }
             Err(dial_request::Error::Io(e)) => {
@@ -206,13 +210,20 @@ where
                     %nonce,
                     "Failed to complete AutoNAT probe: {e}"
                 );
+
+                self.reset_status_to(nonce, TestStatus::Untested); // Reset so it will be tried again.
+
                 return;
             }
             Err(dial_request::Error::AddressNotReachable {
                 address,
                 bytes_sent,
                 error,
-            }) => ((address, bytes_sent), Err(error)),
+            }) => {
+                self.reset_status_to(nonce, TestStatus::Failed);
+
+                ((address, bytes_sent), Err(error))
+            }
         };
 
         self.pending_events.push_back(ToSwarm::GenerateEvent(Event {
@@ -251,7 +262,6 @@ where
 {
     pub fn new(rng: R, config: Config) -> Self {
         Self {
-            pending_nonces: HashMap::new(),
             rng,
             next_tick: Delay::new(config.probe_interval),
             config,
@@ -273,11 +283,10 @@ where
             };
 
             let nonce = self.rng.gen();
-            self.pending_nonces.insert(nonce, NonceStatus::Pending);
             self.address_candidates
                 .get_mut(&addr)
                 .expect("only emit candidates")
-                .status = TestStatus::Pending;
+                .status = TestStatus::Pending(nonce);
 
             self.pending_events.push_back(ToSwarm::NotifyHandler {
                 peer_id,
@@ -325,9 +334,22 @@ where
         Some((*conn_id, info.peer_id))
     }
 
+    fn reset_status_to(&mut self, nonce: Nonce, new_status: TestStatus) {
+        let Some((_, info)) = self
+            .address_candidates
+            .iter_mut()
+            .find(|(_, i)| i.is_pending_with_nonce(nonce) || i.is_received_with_nonce(nonce))
+        else {
+            return;
+        };
+
+        info.status = new_status;
+    }
+
+    // FIXME: We don't want test-only APIs in our public API.
     pub fn validate_addr(&mut self, addr: &Multiaddr) {
         if let Some(info) = self.address_candidates.get_mut(addr) {
-            info.status = TestStatus::Tested;
+            info.status = TestStatus::Received(self.rng.next_u64());
         }
     }
 }
@@ -377,12 +399,6 @@ fn addr_is_local(addr: &Multiaddr) -> bool {
     })
 }
 
-#[derive(Debug, PartialEq)]
-enum NonceStatus {
-    Pending,
-    Received,
-}
-
 struct ConnectionInfo {
     peer_id: PeerId,
     supports_autonat: bool,
@@ -395,10 +411,27 @@ struct AddressInfo {
     status: TestStatus,
 }
 
+impl AddressInfo {
+    fn is_pending_with_nonce(&self, nonce: Nonce) -> bool {
+        match self.status {
+            TestStatus::Pending(c) => c == nonce,
+            _ => false,
+        }
+    }
+
+    fn is_received_with_nonce(&self, nonce: Nonce) -> bool {
+        match self.status {
+            TestStatus::Received(c) => c == nonce,
+            _ => false,
+        }
+    }
+}
+
 #[derive(Clone, Copy, Default, PartialEq)]
 enum TestStatus {
     #[default]
     Untested,
-    Pending,
-    Tested,
+    Pending(Nonce),
+    Failed,
+    Received(Nonce),
 }
