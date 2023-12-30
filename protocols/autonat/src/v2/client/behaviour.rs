@@ -7,7 +7,7 @@ use std::{
 use either::Either;
 use futures::FutureExt;
 use futures_timer::Delay;
-use libp2p_core::{multiaddr::Protocol, transport::PortUse, Endpoint, Multiaddr};
+use libp2p_core::{transport::PortUse, Endpoint, Multiaddr};
 use libp2p_identity::PeerId;
 use libp2p_swarm::{
     behaviour::ConnectionEstablished, ConnectionClosed, ConnectionDenied, ConnectionHandler,
@@ -17,7 +17,7 @@ use rand::prelude::*;
 use rand_core::OsRng;
 use std::fmt::{Debug, Display, Formatter};
 
-use crate::v2::{global_only::IpExt, protocol::DialRequest, Nonce};
+use crate::v2::{protocol::DialRequest, Nonce};
 
 use super::handler::{dial_back, dial_request};
 
@@ -112,7 +112,7 @@ where
             FromSwarm::ConnectionEstablished(ConnectionEstablished {
                 peer_id,
                 connection_id,
-                endpoint,
+                endpoint: _,
                 ..
             }) => {
                 self.peer_info.insert(
@@ -120,7 +120,6 @@ where
                     ConnectionInfo {
                         peer_id,
                         supports_autonat: false,
-                        is_local: addr_is_local(endpoint.get_remote_address()),
                     },
                 );
             }
@@ -392,18 +391,9 @@ pub struct Event {
     pub result: Result<(), Error>,
 }
 
-fn addr_is_local(addr: &Multiaddr) -> bool {
-    addr.iter().any(|c| match c {
-        Protocol::Ip4(ip) => !IpExt::is_global(&ip),
-        Protocol::Ip6(ip) => !IpExt::is_global(&ip),
-        _ => false,
-    })
-}
-
 struct ConnectionInfo {
     peer_id: PeerId,
     supports_autonat: bool,
-    is_local: bool,
 }
 
 #[derive(Copy, Clone, Default)]
