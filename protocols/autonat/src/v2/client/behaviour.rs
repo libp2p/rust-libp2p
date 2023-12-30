@@ -172,18 +172,8 @@ where
             }
             Either::Left(dial_request::ToBehaviour::PeerHasServerSupport) => {
                 self.peer_info
-                    .values_mut()
-                    .filter(|info| info.peer_id == peer_id)
-                    .for_each(|info| {
-                        info.supports_autonat = true;
-                    });
-                self.peer_info
-                    .entry(connection_id)
-                    .or_insert(ConnectionInfo {
-                        peer_id,
-                        supports_autonat: true,
-                        is_local: false,
-                    })
+                    .get_mut(&connection_id)
+                    .expect("inconsistent state")
                     .supports_autonat = true;
             }
             Either::Left(dial_request::ToBehaviour::TestCompleted(InternalStatusUpdate {
@@ -195,12 +185,11 @@ where
             })) => {
                 if server_no_support {
                     self.peer_info
-                        .values_mut()
-                        .filter(|info| info.peer_id == peer_id)
-                        .for_each(|info| {
-                            info.supports_autonat = false;
-                        });
+                        .get_mut(&connection_id)
+                        .expect("inconsistent state")
+                        .supports_autonat = false;
                 }
+
                 match result {
                     Ok(TestEnd {
                         dial_request: DialRequest { nonce, .. },
