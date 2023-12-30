@@ -140,7 +140,14 @@ where
                 connection_id,
                 ..
             }) => {
-                self.handle_no_connection(peer_id, connection_id);
+                let info = self
+                    .peer_info
+                    .remove(&connection_id)
+                    .expect("inconsistent state");
+
+                if info.supports_autonat {
+                    tracing::debug!(%peer_id, "Disconnected from AutoNAT server");
+                }
             }
             FromSwarm::DialFailure(DialFailure {
                 peer_id: Some(peer_id),
