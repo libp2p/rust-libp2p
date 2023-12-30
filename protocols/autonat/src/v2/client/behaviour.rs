@@ -327,6 +327,7 @@ where
             .map(|(addr, _)| addr)
     }
 
+    /// Chooses an active connection to one of our peers that reported support for the [`DIAL_REQUEST_PROTOCOL`](crate::v2::DIAL_REQUEST_PROTOCOL) protocol.
     fn random_autonat_server(&mut self) -> Option<(ConnectionId, PeerId)> {
         let (conn_id, info) = self
             .peer_info

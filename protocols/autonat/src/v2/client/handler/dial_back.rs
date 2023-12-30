@@ -12,7 +12,7 @@ use libp2p_swarm::{
 };
 use void::Void;
 
-use crate::v2::{protocol, Nonce, DIAL_BACK_PROTOCOL_NAME};
+use crate::v2::{protocol, Nonce, DIAL_BACK_PROTOCOL};
 
 pub struct Handler {
     inbound: FuturesSet<io::Result<Nonce>>,
@@ -35,7 +35,7 @@ impl ConnectionHandler for Handler {
     type OutboundOpenInfo = ();
 
     fn listen_protocol(&self) -> SubstreamProtocol<Self::InboundProtocol, Self::InboundOpenInfo> {
-        SubstreamProtocol::new(ReadyUpgrade::new(DIAL_BACK_PROTOCOL_NAME), ())
+        SubstreamProtocol::new(ReadyUpgrade::new(DIAL_BACK_PROTOCOL), ())
     }
 
     fn poll(

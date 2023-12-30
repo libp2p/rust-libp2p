@@ -28,7 +28,7 @@ use crate::v2::{
         Coder, DialDataRequest, DialDataResponse, DialRequest, DialResponse, Request, Response,
         DATA_FIELD_LEN_UPPER_BOUND, DATA_LEN_LOWER_BOUND, DATA_LEN_UPPER_BOUND,
     },
-    REQUEST_PROTOCOL_NAME,
+    DIAL_REQUEST_PROTOCOL,
 };
 
 #[derive(Debug, thiserror::Error)]
@@ -108,7 +108,7 @@ impl Handler {
         self.queued_streams.push_back(tx);
         self.queued_events
             .push_back(ConnectionHandlerEvent::OutboundSubstreamRequest {
-                protocol: SubstreamProtocol::new(ReadyUpgrade::new(REQUEST_PROTOCOL_NAME), ()),
+                protocol: SubstreamProtocol::new(ReadyUpgrade::new(DIAL_REQUEST_PROTOCOL), ()),
             });
         if self
             .outbound
@@ -200,7 +200,7 @@ impl ConnectionHandler for Handler {
                 }
             },
             ConnectionEvent::RemoteProtocolsChange(ProtocolsChange::Added(mut added)) => {
-                if added.any(|p| p.as_ref() == REQUEST_PROTOCOL_NAME) {
+                if added.any(|p| p.as_ref() == DIAL_REQUEST_PROTOCOL) {
                     self.queued_events
                         .push_back(ConnectionHandlerEvent::NotifyBehaviour(
                             ToBehaviour::PeerHasServerSupport,
