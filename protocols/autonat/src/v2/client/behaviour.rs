@@ -227,7 +227,7 @@ where
                             self.handle_no_connection(peer_id, connection_id);
                         }
                         _ => {
-                            tracing::debug!("Test failed: {:?}", err);
+                            tracing::debug!("Test failed: {err}");
                         }
                     },
                 }
