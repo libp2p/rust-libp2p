@@ -253,7 +253,7 @@ where
             if self.next_tick.poll_unpin(cx).is_ready() {
                 self.next_tick.reset(self.config.probe_interval);
 
-                self.inject_address_candiate_test();
+                self.issue_dial_requests_for_untested_candidates();
                 continue;
             }
 
@@ -278,8 +278,11 @@ where
         }
     }
 
-    /// Inject an immediate test for all pending address candidates.
-    fn inject_address_candiate_test(&mut self) {
+    /// Issues dial requests to random AutoNAT servers for the most frequently reported, untested candidates.
+    ///
+    /// In the current implementation, we only send a single address to each AutoNAT server.
+    /// This spreads our candidates out across all servers we are connected to which should give us pretty fast feedback on all of them.
+    fn issue_dial_requests_for_untested_candidates(&mut self) {
         for addr in self.untested_candidates() {
             let Some((conn_id, peer_id)) = self.random_autonat_server() else {
                 tracing::debug!("Not connected to any AutoNAT servers");
@@ -300,6 +303,9 @@ where
         }
     }
 
+    /// Returns all untested candidates, sorted by the frequency they were reported at.
+    ///
+    /// More frequently reported candidates are considered to more likely be external addresses and thus tested first.
     fn untested_candidates(&self) -> impl Iterator<Item = Multiaddr> {
         let mut entries = self
             .address_candidates
@@ -309,6 +315,10 @@ where
             .collect::<Vec<_>>();
 
         entries.sort_unstable_by_key(|(_, count)| *count);
+
+        if entries.is_empty() {
+            tracing::debug!("No untested address candidates");
+        }
 
         entries
             .into_iter()
@@ -418,7 +428,6 @@ enum NonceStatus {
     Received,
 }
 
-#[derive(Clone, Copy)]
 struct ConnectionInfo {
     peer_id: PeerId,
     supports_autonat: bool,
