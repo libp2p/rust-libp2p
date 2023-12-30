@@ -296,9 +296,6 @@ mod tests {
     use crate::v2::generated::structs::{
         mod_Message::OneOfmsg, DialDataResponse as GenDialDataResponse, Message,
     };
-    use crate::v2::protocol::{Coder, DialDataResponse, Request};
-
-    use rand::{thread_rng, Rng};
 
     #[test]
     fn message_correct_max_size() {
