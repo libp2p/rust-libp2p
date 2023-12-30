@@ -11,7 +11,7 @@ use libp2p_core::{multiaddr::Protocol, transport::PortUse, Endpoint, Multiaddr};
 use libp2p_identity::PeerId;
 use libp2p_swarm::{
     behaviour::{ConnectionEstablished, ExternalAddrConfirmed},
-    ConnectionClosed, ConnectionDenied, ConnectionHandler, ConnectionId, DialFailure, FromSwarm,
+    ConnectionClosed, ConnectionDenied, ConnectionHandler, ConnectionId, FromSwarm,
     NetworkBehaviour, NewExternalAddrCandidate, NotifyHandler, ToSwarm,
 };
 use rand::prelude::*;
@@ -149,13 +149,6 @@ where
                 if info.supports_autonat {
                     tracing::debug!(%peer_id, "Disconnected from AutoNAT server");
                 }
-            }
-            FromSwarm::DialFailure(DialFailure {
-                peer_id: Some(peer_id),
-                connection_id,
-                ..
-            }) => {
-                self.handle_no_connection(peer_id, connection_id);
             }
             _ => {}
         }
