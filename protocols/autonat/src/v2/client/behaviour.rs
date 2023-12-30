@@ -90,42 +90,22 @@ where
 
     fn handle_established_inbound_connection(
         &mut self,
-        connection_id: ConnectionId,
-        peer_id: PeerId,
-        _local_addr: &Multiaddr,
-        remote_addr: &Multiaddr,
+        _: ConnectionId,
+        _: PeerId,
+        _: &Multiaddr,
+        _: &Multiaddr,
     ) -> Result<<Self as NetworkBehaviour>::ConnectionHandler, ConnectionDenied> {
-        if addr_is_local(remote_addr) {
-            self.peer_info
-                .entry(connection_id)
-                .or_insert(ConnectionInfo {
-                    peer_id,
-                    supports_autonat: false,
-                    is_local: true,
-                })
-                .is_local = true;
-        }
         Ok(Either::Right(dial_back::Handler::new()))
     }
 
     fn handle_established_outbound_connection(
         &mut self,
-        connection_id: ConnectionId,
+        _: ConnectionId,
         peer_id: PeerId,
-        addr: &Multiaddr,
-        _role_override: Endpoint,
-        _port_use: PortUse,
+        _: &Multiaddr,
+        _: Endpoint,
+        _: PortUse,
     ) -> Result<<Self as NetworkBehaviour>::ConnectionHandler, ConnectionDenied> {
-        if addr_is_local(addr) {
-            self.peer_info
-                .entry(connection_id)
-                .or_insert(ConnectionInfo {
-                    peer_id,
-                    supports_autonat: false,
-                    is_local: true,
-                })
-                .is_local = true;
-        }
         Ok(Either::Left(dial_request::Handler::new(peer_id)))
     }
 
@@ -145,6 +125,7 @@ where
             FromSwarm::ConnectionEstablished(ConnectionEstablished {
                 peer_id,
                 connection_id,
+                endpoint,
                 ..
             }) => {
                 self.peer_info
@@ -152,7 +133,7 @@ where
                     .or_insert(ConnectionInfo {
                         peer_id,
                         supports_autonat: false,
-                        is_local: false,
+                        is_local: addr_is_local(endpoint.get_remote_address()),
                     });
             }
             FromSwarm::ConnectionClosed(ConnectionClosed {
