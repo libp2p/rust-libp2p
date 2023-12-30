@@ -90,6 +90,32 @@ pub(crate) enum Request {
     Data(DialDataResponse),
 }
 
+impl From<DialRequest> for proto::Message {
+    fn from(val: DialRequest) -> Self {
+        let addrs = val.addrs.iter().map(|e| e.to_vec()).collect();
+        let nonce = Some(val.nonce);
+
+        proto::Message {
+            msg: proto::mod_Message::OneOfmsg::dialRequest(proto::DialRequest { addrs, nonce }),
+        }
+    }
+}
+
+impl From<DialDataResponse> for proto::Message {
+    fn from(val: DialDataResponse) -> Self {
+        debug_assert!(
+            val.data_count <= DATA_FIELD_LEN_UPPER_BOUND,
+            "data_count too large"
+        );
+        static DATA: &[u8] = &[0u8; DATA_FIELD_LEN_UPPER_BOUND];
+        proto::Message {
+            msg: proto::mod_Message::OneOfmsg::dialDataResponse(proto::DialDataResponse {
+                data: Some(Cow::Borrowed(&DATA[..val.data_count])),
+            }),
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct DialRequest {
     pub(crate) addrs: Vec<Multiaddr>,
@@ -140,35 +166,6 @@ impl TryFrom<proto::Message> for Request {
             _ => Err(new_io_invalid_data_err(
                 "expected dialResponse or dialDataRequest",
             )),
-        }
-    }
-}
-
-impl Into<proto::Message> for Request {
-    fn into(self) -> proto::Message {
-        match self {
-            Request::Dial(DialRequest { addrs, nonce }) => {
-                let addrs = addrs.iter().map(|e| e.to_vec()).collect();
-                let nonce = Some(nonce);
-                proto::Message {
-                    msg: proto::mod_Message::OneOfmsg::dialRequest(proto::DialRequest {
-                        addrs,
-                        nonce,
-                    }),
-                }
-            }
-            Request::Data(DialDataResponse { data_count }) => {
-                debug_assert!(
-                    data_count <= DATA_FIELD_LEN_UPPER_BOUND,
-                    "data_count too large"
-                );
-                static DATA: &[u8] = &[0u8; DATA_FIELD_LEN_UPPER_BOUND];
-                proto::Message {
-                    msg: proto::mod_Message::OneOfmsg::dialDataResponse(proto::DialDataResponse {
-                        data: Some(Cow::Borrowed(&DATA[..data_count])),
-                    }),
-                }
-            }
         }
     }
 }

@@ -1,5 +1,5 @@
-use futures::{channel::oneshot, AsyncRead, AsyncWrite};
-use futures_bounded::FuturesSet;
+use futures::{channel::oneshot, AsyncWrite};
+use futures_bounded::FuturesMap;
 use libp2p_core::{
     upgrade::{DeniedUpgrade, ReadyUpgrade},
     Multiaddr,
@@ -22,57 +22,49 @@ use std::{
 };
 
 use crate::v2::{
-    client::behaviour::Error,
     generated::structs::{mod_DialResponse::ResponseStatus, DialStatus},
     protocol::{
-        Coder, DialDataRequest, DialDataResponse, DialRequest, DialResponse, Request, Response,
+        Coder, DialDataRequest, DialDataResponse, DialRequest, Response,
         DATA_FIELD_LEN_UPPER_BOUND, DATA_LEN_LOWER_BOUND, DATA_LEN_UPPER_BOUND,
     },
-    DIAL_REQUEST_PROTOCOL,
+    Nonce, DIAL_REQUEST_PROTOCOL,
 };
-
-#[derive(Debug, thiserror::Error)]
-pub(crate) enum InternalError {
-    #[error("io error")]
-    Io(#[from] io::Error),
-    #[error("invalid referenced address index: {index} (max number of addr: {max})")]
-    InvalidReferencedAddress { index: usize, max: usize },
-    #[error("data request too large: {len} (max: {max})")]
-    DataRequestTooLarge { len: usize, max: usize },
-    #[error("data request too small: {len} (min: {min})")]
-    DataRequestTooSmall { len: usize, min: usize },
-    #[error("server rejected dial request")]
-    ServerRejectedDialRequest,
-    #[error("server chose not to dial any provided address")]
-    ServerChoseNotToDialAnyAddress,
-    #[error("server ran into an internal error")]
-    InternalServer,
-    #[error("server did not respond correctly to dial request")]
-    InvalidResponse,
-    #[error("server was unable to connect to address: {addr:?}")]
-    UnableToConnectOnSelectedAddress { addr: Option<Multiaddr> },
-    #[error("server experienced failure during dial back on address: {addr:?}")]
-    FailureDuringDialBack { addr: Option<Multiaddr> },
-}
-
-#[derive(Debug)]
-pub struct InternalStatusUpdate {
-    pub(crate) tested_addr: Option<Multiaddr>,
-    pub(crate) bytes_sent: usize,
-    pub result: Result<TestEnd, Error>,
-    pub(crate) server_no_support: bool,
-}
-
-#[derive(Debug)]
-pub struct TestEnd {
-    pub(crate) dial_request: DialRequest,
-    pub(crate) reachable_addr: Multiaddr,
-}
 
 #[derive(Debug)]
 pub enum ToBehaviour {
-    TestCompleted(InternalStatusUpdate),
+    TestOutcome {
+        nonce: Nonce,
+        outcome: Result<(Multiaddr, usize), Error>,
+    },
     PeerHasServerSupport,
+}
+
+#[derive(thiserror::Error, Debug)]
+pub enum Error {
+    #[error("Address is not reachable: {error}")]
+    AddressNotReachable {
+        address: Multiaddr,
+        bytes_sent: usize,
+        error: DialBackError,
+    },
+    #[error("Peer does not support AutoNAT dial-request protocol")]
+    UnsupportedProtocol,
+    #[error("IO error: {0}")]
+    Io(io::Error),
+}
+
+impl From<io::Error> for Error {
+    fn from(value: io::Error) -> Self {
+        Self::Io(value)
+    }
+}
+
+#[derive(thiserror::Error, Debug)]
+pub enum DialBackError {
+    #[error("server failed to establish a connection")]
+    NoConnection,
+    #[error("dial back stream failed")]
+    StreamFailed,
 }
 
 pub struct Handler {
@@ -83,7 +75,7 @@ pub struct Handler {
             <Self as ConnectionHandler>::ToBehaviour,
         >,
     >,
-    outbound: futures_bounded::FuturesSet<InternalStatusUpdate>,
+    outbound: FuturesMap<Nonce, Result<(Multiaddr, usize), Error>>,
     queued_streams: VecDeque<
         oneshot::Sender<
             Result<
@@ -98,7 +90,7 @@ impl Handler {
     pub(crate) fn new() -> Self {
         Self {
             queued_events: VecDeque::new(),
-            outbound: FuturesSet::new(Duration::from_secs(10), 10),
+            outbound: FuturesMap::new(Duration::from_secs(10), 10),
             queued_streams: VecDeque::default(),
         }
     }
@@ -112,7 +104,7 @@ impl Handler {
             });
         if self
             .outbound
-            .try_push(start_stream_handle(req, rx))
+            .try_push(req.nonce, start_stream_handle(req, rx))
             .is_err()
         {
             tracing::debug!("Dial request dropped, too many requests in flight");
@@ -141,22 +133,24 @@ impl ConnectionHandler for Handler {
         if let Some(event) = self.queued_events.pop_front() {
             return Poll::Ready(event);
         }
-        if let Poll::Ready(m) = self.outbound.poll_unpin(cx) {
-            let status_update = match m {
-                Ok(ok) => ok,
-                Err(_) => InternalStatusUpdate {
-                    tested_addr: None,
-                    bytes_sent: 0,
-                    result: Err(Error {
-                        internal: InternalError::Io(io::Error::from(io::ErrorKind::TimedOut)),
-                    }),
-                    server_no_support: false,
-                },
-            };
-            return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(
-                ToBehaviour::TestCompleted(status_update),
-            ));
+
+        match self.outbound.poll_unpin(cx) {
+            Poll::Ready((nonce, Ok(outcome))) => {
+                return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(
+                    ToBehaviour::TestOutcome { nonce, outcome },
+                ))
+            }
+            Poll::Ready((nonce, Err(_))) => {
+                return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(
+                    ToBehaviour::TestOutcome {
+                        nonce,
+                        outcome: Err(Error::Io(io::ErrorKind::TimedOut.into())),
+                    },
+                ));
+            }
+            Poll::Pending => {}
         }
+
         Poll::Pending
     }
 
@@ -213,177 +207,126 @@ impl ConnectionHandler for Handler {
 }
 
 async fn start_stream_handle(
-    dial_request: DialRequest,
-    stream_recv: oneshot::Receiver<
-        Result<
-            Stream,
-            StreamUpgradeError<<ReadyUpgrade<StreamProtocol> as OutboundUpgradeSend>::Error>,
-        >,
-    >,
-) -> InternalStatusUpdate {
-    let mut server_no_support = false;
-    let substream_result = match stream_recv.await {
-        Ok(Ok(substream)) => Ok(substream),
-        Ok(Err(StreamUpgradeError::Io(io))) => Err(InternalError::from(io).into()),
-        Ok(Err(StreamUpgradeError::Timeout)) => {
-            Err(InternalError::Io(io::Error::from(io::ErrorKind::TimedOut)).into())
-        }
-        Ok(Err(StreamUpgradeError::Apply(upgrade_error))) => void::unreachable(upgrade_error),
-        Ok(Err(StreamUpgradeError::NegotiationFailed)) => {
-            server_no_support = true;
-            Err(
-                InternalError::Io(io::Error::new(io::ErrorKind::Other, "negotiation failed"))
-                    .into(),
-            )
-        }
-        Err(_) => Err(InternalError::InternalServer.into()),
-    };
-    let substream = match substream_result {
-        Ok(substream) => substream,
-        Err(err) => {
-            let status_update = InternalStatusUpdate {
-                tested_addr: None,
-                bytes_sent: 0,
-                result: Err(err),
-                server_no_support,
-            };
-            return status_update;
-        }
-    };
-    let mut data_amount = 0;
-    let mut checked_addr_idx = None;
-    let addrs = dial_request.addrs.clone();
-    assert_ne!(addrs, vec![]);
-    let result = handle_stream(
-        dial_request,
-        substream,
-        &mut data_amount,
-        &mut checked_addr_idx,
-    )
-    .await
-    .map_err(crate::v2::client::behaviour::Error::from);
-    InternalStatusUpdate {
-        tested_addr: checked_addr_idx.and_then(|idx| addrs.get(idx).cloned()),
-        bytes_sent: data_amount,
-        result,
-        server_no_support,
-    }
-}
+    req: DialRequest,
+    stream_recv: oneshot::Receiver<Result<Stream, StreamUpgradeError<void::Void>>>,
+) -> Result<(Multiaddr, usize), Error> {
+    let stream = stream_recv
+        .await
+        .map_err(|_| io::Error::from(io::ErrorKind::BrokenPipe))?
+        .map_err(|e| match e {
+            StreamUpgradeError::NegotiationFailed => Error::UnsupportedProtocol,
+            StreamUpgradeError::Timeout => Error::Io(io::ErrorKind::TimedOut.into()),
+            StreamUpgradeError::Apply(v) => void::unreachable(v),
+            StreamUpgradeError::Io(e) => Error::Io(e),
+        })?;
 
-async fn handle_stream(
-    dial_request: DialRequest,
-    stream: impl AsyncRead + AsyncWrite + Unpin,
-    data_amount: &mut usize,
-    checked_addr_idx: &mut Option<usize>,
-) -> Result<TestEnd, InternalError> {
     let mut coder = Coder::new(stream);
-    coder.send(Request::Dial(dial_request.clone())).await?;
-    match coder.next().await? {
+    coder.send(req.clone()).await?;
+
+    let (res, bytes_sent) = match coder.next().await? {
         Response::Data(DialDataRequest {
             addr_idx,
             num_bytes,
         }) => {
-            if addr_idx >= dial_request.addrs.len() {
-                return Err(InternalError::InvalidReferencedAddress {
-                    index: addr_idx,
-                    max: dial_request.addrs.len(),
-                });
+            if addr_idx >= req.addrs.len() {
+                return Err(Error::Io(io::Error::new(
+                    io::ErrorKind::InvalidInput,
+                    "address index out of bounds",
+                )));
             }
-            if num_bytes > DATA_LEN_UPPER_BOUND {
-                return Err(InternalError::DataRequestTooLarge {
-                    len: num_bytes,
-                    max: DATA_LEN_UPPER_BOUND,
-                });
+            if num_bytes > DATA_LEN_UPPER_BOUND || num_bytes < DATA_LEN_LOWER_BOUND {
+                return Err(Error::Io(io::Error::new(
+                    io::ErrorKind::InvalidInput,
+                    "requested bytes out of bounds",
+                )));
             }
-            if num_bytes < DATA_LEN_LOWER_BOUND {
-                return Err(InternalError::DataRequestTooSmall {
-                    len: num_bytes,
-                    min: DATA_LEN_LOWER_BOUND,
-                });
-            }
-            *checked_addr_idx = Some(addr_idx);
-            send_aap_data(&mut coder, num_bytes, data_amount).await?;
-            if let Response::Dial(dial_response) = coder.next().await? {
-                *checked_addr_idx = Some(dial_response.addr_idx);
-                coder.close().await?;
-                test_end_from_dial_response(dial_request, dial_response)
-            } else {
-                Err(InternalError::InternalServer)
-            }
+
+            send_aap_data(&mut coder, num_bytes).await?;
+
+            let Response::Dial(dial_response) = coder.next().await? else {
+                return Err(Error::Io(io::Error::new(
+                    io::ErrorKind::InvalidInput,
+                    "expected message",
+                )));
+            };
+
+            (dial_response, num_bytes)
         }
-        Response::Dial(dial_response) => {
-            *checked_addr_idx = Some(dial_response.addr_idx);
-            coder.close().await?;
-            test_end_from_dial_response(dial_request, dial_response)
+        Response::Dial(dial_response) => (dial_response, 0),
+    };
+    coder.close().await?;
+
+    match res.status {
+        ResponseStatus::E_REQUEST_REJECTED => {
+            return Err(Error::Io(io::Error::new(
+                io::ErrorKind::Other,
+                "server rejected request",
+            )))
         }
+        ResponseStatus::E_DIAL_REFUSED => {
+            return Err(Error::Io(io::Error::new(
+                io::ErrorKind::Other,
+                "server refused dial",
+            )))
+        }
+        ResponseStatus::E_INTERNAL_ERROR => {
+            return Err(Error::Io(io::Error::new(
+                io::ErrorKind::Other,
+                "server encountered internal error",
+            )))
+        }
+        ResponseStatus::OK => {}
     }
+
+    let tested_address = req
+        .addrs
+        .get(res.addr_idx)
+        .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "address index out of bounds"))?
+        .clone();
+
+    match res.dial_status {
+        DialStatus::UNUSED => {
+            return Err(Error::Io(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "unexpected message",
+            )))
+        }
+        DialStatus::E_DIAL_ERROR => {
+            return Err(Error::AddressNotReachable {
+                address: tested_address,
+                bytes_sent,
+                error: DialBackError::NoConnection,
+            })
+        }
+        DialStatus::E_DIAL_BACK_ERROR => {
+            return Err(Error::AddressNotReachable {
+                address: tested_address,
+                bytes_sent,
+                error: DialBackError::StreamFailed,
+            })
+        }
+        DialStatus::OK => {}
+    }
+
+    Ok((tested_address, bytes_sent))
 }
 
-fn test_end_from_dial_response(
-    req: DialRequest,
-    resp: DialResponse,
-) -> Result<TestEnd, InternalError> {
-    if resp.addr_idx >= req.addrs.len() {
-        return Err(InternalError::InvalidReferencedAddress {
-            index: resp.addr_idx,
-            max: req.addrs.len(),
-        });
-    }
-    match (resp.status, resp.dial_status) {
-        (ResponseStatus::E_REQUEST_REJECTED, _) => Err(InternalError::ServerRejectedDialRequest),
-        (ResponseStatus::E_DIAL_REFUSED, _) => Err(InternalError::ServerChoseNotToDialAnyAddress),
-        (ResponseStatus::E_INTERNAL_ERROR, _) => Err(InternalError::InternalServer),
-        (ResponseStatus::OK, DialStatus::UNUSED) => Err(InternalError::InvalidResponse),
-        (ResponseStatus::OK, DialStatus::E_DIAL_ERROR) => {
-            Err(InternalError::UnableToConnectOnSelectedAddress {
-                addr: req.addrs.get(resp.addr_idx).cloned(),
-            })
-        }
-        (ResponseStatus::OK, DialStatus::E_DIAL_BACK_ERROR) => {
-            Err(InternalError::FailureDuringDialBack {
-                addr: req.addrs.get(resp.addr_idx).cloned(),
-            })
-        }
-        (ResponseStatus::OK, DialStatus::OK) => req
-            .addrs
-            .get(resp.addr_idx)
-            .ok_or(InternalError::InvalidReferencedAddress {
-                index: resp.addr_idx,
-                max: req.addrs.len(),
-            })
-            .cloned()
-            .map(|reachable_addr| TestEnd {
-                dial_request: req,
-                reachable_addr,
-            }),
-    }
-}
-
-async fn send_aap_data<I>(
-    stream: &mut Coder<I>,
-    num_bytes: usize,
-    data_amount: &mut usize,
-) -> io::Result<()>
+async fn send_aap_data<I>(stream: &mut Coder<I>, num_bytes: usize) -> io::Result<()>
 where
     I: AsyncWrite + Unpin,
 {
     let count_full = num_bytes / DATA_FIELD_LEN_UPPER_BOUND;
     let partial_len = num_bytes % DATA_FIELD_LEN_UPPER_BOUND;
-    for (data_count, req) in repeat(DATA_FIELD_LEN_UPPER_BOUND)
+    for req in repeat(DATA_FIELD_LEN_UPPER_BOUND)
         .take(count_full)
         .chain(once(partial_len))
         .filter(|e| *e > 0)
         .map(|data_count| {
-            (
-                data_count,
-                Request::Data(
-                    DialDataResponse::new(data_count).expect("data count is unexpectedly too big"),
-                ),
-            )
+            DialDataResponse::new(data_count).expect("data count is unexpectedly too big")
         })
     {
-        *data_amount += data_count;
         stream.send(req).await?;
     }
+
     Ok(())
 }
