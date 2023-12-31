@@ -40,7 +40,7 @@ async fn main() -> Result<()> {
     // Deal with incoming streams.
     // Spawning a dedicated task is just one way of doing this.
     // libp2p doesn't care how you handle incoming streams but you _must_ handle them somehow.
-    // To mitigate DoS attacks, libp2p will internally drop incoming streams if your application cannot keep in processing them.
+    // To mitigate DoS attacks, libp2p will internally drop incoming streams if your application cannot keep up processing them.
     tokio::spawn(async move {
         // This loop handles incoming streams _sequentially_ but that doesn't have to be the case.
         // You can also spawn a dedicated task per stream if you want to.
