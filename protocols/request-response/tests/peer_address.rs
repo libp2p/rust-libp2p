@@ -28,9 +28,9 @@ async fn dial_succeeds_after_adding_peers_address() {
 
     let (listen_addr, _) = swarm2.listen().with_memory_addr_external().await;
 
-    swarm.add_peer_address(peer_id2.clone(), listen_addr.clone());
+    swarm.add_peer_address(peer_id2, listen_addr.clone());
 
-    swarm.dial(peer_id2.clone()).unwrap();
+    swarm.dial(peer_id2).unwrap();
 
     async_std::task::spawn(swarm2.loop_on_next());
 
