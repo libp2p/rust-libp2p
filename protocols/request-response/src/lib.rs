@@ -470,9 +470,9 @@ where
     ///
     /// Returns true if the address was added, false otherwise (i.e. if the
     /// address is already in the list).
-    #[deprecated(note = "Use `libp2p_swarm::Swarm::add_peer_address` instead.")]
+    #[deprecated(note = "Use `Swarm::add_peer_address` instead.")]
     pub fn add_address(&mut self, peer: &PeerId, address: Multiaddr) -> bool {
-        self.addresses.put(*peer, std::iter::once(address))
+        self.addresses.add(*peer, address)
     }
 
     /// Removes an address of a peer previously added via [`Behaviour::add_address`].

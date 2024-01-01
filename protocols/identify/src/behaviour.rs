@@ -484,7 +484,9 @@ impl PeerCache {
 
     fn put(&mut self, peer: PeerId, addresses: impl Iterator<Item = Multiaddr>) {
         if let Some(cache) = self.0.as_mut() {
-            cache.put(peer, addresses);
+            for address in addresses {
+                cache.add(peer, address);
+            }
         }
     }
 

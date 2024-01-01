@@ -25,41 +25,35 @@ impl PeerAddresses {
     pub fn on_swarm_event(&mut self, event: &FromSwarm) -> bool {
         match event {
             FromSwarm::NewExternalAddrOfPeer(NewExternalAddrOfPeer { peer_id, addr }) => {
-                if let Some(peer_addrs) = self.0.get_mut(peer_id) {
-                    let addr = prepare_addr(peer_id, addr);
-                    peer_addrs.insert(addr)
-                } else {
-                    let addr = prepare_addr(peer_id, addr);
-                    self.put(*peer_id, std::iter::once(addr));
-                    true
-                }
+                self.add(*peer_id, (*addr).clone())
             }
             FromSwarm::DialFailure(DialFailure {
                 peer_id: Some(peer_id),
-                error: DialError::NoAddresses,
+                error: DialError::Transport(errors),
                 ..
-            }) => self.0.pop(peer_id).is_some(),
+            }) => {
+                for (addr, _error) in errors {
+                    self.remove(peer_id, addr);
+                }
+                true
+            }
             _ => false,
         }
     }
 
-    /// Adds addresses to cache.
-    /// Appends addresses to the existing set if peer addresses already exist.
+    /// Adds address to cache.
+    /// Appends address to the existing set if peer addresses already exist.
     /// Creates a new cache entry for peer_id if no addresses are present.
-    /// Returns true if the newly added addresses were not previously in the cache.
-    pub fn put(&mut self, peer: PeerId, addresses: impl Iterator<Item = Multiaddr>) -> bool {
-        let addresses = addresses.filter_map(|a| a.with_p2p(peer).ok());
+    /// Returns true if the newly added address was not previously in the cache.
+    ///
+    pub fn add(&mut self, peer: PeerId, address: Multiaddr) -> bool {
+        let address = prepare_addr(&peer, &address);
         if let Some(cached) = self.0.get_mut(&peer) {
-            let mut inserted_any = false;
-            for addr in addresses {
-                if cached.insert(addr) {
-                    inserted_any = true;
-                }
-            }
-
-            inserted_any
+            cached.insert(address)
         } else {
-            self.0.put(peer, HashSet::from_iter(addresses));
+            let mut set: HashSet<Multiaddr> = HashSet::new();
+            set.insert(address);
+            self.0.put(peer, set);
             true
         }
     }
@@ -95,10 +89,15 @@ impl Default for PeerAddresses {
 
 #[cfg(test)]
 mod tests {
-    use crate::{ConnectionId, DialError};
-
     use super::*;
-    use libp2p_core::multiaddr::Protocol;
+    use std::io;
+
+    use crate::{ConnectionId, DialError};
+    use libp2p_core::{
+        multiaddr::Protocol,
+        transport::{memory::MemoryTransportError, TransportError},
+    };
+
     use once_cell::sync::Lazy;
 
     #[test]
@@ -165,18 +164,34 @@ mod tests {
     }
 
     #[test]
-    fn addrs_of_peer_are_removed_when_received_dial_failure_event() {
+    fn addresses_of_peer_are_removed_when_received_dial_failure() {
         let mut cache = PeerAddresses::default();
         let peer_id = PeerId::random();
 
-        cache.on_swarm_event(&new_external_addr_of_peer1(peer_id));
-        let event = dial_error(peer_id);
+        let addr: Multiaddr = "/ip4/127.0.0.1/tcp/8080".parse().unwrap();
+        let addr2: Multiaddr = "/ip4/127.0.0.1/tcp/8081".parse().unwrap();
+        let addr3: Multiaddr = "/ip4/127.0.0.1/tcp/8082".parse().unwrap();
+
+        cache.add(peer_id, addr.clone());
+        cache.add(peer_id, addr2.clone());
+        cache.add(peer_id, addr3.clone());
+
+        let error = DialError::Transport(prepare_errors(vec![addr, addr3]));
+
+        let event = FromSwarm::DialFailure(DialFailure {
+            peer_id: Some(peer_id),
+            error: &error,
+            connection_id: ConnectionId::new_unchecked(8),
+        });
 
         let changed = cache.on_swarm_event(&event);
 
         assert!(changed);
-        let expected = cache.get(&peer_id).collect::<Vec<Multiaddr>>();
-        assert_eq!(expected, []);
+
+        let cached = cache.get(&peer_id).collect::<Vec<Multiaddr>>();
+        let expected = prepare_expected_addrs(peer_id, [addr2].into_iter());
+
+        assert_eq!(cached, expected);
     }
 
     #[test]
@@ -185,7 +200,7 @@ mod tests {
         let peer_id = PeerId::random();
         let addr: Multiaddr = "/ip4/127.0.0.1/tcp/8080".parse().unwrap();
 
-        cache.put(peer_id, std::iter::once(addr.clone()));
+        cache.add(peer_id, addr.clone());
 
         assert!(cache.remove(&peer_id, &addr));
     }
@@ -216,10 +231,9 @@ mod tests {
         let addr2: Multiaddr = "/ip4/127.0.0.1/tcp/8081".parse().unwrap();
         let addr3: Multiaddr = "/ip4/127.0.0.1/tcp/8082".parse().unwrap();
 
-        cache.put(
-            peer_id,
-            [addr.clone(), addr2.clone(), addr3.clone()].into_iter(),
-        );
+        cache.add(peer_id, addr.clone());
+        cache.add(peer_id, addr2.clone());
+        cache.add(peer_id, addr3.clone());
 
         assert!(cache.remove(&peer_id, &addr2));
 
@@ -232,12 +246,12 @@ mod tests {
     }
 
     #[test]
-    fn put_adds_new_address_to_cache() {
+    fn add_adds_new_address_to_cache() {
         let mut cache = PeerAddresses::default();
         let peer_id = PeerId::random();
         let addr: Multiaddr = "/ip4/127.0.0.1/tcp/8080".parse().unwrap();
 
-        assert!(cache.put(peer_id, [addr.clone()].into_iter()));
+        assert!(cache.add(peer_id, addr.clone()));
 
         let mut cached = cache.get(&peer_id).collect::<Vec<Multiaddr>>();
         cached.sort();
@@ -247,16 +261,17 @@ mod tests {
     }
 
     #[test]
-    fn put_adds_address_to_cache_to_existing_key() {
+    fn add_adds_address_to_cache_to_existing_key() {
         let mut cache = PeerAddresses::default();
         let peer_id = PeerId::random();
         let addr: Multiaddr = "/ip4/127.0.0.1/tcp/8080".parse().unwrap();
         let addr2: Multiaddr = "/ip4/127.0.0.1/tcp/8081".parse().unwrap();
         let addr3: Multiaddr = "/ip4/127.0.0.1/tcp/8082".parse().unwrap();
 
-        assert!(cache.put(peer_id, [addr.clone()].into_iter()));
+        assert!(cache.add(peer_id, addr.clone()));
 
-        cache.put(peer_id, [addr2.clone(), addr3.clone()].into_iter());
+        cache.add(peer_id, addr2.clone());
+        cache.add(peer_id, addr3.clone());
 
         let expected = prepare_expected_addrs(peer_id, [addr, addr2, addr3].into_iter());
 
@@ -291,12 +306,20 @@ mod tests {
         })
     }
 
-    fn dial_error(peer_id: PeerId) -> FromSwarm<'static> {
-        FromSwarm::DialFailure(DialFailure {
-            peer_id: Some(peer_id),
-            error: &DialError::NoAddresses,
-            connection_id: ConnectionId::new_unchecked(8),
-        })
+    fn prepare_errors(addrs: Vec<Multiaddr>) -> Vec<(Multiaddr, TransportError<io::Error>)> {
+        let errors: Vec<(Multiaddr, TransportError<io::Error>)> = addrs
+            .iter()
+            .map(|addr| {
+                (
+                    addr.clone(),
+                    TransportError::Other(io::Error::new(
+                        io::ErrorKind::Other,
+                        MemoryTransportError::Unreachable,
+                    )),
+                )
+            })
+            .collect();
+        errors
     }
 
     static MEMORY_ADDR_1000: Lazy<Multiaddr> =
