@@ -11,10 +11,10 @@ release = false
 [dependencies]
 tokio = { version = "1.35", features = ["rt-multi-thread", "macros"] }
 async-trait = "0.1"
-clap = { version = "4.4.11", features = ["derive"] }
+clap = { version = "4.4.12", features = ["derive"] }
 env_logger = "0.10"
 futures = "0.3.30"
-anyhow = "1.0.76"
+anyhow = "1.0.78"
 libp2p = { path = "../../libp2p", features = [ "tokio", "dns", "kad", "noise", "tcp", "yamux", "rsa"] }
 tracing = "0.1.37"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }

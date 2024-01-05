@@ -20,7 +20,7 @@ libp2p-swarm = { workspace = true }
 libp2p-identity = { workspace = true }
 rand = "0.8"
 serde = { version = "1.0", optional = true}
-serde_json = { version = "1.0.108", optional = true }
+serde_json = { version = "1.0.109", optional = true }
 smallvec = "1.11.2"
 tracing = "0.1.37"
 void = "1.0.2"
@@ -32,7 +32,7 @@ json = ["dep:serde", "dep:serde_json", "libp2p-swarm/macros"]
 cbor = ["dep:serde", "dep:cbor4ii", "libp2p-swarm/macros"]
 
 [dev-dependencies]
-anyhow = "1.0.76"
+anyhow = "1.0.78"
 async-std = { version = "1.6.2", features = ["attributes"] }
 libp2p-noise = { workspace = true }
 libp2p-tcp = { workspace = true, features = ["async-io"] }
