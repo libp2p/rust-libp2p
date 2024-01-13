@@ -3,8 +3,11 @@ name = "libp2p-stream"
 version = "0.1.0-alpha"
 edition = "2021"
 rust-version.workspace = true
-
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+description = "Generic stream protocols for libp2p"
+license = "MIT"
+repository = "https://github.com/libp2p/rust-libp2p"
+keywords = ["peer-to-peer", "libp2p", "networking"]
+categories = ["network-programming", "asynchronous"]
 
 [dependencies]
 futures = "0.3.29"
