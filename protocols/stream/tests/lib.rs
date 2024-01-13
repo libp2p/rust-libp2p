@@ -1,4 +1,7 @@
+use std::io;
+
 use futures::{AsyncReadExt as _, AsyncWriteExt as _, StreamExt as _};
+use libp2p_identity::PeerId;
 use libp2p_stream as stream;
 use libp2p_swarm::{StreamProtocol, Swarm};
 use libp2p_swarm_test::SwarmExt as _;
@@ -54,4 +57,24 @@ async fn dropping_incoming_streams_deregisters() {
         .await
         .unwrap_err();
     assert!(matches!(error, OpenStreamError::UnsupportedProtocol(_)));
+}
+
+#[tokio::test]
+async fn dial_errors_are_propagated() {
+    let swarm1 = Swarm::new_ephemeral(|_| stream::Behaviour::new());
+
+    let mut control = swarm1.behaviour().new_control();
+    tokio::spawn(swarm1.loop_on_next());
+
+    let error = control
+        .open_stream(PeerId::random(), PROTOCOL)
+        .await
+        .unwrap_err();
+
+    let OpenStreamError::Io(e) = error else {
+        panic!("Unexpected error: {error}")
+    };
+
+    assert_eq!(e.kind(), io::ErrorKind::NotConnected);
+    assert_eq!("Dial error: no addresses for peer.", e.to_string());
 }

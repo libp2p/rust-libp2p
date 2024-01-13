@@ -259,7 +259,7 @@ impl NetworkBehaviour for Behaviour {
                             .sender
                             .send(Err(crate::OpenStreamError::Io(io::Error::new(
                                 io::ErrorKind::NotConnected,
-                                error.to_string(),
+                                error.to_string(), // We can only forward the string repr but it is better than nothing.
                             ))));
                 }
             }
