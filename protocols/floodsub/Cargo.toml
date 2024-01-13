@@ -15,7 +15,7 @@ asynchronous-codec = { workspace = true }
 cuckoofilter = "0.5.0"
 fnv = "1.0"
 bytes = "1.5"
-futures = "0.3.29"
+futures = "0.3.30"
 libp2p-core = { workspace = true }
 libp2p-swarm = { workspace = true }
 libp2p-identity = { workspace = true }
@@ -23,7 +23,7 @@ quick-protobuf = "0.8"
 quick-protobuf-codec = { workspace = true }
 rand = "0.8"
 smallvec = "1.11.2"
-thiserror = "1.0.51"
+thiserror = "1.0.56"
 tracing = "0.1.37"
 
 # Passing arguments to the docsrs builder in order to properly document cfg's.

@@ -240,6 +240,7 @@ pub enum Error {
     #[error("failed to decode protobuf ")]
     InvalidPayload(#[from] DecodeError),
     #[error(transparent)]
+    #[allow(clippy::enum_variant_names)]
     SigningError(#[from] libp2p_identity::SigningError),
     #[error("Expected WebTransport certhashes ({}) are not a subset of received ones ({})", certhashes_to_string(.0), certhashes_to_string(.1))]
     UnknownWebTransportCerthashes(HashSet<Multihash<64>>, HashSet<Multihash<64>>),
