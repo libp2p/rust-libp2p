@@ -77,7 +77,7 @@ impl Shared {
         self.supported_inbound_protocols
             .insert(protocol.clone(), sender);
 
-        Ok(IncomingStreams { receiver })
+        Ok(IncomingStreams::new(receiver))
     }
 
     /// Lists the protocols for which we have an active [`IncomingStream`]s instance.
@@ -177,9 +177,7 @@ impl Behaviour {
     /// A [`Control`] only deals with the _outbound_ side of a protocol.
     /// To accept inbound streams for a protocol, use [`Behaviour::accept`].
     pub fn new_control(&self) -> Control {
-        Control {
-            shared: self.shared.clone(),
-        }
+        Control::new(self.shared.clone())
     }
 }
 
