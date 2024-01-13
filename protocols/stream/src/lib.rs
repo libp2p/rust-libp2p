@@ -23,16 +23,16 @@ mod upgrade;
 
 pub use behaviour::{AlreadyRegistered, Behaviour};
 
-/// A (remote) control for opening new streams for a particular protocol.
+/// A (remote) control for opening new streams.
 #[derive(Clone)]
 pub struct Control {
     shared: Arc<Mutex<Shared>>,
 }
 
 impl Control {
-    /// Obtain a [`PeerControl`] for the given [`PeerId`].
+    /// Attempt to open a new stream for the given protocol and peer.
     ///
-    /// This function will block until we have a connection to the given peer.
+    /// In case we are currently not connected to the peer, we will attempt to make a new connection.
     pub async fn open_stream(
         &mut self,
         peer: PeerId,

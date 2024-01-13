@@ -35,11 +35,16 @@ pub(crate) struct Shared {
     ///
     /// For each [`StreamProtocol`], we hold the [`mpsc::Sender`] corresponding to the [`mpsc::Receiver`] in [`IncomingStreams`].
     supported_inbound_protocols: HashMap<StreamProtocol, mpsc::Sender<(PeerId, Stream)>>,
+
     connections: HashMap<ConnectionId, PeerId>,
     senders: HashMap<ConnectionId, mpsc::Sender<NewStream>>,
 
+    /// Tracks channel pairs for a peer whilst we are dialing them.
     pending_channels: HashMap<PeerId, (mpsc::Sender<NewStream>, mpsc::Receiver<NewStream>)>,
 
+    /// Sender for peers we want to dial.
+    ///
+    /// We manage this through a channel to avoid locks as part of [`NetworkBehaviour::poll`].
     dial_sender: mpsc::Sender<PeerId>,
 }
 
@@ -116,6 +121,8 @@ impl Shared {
                 sender.clone()
             }
             None => {
+                tracing::debug!(%peer, "Not connected to peer, initiating dial");
+
                 let (sender, _) = self
                     .pending_channels
                     .entry(peer)
