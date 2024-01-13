@@ -35,7 +35,11 @@ async fn main() -> Result<()> {
 
     swarm.listen_on("/ip4/127.0.0.1/udp/0/quic-v1".parse()?)?;
 
-    let mut incoming_streams = swarm.behaviour_mut().accept(ECHO_PROTOCOL).unwrap();
+    let mut incoming_streams = swarm
+        .behaviour()
+        .new_control()
+        .accept(ECHO_PROTOCOL)
+        .unwrap();
 
     // Deal with incoming streams.
     // Spawning a dedicated task is just one way of doing this.
@@ -92,14 +96,14 @@ async fn connection_handler(peer: PeerId, mut control: stream::Control) {
 
         let stream = match control.open_stream(peer, ECHO_PROTOCOL).await {
             Ok(stream) => stream,
-            Err(stream::OpenStreamError::UnsupportedProtocol) => {
-                tracing::info!(%peer, %ECHO_PROTOCOL, "Peer does not support protocol");
+            Err(error @ stream::OpenStreamError::UnsupportedProtocol(_)) => {
+                tracing::info!(%peer, %error);
                 return;
             }
-            Err(stream::OpenStreamError::Io(e)) => {
-                // IO errors may be temporary.
+            Err(error) => {
+                // Other errors may be temporary.
                 // In production, something like an exponential backoff / circuit-breaker may be more appropriate.
-                tracing::debug!(%peer, "IO error when opening stream: {e}");
+                tracing::debug!(%peer, %error);
                 continue;
             }
         };

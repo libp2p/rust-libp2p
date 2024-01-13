@@ -1,6 +1,6 @@
 use core::fmt;
 use std::{
-    collections::{HashMap, VecDeque},
+    collections::{hash_map::Entry, HashMap},
     io,
     sync::{Arc, Mutex},
     task::{Context, Poll},
@@ -20,20 +20,21 @@ use swarm::{
 };
 
 use crate::{
-    handler::{Handler, NewStream, RegisterProtocol},
+    handler::{Handler, NewStream},
     Control, IncomingStreams,
 };
 
 /// A generic behaviour for stream-oriented protocols.
 pub struct Behaviour {
     shared: Arc<Mutex<Shared>>,
-    receiver: mpsc::Receiver<PeerId>,
-    supported_protocols: HashMap<StreamProtocol, mpsc::Sender<(PeerId, Stream)>>,
-
-    events: VecDeque<ToSwarm<(), RegisterProtocol>>,
+    dial_receiver: mpsc::Receiver<PeerId>,
 }
 
 pub(crate) struct Shared {
+    /// Tracks the supported inbound protocols created via [`Control::accept`].
+    ///
+    /// For each [`StreamProtocol`], we hold the [`mpsc::Sender`] corresponding to the [`mpsc::Receiver`] in [`IncomingStreams`].
+    supported_inbound_protocols: HashMap<StreamProtocol, mpsc::Sender<(PeerId, Stream)>>,
     connections: HashMap<ConnectionId, PeerId>,
     senders: HashMap<ConnectionId, mpsc::Sender<NewStream>>,
 
@@ -45,10 +46,58 @@ pub(crate) struct Shared {
 impl Shared {
     pub(crate) fn new(dial_sender: mpsc::Sender<PeerId>) -> Self {
         Self {
+            dial_sender,
             connections: Default::default(),
             senders: Default::default(),
             pending_channels: Default::default(),
-            dial_sender,
+            supported_inbound_protocols: Default::default(),
+        }
+    }
+
+    pub(crate) fn accept(
+        &mut self,
+        protocol: StreamProtocol,
+    ) -> Result<IncomingStreams, AlreadyRegistered> {
+        if self.supported_inbound_protocols.contains_key(&protocol) {
+            return Err(AlreadyRegistered);
+        }
+
+        let (sender, receiver) = mpsc::channel(0);
+        self.supported_inbound_protocols
+            .insert(protocol.clone(), sender);
+
+        Ok(IncomingStreams { receiver })
+    }
+
+    /// Lists the protocols for which we have an active [`IncomingStream`]s instance.
+    pub(crate) fn supported_inbound_protocols(&mut self) -> Vec<StreamProtocol> {
+        self.supported_inbound_protocols
+            .retain(|_, sender| !sender.is_closed());
+
+        self.supported_inbound_protocols.keys().cloned().collect()
+    }
+
+    pub(crate) fn on_inbound_stream(
+        &mut self,
+        remote: PeerId,
+        stream: Stream,
+        protocol: StreamProtocol,
+    ) {
+        match self.supported_inbound_protocols.entry(protocol.clone()) {
+            Entry::Occupied(mut entry) => match entry.get_mut().try_send((remote, stream)) {
+                Ok(()) => {}
+                Err(e) if e.is_full() => {
+                    tracing::debug!(%protocol, "Channel is full, dropping inbound stream");
+                }
+                Err(e) if e.is_disconnected() => {
+                    tracing::debug!(%protocol, "Channel is gone, dropping inbound stream");
+                    entry.remove();
+                }
+                _ => unreachable!(),
+            },
+            Entry::Vacant(_) => {
+                tracing::debug!(%protocol, "channel is gone, dropping inbound stream");
+            }
         }
     }
 
@@ -79,7 +128,11 @@ impl Shared {
         }
     }
 
-    fn receiver(&mut self, peer: PeerId, connection: ConnectionId) -> mpsc::Receiver<NewStream> {
+    pub(crate) fn receiver(
+        &mut self,
+        peer: PeerId,
+        connection: ConnectionId,
+    ) -> mpsc::Receiver<NewStream> {
         if let Some((sender, receiver)) = self.pending_channels.remove(&peer) {
             tracing::debug!(%peer, %connection, "Returning existing pending receiver");
 
@@ -98,13 +151,11 @@ impl Shared {
 
 impl Behaviour {
     pub fn new() -> Self {
-        let (sender, receiver) = mpsc::channel(0);
+        let (dial_sender, dial_receiver) = mpsc::channel(0);
 
         Self {
-            shared: Arc::new(Mutex::new(Shared::new(sender))),
-            receiver,
-            supported_protocols: Default::default(),
-            events: Default::default(),
+            shared: Arc::new(Mutex::new(Shared::new(dial_sender))),
+            dial_receiver,
         }
     }
 
@@ -116,45 +167,6 @@ impl Behaviour {
         Control {
             shared: self.shared.clone(),
         }
-    }
-
-    /// Accept inbound streams for the provided protocol.
-    ///
-    /// To stop accepting streams, simply drop the returned [`IncomingStreams`] handle.
-    pub fn accept(
-        &mut self,
-        protocol: StreamProtocol,
-    ) -> Result<IncomingStreams, AlreadyRegistered> {
-        if self.supported_protocols.contains_key(&protocol) {
-            return Err(AlreadyRegistered);
-        }
-
-        let (sender, receiver) = mpsc::channel(0);
-        self.supported_protocols
-            .insert(protocol.clone(), sender.clone());
-
-        let connections = self.shared.lock().unwrap().connections.clone();
-        let num_handlers = connections.len();
-
-        self.events.extend(
-            connections
-                .into_iter()
-                .map(|(conn, peer_id)| ToSwarm::NotifyHandler {
-                    peer_id,
-                    handler: swarm::NotifyHandler::One(conn),
-                    event: RegisterProtocol {
-                        protocol: protocol.clone(),
-                        sender: sender.clone(),
-                    },
-                }),
-        );
-
-        tracing::debug!(
-            %protocol,
-            "Registering protocol with {num_handlers} existing handlers"
-        );
-
-        Ok(IncomingStreams { receiver })
     }
 }
 
@@ -172,7 +184,6 @@ impl std::error::Error for AlreadyRegistered {}
 
 impl NetworkBehaviour for Behaviour {
     type ConnectionHandler = Handler;
-
     type ToSwarm = ();
 
     fn handle_established_inbound_connection(
@@ -182,12 +193,10 @@ impl NetworkBehaviour for Behaviour {
         _: &Multiaddr,
         _: &Multiaddr,
     ) -> Result<THandler<Self>, ConnectionDenied> {
-        let receiver = self.shared.lock().unwrap().receiver(peer, connection_id);
-
         Ok(Handler::new(
             peer,
-            self.supported_protocols.clone(),
-            receiver,
+            self.shared.clone(),
+            self.shared.lock().unwrap().receiver(peer, connection_id),
         ))
     }
 
@@ -198,12 +207,10 @@ impl NetworkBehaviour for Behaviour {
         _: &Multiaddr,
         _: Endpoint,
     ) -> Result<THandler<Self>, ConnectionDenied> {
-        let receiver = self.shared.lock().unwrap().receiver(peer, connection_id);
-
         Ok(Handler::new(
             peer,
-            self.supported_protocols.clone(),
-            receiver,
+            self.shared.clone(),
+            self.shared.lock().unwrap().receiver(peer, connection_id),
         ))
     }
 
@@ -273,7 +280,7 @@ impl NetworkBehaviour for Behaviour {
         &mut self,
         cx: &mut Context<'_>,
     ) -> Poll<ToSwarm<Self::ToSwarm, THandlerInEvent<Self>>> {
-        if let Poll::Ready(Some(peer)) = self.receiver.poll_next_unpin(cx) {
+        if let Poll::Ready(Some(peer)) = self.dial_receiver.poll_next_unpin(cx) {
             return Poll::Ready(ToSwarm::Dial {
                 opts: DialOpts::peer_id(peer)
                     .condition(PeerCondition::DisconnectedAndNotDialing)

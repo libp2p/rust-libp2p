@@ -1,5 +1,6 @@
 #![doc = include_str!("../README.md")]
 
+use core::fmt;
 use std::{
     io,
     pin::Pin,
@@ -54,13 +55,24 @@ impl Control {
 
         Ok(stream)
     }
+
+    /// Accept inbound streams for the provided protocol.
+    ///
+    /// To stop accepting streams, simply drop the returned [`IncomingStreams`] handle.
+    pub fn accept(
+        &mut self,
+        protocol: StreamProtocol,
+    ) -> Result<IncomingStreams, AlreadyRegistered> {
+        self.shared.lock().unwrap().accept(protocol)
+    }
 }
 
 /// Errors while opening a new stream.
 #[derive(Debug)]
+#[non_exhaustive]
 pub enum OpenStreamError {
     /// The remote does not support the requested protocol.
-    UnsupportedProtocol,
+    UnsupportedProtocol(StreamProtocol),
     /// IO Error that occurred during the protocol handshake.
     Io(std::io::Error),
 }
@@ -68,6 +80,19 @@ pub enum OpenStreamError {
 impl From<std::io::Error> for OpenStreamError {
     fn from(v: std::io::Error) -> Self {
         Self::Io(v)
+    }
+}
+
+impl fmt::Display for OpenStreamError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            OpenStreamError::UnsupportedProtocol(p) => {
+                write!(f, "failed to open stream: remote peer does not support {p}")
+            }
+            OpenStreamError::Io(e) => {
+                write!(f, "failed to open stream: io error: {e}")
+            }
+        }
     }
 }
 

@@ -23,8 +23,8 @@ async fn dropping_incoming_streams_deregisters() {
     let mut swarm1 = Swarm::new_ephemeral(|_| stream::Behaviour::new());
     let mut swarm2 = Swarm::new_ephemeral(|_| stream::Behaviour::new());
 
-    let mut control = swarm1.behaviour_mut().new_control();
-    let mut incoming = swarm2.behaviour_mut().accept(PROTOCOL).unwrap();
+    let mut control = swarm1.behaviour().new_control();
+    let mut incoming = swarm2.behaviour().new_control().accept(PROTOCOL).unwrap();
 
     swarm2.listen().with_memory_addr_external().await;
     swarm1.connect(&mut swarm2).await;
@@ -53,5 +53,5 @@ async fn dropping_incoming_streams_deregisters() {
         .open_stream(swarm2_peer_id, PROTOCOL)
         .await
         .unwrap_err();
-    assert!(matches!(error, OpenStreamError::UnsupportedProtocol));
+    assert!(matches!(error, OpenStreamError::UnsupportedProtocol(_)));
 }

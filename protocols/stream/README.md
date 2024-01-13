@@ -1,10 +1,14 @@
-# Generic stream protocols
+# Generic (stream) protocols
 
 This module provides a generic [`NetworkBehaviour`](libp2p_swarm::NetworkBehaviour) for stream-oriented protocols.
+Streams are the fundamental primitive of libp2p and all other protocols are implemented using streams.
+In contrast to other [`NetworkBehaviour`](libp2p_swarm::NetworkBehaviour)s, this module takes a different design approach.
+All interaction happens through a [`Control`] that can be obtained via [`Behaviour::new_control`].
+[`Control`]s can be cloned and thus shared across your application.
 
 ## Inbound
 
-To accept streams for a particular [`StreamProtocol`] using this module, use [`Behaviour::accept`]:
+To accept streams for a particular [`StreamProtocol`] using this module, use [`Control::accept`]:
 
 ### Example
 
@@ -15,7 +19,8 @@ To accept streams for a particular [`StreamProtocol`] using this module, use [`B
 # use futures::StreamExt as _;
 let mut swarm: Swarm<stream::Behaviour> = todo!();
 
-let mut incoming = swarm.behaviour_mut().accept(StreamProtocol::new("/my-protocol")).unwrap();
+let mut control = swarm.behaviour().new_control();
+let mut incoming = control.accept(StreamProtocol::new("/my-protocol")).unwrap();
 
 let handler_future = async move {
     while let Some((peer, stream)) = incoming.next().await {
@@ -27,7 +32,7 @@ let handler_future = async move {
 
 ### Backpressure
 
-[`Behaviour::accept`] returns you an instance of [`IncomingStreams`].
+[`Control::accept`] returns you an instance of [`IncomingStreams`].
 This struct implements [`Stream`](futures::Stream) and like other streams, is lazy.
 You must continuously poll it to make progress.
 In the example above, this taken care of by using the [`StreamExt::next`](futures::StreamExt::next) helper.
@@ -41,11 +46,7 @@ Any further attempt by remote peers to open a stream using the provided protocol
 
 ## Outbound
 
-To open a new outbound stream for a particular protocol, you can obtain a [`Control`] using [`Behaviour::new_control`].
-In contrast to [`IncomingStreams`]s, [`Control`]s can be cloned and you can obtain as many [`Control`]s for the same protocol as you want.
-
-To open a stream, you need construct a [`PeerControl`] using [`Control::peer`].
-This function is `async` and will block until we have a connection to the given peer.
+To open a new outbound stream for a particular protocol, use [`Control::open_stream`].
 
 ### Example
 

@@ -1,6 +1,6 @@
 use std::{
-    collections::{hash_map::Entry, HashMap},
     io,
+    sync::{Arc, Mutex},
     task::{Context, Poll},
 };
 
@@ -15,11 +15,11 @@ use libp2p_swarm::{
     ConnectionHandler, Stream, StreamProtocol,
 };
 
-use crate::{upgrade::Upgrade, OpenStreamError};
+use crate::{behaviour::Shared, upgrade::Upgrade, OpenStreamError};
 
 pub struct Handler {
     remote: PeerId,
-    supported_protocols: HashMap<StreamProtocol, mpsc::Sender<(PeerId, Stream)>>,
+    shared: Arc<Mutex<Shared>>,
 
     receiver: mpsc::Receiver<NewStream>,
     pending_upgrade: Option<(
@@ -31,11 +31,11 @@ pub struct Handler {
 impl Handler {
     pub(crate) fn new(
         remote: PeerId,
-        supported_protocols: HashMap<StreamProtocol, mpsc::Sender<(PeerId, Stream)>>,
+        shared: Arc<Mutex<Shared>>,
         receiver: mpsc::Receiver<NewStream>,
     ) -> Self {
         Self {
-            supported_protocols,
+            shared,
             receiver,
             pending_upgrade: None,
             remote,
@@ -44,7 +44,7 @@ impl Handler {
 }
 
 impl ConnectionHandler for Handler {
-    type FromBehaviour = RegisterProtocol;
+    type FromBehaviour = void::Void;
     type ToBehaviour = void::Void;
     type InboundProtocol = Upgrade;
     type OutboundProtocol = Upgrade;
@@ -56,7 +56,7 @@ impl ConnectionHandler for Handler {
     ) -> swarm::SubstreamProtocol<Self::InboundProtocol, Self::InboundOpenInfo> {
         swarm::SubstreamProtocol::new(
             Upgrade {
-                supported_protocols: self.supported_protocols.keys().cloned().collect(),
+                supported_protocols: self.shared.lock().unwrap().supported_inbound_protocols(),
             },
             (),
         )
@@ -72,17 +72,6 @@ impl ConnectionHandler for Handler {
             Self::ToBehaviour,
         >,
     > {
-        // Check regularly for closed senders to avoid listen them as part of `listen_protocol`.
-        if let Some(disabled_protocol) = self
-            .supported_protocols
-            .iter_mut()
-            .find_map(|(p, r)| r.is_closed().then_some(p.clone()))
-        {
-            self.supported_protocols.remove(&disabled_protocol);
-            cx.waker().wake_by_ref();
-            return Poll::Pending;
-        }
-
         if self.pending_upgrade.is_some() {
             return Poll::Pending;
         }
@@ -107,8 +96,7 @@ impl ConnectionHandler for Handler {
     }
 
     fn on_behaviour_event(&mut self, event: Self::FromBehaviour) {
-        self.supported_protocols
-            .insert(event.protocol, event.sender);
+        void::unreachable(event)
     }
 
     fn on_connection_event(
@@ -124,24 +112,12 @@ impl ConnectionHandler for Handler {
             ConnectionEvent::FullyNegotiatedInbound(FullyNegotiatedInbound {
                 protocol: (stream, protocol),
                 info: (),
-            }) => match self.supported_protocols.entry(protocol.clone()) {
-                Entry::Occupied(mut entry) => {
-                    match entry.get_mut().try_send((self.remote, stream)) {
-                        Ok(()) => {}
-                        Err(e) if e.is_full() => {
-                            tracing::debug!(%protocol, "Channel is full, dropping inbound stream");
-                        }
-                        Err(e) if e.is_disconnected() => {
-                            tracing::debug!(%protocol, "Channel is gone, dropping inbound stream");
-                            entry.remove();
-                        }
-                        _ => unreachable!(),
-                    }
-                }
-                Entry::Vacant(_) => {
-                    tracing::debug!(%protocol, "channel is gone, dropping inbound stream");
-                }
-            },
+            }) => {
+                self.shared
+                    .lock()
+                    .unwrap()
+                    .on_inbound_stream(self.remote, stream, protocol);
+            }
             ConnectionEvent::FullyNegotiatedOutbound(FullyNegotiatedOutbound {
                 protocol: (stream, actual_protocol),
                 info: (),
@@ -158,7 +134,7 @@ impl ConnectionHandler for Handler {
                 let _ = sender.send(Ok(stream));
             }
             ConnectionEvent::DialUpgradeError(DialUpgradeError { error, info: () }) => {
-                let Some((_, sender)) = self.pending_upgrade.take() else {
+                let Some((p, sender)) = self.pending_upgrade.take() else {
                     debug_assert!(
                         false,
                         "Received a `DialUpgradeError` without a back channel"
@@ -172,7 +148,7 @@ impl ConnectionHandler for Handler {
                     }
                     swarm::StreamUpgradeError::Apply(v) => void::unreachable(v),
                     swarm::StreamUpgradeError::NegotiationFailed => {
-                        OpenStreamError::UnsupportedProtocol
+                        OpenStreamError::UnsupportedProtocol(p)
                     }
                     swarm::StreamUpgradeError::Io(io) => OpenStreamError::Io(io),
                 };
@@ -189,17 +165,4 @@ impl ConnectionHandler for Handler {
 pub(crate) struct NewStream {
     pub(crate) protocol: StreamProtocol,
     pub(crate) sender: oneshot::Sender<Result<Stream, OpenStreamError>>,
-}
-
-pub struct RegisterProtocol {
-    pub(crate) protocol: StreamProtocol,
-    pub(crate) sender: mpsc::Sender<(PeerId, Stream)>,
-}
-
-impl std::fmt::Debug for RegisterProtocol {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("RegisterProtocol")
-            .field("protocol", &self.protocol)
-            .finish()
-    }
 }
