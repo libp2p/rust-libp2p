@@ -56,7 +56,7 @@ impl ConnectionHandler for Handler {
     ) -> swarm::SubstreamProtocol<Self::InboundProtocol, Self::InboundOpenInfo> {
         swarm::SubstreamProtocol::new(
             Upgrade {
-                supported_protocols: self.shared.lock().unwrap().supported_inbound_protocols(),
+                supported_protocols: Shared::lock(&self.shared).supported_inbound_protocols(),
             },
             (),
         )
@@ -113,10 +113,7 @@ impl ConnectionHandler for Handler {
                 protocol: (stream, protocol),
                 info: (),
             }) => {
-                self.shared
-                    .lock()
-                    .unwrap()
-                    .on_inbound_stream(self.remote, stream, protocol);
+                Shared::lock(&self.shared).on_inbound_stream(self.remote, stream, protocol);
             }
             ConnectionEvent::FullyNegotiatedOutbound(FullyNegotiatedOutbound {
                 protocol: (stream, actual_protocol),

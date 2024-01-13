@@ -2,7 +2,7 @@ use core::fmt;
 use std::{
     collections::{hash_map::Entry, HashMap},
     io,
-    sync::{Arc, Mutex},
+    sync::{Arc, Mutex, MutexGuard},
     task::{Context, Poll},
 };
 
@@ -46,6 +46,12 @@ pub(crate) struct Shared {
     ///
     /// We manage this through a channel to avoid locks as part of [`NetworkBehaviour::poll`].
     dial_sender: mpsc::Sender<PeerId>,
+}
+
+impl Shared {
+    pub(crate) fn lock(shared: &Arc<Mutex<Shared>>) -> MutexGuard<'_, Shared> {
+        shared.lock().unwrap_or_else(|e| e.into_inner())
+    }
 }
 
 impl Shared {
@@ -203,7 +209,7 @@ impl NetworkBehaviour for Behaviour {
         Ok(Handler::new(
             peer,
             self.shared.clone(),
-            self.shared.lock().unwrap().receiver(peer, connection_id),
+            Shared::lock(&self.shared).receiver(peer, connection_id),
         ))
     }
 
@@ -217,7 +223,7 @@ impl NetworkBehaviour for Behaviour {
         Ok(Handler::new(
             peer,
             self.shared.clone(),
-            self.shared.lock().unwrap().receiver(peer, connection_id),
+            Shared::lock(&self.shared).receiver(peer, connection_id),
         ))
     }
 
@@ -228,16 +234,12 @@ impl NetworkBehaviour for Behaviour {
                 connection_id,
                 ..
             }) => {
-                self.shared
-                    .lock()
-                    .unwrap()
+                Shared::lock(&self.shared)
                     .connections
                     .insert(connection_id, peer_id);
             }
             FromSwarm::ConnectionClosed(ConnectionClosed { connection_id, .. }) => {
-                self.shared
-                    .lock()
-                    .unwrap()
+                Shared::lock(&self.shared)
                     .connections
                     .remove(&connection_id);
             }
@@ -250,12 +252,8 @@ impl NetworkBehaviour for Behaviour {
                     | DialError::WrongPeerId { .. }),
                 ..
             }) => {
-                let Some((_, mut receiver)) = self
-                    .shared
-                    .lock()
-                    .unwrap()
-                    .pending_channels
-                    .remove(&peer_id)
+                let Some((_, mut receiver)) =
+                    Shared::lock(&self.shared).pending_channels.remove(&peer_id)
                 else {
                     return;
                 };
