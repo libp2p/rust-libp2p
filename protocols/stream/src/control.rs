@@ -6,8 +6,8 @@ use std::{
     task::{Context, Poll},
 };
 
-use crate::handler::NewStream;
-use crate::{behaviour::Shared, AlreadyRegistered};
+use crate::AlreadyRegistered;
+use crate::{handler::NewStream, shared::Shared};
 
 use futures::{
     channel::{mpsc, oneshot},

@@ -15,7 +15,7 @@ use libp2p_swarm::{
     ConnectionHandler, Stream, StreamProtocol,
 };
 
-use crate::{behaviour::Shared, upgrade::Upgrade, OpenStreamError};
+use crate::{shared::Shared, upgrade::Upgrade, OpenStreamError};
 
 pub struct Handler {
     remote: PeerId,
