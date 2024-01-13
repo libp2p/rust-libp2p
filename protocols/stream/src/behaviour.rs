@@ -40,10 +40,7 @@ impl Behaviour {
         }
     }
 
-    /// Obtain a new [`Control`] for the provided protocol.
-    ///
-    /// A [`Control`] only deals with the _outbound_ side of a protocol.
-    /// To accept inbound streams for a protocol, use [`Behaviour::accept`].
+    /// Obtain a new [`Control`].
     pub fn new_control(&self) -> Control {
         Control::new(self.shared.clone())
     }

@@ -8,7 +8,7 @@ All interaction happens through a [`Control`] that can be obtained via [`Behavio
 
 ## Inbound
 
-To accept streams for a particular [`StreamProtocol`] using this module, use [`Control::accept`]:
+To accept streams for a particular [`StreamProtocol`](libp2p_swarm::StreamProtocol) using this module, use [`Control::accept`]:
 
 ### Example
 

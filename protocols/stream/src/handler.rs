@@ -157,7 +157,7 @@ impl ConnectionHandler for Handler {
     }
 }
 
-/// Message from a [`PeerControl`] to a [`ConnectionHandler`] to negotiate a new outbound stream.
+/// Message from a [`Control`](crate::Control) to a [`ConnectionHandler`] to negotiate a new outbound stream.
 #[derive(Debug)]
 pub(crate) struct NewStream {
     pub(crate) protocol: StreamProtocol,
