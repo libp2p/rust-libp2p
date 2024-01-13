@@ -25,7 +25,6 @@ pub use behaviour::{AlreadyRegistered, Behaviour};
 /// A (remote) control for opening new streams for a particular protocol.
 #[derive(Clone)]
 pub struct Control {
-    protocol: StreamProtocol,
     shared: Arc<Mutex<Shared>>,
 }
 
@@ -33,7 +32,11 @@ impl Control {
     /// Obtain a [`PeerControl`] for the given [`PeerId`].
     ///
     /// This function will block until we have a connection to the given peer.
-    pub async fn open_stream(&mut self, peer: PeerId) -> Result<Stream, OpenStreamError> {
+    pub async fn open_stream(
+        &mut self,
+        peer: PeerId,
+        protocol: StreamProtocol,
+    ) -> Result<Stream, OpenStreamError> {
         tracing::debug!(%peer, "Requesting new stream");
 
         let mut new_stream_sender = self.shared.lock().unwrap().sender(peer);
@@ -41,10 +44,7 @@ impl Control {
         let (sender, receiver) = oneshot::channel();
 
         new_stream_sender
-            .send(NewStream {
-                protocol: self.protocol.clone(),
-                sender,
-            })
+            .send(NewStream { protocol, sender })
             .await
             .map_err(|e| io::Error::new(io::ErrorKind::ConnectionReset, e))?;
 

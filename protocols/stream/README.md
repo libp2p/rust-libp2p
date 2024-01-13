@@ -57,10 +57,10 @@ This function is `async` and will block until we have a connection to the given 
 let mut swarm: Swarm<stream::Behaviour> = todo!();
 let peer_id: PeerId = todo!();
 
-let mut control = swarm.behaviour().new_control(StreamProtocol::new("/my-protocol"));
+let mut control = swarm.behaviour().new_control();
 
 let protocol_future = async move {
-    let stream = control.open_stream(peer_id).await.unwrap();
+    let stream = control.open_stream(peer_id, StreamProtocol::new("/my-protocol")).await.unwrap();
 
     // Execute your protocol here using `stream`.
 };

@@ -112,9 +112,8 @@ impl Behaviour {
     ///
     /// A [`Control`] only deals with the _outbound_ side of a protocol.
     /// To accept inbound streams for a protocol, use [`Behaviour::accept`].
-    pub fn new_control(&self, protocol: StreamProtocol) -> Control {
+    pub fn new_control(&self) -> Control {
         Control {
-            protocol,
             shared: self.shared.clone(),
         }
     }

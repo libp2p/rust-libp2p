@@ -68,10 +68,7 @@ async fn main() -> Result<()> {
 
         swarm.dial(address)?;
 
-        tokio::spawn(connection_handler(
-            peer_id,
-            swarm.behaviour().new_control(ECHO_PROTOCOL),
-        ));
+        tokio::spawn(connection_handler(peer_id, swarm.behaviour().new_control()));
     }
 
     // Poll the swarm to make progress.
@@ -93,7 +90,7 @@ async fn connection_handler(peer: PeerId, mut control: stream::Control) {
     loop {
         tokio::time::sleep(Duration::from_secs(1)).await; // Wait a second between echos.
 
-        let stream = match control.open_stream(peer).await {
+        let stream = match control.open_stream(peer, ECHO_PROTOCOL).await {
             Ok(stream) => stream,
             Err(stream::OpenStreamError::UnsupportedProtocol) => {
                 tracing::info!(%peer, %ECHO_PROTOCOL, "Peer does not support protocol");
