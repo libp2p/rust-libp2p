@@ -24,6 +24,12 @@ pub struct Behaviour {
     dial_receiver: mpsc::Receiver<PeerId>,
 }
 
+impl Default for Behaviour {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl Behaviour {
     pub fn new() -> Self {
         let (dial_sender, dial_receiver) = mpsc::channel(0);
