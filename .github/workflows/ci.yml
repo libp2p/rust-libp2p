@@ -379,7 +379,7 @@ jobs:
       - run: cargo install --version 0.10.0 pb-rs --locked
 
       - name: Glob match
-        uses: tj-actions/glob@v17
+        uses: tj-actions/glob@v18
         id: glob
         with:
           files: |
