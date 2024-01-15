@@ -7,8 +7,8 @@
 // copies of the Software, and to permit persons to whom the Software is
 // furnished to do so, subject to the following conditions:
 //
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
+// The above copyright notice and this permission notice shall be included in all
+// copies or substantial portions of the Software.
 //
 // THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
 // IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
@@ -35,24 +35,21 @@
 
 mod web_context;
 
+use bytes::BytesMut;
+use futures::task::AtomicWaker;
+use futures::{future::Ready, io, prelude::*};
+use js_sys::Array;
+use libp2p_core::{
+    multiaddr::{Multiaddr, Protocol},
+    transport::{ListenerId, TransportError, TransportEvent},
+};
+use send_wrapper::SendWrapper;
 use std::cmp::min;
-use std::pin::Pin;
 use std::rc::Rc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Mutex;
-use std::task::{Context, Poll};
-
-use bytes::BytesMut;
-use futures::future::Ready;
-use futures::io;
-use futures::prelude::*;
-use futures::task::AtomicWaker;
-use js_sys::Array;
-use libp2p_core::multiaddr::{Multiaddr, Protocol};
-use libp2p_core::transport::{ListenerId, TransportError, TransportEvent};
-use send_wrapper::SendWrapper;
-use wasm_bindgen::prelude::*;
-use wasm_bindgen::JsCast;
+use std::{pin::Pin, task::Context, task::Poll};
+use wasm_bindgen::{prelude::*, JsCast};
 use web_sys::{CloseEvent, Event, MessageEvent, WebSocket};
 
 use crate::web_context::{IntervalHandle, WebContext};
@@ -88,15 +85,14 @@ pub struct Transport {
     _private: (),
 }
 
-/// Arbitrary, maximum amount we are willing to buffer before we throttle our
-/// user.
+/// Arbitrary, maximum amount we are willing to buffer before we throttle our user.
 const MAX_BUFFER: usize = 1024 * 1024;
 
 impl libp2p_core::Transport for Transport {
-    type Dial = Pin<Box<dyn Future<Output = Result<Self::Output, Self::Error>> + Send>>;
+    type Output = Connection;
     type Error = Error;
     type ListenerUpgrade = Ready<Result<Self::Output, Self::Error>>;
-    type Output = Connection;
+    type Dial = Pin<Box<dyn Future<Output = Result<Self::Output, Self::Error>> + Send>>;
 
     fn listen_on(
         &mut self,
@@ -202,8 +198,7 @@ struct Inner {
     /// Waker for when we are waiting for the WebSocket to be opened.
     open_waker: Rc<AtomicWaker>,
 
-    /// Waker for when we are waiting to write (again) to the WebSocket because
-    /// we previously exceeded the [`MAX_BUFFER`] threshold.
+    /// Waker for when we are waiting to write (again) to the WebSocket because we previously exceeded the [`MAX_BUFFER`] threshold.
     write_waker: Rc<AtomicWaker>,
 
     /// Waker for when we are waiting for the WebSocket to be closed.
