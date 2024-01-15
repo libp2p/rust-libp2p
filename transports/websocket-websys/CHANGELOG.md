@@ -1,4 +1,4 @@
-## Unreleased
+## 0.3.2
 
 - Add support for environments which globally expose `setInterval` and `clearInterval` instead of a window.
 - This crate will now correctly panic if it cannot find the `WebSocket` global JavaScript object.
