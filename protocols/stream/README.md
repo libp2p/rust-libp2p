@@ -30,7 +30,7 @@ let handler_future = async move {
 # }
 ```
 
-### Backpressure
+### Resource management
 
 [`Control::accept`] returns you an instance of [`IncomingStreams`].
 This struct implements [`Stream`](futures::Stream) and like other streams, is lazy.
