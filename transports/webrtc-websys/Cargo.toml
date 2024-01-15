@@ -14,7 +14,7 @@ publish = true
 [dependencies]
 bytes = "1"
 futures = "0.3"
-getrandom = { version = "0.2.11", features = ["js"] }
+getrandom = { version = "0.2.12", features = ["js"] }
 hex = "0.4.3"
 js-sys = { version = "0.3" }
 libp2p-core = { workspace = true }
