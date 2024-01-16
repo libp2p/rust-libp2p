@@ -29,6 +29,7 @@ use std::{
     time::Duration,
 };
 
+use futures::channel::mpsc::channel;
 use futures::StreamExt;
 use futures_ticker::Ticker;
 use prometheus_client::registry::Registry;
@@ -45,8 +46,6 @@ use libp2p_swarm::{
     THandlerOutEvent, ToSwarm,
 };
 
-use crate::backoff::BackoffStorage;
-use crate::config::{Config, ValidationMode};
 use crate::gossip_promises::GossipPromises;
 use crate::handler::{Handler, HandlerEvent, HandlerIn};
 use crate::mcache::MessageCache;
@@ -61,7 +60,12 @@ use crate::types::{
     ControlAction, Message, MessageAcceptance, MessageId, PeerInfo, RawMessage, Subscription,
     SubscriptionAction,
 };
-use crate::types::{PeerConnections, PeerKind, RpcOut};
+use crate::types::{PeerConnections, PeerKind};
+use crate::{backoff::BackoffStorage, types::RpcSender};
+use crate::{
+    config::{Config, ValidationMode},
+    types::RpcReceiver,
+};
 use crate::{rpc_proto::proto, TopicScoreParams};
 use crate::{PublishError, SubscriptionError, ValidationError};
 use instant::SystemTime;
@@ -534,10 +538,14 @@ where
         }
 
         // send subscription request to all peers
-        for peer in self.peer_topics.keys().copied().collect::<Vec<_>>() {
+        for peer in self.peer_topics.keys() {
             tracing::debug!(%peer, "Sending SUBSCRIBE to peer");
-            let event = RpcOut::Subscribe(topic_hash.clone());
-            self.send_message(peer, event);
+            let sender = self
+                .connected_peers
+                .get_mut(peer)
+                .expect("Peerid should exist");
+
+            sender.subscribe(topic_hash.clone());
         }
 
         // call JOIN(topic)
@@ -561,10 +569,14 @@ where
         }
 
         // announce to all peers
-        for peer in self.peer_topics.keys().copied().collect::<Vec<_>>() {
+        for peer in self.peer_topics.keys() {
             tracing::debug!(%peer, "Sending UNSUBSCRIBE to peer");
-            let event = RpcOut::Unsubscribe(topic_hash.clone());
-            self.send_message(peer, event);
+            let sender = self
+                .connected_peers
+                .get_mut(peer)
+                .expect("Peerid should exist");
+
+            sender.unsubscribe(topic_hash.clone());
         }
 
         // call LEAVE(topic)
@@ -711,9 +723,20 @@ where
         }
 
         // Send to peers we know are subscribed to the topic.
+        let mut publish_failed = true;
         for peer_id in recipient_peers.iter() {
             tracing::trace!(peer=%peer_id, "Sending message to peer");
-            self.send_message(*peer_id, RpcOut::Publish(raw_message.clone()));
+            let sender = self
+                .connected_peers
+                .get_mut(peer_id)
+                .expect("Peerid should exist");
+
+            publish_failed &= sender
+                .publish(raw_message.clone(), self.metrics.as_mut())
+                .is_err();
+        }
+        if publish_failed {
+            return Err(PublishError::InsufficientPeers);
         }
 
         tracing::debug!(message=%msg_id, "Published message");
@@ -1311,7 +1334,12 @@ where
                     );
                 } else {
                     tracing::debug!(peer=%peer_id, "IWANT: Sending cached messages to peer");
-                    self.send_message(*peer_id, RpcOut::Forward(msg));
+                    let sender = self
+                        .connected_peers
+                        .get_mut(peer_id)
+                        .expect("Peerid should exist");
+
+                    sender.forward(msg, self.metrics.as_mut());
                 }
             }
         }
@@ -1464,13 +1492,18 @@ where
         if !to_prune_topics.is_empty() {
             // build the prune messages to send
             let on_unsubscribe = false;
+            let mut sender = self
+                .connected_peers
+                .remove(peer_id)
+                .expect("Peerid should exist");
+
             for action in to_prune_topics
                 .iter()
                 .map(|t| self.make_prune(t, peer_id, do_px, on_unsubscribe))
-                .collect::<Vec<_>>()
             {
-                self.send_message(*peer_id, RpcOut::Control(action));
+                sender.control(action);
             }
+            self.connected_peers.insert(*peer_id, sender);
             // Send the prune messages to the peer
             tracing::debug!(
                 peer=%peer_id,
@@ -1964,12 +1997,16 @@ where
 
         // If we need to send grafts to peer, do so immediately, rather than waiting for the
         // heartbeat.
+        let sender = self
+            .connected_peers
+            .get_mut(propagation_source)
+            .expect("Peerid should exist");
+
         for action in topics_to_graft
             .into_iter()
             .map(|topic_hash| ControlAction::Graft { topic_hash })
-            .collect::<Vec<_>>()
         {
-            self.send_message(*propagation_source, RpcOut::Control(action))
+            sender.control(action);
         }
 
         // Notify the application of the subscriptions
@@ -2504,6 +2541,13 @@ where
             // It therefore must be in at least one mesh and we do not need to inform the handler
             // of its removal from another.
 
+            // send the control messages
+            let mut sender = self
+                .connected_peers
+                .get_mut(&peer)
+                .expect("Peerid should exist")
+                .clone();
+
             // The following prunes are not due to unsubscribing.
             let prunes = to_prune
                 .remove(&peer)
@@ -2518,9 +2562,8 @@ where
                     )
                 });
 
-            // send the control messages
-            for msg in control_msgs.chain(prunes).collect::<Vec<_>>() {
-                self.send_message(peer, RpcOut::Control(msg));
+            for msg in control_msgs.chain(prunes) {
+                sender.control(msg);
             }
         }
 
@@ -2534,7 +2577,13 @@ where
                     self.config.do_px() && !no_px.contains(peer),
                     false,
                 );
-                self.send_message(*peer, RpcOut::Control(prune));
+                let mut sender = self
+                    .connected_peers
+                    .get_mut(peer)
+                    .expect("Peerid should exist")
+                    .clone();
+
+                sender.control(prune);
 
                 // inform the handler
                 peer_removed_from_mesh(
@@ -2602,11 +2651,13 @@ where
 
         // forward the message to peers
         if !recipient_peers.is_empty() {
-            let event = RpcOut::Forward(message.clone());
-
             for peer in recipient_peers.iter() {
                 tracing::debug!(%peer, message=%msg_id, "Sending message to peer");
-                self.send_message(*peer, event.clone());
+                let sender = self
+                    .connected_peers
+                    .get_mut(peer)
+                    .expect("Peerid should exist");
+                sender.forward(message.clone(), self.metrics.as_mut());
             }
             tracing::debug!("Completed forwarding message");
             Ok(true)
@@ -2720,7 +2771,12 @@ where
     fn flush_control_pool(&mut self) {
         for (peer, controls) in self.control_pool.drain().collect::<Vec<_>>() {
             for msg in controls {
-                self.send_message(peer, RpcOut::Control(msg));
+                let sender = self
+                    .connected_peers
+                    .get_mut(&peer)
+                    .expect("Peerid should exist");
+
+                sender.control(msg);
             }
         }
 
@@ -2728,28 +2784,11 @@ where
         self.pending_iwant_msgs.clear();
     }
 
-    /// Send a [`RpcOut`] message to a peer. This will wrap the message in an arc if it
-    /// is not already an arc.
-    fn send_message(&mut self, peer_id: PeerId, rpc: RpcOut) {
-        if let Some(m) = self.metrics.as_mut() {
-            if let RpcOut::Publish(ref message) | RpcOut::Forward(ref message) = rpc {
-                // register bytes sent on the internal metrics.
-                m.msg_sent(&message.topic, message.raw_protobuf_len());
-            }
-        }
-
-        self.events.push_back(ToSwarm::NotifyHandler {
-            peer_id,
-            event: HandlerIn::Message(rpc),
-            handler: NotifyHandler::Any,
-        });
-    }
-
     fn on_connection_established(
         &mut self,
         ConnectionEstablished {
             peer_id,
-            connection_id,
+            connection_id: _,
             endpoint,
             other_established,
             ..
@@ -2777,20 +2816,6 @@ where
             }
         }
 
-        // By default we assume a peer is only a floodsub peer.
-        //
-        // The protocol negotiation occurs once a message is sent/received. Once this happens we
-        // update the type of peer that this is in order to determine which kind of routing should
-        // occur.
-        self.connected_peers
-            .entry(peer_id)
-            .or_insert(PeerConnections {
-                kind: PeerKind::Floodsub,
-                connections: vec![],
-            })
-            .connections
-            .push(connection_id);
-
         if other_established > 0 {
             return; // Not our first connection to this peer, hence nothing to do.
         }
@@ -2810,8 +2835,13 @@ where
 
         tracing::debug!(peer=%peer_id, "New peer connected");
         // We need to send our subscriptions to the newly-connected node.
+        let sender = self
+            .connected_peers
+            .get_mut(&peer_id)
+            .expect("Peerid should exist");
+
         for topic_hash in self.mesh.clone().into_keys() {
-            self.send_message(peer_id, RpcOut::Subscribe(topic_hash));
+            sender.subscribe(topic_hash);
         }
     }
 
@@ -2841,16 +2871,11 @@ where
         if remaining_established != 0 {
             // Remove the connection from the list
             if let Some(connections) = self.connected_peers.get_mut(&peer_id) {
-                let index = connections
-                    .connections
-                    .iter()
-                    .position(|v| v == &connection_id)
-                    .expect("Previously established connection to peer must be present");
-                connections.connections.remove(index);
+                connections.connections.remove(&connection_id);
 
                 // If there are more connections and this peer is in a mesh, inform the first connection
                 // handler.
-                if !connections.connections.is_empty() {
+                if let Some(alternative_connection_id) = connections.connections.keys().next() {
                     if let Some(topics) = self.peer_topics.get(&peer_id) {
                         for topic in topics {
                             if let Some(mesh_peers) = self.mesh.get(topic) {
@@ -2858,7 +2883,7 @@ where
                                     self.events.push_back(ToSwarm::NotifyHandler {
                                         peer_id,
                                         event: HandlerIn::JoinedMesh,
-                                        handler: NotifyHandler::One(connections.connections[0]),
+                                        handler: NotifyHandler::One(*alternative_connection_id),
                                     });
                                     break;
                                 }
@@ -2997,22 +3022,72 @@ where
 
     fn handle_established_inbound_connection(
         &mut self,
-        _: ConnectionId,
-        _: PeerId,
+        connection_id: ConnectionId,
+        peer_id: PeerId,
         _: &Multiaddr,
         _: &Multiaddr,
     ) -> Result<THandler<Self>, ConnectionDenied> {
-        Ok(Handler::new(self.config.protocol_config()))
+        let (priority_sender, priority_receiver) =
+            channel(self.config.connection_handler_queue_len());
+        let (non_priority_sender, non_priority_receiver) =
+            channel(self.config.connection_handler_queue_len());
+        let sender = RpcSender {
+            priority: priority_sender,
+            non_priority: non_priority_sender,
+        };
+        let receiver = RpcReceiver {
+            priority: priority_receiver.peekable(),
+            non_priority: non_priority_receiver.peekable(),
+        };
+        // By default we assume a peer is only a floodsub peer.
+        //
+        // The protocol negotiation occurs once a message is sent/received. Once this happens we
+        // update the type of peer that this is in order to determine which kind of routing should
+        // occur.
+        let peer_info =
+            self.connected_peers
+                .entry(peer_id)
+                .or_insert_with_key(|_| PeerConnections {
+                    kind: PeerKind::Floodsub,
+                    connections: Default::default(),
+                });
+        peer_info.connections.insert(connection_id, sender);
+        Ok(Handler::new(self.config.protocol_config(), receiver))
     }
 
     fn handle_established_outbound_connection(
         &mut self,
-        _: ConnectionId,
-        _: PeerId,
+        connection_id: ConnectionId,
+        peer_id: PeerId,
         _: &Multiaddr,
         _: Endpoint,
     ) -> Result<THandler<Self>, ConnectionDenied> {
-        Ok(Handler::new(self.config.protocol_config()))
+        let (priority_sender, priority_receiver) =
+            channel(self.config.connection_handler_queue_len());
+        let (non_priority_sender, non_priority_receiver) =
+            channel(self.config.connection_handler_queue_len());
+        let sender = RpcSender {
+            priority: priority_sender,
+            non_priority: non_priority_sender,
+        };
+        let receiver = RpcReceiver {
+            priority: priority_receiver.peekable(),
+            non_priority: non_priority_receiver.peekable(),
+        };
+        // By default we assume a peer is only a floodsub peer.
+        //
+        // The protocol negotiation occurs once a message is sent/received. Once this happens we
+        // update the type of peer that this is in order to determine which kind of routing should
+        // occur.
+        let peer_info =
+            self.connected_peers
+                .entry(peer_id)
+                .or_insert_with_key(|_| PeerConnections {
+                    kind: PeerKind::Floodsub,
+                    connections: Default::default(),
+                });
+        peer_info.connections.insert(connection_id, sender);
+        Ok(Handler::new(self.config.protocol_config(), receiver))
     }
 
     fn on_connection_handler_event(
@@ -3197,7 +3272,10 @@ fn peer_added_to_mesh(
             !conn.connections.is_empty(),
             "Must have at least one connection"
         );
-        conn.connections[0]
+        conn.connections
+            .keys()
+            .next()
+            .expect("To be connected to peer")
     };
 
     if let Some(topics) = known_topics {
@@ -3216,7 +3294,7 @@ fn peer_added_to_mesh(
     events.push_back(ToSwarm::NotifyHandler {
         peer_id,
         event: HandlerIn::JoinedMesh,
-        handler: NotifyHandler::One(connection_id),
+        handler: NotifyHandler::One(*connection_id),
     });
 }
 
@@ -3236,7 +3314,8 @@ fn peer_removed_from_mesh(
         .get(&peer_id)
         .expect("To be connected to peer.")
         .connections
-        .first()
+        .keys()
+        .next()
         .expect("There should be at least one connection to a peer.");
 
     if let Some(topics) = known_topics {
@@ -3380,7 +3459,7 @@ impl fmt::Debug for PublishConfig {
 #[cfg(test)]
 mod local_test {
     use super::*;
-    use crate::IdentTopic;
+    use crate::{types::RpcOut, IdentTopic};
     use quickcheck::*;
 
     fn test_message() -> RawMessage {

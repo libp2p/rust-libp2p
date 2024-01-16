@@ -1,7 +1,11 @@
-## 0.46.1
+## 0.46.1 - unreleased
+
+- Implement backpressure by diferentiating between priority and non priority messages.
+  Drop `Publish` and `Forward` messages when the queue becomes full.
+  See [PR 4914](https://github.com/libp2p/rust-libp2p/pull/4914)
 
 - Deprecate `Rpc` in preparation for removing it from the public API because it is an internal type.
-  See [PR 4833](https://github.com/libp2p/rust-libp2p/pull/4833). 
+  See [PR 4833](https://github.com/libp2p/rust-libp2p/pull/4833).
 
 ## 0.46.0
 
