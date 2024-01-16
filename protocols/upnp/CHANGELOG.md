@@ -1,6 +1,6 @@
 ## 0.2.1
 - Ignore oneshot sender error when behaviour has dropped.
-  See [PR XXXX](https://github.com/libp2p/rust-libp2p/pull/XXXX).
+  See [PR 5096](https://github.com/libp2p/rust-libp2p/pull/5096).
 
 ## 0.2.0
 
