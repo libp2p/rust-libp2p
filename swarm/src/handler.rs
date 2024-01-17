@@ -386,17 +386,19 @@ impl<'a> ProtocolsChange<'a> {
         buffer: &'a mut Vec<StreamProtocol>,
     ) -> SmallVec<[Self; 2]> {
         buffer.clear();
-        // this is used as mark-and-sweep flag, we assume all values in the existing_protocols are
-        // same, since later `retain` ensures that
-        let keep_marker = !existing_protocols.values().next().copied().unwrap_or(false);
+
+        for v in existing_protocols.values_mut() {
+            *v = false;
+        }
+
         let mut new_protocol_count = 0;
         for new_protocol in new_protocols {
             existing_protocols
                 .entry(AsStrHashEq(new_protocol))
-                .and_modify(|v| *v = keep_marker)
+                .and_modify(|v| *v = true)
                 .or_insert_with_key(|k| {
                     buffer.extend(StreamProtocol::try_from_owned(k.0.as_ref().to_owned()).ok());
-                    keep_marker
+                    true
                 });
             new_protocol_count += 1;
         }
