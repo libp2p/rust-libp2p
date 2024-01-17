@@ -189,7 +189,7 @@ where
         max_negotiating_inbound_streams: usize,
         idle_timeout: Duration,
     ) -> Self {
-        let local_supported_protocols = gather_supported_protocols(&handler);
+        let initial_protocols = gather_supported_protocols(&handler);
 
         if !local_supported_protocols.is_empty() {
             let temp = local_supported_protocols
