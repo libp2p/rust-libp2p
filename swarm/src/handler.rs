@@ -409,8 +409,10 @@ impl<'a> ProtocolsChange<'a> {
         existing_protocols.retain(|k, v| {
             if *v != keep_marker {
                 buffer.extend(StreamProtocol::try_from_owned(k.0.as_ref().to_owned()).ok());
+                false
+            } else {
+            	true
             }
-            *v == keep_marker
         });
 
         let (added, removed) = buffer.split_at(added_count);
