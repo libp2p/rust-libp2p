@@ -6749,7 +6749,7 @@ name = "websocket-server"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "base64 0.21.5",
+ "base64 0.21.7",
  "clap",
  "futures",
  "futures-timer",
@@ -6773,7 +6773,7 @@ dependencies = [
  "env_logger 0.10.1",
  "futures",
  "futures-timer",
- "getrandom 0.2.11",
+ "getrandom 0.2.12",
  "libp2p",
  "libp2p-core",
  "libp2p-identity",

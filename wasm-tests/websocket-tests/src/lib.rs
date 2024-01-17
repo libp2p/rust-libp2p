@@ -38,6 +38,7 @@ fn build_behaviour(key: &Keypair) -> Behaviour {
 async fn connect() -> Result<(), Box<dyn Error>> {
 
     let server_listen_multiaddr = env!("SERVER_LISTEN_MULTIADDRESS");
+    let timeout = Duration::from_secs(5);
 
     #[cfg(not(target_arch = "wasm32"))]
     let swarm_builder = SwarmBuilder::with_new_identity()
@@ -45,12 +46,13 @@ async fn connect() -> Result<(), Box<dyn Error>> {
         .with_websocket(noise::Config::new, yamux::Config::default)
         .await?;
 
-    //#[cfg(target_arch = "wasm32")]
+    #[cfg(target_arch = "wasm32")]
     let swarm_builder = SwarmBuilder::with_new_identity()
         .with_wasm_bindgen()
         .with_other_transport(|local_key| {
             Ok(libp2p_websocket_websys::Transport::default()
                 .upgrade(libp2p_core::upgrade::Version::V1)
+
                 .authenticate(
                     noise::Config::new(&local_key)
                         .context("failed to initialise noise")?,
@@ -61,6 +63,7 @@ async fn connect() -> Result<(), Box<dyn Error>> {
 
     let mut swarm = swarm_builder
         .with_behaviour(build_behaviour)?
+        .with_swarm_config(|c| c.with_idle_connection_timeout(timeout))
         .build();
 
     let opts = DialOpts::peer_id("12D3KooWNbGStz2dMnBZYdAvuchWW4xfeHrjHboP1hiq6XexRKEf".parse().context("failed to parse peer id")?)
