@@ -9,7 +9,7 @@ license = "MIT"
 release = false
 
 [dependencies]
-clap = { version = "4.4.12", features = ["derive"] }
+clap = { version = "4.4.16", features = ["derive"] }
 futures = "0.3.30"
 futures-timer = "3.0"
 libp2p = { path = "../../libp2p", features = [ "dns", "dcutr", "identify", "macros", "noise", "ping", "quic", "relay", "rendezvous", "tcp", "tokio", "yamux"] }
