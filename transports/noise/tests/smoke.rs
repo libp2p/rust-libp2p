@@ -30,7 +30,7 @@ use tracing_subscriber::EnvFilter;
 
 #[allow(dead_code)]
 fn core_upgrade_compat() {
-    // Tests API compaibility with the libp2p-core upgrade API,
+    // Tests API compatibility with the libp2p-core upgrade API,
     // i.e. if it compiles, the "test" is considered a success.
     let id_keys = identity::Keypair::generate_ed25519();
     let noise = noise::Config::new(&id_keys).unwrap();

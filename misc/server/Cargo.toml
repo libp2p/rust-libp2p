@@ -12,7 +12,7 @@ license = "MIT"
 
 [dependencies]
 base64 = "0.21"
-clap = { version = "4.4.10", features = ["derive"] }
+clap = { version = "4.4.16", features = ["derive"] }
 futures = "0.3"
 futures-timer = "3"
 hyper = { version = "0.14", features = ["server", "tcp", "http1"] }

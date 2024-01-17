@@ -172,17 +172,16 @@ where
 
     /// Returns an `Entry` for the given key, representing the state of the entry
     /// in the routing table.
-    pub(crate) fn entry<'a>(&'a mut self, key: &'a TKey) -> Entry<'a, TKey, TVal> {
-        let index = BucketIndex::new(&self.local_key.as_ref().distance(key));
-        if let Some(i) = index {
-            let bucket = &mut self.buckets[i.get()];
-            if let Some(applied) = bucket.apply_pending() {
-                self.applied_pending.push_back(applied)
-            }
-            Entry::new(bucket, key)
-        } else {
-            Entry::SelfEntry
+    ///
+    /// Returns `None` in case the key points to the local node.
+    pub(crate) fn entry<'a>(&'a mut self, key: &'a TKey) -> Option<Entry<'a, TKey, TVal>> {
+        let index = BucketIndex::new(&self.local_key.as_ref().distance(key))?;
+
+        let bucket = &mut self.buckets[index.get()];
+        if let Some(applied) = bucket.apply_pending() {
+            self.applied_pending.push_back(applied)
         }
+        Some(Entry::new(bucket, key))
     }
 
     /// Returns an iterator over all buckets.
@@ -627,7 +626,7 @@ mod tests {
         let other_id = Key::from(PeerId::random());
 
         let mut table = KBucketsTable::<_, ()>::new(local_key, Duration::from_secs(5));
-        if let Entry::Absent(entry) = table.entry(&other_id) {
+        if let Some(Entry::Absent(entry)) = table.entry(&other_id) {
             match entry.insert((), NodeStatus::Connected) {
                 InsertResult::Inserted => (),
                 _ => panic!(),
@@ -645,10 +644,8 @@ mod tests {
     fn entry_self() {
         let local_key = Key::from(PeerId::random());
         let mut table = KBucketsTable::<_, ()>::new(local_key.clone(), Duration::from_secs(5));
-        match table.entry(&local_key) {
-            Entry::SelfEntry => (),
-            _ => panic!(),
-        }
+
+        assert!(table.entry(&local_key).is_none())
     }
 
     #[test]
@@ -661,7 +658,7 @@ mod tests {
                 break;
             }
             let key = Key::from(PeerId::random());
-            if let Entry::Absent(e) = table.entry(&key) {
+            if let Some(Entry::Absent(e)) = table.entry(&key) {
                 match e.insert((), NodeStatus::Connected) {
                     InsertResult::Inserted => count += 1,
                     _ => continue,
@@ -694,10 +691,10 @@ mod tests {
         let full_bucket_index;
         loop {
             let key = Key::from(PeerId::random());
-            if let Entry::Absent(e) = table.entry(&key) {
+            if let Some(Entry::Absent(e)) = table.entry(&key) {
                 match e.insert((), NodeStatus::Disconnected) {
                     InsertResult::Full => {
-                        if let Entry::Absent(e) = table.entry(&key) {
+                        if let Some(Entry::Absent(e)) = table.entry(&key) {
                             match e.insert((), NodeStatus::Connected) {
                                 InsertResult::Pending { disconnected } => {
                                     expected_applied = AppliedPending {
@@ -732,12 +729,12 @@ mod tests {
         full_bucket.pending_mut().unwrap().set_ready_at(elapsed);
 
         match table.entry(&expected_applied.inserted.key) {
-            Entry::Present(_, NodeStatus::Connected) => {}
+            Some(Entry::Present(_, NodeStatus::Connected)) => {}
             x => panic!("Unexpected entry: {x:?}"),
         }
 
         match table.entry(&expected_applied.evicted.as_ref().unwrap().key) {
-            Entry::Absent(_) => {}
+            Some(Entry::Absent(_)) => {}
             x => panic!("Unexpected entry: {x:?}"),
         }
 
