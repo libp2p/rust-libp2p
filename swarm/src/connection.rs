@@ -156,7 +156,7 @@ where
     local_supported_protocols:
         HashMap<AsStrHashEq<<THandler::InboundProtocol as UpgradeInfoSend>::Info>, bool>,
     remote_supported_protocols: HashSet<StreamProtocol>,
-    temp_protocols: Vec<StreamProtocol>,
+    protocol_buffer: Vec<StreamProtocol>,
 
     idle_timeout: Duration,
     stream_counter: ActiveStreamCounter,
@@ -190,18 +190,17 @@ where
         idle_timeout: Duration,
     ) -> Self {
         let initial_protocols = gather_supported_protocols(&handler);
+        let mut buffer = Vec::new();
 
-        if !local_supported_protocols.is_empty() {
-            let temp = local_supported_protocols
-                .keys()
-                .filter_map(|i| StreamProtocol::try_from_owned(i.0.as_ref().to_owned()).ok())
-                .collect::<Vec<_>>();
+        if !initial_protocols.is_empty() {
             handler.on_connection_event(ConnectionEvent::LocalProtocolsChange(
-                ProtocolsChange::Added(ProtocolsAdded {
-                    protocols: temp.iter(),
-                }),
+                ProtocolsChange::from_initial_protocols(
+                    initial_protocols.keys().map(|e| &e.0),
+                    &mut buffer,
+                ),
             ));
         }
+
         Connection {
             muxing: muxer,
             handler,
@@ -211,9 +210,9 @@ where
             substream_upgrade_protocol_override,
             max_negotiating_inbound_streams,
             requested_substreams: Default::default(),
-            local_supported_protocols,
+            local_supported_protocols: initial_protocols,
             remote_supported_protocols: Default::default(),
-            temp_protocols: Default::default(),
+            protocol_buffer: buffer,
             idle_timeout,
             stream_counter: ActiveStreamCounter::default(),
         }
@@ -261,7 +260,7 @@ where
             substream_upgrade_protocol_override,
             local_supported_protocols: supported_protocols,
             remote_supported_protocols,
-            temp_protocols,
+            protocol_buffer,
             idle_timeout,
             stream_counter,
             ..
@@ -299,10 +298,10 @@ where
                     ProtocolSupport::Added(protocols),
                 )) => {
                     if let Some(added) =
-                        ProtocolsChange::add(remote_supported_protocols, protocols, temp_protocols)
+                        ProtocolsChange::add(remote_supported_protocols, protocols, protocol_buffer)
                     {
                         handler.on_connection_event(ConnectionEvent::RemoteProtocolsChange(added));
-                        remote_supported_protocols.extend(temp_protocols.drain(..));
+                        remote_supported_protocols.extend(protocol_buffer.drain(..));
                     }
                     continue;
                 }
@@ -312,7 +311,7 @@ where
                     if let Some(removed) = ProtocolsChange::remove(
                         remote_supported_protocols,
                         protocols,
-                        temp_protocols,
+                        protocol_buffer,
                     ) {
                         handler
                             .on_connection_event(ConnectionEvent::RemoteProtocolsChange(removed));
@@ -445,7 +444,7 @@ where
             let changes = ProtocolsChange::from_full_sets(
                 supported_protocols,
                 handler.listen_protocol().upgrade().protocol_info(),
-                temp_protocols,
+                protocol_buffer,
             );
 
             if !changes.is_empty() {

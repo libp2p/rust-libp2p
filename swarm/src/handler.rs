@@ -331,6 +331,23 @@ pub enum ProtocolsChange<'a> {
 }
 
 impl<'a> ProtocolsChange<'a> {
+    /// Compute the protocol change for the initial set of protocols.
+    pub(crate) fn from_initial_protocols<'b, T: AsRef<str> + 'b>(
+        new_protocols: impl IntoIterator<Item = &'b T>,
+        buffer: &'a mut Vec<StreamProtocol>,
+    ) -> Self {
+        buffer.clear();
+        buffer.extend(
+            new_protocols
+                .into_iter()
+                .filter_map(|i| StreamProtocol::try_from_owned(i.as_ref().to_owned()).ok()),
+        );
+
+        ProtocolsChange::Added(ProtocolsAdded {
+            protocols: buffer.iter(),
+        })
+    }
+
     /// Compute the [`ProtocolsChange`] that results from adding `to_add` to `existing_protocols`.
     ///
     /// Returns `None` if the change is a no-op, i.e. `to_add` is a subset of `existing_protocols`.
@@ -409,11 +426,11 @@ impl<'a> ProtocolsChange<'a> {
 
         let added_count = buffer.len();
         existing_protocols.retain(|k, v| {
-            if *v != keep_marker {
+            if *v {
+                true
+            } else {
                 buffer.extend(StreamProtocol::try_from_owned(k.0.as_ref().to_owned()).ok());
                 false
-            } else {
-            	true
             }
         });
 
@@ -704,5 +721,86 @@ where
 {
     fn source(&self) -> Option<&(dyn error::Error + 'static)> {
         None
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    fn preprocess(s: &'static str) -> HashSet<StreamProtocol> {
+        s.split_whitespace()
+            .map(|p| StreamProtocol::try_from_owned(format!("/{p}")).unwrap())
+            .collect()
+    }
+
+    #[test]
+    fn test_protocol_remove() {
+        let cases = [
+            ["a b c", "a b", "c", "a b"],
+            ["a b c", "a b c", "", "a b c"],
+            ["a b c", "a b c d", "", "a b c"],
+            ["a b c", "d", "a b c", ""],
+            ["", "d", "", ""],
+        ]
+        .map(|arr| arr.map(preprocess));
+
+        for (i, [mut existing, to_remove, reminig, removed]) in cases.into_iter().enumerate() {
+            let mut buffer = Vec::new();
+
+            let change = ProtocolsChange::remove(&mut existing, to_remove, &mut buffer)
+                .into_iter()
+                .flat_map(|c| match c {
+                    ProtocolsChange::Added(_) => panic!("unexpected added"),
+                    ProtocolsChange::Removed(r) => r.cloned(),
+                })
+                .collect::<HashSet<_>>();
+
+            assert_eq!(existing, reminig, "{i}");
+            assert_eq!(change, removed, "{i}");
+        }
+    }
+
+    #[test]
+    fn test_from_full_sets() {
+        let cases = [
+            ["a b c", "a b", "", "c"],
+            ["a b", "a b c", "c", ""],
+            ["a b", "b c", "c", "a"],
+            ["a b", "c d", "c d", "a b"],
+            ["", "", "", ""],
+        ]
+        .map(|arr| arr.map(preprocess));
+
+        for (i, [existing, new, added, removed]) in cases.into_iter().enumerate() {
+            let mut buffer = Vec::new();
+            let mut existing = existing
+                .iter()
+                .map(|p| (AsStrHashEq(p.as_ref()), true))
+                .collect::<HashMap<_, _>>();
+
+            let changes = ProtocolsChange::from_full_sets(
+                &mut existing,
+                new.iter().map(AsRef::as_ref),
+                &mut buffer,
+            );
+
+            let mut added_changes = HashSet::new();
+            let mut removed_changes = HashSet::new();
+
+            for change in changes {
+                match change {
+                    ProtocolsChange::Added(a) => {
+                        added_changes.extend(a.cloned());
+                    }
+                    ProtocolsChange::Removed(r) => {
+                        removed_changes.extend(r.cloned());
+                    }
+                }
+            }
+
+            assert_eq!(added_changes, added, "{i}");
+            assert_eq!(removed_changes, removed, "{i}");
+        }
     }
 }
