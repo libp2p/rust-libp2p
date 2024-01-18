@@ -3235,6 +3235,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "libp2p-stream"
+version = "0.1.0-alpha"
+dependencies = [
+ "futures",
+ "libp2p-core",
+ "libp2p-identity",
+ "libp2p-swarm",
+ "libp2p-swarm-test",
+ "rand 0.8.5",
+ "tokio",
+ "tracing",
+ "tracing-subscriber",
+ "void",
+]
+
+[[package]]
 name = "libp2p-swarm"
 version = "0.44.1"
 dependencies = [
@@ -5564,6 +5580,20 @@ name = "static_assertions"
 version = "1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a2eb9349b6444b326872e140eb1cf5e7c522154d69e7a0ffb0fb81c06b37543f"
+
+[[package]]
+name = "stream-example"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "futures",
+ "libp2p",
+ "libp2p-stream",
+ "rand 0.8.5",
+ "tokio",
+ "tracing",
+ "tracing-subscriber",
+]
 
 [[package]]
 name = "stringmatch"
