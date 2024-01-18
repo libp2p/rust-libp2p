@@ -476,6 +476,7 @@ where
     }
 
     /// Removes an address of a peer previously added via [`Behaviour::add_address`].
+    #[deprecated(note = "Will be removed with the next breaking release and won't be replaced.")]
     pub fn remove_address(&mut self, peer: &PeerId, address: &Multiaddr) {
         self.addresses.remove(peer, address);
     }

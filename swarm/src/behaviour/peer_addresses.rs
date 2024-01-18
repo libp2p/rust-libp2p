@@ -47,14 +47,18 @@ impl PeerAddresses {
     /// Returns true if the newly added address was not previously in the cache.
     ///
     pub fn add(&mut self, peer: PeerId, address: Multiaddr) -> bool {
-        let address = prepare_addr(&peer, &address);
-        if let Some(cached) = self.0.get_mut(&peer) {
-            cached.insert(address)
-        } else {
-            let mut set: HashSet<Multiaddr> = HashSet::new();
-            set.insert(address);
-            self.0.put(peer, set);
-            true
+        match prepare_addr(&peer, &address) {
+            Ok(address) => {
+                if let Some(cached) = self.0.get_mut(&peer) {
+                    cached.insert(address)
+                } else {
+                    let mut set: HashSet<Multiaddr> = HashSet::new();
+                    set.insert(address);
+                    self.0.put(peer, set);
+                    true
+                }
+            }
+            Err(_) => false,
         }
     }
 
@@ -66,19 +70,18 @@ impl PeerAddresses {
     /// Removes address from peer addresses cache.
     /// Returns true if the address was removed.
     pub fn remove(&mut self, peer: &PeerId, address: &Multiaddr) -> bool {
-        self.0.get_mut(peer).map_or_else(
-            || false,
-            |addrs| {
-                let address = prepare_addr(peer, address);
-                addrs.remove(&address)
+        match self.0.get_mut(peer) {
+            Some(addrs) => match prepare_addr(peer, address) {
+                Ok(address) => addrs.remove(&address),
+                Err(_) => false,
             },
-        )
+            None => false,
+        }
     }
 }
 
-fn prepare_addr(peer: &PeerId, addr: &Multiaddr) -> Multiaddr {
-    let addr = addr.clone();
-    addr.clone().with_p2p(*peer).unwrap_or(addr)
+fn prepare_addr(peer: &PeerId, addr: &Multiaddr) -> Result<Multiaddr, Multiaddr> {
+    addr.clone().with_p2p(*peer)
 }
 
 impl Default for PeerAddresses {
