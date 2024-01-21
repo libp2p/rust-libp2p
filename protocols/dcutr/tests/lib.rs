@@ -203,7 +203,7 @@ async fn wait_for_reservation(
             SwarmEvent::ExternalAddrConfirmed { address } if !is_renewal => {
                 assert_eq!(address, client_addr);
             }
-            SwarmEvent::NewExternalAddrOfPeer { peer_id, address } => {}
+            SwarmEvent::NewExternalAddrOfPeer { .. } => {}
             e => panic!("{e:?}"),
         }
     }
