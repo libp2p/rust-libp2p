@@ -6,17 +6,18 @@ use libp2p_identity::PeerId;
 
 use lru::LruCache;
 
-use std::collections::HashSet;
 use std::num::NonZeroUsize;
 
 /// Struct for tracking peers' external addresses of the [`Swarm`](crate::Swarm).
 #[derive(Debug)]
-pub struct PeerAddresses(LruCache<PeerId, HashSet<Multiaddr>>);
+pub struct PeerAddresses(LruCache<PeerId, LruCache<Multiaddr, ()>>);
 
 impl PeerAddresses {
-    /// Creates cache with capacity of `cache_size`.
-    pub fn new(cache_size: NonZeroUsize) -> Self {
-        Self(LruCache::new(cache_size))
+    /// Creates a [`PeerAddresses`] cache with capacity for the given number of peers.
+    ///
+    /// For each peer, we will at most store 10 addresses.
+    pub fn new(number_of_peers: NonZeroUsize) -> Self {
+        Self(LruCache::new(number_of_peers))
     }
 
     /// Feed a [`FromSwarm`] event to this struct.
@@ -50,11 +51,12 @@ impl PeerAddresses {
         match prepare_addr(&peer, &address) {
             Ok(address) => {
                 if let Some(cached) = self.0.get_mut(&peer) {
-                    cached.insert(address)
+                    cached.put(address, ()).is_none()
                 } else {
-                    let mut set: HashSet<Multiaddr> = HashSet::new();
-                    set.insert(address);
+                    let mut set = LruCache::new(NonZeroUsize::new(10).expect("10 > 0"));
+                    set.put(address, ());
                     self.0.put(peer, set);
+
                     true
                 }
             }
@@ -63,8 +65,12 @@ impl PeerAddresses {
     }
 
     /// Returns peer's external addresses.
-    pub fn get(&mut self, peer: &PeerId) -> impl Iterator<Item = Multiaddr> {
-        self.0.get(peer).cloned().unwrap_or_default().into_iter()
+    pub fn get(&mut self, peer: &PeerId) -> impl Iterator<Item = Multiaddr> + '_ {
+        self.0
+            .get(peer)
+            .into_iter()
+            .flat_map(|c| c.iter().map(|(m, ())| m))
+            .cloned()
     }
 
     /// Removes address from peer addresses cache.
@@ -72,7 +78,7 @@ impl PeerAddresses {
     pub fn remove(&mut self, peer: &PeerId, address: &Multiaddr) -> bool {
         match self.0.get_mut(peer) {
             Some(addrs) => match prepare_addr(peer, address) {
-                Ok(address) => addrs.remove(&address),
+                Ok(address) => addrs.pop(&address).is_some(),
                 Err(_) => false,
             },
             None => false,

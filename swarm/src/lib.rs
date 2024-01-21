@@ -299,6 +299,8 @@ pub enum SwarmEvent<TBehaviourOutEvent> {
     ExternalAddrConfirmed { address: Multiaddr },
     /// An external address of the local node expired, i.e. is no-longer confirmed.
     ExternalAddrExpired { address: Multiaddr },
+    /// We have discovered a new address of a peer.
+    NewExternalAddrOfPeer { peer_id: PeerId, address: Multiaddr },
 }
 
 impl<TBehaviourOutEvent> SwarmEvent<TBehaviourOutEvent> {
@@ -1188,12 +1190,14 @@ where
                     self.pool.disconnect(peer_id);
                 }
             },
-            ToSwarm::NewExternalAddrOfPeer { addr, peer_id } => {
+            ToSwarm::NewExternalAddrOfPeer { peer_id, address } => {
                 self.behaviour
                     .on_swarm_event(FromSwarm::NewExternalAddrOfPeer(NewExternalAddrOfPeer {
                         peer_id,
-                        addr: &addr,
-                    }))
+                        addr: &address,
+                    }));
+                self.pending_swarm_events
+                    .push_back(SwarmEvent::NewExternalAddrOfPeer { peer_id, address });
             }
         }
     }

@@ -267,10 +267,6 @@ impl NetworkBehaviour for Behaviour {
                 info.listen_addrs
                     .retain(|addr| multiaddr_matches_peer_id(addr, &peer_id));
 
-                // Replace existing addresses to prevent other peer from filling up our memory.
-                self.discovered_peers
-                    .put(peer_id, info.listen_addrs.iter().cloned());
-
                 let observed = info.observed_addr.clone();
                 self.events
                     .push_back(ToSwarm::GenerateEvent(Event::Received {
@@ -283,7 +279,7 @@ impl NetworkBehaviour for Behaviour {
                         if discovered_peers.add(peer_id, address.clone()) {
                             self.events.push_back(ToSwarm::NewExternalAddrOfPeer {
                                 peer_id,
-                                addr: address.clone(),
+                                address: address.clone(),
                             });
                         }
                     }
@@ -467,17 +463,6 @@ impl PeerCache {
 
     fn enabled(size: NonZeroUsize) -> Self {
         Self(Some(PeerAddresses::new(size)))
-    }
-
-    fn put(&mut self, peer: PeerId, addresses: impl Iterator<Item = Multiaddr>) {
-        let cache = match self.0.as_mut() {
-            None => return,
-            Some(cache) => cache,
-        };
-
-        for address in addresses {
-            cache.add(peer, address);
-        }
     }
 
     fn get(&mut self, peer: &PeerId) -> Vec<Multiaddr> {

@@ -307,7 +307,7 @@ pub enum ToSwarm<TOutEvent, TInEvent> {
     },
 
     /// Reports external address of a remote peer to the [`Swarm`](crate::Swarm) and through that to other [`NetworkBehaviour`]s.
-    NewExternalAddrOfPeer { peer_id: PeerId, addr: Multiaddr },
+    NewExternalAddrOfPeer { peer_id: PeerId, address: Multiaddr },
 }
 
 impl<TOutEvent, TInEventOld> ToSwarm<TOutEvent, TInEventOld> {
@@ -340,9 +340,13 @@ impl<TOutEvent, TInEventOld> ToSwarm<TOutEvent, TInEventOld> {
             ToSwarm::NewExternalAddrCandidate(addr) => ToSwarm::NewExternalAddrCandidate(addr),
             ToSwarm::ExternalAddrConfirmed(addr) => ToSwarm::ExternalAddrConfirmed(addr),
             ToSwarm::ExternalAddrExpired(addr) => ToSwarm::ExternalAddrExpired(addr),
-            ToSwarm::NewExternalAddrOfPeer { addr, peer_id } => {
-                ToSwarm::NewExternalAddrOfPeer { addr, peer_id }
-            }
+            ToSwarm::NewExternalAddrOfPeer {
+                address: addr,
+                peer_id,
+            } => ToSwarm::NewExternalAddrOfPeer {
+                address: addr,
+                peer_id,
+            },
         }
     }
 }
@@ -374,9 +378,13 @@ impl<TOutEvent, THandlerIn> ToSwarm<TOutEvent, THandlerIn> {
                 peer_id,
                 connection,
             },
-            ToSwarm::NewExternalAddrOfPeer { addr, peer_id } => {
-                ToSwarm::NewExternalAddrOfPeer { addr, peer_id }
-            }
+            ToSwarm::NewExternalAddrOfPeer {
+                address: addr,
+                peer_id,
+            } => ToSwarm::NewExternalAddrOfPeer {
+                address: addr,
+                peer_id,
+            },
         }
     }
 }
