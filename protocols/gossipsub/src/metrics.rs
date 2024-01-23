@@ -23,7 +23,7 @@
 
 use std::collections::HashMap;
 
-use prometheus_client::encoding::text::Encode;
+use prometheus_client::encoding::{EncodeLabelSet, EncodeLabelValue};
 use prometheus_client::metrics::counter::Counter;
 use prometheus_client::metrics::family::{Family, MetricConstructor};
 use prometheus_client::metrics::gauge::Gauge;
@@ -99,7 +99,7 @@ impl Default for Config {
 type EverSubscribed = bool;
 
 /// A collection of metrics used throughout the Gossipsub behaviour.
-pub struct Metrics {
+pub(crate) struct Metrics {
     /* Configuration parameters */
     /// Maximum number of topics for which we store metrics. This helps keep the metrics bounded.
     max_topics: usize,
@@ -177,7 +177,7 @@ pub struct Metrics {
 }
 
 impl Metrics {
-    pub fn new(registry: &mut Registry, config: Config) -> Self {
+    pub(crate) fn new(registry: &mut Registry, config: Config) -> Self {
         // Destructure the config to be sure everything is used.
         let Config {
             max_topics,
@@ -188,7 +188,7 @@ impl Metrics {
         macro_rules! register_family {
             ($name:expr, $help:expr) => {{
                 let fam = Family::default();
-                registry.register($name, $help, Box::new(fam.clone()));
+                registry.register($name, $help, fam.clone());
                 fam
             }};
         }
@@ -269,7 +269,7 @@ impl Metrics {
         registry.register(
             "score_per_mesh",
             "Histogram of scores per mesh topic",
-            Box::new(score_per_mesh.clone()),
+            score_per_mesh.clone(),
         );
 
         let scoring_penalties = register_family!(
@@ -285,7 +285,7 @@ impl Metrics {
         registry.register(
             "heartbeat_duration",
             "Histogram of observed heartbeat durations",
-            Box::new(heartbeat_duration.clone()),
+            heartbeat_duration.clone(),
         );
 
         let topic_iwant_msgs = register_family!(
@@ -297,7 +297,7 @@ impl Metrics {
             registry.register(
                 "memcache_misses",
                 "Number of times a message is not found in the duplicate cache when validating",
-                Box::new(metric.clone()),
+                metric.clone(),
             );
             metric
         };
@@ -356,11 +356,11 @@ impl Metrics {
     }
 
     /// Register how many peers do we known are subscribed to this topic.
-    pub fn set_topic_peers(&mut self, topic: &TopicHash, count: usize) {
+    pub(crate) fn set_topic_peers(&mut self, topic: &TopicHash, count: usize) {
         if self.register_topic(topic).is_ok() {
             self.topic_peers_count
                 .get_or_create(topic)
-                .set(count as u64);
+                .set(count as i64);
         }
     }
 
@@ -368,7 +368,7 @@ impl Metrics {
 
     /// Registers the subscription to a topic if the configured limits allow it.
     /// Sets the registered number of peers in the mesh to 0.
-    pub fn joined(&mut self, topic: &TopicHash) {
+    pub(crate) fn joined(&mut self, topic: &TopicHash) {
         if self.topic_info.contains_key(topic) || self.topic_info.len() < self.max_topics {
             self.topic_info.insert(topic.clone(), true);
             let was_subscribed = self.topic_subscription_status.get_or_create(topic).set(1);
@@ -379,7 +379,7 @@ impl Metrics {
 
     /// Registers the unsubscription to a topic if the topic was previously allowed.
     /// Sets the registered number of peers in the mesh to 0.
-    pub fn left(&mut self, topic: &TopicHash) {
+    pub(crate) fn left(&mut self, topic: &TopicHash) {
         if self.topic_info.contains_key(topic) {
             // Depending on the configured topic bounds we could miss a mesh topic.
             // So, check first if the topic was previously allowed.
@@ -390,7 +390,7 @@ impl Metrics {
     }
 
     /// Register the inclusion of peers in our mesh due to some reason.
-    pub fn peers_included(&mut self, topic: &TopicHash, reason: Inclusion, count: usize) {
+    pub(crate) fn peers_included(&mut self, topic: &TopicHash, reason: Inclusion, count: usize) {
         if self.register_topic(topic).is_ok() {
             self.mesh_peer_inclusion_events
                 .get_or_create(&InclusionLabel {
@@ -402,7 +402,7 @@ impl Metrics {
     }
 
     /// Register the removal of peers in our mesh due to some reason.
-    pub fn peers_removed(&mut self, topic: &TopicHash, reason: Churn, count: usize) {
+    pub(crate) fn peers_removed(&mut self, topic: &TopicHash, reason: Churn, count: usize) {
         if self.register_topic(topic).is_ok() {
             self.mesh_peer_churn_events
                 .get_or_create(&ChurnLabel {
@@ -414,36 +414,36 @@ impl Metrics {
     }
 
     /// Register the current number of peers in our mesh for this topic.
-    pub fn set_mesh_peers(&mut self, topic: &TopicHash, count: usize) {
+    pub(crate) fn set_mesh_peers(&mut self, topic: &TopicHash, count: usize) {
         if self.register_topic(topic).is_ok() {
             // Due to limits, this topic could have not been allowed, so we check.
-            self.mesh_peer_counts.get_or_create(topic).set(count as u64);
+            self.mesh_peer_counts.get_or_create(topic).set(count as i64);
         }
     }
 
     /// Register that an invalid message was received on a specific topic.
-    pub fn register_invalid_message(&mut self, topic: &TopicHash) {
+    pub(crate) fn register_invalid_message(&mut self, topic: &TopicHash) {
         if self.register_topic(topic).is_ok() {
             self.invalid_messages.get_or_create(topic).inc();
         }
     }
 
     /// Register a score penalty.
-    pub fn register_score_penalty(&mut self, penalty: Penalty) {
+    pub(crate) fn register_score_penalty(&mut self, penalty: Penalty) {
         self.scoring_penalties
             .get_or_create(&PenaltyLabel { penalty })
             .inc();
     }
 
     /// Registers that a message was published on a specific topic.
-    pub fn register_published_message(&mut self, topic: &TopicHash) {
+    pub(crate) fn register_published_message(&mut self, topic: &TopicHash) {
         if self.register_topic(topic).is_ok() {
             self.topic_msg_published.get_or_create(topic).inc();
         }
     }
 
     /// Register sending a message over a topic.
-    pub fn msg_sent(&mut self, topic: &TopicHash, bytes: usize) {
+    pub(crate) fn msg_sent(&mut self, topic: &TopicHash, bytes: usize) {
         if self.register_topic(topic).is_ok() {
             self.topic_msg_sent_counts.get_or_create(topic).inc();
             self.topic_msg_sent_bytes
@@ -453,14 +453,14 @@ impl Metrics {
     }
 
     /// Register that a message was received (and was not a duplicate).
-    pub fn msg_recvd(&mut self, topic: &TopicHash) {
+    pub(crate) fn msg_recvd(&mut self, topic: &TopicHash) {
         if self.register_topic(topic).is_ok() {
             self.topic_msg_recv_counts.get_or_create(topic).inc();
         }
     }
 
     /// Register that a message was received (could have been a duplicate).
-    pub fn msg_recvd_unfiltered(&mut self, topic: &TopicHash, bytes: usize) {
+    pub(crate) fn msg_recvd_unfiltered(&mut self, topic: &TopicHash, bytes: usize) {
         if self.register_topic(topic).is_ok() {
             self.topic_msg_recv_counts_unfiltered
                 .get_or_create(topic)
@@ -471,7 +471,11 @@ impl Metrics {
         }
     }
 
-    pub fn register_msg_validation(&mut self, topic: &TopicHash, validation: &MessageAcceptance) {
+    pub(crate) fn register_msg_validation(
+        &mut self,
+        topic: &TopicHash,
+        validation: &MessageAcceptance,
+    ) {
         if self.register_topic(topic).is_ok() {
             match validation {
                 MessageAcceptance::Accept => self.accepted_messages.get_or_create(topic).inc(),
@@ -482,38 +486,38 @@ impl Metrics {
     }
 
     /// Register a memcache miss.
-    pub fn memcache_miss(&mut self) {
+    pub(crate) fn memcache_miss(&mut self) {
         self.memcache_misses.inc();
     }
 
     /// Register sending an IWANT msg for this topic.
-    pub fn register_iwant(&mut self, topic: &TopicHash) {
+    pub(crate) fn register_iwant(&mut self, topic: &TopicHash) {
         if self.register_topic(topic).is_ok() {
             self.topic_iwant_msgs.get_or_create(topic).inc();
         }
     }
 
     /// Observes a heartbeat duration.
-    pub fn observe_heartbeat_duration(&mut self, millis: u64) {
+    pub(crate) fn observe_heartbeat_duration(&mut self, millis: u64) {
         self.heartbeat_duration.observe(millis as f64);
     }
 
     /// Observe a score of a mesh peer.
-    pub fn observe_mesh_peers_score(&mut self, topic: &TopicHash, score: f64) {
+    pub(crate) fn observe_mesh_peers_score(&mut self, topic: &TopicHash, score: f64) {
         if self.register_topic(topic).is_ok() {
             self.score_per_mesh.get_or_create(topic).observe(score);
         }
     }
 
     /// Register a new peers connection based on its protocol.
-    pub fn peer_protocol_connected(&mut self, kind: PeerKind) {
+    pub(crate) fn peer_protocol_connected(&mut self, kind: PeerKind) {
         self.peers_per_protocol
             .get_or_create(&ProtocolLabel { protocol: kind })
             .inc();
     }
 
     /// Removes a peer from the counter based on its protocol when it disconnects.
-    pub fn peer_protocol_disconnected(&mut self, kind: PeerKind) {
+    pub(crate) fn peer_protocol_disconnected(&mut self, kind: PeerKind) {
         let metric = self
             .peers_per_protocol
             .get_or_create(&ProtocolLabel { protocol: kind });
@@ -525,8 +529,8 @@ impl Metrics {
 }
 
 /// Reasons why a peer was included in the mesh.
-#[derive(PartialEq, Eq, Hash, Encode, Clone)]
-pub enum Inclusion {
+#[derive(PartialEq, Eq, Hash, EncodeLabelValue, Clone, Debug)]
+pub(crate) enum Inclusion {
     /// Peer was a fanaout peer.
     Fanout,
     /// Included from random selection.
@@ -538,8 +542,8 @@ pub enum Inclusion {
 }
 
 /// Reasons why a peer was removed from the mesh.
-#[derive(PartialEq, Eq, Hash, Encode, Clone)]
-pub enum Churn {
+#[derive(PartialEq, Eq, Hash, EncodeLabelValue, Clone, Debug)]
+pub(crate) enum Churn {
     /// Peer disconnected.
     Dc,
     /// Peer had a bad score.
@@ -553,8 +557,8 @@ pub enum Churn {
 }
 
 /// Kinds of reasons a peer's score has been penalized
-#[derive(PartialEq, Eq, Hash, Encode, Clone)]
-pub enum Penalty {
+#[derive(PartialEq, Eq, Hash, EncodeLabelValue, Clone, Debug)]
+pub(crate) enum Penalty {
     /// A peer grafted before waiting the back-off time.
     GraftBackoff,
     /// A Peer did not respond to an IWANT request in time.
@@ -566,27 +570,27 @@ pub enum Penalty {
 }
 
 /// Label for the mesh inclusion event metrics.
-#[derive(PartialEq, Eq, Hash, Encode, Clone)]
+#[derive(PartialEq, Eq, Hash, EncodeLabelSet, Clone, Debug)]
 struct InclusionLabel {
     hash: String,
     reason: Inclusion,
 }
 
 /// Label for the mesh churn event metrics.
-#[derive(PartialEq, Eq, Hash, Encode, Clone)]
+#[derive(PartialEq, Eq, Hash, EncodeLabelSet, Clone, Debug)]
 struct ChurnLabel {
     hash: String,
     reason: Churn,
 }
 
 /// Label for the kinds of protocols peers can connect as.
-#[derive(PartialEq, Eq, Hash, Encode, Clone)]
+#[derive(PartialEq, Eq, Hash, EncodeLabelSet, Clone, Debug)]
 struct ProtocolLabel {
     protocol: PeerKind,
 }
 
 /// Label for the kinds of scoring penalties that can occur
-#[derive(PartialEq, Eq, Hash, Encode, Clone)]
+#[derive(PartialEq, Eq, Hash, EncodeLabelSet, Clone, Debug)]
 struct PenaltyLabel {
     penalty: Penalty,
 }

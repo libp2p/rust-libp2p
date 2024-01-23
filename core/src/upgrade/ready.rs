@@ -19,7 +19,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::upgrade::{InboundUpgrade, OutboundUpgrade, ProtocolName, UpgradeInfo};
+use crate::upgrade::{InboundUpgrade, OutboundUpgrade, UpgradeInfo};
 use futures::future;
 use std::iter;
 use void::Void;
@@ -38,7 +38,7 @@ impl<P> ReadyUpgrade<P> {
 
 impl<P> UpgradeInfo for ReadyUpgrade<P>
 where
-    P: ProtocolName + Clone,
+    P: AsRef<str> + Clone,
 {
     type Info = P;
     type InfoIter = iter::Once<P>;
@@ -50,7 +50,7 @@ where
 
 impl<C, P> InboundUpgrade<C> for ReadyUpgrade<P>
 where
-    P: ProtocolName + Clone,
+    P: AsRef<str> + Clone,
 {
     type Output = C;
     type Error = Void;
@@ -63,7 +63,7 @@ where
 
 impl<C, P> OutboundUpgrade<C> for ReadyUpgrade<P>
 where
-    P: ProtocolName + Clone,
+    P: AsRef<str> + Clone,
 {
     type Output = C;
     type Error = Void;

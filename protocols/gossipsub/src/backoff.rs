@@ -20,19 +20,19 @@
 
 //! Data structure for efficiently storing known back-off's when pruning peers.
 use crate::topic::TopicHash;
-use libp2p_core::PeerId;
+use instant::Instant;
+use libp2p_identity::PeerId;
 use std::collections::{
     hash_map::{Entry, HashMap},
     HashSet,
 };
 use std::time::Duration;
-use wasm_timer::Instant;
 
 #[derive(Copy, Clone)]
 struct HeartbeatIndex(usize);
 
 /// Stores backoffs in an efficient manner.
-pub struct BackoffStorage {
+pub(crate) struct BackoffStorage {
     /// Stores backoffs and the index in backoffs_by_heartbeat per peer per topic.
     backoffs: HashMap<TopicHash, HashMap<PeerId, (Instant, HeartbeatIndex)>>,
     /// Stores peer topic pairs per heartbeat (this is cyclic the current index is
@@ -52,7 +52,7 @@ impl BackoffStorage {
             as usize
     }
 
-    pub fn new(
+    pub(crate) fn new(
         prune_backoff: &Duration,
         heartbeat_interval: Duration,
         backoff_slack: u32,
@@ -71,7 +71,7 @@ impl BackoffStorage {
 
     /// Updates the backoff for a peer (if there is already a more restrictive backoff then this call
     /// doesn't change anything).
-    pub fn update_backoff(&mut self, topic: &TopicHash, peer: &PeerId, time: Duration) {
+    pub(crate) fn update_backoff(&mut self, topic: &TopicHash, peer: &PeerId, time: Duration) {
         let instant = Instant::now() + time;
         let insert_into_backoffs_by_heartbeat =
             |heartbeat_index: HeartbeatIndex,
@@ -86,12 +86,7 @@ impl BackoffStorage {
                 backoffs_by_heartbeat[index].insert(pair);
                 HeartbeatIndex(index)
             };
-        match self
-            .backoffs
-            .entry(topic.clone())
-            .or_insert_with(HashMap::new)
-            .entry(*peer)
-        {
+        match self.backoffs.entry(topic.clone()).or_default().entry(*peer) {
             Entry::Occupied(mut o) => {
                 let (backoff, index) = o.get();
                 if backoff < &instant {
@@ -127,13 +122,13 @@ impl BackoffStorage {
     ///
     /// This method should be used for deciding if we can already send a GRAFT to a previously
     /// backoffed peer.
-    pub fn is_backoff_with_slack(&self, topic: &TopicHash, peer: &PeerId) -> bool {
+    pub(crate) fn is_backoff_with_slack(&self, topic: &TopicHash, peer: &PeerId) -> bool {
         self.backoffs
             .get(topic)
             .map_or(false, |m| m.contains_key(peer))
     }
 
-    pub fn get_backoff_time(&self, topic: &TopicHash, peer: &PeerId) -> Option<Instant> {
+    pub(crate) fn get_backoff_time(&self, topic: &TopicHash, peer: &PeerId) -> Option<Instant> {
         Self::get_backoff_time_from_backoffs(&self.backoffs, topic, peer)
     }
 
@@ -149,7 +144,7 @@ impl BackoffStorage {
 
     /// Applies a heartbeat. That should be called regularly in intervals of length
     /// `heartbeat_interval`.
-    pub fn heartbeat(&mut self) {
+    pub(crate) fn heartbeat(&mut self) {
         // Clean up backoffs_by_heartbeat
         if let Some(s) = self.backoffs_by_heartbeat.get_mut(self.heartbeat_index.0) {
             let backoffs = &mut self.backoffs;

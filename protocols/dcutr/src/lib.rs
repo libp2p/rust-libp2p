@@ -23,16 +23,21 @@
 
 #![cfg_attr(docsrs, feature(doc_cfg, doc_auto_cfg))]
 
-pub mod behaviour;
+mod behaviour;
 mod handler;
 mod protocol;
 
-pub use protocol::{
-    inbound::UpgradeError as InboundUpgradeError, outbound::UpgradeError as OutboundUpgradeError,
-    PROTOCOL_NAME,
-};
+mod proto {
+    #![allow(unreachable_pub)]
+    include!("generated/mod.rs");
+    pub(crate) use self::holepunch::pb::{mod_HolePunch::*, HolePunch};
+}
 
-#[allow(clippy::derive_partial_eq_without_eq)]
-mod message_proto {
-    include!(concat!(env!("OUT_DIR"), "/holepunch.pb.rs"));
+pub use behaviour::{Behaviour, Error, Event};
+pub use protocol::PROTOCOL_NAME;
+pub mod inbound {
+    pub use crate::protocol::inbound::ProtocolViolation;
+}
+pub mod outbound {
+    pub use crate::protocol::outbound::ProtocolViolation;
 }

@@ -1,0 +1,5 @@
+error: expected a string literal
+ --> tests/ui/fail/to_swarm_not_string.rs:4:25
+  |
+4 | #[behaviour(out_event = FooEvent, prelude = "libp2p_swarm::derive_prelude")]
+  |                         ^^^^^^^^

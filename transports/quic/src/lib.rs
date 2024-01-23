@@ -32,15 +32,15 @@
 //! # fn main() -> std::io::Result<()> {
 //! #
 //! use libp2p_quic as quic;
-//! use libp2p_core::{Multiaddr, Transport};
+//! use libp2p_core::{Multiaddr, Transport, transport::ListenerId};
 //!
-//! let keypair = libp2p_core::identity::Keypair::generate_ed25519();
+//! let keypair = libp2p_identity::Keypair::generate_ed25519();
 //! let quic_config = quic::Config::new(&keypair);
 //!
 //! let mut quic_transport = quic::async_std::Transport::new(quic_config);
 //!
 //! let addr = "/ip4/127.0.0.1/udp/12345/quic-v1".parse().expect("address should be valid");
-//! quic_transport.listen_on(addr).expect("listen error.");
+//! quic_transport.listen_on(ListenerId::next(), addr).expect("listen error.");
 //! #
 //! # Ok(())
 //! # }
@@ -57,13 +57,17 @@
 
 #![cfg_attr(docsrs, feature(doc_cfg, doc_auto_cfg))]
 
+mod config;
 mod connection;
-mod endpoint;
+mod hole_punching;
 mod provider;
 mod transport;
 
-pub use connection::{Connecting, Connection, Substream};
-pub use endpoint::Config;
+use std::net::SocketAddr;
+
+pub use config::Config;
+pub use connection::{Connecting, Connection, Stream};
+
 #[cfg(feature = "async-std")]
 pub use provider::async_std;
 #[cfg(feature = "tokio")]
@@ -86,22 +90,25 @@ pub enum Error {
     #[error(transparent)]
     Io(#[from] std::io::Error),
 
-    /// The task spawned in [`Provider::spawn`] to drive
-    /// the quic endpoint has crashed.
-    #[error("Endpoint driver crashed")]
-    EndpointDriverCrashed,
-
     /// The [`Connecting`] future timed out.
     #[error("Handshake with the remote timed out.")]
     HandshakeTimedOut,
+
+    /// Error when `Transport::dial_as_listener` is called without an active listener.
+    #[error("Tried to dial as listener without an active listener.")]
+    NoActiveListenerForDialAsListener,
+
+    /// Error when holepunching for a remote is already in progress
+    #[error("Already punching hole for {0}).")]
+    HolePunchInProgress(SocketAddr),
 }
 
 /// Dialing a remote peer failed.
 #[derive(Debug, thiserror::Error)]
 #[error(transparent)]
-pub struct ConnectError(#[from] quinn_proto::ConnectError);
+pub struct ConnectError(quinn::ConnectError);
 
 /// Error on an established [`Connection`].
 #[derive(Debug, thiserror::Error)]
 #[error(transparent)]
-pub struct ConnectionError(#[from] quinn_proto::ConnectionError);
+pub struct ConnectionError(quinn::ConnectionError);

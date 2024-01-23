@@ -1,34 +1,37 @@
 [package]
 name = "libp2p-quic"
-version = "0.7.0-alpha.2"
+version = "0.10.2"
 authors = ["Parity Technologies <admin@parity.io>"]
 edition = "2021"
-rust-version = "1.62.0"
+rust-version = { workspace = true }
 description = "TLS based QUIC transport implementation for libp2p"
 repository = "https://github.com/libp2p/rust-libp2p"
 license = "MIT"
 
 [dependencies]
 async-std = { version = "1.12.0", optional = true }
-bytes = "1.2.1"
-futures = "0.3.15"
+bytes = "1.5.0"
+futures = "0.3.30"
 futures-timer = "3.0.2"
-if-watch = "3.0.0"
-libp2p-core = { version = "0.38.0", path = "../../core" }
-libp2p-tls = { version = "0.1.0-alpha", path = "../tls" }
-log = "0.4"
+if-watch = "3.2.0"
+libp2p-core = { workspace = true }
+libp2p-tls = { workspace = true }
+libp2p-identity = { workspace = true }
 parking_lot = "0.12.0"
-quinn-proto = { version = "0.9.0", default-features = false, features = ["tls-rustls"] }
+quinn = { version = "0.10.2", default-features = false, features = ["tls-rustls", "futures-io"] }
 rand = "0.8.5"
-rustls = { version = "0.20.2", default-features = false }
-thiserror = "1.0.26"
-tokio = { version = "1.21.1", default-features = false, features = ["net", "rt"], optional = true }
+rustls = { version = "0.21.9", default-features = false }
+thiserror = "1.0.56"
+tokio = { version = "1.35.1", default-features = false, features = ["net", "rt", "time"], optional = true }
+tracing = "0.1.37"
+socket2 = "0.5.5"
+ring = "0.16.20"
 
 [features]
-tokio = ["dep:tokio", "if-watch/tokio"]
-async-std = ["dep:async-std", "if-watch/smol"]
+tokio = ["dep:tokio", "if-watch/tokio", "quinn/runtime-tokio"]
+async-std = ["dep:async-std", "if-watch/smol", "quinn/runtime-async-std"]
 
-# Passing arguments to the docsrs builder in order to properly document cfg's. 
+# Passing arguments to the docsrs builder in order to properly document cfg's.
 # More information: https://docs.rs/about/builds#cross-compiling
 [package.metadata.docs.rs]
 all-features = true
@@ -37,12 +40,18 @@ rustc-args = ["--cfg", "docsrs"]
 
 [dev-dependencies]
 async-std = { version = "1.12.0", features = ["attributes"] }
-env_logger = "0.10.0"
-libp2p = { path = "../..", features = ["tcp", "yamux", "noise", "async-std"] }
+libp2p-identity = { workspace = true, features = ["rand"] }
 libp2p-muxer-test-harness = { path = "../../muxers/test-harness" }
+libp2p-noise = { workspace = true }
+libp2p-tcp = { workspace = true, features = ["async-io"] }
+libp2p-yamux = { workspace = true }
 quickcheck = "1"
-tokio = { version = "1.21.1", features = ["macros", "rt-multi-thread", "time"] }
+tokio = { version = "1.35.1", features = ["macros", "rt-multi-thread", "time"] }
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 
 [[test]]
 name = "stream_compliance"
 required-features = ["async-std"]
+
+[lints]
+workspace = true

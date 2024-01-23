@@ -34,7 +34,8 @@ pub use self::{
 };
 pub use libp2p_request_response::{InboundFailure, OutboundFailure};
 
-#[allow(clippy::derive_partial_eq_without_eq)]
-mod structs_proto {
-    include!(concat!(env!("OUT_DIR"), "/structs.rs"));
+mod proto {
+    #![allow(unreachable_pub)]
+    include!("generated/mod.rs");
+    pub(crate) use self::structs::{mod_Message::*, Message};
 }

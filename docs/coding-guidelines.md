@@ -19,6 +19,7 @@
         - [Further Reading](#further-reading)
     - [Use iteration not recursion](#use-iteration-not-recursion)
         - [Further Reading](#further-reading-1)
+    - [Allow Correlating Asynchronous Responses to Their Requests](#allow-correlating-asynchronous-responses-to-their-requests)
 
 <!-- markdown-toc end -->
 
@@ -27,7 +28,7 @@ Below is a set of coding guidelines followed across the rust-libp2p code base.
 
 ## Hierarchical State Machines
 
-If you sqint, rust-libp2p is just a big hierarchy of [state
+If you squint, rust-libp2p is just a big hierarchy of [state
 machines](https://en.wikipedia.org/wiki/Finite-state_machine) where parents pass
 events down to their children and children pass events up to their parents.
 
@@ -166,7 +167,7 @@ impl Stream for SomeStateMachine {
 }
 ```
 
-This priotization provides:
+This prioritization provides:
 - Low memory footprint as local queues (here `events_to_return_to_parent`) stay small.
 - Low latency as accepted local work is not stuck in queues.
 - DOS defense as a remote does not control the size of the local queue, nor starves local work with its remote work.
@@ -194,7 +195,7 @@ through a side-channel.
 ### Local queues
 
 As for channels shared across potentially concurrent actors (e.g. future tasks
-or OS threads), the same applies for queues owned by a single actor only. E.g.
+or OS threads), the same applies to queues owned by a single actor only. E.g.
 reading events from a socket into a `Vec<Event>` without some mechanism
 bounding the size of that `Vec<Event>` again can lead to unbounded memory
 growth and high latencies.
@@ -240,7 +241,7 @@ shows a speed up when running it concurrently.
 ## Use `async/await` for sequential execution only
 
 Using `async/await` for sequential execution makes things significantly simpler.
-Though unfortunately using `async/await` does not allow accesing methods on the
+Though unfortunately using `async/await` does not allow accessing methods on the
 object being `await`ed unless paired with some synchronization mechanism like an
 `Arc<Mutex<_>>`.
 
@@ -299,3 +300,26 @@ stack potentially unboundedly. Instead use iteration e.g. via `loop` or `for`.
 - https://en.wikipedia.org/wiki/Tail_call
 - https://stackoverflow.com/questions/65948553/why-is-recursion-not-suggested-in-rust
 - https://stackoverflow.com/questions/59257543/when-is-tail-recursion-guaranteed-in-rust
+
+## Allow Correlating Asynchronous Responses to Their Requests
+
+In an asynchronous context, it is important to enable users to determine the correlation between a
+response and a previous request. For example, if a user requests two new connections to the same
+peer, they should be able to match each new connection to the corresponding previous connection
+request without having to guess.
+
+When accepting a **command** that eventually results in a response through an event requires that
+command to contain a unique ID, which is later on contained in the asynchronous response event. One
+such example is the `Swarm` accepting a `ToSwarm::Dial` from the `NetworkBehaviour`.
+
+``` rust
+struct Command {
+  id: Id,
+  // ...
+}
+
+struct Response {
+  command_id: Id,
+  // ...
+}
+```

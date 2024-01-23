@@ -23,13 +23,10 @@
 mod test;
 
 use crate::addresses::Addresses;
-use crate::handler::{
-    KademliaHandlerConfig, KademliaHandlerEvent, KademliaHandlerIn, KademliaHandlerProto,
-    KademliaRequestId,
-};
+use crate::handler::{Handler, HandlerEvent, HandlerIn, RequestId};
 use crate::jobs::*;
 use crate::kbucket::{self, Distance, KBucketsTable, NodeStatus};
-use crate::protocol::{KadConnectionType, KadPeer, KademliaProtocolConfig};
+use crate::protocol::{ConnectionType, KadPeer, ProtocolConfig};
 use crate::query::{Query, QueryConfig, QueryId, QueryPool, QueryPoolState};
 use crate::record::{
     self,
@@ -39,41 +36,43 @@ use crate::record::{
 use crate::K_VALUE;
 use fnv::{FnvHashMap, FnvHashSet};
 use instant::Instant;
-use libp2p_core::{connection::ConnectionId, ConnectedPoint, Multiaddr, PeerId};
+use libp2p_core::{ConnectedPoint, Endpoint, Multiaddr};
+use libp2p_identity::PeerId;
 use libp2p_swarm::behaviour::{
-    AddressChange, ConnectionClosed, ConnectionEstablished, DialFailure, ExpiredListenAddr,
-    FromSwarm, NewExternalAddr, NewListenAddr,
+    AddressChange, ConnectionClosed, ConnectionEstablished, DialFailure, FromSwarm,
 };
 use libp2p_swarm::{
     dial_opts::{self, DialOpts},
-    DialError, NetworkBehaviour, NetworkBehaviourAction, NotifyHandler, PollParameters,
+    ConnectionDenied, ConnectionHandler, ConnectionId, DialError, ExternalAddresses,
+    ListenAddresses, NetworkBehaviour, NotifyHandler, StreamProtocol, THandler, THandlerInEvent,
+    THandlerOutEvent, ToSwarm,
 };
-use log::{debug, info, warn};
 use smallvec::SmallVec;
-use std::collections::{BTreeMap, HashSet, VecDeque};
+use std::collections::{BTreeMap, HashMap, HashSet, VecDeque};
 use std::fmt;
 use std::num::NonZeroUsize;
-use std::task::{Context, Poll};
+use std::task::{Context, Poll, Waker};
+use std::time::Duration;
 use std::vec;
-use std::{borrow::Cow, time::Duration};
 use thiserror::Error;
+use tracing::Level;
 
 pub use crate::query::QueryStats;
 
-/// `Kademlia` is a `NetworkBehaviour` that implements the libp2p
+/// `Behaviour` is a `NetworkBehaviour` that implements the libp2p
 /// Kademlia protocol.
-pub struct Kademlia<TStore> {
+pub struct Behaviour<TStore> {
     /// The Kademlia routing table.
     kbuckets: KBucketsTable<kbucket::Key<PeerId>, Addresses>,
 
     /// The k-bucket insertion strategy.
-    kbucket_inserts: KademliaBucketInserts,
+    kbucket_inserts: BucketInserts,
 
     /// Configuration of the wire protocol.
-    protocol_config: KademliaProtocolConfig,
+    protocol_config: ProtocolConfig,
 
     /// Configuration of [`RecordStore`] filtering.
-    record_filtering: KademliaStoreInserts,
+    record_filtering: StoreInserts,
 
     /// The currently active (i.e. in-progress) queries.
     queries: QueryPool<QueryInner>,
@@ -97,17 +96,23 @@ pub struct Kademlia<TStore> {
     /// The TTL of provider records.
     provider_record_ttl: Option<Duration>,
 
-    /// How long to keep connections alive when they're idle.
-    connection_idle_timeout: Duration,
-
     /// Queued events to return when the behaviour is being polled.
-    queued_events: VecDeque<NetworkBehaviourAction<KademliaEvent, KademliaHandlerProto<QueryId>>>,
+    queued_events: VecDeque<ToSwarm<Event, HandlerIn>>,
 
-    /// The currently known addresses of the local node.
-    local_addrs: HashSet<Multiaddr>,
+    listen_addresses: ListenAddresses,
 
-    /// See [`KademliaConfig::caching`].
-    caching: KademliaCaching,
+    external_addresses: ExternalAddresses,
+
+    connections: HashMap<ConnectionId, PeerId>,
+
+    /// See [`Config::caching`].
+    caching: Caching,
+
+    local_peer_id: PeerId,
+
+    mode: Mode,
+    auto_mode: bool,
+    no_events_waker: Option<Waker>,
 
     /// The record storage.
     store: TStore,
@@ -117,7 +122,7 @@ pub struct Kademlia<TStore> {
 /// and their addresses into the k-buckets of the Kademlia
 /// routing table.
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
-pub enum KademliaBucketInserts {
+pub enum BucketInserts {
     /// Whenever a connection to a peer is established as a
     /// result of a dialing attempt and that peer is not yet
     /// in the routing table, it is inserted as long as there
@@ -127,10 +132,10 @@ pub enum KademliaBucketInserts {
     /// disconnected peer is evicted from the bucket.
     OnConnected,
     /// New peers and addresses are only added to the routing table via
-    /// explicit calls to [`Kademlia::add_address`].
+    /// explicit calls to [`Behaviour::add_address`].
     ///
     /// > **Note**: Even though peers can only get into the
-    /// > routing table as a result of [`Kademlia::add_address`],
+    /// > routing table as a result of [`Behaviour::add_address`],
     /// > routing table entries are still updated as peers
     /// > connect and disconnect (i.e. the order of the entries
     /// > as well as the network addresses).
@@ -145,63 +150,61 @@ pub enum KademliaBucketInserts {
 ///
 /// [`Key`]: crate::record::Key
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
-pub enum KademliaStoreInserts {
+pub enum StoreInserts {
     /// Whenever a (provider) record is received,
     /// the record is forwarded immediately to the [`RecordStore`].
     Unfiltered,
     /// Whenever a (provider) record is received, an event is emitted.
-    /// Provider records generate a [`InboundRequest::AddProvider`] under [`KademliaEvent::InboundRequest`],
-    /// normal records generate a [`InboundRequest::PutRecord`] under [`KademliaEvent::InboundRequest`].
+    /// Provider records generate a [`InboundRequest::AddProvider`] under [`Event::InboundRequest`],
+    /// normal records generate a [`InboundRequest::PutRecord`] under [`Event::InboundRequest`].
     ///
     /// When deemed valid, a (provider) record needs to be explicitly stored in
     /// the [`RecordStore`] via [`RecordStore::put`] or [`RecordStore::add_provider`],
     /// whichever is applicable. A mutable reference to the [`RecordStore`] can
-    /// be retrieved via [`Kademlia::store_mut`].
+    /// be retrieved via [`Behaviour::store_mut`].
     FilterBoth,
 }
 
 /// The configuration for the `Kademlia` behaviour.
 ///
-/// The configuration is consumed by [`Kademlia::new`].
+/// The configuration is consumed by [`Behaviour::new`].
 #[derive(Debug, Clone)]
-pub struct KademliaConfig {
+pub struct Config {
     kbucket_pending_timeout: Duration,
     query_config: QueryConfig,
-    protocol_config: KademliaProtocolConfig,
+    protocol_config: ProtocolConfig,
     record_ttl: Option<Duration>,
     record_replication_interval: Option<Duration>,
     record_publication_interval: Option<Duration>,
-    record_filtering: KademliaStoreInserts,
+    record_filtering: StoreInserts,
     provider_record_ttl: Option<Duration>,
     provider_publication_interval: Option<Duration>,
-    connection_idle_timeout: Duration,
-    kbucket_inserts: KademliaBucketInserts,
-    caching: KademliaCaching,
+    kbucket_inserts: BucketInserts,
+    caching: Caching,
 }
 
-impl Default for KademliaConfig {
+impl Default for Config {
     fn default() -> Self {
-        KademliaConfig {
+        Config {
             kbucket_pending_timeout: Duration::from_secs(60),
             query_config: QueryConfig::default(),
             protocol_config: Default::default(),
             record_ttl: Some(Duration::from_secs(48 * 60 * 60)),
             record_replication_interval: Some(Duration::from_secs(60 * 60)),
             record_publication_interval: Some(Duration::from_secs(22 * 60 * 60)),
-            record_filtering: KademliaStoreInserts::Unfiltered,
-            provider_publication_interval: Some(Duration::from_secs(22 * 60 * 60)),
+            record_filtering: StoreInserts::Unfiltered,
+            provider_publication_interval: Some(Duration::from_secs(12 * 60 * 60)),
             provider_record_ttl: Some(Duration::from_secs(48 * 60 * 60)),
-            connection_idle_timeout: Duration::from_secs(10),
-            kbucket_inserts: KademliaBucketInserts::OnConnected,
-            caching: KademliaCaching::Enabled { max_peers: 1 },
+            kbucket_inserts: BucketInserts::OnConnected,
+            caching: Caching::Enabled { max_peers: 1 },
         }
     }
 }
 
 /// The configuration for Kademlia "write-back" caching after successful
-/// lookups via [`Kademlia::get_record`].
+/// lookups via [`Behaviour::get_record`].
 #[derive(Debug, Clone)]
-pub enum KademliaCaching {
+pub enum Caching {
     /// Caching is disabled and the peers closest to records being looked up
     /// that do not return a record are not tracked, i.e.
     /// [`GetRecordOk::FinishedWithNoAdditionalRecord`] is always empty.
@@ -209,11 +212,11 @@ pub enum KademliaCaching {
     /// Up to `max_peers` peers not returning a record that are closest to the key
     /// being looked up are tracked and returned in [`GetRecordOk::FinishedWithNoAdditionalRecord`].
     /// The write-back operation must be performed explicitly, if
-    /// desired and after choosing a record from the results, via [`Kademlia::put_record_to`].
+    /// desired and after choosing a record from the results, via [`Behaviour::put_record_to`].
     Enabled { max_peers: u16 },
 }
 
-impl KademliaConfig {
+impl Config {
     /// Sets custom protocol names.
     ///
     /// Kademlia nodes only communicate with other nodes using the same protocol
@@ -223,7 +226,7 @@ impl KademliaConfig {
     /// More than one protocol name can be supplied. In this case the node will
     /// be able to talk to other nodes supporting any of the provided names.
     /// Multiple names must be used with caution to avoid network partitioning.
-    pub fn set_protocol_names(&mut self, names: Vec<Cow<'static, [u8]>>) -> &mut Self {
+    pub fn set_protocol_names(&mut self, names: Vec<StreamProtocol>) -> &mut Self {
         self.protocol_config.set_protocol_names(names);
         self
     }
@@ -258,7 +261,7 @@ impl KademliaConfig {
     /// This only controls the level of parallelism of an iterative query, not
     /// the level of parallelism of a query to a fixed set of peers.
     ///
-    /// When used with [`KademliaConfig::disjoint_query_paths`] it equals
+    /// When used with [`Config::disjoint_query_paths`] it equals
     /// the amount of disjoint paths used.
     pub fn set_parallelism(&mut self, parallelism: NonZeroUsize) -> &mut Self {
         self.query_config.parallelism = parallelism;
@@ -294,9 +297,9 @@ impl KademliaConfig {
 
     /// Sets whether or not records should be filtered before being stored.
     ///
-    /// See [`KademliaStoreInserts`] for the different values.
-    /// Defaults to [`KademliaStoreInserts::Unfiltered`].
-    pub fn set_record_filtering(&mut self, filtering: KademliaStoreInserts) -> &mut Self {
+    /// See [`StoreInserts`] for the different values.
+    /// Defaults to [`StoreInserts::Unfiltered`].
+    pub fn set_record_filtering(&mut self, filtering: StoreInserts) -> &mut Self {
         self.record_filtering = filtering;
         self
     }
@@ -363,12 +366,6 @@ impl KademliaConfig {
         self
     }
 
-    /// Sets the amount of time to keep connections alive when they're idle.
-    pub fn set_connection_idle_timeout(&mut self, duration: Duration) -> &mut Self {
-        self.connection_idle_timeout = duration;
-        self
-    }
-
     /// Modifies the maximum allowed size of individual Kademlia packets.
     ///
     /// It might be necessary to increase this value if trying to put large
@@ -379,27 +376,26 @@ impl KademliaConfig {
     }
 
     /// Sets the k-bucket insertion strategy for the Kademlia routing table.
-    pub fn set_kbucket_inserts(&mut self, inserts: KademliaBucketInserts) -> &mut Self {
+    pub fn set_kbucket_inserts(&mut self, inserts: BucketInserts) -> &mut Self {
         self.kbucket_inserts = inserts;
         self
     }
 
-    /// Sets the [`KademliaCaching`] strategy to use for successful lookups.
+    /// Sets the [`Caching`] strategy to use for successful lookups.
     ///
-    /// The default is [`KademliaCaching::Enabled`] with a `max_peers` of 1.
+    /// The default is [`Caching::Enabled`] with a `max_peers` of 1.
     /// Hence, with default settings and a lookup quorum of 1, a successful lookup
     /// will result in the record being cached at the closest node to the key that
     /// did not return the record, i.e. the standard Kademlia behaviour.
-    pub fn set_caching(&mut self, c: KademliaCaching) -> &mut Self {
+    pub fn set_caching(&mut self, c: Caching) -> &mut Self {
         self.caching = c;
         self
     }
 }
 
-impl<TStore> Kademlia<TStore>
+impl<TStore> Behaviour<TStore>
 where
-    for<'a> TStore: RecordStore<'a>,
-    TStore: Send + 'static,
+    TStore: RecordStore + Send + 'static,
 {
     /// Creates a new `Kademlia` network behaviour with a default configuration.
     pub fn new(id: PeerId, store: TStore) -> Self {
@@ -407,12 +403,12 @@ where
     }
 
     /// Get the protocol name of this kademlia instance.
-    pub fn protocol_names(&self) -> &[Cow<'static, [u8]>] {
+    pub fn protocol_names(&self) -> &[StreamProtocol] {
         self.protocol_config.protocol_names()
     }
 
     /// Creates a new `Kademlia` network behaviour with the given configuration.
-    pub fn with_config(id: PeerId, store: TStore, config: KademliaConfig) -> Self {
+    pub fn with_config(id: PeerId, store: TStore, config: Config) -> Self {
         let local_key = kbucket::Key::from(id);
 
         let put_record_job = config
@@ -431,7 +427,7 @@ where
             .provider_publication_interval
             .map(AddProviderJob::new);
 
-        Kademlia {
+        Behaviour {
             store,
             caching: config.caching,
             kbuckets: KBucketsTable::new(local_key, config.kbucket_pending_timeout),
@@ -439,14 +435,19 @@ where
             protocol_config: config.protocol_config,
             record_filtering: config.record_filtering,
             queued_events: VecDeque::with_capacity(config.query_config.replication_factor.get()),
+            listen_addresses: Default::default(),
             queries: QueryPool::new(config.query_config),
             connected_peers: Default::default(),
             add_provider_job,
             put_record_job,
             record_ttl: config.record_ttl,
             provider_record_ttl: config.provider_record_ttl,
-            connection_idle_timeout: config.connection_idle_timeout,
-            local_addrs: HashSet::new(),
+            external_addresses: Default::default(),
+            local_peer_id: id,
+            connections: Default::default(),
+            mode: Mode::Client,
+            auto_mode: true,
+            no_events_waker: None,
         }
     }
 
@@ -510,34 +511,36 @@ where
     ///      in the DHT.
     ///
     /// If the routing table has been updated as a result of this operation,
-    /// a [`KademliaEvent::RoutingUpdated`] event is emitted.
+    /// a [`Event::RoutingUpdated`] event is emitted.
     pub fn add_address(&mut self, peer: &PeerId, address: Multiaddr) -> RoutingUpdate {
+        // ensuring address is a fully-qualified /p2p multiaddr
+        let Ok(address) = address.with_p2p(*peer) else {
+            return RoutingUpdate::Failed;
+        };
         let key = kbucket::Key::from(*peer);
         match self.kbuckets.entry(&key) {
-            kbucket::Entry::Present(mut entry, _) => {
+            Some(kbucket::Entry::Present(mut entry, _)) => {
                 if entry.value().insert(address) {
                     self.queued_events
-                        .push_back(NetworkBehaviourAction::GenerateEvent(
-                            KademliaEvent::RoutingUpdated {
-                                peer: *peer,
-                                is_new_peer: false,
-                                addresses: entry.value().clone(),
-                                old_peer: None,
-                                bucket_range: self
-                                    .kbuckets
-                                    .bucket(&key)
-                                    .map(|b| b.range())
-                                    .expect("Not kbucket::Entry::SelfEntry."),
-                            },
-                        ))
+                        .push_back(ToSwarm::GenerateEvent(Event::RoutingUpdated {
+                            peer: *peer,
+                            is_new_peer: false,
+                            addresses: entry.value().clone(),
+                            old_peer: None,
+                            bucket_range: self
+                                .kbuckets
+                                .bucket(&key)
+                                .map(|b| b.range())
+                                .expect("Not kbucket::Entry::SelfEntry."),
+                        }))
                 }
                 RoutingUpdate::Success
             }
-            kbucket::Entry::Pending(mut entry, _) => {
+            Some(kbucket::Entry::Pending(mut entry, _)) => {
                 entry.value().insert(address);
                 RoutingUpdate::Pending
             }
-            kbucket::Entry::Absent(entry) => {
+            Some(kbucket::Entry::Absent(entry)) => {
                 let addresses = Addresses::new(address);
                 let status = if self.connected_peers.contains(peer) {
                     NodeStatus::Connected
@@ -546,37 +549,36 @@ where
                 };
                 match entry.insert(addresses.clone(), status) {
                     kbucket::InsertResult::Inserted => {
-                        self.queued_events
-                            .push_back(NetworkBehaviourAction::GenerateEvent(
-                                KademliaEvent::RoutingUpdated {
-                                    peer: *peer,
-                                    is_new_peer: true,
-                                    addresses,
-                                    old_peer: None,
-                                    bucket_range: self
-                                        .kbuckets
-                                        .bucket(&key)
-                                        .map(|b| b.range())
-                                        .expect("Not kbucket::Entry::SelfEntry."),
-                                },
-                            ));
+                        self.queued_events.push_back(ToSwarm::GenerateEvent(
+                            Event::RoutingUpdated {
+                                peer: *peer,
+                                is_new_peer: true,
+                                addresses,
+                                old_peer: None,
+                                bucket_range: self
+                                    .kbuckets
+                                    .bucket(&key)
+                                    .map(|b| b.range())
+                                    .expect("Not kbucket::Entry::SelfEntry."),
+                            },
+                        ));
                         RoutingUpdate::Success
                     }
                     kbucket::InsertResult::Full => {
-                        debug!("Bucket full. Peer not added to routing table: {}", peer);
+                        tracing::debug!(%peer, "Bucket full. Peer not added to routing table");
                         RoutingUpdate::Failed
                     }
                     kbucket::InsertResult::Pending { disconnected } => {
-                        let handler = self.new_handler();
-                        self.queued_events.push_back(NetworkBehaviourAction::Dial {
-                            opts: DialOpts::peer_id(disconnected.into_preimage()).build(),
-                            handler,
+                        self.queued_events.push_back(ToSwarm::Dial {
+                            opts: DialOpts::peer_id(disconnected.into_preimage())
+                                .condition(dial_opts::PeerCondition::NotDialing)
+                                .build(),
                         });
                         RoutingUpdate::Pending
                     }
                 }
             }
-            kbucket::Entry::SelfEntry => RoutingUpdate::Failed,
+            None => RoutingUpdate::Failed,
         }
     }
 
@@ -595,8 +597,9 @@ where
         peer: &PeerId,
         address: &Multiaddr,
     ) -> Option<kbucket::EntryView<kbucket::Key<PeerId>, Addresses>> {
+        let address = &address.to_owned().with_p2p(*peer).ok()?;
         let key = kbucket::Key::from(*peer);
-        match self.kbuckets.entry(&key) {
+        match self.kbuckets.entry(&key)? {
             kbucket::Entry::Present(mut entry, _) => {
                 if entry.value().remove(address).is_err() {
                     Some(entry.remove()) // it is the last address, thus remove the peer.
@@ -611,7 +614,7 @@ where
                     None
                 }
             }
-            kbucket::Entry::Absent(..) | kbucket::Entry::SelfEntry => None,
+            kbucket::Entry::Absent(..) => None,
         }
     }
 
@@ -624,10 +627,10 @@ where
         peer: &PeerId,
     ) -> Option<kbucket::EntryView<kbucket::Key<PeerId>, Addresses>> {
         let key = kbucket::Key::from(*peer);
-        match self.kbuckets.entry(&key) {
+        match self.kbuckets.entry(&key)? {
             kbucket::Entry::Present(entry, _) => Some(entry.remove()),
             kbucket::Entry::Pending(entry, _) => Some(entry.remove()),
-            kbucket::Entry::Absent(..) | kbucket::Entry::SelfEntry => None,
+            kbucket::Entry::Absent(..) => None,
         }
     }
 
@@ -654,7 +657,7 @@ where
     /// Initiates an iterative query for the closest peers to the given key.
     ///
     /// The result of the query is delivered in a
-    /// [`KademliaEvent::OutboundQueryCompleted{QueryResult::GetClosestPeers}`].
+    /// [`Event::OutboundQueryProgressed{QueryResult::GetClosestPeers}`].
     pub fn get_closest_peers<K>(&mut self, key: K) -> QueryId
     where
         K: Into<kbucket::Key<K>> + Into<Vec<u8>> + Clone,
@@ -681,7 +684,7 @@ where
     /// Performs a lookup for a record in the DHT.
     ///
     /// The result of this operation is delivered in a
-    /// [`KademliaEvent::OutboundQueryCompleted{QueryResult::GetRecord}`].
+    /// [`Event::OutboundQueryProgressed{QueryResult::GetRecord}`].
     pub fn get_record(&mut self, key: record::Key) -> QueryId {
         let record = if let Some(record) = self.store.get(&key) {
             if record.is_expired(Instant::now()) {
@@ -724,14 +727,12 @@ where
 
         if let Some(record) = record {
             self.queued_events
-                .push_back(NetworkBehaviourAction::GenerateEvent(
-                    KademliaEvent::OutboundQueryProgressed {
-                        id,
-                        result: QueryResult::GetRecord(Ok(GetRecordOk::FoundRecord(record))),
-                        step,
-                        stats,
-                    },
-                ));
+                .push_back(ToSwarm::GenerateEvent(Event::OutboundQueryProgressed {
+                    id,
+                    result: QueryResult::GetRecord(Ok(GetRecordOk::FoundRecord(record))),
+                    step,
+                    stats,
+                }));
         }
 
         id
@@ -743,12 +744,12 @@ where
     /// Returns `Ok` if a record has been stored locally, providing the
     /// `QueryId` of the initial query that replicates the record in the DHT.
     /// The result of the query is eventually reported as a
-    /// [`KademliaEvent::OutboundQueryCompleted{QueryResult::PutRecord}`].
+    /// [`Event::OutboundQueryProgressed{QueryResult::PutRecord}`].
     ///
     /// The record is always stored locally with the given expiration. If the record's
     /// expiration is `None`, the common case, it does not expire in local storage
     /// but is still replicated with the configured record TTL. To remove the record
-    /// locally and stop it from being re-published in the DHT, see [`Kademlia::remove_record`].
+    /// locally and stop it from being re-published in the DHT, see [`Behaviour::remove_record`].
     ///
     /// After the initial publication of the record, it is subject to (re-)replication
     /// and (re-)publication as per the configured intervals. Periodic (re-)publication
@@ -859,13 +860,13 @@ where
     ///
     /// Returns `Ok` if bootstrapping has been initiated with a self-lookup, providing the
     /// `QueryId` for the entire bootstrapping process. The progress of bootstrapping is
-    /// reported via [`KademliaEvent::OutboundQueryCompleted{QueryResult::Bootstrap}`] events,
+    /// reported via [`Event::OutboundQueryProgressed{QueryResult::Bootstrap}`] events,
     /// with one such event per bootstrapping query.
     ///
     /// Returns `Err` if bootstrapping is impossible due an empty routing table.
     ///
     /// > **Note**: Bootstrapping requires at least one node of the DHT to be known.
-    /// > See [`Kademlia::add_address`].
+    /// > See [`Behaviour::add_address`].
     pub fn bootstrap(&mut self) -> Result<QueryId, NoKnownPeers> {
         let local_key = self.kbuckets.local_key().clone();
         let info = QueryInfo::Bootstrap {
@@ -894,16 +895,16 @@ where
     /// The publication of the provider records is periodically repeated as per the
     /// configured interval, to renew the expiry and account for changes to the DHT
     /// topology. A provider record may be removed from local storage and
-    /// thus no longer re-published by calling [`Kademlia::stop_providing`].
+    /// thus no longer re-published by calling [`Behaviour::stop_providing`].
     ///
     /// In contrast to the standard Kademlia push-based model for content distribution
-    /// implemented by [`Kademlia::put_record`], the provider API implements a
+    /// implemented by [`Behaviour::put_record`], the provider API implements a
     /// pull-based model that may be used in addition or as an alternative.
     /// The means by which the actual value is obtained from a provider is out of scope
     /// of the libp2p Kademlia provider API.
     ///
     /// The results of the (repeated) provider announcements sent by this node are
-    /// reported via [`KademliaEvent::OutboundQueryCompleted{QueryResult::StartProviding}`].
+    /// reported via [`Event::OutboundQueryProgressed{QueryResult::StartProviding}`].
     pub fn start_providing(&mut self, key: record::Key) -> Result<QueryId, store::Error> {
         // Note: We store our own provider records locally without local addresses
         // to avoid redundant storage and outdated addresses. Instead these are
@@ -940,7 +941,7 @@ where
     /// Performs a lookup for providers of a value to the given key.
     ///
     /// The result of this operation is delivered in a
-    /// reported via [`KademliaEvent::OutboundQueryCompleted{QueryResult::GetProviders}`].
+    /// reported via [`Event::OutboundQueryProgressed{QueryResult::GetProviders}`].
     pub fn get_providers(&mut self, key: record::Key) -> QueryId {
         let providers: HashSet<_> = self
             .store
@@ -972,19 +973,114 @@ where
 
         if !providers.is_empty() {
             self.queued_events
-                .push_back(NetworkBehaviourAction::GenerateEvent(
-                    KademliaEvent::OutboundQueryProgressed {
-                        id,
-                        result: QueryResult::GetProviders(Ok(GetProvidersOk::FoundProviders {
-                            key,
-                            providers,
-                        })),
-                        step,
-                        stats,
-                    },
-                ));
+                .push_back(ToSwarm::GenerateEvent(Event::OutboundQueryProgressed {
+                    id,
+                    result: QueryResult::GetProviders(Ok(GetProvidersOk::FoundProviders {
+                        key,
+                        providers,
+                    })),
+                    step,
+                    stats,
+                }));
         }
         id
+    }
+
+    /// Set the [`Mode`] in which we should operate.
+    ///
+    /// By default, we are in [`Mode::Client`] and will swap into [`Mode::Server`] as soon as we have a confirmed, external address via [`FromSwarm::ExternalAddrConfirmed`].
+    ///
+    /// Setting a mode via this function disables this automatic behaviour and unconditionally operates in the specified mode.
+    /// To reactivate the automatic configuration, pass [`None`] instead.
+    pub fn set_mode(&mut self, mode: Option<Mode>) {
+        match mode {
+            Some(mode) => {
+                self.mode = mode;
+                self.auto_mode = false;
+                self.reconfigure_mode();
+            }
+            None => {
+                self.auto_mode = true;
+                self.determine_mode_from_external_addresses();
+            }
+        }
+
+        if let Some(waker) = self.no_events_waker.take() {
+            waker.wake();
+        }
+    }
+
+    fn reconfigure_mode(&mut self) {
+        if self.connections.is_empty() {
+            return;
+        }
+
+        let num_connections = self.connections.len();
+
+        tracing::debug!(
+            "Re-configuring {} established connection{}",
+            num_connections,
+            if num_connections > 1 { "s" } else { "" }
+        );
+
+        self.queued_events
+            .extend(
+                self.connections
+                    .iter()
+                    .map(|(conn_id, peer_id)| ToSwarm::NotifyHandler {
+                        peer_id: *peer_id,
+                        handler: NotifyHandler::One(*conn_id),
+                        event: HandlerIn::ReconfigureMode {
+                            new_mode: self.mode,
+                        },
+                    }),
+            );
+    }
+
+    fn determine_mode_from_external_addresses(&mut self) {
+        let old_mode = self.mode;
+
+        self.mode = match (self.external_addresses.as_slice(), self.mode) {
+            ([], Mode::Server) => {
+                tracing::debug!("Switching to client-mode because we no longer have any confirmed external addresses");
+
+                Mode::Client
+            }
+            ([], Mode::Client) => {
+                // Previously client-mode, now also client-mode because no external addresses.
+
+                Mode::Client
+            }
+            (confirmed_external_addresses, Mode::Client) => {
+                if tracing::enabled!(Level::DEBUG) {
+                    let confirmed_external_addresses =
+                        to_comma_separated_list(confirmed_external_addresses);
+
+                    tracing::debug!("Switching to server-mode assuming that one of [{confirmed_external_addresses}] is externally reachable");
+                }
+
+                Mode::Server
+            }
+            (confirmed_external_addresses, Mode::Server) => {
+                debug_assert!(
+                    !confirmed_external_addresses.is_empty(),
+                    "Previous match arm handled empty list"
+                );
+
+                // Previously, server-mode, now also server-mode because > 1 external address. Don't log anything to avoid spam.
+
+                Mode::Server
+            }
+        };
+
+        self.reconfigure_mode();
+
+        if old_mode != self.mode {
+            self.queued_events
+                .push_back(ToSwarm::GenerateEvent(Event::ModeChanged {
+                    new_mode: self.mode,
+                }));
+        }
     }
 
     /// Processes discovered peers from a successful request in an iterative `Query`.
@@ -995,13 +1091,13 @@ where
         let local_id = self.kbuckets.local_key().preimage();
         let others_iter = peers.filter(|p| &p.node_id != local_id);
         if let Some(query) = self.queries.get_mut(query_id) {
-            log::trace!("Request to {:?} in query {:?} succeeded.", source, query_id);
+            tracing::trace!(peer=%source, query=?query_id, "Request to peer in query succeeded");
             for peer in others_iter.clone() {
-                log::trace!(
-                    "Peer {:?} reported by {:?} in query {:?}.",
-                    peer,
-                    source,
-                    query_id
+                tracing::trace!(
+                    ?peer,
+                    %source,
+                    query=?query_id,
+                    "Peer reported by source in query"
                 );
                 let addrs = peer.multiaddrs.iter().cloned().collect();
                 query.inner.addresses.insert(peer.node_id, addrs);
@@ -1034,7 +1130,9 @@ where
     fn provider_peers(&mut self, key: &record::Key, source: &PeerId) -> Vec<KadPeer> {
         let kbuckets = &mut self.kbuckets;
         let connected = &mut self.connected_peers;
-        let local_addrs = &self.local_addrs;
+        let listen_addresses = &self.listen_addresses;
+        let external_addresses = &self.external_addresses;
+
         self.store
             .providers(key)
             .into_iter()
@@ -1043,9 +1141,9 @@ where
                     let node_id = p.provider;
                     let multiaddrs = p.addresses;
                     let connection_ty = if connected.contains(&node_id) {
-                        KadConnectionType::Connected
+                        ConnectionType::Connected
                     } else {
-                        KadConnectionType::NotConnected
+                        ConnectionType::NotConnected
                     };
                     if multiaddrs.is_empty() {
                         // The provider is either the local node and we fill in
@@ -1055,12 +1153,19 @@ where
                         // done before provider records were stored along with
                         // their addresses.
                         if &node_id == kbuckets.local_key().preimage() {
-                            Some(local_addrs.iter().cloned().collect::<Vec<_>>())
+                            Some(
+                                listen_addresses
+                                    .iter()
+                                    .chain(external_addresses.iter())
+                                    .cloned()
+                                    .collect::<Vec<_>>(),
+                            )
                         } else {
                             let key = kbucket::Key::from(node_id);
                             kbuckets
                                 .entry(&key)
-                                .view()
+                                .as_mut()
+                                .and_then(|e| e.view())
                                 .map(|e| e.node.value.clone().into_vec())
                         }
                     } else {
@@ -1116,31 +1221,30 @@ where
     ) {
         let key = kbucket::Key::from(peer);
         match self.kbuckets.entry(&key) {
-            kbucket::Entry::Present(mut entry, old_status) => {
+            Some(kbucket::Entry::Present(mut entry, old_status)) => {
                 if old_status != new_status {
                     entry.update(new_status)
                 }
                 if let Some(address) = address {
                     if entry.value().insert(address) {
-                        self.queued_events
-                            .push_back(NetworkBehaviourAction::GenerateEvent(
-                                KademliaEvent::RoutingUpdated {
-                                    peer,
-                                    is_new_peer: false,
-                                    addresses: entry.value().clone(),
-                                    old_peer: None,
-                                    bucket_range: self
-                                        .kbuckets
-                                        .bucket(&key)
-                                        .map(|b| b.range())
-                                        .expect("Not kbucket::Entry::SelfEntry."),
-                                },
-                            ))
+                        self.queued_events.push_back(ToSwarm::GenerateEvent(
+                            Event::RoutingUpdated {
+                                peer,
+                                is_new_peer: false,
+                                addresses: entry.value().clone(),
+                                old_peer: None,
+                                bucket_range: self
+                                    .kbuckets
+                                    .bucket(&key)
+                                    .map(|b| b.range())
+                                    .expect("Not kbucket::Entry::SelfEntry."),
+                            },
+                        ))
                     }
                 }
             }
 
-            kbucket::Entry::Pending(mut entry, old_status) => {
+            Some(kbucket::Entry::Pending(mut entry, old_status)) => {
                 if let Some(address) = address {
                     entry.value().insert(address);
                 }
@@ -1149,7 +1253,7 @@ where
                 }
             }
 
-            kbucket::Entry::Absent(entry) => {
+            Some(kbucket::Entry::Absent(entry)) => {
                 // Only connected nodes with a known address are newly inserted.
                 if new_status != NodeStatus::Connected {
                     return;
@@ -1157,21 +1261,20 @@ where
                 match (address, self.kbucket_inserts) {
                     (None, _) => {
                         self.queued_events
-                            .push_back(NetworkBehaviourAction::GenerateEvent(
-                                KademliaEvent::UnroutablePeer { peer },
-                            ));
+                            .push_back(ToSwarm::GenerateEvent(Event::UnroutablePeer { peer }));
                     }
-                    (Some(a), KademliaBucketInserts::Manual) => {
+                    (Some(a), BucketInserts::Manual) => {
                         self.queued_events
-                            .push_back(NetworkBehaviourAction::GenerateEvent(
-                                KademliaEvent::RoutablePeer { peer, address: a },
-                            ));
+                            .push_back(ToSwarm::GenerateEvent(Event::RoutablePeer {
+                                peer,
+                                address: a,
+                            }));
                     }
-                    (Some(a), KademliaBucketInserts::OnConnected) => {
+                    (Some(a), BucketInserts::OnConnected) => {
                         let addresses = Addresses::new(a);
                         match entry.insert(addresses.clone(), new_status) {
                             kbucket::InsertResult::Inserted => {
-                                let event = KademliaEvent::RoutingUpdated {
+                                let event = Event::RoutingUpdated {
                                     peer,
                                     is_new_peer: true,
                                     addresses,
@@ -1182,38 +1285,35 @@ where
                                         .map(|b| b.range())
                                         .expect("Not kbucket::Entry::SelfEntry."),
                                 };
-                                self.queued_events
-                                    .push_back(NetworkBehaviourAction::GenerateEvent(event));
+                                self.queued_events.push_back(ToSwarm::GenerateEvent(event));
                             }
                             kbucket::InsertResult::Full => {
-                                debug!("Bucket full. Peer not added to routing table: {}", peer);
-                                let address = addresses.first().clone();
-                                self.queued_events.push_back(
-                                    NetworkBehaviourAction::GenerateEvent(
-                                        KademliaEvent::RoutablePeer { peer, address },
-                                    ),
+                                tracing::debug!(
+                                    %peer,
+                                    "Bucket full. Peer not added to routing table"
                                 );
+                                let address = addresses.first().clone();
+                                self.queued_events.push_back(ToSwarm::GenerateEvent(
+                                    Event::RoutablePeer { peer, address },
+                                ));
                             }
                             kbucket::InsertResult::Pending { disconnected } => {
                                 let address = addresses.first().clone();
-                                self.queued_events.push_back(
-                                    NetworkBehaviourAction::GenerateEvent(
-                                        KademliaEvent::PendingRoutablePeer { peer, address },
-                                    ),
-                                );
+                                self.queued_events.push_back(ToSwarm::GenerateEvent(
+                                    Event::PendingRoutablePeer { peer, address },
+                                ));
 
                                 // `disconnected` might already be in the process of re-connecting.
                                 // In other words `disconnected` might have already re-connected but
                                 // is not yet confirmed to support the Kademlia protocol via
-                                // [`KademliaHandlerEvent::ProtocolConfirmed`].
+                                // [`HandlerEvent::ProtocolConfirmed`].
                                 //
                                 // Only try dialing peer if not currently connected.
                                 if !self.connected_peers.contains(disconnected.preimage()) {
-                                    let handler = self.new_handler();
-                                    self.queued_events.push_back(NetworkBehaviourAction::Dial {
+                                    self.queued_events.push_back(ToSwarm::Dial {
                                         opts: DialOpts::peer_id(disconnected.into_preimage())
+                                            .condition(dial_opts::PeerCondition::NotDialing)
                                             .build(),
-                                        handler,
                                     })
                                 }
                             }
@@ -1226,13 +1326,9 @@ where
     }
 
     /// Handles a finished (i.e. successful) query.
-    fn query_finished(
-        &mut self,
-        q: Query<QueryInner>,
-        params: &mut impl PollParameters,
-    ) -> Option<KademliaEvent> {
+    fn query_finished(&mut self, q: Query<QueryInner>) -> Option<Event> {
         let query_id = q.id();
-        log::trace!("Query {:?} finished.", query_id);
+        tracing::trace!(query=?query_id, "Query finished");
         let result = q.into_result();
         match result.inner.info {
             QueryInfo::Bootstrap {
@@ -1295,7 +1391,7 @@ where
                     step.last = true;
                 };
 
-                Some(KademliaEvent::OutboundQueryProgressed {
+                Some(Event::OutboundQueryProgressed {
                     id: query_id,
                     stats: result.stats,
                     result: QueryResult::Bootstrap(Ok(BootstrapOk {
@@ -1309,7 +1405,7 @@ where
             QueryInfo::GetClosestPeers { key, mut step } => {
                 step.last = true;
 
-                Some(KademliaEvent::OutboundQueryProgressed {
+                Some(Event::OutboundQueryProgressed {
                     id: query_id,
                     stats: result.stats,
                     result: QueryResult::GetClosestPeers(Ok(GetClosestPeersOk {
@@ -1323,7 +1419,7 @@ where
             QueryInfo::GetProviders { mut step, .. } => {
                 step.last = true;
 
-                Some(KademliaEvent::OutboundQueryProgressed {
+                Some(Event::OutboundQueryProgressed {
                     id: query_id,
                     stats: result.stats,
                     result: QueryResult::GetProviders(Ok(
@@ -1340,8 +1436,8 @@ where
                 key,
                 phase: AddProviderPhase::GetClosestPeers,
             } => {
-                let provider_id = *params.local_peer_id();
-                let external_addresses = params.external_addresses().map(|r| r.addr).collect();
+                let provider_id = self.local_peer_id;
+                let external_addresses = self.external_addresses.iter().cloned().collect();
                 let inner = QueryInner::new(QueryInfo::AddProvider {
                     context,
                     key,
@@ -1364,13 +1460,13 @@ where
                         ..
                     },
             } => match context {
-                AddProviderContext::Publish => Some(KademliaEvent::OutboundQueryProgressed {
+                AddProviderContext::Publish => Some(Event::OutboundQueryProgressed {
                     id: query_id,
                     stats: get_closest_peers_stats.merge(result.stats),
                     result: QueryResult::StartProviding(Ok(AddProviderOk { key })),
                     step: ProgressStep::first_and_last(),
                 }),
-                AddProviderContext::Republish => Some(KademliaEvent::OutboundQueryProgressed {
+                AddProviderContext::Republish => Some(Event::OutboundQueryProgressed {
                     id: query_id,
                     stats: get_closest_peers_stats.merge(result.stats),
                     result: QueryResult::RepublishProvider(Ok(AddProviderOk { key })),
@@ -1394,7 +1490,7 @@ where
                         closest_peers: result.peers.collect(),
                     })
                 };
-                Some(KademliaEvent::OutboundQueryProgressed {
+                Some(Event::OutboundQueryProgressed {
                     id: query_id,
                     stats: result.stats,
                     result: QueryResult::GetRecord(results),
@@ -1445,21 +1541,21 @@ where
                 };
                 match context {
                     PutRecordContext::Publish | PutRecordContext::Custom => {
-                        Some(KademliaEvent::OutboundQueryProgressed {
+                        Some(Event::OutboundQueryProgressed {
                             id: query_id,
                             stats: get_closest_peers_stats.merge(result.stats),
                             result: QueryResult::PutRecord(mk_result(record.key)),
                             step: ProgressStep::first_and_last(),
                         })
                     }
-                    PutRecordContext::Republish => Some(KademliaEvent::OutboundQueryProgressed {
+                    PutRecordContext::Republish => Some(Event::OutboundQueryProgressed {
                         id: query_id,
                         stats: get_closest_peers_stats.merge(result.stats),
                         result: QueryResult::RepublishRecord(mk_result(record.key)),
                         step: ProgressStep::first_and_last(),
                     }),
                     PutRecordContext::Replicate => {
-                        debug!("Record replicated: {:?}", record.key);
+                        tracing::debug!(record=?record.key, "Record replicated");
                         None
                     }
                 }
@@ -1468,9 +1564,9 @@ where
     }
 
     /// Handles a query that timed out.
-    fn query_timeout(&mut self, query: Query<QueryInner>) -> Option<KademliaEvent> {
+    fn query_timeout(&mut self, query: Query<QueryInner>) -> Option<Event> {
         let query_id = query.id();
-        log::trace!("Query {:?} timed out.", query_id);
+        tracing::trace!(query=?query_id, "Query timed out");
         let result = query.into_result();
         match result.inner.info {
             QueryInfo::Bootstrap {
@@ -1497,7 +1593,7 @@ where
                     step.last = true;
                 }
 
-                Some(KademliaEvent::OutboundQueryProgressed {
+                Some(Event::OutboundQueryProgressed {
                     id: query_id,
                     stats: result.stats,
                     result: QueryResult::Bootstrap(Err(BootstrapError::Timeout {
@@ -1509,13 +1605,13 @@ where
             }
 
             QueryInfo::AddProvider { context, key, .. } => Some(match context {
-                AddProviderContext::Publish => KademliaEvent::OutboundQueryProgressed {
+                AddProviderContext::Publish => Event::OutboundQueryProgressed {
                     id: query_id,
                     stats: result.stats,
                     result: QueryResult::StartProviding(Err(AddProviderError::Timeout { key })),
                     step: ProgressStep::first_and_last(),
                 },
-                AddProviderContext::Republish => KademliaEvent::OutboundQueryProgressed {
+                AddProviderContext::Republish => Event::OutboundQueryProgressed {
                     id: query_id,
                     stats: result.stats,
                     result: QueryResult::RepublishProvider(Err(AddProviderError::Timeout { key })),
@@ -1526,7 +1622,7 @@ where
             QueryInfo::GetClosestPeers { key, mut step } => {
                 step.last = true;
 
-                Some(KademliaEvent::OutboundQueryProgressed {
+                Some(Event::OutboundQueryProgressed {
                     id: query_id,
                     stats: result.stats,
                     result: QueryResult::GetClosestPeers(Err(GetClosestPeersError::Timeout {
@@ -1553,14 +1649,14 @@ where
                 });
                 match context {
                     PutRecordContext::Publish | PutRecordContext::Custom => {
-                        Some(KademliaEvent::OutboundQueryProgressed {
+                        Some(Event::OutboundQueryProgressed {
                             id: query_id,
                             stats: result.stats,
                             result: QueryResult::PutRecord(err),
                             step: ProgressStep::first_and_last(),
                         })
                     }
-                    PutRecordContext::Republish => Some(KademliaEvent::OutboundQueryProgressed {
+                    PutRecordContext::Republish => Some(Event::OutboundQueryProgressed {
                         id: query_id,
                         stats: result.stats,
                         result: QueryResult::RepublishRecord(err),
@@ -1568,11 +1664,14 @@ where
                     }),
                     PutRecordContext::Replicate => match phase {
                         PutRecordPhase::GetClosestPeers => {
-                            warn!("Locating closest peers for replication failed: {:?}", err);
+                            tracing::warn!(
+                                "Locating closest peers for replication failed: {:?}",
+                                err
+                            );
                             None
                         }
                         PutRecordPhase::PutRecord { .. } => {
-                            debug!("Replicating record failed: {:?}", err);
+                            tracing::debug!("Replicating record failed: {:?}", err);
                             None
                         }
                     },
@@ -1582,7 +1681,7 @@ where
             QueryInfo::GetRecord { key, mut step, .. } => {
                 step.last = true;
 
-                Some(KademliaEvent::OutboundQueryProgressed {
+                Some(Event::OutboundQueryProgressed {
                     id: query_id,
                     stats: result.stats,
                     result: QueryResult::GetRecord(Err(GetRecordError::Timeout { key })),
@@ -1593,7 +1692,7 @@ where
             QueryInfo::GetProviders { key, mut step, .. } => {
                 step.last = true;
 
-                Some(KademliaEvent::OutboundQueryProgressed {
+                Some(Event::OutboundQueryProgressed {
                     id: query_id,
                     stats: result.stats,
                     result: QueryResult::GetProviders(Err(GetProvidersError::Timeout {
@@ -1611,23 +1710,22 @@ where
         &mut self,
         source: PeerId,
         connection: ConnectionId,
-        request_id: KademliaRequestId,
+        request_id: RequestId,
         mut record: Record,
     ) {
         if record.publisher.as_ref() == Some(self.kbuckets.local_key().preimage()) {
             // If the (alleged) publisher is the local node, do nothing. The record of
             // the original publisher should never change as a result of replication
             // and the publisher is always assumed to have the "right" value.
-            self.queued_events
-                .push_back(NetworkBehaviourAction::NotifyHandler {
-                    peer_id: source,
-                    handler: NotifyHandler::One(connection),
-                    event: KademliaHandlerIn::PutRecordRes {
-                        key: record.key,
-                        value: record.value,
-                        request_id,
-                    },
-                });
+            self.queued_events.push_back(ToSwarm::NotifyHandler {
+                peer_id: source,
+                handler: NotifyHandler::One(connection),
+                event: HandlerIn::PutRecordRes {
+                    key: record.key,
+                    value: record.value,
+                    request_id,
+                },
+            });
             return;
         }
 
@@ -1671,68 +1769,63 @@ where
             // requirement to send back the value in the response, although this
             // is a waste of resources.
             match self.record_filtering {
-                KademliaStoreInserts::Unfiltered => match self.store.put(record.clone()) {
+                StoreInserts::Unfiltered => match self.store.put(record.clone()) {
                     Ok(()) => {
-                        debug!(
-                            "Record stored: {:?}; {} bytes",
-                            record.key,
+                        tracing::debug!(
+                            record=?record.key,
+                            "Record stored: {} bytes",
                             record.value.len()
                         );
-                        self.queued_events
-                            .push_back(NetworkBehaviourAction::GenerateEvent(
-                                KademliaEvent::InboundRequest {
-                                    request: InboundRequest::PutRecord {
-                                        source,
-                                        connection,
-                                        record: None,
-                                    },
+                        self.queued_events.push_back(ToSwarm::GenerateEvent(
+                            Event::InboundRequest {
+                                request: InboundRequest::PutRecord {
+                                    source,
+                                    connection,
+                                    record: None,
                                 },
-                            ));
+                            },
+                        ));
                     }
                     Err(e) => {
-                        info!("Record not stored: {:?}", e);
-                        self.queued_events
-                            .push_back(NetworkBehaviourAction::NotifyHandler {
-                                peer_id: source,
-                                handler: NotifyHandler::One(connection),
-                                event: KademliaHandlerIn::Reset(request_id),
-                            });
+                        tracing::info!("Record not stored: {:?}", e);
+                        self.queued_events.push_back(ToSwarm::NotifyHandler {
+                            peer_id: source,
+                            handler: NotifyHandler::One(connection),
+                            event: HandlerIn::Reset(request_id),
+                        });
 
                         return;
                     }
                 },
-                KademliaStoreInserts::FilterBoth => {
+                StoreInserts::FilterBoth => {
                     self.queued_events
-                        .push_back(NetworkBehaviourAction::GenerateEvent(
-                            KademliaEvent::InboundRequest {
-                                request: InboundRequest::PutRecord {
-                                    source,
-                                    connection,
-                                    record: Some(record.clone()),
-                                },
+                        .push_back(ToSwarm::GenerateEvent(Event::InboundRequest {
+                            request: InboundRequest::PutRecord {
+                                source,
+                                connection,
+                                record: Some(record.clone()),
                             },
-                        ));
+                        }));
                 }
             }
         }
 
-        // The remote receives a [`KademliaHandlerIn::PutRecordRes`] even in the
+        // The remote receives a [`HandlerIn::PutRecordRes`] even in the
         // case where the record is discarded due to being expired. Given that
-        // the remote sent the local node a [`KademliaHandlerEvent::PutRecord`]
+        // the remote sent the local node a [`HandlerEvent::PutRecord`]
         // request, the remote perceives the local node as one node among the k
         // closest nodes to the target. In addition returning
-        // [`KademliaHandlerIn::PutRecordRes`] does not reveal any internal
+        // [`HandlerIn::PutRecordRes`] does not reveal any internal
         // information to a possibly malicious remote node.
-        self.queued_events
-            .push_back(NetworkBehaviourAction::NotifyHandler {
-                peer_id: source,
-                handler: NotifyHandler::One(connection),
-                event: KademliaHandlerIn::PutRecordRes {
-                    key: record.key,
-                    value: record.value,
-                    request_id,
-                },
-            })
+        self.queued_events.push_back(ToSwarm::NotifyHandler {
+            peer_id: source,
+            handler: NotifyHandler::One(connection),
+            event: HandlerIn::PutRecordRes {
+                key: record.key,
+                value: record.value,
+                request_id,
+            },
+        })
     }
 
     /// Processes a provider record received from a peer.
@@ -1745,28 +1838,24 @@ where
                 addresses: provider.multiaddrs,
             };
             match self.record_filtering {
-                KademliaStoreInserts::Unfiltered => {
+                StoreInserts::Unfiltered => {
                     if let Err(e) = self.store.add_provider(record) {
-                        info!("Provider record not stored: {:?}", e);
+                        tracing::info!("Provider record not stored: {:?}", e);
                         return;
                     }
 
                     self.queued_events
-                        .push_back(NetworkBehaviourAction::GenerateEvent(
-                            KademliaEvent::InboundRequest {
-                                request: InboundRequest::AddProvider { record: None },
-                            },
-                        ));
+                        .push_back(ToSwarm::GenerateEvent(Event::InboundRequest {
+                            request: InboundRequest::AddProvider { record: None },
+                        }));
                 }
-                KademliaStoreInserts::FilterBoth => {
+                StoreInserts::FilterBoth => {
                     self.queued_events
-                        .push_back(NetworkBehaviourAction::GenerateEvent(
-                            KademliaEvent::InboundRequest {
-                                request: InboundRequest::AddProvider {
-                                    record: Some(record),
-                                },
+                        .push_back(ToSwarm::GenerateEvent(Event::InboundRequest {
+                            request: InboundRequest::AddProvider {
+                                record: Some(record),
                             },
-                        ));
+                        }));
                 }
             }
         }
@@ -1775,16 +1864,17 @@ where
     fn address_failed(&mut self, peer_id: PeerId, address: &Multiaddr) {
         let key = kbucket::Key::from(peer_id);
 
-        if let Some(addrs) = self.kbuckets.entry(&key).value() {
+        if let Some(addrs) = self.kbuckets.entry(&key).as_mut().and_then(|e| e.value()) {
             // TODO: Ideally, the address should only be removed if the error can
             // be classified as "permanent" but since `err` is currently a borrowed
             // trait object without a `'static` bound, even downcasting for inspection
             // of the error is not possible (and also not truly desirable or ergonomic).
             // The error passed in should rather be a dedicated enum.
             if addrs.remove(address).is_ok() {
-                debug!(
-                    "Address '{}' removed from peer '{}' due to error.",
-                    address, peer_id
+                tracing::debug!(
+                    peer=%peer_id,
+                    %address,
+                    "Address removed from peer due to error."
                 );
             } else {
                 // Despite apparently having no reachable address (any longer),
@@ -1795,11 +1885,12 @@ where
                 // and is unreachable in the context of another peer pending insertion
                 // into the same bucket. This is handled transparently by the
                 // `KBucketsTable` and takes effect through `KBucketsTable::take_applied_pending`
-                // within `Kademlia::poll`.
-                debug!(
-                    "Last remaining address '{}' of peer '{}' is unreachable.",
-                    address, peer_id,
-                )
+                // within `Behaviour::poll`.
+                tracing::debug!(
+                    peer=%peer_id,
+                    %address,
+                    "Last remaining address of peer is unreachable."
+                );
             }
         }
 
@@ -1823,30 +1914,8 @@ where
             self.address_failed(peer_id, addr);
         }
 
-        // When a connection is established, we don't know yet whether the
-        // remote supports the configured protocol name. Only once a connection
-        // handler reports [`KademliaHandlerEvent::ProtocolConfirmed`] do we
-        // update the local routing table.
-
         // Peer's first connection.
         if other_established == 0 {
-            // Queue events for sending pending RPCs to the connected peer.
-            // There can be only one pending RPC for a particular peer and query per definition.
-            for (peer_id, event) in self.queries.iter_mut().filter_map(|q| {
-                q.inner
-                    .pending_rpcs
-                    .iter()
-                    .position(|(p, _)| p == &peer_id)
-                    .map(|p| q.inner.pending_rpcs.remove(p))
-            }) {
-                self.queued_events
-                    .push_back(NetworkBehaviourAction::NotifyHandler {
-                        peer_id,
-                        event,
-                        handler: NotifyHandler::Any,
-                    });
-            }
-
             self.connected_peers.insert(peer_id);
         }
     }
@@ -1863,24 +1932,34 @@ where
         let (old, new) = (old.get_remote_address(), new.get_remote_address());
 
         // Update routing table.
-        if let Some(addrs) = self.kbuckets.entry(&kbucket::Key::from(peer)).value() {
+        if let Some(addrs) = self
+            .kbuckets
+            .entry(&kbucket::Key::from(peer))
+            .as_mut()
+            .and_then(|e| e.value())
+        {
             if addrs.replace(old, new) {
-                debug!(
-                    "Address '{}' replaced with '{}' for peer '{}'.",
-                    old, new, peer
+                tracing::debug!(
+                    %peer,
+                    old_address=%old,
+                    new_address=%new,
+                    "Old address replaced with new address for peer."
                 );
             } else {
-                debug!(
-                    "Address '{}' not replaced with '{}' for peer '{}' as old address wasn't \
-                     present.",
-                    old, new, peer
+                tracing::debug!(
+                    %peer,
+                    old_address=%old,
+                    new_address=%new,
+                    "Old address not replaced with new address for peer as old address wasn't present.",
                 );
             }
         } else {
-            debug!(
-                "Address '{}' not replaced with '{}' for peer '{}' as peer is not present in the \
-                 routing table.",
-                old, new, peer
+            tracing::debug!(
+                %peer,
+                old_address=%old,
+                new_address=%new,
+                "Old address not replaced with new address for peer as peer is not present in the \
+                 routing table."
             );
         }
 
@@ -1909,26 +1988,14 @@ where
         }
     }
 
-    fn on_dial_failure(
-        &mut self,
-        DialFailure { peer_id, error, .. }: DialFailure<
-            <Self as NetworkBehaviour>::ConnectionHandler,
-        >,
-    ) {
-        let peer_id = match peer_id {
-            Some(id) => id,
-            // Not interested in dial failures to unknown peers.
-            None => return,
-        };
+    fn on_dial_failure(&mut self, DialFailure { peer_id, error, .. }: DialFailure) {
+        let Some(peer_id) = peer_id else { return };
 
         match error {
-            DialError::Banned
-            | DialError::ConnectionLimit(_)
-            | DialError::LocalPeerId
-            | DialError::InvalidPeerId { .. }
+            DialError::LocalPeerId { .. }
             | DialError::WrongPeerId { .. }
             | DialError::Aborted
-            | DialError::ConnectionIo(_)
+            | DialError::Denied { .. }
             | DialError::Transport(_)
             | DialError::NoAddresses => {
                 if let DialError::Transport(addresses) = error {
@@ -1942,7 +2009,9 @@ where
                 }
             }
             DialError::DialPeerConditionFalse(
-                dial_opts::PeerCondition::Disconnected | dial_opts::PeerCondition::NotDialing,
+                dial_opts::PeerCondition::Disconnected
+                | dial_opts::PeerCondition::NotDialing
+                | dial_opts::PeerCondition::DisconnectedAndNotDialing,
             ) => {
                 // We might (still) be connected, or about to be connected, thus do not report the
                 // failure to the queries.
@@ -1958,15 +2027,39 @@ where
         ConnectionClosed {
             peer_id,
             remaining_established,
+            connection_id,
             ..
-        }: ConnectionClosed<<Self as NetworkBehaviour>::ConnectionHandler>,
+        }: ConnectionClosed,
     ) {
+        self.connections.remove(&connection_id);
+
         if remaining_established == 0 {
             for query in self.queries.iter_mut() {
                 query.on_failure(&peer_id);
             }
             self.connection_updated(peer_id, None, NodeStatus::Disconnected);
             self.connected_peers.remove(&peer_id);
+        }
+    }
+
+    /// Preloads a new [`Handler`] with requests that are waiting to be sent to the newly connected peer.
+    fn preload_new_handler(
+        &mut self,
+        handler: &mut Handler,
+        connection_id: ConnectionId,
+        peer: PeerId,
+    ) {
+        self.connections.insert(connection_id, peer);
+        // Queue events for sending pending RPCs to the connected peer.
+        // There can be only one pending RPC for a particular peer and query per definition.
+        for (_peer_id, event) in self.queries.iter_mut().filter_map(|q| {
+            q.inner
+                .pending_rpcs
+                .iter()
+                .position(|(p, _)| p == &peer)
+                .map(|p| q.inner.pending_rpcs.remove(p))
+        }) {
+            handler.on_behaviour_event(event)
         }
     }
 }
@@ -1976,28 +2069,76 @@ fn exp_decrease(ttl: Duration, exp: u32) -> Duration {
     Duration::from_secs(ttl.as_secs().checked_shr(exp).unwrap_or(0))
 }
 
-impl<TStore> NetworkBehaviour for Kademlia<TStore>
+impl<TStore> NetworkBehaviour for Behaviour<TStore>
 where
-    for<'a> TStore: RecordStore<'a>,
-    TStore: Send + 'static,
+    TStore: RecordStore + Send + 'static,
 {
-    type ConnectionHandler = KademliaHandlerProto<QueryId>;
-    type OutEvent = KademliaEvent;
+    type ConnectionHandler = Handler;
+    type ToSwarm = Event;
 
-    fn new_handler(&mut self) -> Self::ConnectionHandler {
-        KademliaHandlerProto::new(KademliaHandlerConfig {
-            protocol_config: self.protocol_config.clone(),
-            allow_listening: true,
-            idle_timeout: self.connection_idle_timeout,
-        })
+    fn handle_established_inbound_connection(
+        &mut self,
+        connection_id: ConnectionId,
+        peer: PeerId,
+        local_addr: &Multiaddr,
+        remote_addr: &Multiaddr,
+    ) -> Result<THandler<Self>, ConnectionDenied> {
+        let connected_point = ConnectedPoint::Listener {
+            local_addr: local_addr.clone(),
+            send_back_addr: remote_addr.clone(),
+        };
+
+        let mut handler = Handler::new(
+            self.protocol_config.clone(),
+            connected_point,
+            peer,
+            self.mode,
+        );
+        self.preload_new_handler(&mut handler, connection_id, peer);
+
+        Ok(handler)
     }
 
-    fn addresses_of_peer(&mut self, peer_id: &PeerId) -> Vec<Multiaddr> {
+    fn handle_established_outbound_connection(
+        &mut self,
+        connection_id: ConnectionId,
+        peer: PeerId,
+        addr: &Multiaddr,
+        role_override: Endpoint,
+    ) -> Result<THandler<Self>, ConnectionDenied> {
+        let connected_point = ConnectedPoint::Dialer {
+            address: addr.clone(),
+            role_override,
+        };
+
+        let mut handler = Handler::new(
+            self.protocol_config.clone(),
+            connected_point,
+            peer,
+            self.mode,
+        );
+        self.preload_new_handler(&mut handler, connection_id, peer);
+
+        Ok(handler)
+    }
+
+    fn handle_pending_outbound_connection(
+        &mut self,
+        _connection_id: ConnectionId,
+        maybe_peer: Option<PeerId>,
+        _addresses: &[Multiaddr],
+        _effective_role: Endpoint,
+    ) -> Result<Vec<Multiaddr>, ConnectionDenied> {
+        let peer_id = match maybe_peer {
+            None => return Ok(vec![]),
+            Some(peer) => peer,
+        };
+
         // We should order addresses from decreasing likelyhood of connectivity, so start with
         // the addresses of that peer in the k-buckets.
-        let key = kbucket::Key::from(*peer_id);
+        let key = kbucket::Key::from(peer_id);
         let mut peer_addrs =
-            if let kbucket::Entry::Present(mut entry, _) = self.kbuckets.entry(&key) {
+            if let Some(kbucket::Entry::Present(mut entry, _)) = self.kbuckets.entry(&key) {
                 let addrs = entry.value().iter().cloned().collect::<Vec<_>>();
                 debug_assert!(!addrs.is_empty(), "Empty peer addresses in routing table.");
                 addrs
@@ -2007,22 +2148,22 @@ where
 
         // We add to that a temporary list of addresses from the ongoing queries.
         for query in self.queries.iter() {
-            if let Some(addrs) = query.inner.addresses.get(peer_id) {
+            if let Some(addrs) = query.inner.addresses.get(&peer_id) {
                 peer_addrs.extend(addrs.iter().cloned())
             }
         }
 
-        peer_addrs
+        Ok(peer_addrs)
     }
 
     fn on_connection_handler_event(
         &mut self,
         source: PeerId,
         connection: ConnectionId,
-        event: KademliaHandlerEvent<QueryId>,
+        event: THandlerOutEvent<Self>,
     ) {
         match event {
-            KademliaHandlerEvent::ProtocolConfirmed { endpoint } => {
+            HandlerEvent::ProtocolConfirmed { endpoint } => {
                 debug_assert!(self.connected_peers.contains(&source));
                 // The remote's address can only be put into the routing table,
                 // and thus shared with other nodes, if the local node is the dialer,
@@ -2032,73 +2173,76 @@ where
                     ConnectedPoint::Dialer { address, .. } => Some(address),
                     ConnectedPoint::Listener { .. } => None,
                 };
+
                 self.connection_updated(source, address, NodeStatus::Connected);
             }
 
-            KademliaHandlerEvent::FindNodeReq { key, request_id } => {
+            HandlerEvent::ProtocolNotSupported { endpoint } => {
+                let address = match endpoint {
+                    ConnectedPoint::Dialer { address, .. } => Some(address),
+                    ConnectedPoint::Listener { .. } => None,
+                };
+                self.connection_updated(source, address, NodeStatus::Disconnected);
+            }
+
+            HandlerEvent::FindNodeReq { key, request_id } => {
                 let closer_peers = self.find_closest(&kbucket::Key::new(key), &source);
 
                 self.queued_events
-                    .push_back(NetworkBehaviourAction::GenerateEvent(
-                        KademliaEvent::InboundRequest {
-                            request: InboundRequest::FindNode {
-                                num_closer_peers: closer_peers.len(),
-                            },
+                    .push_back(ToSwarm::GenerateEvent(Event::InboundRequest {
+                        request: InboundRequest::FindNode {
+                            num_closer_peers: closer_peers.len(),
                         },
-                    ));
+                    }));
 
-                self.queued_events
-                    .push_back(NetworkBehaviourAction::NotifyHandler {
-                        peer_id: source,
-                        handler: NotifyHandler::One(connection),
-                        event: KademliaHandlerIn::FindNodeRes {
-                            closer_peers,
-                            request_id,
-                        },
-                    });
+                self.queued_events.push_back(ToSwarm::NotifyHandler {
+                    peer_id: source,
+                    handler: NotifyHandler::One(connection),
+                    event: HandlerIn::FindNodeRes {
+                        closer_peers,
+                        request_id,
+                    },
+                });
             }
 
-            KademliaHandlerEvent::FindNodeRes {
+            HandlerEvent::FindNodeRes {
                 closer_peers,
-                user_data,
+                query_id,
             } => {
-                self.discovered(&user_data, &source, closer_peers.iter());
+                self.discovered(&query_id, &source, closer_peers.iter());
             }
 
-            KademliaHandlerEvent::GetProvidersReq { key, request_id } => {
+            HandlerEvent::GetProvidersReq { key, request_id } => {
                 let provider_peers = self.provider_peers(&key, &source);
                 let closer_peers = self.find_closest(&kbucket::Key::new(key), &source);
 
                 self.queued_events
-                    .push_back(NetworkBehaviourAction::GenerateEvent(
-                        KademliaEvent::InboundRequest {
-                            request: InboundRequest::GetProvider {
-                                num_closer_peers: closer_peers.len(),
-                                num_provider_peers: provider_peers.len(),
-                            },
+                    .push_back(ToSwarm::GenerateEvent(Event::InboundRequest {
+                        request: InboundRequest::GetProvider {
+                            num_closer_peers: closer_peers.len(),
+                            num_provider_peers: provider_peers.len(),
                         },
-                    ));
+                    }));
 
-                self.queued_events
-                    .push_back(NetworkBehaviourAction::NotifyHandler {
-                        peer_id: source,
-                        handler: NotifyHandler::One(connection),
-                        event: KademliaHandlerIn::GetProvidersRes {
-                            closer_peers,
-                            provider_peers,
-                            request_id,
-                        },
-                    });
+                self.queued_events.push_back(ToSwarm::NotifyHandler {
+                    peer_id: source,
+                    handler: NotifyHandler::One(connection),
+                    event: HandlerIn::GetProvidersRes {
+                        closer_peers,
+                        provider_peers,
+                        request_id,
+                    },
+                });
             }
 
-            KademliaHandlerEvent::GetProvidersRes {
+            HandlerEvent::GetProvidersRes {
                 closer_peers,
                 provider_peers,
-                user_data,
+                query_id,
             } => {
                 let peers = closer_peers.iter().chain(provider_peers.iter());
-                self.discovered(&user_data, &source, peers);
-                if let Some(query) = self.queries.get_mut(&user_data) {
+                self.discovered(&query_id, &source, peers);
+                if let Some(query) = self.queries.get_mut(&query_id) {
                     let stats = query.stats().clone();
                     if let QueryInfo::GetProviders {
                         ref key,
@@ -2110,40 +2254,38 @@ where
                         *providers_found += provider_peers.len();
                         let providers = provider_peers.iter().map(|p| p.node_id).collect();
 
-                        self.queued_events
-                            .push_back(NetworkBehaviourAction::GenerateEvent(
-                                KademliaEvent::OutboundQueryProgressed {
-                                    id: user_data,
-                                    result: QueryResult::GetProviders(Ok(
-                                        GetProvidersOk::FoundProviders {
-                                            key: key.clone(),
-                                            providers,
-                                        },
-                                    )),
-                                    step: step.clone(),
-                                    stats,
-                                },
-                            ));
+                        self.queued_events.push_back(ToSwarm::GenerateEvent(
+                            Event::OutboundQueryProgressed {
+                                id: query_id,
+                                result: QueryResult::GetProviders(Ok(
+                                    GetProvidersOk::FoundProviders {
+                                        key: key.clone(),
+                                        providers,
+                                    },
+                                )),
+                                step: step.clone(),
+                                stats,
+                            },
+                        ));
                         *step = step.next();
                     }
                 }
             }
-
-            KademliaHandlerEvent::QueryError { user_data, error } => {
-                log::debug!(
-                    "Request to {:?} in query {:?} failed with {:?}",
-                    source,
-                    user_data,
+            HandlerEvent::QueryError { query_id, error } => {
+                tracing::debug!(
+                    peer=%source,
+                    query=?query_id,
+                    "Request to peer in query failed with {:?}",
                     error
                 );
                 // If the query to which the error relates is still active,
                 // signal the failure w.r.t. `source`.
-                if let Some(query) = self.queries.get_mut(&user_data) {
+                if let Some(query) = self.queries.get_mut(&query_id) {
                     query.on_failure(&source)
                 }
             }
 
-            KademliaHandlerEvent::AddProvider { key, provider } => {
+            HandlerEvent::AddProvider { key, provider } => {
                 // Only accept a provider record from a legitimate peer.
                 if provider.node_id != source {
                     return;
@@ -2152,7 +2294,7 @@ where
                 self.provider_received(key, provider);
             }
 
-            KademliaHandlerEvent::GetRecord { key, request_id } => {
+            HandlerEvent::GetRecord { key, request_id } => {
                 // Lookup the record locally.
                 let record = match self.store.get(&key) {
                     Some(record) => {
@@ -2169,33 +2311,30 @@ where
                 let closer_peers = self.find_closest(&kbucket::Key::new(key), &source);
 
                 self.queued_events
-                    .push_back(NetworkBehaviourAction::GenerateEvent(
-                        KademliaEvent::InboundRequest {
-                            request: InboundRequest::GetRecord {
-                                num_closer_peers: closer_peers.len(),
-                                present_locally: record.is_some(),
-                            },
+                    .push_back(ToSwarm::GenerateEvent(Event::InboundRequest {
+                        request: InboundRequest::GetRecord {
+                            num_closer_peers: closer_peers.len(),
+                            present_locally: record.is_some(),
                         },
-                    ));
+                    }));
 
-                self.queued_events
-                    .push_back(NetworkBehaviourAction::NotifyHandler {
-                        peer_id: source,
-                        handler: NotifyHandler::One(connection),
-                        event: KademliaHandlerIn::GetRecordRes {
-                            record,
-                            closer_peers,
-                            request_id,
-                        },
-                    });
+                self.queued_events.push_back(ToSwarm::NotifyHandler {
+                    peer_id: source,
+                    handler: NotifyHandler::One(connection),
+                    event: HandlerIn::GetRecordRes {
+                        record,
+                        closer_peers,
+                        request_id,
+                    },
+                });
             }
 
-            KademliaHandlerEvent::GetRecordRes {
+            HandlerEvent::GetRecordRes {
                 record,
                 closer_peers,
-                user_data,
+                query_id,
             } => {
-                if let Some(query) = self.queries.get_mut(&user_data) {
+                if let Some(query) = self.queries.get_mut(&query_id) {
                     let stats = query.stats().clone();
                     if let QueryInfo::GetRecord {
                         key,
@@ -2211,22 +2350,21 @@ where
                                 record,
                             };
 
-                            self.queued_events
-                                .push_back(NetworkBehaviourAction::GenerateEvent(
-                                    KademliaEvent::OutboundQueryProgressed {
-                                        id: user_data,
-                                        result: QueryResult::GetRecord(Ok(
-                                            GetRecordOk::FoundRecord(record),
-                                        )),
-                                        step: step.clone(),
-                                        stats,
-                                    },
-                                ));
+                            self.queued_events.push_back(ToSwarm::GenerateEvent(
+                                Event::OutboundQueryProgressed {
+                                    id: query_id,
+                                    result: QueryResult::GetRecord(Ok(GetRecordOk::FoundRecord(
+                                        record,
+                                    ))),
+                                    step: step.clone(),
+                                    stats,
+                                },
+                            ));
 
                             *step = step.next();
                         } else {
-                            log::trace!("Record with key {:?} not found at {}", key, source);
-                            if let KademliaCaching::Enabled { max_peers } = self.caching {
+                            tracing::trace!(record=?key, %source, "Record not found at source");
+                            if let Caching::Enabled { max_peers } = self.caching {
                                 let source_key = kbucket::Key::from(source);
                                 let target_key = kbucket::Key::from(key.clone());
                                 let distance = source_key.distance(&target_key);
@@ -2243,15 +2381,15 @@ where
                     }
                 }
 
-                self.discovered(&user_data, &source, closer_peers.iter());
+                self.discovered(&query_id, &source, closer_peers.iter());
             }
 
-            KademliaHandlerEvent::PutRecord { record, request_id } => {
+            HandlerEvent::PutRecord { record, request_id } => {
                 self.record_received(source, connection, request_id, record);
             }
 
-            KademliaHandlerEvent::PutRecordRes { user_data, .. } => {
-                if let Some(query) = self.queries.get_mut(&user_data) {
+            HandlerEvent::PutRecordRes { query_id, .. } => {
+                if let Some(query) = self.queries.get_mut(&query_id) {
                     query.on_success(&source, vec![]);
                     if let QueryInfo::PutRecord {
                         phase: PutRecordPhase::PutRecord { success, .. },
@@ -2266,13 +2404,13 @@ where
                             let peers = success.clone();
                             let finished = query.try_finish(peers.iter());
                             if !finished {
-                                debug!(
-                                    "PutRecord query ({:?}) reached quorum ({}/{}) with response \
-                                     from peer {} but could not yet finish.",
-                                    user_data,
+                                tracing::debug!(
+                                    peer=%source,
+                                    query=?query_id,
+                                    "PutRecord query reached quorum ({}/{}) with response \
+                                     from peer but could not yet finish.",
                                     peers.len(),
                                     quorum,
-                                    source,
                                 );
                             }
                         }
@@ -2282,11 +2420,11 @@ where
         };
     }
 
+    #[tracing::instrument(level = "trace", name = "NetworkBehaviour::poll", skip(self, cx))]
     fn poll(
         &mut self,
         cx: &mut Context<'_>,
-        parameters: &mut impl PollParameters,
-    ) -> Poll<NetworkBehaviourAction<Self::OutEvent, Self::ConnectionHandler>> {
+    ) -> Poll<ToSwarm<Self::ToSwarm, THandlerInEvent<Self>>> {
         let now = Instant::now();
 
         // Calculate the available capacity for queries triggered by background jobs.
@@ -2334,7 +2472,7 @@ where
             // Drain applied pending entries from the routing table.
             if let Some(entry) = self.kbuckets.take_applied_pending() {
                 let kbucket::Node { key, value } = entry.inserted;
-                let event = KademliaEvent::RoutingUpdated {
+                let event = Event::RoutingUpdated {
                     bucket_range: self
                         .kbuckets
                         .bucket(&key)
@@ -2345,20 +2483,20 @@ where
                     addresses: value,
                     old_peer: entry.evicted.map(|n| n.key.into_preimage()),
                 };
-                return Poll::Ready(NetworkBehaviourAction::GenerateEvent(event));
+                return Poll::Ready(ToSwarm::GenerateEvent(event));
             }
 
             // Look for a finished query.
             loop {
                 match self.queries.poll(now) {
                     QueryPoolState::Finished(q) => {
-                        if let Some(event) = self.query_finished(q, parameters) {
-                            return Poll::Ready(NetworkBehaviourAction::GenerateEvent(event));
+                        if let Some(event) = self.query_finished(q) {
+                            return Poll::Ready(ToSwarm::GenerateEvent(event));
                         }
                     }
                     QueryPoolState::Timeout(q) => {
                         if let Some(event) = self.query_timeout(q) {
-                            return Poll::Ready(NetworkBehaviourAction::GenerateEvent(event));
+                            return Poll::Ready(ToSwarm::GenerateEvent(event));
                         }
                     }
                     QueryPoolState::Waiting(Some((query, peer_id))) => {
@@ -2377,18 +2515,17 @@ where
                         }
 
                         if self.connected_peers.contains(&peer_id) {
-                            self.queued_events
-                                .push_back(NetworkBehaviourAction::NotifyHandler {
-                                    peer_id,
-                                    event,
-                                    handler: NotifyHandler::Any,
-                                });
+                            self.queued_events.push_back(ToSwarm::NotifyHandler {
+                                peer_id,
+                                event,
+                                handler: NotifyHandler::Any,
+                            });
                         } else if &peer_id != self.kbuckets.local_key().preimage() {
                             query.inner.pending_rpcs.push((peer_id, event));
-                            let handler = self.new_handler();
-                            self.queued_events.push_back(NetworkBehaviourAction::Dial {
-                                opts: DialOpts::peer_id(peer_id).build(),
-                                handler,
+                            self.queued_events.push_back(ToSwarm::Dial {
+                                opts: DialOpts::peer_id(peer_id)
+                                    .condition(dial_opts::PeerCondition::NotDialing)
+                                    .build(),
                             });
                         }
                     }
@@ -2400,12 +2537,21 @@ where
             // If no new events have been queued either, signal `NotReady` to
             // be polled again later.
             if self.queued_events.is_empty() {
+                self.no_events_waker = Some(cx.waker().clone());
+
                 return Poll::Pending;
             }
         }
     }
 
-    fn on_swarm_event(&mut self, event: FromSwarm<Self::ConnectionHandler>) {
+    fn on_swarm_event(&mut self, event: FromSwarm) {
+        self.listen_addresses.on_swarm_event(&event);
+        let external_addresses_changed = self.external_addresses.on_swarm_event(&event);
+
+        if self.auto_mode && external_addresses_changed {
+            self.determine_mode_from_external_addresses();
+        }
+
         match event {
             FromSwarm::ConnectionEstablished(connection_established) => {
                 self.on_connection_established(connection_established)
@@ -2415,22 +2561,7 @@ where
             }
             FromSwarm::DialFailure(dial_failure) => self.on_dial_failure(dial_failure),
             FromSwarm::AddressChange(address_change) => self.on_address_change(address_change),
-            FromSwarm::ExpiredListenAddr(ExpiredListenAddr { addr, .. }) => {
-                self.local_addrs.remove(addr);
-            }
-            FromSwarm::NewExternalAddr(NewExternalAddr { addr }) => {
-                if self.local_addrs.len() < MAX_LOCAL_EXTERNAL_ADDRS {
-                    self.local_addrs.insert(addr.clone());
-                }
-            }
-            FromSwarm::NewListenAddr(NewListenAddr { addr, .. }) => {
-                self.local_addrs.insert(addr.clone());
-            }
-            FromSwarm::ListenFailure(_)
-            | FromSwarm::NewListener(_)
-            | FromSwarm::ListenerClosed(_)
-            | FromSwarm::ListenerError(_)
-            | FromSwarm::ExpiredExternalAddr(_) => {}
+            _ => {}
         }
     }
 }
@@ -2476,7 +2607,7 @@ pub struct PeerRecord {
 /// See [`NetworkBehaviour::poll`].
 #[derive(Debug, Clone)]
 #[allow(clippy::large_enum_variant)]
-pub enum KademliaEvent {
+pub enum Event {
     /// An inbound request has been received and handled.
     //
     // Note on the difference between 'request' and 'query': A request is a
@@ -2506,7 +2637,7 @@ pub enum KademliaEvent {
         is_new_peer: bool,
         /// The full list of known addresses of `peer`.
         addresses: Addresses,
-        /// Returns the minimum inclusive and maximum inclusive [`Distance`] for
+        /// Returns the minimum inclusive and maximum inclusive distance for
         /// the bucket of the peer.
         bucket_range: (Distance, Distance),
         /// The ID of the peer that was evicted from the routing table to make
@@ -2517,19 +2648,19 @@ pub enum KademliaEvent {
     /// A peer has connected for whom no listen address is known.
     ///
     /// If the peer is to be added to the routing table, a known
-    /// listen address for the peer must be provided via [`Kademlia::add_address`].
+    /// listen address for the peer must be provided via [`Behaviour::add_address`].
     UnroutablePeer { peer: PeerId },
 
     /// A connection to a peer has been established for whom a listen address
     /// is known but the peer has not been added to the routing table either
-    /// because [`KademliaBucketInserts::Manual`] is configured or because
+    /// because [`BucketInserts::Manual`] is configured or because
     /// the corresponding bucket is full.
     ///
     /// If the peer is to be included in the routing table, it must
-    /// must be explicitly added via [`Kademlia::add_address`], possibly after
+    /// must be explicitly added via [`Behaviour::add_address`], possibly after
     /// removing another peer.
     ///
-    /// See [`Kademlia::kbucket`] for insight into the contents of
+    /// See [`Behaviour::kbucket`] for insight into the contents of
     /// the k-bucket of `peer`.
     RoutablePeer { peer: PeerId, address: Multiaddr },
 
@@ -2539,12 +2670,18 @@ pub enum KademliaEvent {
     /// may not make it into the routing table.
     ///
     /// If the peer is to be unconditionally included in the routing table,
-    /// it should be explicitly added via [`Kademlia::add_address`] after
+    /// it should be explicitly added via [`Behaviour::add_address`] after
     /// removing another peer.
     ///
-    /// See [`Kademlia::kbucket`] for insight into the contents of
+    /// See [`Behaviour::kbucket`] for insight into the contents of
     /// the k-bucket of `peer`.
     PendingRoutablePeer { peer: PeerId, address: Multiaddr },
+
+    /// This peer's mode has been updated automatically.
+    ///
+    /// This happens in response to an external
+    /// address being added or removed.
+    ModeChanged { new_mode: Mode },
 }
 
 /// Information about progress events.
@@ -2589,21 +2726,21 @@ pub enum InboundRequest {
         num_closer_peers: usize,
         num_provider_peers: usize,
     },
-    /// A peer sent a [`KademliaHandlerIn::AddProvider`] request.
-    /// If filtering [`KademliaStoreInserts::FilterBoth`] is enabled, the [`ProviderRecord`] is
+    /// A peer sent an add provider request.
+    /// If filtering [`StoreInserts::FilterBoth`] is enabled, the [`ProviderRecord`] is
     /// included.
     ///
-    /// See [`KademliaStoreInserts`] and [`KademliaConfig::set_record_filtering`] for details..
+    /// See [`StoreInserts`] and [`Config::set_record_filtering`] for details..
     AddProvider { record: Option<ProviderRecord> },
     /// Request to retrieve a record.
     GetRecord {
         num_closer_peers: usize,
         present_locally: bool,
     },
-    /// A peer sent a [`KademliaHandlerIn::PutRecord`] request.
-    /// If filtering [`KademliaStoreInserts::FilterBoth`] is enabled, the [`Record`] is included.
+    /// A peer sent a put record request.
+    /// If filtering [`StoreInserts::FilterBoth`] is enabled, the [`Record`] is included.
     ///
-    /// See [`KademliaStoreInserts`] and [`KademliaConfig::set_record_filtering`].
+    /// See [`StoreInserts`] and [`Config::set_record_filtering`].
     PutRecord {
         source: PeerId,
         connection: ConnectionId,
@@ -2614,35 +2751,35 @@ pub enum InboundRequest {
 /// The results of Kademlia queries.
 #[derive(Debug, Clone)]
 pub enum QueryResult {
-    /// The result of [`Kademlia::bootstrap`].
+    /// The result of [`Behaviour::bootstrap`].
     Bootstrap(BootstrapResult),
 
-    /// The result of [`Kademlia::get_closest_peers`].
+    /// The result of [`Behaviour::get_closest_peers`].
     GetClosestPeers(GetClosestPeersResult),
 
-    /// The result of [`Kademlia::get_providers`].
+    /// The result of [`Behaviour::get_providers`].
     GetProviders(GetProvidersResult),
 
-    /// The result of [`Kademlia::start_providing`].
+    /// The result of [`Behaviour::start_providing`].
     StartProviding(AddProviderResult),
 
     /// The result of a (automatic) republishing of a provider record.
     RepublishProvider(AddProviderResult),
 
-    /// The result of [`Kademlia::get_record`].
+    /// The result of [`Behaviour::get_record`].
     GetRecord(GetRecordResult),
 
-    /// The result of [`Kademlia::put_record`].
+    /// The result of [`Behaviour::put_record`].
     PutRecord(PutRecordResult),
 
     /// The result of a (automatic) republishing of a (value-)record.
     RepublishRecord(PutRecordResult),
 }
 
-/// The result of [`Kademlia::get_record`].
+/// The result of [`Behaviour::get_record`].
 pub type GetRecordResult = Result<GetRecordOk, GetRecordError>;
 
-/// The successful result of [`Kademlia::get_record`].
+/// The successful result of [`Behaviour::get_record`].
 #[derive(Debug, Clone)]
 pub enum GetRecordOk {
     FoundRecord(PeerRecord),
@@ -2651,16 +2788,16 @@ pub enum GetRecordOk {
         /// _to the record key_ (not the local node) that were queried but
         /// did not return the record, sorted by distance to the record key
         /// from closest to farthest. How many of these are tracked is configured
-        /// by [`KademliaConfig::set_caching`]. If the lookup used a quorum of
-        /// 1, these peers will be sent the record as a means of caching.
-        /// If the lookup used a quorum > 1, you may wish to use these
-        /// candidates with [`Kademlia::put_record_to`] after selecting
-        /// one of the returned records.
+        /// by [`Config::set_caching`].
+        ///
+        /// Writing back the cache at these peers is a manual operation.
+        /// ie. you may wish to use these candidates with [`Behaviour::put_record_to`]
+        /// after selecting one of the returned records.
         cache_candidates: BTreeMap<kbucket::Distance, PeerId>,
     },
 }
 
-/// The error result of [`Kademlia::get_record`].
+/// The error result of [`Behaviour::get_record`].
 #[derive(Debug, Clone, Error)]
 pub enum GetRecordError {
     #[error("the record was not found")]
@@ -2699,16 +2836,16 @@ impl GetRecordError {
     }
 }
 
-/// The result of [`Kademlia::put_record`].
+/// The result of [`Behaviour::put_record`].
 pub type PutRecordResult = Result<PutRecordOk, PutRecordError>;
 
-/// The successful result of [`Kademlia::put_record`].
+/// The successful result of [`Behaviour::put_record`].
 #[derive(Debug, Clone)]
 pub struct PutRecordOk {
     pub key: record::Key,
 }
 
-/// The error result of [`Kademlia::put_record`].
+/// The error result of [`Behaviour::put_record`].
 #[derive(Debug, Clone, Error)]
 pub enum PutRecordError {
     #[error("the quorum failed; needed {quorum} peers")]
@@ -2746,17 +2883,17 @@ impl PutRecordError {
     }
 }
 
-/// The result of [`Kademlia::bootstrap`].
+/// The result of [`Behaviour::bootstrap`].
 pub type BootstrapResult = Result<BootstrapOk, BootstrapError>;
 
-/// The successful result of [`Kademlia::bootstrap`].
+/// The successful result of [`Behaviour::bootstrap`].
 #[derive(Debug, Clone)]
 pub struct BootstrapOk {
     pub peer: PeerId,
     pub num_remaining: u32,
 }
 
-/// The error result of [`Kademlia::bootstrap`].
+/// The error result of [`Behaviour::bootstrap`].
 #[derive(Debug, Clone, Error)]
 pub enum BootstrapError {
     #[error("the request timed out")]
@@ -2766,17 +2903,17 @@ pub enum BootstrapError {
     },
 }
 
-/// The result of [`Kademlia::get_closest_peers`].
+/// The result of [`Behaviour::get_closest_peers`].
 pub type GetClosestPeersResult = Result<GetClosestPeersOk, GetClosestPeersError>;
 
-/// The successful result of [`Kademlia::get_closest_peers`].
+/// The successful result of [`Behaviour::get_closest_peers`].
 #[derive(Debug, Clone)]
 pub struct GetClosestPeersOk {
     pub key: Vec<u8>,
     pub peers: Vec<PeerId>,
 }
 
-/// The error result of [`Kademlia::get_closest_peers`].
+/// The error result of [`Behaviour::get_closest_peers`].
 #[derive(Debug, Clone, Error)]
 pub enum GetClosestPeersError {
     #[error("the request timed out")]
@@ -2800,10 +2937,10 @@ impl GetClosestPeersError {
     }
 }
 
-/// The result of [`Kademlia::get_providers`].
+/// The result of [`Behaviour::get_providers`].
 pub type GetProvidersResult = Result<GetProvidersOk, GetProvidersError>;
 
-/// The successful result of [`Kademlia::get_providers`].
+/// The successful result of [`Behaviour::get_providers`].
 #[derive(Debug, Clone)]
 pub enum GetProvidersOk {
     FoundProviders {
@@ -2816,7 +2953,7 @@ pub enum GetProvidersOk {
     },
 }
 
-/// The error result of [`Kademlia::get_providers`].
+/// The error result of [`Behaviour::get_providers`].
 #[derive(Debug, Clone, Error)]
 pub enum GetProvidersError {
     #[error("the request timed out")]
@@ -2881,8 +3018,8 @@ impl From<kbucket::EntryView<kbucket::Key<PeerId>, Addresses>> for KadPeer {
             node_id: e.node.key.into_preimage(),
             multiaddrs: e.node.value.into_vec(),
             connection_ty: match e.status {
-                NodeStatus::Connected => KadConnectionType::Connected,
-                NodeStatus::Disconnected => KadConnectionType::NotConnected,
+                NodeStatus::Connected => ConnectionType::Connected,
+                NodeStatus::Disconnected => ConnectionType::NotConnected,
             },
         }
     }
@@ -2900,7 +3037,7 @@ struct QueryInner {
     ///
     /// A request is pending if the targeted peer is not currently connected
     /// and these requests are sent as soon as a connection to the peer is established.
-    pending_rpcs: SmallVec<[(PeerId, KademliaHandlerIn<QueryId>); K_VALUE.get()]>,
+    pending_rpcs: SmallVec<[(PeerId, HandlerIn); K_VALUE.get()]>,
 }
 
 impl QueryInner {
@@ -2916,33 +3053,33 @@ impl QueryInner {
 /// The context of a [`QueryInfo::AddProvider`] query.
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum AddProviderContext {
-    /// The context is a [`Kademlia::start_providing`] operation.
+    /// The context is a [`Behaviour::start_providing`] operation.
     Publish,
     /// The context is periodic republishing of provider announcements
-    /// initiated earlier via [`Kademlia::start_providing`].
+    /// initiated earlier via [`Behaviour::start_providing`].
     Republish,
 }
 
 /// The context of a [`QueryInfo::PutRecord`] query.
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum PutRecordContext {
-    /// The context is a [`Kademlia::put_record`] operation.
+    /// The context is a [`Behaviour::put_record`] operation.
     Publish,
     /// The context is periodic republishing of records stored
-    /// earlier via [`Kademlia::put_record`].
+    /// earlier via [`Behaviour::put_record`].
     Republish,
     /// The context is periodic replication (i.e. without extending
     /// the record TTL) of stored records received earlier from another peer.
     Replicate,
     /// The context is a custom store operation targeting specific
-    /// peers initiated by [`Kademlia::put_record_to`].
+    /// peers initiated by [`Behaviour::put_record_to`].
     Custom,
 }
 
 /// Information about a running query.
 #[derive(Debug, Clone)]
 pub enum QueryInfo {
-    /// A query initiated by [`Kademlia::bootstrap`].
+    /// A query initiated by [`Behaviour::bootstrap`].
     Bootstrap {
         /// The targeted peer ID.
         peer: PeerId,
@@ -2956,7 +3093,7 @@ pub enum QueryInfo {
         step: ProgressStep,
     },
 
-    /// A (repeated) query initiated by [`Kademlia::get_closest_peers`].
+    /// A (repeated) query initiated by [`Behaviour::get_closest_peers`].
     GetClosestPeers {
         /// The key being queried (the preimage).
         key: Vec<u8>,
@@ -2964,7 +3101,7 @@ pub enum QueryInfo {
         step: ProgressStep,
     },
 
-    /// A (repeated) query initiated by [`Kademlia::get_providers`].
+    /// A (repeated) query initiated by [`Behaviour::get_providers`].
     GetProviders {
         /// The key for which to search for providers.
         key: record::Key,
@@ -2974,7 +3111,7 @@ pub enum QueryInfo {
         step: ProgressStep,
     },
 
-    /// A (repeated) query initiated by [`Kademlia::start_providing`].
+    /// A (repeated) query initiated by [`Behaviour::start_providing`].
     AddProvider {
         /// The record key.
         key: record::Key,
@@ -2984,7 +3121,7 @@ pub enum QueryInfo {
         context: AddProviderContext,
     },
 
-    /// A (repeated) query initiated by [`Kademlia::put_record`].
+    /// A (repeated) query initiated by [`Behaviour::put_record`].
     PutRecord {
         record: Record,
         /// The expected quorum of responses w.r.t. the replication factor.
@@ -2995,7 +3132,7 @@ pub enum QueryInfo {
         context: PutRecordContext,
     },
 
-    /// A (repeated) query initiated by [`Kademlia::get_record`].
+    /// A (repeated) query initiated by [`Behaviour::get_record`].
     GetRecord {
         /// The key to look for.
         key: record::Key,
@@ -3012,50 +3149,51 @@ pub enum QueryInfo {
 impl QueryInfo {
     /// Creates an event for a handler to issue an outgoing request in the
     /// context of a query.
-    fn to_request(&self, query_id: QueryId) -> KademliaHandlerIn<QueryId> {
+    fn to_request(&self, query_id: QueryId) -> HandlerIn {
         match &self {
-            QueryInfo::Bootstrap { peer, .. } => KademliaHandlerIn::FindNodeReq {
+            QueryInfo::Bootstrap { peer, .. } => HandlerIn::FindNodeReq {
                 key: peer.to_bytes(),
-                user_data: query_id,
+                query_id,
             },
-            QueryInfo::GetClosestPeers { key, .. } => KademliaHandlerIn::FindNodeReq {
+            QueryInfo::GetClosestPeers { key, .. } => HandlerIn::FindNodeReq {
                 key: key.clone(),
-                user_data: query_id,
+                query_id,
             },
-            QueryInfo::GetProviders { key, .. } => KademliaHandlerIn::GetProvidersReq {
+            QueryInfo::GetProviders { key, .. } => HandlerIn::GetProvidersReq {
                 key: key.clone(),
-                user_data: query_id,
+                query_id,
             },
             QueryInfo::AddProvider { key, phase, .. } => match phase {
-                AddProviderPhase::GetClosestPeers => KademliaHandlerIn::FindNodeReq {
+                AddProviderPhase::GetClosestPeers => HandlerIn::FindNodeReq {
                     key: key.to_vec(),
-                    user_data: query_id,
+                    query_id,
                 },
                 AddProviderPhase::AddProvider {
                     provider_id,
                     external_addresses,
                     ..
-                } => KademliaHandlerIn::AddProvider {
+                } => HandlerIn::AddProvider {
                     key: key.clone(),
                     provider: crate::protocol::KadPeer {
                         node_id: *provider_id,
                         multiaddrs: external_addresses.clone(),
-                        connection_ty: crate::protocol::KadConnectionType::Connected,
+                        connection_ty: crate::protocol::ConnectionType::Connected,
                     },
+                    query_id,
                 },
             },
-            QueryInfo::GetRecord { key, .. } => KademliaHandlerIn::GetRecord {
+            QueryInfo::GetRecord { key, .. } => HandlerIn::GetRecord {
                 key: key.clone(),
-                user_data: query_id,
+                query_id,
             },
             QueryInfo::PutRecord { record, phase, .. } => match phase {
-                PutRecordPhase::GetClosestPeers => KademliaHandlerIn::FindNodeReq {
+                PutRecordPhase::GetClosestPeers => HandlerIn::FindNodeReq {
                     key: record.key.to_vec(),
-                    user_data: query_id,
+                    query_id,
                 },
-                PutRecordPhase::PutRecord { .. } => KademliaHandlerIn::PutRecord {
+                PutRecordPhase::PutRecord { .. } => HandlerIn::PutRecord {
                     record: record.clone(),
-                    user_data: query_id,
+                    query_id,
                 },
             },
         }
@@ -3161,7 +3299,8 @@ impl fmt::Display for NoKnownPeers {
 
 impl std::error::Error for NoKnownPeers {}
 
-/// The possible outcomes of [`Kademlia::add_address`].
+/// The possible outcomes of [`Behaviour::add_address`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum RoutingUpdate {
     /// The given peer and address has been added to the routing
     /// table.
@@ -3169,7 +3308,7 @@ pub enum RoutingUpdate {
     /// The peer and address is pending insertion into
     /// the routing table, if a disconnected peer fails
     /// to respond. If the given peer and address ends up
-    /// in the routing table, [`KademliaEvent::RoutingUpdated`]
+    /// in the routing table, [`Event::RoutingUpdated`]
     /// is eventually emitted.
     Pending,
     /// The routing table update failed, either because the
@@ -3180,7 +3319,28 @@ pub enum RoutingUpdate {
     Failed,
 }
 
-/// The maximum number of local external addresses. When reached any
-/// further externally reported addresses are ignored. The behaviour always
-/// tracks all its listen addresses.
-const MAX_LOCAL_EXTERNAL_ADDRS: usize = 20;
+#[derive(PartialEq, Copy, Clone, Debug)]
+pub enum Mode {
+    Client,
+    Server,
+}
+
+impl fmt::Display for Mode {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Mode::Client => write!(f, "client"),
+            Mode::Server => write!(f, "server"),
+        }
+    }
+}
+
+fn to_comma_separated_list<T>(confirmed_external_addresses: &[T]) -> String
+where
+    T: ToString,
+{
+    confirmed_external_addresses
+        .iter()
+        .map(|addr| addr.to_string())
+        .collect::<Vec<_>>()
+        .join(", ")
+}

@@ -1,3 +1,4 @@
+use base64::prelude::*;
 use std::error::Error;
 use std::path::PathBuf;
 use std::str::{self, FromStr};
@@ -7,8 +8,8 @@ use std::thread;
 mod config;
 
 use clap::Parser;
-use libp2p_core::identity::{self, ed25519};
-use libp2p_core::PeerId;
+use libp2p_identity as identity;
+use libp2p_identity::PeerId;
 use zeroize::Zeroizing;
 
 #[derive(Debug, Parser)]
@@ -54,7 +55,7 @@ fn main() -> Result<(), Box<dyn Error>> {
             let config = Zeroizing::new(config::Config::from_file(config.as_ref())?);
 
             let keypair = identity::Keypair::from_protobuf_encoding(&Zeroizing::new(
-                base64::decode(config.identity.priv_key.as_bytes())?,
+                BASE64_STANDARD.decode(config.identity.priv_key.as_bytes())?,
             ))?;
 
             let peer_id = keypair.public().into();
@@ -71,13 +72,13 @@ fn main() -> Result<(), Box<dyn Error>> {
         Command::Rand { prefix } => {
             if let Some(prefix) = prefix {
                 if prefix.as_bytes().iter().any(|c| !ALPHABET.contains(c)) {
-                    eprintln!("Prefix {} is not valid base58", prefix);
+                    eprintln!("Prefix {prefix} is not valid base58");
                     std::process::exit(1);
                 }
 
                 // Checking conformity to ALLOWED_FIRST_BYTE.
                 if !prefix.is_empty() && !ALLOWED_FIRST_BYTE.contains(&prefix.as_bytes()[0]) {
-                    eprintln!("Prefix {} is not reachable", prefix);
+                    eprintln!("Prefix {prefix} is not reachable");
                     eprintln!(
                         "Only the following bytes are possible as first byte: {}",
                         str::from_utf8(ALLOWED_FIRST_BYTE).unwrap()
@@ -93,19 +94,18 @@ fn main() -> Result<(), Box<dyn Error>> {
                     let tx = tx.clone();
 
                     thread::spawn(move || loop {
-                        let keypair = ed25519::Keypair::generate();
-                        let peer_id = identity::PublicKey::Ed25519(keypair.public()).to_peer_id();
+                        let keypair = identity::Keypair::generate_ed25519();
+                        let peer_id = keypair.public().to_peer_id();
                         let base58 = peer_id.to_base58();
                         if base58[8..].starts_with(&prefix) {
-                            tx.send((peer_id, identity::Keypair::Ed25519(keypair)))
-                                .expect("to send");
+                            tx.send((peer_id, keypair)).expect("to send");
                         }
                     });
                 }
 
                 rx.recv().expect("to recv")
             } else {
-                let keypair = identity::Keypair::Ed25519(ed25519::Keypair::generate());
+                let keypair = identity::Keypair::generate_ed25519();
                 (keypair.public().into(), keypair)
             }
         }

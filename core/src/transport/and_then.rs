@@ -20,10 +20,10 @@
 
 use crate::{
     connection::{ConnectedPoint, Endpoint},
-    either::EitherError,
     transport::{ListenerId, Transport, TransportError, TransportEvent},
 };
-use futures::{future::Either, prelude::*};
+use either::Either;
+use futures::prelude::*;
 use multiaddr::Multiaddr;
 use std::{error, marker::PhantomPinned, pin::Pin, task::Context, task::Poll};
 
@@ -50,14 +50,18 @@ where
     F::Error: error::Error,
 {
     type Output = O;
-    type Error = EitherError<T::Error, F::Error>;
+    type Error = Either<T::Error, F::Error>;
     type ListenerUpgrade = AndThenFuture<T::ListenerUpgrade, C, F>;
     type Dial = AndThenFuture<T::Dial, C, F>;
 
-    fn listen_on(&mut self, addr: Multiaddr) -> Result<ListenerId, TransportError<Self::Error>> {
+    fn listen_on(
+        &mut self,
+        id: ListenerId,
+        addr: Multiaddr,
+    ) -> Result<(), TransportError<Self::Error>> {
         self.transport
-            .listen_on(addr)
-            .map_err(|err| err.map(EitherError::A))
+            .listen_on(id, addr)
+            .map_err(|err| err.map(Either::Left))
     }
 
     fn remove_listener(&mut self, id: ListenerId) -> bool {
@@ -68,7 +72,7 @@ where
         let dialed_fut = self
             .transport
             .dial(addr.clone())
-            .map_err(|err| err.map(EitherError::A))?;
+            .map_err(|err| err.map(Either::Left))?;
         let future = AndThenFuture {
             inner: Either::Left(Box::pin(dialed_fut)),
             args: Some((
@@ -90,7 +94,7 @@ where
         let dialed_fut = self
             .transport
             .dial_as_listener(addr.clone())
-            .map_err(|err| err.map(EitherError::A))?;
+            .map_err(|err| err.map(Either::Left))?;
         let future = AndThenFuture {
             inner: Either::Left(Box::pin(dialed_fut)),
             args: Some((
@@ -139,7 +143,7 @@ where
             Poll::Ready(other) => {
                 let mapped = other
                     .map_upgrade(|_upgrade| unreachable!("case already matched"))
-                    .map_err(EitherError::A);
+                    .map_err(Either::Left);
                 Poll::Ready(mapped)
             }
             Poll::Pending => Poll::Pending,
@@ -163,7 +167,7 @@ where
     TMap: FnOnce(TFut::Ok, ConnectedPoint) -> TMapOut,
     TMapOut: TryFuture,
 {
-    type Output = Result<TMapOut::Ok, EitherError<TFut::Error, TMapOut::Error>>;
+    type Output = Result<TMapOut::Ok, Either<TFut::Error, TMapOut::Error>>;
 
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         loop {
@@ -171,7 +175,7 @@ where
                 Either::Left(future) => {
                     let item = match TryFuture::try_poll(future.as_mut(), cx) {
                         Poll::Ready(Ok(v)) => v,
-                        Poll::Ready(Err(err)) => return Poll::Ready(Err(EitherError::A(err))),
+                        Poll::Ready(Err(err)) => return Poll::Ready(Err(Either::Left(err))),
                         Poll::Pending => return Poll::Pending,
                     };
                     let (f, a) = self
@@ -183,7 +187,7 @@ where
                 Either::Right(future) => {
                     return match TryFuture::try_poll(future.as_mut(), cx) {
                         Poll::Ready(Ok(v)) => Poll::Ready(Ok(v)),
-                        Poll::Ready(Err(err)) => return Poll::Ready(Err(EitherError::B(err))),
+                        Poll::Ready(Err(err)) => return Poll::Ready(Err(Either::Right(err))),
                         Poll::Pending => Poll::Pending,
                     }
                 }

@@ -1,35 +1,34 @@
 [package]
 name = "libp2p-autonat"
 edition = "2021"
-rust-version = "1.62.0"
+rust-version = { workspace = true }
 description = "NAT and firewall detection for libp2p"
-version = "0.10.0"
+version = "0.12.0"
 authors = ["David Craven <david@craven.ch>", "Elena Frank <elena.frank@protonmail.com>"]
 license = "MIT"
 repository = "https://github.com/libp2p/rust-libp2p"
 keywords = ["peer-to-peer", "libp2p", "networking"]
 categories = ["network-programming", "asynchronous"]
 
-[build-dependencies]
-prost-build = "0.11"
-
 [dependencies]
 async-trait = "0.1"
 futures = "0.3"
 futures-timer = "3.0"
 instant = "0.1"
-libp2p-core = { version = "0.38.0", path = "../../core" }
-libp2p-swarm = { version = "0.42.0", path = "../../swarm" }
-libp2p-request-response = { version = "0.24.0", path = "../request-response" }
-log = "0.4"
+libp2p-core = { workspace = true }
+libp2p-swarm = { workspace = true }
+libp2p-request-response = { workspace = true }
+libp2p-identity = { workspace = true }
+quick-protobuf = "0.8"
 rand = "0.8"
-prost = "0.11"
+tracing = "0.1.37"
+quick-protobuf-codec = { workspace = true }
+asynchronous-codec = { workspace = true }
 
 [dev-dependencies]
 async-std = { version = "1.10", features = ["attributes"] }
-env_logger = "0.10"
-clap = { version = "4.0.13", features = ["derive"] }
-libp2p = { path = "../..", features = ["full"] }
+libp2p-swarm-test = { path = "../../swarm-test" }
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 
 # Passing arguments to the docsrs builder in order to properly document cfg's.
 # More information: https://docs.rs/about/builds#cross-compiling
@@ -37,3 +36,6 @@ libp2p = { path = "../..", features = ["full"] }
 all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
 rustc-args = ["--cfg", "docsrs"]
+
+[lints]
+workspace = true

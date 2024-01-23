@@ -1,9 +1,9 @@
 [package]
 name = "libp2p-floodsub"
 edition = "2021"
-rust-version = "1.62.0"
+rust-version = { workspace = true }
 description = "Floodsub protocol for libp2p"
-version = "0.42.0"
+version = "0.44.0"
 authors = ["Parity Technologies <admin@parity.io>"]
 license = "MIT"
 repository = "https://github.com/libp2p/rust-libp2p"
@@ -11,19 +11,20 @@ keywords = ["peer-to-peer", "libp2p", "networking"]
 categories = ["network-programming", "asynchronous"]
 
 [dependencies]
+asynchronous-codec = { workspace = true }
 cuckoofilter = "0.5.0"
 fnv = "1.0"
-futures = "0.3.1"
-libp2p-core = { version = "0.38.0", path = "../../core" }
-libp2p-swarm = { version = "0.42.0", path = "../../swarm" }
-log = "0.4"
-prost = "0.11"
+bytes = "1.5"
+futures = "0.3.30"
+libp2p-core = { workspace = true }
+libp2p-swarm = { workspace = true }
+libp2p-identity = { workspace = true }
+quick-protobuf = "0.8"
+quick-protobuf-codec = { workspace = true }
 rand = "0.8"
-smallvec = "1.6.1"
-thiserror = "1.0.37"
-
-[build-dependencies]
-prost-build = "0.11"
+smallvec = "1.12.0"
+thiserror = "1.0.56"
+tracing = "0.1.37"
 
 # Passing arguments to the docsrs builder in order to properly document cfg's.
 # More information: https://docs.rs/about/builds#cross-compiling
@@ -31,3 +32,6 @@ prost-build = "0.11"
 all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
 rustc-args = ["--cfg", "docsrs"]
+
+[lints]
+workspace = true

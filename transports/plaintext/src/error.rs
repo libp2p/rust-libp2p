@@ -23,25 +23,25 @@ use std::fmt;
 use std::io::Error as IoError;
 
 #[derive(Debug)]
-pub enum PlainTextError {
+pub enum Error {
     /// I/O error.
-    IoError(IoError),
+    Io(IoError),
 
     /// Failed to parse the handshake protobuf message.
     InvalidPayload(DecodeError),
 
     /// Failed to parse public key from bytes in protobuf message.
-    InvalidPublicKey(libp2p_core::identity::error::DecodingError),
+    InvalidPublicKey(libp2p_identity::DecodingError),
 
-    /// Failed to parse the [`PeerId`](libp2p_core::PeerId) from bytes in the protobuf message.
-    InvalidPeerId(libp2p_core::multihash::Error),
+    /// Failed to parse the [`PeerId`](libp2p_identity::PeerId) from bytes in the protobuf message.
+    InvalidPeerId(libp2p_identity::ParseError),
 
     /// The peer id of the exchange isn't consistent with the remote public key.
     PeerIdMismatch,
 }
 
 #[derive(Debug)]
-pub struct DecodeError(prost::DecodeError);
+pub struct DecodeError(pub(crate) quick_protobuf_codec::Error);
 
 impl fmt::Display for DecodeError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -55,52 +55,52 @@ impl error::Error for DecodeError {
     }
 }
 
-impl error::Error for PlainTextError {
+impl error::Error for Error {
     fn cause(&self) -> Option<&dyn error::Error> {
         match *self {
-            PlainTextError::IoError(ref err) => Some(err),
-            PlainTextError::InvalidPayload(ref err) => Some(err),
-            PlainTextError::InvalidPublicKey(ref err) => Some(err),
-            PlainTextError::InvalidPeerId(ref err) => Some(err),
+            Error::Io(ref err) => Some(err),
+            Error::InvalidPayload(ref err) => Some(err),
+            Error::InvalidPublicKey(ref err) => Some(err),
+            Error::InvalidPeerId(ref err) => Some(err),
             _ => None,
         }
     }
 }
 
-impl fmt::Display for PlainTextError {
+impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> Result<(), fmt::Error> {
         match self {
-            PlainTextError::IoError(e) => write!(f, "I/O error: {}", e),
-            PlainTextError::InvalidPayload(_) => f.write_str("Failed to decode protobuf"),
-            PlainTextError::PeerIdMismatch => f.write_str(
+            Error::Io(e) => write!(f, "I/O error: {e}"),
+            Error::InvalidPayload(_) => f.write_str("Failed to decode protobuf"),
+            Error::PeerIdMismatch => f.write_str(
                 "The peer id of the exchange isn't consistent with the remote public key",
             ),
-            PlainTextError::InvalidPublicKey(_) => f.write_str("Failed to decode public key"),
-            PlainTextError::InvalidPeerId(_) => f.write_str("Failed to decode PeerId"),
+            Error::InvalidPublicKey(_) => f.write_str("Failed to decode public key"),
+            Error::InvalidPeerId(_) => f.write_str("Failed to decode PeerId"),
         }
     }
 }
 
-impl From<IoError> for PlainTextError {
-    fn from(err: IoError) -> PlainTextError {
-        PlainTextError::IoError(err)
+impl From<IoError> for Error {
+    fn from(err: IoError) -> Error {
+        Error::Io(err)
     }
 }
 
-impl From<prost::DecodeError> for PlainTextError {
-    fn from(err: prost::DecodeError) -> PlainTextError {
-        PlainTextError::InvalidPayload(DecodeError(err))
+impl From<DecodeError> for Error {
+    fn from(err: DecodeError) -> Error {
+        Error::InvalidPayload(err)
     }
 }
 
-impl From<libp2p_core::identity::error::DecodingError> for PlainTextError {
-    fn from(err: libp2p_core::identity::error::DecodingError) -> PlainTextError {
-        PlainTextError::InvalidPublicKey(err)
+impl From<libp2p_identity::DecodingError> for Error {
+    fn from(err: libp2p_identity::DecodingError) -> Error {
+        Error::InvalidPublicKey(err)
     }
 }
 
-impl From<libp2p_core::multihash::Error> for PlainTextError {
-    fn from(err: libp2p_core::multihash::Error) -> PlainTextError {
-        PlainTextError::InvalidPeerId(err)
+impl From<libp2p_identity::ParseError> for Error {
+    fn from(err: libp2p_identity::ParseError) -> Error {
+        Error::InvalidPeerId(err)
     }
 }

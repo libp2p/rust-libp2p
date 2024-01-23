@@ -19,7 +19,8 @@
 // DEALINGS IN THE SOFTWARE.
 
 use crate::record;
-use libp2p_core::{multihash::Multihash, PeerId};
+use libp2p_core::multihash::Multihash;
+use libp2p_identity::PeerId;
 use sha2::digest::generic_array::{typenum::U32, GenericArray};
 use sha2::{Digest, Sha256};
 use std::borrow::Borrow;
@@ -76,6 +77,11 @@ impl<T> Key<T> {
         self.bytes.distance(other)
     }
 
+    /// Exposing the hashed bytes.
+    pub fn hashed_bytes(&self) -> &[u8] {
+        &self.bytes.0
+    }
+
     /// Returns the uniquely determined key with the given distance to `self`.
     ///
     /// This implements the following equivalence:
@@ -92,8 +98,8 @@ impl<T> From<Key<T>> for KeyBytes {
     }
 }
 
-impl From<Multihash> for Key<Multihash> {
-    fn from(m: Multihash) -> Self {
+impl<const S: usize> From<Multihash<S>> for Key<Multihash<S>> {
+    fn from(m: Multihash<S>) -> Self {
         let bytes = KeyBytes(Sha256::digest(m.to_bytes()));
         Key { preimage: m, bytes }
     }
@@ -195,7 +201,7 @@ impl Distance {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use libp2p_core::multihash::Code;
+    use crate::SHA_256_MH;
     use quickcheck::*;
 
     impl Arbitrary for Key<PeerId> {
@@ -204,10 +210,10 @@ mod tests {
         }
     }
 
-    impl Arbitrary for Key<Multihash> {
-        fn arbitrary(g: &mut Gen) -> Key<Multihash> {
+    impl Arbitrary for Key<Multihash<64>> {
+        fn arbitrary(g: &mut Gen) -> Key<Multihash<64>> {
             let hash: [u8; 32] = core::array::from_fn(|_| u8::arbitrary(g));
-            Key::from(Multihash::wrap(Code::Sha2_256.into(), &hash).unwrap())
+            Key::from(Multihash::wrap(SHA_256_MH, &hash).unwrap())
         }
     }
 

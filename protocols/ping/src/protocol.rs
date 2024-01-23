@@ -20,10 +20,11 @@
 
 use futures::prelude::*;
 use instant::Instant;
+use libp2p_swarm::StreamProtocol;
 use rand::{distributions, prelude::*};
 use std::{io, time::Duration};
 
-pub const PROTOCOL_NAME: &[u8] = b"/ipfs/ping/1.0.0";
+pub const PROTOCOL_NAME: StreamProtocol = StreamProtocol::new("/ipfs/ping/1.0.0");
 
 /// The `Ping` protocol upgrade.
 ///
@@ -34,8 +35,7 @@ pub const PROTOCOL_NAME: &[u8] = b"/ipfs/ping/1.0.0";
 ///
 /// At most a single inbound and outbound substream is kept open at
 /// any time. In case of a ping timeout or another error on a substream, the
-/// substream is dropped. If a configurable number of consecutive
-/// outbound pings fail, the connection is closed.
+/// substream is dropped.
 ///
 /// Successful pings report the round-trip time.
 ///
@@ -45,12 +45,11 @@ pub const PROTOCOL_NAME: &[u8] = b"/ipfs/ping/1.0.0";
 /// >           which can affect latencies especially on otherwise low-volume
 /// >           connections.
 #[derive(Default, Debug, Copy, Clone)]
-pub struct Ping;
-
+pub(crate) struct Ping;
 const PING_SIZE: usize = 32;
 
 /// Sends a ping and waits for the pong.
-pub async fn send_ping<S>(mut stream: S) -> io::Result<(S, Duration)>
+pub(crate) async fn send_ping<S>(mut stream: S) -> io::Result<(S, Duration)>
 where
     S: AsyncRead + AsyncWrite + Unpin,
 {
@@ -71,7 +70,7 @@ where
 }
 
 /// Waits for a ping and sends a pong.
-pub async fn recv_ping<S>(mut stream: S) -> io::Result<S>
+pub(crate) async fn recv_ping<S>(mut stream: S) -> io::Result<S>
 where
     S: AsyncRead + AsyncWrite + Unpin,
 {
@@ -88,7 +87,7 @@ mod tests {
     use futures::StreamExt;
     use libp2p_core::{
         multiaddr::multiaddr,
-        transport::{memory::MemoryTransport, Transport},
+        transport::{memory::MemoryTransport, ListenerId, Transport},
     };
     use rand::{thread_rng, Rng};
     use std::time::Duration;
@@ -97,7 +96,7 @@ mod tests {
     fn ping_pong() {
         let mem_addr = multiaddr![Memory(thread_rng().gen::<u64>())];
         let mut transport = MemoryTransport::new().boxed();
-        transport.listen_on(mem_addr).unwrap();
+        transport.listen_on(ListenerId::next(), mem_addr).unwrap();
 
         let listener_addr = transport
             .select_next_some()

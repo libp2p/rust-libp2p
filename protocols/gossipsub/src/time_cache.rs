@@ -21,13 +21,13 @@
 //! This implements a time-based LRU cache for checking gossipsub message duplicates.
 
 use fnv::FnvHashMap;
+use instant::Instant;
 use std::collections::hash_map::{
     self,
     Entry::{Occupied, Vacant},
 };
 use std::collections::VecDeque;
 use std::time::Duration;
-use wasm_timer::Instant;
 
 struct ExpiringElement<Element> {
     /// The element that expires
@@ -36,7 +36,7 @@ struct ExpiringElement<Element> {
     expires: Instant,
 }
 
-pub struct TimeCache<Key, Value> {
+pub(crate) struct TimeCache<Key, Value> {
     /// Mapping a key to its value together with its latest expire time (can be updated through
     /// reinserts).
     map: FnvHashMap<Key, ExpiringElement<Value>>,
@@ -46,42 +46,20 @@ pub struct TimeCache<Key, Value> {
     ttl: Duration,
 }
 
-pub struct OccupiedEntry<'a, K, V> {
-    expiration: Instant,
+pub(crate) struct OccupiedEntry<'a, K, V> {
     entry: hash_map::OccupiedEntry<'a, K, ExpiringElement<V>>,
-    list: &'a mut VecDeque<ExpiringElement<K>>,
 }
 
 impl<'a, K, V> OccupiedEntry<'a, K, V>
 where
     K: Eq + std::hash::Hash + Clone,
 {
-    pub fn into_mut(self) -> &'a mut V {
+    pub(crate) fn into_mut(self) -> &'a mut V {
         &mut self.entry.into_mut().element
-    }
-
-    pub fn insert_without_updating_expiration(&mut self, value: V) -> V {
-        //keep old expiration, only replace value of element
-        ::std::mem::replace(&mut self.entry.get_mut().element, value)
-    }
-
-    pub fn insert_and_update_expiration(&mut self, value: V) -> V {
-        //We push back an additional element, the first reference in the list will be ignored
-        // since we also updated the expires in the map, see below.
-        self.list.push_back(ExpiringElement {
-            element: self.entry.key().clone(),
-            expires: self.expiration,
-        });
-        self.entry
-            .insert(ExpiringElement {
-                element: value,
-                expires: self.expiration,
-            })
-            .element
     }
 }
 
-pub struct VacantEntry<'a, K, V> {
+pub(crate) struct VacantEntry<'a, K, V> {
     expiration: Instant,
     entry: hash_map::VacantEntry<'a, K, ExpiringElement<V>>,
     list: &'a mut VecDeque<ExpiringElement<K>>,
@@ -91,7 +69,7 @@ impl<'a, K, V> VacantEntry<'a, K, V>
 where
     K: Eq + std::hash::Hash + Clone,
 {
-    pub fn insert(self, value: V) -> &'a mut V {
+    pub(crate) fn insert(self, value: V) -> &'a mut V {
         self.list.push_back(ExpiringElement {
             element: self.entry.key().clone(),
             expires: self.expiration,
@@ -106,7 +84,7 @@ where
     }
 }
 
-pub enum Entry<'a, K: 'a, V: 'a> {
+pub(crate) enum Entry<'a, K: 'a, V: 'a> {
     Occupied(OccupiedEntry<'a, K, V>),
     Vacant(VacantEntry<'a, K, V>),
 }
@@ -115,10 +93,13 @@ impl<'a, K: 'a, V: 'a> Entry<'a, K, V>
 where
     K: Eq + std::hash::Hash + Clone,
 {
-    pub fn or_insert_with<F: FnOnce() -> V>(self, default: F) -> &'a mut V {
+    pub(crate) fn or_default(self) -> &'a mut V
+    where
+        V: Default,
+    {
         match self {
             Entry::Occupied(entry) => entry.into_mut(),
-            Entry::Vacant(entry) => entry.insert(default()),
+            Entry::Vacant(entry) => entry.insert(V::default()),
         }
     }
 }
@@ -127,7 +108,7 @@ impl<Key, Value> TimeCache<Key, Value>
 where
     Key: Eq + std::hash::Hash + Clone,
 {
-    pub fn new(ttl: Duration) -> Self {
+    pub(crate) fn new(ttl: Duration) -> Self {
         TimeCache {
             map: FnvHashMap::default(),
             list: VecDeque::new(),
@@ -149,15 +130,11 @@ where
         }
     }
 
-    pub fn entry(&mut self, key: Key) -> Entry<Key, Value> {
+    pub(crate) fn entry(&mut self, key: Key) -> Entry<Key, Value> {
         let now = Instant::now();
         self.remove_expired_keys(now);
         match self.map.entry(key) {
-            Occupied(entry) => Entry::Occupied(OccupiedEntry {
-                expiration: now + self.ttl,
-                entry,
-                list: &mut self.list,
-            }),
+            Occupied(entry) => Entry::Occupied(OccupiedEntry { entry }),
             Vacant(entry) => Entry::Vacant(VacantEntry {
                 expiration: now + self.ttl,
                 entry,
@@ -167,31 +144,24 @@ where
     }
 
     /// Empties the entire cache.
-    pub fn clear(&mut self) {
+    #[cfg(test)]
+    pub(crate) fn clear(&mut self) {
         self.map.clear();
         self.list.clear();
     }
 
-    pub fn contains_key(&self, key: &Key) -> bool {
+    pub(crate) fn contains_key(&self, key: &Key) -> bool {
         self.map.contains_key(key)
-    }
-
-    pub fn get(&self, key: &Key) -> Option<&Value> {
-        self.map.get(key).map(|e| &e.element)
-    }
-
-    pub fn get_mut(&mut self, key: &Key) -> Option<&mut Value> {
-        self.map.get_mut(key).map(|e| &mut e.element)
     }
 }
 
-pub struct DuplicateCache<Key>(TimeCache<Key, ()>);
+pub(crate) struct DuplicateCache<Key>(TimeCache<Key, ()>);
 
 impl<Key> DuplicateCache<Key>
 where
     Key: Eq + std::hash::Hash + Clone,
 {
-    pub fn new(ttl: Duration) -> Self {
+    pub(crate) fn new(ttl: Duration) -> Self {
         Self(TimeCache::new(ttl))
     }
 
@@ -199,7 +169,7 @@ where
     //
     // If the key was not present this returns `true`. If the value was already present this
     // returns `false`.
-    pub fn insert(&mut self, key: Key) -> bool {
+    pub(crate) fn insert(&mut self, key: Key) -> bool {
         if let Entry::Vacant(entry) = self.0.entry(key) {
             entry.insert(());
             true
@@ -208,7 +178,7 @@ where
         }
     }
 
-    pub fn contains(&self, key: &Key) -> bool {
+    pub(crate) fn contains(&self, key: &Key) -> bool {
         self.0.contains_key(key)
     }
 }

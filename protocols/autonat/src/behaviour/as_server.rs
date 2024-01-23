@@ -23,14 +23,14 @@ use super::{
     ResponseError,
 };
 use instant::Instant;
-use libp2p_core::{connection::ConnectionId, multiaddr::Protocol, Multiaddr, PeerId};
+use libp2p_core::{multiaddr::Protocol, Multiaddr};
+use libp2p_identity::PeerId;
 use libp2p_request_response::{
-    InboundFailure, RequestId, RequestResponse, RequestResponseEvent, RequestResponseMessage,
-    ResponseChannel,
+    self as request_response, InboundFailure, InboundRequestId, ResponseChannel,
 };
 use libp2p_swarm::{
     dial_opts::{DialOpts, PeerCondition},
-    DialError, NetworkBehaviour, NetworkBehaviourAction, PollParameters,
+    ConnectionId, DialError, ToSwarm,
 };
 use std::{
     collections::{HashMap, HashSet, VecDeque},
@@ -38,7 +38,7 @@ use std::{
 };
 
 /// Inbound probe failed.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug)]
 pub enum InboundProbeError {
     /// Receiving the dial-back request or sending a response failed.
     InboundRequest(InboundFailure),
@@ -46,7 +46,7 @@ pub enum InboundProbeError {
     Response(ResponseError),
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug)]
 pub enum InboundProbeEvent {
     /// A dial-back request was received from a remote peer.
     Request {
@@ -74,20 +74,18 @@ pub enum InboundProbeEvent {
 }
 
 /// View over [`super::Behaviour`] in a server role.
-pub struct AsServer<'a> {
-    pub inner: &'a mut RequestResponse<AutoNatCodec>,
-    pub config: &'a Config,
-    pub connected: &'a HashMap<PeerId, HashMap<ConnectionId, Option<Multiaddr>>>,
-    pub probe_id: &'a mut ProbeId,
-
-    pub throttled_clients: &'a mut Vec<(PeerId, Instant)>,
-
+pub(crate) struct AsServer<'a> {
+    pub(crate) inner: &'a mut request_response::Behaviour<AutoNatCodec>,
+    pub(crate) config: &'a Config,
+    pub(crate) connected: &'a HashMap<PeerId, HashMap<ConnectionId, Option<Multiaddr>>>,
+    pub(crate) probe_id: &'a mut ProbeId,
+    pub(crate) throttled_clients: &'a mut Vec<(PeerId, Instant)>,
     #[allow(clippy::type_complexity)]
-    pub ongoing_inbound: &'a mut HashMap<
+    pub(crate) ongoing_inbound: &'a mut HashMap<
         PeerId,
         (
             ProbeId,
-            RequestId,
+            InboundRequestId,
             Vec<Multiaddr>,
             ResponseChannel<DialResponse>,
         ),
@@ -97,16 +95,13 @@ pub struct AsServer<'a> {
 impl<'a> HandleInnerEvent for AsServer<'a> {
     fn handle_event(
         &mut self,
-        _params: &mut impl PollParameters,
-        event: RequestResponseEvent<DialRequest, DialResponse>,
-    ) -> (VecDeque<Event>, Option<Action>) {
-        let mut events = VecDeque::new();
-        let mut action = None;
+        event: request_response::Event<DialRequest, DialResponse>,
+    ) -> VecDeque<Action> {
         match event {
-            RequestResponseEvent::Message {
+            request_response::Event::Message {
                 peer,
                 message:
-                    RequestResponseMessage::Request {
+                    request_response::Message::Request {
                         request_id,
                         request,
                         channel,
@@ -115,9 +110,9 @@ impl<'a> HandleInnerEvent for AsServer<'a> {
                 let probe_id = self.probe_id.next();
                 match self.resolve_inbound_request(peer, request) {
                     Ok(addrs) => {
-                        log::debug!(
-                            "Inbound dial request from Peer {} with dial-back addresses {:?}.",
-                            peer,
+                        tracing::debug!(
+                            %peer,
+                            "Inbound dial request from peer with dial-back addresses {:?}",
                             addrs
                         );
 
@@ -125,26 +120,30 @@ impl<'a> HandleInnerEvent for AsServer<'a> {
                             .insert(peer, (probe_id, request_id, addrs.clone(), channel));
                         self.throttled_clients.push((peer, Instant::now()));
 
-                        events.push_back(Event::InboundProbe(InboundProbeEvent::Request {
-                            probe_id,
-                            peer,
-                            addresses: addrs.clone(),
-                        }));
-
-                        action = Some(NetworkBehaviourAction::Dial {
-                            opts: DialOpts::peer_id(peer)
-                                .condition(PeerCondition::Always)
-                                .override_dial_concurrency_factor(NonZeroU8::new(1).expect("1 > 0"))
-                                .addresses(addrs)
-                                .build(),
-                            handler: self.inner.new_handler(),
-                        });
+                        VecDeque::from([
+                            ToSwarm::GenerateEvent(Event::InboundProbe(
+                                InboundProbeEvent::Request {
+                                    probe_id,
+                                    peer,
+                                    addresses: addrs.clone(),
+                                },
+                            )),
+                            ToSwarm::Dial {
+                                opts: DialOpts::peer_id(peer)
+                                    .condition(PeerCondition::Always)
+                                    .override_dial_concurrency_factor(
+                                        NonZeroU8::new(1).expect("1 > 0"),
+                                    )
+                                    .addresses(addrs)
+                                    .build(),
+                            },
+                        ])
                     }
                     Err((status_text, error)) => {
-                        log::debug!(
-                            "Reject inbound dial request from peer {}: {}.",
-                            peer,
-                            status_text
+                        tracing::debug!(
+                            %peer,
+                            status=%status_text,
+                            "Reject inbound dial request from peer"
                         );
 
                         let response = DialResponse {
@@ -153,23 +152,25 @@ impl<'a> HandleInnerEvent for AsServer<'a> {
                         };
                         let _ = self.inner.send_response(channel, response);
 
-                        events.push_back(Event::InboundProbe(InboundProbeEvent::Error {
-                            probe_id,
-                            peer,
-                            error: InboundProbeError::Response(error),
-                        }));
+                        VecDeque::from([ToSwarm::GenerateEvent(Event::InboundProbe(
+                            InboundProbeEvent::Error {
+                                probe_id,
+                                peer,
+                                error: InboundProbeError::Response(error),
+                            },
+                        ))])
                     }
                 }
             }
-            RequestResponseEvent::InboundFailure {
+            request_response::Event::InboundFailure {
                 peer,
                 error,
                 request_id,
             } => {
-                log::debug!(
-                    "Inbound Failure {} when on dial-back request from peer {}.",
-                    error,
-                    peer
+                tracing::debug!(
+                    %peer,
+                    "Inbound Failure {} when on dial-back request from peer",
+                    error
                 );
 
                 let probe_id = match self.ongoing_inbound.get(&peer) {
@@ -179,20 +180,21 @@ impl<'a> HandleInnerEvent for AsServer<'a> {
                     _ => self.probe_id.next(),
                 };
 
-                events.push_back(Event::InboundProbe(InboundProbeEvent::Error {
-                    probe_id,
-                    peer,
-                    error: InboundProbeError::InboundRequest(error),
-                }));
+                VecDeque::from([ToSwarm::GenerateEvent(Event::InboundProbe(
+                    InboundProbeEvent::Error {
+                        probe_id,
+                        peer,
+                        error: InboundProbeError::InboundRequest(error),
+                    },
+                ))])
             }
-            _ => {}
+            _ => VecDeque::new(),
         }
-        (events, action)
     }
 }
 
 impl<'a> AsServer<'a> {
-    pub fn on_outbound_connection(
+    pub(crate) fn on_outbound_connection(
         &mut self,
         peer: &PeerId,
         address: &Multiaddr,
@@ -204,10 +206,10 @@ impl<'a> AsServer<'a> {
             return None;
         }
 
-        log::debug!(
-            "Dial-back to peer {} succeeded at addr {:?}.",
-            peer,
-            address
+        tracing::debug!(
+            %peer,
+            %address,
+            "Dial-back to peer succeeded"
         );
 
         let (probe_id, _, _, channel) = self.ongoing_inbound.remove(peer).unwrap();
@@ -224,17 +226,25 @@ impl<'a> AsServer<'a> {
         })
     }
 
-    pub fn on_outbound_dial_error(
+    pub(crate) fn on_outbound_dial_error(
         &mut self,
         peer: Option<PeerId>,
         error: &DialError,
     ) -> Option<InboundProbeEvent> {
         let (probe_id, _, _, channel) = peer.and_then(|p| self.ongoing_inbound.remove(&p))?;
-        log::debug!(
-            "Dial-back to peer {} failed with error {:?}.",
-            peer.unwrap(),
-            error
-        );
+
+        match peer {
+            Some(p) => tracing::debug!(
+                peer=%p,
+                "Dial-back to peer failed with error {:?}",
+                error
+            ),
+            None => tracing::debug!(
+                "Dial-back to non existent peer failed with error {:?}",
+                error
+            ),
+        };
+
         let response_error = ResponseError::DialError;
         let response = DialResponse {
             result: Err(response_error.clone()),
@@ -316,13 +326,13 @@ impl<'a> AsServer<'a> {
         demanded: Vec<Multiaddr>,
         observed_remote_at: &Multiaddr,
     ) -> Vec<Multiaddr> {
-        let observed_ip = match observed_remote_at
+        let Some(observed_ip) = observed_remote_at
             .into_iter()
             .find(|p| matches!(p, Protocol::Ip4(_) | Protocol::Ip6(_)))
-        {
-            Some(ip) => ip,
-            None => return Vec::new(),
+        else {
+            return Vec::new();
         };
+
         let mut distinct = HashSet::new();
         demanded
             .into_iter()
@@ -335,7 +345,7 @@ impl<'a> AsServer<'a> {
 
                 let is_valid = addr.iter().all(|proto| match proto {
                     Protocol::P2pCircuit => false,
-                    Protocol::P2p(hash) => hash == peer.into(),
+                    Protocol::P2p(peer_id) => peer_id == peer,
                     _ => true,
                 });
 
@@ -343,7 +353,7 @@ impl<'a> AsServer<'a> {
                     return None;
                 }
                 if !addr.iter().any(|p| matches!(p, Protocol::P2p(_))) {
-                    addr.push(Protocol::P2p(peer.into()))
+                    addr.push(Protocol::P2p(peer))
                 }
                 // Only collect distinct addresses.
                 distinct.insert(addr.clone()).then_some(addr)
@@ -377,26 +387,26 @@ mod test {
         let observed_addr = Multiaddr::empty()
             .with(observed_ip.clone())
             .with(random_port())
-            .with(Protocol::P2p(peer_id.into()));
+            .with(Protocol::P2p(peer_id));
         // Valid address with matching peer-id
         let demanded_1 = Multiaddr::empty()
             .with(random_ip())
             .with(random_port())
-            .with(Protocol::P2p(peer_id.into()));
+            .with(Protocol::P2p(peer_id));
         // Invalid because peer_id does not match
         let demanded_2 = Multiaddr::empty()
             .with(random_ip())
             .with(random_port())
-            .with(Protocol::P2p(PeerId::random().into()));
+            .with(Protocol::P2p(PeerId::random()));
         // Valid address without peer-id
         let demanded_3 = Multiaddr::empty().with(random_ip()).with(random_port());
         // Invalid because relayed
         let demanded_4 = Multiaddr::empty()
             .with(random_ip())
             .with(random_port())
-            .with(Protocol::P2p(PeerId::random().into()))
+            .with(Protocol::P2p(PeerId::random()))
             .with(Protocol::P2pCircuit)
-            .with(Protocol::P2p(peer_id.into()));
+            .with(Protocol::P2p(peer_id));
         let demanded = vec![
             demanded_1.clone(),
             demanded_2,
@@ -410,7 +420,7 @@ mod test {
         let expected_2 = demanded_3
             .replace(0, |_| Some(observed_ip))
             .unwrap()
-            .with(Protocol::P2p(peer_id.into()));
+            .with(Protocol::P2p(peer_id));
         assert_eq!(filtered, vec![expected_1, expected_2]);
     }
 }

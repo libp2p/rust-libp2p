@@ -1,32 +1,56 @@
 name: Interoperability Testing
-
 on:
   pull_request:
   push:
     branches:
-      - master
+      - "master"
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
-  # NOTE: during a pull request run, github creates a merge commit referenced in `github.sha`
-  # that merge commit is not a regular commit. You won't find it with a regular `git checkout SHA` and
-  # tools like `go get repo@SHA` won't find it.
-  #
-  # As a workaround, we generate a path to the actual pull request's commit, it looks like:
-  # `github.com/external-org/go-libp2p@latest-commit-on-their-branch`
-  run-ping-interop-cross-version:
-    uses: "libp2p/test-plans/.github/workflows/run-composition.yml@master"
-    with:
-      composition_file: "ping/_compositions/rust-cross-versions.toml"
-      custom_git_target: github.com/${{ github.event.pull_request.head.repo.full_name || github.event.repository.full_name }}
-      custom_git_reference: ${{ github.event.pull_request.head.sha || github.sha }}
-  run-ping-interop-cross-implementation:
-    uses: "libp2p/test-plans/.github/workflows/run-composition.yml@master"
-    with:
-      composition_file: "ping/_compositions/all-interop-latest.toml"
-      custom_git_target: github.com/${{ github.event.pull_request.head.repo.full_name || github.event.repository.full_name }}
-      custom_git_reference: ${{ github.event.pull_request.head.sha || github.sha }}
-      custom_interop_target: rust
+  run-transport-interop:
+    name: Run transport interoperability tests
+    runs-on: ${{ fromJSON(github.repository == 'libp2p/rust-libp2p' && '["self-hosted", "linux", "x64", "4xlarge"]' || '"ubuntu-latest"') }}
+    strategy:
+      matrix:
+        flavour: [chromium, native]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Build ${{ matrix.flavour }} image
+        run: ./scripts/build-interop-image.sh
+        env:
+          AWS_ACCESS_KEY_ID: ${{ vars.TEST_PLANS_BUILD_CACHE_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.TEST_PLANS_BUILD_CACHE_KEY }}
+          FLAVOUR: ${{ matrix.flavour }}
+
+      - name: Run ${{ matrix.flavour }} tests
+        uses: libp2p/test-plans/.github/actions/run-transport-interop-test@master
+        with:
+          test-filter: ${{ matrix.flavour }}-rust-libp2p-head
+          extra-versions: ${{ github.workspace }}/interop-tests/${{ matrix.flavour }}-ping-version.json
+          s3-cache-bucket: libp2p-by-tf-aws-bootstrap
+          s3-access-key-id: ${{ vars.TEST_PLANS_BUILD_CACHE_KEY_ID }}
+          s3-secret-access-key: ${{ secrets.TEST_PLANS_BUILD_CACHE_KEY }}
+          worker-count: 16
+  run-holepunching-interop:
+    name: Run hole-punch interoperability tests
+    runs-on: ${{ fromJSON(github.repository == 'libp2p/rust-libp2p' && '["self-hosted", "linux", "x64", "4xlarge"]' || '"ubuntu-latest"') }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - name: Build image
+        run: docker buildx build --load -t rust-libp2p-head . -f hole-punching-tests/Dockerfile
+      - name: Run tests
+        uses: libp2p/test-plans/.github/actions/run-interop-hole-punch-test@master
+        with:
+          test-filter: rust-libp2p-head
+          extra-versions: ${{ github.workspace }}/hole-punching-tests/version.json
+          s3-cache-bucket: libp2p-by-tf-aws-bootstrap
+          s3-access-key-id: ${{ vars.TEST_PLANS_BUILD_CACHE_KEY_ID }}
+          s3-secret-access-key: ${{ secrets.TEST_PLANS_BUILD_CACHE_KEY }}
+          worker-count: 16

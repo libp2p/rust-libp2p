@@ -1,8 +1,10 @@
-use crate::identity::error::SigningError;
-use crate::identity::Keypair;
 use crate::signed_envelope::SignedEnvelope;
-use crate::{peer_record_proto, signed_envelope, DecodeError, Multiaddr, PeerId};
+use crate::{proto, signed_envelope, DecodeError, Multiaddr};
 use instant::SystemTime;
+use libp2p_identity::Keypair;
+use libp2p_identity::PeerId;
+use libp2p_identity::SigningError;
+use quick_protobuf::{BytesReader, Writer};
 use std::convert::TryInto;
 
 const PAYLOAD_TYPE: &str = "/libp2p/routing-state-record";
@@ -29,11 +31,12 @@ impl PeerRecord {
     ///
     /// If this function succeeds, the [`SignedEnvelope`] contained a peer record with a valid signature and can hence be considered authenticated.
     pub fn from_signed_envelope(envelope: SignedEnvelope) -> Result<Self, FromEnvelopeError> {
-        use prost::Message;
+        use quick_protobuf::MessageRead;
 
         let (payload, signing_key) =
             envelope.payload_and_signing_key(String::from(DOMAIN_SEP), PAYLOAD_TYPE.as_bytes())?;
-        let record = peer_record_proto::PeerRecord::decode(payload).map_err(DecodeError)?;
+        let mut reader = BytesReader::from_bytes(payload);
+        let record = proto::PeerRecord::from_reader(&mut reader, payload).map_err(DecodeError)?;
 
         let peer_id = PeerId::from_bytes(&record.peer_id)?;
 
@@ -45,7 +48,7 @@ impl PeerRecord {
         let addresses = record
             .addresses
             .into_iter()
-            .map(|a| a.multiaddr.try_into())
+            .map(|a| a.multiaddr.to_vec().try_into())
             .collect::<Result<Vec<_>, _>>()?;
 
         Ok(Self {
@@ -60,7 +63,7 @@ impl PeerRecord {
     ///
     /// This is the same key that is used for authenticating every libp2p connection of your application, i.e. what you use when setting up your [`crate::transport::Transport`].
     pub fn new(key: &Keypair, addresses: Vec<Multiaddr>) -> Result<Self, SigningError> {
-        use prost::Message;
+        use quick_protobuf::MessageWrite;
 
         let seq = SystemTime::now()
             .duration_since(SystemTime::UNIX_EPOCH)
@@ -69,21 +72,23 @@ impl PeerRecord {
         let peer_id = key.public().to_peer_id();
 
         let payload = {
-            let record = peer_record_proto::PeerRecord {
+            let record = proto::PeerRecord {
                 peer_id: peer_id.to_bytes(),
                 seq,
                 addresses: addresses
                     .iter()
-                    .map(|m| peer_record_proto::peer_record::AddressInfo {
+                    .map(|m| proto::AddressInfo {
                         multiaddr: m.to_vec(),
                     })
                     .collect(),
             };
 
-            let mut buf = Vec::with_capacity(record.encoded_len());
+            let mut buf = Vec::with_capacity(record.get_size());
+            let mut writer = Writer::new(&mut buf);
             record
-                .encode(&mut buf)
-                .expect("Vec<u8> provides capacity as needed");
+                .write_message(&mut writer)
+                .expect("Encoding to succeed");
+
             buf
         };
 
@@ -133,7 +138,7 @@ pub enum FromEnvelopeError {
     InvalidPeerRecord(#[from] DecodeError),
     /// Failed to decode the peer ID.
     #[error("Failed to decode bytes as PeerId")]
-    InvalidPeerId(#[from] multihash::Error),
+    InvalidPeerId(#[from] libp2p_identity::ParseError),
     /// The signer of the envelope is different than the peer id in the record.
     #[error("The signer of the envelope is different than the peer id in the record")]
     MismatchedSignature,
@@ -162,7 +167,7 @@ mod tests {
 
     #[test]
     fn mismatched_signature() {
-        use prost::Message;
+        use quick_protobuf::MessageWrite;
 
         let addr: Multiaddr = HOME.parse().unwrap();
 
@@ -171,18 +176,20 @@ mod tests {
             let identity_b = Keypair::generate_ed25519();
 
             let payload = {
-                let record = peer_record_proto::PeerRecord {
+                let record = proto::PeerRecord {
                     peer_id: identity_a.public().to_peer_id().to_bytes(),
                     seq: 0,
-                    addresses: vec![peer_record_proto::peer_record::AddressInfo {
+                    addresses: vec![proto::AddressInfo {
                         multiaddr: addr.to_vec(),
                     }],
                 };
 
-                let mut buf = Vec::with_capacity(record.encoded_len());
+                let mut buf = Vec::with_capacity(record.get_size());
+                let mut writer = Writer::new(&mut buf);
                 record
-                    .encode(&mut buf)
-                    .expect("Vec<u8> provides capacity as needed");
+                    .write_message(&mut writer)
+                    .expect("Encoding to succeed");
+
                 buf
             };
 

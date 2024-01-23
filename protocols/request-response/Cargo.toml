@@ -1,9 +1,9 @@
 [package]
 name = "libp2p-request-response"
 edition = "2021"
-rust-version = "1.62.0"
+rust-version = { workspace = true }
 description = "Generic Request/Response Protocols"
-version = "0.24.0"
+version = "0.26.1"
 authors = ["Parity Technologies <admin@parity.io>"]
 license = "MIT"
 repository = "https://github.com/libp2p/rust-libp2p"
@@ -12,21 +12,36 @@ categories = ["network-programming", "asynchronous"]
 
 [dependencies]
 async-trait = "0.1"
-bytes = "1"
-futures = "0.3.1"
-instant = "0.1.11"
-libp2p-core = { version = "0.38.0", path = "../../core" }
-libp2p-swarm = { version = "0.42.0", path = "../../swarm" }
-log = "0.4.11"
+cbor4ii = { version = "0.3.2", features = ["serde1", "use_std"], optional = true }
+futures = "0.3.30"
+instant = "0.1.12"
+libp2p-core = { workspace = true }
+libp2p-swarm = { workspace = true }
+libp2p-identity = { workspace = true }
 rand = "0.8"
-smallvec = "1.6.1"
-unsigned-varint = { version = "0.7", features = ["std", "futures"] }
+serde = { version = "1.0", optional = true}
+serde_json = { version = "1.0.111", optional = true }
+smallvec = "1.12.0"
+tracing = "0.1.37"
+void = "1.0.2"
+futures-timer = "3.0.2"
+futures-bounded = { workspace = true }
+
+[features]
+json = ["dep:serde", "dep:serde_json", "libp2p-swarm/macros"]
+cbor = ["dep:serde", "dep:cbor4ii", "libp2p-swarm/macros"]
 
 [dev-dependencies]
-async-std = "1.6.2"
-env_logger = "0.10.0"
-libp2p = { path = "../..", features = ["full"] }
+anyhow = "1.0.79"
+async-std = { version = "1.6.2", features = ["attributes"] }
+libp2p-noise = { workspace = true }
+libp2p-tcp = { workspace = true, features = ["async-io"] }
+libp2p-yamux = { workspace = true }
 rand = "0.8"
+libp2p-swarm-test = { path = "../../swarm-test" }
+futures_ringbuf = "0.4.0"
+serde = { version = "1.0", features = ["derive"]}
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 
 # Passing arguments to the docsrs builder in order to properly document cfg's.
 # More information: https://docs.rs/about/builds#cross-compiling
@@ -34,3 +49,6 @@ rand = "0.8"
 all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
 rustc-args = ["--cfg", "docsrs"]
+
+[lints]
+workspace = true

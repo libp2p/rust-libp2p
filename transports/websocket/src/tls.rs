@@ -92,7 +92,7 @@ impl Config {
 /// Setup the rustls client configuration.
 fn client_root_store() -> rustls::RootCertStore {
     let mut client_root_store = rustls::RootCertStore::empty();
-    client_root_store.add_server_trust_anchors(webpki_roots::TLS_SERVER_ROOTS.0.iter().map(|ta| {
+    client_root_store.add_trust_anchors(webpki_roots::TLS_SERVER_ROOTS.iter().map(|ta| {
         rustls::OwnedTrustAnchor::from_subject_spki_name_constraints(
             ta.subject,
             ta.spki,
@@ -167,9 +167,9 @@ pub enum Error {
 impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Error::Io(e) => write!(f, "i/o error: {}", e),
-            Error::Tls(e) => write!(f, "tls error: {}", e),
-            Error::InvalidDnsName(n) => write!(f, "invalid DNS name: {}", n),
+            Error::Io(e) => write!(f, "i/o error: {e}"),
+            Error::Tls(e) => write!(f, "tls error: {e}"),
+            Error::InvalidDnsName(n) => write!(f, "invalid DNS name: {n}"),
         }
     }
 }

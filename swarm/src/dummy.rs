@@ -1,12 +1,16 @@
-use crate::behaviour::{FromSwarm, NetworkBehaviour, NetworkBehaviourAction, PollParameters};
+use crate::behaviour::{FromSwarm, NetworkBehaviour, ToSwarm};
+use crate::connection::ConnectionId;
 use crate::handler::{
     ConnectionEvent, DialUpgradeError, FullyNegotiatedInbound, FullyNegotiatedOutbound,
 };
-use crate::{ConnectionHandlerEvent, ConnectionHandlerUpgrErr, KeepAlive, SubstreamProtocol};
-use libp2p_core::connection::ConnectionId;
+use crate::{
+    ConnectionDenied, ConnectionHandlerEvent, StreamUpgradeError, SubstreamProtocol, THandler,
+    THandlerInEvent, THandlerOutEvent,
+};
 use libp2p_core::upgrade::DeniedUpgrade;
-use libp2p_core::PeerId;
-use libp2p_core::UpgradeError;
+use libp2p_core::Endpoint;
+use libp2p_core::Multiaddr;
+use libp2p_identity::PeerId;
 use std::task::{Context, Poll};
 use void::Void;
 
@@ -15,40 +19,42 @@ pub struct Behaviour;
 
 impl NetworkBehaviour for Behaviour {
     type ConnectionHandler = ConnectionHandler;
-    type OutEvent = Void;
+    type ToSwarm = Void;
 
-    fn new_handler(&mut self) -> Self::ConnectionHandler {
-        ConnectionHandler
+    fn handle_established_inbound_connection(
+        &mut self,
+        _: ConnectionId,
+        _: PeerId,
+        _: &Multiaddr,
+        _: &Multiaddr,
+    ) -> Result<THandler<Self>, ConnectionDenied> {
+        Ok(ConnectionHandler)
     }
 
-    fn on_connection_handler_event(&mut self, _: PeerId, _: ConnectionId, event: Void) {
+    fn handle_established_outbound_connection(
+        &mut self,
+        _: ConnectionId,
+        _: PeerId,
+        _: &Multiaddr,
+        _: Endpoint,
+    ) -> Result<THandler<Self>, ConnectionDenied> {
+        Ok(ConnectionHandler)
+    }
+
+    fn on_connection_handler_event(
+        &mut self,
+        _: PeerId,
+        _: ConnectionId,
+        event: THandlerOutEvent<Self>,
+    ) {
         void::unreachable(event)
     }
 
-    fn poll(
-        &mut self,
-        _: &mut Context<'_>,
-        _: &mut impl PollParameters,
-    ) -> Poll<NetworkBehaviourAction<Self::OutEvent, Self::ConnectionHandler>> {
+    fn poll(&mut self, _: &mut Context<'_>) -> Poll<ToSwarm<Self::ToSwarm, THandlerInEvent<Self>>> {
         Poll::Pending
     }
 
-    fn on_swarm_event(&mut self, event: FromSwarm<Self::ConnectionHandler>) {
-        match event {
-            FromSwarm::ConnectionEstablished(_)
-            | FromSwarm::ConnectionClosed(_)
-            | FromSwarm::AddressChange(_)
-            | FromSwarm::DialFailure(_)
-            | FromSwarm::ListenFailure(_)
-            | FromSwarm::NewListener(_)
-            | FromSwarm::NewListenAddr(_)
-            | FromSwarm::ExpiredListenAddr(_)
-            | FromSwarm::ListenerError(_)
-            | FromSwarm::ListenerClosed(_)
-            | FromSwarm::NewExternalAddr(_)
-            | FromSwarm::ExpiredExternalAddr(_) => {}
-        }
-    }
+    fn on_swarm_event(&mut self, _event: FromSwarm) {}
 }
 
 /// An implementation of [`ConnectionHandler`] that neither handles any protocols nor does it keep the connection alive.
@@ -56,9 +62,8 @@ impl NetworkBehaviour for Behaviour {
 pub struct ConnectionHandler;
 
 impl crate::handler::ConnectionHandler for ConnectionHandler {
-    type InEvent = Void;
-    type OutEvent = Void;
-    type Error = Void;
+    type FromBehaviour = Void;
+    type ToBehaviour = Void;
     type InboundProtocol = DeniedUpgrade;
     type OutboundProtocol = DeniedUpgrade;
     type InboundOpenInfo = ();
@@ -68,24 +73,15 @@ impl crate::handler::ConnectionHandler for ConnectionHandler {
         SubstreamProtocol::new(DeniedUpgrade, ())
     }
 
-    fn on_behaviour_event(&mut self, event: Self::InEvent) {
+    fn on_behaviour_event(&mut self, event: Self::FromBehaviour) {
         void::unreachable(event)
-    }
-
-    fn connection_keep_alive(&self) -> KeepAlive {
-        KeepAlive::No
     }
 
     fn poll(
         &mut self,
         _: &mut Context<'_>,
     ) -> Poll<
-        ConnectionHandlerEvent<
-            Self::OutboundProtocol,
-            Self::OutboundOpenInfo,
-            Self::OutEvent,
-            Self::Error,
-        >,
+        ConnectionHandlerEvent<Self::OutboundProtocol, Self::OutboundOpenInfo, Self::ToBehaviour>,
     > {
         Poll::Pending
     }
@@ -107,14 +103,16 @@ impl crate::handler::ConnectionHandler for ConnectionHandler {
                 protocol, ..
             }) => void::unreachable(protocol),
             ConnectionEvent::DialUpgradeError(DialUpgradeError { info: _, error }) => match error {
-                ConnectionHandlerUpgrErr::Timeout => unreachable!(),
-                ConnectionHandlerUpgrErr::Timer => unreachable!(),
-                ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Apply(e)) => void::unreachable(e),
-                ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Select(_)) => {
+                StreamUpgradeError::Timeout => unreachable!(),
+                StreamUpgradeError::Apply(e) => void::unreachable(e),
+                StreamUpgradeError::NegotiationFailed | StreamUpgradeError::Io(_) => {
                     unreachable!("Denied upgrade does not support any protocols")
                 }
             },
-            ConnectionEvent::AddressChange(_) | ConnectionEvent::ListenUpgradeError(_) => {}
+            ConnectionEvent::AddressChange(_)
+            | ConnectionEvent::ListenUpgradeError(_)
+            | ConnectionEvent::LocalProtocolsChange(_)
+            | ConnectionEvent::RemoteProtocolsChange(_) => {}
         }
     }
 }

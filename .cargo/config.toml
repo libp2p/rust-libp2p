@@ -1,3 +1,0 @@
-[alias]
-# Temporary solution to have clippy config in a single place until https://github.com/rust-lang/rust-clippy/blob/master/doc/roadmap-2021.md#lintstoml-configuration is shipped.
-custom-clippy = "clippy --workspace --all-features --all-targets -- -A clippy::type_complexity -A clippy::pedantic -D warnings"

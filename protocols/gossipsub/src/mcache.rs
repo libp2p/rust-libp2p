@@ -19,9 +19,8 @@
 // DEALINGS IN THE SOFTWARE.
 
 use crate::topic::TopicHash;
-use crate::types::{MessageId, RawGossipsubMessage};
-use libp2p_core::PeerId;
-use log::{debug, trace};
+use crate::types::{MessageId, RawMessage};
+use libp2p_identity::PeerId;
 use std::collections::hash_map::Entry;
 use std::fmt::Debug;
 use std::{
@@ -31,15 +30,15 @@ use std::{
 
 /// CacheEntry stored in the history.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct CacheEntry {
+pub(crate) struct CacheEntry {
     mid: MessageId,
     topic: TopicHash,
 }
 
 /// MessageCache struct holding history of messages.
 #[derive(Clone)]
-pub struct MessageCache {
-    msgs: HashMap<MessageId, (RawGossipsubMessage, HashSet<PeerId>)>,
+pub(crate) struct MessageCache {
+    msgs: HashMap<MessageId, (RawMessage, HashSet<PeerId>)>,
     /// For every message and peer the number of times this peer asked for the message
     iwant_counts: HashMap<MessageId, HashMap<PeerId, u32>>,
     history: Vec<Vec<CacheEntry>>,
@@ -61,7 +60,7 @@ impl fmt::Debug for MessageCache {
 
 /// Implementation of the MessageCache.
 impl MessageCache {
-    pub fn new(gossip: usize, history_capacity: usize) -> Self {
+    pub(crate) fn new(gossip: usize, history_capacity: usize) -> Self {
         MessageCache {
             gossip,
             msgs: HashMap::default(),
@@ -73,7 +72,7 @@ impl MessageCache {
     /// Put a message into the memory cache.
     ///
     /// Returns true if the message didn't already exist in the cache.
-    pub fn put(&mut self, message_id: &MessageId, msg: RawGossipsubMessage) -> bool {
+    pub(crate) fn put(&mut self, message_id: &MessageId, msg: RawMessage) -> bool {
         match self.msgs.entry(message_id.clone()) {
             Entry::Occupied(_) => {
                 // Don't add duplicate entries to the cache.
@@ -87,14 +86,14 @@ impl MessageCache {
                 entry.insert((msg, HashSet::default()));
                 self.history[0].push(cache_entry);
 
-                trace!("Put message {:?} in mcache", message_id);
+                tracing::trace!(message=?message_id, "Put message in mcache");
                 true
             }
         }
     }
 
     /// Keeps track of peers we know have received the message to prevent forwarding to said peers.
-    pub fn observe_duplicate(&mut self, message_id: &MessageId, source: &PeerId) {
+    pub(crate) fn observe_duplicate(&mut self, message_id: &MessageId, source: &PeerId) {
         if let Some((message, originating_peers)) = self.msgs.get_mut(message_id) {
             // if the message is already validated, we don't need to store extra peers sending us
             // duplicates as the message has already been forwarded
@@ -108,17 +107,17 @@ impl MessageCache {
 
     /// Get a message with `message_id`
     #[cfg(test)]
-    pub fn get(&self, message_id: &MessageId) -> Option<&RawGossipsubMessage> {
+    pub(crate) fn get(&self, message_id: &MessageId) -> Option<&RawMessage> {
         self.msgs.get(message_id).map(|(message, _)| message)
     }
 
     /// Increases the iwant count for the given message by one and returns the message together
     /// with the iwant if the message exists.
-    pub fn get_with_iwant_counts(
+    pub(crate) fn get_with_iwant_counts(
         &mut self,
         message_id: &MessageId,
         peer: &PeerId,
-    ) -> Option<(&RawGossipsubMessage, u32)> {
+    ) -> Option<(&RawMessage, u32)> {
         let iwant_counts = &mut self.iwant_counts;
         self.msgs.get(message_id).and_then(|(message, _)| {
             if !message.validated {
@@ -140,10 +139,10 @@ impl MessageCache {
     /// Gets a message with [`MessageId`] and tags it as validated.
     /// This function also returns the known peers that have sent us this message. This is used to
     /// prevent us sending redundant messages to peers who have already propagated it.
-    pub fn validate(
+    pub(crate) fn validate(
         &mut self,
         message_id: &MessageId,
-    ) -> Option<(&RawGossipsubMessage, HashSet<PeerId>)> {
+    ) -> Option<(&RawMessage, HashSet<PeerId>)> {
         self.msgs.get_mut(message_id).map(|(message, known_peers)| {
             message.validated = true;
             // Clear the known peers list (after a message is validated, it is forwarded and we no
@@ -154,7 +153,7 @@ impl MessageCache {
     }
 
     /// Get a list of [`MessageId`]s for a given topic.
-    pub fn get_gossip_message_ids(&self, topic: &TopicHash) -> Vec<MessageId> {
+    pub(crate) fn get_gossip_message_ids(&self, topic: &TopicHash) -> Vec<MessageId> {
         self.history[..self.gossip]
             .iter()
             .fold(vec![], |mut current_entries, entries| {
@@ -184,20 +183,20 @@ impl MessageCache {
 
     /// Shift the history array down one and delete messages associated with the
     /// last entry.
-    pub fn shift(&mut self) {
+    pub(crate) fn shift(&mut self) {
         for entry in self.history.pop().expect("history is always > 1") {
             if let Some((msg, _)) = self.msgs.remove(&entry.mid) {
                 if !msg.validated {
                     // If GossipsubConfig::validate_messages is true, the implementing
                     // application has to ensure that Gossipsub::validate_message gets called for
                     // each received message within the cache timeout time."
-                    debug!(
-                        "The message with id {} got removed from the cache without being validated.",
-                        &entry.mid
+                    tracing::debug!(
+                        message=%&entry.mid,
+                        "The message got removed from the cache without being validated."
                     );
                 }
             }
-            trace!("Remove message from the cache: {}", &entry.mid);
+            tracing::trace!(message=%&entry.mid, "Remove message from the cache");
 
             self.iwant_counts.remove(&entry.mid);
         }
@@ -207,10 +206,10 @@ impl MessageCache {
     }
 
     /// Removes a message from the cache and returns it if existent
-    pub fn remove(
+    pub(crate) fn remove(
         &mut self,
         message_id: &MessageId,
-    ) -> Option<(RawGossipsubMessage, HashSet<PeerId>)> {
+    ) -> Option<(RawMessage, HashSet<PeerId>)> {
         //We only remove the message from msgs and iwant_count and keep the message_id in the
         // history vector. Zhe id in the history vector will simply be ignored on popping.
 
@@ -222,12 +221,12 @@ impl MessageCache {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::types::RawGossipsubMessage;
+    use crate::types::RawMessage;
     use crate::{IdentTopic as Topic, TopicHash};
-    use libp2p_core::PeerId;
+    use libp2p_identity::PeerId;
 
-    fn gen_testm(x: u64, topic: TopicHash) -> (MessageId, RawGossipsubMessage) {
-        let default_id = |message: &RawGossipsubMessage| {
+    fn gen_testm(x: u64, topic: TopicHash) -> (MessageId, RawMessage) {
+        let default_id = |message: &RawMessage| {
             // default message id is: source + sequence number
             let mut source_string = message.source.as_ref().unwrap().to_base58();
             source_string.push_str(&message.sequence_number.unwrap().to_string());
@@ -238,7 +237,7 @@ mod tests {
         let data: Vec<u8> = vec![u8x];
         let sequence_number = Some(x);
 
-        let m = RawGossipsubMessage {
+        let m = RawMessage {
             source,
             data,
             sequence_number,

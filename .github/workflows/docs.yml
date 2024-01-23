@@ -9,12 +9,8 @@ jobs:
     name: Build documentation
     runs-on: ubuntu-latest
     steps:
-    - name: Install Protoc
-      uses: arduino/setup-protoc@64c0c85d18e984422218383b81c52f8b077404d3 # v1.1.2
-      with:
-        repo-token: ${{ secrets.GITHUB_TOKEN }}
     - name: Checkout 
-      uses: actions/checkout@v3
+      uses: actions/checkout@v4
     - name: Install nightly toolchain
       run: rustup toolchain install nightly 
     - name: Build Documentation
@@ -28,7 +24,7 @@ jobs:
         echo "<meta http-equiv=\"refresh\" content=\"0; url=libp2p\">" > target/doc/index.html
         cp -r target/doc/* ./host-docs
     - name: Upload documentation
-      uses: actions/upload-pages-artifact@v1.0.6
+      uses: actions/upload-pages-artifact@v3.0.0
       with:
         path: "host-docs/"
 
@@ -46,5 +42,5 @@ jobs:
     steps:
       - name: Deploy to GitHub Pages
         id: deployment
-        uses: actions/deploy-pages@v1
+        uses: actions/deploy-pages@v4
 

@@ -61,84 +61,27 @@ mod apply;
 mod denied;
 mod either;
 mod error;
-mod from_fn;
-mod map;
-mod optional;
 mod pending;
 mod ready;
 mod select;
-mod transfer;
 
+pub(crate) use apply::{
+    apply, apply_inbound, apply_outbound, InboundUpgradeApply, OutboundUpgradeApply,
+};
+pub(crate) use error::UpgradeError;
 use futures::future::Future;
 
 pub use self::{
-    apply::{apply, apply_inbound, apply_outbound, InboundUpgradeApply, OutboundUpgradeApply},
-    denied::DeniedUpgrade,
-    either::EitherUpgrade,
-    error::UpgradeError,
-    from_fn::{from_fn, FromFnUpgrade},
-    map::{MapInboundUpgrade, MapInboundUpgradeErr, MapOutboundUpgrade, MapOutboundUpgradeErr},
-    optional::OptionalUpgrade,
-    pending::PendingUpgrade,
-    ready::ReadyUpgrade,
-    select::SelectUpgrade,
-    transfer::{read_length_prefixed, read_varint, write_length_prefixed, write_varint},
+    denied::DeniedUpgrade, pending::PendingUpgrade, ready::ReadyUpgrade, select::SelectUpgrade,
 };
 pub use crate::Negotiated;
 pub use multistream_select::{NegotiatedComplete, NegotiationError, ProtocolError, Version};
-
-/// Types serving as protocol names.
-///
-/// # Context
-///
-/// In situations where we provide a list of protocols that we support,
-/// the elements of that list are required to implement the [`ProtocolName`] trait.
-///
-/// Libp2p will call [`ProtocolName::protocol_name`] on each element of that list, and transmit the
-/// returned value on the network. If the remote accepts a given protocol, the element
-/// serves as the return value of the function that performed the negotiation.
-///
-/// # Example
-///
-/// ```
-/// use libp2p_core::ProtocolName;
-///
-/// enum MyProtocolName {
-///     Version1,
-///     Version2,
-///     Version3,
-/// }
-///
-/// impl ProtocolName for MyProtocolName {
-///     fn protocol_name(&self) -> &[u8] {
-///         match *self {
-///             MyProtocolName::Version1 => b"/myproto/1.0",
-///             MyProtocolName::Version2 => b"/myproto/2.0",
-///             MyProtocolName::Version3 => b"/myproto/3.0",
-///         }
-///     }
-/// }
-/// ```
-///
-pub trait ProtocolName {
-    /// The protocol name as bytes. Transmitted on the network.
-    ///
-    /// **Note:** Valid protocol names must start with `/` and
-    /// not exceed 140 bytes in length.
-    fn protocol_name(&self) -> &[u8];
-}
-
-impl<T: AsRef<[u8]>> ProtocolName for T {
-    fn protocol_name(&self) -> &[u8] {
-        self.as_ref()
-    }
-}
 
 /// Common trait for upgrades that can be applied on inbound substreams, outbound substreams,
 /// or both.
 pub trait UpgradeInfo {
     /// Opaque type representing a negotiable protocol.
-    type Info: ProtocolName + Clone;
+    type Info: AsRef<str> + Clone;
     /// Iterator returned by `protocol_info`.
     type InfoIter: IntoIterator<Item = Self::Info>;
 
@@ -162,30 +105,6 @@ pub trait InboundUpgrade<C>: UpgradeInfo {
     fn upgrade_inbound(self, socket: C, info: Self::Info) -> Self::Future;
 }
 
-/// Extension trait for `InboundUpgrade`. Automatically implemented on all types that implement
-/// `InboundUpgrade`.
-pub trait InboundUpgradeExt<C>: InboundUpgrade<C> {
-    /// Returns a new object that wraps around `Self` and applies a closure to the `Output`.
-    fn map_inbound<F, T>(self, f: F) -> MapInboundUpgrade<Self, F>
-    where
-        Self: Sized,
-        F: FnOnce(Self::Output) -> T,
-    {
-        MapInboundUpgrade::new(self, f)
-    }
-
-    /// Returns a new object that wraps around `Self` and applies a closure to the `Error`.
-    fn map_inbound_err<F, T>(self, f: F) -> MapInboundUpgradeErr<Self, F>
-    where
-        Self: Sized,
-        F: FnOnce(Self::Error) -> T,
-    {
-        MapInboundUpgradeErr::new(self, f)
-    }
-}
-
-impl<C, U: InboundUpgrade<C>> InboundUpgradeExt<C> for U {}
-
 /// Possible upgrade on an outbound connection or substream.
 pub trait OutboundUpgrade<C>: UpgradeInfo {
     /// Output after the upgrade has been successfully negotiated and the handshake performed.
@@ -202,26 +121,34 @@ pub trait OutboundUpgrade<C>: UpgradeInfo {
     fn upgrade_outbound(self, socket: C, info: Self::Info) -> Self::Future;
 }
 
-/// Extention trait for `OutboundUpgrade`. Automatically implemented on all types that implement
-/// `OutboundUpgrade`.
-pub trait OutboundUpgradeExt<C>: OutboundUpgrade<C> {
-    /// Returns a new object that wraps around `Self` and applies a closure to the `Output`.
-    fn map_outbound<F, T>(self, f: F) -> MapOutboundUpgrade<Self, F>
-    where
-        Self: Sized,
-        F: FnOnce(Self::Output) -> T,
-    {
-        MapOutboundUpgrade::new(self, f)
-    }
+/// Possible upgrade on an inbound connection
+pub trait InboundConnectionUpgrade<T>: UpgradeInfo {
+    /// Output after the upgrade has been successfully negotiated and the handshake performed.
+    type Output;
+    /// Possible error during the handshake.
+    type Error;
+    /// Future that performs the handshake with the remote.
+    type Future: Future<Output = Result<Self::Output, Self::Error>>;
 
-    /// Returns a new object that wraps around `Self` and applies a closure to the `Error`.
-    fn map_outbound_err<F, T>(self, f: F) -> MapOutboundUpgradeErr<Self, F>
-    where
-        Self: Sized,
-        F: FnOnce(Self::Error) -> T,
-    {
-        MapOutboundUpgradeErr::new(self, f)
-    }
+    /// After we have determined that the remote supports one of the protocols we support, this
+    /// method is called to start the handshake.
+    ///
+    /// The `info` is the identifier of the protocol, as produced by `protocol_info`.
+    fn upgrade_inbound(self, socket: T, info: Self::Info) -> Self::Future;
 }
 
-impl<C, U: OutboundUpgrade<C>> OutboundUpgradeExt<C> for U {}
+/// Possible upgrade on an outbound connection
+pub trait OutboundConnectionUpgrade<T>: UpgradeInfo {
+    /// Output after the upgrade has been successfully negotiated and the handshake performed.
+    type Output;
+    /// Possible error during the handshake.
+    type Error;
+    /// Future that performs the handshake with the remote.
+    type Future: Future<Output = Result<Self::Output, Self::Error>>;
+
+    /// After we have determined that the remote supports one of the protocols we support, this
+    /// method is called to start the handshake.
+    ///
+    /// The `info` is the identifier of the protocol, as produced by `protocol_info`.
+    fn upgrade_outbound(self, socket: T, info: Self::Info) -> Self::Future;
+}

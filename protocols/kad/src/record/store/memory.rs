@@ -21,7 +21,7 @@
 use super::*;
 
 use crate::kbucket;
-use libp2p_core::PeerId;
+use libp2p_identity::PeerId;
 use smallvec::SmallVec;
 use std::borrow::Cow;
 use std::collections::{hash_map, hash_set, HashMap, HashSet};
@@ -96,20 +96,20 @@ impl MemoryStore {
     }
 }
 
-impl<'a> RecordStore<'a> for MemoryStore {
-    type RecordsIter =
+impl RecordStore for MemoryStore {
+    type RecordsIter<'a> =
         iter::Map<hash_map::Values<'a, Key, Record>, fn(&'a Record) -> Cow<'a, Record>>;
 
-    type ProvidedIter = iter::Map<
+    type ProvidedIter<'a> = iter::Map<
         hash_set::Iter<'a, ProviderRecord>,
         fn(&'a ProviderRecord) -> Cow<'a, ProviderRecord>,
     >;
 
-    fn get(&'a self, k: &Key) -> Option<Cow<'_, Record>> {
+    fn get(&self, k: &Key) -> Option<Cow<'_, Record>> {
         self.records.get(k).map(Cow::Borrowed)
     }
 
-    fn put(&'a mut self, r: Record) -> Result<()> {
+    fn put(&mut self, r: Record) -> Result<()> {
         if r.value.len() >= self.config.max_value_bytes {
             return Err(Error::ValueTooLarge);
         }
@@ -131,15 +131,15 @@ impl<'a> RecordStore<'a> for MemoryStore {
         Ok(())
     }
 
-    fn remove(&'a mut self, k: &Key) {
+    fn remove(&mut self, k: &Key) {
         self.records.remove(k);
     }
 
-    fn records(&'a self) -> Self::RecordsIter {
+    fn records(&self) -> Self::RecordsIter<'_> {
         self.records.values().map(Cow::Borrowed)
     }
 
-    fn add_provider(&'a mut self, record: ProviderRecord) -> Result<()> {
+    fn add_provider(&mut self, record: ProviderRecord) -> Result<()> {
         let num_keys = self.providers.len();
 
         // Obtain the entry
@@ -189,17 +189,17 @@ impl<'a> RecordStore<'a> for MemoryStore {
         Ok(())
     }
 
-    fn providers(&'a self, key: &Key) -> Vec<ProviderRecord> {
+    fn providers(&self, key: &Key) -> Vec<ProviderRecord> {
         self.providers
             .get(key)
             .map_or_else(Vec::new, |ps| ps.clone().into_vec())
     }
 
-    fn provided(&'a self) -> Self::ProvidedIter {
+    fn provided(&self) -> Self::ProvidedIter<'_> {
         self.provided.iter().map(Cow::Borrowed)
     }
 
-    fn remove_provider(&'a mut self, key: &Key, provider: &PeerId) {
+    fn remove_provider(&mut self, key: &Key, provider: &PeerId) {
         if let hash_map::Entry::Occupied(mut e) = self.providers.entry(key.clone()) {
             let providers = e.get_mut();
             if let Some(i) = providers.iter().position(|p| &p.provider == provider) {
@@ -216,12 +216,13 @@ impl<'a> RecordStore<'a> for MemoryStore {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use libp2p_core::multihash::{Code, Multihash};
+    use crate::SHA_256_MH;
+    use libp2p_core::multihash::Multihash;
     use quickcheck::*;
     use rand::Rng;
 
-    fn random_multihash() -> Multihash {
-        Multihash::wrap(Code::Sha2_256.into(), &rand::thread_rng().gen::<[u8; 32]>()).unwrap()
+    fn random_multihash() -> Multihash<64> {
+        Multihash::wrap(SHA_256_MH, &rand::thread_rng().gen::<[u8; 32]>()).unwrap()
     }
 
     fn distance(r: &ProviderRecord) -> kbucket::Distance {

@@ -20,18 +20,18 @@
 
 use std::{
     marker::Unpin,
-    pin::Pin,
-    task::{Context, Poll},
     time::{Duration, Instant},
 };
 
-/// Simple wrapper for the differents type of timers
+/// Simple wrapper for the different type of timers
 #[derive(Debug)]
+#[cfg(any(feature = "async-io", feature = "tokio"))]
 pub struct Timer<T> {
     inner: T,
 }
 
-/// Builder interface to homogenize the differents implementations
+/// Builder interface to homogenize the different implementations
+#[allow(unreachable_pub)] // Users should not depend on this.
 pub trait Builder: Send + Unpin + 'static {
     /// Creates a timer that emits an event once at the given time instant.
     fn at(instant: Instant) -> Self;
@@ -44,14 +44,17 @@ pub trait Builder: Send + Unpin + 'static {
 }
 
 #[cfg(feature = "async-io")]
-pub mod asio {
+pub(crate) mod asio {
     use super::*;
     use async_io::Timer as AsioTimer;
     use futures::Stream;
+    use std::{
+        pin::Pin,
+        task::{Context, Poll},
+    };
 
     /// Async Timer
-    pub type AsyncTimer = Timer<AsioTimer>;
-
+    pub(crate) type AsyncTimer = Timer<AsioTimer>;
     impl Builder for AsyncTimer {
         fn at(instant: Instant) -> Self {
             Self {
@@ -82,14 +85,17 @@ pub mod asio {
 }
 
 #[cfg(feature = "tokio")]
-pub mod tokio {
+pub(crate) mod tokio {
     use super::*;
     use ::tokio::time::{self, Instant as TokioInstant, Interval, MissedTickBehavior};
     use futures::Stream;
+    use std::{
+        pin::Pin,
+        task::{Context, Poll},
+    };
 
     /// Tokio wrapper
-    pub type TokioTimer = Timer<Interval>;
-
+    pub(crate) type TokioTimer = Timer<Interval>;
     impl Builder for TokioTimer {
         fn at(instant: Instant) -> Self {
             // Taken from: https://docs.rs/async-io/1.7.0/src/async_io/lib.rs.html#91

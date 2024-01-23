@@ -44,32 +44,12 @@
 pub use self::behaviour::{Behaviour, Config, Event};
 pub use self::protocol::{Info, UpgradeError, PROTOCOL_NAME, PUSH_PROTOCOL_NAME};
 
-#[deprecated(
-    since = "0.40.0",
-    note = "Use re-exports that omit `Identify` prefix, i.e. `libp2p::identify::Config`"
-)]
-pub type IdentifyConfig = Config;
-
-#[deprecated(
-    since = "0.40.0",
-    note = "Use re-exports that omit `Identify` prefix, i.e. `libp2p::identify::Event`"
-)]
-pub type IdentifyEvent = Event;
-
-#[deprecated(since = "0.40.0", note = "Use libp2p::identify::Behaviour instead.")]
-pub type Identify = Behaviour;
-
-#[deprecated(
-    since = "0.40.0",
-    note = "Use re-exports that omit `Identify` prefix, i.e. `libp2p::identify::Info`"
-)]
-pub type IdentifyInfo = Info;
-
 mod behaviour;
 mod handler;
 mod protocol;
 
-#[allow(clippy::derive_partial_eq_without_eq)]
-mod structs_proto {
-    include!(concat!(env!("OUT_DIR"), "/structs.rs"));
+mod proto {
+    #![allow(unreachable_pub)]
+    include!("generated/mod.rs");
+    pub(crate) use self::structs::Identify;
 }

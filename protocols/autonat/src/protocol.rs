@@ -18,86 +18,94 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::structs_proto;
+use crate::proto;
 use async_trait::async_trait;
-use futures::io::{AsyncRead, AsyncWrite, AsyncWriteExt};
-use libp2p_core::{upgrade, Multiaddr, PeerId};
-use libp2p_request_response::{ProtocolName, RequestResponseCodec};
-use prost::Message;
+use asynchronous_codec::{FramedRead, FramedWrite};
+use futures::io::{AsyncRead, AsyncWrite};
+use futures::{SinkExt, StreamExt};
+use libp2p_core::Multiaddr;
+use libp2p_identity::PeerId;
+use libp2p_request_response::{self as request_response};
+use libp2p_swarm::StreamProtocol;
 use std::{convert::TryFrom, io};
 
-#[derive(Clone, Debug)]
-pub struct AutoNatProtocol;
-
 /// The protocol name used for negotiating with multistream-select.
-pub const DEFAULT_PROTOCOL_NAME: &[u8] = b"/libp2p/autonat/1.0.0";
-
-impl ProtocolName for AutoNatProtocol {
-    fn protocol_name(&self) -> &[u8] {
-        DEFAULT_PROTOCOL_NAME
-    }
-}
+pub const DEFAULT_PROTOCOL_NAME: StreamProtocol = StreamProtocol::new("/libp2p/autonat/1.0.0");
 
 #[derive(Clone)]
 pub struct AutoNatCodec;
 
 #[async_trait]
-impl RequestResponseCodec for AutoNatCodec {
-    type Protocol = AutoNatProtocol;
+impl request_response::Codec for AutoNatCodec {
+    type Protocol = StreamProtocol;
     type Request = DialRequest;
     type Response = DialResponse;
 
-    async fn read_request<T>(
-        &mut self,
-        _: &AutoNatProtocol,
-        io: &mut T,
-    ) -> io::Result<Self::Request>
+    async fn read_request<T>(&mut self, _: &StreamProtocol, io: &mut T) -> io::Result<Self::Request>
     where
         T: AsyncRead + Send + Unpin,
     {
-        let bytes = upgrade::read_length_prefixed(io, 1024).await?;
-        let request = DialRequest::from_bytes(&bytes)?;
+        let message = FramedRead::new(io, codec())
+            .next()
+            .await
+            .ok_or(io::ErrorKind::UnexpectedEof)??;
+        let request = DialRequest::from_proto(message)?;
+
         Ok(request)
     }
 
     async fn read_response<T>(
         &mut self,
-        _: &AutoNatProtocol,
+        _: &StreamProtocol,
         io: &mut T,
     ) -> io::Result<Self::Response>
     where
         T: AsyncRead + Send + Unpin,
     {
-        let bytes = upgrade::read_length_prefixed(io, 1024).await?;
-        let response = DialResponse::from_bytes(&bytes)?;
+        let message = FramedRead::new(io, codec())
+            .next()
+            .await
+            .ok_or(io::ErrorKind::UnexpectedEof)??;
+        let response = DialResponse::from_proto(message)?;
+
         Ok(response)
     }
 
     async fn write_request<T>(
         &mut self,
-        _: &AutoNatProtocol,
+        _: &StreamProtocol,
         io: &mut T,
         data: Self::Request,
     ) -> io::Result<()>
     where
         T: AsyncWrite + Send + Unpin,
     {
-        upgrade::write_length_prefixed(io, data.into_bytes()).await?;
-        io.close().await
+        let mut framed = FramedWrite::new(io, codec());
+        framed.send(data.into_proto()).await?;
+        framed.close().await?;
+
+        Ok(())
     }
 
     async fn write_response<T>(
         &mut self,
-        _: &AutoNatProtocol,
+        _: &StreamProtocol,
         io: &mut T,
         data: Self::Response,
     ) -> io::Result<()>
     where
         T: AsyncWrite + Send + Unpin,
     {
-        upgrade::write_length_prefixed(io, data.into_bytes()).await?;
-        io.close().await
+        let mut framed = FramedWrite::new(io, codec());
+        framed.send(data.into_proto()).await?;
+        framed.close().await?;
+
+        Ok(())
     }
+}
+
+fn codec() -> quick_protobuf_codec::Codec<proto::Message> {
+    quick_protobuf_codec::Codec::<proto::Message>::new(1024)
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -107,49 +115,45 @@ pub struct DialRequest {
 }
 
 impl DialRequest {
-    pub fn from_bytes(bytes: &[u8]) -> Result<Self, io::Error> {
-        let msg = structs_proto::Message::decode(bytes)
-            .map_err(|err| io::Error::new(io::ErrorKind::InvalidData, err))?;
-        if msg.r#type != Some(structs_proto::message::MessageType::Dial as _) {
+    pub fn from_proto(msg: proto::Message) -> Result<Self, io::Error> {
+        if msg.type_pb != Some(proto::MessageType::DIAL) {
             return Err(io::Error::new(io::ErrorKind::InvalidData, "invalid type"));
         }
-        let (peer_id, addrs) = if let Some(structs_proto::message::Dial {
-            peer:
-                Some(structs_proto::message::PeerInfo {
-                    id: Some(peer_id),
-                    addrs,
-                }),
-        }) = msg.dial
-        {
-            (peer_id, addrs)
-        } else {
-            log::debug!("Received malformed dial message.");
-            return Err(io::Error::new(
-                io::ErrorKind::InvalidData,
-                "invalid dial message",
-            ));
-        };
+
+        let peer_id_result = msg.dial.and_then(|dial| {
+            dial.peer.and_then(|peer_info| {
+                let Some(peer_id) = peer_info.id else {
+                    return None;
+                };
+                Some((peer_id, peer_info.addrs))
+            })
+        });
+
+        let (peer_id, addrs) = peer_id_result
+            .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidData, "invalid dial message"))?;
 
         let peer_id = {
-            PeerId::try_from(peer_id)
+            PeerId::try_from(peer_id.to_vec())
                 .map_err(|_| io::Error::new(io::ErrorKind::InvalidData, "invalid peer id"))?
         };
-        let addrs = {
-            let mut maddrs = vec![];
-            for addr in addrs.into_iter() {
-                let maddr = Multiaddr::try_from(addr)
-                    .map_err(|err| io::Error::new(io::ErrorKind::InvalidData, err))?;
-                maddrs.push(maddr);
-            }
-            maddrs
-        };
+
+        let addrs = addrs
+            .into_iter()
+            .filter_map(|a| match Multiaddr::try_from(a.to_vec()) {
+                Ok(a) => Some(a),
+                Err(e) => {
+                    tracing::debug!("Unable to parse multiaddr: {e}");
+                    None
+                }
+            })
+            .collect();
         Ok(Self {
             peer_id,
             addresses: addrs,
         })
     }
 
-    pub fn into_bytes(self) -> Vec<u8> {
+    pub fn into_proto(self) -> proto::Message {
         let peer_id = self.peer_id.to_bytes();
         let addrs = self
             .addresses
@@ -157,21 +161,16 @@ impl DialRequest {
             .map(|addr| addr.to_vec())
             .collect();
 
-        let msg = structs_proto::Message {
-            r#type: Some(structs_proto::message::MessageType::Dial as _),
-            dial: Some(structs_proto::message::Dial {
-                peer: Some(structs_proto::message::PeerInfo {
-                    id: Some(peer_id),
+        proto::Message {
+            type_pb: Some(proto::MessageType::DIAL),
+            dial: Some(proto::Dial {
+                peer: Some(proto::PeerInfo {
+                    id: Some(peer_id.to_vec()),
                     addrs,
                 }),
             }),
-            dial_response: None,
-        };
-
-        let mut bytes = Vec::with_capacity(msg.encoded_len());
-        msg.encode(&mut bytes)
-            .expect("Vec<u8> provides capacity as needed");
-        bytes
+            dialResponse: None,
+        }
     }
 }
 
@@ -183,30 +182,28 @@ pub enum ResponseError {
     InternalError,
 }
 
-impl From<ResponseError> for i32 {
+impl From<ResponseError> for proto::ResponseStatus {
     fn from(t: ResponseError) -> Self {
         match t {
-            ResponseError::DialError => 100,
-            ResponseError::DialRefused => 101,
-            ResponseError::BadRequest => 200,
-            ResponseError::InternalError => 300,
+            ResponseError::DialError => proto::ResponseStatus::E_DIAL_ERROR,
+            ResponseError::DialRefused => proto::ResponseStatus::E_DIAL_REFUSED,
+            ResponseError::BadRequest => proto::ResponseStatus::E_BAD_REQUEST,
+            ResponseError::InternalError => proto::ResponseStatus::E_INTERNAL_ERROR,
         }
     }
 }
 
-impl TryFrom<structs_proto::message::ResponseStatus> for ResponseError {
+impl TryFrom<proto::ResponseStatus> for ResponseError {
     type Error = io::Error;
 
-    fn try_from(value: structs_proto::message::ResponseStatus) -> Result<Self, Self::Error> {
+    fn try_from(value: proto::ResponseStatus) -> Result<Self, Self::Error> {
         match value {
-            structs_proto::message::ResponseStatus::EDialError => Ok(ResponseError::DialError),
-            structs_proto::message::ResponseStatus::EDialRefused => Ok(ResponseError::DialRefused),
-            structs_proto::message::ResponseStatus::EBadRequest => Ok(ResponseError::BadRequest),
-            structs_proto::message::ResponseStatus::EInternalError => {
-                Ok(ResponseError::InternalError)
-            }
-            structs_proto::message::ResponseStatus::Ok => {
-                log::debug!("Received response with status code OK but expected error.");
+            proto::ResponseStatus::E_DIAL_ERROR => Ok(ResponseError::DialError),
+            proto::ResponseStatus::E_DIAL_REFUSED => Ok(ResponseError::DialRefused),
+            proto::ResponseStatus::E_BAD_REQUEST => Ok(ResponseError::BadRequest),
+            proto::ResponseStatus::E_INTERNAL_ERROR => Ok(ResponseError::InternalError),
+            proto::ResponseStatus::OK => {
+                tracing::debug!("Received response with status code OK but expected error");
                 Err(io::Error::new(
                     io::ErrorKind::InvalidData,
                     "invalid response error type",
@@ -223,42 +220,34 @@ pub struct DialResponse {
 }
 
 impl DialResponse {
-    pub fn from_bytes(bytes: &[u8]) -> Result<Self, io::Error> {
-        let msg = structs_proto::Message::decode(bytes)
-            .map_err(|err| io::Error::new(io::ErrorKind::InvalidData, err))?;
-        if msg.r#type != Some(structs_proto::message::MessageType::DialResponse as _) {
+    pub fn from_proto(msg: proto::Message) -> Result<Self, io::Error> {
+        if msg.type_pb != Some(proto::MessageType::DIAL_RESPONSE) {
             return Err(io::Error::new(io::ErrorKind::InvalidData, "invalid type"));
         }
 
-        Ok(match msg.dial_response {
-            Some(structs_proto::message::DialResponse {
-                status: Some(status),
-                status_text,
+        Ok(match msg.dialResponse {
+            Some(proto::DialResponse {
+                status: Some(proto::ResponseStatus::OK),
+                statusText,
                 addr: Some(addr),
-            }) if structs_proto::message::ResponseStatus::from_i32(status)
-                == Some(structs_proto::message::ResponseStatus::Ok) =>
-            {
-                let addr = Multiaddr::try_from(addr)
+            }) => {
+                let addr = Multiaddr::try_from(addr.to_vec())
                     .map_err(|err| io::Error::new(io::ErrorKind::InvalidData, err))?;
                 Self {
-                    status_text,
+                    status_text: statusText,
                     result: Ok(addr),
                 }
             }
-            Some(structs_proto::message::DialResponse {
+            Some(proto::DialResponse {
                 status: Some(status),
-                status_text,
+                statusText,
                 addr: None,
             }) => Self {
-                status_text,
-                result: Err(ResponseError::try_from(
-                    structs_proto::message::ResponseStatus::from_i32(status).ok_or_else(|| {
-                        io::Error::new(io::ErrorKind::InvalidData, "invalid response status code")
-                    })?,
-                )?),
+                status_text: statusText,
+                result: Err(ResponseError::try_from(status)?),
             },
             _ => {
-                log::debug!("Received malformed response message.");
+                tracing::debug!("Received malformed response message");
                 return Err(io::Error::new(
                     io::ErrorKind::InvalidData,
                     "invalid dial response message",
@@ -267,30 +256,25 @@ impl DialResponse {
         })
     }
 
-    pub fn into_bytes(self) -> Vec<u8> {
+    pub fn into_proto(self) -> proto::Message {
         let dial_response = match self.result {
-            Ok(addr) => structs_proto::message::DialResponse {
-                status: Some(0),
-                status_text: self.status_text,
+            Ok(addr) => proto::DialResponse {
+                status: Some(proto::ResponseStatus::OK),
+                statusText: self.status_text,
                 addr: Some(addr.to_vec()),
             },
-            Err(error) => structs_proto::message::DialResponse {
+            Err(error) => proto::DialResponse {
                 status: Some(error.into()),
-                status_text: self.status_text,
+                statusText: self.status_text,
                 addr: None,
             },
         };
 
-        let msg = structs_proto::Message {
-            r#type: Some(structs_proto::message::MessageType::DialResponse as _),
+        proto::Message {
+            type_pb: Some(proto::MessageType::DIAL_RESPONSE),
             dial: None,
-            dial_response: Some(dial_response),
-        };
-
-        let mut bytes = Vec::with_capacity(msg.encoded_len());
-        msg.encode(&mut bytes)
-            .expect("Vec<u8> provides capacity as needed");
-        bytes
+            dialResponse: Some(dial_response),
+        }
     }
 }
 
@@ -307,8 +291,8 @@ mod tests {
                 "/ip4/192.168.1.42/tcp/30333".parse().unwrap(),
             ],
         };
-        let bytes = request.clone().into_bytes();
-        let request2 = DialRequest::from_bytes(&bytes).unwrap();
+        let proto = request.clone().into_proto();
+        let request2 = DialRequest::from_proto(proto).unwrap();
         assert_eq!(request, request2);
     }
 
@@ -318,8 +302,8 @@ mod tests {
             result: Ok("/ip4/8.8.8.8/tcp/30333".parse().unwrap()),
             status_text: None,
         };
-        let bytes = response.clone().into_bytes();
-        let response2 = DialResponse::from_bytes(&bytes).unwrap();
+        let proto = response.clone().into_proto();
+        let response2 = DialResponse::from_proto(proto).unwrap();
         assert_eq!(response, response2);
     }
 
@@ -329,8 +313,35 @@ mod tests {
             result: Err(ResponseError::DialError),
             status_text: Some("dial failed".to_string()),
         };
-        let bytes = response.clone().into_bytes();
-        let response2 = DialResponse::from_bytes(&bytes).unwrap();
+        let proto = response.clone().into_proto();
+        let response2 = DialResponse::from_proto(proto).unwrap();
         assert_eq!(response, response2);
+    }
+
+    #[test]
+    fn test_skip_unparsable_multiaddr() {
+        let valid_multiaddr: Multiaddr = "/ip6/2001:db8::/tcp/1234".parse().unwrap();
+        let valid_multiaddr_bytes = valid_multiaddr.to_vec();
+
+        let invalid_multiaddr = {
+            let a = vec![255; 8];
+            assert!(Multiaddr::try_from(a.clone()).is_err());
+            a
+        };
+
+        let msg = proto::Message {
+            type_pb: Some(proto::MessageType::DIAL),
+            dial: Some(proto::Dial {
+                peer: Some(proto::PeerInfo {
+                    id: Some(PeerId::random().to_bytes()),
+                    addrs: vec![valid_multiaddr_bytes, invalid_multiaddr],
+                }),
+            }),
+            dialResponse: None,
+        };
+
+        let request = DialRequest::from_proto(msg).expect("not to fail");
+
+        assert_eq!(request.addresses, vec![valid_multiaddr])
     }
 }

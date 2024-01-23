@@ -1,59 +1,59 @@
 [package]
 name = "libp2p-webrtc"
-version = "0.4.0-alpha"
+version = "0.7.0-alpha"
 authors = ["Parity Technologies <admin@parity.io>"]
 description = "WebRTC transport for libp2p"
 repository = "https://github.com/libp2p/rust-libp2p"
 license = "MIT"
 edition = "2021"
-rust-version = "1.60.0"
+rust-version = { workspace = true }
 keywords = ["peer-to-peer", "libp2p", "networking"]
 categories = ["network-programming", "asynchronous"]
 
 [dependencies]
 async-trait = "0.1"
-asynchronous-codec = "0.6.1"
 bytes = "1"
 futures = "0.3"
 futures-timer = "3"
 hex = "0.4"
-if-watch = "3.0"
-libp2p-core = { version = "0.38.0", path = "../../core"  }
-libp2p-noise = { version = "0.41.0", path = "../../transports/noise" }
-log = "0.4"
-multihash = { version = "0.16", default-features = false, features = ["sha2"] }
-prost = "0.11"
-prost-codec = { version = "0.3.0", path = "../../misc/prost-codec" }
+if-watch = "3.2"
+libp2p-core = { workspace = true }
+libp2p-noise = { workspace = true }
+libp2p-identity = { workspace = true }
+libp2p-webrtc-utils = { workspace = true }
+multihash = { workspace = true }
 rand = "0.8"
-rcgen = "0.9.3"
+rcgen = "0.11.3"
 serde = { version = "1.0", features = ["derive"] }
-stun = "0.4"
+stun = "0.5"
 thiserror = "1"
 tinytemplate = "1.2"
-tokio = { version = "1.19", features = ["net"], optional = true}
+tokio = { version = "1.35", features = ["net"], optional = true }
 tokio-util = { version = "0.7", features = ["compat"], optional = true }
-webrtc = { version = "0.6.0", optional = true }
+tracing = "0.1.37"
+webrtc = { version = "0.9.0", optional = true }
 
 [features]
 tokio = ["dep:tokio", "dep:tokio-util", "dep:webrtc", "if-watch/tokio"]
 pem = ["webrtc?/pem"]
 
-[build-dependencies]
-prost-build = "0.11"
-
 [dev-dependencies]
-anyhow = "1.0"
-env_logger = "0.10"
-hex-literal = "0.3"
-libp2p = { path = "../..", features = ["full"] }
-tokio = { version = "1.19", features = ["full"] }
-unsigned-varint = { version = "0.7", features = ["asynchronous_codec"] }
-void = "1"
+libp2p-identity = { workspace = true, features = ["rand"] }
+tokio = { version = "1.35", features = ["full"] }
+quickcheck = "1.0.3"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
 
 [[test]]
 name = "smoke"
 required-features = ["tokio"]
 
-[[example]]
-name = "listen_ping"
-required-features = ["tokio"]
+[lints]
+workspace = true
+
+# Passing arguments to the docsrs builder in order to properly document cfg's.
+# More information: https://docs.rs/about/builds#cross-compiling
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
+rustc-args = ["--cfg", "docsrs"]

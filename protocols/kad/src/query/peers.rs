@@ -38,10 +38,9 @@
 //!
 //! [`Finished`]: PeersIterState::Finished
 
-pub mod closest;
-pub mod fixed;
-
-use libp2p_core::PeerId;
+pub(crate) mod closest;
+pub(crate) mod fixed;
+use libp2p_identity::PeerId;
 use std::borrow::Cow;
 
 /// The state of a peer iterator.

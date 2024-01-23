@@ -1,9 +1,9 @@
 [package]
 name = "libp2p-tcp"
 edition = "2021"
-rust-version = "1.60.0"
+rust-version = { workspace = true }
 description = "TCP/IP transport protocol for libp2p"
-version = "0.38.0"
+version = "0.41.0"
 authors = ["Parity Technologies <admin@parity.io>"]
 license = "MIT"
 repository = "https://github.com/libp2p/rust-libp2p"
@@ -11,15 +11,16 @@ keywords = ["peer-to-peer", "libp2p", "networking"]
 categories = ["network-programming", "asynchronous"]
 
 [dependencies]
-async-io = { version = "1.2.0", optional = true }
-futures = "0.3.8"
+async-io = { version = "2.2.2", optional = true }
+futures = "0.3.30"
 futures-timer = "3.0"
-if-watch = "3.0.0"
-libc = "0.2.80"
-libp2p-core = { version = "0.38.0", path = "../../core" }
-log = "0.4.11"
-socket2 = { version = "0.4.0", features = ["all"] }
-tokio = { version = "1.19.0", default-features = false, features = ["net"], optional = true }
+if-watch = "3.2.0"
+libc = "0.2.152"
+libp2p-core = { workspace = true }
+libp2p-identity = { workspace = true }
+socket2 = { version = "0.5.5", features = ["all"] }
+tokio = { version = "1.35.1", default-features = false, features = ["net"], optional = true }
+tracing = "0.1.37"
 
 [features]
 tokio = ["dep:tokio", "if-watch/tokio"]
@@ -27,12 +28,17 @@ async-io = ["dep:async-io", "if-watch/smol"]
 
 [dev-dependencies]
 async-std = { version = "1.6.5", features = ["attributes"] }
-tokio = { version = "1.0.1", default-features = false, features = ["full"] }
-env_logger = "0.10.0"
+libp2p-identity = { workspace = true, features = ["rand"] }
+tokio = { version = "1.35.1", default-features = false, features = ["full"] }
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 
 # Passing arguments to the docsrs builder in order to properly document cfg's.
 # More information: https://docs.rs/about/builds#cross-compiling
 [package.metadata.docs.rs]
 all-features = true
+
 rustdoc-args = ["--cfg", "docsrs"]
 rustc-args = ["--cfg", "docsrs"]
+
+[lints]
+workspace = true

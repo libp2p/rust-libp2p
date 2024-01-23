@@ -1,9 +1,9 @@
 [package]
 name = "libp2p-dcutr"
 edition = "2021"
-rust-version = "1.62.0"
+rust-version = { workspace = true }
 description = "Direct connection upgrade through relay"
-version = "0.9.0"
+version = "0.11.0"
 authors = ["Max Inden <mail@max-inden.de>"]
 license = "MIT"
 repository = "https://github.com/libp2p/rust-libp2p"
@@ -11,28 +11,37 @@ keywords = ["peer-to-peer", "libp2p", "networking"]
 categories = ["network-programming", "asynchronous"]
 
 [dependencies]
-asynchronous-codec = "0.6"
-bytes = "1"
-either = "1.6.0"
-futures = "0.3.1"
+asynchronous-codec = { workspace = true }
+either = "1.9.0"
+futures = "0.3.30"
 futures-timer = "3.0"
-instant = "0.1.11"
-libp2p-core = { version = "0.38.0", path = "../../core" }
-libp2p-swarm = { version = "0.42.0", path = "../../swarm" }
-log = "0.4"
-prost-codec = { version = "0.3", path = "../../misc/prost-codec" }
-prost = "0.11"
+instant = "0.1.12"
+libp2p-core = { workspace = true }
+libp2p-swarm = { workspace = true }
+libp2p-identity = { workspace = true }
+quick-protobuf = "0.8"
+quick-protobuf-codec = { workspace = true }
 thiserror = "1.0"
+tracing = "0.1.37"
 void = "1"
-
-[build-dependencies]
-prost-build = "0.11"
+lru = "0.12.1"
+futures-bounded = { workspace = true }
 
 [dev-dependencies]
-env_logger = "0.10.0"
-libp2p = { path = "../..", features = ["full"] }
+async-std = { version = "1.12.0", features = ["attributes"] }
+clap = { version = "4.4.16", features = ["derive"] }
+libp2p-dns = { workspace = true, features = ["async-std"] }
+libp2p-identify = { workspace = true }
+libp2p-noise = { workspace = true }
+libp2p-ping = { workspace = true }
+libp2p-plaintext = { workspace = true }
+libp2p-relay = { workspace = true }
+libp2p-swarm = { workspace = true, features = ["macros"] }
+libp2p-swarm-test = { path = "../../swarm-test" }
+libp2p-tcp = { workspace = true, features = ["async-io"] }
+libp2p-yamux = { workspace = true }
 rand = "0.8"
-clap = { version = "4.0.13", features = ["derive"] }
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 
 # Passing arguments to the docsrs builder in order to properly document cfg's.
 # More information: https://docs.rs/about/builds#cross-compiling
@@ -40,3 +49,6 @@ clap = { version = "4.0.13", features = ["derive"] }
 all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
 rustc-args = ["--cfg", "docsrs"]
+
+[lints]
+workspace = true

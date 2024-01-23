@@ -1,0 +1,12 @@
+name: Semantic PR
+
+on:
+  pull_request_target:
+    types:
+      - opened
+      - edited
+      - synchronize
+
+jobs:
+  main:
+    uses: pl-strflt/.github/.github/workflows/reusable-semantic-pull-request.yml@v0.3

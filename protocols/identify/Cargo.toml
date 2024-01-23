@@ -1,9 +1,9 @@
 [package]
 name = "libp2p-identify"
 edition = "2021"
-rust-version = "1.62.0"
+rust-version = { workspace = true }
 description = "Nodes identifcation protocol for libp2p"
-version = "0.42.0"
+version = "0.44.1"
 authors = ["Parity Technologies <admin@parity.io>"]
 license = "MIT"
 repository = "https://github.com/libp2p/rust-libp2p"
@@ -11,26 +11,27 @@ keywords = ["peer-to-peer", "libp2p", "networking"]
 categories = ["network-programming", "asynchronous"]
 
 [dependencies]
-asynchronous-codec = "0.6"
-futures = "0.3.1"
+asynchronous-codec = { workspace = true }
+futures = "0.3.30"
 futures-timer = "3.0.2"
-libp2p-core = { version = "0.38.0", path = "../../core" }
-libp2p-swarm = { version = "0.42.0", path = "../../swarm" }
-log = "0.4.1"
-lru = "0.8.0"
-prost-codec = { version = "0.3", path = "../../misc/prost-codec" }
-prost = "0.11"
-smallvec = "1.6.1"
+futures-bounded = { workspace = true }
+libp2p-core = { workspace = true }
+libp2p-swarm = { workspace = true }
+libp2p-identity = { workspace = true }
+lru = "0.12.1"
+quick-protobuf-codec = { workspace = true }
+quick-protobuf = "0.8"
+smallvec = "1.12.0"
 thiserror = "1.0"
+tracing = "0.1.37"
 void = "1.0"
+either = "1.9.0"
 
 [dev-dependencies]
 async-std = { version = "1.6.2", features = ["attributes"] }
-env_logger = "0.10"
-libp2p = { path = "../..", features = ["full"] }
-
-[build-dependencies]
-prost-build = "0.11"
+libp2p-swarm-test = { path = "../../swarm-test" }
+libp2p-swarm = { workspace = true, features = ["macros"] }
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 
 # Passing arguments to the docsrs builder in order to properly document cfg's.
 # More information: https://docs.rs/about/builds#cross-compiling
@@ -38,3 +39,6 @@ prost-build = "0.11"
 all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
 rustc-args = ["--cfg", "docsrs"]
+
+[lints]
+workspace = true

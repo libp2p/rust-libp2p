@@ -1,19 +1,22 @@
 ## Description
 
-<!-- Please write a summary of your changes and why you made them.-->
-<!-- This section will appear as the commit message after merging. Please craft it accordingly. -->
+<!--
+Please write a summary of your changes and why you made them.
+This section will appear as the commit message after merging.
+Please craft it accordingly.
+For a quick primer on good commit mesages, check out this blog post: https://cbea.ms/git-commit/
 
-## Notes
+Please include any relevant issues in here, for example:
 
-<!-- Any notes or remarks you'd like to make about the PR. -->
+Related https://github.com/libp2p/rust-libp2p/issues/ABCD.
+Fixes https://github.com/libp2p/rust-libp2p/issues/XYZ.
+-->
 
-## Links to any relevant issues
+## Notes & open questions
 
-<!-- Reference any related issues.-->
-
-## Open Questions
-
-<!-- Unresolved questions, if any. -->
+<!--
+Any notes, remarks or open questions you have to make about the PR which don't need to go into the final commit message.
+-->
 
 ## Change checklist
 

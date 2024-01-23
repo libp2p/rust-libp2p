@@ -19,13 +19,12 @@
 // DEALINGS IN THE SOFTWARE.
 
 use crate::handler::{
-    AddressChange, ConnectionEvent, ConnectionHandler, ConnectionHandlerEvent, DialUpgradeError,
-    FullyNegotiatedInbound, FullyNegotiatedOutbound, KeepAlive, ListenUpgradeError,
-    SubstreamProtocol,
+    ConnectionEvent, ConnectionHandler, ConnectionHandlerEvent, SubstreamProtocol,
 };
 use std::{fmt::Debug, marker::PhantomData, task::Context, task::Poll};
 
 /// Wrapper around a protocol handler that turns the input event into something else.
+#[derive(Debug)]
 pub struct MapInEvent<TConnectionHandler, TNewIn, TMap> {
     inner: TConnectionHandler,
     map: TMap,
@@ -47,13 +46,12 @@ impl<TConnectionHandler, TMap, TNewIn> ConnectionHandler
     for MapInEvent<TConnectionHandler, TNewIn, TMap>
 where
     TConnectionHandler: ConnectionHandler,
-    TMap: Fn(TNewIn) -> Option<TConnectionHandler::InEvent>,
+    TMap: Fn(TNewIn) -> Option<TConnectionHandler::FromBehaviour>,
     TNewIn: Debug + Send + 'static,
     TMap: Send + 'static,
 {
-    type InEvent = TNewIn;
-    type OutEvent = TConnectionHandler::OutEvent;
-    type Error = TConnectionHandler::Error;
+    type FromBehaviour = TNewIn;
+    type ToBehaviour = TConnectionHandler::ToBehaviour;
     type InboundProtocol = TConnectionHandler::InboundProtocol;
     type OutboundProtocol = TConnectionHandler::OutboundProtocol;
     type InboundOpenInfo = TConnectionHandler::InboundOpenInfo;
@@ -65,12 +63,11 @@ where
 
     fn on_behaviour_event(&mut self, event: TNewIn) {
         if let Some(event) = (self.map)(event) {
-            #[allow(deprecated)]
-            self.inner.inject_event(event);
+            self.inner.on_behaviour_event(event);
         }
     }
 
-    fn connection_keep_alive(&self) -> KeepAlive {
+    fn connection_keep_alive(&self) -> bool {
         self.inner.connection_keep_alive()
     }
 
@@ -78,14 +75,13 @@ where
         &mut self,
         cx: &mut Context<'_>,
     ) -> Poll<
-        ConnectionHandlerEvent<
-            Self::OutboundProtocol,
-            Self::OutboundOpenInfo,
-            Self::OutEvent,
-            Self::Error,
-        >,
+        ConnectionHandlerEvent<Self::OutboundProtocol, Self::OutboundOpenInfo, Self::ToBehaviour>,
     > {
         self.inner.poll(cx)
+    }
+
+    fn poll_close(&mut self, cx: &mut Context<'_>) -> Poll<Option<Self::ToBehaviour>> {
+        self.inner.poll_close(cx)
     }
 
     fn on_connection_event(
@@ -97,35 +93,6 @@ where
             Self::OutboundOpenInfo,
         >,
     ) {
-        match event {
-            ConnectionEvent::FullyNegotiatedInbound(FullyNegotiatedInbound { protocol, info }) =>
-            {
-                #[allow(deprecated)]
-                self.inner.inject_fully_negotiated_inbound(protocol, info)
-            }
-            ConnectionEvent::FullyNegotiatedOutbound(FullyNegotiatedOutbound {
-                protocol,
-                info,
-            }) =>
-            {
-                #[allow(deprecated)]
-                self.inner.inject_fully_negotiated_outbound(protocol, info)
-            }
-            ConnectionEvent::AddressChange(AddressChange { new_address }) =>
-            {
-                #[allow(deprecated)]
-                self.inner.inject_address_change(new_address)
-            }
-            ConnectionEvent::DialUpgradeError(DialUpgradeError { info, error }) =>
-            {
-                #[allow(deprecated)]
-                self.inner.inject_dial_upgrade_error(info, error)
-            }
-            ConnectionEvent::ListenUpgradeError(ListenUpgradeError { info, error }) =>
-            {
-                #[allow(deprecated)]
-                self.inner.inject_listen_upgrade_error(info, error)
-            }
-        }
+        self.inner.on_connection_event(event);
     }
 }

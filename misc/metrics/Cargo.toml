@@ -1,9 +1,9 @@
 [package]
 name = "libp2p-metrics"
 edition = "2021"
-rust-version = "1.62.0"
+rust-version = { workspace = true }
 description = "Metrics for libp2p"
-version = "0.12.0"
+version = "0.14.1"
 authors = ["Max Inden <mail@max-inden.de>"]
 license = "MIT"
 repository = "https://github.com/libp2p/rust-libp2p"
@@ -11,37 +11,37 @@ keywords = ["peer-to-peer", "libp2p", "networking"]
 categories = ["network-programming", "asynchronous"]
 
 [features]
+dcutr = ["libp2p-dcutr"]
 gossipsub = ["libp2p-gossipsub"]
 identify = ["libp2p-identify"]
 kad = ["libp2p-kad"]
 ping = ["libp2p-ping"]
 relay = ["libp2p-relay"]
-dcutr = ["libp2p-dcutr"]
 
 [dependencies]
-libp2p-core = { version = "0.38.0", path = "../../core" }
-libp2p-dcutr =  { version = "0.9.0", path = "../../protocols/dcutr", optional = true }
-libp2p-identify = { version = "0.42.0", path = "../../protocols/identify", optional = true }
-libp2p-kad = { version = "0.43.0", path = "../../protocols/kad", optional = true }
-libp2p-ping = { version = "0.42.0", path = "../../protocols/ping", optional = true }
-libp2p-relay =  { version = "0.15.0", path = "../../protocols/relay", optional = true }
-libp2p-swarm = { version = "0.42.0", path = "../../swarm" }
-prometheus-client = "0.18.0"
-
-[target.'cfg(not(target_os = "unknown"))'.dependencies]
-libp2p-gossipsub =  { version = "0.44.0", path = "../../protocols/gossipsub", optional = true }
+futures = "0.3.30"
+instant = "0.1.12"
+libp2p-core = { workspace = true }
+libp2p-dcutr =  { workspace = true, optional = true }
+libp2p-gossipsub =  { workspace = true, optional = true }
+libp2p-identify = { workspace = true, optional = true }
+libp2p-identity = { workspace = true }
+libp2p-kad = { workspace = true, optional = true }
+libp2p-ping = { workspace = true, optional = true }
+libp2p-relay =  { workspace = true, optional = true }
+libp2p-swarm = { workspace = true }
+pin-project = "1.0.0"
+prometheus-client = { workspace = true }
 
 [dev-dependencies]
-log = "0.4.0"
-env_logger = "0.10.0"
-futures = "0.3.1"
-libp2p = { path = "../..", features = ["full"] }
-hyper = { version="0.14", features = ["server", "tcp", "http1"] }
-tokio = { version = "1", features = ["rt-multi-thread"] }
+libp2p-identity = { workspace = true, features = ["rand"] }
 
 # Passing arguments to the docsrs builder in order to properly document cfg's.
 # More information: https://docs.rs/about/builds#cross-compiling
 [package.metadata.docs.rs]
 all-features = true
-rustdoc-args = ["--cfg", "docsrs"]
 rustc-args = ["--cfg", "docsrs"]
+rustdoc-args = ["--cfg", "docsrs"]
+
+[lints]
+workspace = true

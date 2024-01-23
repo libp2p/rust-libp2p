@@ -1,10 +1,10 @@
 use futures::{future, StreamExt};
-use libp2p::multiaddr::Protocol;
-use libp2p::swarm::{keep_alive, SwarmEvent};
-use libp2p::Swarm;
+use libp2p_core::multiaddr::Protocol;
 use libp2p_core::transport::MemoryTransport;
 use libp2p_core::upgrade::Version;
 use libp2p_core::Transport;
+use libp2p_swarm::{dummy, Config, Swarm, SwarmEvent};
+use std::time::Duration;
 
 #[tokio::test]
 async fn can_establish_connection() {
@@ -31,7 +31,7 @@ async fn can_establish_connection() {
             match swarm1.next().await.unwrap() {
                 SwarmEvent::ConnectionEstablished { peer_id, .. } => break peer_id,
                 SwarmEvent::IncomingConnectionError { error, .. } => {
-                    panic!("Incoming connection failed: {}", error)
+                    panic!("Incoming connection failed: {error}")
                 }
                 _ => continue,
             };
@@ -42,7 +42,7 @@ async fn can_establish_connection() {
             match swarm2.next().await.unwrap() {
                 SwarmEvent::ConnectionEstablished { peer_id, .. } => break peer_id,
                 SwarmEvent::OutgoingConnectionError { error, .. } => {
-                    panic!("Failed to dial: {}", error)
+                    panic!("Failed to dial: {error}")
                 }
                 _ => continue,
             };
@@ -56,18 +56,19 @@ async fn can_establish_connection() {
     assert_eq!(&outbound_peer_id, swarm1.local_peer_id());
 }
 
-fn make_swarm() -> Swarm<keep_alive::Behaviour> {
-    let identity = libp2p::identity::Keypair::generate_ed25519();
+fn make_swarm() -> Swarm<dummy::Behaviour> {
+    let identity = libp2p_identity::Keypair::generate_ed25519();
 
     let transport = MemoryTransport::default()
         .upgrade(Version::V1)
         .authenticate(libp2p_tls::Config::new(&identity).unwrap())
-        .multiplex(libp2p::yamux::YamuxConfig::default())
+        .multiplex(libp2p_yamux::Config::default())
         .boxed();
 
-    Swarm::without_executor(
+    Swarm::new(
         transport,
-        keep_alive::Behaviour,
+        dummy::Behaviour,
         identity.public().to_peer_id(),
+        Config::with_tokio_executor().with_idle_connection_timeout(Duration::from_secs(60)),
     )
 }

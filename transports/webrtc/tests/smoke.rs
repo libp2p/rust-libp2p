@@ -18,469 +18,366 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use anyhow::Result;
-use async_trait::async_trait;
-use futures::{
-    future::{select, Either, FutureExt},
-    io::{AsyncRead, AsyncWrite, AsyncWriteExt},
-    stream::StreamExt,
-};
-use libp2p::core::{identity, muxing::StreamMuxerBox, upgrade, Transport as _};
-use libp2p::request_response::{
-    ProtocolName, ProtocolSupport, RequestResponse, RequestResponseCodec, RequestResponseConfig,
-    RequestResponseEvent, RequestResponseMessage,
-};
-use libp2p::swarm::{Swarm, SwarmEvent};
-use libp2p::webrtc::tokio as webrtc;
+use futures::channel::mpsc;
+use futures::future::{BoxFuture, Either};
+use futures::stream::StreamExt;
+use futures::{future, ready, AsyncReadExt, AsyncWriteExt, FutureExt, SinkExt};
+use libp2p_core::muxing::{StreamMuxerBox, StreamMuxerExt};
+use libp2p_core::transport::{Boxed, ListenerId, TransportEvent};
+use libp2p_core::{Multiaddr, Transport};
+use libp2p_identity::PeerId;
+use libp2p_webrtc as webrtc;
 use rand::{thread_rng, RngCore};
-
-use std::{io, iter};
+use std::future::Future;
+use std::num::NonZeroU8;
+use std::pin::Pin;
+use std::task::{Context, Poll};
+use std::time::Duration;
+use tracing_subscriber::EnvFilter;
 
 #[tokio::test]
-async fn smoke() -> Result<()> {
-    let _ = env_logger::builder().is_test(true).try_init();
+async fn smoke() {
+    let _ = tracing_subscriber::fmt()
+        .with_env_filter(EnvFilter::from_default_env())
+        .try_init();
 
-    let mut rng = rand::thread_rng();
+    let (a_peer_id, mut a_transport) = create_transport();
+    let (b_peer_id, mut b_transport) = create_transport();
 
-    let mut a = create_swarm()?;
-    let mut b = create_swarm()?;
+    let addr = start_listening(&mut a_transport, "/ip4/127.0.0.1/udp/0/webrtc-direct").await;
+    start_listening(&mut b_transport, "/ip4/127.0.0.1/udp/0/webrtc-direct").await;
+    let ((a_connected, _, _), (b_connected, _)) =
+        connect(&mut a_transport, &mut b_transport, addr).await;
 
-    Swarm::listen_on(&mut a, "/ip4/127.0.0.1/udp/0/webrtc".parse()?)?;
-    Swarm::listen_on(&mut b, "/ip4/127.0.0.1/udp/0/webrtc".parse()?)?;
+    assert_eq!(a_connected, b_peer_id);
+    assert_eq!(b_connected, a_peer_id);
+}
 
-    let addr = match a.next().await {
-        Some(SwarmEvent::NewListenAddr { address, .. }) => address,
-        e => panic!("{:?}", e),
-    };
+// Note: This test should likely be ported to the muxer compliance test suite.
+#[test]
+fn concurrent_connections_and_streams_tokio() {
+    let _ = tracing_subscriber::fmt()
+        .with_env_filter(EnvFilter::from_default_env())
+        .try_init();
 
-    // skip other interface addresses
-    while a.next().now_or_never().is_some() {}
+    let rt = tokio::runtime::Runtime::new().unwrap();
+    let _guard = rt.enter();
+    quickcheck::QuickCheck::new()
+        .min_tests_passed(1)
+        .quickcheck(prop as fn(_, _) -> _);
+}
 
-    let _ = match b.next().await {
-        Some(SwarmEvent::NewListenAddr { address, .. }) => address,
-        e => panic!("{:?}", e),
-    };
+fn generate_tls_keypair() -> libp2p_identity::Keypair {
+    libp2p_identity::Keypair::generate_ed25519()
+}
 
-    // skip other interface addresses
-    while b.next().now_or_never().is_some() {}
+fn create_transport() -> (PeerId, Boxed<(PeerId, StreamMuxerBox)>) {
+    let keypair = generate_tls_keypair();
+    let peer_id = keypair.public().to_peer_id();
 
-    let mut data = vec![0; 4096];
-    rng.fill_bytes(&mut data);
+    let transport = webrtc::tokio::Transport::new(
+        keypair,
+        webrtc::tokio::Certificate::generate(&mut thread_rng()).unwrap(),
+    )
+    .map(|(p, c), _| (p, StreamMuxerBox::new(c)))
+    .boxed();
 
-    b.behaviour_mut()
-        .add_address(Swarm::local_peer_id(&a), addr);
-    b.behaviour_mut()
-        .send_request(Swarm::local_peer_id(&a), Ping(data.clone()));
+    (peer_id, transport)
+}
 
-    match b.next().await {
-        Some(SwarmEvent::Dialing(_)) => {}
-        e => panic!("{:?}", e),
+async fn start_listening(transport: &mut Boxed<(PeerId, StreamMuxerBox)>, addr: &str) -> Multiaddr {
+    transport
+        .listen_on(ListenerId::next(), addr.parse().unwrap())
+        .unwrap();
+    match transport.next().await {
+        Some(TransportEvent::NewAddress { listen_addr, .. }) => listen_addr,
+        e => panic!("{e:?}"),
+    }
+}
+
+fn prop(number_listeners: NonZeroU8, number_streams: NonZeroU8) -> quickcheck::TestResult {
+    const BUFFER_SIZE: usize = 4096 * 10;
+
+    let number_listeners = u8::from(number_listeners) as usize;
+    let number_streams = u8::from(number_streams) as usize;
+
+    if number_listeners > 10 || number_streams > 10 {
+        return quickcheck::TestResult::discard();
     }
 
-    let pair = select(a.next(), b.next());
-    match pair.await {
-        Either::Left((Some(SwarmEvent::IncomingConnection { .. }), _)) => {}
-        Either::Left((e, _)) => panic!("{:?}", e),
-        Either::Right(_) => panic!("b completed first"),
-    }
+    let (listeners_tx, mut listeners_rx) = mpsc::channel(number_listeners);
 
-    let pair = select(a.next(), b.next());
-    match pair.await {
-        Either::Left((Some(SwarmEvent::ConnectionEstablished { .. }), _)) => {}
-        Either::Left((e, _)) => panic!("{:?}", e),
-        Either::Right((Some(SwarmEvent::ConnectionEstablished { .. }), _)) => {}
-        Either::Right((e, _)) => panic!("{:?}", e),
-    }
-
-    let pair = select(a.next(), b.next());
-    match pair.await {
-        Either::Left((Some(SwarmEvent::ConnectionEstablished { .. }), _)) => {}
-        Either::Left((e, _)) => panic!("{:?}", e),
-        Either::Right((Some(SwarmEvent::ConnectionEstablished { .. }), _)) => {}
-        Either::Right((e, _)) => panic!("{:?}", e),
-    }
-
-    assert!(b.next().now_or_never().is_none());
-
-    let pair = select(a.next(), b.next());
-    match pair.await {
-        Either::Left((
-            Some(SwarmEvent::Behaviour(RequestResponseEvent::Message {
-                message:
-                    RequestResponseMessage::Request {
-                        request: Ping(ping),
-                        channel,
-                        ..
-                    },
-                ..
-            })),
-            _,
-        )) => {
-            a.behaviour_mut()
-                .send_response(channel, Pong(ping))
-                .unwrap();
-        }
-        Either::Left((e, _)) => panic!("{:?}", e),
-        Either::Right(_) => panic!("b completed first"),
-    }
-
-    match a.next().await {
-        Some(SwarmEvent::Behaviour(RequestResponseEvent::ResponseSent { .. })) => {}
-        e => panic!("{:?}", e),
-    }
-
-    let pair = select(a.next(), b.next());
-    match pair.await {
-        Either::Right((
-            Some(SwarmEvent::Behaviour(RequestResponseEvent::Message {
-                message:
-                    RequestResponseMessage::Response {
-                        response: Pong(pong),
-                        ..
-                    },
-                ..
-            })),
-            _,
-        )) => assert_eq!(data, pong),
-        Either::Right((e, _)) => panic!("{:?}", e),
-        Either::Left(_) => panic!("a completed first"),
-    }
-
-    a.behaviour_mut().send_request(
-        Swarm::local_peer_id(&b),
-        Ping(b"another substream".to_vec()),
+    tracing::info!(
+        stream_count=%number_streams,
+        connection_count=%number_listeners,
+        "Creating streams on connections"
     );
 
-    assert!(a.next().now_or_never().is_none());
-
-    let pair = select(a.next(), b.next());
-    match pair.await {
-        Either::Right((
-            Some(SwarmEvent::Behaviour(RequestResponseEvent::Message {
-                message:
-                    RequestResponseMessage::Request {
-                        request: Ping(data),
-                        channel,
-                        ..
-                    },
-                ..
-            })),
-            _,
-        )) => {
-            b.behaviour_mut()
-                .send_response(channel, Pong(data))
-                .unwrap();
-        }
-        Either::Right((e, _)) => panic!("{:?}", e),
-        Either::Left(_) => panic!("a completed first"),
-    }
-
-    match b.next().await {
-        Some(SwarmEvent::Behaviour(RequestResponseEvent::ResponseSent { .. })) => {}
-        e => panic!("{:?}", e),
-    }
-
-    let pair = select(a.next(), b.next());
-    match pair.await {
-        Either::Left((
-            Some(SwarmEvent::Behaviour(RequestResponseEvent::Message {
-                message:
-                    RequestResponseMessage::Response {
-                        response: Pong(data),
-                        ..
-                    },
-                ..
-            })),
-            _,
-        )) => assert_eq!(data, b"another substream".to_vec()),
-        Either::Left((e, _)) => panic!("{:?}", e),
-        Either::Right(_) => panic!("b completed first"),
-    }
-
-    Ok(())
-}
-
-#[tokio::test]
-async fn dial_failure() -> Result<()> {
-    let _ = env_logger::builder().is_test(true).try_init();
-
-    let mut a = create_swarm()?;
-    let mut b = create_swarm()?;
-
-    Swarm::listen_on(&mut a, "/ip4/127.0.0.1/udp/0/webrtc".parse()?)?;
-    Swarm::listen_on(&mut b, "/ip4/127.0.0.1/udp/0/webrtc".parse()?)?;
-
-    let addr = match a.next().await {
-        Some(SwarmEvent::NewListenAddr { address, .. }) => address,
-        e => panic!("{:?}", e),
-    };
-
-    // skip other interface addresses
-    while a.next().now_or_never().is_some() {}
-
-    let _ = match b.next().await {
-        Some(SwarmEvent::NewListenAddr { address, .. }) => address,
-        e => panic!("{:?}", e),
-    };
-
-    // skip other interface addresses
-    while b.next().now_or_never().is_some() {}
-
-    let a_peer_id = &Swarm::local_peer_id(&a).clone();
-    drop(a); // stop a swarm so b can never reach it
-
-    b.behaviour_mut().add_address(a_peer_id, addr);
-    b.behaviour_mut()
-        .send_request(a_peer_id, Ping(b"hello world".to_vec()));
-
-    match b.next().await {
-        Some(SwarmEvent::Dialing(_)) => {}
-        e => panic!("{:?}", e),
-    }
-
-    match b.next().await {
-        Some(SwarmEvent::OutgoingConnectionError { .. }) => {}
-        e => panic!("{:?}", e),
-    };
-
-    match b.next().await {
-        Some(SwarmEvent::Behaviour(RequestResponseEvent::OutboundFailure { .. })) => {}
-        e => panic!("{:?}", e),
-    };
-
-    Ok(())
-}
-
-#[tokio::test]
-async fn concurrent_connections_and_streams() {
-    let _ = env_logger::builder().is_test(true).try_init();
-
-    let num_listeners = 3usize;
-    let num_streams = 8usize;
-
-    let mut data = vec![0; 4096];
-    rand::thread_rng().fill_bytes(&mut data);
-    let mut listeners = vec![];
-
     // Spawn the listener nodes.
-    for _ in 0..num_listeners {
-        let mut listener = create_swarm().unwrap();
-        Swarm::listen_on(
-            &mut listener,
-            "/ip4/127.0.0.1/udp/0/webrtc".parse().unwrap(),
-        )
-        .unwrap();
+    for _ in 0..number_listeners {
+        tokio::spawn({
+            let mut listeners_tx = listeners_tx.clone();
 
-        // Wait to listen on address.
-        let addr = match listener.next().await {
-            Some(SwarmEvent::NewListenAddr { address, .. }) => address,
-            e => panic!("{:?}", e),
-        };
+            async move {
+                let (peer_id, mut listener) = create_transport();
+                let addr =
+                    start_listening(&mut listener, "/ip4/127.0.0.1/udp/0/webrtc-direct").await;
 
-        listeners.push((*listener.local_peer_id(), addr));
+                listeners_tx.send((peer_id, addr)).await.unwrap();
 
-        tokio::spawn(async move {
-            loop {
-                match listener.next().await {
-                    Some(SwarmEvent::IncomingConnection { .. }) => {
-                        log::debug!("listener IncomingConnection");
-                    }
-                    Some(SwarmEvent::ConnectionEstablished { .. }) => {
-                        log::debug!("listener ConnectionEstablished");
-                    }
-                    Some(SwarmEvent::Behaviour(RequestResponseEvent::Message {
-                        message:
-                            RequestResponseMessage::Request {
-                                request: Ping(ping),
-                                channel,
-                                ..
-                            },
-                        ..
-                    })) => {
-                        log::debug!("listener got Message");
-                        listener
-                            .behaviour_mut()
-                            .send_response(channel, Pong(ping))
-                            .unwrap();
-                    }
-                    Some(SwarmEvent::Behaviour(RequestResponseEvent::ResponseSent { .. })) => {
-                        log::debug!("listener ResponseSent");
-                    }
-                    Some(SwarmEvent::ConnectionClosed { .. }) => {}
-                    Some(SwarmEvent::NewListenAddr { .. }) => {
-                        log::debug!("listener NewListenAddr");
-                    }
-                    Some(e) => {
-                        panic!("unexpected event {:?}", e);
-                    }
-                    None => {
-                        panic!("listener stopped");
+                loop {
+                    if let TransportEvent::Incoming { upgrade, .. } =
+                        listener.select_next_some().await
+                    {
+                        let (_, connection) = upgrade.await.unwrap();
+
+                        tokio::spawn(answer_inbound_streams::<BUFFER_SIZE>(connection));
                     }
                 }
             }
         });
     }
 
-    let mut dialer = create_swarm().unwrap();
-    Swarm::listen_on(&mut dialer, "/ip4/127.0.0.1/udp/0/webrtc".parse().unwrap()).unwrap();
-
-    // Wait to listen on address.
-    match dialer.next().await {
-        Some(SwarmEvent::NewListenAddr { address, .. }) => address,
-        e => panic!("{:?}", e),
-    };
+    let (completed_streams_tx, completed_streams_rx) =
+        mpsc::channel(number_streams * number_listeners);
 
     // For each listener node start `number_streams` requests.
-    for (listener_peer_id, listener_addr) in &listeners {
-        dialer
-            .behaviour_mut()
-            .add_address(listener_peer_id, listener_addr.clone());
+    tokio::spawn(async move {
+        let (_, mut dialer) = create_transport();
 
-        dialer.dial(*listener_peer_id).unwrap();
+        while let Some((_, listener_addr)) = listeners_rx.next().await {
+            let (_, connection) = Dial::new(&mut dialer, listener_addr.clone()).await;
+
+            tokio::spawn(open_outbound_streams::<BUFFER_SIZE>(
+                connection,
+                number_streams,
+                completed_streams_tx.clone(),
+            ));
+        }
+
+        // Drive the dialer.
+        loop {
+            dialer.next().await;
+        }
+    });
+
+    let completed_streams = number_streams * number_listeners;
+
+    // Wait for all streams to complete.
+    tokio::runtime::Handle::current()
+        .block_on(tokio::time::timeout(
+            Duration::from_secs(30),
+            completed_streams_rx
+                .take(completed_streams)
+                .collect::<Vec<_>>(),
+        ))
+        .unwrap();
+
+    quickcheck::TestResult::passed()
+}
+
+async fn answer_inbound_streams<const BUFFER_SIZE: usize>(mut connection: StreamMuxerBox) {
+    loop {
+        let Ok(mut inbound_stream) = future::poll_fn(|cx| {
+            let _ = connection.poll_unpin(cx)?;
+            connection.poll_inbound_unpin(cx)
+        })
+        .await
+        else {
+            return;
+        };
+
+        tokio::spawn(async move {
+            // FIXME: Need to write _some_ data before we can read on both sides.
+            // Do a ping-pong exchange.
+            {
+                let mut pong = [0u8; 4];
+                inbound_stream.write_all(b"PING").await.unwrap();
+                inbound_stream.flush().await.unwrap();
+                inbound_stream.read_exact(&mut pong).await.unwrap();
+                assert_eq!(&pong, b"PONG");
+            }
+
+            let mut data = vec![0; BUFFER_SIZE];
+
+            inbound_stream.read_exact(&mut data).await.unwrap();
+            inbound_stream.write_all(&data).await.unwrap();
+            inbound_stream.close().await.unwrap();
+        });
+    }
+}
+
+async fn open_outbound_streams<const BUFFER_SIZE: usize>(
+    mut connection: StreamMuxerBox,
+    number_streams: usize,
+    completed_streams_tx: mpsc::Sender<()>,
+) {
+    for _ in 0..number_streams {
+        let mut outbound_stream = future::poll_fn(|cx| {
+            let _ = connection.poll_unpin(cx)?;
+
+            connection.poll_outbound_unpin(cx)
+        })
+        .await
+        .unwrap();
+
+        tokio::spawn({
+            let mut completed_streams_tx = completed_streams_tx.clone();
+
+            async move {
+                // FIXME: Need to write _some_ data before we can read on both sides.
+                // Do a ping-pong exchange.
+                {
+                    let mut ping = [0u8; 4];
+                    outbound_stream.write_all(b"PONG").await.unwrap();
+                    outbound_stream.flush().await.unwrap();
+                    outbound_stream.read_exact(&mut ping).await.unwrap();
+                    assert_eq!(&ping, b"PING");
+                }
+
+                let mut data = vec![0; BUFFER_SIZE];
+                rand::thread_rng().fill_bytes(&mut data);
+
+                let mut received = Vec::new();
+
+                outbound_stream.write_all(&data).await.unwrap();
+                outbound_stream.flush().await.unwrap();
+                outbound_stream.read_to_end(&mut received).await.unwrap();
+
+                assert_eq!(received, data);
+
+                completed_streams_tx.send(()).await.unwrap();
+            }
+        });
     }
 
-    // Wait for responses to each request.
-    let mut num_responses = 0;
-    loop {
-        match dialer.next().await {
-            Some(SwarmEvent::Dialing(_)) => {
-                log::debug!("dialer Dialing");
-            }
-            Some(SwarmEvent::ConnectionEstablished { peer_id, .. }) => {
-                log::debug!("dialer Connection established");
-                for _ in 0..num_streams {
-                    dialer
-                        .behaviour_mut()
-                        .send_request(&peer_id, Ping(data.clone()));
+    tracing::info!(stream_count=%number_streams, "Created streams");
+
+    while future::poll_fn(|cx| connection.poll_unpin(cx))
+        .await
+        .is_ok()
+    {}
+}
+
+async fn connect(
+    a_transport: &mut Boxed<(PeerId, StreamMuxerBox)>,
+    b_transport: &mut Boxed<(PeerId, StreamMuxerBox)>,
+    addr: Multiaddr,
+) -> (
+    (PeerId, Multiaddr, StreamMuxerBox),
+    (PeerId, StreamMuxerBox),
+) {
+    match futures::future::select(
+        ListenUpgrade::new(a_transport),
+        Dial::new(b_transport, addr),
+    )
+    .await
+    {
+        Either::Left((listen_done, dial)) => {
+            let mut pending_dial = dial;
+
+            loop {
+                match future::select(pending_dial, a_transport.next()).await {
+                    Either::Left((dial_done, _)) => return (listen_done, dial_done),
+                    Either::Right((_, dial)) => {
+                        pending_dial = dial;
+                    }
                 }
             }
-            Some(SwarmEvent::Behaviour(RequestResponseEvent::Message {
-                message:
-                    RequestResponseMessage::Response {
-                        response: Pong(pong),
-                        ..
-                    },
-                ..
-            })) => {
-                log::debug!("dialer got Message");
-                num_responses += 1;
-                assert_eq!(data, pong);
-                let should_be = num_listeners * num_streams;
-                log::debug!(
-                    "num of responses: {}, num of listeners * num of streams: {}",
-                    num_responses,
-                    should_be
-                );
-                if num_responses == should_be {
-                    break;
+        }
+        Either::Right((dial_done, listen)) => {
+            let mut pending_listen = listen;
+
+            loop {
+                match future::select(pending_listen, b_transport.next()).await {
+                    Either::Left((listen_done, _)) => return (listen_done, dial_done),
+                    Either::Right((_, listen)) => {
+                        pending_listen = listen;
+                    }
                 }
-            }
-            Some(SwarmEvent::ConnectionClosed { .. }) => {
-                log::debug!("dialer ConnectionClosed");
-            }
-            Some(SwarmEvent::NewListenAddr { .. }) => {
-                log::debug!("dialer NewListenAddr");
-            }
-            e => {
-                panic!("unexpected event {:?}", e);
             }
         }
     }
 }
 
-#[derive(Debug, Clone)]
-struct PingProtocol();
+struct ListenUpgrade<'a> {
+    listener: &'a mut Boxed<(PeerId, StreamMuxerBox)>,
+    listener_upgrade_task: Option<BoxFuture<'static, (PeerId, Multiaddr, StreamMuxerBox)>>,
+}
 
-#[derive(Clone)]
-struct PingCodec();
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-struct Ping(Vec<u8>);
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-struct Pong(Vec<u8>);
-
-impl ProtocolName for PingProtocol {
-    fn protocol_name(&self) -> &[u8] {
-        "/ping/1".as_bytes()
+impl<'a> ListenUpgrade<'a> {
+    pub(crate) fn new(listener: &'a mut Boxed<(PeerId, StreamMuxerBox)>) -> Self {
+        Self {
+            listener,
+            listener_upgrade_task: None,
+        }
     }
 }
 
-#[async_trait]
-impl RequestResponseCodec for PingCodec {
-    type Protocol = PingProtocol;
-    type Request = Ping;
-    type Response = Pong;
+struct Dial<'a> {
+    dialer: &'a mut Boxed<(PeerId, StreamMuxerBox)>,
+    dial_task: BoxFuture<'static, (PeerId, StreamMuxerBox)>,
+}
 
-    async fn read_request<T>(&mut self, _: &PingProtocol, io: &mut T) -> io::Result<Self::Request>
-    where
-        T: AsyncRead + Unpin + Send,
-    {
-        upgrade::read_length_prefixed(io, 4096)
-            .map(|res| match res {
-                Err(e) => Err(io::Error::new(io::ErrorKind::InvalidData, e)),
-                Ok(vec) if vec.is_empty() => Err(io::ErrorKind::UnexpectedEof.into()),
-                Ok(vec) => Ok(Ping(vec)),
-            })
-            .await
-    }
-
-    async fn read_response<T>(&mut self, _: &PingProtocol, io: &mut T) -> io::Result<Self::Response>
-    where
-        T: AsyncRead + Unpin + Send,
-    {
-        upgrade::read_length_prefixed(io, 4096)
-            .map(|res| match res {
-                Err(e) => Err(io::Error::new(io::ErrorKind::InvalidData, e)),
-                Ok(vec) if vec.is_empty() => Err(io::ErrorKind::UnexpectedEof.into()),
-                Ok(vec) => Ok(Pong(vec)),
-            })
-            .await
-    }
-
-    async fn write_request<T>(
-        &mut self,
-        _: &PingProtocol,
-        io: &mut T,
-        Ping(data): Ping,
-    ) -> io::Result<()>
-    where
-        T: AsyncWrite + Unpin + Send,
-    {
-        upgrade::write_length_prefixed(io, data).await?;
-        io.close().await?;
-        Ok(())
-    }
-
-    async fn write_response<T>(
-        &mut self,
-        _: &PingProtocol,
-        io: &mut T,
-        Pong(data): Pong,
-    ) -> io::Result<()>
-    where
-        T: AsyncWrite + Unpin + Send,
-    {
-        upgrade::write_length_prefixed(io, data).await?;
-        io.close().await?;
-        Ok(())
+impl<'a> Dial<'a> {
+    fn new(dialer: &'a mut Boxed<(PeerId, StreamMuxerBox)>, addr: Multiaddr) -> Self {
+        Self {
+            dial_task: dialer.dial(addr).unwrap().map(|r| r.unwrap()).boxed(),
+            dialer,
+        }
     }
 }
 
-fn create_swarm() -> Result<Swarm<RequestResponse<PingCodec>>> {
-    let id_keys = identity::Keypair::generate_ed25519();
-    let peer_id = id_keys.public().to_peer_id();
-    let transport = webrtc::Transport::new(
-        id_keys,
-        webrtc::Certificate::generate(&mut thread_rng()).unwrap(),
-    );
+impl Future for Dial<'_> {
+    type Output = (PeerId, StreamMuxerBox);
 
-    let protocols = iter::once((PingProtocol(), ProtocolSupport::Full));
-    let cfg = RequestResponseConfig::default();
-    let behaviour = RequestResponse::new(PingCodec(), protocols, cfg);
-    let transport = transport
-        .map(|(peer_id, conn), _| (peer_id, StreamMuxerBox::new(conn)))
-        .boxed();
+    fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        loop {
+            match self.dialer.poll_next_unpin(cx) {
+                Poll::Ready(_) => {
+                    continue;
+                }
+                Poll::Pending => {}
+            }
 
-    Ok(Swarm::with_tokio_executor(transport, behaviour, peer_id))
+            let conn = ready!(self.dial_task.poll_unpin(cx));
+            return Poll::Ready(conn);
+        }
+    }
+}
+
+impl Future for ListenUpgrade<'_> {
+    type Output = (PeerId, Multiaddr, StreamMuxerBox);
+
+    fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        loop {
+            match self.listener.poll_next_unpin(cx) {
+                Poll::Ready(Some(TransportEvent::Incoming {
+                    upgrade,
+                    send_back_addr,
+                    ..
+                })) => {
+                    self.listener_upgrade_task = Some(
+                        async move {
+                            let (peer, conn) = upgrade.await.unwrap();
+
+                            (peer, send_back_addr, conn)
+                        }
+                        .boxed(),
+                    );
+                    continue;
+                }
+                Poll::Ready(None) => unreachable!("stream never ends"),
+                Poll::Ready(Some(_)) => continue,
+                Poll::Pending => {}
+            }
+
+            let conn = match self.listener_upgrade_task.as_mut() {
+                None => return Poll::Pending,
+                Some(inner) => ready!(inner.poll_unpin(cx)),
+            };
+
+            return Poll::Ready(conn);
+        }
+    }
 }

@@ -18,7 +18,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use libp2p_core::PeerId;
+use libp2p_identity::PeerId;
 use thiserror::Error;
 
 /// Error in WebRTC.
@@ -29,7 +29,7 @@ pub enum Error {
     #[error("IO error")]
     Io(#[from] std::io::Error),
     #[error("failed to authenticate peer")]
-    Authentication(#[from] libp2p_noise::NoiseError),
+    Authentication(#[from] libp2p_noise::Error),
 
     // Authentication errors.
     #[error("invalid peer ID (expected {expected}, got {got})")]

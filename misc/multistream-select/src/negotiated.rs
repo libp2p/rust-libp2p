@@ -171,7 +171,7 @@ impl<TInner> Negotiated<TInner> {
 
                     if let Message::Protocol(p) = &msg {
                         if p.as_ref() == protocol.as_ref() {
-                            log::debug!("Negotiated: Received confirmation for protocol: {}", p);
+                            tracing::debug!(protocol=%p, "Negotiated: Received confirmation for protocol");
                             *this.state = State::Completed {
                                 io: io.into_inner(),
                             };
@@ -305,9 +305,7 @@ where
     }
 
     fn poll_close(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), io::Error>> {
-        // Ensure all data has been flushed and expected negotiation messages
-        // have been received.
-        ready!(self.as_mut().poll(cx).map_err(Into::<io::Error>::into)?);
+        // Ensure all data has been flushed, including optimistic multistream-select messages.
         ready!(self
             .as_mut()
             .poll_flush(cx)
@@ -316,7 +314,13 @@ where
         // Continue with the shutdown of the underlying I/O stream.
         match self.project().state.project() {
             StateProj::Completed { io, .. } => io.poll_close(cx),
-            StateProj::Expecting { io, .. } => io.poll_close(cx),
+            StateProj::Expecting { io, .. } => {
+                let close_poll = io.poll_close(cx);
+                if let Poll::Ready(Ok(())) = close_poll {
+                    tracing::debug!("Stream closed. Confirmation from remote for optimstic protocol negotiation still pending")
+                }
+                close_poll
+            }
             StateProj::Invalid => panic!("Negotiated: Invalid state"),
         }
     }
@@ -378,7 +382,7 @@ impl fmt::Display for NegotiationError {
     fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> Result<(), fmt::Error> {
         match self {
             NegotiationError::ProtocolError(p) => {
-                fmt.write_fmt(format_args!("Protocol error: {}", p))
+                fmt.write_fmt(format_args!("Protocol error: {p}"))
             }
             NegotiationError::Failed => fmt.write_str("Protocol negotiation failed."),
         }

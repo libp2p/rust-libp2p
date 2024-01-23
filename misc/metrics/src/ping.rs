@@ -18,13 +18,13 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use prometheus_client::encoding::text::Encode;
+use prometheus_client::encoding::{EncodeLabelSet, EncodeLabelValue};
 use prometheus_client::metrics::counter::Counter;
 use prometheus_client::metrics::family::Family;
 use prometheus_client::metrics::histogram::{exponential_buckets, Histogram};
 use prometheus_client::registry::{Registry, Unit};
 
-#[derive(Clone, Hash, PartialEq, Eq, Encode)]
+#[derive(Clone, Hash, PartialEq, Eq, EncodeLabelSet, Debug)]
 struct FailureLabels {
     reason: Failure,
 }
@@ -45,21 +45,20 @@ impl From<&libp2p_ping::Failure> for FailureLabels {
     }
 }
 
-#[derive(Clone, Hash, PartialEq, Eq, Encode)]
+#[derive(Clone, Hash, PartialEq, Eq, EncodeLabelValue, Debug)]
 enum Failure {
     Timeout,
     Unsupported,
     Other,
 }
 
-pub struct Metrics {
+pub(crate) struct Metrics {
     rtt: Histogram,
     failure: Family<FailureLabels, Counter>,
-    pong_received: Counter,
 }
 
 impl Metrics {
-    pub fn new(registry: &mut Registry) -> Self {
+    pub(crate) fn new(registry: &mut Registry) -> Self {
         let sub_registry = registry.sub_registry_with_prefix("ping");
 
         let rtt = Histogram::new(exponential_buckets(0.001, 2.0, 12));
@@ -67,38 +66,24 @@ impl Metrics {
             "rtt",
             "Round-trip time sending a 'ping' and receiving a 'pong'",
             Unit::Seconds,
-            Box::new(rtt.clone()),
+            rtt.clone(),
         );
 
         let failure = Family::default();
         sub_registry.register(
             "failure",
             "Failure while sending a 'ping' or receiving a 'pong'",
-            Box::new(failure.clone()),
+            failure.clone(),
         );
 
-        let pong_received = Counter::default();
-        sub_registry.register(
-            "pong_received",
-            "Number of 'pong's received",
-            Box::new(pong_received.clone()),
-        );
-
-        Self {
-            rtt,
-            failure,
-            pong_received,
-        }
+        Self { rtt, failure }
     }
 }
 
 impl super::Recorder<libp2p_ping::Event> for Metrics {
     fn record(&self, event: &libp2p_ping::Event) {
         match &event.result {
-            Ok(libp2p_ping::Success::Pong) => {
-                self.pong_received.inc();
-            }
-            Ok(libp2p_ping::Success::Ping { rtt }) => {
+            Ok(rtt) => {
                 self.rtt.observe(rtt.as_secs_f64());
             }
             Err(failure) => {

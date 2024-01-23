@@ -24,7 +24,6 @@ use asynchronous_codec::Framed;
 use bytes::Bytes;
 use futures::task::{waker_ref, ArcWake, AtomicWaker, WakerRef};
 use futures::{prelude::*, ready, stream::Fuse};
-use log::{debug, trace};
 use nohash_hasher::{IntMap, IntSet};
 use parking_lot::Mutex;
 use smallvec::SmallVec;
@@ -35,8 +34,7 @@ use std::{
     task::{Context, Poll, Waker},
 };
 
-pub use std::io::{Error, ErrorKind, Result};
-
+pub(crate) use std::io::{Error, Result};
 /// A connection identifier.
 ///
 /// Randomly generated and mainly intended to improve log output
@@ -56,7 +54,7 @@ impl fmt::Display for ConnectionId {
     }
 }
 /// A multiplexed I/O stream.
-pub struct Multiplexed<C> {
+pub(crate) struct Multiplexed<C> {
     /// A unique ID for the multiplexed stream (i.e. connection).
     id: ConnectionId,
     /// The current operating status of the multiplex stream.
@@ -116,9 +114,9 @@ where
     C: AsyncRead + AsyncWrite + Unpin,
 {
     /// Creates a new multiplexed I/O stream.
-    pub fn new(io: C, config: MplexConfig) -> Self {
+    pub(crate) fn new(io: C, config: MplexConfig) -> Self {
         let id = ConnectionId(rand::random());
-        debug!("New multiplexed connection: {}", id);
+        tracing::debug!(connection=%id, "New multiplexed connection");
         Multiplexed {
             id,
             config,
@@ -144,7 +142,7 @@ where
     }
 
     /// Flushes the underlying I/O stream.
-    pub fn poll_flush(&mut self, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
+    pub(crate) fn poll_flush(&mut self, cx: &Context<'_>) -> Poll<io::Result<()>> {
         match &self.status {
             Status::Closed => return Poll::Ready(Ok(())),
             Status::Err(e) => return Poll::Ready(Err(io::Error::new(e.kind(), e.to_string()))),
@@ -170,7 +168,7 @@ where
     /// > **Note**: No `Close` or `Reset` frames are sent on open substreams
     /// > before closing the underlying connection. However, the connection
     /// > close implies a flush of any frames already sent.
-    pub fn poll_close(&mut self, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
+    pub(crate) fn poll_close(&mut self, cx: &Context<'_>) -> Poll<io::Result<()>> {
         match &self.status {
             Status::Closed => return Poll::Ready(Ok(())),
             Status::Err(e) => return Poll::Ready(Err(io::Error::new(e.kind(), e.to_string()))),
@@ -209,7 +207,7 @@ where
     /// [`MaxBufferBehaviour::Block`] is used, this method is blocked
     /// (i.e. `Pending`) on some task reading from the substream whose
     /// buffer is full.
-    pub fn poll_next_stream(&mut self, cx: &mut Context<'_>) -> Poll<io::Result<LocalStreamId>> {
+    pub(crate) fn poll_next_stream(&mut self, cx: &Context<'_>) -> Poll<io::Result<LocalStreamId>> {
         self.guard_open()?;
 
         // Try to read from the buffer first.
@@ -226,7 +224,7 @@ where
             // yield to give the current task a chance to read
             // from the respective substreams.
             if num_buffered == self.config.max_buffer_len {
-                cx.waker().clone().wake();
+                cx.waker().wake_by_ref();
                 return Poll::Pending;
             }
 
@@ -250,14 +248,16 @@ where
     }
 
     /// Creates a new (outbound) substream, returning the allocated stream ID.
-    pub fn poll_open_stream(&mut self, cx: &mut Context<'_>) -> Poll<io::Result<LocalStreamId>> {
+    pub(crate) fn poll_open_stream(&mut self, cx: &Context<'_>) -> Poll<io::Result<LocalStreamId>> {
         self.guard_open()?;
 
         // Check the stream limits.
         if self.substreams.len() >= self.config.max_substreams {
-            debug!(
-                "{}: Maximum number of substreams reached ({})",
-                self.id, self.config.max_substreams
+            tracing::debug!(
+                connection=%self.id,
+                total_substreams=%self.substreams.len(),
+                max_substreams=%self.config.max_substreams,
+                "Maximum number of substreams reached"
             );
             self.notifier_open.register(cx.waker());
             return Poll::Pending;
@@ -277,11 +277,11 @@ where
                                 buf: Default::default(),
                             },
                         );
-                        debug!(
-                            "{}: New outbound substream: {} (total {})",
-                            self.id,
-                            stream_id,
-                            self.substreams.len()
+                        tracing::debug!(
+                            connection=%self.id,
+                            substream=%stream_id,
+                            total_substreams=%self.substreams.len(),
+                            "New outbound substream"
                         );
                         // The flush is delayed and the `Open` frame may be sent
                         // together with other frames in the same transport packet.
@@ -317,7 +317,7 @@ where
     /// > **Note**: All substreams obtained via `poll_next_stream`
     /// > or `poll_open_stream` must eventually be "dropped" by
     /// > calling this method when they are no longer used.
-    pub fn drop_stream(&mut self, id: LocalStreamId) {
+    pub(crate) fn drop_stream(&mut self, id: LocalStreamId) {
         // Check if the underlying stream is ok.
         match self.status {
             Status::Closed | Status::Err(_) => return,
@@ -349,7 +349,11 @@ where
                         if self.check_max_pending_frames().is_err() {
                             return;
                         }
-                        trace!("{}: Pending close for stream {}", self.id, id);
+                        tracing::trace!(
+                            connection=%self.id,
+                            substream=%id,
+                            "Pending close for substream"
+                        );
                         self.pending_frames
                             .push_front(Frame::Close { stream_id: id });
                     }
@@ -357,7 +361,11 @@ where
                         if self.check_max_pending_frames().is_err() {
                             return;
                         }
-                        trace!("{}: Pending reset for stream {}", self.id, id);
+                        tracing::trace!(
+                            connection=%self.id,
+                            substream=%id,
+                            "Pending reset for substream"
+                        );
                         self.pending_frames
                             .push_front(Frame::Reset { stream_id: id });
                     }
@@ -367,9 +375,9 @@ where
     }
 
     /// Writes data to a substream.
-    pub fn poll_write_stream(
+    pub(crate) fn poll_write_stream(
         &mut self,
-        cx: &mut Context<'_>,
+        cx: &Context<'_>,
         id: LocalStreamId,
         buf: &[u8],
     ) -> Poll<io::Result<usize>> {
@@ -417,9 +425,9 @@ where
     /// and under consideration of the number of already used substreams,
     /// thereby waking the task that last called `poll_next_stream`, if any.
     /// Inbound substreams received in excess of that limit are immediately reset.
-    pub fn poll_read_stream(
+    pub(crate) fn poll_read_stream(
         &mut self,
-        cx: &mut Context<'_>,
+        cx: &Context<'_>,
         id: LocalStreamId,
     ) -> Poll<io::Result<Option<Bytes>>> {
         self.guard_open()?;
@@ -448,7 +456,7 @@ where
             // next frame for `id`, yield to give the current task
             // a chance to read from the other substream(s).
             if num_buffered == self.config.max_buffer_len {
-                cx.waker().clone().wake();
+                cx.waker().wake_by_ref();
                 return Poll::Pending;
             }
 
@@ -477,11 +485,11 @@ where
                 frame @ Frame::Open { .. } => {
                     if let Some(id) = self.on_open(frame.remote_id())? {
                         self.open_buffer.push_front(id);
-                        trace!(
-                            "{}: Buffered new inbound stream {} (total: {})",
-                            self.id,
-                            id,
-                            self.open_buffer.len()
+                        tracing::trace!(
+                            connection=%self.id,
+                            inbound_stream=%id,
+                            inbound_buffer_len=%self.open_buffer.len(),
+                            "Buffered new inbound stream"
                         );
                         self.notifier_read.wake_next_stream();
                     }
@@ -509,15 +517,19 @@ where
     /// > **Note**: This is equivalent to `poll_flush()`, i.e. to flushing
     /// > all substreams, except that this operation returns an error if
     /// > the underlying I/O stream is already closed.
-    pub fn poll_flush_stream(
+    pub(crate) fn poll_flush_stream(
         &mut self,
-        cx: &mut Context<'_>,
+        cx: &Context<'_>,
         id: LocalStreamId,
     ) -> Poll<io::Result<()>> {
         self.guard_open()?;
 
         ready!(self.poll_flush(cx))?;
-        trace!("{}: Flushed substream {}", self.id, id);
+        tracing::trace!(
+            connection=%self.id,
+            substream=%id,
+            "Flushed substream"
+        );
 
         Poll::Ready(Ok(()))
     }
@@ -525,9 +537,9 @@ where
     /// Closes a stream for writing.
     ///
     /// > **Note**: As opposed to `poll_close()`, a flush it not implied.
-    pub fn poll_close_stream(
+    pub(crate) fn poll_close_stream(
         &mut self,
-        cx: &mut Context<'_>,
+        cx: &Context<'_>,
         id: LocalStreamId,
     ) -> Poll<io::Result<()>> {
         self.guard_open()?;
@@ -555,7 +567,11 @@ where
                     self.substreams.insert(id, SubstreamState::Open { buf });
                     Poll::Pending
                 } else {
-                    debug!("{}: Closed substream {} (half-close)", self.id, id);
+                    tracing::debug!(
+                        connection=%self.id,
+                        substream=%id,
+                        "Closed substream (half-close)"
+                    );
                     self.substreams
                         .insert(id, SubstreamState::SendClosed { buf });
                     Poll::Ready(Ok(()))
@@ -570,7 +586,11 @@ where
                         .insert(id, SubstreamState::RecvClosed { buf });
                     Poll::Pending
                 } else {
-                    debug!("{}: Closed substream {}", self.id, id);
+                    tracing::debug!(
+                        connection=%self.id,
+                        substream=%id,
+                        "Closed substream"
+                    );
                     self.substreams.insert(id, SubstreamState::Closed { buf });
                     Poll::Ready(Ok(()))
                 }
@@ -582,7 +602,7 @@ where
     ///
     /// The frame is only constructed if the underlying sink is ready to
     /// send another frame.
-    fn poll_send_frame<F>(&mut self, cx: &mut Context<'_>, frame: F) -> Poll<io::Result<()>>
+    fn poll_send_frame<F>(&mut self, cx: &Context<'_>, frame: F) -> Poll<io::Result<()>>
     where
         F: FnOnce() -> Frame<LocalStreamId>,
     {
@@ -590,7 +610,7 @@ where
         match ready!(self.io.poll_ready_unpin(&mut Context::from_waker(&waker))) {
             Ok(()) => {
                 let frame = frame();
-                trace!("{}: Sending {:?}", self.id, frame);
+                tracing::trace!(connection=%self.id, ?frame, "Sending frame");
                 match self.io.start_send_unpin(frame) {
                     Ok(()) => Poll::Ready(Ok(())),
                     Err(e) => Poll::Ready(self.on_error(e)),
@@ -608,7 +628,7 @@ where
     /// frames for any substream.
     fn poll_read_frame(
         &mut self,
-        cx: &mut Context<'_>,
+        cx: &Context<'_>,
         stream_id: Option<LocalStreamId>,
     ) -> Poll<io::Result<Frame<RemoteStreamId>>> {
         // Try to send pending frames, if there are any, without blocking,
@@ -619,7 +639,11 @@ where
         // Perform any pending flush before reading.
         if let Some(id) = &stream_id {
             if self.pending_flush_open.contains(id) {
-                trace!("{}: Executing pending flush for {}.", self.id, id);
+                tracing::trace!(
+                    connection=%self.id,
+                    substream=%id,
+                    "Executing pending flush for substream"
+                );
                 ready!(self.poll_flush(cx))?;
                 self.pending_flush_open = Default::default();
             }
@@ -635,11 +659,11 @@ where
             if !self.notifier_read.wake_read_stream(*blocked_id) {
                 // No task dedicated to the blocked stream woken, so schedule
                 // this task again to have a chance at progress.
-                trace!(
-                    "{}: No task to read from blocked stream. Waking current task.",
-                    self.id
+                tracing::trace!(
+                    connection=%self.id,
+                    "No task to read from blocked stream. Waking current task."
                 );
-                cx.waker().clone().wake();
+                cx.waker().wake_by_ref();
             } else if let Some(id) = stream_id {
                 // We woke some other task, but are still interested in
                 // reading `Data` frames from the current stream when unblocked.
@@ -665,7 +689,7 @@ where
         };
         match ready!(self.io.poll_next_unpin(&mut Context::from_waker(&waker))) {
             Some(Ok(frame)) => {
-                trace!("{}: Received {:?}", self.id, frame);
+                tracing::trace!(connection=%self.id, ?frame, "Received frame");
                 Poll::Ready(Ok(frame))
             }
             Some(Err(e)) => Poll::Ready(self.on_error(e)),
@@ -678,9 +702,10 @@ where
         let id = id.into_local();
 
         if self.substreams.contains_key(&id) {
-            debug!(
-                "{}: Received unexpected `Open` frame for open substream {}",
-                self.id, id
+            tracing::debug!(
+                connection=%self.id,
+                substream=%id,
+                "Received unexpected `Open` frame for open substream",
             );
             return self.on_error(io::Error::new(
                 io::ErrorKind::Other,
@@ -689,12 +714,17 @@ where
         }
 
         if self.substreams.len() >= self.config.max_substreams {
-            debug!(
-                "{}: Maximum number of substreams exceeded: {}",
-                self.id, self.config.max_substreams
+            tracing::debug!(
+                connection=%self.id,
+                max_substreams=%self.config.max_substreams,
+                "Maximum number of substreams exceeded"
             );
             self.check_max_pending_frames()?;
-            debug!("{}: Pending reset for new stream {}", self.id, id);
+            tracing::debug!(
+                connection=%self.id,
+                substream=%id,
+                "Pending reset for new substream"
+            );
             self.pending_frames
                 .push_front(Frame::Reset { stream_id: id });
             return Ok(None);
@@ -707,11 +737,11 @@ where
             },
         );
 
-        debug!(
-            "{}: New inbound substream: {} (total {})",
-            self.id,
-            id,
-            self.substreams.len()
+        tracing::debug!(
+            connection=%self.id,
+            substream=%id,
+            total_substreams=%self.substreams.len(),
+            "New inbound substream"
         );
 
         Ok(Some(id))
@@ -722,23 +752,27 @@ where
         if let Some(state) = self.substreams.remove(&id) {
             match state {
                 SubstreamState::Closed { .. } => {
-                    trace!(
-                        "{}: Ignoring reset for mutually closed substream {}.",
-                        self.id,
-                        id
+                    tracing::trace!(
+                        connection=%self.id,
+                        substream=%id,
+                        "Ignoring reset for mutually closed substream"
                     );
                 }
                 SubstreamState::Reset { .. } => {
-                    trace!(
-                        "{}: Ignoring redundant reset for already reset substream {}",
-                        self.id,
-                        id
+                    tracing::trace!(
+                        connection=%self.id,
+                        substream=%id,
+                        "Ignoring redundant reset for already reset substream"
                     );
                 }
                 SubstreamState::RecvClosed { buf }
                 | SubstreamState::SendClosed { buf }
                 | SubstreamState::Open { buf } => {
-                    debug!("{}: Substream {} reset by remote.", self.id, id);
+                    tracing::debug!(
+                        connection=%self.id,
+                        substream=%id,
+                        "Substream reset by remote"
+                    );
                     self.substreams.insert(id, SubstreamState::Reset { buf });
                     // Notify tasks interested in reading from that stream,
                     // so they may read the EOF.
@@ -746,10 +780,10 @@ where
                 }
             }
         } else {
-            trace!(
-                "{}: Ignoring `Reset` for unknown substream {}. Possibly dropped earlier.",
-                self.id,
-                id
+            tracing::trace!(
+                connection=%self.id,
+                substream=%id,
+                "Ignoring `Reset` for unknown substream, possibly dropped earlier"
             );
         }
     }
@@ -759,32 +793,36 @@ where
         if let Some(state) = self.substreams.remove(&id) {
             match state {
                 SubstreamState::RecvClosed { .. } | SubstreamState::Closed { .. } => {
-                    debug!(
-                        "{}: Ignoring `Close` frame for closed substream {}",
-                        self.id, id
+                    tracing::debug!(
+                        connection=%self.id,
+                        substream=%id,
+                        "Ignoring `Close` frame for closed substream"
                     );
                     self.substreams.insert(id, state);
                 }
                 SubstreamState::Reset { buf } => {
-                    debug!(
-                        "{}: Ignoring `Close` frame for already reset substream {}",
-                        self.id, id
+                    tracing::debug!(
+                        connection=%self.id,
+                        substream=%id,
+                        "Ignoring `Close` frame for already reset substream"
                     );
                     self.substreams.insert(id, SubstreamState::Reset { buf });
                 }
                 SubstreamState::SendClosed { buf } => {
-                    debug!(
-                        "{}: Substream {} closed by remote (SendClosed -> Closed).",
-                        self.id, id
+                    tracing::debug!(
+                        connection=%self.id,
+                        substream=%id,
+                        "Substream closed by remote (SendClosed -> Closed)"
                     );
                     self.substreams.insert(id, SubstreamState::Closed { buf });
                     // Notify tasks interested in reading, so they may read the EOF.
                     self.notifier_read.wake_read_stream(id);
                 }
                 SubstreamState::Open { buf } => {
-                    debug!(
-                        "{}: Substream {} closed by remote (Open -> RecvClosed)",
-                        self.id, id
+                    tracing::debug!(
+                        connection=%self.id,
+                        substream=%id,
+                        "Substream closed by remote (Open -> RecvClosed)"
                     );
                     self.substreams
                         .insert(id, SubstreamState::RecvClosed { buf });
@@ -793,10 +831,10 @@ where
                 }
             }
         } else {
-            trace!(
-                "{}: Ignoring `Close` for unknown substream {}. Possibly dropped earlier.",
-                self.id,
-                id
+            tracing::trace!(
+                connection=%self.id,
+                substream=%id,
+                "Ignoring `Close` for unknown substream, possibly dropped earlier."
             );
         }
     }
@@ -817,7 +855,7 @@ where
     }
 
     /// Sends pending frames, without flushing.
-    fn send_pending_frames(&mut self, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
+    fn send_pending_frames(&mut self, cx: &Context<'_>) -> Poll<io::Result<()>> {
         while let Some(frame) = self.pending_frames.pop_back() {
             if self.poll_send_frame(cx, || frame.clone())?.is_pending() {
                 self.pending_frames.push_back(frame);
@@ -830,7 +868,11 @@ where
 
     /// Records a fatal error for the multiplexed I/O stream.
     fn on_error<T>(&mut self, e: io::Error) -> io::Result<T> {
-        debug!("{}: Multiplexed connection failed: {:?}", self.id, e);
+        tracing::debug!(
+            connection=%self.id,
+            "Multiplexed connection failed: {:?}",
+            e
+        );
         self.status = Status::Err(io::Error::new(e.kind(), e.to_string()));
         self.pending_frames = Default::default();
         self.substreams = Default::default();
@@ -870,48 +912,52 @@ where
     /// Fails the entire multiplexed stream if too many pending `Reset`
     /// frames accumulate when using [`MaxBufferBehaviour::ResetStream`].
     fn buffer(&mut self, id: LocalStreamId, data: Bytes) -> io::Result<()> {
-        let state = if let Some(state) = self.substreams.get_mut(&id) {
-            state
-        } else {
-            trace!(
-                "{}: Dropping data {:?} for unknown substream {}",
-                self.id,
-                data,
-                id
+        let Some(state) = self.substreams.get_mut(&id) else {
+            tracing::trace!(
+                connection=%self.id,
+                substream=%id,
+                data=?data,
+                "Dropping data for unknown substream"
             );
             return Ok(());
         };
 
-        let buf = if let Some(buf) = state.recv_buf_open() {
-            buf
-        } else {
-            trace!(
-                "{}: Dropping data {:?} for closed or reset substream {}",
-                self.id,
-                data,
-                id
+        let Some(buf) = state.recv_buf_open() else {
+            tracing::trace!(
+                connection=%self.id,
+                substream=%id,
+                data=?data,
+                "Dropping data for closed or reset substream",
             );
             return Ok(());
         };
 
         debug_assert!(buf.len() <= self.config.max_buffer_len);
-        trace!(
-            "{}: Buffering {:?} for stream {} (total: {})",
-            self.id,
-            data,
-            id,
-            buf.len() + 1
+        tracing::trace!(
+            connection=%self.id,
+            substream=%id,
+            data=?data,
+            data_buffer=%buf.len() + 1,
+            "Buffering data for substream"
         );
         buf.push(data);
         self.notifier_read.wake_read_stream(id);
         if buf.len() > self.config.max_buffer_len {
-            debug!("{}: Frame buffer of stream {} is full.", self.id, id);
+            tracing::debug!(
+                connection=%self.id,
+                substream=%id,
+                "Frame buffer of substream is full"
+            );
             match self.config.max_buffer_behaviour {
                 MaxBufferBehaviour::ResetStream => {
                     let buf = buf.clone();
                     self.check_max_pending_frames()?;
                     self.substreams.insert(id, SubstreamState::Reset { buf });
-                    debug!("{}: Pending reset for stream {}", self.id, id);
+                    tracing::debug!(
+                        connection=%self.id,
+                        substream=%id,
+                        "Pending reset for stream"
+                    );
                     self.pending_frames
                         .push_front(Frame::Reset { stream_id: id });
                 }
@@ -1180,7 +1226,10 @@ mod tests {
 
     #[test]
     fn max_buffer_behaviour() {
-        let _ = env_logger::try_init();
+        use tracing_subscriber::EnvFilter;
+        let _ = tracing_subscriber::fmt()
+            .with_env_filter(EnvFilter::from_default_env())
+            .try_init();
 
         fn prop(cfg: MplexConfig, overflow: NonZeroU8) {
             let mut r_buf = BytesMut::new();
@@ -1220,7 +1269,7 @@ mod tests {
                 for i in 0..cfg.max_substreams {
                     match m.poll_next_stream(cx) {
                         Poll::Pending => panic!("Expected new inbound stream."),
-                        Poll::Ready(Err(e)) => panic!("{:?}", e),
+                        Poll::Ready(Err(e)) => panic!("{e:?}"),
                         Poll::Ready(Ok(id)) => {
                             assert_eq!(id, LocalStreamId::listener(i as u64));
                         }
@@ -1231,7 +1280,7 @@ mod tests {
                 // after reading and buffering data frames up to the limit.
                 let id = LocalStreamId::listener(0);
                 match m.poll_next_stream(cx) {
-                    Poll::Ready(r) => panic!("Unexpected result for next stream: {:?}", r),
+                    Poll::Ready(r) => panic!("Unexpected result for next stream: {r:?}"),
                     Poll::Pending => {
                         // We expect the implementation to yield when the buffer
                         // is full but before it is exceeded and the max buffer
@@ -1243,7 +1292,7 @@ mod tests {
                             cfg.max_buffer_len
                         );
                         match m.poll_next_stream(cx) {
-                            Poll::Ready(r) => panic!("Unexpected result for next stream: {:?}", r),
+                            Poll::Ready(r) => panic!("Unexpected result for next stream: {r:?}"),
                             Poll::Pending => {
                                 // Expect the buffer for stream 0 to be exceeded, triggering
                                 // the max. buffer behaviour.
@@ -1281,7 +1330,7 @@ mod tests {
                         Poll::Ready(Ok(Some(bytes))) => {
                             assert_eq!(bytes, data);
                         }
-                        x => panic!("Unexpected: {:?}", x),
+                        x => panic!("Unexpected: {x:?}"),
                     }
                 }
 
@@ -1293,7 +1342,7 @@ mod tests {
                         // Expect to read EOF
                         match m.poll_read_stream(cx, id) {
                             Poll::Ready(Ok(None)) => {}
-                            poll => panic!("Unexpected: {:?}", poll),
+                            poll => panic!("Unexpected: {poll:?}"),
                         }
                     }
                     MaxBufferBehaviour::Block => {
@@ -1301,7 +1350,7 @@ mod tests {
                         match m.poll_read_stream(cx, id) {
                             Poll::Ready(Ok(Some(bytes))) => assert_eq!(bytes, data),
                             Poll::Pending => assert_eq!(overflow.get(), 1),
-                            poll => panic!("Unexpected: {:?}", poll),
+                            poll => panic!("Unexpected: {poll:?}"),
                         }
                     }
                 }
@@ -1315,7 +1364,10 @@ mod tests {
 
     #[test]
     fn close_on_error() {
-        let _ = env_logger::try_init();
+        use tracing_subscriber::EnvFilter;
+        let _ = tracing_subscriber::fmt()
+            .with_env_filter(EnvFilter::from_default_env())
+            .try_init();
 
         fn prop(cfg: MplexConfig, num_streams: NonZeroU8) {
             let num_streams = cmp::min(cfg.max_substreams, num_streams.get() as usize);

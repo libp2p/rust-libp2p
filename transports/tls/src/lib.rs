@@ -29,7 +29,8 @@ pub mod certificate;
 mod upgrade;
 mod verifier;
 
-use libp2p_core::{identity::Keypair, PeerId};
+use libp2p_identity::Keypair;
+use libp2p_identity::PeerId;
 use std::sync::Arc;
 
 pub use futures_rustls::TlsStream;
@@ -53,7 +54,7 @@ pub fn make_client_config(
         .with_custom_certificate_verifier(Arc::new(
             verifier::Libp2pCertificateVerifier::with_remote_peer_id(remote_peer_id),
         ))
-        .with_single_cert(vec![certificate], private_key)
+        .with_client_auth_cert(vec![certificate], private_key)
         .expect("Client cert key DER is valid; qed");
     crypto.alpn_protocols = vec![P2P_ALPN.to_vec()];
 

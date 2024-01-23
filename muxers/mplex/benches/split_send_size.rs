@@ -26,14 +26,16 @@ use criterion::{black_box, criterion_group, criterion_main, Criterion, Throughpu
 use futures::future::poll_fn;
 use futures::prelude::*;
 use futures::{channel::oneshot, future::join};
-use libp2p::core::muxing::StreamMuxerExt;
-use libp2p::core::{
-    identity, multiaddr::multiaddr, muxing, transport, upgrade, Multiaddr, PeerId, Transport,
-};
-use libp2p::plaintext::PlainText2Config;
-use libp2p::{mplex, tcp};
+use libp2p_core::muxing::StreamMuxerExt;
+use libp2p_core::transport::ListenerId;
+use libp2p_core::{multiaddr::multiaddr, muxing, transport, upgrade, Multiaddr, Transport};
+use libp2p_identity as identity;
+use libp2p_identity::PeerId;
+use libp2p_mplex as mplex;
+use libp2p_plaintext as plaintext;
 use std::pin::Pin;
 use std::time::Duration;
+use tracing_subscriber::EnvFilter;
 
 type BenchTransport = transport::Boxed<(PeerId, muxing::StreamMuxerBox)>;
 
@@ -50,7 +52,9 @@ const BENCH_SIZES: [usize; 8] = [
 ];
 
 fn prepare(c: &mut Criterion) {
-    let _ = env_logger::try_init();
+    let _ = tracing_subscriber::fmt()
+        .with_env_filter(EnvFilter::from_default_env())
+        .try_init();
 
     let payload: Vec<u8> = vec![1; 1024 * 1024];
 
@@ -60,7 +64,7 @@ fn prepare(c: &mut Criterion) {
         tcp.throughput(Throughput::Bytes(payload.len() as u64));
         let mut receiver_transport = tcp_transport(size);
         let mut sender_transport = tcp_transport(size);
-        tcp.bench_function(format!("{}", size), |b| {
+        tcp.bench_function(format!("{size}"), |b| {
             b.iter(|| {
                 run(
                     black_box(&mut receiver_transport),
@@ -79,7 +83,7 @@ fn prepare(c: &mut Criterion) {
         mem.throughput(Throughput::Bytes(payload.len() as u64));
         let mut receiver_transport = mem_transport(size);
         let mut sender_transport = mem_transport(size);
-        mem.bench_function(format!("{}", size), |b| {
+        mem.bench_function(format!("{size}"), |b| {
             b.iter(|| {
                 run(
                     black_box(&mut receiver_transport),
@@ -97,10 +101,12 @@ fn prepare(c: &mut Criterion) {
 fn run(
     receiver_trans: &mut BenchTransport,
     sender_trans: &mut BenchTransport,
-    payload: &Vec<u8>,
+    payload: &[u8],
     listen_addr: &Multiaddr,
 ) {
-    receiver_trans.listen_on(listen_addr.clone()).unwrap();
+    receiver_trans
+        .listen_on(ListenerId::next(), listen_addr.clone())
+        .unwrap();
     let (addr_sender, addr_receiver) = oneshot::channel();
     let mut addr_sender = Some(addr_sender);
     let payload_len = payload.len();
@@ -163,30 +169,28 @@ fn run(
 }
 
 fn tcp_transport(split_send_size: usize) -> BenchTransport {
-    let key = identity::Keypair::generate_ed25519();
-    let local_public_key = key.public();
-
     let mut mplex = mplex::MplexConfig::default();
     mplex.set_split_send_size(split_send_size);
 
-    tcp::async_io::Transport::new(tcp::Config::default().nodelay(true))
+    libp2p_tcp::async_io::Transport::new(libp2p_tcp::Config::default().nodelay(true))
         .upgrade(upgrade::Version::V1)
-        .authenticate(PlainText2Config { local_public_key })
+        .authenticate(plaintext::Config::new(
+            &identity::Keypair::generate_ed25519(),
+        ))
         .multiplex(mplex)
         .timeout(Duration::from_secs(5))
         .boxed()
 }
 
 fn mem_transport(split_send_size: usize) -> BenchTransport {
-    let key = identity::Keypair::generate_ed25519();
-    let local_public_key = key.public();
-
     let mut mplex = mplex::MplexConfig::default();
     mplex.set_split_send_size(split_send_size);
 
     transport::MemoryTransport::default()
         .upgrade(upgrade::Version::V1)
-        .authenticate(PlainText2Config { local_public_key })
+        .authenticate(plaintext::Config::new(
+            &identity::Keypair::generate_ed25519(),
+        ))
         .multiplex(mplex)
         .timeout(Duration::from_secs(5))
         .boxed()

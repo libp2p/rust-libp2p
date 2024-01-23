@@ -1,0 +1,21 @@
+[package]
+name = "ipfs-private-example"
+version = "0.1.0"
+edition = "2021"
+publish = false
+license = "MIT"
+
+[package.metadata.release]
+release = false
+
+[dependencies]
+tokio = { version = "1.35", features = ["rt-multi-thread", "macros", "io-std"] }
+async-trait = "0.1"
+either = "1.9"
+futures = "0.3.30"
+libp2p = { path = "../../libp2p", features = [ "tokio", "gossipsub", "dns", "identify", "kad", "macros", "noise", "ping", "pnet", "tcp", "websocket", "yamux"] }
+tracing = "0.1.37"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+[lints]
+workspace = true

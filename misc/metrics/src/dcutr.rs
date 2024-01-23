@@ -18,67 +18,58 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use prometheus_client::encoding::text::Encode;
+use prometheus_client::encoding::{EncodeLabelSet, EncodeLabelValue};
 use prometheus_client::metrics::counter::Counter;
 use prometheus_client::metrics::family::Family;
 use prometheus_client::registry::Registry;
 
-pub struct Metrics {
+pub(crate) struct Metrics {
     events: Family<EventLabels, Counter>,
 }
 
 impl Metrics {
-    pub fn new(registry: &mut Registry) -> Self {
+    pub(crate) fn new(registry: &mut Registry) -> Self {
         let sub_registry = registry.sub_registry_with_prefix("dcutr");
 
         let events = Family::default();
         sub_registry.register(
             "events",
             "Events emitted by the relay NetworkBehaviour",
-            Box::new(events.clone()),
+            events.clone(),
         );
 
         Self { events }
     }
 }
 
-#[derive(Debug, Clone, Hash, PartialEq, Eq, Encode)]
+#[derive(Debug, Clone, Hash, PartialEq, Eq, EncodeLabelSet)]
 struct EventLabels {
     event: EventType,
 }
 
-#[derive(Debug, Clone, Hash, PartialEq, Eq, Encode)]
+#[derive(Debug, Clone, Hash, PartialEq, Eq, EncodeLabelValue)]
 enum EventType {
-    InitiateDirectConnectionUpgrade,
-    RemoteInitiatedDirectConnectionUpgrade,
     DirectConnectionUpgradeSucceeded,
     DirectConnectionUpgradeFailed,
 }
 
-impl From<&libp2p_dcutr::behaviour::Event> for EventType {
-    fn from(event: &libp2p_dcutr::behaviour::Event) -> Self {
+impl From<&libp2p_dcutr::Event> for EventType {
+    fn from(event: &libp2p_dcutr::Event) -> Self {
         match event {
-            libp2p_dcutr::behaviour::Event::InitiatedDirectConnectionUpgrade {
+            libp2p_dcutr::Event {
                 remote_peer_id: _,
-                local_relayed_addr: _,
-            } => EventType::InitiateDirectConnectionUpgrade,
-            libp2p_dcutr::behaviour::Event::RemoteInitiatedDirectConnectionUpgrade {
-                remote_peer_id: _,
-                remote_relayed_addr: _,
-            } => EventType::RemoteInitiatedDirectConnectionUpgrade,
-            libp2p_dcutr::behaviour::Event::DirectConnectionUpgradeSucceeded {
-                remote_peer_id: _,
+                result: Ok(_),
             } => EventType::DirectConnectionUpgradeSucceeded,
-            libp2p_dcutr::behaviour::Event::DirectConnectionUpgradeFailed {
+            libp2p_dcutr::Event {
                 remote_peer_id: _,
-                error: _,
+                result: Err(_),
             } => EventType::DirectConnectionUpgradeFailed,
         }
     }
 }
 
-impl super::Recorder<libp2p_dcutr::behaviour::Event> for Metrics {
-    fn record(&self, event: &libp2p_dcutr::behaviour::Event) {
+impl super::Recorder<libp2p_dcutr::Event> for Metrics {
+    fn record(&self, event: &libp2p_dcutr::Event) {
         self.events
             .get_or_create(&EventLabels {
                 event: event.into(),

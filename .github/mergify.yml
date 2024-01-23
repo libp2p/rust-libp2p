@@ -3,16 +3,24 @@ defaults:
     queue:
       method: squash
       commit_message_template: |
-        {{ title }} (#{{ number }})
-        
-        {{ body | get_section("## Description", "") }}   
+        {{ title }}
+
+        {{ body | get_section("## Description", "") }}
+
+        Pull-Request: #{{ number }}.
+
+        {{ body | get_section("## Attributions", "") }}
 
 pull_request_rules:
   - name: Ask to resolve conflict
     conditions:
       - conflict
-      - -draft # Draft PRs are allowed to have conflicts.
       - -author=dependabot[bot]
+      - or:
+        - -draft # Don't report conflicts on regular draft.
+        - and: # Do report conflicts on draft that are scheduled for the next major release.
+          - draft
+          - milestone~=v[0-9]\.[0-9]{2}
     actions:
       comment:
         message: This pull request has merge conflicts. Could you please resolve them @{{author}}? 🙏
@@ -21,8 +29,45 @@ pull_request_rules:
     conditions:
       # All branch protection rules are implicit: https://docs.mergify.com/conditions/#about-branch-protection
       - label=send-it
+      - base=master
     actions:
       queue:
+
+  - name: Add approved dependabot PRs to merge queue
+    conditions:
+      # All branch protection rules are implicit: https://docs.mergify.com/conditions/#about-branch-protection
+      - author=dependabot[bot]
+      - base=master
+    actions:
+      queue:
+
+  - name: Remove reviews on updates after PR is queued for merging
+    conditions:
+      - base=master
+      - label=send-it
+      - author!=@libp2p/rust-libp2p-maintainers
+      - author!=dependabot[bot]
+    actions:
+      dismiss_reviews:
+        message: Approvals have been dismissed because the PR was updated after the `send-it` label was applied.
+        changes_requested: false
+
+  - name: Approve trivial maintainer PRs
+    conditions:
+      - base=master
+      - label=trivial
+      - author=@libp2p/rust-libp2p-maintainers
+    actions:
+      review:
+
+  - name: Approve dependabot PRs of semver-compatible updates
+    conditions:
+      - author=dependabot[bot]
+      - or:
+          - title~=bump [^\s]+ from ([1-9]+)\..+ to \1\.      # For major >= 1 versions, only approve updates with the same major version.
+          - title~=bump [^\s]+ from 0\.([\d]+)\..+ to 0\.\1\. # For major == 0 versions, only approve updates with the same minor version.
+    actions:
+      review:
 
 queue_rules:
   - name: default

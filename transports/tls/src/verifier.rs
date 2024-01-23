@@ -24,17 +24,17 @@
 //! and signatures allegedly by the given certificates.
 
 use crate::certificate;
-use libp2p_core::PeerId;
+use libp2p_identity::PeerId;
 use rustls::{
     cipher_suite::{
         TLS13_AES_128_GCM_SHA256, TLS13_AES_256_GCM_SHA384, TLS13_CHACHA20_POLY1305_SHA256,
     },
     client::{HandshakeSignatureValid, ServerCertVerified, ServerCertVerifier},
-    internal::msgs::handshake::DigitallySignedStruct,
     server::{ClientCertVerified, ClientCertVerifier},
-    Certificate, DistinguishedNames, SignatureScheme, SupportedCipherSuite,
-    SupportedProtocolVersion,
+    Certificate, CertificateError, DigitallySignedStruct, DistinguishedName, SignatureScheme,
+    SupportedCipherSuite, SupportedProtocolVersion,
 };
+use std::sync::Arc;
 
 /// The protocol versions supported by this verifier.
 ///
@@ -42,12 +42,11 @@ use rustls::{
 ///
 /// > The libp2p handshake uses TLS 1.3 (and higher).
 /// > Endpoints MUST NOT negotiate lower TLS versions.
-pub static PROTOCOL_VERSIONS: &[&SupportedProtocolVersion] = &[&rustls::version::TLS13];
-
+pub(crate) static PROTOCOL_VERSIONS: &[&SupportedProtocolVersion] = &[&rustls::version::TLS13];
 /// A list of the TLS 1.3 cipher suites supported by rustls.
 // By default rustls creates client/server configs with both
 // TLS 1.3 __and__ 1.2 cipher suites. But we don't need 1.2.
-pub static CIPHERSUITES: &[SupportedCipherSuite] = &[
+pub(crate) static CIPHERSUITES: &[SupportedCipherSuite] = &[
     // TLS1.3 suites
     TLS13_CHACHA20_POLY1305_SHA256,
     TLS13_AES_256_GCM_SHA384,
@@ -57,7 +56,7 @@ pub static CIPHERSUITES: &[SupportedCipherSuite] = &[
 /// Implementation of the `rustls` certificate verification traits for libp2p.
 ///
 /// Only TLS 1.3 is supported. TLS 1.2 should be disabled in the configuration of `rustls`.
-pub struct Libp2pCertificateVerifier {
+pub(crate) struct Libp2pCertificateVerifier {
     /// The peer ID we intend to connect to
     remote_peer_id: Option<PeerId>,
 }
@@ -69,12 +68,12 @@ pub struct Libp2pCertificateVerifier {
 /// - The certificate must have a valid libp2p extension that includes a
 ///   signature of its public key.
 impl Libp2pCertificateVerifier {
-    pub fn new() -> Self {
+    pub(crate) fn new() -> Self {
         Self {
             remote_peer_id: None,
         }
     }
-    pub fn with_remote_peer_id(remote_peer_id: Option<PeerId>) -> Self {
+    pub(crate) fn with_remote_peer_id(remote_peer_id: Option<PeerId>) -> Self {
         Self { remote_peer_id }
     }
 
@@ -119,8 +118,8 @@ impl ServerCertVerifier for Libp2pCertificateVerifier {
             // the certificate matches the peer ID they intended to connect to,
             // and MUST abort the connection if there is a mismatch.
             if remote_peer_id != peer_id {
-                return Err(rustls::Error::PeerMisbehavedError(
-                    "Wrong peer ID in p2p extension".to_string(),
+                return Err(rustls::Error::InvalidCertificate(
+                    CertificateError::ApplicationVerificationFailure,
                 ));
             }
         }
@@ -163,8 +162,8 @@ impl ClientCertVerifier for Libp2pCertificateVerifier {
         true
     }
 
-    fn client_auth_root_subjects(&self) -> Option<DistinguishedNames> {
-        Some(vec![])
+    fn client_auth_root_subjects(&self) -> &[DistinguishedName] {
+        &[]
     }
 
     fn verify_client_cert(
@@ -237,8 +236,8 @@ impl From<certificate::ParseError> for rustls::Error {
     fn from(certificate::ParseError(e): certificate::ParseError) -> Self {
         use webpki::Error::*;
         match e {
-            BadDer => rustls::Error::InvalidCertificateEncoding,
-            e => rustls::Error::InvalidCertificateData(format!("invalid peer certificate: {}", e)),
+            BadDer => rustls::Error::InvalidCertificate(CertificateError::BadEncoding),
+            e => rustls::Error::InvalidCertificate(CertificateError::Other(Arc::new(e))),
         }
     }
 }
@@ -246,11 +245,10 @@ impl From<certificate::VerificationError> for rustls::Error {
     fn from(certificate::VerificationError(e): certificate::VerificationError) -> Self {
         use webpki::Error::*;
         match e {
-            InvalidSignatureForPublicKey => rustls::Error::InvalidCertificateSignature,
-            UnsupportedSignatureAlgorithm | UnsupportedSignatureAlgorithmForPublicKey => {
-                rustls::Error::InvalidCertificateSignatureType
+            InvalidSignatureForPublicKey => {
+                rustls::Error::InvalidCertificate(CertificateError::BadSignature)
             }
-            e => rustls::Error::InvalidCertificateData(format!("invalid peer certificate: {}", e)),
+            other => rustls::Error::InvalidCertificate(CertificateError::Other(Arc::new(other))),
         }
     }
 }

@@ -18,19 +18,17 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-pub use libp2p_core::ProtocolName;
-
 use async_trait::async_trait;
 use futures::prelude::*;
 use std::io;
 
-/// A `RequestResponseCodec` defines the request and response types
-/// for a [`RequestResponse`](crate::RequestResponse) protocol or
+/// A `Codec` defines the request and response types
+/// for a request-response [`Behaviour`](crate::Behaviour) protocol or
 /// protocol family and how they are encoded / decoded on an I/O stream.
 #[async_trait]
-pub trait RequestResponseCodec {
+pub trait Codec {
     /// The type of protocol(s) or protocol versions being negotiated.
-    type Protocol: ProtocolName + Send + Clone;
+    type Protocol: AsRef<str> + Send + Clone;
     /// The type of inbound and outbound requests.
     type Request: Send;
     /// The type of inbound and outbound responses.

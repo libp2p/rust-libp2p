@@ -1,219 +1,147 @@
-[package]
-name = "libp2p"
-edition = "2021"
-rust-version = "1.62.0"
-description = "Peer-to-peer networking library"
-version = "0.51.0"
-authors = ["Parity Technologies <admin@parity.io>"]
-license = "MIT"
-repository = "https://github.com/libp2p/rust-libp2p"
-keywords = ["peer-to-peer", "libp2p", "networking"]
-categories = ["network-programming", "asynchronous"]
-
-[features]
-full = [
-    "async-std",
-    "autonat",
-    "dcutr",
-    "deflate",
-    "dns",
-    "ecdsa",
-    "floodsub",
-    "gossipsub",
-    "identify",
-    "kad",
-    "mdns",
-    "metrics",
-    "mplex",
-    "noise",
-    "ping",
-    "plaintext",
-    "pnet",
-    "quic",
-    "macros",
-    "relay",
-    "rendezvous",
-    "request-response",
-    "rsa",
-    "secp256k1",
-    "serde",
-    "tcp",
-    "tls",
-    "tokio",
-    "uds",
-    "wasm-bindgen",
-    "wasm-ext",
-    "wasm-ext-websocket",
-    "webrtc",
-    "websocket",
-    "yamux",
-]
-
-async-std = ["libp2p-swarm/async-std", "libp2p-mdns?/async-io", "libp2p-tcp?/async-io", "libp2p-dns?/async-std", "libp2p-quic?/async-std"]
-autonat = ["dep:libp2p-autonat"]
-dcutr = ["dep:libp2p-dcutr", "libp2p-metrics?/dcutr"]
-deflate = ["dep:libp2p-deflate"]
-dns = ["dep:libp2p-dns"]
-ecdsa = ["libp2p-core/ecdsa"]
-floodsub = ["dep:libp2p-floodsub"]
-gossipsub = ["dep:libp2p-gossipsub", "libp2p-metrics?/gossipsub"]
-identify = ["dep:libp2p-identify", "libp2p-metrics?/identify"]
-kad = ["dep:libp2p-kad", "libp2p-metrics?/kad"]
-macros = ["libp2p-swarm/macros"]
-mdns = ["dep:libp2p-mdns"]
-tls = ["dep:libp2p-tls"]
-metrics = ["dep:libp2p-metrics"]
-mplex = ["dep:libp2p-mplex"]
-noise = ["dep:libp2p-noise"]
-ping = ["dep:libp2p-ping", "libp2p-metrics?/ping"]
-plaintext = ["dep:libp2p-plaintext"]
-pnet = ["dep:libp2p-pnet"]
-quic = ["dep:libp2p-quic"]
-relay = ["dep:libp2p-relay", "libp2p-metrics?/relay"]
-rendezvous = ["dep:libp2p-rendezvous"]
-request-response = ["dep:libp2p-request-response"]
-rsa = ["libp2p-core/rsa"]
-secp256k1 = ["libp2p-core/secp256k1"]
-serde = ["libp2p-core/serde", "libp2p-kad?/serde", "libp2p-gossipsub?/serde"]
-tcp = ["dep:libp2p-tcp"]
-tokio = ["libp2p-swarm/tokio", "libp2p-mdns?/tokio", "libp2p-tcp?/tokio", "libp2p-dns?/tokio", "libp2p-quic?/tokio", "libp2p-webrtc?/tokio"]
-uds = ["dep:libp2p-uds"]
-wasm-bindgen = ["futures-timer/wasm-bindgen", "instant/wasm-bindgen", "getrandom/js", "libp2p-swarm/wasm-bindgen"]
-wasm-ext = ["dep:libp2p-wasm-ext"]
-wasm-ext-websocket = ["wasm-ext", "libp2p-wasm-ext?/websocket"]
-webrtc = ["dep:libp2p-webrtc", "libp2p-webrtc?/pem"]
-websocket = ["dep:libp2p-websocket"]
-yamux = ["dep:libp2p-yamux"]
-
-[dependencies]
-bytes = "1"
-futures = "0.3.1"
-futures-timer = "3.0.2" # Explicit dependency to be used in `wasm-bindgen` feature
-getrandom = "0.2.3" # Explicit dependency to be used in `wasm-bindgen` feature
-instant = "0.1.11" # Explicit dependency to be used in `wasm-bindgen` feature
-
-libp2p-autonat = { version = "0.10.0", path = "protocols/autonat", optional = true }
-libp2p-core = { version = "0.38.0", path = "core" }
-libp2p-dcutr = { version = "0.9.0", path = "protocols/dcutr", optional = true }
-libp2p-floodsub = { version = "0.42.0", path = "protocols/floodsub", optional = true }
-libp2p-identify = { version = "0.42.0", path = "protocols/identify", optional = true }
-libp2p-kad = { version = "0.43.0", path = "protocols/kad", optional = true }
-libp2p-metrics = { version = "0.12.0", path = "misc/metrics", optional = true }
-libp2p-mplex = { version = "0.38.0", path = "muxers/mplex", optional = true }
-libp2p-noise = { version = "0.41.0", path = "transports/noise", optional = true }
-libp2p-ping = { version = "0.42.0", path = "protocols/ping", optional = true }
-libp2p-plaintext = { version = "0.38.0", path = "transports/plaintext", optional = true }
-libp2p-pnet = { version = "0.22.2", path = "transports/pnet", optional = true }
-libp2p-relay = { version = "0.15.0", path = "protocols/relay", optional = true }
-libp2p-rendezvous = { version = "0.12.0", path = "protocols/rendezvous", optional = true }
-libp2p-request-response = { version = "0.24.0", path = "protocols/request-response", optional = true }
-libp2p-swarm = { version = "0.42.0", path = "swarm" }
-libp2p-uds = { version = "0.37.0", path = "transports/uds", optional = true }
-libp2p-wasm-ext = { version = "0.38.0", path = "transports/wasm-ext", optional = true }
-libp2p-yamux = { version = "0.42.0", path = "muxers/yamux", optional = true }
-multiaddr = { version = "0.16.0" }
-parking_lot = "0.12.0"
-pin-project = "1.0.0"
-smallvec = "1.6.1"
-
-[target.'cfg(not(any(target_os = "emscripten", target_os = "wasi", target_os = "unknown")))'.dependencies]
-libp2p-deflate = { version = "0.38.0", path = "transports/deflate", optional = true }
-libp2p-dns = { version = "0.38.0", path = "transports/dns", optional = true }
-libp2p-mdns = { version = "0.43.0", path = "protocols/mdns", optional = true }
-libp2p-quic = { version = "0.7.0-alpha", path = "transports/quic", optional = true }
-libp2p-tcp = { version = "0.38.0", path = "transports/tcp", optional = true }
-libp2p-tls = { version = "0.1.0-alpha", path = "transports/tls", optional = true }
-libp2p-webrtc = { version = "0.4.0-alpha", path = "transports/webrtc", optional = true }
-libp2p-websocket = { version = "0.40.0", path = "transports/websocket", optional = true }
-
-[target.'cfg(not(target_os = "unknown"))'.dependencies]
-libp2p-gossipsub = { version = "0.44.0", path = "protocols/gossipsub", optional = true }
-
-[dev-dependencies]
-async-std = { version = "1.6.2", features = ["attributes"] }
-async-trait = "0.1"
-env_logger = "0.10.0"
-clap = { version = "4.0.13", features = ["derive"] }
-tokio = { version = "1.15", features = ["io-util", "io-std", "macros", "rt", "rt-multi-thread"] }
-
 [workspace]
 members = [
     "core",
+    "examples/autonat",
+    "examples/browser-webrtc",
+    "examples/chat",
+    "examples/dcutr",
+    "examples/distributed-key-value-store",
+    "examples/file-sharing",
+    "examples/identify",
+    "examples/ipfs-kad",
+    "examples/ipfs-private",
+    "examples/metrics",
+    "examples/ping",
+    "examples/relay-server",
+    "examples/rendezvous",
+    "examples/stream",
+    "examples/upnp",
+    "hole-punching-tests",
+    "identity",
+    "interop-tests",
+    "misc/allow-block-list",
+    "misc/connection-limits",
+    "misc/futures-bounded",
+    "misc/keygen",
+    "misc/memory-connection-limits",
     "misc/metrics",
     "misc/multistream-select",
-    "misc/rw-stream-sink",
-    "misc/keygen",
-    "misc/prost-codec",
+    "misc/quick-protobuf-codec",
     "misc/quickcheck-ext",
+    "misc/rw-stream-sink",
+    "misc/server",
+    "misc/webrtc-utils",
     "muxers/mplex",
-    "muxers/yamux",
     "muxers/test-harness",
-    "protocols/dcutr",
+    "muxers/yamux",
     "protocols/autonat",
+    "protocols/dcutr",
     "protocols/floodsub",
     "protocols/gossipsub",
-    "protocols/rendezvous",
     "protocols/identify",
     "protocols/kad",
     "protocols/mdns",
+    "protocols/perf",
     "protocols/ping",
     "protocols/relay",
+    "protocols/rendezvous",
     "protocols/request-response",
-    "swarm",
+    "protocols/stream",
+    "protocols/upnp",
     "swarm-derive",
-    "transports/deflate",
+    "swarm-test",
+    "swarm",
     "transports/dns",
     "transports/noise",
-    "transports/tls",
     "transports/plaintext",
     "transports/pnet",
     "transports/quic",
     "transports/tcp",
+    "transports/tls",
     "transports/uds",
+    "transports/webrtc-websys",
+    "transports/webrtc",
+    "transports/websocket-websys",
     "transports/websocket",
-    "transports/wasm-ext",
-    "transports/webrtc"
+    "transports/webtransport-websys",
+    "wasm-tests/webtransport-tests",
 ]
+resolver = "2"
 
-[[example]]
-name = "chat"
-required-features = ["full"]
+[workspace.package]
+rust-version = "1.73.0"
 
-[[example]]
-name = "chat-tokio"
-required-features = ["full"]
+[workspace.dependencies]
+asynchronous-codec = { version = "0.7.0" }
+futures-bounded = { version = "0.2.3", path = "misc/futures-bounded" }
+libp2p = { version = "0.53.2", path = "libp2p" }
+libp2p-allow-block-list = { version = "0.3.0", path = "misc/allow-block-list" }
+libp2p-autonat = { version = "0.12.0", path = "protocols/autonat" }
+libp2p-connection-limits = { version = "0.3.1", path = "misc/connection-limits" }
+libp2p-core = { version = "0.41.2", path = "core" }
+libp2p-dcutr = { version = "0.11.0", path = "protocols/dcutr" }
+libp2p-dns = { version = "0.41.1", path = "transports/dns" }
+libp2p-floodsub = { version = "0.44.0", path = "protocols/floodsub" }
+libp2p-gossipsub = { version = "0.46.1", path = "protocols/gossipsub" }
+libp2p-identify = { version = "0.44.1", path = "protocols/identify" }
+libp2p-identity = { version = "0.2.8" }
+libp2p-kad = { version = "0.45.3", path = "protocols/kad" }
+libp2p-mdns = { version = "0.45.1", path = "protocols/mdns" }
+libp2p-memory-connection-limits = { version = "0.2.0", path = "misc/memory-connection-limits" }
+libp2p-metrics = { version = "0.14.1", path = "misc/metrics" }
+libp2p-mplex = { version = "0.41.0", path = "muxers/mplex" }
+libp2p-muxer-test-harness = { path = "muxers/test-harness" }
+libp2p-noise = { version = "0.44.0", path = "transports/noise" }
+libp2p-perf = { version = "0.3.0", path = "protocols/perf" }
+libp2p-ping = { version = "0.44.0", path = "protocols/ping" }
+libp2p-plaintext = { version = "0.41.0", path = "transports/plaintext" }
+libp2p-pnet = { version = "0.24.0", path = "transports/pnet" }
+libp2p-quic = { version = "0.10.2", path = "transports/quic" }
+libp2p-relay = { version = "0.17.1", path = "protocols/relay" }
+libp2p-rendezvous = { version = "0.14.0", path = "protocols/rendezvous" }
+libp2p-request-response = { version = "0.26.1", path = "protocols/request-response" }
+libp2p-server = { version = "0.12.5", path = "misc/server" }
+libp2p-stream = { version = "0.1.0-alpha", path = "protocols/stream" }
+libp2p-swarm = { version = "0.44.1", path = "swarm" }
+libp2p-swarm-derive = { version = "=0.34.2", path = "swarm-derive" } # `libp2p-swarm-derive` may not be compatible with different `libp2p-swarm` non-breaking releases. E.g. `libp2p-swarm` might introduce a new enum variant `FromSwarm` (which is `#[non-exhaustive]`) in a non-breaking release. Older versions of `libp2p-swarm-derive` would not forward this enum variant within the `NetworkBehaviour` hierarchy. Thus the version pinning is required.
+libp2p-swarm-test = { version = "0.3.0", path = "swarm-test" }
+libp2p-tcp = { version = "0.41.0", path = "transports/tcp" }
+libp2p-tls = { version = "0.3.0", path = "transports/tls" }
+libp2p-uds = { version = "0.40.0", path = "transports/uds" }
+libp2p-upnp = { version = "0.2.1", path = "protocols/upnp" }
+libp2p-webrtc = { version = "0.7.0-alpha", path = "transports/webrtc" }
+libp2p-webrtc-utils = { version = "0.2.0", path = "misc/webrtc-utils" }
+libp2p-webrtc-websys = { version = "0.3.0-alpha", path = "transports/webrtc-websys" }
+libp2p-websocket = { version = "0.43.0", path = "transports/websocket" }
+libp2p-websocket-websys = { version = "0.3.1", path = "transports/websocket-websys" }
+libp2p-webtransport-websys = { version = "0.2.0", path = "transports/webtransport-websys" }
+libp2p-yamux = { version = "0.45.1", path = "muxers/yamux" }
+multiaddr = "0.18.1"
+multihash = "0.19.1"
+multistream-select = { version = "0.13.0", path = "misc/multistream-select" }
+prometheus-client = "0.22.0"
+quick-protobuf-codec = { version = "0.3.1", path = "misc/quick-protobuf-codec" }
+quickcheck = { package = "quickcheck-ext", path = "misc/quickcheck-ext" }
+rw-stream-sink = { version = "0.4.0", path = "misc/rw-stream-sink" }
+unsigned-varint = { version = "0.8.0" }
 
-[[example]]
-name = "file-sharing"
-required-features = ["full"]
+[patch.crates-io]
 
-[[example]]
-name = "gossipsub-chat"
-required-features = ["full"]
+# Patch away `libp2p-identity` in our dependency tree with the workspace version.
+# `libp2p-identity` is a leaf dependency and used within `rust-multiaddr` which is **not** part of the workspace.
+# As a result, we cannot just reference the workspace version in our crates because the types would mismatch with what
+# we import via `rust-multiaddr`.
+# This is expected to stay here until we move `libp2p-identity` to a separate repository which makes the dependency relationship more obvious.
+libp2p-identity = { path = "identity" }
 
-[[example]]
-name = "ipfs-private"
-required-features = ["full"]
+[workspace.lints]
+rust.unreachable_pub = "warn"
+clippy.used_underscore_binding = "warn"
+clippy.pedantic = "allow"
+clippy.type_complexity = "allow"
+clippy.unnecessary_wraps = "warn"
+clippy.manual_let_else = "warn"
+clippy.dbg_macro = "warn"
 
-[[example]]
-name = "ipfs-kad"
-required-features = ["full"]
-
-[[example]]
-name = "ping"
-required-features = ["full"]
-
-[[example]]
-name = "mdns-passive-discovery"
-required-features = ["full"]
-
-[[example]]
-name = "distributed-key-value-store"
-required-features = ["full"]
-
-# Passing arguments to the docsrs builder in order to properly document cfg's.
-# More information: https://docs.rs/about/builds#cross-compiling
-[package.metadata.docs.rs]
-all-features = true
-rustdoc-args = ["--cfg", "docsrs"]
-rustc-args = ["--cfg", "docsrs"]
+[workspace.metadata.release]
+pre-release-hook = ["/bin/sh", '-c', '/bin/sh $WORKSPACE_ROOT/scripts/add-changelog-header.sh'] # Nested use of shell to expand variables.

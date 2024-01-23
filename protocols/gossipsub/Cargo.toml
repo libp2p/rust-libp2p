@@ -1,50 +1,55 @@
 [package]
 name = "libp2p-gossipsub"
 edition = "2021"
-rust-version = "1.62.0"
+rust-version = { workspace = true }
 description = "Gossipsub protocol for libp2p"
-version = "0.44.0"
+version = "0.46.1"
 authors = ["Age Manning <Age@AgeManning.com>"]
 license = "MIT"
 repository = "https://github.com/libp2p/rust-libp2p"
 keywords = ["peer-to-peer", "libp2p", "networking"]
 categories = ["network-programming", "asynchronous"]
 
+[features]
+wasm-bindgen = ["getrandom/js", "instant/wasm-bindgen"]
+
 [dependencies]
-libp2p-swarm = { version = "0.42.0", path = "../../swarm" }
-libp2p-core = { version = "0.38.0", path = "../../core" }
-bytes = "1.0"
-byteorder = "1.3.4"
+asynchronous-codec = { workspace = true }
+base64 = "0.21.7"
+byteorder = "1.5.0"
+bytes = "1.5"
+either = "1.9"
 fnv = "1.0.7"
-futures = "0.3.5"
-rand = "0.8"
-asynchronous-codec = "0.6"
-unsigned-varint = { version = "0.7.0", features = ["asynchronous_codec"] }
-log = "0.4.11"
-sha2 = "0.10.0"
-base64 = "0.13.0"
-smallvec = "1.6.1"
-prost = "0.11"
-prost-codec = { version = "0.3", path = "../../misc/prost-codec" }
+futures = "0.3.30"
+futures-ticker = "0.0.3"
+getrandom = "0.2.12"
 hex_fmt = "0.3.0"
-regex = "1.5.5"
+instant = "0.1.12"
+libp2p-core = { workspace = true }
+libp2p-identity = { workspace = true, features = ["rand"] }
+libp2p-swarm = { workspace = true }
+quick-protobuf = "0.8"
+quick-protobuf-codec = { workspace = true }
+rand = "0.8"
+regex = "1.10.3"
 serde = { version = "1", optional = true, features = ["derive"] }
-thiserror = "1.0"
-wasm-timer = "0.2.5"
-instant = "0.1.11"
+sha2 = "0.10.8"
+smallvec = "1.12.0"
+tracing = "0.1.37"
+void = "1.0.2"
+
 # Metrics dependencies
-prometheus-client = "0.18.0"
+prometheus-client = { workspace = true }
 
 [dev-dependencies]
-async-std = "1.6.3"
-env_logger = "0.10.0"
-libp2p = { path = "../..", features = ["full"] }
-quickcheck = { package = "quickcheck-ext", path = "../../misc/quickcheck-ext" }
+async-std = { version = "1.6.3", features = ["unstable"] }
 hex = "0.4.2"
-derive_builder = "0.11.1"
-
-[build-dependencies]
-prost-build = "0.11"
+libp2p-core = { workspace = true }
+libp2p-yamux = { workspace = true }
+libp2p-noise = { workspace = true }
+libp2p-swarm-test = { path = "../../swarm-test" }
+quickcheck = { workspace = true }
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 
 # Passing arguments to the docsrs builder in order to properly document cfg's.
 # More information: https://docs.rs/about/builds#cross-compiling
@@ -52,3 +57,6 @@ prost-build = "0.11"
 all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
 rustc-args = ["--cfg", "docsrs"]
+
+[lints]
+workspace = true

@@ -10,70 +10,128 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+env:
+  SEGMENT_DOWNLOAD_TIMEOUT_MINS: 2 # Fail cache download after 2 minutes.
+  RUSTFLAGS: '-Dwarnings' # Never tolerate warnings.
+
 jobs:
   test:
     name: Test ${{ matrix.crate }}
-    runs-on: ubuntu-latest
+    runs-on: ${{ fromJSON(
+      github.repository == 'libp2p/rust-libp2p' && (
+        (contains(fromJSON('["libp2p-webrtc", "libp2p"]'), matrix.crate) && '["self-hosted", "linux", "x64", "2xlarge"]') ||
+        (contains(fromJSON('["libp2p-quic", "libp2p-perf"]'), matrix.crate) && '["self-hosted", "linux", "x64", "xlarge"]') ||
+        '["self-hosted", "linux", "x64", "large"]'
+      ) || '"ubuntu-latest"') }}
+    timeout-minutes: 10
     needs: gather_published_crates
     strategy:
       fail-fast: false
       matrix:
         crate: ${{ fromJSON(needs.gather_published_crates.outputs.members) }}
+    env:
+      CRATE: ${{ matrix.crate }}
     steps:
-      - name: Install Protoc
-        uses: arduino/setup-protoc@64c0c85d18e984422218383b81c52f8b077404d3 # v1.1.2
+      - uses: actions/checkout@v4
         with:
-          repo-token: ${{ secrets.GITHUB_TOKEN }}
+          fetch-depth: 0
 
-      - uses: actions/checkout@v3
+      - uses: r7kamura/rust-problem-matchers@2c2f1016021a7455a6b5b4bbae31145f3b3cd83a #v1.4.0
 
-      - name: Get MSRV for ${{ matrix.crate }}
-        id: parse-msrv
-        run: |
-          RUST_VERSION=$(cargo metadata --format-version=1 --no-deps | jq -r '.packages[] | select(.name == "${{ matrix.crate }}") | .rust_version')
-          echo "version=${RUST_VERSION}" >> $GITHUB_OUTPUT
+      - uses: dtolnay/rust-toolchain@stable
 
-      - name: Install Rust ${{ steps.parse-msrv.outputs.version }} for MSRV check
-        uses: actions-rs/toolchain@16499b5e05bf2e26879000db0c1d13f7e13fa3af # v1.0.7
+      - uses: Swatinem/rust-cache@23bce251a8cd2ffc3c1075eaa2367cf899916d84 # v2.7.3
         with:
-          profile: minimal
-          toolchain: ${{ steps.parse-msrv.outputs.version }}
-
-      - name: Update to latest stable Rust
-        uses: actions-rs/toolchain@16499b5e05bf2e26879000db0c1d13f7e13fa3af # v1.0.7
-        with:
-          profile: minimal
-          toolchain: stable
-          override: true
-
-      # By default, this action already includes the active Rust toolchain in the cache key.
-      # We also install a separate toolchain for the MSRV check so all we need to do is add that to the key to make sure it invalidates when we update the MSRV.
-      # cargo separates build artifacts by Rust compiler version, meaning we can compile with different versions but cache all artifacts.
-      - uses: Swatinem/rust-cache@359a70e43a0bb8a13953b04a90f76428b4959bb6 # v2.2.0
-        with:
-          key: ${{ matrix.crate }}-msrv-${{ steps.parse-msrv.outputs.version }}
-
-      - name: Check if ${{ matrix.crate }} compiles on MSRV (Rust ${{ steps.parse-msrv.outputs.version }})
-        run: cargo +${{ steps.parse-msrv.outputs.version }} check --package ${{ matrix.crate }} --all-features
-
-      - name: Check if we compile without any features activated
-        run: cargo check --package ${{ matrix.crate }} --no-default-features
+          shared-key: stable-cache
+          save-if: false
 
       - name: Run all tests
-        run: cargo test --package ${{ matrix.crate }} --all-features
+        run: cargo test --package "$CRATE" --all-features
 
-      - name: Check if crate has been released
-        id: check-released
-        run: |
-          RESPONSE_CODE=$(curl https://crates.io/api/v1/crates/${{ matrix.crate }} --silent --write-out "%{http_code}" --output /dev/null)
-          echo "code=${RESPONSE_CODE}"
-          echo "code=${RESPONSE_CODE}" >> $GITHUB_OUTPUT
+      - name: Check if we compile without any features activated
+        run: cargo build --package "$CRATE" --no-default-features
 
-      - name: Check public API for semver violations
-        if: steps.check-released.outputs.code == 200 # Workaround until https://github.com/obi1kenobi/cargo-semver-check/issues/146 is shipped.
+      - name: Enforce no dependency on meta crate
+        if: env.CRATE != 'libp2p-server' && env.CRATE != 'libp2p-perf'
         run: |
-          cargo install cargo-semver-checks --locked
-          cargo semver-checks check-release -p ${{ matrix.crate }}
+          cargo metadata --format-version=1 --no-deps | \
+          jq -e -r '.packages[] | select(.name == "'"$CRATE"'") | .dependencies | all(.name != "libp2p")'
+
+      - uses: taiki-e/cache-cargo-install-action@924d49e0af41f449f0ad549559bc608ee4653562 # v1
+        with:
+          tool: tomlq
+
+      - name: Extract version from manifest
+        run: |
+          CRATE_VERSION=$(cargo metadata --format-version=1 --no-deps | jq -e -r '.packages[] | select(.name == "'"$CRATE"'") | .version')
+          
+          echo "CRATE_VERSION=$CRATE_VERSION" >> $GITHUB_ENV
+
+      - name: Enforce version in `workspace.dependencies` matches latest version
+        if: env.CRATE != 'libp2p'
+        run: |
+          SPECIFIED_VERSION=$(tomlq "workspace.dependencies.$CRATE.version" --file ./Cargo.toml)
+
+          echo "Package version: $CRATE_VERSION";
+          echo "Specified version: $SPECIFIED_VERSION";
+
+          test "$CRATE_VERSION" = "$SPECIFIED_VERSION" || test "=$CRATE_VERSION" = "$SPECIFIED_VERSION"
+
+      - name: Enforce version in CHANGELOG.md matches version in manifest
+        run: |
+          MANIFEST_PATH=$(cargo metadata --format-version=1 --no-deps | jq -e -r '.packages[] | select(.name == "'"$CRATE"'") | .manifest_path')
+          DIR_TO_CRATE=$(dirname "$MANIFEST_PATH")
+          VERSION_IN_CHANGELOG=$(awk -F' ' '/^## [0-9]+\.[0-9]+\.[0-9]+/{print $2; exit}' "$DIR_TO_CRATE/CHANGELOG.md")
+
+          echo "Package version: $CRATE_VERSION";
+          echo "Changelog version: $VERSION_IN_CHANGELOG";
+
+          test "$CRATE_VERSION" = "$VERSION_IN_CHANGELOG"
+
+      - name: Ensure manifest and CHANGELOG are properly updated
+        if: >
+          github.event_name == 'pull_request' &&
+          !startsWith(github.event.pull_request.title, 'chore') &&
+          !startsWith(github.event.pull_request.title, 'refactor') &&
+          !startsWith(github.event.pull_request.title, 'deps') &&
+          !startsWith(github.event.pull_request.title, 'docs') &&
+          !contains(github.event.pull_request.labels.*.name, 'internal-change')
+        run: |
+          git fetch origin master:master
+          git fetch origin ${{ github.event.pull_request.base.ref }}:${{ github.event.pull_request.base.ref }}
+          ./scripts/ensure-version-bump-and-changelog.sh
+        env:
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          PR_BASE: ${{ github.event.pull_request.base.ref }}
+
+  wasm_tests:
+    name: Run all WASM tests
+    runs-on: ubuntu-latest
+    env:
+      CHROMEDRIVER_VERSION: '114.0.5735.90'
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          target: wasm32-unknown-unknown
+
+      - uses: taiki-e/cache-cargo-install-action@v1
+        with:
+          tool: wasm-pack@0.12.0
+
+      - name: Install Google Chrome
+        run: |
+          curl -o /tmp/google-chrome-stable_amd64.deb https://dl.google.com/linux/chrome/deb/pool/main/g/google-chrome-stable/google-chrome-stable_${CHROMEDRIVER_VERSION}-1_amd64.deb
+          sudo dpkg -i /tmp/google-chrome-stable_amd64.deb
+
+      - name: Install chromedriver
+        uses: nanasess/setup-chromedriver@v2
+        with:
+          chromedriver-version: ${{ env.CHROMEDRIVER_VERSION }}
+
+      - name: Run all tests
+        run: ./wasm-tests/run-all.sh
 
   cross:
     name: Compile on ${{ matrix.target }}
@@ -92,23 +150,44 @@ jobs:
             os: windows-latest
     runs-on: ${{ matrix.os }}
     steps:
-      - name: Install Protoc
-        uses: arduino/setup-protoc@64c0c85d18e984422218383b81c52f8b077404d3 # v1.1.2
-        with:
-          repo-token: ${{ secrets.GITHUB_TOKEN }}
+      - uses: actions/checkout@v4
 
-      - uses: actions/checkout@v3
-
-      - uses: actions-rs/toolchain@16499b5e05bf2e26879000db0c1d13f7e13fa3af # v1.0.7
+      - uses: dtolnay/rust-toolchain@stable
         with:
-          profile: minimal
-          toolchain: stable
-          override: true
           target: ${{ matrix.target }}
 
-      - uses: Swatinem/rust-cache@359a70e43a0bb8a13953b04a90f76428b4959bb6 # v2.2.0
+      - uses: r7kamura/rust-problem-matchers@2c2f1016021a7455a6b5b4bbae31145f3b3cd83a #v1.4.0
+
+      - uses: Swatinem/rust-cache@23bce251a8cd2ffc3c1075eaa2367cf899916d84 # v2.7.3
+        with:
+          key: ${{ matrix.target }}
+          save-if: ${{ github.ref == 'refs/heads/master' }}
 
       - run: cargo check --package libp2p --all-features --target=${{ matrix.target }}
+
+  msrv:
+    name: Compile with MSRV
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Extract MSRV from workspace manifest
+        shell: bash
+        run: |
+          MSRV=$(grep -oP 'rust-version\s*=\s*"\K[^"]+' Cargo.toml)
+          echo "MSRV=$MSRV" >> $GITHUB_ENV
+
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ env.MSRV }}
+
+      - uses: r7kamura/rust-problem-matchers@2c2f1016021a7455a6b5b4bbae31145f3b3cd83a #v1.4.0
+
+      - uses: Swatinem/rust-cache@23bce251a8cd2ffc3c1075eaa2367cf899916d84 # v2.7.3
+        with:
+          save-if: ${{ github.ref == 'refs/heads/master' }}
+
+      - run: cargo +$MSRV check --workspace --all-features
 
   feature_matrix: # Test various feature combinations work correctly
     name: Compile with select features (${{ matrix.features }})
@@ -119,22 +198,16 @@ jobs:
           - features: "mdns tcp dns tokio"
           - features: "mdns tcp dns async-std"
     steps:
-      - name: Install Protoc
-        uses: arduino/setup-protoc@64c0c85d18e984422218383b81c52f8b077404d3 # v1.1.2
-        with:
-          repo-token: ${{ secrets.GITHUB_TOKEN }}
+      - uses: actions/checkout@v4
 
-      - uses: actions/checkout@v3
+      - uses: dtolnay/rust-toolchain@stable
 
-      - uses: actions-rs/toolchain@16499b5e05bf2e26879000db0c1d13f7e13fa3af # v1.0.7
-        with:
-          profile: minimal
-          toolchain: stable
-          override: true
+      - uses: r7kamura/rust-problem-matchers@2c2f1016021a7455a6b5b4bbae31145f3b3cd83a #v1.4.0
 
-      - uses: Swatinem/rust-cache@359a70e43a0bb8a13953b04a90f76428b4959bb6 # v2.2.0
+      - uses: Swatinem/rust-cache@23bce251a8cd2ffc3c1075eaa2367cf899916d84 # v2.7.3
         with:
-          key: ${{ matrix.runtime }}
+          key: ${{ matrix.features }}
+          save-if: ${{ github.ref == 'refs/heads/master' }}
 
       - run: cargo check --package libp2p --features="${{ matrix.features }}"
 
@@ -142,20 +215,15 @@ jobs:
     name: Check rustdoc intra-doc links
     runs-on: ubuntu-latest
     steps:
-      - name: Install Protoc
-        uses: arduino/setup-protoc@64c0c85d18e984422218383b81c52f8b077404d3 # v1.1.2
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: r7kamura/rust-problem-matchers@2c2f1016021a7455a6b5b4bbae31145f3b3cd83a #v1.4.0
+
+      - uses: Swatinem/rust-cache@23bce251a8cd2ffc3c1075eaa2367cf899916d84 # v2.7.3
         with:
-          repo-token: ${{ secrets.GITHUB_TOKEN }}
-
-      - uses: actions/checkout@v3
-
-      - uses: actions-rs/toolchain@16499b5e05bf2e26879000db0c1d13f7e13fa3af # v1.0.7
-        with:
-          profile: minimal
-          toolchain: stable
-          override: true
-
-      - uses: Swatinem/rust-cache@359a70e43a0bb8a13953b04a90f76428b4959bb6 # v2.2.0
+          save-if: ${{ github.ref == 'refs/heads/master' }}
 
       - name: Check rustdoc links
         run: RUSTDOCFLAGS="--deny rustdoc::broken_intra_doc_links --deny warnings" cargo doc --verbose --workspace --no-deps --all-features --document-private-items
@@ -166,64 +234,103 @@ jobs:
       fail-fast: false
       matrix:
         rust-version: [
-          stable,
-          beta
+          1.75.0, # current stable
+          beta,
         ]
     steps:
-      - name: Install Protoc
-        uses: arduino/setup-protoc@64c0c85d18e984422218383b81c52f8b077404d3 # v1.1.2
-        with:
-          repo-token: ${{ secrets.GITHUB_TOKEN }}
+      - uses: actions/checkout@v4
 
-      - uses: actions/checkout@v3
-
-      - uses: actions-rs/toolchain@16499b5e05bf2e26879000db0c1d13f7e13fa3af # v1.0.7
+      - uses: dtolnay/rust-toolchain@master
         with:
-          profile: minimal
           toolchain: ${{ matrix.rust-version }}
-          override: true
           components: clippy
 
-      - uses: Swatinem/rust-cache@359a70e43a0bb8a13953b04a90f76428b4959bb6 # v2.2.0
+      - uses: r7kamura/rust-problem-matchers@2c2f1016021a7455a6b5b4bbae31145f3b3cd83a #v1.4.0
 
-      - name: Run cargo clippy
-        uses: actions-rs/cargo@844f36862e911db73fe0815f00a4a2602c279505 # v1.0.3
+      - uses: Swatinem/rust-cache@23bce251a8cd2ffc3c1075eaa2367cf899916d84 # v2.7.3
         with:
-          command: custom-clippy # cargo alias to allow reuse of config locally
+          save-if: ${{ github.ref == 'refs/heads/master' }}
+
+      - run: cargo clippy --all-targets --all-features
 
   ipfs-integration-test:
     name: IPFS Integration tests
     runs-on: ubuntu-latest
     steps:
-      - name: Install Protoc
-        uses: arduino/setup-protoc@64c0c85d18e984422218383b81c52f8b077404d3 # v1.1.2
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: r7kamura/rust-problem-matchers@2c2f1016021a7455a6b5b4bbae31145f3b3cd83a #v1.4.0
+
+      - uses: Swatinem/rust-cache@23bce251a8cd2ffc3c1075eaa2367cf899916d84 # v2.7.3
         with:
-          repo-token: ${{ secrets.GITHUB_TOKEN }}
+          save-if: ${{ github.ref == 'refs/heads/master' }}
 
-      - uses: actions/checkout@v3
+      - name: Run ipfs-kad example - get peers
+        run: cd ./examples/ipfs-kad/ && RUST_LOG=libp2p_swarm=debug,libp2p_kad=trace,libp2p_tcp=debug cargo run -- get-peers
 
-      - uses: actions-rs/toolchain@16499b5e05bf2e26879000db0c1d13f7e13fa3af # v1.0.7
+      - name: Run ipfs-kad example - put PK record
+        run: cd ./examples/ipfs-kad/ && RUST_LOG=libp2p_swarm=debug,libp2p_kad=trace,libp2p_tcp=debug cargo run -- put-pk-record
+
+  examples:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: r7kamura/rust-problem-matchers@2c2f1016021a7455a6b5b4bbae31145f3b3cd83a #v1.4.0
+
+      - uses: Swatinem/rust-cache@23bce251a8cd2ffc3c1075eaa2367cf899916d84 # v2.7.3
         with:
-          profile: minimal
-          toolchain: stable
-          override: true
+          shared-key: stable-cache
+          save-if: false
 
-      - uses: Swatinem/rust-cache@359a70e43a0bb8a13953b04a90f76428b4959bb6 # v2.2.0
+      - name: Compile all examples
+        run: |
+          set -e;
 
-      - name: Run ipfs-kad example
-        run: RUST_LOG=libp2p_swarm=debug,libp2p_kad=trace,libp2p_tcp=debug cargo run --example ipfs-kad --features full
+          for toml in examples/**/Cargo.toml; do
+            cargo check --manifest-path "$toml";
+          done
+
+      - uses: taiki-e/cache-cargo-install-action@v1
+        with:
+          tool: wasm-pack@0.12.0
+
+      - name: Build webrtc-browser example
+        run: |
+          cd examples/browser-webrtc
+          wasm-pack build --target web --out-dir static
+
+  semver:
+    runs-on: ubuntu-latest
+    env:
+      # Unset the global `RUSTFLAGS` env to allow warnings.
+      # cargo-semver-checks intentionally re-locks dependency versions
+      # before checking, and we shouldn't fail here if a dep has a warning.
+      #
+      # More context:
+      # https://github.com/libp2p/rust-libp2p/pull/4932#issuecomment-1829014527
+      # https://github.com/obi1kenobi/cargo-semver-checks/issues/589
+      RUSTFLAGS: ''
+    steps:
+      - uses: actions/checkout@v4
+      - run: wget -q -O- https://github.com/obi1kenobi/cargo-semver-checks/releases/download/v0.27.0/cargo-semver-checks-x86_64-unknown-linux-gnu.tar.gz | tar -xz -C ~/.cargo/bin
+        shell: bash
+      - uses: obi1kenobi/cargo-semver-checks-action@e275dda72e250d4df5b564e969e1348d67fefa52 # v2
 
   rustfmt:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
 
-      - uses: actions-rs/toolchain@16499b5e05bf2e26879000db0c1d13f7e13fa3af # v1.0.7
+      - uses: dtolnay/rust-toolchain@stable
         with:
-          profile: minimal
-          toolchain: stable
-          override: true
           components: rustfmt
+
+      - uses: r7kamura/rust-problem-matchers@2c2f1016021a7455a6b5b4bbae31145f3b3cd83a #v1.4.0
 
       - name: Check formatting
         run: cargo fmt -- --check
@@ -231,20 +338,16 @@ jobs:
   manifest_lint:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
 
-      - uses: actions-rs/toolchain@16499b5e05bf2e26879000db0c1d13f7e13fa3af # v1.0.7
-        with:
-          profile: minimal
-          toolchain: stable
-          override: true
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: r7kamura/rust-problem-matchers@2c2f1016021a7455a6b5b4bbae31145f3b3cd83a #v1.4.0
 
       - name: Ensure `full` feature contains all features
         run: |
           ALL_FEATURES=$(cargo metadata --format-version=1 --no-deps | jq -r '.packages[] | select(.name == "libp2p") | .features | keys | map(select(. != "full")) | sort | join(" ")')
           FULL_FEATURE=$(cargo metadata --format-version=1 --no-deps | jq -r '.packages[] | select(.name == "libp2p") | .features["full"] | sort | join(" ")')
-
-          test "$ALL_FEATURES = $FULL_FEATURE"
 
           echo "$ALL_FEATURES";
           echo "$FULL_FEATURE";
@@ -256,9 +359,54 @@ jobs:
     outputs:
       members: ${{ steps.cargo-metadata.outputs.members }}
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
 
       - id: cargo-metadata
         run: |
-          WORKSPACE_MEMBERS=$(cargo metadata --format-version=1 --no-deps | jq -c '.packages | .[] | select(.publish == null) | .name' | jq -s '.' | jq -c '.')
+          WORKSPACE_MEMBERS=$(cargo metadata --format-version=1 --no-deps | jq -c '.packages | map(select(.publish == null) | .name)')
           echo "members=${WORKSPACE_MEMBERS}" >> $GITHUB_OUTPUT
+
+  check-proto-files:
+    name: Check for changes in proto files
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: Swatinem/rust-cache@23bce251a8cd2ffc3c1075eaa2367cf899916d84 # v2.7.3
+
+      - run: cargo install --version 0.10.0 pb-rs --locked
+
+      - name: Glob match
+        uses: tj-actions/glob@v19
+        id: glob
+        with:
+          files: |
+            **/generated/*.proto
+
+      - name: Generate proto files
+        run: pb-rs --dont_use_cow ${{ steps.glob.outputs.paths }}
+
+      - name: Ensure generated files are unmodified # https://stackoverflow.com/a/5737794
+        run: |
+            git_status=$(git status --porcelain)
+
+            echo $git_status
+            test -z "$git_status"
+
+  ensure-lockfile-uptodate:
+    name: Ensure that `Cargo.lock` is up-to-date
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: Swatinem/rust-cache@23bce251a8cd2ffc3c1075eaa2367cf899916d84 # v2.7.3
+      - run: cargo metadata --locked --format-version=1 > /dev/null
+
+  cargo-deny:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    - uses: EmbarkStudios/cargo-deny-action@v1
+      with:
+        command: check advisories bans licenses sources

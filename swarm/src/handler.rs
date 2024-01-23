@@ -47,16 +47,22 @@ mod pending;
 mod select;
 
 pub use crate::upgrade::{InboundUpgradeSend, OutboundUpgradeSend, SendWrapper, UpgradeInfoSend};
-
-use instant::Instant;
-use libp2p_core::{upgrade::UpgradeError, ConnectedPoint, Multiaddr, PeerId};
-use std::{cmp::Ordering, error, fmt, task::Context, task::Poll, time::Duration};
-
 pub use map_in::MapInEvent;
 pub use map_out::MapOutEvent;
 pub use one_shot::{OneShotHandler, OneShotHandlerConfig};
 pub use pending::PendingConnectionHandler;
-pub use select::{ConnectionHandlerSelect, IntoConnectionHandlerSelect};
+pub use select::ConnectionHandlerSelect;
+
+use crate::StreamProtocol;
+use ::either::Either;
+use libp2p_core::Multiaddr;
+use once_cell::sync::Lazy;
+use smallvec::SmallVec;
+use std::collections::hash_map::RandomState;
+use std::collections::hash_set::{Difference, Intersection};
+use std::collections::HashSet;
+use std::iter::Peekable;
+use std::{error, fmt, io, task::Context, task::Poll, time::Duration};
 
 /// A handler for a set of protocols used on a connection with a remote.
 ///
@@ -92,12 +98,10 @@ pub use select::{ConnectionHandlerSelect, IntoConnectionHandlerSelect};
 /// When a connection is closed gracefully, the substreams used by the handler may still
 /// continue reading data until the remote closes its side of the connection.
 pub trait ConnectionHandler: Send + 'static {
-    /// Custom event that can be received from the outside.
-    type InEvent: fmt::Debug + Send + 'static;
-    /// Custom event that can be produced by the handler and that will be returned to the outside.
-    type OutEvent: fmt::Debug + Send + 'static;
-    /// The type of errors returned by [`ConnectionHandler::poll`].
-    type Error: error::Error + fmt::Debug + Send + 'static;
+    /// A type representing the message(s) a [`NetworkBehaviour`](crate::behaviour::NetworkBehaviour) can send to a [`ConnectionHandler`] via [`ToSwarm::NotifyHandler`](crate::behaviour::ToSwarm::NotifyHandler)
+    type FromBehaviour: fmt::Debug + Send + 'static;
+    /// A type representing message(s) a [`ConnectionHandler`] can send to a [`NetworkBehaviour`](crate::behaviour::NetworkBehaviour) via [`ConnectionHandlerEvent::NotifyBehaviour`].
+    type ToBehaviour: fmt::Debug + Send + 'static;
     /// The inbound upgrade for the protocol(s) used by the handler.
     type InboundProtocol: InboundUpgradeSend;
     /// The outbound upgrade for the protocol(s) used by the handler.
@@ -116,142 +120,58 @@ pub trait ConnectionHandler: Send + 'static {
     /// >           This allows a remote to put the list of supported protocols in a cache.
     fn listen_protocol(&self) -> SubstreamProtocol<Self::InboundProtocol, Self::InboundOpenInfo>;
 
-    /// Injects the output of a successful upgrade on a new inbound substream.
+    /// Returns whether the connection should be kept alive.
     ///
-    /// Note that it is up to the [`ConnectionHandler`] implementation to manage the lifetime of the
-    /// negotiated inbound substreams. E.g. the implementation has to enforce a limit on the number
-    /// of simultaneously open negotiated inbound substreams. In other words it is up to the
-    /// [`ConnectionHandler`] implementation to stop a malicious remote node to open and keep alive
-    /// an excessive amount of inbound substreams.
-    #[deprecated(
-        since = "0.41.0",
-        note = "Handle `ConnectionEvent::FullyNegotiatedInbound` on `ConnectionHandler::on_connection_event` instead.
-        The default implemention of this `inject_*` method delegates to it."
-    )]
-    fn inject_fully_negotiated_inbound(
-        &mut self,
-        protocol: <Self::InboundProtocol as InboundUpgradeSend>::Output,
-        info: Self::InboundOpenInfo,
-    ) {
-        self.on_connection_event(ConnectionEvent::FullyNegotiatedInbound(
-            FullyNegotiatedInbound { protocol, info },
-        ))
+    /// ## Keep alive algorithm
+    ///
+    /// A connection is always kept alive:
+    ///
+    /// - Whilst a [`ConnectionHandler`] returns [`Poll::Ready`].
+    /// - We are negotiating inbound or outbound streams.
+    /// - There are active [`Stream`](crate::Stream)s on the connection.
+    ///
+    /// The combination of the above means that _most_ protocols will not need to override this method.
+    /// This method is only invoked when all of the above are `false`, i.e. when the connection is entirely idle.
+    ///
+    /// ## Exceptions
+    ///
+    /// - Protocols like [circuit-relay v2](https://github.com/libp2p/specs/blob/master/relay/circuit-v2.md) need to keep a connection alive beyond these circumstances and can thus override this method.
+    /// - Protocols like [ping](https://github.com/libp2p/specs/blob/master/ping/ping.md) **don't** want to keep a connection alive despite an active streams.
+    /// In that case, protocol authors can use [`Stream::ignore_for_keep_alive`](crate::Stream::ignore_for_keep_alive) to opt-out a particular stream from the keep-alive algorithm.
+    fn connection_keep_alive(&self) -> bool {
+        false
     }
-
-    /// Injects the output of a successful upgrade on a new outbound substream.
-    ///
-    /// The second argument is the information that was previously passed to
-    /// [`ConnectionHandlerEvent::OutboundSubstreamRequest`].
-    #[deprecated(
-        since = "0.41.0",
-        note = "Handle `ConnectionEvent::FullyNegotiatedOutbound` on `ConnectionHandler::on_connection_event` instead.
-        The default implemention of this `inject_*` method delegates to it."
-    )]
-    fn inject_fully_negotiated_outbound(
-        &mut self,
-        protocol: <Self::OutboundProtocol as OutboundUpgradeSend>::Output,
-        info: Self::OutboundOpenInfo,
-    ) {
-        self.on_connection_event(ConnectionEvent::FullyNegotiatedOutbound(
-            FullyNegotiatedOutbound { protocol, info },
-        ))
-    }
-
-    /// Injects an event coming from the outside in the handler.
-    #[deprecated(
-        since = "0.41.0",
-        note = "Implement `ConnectionHandler::on_behaviour_event` instead. The default implementation of `inject_event` delegates to it."
-    )]
-    fn inject_event(&mut self, event: Self::InEvent) {
-        self.on_behaviour_event(event);
-    }
-
-    /// Notifies the handler of a change in the address of the remote.
-    #[deprecated(
-        since = "0.41.0",
-        note = "Handle `ConnectionEvent::AddressChange` on `ConnectionHandler::on_connection_event` instead.
-        The default implemention of this `inject_*` method delegates to it."
-    )]
-    fn inject_address_change(&mut self, new_address: &Multiaddr) {
-        self.on_connection_event(ConnectionEvent::AddressChange(AddressChange {
-            new_address,
-        }))
-    }
-
-    /// Indicates to the handler that upgrading an outbound substream to the given protocol has failed.
-    #[deprecated(
-        since = "0.41.0",
-        note = "Handle `ConnectionEvent::DialUpgradeError` on `ConnectionHandler::on_connection_event` instead.
-        The default implemention of this `inject_*` method delegates to it."
-    )]
-    fn inject_dial_upgrade_error(
-        &mut self,
-        info: Self::OutboundOpenInfo,
-        error: ConnectionHandlerUpgrErr<<Self::OutboundProtocol as OutboundUpgradeSend>::Error>,
-    ) {
-        self.on_connection_event(ConnectionEvent::DialUpgradeError(DialUpgradeError {
-            info,
-            error,
-        }))
-    }
-
-    /// Indicates to the handler that upgrading an inbound substream to the given protocol has failed.
-    #[deprecated(
-        since = "0.41.0",
-        note = "Handle `ConnectionEvent::ListenUpgradeError` on `ConnectionHandler::on_connection_event` instead.
-        The default implemention of this `inject_*` method delegates to it."
-    )]
-    fn inject_listen_upgrade_error(
-        &mut self,
-        info: Self::InboundOpenInfo,
-        error: ConnectionHandlerUpgrErr<<Self::InboundProtocol as InboundUpgradeSend>::Error>,
-    ) {
-        self.on_connection_event(ConnectionEvent::ListenUpgradeError(ListenUpgradeError {
-            info,
-            error,
-        }))
-    }
-
-    /// Returns until when the connection should be kept alive.
-    ///
-    /// This method is called by the `Swarm` after each invocation of
-    /// [`ConnectionHandler::poll`] to determine if the connection and the associated
-    /// [`ConnectionHandler`]s should be kept alive as far as this handler is concerned
-    /// and if so, for how long.
-    ///
-    /// Returning [`KeepAlive::No`] indicates that the connection should be
-    /// closed and this handler destroyed immediately.
-    ///
-    /// Returning [`KeepAlive::Until`] indicates that the connection may be closed
-    /// and this handler destroyed after the specified `Instant`.
-    ///
-    /// Returning [`KeepAlive::Yes`] indicates that the connection should
-    /// be kept alive until the next call to this method.
-    ///
-    /// > **Note**: The connection is always closed and the handler destroyed
-    /// > when [`ConnectionHandler::poll`] returns an error. Furthermore, the
-    /// > connection may be closed for reasons outside of the control
-    /// > of the handler.
-    fn connection_keep_alive(&self) -> KeepAlive;
 
     /// Should behave like `Stream::poll()`.
     fn poll(
         &mut self,
         cx: &mut Context<'_>,
     ) -> Poll<
-        ConnectionHandlerEvent<
-            Self::OutboundProtocol,
-            Self::OutboundOpenInfo,
-            Self::OutEvent,
-            Self::Error,
-        >,
+        ConnectionHandlerEvent<Self::OutboundProtocol, Self::OutboundOpenInfo, Self::ToBehaviour>,
     >;
+
+    /// Gracefully close the [`ConnectionHandler`].
+    ///
+    /// The contract for this function is equivalent to a [`Stream`](futures::Stream).
+    /// When a connection is being shut down, we will first poll this function to completion.
+    /// Following that, the physical connection will be shut down.
+    ///
+    /// This is also called when the shutdown was initiated due to an error on the connection.
+    /// We therefore cannot guarantee that performing IO within here will succeed.
+    ///
+    /// To signal completion, [`Poll::Ready(None)`] should be returned.
+    ///
+    /// Implementations MUST have a [`fuse`](futures::StreamExt::fuse)-like behaviour.
+    /// That is, [`Poll::Ready(None)`] MUST be returned on repeated calls to [`ConnectionHandler::poll_close`].
+    fn poll_close(&mut self, _: &mut Context<'_>) -> Poll<Option<Self::ToBehaviour>> {
+        Poll::Ready(None)
+    }
 
     /// Adds a closure that turns the input event into something else.
     fn map_in_event<TNewIn, TMap>(self, map: TMap) -> MapInEvent<Self, TNewIn, TMap>
     where
         Self: Sized,
-        TMap: Fn(&TNewIn) -> Option<&Self::InEvent>,
+        TMap: Fn(&TNewIn) -> Option<&Self::FromBehaviour>,
     {
         MapInEvent::new(self, map)
     }
@@ -260,17 +180,13 @@ pub trait ConnectionHandler: Send + 'static {
     fn map_out_event<TMap, TNewOut>(self, map: TMap) -> MapOutEvent<Self, TMap>
     where
         Self: Sized,
-        TMap: FnMut(Self::OutEvent) -> TNewOut,
+        TMap: FnMut(Self::ToBehaviour) -> TNewOut,
     {
         MapOutEvent::new(self, map)
     }
 
     /// Creates a new [`ConnectionHandler`] that selects either this handler or
     /// `other` by delegating methods calls appropriately.
-    ///
-    /// > **Note**: The largest `KeepAlive` returned by the two handlers takes precedence,
-    /// > i.e. is returned from [`ConnectionHandler::connection_keep_alive`] by the returned
-    /// > handler.
     fn select<TProto2>(self, other: TProto2) -> ConnectionHandlerSelect<Self, TProto2>
     where
         Self: Sized,
@@ -279,22 +195,22 @@ pub trait ConnectionHandler: Send + 'static {
     }
 
     /// Informs the handler about an event from the [`NetworkBehaviour`](super::NetworkBehaviour).
-    fn on_behaviour_event(&mut self, _event: Self::InEvent) {}
+    fn on_behaviour_event(&mut self, _event: Self::FromBehaviour);
 
     fn on_connection_event(
         &mut self,
-        _event: ConnectionEvent<
+        event: ConnectionEvent<
             Self::InboundProtocol,
             Self::OutboundProtocol,
             Self::InboundOpenInfo,
             Self::OutboundOpenInfo,
         >,
-    ) {
-    }
+    );
 }
 
 /// Enumeration with the list of the possible stream events
 /// to pass to [`on_connection_event`](ConnectionHandler::on_connection_event).
+#[non_exhaustive]
 pub enum ConnectionEvent<'a, IP: InboundUpgradeSend, OP: OutboundUpgradeSend, IOI, OOI> {
     /// Informs the handler about the output of a successful upgrade on a new inbound substream.
     FullyNegotiatedInbound(FullyNegotiatedInbound<IP, IOI>),
@@ -306,6 +222,78 @@ pub enum ConnectionEvent<'a, IP: InboundUpgradeSend, OP: OutboundUpgradeSend, IO
     DialUpgradeError(DialUpgradeError<OOI, OP>),
     /// Informs the handler that upgrading an inbound substream to the given protocol has failed.
     ListenUpgradeError(ListenUpgradeError<IOI, IP>),
+    /// The local [`ConnectionHandler`] added or removed support for one or more protocols.
+    LocalProtocolsChange(ProtocolsChange<'a>),
+    /// The remote [`ConnectionHandler`] now supports a different set of protocols.
+    RemoteProtocolsChange(ProtocolsChange<'a>),
+}
+
+impl<'a, IP, OP, IOI, OOI> fmt::Debug for ConnectionEvent<'a, IP, OP, IOI, OOI>
+where
+    IP: InboundUpgradeSend + fmt::Debug,
+    IP::Output: fmt::Debug,
+    IP::Error: fmt::Debug,
+    OP: OutboundUpgradeSend + fmt::Debug,
+    OP::Output: fmt::Debug,
+    OP::Error: fmt::Debug,
+    IOI: fmt::Debug,
+    OOI: fmt::Debug,
+{
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            ConnectionEvent::FullyNegotiatedInbound(v) => {
+                f.debug_tuple("FullyNegotiatedInbound").field(v).finish()
+            }
+            ConnectionEvent::FullyNegotiatedOutbound(v) => {
+                f.debug_tuple("FullyNegotiatedOutbound").field(v).finish()
+            }
+            ConnectionEvent::AddressChange(v) => f.debug_tuple("AddressChange").field(v).finish(),
+            ConnectionEvent::DialUpgradeError(v) => {
+                f.debug_tuple("DialUpgradeError").field(v).finish()
+            }
+            ConnectionEvent::ListenUpgradeError(v) => {
+                f.debug_tuple("ListenUpgradeError").field(v).finish()
+            }
+            ConnectionEvent::LocalProtocolsChange(v) => {
+                f.debug_tuple("LocalProtocolsChange").field(v).finish()
+            }
+            ConnectionEvent::RemoteProtocolsChange(v) => {
+                f.debug_tuple("RemoteProtocolsChange").field(v).finish()
+            }
+        }
+    }
+}
+
+impl<'a, IP: InboundUpgradeSend, OP: OutboundUpgradeSend, IOI, OOI>
+    ConnectionEvent<'a, IP, OP, IOI, OOI>
+{
+    /// Whether the event concerns an outbound stream.
+    pub fn is_outbound(&self) -> bool {
+        match self {
+            ConnectionEvent::DialUpgradeError(_) | ConnectionEvent::FullyNegotiatedOutbound(_) => {
+                true
+            }
+            ConnectionEvent::FullyNegotiatedInbound(_)
+            | ConnectionEvent::AddressChange(_)
+            | ConnectionEvent::LocalProtocolsChange(_)
+            | ConnectionEvent::RemoteProtocolsChange(_)
+            | ConnectionEvent::ListenUpgradeError(_) => false,
+        }
+    }
+
+    /// Whether the event concerns an inbound stream.
+    pub fn is_inbound(&self) -> bool {
+        match self {
+            ConnectionEvent::FullyNegotiatedInbound(_) | ConnectionEvent::ListenUpgradeError(_) => {
+                true
+            }
+            ConnectionEvent::FullyNegotiatedOutbound(_)
+            | ConnectionEvent::AddressChange(_)
+            | ConnectionEvent::LocalProtocolsChange(_)
+            | ConnectionEvent::RemoteProtocolsChange(_)
+            | ConnectionEvent::DialUpgradeError(_) => false,
+        }
+    }
 }
 
 /// [`ConnectionEvent`] variant that informs the handler about
@@ -316,6 +304,7 @@ pub enum ConnectionEvent<'a, IP: InboundUpgradeSend, OP: OutboundUpgradeSend, IO
 /// of simultaneously open negotiated inbound substreams. In other words it is up to the
 /// [`ConnectionHandler`] implementation to stop a malicious remote node to open and keep alive
 /// an excessive amount of inbound substreams.
+#[derive(Debug)]
 pub struct FullyNegotiatedInbound<IP: InboundUpgradeSend, IOI> {
     pub protocol: IP::Output,
     pub info: IOI,
@@ -325,28 +314,148 @@ pub struct FullyNegotiatedInbound<IP: InboundUpgradeSend, IOI> {
 ///
 /// The `protocol` field is the information that was previously passed to
 /// [`ConnectionHandlerEvent::OutboundSubstreamRequest`].
+#[derive(Debug)]
 pub struct FullyNegotiatedOutbound<OP: OutboundUpgradeSend, OOI> {
     pub protocol: OP::Output,
     pub info: OOI,
 }
 
 /// [`ConnectionEvent`] variant that informs the handler about a change in the address of the remote.
+#[derive(Debug)]
 pub struct AddressChange<'a> {
     pub new_address: &'a Multiaddr,
 }
 
+/// [`ConnectionEvent`] variant that informs the handler about a change in the protocols supported on the connection.
+#[derive(Debug, Clone)]
+pub enum ProtocolsChange<'a> {
+    Added(ProtocolsAdded<'a>),
+    Removed(ProtocolsRemoved<'a>),
+}
+
+impl<'a> ProtocolsChange<'a> {
+    /// Compute the [`ProtocolsChange`] that results from adding `to_add` to `existing_protocols`.
+    ///
+    /// Returns `None` if the change is a no-op, i.e. `to_add` is a subset of `existing_protocols`.
+    pub(crate) fn add(
+        existing_protocols: &'a HashSet<StreamProtocol>,
+        to_add: &'a HashSet<StreamProtocol>,
+    ) -> Option<Self> {
+        let mut actually_added_protocols = to_add.difference(existing_protocols).peekable();
+
+        actually_added_protocols.peek()?;
+
+        Some(ProtocolsChange::Added(ProtocolsAdded {
+            protocols: actually_added_protocols,
+        }))
+    }
+
+    /// Compute the [`ProtocolsChange`] that results from removing `to_remove` from `existing_protocols`.
+    ///
+    /// Returns `None` if the change is a no-op, i.e. none of the protocols in `to_remove` are in `existing_protocols`.
+    pub(crate) fn remove(
+        existing_protocols: &'a HashSet<StreamProtocol>,
+        to_remove: &'a HashSet<StreamProtocol>,
+    ) -> Option<Self> {
+        let mut actually_removed_protocols = existing_protocols.intersection(to_remove).peekable();
+
+        actually_removed_protocols.peek()?;
+
+        Some(ProtocolsChange::Removed(ProtocolsRemoved {
+            protocols: Either::Right(actually_removed_protocols),
+        }))
+    }
+
+    /// Compute the [`ProtocolsChange`]s required to go from `existing_protocols` to `new_protocols`.
+    pub(crate) fn from_full_sets(
+        existing_protocols: &'a HashSet<StreamProtocol>,
+        new_protocols: &'a HashSet<StreamProtocol>,
+    ) -> SmallVec<[Self; 2]> {
+        if existing_protocols == new_protocols {
+            return SmallVec::new();
+        }
+
+        let mut changes = SmallVec::new();
+
+        let mut added_protocols = new_protocols.difference(existing_protocols).peekable();
+        let mut removed_protocols = existing_protocols.difference(new_protocols).peekable();
+
+        if added_protocols.peek().is_some() {
+            changes.push(ProtocolsChange::Added(ProtocolsAdded {
+                protocols: added_protocols,
+            }));
+        }
+
+        if removed_protocols.peek().is_some() {
+            changes.push(ProtocolsChange::Removed(ProtocolsRemoved {
+                protocols: Either::Left(removed_protocols),
+            }));
+        }
+
+        changes
+    }
+}
+
+/// An [`Iterator`] over all protocols that have been added.
+#[derive(Debug, Clone)]
+pub struct ProtocolsAdded<'a> {
+    protocols: Peekable<Difference<'a, StreamProtocol, RandomState>>,
+}
+
+impl<'a> ProtocolsAdded<'a> {
+    pub(crate) fn from_set(protocols: &'a HashSet<StreamProtocol, RandomState>) -> Self {
+        ProtocolsAdded {
+            protocols: protocols.difference(&EMPTY_HASHSET).peekable(),
+        }
+    }
+}
+
+/// An [`Iterator`] over all protocols that have been removed.
+#[derive(Debug, Clone)]
+pub struct ProtocolsRemoved<'a> {
+    protocols: Either<
+        Peekable<Difference<'a, StreamProtocol, RandomState>>,
+        Peekable<Intersection<'a, StreamProtocol, RandomState>>,
+    >,
+}
+
+impl<'a> ProtocolsRemoved<'a> {
+    #[cfg(test)]
+    pub(crate) fn from_set(protocols: &'a HashSet<StreamProtocol, RandomState>) -> Self {
+        ProtocolsRemoved {
+            protocols: Either::Left(protocols.difference(&EMPTY_HASHSET).peekable()),
+        }
+    }
+}
+
+impl<'a> Iterator for ProtocolsAdded<'a> {
+    type Item = &'a StreamProtocol;
+    fn next(&mut self) -> Option<Self::Item> {
+        self.protocols.next()
+    }
+}
+
+impl<'a> Iterator for ProtocolsRemoved<'a> {
+    type Item = &'a StreamProtocol;
+    fn next(&mut self) -> Option<Self::Item> {
+        self.protocols.next()
+    }
+}
+
 /// [`ConnectionEvent`] variant that informs the handler
 /// that upgrading an outbound substream to the given protocol has failed.
+#[derive(Debug)]
 pub struct DialUpgradeError<OOI, OP: OutboundUpgradeSend> {
     pub info: OOI,
-    pub error: ConnectionHandlerUpgrErr<OP::Error>,
+    pub error: StreamUpgradeError<OP::Error>,
 }
 
 /// [`ConnectionEvent`] variant that informs the handler
 /// that upgrading an inbound substream to the given protocol has failed.
+#[derive(Debug)]
 pub struct ListenUpgradeError<IOI, IP: InboundUpgradeSend> {
     pub info: IOI,
-    pub error: ConnectionHandlerUpgrErr<IP::Error>,
+    pub error: IP::Error,
 }
 
 /// Configuration of inbound or outbound substream protocol(s)
@@ -426,38 +535,39 @@ impl<TUpgrade, TInfo> SubstreamProtocol<TUpgrade, TInfo> {
 }
 
 /// Event produced by a handler.
-#[derive(Debug, Copy, Clone, PartialEq, Eq)]
-pub enum ConnectionHandlerEvent<TConnectionUpgrade, TOutboundOpenInfo, TCustom, TErr> {
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum ConnectionHandlerEvent<TConnectionUpgrade, TOutboundOpenInfo, TCustom> {
     /// Request a new outbound substream to be opened with the remote.
     OutboundSubstreamRequest {
         /// The protocol(s) to apply on the substream.
         protocol: SubstreamProtocol<TConnectionUpgrade, TOutboundOpenInfo>,
     },
+    /// We learned something about the protocols supported by the remote.
+    ReportRemoteProtocols(ProtocolSupport),
 
-    /// Close the connection for the given reason.
-    ///
-    /// Note this will affect all [`ConnectionHandler`]s handling this
-    /// connection, in other words it will close the connection for all
-    /// [`ConnectionHandler`]s. To signal that one has no more need for the
-    /// connection, while allowing other [`ConnectionHandler`]s to continue using
-    /// the connection, return [`KeepAlive::No`] in
-    /// [`ConnectionHandler::connection_keep_alive`].
-    Close(TErr),
+    /// Event that is sent to a [`NetworkBehaviour`](crate::behaviour::NetworkBehaviour).
+    NotifyBehaviour(TCustom),
+}
 
-    /// Other event.
-    Custom(TCustom),
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ProtocolSupport {
+    /// The remote now supports these additional protocols.
+    Added(HashSet<StreamProtocol>),
+    /// The remote no longer supports these protocols.
+    Removed(HashSet<StreamProtocol>),
 }
 
 /// Event produced by a handler.
-impl<TConnectionUpgrade, TOutboundOpenInfo, TCustom, TErr>
-    ConnectionHandlerEvent<TConnectionUpgrade, TOutboundOpenInfo, TCustom, TErr>
+impl<TConnectionUpgrade, TOutboundOpenInfo, TCustom>
+    ConnectionHandlerEvent<TConnectionUpgrade, TOutboundOpenInfo, TCustom>
 {
     /// If this is an `OutboundSubstreamRequest`, maps the `info` member from a
     /// `TOutboundOpenInfo` to something else.
     pub fn map_outbound_open_info<F, I>(
         self,
         map: F,
-    ) -> ConnectionHandlerEvent<TConnectionUpgrade, I, TCustom, TErr>
+    ) -> ConnectionHandlerEvent<TConnectionUpgrade, I, TCustom>
     where
         F: FnOnce(TOutboundOpenInfo) -> I,
     {
@@ -467,17 +577,18 @@ impl<TConnectionUpgrade, TOutboundOpenInfo, TCustom, TErr>
                     protocol: protocol.map_info(map),
                 }
             }
-            ConnectionHandlerEvent::Custom(val) => ConnectionHandlerEvent::Custom(val),
-            ConnectionHandlerEvent::Close(val) => ConnectionHandlerEvent::Close(val),
+            ConnectionHandlerEvent::NotifyBehaviour(val) => {
+                ConnectionHandlerEvent::NotifyBehaviour(val)
+            }
+            ConnectionHandlerEvent::ReportRemoteProtocols(support) => {
+                ConnectionHandlerEvent::ReportRemoteProtocols(support)
+            }
         }
     }
 
     /// If this is an `OutboundSubstreamRequest`, maps the protocol (`TConnectionUpgrade`)
     /// to something else.
-    pub fn map_protocol<F, I>(
-        self,
-        map: F,
-    ) -> ConnectionHandlerEvent<I, TOutboundOpenInfo, TCustom, TErr>
+    pub fn map_protocol<F, I>(self, map: F) -> ConnectionHandlerEvent<I, TOutboundOpenInfo, TCustom>
     where
         F: FnOnce(TConnectionUpgrade) -> I,
     {
@@ -487,8 +598,12 @@ impl<TConnectionUpgrade, TOutboundOpenInfo, TCustom, TErr>
                     protocol: protocol.map_upgrade(map),
                 }
             }
-            ConnectionHandlerEvent::Custom(val) => ConnectionHandlerEvent::Custom(val),
-            ConnectionHandlerEvent::Close(val) => ConnectionHandlerEvent::Close(val),
+            ConnectionHandlerEvent::NotifyBehaviour(val) => {
+                ConnectionHandlerEvent::NotifyBehaviour(val)
+            }
+            ConnectionHandlerEvent::ReportRemoteProtocols(support) => {
+                ConnectionHandlerEvent::ReportRemoteProtocols(support)
+            }
         }
     }
 
@@ -496,7 +611,7 @@ impl<TConnectionUpgrade, TOutboundOpenInfo, TCustom, TErr>
     pub fn map_custom<F, I>(
         self,
         map: F,
-    ) -> ConnectionHandlerEvent<TConnectionUpgrade, TOutboundOpenInfo, I, TErr>
+    ) -> ConnectionHandlerEvent<TConnectionUpgrade, TOutboundOpenInfo, I>
     where
         F: FnOnce(TCustom) -> I,
     {
@@ -504,159 +619,77 @@ impl<TConnectionUpgrade, TOutboundOpenInfo, TCustom, TErr>
             ConnectionHandlerEvent::OutboundSubstreamRequest { protocol } => {
                 ConnectionHandlerEvent::OutboundSubstreamRequest { protocol }
             }
-            ConnectionHandlerEvent::Custom(val) => ConnectionHandlerEvent::Custom(map(val)),
-            ConnectionHandlerEvent::Close(val) => ConnectionHandlerEvent::Close(val),
-        }
-    }
-
-    /// If this is a `Close` event, maps the content to something else.
-    pub fn map_close<F, I>(
-        self,
-        map: F,
-    ) -> ConnectionHandlerEvent<TConnectionUpgrade, TOutboundOpenInfo, TCustom, I>
-    where
-        F: FnOnce(TErr) -> I,
-    {
-        match self {
-            ConnectionHandlerEvent::OutboundSubstreamRequest { protocol } => {
-                ConnectionHandlerEvent::OutboundSubstreamRequest { protocol }
+            ConnectionHandlerEvent::NotifyBehaviour(val) => {
+                ConnectionHandlerEvent::NotifyBehaviour(map(val))
             }
-            ConnectionHandlerEvent::Custom(val) => ConnectionHandlerEvent::Custom(val),
-            ConnectionHandlerEvent::Close(val) => ConnectionHandlerEvent::Close(map(val)),
+            ConnectionHandlerEvent::ReportRemoteProtocols(support) => {
+                ConnectionHandlerEvent::ReportRemoteProtocols(support)
+            }
         }
     }
 }
 
 /// Error that can happen on an outbound substream opening attempt.
 #[derive(Debug)]
-pub enum ConnectionHandlerUpgrErr<TUpgrErr> {
+pub enum StreamUpgradeError<TUpgrErr> {
     /// The opening attempt timed out before the negotiation was fully completed.
     Timeout,
-    /// There was an error in the timer used.
-    Timer,
-    /// Error while upgrading the substream to the protocol we want.
-    Upgrade(UpgradeError<TUpgrErr>),
+    /// The upgrade produced an error.
+    Apply(TUpgrErr),
+    /// No protocol could be agreed upon.
+    NegotiationFailed,
+    /// An IO or otherwise unrecoverable error happened.
+    Io(io::Error),
 }
 
-impl<TUpgrErr> ConnectionHandlerUpgrErr<TUpgrErr> {
-    /// Map the inner [`UpgradeError`] type.
-    pub fn map_upgrade_err<F, E>(self, f: F) -> ConnectionHandlerUpgrErr<E>
+impl<TUpgrErr> StreamUpgradeError<TUpgrErr> {
+    /// Map the inner [`StreamUpgradeError`] type.
+    pub fn map_upgrade_err<F, E>(self, f: F) -> StreamUpgradeError<E>
     where
-        F: FnOnce(UpgradeError<TUpgrErr>) -> UpgradeError<E>,
+        F: FnOnce(TUpgrErr) -> E,
     {
         match self {
-            ConnectionHandlerUpgrErr::Timeout => ConnectionHandlerUpgrErr::Timeout,
-            ConnectionHandlerUpgrErr::Timer => ConnectionHandlerUpgrErr::Timer,
-            ConnectionHandlerUpgrErr::Upgrade(e) => ConnectionHandlerUpgrErr::Upgrade(f(e)),
+            StreamUpgradeError::Timeout => StreamUpgradeError::Timeout,
+            StreamUpgradeError::Apply(e) => StreamUpgradeError::Apply(f(e)),
+            StreamUpgradeError::NegotiationFailed => StreamUpgradeError::NegotiationFailed,
+            StreamUpgradeError::Io(e) => StreamUpgradeError::Io(e),
         }
     }
 }
 
-impl<TUpgrErr> fmt::Display for ConnectionHandlerUpgrErr<TUpgrErr>
+impl<TUpgrErr> fmt::Display for StreamUpgradeError<TUpgrErr>
 where
-    TUpgrErr: fmt::Display,
+    TUpgrErr: error::Error + 'static,
 {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            ConnectionHandlerUpgrErr::Timeout => {
+            StreamUpgradeError::Timeout => {
                 write!(f, "Timeout error while opening a substream")
             }
-            ConnectionHandlerUpgrErr::Timer => {
-                write!(f, "Timer error while opening a substream")
+            StreamUpgradeError::Apply(err) => {
+                write!(f, "Apply: ")?;
+                crate::print_error_chain(f, err)
             }
-            ConnectionHandlerUpgrErr::Upgrade(err) => write!(f, "{}", err),
+            StreamUpgradeError::NegotiationFailed => {
+                write!(f, "no protocols could be agreed upon")
+            }
+            StreamUpgradeError::Io(e) => {
+                write!(f, "IO error: ")?;
+                crate::print_error_chain(f, e)
+            }
         }
     }
 }
 
-impl<TUpgrErr> error::Error for ConnectionHandlerUpgrErr<TUpgrErr>
+impl<TUpgrErr> error::Error for StreamUpgradeError<TUpgrErr>
 where
     TUpgrErr: error::Error + 'static,
 {
     fn source(&self) -> Option<&(dyn error::Error + 'static)> {
-        match self {
-            ConnectionHandlerUpgrErr::Timeout => None,
-            ConnectionHandlerUpgrErr::Timer => None,
-            ConnectionHandlerUpgrErr::Upgrade(err) => Some(err),
-        }
+        None
     }
 }
 
-/// Prototype for a [`ConnectionHandler`].
-pub trait IntoConnectionHandler: Send + 'static {
-    /// The protocols handler.
-    type Handler: ConnectionHandler;
-
-    /// Builds the protocols handler.
-    ///
-    /// The `PeerId` is the id of the node the handler is going to handle.
-    fn into_handler(
-        self,
-        remote_peer_id: &PeerId,
-        connected_point: &ConnectedPoint,
-    ) -> Self::Handler;
-
-    /// Return the handler's inbound protocol.
-    fn inbound_protocol(&self) -> <Self::Handler as ConnectionHandler>::InboundProtocol;
-
-    /// Builds an implementation of [`IntoConnectionHandler`] that handles both this protocol and the
-    /// other one together.
-    fn select<TProto2>(self, other: TProto2) -> IntoConnectionHandlerSelect<Self, TProto2>
-    where
-        Self: Sized,
-    {
-        IntoConnectionHandlerSelect::new(self, other)
-    }
-}
-
-impl<T> IntoConnectionHandler for T
-where
-    T: ConnectionHandler,
-{
-    type Handler = Self;
-
-    fn into_handler(self, _: &PeerId, _: &ConnectedPoint) -> Self {
-        self
-    }
-
-    fn inbound_protocol(&self) -> <Self::Handler as ConnectionHandler>::InboundProtocol {
-        self.listen_protocol().into_upgrade().0
-    }
-}
-
-/// How long the connection should be kept alive.
-#[derive(Debug, Copy, Clone, PartialEq, Eq)]
-pub enum KeepAlive {
-    /// If nothing new happens, the connection should be closed at the given `Instant`.
-    Until(Instant),
-    /// Keep the connection alive.
-    Yes,
-    /// Close the connection as soon as possible.
-    No,
-}
-
-impl KeepAlive {
-    /// Returns true for `Yes`, false otherwise.
-    pub fn is_yes(&self) -> bool {
-        matches!(*self, KeepAlive::Yes)
-    }
-}
-
-impl PartialOrd for KeepAlive {
-    fn partial_cmp(&self, other: &KeepAlive) -> Option<Ordering> {
-        Some(self.cmp(other))
-    }
-}
-
-impl Ord for KeepAlive {
-    fn cmp(&self, other: &KeepAlive) -> Ordering {
-        use self::KeepAlive::*;
-
-        match (self, other) {
-            (No, No) | (Yes, Yes) => Ordering::Equal,
-            (No, _) | (_, Yes) => Ordering::Less,
-            (_, No) | (Yes, _) => Ordering::Greater,
-            (Until(t1), Until(t2)) => t1.cmp(t2),
-        }
-    }
-}
+/// A statically declared, empty [`HashSet`] allows us to work around borrow-checker rules for
+/// [`ProtocolsAdded::from_set`]. The lifetimes don't work unless we have a [`HashSet`] with a `'static' lifetime.
+static EMPTY_HASHSET: Lazy<HashSet<StreamProtocol>> = Lazy::new(HashSet::new);

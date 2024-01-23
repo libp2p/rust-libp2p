@@ -21,13 +21,12 @@
 //! Noise protocol I/O.
 
 mod framed;
-pub mod handshake;
-
+pub(crate) mod handshake;
+use asynchronous_codec::Framed;
 use bytes::Bytes;
-use framed::{NoiseFramed, MAX_FRAME_LEN};
+use framed::{Codec, MAX_FRAME_LEN};
 use futures::prelude::*;
 use futures::ready;
-use log::trace;
 use std::{
     cmp::min,
     fmt, io,
@@ -38,23 +37,23 @@ use std::{
 /// A noise session to a remote.
 ///
 /// `T` is the type of the underlying I/O resource.
-pub struct NoiseOutput<T> {
-    io: NoiseFramed<T, snow::TransportState>,
+pub struct Output<T> {
+    io: Framed<T, Codec<snow::TransportState>>,
     recv_buffer: Bytes,
     recv_offset: usize,
     send_buffer: Vec<u8>,
     send_offset: usize,
 }
 
-impl<T> fmt::Debug for NoiseOutput<T> {
+impl<T> fmt::Debug for Output<T> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("NoiseOutput").field("io", &self.io).finish()
+        f.debug_struct("NoiseOutput").finish()
     }
 }
 
-impl<T> NoiseOutput<T> {
-    fn new(io: NoiseFramed<T, snow::TransportState>) -> Self {
-        NoiseOutput {
+impl<T> Output<T> {
+    fn new(io: Framed<T, Codec<snow::TransportState>>) -> Self {
+        Output {
             io,
             recv_buffer: Bytes::new(),
             recv_offset: 0,
@@ -64,7 +63,7 @@ impl<T> NoiseOutput<T> {
     }
 }
 
-impl<T: AsyncRead + Unpin> AsyncRead for NoiseOutput<T> {
+impl<T: AsyncRead + Unpin> AsyncRead for Output<T> {
     fn poll_read(
         mut self: Pin<&mut Self>,
         cx: &mut Context<'_>,
@@ -76,10 +75,10 @@ impl<T: AsyncRead + Unpin> AsyncRead for NoiseOutput<T> {
             if len > 0 {
                 let n = min(len - off, buf.len());
                 buf[..n].copy_from_slice(&self.recv_buffer[off..off + n]);
-                trace!("read: copied {}/{} bytes", off + n, len);
+                tracing::trace!(copied_bytes=%(off + n), total_bytes=%len, "read: copied");
                 self.recv_offset += n;
                 if len == self.recv_offset {
-                    trace!("read: frame consumed");
+                    tracing::trace!("read: frame consumed");
                     // Drop the existing view so `NoiseFramed` can reuse
                     // the buffer when polling for the next frame below.
                     self.recv_buffer = Bytes::new();
@@ -100,7 +99,7 @@ impl<T: AsyncRead + Unpin> AsyncRead for NoiseOutput<T> {
     }
 }
 
-impl<T: AsyncWrite + Unpin> AsyncWrite for NoiseOutput<T> {
+impl<T: AsyncWrite + Unpin> AsyncWrite for Output<T> {
     fn poll_write(
         self: Pin<&mut Self>,
         cx: &mut Context<'_>,
@@ -112,7 +111,7 @@ impl<T: AsyncWrite + Unpin> AsyncWrite for NoiseOutput<T> {
 
         // The MAX_FRAME_LEN is the maximum buffer size before a frame must be sent.
         if this.send_offset == MAX_FRAME_LEN {
-            trace!("write: sending {} bytes", MAX_FRAME_LEN);
+            tracing::trace!(bytes=%MAX_FRAME_LEN, "write: sending");
             ready!(io.as_mut().poll_ready(cx))?;
             io.as_mut().start_send(frame_buf)?;
             this.send_offset = 0;
@@ -124,7 +123,7 @@ impl<T: AsyncWrite + Unpin> AsyncWrite for NoiseOutput<T> {
         let n = min(MAX_FRAME_LEN - off, buf.len());
         this.send_buffer[off..off + n].copy_from_slice(&buf[..n]);
         this.send_offset += n;
-        trace!("write: buffered {} bytes", this.send_offset);
+        tracing::trace!(bytes=%this.send_offset, "write: buffered");
 
         Poll::Ready(Ok(n))
     }
@@ -137,7 +136,7 @@ impl<T: AsyncWrite + Unpin> AsyncWrite for NoiseOutput<T> {
         // Check if there is still one more frame to send.
         if this.send_offset > 0 {
             ready!(io.as_mut().poll_ready(cx))?;
-            trace!("flush: sending {} bytes", this.send_offset);
+            tracing::trace!(bytes= %this.send_offset, "flush: sending");
             io.as_mut().start_send(frame_buf)?;
             this.send_offset = 0;
         }

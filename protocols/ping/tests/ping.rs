@@ -20,213 +20,65 @@
 
 //! Integration tests for the `Ping` network behaviour.
 
-use futures::{channel::mpsc, prelude::*};
-use libp2p::core::{
-    identity,
-    muxing::StreamMuxerBox,
-    transport::{self, Transport},
-    upgrade, Multiaddr, PeerId,
-};
-use libp2p::mplex;
-use libp2p::noise;
-use libp2p::ping;
-use libp2p::swarm::{NetworkBehaviour, Swarm, SwarmEvent};
-use libp2p::tcp;
-use libp2p::yamux;
-use libp2p_swarm::keep_alive;
+use libp2p_ping as ping;
+use libp2p_swarm::dummy;
+use libp2p_swarm::{Swarm, SwarmEvent};
+use libp2p_swarm_test::SwarmExt;
 use quickcheck::*;
 use std::{num::NonZeroU8, time::Duration};
 
 #[test]
 fn ping_pong() {
-    fn prop(count: NonZeroU8, muxer: MuxerChoice) {
+    fn prop(count: NonZeroU8) {
         let cfg = ping::Config::new().with_interval(Duration::from_millis(10));
 
-        let (peer1_id, trans) = mk_transport(muxer);
-        let mut swarm1 =
-            Swarm::with_async_std_executor(trans, Behaviour::new(cfg.clone()), peer1_id);
+        let mut swarm1 = Swarm::new_ephemeral(|_| ping::Behaviour::new(cfg.clone()));
+        let mut swarm2 = Swarm::new_ephemeral(|_| ping::Behaviour::new(cfg.clone()));
 
-        let (peer2_id, trans) = mk_transport(muxer);
-        let mut swarm2 = Swarm::with_async_std_executor(trans, Behaviour::new(cfg), peer2_id);
+        async_std::task::block_on(async {
+            swarm1.listen().with_memory_addr_external().await;
+            swarm2.connect(&mut swarm1).await;
 
-        let (mut tx, mut rx) = mpsc::channel::<Multiaddr>(1);
+            for _ in 0..count.get() {
+                let ([e1], [e2]): ([ping::Event; 1], [ping::Event; 1]) =
+                    libp2p_swarm_test::drive(&mut swarm1, &mut swarm2).await;
 
-        let pid1 = peer1_id;
-        let addr = "/ip4/127.0.0.1/tcp/0".parse().unwrap();
-        swarm1.listen_on(addr).unwrap();
+                assert_eq!(&e1.peer, swarm2.local_peer_id());
+                assert_eq!(&e2.peer, swarm1.local_peer_id());
 
-        let mut count1 = count.get();
-        let mut count2 = count.get();
-
-        let peer1 = async move {
-            loop {
-                match swarm1.select_next_some().await {
-                    SwarmEvent::NewListenAddr { address, .. } => tx.send(address).await.unwrap(),
-                    SwarmEvent::Behaviour(BehaviourEvent::Ping(ping::Event {
-                        peer,
-                        result: Ok(ping::Success::Ping { rtt }),
-                    })) => {
-                        count1 -= 1;
-                        if count1 == 0 {
-                            return (pid1, peer, rtt);
-                        }
-                    }
-                    SwarmEvent::Behaviour(BehaviourEvent::Ping(ping::Event {
-                        result: Err(e),
-                        ..
-                    })) => {
-                        panic!("Ping failure: {:?}", e)
-                    }
-                    _ => {}
-                }
+                assert_ping_rtt_less_than_50ms(e1);
+                assert_ping_rtt_less_than_50ms(e2);
             }
-        };
-
-        let pid2 = peer2_id;
-        let peer2 = async move {
-            swarm2.dial(rx.next().await.unwrap()).unwrap();
-
-            loop {
-                match swarm2.select_next_some().await {
-                    SwarmEvent::Behaviour(BehaviourEvent::Ping(ping::Event {
-                        peer,
-                        result: Ok(ping::Success::Ping { rtt }),
-                    })) => {
-                        count2 -= 1;
-                        if count2 == 0 {
-                            return (pid2, peer, rtt);
-                        }
-                    }
-                    SwarmEvent::Behaviour(BehaviourEvent::Ping(ping::Event {
-                        result: Err(e),
-                        ..
-                    })) => {
-                        panic!("Ping failure: {:?}", e)
-                    }
-                    _ => {}
-                }
-            }
-        };
-
-        let result = future::select(Box::pin(peer1), Box::pin(peer2));
-        let ((p1, p2, rtt), _) = async_std::task::block_on(result).factor_first();
-        assert!(p1 == peer1_id && p2 == peer2_id || p1 == peer2_id && p2 == peer1_id);
-        assert!(rtt < Duration::from_millis(50));
+        });
     }
 
-    QuickCheck::new().tests(10).quickcheck(prop as fn(_, _))
+    QuickCheck::new().tests(10).quickcheck(prop as fn(_))
 }
 
-/// Tests that the connection is closed upon a configurable
-/// number of consecutive ping failures.
-#[test]
-fn max_failures() {
-    fn prop(max_failures: NonZeroU8, muxer: MuxerChoice) {
-        let cfg = ping::Config::new()
-            .with_interval(Duration::from_millis(10))
-            .with_timeout(Duration::from_millis(0))
-            .with_max_failures(max_failures.into());
+fn assert_ping_rtt_less_than_50ms(e: ping::Event) {
+    let rtt = e.result.expect("a ping success");
 
-        let (peer1_id, trans) = mk_transport(muxer);
-        let mut swarm1 =
-            Swarm::with_async_std_executor(trans, Behaviour::new(cfg.clone()), peer1_id);
-
-        let (peer2_id, trans) = mk_transport(muxer);
-        let mut swarm2 = Swarm::with_async_std_executor(trans, Behaviour::new(cfg), peer2_id);
-
-        let (mut tx, mut rx) = mpsc::channel::<Multiaddr>(1);
-
-        let addr = "/ip4/127.0.0.1/tcp/0".parse().unwrap();
-        swarm1.listen_on(addr).unwrap();
-
-        let peer1 = async move {
-            let mut count1: u8 = 0;
-
-            loop {
-                match swarm1.select_next_some().await {
-                    SwarmEvent::NewListenAddr { address, .. } => tx.send(address).await.unwrap(),
-                    SwarmEvent::Behaviour(BehaviourEvent::Ping(ping::Event {
-                        result: Ok(ping::Success::Ping { .. }),
-                        ..
-                    })) => {
-                        count1 = 0; // there may be an occasional success
-                    }
-                    SwarmEvent::Behaviour(BehaviourEvent::Ping(ping::Event {
-                        result: Err(_),
-                        ..
-                    })) => {
-                        count1 += 1;
-                    }
-                    SwarmEvent::ConnectionClosed { .. } => return count1,
-                    _ => {}
-                }
-            }
-        };
-
-        let peer2 = async move {
-            swarm2.dial(rx.next().await.unwrap()).unwrap();
-
-            let mut count2: u8 = 0;
-
-            loop {
-                match swarm2.select_next_some().await {
-                    SwarmEvent::Behaviour(BehaviourEvent::Ping(ping::Event {
-                        result: Ok(ping::Success::Ping { .. }),
-                        ..
-                    })) => {
-                        count2 = 0; // there may be an occasional success
-                    }
-                    SwarmEvent::Behaviour(BehaviourEvent::Ping(ping::Event {
-                        result: Err(_),
-                        ..
-                    })) => {
-                        count2 += 1;
-                    }
-                    SwarmEvent::ConnectionClosed { .. } => return count2,
-                    _ => {}
-                }
-            }
-        };
-
-        let future = future::join(peer1, peer2);
-        let (count1, count2) = async_std::task::block_on(future);
-        assert_eq!(u8::max(count1, count2), max_failures.get() - 1);
-    }
-
-    QuickCheck::new().tests(10).quickcheck(prop as fn(_, _))
+    assert!(rtt < Duration::from_millis(50))
 }
 
 #[test]
 fn unsupported_doesnt_fail() {
-    let (peer1_id, trans) = mk_transport(MuxerChoice::Mplex);
-    let mut swarm1 = Swarm::with_async_std_executor(trans, keep_alive::Behaviour, peer1_id);
+    let mut swarm1 = Swarm::new_ephemeral(|_| dummy::Behaviour);
+    let mut swarm2 = Swarm::new_ephemeral(|_| ping::Behaviour::new(ping::Config::new()));
 
-    let (peer2_id, trans) = mk_transport(MuxerChoice::Mplex);
-    let mut swarm2 = Swarm::with_async_std_executor(trans, Behaviour::default(), peer2_id);
-
-    let (mut tx, mut rx) = mpsc::channel::<Multiaddr>(1);
-
-    let addr = "/ip4/127.0.0.1/tcp/0".parse().unwrap();
-    swarm1.listen_on(addr).unwrap();
-
-    async_std::task::spawn(async move {
-        loop {
-            if let SwarmEvent::NewListenAddr { address, .. } = swarm1.select_next_some().await {
-                tx.send(address).await.unwrap()
-            }
-        }
-    });
-
-    let result = async_std::task::block_on(async move {
-        swarm2.dial(rx.next().await.unwrap()).unwrap();
+    let result = async_std::task::block_on(async {
+        swarm1.listen().with_memory_addr_external().await;
+        swarm2.connect(&mut swarm1).await;
+        let swarm1_peer_id = *swarm1.local_peer_id();
+        async_std::task::spawn(swarm1.loop_on_next());
 
         loop {
-            match swarm2.select_next_some().await {
-                SwarmEvent::Behaviour(BehaviourEvent::Ping(ping::Event {
+            match swarm2.next_swarm_event().await {
+                SwarmEvent::Behaviour(ping::Event {
                     result: Err(ping::Failure::Unsupported),
                     ..
-                })) => {
-                    swarm2.disconnect_peer_id(peer1_id).unwrap();
+                }) => {
+                    swarm2.disconnect_peer_id(swarm1_peer_id).unwrap();
                 }
                 SwarmEvent::ConnectionClosed { cause: Some(e), .. } => {
                     break Err(e);
@@ -240,47 +92,4 @@ fn unsupported_doesnt_fail() {
     });
 
     result.expect("node with ping should not fail connection due to unsupported protocol");
-}
-
-fn mk_transport(muxer: MuxerChoice) -> (PeerId, transport::Boxed<(PeerId, StreamMuxerBox)>) {
-    let id_keys = identity::Keypair::generate_ed25519();
-    let peer_id = id_keys.public().to_peer_id();
-    (
-        peer_id,
-        tcp::async_io::Transport::new(tcp::Config::default().nodelay(true))
-            .upgrade(upgrade::Version::V1)
-            .authenticate(noise::NoiseAuthenticated::xx(&id_keys).unwrap())
-            .multiplex(match muxer {
-                MuxerChoice::Yamux => upgrade::EitherUpgrade::A(yamux::YamuxConfig::default()),
-                MuxerChoice::Mplex => upgrade::EitherUpgrade::B(mplex::MplexConfig::default()),
-            })
-            .boxed(),
-    )
-}
-
-#[derive(Debug, Copy, Clone)]
-enum MuxerChoice {
-    Mplex,
-    Yamux,
-}
-
-impl Arbitrary for MuxerChoice {
-    fn arbitrary(g: &mut Gen) -> MuxerChoice {
-        *g.choose(&[MuxerChoice::Mplex, MuxerChoice::Yamux]).unwrap()
-    }
-}
-
-#[derive(NetworkBehaviour, Default)]
-struct Behaviour {
-    keep_alive: keep_alive::Behaviour,
-    ping: ping::Behaviour,
-}
-
-impl Behaviour {
-    fn new(config: ping::Config) -> Self {
-        Self {
-            keep_alive: keep_alive::Behaviour,
-            ping: ping::Behaviour::new(config),
-        }
-    }
 }

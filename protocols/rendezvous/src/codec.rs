@@ -19,16 +19,24 @@
 // DEALINGS IN THE SOFTWARE.
 
 use crate::DEFAULT_TTL;
+use async_trait::async_trait;
 use asynchronous_codec::{BytesMut, Decoder, Encoder};
+use asynchronous_codec::{FramedRead, FramedWrite};
+use futures::{AsyncRead, AsyncWrite, SinkExt, StreamExt};
 use libp2p_core::{peer_record, signed_envelope, PeerRecord, SignedEnvelope};
+use libp2p_swarm::StreamProtocol;
+use quick_protobuf_codec::Codec as ProtobufCodec;
 use rand::RngCore;
 use std::convert::{TryFrom, TryInto};
-use std::fmt;
+use std::{fmt, io};
 
 pub type Ttl = u64;
+pub(crate) type Limit = u64;
+
+const MAX_MESSAGE_LEN_BYTES: usize = 1024 * 1024;
 
 #[allow(clippy::large_enum_variant)]
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum Message {
     Register(NewRegistration),
     RegisterResponse(Result<Ttl, ErrorCode>),
@@ -36,7 +44,7 @@ pub enum Message {
     Discover {
         namespace: Option<Namespace>,
         cookie: Option<Cookie>,
-        limit: Option<Ttl>,
+        limit: Option<Limit>,
     },
     DiscoverResponse(Result<(Vec<Registration>, Cookie), ErrorCode>),
 }
@@ -49,15 +57,15 @@ impl Namespace {
     ///
     /// This will panic if the namespace is too long. We accepting panicking in this case because we are enforcing a `static lifetime which means this value can only be a constant in the program and hence we hope the developer checked that it is of an acceptable length.
     pub fn from_static(value: &'static str) -> Self {
-        if value.len() > 255 {
-            panic!("Namespace '{}' is too long!", value)
+        if value.len() > crate::MAX_NAMESPACE {
+            panic!("Namespace '{value}' is too long!")
         }
 
         Namespace(value.to_owned())
     }
 
     pub fn new(value: String) -> Result<Self, NamespaceTooLong> {
-        if value.len() > 255 {
+        if value.len() > crate::MAX_NAMESPACE {
             return Err(NamespaceTooLong);
         }
 
@@ -160,7 +168,7 @@ impl Cookie {
 #[error("The cookie was malformed")]
 pub struct InvalidCookie;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct NewRegistration {
     pub namespace: Namespace,
     pub record: PeerRecord,
@@ -199,180 +207,241 @@ pub enum ErrorCode {
     Unavailable,
 }
 
-pub struct RendezvousCodec {
-    inner: prost_codec::Codec<wire::Message>,
-}
-
-impl Default for RendezvousCodec {
-    fn default() -> Self {
-        Self {
-            inner: prost_codec::Codec::new(1024 * 1024), // 1MB
-        }
-    }
-}
-
-impl Encoder for RendezvousCodec {
-    type Item = Message;
+impl Encoder for Codec {
+    type Item<'a> = Message;
     type Error = Error;
 
-    fn encode(&mut self, item: Self::Item, dst: &mut BytesMut) -> Result<(), Self::Error> {
-        self.inner.encode(wire::Message::from(item), dst)?;
+    fn encode(&mut self, item: Self::Item<'_>, dst: &mut BytesMut) -> Result<(), Self::Error> {
+        let mut pb: ProtobufCodec<proto::Message> = ProtobufCodec::new(MAX_MESSAGE_LEN_BYTES);
+
+        pb.encode(proto::Message::from(item), dst)?;
 
         Ok(())
     }
 }
 
-impl Decoder for RendezvousCodec {
+impl Decoder for Codec {
     type Item = Message;
     type Error = Error;
 
     fn decode(&mut self, src: &mut BytesMut) -> Result<Option<Self::Item>, Self::Error> {
-        let message = match self.inner.decode(src)? {
-            Some(p) => p,
-            None => return Ok(None),
+        let mut pb: ProtobufCodec<proto::Message> = ProtobufCodec::new(MAX_MESSAGE_LEN_BYTES);
+
+        let Some(message) = pb.decode(src)? else {
+            return Ok(None);
         };
 
         Ok(Some(message.try_into()?))
     }
 }
 
+#[derive(Clone, Default)]
+pub struct Codec {}
+
+#[async_trait]
+impl libp2p_request_response::Codec for Codec {
+    type Protocol = StreamProtocol;
+    type Request = Message;
+    type Response = Message;
+
+    async fn read_request<T>(&mut self, _: &Self::Protocol, io: &mut T) -> io::Result<Self::Request>
+    where
+        T: AsyncRead + Unpin + Send,
+    {
+        let message = FramedRead::new(io, self.clone())
+            .next()
+            .await
+            .ok_or(io::ErrorKind::UnexpectedEof)??;
+
+        Ok(message)
+    }
+
+    async fn read_response<T>(
+        &mut self,
+        _: &Self::Protocol,
+        io: &mut T,
+    ) -> io::Result<Self::Response>
+    where
+        T: AsyncRead + Unpin + Send,
+    {
+        let message = FramedRead::new(io, self.clone())
+            .next()
+            .await
+            .ok_or(io::ErrorKind::UnexpectedEof)??;
+
+        Ok(message)
+    }
+
+    async fn write_request<T>(
+        &mut self,
+        _: &Self::Protocol,
+        io: &mut T,
+        req: Self::Request,
+    ) -> io::Result<()>
+    where
+        T: AsyncWrite + Unpin + Send,
+    {
+        FramedWrite::new(io, self.clone()).send(req).await?;
+
+        Ok(())
+    }
+
+    async fn write_response<T>(
+        &mut self,
+        _: &Self::Protocol,
+        io: &mut T,
+        res: Self::Response,
+    ) -> io::Result<()>
+    where
+        T: AsyncWrite + Unpin + Send,
+    {
+        FramedWrite::new(io, self.clone()).send(res).await?;
+
+        Ok(())
+    }
+}
+
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
     #[error(transparent)]
-    Codec(#[from] prost_codec::Error),
+    Codec(#[from] quick_protobuf_codec::Error),
     #[error("Failed to read/write")]
     Io(#[from] std::io::Error),
     #[error("Failed to convert wire message to internal data model")]
     Conversion(#[from] ConversionError),
 }
 
-impl From<Message> for wire::Message {
-    fn from(message: Message) -> Self {
-        use wire::message::*;
+impl From<Error> for std::io::Error {
+    fn from(value: Error) -> Self {
+        match value {
+            Error::Io(e) => e,
+            Error::Codec(e) => io::Error::from(e),
+            Error::Conversion(e) => io::Error::new(io::ErrorKind::InvalidInput, e),
+        }
+    }
+}
 
+impl From<Message> for proto::Message {
+    fn from(message: Message) -> Self {
         match message {
             Message::Register(NewRegistration {
                 namespace,
                 record,
                 ttl,
-            }) => wire::Message {
-                r#type: Some(MessageType::Register.into()),
-                register: Some(Register {
+            }) => proto::Message {
+                type_pb: Some(proto::MessageType::REGISTER),
+                register: Some(proto::Register {
                     ns: Some(namespace.into()),
                     ttl,
-                    signed_peer_record: Some(
-                        record.into_signed_envelope().into_protobuf_encoding(),
-                    ),
+                    signedPeerRecord: Some(record.into_signed_envelope().into_protobuf_encoding()),
                 }),
-                register_response: None,
+                registerResponse: None,
                 unregister: None,
                 discover: None,
-                discover_response: None,
+                discoverResponse: None,
             },
-            Message::RegisterResponse(Ok(ttl)) => wire::Message {
-                r#type: Some(MessageType::RegisterResponse.into()),
-                register_response: Some(RegisterResponse {
-                    status: Some(ResponseStatus::Ok.into()),
-                    status_text: None,
+            Message::RegisterResponse(Ok(ttl)) => proto::Message {
+                type_pb: Some(proto::MessageType::REGISTER_RESPONSE),
+                registerResponse: Some(proto::RegisterResponse {
+                    status: Some(proto::ResponseStatus::OK),
+                    statusText: None,
                     ttl: Some(ttl),
                 }),
                 register: None,
                 discover: None,
                 unregister: None,
-                discover_response: None,
+                discoverResponse: None,
             },
-            Message::RegisterResponse(Err(error)) => wire::Message {
-                r#type: Some(MessageType::RegisterResponse.into()),
-                register_response: Some(RegisterResponse {
-                    status: Some(ResponseStatus::from(error).into()),
-                    status_text: None,
+            Message::RegisterResponse(Err(error)) => proto::Message {
+                type_pb: Some(proto::MessageType::REGISTER_RESPONSE),
+                registerResponse: Some(proto::RegisterResponse {
+                    status: Some(proto::ResponseStatus::from(error)),
+                    statusText: None,
                     ttl: None,
                 }),
                 register: None,
                 discover: None,
                 unregister: None,
-                discover_response: None,
+                discoverResponse: None,
             },
-            Message::Unregister(namespace) => wire::Message {
-                r#type: Some(MessageType::Unregister.into()),
-                unregister: Some(Unregister {
+            Message::Unregister(namespace) => proto::Message {
+                type_pb: Some(proto::MessageType::UNREGISTER),
+                unregister: Some(proto::Unregister {
                     ns: Some(namespace.into()),
                     id: None,
                 }),
                 register: None,
-                register_response: None,
+                registerResponse: None,
                 discover: None,
-                discover_response: None,
+                discoverResponse: None,
             },
             Message::Discover {
                 namespace,
                 cookie,
                 limit,
-            } => wire::Message {
-                r#type: Some(MessageType::Discover.into()),
-                discover: Some(Discover {
+            } => proto::Message {
+                type_pb: Some(proto::MessageType::DISCOVER),
+                discover: Some(proto::Discover {
                     ns: namespace.map(|ns| ns.into()),
                     cookie: cookie.map(|cookie| cookie.into_wire_encoding()),
                     limit,
                 }),
                 register: None,
-                register_response: None,
+                registerResponse: None,
                 unregister: None,
-                discover_response: None,
+                discoverResponse: None,
             },
-            Message::DiscoverResponse(Ok((registrations, cookie))) => wire::Message {
-                r#type: Some(MessageType::DiscoverResponse.into()),
-                discover_response: Some(DiscoverResponse {
+            Message::DiscoverResponse(Ok((registrations, cookie))) => proto::Message {
+                type_pb: Some(proto::MessageType::DISCOVER_RESPONSE),
+                discoverResponse: Some(proto::DiscoverResponse {
                     registrations: registrations
                         .into_iter()
-                        .map(|reggo| Register {
+                        .map(|reggo| proto::Register {
                             ns: Some(reggo.namespace.into()),
                             ttl: Some(reggo.ttl),
-                            signed_peer_record: Some(
+                            signedPeerRecord: Some(
                                 reggo.record.into_signed_envelope().into_protobuf_encoding(),
                             ),
                         })
                         .collect(),
-                    status: Some(ResponseStatus::Ok.into()),
-                    status_text: None,
+                    status: Some(proto::ResponseStatus::OK),
+                    statusText: None,
                     cookie: Some(cookie.into_wire_encoding()),
                 }),
                 register: None,
                 discover: None,
                 unregister: None,
-                register_response: None,
+                registerResponse: None,
             },
-            Message::DiscoverResponse(Err(error)) => wire::Message {
-                r#type: Some(MessageType::DiscoverResponse.into()),
-                discover_response: Some(DiscoverResponse {
+            Message::DiscoverResponse(Err(error)) => proto::Message {
+                type_pb: Some(proto::MessageType::DISCOVER_RESPONSE),
+                discoverResponse: Some(proto::DiscoverResponse {
                     registrations: Vec::new(),
-                    status: Some(ResponseStatus::from(error).into()),
-                    status_text: None,
+                    status: Some(proto::ResponseStatus::from(error)),
+                    statusText: None,
                     cookie: None,
                 }),
                 register: None,
                 discover: None,
                 unregister: None,
-                register_response: None,
+                registerResponse: None,
             },
         }
     }
 }
 
-impl TryFrom<wire::Message> for Message {
+impl TryFrom<proto::Message> for Message {
     type Error = ConversionError;
 
-    fn try_from(message: wire::Message) -> Result<Self, Self::Error> {
-        use wire::message::*;
-
+    fn try_from(message: proto::Message) -> Result<Self, Self::Error> {
         let message = match message {
-            wire::Message {
-                r#type: Some(0),
+            proto::Message {
+                type_pb: Some(proto::MessageType::REGISTER),
                 register:
-                    Some(Register {
+                    Some(proto::Register {
                         ns,
                         ttl,
-                        signed_peer_record: Some(signed_peer_record),
+                        signedPeerRecord: Some(signed_peer_record),
                     }),
                 ..
             } => Message::Register(NewRegistration {
@@ -385,31 +454,31 @@ impl TryFrom<wire::Message> for Message {
                     &signed_peer_record,
                 )?)?,
             }),
-            wire::Message {
-                r#type: Some(1),
-                register_response:
-                    Some(RegisterResponse {
-                        status: Some(0),
+            proto::Message {
+                type_pb: Some(proto::MessageType::REGISTER_RESPONSE),
+                registerResponse:
+                    Some(proto::RegisterResponse {
+                        status: Some(proto::ResponseStatus::OK),
                         ttl,
                         ..
                     }),
                 ..
             } => Message::RegisterResponse(Ok(ttl.ok_or(ConversionError::MissingTtl)?)),
-            wire::Message {
-                r#type: Some(3),
-                discover: Some(Discover { ns, limit, cookie }),
+            proto::Message {
+                type_pb: Some(proto::MessageType::DISCOVER),
+                discover: Some(proto::Discover { ns, limit, cookie }),
                 ..
             } => Message::Discover {
                 namespace: ns.map(Namespace::new).transpose()?,
                 cookie: cookie.map(Cookie::from_wire_encoding).transpose()?,
                 limit,
             },
-            wire::Message {
-                r#type: Some(4),
-                discover_response:
-                    Some(DiscoverResponse {
+            proto::Message {
+                type_pb: Some(proto::MessageType::DISCOVER_RESPONSE),
+                discoverResponse:
+                    Some(proto::DiscoverResponse {
                         registrations,
-                        status: Some(0),
+                        status: Some(proto::ResponseStatus::OK),
                         cookie: Some(cookie),
                         ..
                     }),
@@ -427,7 +496,7 @@ impl TryFrom<wire::Message> for Message {
                             record: PeerRecord::from_signed_envelope(
                                 SignedEnvelope::from_protobuf_encoding(
                                     &reggo
-                                        .signed_peer_record
+                                        .signedPeerRecord
                                         .ok_or(ConversionError::MissingSignedPeerRecord)?,
                                 )?,
                             )?,
@@ -439,43 +508,33 @@ impl TryFrom<wire::Message> for Message {
 
                 Message::DiscoverResponse(Ok((registrations, cookie)))
             }
-            wire::Message {
-                r#type: Some(1),
-                register_response:
-                    Some(RegisterResponse {
-                        status: Some(error_code),
+            proto::Message {
+                type_pb: Some(proto::MessageType::REGISTER_RESPONSE),
+                registerResponse:
+                    Some(proto::RegisterResponse {
+                        status: Some(response_status),
                         ..
                     }),
                 ..
-            } => {
-                let error_code = wire::message::ResponseStatus::from_i32(error_code)
-                    .ok_or(ConversionError::BadStatusCode)?
-                    .try_into()?;
-                Message::RegisterResponse(Err(error_code))
-            }
-            wire::Message {
-                r#type: Some(2),
-                unregister: Some(Unregister { ns, .. }),
+            } => Message::RegisterResponse(Err(response_status.try_into()?)),
+            proto::Message {
+                type_pb: Some(proto::MessageType::UNREGISTER),
+                unregister: Some(proto::Unregister { ns, .. }),
                 ..
             } => Message::Unregister(
                 ns.map(Namespace::new)
                     .transpose()?
                     .ok_or(ConversionError::MissingNamespace)?,
             ),
-            wire::Message {
-                r#type: Some(4),
-                discover_response:
-                    Some(DiscoverResponse {
-                        status: Some(error_code),
+            proto::Message {
+                type_pb: Some(proto::MessageType::DISCOVER_RESPONSE),
+                discoverResponse:
+                    Some(proto::DiscoverResponse {
+                        status: Some(response_status),
                         ..
                     }),
                 ..
-            } => {
-                let error = wire::message::ResponseStatus::from_i32(error_code)
-                    .ok_or(ConversionError::BadStatusCode)?
-                    .try_into()?;
-                Message::DiscoverResponse(Err(error))
-            }
+            } => Message::DiscoverResponse(Err(response_status.try_into()?)),
             _ => return Err(ConversionError::InconsistentWireMessage),
         };
 
@@ -527,39 +586,39 @@ impl ConversionError {
     }
 }
 
-impl TryFrom<wire::message::ResponseStatus> for ErrorCode {
+impl TryFrom<proto::ResponseStatus> for ErrorCode {
     type Error = UnmappableStatusCode;
 
-    fn try_from(value: wire::message::ResponseStatus) -> Result<Self, Self::Error> {
-        use wire::message::ResponseStatus::*;
+    fn try_from(value: proto::ResponseStatus) -> Result<Self, Self::Error> {
+        use proto::ResponseStatus::*;
 
         let code = match value {
-            Ok => return Err(UnmappableStatusCode(value)),
-            EInvalidNamespace => ErrorCode::InvalidNamespace,
-            EInvalidSignedPeerRecord => ErrorCode::InvalidSignedPeerRecord,
-            EInvalidTtl => ErrorCode::InvalidTtl,
-            EInvalidCookie => ErrorCode::InvalidCookie,
-            ENotAuthorized => ErrorCode::NotAuthorized,
-            EInternalError => ErrorCode::InternalError,
-            EUnavailable => ErrorCode::Unavailable,
+            OK => return Err(UnmappableStatusCode(value)),
+            E_INVALID_NAMESPACE => ErrorCode::InvalidNamespace,
+            E_INVALID_SIGNED_PEER_RECORD => ErrorCode::InvalidSignedPeerRecord,
+            E_INVALID_TTL => ErrorCode::InvalidTtl,
+            E_INVALID_COOKIE => ErrorCode::InvalidCookie,
+            E_NOT_AUTHORIZED => ErrorCode::NotAuthorized,
+            E_INTERNAL_ERROR => ErrorCode::InternalError,
+            E_UNAVAILABLE => ErrorCode::Unavailable,
         };
 
-        Result::Ok(code)
+        Ok(code)
     }
 }
 
-impl From<ErrorCode> for wire::message::ResponseStatus {
+impl From<ErrorCode> for proto::ResponseStatus {
     fn from(error_code: ErrorCode) -> Self {
-        use wire::message::ResponseStatus::*;
+        use proto::ResponseStatus::*;
 
         match error_code {
-            ErrorCode::InvalidNamespace => EInvalidNamespace,
-            ErrorCode::InvalidSignedPeerRecord => EInvalidSignedPeerRecord,
-            ErrorCode::InvalidTtl => EInvalidTtl,
-            ErrorCode::InvalidCookie => EInvalidCookie,
-            ErrorCode::NotAuthorized => ENotAuthorized,
-            ErrorCode::InternalError => EInternalError,
-            ErrorCode::Unavailable => EUnavailable,
+            ErrorCode::InvalidNamespace => E_INVALID_NAMESPACE,
+            ErrorCode::InvalidSignedPeerRecord => E_INVALID_SIGNED_PEER_RECORD,
+            ErrorCode::InvalidTtl => E_INVALID_TTL,
+            ErrorCode::InvalidCookie => E_INVALID_COOKIE,
+            ErrorCode::NotAuthorized => E_NOT_AUTHORIZED,
+            ErrorCode::InternalError => E_INTERNAL_ERROR,
+            ErrorCode::Unavailable => E_UNAVAILABLE,
         }
     }
 }
@@ -572,16 +631,18 @@ impl From<UnmappableStatusCode> for ConversionError {
 
 #[derive(Debug, thiserror::Error)]
 #[error("The response code ({0:?}) cannot be mapped to our ErrorCode enum")]
-pub struct UnmappableStatusCode(wire::message::ResponseStatus);
+pub struct UnmappableStatusCode(proto::ResponseStatus);
 
-#[allow(clippy::derive_partial_eq_without_eq)]
-mod wire {
-    include!(concat!(env!("OUT_DIR"), "/rendezvous.pb.rs"));
+mod proto {
+    #![allow(unreachable_pub)]
+    include!("generated/mod.rs");
+    pub(crate) use self::rendezvous::pb::{mod_Message::*, Message};
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::Namespace;
 
     #[test]
     fn cookie_wire_encoding_roundtrip() {

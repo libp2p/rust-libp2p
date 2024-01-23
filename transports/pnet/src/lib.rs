@@ -29,7 +29,6 @@
 mod crypt_writer;
 use crypt_writer::CryptWriter;
 use futures::prelude::*;
-use log::trace;
 use pin_project::pin_project;
 use rand::RngCore;
 use salsa20::{
@@ -102,7 +101,7 @@ fn to_hex(bytes: &[u8]) -> String {
     let mut hex = String::with_capacity(bytes.len() * 2);
 
     for byte in bytes {
-        write!(hex, "{:02x}", byte).expect("Can't fail on writing to string");
+        write!(hex, "{byte:02x}").expect("Can't fail on writing to string");
     }
 
     hex
@@ -159,6 +158,7 @@ impl fmt::Display for Fingerprint {
 
 /// Error when parsing a PreSharedKey
 #[derive(Clone, Debug, PartialEq, Eq)]
+#[allow(clippy::enum_variant_names)] // Maybe fix at some stage, not important now.
 pub enum KeyParseError {
     /// file does not have the expected structure
     InvalidKeyFile,
@@ -174,7 +174,7 @@ pub enum KeyParseError {
 
 impl fmt::Display for KeyParseError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{:?}", self)
+        write!(f, "{self:?}")
     }
 }
 
@@ -209,7 +209,7 @@ impl PnetConfig {
     where
         TSocket: AsyncRead + AsyncWrite + Send + Unpin + 'static,
     {
-        trace!("exchanging nonces");
+        tracing::trace!("exchanging nonces");
         let mut local_nonce = [0u8; NONCE_SIZE];
         let mut remote_nonce = [0u8; NONCE_SIZE];
         rand::thread_rng().fill_bytes(&mut local_nonce);
@@ -217,11 +217,12 @@ impl PnetConfig {
             .write_all(&local_nonce)
             .await
             .map_err(PnetError::HandshakeError)?;
+        socket.flush().await?;
         socket
             .read_exact(&mut remote_nonce)
             .await
             .map_err(PnetError::HandshakeError)?;
-        trace!("setting up ciphers");
+        tracing::trace!("setting up ciphers");
         let write_cipher = XSalsa20::new(&self.key.0.into(), &local_nonce.into());
         let read_cipher = XSalsa20::new(&self.key.0.into(), &remote_nonce.into());
         Ok(PnetOutput::new(socket, write_cipher, read_cipher))
@@ -255,9 +256,9 @@ impl<S: AsyncRead + AsyncWrite> AsyncRead for PnetOutput<S> {
         let this = self.project();
         let result = this.inner.get_pin_mut().poll_read(cx, buf);
         if let Poll::Ready(Ok(size)) = &result {
-            trace!("read {} bytes", size);
+            tracing::trace!(bytes=%size, "read bytes");
             this.read_cipher.apply_keystream(&mut buf[..*size]);
-            trace!("decrypted {} bytes", size);
+            tracing::trace!(bytes=%size, "decrypted bytes");
         }
         result
     }
@@ -310,8 +311,8 @@ impl fmt::Display for PnetError {
     #[inline]
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> Result<(), fmt::Error> {
         match self {
-            PnetError::HandshakeError(e) => write!(f, "Handshake error: {}", e),
-            PnetError::IoError(e) => write!(f, "I/O error: {}", e),
+            PnetError::HandshakeError(e) => write!(f, "Handshake error: {e}"),
+            PnetError::IoError(e) => write!(f, "I/O error: {e}"),
         }
     }
 }

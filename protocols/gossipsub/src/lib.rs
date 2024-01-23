@@ -48,10 +48,11 @@
 //! encoded) by setting the `hash_topics` configuration parameter to true.
 //!
 //! - **Sequence Numbers** - A message on the gossipsub network is identified by the source
-//! [`libp2p_core::PeerId`] and a nonce (sequence number) of the message. The sequence numbers in
+//! [`PeerId`](libp2p_identity::PeerId) and a nonce (sequence number) of the message. The sequence numbers in
 //! this implementation are sent as raw bytes across the wire. They are 64-bit big-endian unsigned
-//! integers. They are chosen at random in this implementation of gossipsub, but are sequential in
-//! the current go implementation.
+//! integers. When messages are signed, they are monotonically increasing integers starting from a
+//! random value and wrapping around u64::MAX. When messages are unsigned, they are chosen at random.
+//! NOTE: These numbers are sequential in the current go implementation.
 //!
 //! # Peer Discovery
 //!
@@ -67,111 +68,67 @@
 //!
 //! # Using Gossipsub
 //!
-//! ## GossipsubConfig
+//! ## Gossipsub Config
 //!
-//! The [`GossipsubConfig`] struct specifies various network performance/tuning configuration
+//! The [`Config`] struct specifies various network performance/tuning configuration
 //! parameters. Specifically it specifies:
 //!
-//! [`GossipsubConfig`]: struct.Config.html
+//! [`Config`]: struct.Config.html
 //!
 //! This struct implements the [`Default`] trait and can be initialised via
-//! [`GossipsubConfig::default()`].
+//! [`Config::default()`].
 //!
 //!
-//! ## Gossipsub
+//! ## Behaviour
 //!
-//! The [`Gossipsub`] struct implements the [`libp2p_swarm::NetworkBehaviour`] trait allowing it to
+//! The [`Behaviour`] struct implements the [`libp2p_swarm::NetworkBehaviour`] trait allowing it to
 //! act as the routing behaviour in a [`libp2p_swarm::Swarm`]. This struct requires an instance of
-//! [`libp2p_core::PeerId`] and [`GossipsubConfig`].
+//! [`PeerId`](libp2p_identity::PeerId) and [`Config`].
 //!
-//! [`Gossipsub`]: struct.Gossipsub.html
+//! [`Behaviour`]: struct.Behaviour.html
 
 //! ## Example
 //!
-//! An example of initialising a gossipsub compatible swarm:
-//!
-//! ```
-//! use libp2p_gossipsub::GossipsubEvent;
-//! use libp2p_core::{identity::Keypair,transport::{Transport, MemoryTransport}, Multiaddr};
-//! use libp2p_gossipsub::MessageAuthenticity;
-//! let local_key = Keypair::generate_ed25519();
-//! let local_peer_id = libp2p_core::PeerId::from(local_key.public());
-//!
-//! // Set up an encrypted TCP Transport over the Mplex
-//! // This is test transport (memory).
-//! let transport = MemoryTransport::default()
-//!            .upgrade(libp2p_core::upgrade::Version::V1)
-//!            .authenticate(libp2p::noise::NoiseAuthenticated::xx(&local_key).unwrap())
-//!            .multiplex(libp2p::mplex::MplexConfig::new())
-//!            .boxed();
-//!
-//! // Create a Gossipsub topic
-//! let topic = libp2p_gossipsub::IdentTopic::new("example");
-//!
-//! // Set the message authenticity - How we expect to publish messages
-//! // Here we expect the publisher to sign the message with their key.
-//! let message_authenticity = MessageAuthenticity::Signed(local_key);
-//!
-//! // Create a Swarm to manage peers and events
-//! let mut swarm = {
-//!     // set default parameters for gossipsub
-//!     let gossipsub_config = libp2p_gossipsub::GossipsubConfig::default();
-//!     // build a gossipsub network behaviour
-//!     let mut gossipsub: libp2p_gossipsub::Gossipsub =
-//!         libp2p_gossipsub::Gossipsub::new(message_authenticity, gossipsub_config).unwrap();
-//!     // subscribe to the topic
-//!     gossipsub.subscribe(&topic);
-//!     // create the swarm (use an executor in a real example)
-//!     libp2p_swarm::Swarm::without_executor(
-//!         transport,
-//!         gossipsub,
-//!         local_peer_id,
-//!     )
-//! };
-//!
-//! // Listen on a memory transport.
-//! let memory: Multiaddr = libp2p_core::multiaddr::Protocol::Memory(10).into();
-//! let addr = swarm.listen_on(memory).unwrap();
-//! println!("Listening on {:?}", addr);
-//! ```
+//! For an example on how to use gossipsub, see the [chat-example](https://github.com/libp2p/rust-libp2p/tree/master/examples/chat).
 
 #![cfg_attr(docsrs, feature(doc_cfg, doc_auto_cfg))]
-
-pub mod error;
-pub mod protocol;
 
 mod backoff;
 mod behaviour;
 mod config;
+mod error;
 mod gossip_promises;
 mod handler;
 mod mcache;
-pub mod metrics;
+mod metrics;
 mod peer_score;
-pub mod subscription_filter;
-pub mod time_cache;
+mod protocol;
+mod rpc_proto;
+mod subscription_filter;
+mod time_cache;
 mod topic;
 mod transform;
 mod types;
 
-#[cfg(test)]
-#[macro_use]
-extern crate derive_builder;
-
-mod rpc_proto;
-
-pub use self::behaviour::{Gossipsub, GossipsubEvent, MessageAuthenticity};
-pub use self::transform::{DataTransform, IdentityTransform};
-
-pub use self::config::{GossipsubConfig, GossipsubConfigBuilder, GossipsubVersion, ValidationMode};
+pub use self::behaviour::{Behaviour, Event, MessageAuthenticity};
+pub use self::config::{Config, ConfigBuilder, ValidationMode, Version};
+pub use self::error::{ConfigBuilderError, PublishError, SubscriptionError, ValidationError};
+pub use self::metrics::Config as MetricsConfig;
 pub use self::peer_score::{
     score_parameter_decay, score_parameter_decay_with_base, PeerScoreParams, PeerScoreThresholds,
     TopicScoreParams,
 };
-pub use self::topic::{Hasher, Topic, TopicHash};
-pub use self::types::{
-    FastMessageId, GossipsubMessage, GossipsubRpc, MessageAcceptance, MessageId,
-    RawGossipsubMessage,
+pub use self::subscription_filter::{
+    AllowAllSubscriptionFilter, CallbackSubscriptionFilter, CombinedSubscriptionFilters,
+    MaxCountSubscriptionFilter, RegexSubscriptionFilter, TopicSubscriptionFilter,
+    WhitelistSubscriptionFilter,
 };
+pub use self::topic::{Hasher, Topic, TopicHash};
+pub use self::transform::{DataTransform, IdentityTransform};
+pub use self::types::{Message, MessageAcceptance, MessageId, RawMessage};
+
+#[deprecated(note = "Will be removed from the public API.")]
+pub type Rpc = self::types::Rpc;
+
 pub type IdentTopic = Topic<self::topic::IdentityHash>;
 pub type Sha256Topic = Topic<self::topic::Sha256Hash>;

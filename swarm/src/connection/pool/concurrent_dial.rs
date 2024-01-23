@@ -18,45 +18,38 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::{
-    transport::{Transport, TransportError},
-    Multiaddr,
-};
+use crate::{transport::TransportError, Multiaddr};
 use futures::{
     future::{BoxFuture, Future},
     ready,
     stream::{FuturesUnordered, StreamExt},
 };
+use libp2p_core::muxing::StreamMuxerBox;
+use libp2p_identity::PeerId;
 use std::{
     num::NonZeroU8,
     pin::Pin,
     task::{Context, Poll},
 };
 
-type Dial<TTrans> = BoxFuture<
+type Dial = BoxFuture<
     'static,
     (
         Multiaddr,
-        Result<<TTrans as Transport>::Output, TransportError<<TTrans as Transport>::Error>>,
+        Result<(PeerId, StreamMuxerBox), TransportError<std::io::Error>>,
     ),
 >;
 
-pub struct ConcurrentDial<TTrans: Transport> {
-    dials: FuturesUnordered<Dial<TTrans>>,
-    pending_dials: Box<dyn Iterator<Item = Dial<TTrans>> + Send>,
-    errors: Vec<(Multiaddr, TransportError<TTrans::Error>)>,
+pub(crate) struct ConcurrentDial {
+    dials: FuturesUnordered<Dial>,
+    pending_dials: Box<dyn Iterator<Item = Dial> + Send>,
+    errors: Vec<(Multiaddr, TransportError<std::io::Error>)>,
 }
 
-impl<TTrans: Transport> Unpin for ConcurrentDial<TTrans> {}
+impl Unpin for ConcurrentDial {}
 
-impl<TTrans> ConcurrentDial<TTrans>
-where
-    TTrans: Transport + Send + 'static,
-    TTrans::Output: Send,
-    TTrans::Error: Send,
-    TTrans::Dial: Send + 'static,
-{
-    pub(crate) fn new(pending_dials: Vec<Dial<TTrans>>, concurrency_factor: NonZeroU8) -> Self {
+impl ConcurrentDial {
+    pub(crate) fn new(pending_dials: Vec<Dial>, concurrency_factor: NonZeroU8) -> Self {
         let mut pending_dials = pending_dials.into_iter();
 
         let dials = FuturesUnordered::new();
@@ -75,20 +68,17 @@ where
     }
 }
 
-impl<TTrans> Future for ConcurrentDial<TTrans>
-where
-    TTrans: Transport,
-{
+impl Future for ConcurrentDial {
     type Output = Result<
         // Either one dial succeeded, returning the negotiated [`PeerId`], the address, the
         // muxer and the addresses and errors of the dials that failed before.
         (
             Multiaddr,
-            TTrans::Output,
-            Vec<(Multiaddr, TransportError<TTrans::Error>)>,
+            (PeerId, StreamMuxerBox),
+            Vec<(Multiaddr, TransportError<std::io::Error>)>,
         ),
         // Or all dials failed, thus returning the address and error for each dial.
-        Vec<(Multiaddr, TransportError<TTrans::Error>)>,
+        Vec<(Multiaddr, TransportError<std::io::Error>)>,
     >;
 
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Self::Output> {

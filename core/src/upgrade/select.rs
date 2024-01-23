@@ -18,10 +18,14 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::{
-    either::{EitherError, EitherFuture2, EitherName, EitherOutput},
-    upgrade::{InboundUpgrade, OutboundUpgrade, UpgradeInfo},
+use crate::either::EitherFuture;
+use crate::upgrade::{
+    InboundConnectionUpgrade, InboundUpgrade, OutboundConnectionUpgrade, OutboundUpgrade,
+    UpgradeInfo,
 };
+use either::Either;
+use futures::future;
+use std::iter::{Chain, Map};
 
 /// Upgrade that combines two upgrades into one. Supports all the protocols supported by either
 /// sub-upgrade.
@@ -44,17 +48,25 @@ where
     A: UpgradeInfo,
     B: UpgradeInfo,
 {
-    type Info = EitherName<A::Info, B::Info>;
-    type InfoIter = InfoIterChain<
-        <A::InfoIter as IntoIterator>::IntoIter,
-        <B::InfoIter as IntoIterator>::IntoIter,
+    type Info = Either<A::Info, B::Info>;
+    type InfoIter = Chain<
+        Map<<A::InfoIter as IntoIterator>::IntoIter, fn(A::Info) -> Self::Info>,
+        Map<<B::InfoIter as IntoIterator>::IntoIter, fn(B::Info) -> Self::Info>,
     >;
 
     fn protocol_info(&self) -> Self::InfoIter {
-        InfoIterChain(
-            self.0.protocol_info().into_iter(),
-            self.1.protocol_info().into_iter(),
-        )
+        let a = self
+            .0
+            .protocol_info()
+            .into_iter()
+            .map(Either::Left as fn(A::Info) -> _);
+        let b = self
+            .1
+            .protocol_info()
+            .into_iter()
+            .map(Either::Right as fn(B::Info) -> _);
+
+        a.chain(b)
     }
 }
 
@@ -63,14 +75,31 @@ where
     A: InboundUpgrade<C, Output = TA, Error = EA>,
     B: InboundUpgrade<C, Output = TB, Error = EB>,
 {
-    type Output = EitherOutput<TA, TB>;
-    type Error = EitherError<EA, EB>;
-    type Future = EitherFuture2<A::Future, B::Future>;
+    type Output = future::Either<TA, TB>;
+    type Error = Either<EA, EB>;
+    type Future = EitherFuture<A::Future, B::Future>;
 
     fn upgrade_inbound(self, sock: C, info: Self::Info) -> Self::Future {
         match info {
-            EitherName::A(info) => EitherFuture2::A(self.0.upgrade_inbound(sock, info)),
-            EitherName::B(info) => EitherFuture2::B(self.1.upgrade_inbound(sock, info)),
+            Either::Left(info) => EitherFuture::First(self.0.upgrade_inbound(sock, info)),
+            Either::Right(info) => EitherFuture::Second(self.1.upgrade_inbound(sock, info)),
+        }
+    }
+}
+
+impl<C, A, B, TA, TB, EA, EB> InboundConnectionUpgrade<C> for SelectUpgrade<A, B>
+where
+    A: InboundConnectionUpgrade<C, Output = TA, Error = EA>,
+    B: InboundConnectionUpgrade<C, Output = TB, Error = EB>,
+{
+    type Output = future::Either<TA, TB>;
+    type Error = Either<EA, EB>;
+    type Future = EitherFuture<A::Future, B::Future>;
+
+    fn upgrade_inbound(self, sock: C, info: Self::Info) -> Self::Future {
+        match info {
+            Either::Left(info) => EitherFuture::First(self.0.upgrade_inbound(sock, info)),
+            Either::Right(info) => EitherFuture::Second(self.1.upgrade_inbound(sock, info)),
         }
     }
 }
@@ -80,43 +109,31 @@ where
     A: OutboundUpgrade<C, Output = TA, Error = EA>,
     B: OutboundUpgrade<C, Output = TB, Error = EB>,
 {
-    type Output = EitherOutput<TA, TB>;
-    type Error = EitherError<EA, EB>;
-    type Future = EitherFuture2<A::Future, B::Future>;
+    type Output = future::Either<TA, TB>;
+    type Error = Either<EA, EB>;
+    type Future = EitherFuture<A::Future, B::Future>;
 
     fn upgrade_outbound(self, sock: C, info: Self::Info) -> Self::Future {
         match info {
-            EitherName::A(info) => EitherFuture2::A(self.0.upgrade_outbound(sock, info)),
-            EitherName::B(info) => EitherFuture2::B(self.1.upgrade_outbound(sock, info)),
+            Either::Left(info) => EitherFuture::First(self.0.upgrade_outbound(sock, info)),
+            Either::Right(info) => EitherFuture::Second(self.1.upgrade_outbound(sock, info)),
         }
     }
 }
 
-/// Iterator that combines the protocol names of twp upgrades.
-#[derive(Debug, Clone)]
-pub struct InfoIterChain<A, B>(A, B);
-
-impl<A, B> Iterator for InfoIterChain<A, B>
+impl<C, A, B, TA, TB, EA, EB> OutboundConnectionUpgrade<C> for SelectUpgrade<A, B>
 where
-    A: Iterator,
-    B: Iterator,
+    A: OutboundConnectionUpgrade<C, Output = TA, Error = EA>,
+    B: OutboundConnectionUpgrade<C, Output = TB, Error = EB>,
 {
-    type Item = EitherName<A::Item, B::Item>;
+    type Output = future::Either<TA, TB>;
+    type Error = Either<EA, EB>;
+    type Future = EitherFuture<A::Future, B::Future>;
 
-    fn next(&mut self) -> Option<Self::Item> {
-        if let Some(info) = self.0.next() {
-            return Some(EitherName::A(info));
+    fn upgrade_outbound(self, sock: C, info: Self::Info) -> Self::Future {
+        match info {
+            Either::Left(info) => EitherFuture::First(self.0.upgrade_outbound(sock, info)),
+            Either::Right(info) => EitherFuture::Second(self.1.upgrade_outbound(sock, info)),
         }
-        if let Some(info) = self.1.next() {
-            return Some(EitherName::B(info));
-        }
-        None
-    }
-
-    fn size_hint(&self) -> (usize, Option<usize>) {
-        let (min1, max1) = self.0.size_hint();
-        let (min2, max2) = self.1.size_hint();
-        let max = max1.and_then(move |m1| max2.and_then(move |m2| m1.checked_add(m2)));
-        (min1.saturating_add(min2), max)
     }
 }

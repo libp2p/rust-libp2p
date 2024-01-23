@@ -1,0 +1,18 @@
+[package]
+name = "hole-punching-tests"
+version = "0.1.0"
+edition = "2021"
+publish = false
+license = "MIT"
+
+[dependencies]
+anyhow = "1"
+env_logger = "0.10.2"
+futures = "0.3.30"
+libp2p = { path = "../libp2p", features = ["tokio", "dcutr", "identify", "macros", "noise", "ping", "relay", "tcp", "yamux", "quic"] }
+tracing = "0.1.37"
+redis = { version = "0.23.0", default-features = false, features = ["tokio-comp"] }
+tokio = { version = "1.35.1", features = ["full"] }
+serde = { version = "1.0.193", features = ["derive"] }
+serde_json = "1.0.111"
+either = "1.9.0"

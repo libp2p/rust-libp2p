@@ -1,0 +1,30 @@
+# This workflow _produces_ a cache that is used to speed up pull request builds.
+#
+# Our CI runs a job per crate, meaning all jobs share compilation artifacts but never the full cache.
+# Thus, we make a single cache here that is used by all jobs and the jobs only read from this cache.
+
+name: Cache factory
+
+on:
+  push:
+    branches:
+      - master # Caches are only created on master branch.
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  make_stable_rust_cache:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@23bce251a8cd2ffc3c1075eaa2367cf899916d84 # v2.7.3
+        with:
+          shared-key: stable-cache
+
+      - name: Compile workspace with stable Rust
+        run: cargo test --all-features --all-targets --workspace --no-run

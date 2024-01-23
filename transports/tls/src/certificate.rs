@@ -22,11 +22,12 @@
 //!
 //! This module handles generation, signing, and verification of certificates.
 
-use libp2p_core::{identity, PeerId};
+use libp2p_identity as identity;
+use libp2p_identity::PeerId;
 use x509_parser::{prelude::*, signature_algorithm::SignatureAlgorithm};
 
 /// The libp2p Public Key Extension is a X.509 extension
-/// with the Object Identier 1.3.6.1.4.1.53594.1.1,
+/// with the Object Identifier 1.3.6.1.4.1.53594.1.1,
 /// allocated by IANA to the libp2p project at Protocol Labs.
 const P2P_EXT_OID: [u64; 9] = [1, 3, 6, 1, 4, 1, 53594, 1, 1];
 
@@ -158,7 +159,7 @@ fn parse_unverified(der_input: &[u8]) -> Result<P2pCertificate, webpki::Error> {
             //    required KeyType Type = 1;
             //    required bytes Data = 2;
             // }
-            let public_key = identity::PublicKey::from_protobuf_encoding(&public_key)
+            let public_key = identity::PublicKey::try_decode_protobuf(&public_key)
                 .map_err(|_| webpki::Error::UnknownIssuer)?;
             let ext = P2pExtension {
                 public_key,
@@ -214,7 +215,7 @@ fn make_libp2p_extension(
     //    signature OCTET STRING
     // }
     let extension_content = {
-        let serialized_pubkey = identity_keypair.public().to_protobuf_encoding();
+        let serialized_pubkey = identity_keypair.public().encode_protobuf();
         yasna::encode_der(&(serialized_pubkey, signature))
     };
 
@@ -285,7 +286,7 @@ impl P2pCertificate<'_> {
             // In particular, MD5 and SHA1 MUST NOT be used.
             RSA_PKCS1_SHA1 => return Err(webpki::Error::UnsupportedSignatureAlgorithm),
             ECDSA_SHA1_Legacy => return Err(webpki::Error::UnsupportedSignatureAlgorithm),
-            Unknown(_) => return Err(webpki::Error::UnsupportedSignatureAlgorithm),
+            _ => return Err(webpki::Error::UnsupportedSignatureAlgorithm),
         };
         let spki = &self.certificate.tbs_certificate.subject_pki;
         let key = signature::UnparsedPublicKey::new(
@@ -373,7 +374,7 @@ impl P2pCertificate<'_> {
             }
             if signature_algorithm.algorithm == OID_PKCS1_RSASSAPSS {
                 // According to https://datatracker.ietf.org/doc/html/rfc4055#section-3.1:
-                // Inside of params there shuld be a sequence of:
+                // Inside of params there should be a sequence of:
                 // - Hash Algorithm
                 // - Mask Algorithm
                 // - Salt Length
@@ -519,7 +520,7 @@ mod tests {
 
         let error = parse(&certificate).unwrap_err();
 
-        assert_eq!(format!("{}", error), "UnknownIssuer");
+        assert_eq!(format!("{error}"), "UnknownIssuer");
     }
 
     #[test]

@@ -18,23 +18,29 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.use futures::StreamExt;
 
-use futures::StreamExt;
-use libp2p::{
-    identity,
-    mdns::{async_io::Behaviour, Config, Event},
-    swarm::{Swarm, SwarmEvent},
-    PeerId,
-};
-use std::error::Error;
+use futures::future::Either;
+use libp2p_mdns::Event;
+use libp2p_mdns::{async_io::Behaviour, Config};
+use libp2p_swarm::{Swarm, SwarmEvent};
+use libp2p_swarm_test::SwarmExt as _;
 use std::time::Duration;
+use tracing_subscriber::EnvFilter;
 
 #[async_std::test]
-async fn test_discovery_async_std_ipv4() -> Result<(), Box<dyn Error>> {
+async fn test_discovery_async_std_ipv4() {
+    let _ = tracing_subscriber::fmt()
+        .with_env_filter(EnvFilter::from_default_env())
+        .try_init();
+
     run_discovery_test(Config::default()).await
 }
 
 #[async_std::test]
-async fn test_discovery_async_std_ipv6() -> Result<(), Box<dyn Error>> {
+async fn test_discovery_async_std_ipv6() {
+    let _ = tracing_subscriber::fmt()
+        .with_env_filter(EnvFilter::from_default_env())
+        .try_init();
+
     let config = Config {
         enable_ipv6: true,
         ..Default::default()
@@ -43,84 +49,128 @@ async fn test_discovery_async_std_ipv6() -> Result<(), Box<dyn Error>> {
 }
 
 #[async_std::test]
-async fn test_expired_async_std() -> Result<(), Box<dyn Error>> {
-    env_logger::try_init().ok();
+async fn test_expired_async_std() {
+    let _ = tracing_subscriber::fmt()
+        .with_env_filter(EnvFilter::from_default_env())
+        .try_init();
+
     let config = Config {
         ttl: Duration::from_secs(1),
         query_interval: Duration::from_secs(10),
         ..Default::default()
     };
 
-    async_std::future::timeout(Duration::from_secs(6), run_peer_expiration_test(config))
-        .await
-        .map(|_| ())
-        .map_err(|e| Box::new(e) as Box<dyn Error>)
+    let mut a = create_swarm(config.clone()).await;
+    let a_peer_id = *a.local_peer_id();
+
+    let mut b = create_swarm(config).await;
+    let b_peer_id = *b.local_peer_id();
+
+    loop {
+        match futures::future::select(a.next_behaviour_event(), b.next_behaviour_event()).await {
+            Either::Left((Event::Expired(peers), _)) => {
+                if peers.into_iter().any(|(p, _)| p == b_peer_id) {
+                    return;
+                }
+            }
+            Either::Right((Event::Expired(peers), _)) => {
+                if peers.into_iter().any(|(p, _)| p == a_peer_id) {
+                    return;
+                }
+            }
+            _ => {}
+        }
+    }
 }
 
-async fn create_swarm(config: Config) -> Result<Swarm<Behaviour>, Box<dyn Error>> {
-    let id_keys = identity::Keypair::generate_ed25519();
-    let peer_id = PeerId::from(id_keys.public());
-    let transport = libp2p::development_transport(id_keys).await?;
-    let behaviour = Behaviour::new(config)?;
-    let mut swarm = Swarm::with_async_std_executor(transport, behaviour, peer_id);
-    swarm.listen_on("/ip4/0.0.0.0/tcp/0".parse()?)?;
-    Ok(swarm)
+#[async_std::test]
+async fn test_no_expiration_on_close_async_std() {
+    let _ = tracing_subscriber::fmt()
+        .with_env_filter(EnvFilter::from_default_env())
+        .try_init();
+    let config = Config {
+        ttl: Duration::from_secs(120),
+        query_interval: Duration::from_secs(10),
+        ..Default::default()
+    };
+
+    let mut a = create_swarm(config.clone()).await;
+
+    let b = create_swarm(config).await;
+    let b_peer_id = *b.local_peer_id();
+    async_std::task::spawn(b.loop_on_next());
+
+    // 1. Connect via address from mDNS event
+    loop {
+        if let Event::Discovered(peers) = a.next_behaviour_event().await {
+            if let Some((_, addr)) = peers.into_iter().find(|(p, _)| p == &b_peer_id) {
+                a.dial_and_wait(addr).await;
+                break;
+            }
+        }
+    }
+
+    // 2. Close connection
+    let _ = a.disconnect_peer_id(b_peer_id);
+    a.wait(|event| {
+        matches!(event, SwarmEvent::ConnectionClosed { peer_id, .. } if peer_id == b_peer_id)
+            .then_some(())
+    })
+    .await;
+
+    // 3. Ensure we can still dial via `PeerId`.
+    a.dial(b_peer_id).unwrap();
+    a.wait(|event| {
+        matches!(event, SwarmEvent::ConnectionEstablished { peer_id, .. } if peer_id == b_peer_id)
+            .then_some(())
+    })
+    .await;
 }
 
-async fn run_discovery_test(config: Config) -> Result<(), Box<dyn Error>> {
-    env_logger::try_init().ok();
-    let mut a = create_swarm(config.clone()).await?;
-    let mut b = create_swarm(config).await?;
+async fn run_discovery_test(config: Config) {
+    let mut a = create_swarm(config.clone()).await;
+    let a_peer_id = *a.local_peer_id();
+
+    let mut b = create_swarm(config).await;
+    let b_peer_id = *b.local_peer_id();
+
     let mut discovered_a = false;
     let mut discovered_b = false;
-    loop {
-        futures::select! {
-            ev = a.select_next_some() => if let SwarmEvent::Behaviour(Event::Discovered(peers)) = ev {
-                for (peer, _addr) in peers {
-                    if peer == *b.local_peer_id() {
-                        if discovered_a {
-                            return Ok(());
-                        } else {
-                            discovered_b = true;
-                        }
-                    }
-                }
-            },
-            ev = b.select_next_some() => if let SwarmEvent::Behaviour(Event::Discovered(peers)) = ev {
-                for (peer, _addr) in peers {
-                    if peer == *a.local_peer_id() {
-                        if discovered_b {
-                            return Ok(());
-                        } else {
-                            discovered_a = true;
-                        }
-                    }
+
+    while !discovered_a && !discovered_b {
+        match futures::future::select(a.next_behaviour_event(), b.next_behaviour_event()).await {
+            Either::Left((Event::Discovered(peers), _)) => {
+                if peers.into_iter().any(|(p, _)| p == b_peer_id) {
+                    discovered_b = true;
                 }
             }
+            Either::Right((Event::Discovered(peers), _)) => {
+                if peers.into_iter().any(|(p, _)| p == a_peer_id) {
+                    discovered_a = true;
+                }
+            }
+            _ => {}
         }
     }
 }
 
-async fn run_peer_expiration_test(config: Config) -> Result<(), Box<dyn Error>> {
-    let mut a = create_swarm(config.clone()).await?;
-    let mut b = create_swarm(config).await?;
+async fn create_swarm(config: Config) -> Swarm<Behaviour> {
+    let mut swarm =
+        Swarm::new_ephemeral(|key| Behaviour::new(config, key.public().to_peer_id()).unwrap());
 
-    loop {
-        futures::select! {
-            ev = a.select_next_some() => if let SwarmEvent::Behaviour(Event::Expired(peers)) = ev {
-                for (peer, _addr) in peers {
-                    if peer == *b.local_peer_id() {
-                        return Ok(());
-                    }
-                }
-            },
-            ev = b.select_next_some() => if let SwarmEvent::Behaviour(Event::Expired(peers)) = ev {
-                for (peer, _addr) in peers {
-                    if peer == *a.local_peer_id() {
-                        return Ok(());
-                    }
-                }
+    // Manually listen on all interfaces because mDNS only works for non-loopback addresses.
+    let expected_listener_id = swarm
+        .listen_on("/ip4/0.0.0.0/tcp/0".parse().unwrap())
+        .unwrap();
+
+    swarm
+        .wait(|e| match e {
+            SwarmEvent::NewListenAddr { listener_id, .. } => {
+                (listener_id == expected_listener_id).then_some(())
             }
-        }
-    }
+            _ => None,
+        })
+        .await;
+
+    swarm
 }

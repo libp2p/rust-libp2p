@@ -18,163 +18,148 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use futures::executor::LocalPool;
-use futures::future::FutureExt;
-use futures::io::{AsyncRead, AsyncWrite};
-use futures::stream::StreamExt;
-use futures::task::Spawn;
-use libp2p::core::multiaddr::{Multiaddr, Protocol};
-use libp2p::core::muxing::StreamMuxerBox;
-use libp2p::core::transport::upgrade::Version;
-use libp2p::core::transport::{Boxed, MemoryTransport, OrTransport, Transport};
-use libp2p::core::PublicKey;
-use libp2p::core::{identity, PeerId};
-use libp2p::dcutr;
-use libp2p::plaintext::PlainText2Config;
-use libp2p::relay::v2::client;
-use libp2p::relay::v2::relay;
-use libp2p::swarm::{AddressScore, NetworkBehaviour, Swarm, SwarmEvent};
+use libp2p_core::multiaddr::{Multiaddr, Protocol};
+use libp2p_core::transport::upgrade::Version;
+use libp2p_core::transport::{MemoryTransport, Transport};
+use libp2p_dcutr as dcutr;
+use libp2p_identify as identify;
+use libp2p_identity as identity;
+use libp2p_identity::PeerId;
+use libp2p_plaintext as plaintext;
+use libp2p_relay as relay;
+use libp2p_swarm::{Config, NetworkBehaviour, Swarm, SwarmEvent};
+use libp2p_swarm_test::SwarmExt as _;
 use std::time::Duration;
+use tracing_subscriber::EnvFilter;
 
-#[test]
-fn connect() {
-    let _ = env_logger::try_init();
-    let mut pool = LocalPool::new();
+#[async_std::test]
+async fn connect() {
+    let _ = tracing_subscriber::fmt()
+        .with_env_filter(EnvFilter::from_default_env())
+        .try_init();
 
-    let relay_addr = Multiaddr::empty().with(Protocol::Memory(rand::random::<u64>()));
     let mut relay = build_relay();
-    let relay_peer_id = *relay.local_peer_id();
-
-    relay.listen_on(relay_addr.clone()).unwrap();
-    relay.add_external_address(relay_addr.clone(), AddressScore::Infinite);
-    spawn_swarm_on_pool(&pool, relay);
-
     let mut dst = build_client();
+    let mut src = build_client();
+
+    // Have all swarms listen on a local TCP address.
+    let (_, relay_tcp_addr) = relay.listen().with_tcp_addr_external().await;
+    let (_, dst_tcp_addr) = dst.listen().await;
+    src.listen().await;
+
+    assert!(src.external_addresses().next().is_none());
+    assert!(dst.external_addresses().next().is_none());
+
+    let relay_peer_id = *relay.local_peer_id();
     let dst_peer_id = *dst.local_peer_id();
-    let dst_relayed_addr = relay_addr
-        .with(Protocol::P2p(relay_peer_id.into()))
+
+    async_std::task::spawn(relay.loop_on_next());
+
+    let dst_relayed_addr = relay_tcp_addr
+        .with(Protocol::P2p(relay_peer_id))
         .with(Protocol::P2pCircuit)
-        .with(Protocol::P2p(dst_peer_id.into()));
-    let dst_addr = Multiaddr::empty().with(Protocol::Memory(rand::random::<u64>()));
-
+        .with(Protocol::P2p(dst_peer_id));
     dst.listen_on(dst_relayed_addr.clone()).unwrap();
-    dst.listen_on(dst_addr.clone()).unwrap();
-    dst.add_external_address(dst_addr.clone(), AddressScore::Infinite);
 
-    pool.run_until(wait_for_reservation(
+    wait_for_reservation(
         &mut dst,
         dst_relayed_addr.clone(),
         relay_peer_id,
         false, // No renewal.
-    ));
-    spawn_swarm_on_pool(&pool, dst);
+    )
+    .await;
+    async_std::task::spawn(dst.loop_on_next());
 
-    let mut src = build_client();
-    let src_addr = Multiaddr::empty().with(Protocol::Memory(rand::random::<u64>()));
-    src.listen_on(src_addr.clone()).unwrap();
-    pool.run_until(wait_for_new_listen_addr(&mut src, &src_addr));
-    src.add_external_address(src_addr.clone(), AddressScore::Infinite);
+    src.dial_and_wait(dst_relayed_addr.clone()).await;
 
-    src.dial(dst_relayed_addr.clone()).unwrap();
+    let dst_addr = dst_tcp_addr.with(Protocol::P2p(dst_peer_id));
 
-    pool.run_until(wait_for_connection_established(&mut src, &dst_relayed_addr));
-    match pool.run_until(wait_for_dcutr_event(&mut src)) {
-        dcutr::behaviour::Event::RemoteInitiatedDirectConnectionUpgrade {
-            remote_peer_id,
-            remote_relayed_addr,
-        } if remote_peer_id == dst_peer_id && remote_relayed_addr == dst_relayed_addr => {}
-        e => panic!("Unexpected event: {:?}.", e),
-    }
-    pool.run_until(wait_for_connection_established(
-        &mut src,
-        &dst_addr.with(Protocol::P2p(dst_peer_id.into())),
-    ));
+    let established_conn_id = src
+        .wait(move |e| match e {
+            SwarmEvent::ConnectionEstablished {
+                endpoint,
+                connection_id,
+                ..
+            } => (*endpoint.get_remote_address() == dst_addr).then_some(connection_id),
+            _ => None,
+        })
+        .await;
+
+    let reported_conn_id = src
+        .wait(move |e| match e {
+            SwarmEvent::Behaviour(ClientEvent::Dcutr(dcutr::Event {
+                result: Ok(connection_id),
+                ..
+            })) => Some(connection_id),
+            _ => None,
+        })
+        .await;
+
+    assert_eq!(established_conn_id, reported_conn_id);
 }
 
-fn build_relay() -> Swarm<relay::Relay> {
-    let local_key = identity::Keypair::generate_ed25519();
-    let local_public_key = local_key.public();
-    let local_peer_id = local_public_key.to_peer_id();
+fn build_relay() -> Swarm<Relay> {
+    Swarm::new_ephemeral(|identity| {
+        let local_peer_id = identity.public().to_peer_id();
 
-    let transport = build_transport(MemoryTransport::default().boxed(), local_public_key);
+        Relay {
+            relay: relay::Behaviour::new(
+                local_peer_id,
+                relay::Config {
+                    reservation_duration: Duration::from_secs(2),
+                    ..Default::default()
+                },
+            ),
+            identify: identify::Behaviour::new(identify::Config::new(
+                "/relay".to_owned(),
+                identity.public(),
+            )),
+        }
+    })
+}
 
-    Swarm::with_threadpool_executor(
-        transport,
-        relay::Relay::new(
-            local_peer_id,
-            relay::Config {
-                reservation_duration: Duration::from_secs(2),
-                ..Default::default()
-            },
-        ),
-        local_peer_id,
-    )
+#[derive(NetworkBehaviour)]
+#[behaviour(prelude = "libp2p_swarm::derive_prelude")]
+struct Relay {
+    relay: relay::Behaviour,
+    identify: identify::Behaviour,
 }
 
 fn build_client() -> Swarm<Client> {
     let local_key = identity::Keypair::generate_ed25519();
-    let local_public_key = local_key.public();
-    let local_peer_id = local_public_key.to_peer_id();
+    let local_peer_id = local_key.public().to_peer_id();
 
-    let (relay_transport, behaviour) = client::Client::new_transport_and_behaviour(local_peer_id);
-    let transport = build_transport(
-        OrTransport::new(relay_transport, MemoryTransport::default()).boxed(),
-        local_public_key,
-    );
+    let (relay_transport, behaviour) = relay::client::new(local_peer_id);
 
-    Swarm::with_threadpool_executor(
+    let transport = relay_transport
+        .or_transport(MemoryTransport::default())
+        .or_transport(libp2p_tcp::async_io::Transport::default())
+        .upgrade(Version::V1)
+        .authenticate(plaintext::Config::new(&local_key))
+        .multiplex(libp2p_yamux::Config::default())
+        .boxed();
+
+    Swarm::new(
         transport,
         Client {
             relay: behaviour,
-            dcutr: dcutr::behaviour::Behaviour::new(),
+            dcutr: dcutr::Behaviour::new(local_peer_id),
+            identify: identify::Behaviour::new(identify::Config::new(
+                "/client".to_owned(),
+                local_key.public(),
+            )),
         },
         local_peer_id,
+        Config::with_async_std_executor(),
     )
 }
 
-fn build_transport<StreamSink>(
-    transport: Boxed<StreamSink>,
-    local_public_key: PublicKey,
-) -> Boxed<(PeerId, StreamMuxerBox)>
-where
-    StreamSink: AsyncRead + AsyncWrite + Send + Unpin + 'static,
-{
-    transport
-        .upgrade(Version::V1)
-        .authenticate(PlainText2Config { local_public_key })
-        .multiplex(libp2p::yamux::YamuxConfig::default())
-        .boxed()
-}
-
 #[derive(NetworkBehaviour)]
-#[behaviour(out_event = "ClientEvent", event_process = false)]
+#[behaviour(prelude = "libp2p_swarm::derive_prelude")]
 struct Client {
-    relay: client::Client,
-    dcutr: dcutr::behaviour::Behaviour,
-}
-
-#[derive(Debug)]
-enum ClientEvent {
-    Relay(client::Event),
-    Dcutr(dcutr::behaviour::Event),
-}
-
-impl From<client::Event> for ClientEvent {
-    fn from(event: client::Event) -> Self {
-        ClientEvent::Relay(event)
-    }
-}
-
-impl From<dcutr::behaviour::Event> for ClientEvent {
-    fn from(event: dcutr::behaviour::Event) -> Self {
-        ClientEvent::Dcutr(event)
-    }
-}
-
-fn spawn_swarm_on_pool<B: NetworkBehaviour + Send>(pool: &LocalPool, swarm: Swarm<B>) {
-    pool.spawner()
-        .spawn_obj(swarm.collect::<Vec<_>>().map(|_| ()).boxed().into())
-        .unwrap();
+    relay: relay::client::Behaviour,
+    dcutr: dcutr::Behaviour,
+    identify: identify::Behaviour,
 }
 
 async fn wait_for_reservation(
@@ -185,63 +170,40 @@ async fn wait_for_reservation(
 ) {
     let mut new_listen_addr_for_relayed_addr = false;
     let mut reservation_req_accepted = false;
+    let mut addr_observed = false;
+
     loop {
-        match client.select_next_some().await {
-            SwarmEvent::NewListenAddr { address, .. } if address != client_addr => {}
+        if new_listen_addr_for_relayed_addr && reservation_req_accepted && addr_observed {
+            break;
+        }
+
+        match client.next_swarm_event().await {
             SwarmEvent::NewListenAddr { address, .. } if address == client_addr => {
                 new_listen_addr_for_relayed_addr = true;
-                if reservation_req_accepted {
-                    break;
-                }
             }
-            SwarmEvent::Behaviour(ClientEvent::Relay(client::Event::ReservationReqAccepted {
-                relay_peer_id: peer_id,
-                renewal,
-                ..
-            })) if relay_peer_id == peer_id && renewal == is_renewal => {
-                reservation_req_accepted = true;
-                if new_listen_addr_for_relayed_addr {
-                    break;
-                }
-            }
-            SwarmEvent::Dialing(peer_id) if peer_id == relay_peer_id => {}
-            SwarmEvent::ConnectionEstablished { peer_id, .. } if peer_id == relay_peer_id => {}
-            e => panic!("{:?}", e),
-        }
-    }
-}
-
-async fn wait_for_connection_established(client: &mut Swarm<Client>, addr: &Multiaddr) {
-    loop {
-        match client.select_next_some().await {
-            SwarmEvent::IncomingConnection { .. } => {}
-            SwarmEvent::ConnectionEstablished { endpoint, .. }
-                if endpoint.get_remote_address() == addr =>
-            {
-                break
-            }
-            SwarmEvent::Dialing(_) => {}
             SwarmEvent::Behaviour(ClientEvent::Relay(
-                client::Event::OutboundCircuitEstablished { .. },
-            )) => {}
-            SwarmEvent::ConnectionEstablished { .. } => {}
-            e => panic!("{:?}", e),
-        }
-    }
-}
-
-async fn wait_for_new_listen_addr(client: &mut Swarm<Client>, new_addr: &Multiaddr) {
-    match client.select_next_some().await {
-        SwarmEvent::NewListenAddr { address, .. } if address == *new_addr => {}
-        e => panic!("{:?}", e),
-    }
-}
-
-async fn wait_for_dcutr_event(client: &mut Swarm<Client>) -> dcutr::behaviour::Event {
-    loop {
-        match client.select_next_some().await {
-            SwarmEvent::Behaviour(ClientEvent::Dcutr(e)) => return e,
-            e => panic!("{:?}", e),
+                relay::client::Event::ReservationReqAccepted {
+                    relay_peer_id: peer_id,
+                    renewal,
+                    ..
+                },
+            )) if relay_peer_id == peer_id && renewal == is_renewal => {
+                reservation_req_accepted = true;
+            }
+            SwarmEvent::Dialing {
+                peer_id: Some(peer_id),
+                ..
+            } if peer_id == relay_peer_id => {}
+            SwarmEvent::ConnectionEstablished { peer_id, .. } if peer_id == relay_peer_id => {}
+            SwarmEvent::Behaviour(ClientEvent::Identify(identify::Event::Received { .. })) => {
+                addr_observed = true;
+            }
+            SwarmEvent::Behaviour(ClientEvent::Identify(_)) => {}
+            SwarmEvent::NewExternalAddrCandidate { .. } => {}
+            SwarmEvent::ExternalAddrConfirmed { address } if !is_renewal => {
+                assert_eq!(address, client_addr);
+            }
+            e => panic!("{e:?}"),
         }
     }
 }

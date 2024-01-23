@@ -65,7 +65,7 @@ use crate::record::{self, store::RecordStore, ProviderRecord, Record};
 use futures::prelude::*;
 use futures_timer::Delay;
 use instant::Instant;
-use libp2p_core::PeerId;
+use libp2p_identity::PeerId;
 use std::collections::HashSet;
 use std::pin::Pin;
 use std::task::{Context, Poll};
@@ -74,13 +74,11 @@ use std::vec;
 
 /// The maximum number of queries towards which background jobs
 /// are allowed to start new queries on an invocation of
-/// `Kademlia::poll`.
-pub const JOBS_MAX_QUERIES: usize = 100;
-
+/// `Behaviour::poll`.
+pub(crate) const JOBS_MAX_QUERIES: usize = 100;
 /// The maximum number of new queries started by a background job
-/// per invocation of `Kademlia::poll`.
-pub const JOBS_MAX_NEW_QUERIES: usize = 10;
-
+/// per invocation of `Behaviour::poll`.
+pub(crate) const JOBS_MAX_NEW_QUERIES: usize = 10;
 /// A background job run periodically.
 #[derive(Debug)]
 struct PeriodicJob<T> {
@@ -89,6 +87,7 @@ struct PeriodicJob<T> {
 }
 
 impl<T> PeriodicJob<T> {
+    #[cfg(test)]
     fn is_running(&self) -> bool {
         match self.state {
             PeriodicJobState::Running(..) => true,
@@ -98,9 +97,10 @@ impl<T> PeriodicJob<T> {
 
     /// Cuts short the remaining delay, if the job is currently waiting
     /// for the delay to expire.
+    #[cfg(test)]
     fn asap(&mut self) {
         if let PeriodicJobState::Waiting(delay, deadline) = &mut self.state {
-            let new_deadline = Instant::now() - Duration::from_secs(1);
+            let new_deadline = Instant::now().checked_sub(Duration::from_secs(1)).unwrap();
             *deadline = new_deadline;
             delay.reset(Duration::from_secs(1));
         }
@@ -129,7 +129,7 @@ enum PeriodicJobState<T> {
 // PutRecordJob
 
 /// Periodic job for replicating / publishing records.
-pub struct PutRecordJob {
+pub(crate) struct PutRecordJob {
     local_id: PeerId,
     next_publish: Option<Instant>,
     publish_interval: Option<Duration>,
@@ -141,7 +141,7 @@ pub struct PutRecordJob {
 impl PutRecordJob {
     /// Creates a new periodic job for replicating and re-publishing
     /// locally stored records.
-    pub fn new(
+    pub(crate) fn new(
         local_id: PeerId,
         replicate_interval: Duration,
         publish_interval: Option<Duration>,
@@ -166,12 +166,13 @@ impl PutRecordJob {
 
     /// Adds the key of a record that is ignored on the current or
     /// next run of the job.
-    pub fn skip(&mut self, key: record::Key) {
+    pub(crate) fn skip(&mut self, key: record::Key) {
         self.skipped.insert(key);
     }
 
     /// Checks whether the job is currently running.
-    pub fn is_running(&self) -> bool {
+    #[cfg(test)]
+    pub(crate) fn is_running(&self) -> bool {
         self.inner.is_running()
     }
 
@@ -179,9 +180,10 @@ impl PutRecordJob {
     /// for the delay to expire.
     ///
     /// The job is guaranteed to run on the next invocation of `poll`.
-    pub fn asap(&mut self, publish: bool) {
+    #[cfg(test)]
+    pub(crate) fn asap(&mut self, publish: bool) {
         if publish {
-            self.next_publish = Some(Instant::now() - Duration::from_secs(1))
+            self.next_publish = Some(Instant::now().checked_sub(Duration::from_secs(1)).unwrap())
         }
         self.inner.asap()
     }
@@ -191,9 +193,14 @@ impl PutRecordJob {
     /// Must be called in the context of a task. When `NotReady` is returned,
     /// the current task is registered to be notified when the job is ready
     /// to be run.
-    pub fn poll<T>(&mut self, cx: &mut Context<'_>, store: &mut T, now: Instant) -> Poll<Record>
+    pub(crate) fn poll<T>(
+        &mut self,
+        cx: &mut Context<'_>,
+        store: &mut T,
+        now: Instant,
+    ) -> Poll<Record>
     where
-        for<'a> T: RecordStore<'a>,
+        T: RecordStore,
     {
         if self.inner.check_ready(cx, now) {
             let publish = self.next_publish.map_or(false, |t_pub| now >= t_pub);
@@ -250,13 +257,13 @@ impl PutRecordJob {
 // AddProviderJob
 
 /// Periodic job for replicating provider records.
-pub struct AddProviderJob {
+pub(crate) struct AddProviderJob {
     inner: PeriodicJob<vec::IntoIter<ProviderRecord>>,
 }
 
 impl AddProviderJob {
     /// Creates a new periodic job for provider announcements.
-    pub fn new(interval: Duration) -> Self {
+    pub(crate) fn new(interval: Duration) -> Self {
         let now = Instant::now();
         Self {
             inner: PeriodicJob {
@@ -270,7 +277,8 @@ impl AddProviderJob {
     }
 
     /// Checks whether the job is currently running.
-    pub fn is_running(&self) -> bool {
+    #[cfg(test)]
+    pub(crate) fn is_running(&self) -> bool {
         self.inner.is_running()
     }
 
@@ -278,7 +286,8 @@ impl AddProviderJob {
     /// for the delay to expire.
     ///
     /// The job is guaranteed to run on the next invocation of `poll`.
-    pub fn asap(&mut self) {
+    #[cfg(test)]
+    pub(crate) fn asap(&mut self) {
         self.inner.asap()
     }
 
@@ -287,14 +296,14 @@ impl AddProviderJob {
     /// Must be called in the context of a task. When `NotReady` is returned,
     /// the current task is registered to be notified when the job is ready
     /// to be run.
-    pub fn poll<T>(
+    pub(crate) fn poll<T>(
         &mut self,
         cx: &mut Context<'_>,
         store: &mut T,
         now: Instant,
     ) -> Poll<ProviderRecord>
     where
-        for<'a> T: RecordStore<'a>,
+        T: RecordStore,
     {
         if self.inner.check_ready(cx, now) {
             let records = store

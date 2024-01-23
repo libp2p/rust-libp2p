@@ -18,307 +18,94 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use async_io::Async;
-use futures::{
-    future::{self, Either},
-    prelude::*,
-};
-use libp2p::core::identity;
-use libp2p::core::transport::{self, Transport};
-use libp2p::core::upgrade::{self, apply_inbound, apply_outbound, Negotiated};
-use libp2p::noise::{
-    Keypair, NoiseAuthenticated, NoiseConfig, NoiseOutput, RemoteIdentity, X25519Spec, X25519,
-};
-use libp2p::tcp;
-use libp2p_noise::NoiseError;
-use log::info;
+use futures::prelude::*;
+use libp2p_core::transport::{MemoryTransport, Transport};
+use libp2p_core::upgrade;
+use libp2p_core::upgrade::{InboundConnectionUpgrade, OutboundConnectionUpgrade};
+use libp2p_identity as identity;
+use libp2p_noise as noise;
 use quickcheck::*;
-use std::{convert::TryInto, io, net::TcpStream};
+use std::{convert::TryInto, io};
+use tracing_subscriber::EnvFilter;
 
 #[allow(dead_code)]
 fn core_upgrade_compat() {
-    // Tests API compaibility with the libp2p-core upgrade API,
+    // Tests API compatibility with the libp2p-core upgrade API,
     // i.e. if it compiles, the "test" is considered a success.
     let id_keys = identity::Keypair::generate_ed25519();
-    let noise = NoiseAuthenticated::xx(&id_keys).unwrap();
-    let _ = tcp::async_io::Transport::default()
+    let noise = noise::Config::new(&id_keys).unwrap();
+    let _ = MemoryTransport::default()
         .upgrade(upgrade::Version::V1)
         .authenticate(noise);
 }
 
 #[test]
-fn xx_spec() {
-    let _ = env_logger::try_init();
-    fn prop(mut messages: Vec<Message>) -> bool {
-        messages.truncate(5);
-        let server_id = identity::Keypair::generate_ed25519();
-        let client_id = identity::Keypair::generate_ed25519();
-
-        let server_id_public = server_id.public();
-        let client_id_public = client_id.public();
-
-        let server_dh = Keypair::<X25519Spec>::new()
-            .into_authentic(&server_id)
-            .unwrap();
-        let server_transport = tcp::async_io::Transport::default()
-            .and_then(move |output, endpoint| {
-                upgrade::apply(
-                    output,
-                    NoiseConfig::xx(server_dh),
-                    endpoint,
-                    upgrade::Version::V1,
-                )
-            })
-            .and_then(move |out, _| expect_identity(out, &client_id_public))
-            .boxed();
-
-        let client_dh = Keypair::<X25519Spec>::new()
-            .into_authentic(&client_id)
-            .unwrap();
-        let client_transport = tcp::async_io::Transport::default()
-            .and_then(move |output, endpoint| {
-                upgrade::apply(
-                    output,
-                    NoiseConfig::xx(client_dh),
-                    endpoint,
-                    upgrade::Version::V1,
-                )
-            })
-            .and_then(move |out, _| expect_identity(out, &server_id_public))
-            .boxed();
-
-        run(server_transport, client_transport, messages);
-        true
-    }
-    QuickCheck::new()
-        .max_tests(30)
-        .quickcheck(prop as fn(Vec<Message>) -> bool)
-}
-
-#[test]
 fn xx() {
-    let _ = env_logger::try_init();
+    let _ = tracing_subscriber::fmt()
+        .with_env_filter(EnvFilter::from_default_env())
+        .try_init();
     fn prop(mut messages: Vec<Message>) -> bool {
         messages.truncate(5);
         let server_id = identity::Keypair::generate_ed25519();
         let client_id = identity::Keypair::generate_ed25519();
 
-        let server_id_public = server_id.public();
-        let client_id_public = client_id.public();
+        let (client, server) = futures_ringbuf::Endpoint::pair(100, 100);
 
-        let server_dh = Keypair::<X25519>::new().into_authentic(&server_id).unwrap();
-        let server_transport = tcp::async_io::Transport::default()
-            .and_then(move |output, endpoint| {
-                upgrade::apply(
-                    output,
-                    NoiseConfig::xx(server_dh),
-                    endpoint,
-                    upgrade::Version::V1,
-                )
-            })
-            .and_then(move |out, _| expect_identity(out, &client_id_public))
-            .boxed();
-
-        let client_dh = Keypair::<X25519>::new().into_authentic(&client_id).unwrap();
-        let client_transport = tcp::async_io::Transport::default()
-            .and_then(move |output, endpoint| {
-                upgrade::apply(
-                    output,
-                    NoiseConfig::xx(client_dh),
-                    endpoint,
-                    upgrade::Version::V1,
-                )
-            })
-            .and_then(move |out, _| expect_identity(out, &server_id_public))
-            .boxed();
-
-        run(server_transport, client_transport, messages);
-        true
-    }
-    QuickCheck::new()
-        .max_tests(30)
-        .quickcheck(prop as fn(Vec<Message>) -> bool)
-}
-
-#[test]
-fn ix() {
-    let _ = env_logger::try_init();
-    fn prop(mut messages: Vec<Message>) -> bool {
-        messages.truncate(5);
-        let server_id = identity::Keypair::generate_ed25519();
-        let client_id = identity::Keypair::generate_ed25519();
-
-        let server_id_public = server_id.public();
-        let client_id_public = client_id.public();
-
-        let server_dh = Keypair::<X25519>::new().into_authentic(&server_id).unwrap();
-        let server_transport = tcp::async_io::Transport::default()
-            .and_then(move |output, endpoint| {
-                upgrade::apply(
-                    output,
-                    NoiseConfig::ix(server_dh),
-                    endpoint,
-                    upgrade::Version::V1,
-                )
-            })
-            .and_then(move |out, _| expect_identity(out, &client_id_public))
-            .boxed();
-
-        let client_dh = Keypair::<X25519>::new().into_authentic(&client_id).unwrap();
-        let client_transport = tcp::async_io::Transport::default()
-            .and_then(move |output, endpoint| {
-                upgrade::apply(
-                    output,
-                    NoiseConfig::ix(client_dh),
-                    endpoint,
-                    upgrade::Version::V1,
-                )
-            })
-            .and_then(move |out, _| expect_identity(out, &server_id_public))
-            .boxed();
-
-        run(server_transport, client_transport, messages);
-        true
-    }
-    QuickCheck::new()
-        .max_tests(30)
-        .quickcheck(prop as fn(Vec<Message>) -> bool)
-}
-
-#[test]
-fn ik_xx() {
-    let _ = env_logger::try_init();
-    fn prop(mut messages: Vec<Message>) -> bool {
-        messages.truncate(5);
-        let server_id = identity::Keypair::generate_ed25519();
-        let server_id_public = server_id.public();
-
-        let client_id = identity::Keypair::generate_ed25519();
-        let client_id_public = client_id.public();
-
-        let server_dh = Keypair::<X25519>::new().into_authentic(&server_id).unwrap();
-        let server_dh_public = server_dh.public_dh_key().clone();
-        let server_transport = tcp::async_io::Transport::default()
-            .and_then(move |output, endpoint| {
-                if endpoint.is_listener() {
-                    Either::Left(apply_inbound(output, NoiseConfig::ik_listener(server_dh)))
-                } else {
-                    Either::Right(apply_outbound(
-                        output,
-                        NoiseConfig::xx(server_dh),
-                        upgrade::Version::V1,
-                    ))
-                }
-            })
-            .and_then(move |out, _| expect_identity(out, &client_id_public))
-            .boxed();
-
-        let client_dh = Keypair::<X25519>::new().into_authentic(&client_id).unwrap();
-        let server_id_public2 = server_id_public.clone();
-        let client_transport = tcp::async_io::Transport::default()
-            .and_then(move |output, endpoint| {
-                if endpoint.is_dialer() {
-                    Either::Left(apply_outbound(
-                        output,
-                        NoiseConfig::ik_dialer(client_dh, server_id_public, server_dh_public),
-                        upgrade::Version::V1,
-                    ))
-                } else {
-                    Either::Right(apply_inbound(output, NoiseConfig::xx(client_dh)))
-                }
-            })
-            .and_then(move |out, _| expect_identity(out, &server_id_public2))
-            .boxed();
-
-        run(server_transport, client_transport, messages);
-        true
-    }
-    QuickCheck::new()
-        .max_tests(30)
-        .quickcheck(prop as fn(Vec<Message>) -> bool)
-}
-
-type Output<C> = (RemoteIdentity<C>, NoiseOutput<Negotiated<Async<TcpStream>>>);
-
-fn run<I, C>(
-    mut server: transport::Boxed<Output<C>>,
-    mut client: transport::Boxed<Output<C>>,
-    messages: I,
-) where
-    I: IntoIterator<Item = Message> + Clone,
-{
-    futures::executor::block_on(async {
-        server
-            .listen_on("/ip4/127.0.0.1/tcp/0".parse().unwrap())
+        futures::executor::block_on(async move {
+            let (
+                (reported_client_id, mut server_session),
+                (reported_server_id, mut client_session),
+            ) = futures::future::try_join(
+                noise::Config::new(&server_id)
+                    .unwrap()
+                    .upgrade_inbound(server, ""),
+                noise::Config::new(&client_id)
+                    .unwrap()
+                    .upgrade_outbound(client, ""),
+            )
+            .await
             .unwrap();
 
-        let server_address = server
-            .next()
-            .await
-            .expect("some event")
-            .into_new_address()
-            .expect("listen address");
+            assert_eq!(reported_client_id, client_id.public().to_peer_id());
+            assert_eq!(reported_server_id, server_id.public().to_peer_id());
 
-        let outbound_msgs = messages.clone();
-        let client_fut = async {
-            let mut client_session = client
-                .dial(server_address.clone())
-                .unwrap()
-                .await
-                .map(|(_, session)| session)
-                .expect("no error");
+            let client_fut = async {
+                for m in &messages {
+                    let n = (m.0.len() as u64).to_be_bytes();
+                    client_session.write_all(&n[..]).await.expect("len written");
+                    client_session.write_all(&m.0).await.expect("no error")
+                }
+                client_session.flush().await.expect("no error");
+            };
 
-            for m in outbound_msgs {
-                let n = (m.0.len() as u64).to_be_bytes();
-                client_session.write_all(&n[..]).await.expect("len written");
-                client_session.write_all(&m.0).await.expect("no error")
-            }
-            client_session.flush().await.expect("no error");
-        };
+            let server_fut = async {
+                for m in &messages {
+                    let len = {
+                        let mut n = [0; 8];
+                        match server_session.read_exact(&mut n).await {
+                            Ok(()) => u64::from_be_bytes(n),
+                            Err(e) if e.kind() == io::ErrorKind::UnexpectedEof => 0,
+                            Err(e) => panic!("error reading len: {e}"),
+                        }
+                    };
+                    tracing::info!(bytes=%len, "server: reading message");
+                    let mut server_buffer = vec![0; len.try_into().unwrap()];
+                    server_session
+                        .read_exact(&mut server_buffer)
+                        .await
+                        .expect("no error");
+                    assert_eq!(server_buffer, m.0)
+                }
+            };
 
-        let server_fut = async {
-            let mut server_session = server
-                .next()
-                .await
-                .expect("some event")
-                .into_incoming()
-                .expect("listener upgrade")
-                .0
-                .await
-                .map(|(_, session)| session)
-                .expect("no error");
+            futures::future::join(client_fut, server_fut).await;
+        });
 
-            for m in messages {
-                let len = {
-                    let mut n = [0; 8];
-                    match server_session.read_exact(&mut n).await {
-                        Ok(()) => u64::from_be_bytes(n),
-                        Err(e) if e.kind() == io::ErrorKind::UnexpectedEof => 0,
-                        Err(e) => panic!("error reading len: {}", e),
-                    }
-                };
-                info!("server: reading message ({} bytes)", len);
-                let mut server_buffer = vec![0; len.try_into().unwrap()];
-                server_session
-                    .read_exact(&mut server_buffer)
-                    .await
-                    .expect("no error");
-                assert_eq!(server_buffer, m.0)
-            }
-        };
-
-        futures::future::join(server_fut, client_fut).await;
-    })
-}
-
-fn expect_identity<C>(
-    output: Output<C>,
-    pk: &identity::PublicKey,
-) -> impl Future<Output = Result<Output<C>, NoiseError>> {
-    match output.0 {
-        RemoteIdentity::IdentityKey(ref k) if k == pk => future::ok(output),
-        _ => panic!("Unexpected remote identity"),
+        true
     }
+    QuickCheck::new()
+        .max_tests(30)
+        .quickcheck(prop as fn(Vec<Message>) -> bool)
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

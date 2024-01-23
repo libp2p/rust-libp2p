@@ -22,9 +22,12 @@ use std::borrow::Cow;
 use std::sync::Arc;
 use std::time::Duration;
 
-use libp2p_core::PeerId;
+use crate::error::ConfigBuilderError;
+use crate::protocol::{ProtocolConfig, ProtocolId, FLOODSUB_PROTOCOL};
+use crate::types::{Message, MessageId, PeerKind};
 
-use crate::types::{FastMessageId, GossipsubMessage, MessageId, RawGossipsubMessage};
+use libp2p_identity::PeerId;
+use libp2p_swarm::StreamProtocol;
 
 /// The types of message validation that can be employed by gossipsub.
 #[derive(Debug, Clone)]
@@ -51,16 +54,15 @@ pub enum ValidationMode {
 
 /// Selector for custom Protocol Id
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub enum GossipsubVersion {
+pub enum Version {
     V1_0,
     V1_1,
 }
 
 /// Configuration parameters that define the performance of the gossipsub network.
 #[derive(Clone)]
-pub struct GossipsubConfig {
-    protocol_id: Cow<'static, str>,
-    custom_id_version: Option<GossipsubVersion>,
+pub struct Config {
+    protocol: ProtocolConfig,
     history_length: usize,
     history_gossip: usize,
     mesh_n: usize,
@@ -73,14 +75,9 @@ pub struct GossipsubConfig {
     heartbeat_interval: Duration,
     fanout_ttl: Duration,
     check_explicit_peers_ticks: u64,
-    max_transmit_size: usize,
-    idle_timeout: Duration,
     duplicate_cache_time: Duration,
     validate_messages: bool,
-    validation_mode: ValidationMode,
-    message_id_fn: Arc<dyn Fn(&GossipsubMessage) -> MessageId + Send + Sync + 'static>,
-    fast_message_id_fn:
-        Option<Arc<dyn Fn(&RawGossipsubMessage) -> FastMessageId + Send + Sync + 'static>>,
+    message_id_fn: Arc<dyn Fn(&Message) -> MessageId + Send + Sync + 'static>,
     allow_self_origin: bool,
     do_px: bool,
     prune_peers: usize,
@@ -97,27 +94,12 @@ pub struct GossipsubConfig {
     max_ihave_length: usize,
     max_ihave_messages: usize,
     iwant_followup_time: Duration,
-    support_floodsub: bool,
     published_message_ids_cache_time: Duration,
 }
 
-impl GossipsubConfig {
-    // All the getters
-
-    /// The protocol id to negotiate this protocol. By default, the resulting protocol id has the form
-    /// `/<prefix>/<supported-versions>`, but can optionally be changed to a literal form by providing some GossipsubVersion as custom_id_version.
-    /// As gossipsub supports version 1.0 and 1.1, there are two suffixes supported for the resulting protocol id.
-    ///
-    /// Calling `GossipsubConfigBuilder::protocol_id_prefix` will set a new prefix and retain the prefix logic.
-    /// Calling `GossipsubConfigBuilder::protocol_id` will set a custom `protocol_id` and disable the prefix logic.
-    ///
-    /// The default prefix is `meshsub`, giving the supported protocol ids: `/meshsub/1.1.0` and `/meshsub/1.0.0`, negotiated in that order.
-    pub fn protocol_id(&self) -> &Cow<'static, str> {
-        &self.protocol_id
-    }
-
-    pub fn custom_id_version(&self) -> &Option<GossipsubVersion> {
-        &self.custom_id_version
+impl Config {
+    pub(crate) fn protocol_config(&self) -> ProtocolConfig {
+        self.protocol.clone()
     }
 
     // Overlay network parameters.
@@ -197,14 +179,7 @@ impl GossipsubConfig {
     /// must be large enough to transmit the desired peer information on pruning. It must be at
     /// least 100 bytes. Default is 65536 bytes.
     pub fn max_transmit_size(&self) -> usize {
-        self.max_transmit_size
-    }
-
-    /// The time a connection is maintained to a peer without being in the mesh and without
-    /// send/receiving a message from. Connections that idle beyond this timeout are disconnected.
-    /// Default is 120 seconds.
-    pub fn idle_timeout(&self) -> Duration {
-        self.idle_timeout
+        self.protocol.max_transmit_size
     }
 
     /// Duplicates are prevented by storing message id's of known messages in an LRU time cache.
@@ -217,7 +192,7 @@ impl GossipsubConfig {
 
     /// When set to `true`, prevents automatic forwarding of all received messages. This setting
     /// allows a user to validate the messages before propagating them to their peers. If set to
-    /// true, the user must manually call [`crate::Gossipsub::report_message_validation_result()`]
+    /// true, the user must manually call [`crate::Behaviour::report_message_validation_result()`]
     /// on the behaviour to forward message once validated (default is `false`).
     /// The default is `false`.
     pub fn validate_messages(&self) -> bool {
@@ -227,7 +202,7 @@ impl GossipsubConfig {
     /// Determines the level of validation used when receiving messages. See [`ValidationMode`]
     /// for the available types. The default is ValidationMode::Strict.
     pub fn validation_mode(&self) -> &ValidationMode {
-        &self.validation_mode
+        &self.protocol.validation_mode
     }
 
     /// A user-defined function allowing the user to specify the message id of a gossipsub message.
@@ -236,24 +211,10 @@ impl GossipsubConfig {
     /// addressing, where this function may be set to `hash(message)`. This would prevent messages
     /// of the same content from being duplicated.
     ///
-    /// The function takes a [`GossipsubMessage`] as input and outputs a String to be interpreted as
+    /// The function takes a [`Message`] as input and outputs a String to be interpreted as
     /// the message id.
-    pub fn message_id(&self, message: &GossipsubMessage) -> MessageId {
+    pub fn message_id(&self, message: &Message) -> MessageId {
         (self.message_id_fn)(message)
-    }
-
-    /// A user-defined optional function that computes fast ids from raw messages. This can be used
-    /// to avoid possibly expensive transformations from [`RawGossipsubMessage`] to
-    /// [`GossipsubMessage`] for duplicates. Two semantically different messages must always
-    /// have different fast message ids, but it is allowed that two semantically identical messages
-    /// have different fast message ids as long as the message_id_fn produces the same id for them.
-    ///
-    /// The function takes a [`RawGossipsubMessage`] as input and outputs a String to be
-    /// interpreted as the fast message id. Default is None.
-    pub fn fast_message_id(&self, message: &RawGossipsubMessage) -> Option<FastMessageId> {
-        self.fast_message_id_fn
-            .as_ref()
-            .map(|fast_message_id_fn| fast_message_id_fn(message))
     }
 
     /// By default, gossipsub will reject messages that are sent to us that have the same message
@@ -382,7 +343,7 @@ impl GossipsubConfig {
 
     /// Enable support for flooodsub peers. Default false.
     pub fn support_floodsub(&self) -> bool {
-        self.support_floodsub
+        self.protocol.protocol_ids.contains(&FLOODSUB_PROTOCOL)
     }
 
     /// Published message ids time cache duration. The default is 10 seconds.
@@ -391,26 +352,26 @@ impl GossipsubConfig {
     }
 }
 
-impl Default for GossipsubConfig {
+impl Default for Config {
     fn default() -> Self {
         // use ConfigBuilder to also validate defaults
-        GossipsubConfigBuilder::default()
+        ConfigBuilder::default()
             .build()
             .expect("Default config parameters should be valid parameters")
     }
 }
 
 /// The builder struct for constructing a gossipsub configuration.
-pub struct GossipsubConfigBuilder {
-    config: GossipsubConfig,
+pub struct ConfigBuilder {
+    config: Config,
+    invalid_protocol: bool, // This is a bit of a hack to only expose one error to the user.
 }
 
-impl Default for GossipsubConfigBuilder {
+impl Default for ConfigBuilder {
     fn default() -> Self {
-        GossipsubConfigBuilder {
-            config: GossipsubConfig {
-                protocol_id: Cow::Borrowed("meshsub"),
-                custom_id_version: None,
+        ConfigBuilder {
+            config: Config {
+                protocol: ProtocolConfig::default(),
                 history_length: 5,
                 history_gossip: 3,
                 mesh_n: 6,
@@ -423,11 +384,8 @@ impl Default for GossipsubConfigBuilder {
                 heartbeat_interval: Duration::from_secs(1),
                 fanout_ttl: Duration::from_secs(60),
                 check_explicit_peers_ticks: 300,
-                max_transmit_size: 65536,
-                idle_timeout: Duration::from_secs(120),
                 duplicate_cache_time: Duration::from_secs(60),
                 validate_messages: false,
-                validation_mode: ValidationMode::Strict,
                 message_id_fn: Arc::new(|message| {
                     // default message id is: source + sequence number
                     // NOTE: If either the peer_id or source is not provided, we set to 0;
@@ -442,7 +400,6 @@ impl Default for GossipsubConfigBuilder {
                         .push_str(&message.sequence_number.unwrap_or_default().to_string());
                     MessageId::from(source_string)
                 }),
-                fast_message_id_fn: None,
                 allow_self_origin: false,
                 do_px: false,
                 prune_peers: 0, // NOTE: Increasing this currently has little effect until Signed records are implemented.
@@ -459,27 +416,51 @@ impl Default for GossipsubConfigBuilder {
                 max_ihave_length: 5000,
                 max_ihave_messages: 10,
                 iwant_followup_time: Duration::from_secs(3),
-                support_floodsub: false,
                 published_message_ids_cache_time: Duration::from_secs(10),
             },
+            invalid_protocol: false,
         }
     }
 }
 
-impl From<GossipsubConfig> for GossipsubConfigBuilder {
-    fn from(config: GossipsubConfig) -> Self {
-        GossipsubConfigBuilder { config }
+impl From<Config> for ConfigBuilder {
+    fn from(config: Config) -> Self {
+        ConfigBuilder {
+            config,
+            invalid_protocol: false,
+        }
     }
 }
 
-impl GossipsubConfigBuilder {
-    /// The protocol id prefix to negotiate this protocol (default is `/meshsub/1.0.0`).
+impl ConfigBuilder {
+    /// The protocol id prefix to negotiate this protocol (default is `/meshsub/1.1.0` and `/meshsub/1.0.0`).
     pub fn protocol_id_prefix(
         &mut self,
         protocol_id_prefix: impl Into<Cow<'static, str>>,
     ) -> &mut Self {
-        self.config.custom_id_version = None;
-        self.config.protocol_id = protocol_id_prefix.into();
+        let cow = protocol_id_prefix.into();
+
+        match (
+            StreamProtocol::try_from_owned(format!("{}/1.1.0", cow)),
+            StreamProtocol::try_from_owned(format!("{}/1.0.0", cow)),
+        ) {
+            (Ok(p1), Ok(p2)) => {
+                self.config.protocol.protocol_ids = vec![
+                    ProtocolId {
+                        protocol: p1,
+                        kind: PeerKind::Gossipsubv1_1,
+                    },
+                    ProtocolId {
+                        protocol: p2,
+                        kind: PeerKind::Gossipsub,
+                    },
+                ]
+            }
+            _ => {
+                self.invalid_protocol = true;
+            }
+        }
+
         self
     }
 
@@ -487,10 +468,25 @@ impl GossipsubConfigBuilder {
     pub fn protocol_id(
         &mut self,
         protocol_id: impl Into<Cow<'static, str>>,
-        custom_id_version: GossipsubVersion,
+        custom_id_version: Version,
     ) -> &mut Self {
-        self.config.custom_id_version = Some(custom_id_version);
-        self.config.protocol_id = protocol_id.into();
+        let cow = protocol_id.into();
+
+        match StreamProtocol::try_from_owned(cow.to_string()) {
+            Ok(protocol) => {
+                self.config.protocol.protocol_ids = vec![ProtocolId {
+                    protocol,
+                    kind: match custom_id_version {
+                        Version::V1_1 => PeerKind::Gossipsubv1_1,
+                        Version::V1_0 => PeerKind::Gossipsub,
+                    },
+                }]
+            }
+            _ => {
+                self.invalid_protocol = true;
+            }
+        }
+
         self
     }
 
@@ -577,15 +573,7 @@ impl GossipsubConfigBuilder {
 
     /// The maximum byte size for each gossip (default is 2048 bytes).
     pub fn max_transmit_size(&mut self, max_transmit_size: usize) -> &mut Self {
-        self.config.max_transmit_size = max_transmit_size;
-        self
-    }
-
-    /// The time a connection is maintained to a peer without being in the mesh and without
-    /// send/receiving a message from. Connections that idle beyond this timeout are disconnected.
-    /// Default is 120 seconds.
-    pub fn idle_timeout(&mut self, idle_timeout: Duration) -> &mut Self {
-        self.config.idle_timeout = idle_timeout;
+        self.config.protocol.max_transmit_size = max_transmit_size;
         self
     }
 
@@ -600,7 +588,7 @@ impl GossipsubConfigBuilder {
 
     /// When set, prevents automatic forwarding of all received messages. This setting
     /// allows a user to validate the messages before propagating them to their peers. If set,
-    /// the user must manually call [`crate::Gossipsub::report_message_validation_result()`] on the
+    /// the user must manually call [`crate::Behaviour::report_message_validation_result()`] on the
     /// behaviour to forward a message once validated.
     pub fn validate_messages(&mut self) -> &mut Self {
         self.config.validate_messages = true;
@@ -610,7 +598,7 @@ impl GossipsubConfigBuilder {
     /// Determines the level of validation used when receiving messages. See [`ValidationMode`]
     /// for the available types. The default is ValidationMode::Strict.
     pub fn validation_mode(&mut self, validation_mode: ValidationMode) -> &mut Self {
-        self.config.validation_mode = validation_mode;
+        self.config.protocol.validation_mode = validation_mode;
         self
     }
 
@@ -620,29 +608,13 @@ impl GossipsubConfigBuilder {
     /// addressing, where this function may be set to `hash(message)`. This would prevent messages
     /// of the same content from being duplicated.
     ///
-    /// The function takes a [`GossipsubMessage`] as input and outputs a String to be
+    /// The function takes a [`Message`] as input and outputs a String to be
     /// interpreted as the message id.
     pub fn message_id_fn<F>(&mut self, id_fn: F) -> &mut Self
     where
-        F: Fn(&GossipsubMessage) -> MessageId + Send + Sync + 'static,
+        F: Fn(&Message) -> MessageId + Send + Sync + 'static,
     {
         self.config.message_id_fn = Arc::new(id_fn);
-        self
-    }
-
-    /// A user-defined optional function that computes fast ids from raw messages. This can be used
-    /// to avoid possibly expensive transformations from [`RawGossipsubMessage`] to
-    /// [`GossipsubMessage`] for duplicates. Two semantically different messages must always
-    /// have different fast message ids, but it is allowed that two semantically identical messages
-    /// have different fast message ids as long as the message_id_fn produces the same id for them.
-    ///
-    /// The function takes a [`RawGossipsubMessage`] as input and outputs a String to be interpreted
-    /// as the fast message id. Default is None.
-    pub fn fast_message_id_fn<F>(&mut self, fast_id_fn: F) -> &mut Self
-    where
-        F: Fn(&RawGossipsubMessage) -> FastMessageId + Send + Sync + 'static,
-    {
-        self.config.fast_message_id_fn = Some(Arc::new(fast_id_fn));
         self
     }
 
@@ -788,7 +760,16 @@ impl GossipsubConfigBuilder {
 
     /// Enable support for flooodsub peers.
     pub fn support_floodsub(&mut self) -> &mut Self {
-        self.config.support_floodsub = true;
+        if self
+            .config
+            .protocol
+            .protocol_ids
+            .contains(&FLOODSUB_PROTOCOL)
+        {
+            return self;
+        }
+
+        self.config.protocol.protocol_ids.push(FLOODSUB_PROTOCOL);
         self
     }
 
@@ -801,48 +782,45 @@ impl GossipsubConfigBuilder {
         self
     }
 
-    /// Constructs a [`GossipsubConfig`] from the given configuration and validates the settings.
-    pub fn build(&self) -> Result<GossipsubConfig, &'static str> {
+    /// Constructs a [`Config`] from the given configuration and validates the settings.
+    pub fn build(&self) -> Result<Config, ConfigBuilderError> {
         // check all constraints on config
 
-        if self.config.max_transmit_size < 100 {
-            return Err("The maximum transmission size must be greater than 100 to permit basic control messages");
+        if self.config.protocol.max_transmit_size < 100 {
+            return Err(ConfigBuilderError::MaxTransmissionSizeTooSmall);
         }
 
         if self.config.history_length < self.config.history_gossip {
-            return Err(
-                "The history_length must be greater than or equal to the history_gossip \
-                length",
-            );
+            return Err(ConfigBuilderError::HistoryLengthTooSmall);
         }
 
         if !(self.config.mesh_outbound_min <= self.config.mesh_n_low
             && self.config.mesh_n_low <= self.config.mesh_n
             && self.config.mesh_n <= self.config.mesh_n_high)
         {
-            return Err("The following inequality doesn't hold \
-                mesh_outbound_min <= mesh_n_low <= mesh_n <= mesh_n_high");
+            return Err(ConfigBuilderError::MeshParametersInvalid);
         }
 
         if self.config.mesh_outbound_min * 2 > self.config.mesh_n {
-            return Err(
-                "The following inequality doesn't hold mesh_outbound_min <= self.config.mesh_n / 2",
-            );
+            return Err(ConfigBuilderError::MeshOutboundInvalid);
         }
 
         if self.config.unsubscribe_backoff.as_millis() == 0 {
-            return Err("The unsubscribe_backoff parameter should be positive.");
+            return Err(ConfigBuilderError::UnsubscribeBackoffIsZero);
+        }
+
+        if self.invalid_protocol {
+            return Err(ConfigBuilderError::InvalidProtocol);
         }
 
         Ok(self.config.clone())
     }
 }
 
-impl std::fmt::Debug for GossipsubConfig {
+impl std::fmt::Debug for Config {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let mut builder = f.debug_struct("GossipsubConfig");
-        let _ = builder.field("protocol_id", &self.protocol_id);
-        let _ = builder.field("custom_id_version", &self.custom_id_version);
+        let _ = builder.field("protocol", &self.protocol);
         let _ = builder.field("history_length", &self.history_length);
         let _ = builder.field("history_gossip", &self.history_gossip);
         let _ = builder.field("mesh_n", &self.mesh_n);
@@ -854,11 +832,8 @@ impl std::fmt::Debug for GossipsubConfig {
         let _ = builder.field("heartbeat_initial_delay", &self.heartbeat_initial_delay);
         let _ = builder.field("heartbeat_interval", &self.heartbeat_interval);
         let _ = builder.field("fanout_ttl", &self.fanout_ttl);
-        let _ = builder.field("max_transmit_size", &self.max_transmit_size);
-        let _ = builder.field("idle_timeout", &self.idle_timeout);
         let _ = builder.field("duplicate_cache_time", &self.duplicate_cache_time);
         let _ = builder.field("validate_messages", &self.validate_messages);
-        let _ = builder.field("validation_mode", &self.validation_mode);
         let _ = builder.field("allow_self_origin", &self.allow_self_origin);
         let _ = builder.field("do_px", &self.do_px);
         let _ = builder.field("prune_peers", &self.prune_peers);
@@ -873,7 +848,6 @@ impl std::fmt::Debug for GossipsubConfig {
         let _ = builder.field("max_ihave_length", &self.max_ihave_length);
         let _ = builder.field("max_ihave_messages", &self.max_ihave_messages);
         let _ = builder.field("iwant_followup_time", &self.iwant_followup_time);
-        let _ = builder.field("support_floodsub", &self.support_floodsub);
         let _ = builder.field(
             "published_message_ids_cache_time",
             &self.published_message_ids_cache_time,
@@ -888,24 +862,104 @@ mod test {
     use crate::topic::IdentityHash;
     use crate::types::PeerKind;
     use crate::Topic;
-    use crate::{Gossipsub, MessageAuthenticity};
     use libp2p_core::UpgradeInfo;
-    use libp2p_swarm::{ConnectionHandler, NetworkBehaviour};
+    use libp2p_swarm::StreamProtocol;
     use std::collections::hash_map::DefaultHasher;
     use std::hash::{Hash, Hasher};
 
     #[test]
-    fn create_thing() {
-        let builder: GossipsubConfig = GossipsubConfigBuilder::default()
-            .protocol_id_prefix("purple")
+    fn create_config_with_message_id_as_plain_function() {
+        let config = ConfigBuilder::default()
+            .message_id_fn(message_id_plain_function)
             .build()
             .unwrap();
 
-        dbg!(builder);
+        let result = config.message_id(&get_gossipsub_message());
+
+        assert_eq!(result, get_expected_message_id());
     }
 
-    fn get_gossipsub_message() -> GossipsubMessage {
-        GossipsubMessage {
+    #[test]
+    fn create_config_with_message_id_as_closure() {
+        let config = ConfigBuilder::default()
+            .message_id_fn(|message: &Message| {
+                let mut s = DefaultHasher::new();
+                message.data.hash(&mut s);
+                let mut v = s.finish().to_string();
+                v.push('e');
+                MessageId::from(v)
+            })
+            .build()
+            .unwrap();
+
+        let result = config.message_id(&get_gossipsub_message());
+
+        assert_eq!(result, get_expected_message_id());
+    }
+
+    #[test]
+    fn create_config_with_message_id_as_closure_with_variable_capture() {
+        let captured: char = 'e';
+
+        let config = ConfigBuilder::default()
+            .message_id_fn(move |message: &Message| {
+                let mut s = DefaultHasher::new();
+                message.data.hash(&mut s);
+                let mut v = s.finish().to_string();
+                v.push(captured);
+                MessageId::from(v)
+            })
+            .build()
+            .unwrap();
+
+        let result = config.message_id(&get_gossipsub_message());
+
+        assert_eq!(result, get_expected_message_id());
+    }
+
+    #[test]
+    fn create_config_with_protocol_id_prefix() {
+        let protocol_config = ConfigBuilder::default()
+            .protocol_id_prefix("/purple")
+            .build()
+            .unwrap()
+            .protocol_config();
+
+        let protocol_ids = protocol_config.protocol_info();
+
+        assert_eq!(protocol_ids.len(), 2);
+
+        assert_eq!(
+            protocol_ids[0].protocol,
+            StreamProtocol::new("/purple/1.1.0")
+        );
+        assert_eq!(protocol_ids[0].kind, PeerKind::Gossipsubv1_1);
+
+        assert_eq!(
+            protocol_ids[1].protocol,
+            StreamProtocol::new("/purple/1.0.0")
+        );
+        assert_eq!(protocol_ids[1].kind, PeerKind::Gossipsub);
+    }
+
+    #[test]
+    fn create_config_with_custom_protocol_id() {
+        let protocol_config = ConfigBuilder::default()
+            .protocol_id("/purple", Version::V1_0)
+            .build()
+            .unwrap()
+            .protocol_config();
+
+        let protocol_ids = protocol_config.protocol_info();
+
+        assert_eq!(protocol_ids.len(), 1);
+
+        assert_eq!(protocol_ids[0].protocol, "/purple");
+        assert_eq!(protocol_ids[0].kind, PeerKind::Gossipsub);
+    }
+
+    fn get_gossipsub_message() -> Message {
+        Message {
             source: None,
             data: vec![12, 34, 56],
             sequence_number: None,
@@ -919,117 +973,11 @@ mod test {
         ])
     }
 
-    fn message_id_plain_function(message: &GossipsubMessage) -> MessageId {
+    fn message_id_plain_function(message: &Message) -> MessageId {
         let mut s = DefaultHasher::new();
         message.data.hash(&mut s);
         let mut v = s.finish().to_string();
         v.push('e');
         MessageId::from(v)
-    }
-
-    #[test]
-    fn create_config_with_message_id_as_plain_function() {
-        let builder: GossipsubConfig = GossipsubConfigBuilder::default()
-            .protocol_id_prefix("purple")
-            .message_id_fn(message_id_plain_function)
-            .build()
-            .unwrap();
-
-        let result = builder.message_id(&get_gossipsub_message());
-        assert_eq!(result, get_expected_message_id());
-    }
-
-    #[test]
-    fn create_config_with_message_id_as_closure() {
-        let closure = |message: &GossipsubMessage| {
-            let mut s = DefaultHasher::new();
-            message.data.hash(&mut s);
-            let mut v = s.finish().to_string();
-            v.push('e');
-            MessageId::from(v)
-        };
-
-        let builder: GossipsubConfig = GossipsubConfigBuilder::default()
-            .protocol_id_prefix("purple")
-            .message_id_fn(closure)
-            .build()
-            .unwrap();
-
-        let result = builder.message_id(&get_gossipsub_message());
-        assert_eq!(result, get_expected_message_id());
-    }
-
-    #[test]
-    fn create_config_with_message_id_as_closure_with_variable_capture() {
-        let captured: char = 'e';
-        let closure = move |message: &GossipsubMessage| {
-            let mut s = DefaultHasher::new();
-            message.data.hash(&mut s);
-            let mut v = s.finish().to_string();
-            v.push(captured);
-            MessageId::from(v)
-        };
-
-        let builder: GossipsubConfig = GossipsubConfigBuilder::default()
-            .protocol_id_prefix("purple")
-            .message_id_fn(closure)
-            .build()
-            .unwrap();
-
-        let result = builder.message_id(&get_gossipsub_message());
-        assert_eq!(result, get_expected_message_id());
-    }
-
-    #[test]
-    fn create_config_with_protocol_id_prefix() {
-        let builder: GossipsubConfig = GossipsubConfigBuilder::default()
-            .protocol_id_prefix("purple")
-            .validation_mode(ValidationMode::Anonymous)
-            .message_id_fn(message_id_plain_function)
-            .build()
-            .unwrap();
-
-        assert_eq!(builder.protocol_id(), "purple");
-        assert_eq!(builder.custom_id_version(), &None);
-
-        let mut gossipsub: Gossipsub =
-            Gossipsub::new(MessageAuthenticity::Anonymous, builder).expect("Correct configuration");
-
-        let handler = gossipsub.new_handler();
-        let (protocol_config, _) = handler.listen_protocol().into_upgrade();
-        let protocol_ids = protocol_config.protocol_info();
-
-        assert_eq!(protocol_ids.len(), 2);
-
-        assert_eq!(protocol_ids[0].protocol_id, b"/purple/1.1.0".to_vec());
-        assert_eq!(protocol_ids[0].kind, PeerKind::Gossipsubv1_1);
-
-        assert_eq!(protocol_ids[1].protocol_id, b"/purple/1.0.0".to_vec());
-        assert_eq!(protocol_ids[1].kind, PeerKind::Gossipsub);
-    }
-
-    #[test]
-    fn create_config_with_custom_protocol_id() {
-        let builder: GossipsubConfig = GossipsubConfigBuilder::default()
-            .protocol_id("purple", GossipsubVersion::V1_0)
-            .validation_mode(ValidationMode::Anonymous)
-            .message_id_fn(message_id_plain_function)
-            .build()
-            .unwrap();
-
-        assert_eq!(builder.protocol_id(), "purple");
-        assert_eq!(builder.custom_id_version(), &Some(GossipsubVersion::V1_0));
-
-        let mut gossipsub: Gossipsub =
-            Gossipsub::new(MessageAuthenticity::Anonymous, builder).expect("Correct configuration");
-
-        let handler = gossipsub.new_handler();
-        let (protocol_config, _) = handler.listen_protocol().into_upgrade();
-        let protocol_ids = protocol_config.protocol_info();
-
-        assert_eq!(protocol_ids.len(), 1);
-
-        assert_eq!(protocol_ids[0].protocol_id, b"purple".to_vec());
-        assert_eq!(protocol_ids[0].kind, PeerKind::Gossipsub);
     }
 }

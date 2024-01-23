@@ -5,10 +5,17 @@ edition = "2021"
 publish = false
 license = "MIT"
 
+[package.metadata.release]
+release = false
+
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-libp2p-core = { path = "../../core" }
-futures = "0.3.24"
-log = "0.4"
+libp2p-core = { workspace = true }
+futures = "0.3.30"
 futures-timer = "3.0.2"
+futures_ringbuf = "0.4.0"
+tracing = "0.1.37"
+
+[lints]
+workspace = true

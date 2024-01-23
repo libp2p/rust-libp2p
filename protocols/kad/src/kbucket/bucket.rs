@@ -26,11 +26,10 @@
 //! > of the `KBucketsTable` and in particular the public `Entry` API.
 
 use super::*;
-pub use crate::K_VALUE;
-
+pub(crate) use crate::K_VALUE;
 /// A `PendingNode` is a `Node` that is pending insertion into a `KBucket`.
 #[derive(Debug, Clone)]
-pub struct PendingNode<TKey, TVal> {
+pub(crate) struct PendingNode<TKey, TVal> {
     /// The pending node to insert.
     node: Node<TKey, TVal>,
 
@@ -55,27 +54,24 @@ pub enum NodeStatus {
 }
 
 impl<TKey, TVal> PendingNode<TKey, TVal> {
-    pub fn key(&self) -> &TKey {
-        &self.node.key
-    }
-
-    pub fn status(&self) -> NodeStatus {
+    pub(crate) fn status(&self) -> NodeStatus {
         self.status
     }
 
-    pub fn value_mut(&mut self) -> &mut TVal {
+    pub(crate) fn value_mut(&mut self) -> &mut TVal {
         &mut self.node.value
     }
 
-    pub fn is_ready(&self) -> bool {
+    pub(crate) fn is_ready(&self) -> bool {
         Instant::now() >= self.replace
     }
 
-    pub fn set_ready_at(&mut self, t: Instant) {
+    #[cfg(test)]
+    pub(crate) fn set_ready_at(&mut self, t: Instant) {
         self.replace = t;
     }
 
-    pub fn into_node(self) -> Node<TKey, TVal> {
+    pub(crate) fn into_node(self) -> Node<TKey, TVal> {
         self.node
     }
 }
@@ -94,12 +90,11 @@ pub struct Node<TKey, TVal> {
 /// The position of a node in a `KBucket`, i.e. a non-negative integer
 /// in the range `[0, K_VALUE)`.
 #[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
-pub struct Position(usize);
-
+pub(crate) struct Position(usize);
 /// A `KBucket` is a list of up to `K_VALUE` keys and associated values,
 /// ordered from least-recently connected to most-recently connected.
 #[derive(Debug, Clone)]
-pub struct KBucket<TKey, TVal> {
+pub(crate) struct KBucket<TKey, TVal> {
     /// The nodes contained in the bucket.
     nodes: ArrayVec<Node<TKey, TVal>, { K_VALUE.get() }>,
 
@@ -131,7 +126,7 @@ pub struct KBucket<TKey, TVal> {
 /// The result of inserting an entry into a bucket.
 #[must_use]
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum InsertResult<TKey> {
+pub(crate) enum InsertResult<TKey> {
     /// The entry has been successfully inserted.
     Inserted,
     /// The entry is pending insertion because the relevant bucket is currently full.
@@ -153,12 +148,12 @@ pub enum InsertResult<TKey> {
 /// The result of applying a pending node to a bucket, possibly
 /// replacing an existing node.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct AppliedPending<TKey, TVal> {
+pub(crate) struct AppliedPending<TKey, TVal> {
     /// The key of the inserted pending node.
-    pub inserted: Node<TKey, TVal>,
+    pub(crate) inserted: Node<TKey, TVal>,
     /// The node that has been evicted from the bucket to make room for the
     /// pending node, if any.
-    pub evicted: Option<Node<TKey, TVal>>,
+    pub(crate) evicted: Option<Node<TKey, TVal>>,
 }
 
 impl<TKey, TVal> KBucket<TKey, TVal>
@@ -167,7 +162,7 @@ where
     TVal: Clone,
 {
     /// Creates a new `KBucket` with the given timeout for pending entries.
-    pub fn new(pending_timeout: Duration) -> Self {
+    pub(crate) fn new(pending_timeout: Duration) -> Self {
         KBucket {
             nodes: ArrayVec::new(),
             first_connected_pos: None,
@@ -177,29 +172,24 @@ where
     }
 
     /// Returns a reference to the pending node of the bucket, if there is any.
-    pub fn pending(&self) -> Option<&PendingNode<TKey, TVal>> {
+    pub(crate) fn pending(&self) -> Option<&PendingNode<TKey, TVal>> {
         self.pending.as_ref()
     }
 
     /// Returns a mutable reference to the pending node of the bucket, if there is any.
-    pub fn pending_mut(&mut self) -> Option<&mut PendingNode<TKey, TVal>> {
+    pub(crate) fn pending_mut(&mut self) -> Option<&mut PendingNode<TKey, TVal>> {
         self.pending.as_mut()
     }
 
     /// Returns a reference to the pending node of the bucket, if there is any
     /// with a matching key.
-    pub fn as_pending(&self, key: &TKey) -> Option<&PendingNode<TKey, TVal>> {
+    pub(crate) fn as_pending(&self, key: &TKey) -> Option<&PendingNode<TKey, TVal>> {
         self.pending()
             .filter(|p| p.node.key.as_ref() == key.as_ref())
     }
 
-    /// Returns a reference to a node in the bucket.
-    pub fn get(&self, key: &TKey) -> Option<&Node<TKey, TVal>> {
-        self.position(key).map(|p| &self.nodes[p.0])
-    }
-
     /// Returns an iterator over the nodes in the bucket, together with their status.
-    pub fn iter(&self) -> impl Iterator<Item = (&Node<TKey, TVal>, NodeStatus)> {
+    pub(crate) fn iter(&self) -> impl Iterator<Item = (&Node<TKey, TVal>, NodeStatus)> {
         self.nodes
             .iter()
             .enumerate()
@@ -212,7 +202,7 @@ where
     /// If a pending node has been inserted, its key is returned together with
     /// the node that was replaced. `None` indicates that the nodes in the
     /// bucket remained unchanged.
-    pub fn apply_pending(&mut self) -> Option<AppliedPending<TKey, TVal>> {
+    pub(crate) fn apply_pending(&mut self) -> Option<AppliedPending<TKey, TVal>> {
         if let Some(pending) = self.pending.take() {
             if pending.replace <= Instant::now() {
                 if self.nodes.is_full() {
@@ -269,20 +259,20 @@ where
     }
 
     /// Updates the status of the pending node, if any.
-    pub fn update_pending(&mut self, status: NodeStatus) {
+    pub(crate) fn update_pending(&mut self, status: NodeStatus) {
         if let Some(pending) = &mut self.pending {
             pending.status = status
         }
     }
 
     /// Removes the pending node from the bucket, if any.
-    pub fn remove_pending(&mut self) -> Option<PendingNode<TKey, TVal>> {
+    pub(crate) fn remove_pending(&mut self) -> Option<PendingNode<TKey, TVal>> {
         self.pending.take()
     }
 
     /// Updates the status of the node referred to by the given key, if it is
     /// in the bucket.
-    pub fn update(&mut self, key: &TKey, status: NodeStatus) {
+    pub(crate) fn update(&mut self, key: &TKey, status: NodeStatus) {
         // Remove the node from its current position and then reinsert it
         // with the desired status, which puts it at the end of either the
         // prefix list of disconnected nodes or the suffix list of connected
@@ -319,7 +309,11 @@ where
     ///     i.e. as the most-recently disconnected node. If there are no connected nodes,
     ///     the new node is added as the last element of the bucket.
     ///
-    pub fn insert(&mut self, node: Node<TKey, TVal>, status: NodeStatus) -> InsertResult<TKey> {
+    pub(crate) fn insert(
+        &mut self,
+        node: Node<TKey, TVal>,
+        status: NodeStatus,
+    ) -> InsertResult<TKey> {
         match status {
             NodeStatus::Connected => {
                 if self.nodes.is_full() {
@@ -357,7 +351,10 @@ where
     }
 
     /// Removes the node with the given key from the bucket, if it exists.
-    pub fn remove(&mut self, key: &TKey) -> Option<(Node<TKey, TVal>, NodeStatus, Position)> {
+    pub(crate) fn remove(
+        &mut self,
+        key: &TKey,
+    ) -> Option<(Node<TKey, TVal>, NodeStatus, Position)> {
         if let Some(pos) = self.position(key) {
             // Remove the node from its current position.
             let status = self.status(pos);
@@ -385,7 +382,7 @@ where
     }
 
     /// Returns the status of the node at the given position.
-    pub fn status(&self, pos: Position) -> NodeStatus {
+    pub(crate) fn status(&self, pos: Position) -> NodeStatus {
         if self.first_connected_pos.map_or(false, |i| pos.0 >= i) {
             NodeStatus::Connected
         } else {
@@ -393,28 +390,25 @@ where
         }
     }
 
-    /// Checks whether the given position refers to a connected node.
-    pub fn is_connected(&self, pos: Position) -> bool {
-        self.status(pos) == NodeStatus::Connected
-    }
-
     /// Gets the number of entries currently in the bucket.
-    pub fn num_entries(&self) -> usize {
+    pub(crate) fn num_entries(&self) -> usize {
         self.nodes.len()
     }
 
     /// Gets the number of entries in the bucket that are considered connected.
-    pub fn num_connected(&self) -> usize {
+    #[cfg(test)]
+    pub(crate) fn num_connected(&self) -> usize {
         self.first_connected_pos.map_or(0, |i| self.nodes.len() - i)
     }
 
     /// Gets the number of entries in the bucket that are considered disconnected.
-    pub fn num_disconnected(&self) -> usize {
+    #[cfg(test)]
+    pub(crate) fn num_disconnected(&self) -> usize {
         self.nodes.len() - self.num_connected()
     }
 
     /// Gets the position of an node in the bucket.
-    pub fn position(&self, key: &TKey) -> Option<Position> {
+    pub(crate) fn position(&self, key: &TKey) -> Option<Position> {
         self.nodes
             .iter()
             .position(|p| p.key.as_ref() == key.as_ref())
@@ -425,7 +419,7 @@ where
     ///
     /// Returns `None` if the given key does not refer to a node in the
     /// bucket.
-    pub fn get_mut(&mut self, key: &TKey) -> Option<&mut Node<TKey, TVal>> {
+    pub(crate) fn get_mut(&mut self, key: &TKey) -> Option<&mut Node<TKey, TVal>> {
         self.nodes
             .iter_mut()
             .find(move |p| p.key.as_ref() == key.as_ref())
@@ -435,7 +429,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use libp2p_core::PeerId;
+    use libp2p_identity::PeerId;
     use quickcheck::*;
     use std::collections::VecDeque;
 
@@ -548,7 +542,7 @@ mod tests {
         let node = Node { key, value: () };
         match bucket.insert(node, NodeStatus::Disconnected) {
             InsertResult::Full => {}
-            x => panic!("{:?}", x),
+            x => panic!("{x:?}"),
         }
 
         // One-by-one fill the bucket with connected nodes, replacing the disconnected ones.
@@ -568,20 +562,20 @@ mod tests {
                 InsertResult::Pending { disconnected } => {
                     assert_eq!(disconnected, first_disconnected.key)
                 }
-                x => panic!("{:?}", x),
+                x => panic!("{x:?}"),
             }
 
             // Trying to insert another connected node fails.
             match bucket.insert(node.clone(), NodeStatus::Connected) {
                 InsertResult::Full => {}
-                x => panic!("{:?}", x),
+                x => panic!("{x:?}"),
             }
 
             assert!(bucket.pending().is_some());
 
             // Apply the pending node.
             let pending = bucket.pending_mut().expect("No pending node.");
-            pending.set_ready_at(Instant::now() - Duration::from_secs(1));
+            pending.set_ready_at(Instant::now().checked_sub(Duration::from_secs(1)).unwrap());
             let result = bucket.apply_pending();
             assert_eq!(
                 result,
@@ -603,7 +597,7 @@ mod tests {
         let node = Node { key, value: () };
         match bucket.insert(node, NodeStatus::Connected) {
             InsertResult::Full => {}
-            x => panic!("{:?}", x),
+            x => panic!("{x:?}"),
         }
     }
 

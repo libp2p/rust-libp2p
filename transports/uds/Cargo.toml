@@ -1,28 +1,31 @@
 [package]
 name = "libp2p-uds"
 edition = "2021"
-rust-version = "1.60.0"
+rust-version = { workspace = true }
 description = "Unix domain sockets transport for libp2p"
-version = "0.37.0"
+version = "0.40.0"
 authors = ["Parity Technologies <admin@parity.io>"]
 license = "MIT"
 repository = "https://github.com/libp2p/rust-libp2p"
 keywords = ["peer-to-peer", "libp2p", "networking"]
 categories = ["network-programming", "asynchronous"]
 
-[target.'cfg(all(unix, not(target_os = "emscripten")))'.dependencies]
+[dependencies]
 async-std = { version = "1.6.2", optional = true }
-libp2p-core = { version = "0.38.0", path = "../../core" }
-log = "0.4.1"
-futures = "0.3.1"
-tokio = { version = "1.15", default-features = false, features = ["net"], optional = true }
+libp2p-core = { workspace = true }
+futures = "0.3.30"
+tokio = { version = "1.35", default-features = false, features = ["net"], optional = true }
+tracing = "0.1.37"
 
-[target.'cfg(all(unix, not(target_os = "emscripten")))'.dev-dependencies]
-tempfile = "3.0"
+[dev-dependencies]
+tempfile = "3.9"
 
-# Passing arguments to the docsrs builder in order to properly document cfg's. 
+# Passing arguments to the docsrs builder in order to properly document cfg's.
 # More information: https://docs.rs/about/builds#cross-compiling
 [package.metadata.docs.rs]
 all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
 rustc-args = ["--cfg", "docsrs"]
+
+[lints]
+workspace = true

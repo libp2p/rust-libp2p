@@ -20,9 +20,7 @@
 
 //! Error types that can result from gossipsub.
 
-use libp2p_core::identity::error::SigningError;
-use libp2p_core::upgrade::ProtocolError;
-use thiserror::Error;
+use libp2p_identity::SigningError;
 
 /// Error associated with publishing a gossipsub message.
 #[derive(Debug)]
@@ -42,7 +40,7 @@ pub enum PublishError {
 
 impl std::fmt::Display for PublishError {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        write!(f, "{:?}", self)
+        write!(f, "{self:?}")
     }
 }
 
@@ -67,7 +65,7 @@ pub enum SubscriptionError {
 
 impl std::fmt::Display for SubscriptionError {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        write!(f, "{:?}", self)
+        write!(f, "{self:?}")
     }
 }
 
@@ -84,23 +82,6 @@ impl From<SigningError> for PublishError {
     fn from(error: SigningError) -> Self {
         PublishError::SigningError(error)
     }
-}
-
-/// Errors that can occur in the protocols handler.
-#[derive(Debug, Error)]
-pub enum GossipsubHandlerError {
-    #[error("The maximum number of inbound substreams created has been exceeded.")]
-    MaxInboundSubstreams,
-    #[error("The maximum number of outbound substreams created has been exceeded.")]
-    MaxOutboundSubstreams,
-    #[error("The message exceeds the maximum transmission size.")]
-    MaxTransmissionSize,
-    #[error("Protocol negotiation timeout.")]
-    NegotiationTimeout,
-    #[error("Protocol negotiation failed.")]
-    NegotiationProtocolError(ProtocolError),
-    #[error("Failed to encode or decode")]
-    Codec(#[from] prost_codec::Error),
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -128,20 +109,48 @@ pub enum ValidationError {
 
 impl std::fmt::Display for ValidationError {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        write!(f, "{:?}", self)
+        write!(f, "{self:?}")
     }
 }
 
 impl std::error::Error for ValidationError {}
 
-impl From<std::io::Error> for GossipsubHandlerError {
-    fn from(error: std::io::Error) -> GossipsubHandlerError {
-        GossipsubHandlerError::Codec(prost_codec::Error::from(error))
-    }
-}
-
 impl From<std::io::Error> for PublishError {
     fn from(error: std::io::Error) -> PublishError {
         PublishError::TransformFailed(error)
+    }
+}
+
+/// Error associated with Config building.
+#[derive(Debug)]
+pub enum ConfigBuilderError {
+    /// Maximum transmission size is too small.
+    MaxTransmissionSizeTooSmall,
+    /// Histroy length less than history gossip length.
+    HistoryLengthTooSmall,
+    /// The ineauality doesn't hold mesh_outbound_min <= mesh_n_low <= mesh_n <= mesh_n_high
+    MeshParametersInvalid,
+    /// The inequality doesn't hold mesh_outbound_min <= self.config.mesh_n / 2
+    MeshOutboundInvalid,
+    /// unsubscribe_backoff is zero
+    UnsubscribeBackoffIsZero,
+    /// Invalid protocol
+    InvalidProtocol,
+}
+
+impl std::error::Error for ConfigBuilderError {}
+
+impl std::fmt::Display for ConfigBuilderError {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        match self {
+            Self::MaxTransmissionSizeTooSmall => {
+                write!(f, "Maximum transmission size is too small")
+            }
+            Self::HistoryLengthTooSmall => write!(f, "Histroy length less than history gossip length"),
+            Self::MeshParametersInvalid => write!(f, "The ineauality doesn't hold mesh_outbound_min <= mesh_n_low <= mesh_n <= mesh_n_high"),
+            Self::MeshOutboundInvalid => write!(f, "The inequality doesn't hold mesh_outbound_min <= self.config.mesh_n / 2"),
+            Self::UnsubscribeBackoffIsZero => write!(f, "unsubscribe_backoff is zero"),
+            Self::InvalidProtocol => write!(f, "Invalid protocol"),
+        }
     }
 }

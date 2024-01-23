@@ -27,10 +27,10 @@
 
 #![cfg_attr(docsrs, feature(doc_cfg, doc_auto_cfg))]
 
+mod bandwidth;
 #[cfg(feature = "dcutr")]
 mod dcutr;
 #[cfg(feature = "gossipsub")]
-#[cfg(not(target_os = "unknown"))]
 mod gossipsub;
 #[cfg(feature = "identify")]
 mod identify;
@@ -43,14 +43,14 @@ mod protocol_stack;
 mod relay;
 mod swarm;
 
-use prometheus_client::registry::Registry;
+pub use bandwidth::Transport as BandwidthTransport;
+pub use prometheus_client::registry::Registry;
 
 /// Set of Swarm and protocol metrics derived from emitted events.
 pub struct Metrics {
     #[cfg(feature = "dcutr")]
     dcutr: dcutr::Metrics,
     #[cfg(feature = "gossipsub")]
-    #[cfg(not(target_os = "unknown"))]
     gossipsub: gossipsub::Metrics,
     #[cfg(feature = "identify")]
     identify: identify::Metrics,
@@ -78,7 +78,6 @@ impl Metrics {
             #[cfg(feature = "dcutr")]
             dcutr: dcutr::Metrics::new(sub_registry),
             #[cfg(feature = "gossipsub")]
-            #[cfg(not(target_os = "unknown"))]
             gossipsub: gossipsub::Metrics::new(sub_registry),
             #[cfg(feature = "identify")]
             identify: identify::Metrics::new(sub_registry),
@@ -100,16 +99,15 @@ pub trait Recorder<Event> {
 }
 
 #[cfg(feature = "dcutr")]
-impl Recorder<libp2p_dcutr::behaviour::Event> for Metrics {
-    fn record(&self, event: &libp2p_dcutr::behaviour::Event) {
+impl Recorder<libp2p_dcutr::Event> for Metrics {
+    fn record(&self, event: &libp2p_dcutr::Event) {
         self.dcutr.record(event)
     }
 }
 
 #[cfg(feature = "gossipsub")]
-#[cfg(not(target_os = "unknown"))]
-impl Recorder<libp2p_gossipsub::GossipsubEvent> for Metrics {
-    fn record(&self, event: &libp2p_gossipsub::GossipsubEvent) {
+impl Recorder<libp2p_gossipsub::Event> for Metrics {
+    fn record(&self, event: &libp2p_gossipsub::Event) {
         self.gossipsub.record(event)
     }
 }
@@ -122,8 +120,8 @@ impl Recorder<libp2p_identify::Event> for Metrics {
 }
 
 #[cfg(feature = "kad")]
-impl Recorder<libp2p_kad::KademliaEvent> for Metrics {
-    fn record(&self, event: &libp2p_kad::KademliaEvent) {
+impl Recorder<libp2p_kad::Event> for Metrics {
+    fn record(&self, event: &libp2p_kad::Event) {
         self.kad.record(event)
     }
 }
@@ -136,14 +134,14 @@ impl Recorder<libp2p_ping::Event> for Metrics {
 }
 
 #[cfg(feature = "relay")]
-impl Recorder<libp2p_relay::v2::relay::Event> for Metrics {
-    fn record(&self, event: &libp2p_relay::v2::relay::Event) {
+impl Recorder<libp2p_relay::Event> for Metrics {
+    fn record(&self, event: &libp2p_relay::Event) {
         self.relay.record(event)
     }
 }
 
-impl<TBvEv, THandleErr> Recorder<libp2p_swarm::SwarmEvent<TBvEv, THandleErr>> for Metrics {
-    fn record(&self, event: &libp2p_swarm::SwarmEvent<TBvEv, THandleErr>) {
+impl<TBvEv> Recorder<libp2p_swarm::SwarmEvent<TBvEv>> for Metrics {
+    fn record(&self, event: &libp2p_swarm::SwarmEvent<TBvEv>) {
         self.swarm.record(event);
 
         #[cfg(feature = "identify")]

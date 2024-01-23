@@ -50,9 +50,15 @@ where
     type ListenerUpgrade = MapErrListenerUpgrade<T, F>;
     type Dial = MapErrDial<T, F>;
 
-    fn listen_on(&mut self, addr: Multiaddr) -> Result<ListenerId, TransportError<Self::Error>> {
+    fn listen_on(
+        &mut self,
+        id: ListenerId,
+        addr: Multiaddr,
+    ) -> Result<(), TransportError<Self::Error>> {
         let map = self.map.clone();
-        self.transport.listen_on(addr).map_err(|err| err.map(map))
+        self.transport
+            .listen_on(id, addr)
+            .map_err(|err| err.map(map))
     }
 
     fn remove_listener(&mut self, id: ListenerId) -> bool {

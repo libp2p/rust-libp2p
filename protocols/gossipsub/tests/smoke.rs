@@ -18,93 +18,49 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use futures::prelude::*;
-use log::debug;
-use quickcheck::{QuickCheck, TestResult};
-use rand::{random, seq::SliceRandom, SeedableRng};
-use std::{
-    pin::Pin,
-    task::{Context, Poll},
-    time::Duration,
-};
-
+use async_std::prelude::FutureExt;
+use futures::stream::{FuturesUnordered, SelectAll};
 use futures::StreamExt;
-use libp2p::core::{
-    identity, multiaddr::Protocol, transport::MemoryTransport, upgrade, Multiaddr, Transport,
-};
-use libp2p::gossipsub::{
-    Gossipsub, GossipsubConfigBuilder, GossipsubEvent, IdentTopic as Topic, MessageAuthenticity,
-    ValidationMode,
-};
-use libp2p::plaintext::PlainText2Config;
-use libp2p::swarm::{Swarm, SwarmEvent};
-use libp2p::yamux;
-
+use libp2p_gossipsub as gossipsub;
+use libp2p_gossipsub::{MessageAuthenticity, ValidationMode};
+use libp2p_swarm::Swarm;
+use libp2p_swarm_test::SwarmExt as _;
+use quickcheck::{QuickCheck, TestResult};
+use rand::{seq::SliceRandom, SeedableRng};
+use std::{task::Poll, time::Duration};
+use tracing_subscriber::EnvFilter;
 struct Graph {
-    pub nodes: Vec<(Multiaddr, Swarm<Gossipsub>)>,
-}
-
-impl Future for Graph {
-    type Output = (Multiaddr, GossipsubEvent);
-
-    fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        for (addr, node) in &mut self.nodes {
-            loop {
-                match node.poll_next_unpin(cx) {
-                    Poll::Ready(Some(SwarmEvent::Behaviour(event))) => {
-                        return Poll::Ready((addr.clone(), event))
-                    }
-                    Poll::Ready(Some(_)) => {}
-                    Poll::Ready(None) => panic!("unexpected None when polling nodes"),
-                    Poll::Pending => break,
-                }
-            }
-        }
-
-        Poll::Pending
-    }
+    nodes: SelectAll<Swarm<gossipsub::Behaviour>>,
 }
 
 impl Graph {
-    fn new_connected(num_nodes: usize, seed: u64) -> Graph {
+    async fn new_connected(num_nodes: usize, seed: u64) -> Graph {
         if num_nodes == 0 {
             panic!("expecting at least one node");
         }
 
         let mut rng = rand::rngs::StdRng::seed_from_u64(seed);
 
-        let mut not_connected_nodes = std::iter::once(())
-            .cycle()
-            .take(num_nodes)
+        let mut not_connected_nodes = (0..num_nodes)
             .map(|_| build_node())
-            .collect::<Vec<(Multiaddr, Swarm<Gossipsub>)>>();
+            .collect::<FuturesUnordered<_>>()
+            .collect::<Vec<_>>()
+            .await;
 
         let mut connected_nodes = vec![not_connected_nodes.pop().unwrap()];
 
-        while !not_connected_nodes.is_empty() {
-            connected_nodes.shuffle(&mut rng);
-            not_connected_nodes.shuffle(&mut rng);
+        for mut next in not_connected_nodes {
+            let connected = connected_nodes
+                .choose_mut(&mut rng)
+                .expect("at least one connected node");
 
-            let mut next = not_connected_nodes.pop().unwrap();
-            let connected_addr = &connected_nodes[0].0;
-
-            // Memory transport can not handle addresses with `/p2p` suffix.
-            let mut connected_addr_no_p2p = connected_addr.clone();
-            let p2p_suffix_connected = connected_addr_no_p2p.pop();
-
-            debug!(
-                "Connect: {} -> {}",
-                next.0.clone().pop().unwrap(),
-                p2p_suffix_connected.unwrap()
-            );
-
-            next.1.dial(connected_addr_no_p2p).unwrap();
+            next.connect(connected).await;
 
             connected_nodes.push(next);
         }
 
         Graph {
-            nodes: connected_nodes,
+            nodes: SelectAll::from_iter(connected_nodes),
         }
     }
 
@@ -112,146 +68,146 @@ impl Graph {
     /// `true`.
     ///
     /// Returns [`true`] on success and [`false`] on timeout.
-    fn wait_for<F: FnMut(&GossipsubEvent) -> bool>(&mut self, mut f: F) -> bool {
-        let fut = futures::future::poll_fn(move |cx| match self.poll_unpin(cx) {
-            Poll::Ready((_addr, ev)) if f(&ev) => Poll::Ready(()),
-            _ => Poll::Pending,
-        });
+    async fn wait_for<F: FnMut(&gossipsub::Event) -> bool>(&mut self, mut f: F) -> bool {
+        let condition = async {
+            loop {
+                if let Ok(ev) = self
+                    .nodes
+                    .select_next_some()
+                    .await
+                    .try_into_behaviour_event()
+                {
+                    if f(&ev) {
+                        break;
+                    }
+                }
+            }
+        };
 
-        let fut = async_std::future::timeout(Duration::from_secs(10), fut);
-
-        futures::executor::block_on(fut).is_ok()
+        match condition.timeout(Duration::from_secs(10)).await {
+            Ok(()) => true,
+            Err(_) => false,
+        }
     }
 
     /// Polls the graph until Poll::Pending is obtained, completing the underlying polls.
-    fn drain_poll(self) -> Self {
-        // The future below should return self. Given that it is a FnMut and not a FnOnce, one needs
-        // to wrap `self` in an Option, leaving a `None` behind after the final `Poll::Ready`.
-        let mut this = Some(self);
-
-        let fut = futures::future::poll_fn(move |cx| match &mut this {
-            Some(graph) => loop {
-                match graph.poll_unpin(cx) {
-                    Poll::Ready(_) => {}
-                    Poll::Pending => return Poll::Ready(this.take().unwrap()),
-                }
-            },
-            None => panic!("future called after final return"),
+    async fn drain_events(&mut self) {
+        let fut = futures::future::poll_fn(|cx| loop {
+            match self.nodes.poll_next_unpin(cx) {
+                Poll::Ready(_) => {}
+                Poll::Pending => return Poll::Ready(()),
+            }
         });
-        let fut = async_std::future::timeout(Duration::from_secs(10), fut);
-        futures::executor::block_on(fut).unwrap()
+        fut.timeout(Duration::from_secs(10)).await.unwrap();
     }
 }
 
-fn build_node() -> (Multiaddr, Swarm<Gossipsub>) {
-    let key = identity::Keypair::generate_ed25519();
-    let public_key = key.public();
-
-    let transport = MemoryTransport::default()
-        .upgrade(upgrade::Version::V1)
-        .authenticate(PlainText2Config {
-            local_public_key: public_key.clone(),
-        })
-        .multiplex(yamux::YamuxConfig::default())
-        .boxed();
-
-    let peer_id = public_key.to_peer_id();
-
+async fn build_node() -> Swarm<gossipsub::Behaviour> {
     // NOTE: The graph of created nodes can be disconnected from the mesh point of view as nodes
     // can reach their d_lo value and not add other nodes to their mesh. To speed up this test, we
     // reduce the default values of the heartbeat, so that all nodes will receive gossip in a
     // timely fashion.
 
-    let config = GossipsubConfigBuilder::default()
-        .heartbeat_initial_delay(Duration::from_millis(100))
-        .heartbeat_interval(Duration::from_millis(200))
-        .history_length(10)
-        .history_gossip(10)
-        .validation_mode(ValidationMode::Permissive)
-        .build()
-        .unwrap();
-    let behaviour = Gossipsub::new(MessageAuthenticity::Author(peer_id), config).unwrap();
-    let mut swarm = Swarm::without_executor(transport, behaviour, peer_id);
+    let mut swarm = Swarm::new_ephemeral(|identity| {
+        let peer_id = identity.public().to_peer_id();
 
-    let port = 1 + random::<u64>();
-    let mut addr: Multiaddr = Protocol::Memory(port).into();
-    swarm.listen_on(addr.clone()).unwrap();
+        let config = gossipsub::ConfigBuilder::default()
+            .heartbeat_initial_delay(Duration::from_millis(100))
+            .heartbeat_interval(Duration::from_millis(200))
+            .history_length(10)
+            .history_gossip(10)
+            .validation_mode(ValidationMode::Permissive)
+            .build()
+            .unwrap();
+        gossipsub::Behaviour::new(MessageAuthenticity::Author(peer_id), config).unwrap()
+    });
+    swarm.listen().with_memory_addr_external().await;
 
-    addr = addr.with(Protocol::P2p(public_key.to_peer_id().into()));
-
-    (addr, swarm)
+    swarm
 }
 
 #[test]
 fn multi_hop_propagation() {
-    let _ = env_logger::try_init();
+    let _ = tracing_subscriber::fmt()
+        .with_env_filter(EnvFilter::from_default_env())
+        .try_init();
 
     fn prop(num_nodes: u8, seed: u64) -> TestResult {
         if !(2..=50).contains(&num_nodes) {
             return TestResult::discard();
         }
 
-        debug!("number nodes: {:?}, seed: {:?}", num_nodes, seed);
+        tracing::debug!(number_of_nodes=%num_nodes, seed=%seed);
 
-        let mut graph = Graph::new_connected(num_nodes as usize, seed);
-        let number_nodes = graph.nodes.len();
+        async_std::task::block_on(async move {
+            let mut graph = Graph::new_connected(num_nodes as usize, seed).await;
+            let number_nodes = graph.nodes.len();
 
-        // Subscribe each node to the same topic.
-        let topic = Topic::new("test-net");
-        for (_addr, node) in &mut graph.nodes {
-            node.behaviour_mut().subscribe(&topic).unwrap();
-        }
-
-        // Wait for all nodes to be subscribed.
-        let mut subscribed = 0;
-        let all_subscribed = graph.wait_for(move |ev| {
-            if let GossipsubEvent::Subscribed { .. } = ev {
-                subscribed += 1;
-                if subscribed == (number_nodes - 1) * 2 {
-                    return true;
-                }
+            // Subscribe each node to the same topic.
+            let topic = gossipsub::IdentTopic::new("test-net");
+            for node in &mut graph.nodes {
+                node.behaviour_mut().subscribe(&topic).unwrap();
             }
 
-            false
-        });
-        if !all_subscribed {
-            return TestResult::error(format!(
-                "Timed out waiting for all nodes to subscribe but only have {:?}/{:?}.",
-                subscribed, num_nodes,
-            ));
-        }
+            // Wait for all nodes to be subscribed.
+            let mut subscribed = 0;
 
-        // It can happen that the publish occurs before all grafts have completed causing this test
-        // to fail. We drain all the poll messages before publishing.
-        graph = graph.drain_poll();
+            let all_subscribed = graph
+                .wait_for(move |ev| {
+                    if let gossipsub::Event::Subscribed { .. } = ev {
+                        subscribed += 1;
+                        if subscribed == (number_nodes - 1) * 2 {
+                            return true;
+                        }
+                    }
 
-        // Publish a single message.
-        graph.nodes[0]
-            .1
-            .behaviour_mut()
-            .publish(topic, vec![1, 2, 3])
-            .unwrap();
+                    false
+                })
+                .await;
 
-        // Wait for all nodes to receive the published message.
-        let mut received_msgs = 0;
-        let all_received = graph.wait_for(move |ev| {
-            if let GossipsubEvent::Message { .. } = ev {
-                received_msgs += 1;
-                if received_msgs == number_nodes - 1 {
-                    return true;
-                }
+            if !all_subscribed {
+                return TestResult::error(format!(
+                    "Timed out waiting for all nodes to subscribe but only have {subscribed:?}/{num_nodes:?}.",
+                ));
             }
 
-            false
-        });
-        if !all_received {
-            return TestResult::error(format!(
-                "Timed out waiting for all nodes to receive the msg but only have {:?}/{:?}.",
-                received_msgs, num_nodes,
-            ));
-        }
+            // It can happen that the publish occurs before all grafts have completed causing this test
+            // to fail. We drain all the poll messages before publishing.
+            graph.drain_events().await;
 
-        TestResult::passed()
+            // Publish a single message.
+            graph
+                .nodes
+                .iter_mut()
+                .next()
+                .unwrap()
+                .behaviour_mut()
+                .publish(topic, vec![1, 2, 3])
+                .unwrap();
+
+            // Wait for all nodes to receive the published message.
+            let mut received_msgs = 0;
+            let all_received = graph
+                .wait_for(move |ev| {
+                    if let gossipsub::Event::Message { .. } = ev {
+                        received_msgs += 1;
+                        if received_msgs == number_nodes - 1 {
+                            return true;
+                        }
+                    }
+
+                    false
+                })
+                .await;
+
+            if !all_received {
+                return TestResult::error(format!(
+                    "Timed out waiting for all nodes to receive the msg but only have {received_msgs:?}/{num_nodes:?}.",
+                ));
+            }
+
+            TestResult::passed()
+        })
     }
 
     QuickCheck::new()

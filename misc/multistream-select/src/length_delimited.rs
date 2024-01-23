@@ -40,7 +40,7 @@ const DEFAULT_BUFFER_SIZE: usize = 64;
 /// unlikely to be more than 16KiB long.
 #[pin_project::pin_project]
 #[derive(Debug)]
-pub struct LengthDelimited<R> {
+pub(crate) struct LengthDelimited<R> {
     /// The inner I/O resource.
     #[pin]
     inner: R,
@@ -76,7 +76,7 @@ impl Default for ReadState {
 impl<R> LengthDelimited<R> {
     /// Creates a new I/O resource for reading and writing unsigned-varint
     /// length delimited frames.
-    pub fn new(inner: R) -> LengthDelimited<R> {
+    pub(crate) fn new(inner: R) -> LengthDelimited<R> {
         LengthDelimited {
             inner,
             read_state: ReadState::default(),
@@ -93,7 +93,7 @@ impl<R> LengthDelimited<R> {
     /// The read buffer is guaranteed to be empty whenever `Stream::poll` yields
     /// a new `Bytes` frame. The write buffer is guaranteed to be empty after
     /// flushing.
-    pub fn into_inner(self) -> R {
+    pub(crate) fn into_inner(self) -> R {
         assert!(self.read_buffer.is_empty());
         assert!(self.write_buffer.is_empty());
         self.inner
@@ -106,7 +106,7 @@ impl<R> LengthDelimited<R> {
     /// This is typically done if further uvi-framed messages are expected to be
     /// received but no more such messages are written, allowing the writing of
     /// follow-up protocol data to commence.
-    pub fn into_reader(self) -> LengthDelimitedReader<R> {
+    pub(crate) fn into_reader(self) -> LengthDelimitedReader<R> {
         LengthDelimitedReader { inner: self }
     }
 
@@ -115,10 +115,7 @@ impl<R> LengthDelimited<R> {
     ///
     /// After this method returns `Poll::Ready`, the write buffer of frames
     /// submitted to the `Sink` is guaranteed to be empty.
-    pub fn poll_write_buffer(
-        self: Pin<&mut Self>,
-        cx: &mut Context<'_>,
-    ) -> Poll<Result<(), io::Error>>
+    fn poll_write_buffer(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), io::Error>>
     where
         R: AsyncWrite,
     {
@@ -173,7 +170,7 @@ where
                     if (buf[*pos - 1] & 0x80) == 0 {
                         // MSB is not set, indicating the end of the length prefix.
                         let (len, _) = unsigned_varint::decode::u16(buf).map_err(|e| {
-                            log::debug!("invalid length prefix: {}", e);
+                            tracing::debug!("invalid length prefix: {e}");
                             io::Error::new(io::ErrorKind::InvalidData, "invalid length prefix")
                         })?;
 
@@ -300,7 +297,7 @@ where
 /// frames on an underlying I/O resource combined with direct `AsyncWrite` access.
 #[pin_project::pin_project]
 #[derive(Debug)]
-pub struct LengthDelimitedReader<R> {
+pub(crate) struct LengthDelimitedReader<R> {
     #[pin]
     inner: LengthDelimited<R>,
 }
@@ -318,7 +315,7 @@ impl<R> LengthDelimitedReader<R> {
     /// yield a new `Message`. The write buffer is guaranteed to be empty whenever
     /// [`LengthDelimited::poll_write_buffer`] yields [`Poll::Ready`] or after
     /// the [`Sink`] has been completely flushed via [`Sink::poll_flush`].
-    pub fn into_inner(self) -> R {
+    pub(crate) fn into_inner(self) -> R {
         self.inner.into_inner()
     }
 }
@@ -388,7 +385,6 @@ where
 #[cfg(test)]
 mod tests {
     use crate::length_delimited::LengthDelimited;
-    use async_std::net::{TcpListener, TcpStream};
     use futures::{io::Cursor, prelude::*};
     use quickcheck::*;
     use std::io::ErrorKind;
@@ -415,7 +411,7 @@ mod tests {
         assert!(len < (1 << 15));
         let frame = (0..len).map(|n| (n & 0xff) as u8).collect::<Vec<_>>();
         let mut data = vec![(len & 0x7f) as u8 | 0x80, (len >> 7) as u8];
-        data.extend(frame.clone().into_iter());
+        data.extend(frame.clone());
         let mut framed = LengthDelimited::new(Cursor::new(data));
         let recved = futures::executor::block_on(async move { framed.next().await }).unwrap();
         assert_eq!(recved.unwrap(), frame);
@@ -491,15 +487,13 @@ mod tests {
     #[test]
     fn writing_reading() {
         fn prop(frames: Vec<Vec<u8>>) -> TestResult {
-            async_std::task::block_on(async move {
-                let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
-                let listener_addr = listener.local_addr().unwrap();
+            let (client_connection, server_connection) = futures_ringbuf::Endpoint::pair(100, 100);
 
+            async_std::task::block_on(async move {
                 let expected_frames = frames.clone();
                 let server = async_std::task::spawn(async move {
-                    let socket = listener.accept().await.unwrap().0;
                     let mut connec =
-                        rw_stream_sink::RwStreamSink::new(LengthDelimited::new(socket));
+                        rw_stream_sink::RwStreamSink::new(LengthDelimited::new(server_connection));
 
                     let mut buf = vec![0u8; 0];
                     for expected in expected_frames {
@@ -515,8 +509,7 @@ mod tests {
                 });
 
                 let client = async_std::task::spawn(async move {
-                    let socket = TcpStream::connect(&listener_addr).await.unwrap();
-                    let mut connec = LengthDelimited::new(socket);
+                    let mut connec = LengthDelimited::new(client_connection);
                     for frame in frames {
                         connec.send(From::from(frame)).await.unwrap();
                     }

@@ -21,28 +21,24 @@
 use prometheus_client::metrics::counter::Counter;
 use prometheus_client::registry::Registry;
 
-pub struct Metrics {
+pub(crate) struct Metrics {
     messages: Counter,
 }
 
 impl Metrics {
-    pub fn new(registry: &mut Registry) -> Self {
+    pub(crate) fn new(registry: &mut Registry) -> Self {
         let sub_registry = registry.sub_registry_with_prefix("gossipsub");
 
         let messages = Counter::default();
-        sub_registry.register(
-            "messages",
-            "Number of messages received",
-            Box::new(messages.clone()),
-        );
+        sub_registry.register("messages", "Number of messages received", messages.clone());
 
         Self { messages }
     }
 }
 
-impl super::Recorder<libp2p_gossipsub::GossipsubEvent> for Metrics {
-    fn record(&self, event: &libp2p_gossipsub::GossipsubEvent) {
-        if let libp2p_gossipsub::GossipsubEvent::Message { .. } = event {
+impl super::Recorder<libp2p_gossipsub::Event> for Metrics {
+    fn record(&self, event: &libp2p_gossipsub::Event) {
+        if let libp2p_gossipsub::Event::Message { .. } = event {
             self.messages.inc();
         }
     }

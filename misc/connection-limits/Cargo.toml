@@ -1,0 +1,28 @@
+[package]
+name = "libp2p-connection-limits"
+edition = "2021"
+rust-version = { workspace = true }
+description = "Connection limits for libp2p."
+version = "0.3.1"
+license = "MIT"
+repository = "https://github.com/libp2p/rust-libp2p"
+keywords = ["peer-to-peer", "libp2p", "networking"]
+categories = ["network-programming", "asynchronous"]
+
+[dependencies]
+libp2p-core = { workspace = true }
+libp2p-swarm = { workspace = true }
+libp2p-identity = { workspace = true, features = ["peerid"] }
+void = "1"
+
+[dev-dependencies]
+async-std = { version = "1.12.0", features = ["attributes"] }
+libp2p-identify = { workspace = true }
+libp2p-ping = { workspace = true }
+libp2p-swarm-derive = { path = "../../swarm-derive" }
+libp2p-swarm-test = { path = "../../swarm-test" }
+quickcheck = { workspace = true }
+rand = "0.8.5"
+
+[lints]
+workspace = true

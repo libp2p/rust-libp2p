@@ -27,20 +27,19 @@ use super::{
 use futures::FutureExt;
 use futures_timer::Delay;
 use instant::Instant;
-use libp2p_core::{connection::ConnectionId, Multiaddr, PeerId};
-use libp2p_request_response::{
-    OutboundFailure, RequestId, RequestResponse, RequestResponseEvent, RequestResponseMessage,
-};
-use libp2p_swarm::{AddressScore, NetworkBehaviourAction, PollParameters};
+use libp2p_core::Multiaddr;
+use libp2p_identity::PeerId;
+use libp2p_request_response::{self as request_response, OutboundFailure, OutboundRequestId};
+use libp2p_swarm::{ConnectionId, ListenAddresses, ToSwarm};
 use rand::{seq::SliceRandom, thread_rng};
 use std::{
-    collections::{HashMap, VecDeque},
+    collections::{HashMap, HashSet, VecDeque},
     task::{Context, Poll},
     time::Duration,
 };
 
 /// Outbound probe failed or was aborted.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug)]
 pub enum OutboundProbeError {
     /// Probe was aborted because no server is known, or all servers
     /// are throttled through [`Config::throttle_server_period`].
@@ -54,7 +53,7 @@ pub enum OutboundProbeError {
     Response(ResponseError),
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug)]
 pub enum OutboundProbeEvent {
     /// A dial-back request was sent to a remote peer.
     Request {
@@ -82,48 +81,43 @@ pub enum OutboundProbeEvent {
 }
 
 /// View over [`super::Behaviour`] in a client role.
-pub struct AsClient<'a> {
-    pub inner: &'a mut RequestResponse<AutoNatCodec>,
-    pub local_peer_id: PeerId,
-    pub config: &'a Config,
-    pub connected: &'a HashMap<PeerId, HashMap<ConnectionId, Option<Multiaddr>>>,
-    pub probe_id: &'a mut ProbeId,
-
-    pub servers: &'a Vec<PeerId>,
-    pub throttled_servers: &'a mut Vec<(PeerId, Instant)>,
-
-    pub nat_status: &'a mut NatStatus,
-    pub confidence: &'a mut usize,
-
-    pub ongoing_outbound: &'a mut HashMap<RequestId, ProbeId>,
-
-    pub last_probe: &'a mut Option<Instant>,
-    pub schedule_probe: &'a mut Delay,
+pub(crate) struct AsClient<'a> {
+    pub(crate) inner: &'a mut request_response::Behaviour<AutoNatCodec>,
+    pub(crate) local_peer_id: PeerId,
+    pub(crate) config: &'a Config,
+    pub(crate) connected: &'a HashMap<PeerId, HashMap<ConnectionId, Option<Multiaddr>>>,
+    pub(crate) probe_id: &'a mut ProbeId,
+    pub(crate) servers: &'a HashSet<PeerId>,
+    pub(crate) throttled_servers: &'a mut Vec<(PeerId, Instant)>,
+    pub(crate) nat_status: &'a mut NatStatus,
+    pub(crate) confidence: &'a mut usize,
+    pub(crate) ongoing_outbound: &'a mut HashMap<OutboundRequestId, ProbeId>,
+    pub(crate) last_probe: &'a mut Option<Instant>,
+    pub(crate) schedule_probe: &'a mut Delay,
+    pub(crate) listen_addresses: &'a ListenAddresses,
+    pub(crate) other_candidates: &'a HashSet<Multiaddr>,
 }
 
 impl<'a> HandleInnerEvent for AsClient<'a> {
     fn handle_event(
         &mut self,
-        params: &mut impl PollParameters,
-        event: RequestResponseEvent<DialRequest, DialResponse>,
-    ) -> (VecDeque<Event>, Option<Action>) {
-        let mut events = VecDeque::new();
-        let mut action = None;
+        event: request_response::Event<DialRequest, DialResponse>,
+    ) -> VecDeque<Action> {
         match event {
-            RequestResponseEvent::Message {
+            request_response::Event::Message {
                 peer,
                 message:
-                    RequestResponseMessage::Response {
+                    request_response::Message::Response {
                         request_id,
                         response,
                     },
             } => {
-                log::debug!("Outbound dial-back request returned {:?}.", response);
+                tracing::debug!(?response, "Outbound dial-back request returned response");
 
                 let probe_id = self
                     .ongoing_outbound
                     .remove(&request_id)
-                    .expect("RequestId exists.");
+                    .expect("OutboundRequestId exists.");
 
                 let event = match response.result.clone() {
                     Ok(address) => OutboundProbeEvent::Response {
@@ -137,70 +131,66 @@ impl<'a> HandleInnerEvent for AsClient<'a> {
                         error: OutboundProbeError::Response(e),
                     },
                 };
-                events.push_back(Event::OutboundProbe(event));
+
+                let mut actions = VecDeque::with_capacity(3);
+
+                actions.push_back(ToSwarm::GenerateEvent(Event::OutboundProbe(event)));
 
                 if let Some(old) = self.handle_reported_status(response.result.clone().into()) {
-                    events.push_back(Event::StatusChanged {
+                    actions.push_back(ToSwarm::GenerateEvent(Event::StatusChanged {
                         old,
                         new: self.nat_status.clone(),
-                    });
+                    }));
                 }
 
                 if let Ok(address) = response.result {
-                    // Update observed address score if it is finite.
-                    let score = params
-                        .external_addresses()
-                        .find_map(|r| (r.addr == address).then_some(r.score))
-                        .unwrap_or(AddressScore::Finite(0));
-                    if let AddressScore::Finite(finite_score) = score {
-                        action = Some(NetworkBehaviourAction::ReportObservedAddr {
-                            address,
-                            score: AddressScore::Finite(finite_score + 1),
-                        });
-                    }
+                    actions.push_back(ToSwarm::ExternalAddrConfirmed(address));
                 }
+
+                actions
             }
-            RequestResponseEvent::OutboundFailure {
+            request_response::Event::OutboundFailure {
                 peer,
                 error,
                 request_id,
             } => {
-                log::debug!(
-                    "Outbound Failure {} when on dial-back request to peer {}.",
+                tracing::debug!(
+                    %peer,
+                    "Outbound Failure {} when on dial-back request to peer.",
                     error,
-                    peer
                 );
                 let probe_id = self
                     .ongoing_outbound
                     .remove(&request_id)
                     .unwrap_or_else(|| self.probe_id.next());
 
-                events.push_back(Event::OutboundProbe(OutboundProbeEvent::Error {
-                    probe_id,
-                    peer: Some(peer),
-                    error: OutboundProbeError::OutboundRequest(error),
-                }));
-
                 self.schedule_probe.reset(Duration::ZERO);
+
+                VecDeque::from([ToSwarm::GenerateEvent(Event::OutboundProbe(
+                    OutboundProbeEvent::Error {
+                        probe_id,
+                        peer: Some(peer),
+                        error: OutboundProbeError::OutboundRequest(error),
+                    },
+                ))])
             }
-            _ => {}
+            _ => VecDeque::default(),
         }
-        (events, action)
     }
 }
 
 impl<'a> AsClient<'a> {
-    pub fn poll_auto_probe(
-        &mut self,
-        params: &mut impl PollParameters,
-        cx: &mut Context<'_>,
-    ) -> Poll<OutboundProbeEvent> {
+    pub(crate) fn poll_auto_probe(&mut self, cx: &mut Context<'_>) -> Poll<OutboundProbeEvent> {
         match self.schedule_probe.poll_unpin(cx) {
             Poll::Ready(()) => {
                 self.schedule_probe.reset(self.config.retry_interval);
 
-                let mut addresses: Vec<_> = params.external_addresses().map(|r| r.addr).collect();
-                addresses.extend(params.listened_addresses());
+                let addresses = self
+                    .other_candidates
+                    .iter()
+                    .chain(self.listen_addresses.iter())
+                    .cloned()
+                    .collect();
 
                 let probe_id = self.probe_id.next();
                 let event = match self.do_probe(probe_id, addresses) {
@@ -221,7 +211,7 @@ impl<'a> AsClient<'a> {
     }
 
     // An inbound connection can indicate that we are public; adjust the delay to the next probe.
-    pub fn on_inbound_connection(&mut self) {
+    pub(crate) fn on_inbound_connection(&mut self) {
         if *self.confidence == self.config.confidence_max {
             if self.nat_status.is_public() {
                 self.schedule_next_probe(self.config.refresh_interval * 2);
@@ -231,7 +221,7 @@ impl<'a> AsClient<'a> {
         }
     }
 
-    pub fn on_new_address(&mut self) {
+    pub(crate) fn on_new_address(&mut self) {
         if !self.nat_status.is_public() {
             // New address could be publicly reachable, trigger retry.
             if *self.confidence > 0 {
@@ -241,7 +231,7 @@ impl<'a> AsClient<'a> {
         }
     }
 
-    pub fn on_expired_address(&mut self, addr: &Multiaddr) {
+    pub(crate) fn on_expired_address(&mut self, addr: &Multiaddr) {
         if let NatStatus::Public(public_address) = self.nat_status {
             if public_address == addr {
                 *self.confidence = 0;
@@ -285,16 +275,12 @@ impl<'a> AsClient<'a> {
     ) -> Result<PeerId, OutboundProbeError> {
         let _ = self.last_probe.insert(Instant::now());
         if addresses.is_empty() {
-            log::debug!("Outbound dial-back request aborted: No dial-back addresses.");
+            tracing::debug!("Outbound dial-back request aborted: No dial-back addresses");
             return Err(OutboundProbeError::NoAddresses);
         }
-        let server = match self.random_server() {
-            Some(s) => s,
-            None => {
-                log::debug!("Outbound dial-back request aborted: No qualified server.");
-                return Err(OutboundProbeError::NoServer);
-            }
-        };
+
+        let server = self.random_server().ok_or(OutboundProbeError::NoServer)?;
+
         let request_id = self.inner.send_request(
             &server,
             DialRequest {
@@ -303,7 +289,7 @@ impl<'a> AsClient<'a> {
             },
         );
         self.throttled_servers.push((server, Instant::now()));
-        log::debug!("Send dial-back request to peer {}.", server);
+        tracing::debug!(peer=%server, "Send dial-back request to peer");
         self.ongoing_outbound.insert(request_id, probe_id);
         Ok(server)
     }
@@ -311,11 +297,8 @@ impl<'a> AsClient<'a> {
     // Set the delay to the next probe based on the time of our last probe
     // and the specified delay.
     fn schedule_next_probe(&mut self, delay: Duration) {
-        let last_probe_instant = match self.last_probe {
-            Some(instant) => instant,
-            None => {
-                return;
-            }
+        let Some(last_probe_instant) = self.last_probe else {
+            return;
         };
         let schedule_next = *last_probe_instant + delay;
         self.schedule_probe
@@ -354,10 +337,10 @@ impl<'a> AsClient<'a> {
             return None;
         }
 
-        log::debug!(
-            "Flipped assumed NAT status from {:?} to {:?}",
-            self.nat_status,
-            reported_status
+        tracing::debug!(
+            old_status=?self.nat_status,
+            new_status=?reported_status,
+            "Flipped assumed NAT status"
         );
 
         let old_status = self.nat_status.clone();
