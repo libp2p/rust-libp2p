@@ -2,6 +2,8 @@
 
 - Update to `libp2p-swarm` `v0.42.0`.
 
+- Update to DHT republish interval and expiration time defaults to 22h and 48h respectively. (PR #[3230](https://github.com/libp2p/rust-libp2p/pull/3230), rationale in [libp2p/specs#451](https://github.com/libp2p/specs/pull/451))
+
 # 0.42.0
 
 - Update to `libp2p-core` `v0.38.0`.
