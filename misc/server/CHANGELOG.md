@@ -2,7 +2,7 @@
 
 ### Changed
 
-- Remove `Behaviour::bootstrap` polling.
+- Use periodic and automatic bootstrap of Kademlia.
   See [PR 4838](https://github.com/libp2p/rust-libp2p/pull/4838).
 
 ## 0.12.5
