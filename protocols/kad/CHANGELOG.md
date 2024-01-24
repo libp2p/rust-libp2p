@@ -1,3 +1,8 @@
+## 0.46.0 -- unreleased
+
+- Make it mandatory to provide protocol names when creating a `kad::Config`. Deprecate `kad::Config::default()`, replaced by `kad::Config::new(Vec<StreamProtocol>)`.
+  See [PR 5122](https://github.com/libp2p/rust-libp2p/pull/5122).
+
 ## 0.45.3
 
 - The progress of the close query iterator shall be decided by ANY of the new peers.

@@ -24,7 +24,7 @@ mod test;
 
 use crate::addresses::Addresses;
 use crate::handler::{Handler, HandlerEvent, HandlerIn, RequestId};
-use crate::jobs::*;
+use crate::{jobs::*, protocol};
 use crate::kbucket::{self, Distance, KBucketsTable, NodeStatus};
 use crate::protocol::{ConnectionType, KadPeer, ProtocolConfig};
 use crate::query::{Query, QueryConfig, QueryId, QueryPool, QueryPoolState};
@@ -50,6 +50,7 @@ use libp2p_swarm::{
 use smallvec::SmallVec;
 use std::collections::{BTreeMap, HashMap, HashSet, VecDeque};
 use std::fmt;
+use std::iter;
 use std::num::NonZeroUsize;
 use std::task::{Context, Poll, Waker};
 use std::time::Duration;
@@ -184,20 +185,11 @@ pub struct Config {
 }
 
 impl Default for Config {
+    /// Returns the default configuration.
+    /// 
+    /// Deprecated: use `Config::new` instead.
     fn default() -> Self {
-        Config {
-            kbucket_pending_timeout: Duration::from_secs(60),
-            query_config: QueryConfig::default(),
-            protocol_config: Default::default(),
-            record_ttl: Some(Duration::from_secs(36 * 60 * 60)),
-            record_replication_interval: Some(Duration::from_secs(60 * 60)),
-            record_publication_interval: Some(Duration::from_secs(24 * 60 * 60)),
-            record_filtering: StoreInserts::Unfiltered,
-            provider_publication_interval: Some(Duration::from_secs(12 * 60 * 60)),
-            provider_record_ttl: Some(Duration::from_secs(24 * 60 * 60)),
-            kbucket_inserts: BucketInserts::OnConnected,
-            caching: Caching::Enabled { max_peers: 1 },
-        }
+        Self::new(iter::once(protocol::DEFAULT_PROTO_NAME).collect())
     }
 }
 
@@ -217,6 +209,29 @@ pub enum Caching {
 }
 
 impl Config {
+    /// Builds a new `Config` with the given protocol names.
+    pub fn new(protocol_names: Vec<StreamProtocol>) -> Self {
+        Config {
+            kbucket_pending_timeout: Duration::from_secs(60),
+            query_config: QueryConfig::default(),
+            protocol_config: ProtocolConfig::new(protocol_names),
+            record_ttl: Some(Duration::from_secs(36 * 60 * 60)),
+            record_replication_interval: Some(Duration::from_secs(60 * 60)),
+            record_publication_interval: Some(Duration::from_secs(24 * 60 * 60)),
+            record_filtering: StoreInserts::Unfiltered,
+            provider_publication_interval: Some(Duration::from_secs(12 * 60 * 60)),
+            provider_record_ttl: Some(Duration::from_secs(24 * 60 * 60)),
+            kbucket_inserts: BucketInserts::OnConnected,
+            caching: Caching::Enabled { max_peers: 1 },
+        }
+    }
+
+    /// Returns the default configuration.
+    #[deprecated(note = "Use `Config::new` instead")]
+    pub fn default() -> Self {
+        Default::default()
+    }
+
     /// Sets custom protocol names.
     ///
     /// Kademlia nodes only communicate with other nodes using the same protocol
@@ -226,6 +241,8 @@ impl Config {
     /// More than one protocol name can be supplied. In this case the node will
     /// be able to talk to other nodes supporting any of the provided names.
     /// Multiple names must be used with caution to avoid network partitioning.
+    #[deprecated(note = "Use `Config::new` instead")]
+    #[allow(deprecated)]
     pub fn set_protocol_names(&mut self, names: Vec<StreamProtocol>) -> &mut Self {
         self.protocol_config.set_protocol_names(names);
         self

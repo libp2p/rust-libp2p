@@ -4,7 +4,9 @@ use libp2p::kad;
 use libp2p::ping;
 use libp2p::relay;
 use libp2p::swarm::behaviour::toggle::Toggle;
-use libp2p::{identity, swarm::NetworkBehaviour, Multiaddr, PeerId};
+use libp2p::swarm::{NetworkBehaviour, StreamProtocol};
+use libp2p::{identity, Multiaddr, PeerId};
+use std::iter;
 use std::str::FromStr;
 use std::time::Duration;
 
@@ -14,6 +16,8 @@ const BOOTNODES: [&str; 4] = [
     "QmbLHAnMoJPWSCR5Zhtx6BHJX9KiKNN6tpvbUcqanj75Nb",
     "QmcZf59bWwK5XFi76CZX8cbJ4BhTzzA3gU1ZjYZcYW3dwt",
 ];
+
+const IPFS_PROTO_NAME: StreamProtocol = StreamProtocol::new("/ipfs/kad/1.0.0");
 
 #[derive(NetworkBehaviour)]
 pub(crate) struct Behaviour {
@@ -31,7 +35,7 @@ impl Behaviour {
         enable_autonat: bool,
     ) -> Self {
         let kademlia = if enable_kademlia {
-            let mut kademlia_config = kad::Config::default();
+            let mut kademlia_config = kad::Config::new(iter::once(IPFS_PROTO_NAME).collect());
             // Instantly remove records and provider records.
             //
             // TODO: Replace hack with option to disable both.
