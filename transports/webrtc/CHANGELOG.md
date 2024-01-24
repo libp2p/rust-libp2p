@@ -1,7 +1,7 @@
 ## 0.7.1-alpha
 
 - Bump `libp2p-webrtc-utils` dependency to fix compile.
-  See [PR XXXX](https://github.com/libp2p/rust-libp2p/pull/XXXX).
+  See [PR 5118](https://github.com/libp2p/rust-libp2p/pull/5118).
 
 ## 0.7.0-alpha
 
