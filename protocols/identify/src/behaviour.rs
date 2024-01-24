@@ -259,7 +259,7 @@ impl NetworkBehaviour for Behaviour {
     fn on_connection_handler_event(
         &mut self,
         peer_id: PeerId,
-        id: ConnectionId,
+        connection_id: ConnectionId,
         event: THandlerOutEvent<Self>,
     ) {
         match event {
@@ -274,9 +274,13 @@ impl NetworkBehaviour for Behaviour {
 
                 let observed = info.observed_addr.clone();
                 self.events
-                    .push_back(ToSwarm::GenerateEvent(Event::Received { peer_id, info }));
+                    .push_back(ToSwarm::GenerateEvent(Event::Received {
+                        connection_id,
+                        peer_id,
+                        info,
+                    }));
 
-                match self.our_observed_addresses.entry(id) {
+                match self.our_observed_addresses.entry(connection_id) {
                     Entry::Vacant(not_yet_observed) => {
                         not_yet_observed.insert(observed.clone());
                         self.events
@@ -289,7 +293,7 @@ impl NetworkBehaviour for Behaviour {
                         tracing::info!(
                             old_address=%already_observed.get(),
                             new_address=%observed,
-                            "Our observed address on connection {id} changed",
+                            "Our observed address on connection {connection_id} changed",
                         );
 
                         *already_observed.get_mut() = observed.clone();
@@ -299,16 +303,24 @@ impl NetworkBehaviour for Behaviour {
                 }
             }
             handler::Event::Identification => {
-                self.events
-                    .push_back(ToSwarm::GenerateEvent(Event::Sent { peer_id }));
+                self.events.push_back(ToSwarm::GenerateEvent(Event::Sent {
+                    connection_id,
+                    peer_id,
+                }));
             }
             handler::Event::IdentificationPushed(info) => {
-                self.events
-                    .push_back(ToSwarm::GenerateEvent(Event::Pushed { peer_id, info }));
+                self.events.push_back(ToSwarm::GenerateEvent(Event::Pushed {
+                    connection_id,
+                    peer_id,
+                    info,
+                }));
             }
             handler::Event::IdentificationError(error) => {
-                self.events
-                    .push_back(ToSwarm::GenerateEvent(Event::Error { peer_id, error }));
+                self.events.push_back(ToSwarm::GenerateEvent(Event::Error {
+                    connection_id,
+                    peer_id,
+                    error,
+                }));
             }
         }
     }
@@ -406,6 +418,8 @@ impl NetworkBehaviour for Behaviour {
 pub enum Event {
     /// Identification information has been received from a peer.
     Received {
+        /// Identifier of the connection.
+        connection_id: ConnectionId,
         /// The peer that has been identified.
         peer_id: PeerId,
         /// The information provided by the peer.
@@ -414,12 +428,16 @@ pub enum Event {
     /// Identification information of the local node has been sent to a peer in
     /// response to an identification request.
     Sent {
+        /// Identifier of the connection.
+        connection_id: ConnectionId,
         /// The peer that the information has been sent to.
         peer_id: PeerId,
     },
     /// Identification information of the local node has been actively pushed to
     /// a peer.
     Pushed {
+        /// Identifier of the connection.
+        connection_id: ConnectionId,
         /// The peer that the information has been sent to.
         peer_id: PeerId,
         /// The full Info struct we pushed to the remote peer. Clients must
@@ -428,11 +446,24 @@ pub enum Event {
     },
     /// Error while attempting to identify the remote.
     Error {
+        /// Identifier of the connection.
+        connection_id: ConnectionId,
         /// The peer with whom the error originated.
         peer_id: PeerId,
         /// The error that occurred.
         error: StreamUpgradeError<UpgradeError>,
     },
+}
+
+impl Event {
+    pub fn connection_id(&self) -> ConnectionId {
+        match self {
+            Event::Received { connection_id, .. }
+            | Event::Sent { connection_id, .. }
+            | Event::Pushed { connection_id, .. }
+            | Event::Error { connection_id, .. } => *connection_id,
+        }
+    }
 }
 
 /// If there is a given peer_id in the multiaddr, make sure it is the same as

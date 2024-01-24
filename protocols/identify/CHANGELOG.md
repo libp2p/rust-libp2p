@@ -2,6 +2,8 @@
 
 - Ensure `Multiaddr` handled and returned by `Behaviour` are `/p2p` terminated.
   See [PR 4596](https://github.com/libp2p/rust-libp2p/pull/4596).
+- Add `ConnectionId` in `Event`.
+  See [PR 4981](https://github.com/libp2p/rust-libp2p/pull/4981).
 
 ## 0.44.0
 
