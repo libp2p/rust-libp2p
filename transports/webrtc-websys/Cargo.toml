@@ -25,7 +25,7 @@ thiserror = "1"
 tracing = "0.1.37"
 wasm-bindgen = { version = "0.2.90" }
 wasm-bindgen-futures = { version = "0.4.39" }
-web-sys = { version = "0.3.66", features = ["Document", "Location", "MessageEvent", "Navigator", "RtcCertificate", "RtcConfiguration", "RtcDataChannel", "RtcDataChannelEvent", "RtcDataChannelInit", "RtcDataChannelState", "RtcDataChannelType", "RtcPeerConnection", "RtcSdpType", "RtcSessionDescription", "RtcSessionDescriptionInit", "Window"] }
+web-sys = { version = "0.3.67", features = ["Document", "Location", "MessageEvent", "Navigator", "RtcCertificate", "RtcConfiguration", "RtcDataChannel", "RtcDataChannelEvent", "RtcDataChannelInit", "RtcDataChannelState", "RtcDataChannelType", "RtcPeerConnection", "RtcSdpType", "RtcSessionDescription", "RtcSessionDescriptionInit", "Window"] }
 
 [lints]
 workspace = true
