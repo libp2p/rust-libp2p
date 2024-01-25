@@ -60,7 +60,7 @@ impl ServerCertManager {
         self.check_and_roll_items()?;
 
         let cur_item = self.items.first()
-            .expect("Element with index 0 exists");
+            .expect("The first element exists");
         let cert_hashes = self.items.iter()
             .map(|item| item.cert_hash.clone())
             .collect();
@@ -94,7 +94,7 @@ impl ServerCertManager {
         Ok(CertItem { server_tls_config: Arc::new(tls_config), start, end: not_after, cert_hash })
     }
 
-    ///https://github.com/libp2p/specs/tree/master/webtransport#certificates
+    /// https://github.com/libp2p/specs/tree/master/webtransport#certificates
     /// Servers need to take care of regularly renewing their certificates.At first boot of the node,
     /// it creates one self-signed certificate with a validity of 14 days, starting immediately,
     /// and another certificate with the 14 day validity period starting on the expiry date of the first certificate.
