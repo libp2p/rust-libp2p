@@ -416,6 +416,7 @@ pub enum Error<TErr> {
     /// The underlying transport encountered an error.
     Transport(TErr),
     /// DNS resolution failed.
+    #[allow(clippy::enum_variant_names)]
     ResolveError(ResolveError),
     /// DNS resolution was successful, but the underlying transport refused the resolved address.
     MultiaddrNotSupported(Multiaddr),

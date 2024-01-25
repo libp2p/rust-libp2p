@@ -162,7 +162,7 @@ fn inject_nodes1() -> InjectNodes<IdentityTransform, AllowAllSubscriptionFilter>
 
 fn add_peer<D, F>(
     gs: &mut Behaviour<D, F>,
-    topic_hashes: &Vec<TopicHash>,
+    topic_hashes: &[TopicHash],
     outbound: bool,
     explicit: bool,
 ) -> PeerId
@@ -175,7 +175,7 @@ where
 
 fn add_peer_with_addr<D, F>(
     gs: &mut Behaviour<D, F>,
-    topic_hashes: &Vec<TopicHash>,
+    topic_hashes: &[TopicHash],
     outbound: bool,
     explicit: bool,
     address: Multiaddr,
@@ -196,7 +196,7 @@ where
 
 fn add_peer_with_addr_and_kind<D, F>(
     gs: &mut Behaviour<D, F>,
-    topic_hashes: &Vec<TopicHash>,
+    topic_hashes: &[TopicHash],
     outbound: bool,
     explicit: bool,
     address: Multiaddr,
@@ -3165,7 +3165,7 @@ fn test_scoring_p1() {
     );
 }
 
-fn random_message(seq: &mut u64, topics: &Vec<TopicHash>) -> RawMessage {
+fn random_message(seq: &mut u64, topics: &[TopicHash]) -> RawMessage {
     let mut rng = rand::thread_rng();
     *seq += 1;
     RawMessage {
@@ -4027,20 +4027,20 @@ fn test_scoring_p6() {
     //create 5 peers with the same ip
     let addr = Multiaddr::from(Ipv4Addr::new(10, 1, 2, 3));
     let peers = vec![
-        add_peer_with_addr(&mut gs, &vec![], false, false, addr.clone()),
-        add_peer_with_addr(&mut gs, &vec![], false, false, addr.clone()),
-        add_peer_with_addr(&mut gs, &vec![], true, false, addr.clone()),
-        add_peer_with_addr(&mut gs, &vec![], true, false, addr.clone()),
-        add_peer_with_addr(&mut gs, &vec![], true, true, addr.clone()),
+        add_peer_with_addr(&mut gs, &[], false, false, addr.clone()),
+        add_peer_with_addr(&mut gs, &[], false, false, addr.clone()),
+        add_peer_with_addr(&mut gs, &[], true, false, addr.clone()),
+        add_peer_with_addr(&mut gs, &[], true, false, addr.clone()),
+        add_peer_with_addr(&mut gs, &[], true, true, addr.clone()),
     ];
 
     //create 4 other peers with other ip
     let addr2 = Multiaddr::from(Ipv4Addr::new(10, 1, 2, 4));
     let others = vec![
-        add_peer_with_addr(&mut gs, &vec![], false, false, addr2.clone()),
-        add_peer_with_addr(&mut gs, &vec![], false, false, addr2.clone()),
-        add_peer_with_addr(&mut gs, &vec![], true, false, addr2.clone()),
-        add_peer_with_addr(&mut gs, &vec![], true, false, addr2.clone()),
+        add_peer_with_addr(&mut gs, &[], false, false, addr2.clone()),
+        add_peer_with_addr(&mut gs, &[], false, false, addr2.clone()),
+        add_peer_with_addr(&mut gs, &[], true, false, addr2.clone()),
+        add_peer_with_addr(&mut gs, &[], true, false, addr2.clone()),
     ];
 
     //no penalties yet

@@ -101,7 +101,7 @@ fn prepare(c: &mut Criterion) {
 fn run(
     receiver_trans: &mut BenchTransport,
     sender_trans: &mut BenchTransport,
-    payload: &Vec<u8>,
+    payload: &[u8],
     listen_addr: &Multiaddr,
 ) {
     receiver_trans
