@@ -84,8 +84,8 @@ use libp2p_identity::PeerId;
 use libp2p_swarm::{
     behaviour::{AddressChange, ConnectionClosed, DialFailure, FromSwarm},
     dial_opts::DialOpts,
-    ConnectionDenied, ConnectionHandler, ConnectionId, NetworkBehaviour, NotifyHandler, THandler,
-    THandlerInEvent, THandlerOutEvent, ToSwarm,
+    ConnectionDenied, ConnectionHandler, ConnectionId, NetworkBehaviour, NotifyHandler,
+    PeerAddresses, THandler, THandlerInEvent, THandlerOutEvent, ToSwarm,
 };
 use smallvec::SmallVec;
 use std::{
@@ -357,7 +357,7 @@ where
     /// reachable addresses, if any.
     connected: HashMap<PeerId, SmallVec<[Connection; 2]>>,
     /// Externally managed addresses via `add_address` and `remove_address`.
-    addresses: HashMap<PeerId, HashSet<Multiaddr>>,
+    addresses: PeerAddresses,
     /// Requests that have not yet been sent and are waiting for a connection
     /// to be established.
     pending_outbound_requests: HashMap<PeerId, SmallVec<[OutboundMessage<TCodec>; 10]>>,
@@ -406,7 +406,7 @@ where
             pending_events: VecDeque::new(),
             connected: HashMap::new(),
             pending_outbound_requests: HashMap::new(),
-            addresses: HashMap::new(),
+            addresses: PeerAddresses::default(),
         }
     }
 
@@ -470,20 +470,15 @@ where
     ///
     /// Returns true if the address was added, false otherwise (i.e. if the
     /// address is already in the list).
+    #[deprecated(note = "Use `Swarm::add_peer_address` instead.")]
     pub fn add_address(&mut self, peer: &PeerId, address: Multiaddr) -> bool {
-        self.addresses.entry(*peer).or_default().insert(address)
+        self.addresses.add(*peer, address)
     }
 
-    /// Removes an address of a peer previously added via `add_address`.
+    /// Removes an address of a peer previously added via [`Behaviour::add_address`].
+    #[deprecated(note = "Will be removed with the next breaking release and won't be replaced.")]
     pub fn remove_address(&mut self, peer: &PeerId, address: &Multiaddr) {
-        let mut last = false;
-        if let Some(addresses) = self.addresses.get_mut(peer) {
-            addresses.retain(|a| a != address);
-            last = addresses.is_empty();
-        }
-        if last {
-            self.addresses.remove(peer);
-        }
+        self.addresses.remove(peer, address);
     }
 
     /// Checks whether a peer is currently connected.
@@ -764,9 +759,9 @@ where
         if let Some(connections) = self.connected.get(&peer) {
             addresses.extend(connections.iter().filter_map(|c| c.remote_address.clone()))
         }
-        if let Some(more) = self.addresses.get(&peer) {
-            addresses.extend(more.iter().cloned());
-        }
+
+        let cached_addrs = self.addresses.get(&peer);
+        addresses.extend(cached_addrs);
 
         Ok(addresses)
     }
@@ -797,6 +792,7 @@ where
     }
 
     fn on_swarm_event(&mut self, event: FromSwarm) {
+        self.addresses.on_swarm_event(&event);
         match event {
             FromSwarm::ConnectionEstablished(_) => {}
             FromSwarm::ConnectionClosed(connection_closed) => {

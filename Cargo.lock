@@ -2797,7 +2797,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-identify"
-version = "0.44.1"
+version = "0.44.2"
 dependencies = [
  "async-std",
  "asynchronous-codec",
@@ -3187,7 +3187,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-request-response"
-version = "0.26.1"
+version = "0.26.2"
 dependencies = [
  "anyhow",
  "async-std",
@@ -3252,7 +3252,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-swarm"
-version = "0.44.1"
+version = "0.44.2"
 dependencies = [
  "async-std",
  "either",
@@ -3270,6 +3270,7 @@ dependencies = [
  "libp2p-swarm-derive",
  "libp2p-swarm-test",
  "libp2p-yamux",
+ "lru",
  "multistream-select",
  "once_cell",
  "quickcheck-ext",
@@ -3285,7 +3286,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-swarm-derive"
-version = "0.34.2"
+version = "0.34.3"
 dependencies = [
  "heck",
  "proc-macro2",
@@ -3378,7 +3379,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-webrtc"
-version = "0.7.0-alpha"
+version = "0.7.1-alpha"
 dependencies = [
  "async-trait",
  "bytes",
@@ -5503,9 +5504,9 @@ dependencies = [
 
 [[package]]
 name = "snow"
-version = "0.9.4"
+version = "0.9.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "58021967fd0a5eeeb23b08df6cc244a4d4a5b4aec1d27c9e02fad1a58b4cd74e"
+checksum = "2e87c18a6608909007e75a60e04d03eda77b601c94de1c74d9a9dc2c04ab789a"
 dependencies = [
  "aes-gcm",
  "blake2",
