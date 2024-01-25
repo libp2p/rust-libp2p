@@ -2245,6 +2245,8 @@ mod tests {
             multiaddr![Ip4([0, 0, 0, 0]), Tcp(rand::random::<u16>())],
             multiaddr![Ip4([0, 0, 0, 0]), Tcp(rand::random::<u16>())],
             multiaddr![Ip4([0, 0, 0, 0]), Tcp(rand::random::<u16>())],
+            multiaddr![Ip4([127, 0, 0, 1]), Tcp(rand::random::<u16>())],
+            multiaddr![Ip6([0, 0, 0, 0, 0, 0, 0, 1]), Tcp(rand::random::<u16>())],
             multiaddr![Udp(rand::random::<u16>())],
             multiaddr![Udp(rand::random::<u16>())],
             multiaddr![Udp(rand::random::<u16>())],
