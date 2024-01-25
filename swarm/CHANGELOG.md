@@ -1,3 +1,7 @@
+## 0.44.2 -- unreleased
+- Showcase impossibility to dial self via "0.0.0.0", "127.0.0.1", and "::1"
+  See [PR 5124](https://github.com/libp2p/rust-libp2p/pull/5124)
+
 ## 0.44.1
 
 - Implement `Clone` & `Copy` for `FromSwarm.
