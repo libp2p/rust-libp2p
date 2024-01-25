@@ -1,3 +1,9 @@
+## 0.12.6 -- unreleased
+
+### Changed
+- Stop using kad default protocol.
+  See [PR 5122](https://github.com/libp2p/rust-libp2p/pull/5122)
+
 ## 0.12.5
 
 ### Added

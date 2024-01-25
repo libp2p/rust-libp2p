@@ -154,6 +154,7 @@ impl ProtocolConfig {
 
     /// Returns the default configuration.
     #[deprecated(note = "Use `ProtocolConfig::new` instead")]
+    #[allow(clippy::should_implement_trait)]
     pub fn default() -> Self {
         Default::default()
     }
@@ -178,7 +179,7 @@ impl ProtocolConfig {
 
 impl Default for ProtocolConfig {
     /// Returns the default configuration.
-    /// 
+    ///
     /// Deprecated: use `ProtocolConfig::new` instead.
     fn default() -> Self {
         ProtocolConfig {

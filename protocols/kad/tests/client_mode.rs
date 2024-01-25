@@ -4,10 +4,10 @@ use libp2p_kad::store::MemoryStore;
 use libp2p_kad::{Behaviour, Config, Event, Mode};
 use libp2p_swarm::{Swarm, SwarmEvent};
 use libp2p_swarm_test::SwarmExt;
+use std::iter;
 use tracing_subscriber::EnvFilter;
 use Event::*;
 use MyBehaviourEvent::*;
-use std::iter;
 
 #[async_std::test]
 async fn server_gets_added_to_routing_table_by_client() {

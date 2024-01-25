@@ -24,7 +24,6 @@ mod test;
 
 use crate::addresses::Addresses;
 use crate::handler::{Handler, HandlerEvent, HandlerIn, RequestId};
-use crate::{jobs::*, protocol};
 use crate::kbucket::{self, Distance, KBucketsTable, NodeStatus};
 use crate::protocol::{ConnectionType, KadPeer, ProtocolConfig};
 use crate::query::{Query, QueryConfig, QueryId, QueryPool, QueryPoolState};
@@ -34,6 +33,7 @@ use crate::record::{
     ProviderRecord, Record,
 };
 use crate::K_VALUE;
+use crate::{jobs::*, protocol};
 use fnv::{FnvHashMap, FnvHashSet};
 use instant::Instant;
 use libp2p_core::{ConnectedPoint, Endpoint, Multiaddr};
@@ -186,7 +186,7 @@ pub struct Config {
 
 impl Default for Config {
     /// Returns the default configuration.
-    /// 
+    ///
     /// Deprecated: use `Config::new` instead.
     fn default() -> Self {
         Self::new(iter::once(protocol::DEFAULT_PROTO_NAME).collect())
@@ -228,6 +228,7 @@ impl Config {
 
     /// Returns the default configuration.
     #[deprecated(note = "Use `Config::new` instead")]
+    #[allow(clippy::should_implement_trait)]
     pub fn default() -> Self {
         Default::default()
     }

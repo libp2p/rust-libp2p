@@ -1083,7 +1083,12 @@ fn exp_decr_expiration_overflow() {
     }
 
     // Right shifting a u64 by >63 results in a panic.
-    prop_no_panic(Config::new(iter::once(PROTOCOL_NAME).collect()).record_ttl.unwrap(), 64);
+    prop_no_panic(
+        Config::new(iter::once(PROTOCOL_NAME).collect())
+            .record_ttl
+            .unwrap(),
+        64,
+    );
 
     quickcheck(prop_no_panic as fn(_, _))
 }
