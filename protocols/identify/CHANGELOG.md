@@ -1,3 +1,10 @@
+## 0.44.2
+
+- Emit `ToSwarm::NewExternalAddrOfPeer` for all external addresses of remote peers.
+  For this work, the address cache must be enabled via `identify::Config::with_cache_size`.
+  The default is 0, i.e. disabled.
+  See [PR 4371](https://github.com/libp2p/rust-libp2p/pull/4371).
+
 ## 0.44.1
 
 - Ensure `Multiaddr` handled and returned by `Behaviour` are `/p2p` terminated.
