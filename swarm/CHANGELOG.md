@@ -1,6 +1,14 @@
-## 0.44.2 -- unreleased
+## 0.44.3 -- unreleased
 - Showcase impossibility to dial self via "0.0.0.0", "127.0.0.1", and "::1"
   See [PR 5124](https://github.com/libp2p/rust-libp2p/pull/5124)
+
+## 0.44.2
+
+- Allow `NetworkBehaviour`s to share addresses of peers.
+  This is enabled via the new `ToSwarm::NewExternalAddrOfPeer` event.
+  The address is broadcast to all behaviours via `FromSwarm::NewExternalAddrOfPeer`.
+  Protocols that want to collect these addresses can use the new `PeerAddresses` utility.
+  See [PR 4371](https://github.com/libp2p/rust-libp2p/pull/4371).
 
 ## 0.44.1
 
