@@ -14,7 +14,7 @@ crate-type = ["cdylib", "rlib"]
 [dependencies]
 anyhow = "1"
 either = "1.9.0"
-futures = "0.3.29"
+futures = "0.3.30"
 rand = "0.8.5"
 serde = { version = "1", features = ["derive"] }
 tracing = "0.1.37"
@@ -31,10 +31,10 @@ mime_guess = "2.0"
 redis = { version = "0.23.3", default-features = false, features = [
     "tokio-comp",
 ] }
-rust-embed = "8.0"
+rust-embed = "8.2"
 serde_json = "1"
 thirtyfour = "=0.32.0-rc.8" # https://github.com/stevepryde/thirtyfour/issues/169
-tokio = { version = "1.35.0", features = ["full"] }
+tokio = { version = "1.35.1", features = ["full"] }
 tower-http = { version = "0.5", features = ["cors", "fs", "trace"] }
 tracing = "0.1.37"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }

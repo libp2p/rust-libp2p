@@ -13,12 +13,12 @@ categories = ["network-programming", "asynchronous"]
 [dependencies]
 async-std = { version = "1.6.2", optional = true }
 libp2p-core = { workspace = true }
-futures = "0.3.29"
+futures = "0.3.30"
 tokio = { version = "1.35", default-features = false, features = ["net"], optional = true }
 tracing = "0.1.37"
 
 [dev-dependencies]
-tempfile = "3.8"
+tempfile = "3.9"
 
 # Passing arguments to the docsrs builder in order to properly document cfg's.
 # More information: https://docs.rs/about/builds#cross-compiling

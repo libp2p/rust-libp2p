@@ -3,7 +3,7 @@ name = "libp2p-identify"
 edition = "2021"
 rust-version = { workspace = true }
 description = "Nodes identifcation protocol for libp2p"
-version = "0.44.1"
+version = "0.44.2"
 authors = ["Parity Technologies <admin@parity.io>"]
 license = "MIT"
 repository = "https://github.com/libp2p/rust-libp2p"
@@ -12,7 +12,7 @@ categories = ["network-programming", "asynchronous"]
 
 [dependencies]
 asynchronous-codec = { workspace = true }
-futures = "0.3.29"
+futures = "0.3.30"
 futures-timer = "3.0.2"
 futures-bounded = { workspace = true }
 libp2p-core = { workspace = true }
@@ -21,7 +21,7 @@ libp2p-identity = { workspace = true }
 lru = "0.12.1"
 quick-protobuf-codec = { workspace = true }
 quick-protobuf = "0.8"
-smallvec = "1.11.2"
+smallvec = "1.12.0"
 thiserror = "1.0"
 tracing = "0.1.37"
 void = "1.0"
