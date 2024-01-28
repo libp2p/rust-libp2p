@@ -268,6 +268,7 @@ impl Behaviour {
     pub fn add_server(&mut self, peer: PeerId, address: Option<Multiaddr>) {
         self.servers.insert(peer);
         if let Some(addr) = address {
+            #[allow(deprecated)]
             self.inner.add_address(&peer, addr);
         }
     }

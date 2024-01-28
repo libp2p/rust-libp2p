@@ -1,3 +1,7 @@
+## 0.2.1
+- Fix a panic caused when dropping `upnp::Behaviour` such as when used together with `Toggle`.
+  See [PR 5096](https://github.com/libp2p/rust-libp2p/pull/5096).
+
 ## 0.2.0
 
 

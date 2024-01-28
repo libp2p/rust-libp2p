@@ -84,6 +84,7 @@ pub mod derive_prelude {
     pub use crate::behaviour::ListenerClosed;
     pub use crate::behaviour::ListenerError;
     pub use crate::behaviour::NewExternalAddrCandidate;
+    pub use crate::behaviour::NewExternalAddrOfPeer;
     pub use crate::behaviour::NewListenAddr;
     pub use crate::behaviour::NewListener;
     pub use crate::connection::ConnectionId;
@@ -108,8 +109,8 @@ pub mod derive_prelude {
 pub use behaviour::{
     AddressChange, CloseConnection, ConnectionClosed, DialFailure, ExpiredListenAddr,
     ExternalAddrExpired, ExternalAddresses, FromSwarm, ListenAddresses, ListenFailure,
-    ListenerClosed, ListenerError, NetworkBehaviour, NewExternalAddrCandidate, NewListenAddr,
-    NotifyHandler, ToSwarm,
+    ListenerClosed, ListenerError, NetworkBehaviour, NewExternalAddrCandidate,
+    NewExternalAddrOfPeer, NewListenAddr, NotifyHandler, PeerAddresses, ToSwarm,
 };
 pub use connection::pool::ConnectionCounters;
 pub use connection::{ConnectionError, ConnectionId, SupportedProtocols};
@@ -300,6 +301,8 @@ pub enum SwarmEvent<TBehaviourOutEvent> {
     ExternalAddrConfirmed { address: Multiaddr },
     /// An external address of the local node expired, i.e. is no-longer confirmed.
     ExternalAddrExpired { address: Multiaddr },
+    /// We have discovered a new address of a peer.
+    NewExternalAddrOfPeer { peer_id: PeerId, address: Multiaddr },
 }
 
 impl<TBehaviourOutEvent> SwarmEvent<TBehaviourOutEvent> {
@@ -617,6 +620,17 @@ where
         self.behaviour
             .on_swarm_event(FromSwarm::ExternalAddrExpired(ExternalAddrExpired { addr }));
         self.confirmed_external_addr.remove(addr);
+    }
+
+    /// Add a new external address of a remote peer.
+    ///
+    /// The address is broadcast to all [`NetworkBehaviour`]s via [`FromSwarm::NewExternalAddrOfPeer`].
+    pub fn add_peer_address(&mut self, peer_id: PeerId, addr: Multiaddr) {
+        self.behaviour
+            .on_swarm_event(FromSwarm::NewExternalAddrOfPeer(NewExternalAddrOfPeer {
+                peer_id,
+                addr: &addr,
+            }))
     }
 
     /// Disconnects a peer by its peer ID, closing all connections to said peer.
@@ -1174,6 +1188,15 @@ where
                     self.pool.disconnect(peer_id);
                 }
             },
+            ToSwarm::NewExternalAddrOfPeer { peer_id, address } => {
+                self.behaviour
+                    .on_swarm_event(FromSwarm::NewExternalAddrOfPeer(NewExternalAddrOfPeer {
+                        peer_id,
+                        addr: &address,
+                    }));
+                self.pending_swarm_events
+                    .push_back(SwarmEvent::NewExternalAddrOfPeer { peer_id, address });
+            }
         }
     }
 

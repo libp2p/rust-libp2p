@@ -21,10 +21,12 @@
 mod either;
 mod external_addresses;
 mod listen_addresses;
+mod peer_addresses;
 pub mod toggle;
 
 pub use external_addresses::ExternalAddresses;
 pub use listen_addresses::ListenAddresses;
+pub use peer_addresses::PeerAddresses;
 
 use crate::connection::ConnectionId;
 use crate::dial_opts::DialOpts;
@@ -307,6 +309,9 @@ pub enum ToSwarm<TOutEvent, TInEvent> {
         /// Whether to close a specific or all connections to the given peer.
         connection: CloseConnection,
     },
+
+    /// Reports external address of a remote peer to the [`Swarm`](crate::Swarm) and through that to other [`NetworkBehaviour`]s.
+    NewExternalAddrOfPeer { peer_id: PeerId, address: Multiaddr },
 }
 
 impl<TOutEvent, TInEventOld> ToSwarm<TOutEvent, TInEventOld> {
@@ -339,6 +344,13 @@ impl<TOutEvent, TInEventOld> ToSwarm<TOutEvent, TInEventOld> {
             ToSwarm::NewExternalAddrCandidate(addr) => ToSwarm::NewExternalAddrCandidate(addr),
             ToSwarm::ExternalAddrConfirmed(addr) => ToSwarm::ExternalAddrConfirmed(addr),
             ToSwarm::ExternalAddrExpired(addr) => ToSwarm::ExternalAddrExpired(addr),
+            ToSwarm::NewExternalAddrOfPeer {
+                address: addr,
+                peer_id,
+            } => ToSwarm::NewExternalAddrOfPeer {
+                address: addr,
+                peer_id,
+            },
         }
     }
 }
@@ -369,6 +381,13 @@ impl<TOutEvent, THandlerIn> ToSwarm<TOutEvent, THandlerIn> {
             } => ToSwarm::CloseConnection {
                 peer_id,
                 connection,
+            },
+            ToSwarm::NewExternalAddrOfPeer {
+                address: addr,
+                peer_id,
+            } => ToSwarm::NewExternalAddrOfPeer {
+                address: addr,
+                peer_id,
             },
         }
     }
@@ -436,6 +455,8 @@ pub enum FromSwarm<'a> {
     ExternalAddrConfirmed(ExternalAddrConfirmed<'a>),
     /// Informs the behaviour that an external address of the local node expired, i.e. is no-longer confirmed.
     ExternalAddrExpired(ExternalAddrExpired<'a>),
+    /// Informs the behaviour that we have discovered a new external address for a remote peer.
+    NewExternalAddrOfPeer(NewExternalAddrOfPeer<'a>),
 }
 
 /// [`FromSwarm`] variant that informs the behaviour about a newly established connection to a peer.
@@ -545,5 +566,12 @@ pub struct ExternalAddrConfirmed<'a> {
 /// [`FromSwarm`] variant that informs the behaviour that an external address was removed.
 #[derive(Debug, Clone, Copy)]
 pub struct ExternalAddrExpired<'a> {
+    pub addr: &'a Multiaddr,
+}
+
+/// [`FromSwarm`] variant that informs the behaviour that a new external address for a remote peer was detected.
+#[derive(Clone, Copy, Debug)]
+pub struct NewExternalAddrOfPeer<'a> {
+    pub peer_id: PeerId,
     pub addr: &'a Multiaddr,
 }
