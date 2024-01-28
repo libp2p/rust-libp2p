@@ -28,16 +28,10 @@ pub struct Handler {
 
 impl Handler {
     pub(crate) fn new(cmd: DialBackCommand) -> Self {
-        let mut ret = Self::empty();
-        ret.pending_nonce = Some(cmd);
-        ret
-    }
-
-    pub(crate) fn empty() -> Self {
         Self {
-            pending_nonce: None,
+            pending_nonce: Some(cmd),
             requested_substream_nonce: None,
-            outbound: FuturesSet::new(Duration::from_secs(10000), 2),
+            outbound: FuturesSet::new(Duration::from_secs(10), 5),
         }
     }
 }
@@ -128,6 +122,8 @@ async fn perform_dial_back(
         .await
         .map_err(|_| DialBackRes::DialBackErr)
         .map(|_| ());
+    // this exists to prevent a synchronization issue on the client side. Whitout this, the client
+    // might already receive a
     futures_time::task::sleep(futures_time::time::Duration::from_millis(100)).await;
     back_channel
         .send(res)

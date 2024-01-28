@@ -186,7 +186,7 @@ impl ConnectionHandler for Handler {
             }) => match self.queued_streams.pop_front() {
                 Some(stream_tx) => {
                     if stream_tx.send(Ok(protocol)).is_err() {
-                        tracing::warn!("Failed to send stream to dead handler");
+                        tracing::debug!("Failed to send stream to dead handler");
                     }
                 }
                 None => {

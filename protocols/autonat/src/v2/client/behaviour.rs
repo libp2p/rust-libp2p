@@ -191,6 +191,9 @@ where
                     return;
                 }
 
+                self.pending_events
+                    .push_back(ToSwarm::ExternalAddrConfirmed(address.0.clone()));
+
                 (address, Ok(()))
             }
             Err(dial_request::Error::UnsupportedProtocol) => {

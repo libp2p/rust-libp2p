@@ -24,7 +24,7 @@ use rand_core::RngCore;
 use crate::v2::{
     generated::structs::{mod_DialResponse::ResponseStatus, DialStatus},
     protocol::{Coder, DialDataRequest, DialRequest, DialResponse, Request, Response},
-    server::behaviour::StatusUpdate,
+    server::behaviour::Event,
     Nonce, DIAL_REQUEST_PROTOCOL,
 };
 
@@ -48,9 +48,7 @@ pub struct Handler<R> {
     observed_multiaddr: Multiaddr,
     dial_back_cmd_sender: mpsc::Sender<DialBackCommand>,
     dial_back_cmd_receiver: mpsc::Receiver<DialBackCommand>,
-    status_update_sender: mpsc::Sender<StatusUpdate>,
-    status_update_receiver: mpsc::Receiver<StatusUpdate>,
-    inbound: FuturesSet<Result<(), io::Error>>,
+    inbound: FuturesSet<Event>,
     rng: R,
 }
 
@@ -60,14 +58,11 @@ where
 {
     pub(crate) fn new(client_id: PeerId, observed_multiaddr: Multiaddr, rng: R) -> Self {
         let (dial_back_cmd_sender, dial_back_cmd_receiver) = mpsc::channel(10);
-        let (status_update_sender, status_update_receiver) = mpsc::channel(10);
         Self {
             client_id,
             observed_multiaddr,
             dial_back_cmd_sender,
             dial_back_cmd_receiver,
-            status_update_sender,
-            status_update_receiver,
             inbound: FuturesSet::new(Duration::from_secs(10), 10),
             rng,
         }
@@ -78,16 +73,11 @@ impl<R> ConnectionHandler for Handler<R>
 where
     R: RngCore + Send + Clone + 'static,
 {
-    type FromBehaviour = ();
-
-    type ToBehaviour = Either<io::Result<DialBackCommand>, StatusUpdate>;
-
+    type FromBehaviour = void::Void;
+    type ToBehaviour = Either<DialBackCommand, Event>;
     type InboundProtocol = ReadyUpgrade<StreamProtocol>;
-
     type OutboundProtocol = DeniedUpgrade;
-
     type InboundOpenInfo = ();
-
     type OutboundOpenInfo = ();
 
     fn listen_protocol(&self) -> SubstreamProtocol<Self::InboundProtocol, Self::InboundOpenInfo> {
@@ -101,28 +91,21 @@ where
         ConnectionHandlerEvent<Self::OutboundProtocol, Self::OutboundOpenInfo, Self::ToBehaviour>,
     > {
         match self.inbound.poll_unpin(cx) {
-            Poll::Ready(Ok(Err(e))) => {
-                return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(Either::Left(Err(
-                    e,
-                ))));
+            Poll::Ready(Ok(event)) => {
+                if let Err(e) = &event.result {
+                    tracing::warn!("inbound request handle failed: {:?}", e);
+                }
+                return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(Either::Right(
+                    event,
+                )));
             }
             Poll::Ready(Err(e)) => {
-                return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(Either::Left(Err(
-                    io::Error::new(io::ErrorKind::TimedOut, e),
-                ))));
+                tracing::warn!("inbound request handle timed out {e:?}");
             }
-            Poll::Ready(Ok(Ok(_))) => {}
             Poll::Pending => {}
         }
         if let Poll::Ready(Some(cmd)) = self.dial_back_cmd_receiver.poll_next_unpin(cx) {
-            return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(Either::Left(Ok(
-                cmd,
-            ))));
-        }
-        if let Poll::Ready(Some(status_update)) = self.status_update_receiver.poll_next_unpin(cx) {
-            return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(Either::Right(
-                status_update,
-            )));
+            return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(Either::Left(cmd)));
         }
         Poll::Pending
     }
@@ -144,12 +127,11 @@ where
             }) => {
                 if self
                     .inbound
-                    .try_push(start_handle_request(
+                    .try_push(handle_request(
                         protocol,
                         self.observed_multiaddr.clone(),
                         self.client_id,
                         self.dial_back_cmd_sender.clone(),
-                        self.status_update_sender.clone(),
                         self.rng.clone(),
                     ))
                     .is_err()
@@ -205,6 +187,68 @@ impl From<HandleFail> for DialResponse {
                 },
             },
         }
+    }
+}
+
+async fn handle_request(
+    stream: impl AsyncRead + AsyncWrite + Unpin,
+    observed_multiaddr: Multiaddr,
+    client: PeerId,
+    dial_back_cmd_sender: mpsc::Sender<DialBackCommand>,
+    rng: impl RngCore,
+) -> Event {
+    let mut coder = Coder::new(stream);
+    let mut all_addrs = Vec::new();
+    let mut tested_addr_opt = None;
+    let mut data_amount = 0;
+    let response = handle_request_internal(
+        &mut coder,
+        observed_multiaddr.clone(),
+        dial_back_cmd_sender,
+        rng,
+        &mut all_addrs,
+        &mut tested_addr_opt,
+        &mut data_amount,
+    )
+    .await
+    .unwrap_or_else(|e| e.into());
+    if tested_addr_opt.is_none() {
+        return Event {
+            all_addrs,
+            tested_addr: observed_multiaddr,
+            client,
+            data_amount,
+            result: Err(io::Error::new(
+                io::ErrorKind::Other,
+                "client is not conformint to protocol. the tested address is not the observed address",
+            )),
+        };
+    }
+    let tested_addr = tested_addr_opt.unwrap();
+    if let Err(e) = coder.send(Response::Dial(response)).await {
+        return Event {
+            all_addrs,
+            tested_addr,
+            client,
+            data_amount,
+            result: Err(e),
+        };
+    }
+    if let Err(e) = coder.close().await {
+        return Event {
+            all_addrs,
+            tested_addr,
+            client,
+            data_amount,
+            result: Err(e),
+        };
+    }
+    Event {
+        all_addrs,
+        tested_addr,
+        client,
+        data_amount,
+        result: Ok(()),
     }
 }
 
@@ -284,66 +328,4 @@ where
         addr_idx: idx,
         dial_status: DialStatus::OK,
     })
-}
-
-async fn handle_request(
-    stream: impl AsyncRead + AsyncWrite + Unpin,
-    observed_multiaddr: Multiaddr,
-    dial_back_cmd_sender: mpsc::Sender<DialBackCommand>,
-    rng: impl RngCore,
-    all_addrs: &mut Vec<Multiaddr>,
-    tested_addrs: &mut Option<Multiaddr>,
-    data_amount: &mut usize,
-) -> io::Result<()> {
-    let mut coder = Coder::new(stream);
-    let response = handle_request_internal(
-        &mut coder,
-        observed_multiaddr,
-        dial_back_cmd_sender,
-        rng,
-        all_addrs,
-        tested_addrs,
-        data_amount,
-    )
-    .await
-    .unwrap_or_else(|e| e.into());
-    coder.send(Response::Dial(response)).await?;
-    coder.close().await?;
-    Ok(())
-}
-
-async fn start_handle_request(
-    stream: impl AsyncRead + AsyncWrite + Unpin,
-    observed_multiaddr: Multiaddr,
-    client: PeerId,
-    dial_back_cmd_sender: mpsc::Sender<DialBackCommand>,
-    mut status_update_sender: mpsc::Sender<StatusUpdate>,
-    rng: impl RngCore,
-) -> io::Result<()> {
-    let mut all_addrs = Vec::new();
-    let mut tested_addrs = None;
-    let mut data_amount = 0;
-    let result = handle_request(
-        stream,
-        observed_multiaddr,
-        dial_back_cmd_sender,
-        rng,
-        &mut all_addrs,
-        &mut tested_addrs,
-        &mut data_amount,
-    )
-    .await;
-    if tested_addrs.is_none() {
-        tracing::warn!("client violated the protocol");
-        return Err(io::Error::from(io::ErrorKind::InvalidData));
-    }
-    let status_update = StatusUpdate {
-        all_addrs,
-        tested_addr: tested_addrs.unwrap(),
-        client,
-        data_amount,
-        result,
-    };
-    let _ = status_update_sender.send(status_update).await;
-    Ok(())
 }

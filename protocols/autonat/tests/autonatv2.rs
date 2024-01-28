@@ -61,7 +61,7 @@ async fn confirm_successful() {
             })
             .await;
 
-        let server::StatusUpdate {
+        let server::Event {
             all_addrs,
             tested_addr,
             client,
@@ -185,7 +185,7 @@ async fn dial_back_to_unsupported_protocol() {
         assert_eq!(outgoing_conn_error.len(), 0);
         let data_amount = alice
             .wait(|event| match event {
-                SwarmEvent::Behaviour(CombinedServerEvent::Autonat(server::StatusUpdate {
+                SwarmEvent::Behaviour(CombinedServerEvent::Autonat(server::Event {
                     all_addrs,
                     tested_addr,
                     client,
@@ -287,7 +287,7 @@ async fn dial_back_to_non_libp2p() {
 
             let data_amount = alice
                 .wait(|event| match event {
-                    SwarmEvent::Behaviour(CombinedServerEvent::Autonat(server::StatusUpdate {
+                    SwarmEvent::Behaviour(CombinedServerEvent::Autonat(server::Event {
                         all_addrs,
                         tested_addr,
                         client,
@@ -378,7 +378,7 @@ async fn dial_back_to_not_supporting() {
 
         let data_amount = alice
             .wait(|event| match event {
-                SwarmEvent::Behaviour(CombinedServerEvent::Autonat(server::StatusUpdate {
+                SwarmEvent::Behaviour(CombinedServerEvent::Autonat(server::Event {
                     all_addrs,
                     tested_addr,
                     client,

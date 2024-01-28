@@ -8,11 +8,11 @@ use crate::v2::server::handler::dial_request::DialBackStatus;
 use either::Either;
 use libp2p_core::{transport::PortUse, Endpoint, Multiaddr};
 use libp2p_identity::PeerId;
+use libp2p_swarm::dial_opts::PeerCondition;
 use libp2p_swarm::{
-    dial_opts::DialOpts, ConnectionDenied, ConnectionHandler, ConnectionId, DialFailure, FromSwarm,
-    NetworkBehaviour, ToSwarm,
+    dial_opts::DialOpts, dummy, ConnectionDenied, ConnectionHandler, ConnectionId, DialFailure,
+    FromSwarm, NetworkBehaviour, ToSwarm,
 };
-use libp2p_swarm::{dial_opts::PeerCondition, ConnectionClosed};
 use rand_core::{OsRng, RngCore};
 
 use crate::v2::server::handler::{
@@ -60,7 +60,7 @@ where
 {
     type ConnectionHandler = Handler<R>;
 
-    type ToSwarm = StatusUpdate;
+    type ToSwarm = Event;
 
     fn handle_established_inbound_connection(
         &mut self,
@@ -84,19 +84,15 @@ where
         _role_override: Endpoint,
         _port_use: PortUse,
     ) -> Result<<Self as NetworkBehaviour>::ConnectionHandler, ConnectionDenied> {
-        Ok(
-            if let Some(cmd) = self.dialing_dial_back.remove(&connection_id) {
-                Either::Left(dial_back::Handler::new(cmd))
-            } else {
-                Either::Left(dial_back::Handler::empty())
-            },
-        )
+        Ok(match self.dialing_dial_back.remove(&connection_id) {
+            Some(cmd) => Either::Left(Either::Left(dial_back::Handler::new(cmd))),
+            None => Either::Left(Either::Right(dummy::ConnectionHandler)),
+        })
     }
 
     fn on_swarm_event(&mut self, event: FromSwarm) {
         match event {
-            FromSwarm::DialFailure(DialFailure { connection_id, .. })
-            | FromSwarm::ConnectionClosed(ConnectionClosed { connection_id, .. }) => {
+            FromSwarm::DialFailure(DialFailure { connection_id, .. }) => {
                 if let Some(DialBackCommand { back_channel, .. }) =
                     self.dialing_dial_back.remove(&connection_id)
                 {
@@ -114,11 +110,12 @@ where
         event: <Handler<R> as ConnectionHandler>::ToBehaviour,
     ) {
         match event {
-            Either::Left(Ok(_)) => {}
-            Either::Left(Err(e)) => {
+            Either::Left(Either::Left(Ok(_))) => {}
+            Either::Left(Either::Left(Err(e))) => {
                 tracing::debug!("dial back error: {e:?}");
             }
-            Either::Right(Either::Left(Ok(cmd))) => {
+            Either::Left(Either::Right(v)) => void::unreachable(v),
+            Either::Right(Either::Left(cmd)) => {
                 let addr = cmd.addr.clone();
                 let opts = DialOpts::peer_id(peer_id)
                     .addresses(Vec::from([addr]))
@@ -128,9 +125,6 @@ where
                 let conn_id = opts.connection_id();
                 self.dialing_dial_back.insert(conn_id, cmd);
                 self.pending_events.push_back(ToSwarm::Dial { opts });
-            }
-            Either::Right(Either::Left(Err(e))) => {
-                tracing::warn!("incoming dial request failed: {}", e);
             }
             Either::Right(Either::Right(status_update)) => self
                 .pending_events
@@ -150,11 +144,10 @@ where
 }
 
 #[derive(Debug)]
-pub struct StatusUpdate {
+pub struct Event {
     /// All address that were submitted for testing.
     pub all_addrs: Vec<Multiaddr>,
     /// The address that was eventually tested.
-    /// This is `None` if the client send and unexpected message.
     pub tested_addr: Multiaddr,
     /// The peer id of the client that submitted addresses for testing.
     pub client: PeerId,
