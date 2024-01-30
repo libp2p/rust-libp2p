@@ -1,4 +1,4 @@
-## 0.46.0 -- unreleased
+## 0.45.4 -- unreleased
 
 - Make it mandatory to provide protocol names when creating a `kad::Config`. Deprecate `kad::Config::default()`, replaced by `kad::Config::new(Vec<StreamProtocol>)`.
   See [PR 5122](https://github.com/libp2p/rust-libp2p/pull/5122).
