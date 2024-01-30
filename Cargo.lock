@@ -2552,7 +2552,7 @@ checksum = "13e3bf6590cbc649f4d1a3eefc9d5d6eb746f5200ffb04e5e142700b8faa56e7"
 
 [[package]]
 name = "libp2p"
-version = "0.53.2"
+version = "0.53.3"
 dependencies = [
  "async-std",
  "async-trait",

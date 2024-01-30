@@ -1,4 +1,4 @@
-## 0.53.3 - unreleased
+## 0.53.3
 
 - Fix missing feature flags on `SwarmBuilder` for certain transport combinations.
   See [PR 4880](https://github.com/libp2p/rust-libp2p/pull/4880). 
