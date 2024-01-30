@@ -14,5 +14,5 @@ tracing = "0.1.37"
 redis = { version = "0.23.0", default-features = false, features = ["tokio-comp"] }
 tokio = { version = "1.35.1", features = ["full"] }
 serde = { version = "1.0.196", features = ["derive"] }
-serde_json = "1.0.111"
+serde_json = "1.0.113"
 either = "1.9.0"
