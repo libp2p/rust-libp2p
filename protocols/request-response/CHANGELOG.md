@@ -1,3 +1,13 @@
+## 0.26.2
+
+- Deprecate `Behaviour::add_address` in favor of `Swarm::add_peer_address`.
+  See [PR 4371](https://github.com/libp2p/rust-libp2p/pull/4371).
+
+## 0.26.1
+
+- Derive `PartialOrd` and `Ord` for `{Out,In}boundRequestId`.
+  See [PR 4956](https://github.com/libp2p/rust-libp2p/pull/4956).
+
 ## 0.26.0
 
 - Remove `request_response::Config::set_connection_keep_alive` in favor of `SwarmBuilder::idle_connection_timeout`.

@@ -17,6 +17,15 @@ updates:
         patterns:
           - "opentelemetry*"
           - "tracing-opentelemetry"
+      axum:
+        patterns:
+          - "axum"
+          - "tower"
+          - "tower-http"
+      webrtc:
+        patterns:
+          - "rcgen"
+          - "webrtc"
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:

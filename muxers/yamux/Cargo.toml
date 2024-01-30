@@ -3,7 +3,7 @@ name = "libp2p-yamux"
 edition = "2021"
 rust-version = { workspace = true }
 description = "Yamux multiplexing protocol for libp2p"
-version = "0.45.0"
+version = "0.45.1"
 authors = ["Parity Technologies <admin@parity.io>"]
 license = "MIT"
 repository = "https://github.com/libp2p/rust-libp2p"
@@ -11,10 +11,12 @@ keywords = ["peer-to-peer", "libp2p", "networking"]
 categories = ["network-programming", "asynchronous"]
 
 [dependencies]
-futures = "0.3.29"
+either = "1"
+futures = "0.3.30"
 libp2p-core = { workspace = true }
 thiserror = "1.0"
-yamux = "0.12"
+yamux012 = { version = "0.12.1", package = "yamux" }
+yamux013 = { version = "0.13.1", package = "yamux" }
 tracing = "0.1.37"
 
 [dev-dependencies]

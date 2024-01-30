@@ -16,9 +16,8 @@ This repository is the central place for Rust development of the [libp2p](https:
   many protocols in this repository.
 
 - For **security related issues** please [file a private security vulnerability
-  report](https://github.com/libp2p/rust-libp2p/security/advisories/new)
-  or reach out to [security@libp2p.io](mailto:security@libp2p.io). Please do not
-  file a public issue on GitHub.
+  report](https://github.com/libp2p/rust-libp2p/security/advisories/new) . Please do not file a
+  public issue on GitHub.
 
 - To **report bugs, suggest improvements or request new features** please open a
   GitHub issue on this repository.

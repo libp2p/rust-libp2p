@@ -1,3 +1,17 @@
+## 0.44.2
+
+- Allow `NetworkBehaviour`s to share addresses of peers.
+  This is enabled via the new `ToSwarm::NewExternalAddrOfPeer` event.
+  The address is broadcast to all behaviours via `FromSwarm::NewExternalAddrOfPeer`.
+  Protocols that want to collect these addresses can use the new `PeerAddresses` utility.
+  See [PR 4371](https://github.com/libp2p/rust-libp2p/pull/4371).
+
+## 0.44.1
+
+- Implement `Clone` & `Copy` for `FromSwarm.
+  This makes it easier to forward these events when wrapping other behaviours.
+  See [PR 4825](https://github.com/libp2p/rust-libp2p/pull/4825).
+
 ## 0.44.0
 
 - Add `#[non_exhaustive]` to `FromSwarm`, `ToSwarm`, `SwarmEvent`, `ConnectionHandlerEvent`, `ConnectionEvent`.

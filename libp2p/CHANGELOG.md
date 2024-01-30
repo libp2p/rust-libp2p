@@ -1,7 +1,12 @@
-## 0.53.2 - unreleased
+## 0.53.3 - unreleased
 
 - Fix missing feature flags on `SwarmBuilder` for certain transport combinations.
   See [PR 4880](https://github.com/libp2p/rust-libp2p/pull/4880). 
+
+## 0.53.2
+
+- Allow `SwarmBuilder::with_bandwidth_metrics` after `SwarmBuilder::with_websocket`.
+  See [PR 4937](https://github.com/libp2p/rust-libp2p/pull/4937).
 
 ## 0.53.1
 

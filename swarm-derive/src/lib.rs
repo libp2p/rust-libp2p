@@ -71,19 +71,6 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> syn::Result<Toke
     let peer_id = quote! { #prelude_path::PeerId };
     let connection_id = quote! { #prelude_path::ConnectionId };
     let from_swarm = quote! { #prelude_path::FromSwarm };
-    let connection_established = quote! { #prelude_path::ConnectionEstablished };
-    let address_change = quote! { #prelude_path::AddressChange };
-    let connection_closed = quote! { #prelude_path::ConnectionClosed };
-    let dial_failure = quote! { #prelude_path::DialFailure };
-    let listen_failure = quote! { #prelude_path::ListenFailure };
-    let new_listener = quote! { #prelude_path::NewListener };
-    let new_listen_addr = quote! { #prelude_path::NewListenAddr };
-    let expired_listen_addr = quote! { #prelude_path::ExpiredListenAddr };
-    let new_external_addr_candidate = quote! { #prelude_path::NewExternalAddrCandidate };
-    let external_addr_expired = quote! { #prelude_path::ExternalAddrExpired };
-    let external_addr_confirmed = quote! { #prelude_path::ExternalAddrConfirmed };
-    let listener_error = quote! { #prelude_path::ListenerError };
-    let listener_closed = quote! { #prelude_path::ListenerClosed };
     let t_handler = quote! { #prelude_path::THandler };
     let t_handler_in_event = quote! { #prelude_path::THandlerInEvent };
     let t_handler_out_event = quote! { #prelude_path::THandlerOutEvent };
@@ -175,7 +162,7 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> syn::Result<Toke
 
                     Some(quote! {
                         #[doc = #msg]
-                        #visibility enum #enum_name #ty_generics
+                        #visibility enum #enum_name #impl_generics
                             #where_clause
                         {
                             #(#enum_variants),*
@@ -221,316 +208,18 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> syn::Result<Toke
         }
     };
 
-    // Build the list of statements to put in the body of `on_swarm_event()`
-    // for the `FromSwarm::ConnectionEstablished` variant.
-    let on_connection_established_stmts = {
+    // Build the list of statements to put in the body of `on_swarm_event()`.
+    let on_swarm_event_stmts = {
         data_struct
             .fields
             .iter()
             .enumerate()
             .map(|(field_n, field)| match field.ident {
                 Some(ref i) => quote! {
-                    self.#i.on_swarm_event(#from_swarm::ConnectionEstablished(#connection_established {
-                        peer_id,
-                        connection_id,
-                        endpoint,
-                        failed_addresses,
-                        other_established,
-                    }));
+                    self.#i.on_swarm_event(event);
                 },
                 None => quote! {
-                    self.#field_n.on_swarm_event(#from_swarm::ConnectionEstablished(#connection_established {
-                        peer_id,
-                        connection_id,
-                        endpoint,
-                        failed_addresses,
-                        other_established,
-                    }));
-                },
-            })
-    };
-
-    // Build the list of statements to put in the body of `on_swarm_event()`
-    // for the `FromSwarm::AddressChange variant`.
-    let on_address_change_stmts = {
-        data_struct
-            .fields
-            .iter()
-            .enumerate()
-            .map(|(field_n, field)| match field.ident {
-                Some(ref i) => quote! {
-                self.#i.on_swarm_event(#from_swarm::AddressChange(#address_change {
-                        peer_id,
-                        connection_id,
-                        old,
-                        new,
-                    }));
-                },
-                None => quote! {
-                self.#field_n.on_swarm_event(#from_swarm::AddressChange(#address_change {
-                        peer_id,
-                        connection_id,
-                        old,
-                        new,
-                    }));
-                },
-            })
-    };
-
-    // Build the list of statements to put in the body of `on_swarm_event()`
-    // for the `FromSwarm::ConnectionClosed` variant.
-    let on_connection_closed_stmts = {
-        data_struct
-            .fields
-            .iter()
-            .rev()
-            .enumerate()
-            .map(|(enum_n, field)| {
-                let inject = match field.ident {
-                    Some(ref i) => quote! {
-                    self.#i.on_swarm_event(#from_swarm::ConnectionClosed(#connection_closed {
-                            peer_id,
-                            connection_id,
-                            endpoint,
-                            remaining_established,
-                        }));
-                    },
-                    None => quote! {
-                    self.#enum_n.on_swarm_event(#from_swarm::ConnectionClosed(#connection_closed {
-                            peer_id,
-                            connection_id,
-                            endpoint,
-                            remaining_established,
-                        }));
-                    },
-                };
-
-                quote! {
-                    #inject;
-                }
-            })
-    };
-
-    // Build the list of statements to put in the body of `on_swarm_event()`
-    // for the `FromSwarm::DialFailure` variant.
-    let on_dial_failure_stmts = data_struct
-        .fields
-        .iter()
-        .enumerate()
-        .map(|(enum_n, field)| match field.ident {
-            Some(ref i) => quote! {
-                self.#i.on_swarm_event(#from_swarm::DialFailure(#dial_failure {
-                    peer_id,
-                    connection_id,
-                    error,
-                }));
-            },
-            None => quote! {
-                self.#enum_n.on_swarm_event(#from_swarm::DialFailure(#dial_failure {
-                    peer_id,
-                    connection_id,
-                    error,
-                }));
-            },
-        });
-
-    // Build the list of statements to put in the body of `on_swarm_event()`
-    // for the `FromSwarm::ListenFailure` variant.
-    let on_listen_failure_stmts = data_struct
-        .fields
-        .iter()
-        .enumerate()
-        .map(|(enum_n, field)| match field.ident {
-            Some(ref i) => quote! {
-                self.#i.on_swarm_event(#from_swarm::ListenFailure(#listen_failure {
-                    local_addr,
-                    send_back_addr,
-                    connection_id,
-                    error
-                }));
-            },
-            None => quote! {
-                self.#enum_n.on_swarm_event(#from_swarm::ListenFailure(#listen_failure {
-                    local_addr,
-                    send_back_addr,
-                    connection_id,
-                    error
-                }));
-            },
-        });
-
-    // Build the list of statements to put in the body of `on_swarm_event()`
-    // for the `FromSwarm::NewListener` variant.
-    let on_new_listener_stmts = {
-        data_struct
-            .fields
-            .iter()
-            .enumerate()
-            .map(|(field_n, field)| match field.ident {
-                Some(ref i) => quote! {
-                self.#i.on_swarm_event(#from_swarm::NewListener(#new_listener {
-                        listener_id,
-                    }));
-                },
-                None => quote! {
-                self.#field_n.on_swarm_event(#from_swarm::NewListener(#new_listener {
-                        listener_id,
-                    }));
-                },
-            })
-    };
-
-    // Build the list of statements to put in the body of `on_swarm_event()`
-    // for the `FromSwarm::NewListenAddr` variant.
-    let on_new_listen_addr_stmts = {
-        data_struct
-            .fields
-            .iter()
-            .enumerate()
-            .map(|(field_n, field)| match field.ident {
-                Some(ref i) => quote! {
-                self.#i.on_swarm_event(#from_swarm::NewListenAddr(#new_listen_addr {
-                        listener_id,
-                        addr,
-                    }));
-                },
-                None => quote! {
-                self.#field_n.on_swarm_event(#from_swarm::NewListenAddr(#new_listen_addr {
-                        listener_id,
-                        addr,
-                    }));
-                },
-            })
-    };
-
-    // Build the list of statements to put in the body of `on_swarm_event()`
-    // for the `FromSwarm::ExpiredListenAddr` variant.
-    let on_expired_listen_addr_stmts = {
-        data_struct
-            .fields
-            .iter()
-            .enumerate()
-            .map(|(field_n, field)| match field.ident {
-                Some(ref i) => quote! {
-                self.#i.on_swarm_event(#from_swarm::ExpiredListenAddr(#expired_listen_addr {
-                        listener_id,
-                        addr,
-                    }));
-                },
-                None => quote! {
-                self.#field_n.on_swarm_event(#from_swarm::ExpiredListenAddr(#expired_listen_addr {
-                        listener_id,
-                        addr,
-                    }));
-                },
-            })
-    };
-
-    // Build the list of statements to put in the body of `on_swarm_event()`
-    // for the `FromSwarm::NewExternalAddr` variant.
-    let on_new_external_addr_candidate_stmts = {
-        data_struct
-            .fields
-            .iter()
-            .enumerate()
-            .map(|(field_n, field)| match field.ident {
-                Some(ref i) => quote! {
-                self.#i.on_swarm_event(#from_swarm::NewExternalAddrCandidate(#new_external_addr_candidate {
-                        addr,
-                    }));
-                },
-                None => quote! {
-                self.#field_n.on_swarm_event(#from_swarm::NewExternalAddrCandidate(#new_external_addr_candidate {
-                        addr,
-                    }));
-                },
-            })
-    };
-
-    // Build the list of statements to put in the body of `on_swarm_event()`
-    // for the `FromSwarm::ExternalAddrExpired` variant.
-    let on_external_addr_expired_stmts = {
-        data_struct
-            .fields
-            .iter()
-            .enumerate()
-            .map(|(field_n, field)| match field.ident {
-                Some(ref i) => quote! {
-                self.#i.on_swarm_event(#from_swarm::ExternalAddrExpired(#external_addr_expired {
-                        addr,
-                    }));
-                },
-                None => quote! {
-                self.#field_n.on_swarm_event(#from_swarm::ExternalAddrExpired(#external_addr_expired {
-                        addr,
-                    }));
-                },
-            })
-    };
-
-    // Build the list of statements to put in the body of `on_swarm_event()`
-    // for the `FromSwarm::ExternalAddrConfirmed` variant.
-    let on_external_addr_confirmed_stmts = {
-        data_struct
-            .fields
-            .iter()
-            .enumerate()
-            .map(|(field_n, field)| match field.ident {
-                Some(ref i) => quote! {
-                self.#i.on_swarm_event(#from_swarm::ExternalAddrConfirmed(#external_addr_confirmed {
-                        addr,
-                    }));
-                },
-                None => quote! {
-                self.#field_n.on_swarm_event(#from_swarm::ExternalAddrConfirmed(#external_addr_confirmed {
-                        addr,
-                    }));
-                },
-            })
-    };
-
-    // Build the list of statements to put in the body of `on_swarm_event()`
-    // for the `FromSwarm::ListenerError` variant.
-    let on_listener_error_stmts = {
-        data_struct
-            .fields
-            .iter()
-            .enumerate()
-            .map(|(field_n, field)| match field.ident {
-                Some(ref i) => quote! {
-                    self.#i.on_swarm_event(#from_swarm::ListenerError(#listener_error {
-                        listener_id,
-                        err,
-                    }));
-                },
-                None => quote! {
-                    self.#field_n.on_swarm_event(#from_swarm::ListenerError(#listener_error {
-                        listener_id,
-                        err,
-                    }));
-                },
-            })
-    };
-
-    // Build the list of statements to put in the body of `on_swarm_event()`
-    // for the `FromSwarm::ListenerClosed` variant.
-    let on_listener_closed_stmts = {
-        data_struct
-            .fields
-            .iter()
-            .enumerate()
-            .map(|(field_n, field)| match field.ident {
-                Some(ref i) => quote! {
-                self.#i.on_swarm_event(#from_swarm::ListenerClosed(#listener_closed {
-                        listener_id,
-                        reason,
-                    }));
-                },
-                None => quote! {
-                self.#field_n.on_swarm_event(#from_swarm::ListenerClosed(#listener_closed {
-                        listener_id,
-                        reason,
-                    }));
+                    self.#field_n.on_swarm_event(event);
                 },
             })
     };
@@ -792,48 +481,7 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> syn::Result<Toke
             }
 
             fn on_swarm_event(&mut self, event: #from_swarm) {
-                match event {
-                    #from_swarm::ConnectionEstablished(
-                        #connection_established { peer_id, connection_id, endpoint, failed_addresses, other_established })
-                    => { #(#on_connection_established_stmts)* }
-                    #from_swarm::AddressChange(
-                        #address_change { peer_id, connection_id, old, new })
-                    => { #(#on_address_change_stmts)* }
-                    #from_swarm::ConnectionClosed(
-                        #connection_closed { peer_id, connection_id, endpoint, remaining_established })
-                    => { #(#on_connection_closed_stmts)* }
-                    #from_swarm::DialFailure(
-                        #dial_failure { peer_id, connection_id, error })
-                    => { #(#on_dial_failure_stmts)* }
-                    #from_swarm::ListenFailure(
-                        #listen_failure { local_addr, send_back_addr, connection_id, error })
-                    => { #(#on_listen_failure_stmts)* }
-                    #from_swarm::NewListener(
-                        #new_listener { listener_id })
-                    => { #(#on_new_listener_stmts)* }
-                    #from_swarm::NewListenAddr(
-                        #new_listen_addr { listener_id, addr })
-                    => { #(#on_new_listen_addr_stmts)* }
-                    #from_swarm::ExpiredListenAddr(
-                        #expired_listen_addr { listener_id, addr })
-                    => { #(#on_expired_listen_addr_stmts)* }
-                    #from_swarm::NewExternalAddrCandidate(
-                        #new_external_addr_candidate { addr })
-                    => { #(#on_new_external_addr_candidate_stmts)* }
-                    #from_swarm::ExternalAddrExpired(
-                        #external_addr_expired { addr })
-                    => { #(#on_external_addr_expired_stmts)* }
-                    #from_swarm::ExternalAddrConfirmed(
-                        #external_addr_confirmed { addr })
-                    => { #(#on_external_addr_confirmed_stmts)* }
-                    #from_swarm::ListenerError(
-                        #listener_error { listener_id, err })
-                    => { #(#on_listener_error_stmts)* }
-                    #from_swarm::ListenerClosed(
-                        #listener_closed { listener_id, reason })
-                    => { #(#on_listener_closed_stmts)* }
-                    _ => {}
-                }
+                #(#on_swarm_event_stmts)*
             }
         }
     };
