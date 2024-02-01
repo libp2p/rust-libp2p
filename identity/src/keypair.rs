@@ -819,6 +819,12 @@ impl From<rsa::PublicKey> for PublicKey {
 
 #[cfg(test)]
 mod tests {
+    #[cfg(any(
+        feature = "ecdsa",
+        feature = "secp256k1",
+        feature = "ed25519",
+        feature = "rsa"
+    ))]
     use super::*;
 
     #[test]
