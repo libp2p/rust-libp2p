@@ -289,7 +289,11 @@ where
 mod tests {
     use super::WsConfig;
     use futures::prelude::*;
-    use libp2p_core::{multiaddr::Protocol, transport::ListenerId, Multiaddr, Transport};
+    use libp2p_core::{
+        multiaddr::Protocol,
+        transport::{DialOpts, ListenerId, PortUse},
+        Endpoint, Multiaddr, Transport,
+    };
     use libp2p_identity::PeerId;
     use libp2p_tcp as tcp;
 
@@ -336,7 +340,13 @@ mod tests {
 
         let outbound = new_ws_config()
             .boxed()
-            .dial(addr.with(Protocol::P2p(PeerId::random())))
+            .dial(
+                addr.with(Protocol::P2p(PeerId::random())),
+                DialOpts {
+                    role: Endpoint::Dialer,
+                    port_use: PortUse::New,
+                },
+            )
             .unwrap();
 
         let (a, b) = futures::join!(inbound, outbound);

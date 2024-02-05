@@ -1302,6 +1302,7 @@ fn network_behaviour_on_address_change() {
     let endpoint = ConnectedPoint::Dialer {
         address: old_address.clone(),
         role_override: Endpoint::Dialer,
+        port_use: PortUse::Reuse,
     };
 
     // Mimick a connection being established.
@@ -1352,10 +1353,12 @@ fn network_behaviour_on_address_change() {
         old: &ConnectedPoint::Dialer {
             address: old_address,
             role_override: Endpoint::Dialer,
+            port_use: PortUse::Reuse,
         },
         new: &ConnectedPoint::Dialer {
             address: new_address.clone(),
             role_override: Endpoint::Dialer,
+            port_use: PortUse::Reuse,
         },
     }));
 

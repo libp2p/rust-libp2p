@@ -1092,7 +1092,6 @@ mod tests {
 
     #[test]
     fn port_reuse_listening() {
-        env_logger::try_init().ok();
         let _ = tracing_subscriber::fmt()
             .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
             .try_init();

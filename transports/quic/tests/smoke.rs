@@ -7,8 +7,9 @@ use futures::stream::StreamExt;
 use futures::{future, AsyncReadExt, AsyncWriteExt, FutureExt, SinkExt};
 use futures_timer::Delay;
 use libp2p_core::muxing::{StreamMuxerBox, StreamMuxerExt, SubstreamBox};
-use libp2p_core::transport::{Boxed, OrTransport, TransportEvent};
+use libp2p_core::transport::{Boxed, DialOpts, OrTransport, PortUse, TransportEvent};
 use libp2p_core::transport::{ListenerId, TransportError};
+use libp2p_core::Endpoint;
 use libp2p_core::{multiaddr::Protocol, upgrade, Multiaddr, Transport};
 use libp2p_identity::PeerId;
 use libp2p_noise as noise;
@@ -90,6 +91,8 @@ async fn ipv4_dial_ipv6() {
 #[cfg(feature = "async-std")]
 #[async_std::test]
 async fn wrapped_with_delay() {
+    use libp2p_core::transport::DialOpts;
+
     let _ = tracing_subscriber::fmt()
         .with_env_filter(EnvFilter::from_default_env())
         .try_init();
@@ -125,7 +128,11 @@ async fn wrapped_with_delay() {
         /// Delayed dial, i.e. calling [`Transport::dial`] on the inner [`Transport`] not within the
         /// synchronous [`Transport::dial`] method, but within the [`Future`] returned by the outer
         /// [`Transport::dial`].
-        fn dial(&mut self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
+        fn dial(
+            &mut self,
+            addr: Multiaddr,
+            dial_opts: DialOpts,
+        ) -> Result<Self::Dial, TransportError<Self::Error>> {
             let t = self.0.clone();
             Ok(async move {
                 // Simulate DNS lookup. Giving the `Transport::poll` the chance to return
@@ -133,22 +140,19 @@ async fn wrapped_with_delay() {
                 // on the inner transport below.
                 Delay::new(Duration::from_millis(100)).await;
 
-                let dial = t.lock().unwrap().dial(addr).map_err(|e| match e {
-                    TransportError::MultiaddrNotSupported(_) => {
-                        panic!()
-                    }
-                    TransportError::Other(e) => e,
-                })?;
+                let dial = t
+                    .lock()
+                    .unwrap()
+                    .dial(addr, dial_opts)
+                    .map_err(|e| match e {
+                        TransportError::MultiaddrNotSupported(_) => {
+                            panic!()
+                        }
+                        TransportError::Other(e) => e,
+                    })?;
                 dial.await
             }
             .boxed())
-        }
-
-        fn dial_as_listener(
-            &mut self,
-            addr: Multiaddr,
-        ) -> Result<Self::Dial, TransportError<Self::Error>> {
-            self.0.lock().unwrap().dial_as_listener(addr)
         }
 
         fn poll(
@@ -183,7 +187,15 @@ async fn wrapped_with_delay() {
     // Note that the dial is spawned on a different task than the transport allowing the transport
     // task to poll the transport once and then suspend, waiting for the wakeup from the dial.
     let dial = async_std::task::spawn({
-        let dial = b_transport.dial(a_addr).unwrap();
+        let dial = b_transport
+            .dial(
+                a_addr,
+                DialOpts {
+                    role: Endpoint::Dialer,
+                    port_use: PortUse::Reuse,
+                },
+            )
+            .unwrap();
         async { dial.await.unwrap().0 }
     });
     async_std::task::spawn(async move { b_transport.next().await });
@@ -315,7 +327,13 @@ async fn draft_29_support() {
     let (_, mut c_transport) =
         create_transport::<quic::tokio::Provider>(|cfg| cfg.support_draft_29 = false);
     assert!(matches!(
-        c_transport.dial(a_quic_addr),
+        c_transport.dial(
+            a_quic_addr,
+            DialOpts {
+                role: Endpoint::Dialer,
+                port_use: PortUse::New
+            }
+        ),
         Err(TransportError::MultiaddrNotSupported(_))
     ));
 
@@ -331,7 +349,15 @@ async fn draft_29_support() {
     ));
     let d_quic_v1_addr = start_listening(&mut d_transport, "/ip4/127.0.0.1/udp/0/quic-v1").await;
     let d_quic_addr_mapped = swap_protocol!(d_quic_v1_addr, QuicV1 => Quic);
-    let dial = b_transport.dial(d_quic_addr_mapped).unwrap();
+    let dial = b_transport
+        .dial(
+            d_quic_addr_mapped,
+            DialOpts {
+                role: Endpoint::Dialer,
+                port_use: PortUse::Reuse,
+            },
+        )
+        .unwrap();
     let drive_transports = poll_fn::<(), _>(|cx| {
         let _ = b_transport.poll_next_unpin(cx);
         let _ = d_transport.poll_next_unpin(cx);
@@ -765,7 +791,20 @@ async fn dial(
     transport: &mut Boxed<(PeerId, StreamMuxerBox)>,
     addr: Multiaddr,
 ) -> io::Result<(PeerId, StreamMuxerBox)> {
-    match future::select(transport.dial(addr).unwrap(), transport.next()).await {
+    match future::select(
+        transport
+            .dial(
+                addr,
+                DialOpts {
+                    role: Endpoint::Dialer,
+                    port_use: PortUse::Reuse,
+                },
+            )
+            .unwrap(),
+        transport.next(),
+    )
+    .await
+    {
         Either::Left((conn, _)) => conn,
         Either::Right((event, _)) => {
             panic!("Unexpected event: {event:?}")

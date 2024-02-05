@@ -924,7 +924,13 @@ mod tests {
         let mut transport = crate::tokio::Transport::new(config);
 
         let _dial = transport
-            .dial("/ip4/123.45.67.8/udp/1234/quic-v1".parse().unwrap())
+            .dial(
+                "/ip4/123.45.67.8/udp/1234/quic-v1".parse().unwrap(),
+                DialOpts {
+                    role: Endpoint::Dialer,
+                    port_use: PortUse::New,
+                },
+            )
             .unwrap();
 
         assert!(transport.dialer.contains_key(&SocketFamily::Ipv4));

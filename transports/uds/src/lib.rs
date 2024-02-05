@@ -46,7 +46,7 @@ use futures::{
 use libp2p_core::transport::ListenerId;
 use libp2p_core::{
     multiaddr::{Multiaddr, Protocol},
-    transport::{TransportError, TransportEvent, DialOpts},
+    transport::{DialOpts, TransportError, TransportEvent},
     Transport,
 };
 use std::collections::VecDeque;
@@ -253,8 +253,8 @@ mod tests {
     use futures::{channel::oneshot, prelude::*};
     use libp2p_core::{
         multiaddr::{Multiaddr, Protocol},
-        transport::ListenerId,
-        Transport,
+        transport::{DialOpts, ListenerId, PortUse},
+        Endpoint, Transport,
     };
     use std::{self, borrow::Cow, path::Path};
 
@@ -311,7 +311,17 @@ mod tests {
         async_std::task::block_on(async move {
             let mut uds = UdsConfig::new();
             let addr = rx.await.unwrap();
-            let mut socket = uds.dial(addr).unwrap().await.unwrap();
+            let mut socket = uds
+                .dial(
+                    addr,
+                    DialOpts {
+                        role: Endpoint::Dialer,
+                        port_use: PortUse::Reuse,
+                    },
+                )
+                .unwrap()
+                .await
+                .unwrap();
             let _ = socket.write(&[1, 2, 3]).await.unwrap();
         });
     }

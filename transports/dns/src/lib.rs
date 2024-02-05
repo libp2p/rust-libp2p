@@ -624,8 +624,8 @@ mod tests {
     use futures::future::BoxFuture;
     use libp2p_core::{
         multiaddr::{Multiaddr, Protocol},
-        transport::{TransportError, TransportEvent},
-        Transport,
+        transport::{PortUse, TransportError, TransportEvent},
+        Endpoint, Transport,
     };
     use libp2p_identity::PeerId;
 
@@ -656,20 +656,17 @@ mod tests {
                 false
             }
 
-            fn dial(&mut self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
+            fn dial(
+                &mut self,
+                addr: Multiaddr,
+                _: DialOpts,
+            ) -> Result<Self::Dial, TransportError<Self::Error>> {
                 // Check that all DNS components have been resolved, i.e. replaced.
                 assert!(!addr.iter().any(|p| matches!(
                     p,
                     Protocol::Dns(_) | Protocol::Dns4(_) | Protocol::Dns6(_) | Protocol::Dnsaddr(_)
                 )));
                 Ok(Box::pin(future::ready(Ok(()))))
-            }
-
-            fn dial_as_listener(
-                &mut self,
-                addr: Multiaddr,
-            ) -> Result<Self::Dial, TransportError<Self::Error>> {
-                self.dial(addr)
             }
 
             fn address_translation(&self, _: &Multiaddr, _: &Multiaddr) -> Option<Multiaddr> {
@@ -691,30 +688,34 @@ mod tests {
             T::Dial: Send,
             R: Clone + Send + Sync + Resolver + 'static,
         {
+            let dial_opts = DialOpts {
+                role: Endpoint::Dialer,
+                port_use: PortUse::Reuse,
+            };
             // Success due to existing A record for example.com.
             let _ = transport
-                .dial("/dns4/example.com/tcp/20000".parse().unwrap())
+                .dial("/dns4/example.com/tcp/20000".parse().unwrap(), dial_opts)
                 .unwrap()
                 .await
                 .unwrap();
 
             // Success due to existing AAAA record for example.com.
             let _ = transport
-                .dial("/dns6/example.com/tcp/20000".parse().unwrap())
+                .dial("/dns6/example.com/tcp/20000".parse().unwrap(), dial_opts)
                 .unwrap()
                 .await
                 .unwrap();
 
             // Success due to pass-through, i.e. nothing to resolve.
             let _ = transport
-                .dial("/ip4/1.2.3.4/tcp/20000".parse().unwrap())
+                .dial("/ip4/1.2.3.4/tcp/20000".parse().unwrap(), dial_opts)
                 .unwrap()
                 .await
                 .unwrap();
 
             // Success due to the DNS TXT records at _dnsaddr.bootstrap.libp2p.io.
             let _ = transport
-                .dial("/dnsaddr/bootstrap.libp2p.io".parse().unwrap())
+                .dial("/dnsaddr/bootstrap.libp2p.io".parse().unwrap(), dial_opts)
                 .unwrap()
                 .await
                 .unwrap();
@@ -723,7 +724,7 @@ mod tests {
             // an entry with suffix `/p2p/QmNnooDu7bfjPFoTZYxMNLWUQJyrVwtbZg5gBMjTezGAJN`,
             // i.e. a bootnode with such a peer ID.
             let _ = transport
-                .dial("/dnsaddr/bootstrap.libp2p.io/p2p/QmNnooDu7bfjPFoTZYxMNLWUQJyrVwtbZg5gBMjTezGAJN".parse().unwrap())
+                .dial("/dnsaddr/bootstrap.libp2p.io/p2p/QmNnooDu7bfjPFoTZYxMNLWUQJyrVwtbZg5gBMjTezGAJN".parse().unwrap(), dial_opts)
                 .unwrap()
                 .await
                 .unwrap();
@@ -735,6 +736,7 @@ mod tests {
                     format!("/dnsaddr/bootstrap.libp2p.io/p2p/{}", PeerId::random())
                         .parse()
                         .unwrap(),
+                    dial_opts,
                 )
                 .unwrap()
                 .await
@@ -746,7 +748,10 @@ mod tests {
 
             // Failure due to no records.
             match transport
-                .dial("/dns4/example.invalid/tcp/20000".parse().unwrap())
+                .dial(
+                    "/dns4/example.invalid/tcp/20000".parse().unwrap(),
+                    dial_opts,
+                )
                 .unwrap()
                 .await
             {

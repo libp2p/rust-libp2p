@@ -404,6 +404,7 @@ fn with_generics_constrained() {
             _: libp2p_identity::PeerId,
             _: &Multiaddr,
             _: Endpoint,
+            _: PortUse,
         ) -> Result<THandler<Self>, ConnectionDenied> {
             Ok(dummy::ConnectionHandler)
         }

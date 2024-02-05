@@ -570,6 +570,7 @@ mod tests {
             _peer: PeerId,
             _addr: &Multiaddr,
             _role_override: Endpoint,
+            _port_use: PortUse,
         ) -> Result<THandler<Self>, ConnectionDenied> {
             Err(ConnectionDenied::new(std::io::Error::new(
                 std::io::ErrorKind::Other,
