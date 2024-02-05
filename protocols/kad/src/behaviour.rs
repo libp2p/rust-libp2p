@@ -31,7 +31,7 @@ use crate::query::{Query, QueryConfig, QueryId, QueryPool, QueryPoolState};
 use crate::record::{
     self,
     store::{self, RecordStore},
-    ProviderRecord, Record,
+    ProviderRecord, Record, Key
 };
 use crate::K_VALUE;
 use fnv::{FnvHashMap, FnvHashSet};
@@ -2433,14 +2433,17 @@ where
         // Run the periodic provider announcement job.
         if let Some(mut job) = self.add_provider_job.take() {
             let num = usize::min(JOBS_MAX_NEW_QUERIES, jobs_query_capacity);
+            let mut ready_provider_keys: Vec<Key> = Vec::new();
             for _ in 0..num {
                 if let Poll::Ready(r) = job.poll(cx, &mut self.store, now) {
-                    self.start_add_provider(r.key, AddProviderContext::Republish)
-                } else {
-                    break;
+                    ready_provider_keys.push(r.key)
                 }
             }
-            jobs_query_capacity -= num;
+            if !ready_provider_keys.is_empty() {
+                // Republish the first provider we polled
+                self.start_add_provider(ready_provider_keys[0].clone(), AddProviderContext::Republish)
+            }
+            jobs_query_capacity = jobs_query_capacity - (num - ready_provider_keys.len());
             self.add_provider_job = Some(job);
         }
 
