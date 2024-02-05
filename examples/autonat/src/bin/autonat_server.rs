@@ -20,6 +20,8 @@
 
 #![doc = include_str!("../../README.md")]
 
+#![allow(deprecated)]
+
 use clap::Parser;
 use futures::StreamExt;
 use libp2p::core::{multiaddr::Protocol, Multiaddr};

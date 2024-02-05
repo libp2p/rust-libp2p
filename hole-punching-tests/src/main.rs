@@ -64,7 +64,7 @@ async fn main() -> Result<()> {
     let mut swarm = libp2p::SwarmBuilder::with_new_identity()
         .with_tokio()
         .with_tcp(
-            tcp::Config::new().port_reuse(true).nodelay(true),
+            tcp::Config::new().nodelay(true),
             noise::Config::new,
             yamux::Config::default,
         )?

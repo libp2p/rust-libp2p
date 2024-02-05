@@ -7,9 +7,7 @@ use libp2p::{
     identify, identity,
     multiaddr::Protocol,
     noise,
-    swarm::{
-        dial_opts::DialOpts, FromSwarm, NetworkBehaviour, NewExternalAddrCandidate, SwarmEvent,
-    },
+    swarm::{dial_opts::DialOpts, NetworkBehaviour, SwarmEvent},
     tcp, yamux, Multiaddr, SwarmBuilder,
 };
 use rand::rngs::OsRng;

@@ -46,7 +46,7 @@ use futures::{
 use libp2p_core::transport::ListenerId;
 use libp2p_core::{
     multiaddr::{Multiaddr, Protocol},
-    transport::{TransportError, TransportEvent},
+    transport::{TransportError, TransportEvent, DialOpts},
     Transport,
 };
 use std::collections::VecDeque;
@@ -159,7 +159,7 @@ macro_rules! codegen {
                 }
             }
 
-            fn dial(&mut self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
+            fn dial(&mut self, addr: Multiaddr, _dial_opts: DialOpts) -> Result<Self::Dial, TransportError<Self::Error>> {
                 // TODO: Should we dial at all?
                 if let Ok(path) = multiaddr_to_path(&addr) {
                     tracing::debug!(address=%addr, "Dialing address");
@@ -167,13 +167,6 @@ macro_rules! codegen {
                 } else {
                     Err(TransportError::MultiaddrNotSupported(addr))
                 }
-            }
-
-            fn dial_as_listener(
-                &mut self,
-                addr: Multiaddr,
-            ) -> Result<Self::Dial, TransportError<Self::Error>> {
-                self.dial(addr)
             }
 
             fn address_translation(

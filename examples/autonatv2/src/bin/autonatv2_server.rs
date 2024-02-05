@@ -4,7 +4,7 @@ use cfg_if::cfg_if;
 use clap::Parser;
 use libp2p::{
     autonat,
-    futures::{task::waker, StreamExt},
+    futures::StreamExt,
     identify, identity,
     multiaddr::Protocol,
     noise,
@@ -12,7 +12,6 @@ use libp2p::{
     tcp, yamux, Multiaddr, SwarmBuilder,
 };
 use rand::rngs::OsRng;
-use tracing_subscriber::{util::SubscriberInitExt, EnvFilter};
 
 #[derive(Debug, Parser)]
 #[clap(name = "libp2p autonatv2 server")]
@@ -36,7 +35,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
                 .with(telemetry);
         } else {
             let subscriber = tracing_subscriber::fmt()
-                .with_env_filter(EnvFilter::from_default_env())
+                .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
                 .finish();
         }
     }
