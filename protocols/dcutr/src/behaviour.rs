@@ -24,6 +24,7 @@ use crate::{handler, protocol};
 use either::Either;
 use libp2p_core::connection::ConnectedPoint;
 use libp2p_core::multiaddr::Protocol;
+use libp2p_core::transport::PortUse;
 use libp2p_core::{Endpoint, Multiaddr};
 use libp2p_identity::PeerId;
 use libp2p_swarm::behaviour::{ConnectionClosed, DialFailure, FromSwarm};
@@ -206,12 +207,14 @@ impl NetworkBehaviour for Behaviour {
         peer: PeerId,
         addr: &Multiaddr,
         role_override: Endpoint,
+        port_use: PortUse,
     ) -> Result<THandler<Self>, ConnectionDenied> {
         if is_relayed(addr) {
             return Ok(Either::Left(handler::relayed::Handler::new(
                 ConnectedPoint::Dialer {
                     address: addr.clone(),
                     role_override,
+                    port_use,
                 },
                 self.observed_addresses(),
             ))); // TODO: We could make two `handler::relayed::Handler` here, one inbound one outbound.

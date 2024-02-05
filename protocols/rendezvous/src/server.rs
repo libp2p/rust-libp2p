@@ -24,6 +24,7 @@ use bimap::BiMap;
 use futures::future::BoxFuture;
 use futures::stream::FuturesUnordered;
 use futures::{FutureExt, StreamExt};
+use libp2p_core::transport::PortUse;
 use libp2p_core::{Endpoint, Multiaddr};
 use libp2p_identity::PeerId;
 use libp2p_request_response::ProtocolSupport;
@@ -140,9 +141,10 @@ impl NetworkBehaviour for Behaviour {
         peer: PeerId,
         addr: &Multiaddr,
         role_override: Endpoint,
+        port_use: PortUse,
     ) -> Result<THandler<Self>, ConnectionDenied> {
         self.inner
-            .handle_established_outbound_connection(connection_id, peer, addr, role_override)
+            .handle_established_outbound_connection(connection_id, peer, addr, role_override, port_use)
     }
 
     fn on_connection_handler_event(

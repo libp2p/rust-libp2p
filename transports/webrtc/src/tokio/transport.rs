@@ -22,7 +22,7 @@ use futures::{future::BoxFuture, prelude::*, stream::SelectAll, stream::Stream};
 use if_watch::{tokio::IfWatcher, IfEvent};
 use libp2p_core::{
     multiaddr::{Multiaddr, Protocol},
-    transport::{ListenerId, TransportError, TransportEvent},
+    transport::{DialOpts, ListenerId, TransportError, TransportEvent},
 };
 use libp2p_identity as identity;
 use libp2p_identity::PeerId;
@@ -118,7 +118,15 @@ impl libp2p_core::Transport for Transport {
         }
     }
 
-    fn dial(&mut self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
+    fn dial(
+        &mut self,
+        addr: Multiaddr,
+        _: DialOpts,
+    ) -> Result<Self::Dial, TransportError<Self::Error>> {
+        // TODO: As the listener of a WebRTC hole punch, we need to send a random UDP packet to the
+        // `addr`. See DCUtR specification below.
+        //
+        // https://github.com/libp2p/specs/blob/master/relay/DCUtR.md#the-protocol
         let (sock_addr, server_fingerprint) = libp2p_webrtc_utils::parse_webrtc_dial_addr(&addr)
             .ok_or_else(|| TransportError::MultiaddrNotSupported(addr.clone()))?;
         if sock_addr.port() == 0 || sock_addr.ip().is_unspecified() {
@@ -149,17 +157,6 @@ impl libp2p_core::Transport for Transport {
             Ok((peer_id, connection))
         }
         .boxed())
-    }
-
-    fn dial_as_listener(
-        &mut self,
-        addr: Multiaddr,
-    ) -> Result<Self::Dial, TransportError<Self::Error>> {
-        // TODO: As the listener of a WebRTC hole punch, we need to send a random UDP packet to the
-        // `addr`. See DCUtR specification below.
-        //
-        // https://github.com/libp2p/specs/blob/master/relay/DCUtR.md#the-protocol
-        self.dial(addr)
     }
 
     fn address_translation(&self, server: &Multiaddr, observed: &Multiaddr) -> Option<Multiaddr> {

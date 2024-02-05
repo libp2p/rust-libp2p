@@ -1,7 +1,8 @@
 use futures::channel::oneshot;
 use futures::{AsyncReadExt, AsyncWriteExt};
 use getrandom::getrandom;
-use libp2p_core::{StreamMuxer, Transport as _};
+use libp2p_core::transport::{DialOpts, PortUse};
+use libp2p_core::{Endpoint, StreamMuxer, Transport as _};
 use libp2p_identity::{Keypair, PeerId};
 use libp2p_noise as noise;
 use libp2p_webtransport_websys::{Config, Connection, Error, Stream, Transport};
@@ -263,7 +264,17 @@ async fn connect_without_peer_id() {
     addr.pop();
 
     let mut transport = Transport::new(Config::new(&keypair));
-    transport.dial(addr).unwrap().await.unwrap();
+    transport
+        .dial(
+            addr,
+            DialOpts {
+                role: Endpoint::Dialer,
+                port_use: PortUse::Reuse,
+            },
+        )
+        .unwrap()
+        .await
+        .unwrap();
 }
 
 #[wasm_bindgen_test]
@@ -278,7 +289,17 @@ async fn error_on_unknown_peer_id() {
     addr.push(Protocol::P2p(PeerId::random()));
 
     let mut transport = Transport::new(Config::new(&keypair));
-    let e = transport.dial(addr.clone()).unwrap().await.unwrap_err();
+    let e = transport
+        .dial(
+            addr.clone(),
+            DialOpts {
+                role: Endpoint::Listener,
+                port_use: PortUse::New,
+            },
+        )
+        .unwrap()
+        .await
+        .unwrap_err();
     assert!(matches!(e, Error::UnknownRemotePeerId));
 }
 
@@ -297,7 +318,17 @@ async fn error_on_unknown_certhash() {
     addr.push(peer_id);
 
     let mut transport = Transport::new(Config::new(&keypair));
-    let e = transport.dial(addr.clone()).unwrap().await.unwrap_err();
+    let e = transport
+        .dial(
+            addr.clone(),
+            DialOpts {
+                role: Endpoint::Listener,
+                port_use: PortUse::New,
+            },
+        )
+        .unwrap()
+        .await
+        .unwrap_err();
     assert!(matches!(
         e,
         Error::Noise(noise::Error::UnknownWebTransportCerthashes(..))
@@ -310,7 +341,17 @@ async fn new_connection_to_echo_server() -> Connection {
 
     let mut transport = Transport::new(Config::new(&keypair));
 
-    let (_peer_id, conn) = transport.dial(addr).unwrap().await.unwrap();
+    let (_peer_id, conn) = transport
+        .dial(
+            addr,
+            DialOpts {
+                role: Endpoint::Dialer,
+                port_use: PortUse::New,
+            },
+        )
+        .unwrap()
+        .await
+        .unwrap();
 
     conn
 }
