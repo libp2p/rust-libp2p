@@ -24,7 +24,7 @@ jobs:
         echo "<meta http-equiv=\"refresh\" content=\"0; url=libp2p\">" > target/doc/index.html
         cp -r target/doc/* ./host-docs
     - name: Upload documentation
-      uses: actions/upload-pages-artifact@v3.0.0
+      uses: actions/upload-pages-artifact@v3.0.1
       with:
         path: "host-docs/"
 
