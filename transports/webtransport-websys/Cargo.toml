@@ -15,7 +15,7 @@ categories = ["network-programming", "asynchronous"]
 
 [dependencies]
 futures = "0.3.30"
-js-sys = "0.3.67"
+js-sys = "0.3.68"
 libp2p-core = { workspace = true }
 libp2p-identity = { workspace = true }
 libp2p-noise = { workspace = true }
