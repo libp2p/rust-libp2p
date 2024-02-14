@@ -1,4 +1,4 @@
-## 0.12.6 -- unreleased
+## 0.12.6
 
 ### Changed
 - Stop using kad default protocol.
