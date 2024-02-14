@@ -5,7 +5,7 @@ use std::{borrow::Cow, io};
 
 use asynchronous_codec::{Framed, FramedRead, FramedWrite};
 
-use futures::{AsyncRead, AsyncWrite, SinkExt, StreamExt};
+use futures::{AsyncRead, AsyncWrite, AsyncWriteExt, SinkExt, StreamExt};
 use libp2p_core::Multiaddr;
 
 use quick_protobuf_codec::Codec;
@@ -273,14 +273,11 @@ pub(crate) async fn dial_back(stream: impl AsyncWrite + Unpin, nonce: Nonce) -> 
         .send(msg)
         .await
         .map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
-    framed.close().await?;
 
     Ok(())
 }
 
-pub(crate) async fn recv_dial_back(
-    stream: impl AsyncRead + AsyncWrite + Unpin,
-) -> io::Result<Nonce> {
+pub(crate) async fn recv_dial_back(stream: impl AsyncRead + Unpin) -> io::Result<Nonce> {
     let framed = &mut FramedRead::new(stream, Codec::<proto::DialBack>::new(DIAL_BACK_MAX_SIZE));
     let proto::DialBack { nonce } = framed
         .next()
@@ -289,6 +286,45 @@ pub(crate) async fn recv_dial_back(
     let nonce = ok_or_invalid_data!(nonce)?;
 
     Ok(nonce)
+}
+
+pub(crate) async fn dial_back_response(stream: impl AsyncWrite + Unpin) -> io::Result<()> {
+    let msg = proto::DialBackResponse {
+        status: Some(proto::mod_DialBackResponse::DialBackStatus::OK),
+    };
+    let mut framed = FramedWrite::new(
+        stream,
+        Codec::<proto::DialBackResponse>::new(DIAL_BACK_MAX_SIZE),
+    );
+    framed
+        .send(msg)
+        .await
+        .map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
+    framed.close().await?;
+
+    Ok(())
+}
+
+pub(crate) async fn recv_dial_back_response(
+    stream: impl AsyncRead + AsyncWrite + Unpin,
+) -> io::Result<()> {
+    let framed = &mut FramedRead::new(
+        stream,
+        Codec::<proto::DialBackResponse>::new(DIAL_BACK_MAX_SIZE),
+    );
+    let proto::DialBackResponse { status } = framed
+        .next()
+        .await
+        .ok_or(io::Error::from(io::ErrorKind::UnexpectedEof))??;
+    framed.close().await?;
+    if let Some(proto::mod_DialBackResponse::DialBackStatus::OK) = status {
+        Ok(())
+    } else {
+        Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            "invalid dial back response",
+        ))
+    }
 }
 
 #[cfg(test)]

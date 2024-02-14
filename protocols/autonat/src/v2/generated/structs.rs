@@ -336,3 +336,69 @@ impl MessageWrite for DialBack {
         Ok(())
     }
 }
+
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Debug, Default, PartialEq, Clone)]
+pub(crate) struct DialBackResponse {
+    pub(crate) status: Option<structs::mod_DialBackResponse::DialBackStatus>,
+}
+
+impl<'a> MessageRead<'a> for DialBackResponse {
+    fn from_reader(r: &mut BytesReader, bytes: &'a [u8]) -> Result<Self> {
+        let mut msg = Self::default();
+        while !r.is_eof() {
+            match r.next_tag(bytes) {
+                Ok(8) => msg.status = Some(r.read_enum(bytes)?),
+                Ok(t) => { r.read_unknown(bytes, t)?; }
+                Err(e) => return Err(e),
+            }
+        }
+        Ok(msg)
+    }
+}
+
+impl MessageWrite for DialBackResponse {
+    fn get_size(&self) -> usize {
+        0
+        + self.status.as_ref().map_or(0, |m| 1 + sizeof_varint(*(m) as u64))
+    }
+
+    fn write_message<W: WriterBackend>(&self, w: &mut Writer<W>) -> Result<()> {
+        if let Some(ref s) = self.status { w.write_with_tag(8, |w| w.write_enum(*s as i32))?; }
+        Ok(())
+    }
+}
+
+pub(crate) mod mod_DialBackResponse {
+
+
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
+pub(crate) enum DialBackStatus {
+    OK = 0,
+}
+
+impl Default for DialBackStatus {
+    fn default() -> Self {
+        DialBackStatus::OK
+    }
+}
+
+impl From<i32> for DialBackStatus {
+    fn from(i: i32) -> Self {
+        match i {
+            0 => DialBackStatus::OK,
+            _ => Self::default(),
+        }
+    }
+}
+
+impl<'a> From<&'a str> for DialBackStatus {
+    fn from(s: &'a str) -> Self {
+        match s {
+            "OK" => DialBackStatus::OK,
+            _ => Self::default(),
+        }
+    }
+}
+
+}

@@ -4,6 +4,7 @@ use std::{
     time::Duration,
 };
 
+use futures::{AsyncRead, AsyncWrite};
 use futures_bounded::FuturesSet;
 use libp2p_core::upgrade::{DeniedUpgrade, ReadyUpgrade};
 use libp2p_swarm::{
@@ -75,11 +76,7 @@ impl ConnectionHandler for Handler {
             ConnectionEvent::FullyNegotiatedInbound(FullyNegotiatedInbound {
                 protocol, ..
             }) => {
-                if self
-                    .inbound
-                    .try_push(protocol::recv_dial_back(protocol))
-                    .is_err()
-                {
+                if self.inbound.try_push(perform_dial_back(protocol)).is_err() {
                     tracing::warn!("Dial back request dropped, too many requests in flight");
                 }
             }
@@ -89,4 +86,10 @@ impl ConnectionHandler for Handler {
             _ => {}
         }
     }
+}
+
+async fn perform_dial_back(mut stream: impl AsyncRead + AsyncWrite + Unpin) -> io::Result<Nonce> {
+    let nonce = protocol::recv_dial_back(&mut stream).await?;
+    protocol::dial_back_response(stream).await?;
+    Ok(nonce)
 }

@@ -44,3 +44,11 @@ message DialResponse {
 message DialDataResponse { bytes data = 1; }
 
 message DialBack { fixed64 nonce = 1; }
+
+message DialBackResponse {
+  enum DialBackStatus {
+    OK = 0;
+  }
+
+  DialBackStatus status = 1;
+}

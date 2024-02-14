@@ -238,7 +238,7 @@ async fn dial_back_to_non_libp2p() {
 
     for addr_str in [
         "/ip4/169.150.247.38/tcp/32",
-        "/ip6/2400:52e0:1e02::1187:1/tcp/1000",
+        "/ip6/::1/tcp/1000",
     ] {
         let addr: Multiaddr = addr_str.parse().unwrap();
         let bob_addr = addr.clone();
@@ -279,7 +279,7 @@ async fn dial_back_to_non_libp2p() {
                 let error_string = o.to_string();
                 assert!(
                     error_string.contains("Connection refused"),
-                    "Coorect error string: {error_string}"
+                    "Correct error string: {error_string} for {addr_str}"
                 );
             } else {
                 panic!("No outgoing connection errors");

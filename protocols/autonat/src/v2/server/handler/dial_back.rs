@@ -5,7 +5,7 @@ use std::{
     time::Duration,
 };
 
-use futures::AsyncWrite;
+use futures::{AsyncRead, AsyncWrite};
 use futures_bounded::FuturesSet;
 use libp2p_core::upgrade::{DeniedUpgrade, ReadyUpgrade};
 use libp2p_swarm::{
@@ -14,7 +14,10 @@ use libp2p_swarm::{
     SubstreamProtocol,
 };
 
-use crate::v2::{protocol::dial_back, DIAL_BACK_PROTOCOL};
+use crate::v2::{
+    protocol::{dial_back, recv_dial_back_response},
+    DIAL_BACK_PROTOCOL,
+};
 
 use super::dial_request::{DialBackCommand, DialBackStatus as DialBackRes};
 
@@ -111,20 +114,25 @@ impl ConnectionHandler for Handler {
 }
 
 async fn perform_dial_back(
-    stream: impl AsyncWrite + Unpin,
+    mut stream: impl AsyncRead + AsyncWrite + Unpin,
     DialBackCommand {
         nonce,
         back_channel,
         ..
     }: DialBackCommand,
 ) -> io::Result<()> {
-    let res = dial_back(stream, nonce)
+    let res = dial_back(&mut stream, nonce)
         .await
         .map_err(|_| DialBackRes::DialBackErr)
         .map(|_| ());
-    // this exists to prevent a synchronization issue on the client side. Whitout this, the client
-    // might already receive a
-    futures_time::task::sleep(futures_time::time::Duration::from_millis(100)).await;
+
+    let res = match res {
+        Ok(()) => recv_dial_back_response(stream)
+            .await
+            .map_err(|_| DialBackRes::DialBackErr)
+            .map(|_| ()),
+        Err(e) => Err(e),
+    };
     back_channel
         .send(res)
         .map_err(|_| io::Error::new(io::ErrorKind::Other, "send error"))?;
