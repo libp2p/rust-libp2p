@@ -268,8 +268,8 @@ async fn connect_without_peer_id() {
         .dial(
             addr,
             DialOpts {
-                role: Endpoint::Dialer,
-                port_use: PortUse::Reuse,
+                role: Endpoint::Listener,
+                port_use: PortUse::New,
             },
         )
         .unwrap()

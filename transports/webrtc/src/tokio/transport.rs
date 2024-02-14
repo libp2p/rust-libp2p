@@ -121,12 +121,16 @@ impl libp2p_core::Transport for Transport {
     fn dial(
         &mut self,
         addr: Multiaddr,
-        _: DialOpts,
+        dial_opts: DialOpts,
     ) -> Result<Self::Dial, TransportError<Self::Error>> {
-        // TODO: As the listener of a WebRTC hole punch, we need to send a random UDP packet to the
-        // `addr`. See DCUtR specification below.
-        //
-        // https://github.com/libp2p/specs/blob/master/relay/DCUtR.md#the-protocol
+        if dial_opts.role.is_listener() {
+            // TODO: As the listener of a WebRTC hole punch, we need to send a random UDP packet to the
+            // `addr`. See DCUtR specification below.
+            //
+            // https://github.com/libp2p/specs/blob/master/relay/DCUtR.md#the-protocol
+            tracing::warn!("WebRTC hole punch is not yet supported");
+        }
+
         let (sock_addr, server_fingerprint) = libp2p_webrtc_utils::parse_webrtc_dial_addr(&addr)
             .ok_or_else(|| TransportError::MultiaddrNotSupported(addr.clone()))?;
         if sock_addr.port() == 0 || sock_addr.ip().is_unspecified() {

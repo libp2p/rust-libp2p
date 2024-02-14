@@ -267,7 +267,7 @@ impl<P: Provider> Transport for GenTransport<P> {
             self.remote_multiaddr_to_socketaddr(addr.clone(), true)?;
 
         match (dial_opts.role, dial_opts.port_use) {
-            (Endpoint::Dialer, _) | (Endpoint::Listener, PortUse::New) => {
+            (Endpoint::Dialer, _) | (Endpoint::Listener, PortUse::Reuse) => {
                 let endpoint = match self.eligible_listener(&socket_addr) {
                     None => {
                         // No listener. Get or create an explicit dialer.
