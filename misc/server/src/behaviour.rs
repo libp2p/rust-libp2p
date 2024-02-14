@@ -10,7 +10,6 @@ use libp2p::{identity, swarm::NetworkBehaviour, Multiaddr, PeerId};
 use std::str::FromStr;
 use std::time::Duration;
 
-
 const BOOTNODES: [&str; 4] = [
     "QmNnooDu7bfjPFoTZYxMNLWUQJyrVwtbZg5gBMjTezGAJN",
     "QmQCU2EcMqAqQPR2i9bChDtGNJchTbq5TbXJJ16u19uLTa",

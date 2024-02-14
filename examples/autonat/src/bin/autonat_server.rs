@@ -19,7 +19,6 @@
 // DEALINGS IN THE SOFTWARE.
 
 #![doc = include_str!("../../README.md")]
-
 #![allow(deprecated)]
 
 use clap::Parser;

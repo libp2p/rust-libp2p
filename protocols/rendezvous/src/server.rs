@@ -143,8 +143,13 @@ impl NetworkBehaviour for Behaviour {
         role_override: Endpoint,
         port_use: PortUse,
     ) -> Result<THandler<Self>, ConnectionDenied> {
-        self.inner
-            .handle_established_outbound_connection(connection_id, peer, addr, role_override, port_use)
+        self.inner.handle_established_outbound_connection(
+            connection_id,
+            peer,
+            addr,
+            role_override,
+            port_use,
+        )
     }
 
     fn on_connection_handler_event(

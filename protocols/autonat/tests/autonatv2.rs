@@ -236,10 +236,7 @@ async fn dial_back_to_non_libp2p() {
     let (mut alice, mut bob) = bootstrap().await;
     let alice_peer_id = *alice.local_peer_id();
 
-    for addr_str in [
-        "/ip4/169.150.247.38/tcp/32",
-        "/ip6/::1/tcp/1000",
-    ] {
+    for addr_str in ["/ip4/169.150.247.38/tcp/32", "/ip6/::1/tcp/1000"] {
         let addr: Multiaddr = addr_str.parse().unwrap();
         let bob_addr = addr.clone();
         bob.behaviour_mut()
