@@ -1,3 +1,8 @@
+## 0.45.4
+
+- Compute `jobs_query_capacity` accurately.
+  See [PR 5148](https://github.com/libp2p/rust-libp2p/pull/5148).
+
 ## 0.45.3
 
 - The progress of the close query iterator shall be decided by ANY of the new peers.
