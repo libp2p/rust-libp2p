@@ -234,7 +234,7 @@ async fn start_stream_handle(
                     "address index out of bounds",
                 )));
             }
-            if num_bytes > DATA_LEN_UPPER_BOUND || num_bytes < DATA_LEN_LOWER_BOUND {
+            if !(DATA_LEN_LOWER_BOUND..=DATA_LEN_UPPER_BOUND).contains(&num_bytes) {
                 return Err(Error::Io(io::Error::new(
                     io::ErrorKind::InvalidInput,
                     "requested bytes out of bounds",

@@ -91,15 +91,12 @@ where
     }
 
     fn on_swarm_event(&mut self, event: FromSwarm) {
-        match event {
-            FromSwarm::DialFailure(DialFailure { connection_id, .. }) => {
-                if let Some(DialBackCommand { back_channel, .. }) =
-                    self.dialing_dial_back.remove(&connection_id)
-                {
-                    let _ = back_channel.send(Err(DialBackStatus::DialErr));
-                }
+        if let FromSwarm::DialFailure(DialFailure { connection_id, .. }) = event {
+            if let Some(DialBackCommand { back_channel, .. }) =
+                self.dialing_dial_back.remove(&connection_id)
+            {
+                let _ = back_channel.send(Err(DialBackStatus::DialErr));
             }
-            _ => {}
         }
     }
 

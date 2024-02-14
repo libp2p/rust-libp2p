@@ -226,10 +226,10 @@ impl TryFrom<proto::Message> for Response {
     }
 }
 
-impl Into<proto::Message> for Response {
-    fn into(self) -> proto::Message {
-        match self {
-            Self::Dial(DialResponse {
+impl From<Response> for proto::Message {
+    fn from(val: Response) -> Self {
+        match val {
+            Response::Dial(DialResponse {
                 status,
                 addr_idx,
                 dial_status,
@@ -240,7 +240,7 @@ impl Into<proto::Message> for Response {
                     dialStatus: Some(dial_status),
                 }),
             },
-            Self::Data(DialDataRequest {
+            Response::Data(DialDataRequest {
                 addr_idx,
                 num_bytes,
             }) => proto::Message {
