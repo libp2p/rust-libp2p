@@ -19,7 +19,10 @@ use std::fmt::{Debug, Display, Formatter};
 
 use crate::v2::{protocol::DialRequest, Nonce};
 
-use super::handler::{dial_back, dial_request};
+use super::handler::{
+    dial_back::{self, IncomingNonce},
+    dial_request,
+};
 
 #[derive(Debug, Clone, Copy)]
 pub struct Config {
@@ -148,18 +151,26 @@ where
         event: <Self::ConnectionHandler as ConnectionHandler>::ToBehaviour,
     ) {
         let (nonce, outcome) = match event {
-            Either::Right(nonce) => {
+            Either::Right(IncomingNonce { nonce, sender }) => {
                 let Some((_, info)) = self
                     .address_candidates
                     .iter_mut()
                     .find(|(_, info)| info.is_pending_with_nonce(nonce))
                 else {
                     tracing::warn!(%peer_id, %nonce, "Received unexpected nonce");
+                    let _ = sender.send(Err(std::io::Error::new(
+                        std::io::ErrorKind::InvalidData,
+                        "Received unexpected nonce",
+                    )));
                     return;
                 };
 
                 info.status = TestStatus::Received(nonce);
                 tracing::debug!(%peer_id, %nonce, "Successful dial-back");
+
+                if let Err(e) = sender.send(Ok(())) {
+                    tracing::warn!(%peer_id, %nonce, "Failed to send dial-back response ok to client handler: {e:?}");
+                }
 
                 return;
             }
