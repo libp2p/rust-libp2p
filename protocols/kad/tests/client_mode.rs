@@ -4,7 +4,6 @@ use libp2p_kad::store::MemoryStore;
 use libp2p_kad::{Behaviour, Config, Event, Mode};
 use libp2p_swarm::{Swarm, SwarmEvent};
 use libp2p_swarm_test::SwarmExt;
-use std::iter;
 use tracing_subscriber::EnvFilter;
 use Event::*;
 use MyBehaviourEvent::*;
@@ -180,7 +179,7 @@ impl MyBehaviour {
             kad: Behaviour::with_config(
                 local_peer_id,
                 MemoryStore::new(local_peer_id),
-                Config::new(iter::once(libp2p_kad::PROTOCOL_NAME).collect()),
+                Config::new(libp2p_kad::PROTOCOL_NAME),
             ),
         }
     }

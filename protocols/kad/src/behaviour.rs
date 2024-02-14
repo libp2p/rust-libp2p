@@ -50,7 +50,6 @@ use libp2p_swarm::{
 use smallvec::SmallVec;
 use std::collections::{BTreeMap, HashMap, HashSet, VecDeque};
 use std::fmt;
-use std::iter;
 use std::num::NonZeroUsize;
 use std::task::{Context, Poll, Waker};
 use std::time::Duration;
@@ -189,7 +188,7 @@ impl Default for Config {
     ///
     /// Deprecated: use `Config::new` instead.
     fn default() -> Self {
-        Self::new(iter::once(protocol::DEFAULT_PROTO_NAME).collect())
+        Self::new(protocol::DEFAULT_PROTO_NAME)
     }
 }
 
@@ -209,12 +208,12 @@ pub enum Caching {
 }
 
 impl Config {
-    /// Builds a new `Config` with the given protocol names.
-    pub fn new(protocol_names: Vec<StreamProtocol>) -> Self {
+    /// Builds a new `Config` with the given protocol name.
+    pub fn new(protocol_name: StreamProtocol) -> Self {
         Config {
             kbucket_pending_timeout: Duration::from_secs(60),
             query_config: QueryConfig::default(),
-            protocol_config: ProtocolConfig::new(protocol_names),
+            protocol_config: ProtocolConfig::new(protocol_name),
             record_ttl: Some(Duration::from_secs(36 * 60 * 60)),
             record_replication_interval: Some(Duration::from_secs(60 * 60)),
             record_publication_interval: Some(Duration::from_secs(24 * 60 * 60)),

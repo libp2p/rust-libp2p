@@ -144,10 +144,10 @@ pub struct ProtocolConfig {
 }
 
 impl ProtocolConfig {
-    /// Builds a new `ProtocolConfig` with the given protocol names.
-    pub fn new(protocol_names: Vec<StreamProtocol>) -> Self {
+    /// Builds a new `ProtocolConfig` with the given protocol name.
+    pub fn new(protocol_name: StreamProtocol) -> Self {
         ProtocolConfig {
-            protocol_names,
+            protocol_names: vec![protocol_name],
             max_packet_size: DEFAULT_MAX_PACKET_SIZE,
         }
     }
