@@ -308,7 +308,7 @@ impl RedisClient {
 
         let value = self
             .inner
-            .blpop::<_, HashMap<String, String>>(key, 0)
+            .blpop::<_, HashMap<String, String>>(key, 0.0)
             .await?
             .remove(key)
             .with_context(|| format!("Failed to get value for {key} from redis"))?

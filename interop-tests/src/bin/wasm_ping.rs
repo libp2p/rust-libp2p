@@ -149,7 +149,7 @@ async fn redis_blpop(
         StatusCode::INTERNAL_SERVER_ERROR
     })?;
     let res = conn
-        .blpop(&request.key, request.timeout as usize)
+        .blpop(&request.key, request.timeout as f64)
         .await
         .map_err(|e| {
             tracing::warn!(
