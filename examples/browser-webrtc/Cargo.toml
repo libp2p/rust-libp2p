@@ -39,7 +39,7 @@ libp2p = { path = "../../libp2p", features = [ "ed25519", "macros", "ping", "was
 libp2p-webrtc-websys = { workspace = true }
 tracing-wasm = "0.2.1"
 wasm-bindgen = "0.2.90"
-wasm-bindgen-futures = "0.4.40"
+wasm-bindgen-futures = "0.4.41"
 web-sys = { version = "0.3", features = ['Document', 'Element', 'HtmlElement', 'Node', 'Response', 'Window'] }
 
 [lints]
