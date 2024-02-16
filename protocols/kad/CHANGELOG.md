@@ -1,3 +1,8 @@
+## 0.46.0 - unreleased
+
+- Update to DHT republish interval and expiration time defaults to 22h and 48h respectively, rationale in [libp2p/specs#451](https://github.com/libp2p/specs/pull/451)
+  See [PR 3230](https://github.com/libp2p/rust-libp2p/pull/3230)
+
 ## 0.45.3
 
 - The progress of the close query iterator shall be decided by ANY of the new peers.
