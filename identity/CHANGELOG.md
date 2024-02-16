@@ -1,3 +1,8 @@
+## 0.2.9
+
+- Fix compile errors on certain feature combinations.
+  See [PR 4880](https://github.com/libp2p/rust-libp2p/pull/4880).
+
 ## 0.2.8
 
 - Bump `ring` to `0.17.5.

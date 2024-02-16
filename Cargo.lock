@@ -2553,7 +2553,7 @@ checksum = "9c198f91728a82281a64e1f4f9eeb25d82cb32a5de251c6bd1b5154d63a8e7bd"
 
 [[package]]
 name = "libp2p"
-version = "0.53.2"
+version = "0.53.3"
 dependencies = [
  "async-std",
  "async-trait",
@@ -2822,7 +2822,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-identity"
-version = "0.2.8"
+version = "0.2.9"
 dependencies = [
  "asn1_der",
  "base64 0.21.7",

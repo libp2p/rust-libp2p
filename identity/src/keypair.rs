@@ -215,6 +215,7 @@ impl Keypair {
     }
 
     /// Encode a private key as protobuf structure.
+    #[allow(unreachable_code, unused_variables)]
     pub fn to_protobuf_encoding(&self) -> Result<Vec<u8>, DecodingError> {
         #[cfg(any(
             feature = "ecdsa",
@@ -358,12 +359,7 @@ impl Keypair {
     /// # }
     /// ```
     ///
-    #[cfg(any(
-        feature = "ecdsa",
-        feature = "secp256k1",
-        feature = "ed25519",
-        feature = "rsa"
-    ))]
+    #[cfg(any(feature = "ecdsa", feature = "secp256k1", feature = "ed25519",))]
     pub fn derive_secret(&self, domain: &[u8]) -> Option<[u8; 32]> {
         let mut okm = [0u8; 32];
         hkdf::Hkdf::<sha2::Sha256>::new(None, &self.secret()?)
@@ -374,12 +370,7 @@ impl Keypair {
     }
 
     // We build docs with all features so this doesn't need to have any docs.
-    #[cfg(not(any(
-        feature = "ecdsa",
-        feature = "secp256k1",
-        feature = "ed25519",
-        feature = "rsa"
-    )))]
+    #[cfg(not(any(feature = "ecdsa", feature = "secp256k1", feature = "ed25519",)))]
     pub fn derive_secret(&self, _: &[u8]) -> Option<[u8; 32]> {
         None
     }

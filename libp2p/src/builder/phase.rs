@@ -27,14 +27,12 @@ use swarm::*;
 use tcp::*;
 use websocket::*;
 
-use super::select_muxer::SelectMuxerUpgrade;
-use super::select_security::SelectSecurityUpgrade;
 use super::SwarmBuilder;
 
 use libp2p_core::{muxing::StreamMuxerBox, Transport};
 use libp2p_identity::Keypair;
 
-#[allow(unreachable_pub)]
+#[allow(unreachable_pub)] // Not meant to be public.
 pub trait IntoSecurityUpgrade<C> {
     type Upgrade;
     type Error;
@@ -59,7 +57,7 @@ where
     F1: IntoSecurityUpgrade<C>,
     F2: IntoSecurityUpgrade<C>,
 {
-    type Upgrade = SelectSecurityUpgrade<F1::Upgrade, F2::Upgrade>;
+    type Upgrade = super::select_security::SelectSecurityUpgrade<F1::Upgrade, F2::Upgrade>;
     type Error = either::Either<F1::Error, F2::Error>;
 
     fn into_security_upgrade(self, keypair: &Keypair) -> Result<Self::Upgrade, Self::Error> {
@@ -72,11 +70,11 @@ where
             .into_security_upgrade(keypair)
             .map_err(either::Either::Right)?;
 
-        Ok(SelectSecurityUpgrade::new(u1, u2))
+        Ok(super::select_security::SelectSecurityUpgrade::new(u1, u2))
     }
 }
 
-#[allow(unreachable_pub)]
+#[allow(unreachable_pub)] // Not meant to be public.
 pub trait IntoMultiplexerUpgrade<C> {
     type Upgrade;
 
@@ -99,7 +97,7 @@ where
     U1: IntoMultiplexerUpgrade<C>,
     U2: IntoMultiplexerUpgrade<C>,
 {
-    type Upgrade = SelectMuxerUpgrade<U1::Upgrade, U2::Upgrade>;
+    type Upgrade = super::select_muxer::SelectMuxerUpgrade<U1::Upgrade, U2::Upgrade>;
 
     fn into_multiplexer_upgrade(self) -> Self::Upgrade {
         let (f1, f2) = self;
@@ -107,7 +105,7 @@ where
         let u1 = f1.into_multiplexer_upgrade();
         let u2 = f2.into_multiplexer_upgrade();
 
-        SelectMuxerUpgrade::new(u1, u2)
+        super::select_muxer::SelectMuxerUpgrade::new(u1, u2)
     }
 }
 

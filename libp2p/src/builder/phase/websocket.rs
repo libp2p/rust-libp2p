@@ -44,7 +44,7 @@ macro_rules! impl_websocket_builder {
         /// # Ok(())
         /// # }
         /// ```
-        #[cfg(all(not(target_arch = "wasm32"), feature = $providerKebabCase, feature = "websocket"))]
+        #[cfg(all(not(target_arch = "wasm32"), feature = $providerKebabCase, feature = "websocket", feature = "dns", feature = "tcp"))]
         impl<T> SwarmBuilder<$providerPascalCase, WebsocketPhase<T>> {
             pub async fn with_websocket<
                 SecUpgrade,
@@ -215,11 +215,21 @@ impl<Provider, T: AuthenticatedMultiplexedTransport> SwarmBuilder<Provider, Webs
 
 #[derive(Debug, thiserror::Error)]
 #[error(transparent)]
-#[cfg(all(not(target_arch = "wasm32"), feature = "websocket"))]
+#[cfg(all(
+    not(target_arch = "wasm32"),
+    feature = "websocket",
+    feature = "tcp",
+    feature = "dns"
+))]
 pub struct WebsocketError<Sec>(#[from] WebsocketErrorInner<Sec>);
 
 #[derive(Debug, thiserror::Error)]
-#[cfg(all(not(target_arch = "wasm32"), feature = "websocket"))]
+#[cfg(all(
+    not(target_arch = "wasm32"),
+    feature = "websocket",
+    feature = "tcp",
+    feature = "dns"
+))]
 enum WebsocketErrorInner<Sec> {
     #[error("SecurityUpgrade")]
     SecurityUpgrade(Sec),

@@ -68,7 +68,6 @@ jobs:
           echo "CRATE_VERSION=$CRATE_VERSION" >> $GITHUB_ENV
 
       - name: Enforce version in `workspace.dependencies` matches latest version
-        if: env.CRATE != 'libp2p'
         run: |
           SPECIFIED_VERSION=$(tomlq "workspace.dependencies.$CRATE.version" --file ./Cargo.toml)
 
@@ -189,14 +188,9 @@ jobs:
 
       - run: cargo +$MSRV check --workspace --all-features
 
-  feature_matrix: # Test various feature combinations work correctly
-    name: Compile with select features (${{ matrix.features }})
+  feature_matrix_identity:
+    name: Compile libp2p-identity in feature matrix
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        include:
-          - features: "mdns tcp dns tokio"
-          - features: "mdns tcp dns async-std"
     steps:
       - uses: actions/checkout@v4
 
@@ -209,7 +203,33 @@ jobs:
           key: ${{ matrix.features }}
           save-if: ${{ github.ref == 'refs/heads/master' }}
 
-      - run: cargo check --package libp2p --features="${{ matrix.features }}"
+      - uses: taiki-e/install-action@e2daa7c7c8bc02b4afae53143c6a07d8b916a3f7 # 2.21.12
+        with:
+          tool: cargo-hack@0.6.13
+
+      - run: cargo hack check --feature-powerset --package libp2p-identity
+
+  feature_matrix_libp2p_transports:
+    name: Compile libp2p in transport feature matrix
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: r7kamura/rust-problem-matchers@2c2f1016021a7455a6b5b4bbae31145f3b3cd83a #v1.4.0
+
+      - uses: Swatinem/rust-cache@3cf7f8cc28d1b4e7d01e3783be10a97d55d483c8 # v2.7.1
+        with:
+          key: ${{ matrix.features }}
+          save-if: ${{ github.ref == 'refs/heads/master' }}
+
+      - uses: taiki-e/install-action@e2daa7c7c8bc02b4afae53143c6a07d8b916a3f7 # 2.21.12
+        with:
+          tool: cargo-hack@0.6.13
+
+      - run: cargo hack check --package libp2p --feature-powerset --features tokio     --include-features dns,noise,quic,tcp,tls,websocket
+      - run: cargo hack check --package libp2p --feature-powerset --features async-std --include-features dns,noise,quic,tcp,tls,websocket
 
   check-rustdoc-links:
     name: Check rustdoc intra-doc links
