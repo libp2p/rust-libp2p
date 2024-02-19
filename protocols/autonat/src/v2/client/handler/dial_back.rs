@@ -49,7 +49,7 @@ impl ConnectionHandler for Handler {
             Poll::Pending => Poll::Pending,
             Poll::Ready(None) => Poll::Pending,
             Poll::Ready(Some(Err(err))) => {
-                tracing::debug!("Dial back handler timed out with: {err:?}");
+                tracing::debug!("Stream timed out: {err}");
                 Poll::Pending
             }
             Poll::Ready(Some(Ok(Err(err)))) => {
