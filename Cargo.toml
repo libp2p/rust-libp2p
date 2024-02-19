@@ -100,7 +100,7 @@ libp2p-quic = { version = "0.10.2", path = "transports/quic" }
 libp2p-relay = { version = "0.17.1", path = "protocols/relay" }
 libp2p-rendezvous = { version = "0.14.0", path = "protocols/rendezvous" }
 libp2p-request-response = { version = "0.26.2", path = "protocols/request-response" }
-libp2p-server = { version = "0.12.5", path = "misc/server" }
+libp2p-server = { version = "0.12.6", path = "misc/server" }
 libp2p-stream = { version = "0.1.0-alpha", path = "protocols/stream" }
 libp2p-swarm = { version = "0.44.2", path = "swarm" }
 libp2p-swarm-derive = { version = "=0.34.3", path = "swarm-derive" } # `libp2p-swarm-derive` may not be compatible with different `libp2p-swarm` non-breaking releases. E.g. `libp2p-swarm` might introduce a new enum variant `FromSwarm` (which is `#[non-exhaustive]`) in a non-breaking release. Older versions of `libp2p-swarm-derive` would not forward this enum variant within the `NetworkBehaviour` hierarchy. Thus the version pinning is required.
@@ -119,7 +119,7 @@ libp2p-yamux = { version = "0.45.1", path = "muxers/yamux" }
 multiaddr = "0.18.1"
 multihash = "0.19.1"
 multistream-select = { version = "0.13.0", path = "misc/multistream-select" }
-prometheus-client = "0.22.0"
+prometheus-client = "0.22.1"
 quick-protobuf-codec = { version = "0.3.1", path = "misc/quick-protobuf-codec" }
 quickcheck = { package = "quickcheck-ext", path = "misc/quickcheck-ext" }
 rw-stream-sink = { version = "0.4.0", path = "misc/rw-stream-sink" }
