@@ -124,7 +124,6 @@ fn perform_dial_back(
         let nonce = match protocol::recv_dial_back(&mut state.stream).await {
             Ok(nonce) => nonce,
             Err(err) => {
-                let _ = state.stream.close().await;
                 return Some((Err(err), state));
             }
         };
