@@ -113,7 +113,6 @@ fn perform_dial_back(
                 return Some((Err(io::Error::from(io::ErrorKind::Other)), state));
             }
             if let Err(e) = protocol::dial_back_response(&mut state.stream).await {
-                let _ = state.stream.close().await;
                 return Some((Err(e), state));
             }
             if let Err(e) = state.stream.close().await {
