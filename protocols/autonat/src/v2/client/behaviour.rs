@@ -157,10 +157,9 @@ where
                     .iter_mut()
                     .find(|(_, info)| info.is_pending_with_nonce(nonce))
                 else {
-                    tracing::warn!(%peer_id, %nonce, "Received unexpected nonce");
                     let _ = sender.send(Err(std::io::Error::new(
                         std::io::ErrorKind::InvalidData,
-                        "Received unexpected nonce",
+                        format!("Received unexpected nonce: {nonce} from {peer_id}"),
                     )));
                     return;
                 };
