@@ -179,7 +179,7 @@ impl MyBehaviour {
             kad: Behaviour::with_config(
                 local_peer_id,
                 MemoryStore::new(local_peer_id),
-                Config::default(),
+                Config::new(libp2p_kad::PROTOCOL_NAME),
             ),
         }
     }
