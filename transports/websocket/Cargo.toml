@@ -11,7 +11,7 @@ keywords = ["peer-to-peer", "libp2p", "networking"]
 categories = ["network-programming", "asynchronous"]
 
 [dependencies]
-futures-rustls = "0.24.0"
+futures-rustls = "0.25.1"
 either = "1.9.0"
 futures = "0.3.30"
 libp2p-core = { workspace = true }
