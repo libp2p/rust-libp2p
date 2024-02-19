@@ -109,8 +109,15 @@ fn perform_dial_back(
     };
     futures::stream::unfold(state, |mut state| async move {
         if let Some(ref mut receiver) = state.oneshot {
-            if receiver.await.is_err() {
-                return Some((Err(io::Error::from(io::ErrorKind::Other)), state));
+            match receiver.await {
+                Ok(Ok(())) => {}
+                Ok(Err(e)) => return Some((Err(e), state)),
+                Err(_) => {
+                    return Some((
+                        Err(io::Error::new(io::ErrorKind::Other, "Sender got cancelled")),
+                        state,
+                    ));
+                }
             }
             if let Err(e) = protocol::dial_back_response(&mut state.stream).await {
                 return Some((Err(e), state));
