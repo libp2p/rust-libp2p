@@ -105,10 +105,8 @@ impl fmt::Display for OpenStreamError {
 
 impl std::error::Error for OpenStreamError {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
-        use OpenStreamError::*;
-
         match self {
-            Io(error) => Some(error),
+            Self::Io(error) => Some(error),
             _ => None,
         }
     }
