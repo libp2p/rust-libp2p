@@ -1,7 +1,13 @@
-## 0.45.4
+## 0.45.5
 
 - Add periodic and automatic bootstrap.
   See [PR 4838](https://github.com/libp2p/rust-libp2p/pull/4838).
+
+## 0.45.4
+
+- Make it mandatory to provide protocol names when creating a `kad::Config`.
+  Deprecate `kad::Config::default()`, replaced by `kad::Config::new(StreamProtocol)`.
+  See [PR 5122](https://github.com/libp2p/rust-libp2p/pull/5122).
 
 ## 0.45.3
 

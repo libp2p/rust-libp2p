@@ -24,7 +24,7 @@ use super::*;
 
 use crate::kbucket::Distance;
 use crate::record::{store::MemoryStore, Key};
-use crate::{K_VALUE, SHA_256_MH};
+use crate::{K_VALUE, PROTOCOL_NAME, SHA_256_MH};
 use futures::{executor::block_on, future::poll_fn, prelude::*};
 use futures_timer::Delay;
 use libp2p_core::{
@@ -173,7 +173,7 @@ fn bootstrap() {
         // or smaller than K_VALUE.
         let num_group = rng.gen_range(1..(num_total % K_VALUE.get()) + 2);
 
-        let mut cfg = Config::default();
+        let mut cfg = Config::new(PROTOCOL_NAME);
         // Disabling periodic bootstrap and automatic bootstrap to prevent the bootstrap from triggering automatically.
         cfg.set_periodic_bootstrap_interval(None);
         cfg.set_automatic_bootstrap_throttle(None);
@@ -505,7 +505,7 @@ fn put_record() {
         // At least 4 nodes, 1 under test + 3 bootnodes.
         let num_total = usize::max(4, replication_factor.get() * 2);
 
-        let mut config = Config::default();
+        let mut config = Config::new(PROTOCOL_NAME);
         config.set_replication_factor(replication_factor);
         // Disabling periodic bootstrap and automatic bootstrap to prevent the bootstrap from triggering automatically.
         config.set_periodic_bootstrap_interval(None);
@@ -877,7 +877,7 @@ fn add_provider() {
         // At least 4 nodes, 1 under test + 3 bootnodes.
         let num_total = usize::max(4, replication_factor.get() * 2);
 
-        let mut config = Config::default();
+        let mut config = Config::new(PROTOCOL_NAME);
         config.set_replication_factor(replication_factor);
         // Disabling periodic bootstrap and automatic bootstrap to prevent the bootstrap from triggering automatically.
         config.set_periodic_bootstrap_interval(None);
@@ -1096,14 +1096,14 @@ fn exp_decr_expiration_overflow() {
     }
 
     // Right shifting a u64 by >63 results in a panic.
-    prop_no_panic(Config::default().record_ttl.unwrap(), 64);
+    prop_no_panic(Config::new(PROTOCOL_NAME).record_ttl.unwrap(), 64);
 
     quickcheck(prop_no_panic as fn(_, _))
 }
 
 #[test]
 fn disjoint_query_does_not_finish_before_all_paths_did() {
-    let mut config = Config::default();
+    let mut config = Config::new(PROTOCOL_NAME);
     config.disjoint_query_paths(true);
     // I.e. setting the amount disjoint paths to be explored to 2.
     config.set_parallelism(NonZeroUsize::new(2).unwrap());
@@ -1254,7 +1254,7 @@ fn disjoint_query_does_not_finish_before_all_paths_did() {
 /// the routing table with `BucketInserts::Manual`.
 #[test]
 fn manual_bucket_inserts() {
-    let mut cfg = Config::default();
+    let mut cfg = Config::new(PROTOCOL_NAME);
     cfg.set_kbucket_inserts(BucketInserts::Manual);
     // 1 -> 2 -> [3 -> ...]
     let mut swarms = build_connected_nodes_with_config(3, 1, cfg);

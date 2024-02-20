@@ -144,6 +144,21 @@ pub struct ProtocolConfig {
 }
 
 impl ProtocolConfig {
+    /// Builds a new `ProtocolConfig` with the given protocol name.
+    pub fn new(protocol_name: StreamProtocol) -> Self {
+        ProtocolConfig {
+            protocol_names: vec![protocol_name],
+            max_packet_size: DEFAULT_MAX_PACKET_SIZE,
+        }
+    }
+
+    /// Returns the default configuration.
+    #[deprecated(note = "Use `ProtocolConfig::new` instead")]
+    #[allow(clippy::should_implement_trait)]
+    pub fn default() -> Self {
+        Default::default()
+    }
+
     /// Returns the configured protocol name.
     pub fn protocol_names(&self) -> &[StreamProtocol] {
         &self.protocol_names
@@ -151,6 +166,7 @@ impl ProtocolConfig {
 
     /// Modifies the protocol names used on the wire. Can be used to create incompatibilities
     /// between networks on purpose.
+    #[deprecated(note = "Use `ProtocolConfig::new` instead")]
     pub fn set_protocol_names(&mut self, names: Vec<StreamProtocol>) {
         self.protocol_names = names;
     }
@@ -162,6 +178,9 @@ impl ProtocolConfig {
 }
 
 impl Default for ProtocolConfig {
+    /// Returns the default configuration.
+    ///
+    /// Deprecated: use `ProtocolConfig::new` instead.
     fn default() -> Self {
         ProtocolConfig {
             protocol_names: iter::once(DEFAULT_PROTO_NAME).collect(),
