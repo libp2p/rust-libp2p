@@ -4,6 +4,9 @@ use std::time::Duration;
 
 use futures_timer::Delay;
 
+/// Default value chosen at `<https://github.com/libp2p/rust-libp2p/pull/4838#discussion_r1490184754>`.
+pub(crate) const DEFAULT_AUTOMATIC_THROTTLE: Duration = Duration::from_millis(500);
+
 #[derive(Debug)]
 pub(crate) struct Status {
     /// If the user did not disable periodic bootstrap (by providing `None` for `periodic_interval`)
@@ -282,14 +285,13 @@ mod tests {
     async fn given_periodic_bootstrap_and_no_automatic_bootstrap_triggers_periodically() {
         let mut status = Status::new(Some(MS_100), None);
 
-        for _ in 0..5 {
-            let start = Instant::now();
-
+        let start = Instant::now();
+        for i in 1..6 {
             await_and_do_bootstrap(&mut status).await;
 
             let elapsed = Instant::now().duration_since(start);
 
-            assert!(elapsed > (MS_100 - Duration::from_millis(10))); // Subtract 10ms to avoid flakes.
+            assert!(elapsed > (i * MS_100 - Duration::from_millis(10))); // Subtract 10ms to avoid flakes.
         }
     }
 

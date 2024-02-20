@@ -203,7 +203,7 @@ impl Default for Config {
             kbucket_inserts: BucketInserts::OnConnected,
             caching: Caching::Enabled { max_peers: 1 },
             periodic_bootstrap_interval: Some(Duration::from_secs(5 * 60)),
-            automatic_bootstrap_throttle: Some(Duration::from_millis(10)),
+            automatic_bootstrap_throttle: Some(bootstrap::DEFAULT_AUTOMATIC_THROTTLE),
         }
     }
 }
@@ -413,12 +413,16 @@ impl Config {
     /// This also allows to wait a little bit for other potential peers to be inserted into the routing table before
     /// triggering a bootstrap, giving more context to the future bootstrap request.  
     ///
-    /// * Default to `10` ms.
+    /// * Default to `500` ms.
     /// * Set to `Some(Duration::ZERO)` to never wait before triggering a bootstrap request when a new peer
     ///     is inserted in the routing table.
     /// * Set to `None` to disable automatic bootstrap (no bootstrap request will be triggered when a new
     ///     peer is inserted in the routing table).
-    pub fn set_automatic_bootstrap_throttle(&mut self, duration: Option<Duration>) -> &mut Self {
+    #[cfg(test)]
+    pub(crate) fn set_automatic_bootstrap_throttle(
+        &mut self,
+        duration: Option<Duration>,
+    ) -> &mut Self {
         self.automatic_bootstrap_throttle = duration;
         self
     }
@@ -907,8 +911,7 @@ where
     /// > **Note**: Bootstrap does not require to be called manually. It is periodically
     /// invoked at regular intervals based on the configured `periodic_bootstrap_interval` (see
     /// [`Config::set_periodic_bootstrap_interval`] for details) and it is also automatically invoked
-    /// when a new peer is inserted in the routing table based on the `automatic_bootstrap_throttle`
-    /// (see [`Config::set_automatic_bootstrap_throttle`] for details).
+    /// when a new peer is inserted in the routing table.
     /// These two config parameters are used to call [`Behaviour::bootstrap`] periodically and automatically
     /// to ensure a healthy routing table.
     pub fn bootstrap(&mut self) -> Result<QueryId, NoKnownPeers> {
