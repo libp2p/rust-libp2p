@@ -255,7 +255,7 @@ fn query_iter() {
 
     fn run(rng: &mut impl Rng) {
         let num_total = rng.gen_range(2..20);
-        let mut config = Config::default();
+        let mut config = Config::new(PROTOCOL_NAME);
         // Disabling periodic bootstrap and automatic bootstrap to prevent the bootstrap from triggering automatically.
         config.set_periodic_bootstrap_interval(None);
         config.set_automatic_bootstrap_throttle(None);
