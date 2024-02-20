@@ -18,7 +18,7 @@ tokio = { version = "1.36", default-features = false, features = ["net"], option
 tracing = "0.1.37"
 
 [dev-dependencies]
-tempfile = "3.9"
+tempfile = "3.10"
 
 # Passing arguments to the docsrs builder in order to properly document cfg's.
 # More information: https://docs.rs/about/builds#cross-compiling
