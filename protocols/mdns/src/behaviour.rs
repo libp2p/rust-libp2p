@@ -37,6 +37,7 @@ use libp2p_swarm::{
 };
 use smallvec::SmallVec;
 use std::collections::hash_map::{Entry, HashMap};
+use std::collections::VecDeque;
 use std::future::Future;
 use std::sync::{Arc, RwLock};
 use std::{cmp, fmt, io, net::IpAddr, pin::Pin, task::Context, task::Poll, time::Instant};
@@ -347,8 +348,10 @@ where
         }
 
         if !discovered.is_empty() {
-            let event = Event::Discovered(discovered);
-            return Poll::Ready(ToSwarm::GenerateEvent(event));
+            return Poll::Ready(ToSwarm::NewExternalAddrOfPeer {
+                peer_id: discovered[0].0,
+                address: discovered[0].1.clone(),
+            });
         }
         // Emit expired event.
         let now = Instant::now();
