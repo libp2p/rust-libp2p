@@ -37,7 +37,6 @@ use libp2p_swarm::{
 };
 use smallvec::SmallVec;
 use std::collections::hash_map::{Entry, HashMap};
-use std::collections::VecDeque;
 use std::future::Future;
 use std::sync::{Arc, RwLock};
 use std::{cmp, fmt, io, net::IpAddr, pin::Pin, task::Context, task::Poll, time::Instant};
