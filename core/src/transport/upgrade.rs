@@ -520,7 +520,7 @@ where
 
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         // We use a `this` variable because the compiler can't mutably borrow multiple times
-        // accross a `Deref`.
+        // across a `Deref`.
         let this = &mut *self;
 
         loop {
@@ -579,7 +579,7 @@ where
 
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         // We use a `this` variable because the compiler can't mutably borrow multiple times
-        // accross a `Deref`.
+        // across a `Deref`.
         let this = &mut *self;
 
         loop {
