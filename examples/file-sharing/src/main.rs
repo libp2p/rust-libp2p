@@ -22,18 +22,17 @@
 
 mod network;
 
-use async_std::task::spawn;
+use tokio::task::spawn;
 use clap::Parser;
 
 use futures::prelude::*;
-use futures::StreamExt;
 use libp2p::{core::Multiaddr, multiaddr::Protocol};
 use std::error::Error;
 use std::io::Write;
 use std::path::PathBuf;
 use tracing_subscriber::EnvFilter;
 
-#[async_std::main]
+#[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
     let _ = tracing_subscriber::fmt()
         .with_env_filter(EnvFilter::from_default_env())
@@ -78,7 +77,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
             network_client.start_providing(name.clone()).await;
 
             loop {
-                match network_events.next().await {
+                match network_events.recv().await {
                     // Reply with the content of the file on incoming requests.
                     Some(network::Event::InboundRequest { request, channel }) => {
                         if request == name {

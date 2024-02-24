@@ -1,5 +1,5 @@
-use futures::channel::{mpsc, oneshot};
-use futures::prelude::*;
+use tokio::sync::{mpsc, oneshot};
+use futures::StreamExt;
 
 use libp2p::{
     core::Multiaddr,
@@ -27,7 +27,7 @@ use std::time::Duration;
 /// - The network task driving the network itself.
 pub(crate) async fn new(
     secret_key_seed: Option<u8>,
-) -> Result<(Client, impl Stream<Item = Event>, EventLoop), Box<dyn Error>> {
+) -> Result<(Client, mpsc::Receiver<Event>, EventLoop), Box<dyn Error>> {
     // Create a public/private key pair, either random or based on a seed.
     let id_keys = match secret_key_seed {
         Some(seed) => {
@@ -40,7 +40,7 @@ pub(crate) async fn new(
     let peer_id = id_keys.public().to_peer_id();
 
     let mut swarm = libp2p::SwarmBuilder::with_existing_identity(id_keys)
-        .with_async_std()
+        .with_tokio()
         .with_tcp(
             tcp::Config::default(),
             noise::Config::new,
@@ -67,8 +67,8 @@ pub(crate) async fn new(
         .kademlia
         .set_mode(Some(kad::Mode::Server));
 
-    let (command_sender, command_receiver) = mpsc::channel(0);
-    let (event_sender, event_receiver) = mpsc::channel(0);
+    let (command_sender, command_receiver) = mpsc::channel(100);
+    let (event_sender, event_receiver) = mpsc::channel(100);
 
     Ok((
         Client {
@@ -197,9 +197,9 @@ impl EventLoop {
 
     pub(crate) async fn run(mut self) {
         loop {
-            futures::select! {
-                event = self.swarm.next() => self.handle_event(event.expect("Swarm stream to be infinite.")).await  ,
-                command = self.command_receiver.next() => match command {
+            tokio::select! {
+                event = self.swarm.select_next_some() => self.handle_event(event).await,
+                command = self.command_receiver.recv() => match command {
                     Some(c) => self.handle_command(c).await,
                     // Command channel closed, thus shutting down the network event loop.
                     None=>  return,
