@@ -24,7 +24,7 @@ rustls = { version = "0.21.9", default-features = false }
 thiserror = "1.0.57"
 tokio = { version = "1.36.0", default-features = false, features = ["net", "rt", "time"], optional = true }
 tracing = "0.1.37"
-socket2 = "0.5.5"
+socket2 = "0.5.6"
 ring = "0.16.20"
 
 [features]
