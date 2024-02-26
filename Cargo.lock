@@ -3342,7 +3342,7 @@ dependencies = [
  "libp2p-identity",
  "libp2p-swarm",
  "libp2p-yamux",
- "rcgen",
+ "rcgen 0.12.1",
  "ring 0.16.20",
  "rustls 0.21.9",
  "rustls-webpki",
@@ -3395,7 +3395,7 @@ dependencies = [
  "multihash",
  "quickcheck",
  "rand 0.8.5",
- "rcgen",
+ "rcgen 0.12.1",
  "serde",
  "stun",
  "thiserror",
@@ -3463,7 +3463,7 @@ dependencies = [
  "libp2p-tcp",
  "parking_lot",
  "pin-project-lite",
- "rcgen",
+ "rcgen 0.12.1",
  "rw-stream-sink",
  "soketto",
  "tracing",
@@ -4715,6 +4715,18 @@ dependencies = [
  "ring 0.16.20",
  "time",
  "x509-parser",
+ "yasna",
+]
+
+[[package]]
+name = "rcgen"
+version = "0.12.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "48406db8ac1f3cbc7dcdb56ec355343817958a356ff430259bb07baf7607e1e1"
+dependencies = [
+ "pem",
+ "ring 0.17.5",
+ "time",
  "yasna",
 ]
 
@@ -6547,7 +6559,7 @@ dependencies = [
  "log",
  "pem",
  "rand 0.8.5",
- "rcgen",
+ "rcgen 0.11.3",
  "regex",
  "ring 0.16.20",
  "rtcp",
@@ -6611,7 +6623,7 @@ dependencies = [
  "pem",
  "rand 0.8.5",
  "rand_core 0.6.4",
- "rcgen",
+ "rcgen 0.11.3",
  "ring 0.16.20",
  "rustls 0.21.9",
  "sec1",
