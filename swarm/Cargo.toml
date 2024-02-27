@@ -14,7 +14,7 @@ categories = ["network-programming", "asynchronous"]
 either = "1.9.0"
 fnv = "1.0"
 futures = "0.3.30"
-futures-timer = "3.0.2"
+futures-timer = "3.0.3"
 getrandom = { version = "0.2.12", features = ["js"], optional = true } # Explicit dependency to be used in `wasm-bindgen` feature
 instant = "0.1.12"
 libp2p-core = { workspace = true }
