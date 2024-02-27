@@ -22,8 +22,8 @@
 
 mod network;
 
-use tokio::task::spawn;
 use clap::Parser;
+use tokio::task::spawn;
 
 use futures::prelude::*;
 use futures::StreamExt;
