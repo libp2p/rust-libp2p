@@ -1,4 +1,5 @@
-use tokio::sync::{mpsc, oneshot};
+use futures::channel::{mpsc, oneshot};
+use futures::prelude::*;
 use futures::StreamExt;
 
 use libp2p::{
@@ -27,7 +28,7 @@ use std::time::Duration;
 /// - The network task driving the network itself.
 pub(crate) async fn new(
     secret_key_seed: Option<u8>,
-) -> Result<(Client, mpsc::Receiver<Event>, EventLoop), Box<dyn Error>> {
+) -> Result<(Client, impl Stream<Item = Event>, EventLoop), Box<dyn Error>> {
     // Create a public/private key pair, either random or based on a seed.
     let id_keys = match secret_key_seed {
         Some(seed) => {
@@ -67,8 +68,8 @@ pub(crate) async fn new(
         .kademlia
         .set_mode(Some(kad::Mode::Server));
 
-    let (command_sender, command_receiver) = mpsc::channel(100);
-    let (event_sender, event_receiver) = mpsc::channel(100);
+    let (command_sender, command_receiver) = mpsc::channel(0);
+    let (event_sender, event_receiver) = mpsc::channel(0);
 
     Ok((
         Client {
@@ -199,7 +200,7 @@ impl EventLoop {
         loop {
             tokio::select! {
                 event = self.swarm.select_next_some() => self.handle_event(event).await,
-                command = self.command_receiver.recv() => match command {
+                command = self.command_receiver.next() => match command {
                     Some(c) => self.handle_command(c).await,
                     // Command channel closed, thus shutting down the network event loop.
                     None=>  return,
