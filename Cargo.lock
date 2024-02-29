@@ -1555,12 +1555,11 @@ checksum = "d0870c84016d4b481be5c9f323c24f65e31e901ae618f0e80f4308fb00de1d2d"
 name = "file-sharing-example"
 version = "0.1.0"
 dependencies = [
- "async-std",
  "clap",
- "either",
  "futures",
  "libp2p",
  "serde",
+ "tokio",
  "tracing",
  "tracing-subscriber",
  "void",
