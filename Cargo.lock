@@ -3236,7 +3236,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-stream"
-version = "0.1.0-alpha"
+version = "0.1.0-alpha.1"
 dependencies = [
  "futures",
  "libp2p-core",
