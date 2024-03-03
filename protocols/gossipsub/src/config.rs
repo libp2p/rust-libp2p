@@ -262,9 +262,9 @@ impl Config {
         self.unsubscribe_backoff
     }
 
-    /// Number of heartbeat slots considered as slack for backoffs. This gurantees that we wait
+    /// Number of heartbeat slots considered as slack for backoffs. This guarantees that we wait
     /// at least backoff_slack heartbeats after a backoff is over before we try to graft. This
-    /// solves problems occuring through high latencies. In particular if
+    /// solves problems occurring through high latencies. In particular if
     /// `backoff_slack * heartbeat_interval` is longer than any latencies between processing
     /// prunes on our side and processing prunes on the receiving side this guarantees that we
     /// get not punished for too early grafting. The default is 1.
@@ -660,9 +660,9 @@ impl ConfigBuilder {
         self
     }
 
-    /// Number of heartbeat slots considered as slack for backoffs. This gurantees that we wait
+    /// Number of heartbeat slots considered as slack for backoffs. This guarantees that we wait
     /// at least backoff_slack heartbeats after a backoff is over before we try to graft. This
-    /// solves problems occuring through high latencies. In particular if
+    /// solves problems occurring through high latencies. In particular if
     /// `backoff_slack * heartbeat_interval` is longer than any latencies between processing
     /// prunes on our side and processing prunes on the receiving side this guarantees that we
     /// get not punished for too early grafting. The default is 1.

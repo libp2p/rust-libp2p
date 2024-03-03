@@ -311,7 +311,7 @@ pub enum TransportEvent<TUpgr, TErr> {
 
 impl<TUpgr, TErr> TransportEvent<TUpgr, TErr> {
     /// In case this [`TransportEvent`] is an upgrade, apply the given function
-    /// to the upgrade and produce another transport event based the the function's result.
+    /// to the upgrade and produce another transport event based on the function's result.
     pub fn map_upgrade<U>(self, map: impl FnOnce(TUpgr) -> U) -> TransportEvent<U, TErr> {
         match self {
             TransportEvent::Incoming {
@@ -530,7 +530,7 @@ pub enum TransportError<TErr> {
 }
 
 impl<TErr> TransportError<TErr> {
-    /// Applies a function to the the error in [`TransportError::Other`].
+    /// Applies a function to the error in [`TransportError::Other`].
     pub fn map<TNewErr>(self, map: impl FnOnce(TErr) -> TNewErr) -> TransportError<TNewErr> {
         match self {
             TransportError::MultiaddrNotSupported(addr) => {
