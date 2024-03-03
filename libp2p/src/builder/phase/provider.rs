@@ -37,7 +37,7 @@ impl SwarmBuilder<NoProviderSpecified, ProviderPhase> {
     }
 
     /// Configures the SwarmBuilder to use the Tokio runtime.
-    /// This method is only available when compiling for non-Wasm targets with the `tokio` feature enabled.
+    /// This method is only available when compiling for non-Wasm targets with the `tokio` feature enabled
     #[cfg(all(not(target_arch = "wasm32"), feature = "tokio"))]
     pub fn with_tokio(self) -> SwarmBuilder<Tokio, TcpPhase> {
         SwarmBuilder {
