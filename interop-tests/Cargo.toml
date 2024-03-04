@@ -31,7 +31,7 @@ mime_guess = "2.0"
 redis = { version = "0.23.3", default-features = false, features = [
     "tokio-comp",
 ] }
-rust-embed = "8.2"
+rust-embed = "8.3"
 serde_json = "1"
 thirtyfour = "=0.32.0-rc.8" # https://github.com/stevepryde/thirtyfour/issues/169
 tokio = { version = "1.36.0", features = ["full"] }
