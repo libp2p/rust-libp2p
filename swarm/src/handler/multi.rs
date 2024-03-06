@@ -437,7 +437,7 @@ where
 pub struct DuplicateProtonameError(Vec<u8>);
 
 impl DuplicateProtonameError {
-    /// The protocol name bytes that occured in more than one handler.
+    /// The protocol name bytes that occurred in more than one handler.
     pub fn protocol_name(&self) -> &[u8] {
         &self.0
     }

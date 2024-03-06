@@ -63,7 +63,7 @@ pub enum ConnectedPoint {
         /// Multiaddress that was successfully dialed.
         address: Multiaddr,
         /// Whether the role of the local node on the connection should be
-        /// overriden. I.e. whether the local node should act as a listener on
+        /// overridden. I.e. whether the local node should act as a listener on
         /// the outgoing connection.
         ///
         /// This option is needed for NAT and firewall hole punching.
