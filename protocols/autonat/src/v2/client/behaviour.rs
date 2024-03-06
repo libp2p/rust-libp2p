@@ -167,9 +167,7 @@ where
                 info.status = TestStatus::Received(nonce);
                 tracing::debug!(%peer_id, %nonce, "Successful dial-back");
 
-                if let Err(Err(e)) = sender.send(Ok(())) {
-                    tracing::warn!(%peer_id, %nonce, "Failed to send dial-back response ok to client handler: {e}");
-                }
+                let _ = sender.send(Ok(()));
 
                 return;
             }

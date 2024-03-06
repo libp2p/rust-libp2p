@@ -90,19 +90,21 @@ where
     ) -> Poll<
         ConnectionHandlerEvent<Self::OutboundProtocol, Self::OutboundOpenInfo, Self::ToBehaviour>,
     > {
-        match self.inbound.poll_unpin(cx) {
-            Poll::Ready(Ok(event)) => {
-                if let Err(e) = &event.result {
-                    tracing::warn!("inbound request handle failed: {:?}", e);
+        loop {
+            match self.inbound.poll_unpin(cx) {
+                Poll::Ready(Ok(event)) => {
+                    if let Err(e) = &event.result {
+                        tracing::warn!("inbound request handle failed: {:?}", e);
+                    }
+                    return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(Either::Right(
+                        event,
+                    )));
                 }
-                return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(Either::Right(
-                    event,
-                )));
+                Poll::Ready(Err(e)) => {
+                    tracing::warn!("inbound request handle timed out {e:?}");
+                }
+                Poll::Pending => break,
             }
-            Poll::Ready(Err(e)) => {
-                tracing::warn!("inbound request handle timed out {e:?}");
-            }
-            Poll::Pending => {}
         }
         if let Poll::Ready(Some(cmd)) = self.dial_back_cmd_receiver.poll_next_unpin(cx) {
             return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(Either::Left(cmd)));
@@ -212,7 +214,7 @@ async fn handle_request(
     )
     .await
     .unwrap_or_else(|e| e.into());
-    if tested_addr_opt.is_none() {
+    let Some(tested_addr) = tested_addr_opt else {
         return Event {
             all_addrs,
             tested_addr: observed_multiaddr,
@@ -223,8 +225,7 @@ async fn handle_request(
                 "client is not conformint to protocol. the tested address is not the observed address",
             )),
         };
-    }
-    let tested_addr = tested_addr_opt.unwrap();
+    };
     if let Err(e) = coder.send(Response::Dial(response)).await {
         return Event {
             all_addrs,

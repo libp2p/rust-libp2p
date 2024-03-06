@@ -45,19 +45,21 @@ impl ConnectionHandler for Handler {
     ) -> Poll<
         ConnectionHandlerEvent<Self::OutboundProtocol, Self::OutboundOpenInfo, Self::ToBehaviour>,
     > {
-        match self.inbound.poll_next_unpin(cx) {
-            Poll::Pending => Poll::Pending,
-            Poll::Ready(None) => Poll::Pending,
-            Poll::Ready(Some(Err(err))) => {
-                tracing::debug!("Stream timed out: {err}");
-                Poll::Pending
-            }
-            Poll::Ready(Some(Ok(Err(err)))) => {
-                tracing::debug!("Dial back handler failed with: {err:?}");
-                Poll::Pending
-            }
-            Poll::Ready(Some(Ok(Ok(incoming_nonce)))) => {
-                Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(incoming_nonce))
+        loop {
+            match self.inbound.poll_next_unpin(cx) {
+                Poll::Pending => return Poll::Pending,
+                Poll::Ready(None) => continue,
+                Poll::Ready(Some(Err(err))) => {
+                    tracing::debug!("Stream timed out: {err}");
+                    continue;
+                }
+                Poll::Ready(Some(Ok(Err(err)))) => {
+                    tracing::debug!("Dial back handler failed with: {err:?}");
+                    continue;
+                }
+                Poll::Ready(Some(Ok(Ok(incoming_nonce)))) => {
+                    return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(incoming_nonce));
+                }
             }
         }
     }
@@ -120,9 +122,6 @@ fn perform_dial_back(
                 }
             }
             if let Err(e) = protocol::dial_back_response(&mut state.stream).await {
-                return Some((Err(e), state));
-            }
-            if let Err(e) = state.stream.close().await {
                 return Some((Err(e), state));
             }
             return None;
