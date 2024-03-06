@@ -1,3 +1,8 @@
+## 0.2.9
+
+- Add `rand` feature gate to ecdsa methods requiring a random number generator.
+  See [PR X](https://github.com/libp2p/rust-libp2p/pull/X).
+
 ## 0.2.8
 
 - Bump `ring` to `0.17.5.
