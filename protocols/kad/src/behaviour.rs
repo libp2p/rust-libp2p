@@ -927,9 +927,9 @@ where
     /// > See [`Behaviour::add_address`].
     ///
     /// > **Note**: Bootstrap does not require to be called manually. It is periodically
-    /// invoked at regular intervals based on the configured `periodic_bootstrap_interval` (see
-    /// [`Config::set_periodic_bootstrap_interval`] for details) and it is also automatically invoked
-    /// when a new peer is inserted in the routing table.
+    /// invoked at regular intervals based on the configured `periodic_bootstrap_interval` and
+    /// `automatic_bootstrap_throttle` (see [`Config::set_periodic_bootstrap_interval`] for details)
+    /// and it is also automatically invoked when a new peer is inserted in the routing table.
     /// These two config parameters are used to call [`Behaviour::bootstrap`] periodically and automatically
     /// to ensure a healthy routing table.
     pub fn bootstrap(&mut self) -> Result<QueryId, NoKnownPeers> {
