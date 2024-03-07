@@ -280,6 +280,10 @@ where
         if port_use == PortUse::Reuse {
             socket.set_reuse_port(true)?;
         }
+
+        #[cfg(not(all(unix, not(any(target_os = "solaris", target_os = "illumos")))))]
+        let _ = port_use; // silence the unused warning on non-unix platforms (i.e. Windows)
+
         Ok(socket)
     }
 
