@@ -1,7 +1,7 @@
 // change to quick-protobuf-codec
 
+use std::io;
 use std::io::ErrorKind;
-use std::{borrow::Cow, io};
 
 use asynchronous_codec::{Framed, FramedRead, FramedWrite};
 
@@ -110,7 +110,7 @@ impl From<DialDataResponse> for proto::Message {
         static DATA: &[u8] = &[0u8; DATA_FIELD_LEN_UPPER_BOUND];
         proto::Message {
             msg: proto::mod_Message::OneOfmsg::dialDataResponse(proto::DialDataResponse {
-                data: Some(Cow::Borrowed(&DATA[..val.data_count])),
+                data: Some(DATA[..val.data_count].to_vec()), // Once could use Cow::Borrowed here, but it will require a modification of the generated code and that will fail the CI
             }),
         }
     }

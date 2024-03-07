@@ -9,14 +9,12 @@
 #![cfg_attr(rustfmt, rustfmt_skip)]
 
 
-use std::borrow::Cow;
-
 use quick_protobuf::{MessageInfo, MessageRead, MessageWrite, BytesReader, Writer, WriterBackend, Result};
 use quick_protobuf::sizeofs::*;
 use super::*;
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
-pub(crate) enum DialStatus {
+pub enum DialStatus {
     UNUSED = 0,
     E_DIAL_ERROR = 100,
     E_DIAL_BACK_ERROR = 101,
@@ -55,8 +53,8 @@ impl<'a> From<&'a str> for DialStatus {
 
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Debug, Default, PartialEq, Clone)]
-pub(crate) struct Message {
-    pub(crate) msg: structs::mod_Message::OneOfmsg,
+pub struct Message {
+    pub msg: structs::mod_Message::OneOfmsg,
 }
 
 impl<'a> MessageRead<'a> for Message {
@@ -97,12 +95,12 @@ impl MessageWrite for Message {
     }
 }
 
-pub(crate) mod mod_Message {
+pub mod mod_Message {
 
 use super::*;
 
 #[derive(Debug, PartialEq, Clone)]
-pub(crate) enum OneOfmsg {
+pub enum OneOfmsg {
     dialRequest(structs::DialRequest),
     dialResponse(structs::DialResponse),
     dialDataRequest(structs::DialDataRequest),
@@ -120,9 +118,9 @@ impl Default for OneOfmsg {
 
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Debug, Default, PartialEq, Clone)]
-pub(crate) struct DialRequest {
-    pub(crate) addrs: Vec<Vec<u8>>,
-    pub(crate) nonce: Option<u64>,
+pub struct DialRequest {
+    pub addrs: Vec<Vec<u8>>,
+    pub nonce: Option<u64>,
 }
 
 impl<'a> MessageRead<'a> for DialRequest {
@@ -156,9 +154,9 @@ impl MessageWrite for DialRequest {
 
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Debug, Default, PartialEq, Clone)]
-pub(crate) struct DialDataRequest {
-    pub(crate) addrIdx: Option<u32>,
-    pub(crate) numBytes: Option<u64>,
+pub struct DialDataRequest {
+    pub addrIdx: Option<u32>,
+    pub numBytes: Option<u64>,
 }
 
 impl<'a> MessageRead<'a> for DialDataRequest {
@@ -192,10 +190,10 @@ impl MessageWrite for DialDataRequest {
 
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Debug, Default, PartialEq, Clone)]
-pub(crate) struct DialResponse {
-    pub(crate) status: Option<structs::mod_DialResponse::ResponseStatus>,
-    pub(crate) addrIdx: Option<u32>,
-    pub(crate) dialStatus: Option<structs::DialStatus>,
+pub struct DialResponse {
+    pub status: Option<structs::mod_DialResponse::ResponseStatus>,
+    pub addrIdx: Option<u32>,
+    pub dialStatus: Option<structs::DialStatus>,
 }
 
 impl<'a> MessageRead<'a> for DialResponse {
@@ -230,11 +228,11 @@ impl MessageWrite for DialResponse {
     }
 }
 
-pub(crate) mod mod_DialResponse {
+pub mod mod_DialResponse {
 
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
-pub(crate) enum ResponseStatus {
+pub enum ResponseStatus {
     E_INTERNAL_ERROR = 0,
     E_REQUEST_REJECTED = 100,
     E_DIAL_REFUSED = 101,
@@ -275,8 +273,8 @@ impl<'a> From<&'a str> for ResponseStatus {
 
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Debug, Default, PartialEq, Clone)]
-pub(crate) struct DialDataResponse {
-    pub(crate) data: Option<Cow<'static, [u8]>>,
+pub struct DialDataResponse {
+    pub data: Option<Vec<u8>>,
 }
 
 impl<'a> MessageRead<'a> for DialDataResponse {
@@ -284,7 +282,7 @@ impl<'a> MessageRead<'a> for DialDataResponse {
         let mut msg = Self::default();
         while !r.is_eof() {
             match r.next_tag(bytes) {
-                Ok(10) => msg.data = Some(r.read_bytes(bytes)?.to_owned().into()),
+                Ok(10) => msg.data = Some(r.read_bytes(bytes)?.to_owned()),
                 Ok(t) => { r.read_unknown(bytes, t)?; }
                 Err(e) => return Err(e),
             }
@@ -307,8 +305,8 @@ impl MessageWrite for DialDataResponse {
 
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Debug, Default, PartialEq, Clone)]
-pub(crate) struct DialBack {
-    pub(crate) nonce: Option<u64>,
+pub struct DialBack {
+    pub nonce: Option<u64>,
 }
 
 impl<'a> MessageRead<'a> for DialBack {
@@ -339,8 +337,8 @@ impl MessageWrite for DialBack {
 
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Debug, Default, PartialEq, Clone)]
-pub(crate) struct DialBackResponse {
-    pub(crate) status: Option<structs::mod_DialBackResponse::DialBackStatus>,
+pub struct DialBackResponse {
+    pub status: Option<structs::mod_DialBackResponse::DialBackStatus>,
 }
 
 impl<'a> MessageRead<'a> for DialBackResponse {
@@ -369,11 +367,11 @@ impl MessageWrite for DialBackResponse {
     }
 }
 
-pub(crate) mod mod_DialBackResponse {
+pub mod mod_DialBackResponse {
 
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
-pub(crate) enum DialBackStatus {
+pub enum DialBackStatus {
     OK = 0,
 }
 
@@ -402,3 +400,4 @@ impl<'a> From<&'a str> for DialBackStatus {
 }
 
 }
+
