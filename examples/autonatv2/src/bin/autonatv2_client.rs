@@ -44,6 +44,8 @@ async fn main() -> Result<(), Box<dyn Error>> {
             noise::Config::new,
             yamux::Config::default,
         )?
+        .with_quic()
+        .with_dns()?
         .with_behaviour(|key| Behaviour::new(key.public(), opt.probe_interval))?
         .with_swarm_config(|c| c.with_idle_connection_timeout(Duration::from_secs(10)))
         .build();
