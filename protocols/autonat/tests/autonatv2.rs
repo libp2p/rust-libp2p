@@ -545,14 +545,16 @@ async fn bootstrap() -> (Swarm<CombinedServer>, Swarm<CombinedClient>) {
             })
             .await;
 
-        let _ = bob.wait(|event| match event {
-            SwarmEvent::ConnectionEstablished {
-                connection_id,
-                peer_id,
-                ..
-            } if incoming_conn_id == connection_id && peer_id == cor_server_peer => Some(()),
-            _ => None,
-        }).await;
+        let _ = bob
+            .wait(|event| match event {
+                SwarmEvent::ConnectionEstablished {
+                    connection_id,
+                    peer_id,
+                    ..
+                } if incoming_conn_id == connection_id && peer_id == cor_server_peer => Some(()),
+                _ => None,
+            })
+            .await;
 
         bob.wait(|event| match event {
             SwarmEvent::Behaviour(CombinedClientEvent::Autonat(_)) => Some(()),
