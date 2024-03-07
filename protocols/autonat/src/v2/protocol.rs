@@ -107,10 +107,9 @@ impl From<DialDataResponse> for proto::Message {
             val.data_count <= DATA_FIELD_LEN_UPPER_BOUND,
             "data_count too large"
         );
-        static DATA: &[u8] = &[0u8; DATA_FIELD_LEN_UPPER_BOUND];
         proto::Message {
             msg: proto::mod_Message::OneOfmsg::dialDataResponse(proto::DialDataResponse {
-                data: Some(DATA[..val.data_count].to_vec()), // Once could use Cow::Borrowed here, but it will require a modification of the generated code and that will fail the CI
+                data: Some(vec![0; val.data_count]), // One could use Cow::Borrowed here, but it will require a modification of the generated code and that will fail the CI
             }),
         }
     }
