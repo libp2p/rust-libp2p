@@ -293,8 +293,8 @@ async fn error_on_unknown_peer_id() {
         .dial(
             addr.clone(),
             DialOpts {
-                role: Endpoint::Listener,
-                port_use: PortUse::New,
+                role: Endpoint::Dialer,
+                port_use: PortUse::Reuse,
             },
         )
         .unwrap()
