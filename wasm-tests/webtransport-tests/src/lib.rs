@@ -268,8 +268,8 @@ async fn connect_without_peer_id() {
         .dial(
             addr,
             DialOpts {
-                role: Endpoint::Listener,
-                port_use: PortUse::New,
+                role: Endpoint::Dialer,
+                port_use: PortUse::Reuse,
             },
         )
         .unwrap()
@@ -322,8 +322,8 @@ async fn error_on_unknown_certhash() {
         .dial(
             addr.clone(),
             DialOpts {
-                role: Endpoint::Listener,
-                port_use: PortUse::New,
+                role: Endpoint::Dialer,
+                port_use: PortUse::Reuse,
             },
         )
         .unwrap()
@@ -346,7 +346,7 @@ async fn new_connection_to_echo_server() -> Connection {
             addr,
             DialOpts {
                 role: Endpoint::Dialer,
-                port_use: PortUse::New,
+                port_use: PortUse::Reuse,
             },
         )
         .unwrap()
