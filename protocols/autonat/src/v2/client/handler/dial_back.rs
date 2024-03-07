@@ -4,7 +4,7 @@ use std::{
     time::Duration,
 };
 
-use futures::{channel::oneshot, AsyncWriteExt};
+use futures::channel::oneshot;
 use futures_bounded::StreamSet;
 use libp2p_core::upgrade::{DeniedUpgrade, ReadyUpgrade};
 use libp2p_swarm::{
