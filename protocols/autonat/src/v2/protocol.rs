@@ -337,7 +337,7 @@ mod tests {
     fn message_correct_max_size() {
         let message_bytes = quick_protobuf::serialize_into_vec(&Message {
             msg: OneOfmsg::dialDataResponse(GenDialDataResponse {
-                data: Some(vec![0; 4096].into()),
+                data: Some(vec![0; 4096]),
             }),
         })
         .unwrap();
