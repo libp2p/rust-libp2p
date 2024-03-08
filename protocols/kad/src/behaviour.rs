@@ -23,8 +23,8 @@
 mod test;
 
 use crate::addresses::Addresses;
+use crate::bootstrap;
 use crate::handler::{Handler, HandlerEvent, HandlerIn, RequestId};
-use crate::jobs::*;
 use crate::kbucket::{self, Distance, KBucketsTable, NodeStatus};
 use crate::protocol::{ConnectionType, KadPeer, ProtocolConfig};
 use crate::query::{Query, QueryConfig, QueryId, QueryPool, QueryPoolState};
@@ -34,6 +34,7 @@ use crate::record::{
     ProviderRecord, Record,
 };
 use crate::K_VALUE;
+use crate::{jobs::*, protocol};
 use fnv::{FnvHashMap, FnvHashSet};
 use instant::Instant;
 use libp2p_core::{ConnectedPoint, Endpoint, Multiaddr};
@@ -116,6 +117,9 @@ pub struct Behaviour<TStore> {
 
     /// The record storage.
     store: TStore,
+
+    /// Tracks the status of the current bootstrap.
+    bootstrap_status: bootstrap::Status,
 }
 
 /// The configurable strategies for the insertion of peers
@@ -181,23 +185,16 @@ pub struct Config {
     provider_publication_interval: Option<Duration>,
     kbucket_inserts: BucketInserts,
     caching: Caching,
+    periodic_bootstrap_interval: Option<Duration>,
+    automatic_bootstrap_throttle: Option<Duration>,
 }
 
 impl Default for Config {
+    /// Returns the default configuration.
+    ///
+    /// Deprecated: use `Config::new` instead.
     fn default() -> Self {
-        Config {
-            kbucket_pending_timeout: Duration::from_secs(60),
-            query_config: QueryConfig::default(),
-            protocol_config: Default::default(),
-            record_ttl: Some(Duration::from_secs(36 * 60 * 60)),
-            record_replication_interval: Some(Duration::from_secs(60 * 60)),
-            record_publication_interval: Some(Duration::from_secs(24 * 60 * 60)),
-            record_filtering: StoreInserts::Unfiltered,
-            provider_publication_interval: Some(Duration::from_secs(12 * 60 * 60)),
-            provider_record_ttl: Some(Duration::from_secs(24 * 60 * 60)),
-            kbucket_inserts: BucketInserts::OnConnected,
-            caching: Caching::Enabled { max_peers: 1 },
-        }
+        Self::new(protocol::DEFAULT_PROTO_NAME)
     }
 }
 
@@ -217,6 +214,32 @@ pub enum Caching {
 }
 
 impl Config {
+    /// Builds a new `Config` with the given protocol name.
+    pub fn new(protocol_name: StreamProtocol) -> Self {
+        Config {
+            kbucket_pending_timeout: Duration::from_secs(60),
+            query_config: QueryConfig::default(),
+            protocol_config: ProtocolConfig::new(protocol_name),
+            record_ttl: Some(Duration::from_secs(36 * 60 * 60)),
+            record_replication_interval: Some(Duration::from_secs(60 * 60)),
+            record_publication_interval: Some(Duration::from_secs(24 * 60 * 60)),
+            record_filtering: StoreInserts::Unfiltered,
+            provider_publication_interval: Some(Duration::from_secs(12 * 60 * 60)),
+            provider_record_ttl: Some(Duration::from_secs(24 * 60 * 60)),
+            kbucket_inserts: BucketInserts::OnConnected,
+            caching: Caching::Enabled { max_peers: 1 },
+            periodic_bootstrap_interval: Some(Duration::from_secs(5 * 60)),
+            automatic_bootstrap_throttle: Some(bootstrap::DEFAULT_AUTOMATIC_THROTTLE),
+        }
+    }
+
+    /// Returns the default configuration.
+    #[deprecated(note = "Use `Config::new` instead")]
+    #[allow(clippy::should_implement_trait)]
+    pub fn default() -> Self {
+        Default::default()
+    }
+
     /// Sets custom protocol names.
     ///
     /// Kademlia nodes only communicate with other nodes using the same protocol
@@ -226,6 +249,8 @@ impl Config {
     /// More than one protocol name can be supplied. In this case the node will
     /// be able to talk to other nodes supporting any of the provided names.
     /// Multiple names must be used with caution to avoid network partitioning.
+    #[deprecated(note = "Use `Config::new` instead")]
+    #[allow(deprecated)]
     pub fn set_protocol_names(&mut self, names: Vec<StreamProtocol>) -> &mut Self {
         self.protocol_config.set_protocol_names(names);
         self
@@ -391,6 +416,34 @@ impl Config {
         self.caching = c;
         self
     }
+
+    /// Sets the interval on which [`Behaviour::bootstrap`] is called periodically.
+    ///
+    /// * Default to `5` minutes.
+    /// * Set to `None` to disable periodic bootstrap.
+    pub fn set_periodic_bootstrap_interval(&mut self, interval: Option<Duration>) -> &mut Self {
+        self.periodic_bootstrap_interval = interval;
+        self
+    }
+
+    /// Sets the time to wait before calling [`Behaviour::bootstrap`] after a new peer is inserted in the routing table.
+    /// This prevent cascading bootstrap requests when multiple peers are inserted into the routing table "at the same time".
+    /// This also allows to wait a little bit for other potential peers to be inserted into the routing table before
+    /// triggering a bootstrap, giving more context to the future bootstrap request.  
+    ///
+    /// * Default to `500` ms.
+    /// * Set to `Some(Duration::ZERO)` to never wait before triggering a bootstrap request when a new peer
+    ///     is inserted in the routing table.
+    /// * Set to `None` to disable automatic bootstrap (no bootstrap request will be triggered when a new
+    ///     peer is inserted in the routing table).
+    #[cfg(test)]
+    pub(crate) fn set_automatic_bootstrap_throttle(
+        &mut self,
+        duration: Option<Duration>,
+    ) -> &mut Self {
+        self.automatic_bootstrap_throttle = duration;
+        self
+    }
 }
 
 impl<TStore> Behaviour<TStore>
@@ -448,6 +501,10 @@ where
             mode: Mode::Client,
             auto_mode: true,
             no_events_waker: None,
+            bootstrap_status: bootstrap::Status::new(
+                config.periodic_bootstrap_interval,
+                config.automatic_bootstrap_throttle,
+            ),
         }
     }
 
@@ -549,6 +606,7 @@ where
                 };
                 match entry.insert(addresses.clone(), status) {
                     kbucket::InsertResult::Inserted => {
+                        self.bootstrap_status.on_new_peer_in_routing_table();
                         self.queued_events.push_back(ToSwarm::GenerateEvent(
                             Event::RoutingUpdated {
                                 peer: *peer,
@@ -867,6 +925,13 @@ where
     ///
     /// > **Note**: Bootstrapping requires at least one node of the DHT to be known.
     /// > See [`Behaviour::add_address`].
+    ///
+    /// > **Note**: Bootstrap does not require to be called manually. It is periodically
+    /// invoked at regular intervals based on the configured `periodic_bootstrap_interval` (see
+    /// [`Config::set_periodic_bootstrap_interval`] for details) and it is also automatically invoked
+    /// when a new peer is inserted in the routing table.
+    /// This parameter is used to call [`Behaviour::bootstrap`] periodically and automatically
+    /// to ensure a healthy routing table.
     pub fn bootstrap(&mut self) -> Result<QueryId, NoKnownPeers> {
         let local_key = self.kbuckets.local_key().clone();
         let info = QueryInfo::Bootstrap {
@@ -878,6 +943,7 @@ where
         if peers.is_empty() {
             Err(NoKnownPeers())
         } else {
+            self.bootstrap_status.on_started();
             let inner = QueryInner::new(info);
             Ok(self.queries.add_iter_closest(local_key, peers, inner))
         }
@@ -1274,6 +1340,7 @@ where
                         let addresses = Addresses::new(a);
                         match entry.insert(addresses.clone(), new_status) {
                             kbucket::InsertResult::Inserted => {
+                                self.bootstrap_status.on_new_peer_in_routing_table();
                                 let event = Event::RoutingUpdated {
                                     peer,
                                     is_new_peer: true,
@@ -1389,6 +1456,7 @@ where
                         .continue_iter_closest(query_id, target.clone(), peers, inner);
                 } else {
                     step.last = true;
+                    self.bootstrap_status.on_finish();
                 };
 
                 Some(Event::OutboundQueryProgressed {
@@ -1591,6 +1659,7 @@ where
                         .continue_iter_closest(query_id, target.clone(), peers, inner);
                 } else {
                     step.last = true;
+                    self.bootstrap_status.on_finish();
                 }
 
                 Some(Event::OutboundQueryProgressed {
@@ -2461,6 +2530,13 @@ where
                 }
             }
             self.put_record_job = Some(job);
+        }
+
+        // Poll bootstrap periodically and automatically.
+        if let Poll::Ready(()) = self.bootstrap_status.poll_next_bootstrap(cx) {
+            if let Err(e) = self.bootstrap() {
+                tracing::warn!("Failed to trigger bootstrap: {e}");
+            }
         }
 
         loop {

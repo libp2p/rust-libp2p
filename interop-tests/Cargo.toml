@@ -31,10 +31,10 @@ mime_guess = "2.0"
 redis = { version = "0.23.3", default-features = false, features = [
     "tokio-comp",
 ] }
-rust-embed = "8.2"
+rust-embed = "8.3"
 serde_json = "1"
-thirtyfour = "=0.32.0-rc.8" # https://github.com/stevepryde/thirtyfour/issues/169
-tokio = { version = "1.35.1", features = ["full"] }
+thirtyfour = "=0.32.0-rc.10" # https://github.com/stevepryde/thirtyfour/issues/169
+tokio = { version = "1.36.0", features = ["full"] }
 tower-http = { version = "0.5", features = ["cors", "fs", "trace"] }
 tracing = "0.1.37"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
@@ -49,7 +49,7 @@ wasm-logger = { version = "0.2.0" }
 instant = "0.1.12"
 reqwest = { version = "0.11", features = ["json"] }
 console_error_panic_hook = { version = "0.1.7" }
-futures-timer = "3.0.2"
+futures-timer = "3.0.3"
 
 [lints]
 workspace = true

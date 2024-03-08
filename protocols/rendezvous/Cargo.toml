@@ -15,7 +15,7 @@ asynchronous-codec = { workspace = true }
 async-trait = "0.1"
 bimap = "0.6.3"
 futures = { version = "0.3", default-features = false, features = ["std"] }
-futures-timer = "3.0.2"
+futures-timer = "3.0.3"
 instant = "0.1.12"
 libp2p-core = { workspace = true }
 libp2p-swarm = { workspace = true }
@@ -37,7 +37,7 @@ libp2p-swarm-test = { path = "../../swarm-test" }
 libp2p-tcp = { workspace = true, features = ["tokio"] }
 libp2p-yamux = { workspace = true }
 rand = "0.8"
-tokio = { version = "1.35", features = [ "rt-multi-thread", "time", "macros", "sync", "process", "fs", "net" ] }
+tokio = { version = "1.36", features = [ "rt-multi-thread", "time", "macros", "sync", "process", "fs", "net" ] }
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 
 # Passing arguments to the docsrs builder in order to properly document cfg's.
