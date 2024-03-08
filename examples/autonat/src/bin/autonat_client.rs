@@ -87,7 +87,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
 #[derive(NetworkBehaviour)]
 struct Behaviour {
     identify: identify::Behaviour,
-    auto_nat: autonat::v1::Behaviour,
+    auto_nat: autonat::Behaviour,
 }
 
 impl Behaviour {

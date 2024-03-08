@@ -26,7 +26,7 @@ pub(crate) struct Behaviour {
     ping: ping::Behaviour,
     identify: identify::Behaviour,
     pub(crate) kademlia: Toggle<kad::Behaviour<kad::store::MemoryStore>>,
-    autonat: Toggle<autonat::v1::Behaviour>,
+    autonat: Toggle<autonat::Behaviour>,
 }
 
 impl Behaviour {
@@ -59,7 +59,7 @@ impl Behaviour {
         .into();
 
         let autonat = if enable_autonat {
-            Some(autonat::v1::Behaviour::new(
+            Some(autonat::Behaviour::new(
                 PeerId::from(pub_key.clone()),
                 Default::default(),
             ))
