@@ -24,7 +24,7 @@ quick-protobuf-codec = { workspace = true }
 thiserror = "1.0"
 tracing = "0.1.37"
 void = "1"
-lru = "0.12.1"
+lru = "0.12.2"
 futures-bounded = { workspace = true }
 
 [dev-dependencies]
