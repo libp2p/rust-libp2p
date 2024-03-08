@@ -3182,7 +3182,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-server"
-version = "0.12.6"
+version = "0.12.7"
 dependencies = [
  "base64 0.21.7",
  "clap",
