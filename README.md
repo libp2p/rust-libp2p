@@ -79,7 +79,6 @@ Conduct](https://github.com/ipfs/community/blob/master/code-of-conduct.md).
 (In alphabetical order.)
 
 - João Oliveira ([@jxs](https://github.com/jxs))
-- Max Inden ([@mxinden](https://github.com/mxinden/))
 - Thomas Eizinger ([@thomaseizinger](https://github.com/thomaseizinger))
 
 ## Notable users
