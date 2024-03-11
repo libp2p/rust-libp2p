@@ -10,13 +10,24 @@ release = false
 
 [dependencies]
 futures = "0.3.30"
-hyper = { version = "0.14", features = ["server", "tcp", "http1"] }
-libp2p = { path = "../../libp2p", features = ["tokio", "metrics", "ping", "noise", "identify", "tcp", "yamux", "macros"] }
+hyper = { version = "1.1.0", features = ["server", "http1"] }
+libp2p = { path = "../../libp2p", features = [
+    "tokio",
+    "metrics",
+    "ping",
+    "noise",
+    "identify",
+    "tcp",
+    "yamux",
+    "macros",
+] }
 opentelemetry = { version = "0.20.0", features = ["rt-tokio", "metrics"] }
-opentelemetry-otlp = { version = "0.13.0", features = ["metrics"]}
+opentelemetry-otlp = { version = "0.13.0", features = ["metrics"] }
 opentelemetry_api = "0.20.0"
 prometheus-client = { workspace = true }
 tokio = { version = "1", features = ["full"] }
+tokio-stream = { version = "0.1", features = ["net"] }
+hyper-util = {version = "0.1"}
 tracing = "0.1.37"
 tracing-opentelemetry = "0.21.0"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
