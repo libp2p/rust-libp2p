@@ -24,7 +24,7 @@ send_wrapper = { version = "0.6.0", features = ["futures"] }
 thiserror = "1"
 tracing = "0.1.37"
 wasm-bindgen = { version = "0.2.90" }
-wasm-bindgen-futures = { version = "0.4.41" }
+wasm-bindgen-futures = { version = "0.4.42" }
 web-sys = { version = "0.3.68", features = ["Document", "Location", "MessageEvent", "Navigator", "RtcCertificate", "RtcConfiguration", "RtcDataChannel", "RtcDataChannelEvent", "RtcDataChannelInit", "RtcDataChannelState", "RtcDataChannelType", "RtcPeerConnection", "RtcSdpType", "RtcSessionDescription", "RtcSessionDescriptionInit", "Window"] }
 
 [lints]
