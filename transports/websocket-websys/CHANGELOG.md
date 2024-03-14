@@ -1,3 +1,10 @@
+## 0.3.2
+
+- Change close code in drop implementation to `1000` given that in browsers only
+  the code `1000` and codes between `3000` and `4999` are allowed to be set by
+  userland code.
+  See [PR 5229](https://github.com/libp2p/rust-libp2p/pull/5229).
+
 ## 0.3.1
 
 - Add support for different WASM environments by introducing a `WebContext` that
