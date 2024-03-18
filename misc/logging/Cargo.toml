@@ -1,0 +1,18 @@
+[package]
+name = "logging"
+version = "0.0.0"
+edition = "2021"
+authors = ["drHuangMHT <drhuangmht@gmail.com>"]
+license = "MIT"
+repository = "https://github.com/libp2p/rust-libp2p"
+publish = false
+
+[package.metadata.release]
+release = false
+
+[dependencies]
+tracing = "0.1.37"
+tracing-subscriber = {version = "0.3", features = ["env-filter"]}
+
+[lints]
+workspace = true
