@@ -15,7 +15,7 @@ bytes = "1.4.0"
 futures = "0.3.30"
 js-sys = "0.3.67"
 libp2p-core = { workspace = true }
-tracing = "0.1.37"
+tracing = { workspace = true }
 parking_lot = "0.12.1"
 send_wrapper = "0.6.0"
 thiserror = "1.0.57"

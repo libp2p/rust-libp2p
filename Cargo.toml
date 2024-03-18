@@ -123,6 +123,7 @@ quick-protobuf-codec = { version = "0.3.1", path = "misc/quick-protobuf-codec" }
 quickcheck = { package = "quickcheck-ext", path = "misc/quickcheck-ext" }
 rw-stream-sink = { version = "0.4.0", path = "misc/rw-stream-sink" }
 unsigned-varint = { version = "0.8.0" }
+tracing = { workspace = true }
 
 [patch.crates-io]
 
