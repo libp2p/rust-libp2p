@@ -73,6 +73,7 @@ where
 
 /// Implementation of a [`ConnectionHandler`] that represents either of two [`ConnectionHandler`]
 /// implementations.
+#[allow(deprecated)] // TODO: Remove when {In, Out}boundOpenInfo is fully removed.
 impl<L, R> ConnectionHandler for Either<L, R>
 where
     L: ConnectionHandler,

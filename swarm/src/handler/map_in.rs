@@ -42,6 +42,7 @@ impl<TConnectionHandler, TMap, TNewIn> MapInEvent<TConnectionHandler, TNewIn, TM
     }
 }
 
+#[allow(deprecated)] // TODO: Remove when {In, Out}boundOpenInfo is fully removed.
 impl<TConnectionHandler, TMap, TNewIn> ConnectionHandler
     for MapInEvent<TConnectionHandler, TNewIn, TMap>
 where
