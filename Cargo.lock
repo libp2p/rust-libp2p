@@ -3671,7 +3671,6 @@ dependencies = [
  "opentelemetry_api",
  "prometheus-client",
  "tokio",
- "tokio-stream",
  "tracing",
  "tracing-opentelemetry",
  "tracing-subscriber",

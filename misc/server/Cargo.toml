@@ -16,23 +16,7 @@ clap = { version = "4.4.16", features = ["derive"] }
 futures = "0.3"
 futures-timer = "3"
 hyper = { version = "1.1.0", features = ["server", "http1"] }
-libp2p = { workspace = true, features = [
-    "autonat",
-    "dns",
-    "tokio",
-    "noise",
-    "tcp",
-    "yamux",
-    "identify",
-    "kad",
-    "ping",
-    "relay",
-    "metrics",
-    "rsa",
-    "macros",
-    "quic",
-    "websocket",
-] }
+libp2p = { workspace = true, features = ["autonat", "dns", "tokio", "noise", "tcp", "yamux", "identify", "kad", "ping", "relay", "metrics", "rsa", "macros", "quic", "websocket"] }
 prometheus-client = { workspace = true }
 serde = "1.0.197"
 serde_derive = "1.0.125"
