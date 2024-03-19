@@ -3194,7 +3194,8 @@ dependencies = [
  "clap",
  "futures",
  "futures-timer",
- "hyper 0.14.27",
+ "hyper 1.1.0",
+ "hyper-util",
  "libp2p",
  "prometheus-client",
  "serde",
@@ -3668,7 +3669,8 @@ name = "metrics-example"
 version = "0.1.0"
 dependencies = [
  "futures",
- "hyper 0.14.27",
+ "hyper 1.1.0",
+ "hyper-util",
  "libp2p",
  "opentelemetry",
  "opentelemetry-otlp",
