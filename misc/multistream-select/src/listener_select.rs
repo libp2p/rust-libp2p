@@ -27,8 +27,6 @@ use crate::{Negotiated, NegotiationError};
 use futures::prelude::*;
 use smallvec::SmallVec;
 use std::{
-    convert::TryFrom as _,
-    iter::FromIterator,
     mem,
     pin::Pin,
     task::{Context, Poll},
