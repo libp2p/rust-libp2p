@@ -14,7 +14,7 @@ async-trait = "0.1"
 futures = "0.3.30"
 libp2p = { path = "../../libp2p", features = [ "async-std", "identify", "macros", "noise", "ping", "rendezvous", "tcp", "tokio", "yamux"] }
 tokio = { version = "1.36", features = ["rt-multi-thread", "macros", "time"] }
-tracing = "0.1.37"
+tracing = { workspace = true }
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 
 [lints]
