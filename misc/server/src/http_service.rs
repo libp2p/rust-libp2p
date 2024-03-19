@@ -40,17 +40,22 @@ pub(crate) async fn metrics_server(
     let addr: SocketAddr = ([0, 0, 0, 0], 8888).into();
     let tcp_listener_stream = TcpListener::bind(addr).await?;
     let local_addr = tcp_listener_stream.local_addr()?;
-    let (connection, _) = tcp_listener_stream.accept().await?;
-    let server = Builder::new().serve_connection(
-        hyper_util::rt::TokioIo::new(connection),
-        MetricService::new(registry, metrics_path.clone()),
-    );
+    let service = MetricService::new(registry, metrics_path.clone());
     tracing::info!(metrics_server=%format!("http://{}{}", local_addr, metrics_path));
-    if let Err(e) = server.await {
-        tracing::error!("server error: {}", e);
+    loop {
+        let service = service.clone();
+        let (connection, _) = tcp_listener_stream.accept().await?;
+        tokio::spawn(async move {
+            let server =
+                Builder::new().serve_connection(hyper_util::rt::TokioIo::new(connection), service);
+            if let Err(e) = server.await {
+                tracing::error!("server error: {}", e);
+            }
+        });
     }
-    Ok(())
 }
+
+#[derive(Clone)]
 pub(crate) struct MetricService {
     reg: Arc<Mutex<Registry>>,
     metrics_path: String,
