@@ -43,10 +43,8 @@ pub(crate) async fn metrics_server(registry: Registry) -> Result<(), std::io::Er
         let service = service.clone();
         let (connection, _) = tcp_listener_stream.accept().await?;
         tokio::spawn(async move {
-            let server = Builder::new().serve_connection(
-                hyper_util::rt::TokioIo::new(connection),
-                service,
-            );
+            let server =
+                Builder::new().serve_connection(hyper_util::rt::TokioIo::new(connection), service);
             if let Err(e) = server.await {
                 tracing::error!("server error: {}", e);
             }
