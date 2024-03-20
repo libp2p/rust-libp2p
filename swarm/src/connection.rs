@@ -734,6 +734,7 @@ enum Shutdown {
     /// A shut down is planned as soon as possible.
     Asap,
     /// A shut down is planned for when a `Delay` has elapsed.
+    #[allow(dead_code)]
     Later(Delay, Instant),
 }
 
