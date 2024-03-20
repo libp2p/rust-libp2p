@@ -17,7 +17,6 @@ use prometheus_client::{
     registry::{Registry, Unit},
 };
 use std::{
-    convert::TryFrom as _,
     io,
     pin::Pin,
     task::{Context, Poll},

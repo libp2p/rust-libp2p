@@ -1046,7 +1046,6 @@ impl<'a, K: 'a, V: 'a> EntryExt<'a, K, V> for hash_map::Entry<'a, K, V> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use futures::future::Future;
 
     struct Dummy;
 

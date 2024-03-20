@@ -25,7 +25,7 @@ use libp2p_core::upgrade::{InboundConnectionUpgrade, OutboundConnectionUpgrade};
 use libp2p_identity as identity;
 use libp2p_noise as noise;
 use quickcheck::*;
-use std::{convert::TryInto, io};
+use std::io;
 use tracing_subscriber::EnvFilter;
 
 #[allow(dead_code)]

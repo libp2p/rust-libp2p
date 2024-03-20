@@ -21,7 +21,6 @@
 use bytes::{Buf as _, BufMut as _, Bytes, BytesMut};
 use futures::{io::IoSlice, prelude::*};
 use std::{
-    convert::TryFrom as _,
     io,
     pin::Pin,
     task::{Context, Poll},

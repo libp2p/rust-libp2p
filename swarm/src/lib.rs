@@ -146,7 +146,6 @@ use std::collections::{HashMap, HashSet, VecDeque};
 use std::num::{NonZeroU32, NonZeroU8, NonZeroUsize};
 use std::time::Duration;
 use std::{
-    convert::TryFrom,
     error, fmt, io,
     pin::Pin,
     task::{Context, Poll},
@@ -1771,14 +1770,10 @@ impl NetworkInfo {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::dummy;
     use crate::test::{CallTraceBehaviour, MockBehaviour};
-    use futures::future;
     use libp2p_core::multiaddr::multiaddr;
     use libp2p_core::transport::memory::MemoryTransportError;
-    use libp2p_core::transport::TransportEvent;
-    use libp2p_core::Endpoint;
-    use libp2p_core::{multiaddr, transport, upgrade};
+    use libp2p_core::{multiaddr, upgrade};
     use libp2p_identity as identity;
     use libp2p_plaintext as plaintext;
     use libp2p_yamux as yamux;

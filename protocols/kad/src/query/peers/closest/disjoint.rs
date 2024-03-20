@@ -19,9 +19,6 @@
 // DEALINGS IN THE SOFTWARE.
 
 use super::*;
-use crate::kbucket::{Key, KeyBytes};
-use instant::Instant;
-use libp2p_identity::PeerId;
 use std::{
     collections::HashMap,
     iter::{Cycle, Map, Peekable},
@@ -438,7 +435,7 @@ impl<I: Iterator<Item = Key<PeerId>>> Iterator for ResultIter<I> {
 mod tests {
     use super::*;
 
-    use crate::{K_VALUE, SHA_256_MH};
+    use crate::SHA_256_MH;
     use libp2p_core::multihash::Multihash;
     use quickcheck::*;
     use std::collections::HashSet;

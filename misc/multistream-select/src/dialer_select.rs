@@ -25,7 +25,6 @@ use crate::{Negotiated, NegotiationError, Version};
 
 use futures::prelude::*;
 use std::{
-    convert::TryFrom as _,
     iter, mem,
     pin::Pin,
     task::{Context, Poll},

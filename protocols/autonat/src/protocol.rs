@@ -27,7 +27,7 @@ use libp2p_core::Multiaddr;
 use libp2p_identity::PeerId;
 use libp2p_request_response::{self as request_response};
 use libp2p_swarm::StreamProtocol;
-use std::{convert::TryFrom, io};
+use std::io;
 
 /// The protocol name used for negotiating with multistream-select.
 pub const DEFAULT_PROTOCOL_NAME: StreamProtocol = StreamProtocol::new("/libp2p/autonat/1.0.0");

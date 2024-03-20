@@ -41,6 +41,7 @@
     feature = "ed25519",
     feature = "rsa"
 ))]
+#[allow(clippy::mixed_attributes_style)]
 mod proto {
     #![allow(unreachable_pub)]
     include!("generated/mod.rs");

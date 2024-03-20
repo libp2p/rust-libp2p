@@ -22,17 +22,12 @@
 
 use super::*;
 use crate::subscription_filter::WhitelistSubscriptionFilter;
-use crate::transform::{DataTransform, IdentityTransform};
-use crate::ValidationError;
-use crate::{
-    config::Config, config::ConfigBuilder, types::Rpc, IdentTopic as Topic, TopicScoreParams,
-};
+use crate::{config::ConfigBuilder, types::Rpc, IdentTopic as Topic};
 use async_std::net::Ipv4Addr;
 use byteorder::{BigEndian, ByteOrder};
-use libp2p_core::{ConnectedPoint, Endpoint};
+use libp2p_core::ConnectedPoint;
 use rand::Rng;
 use std::thread::sleep;
-use std::time::Duration;
 
 #[derive(Default, Debug)]
 struct InjectNodes<D, F>

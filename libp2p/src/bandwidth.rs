@@ -28,7 +28,6 @@ use futures::{
     ready,
 };
 use std::{
-    convert::TryFrom as _,
     io,
     pin::Pin,
     sync::{

@@ -755,7 +755,6 @@ fn socketaddr_to_multiaddr(socket_addr: &SocketAddr, version: ProtocolVersion) -
 #[cfg(any(feature = "async-std", feature = "tokio"))]
 mod tests {
     use futures::future::poll_fn;
-    use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
 
     use super::*;
 
