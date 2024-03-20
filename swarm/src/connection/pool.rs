@@ -1030,6 +1030,7 @@ impl PoolConfig {
     }
 }
 
+#[allow(unused)]
 trait EntryExt<'a, K, V> {
     fn expect_occupied(self, msg: &'static str) -> hash_map::OccupiedEntry<'a, K, V>;
 }
