@@ -20,7 +20,7 @@ rand = "0.8"
 
 [dev-dependencies]
 libp2p-swarm-test = { workspace = true }
-tokio = { version = "1", features = ["full"] }
+tokio = { workspace = true, features = ["full"] }
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 
 [lints]
