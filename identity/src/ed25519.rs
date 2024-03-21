@@ -25,7 +25,6 @@ use core::cmp;
 use core::fmt;
 use core::hash;
 use ed25519_dalek::{self as ed25519, Signer as _, Verifier as _};
-use std::convert::TryFrom;
 use zeroize::Zeroize;
 
 /// An Ed25519 keypair.

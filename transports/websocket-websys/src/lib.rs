@@ -36,7 +36,7 @@ use std::rc::Rc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Mutex;
 use std::{pin::Pin, task::Context, task::Poll};
-use wasm_bindgen::{prelude::*, JsCast};
+use wasm_bindgen::prelude::*;
 use web_sys::{CloseEvent, Event, MessageEvent, WebSocket};
 
 use crate::web_context::WebContext;

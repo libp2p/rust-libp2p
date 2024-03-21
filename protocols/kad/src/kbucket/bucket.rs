@@ -431,7 +431,6 @@ mod tests {
     use super::*;
     use libp2p_identity::PeerId;
     use quickcheck::*;
-    use std::collections::VecDeque;
 
     impl Arbitrary for KBucket<Key<PeerId>, ()> {
         fn arbitrary(g: &mut Gen) -> KBucket<Key<PeerId>, ()> {
