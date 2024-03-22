@@ -28,7 +28,7 @@ use crate::types::{
 use crate::ValidationError;
 use asynchronous_codec::{Decoder, Encoder, Framed};
 use byteorder::{BigEndian, ByteOrder};
-use bytes::BytesMut;
+use bytes::{Bytes, BytesMut};
 use futures::future;
 use futures::prelude::*;
 use libp2p_core::{InboundUpgrade, OutboundUpgrade, UpgradeInfo};
@@ -283,7 +283,7 @@ impl Decoder for GossipsubCodec {
             if let Some(validation_error) = invalid_kind.take() {
                 let message = RawMessage {
                     source: None, // don't bother inform the application
-                    data: message.data.unwrap_or_default(),
+                    data: Bytes::from(message.data.unwrap_or_default()),
                     sequence_number: None, // don't inform the application
                     topic: TopicHash::from_raw(message.topic),
                     signature: None, // don't inform the application
@@ -303,7 +303,7 @@ impl Decoder for GossipsubCodec {
                 // and source)
                 let message = RawMessage {
                     source: None, // don't bother inform the application
-                    data: message.data.unwrap_or_default(),
+                    data: Bytes::from(message.data.unwrap_or_default()),
                     sequence_number: None, // don't inform the application
                     topic: TopicHash::from_raw(message.topic),
                     signature: None, // don't inform the application
@@ -328,7 +328,7 @@ impl Decoder for GossipsubCodec {
                         );
                         let message = RawMessage {
                             source: None, // don't bother inform the application
-                            data: message.data.unwrap_or_default(),
+                            data: Bytes::from(message.data.unwrap_or_default()),
                             sequence_number: None, // don't inform the application
                             topic: TopicHash::from_raw(message.topic),
                             signature: message.signature, // don't inform the application
@@ -347,7 +347,7 @@ impl Decoder for GossipsubCodec {
                     tracing::debug!("Sequence number not present but expected");
                     let message = RawMessage {
                         source: None, // don't bother inform the application
-                        data: message.data.unwrap_or_default(),
+                        data: Bytes::from(message.data.unwrap_or_default()),
                         sequence_number: None, // don't inform the application
                         topic: TopicHash::from_raw(message.topic),
                         signature: message.signature, // don't inform the application
@@ -373,7 +373,7 @@ impl Decoder for GossipsubCodec {
                                 tracing::debug!("Message source has an invalid PeerId");
                                 let message = RawMessage {
                                     source: None, // don't bother inform the application
-                                    data: message.data.unwrap_or_default(),
+                                    data: Bytes::from(message.data.unwrap_or_default()),
                                     sequence_number,
                                     topic: TopicHash::from_raw(message.topic),
                                     signature: message.signature, // don't inform the application
@@ -397,7 +397,7 @@ impl Decoder for GossipsubCodec {
             // This message has passed all validation, add it to the validated messages.
             messages.push(RawMessage {
                 source,
-                data: message.data.unwrap_or_default(),
+                data: Bytes::from(message.data.unwrap_or_default()),
                 sequence_number,
                 topic: TopicHash::from_raw(message.topic),
                 signature: message.signature,
@@ -504,6 +504,7 @@ mod tests {
     use crate::config::Config;
     use crate::{Behaviour, ConfigBuilder};
     use crate::{IdentTopic as Topic, Version};
+    use bytes::Bytes;
     use libp2p_identity::Keypair;
     use quickcheck::*;
 
@@ -520,7 +521,7 @@ mod tests {
                 Behaviour::new(crate::MessageAuthenticity::Signed(keypair.0), config).unwrap();
             let data = (0..g.gen_range(10..10024u32))
                 .map(|_| u8::arbitrary(g))
-                .collect::<Vec<_>>();
+                .collect::<Bytes>();
             let topic_id = TopicId::arbitrary(g).0;
             Message(gs.build_raw_message(topic_id, data).unwrap())
         }

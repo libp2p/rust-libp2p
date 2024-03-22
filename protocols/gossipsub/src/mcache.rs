@@ -223,6 +223,7 @@ mod tests {
     use super::*;
     use crate::types::RawMessage;
     use crate::{IdentTopic as Topic, TopicHash};
+    use bytes::Bytes;
     use libp2p_identity::PeerId;
 
     fn gen_testm(x: u64, topic: TopicHash) -> (MessageId, RawMessage) {
@@ -234,7 +235,7 @@ mod tests {
         };
         let u8x: u8 = x as u8;
         let source = Some(PeerId::random());
-        let data: Vec<u8> = vec![u8x];
+        let data = Bytes::from(vec![u8x]);
         let sequence_number = Some(x);
 
         let m = RawMessage {

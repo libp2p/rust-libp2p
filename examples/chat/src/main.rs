@@ -21,6 +21,7 @@
 #![doc = include_str!("../README.md")]
 
 use futures::stream::StreamExt;
+use libp2p::bytes::Bytes;
 use libp2p::{gossipsub, mdns, noise, swarm::NetworkBehaviour, swarm::SwarmEvent, tcp, yamux};
 use std::collections::hash_map::DefaultHasher;
 use std::error::Error;
@@ -99,7 +100,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
             Ok(Some(line)) = stdin.next_line() => {
                 if let Err(e) = swarm
                     .behaviour_mut().gossipsub
-                    .publish(topic.clone(), line.as_bytes()) {
+                    .publish(topic.clone(), Bytes::copy_from_slice(line.as_bytes())) {
                     println!("Publish error: {e:?}");
                 }
             }

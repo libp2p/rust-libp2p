@@ -25,6 +25,8 @@
 //! algorithms that can be topic-specific. Once the raw data is transformed the message-id is then
 //! calculated, allowing for applications to employ message-id functions post compression.
 
+use bytes::Bytes;
+
 use crate::{Message, RawMessage, TopicHash};
 
 /// A general trait of transforming a [`RawMessage`] into a [`Message`]. The
@@ -41,11 +43,7 @@ pub trait DataTransform {
 
     /// Takes the data to be published (a topic and associated data) transforms the data. The
     /// transformed data will then be used to create a [`crate::RawMessage`] to be sent to peers.
-    fn outbound_transform(
-        &self,
-        topic: &TopicHash,
-        data: Vec<u8>,
-    ) -> Result<Vec<u8>, std::io::Error>;
+    fn outbound_transform(&self, topic: &TopicHash, data: Bytes) -> Result<Bytes, std::io::Error>;
 }
 
 /// The default transform, the raw data is propagated as is to the application layer gossipsub.
@@ -62,11 +60,7 @@ impl DataTransform for IdentityTransform {
         })
     }
 
-    fn outbound_transform(
-        &self,
-        _topic: &TopicHash,
-        data: Vec<u8>,
-    ) -> Result<Vec<u8>, std::io::Error> {
+    fn outbound_transform(&self, _topic: &TopicHash, data: Bytes) -> Result<Bytes, std::io::Error> {
         Ok(data)
     }
 }
