@@ -19,6 +19,19 @@
 // SOFTWARE.
 
 //! Libp2p websocket transports built on [web-sys](https://rustwasm.github.io/wasm-bindgen/web-sys/index.html).
+//!
+//! # Node.JS
+//!
+//! This crate will not work out of the box in a Node.JS environment, as there
+//! is no built-in WebSocket implementation, you can fix this by adding the
+//! following line to your project:
+//!
+//! ```js
+//! global.WebSocket = require('isomorphic-ws');
+//! ```
+//!
+//! This will polyfill the `WebSocket` global variable with the `isomorphic-ws`
+//! package.
 
 mod web_context;
 
@@ -39,7 +52,7 @@ use std::{pin::Pin, task::Context, task::Poll};
 use wasm_bindgen::{prelude::*, JsCast};
 use web_sys::{CloseEvent, Event, MessageEvent, WebSocket};
 
-use crate::web_context::WebContext;
+use crate::web_context::{IntervalHandle, WebContext};
 
 /// A Websocket transport that can be used in a wasm environment.
 ///
@@ -59,7 +72,6 @@ use crate::web_context::WebContext;
 ///     .multiplex(yamux::Config::default())
 ///     .boxed();
 /// ```
-///
 #[derive(Default)]
 pub struct Transport {
     _private: (),
@@ -89,6 +101,12 @@ impl libp2p_core::Transport for Transport {
     fn dial(&mut self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
         let url = extract_websocket_url(&addr)
             .ok_or_else(|| TransportError::MultiaddrNotSupported(addr))?;
+
+        if !WebContext::is_websocket_supported() {
+            panic!(
+                "Websockets are not supported in this environment, you can use the `isomorphic-ws` npm package to polyfill `global.WebSocket` to enable support."
+            );
+        }
 
         Ok(async move {
             let socket = match WebSocket::new(&url) {
@@ -192,7 +210,7 @@ struct Inner {
     _on_close_closure: Rc<Closure<dyn FnMut(CloseEvent)>>,
     _on_error_closure: Rc<Closure<dyn FnMut(CloseEvent)>>,
     _on_message_closure: Rc<Closure<dyn FnMut(MessageEvent)>>,
-    buffered_amount_low_interval: i32,
+    buffered_amount_low_interval: Option<IntervalHandle>,
 }
 
 impl Inner {
@@ -306,9 +324,10 @@ impl Connection {
         });
         let buffered_amount_low_interval = WebContext::new()
             .expect("to have a window or worker context")
-            .set_interval_with_callback_and_timeout_and_arguments(
+            .set_interval(
                 on_buffered_amount_low_closure.as_ref().unchecked_ref(),
-                100, // Chosen arbitrarily and likely worth tuning. Due to low impact of the /ws transport, no further effort was invested at the time.
+                100, /* Chosen arbitrarily and likely worth tuning. Due to low impact of the /ws
+                      * transport, no further effort was invested at the time. */
                 &Array::new(),
             )
             .expect("to be able to set an interval");
@@ -327,7 +346,7 @@ impl Connection {
                 _on_close_closure: Rc::new(onclose_closure),
                 _on_error_closure: Rc::new(onerror_closure),
                 _on_message_closure: Rc::new(onmessage_closure),
-                buffered_amount_low_interval,
+                buffered_amount_low_interval: Some(buffered_amount_low_interval),
             }),
         }
     }
@@ -443,8 +462,10 @@ impl Drop for Connection {
                 .close_with_code_and_reason(GO_AWAY_STATUS_CODE, "connection dropped");
         }
 
-        WebContext::new()
-            .expect("to have a window or worker context")
-            .clear_interval_with_handle(self.inner.buffered_amount_low_interval);
+        if let Some(handle) = self.inner.buffered_amount_low_interval.take() {
+            WebContext::new()
+                .expect("to have a window or worker context")
+                .clear_interval(handle);
+        }
     }
 }
