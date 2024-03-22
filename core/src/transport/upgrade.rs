@@ -22,6 +22,7 @@
 
 pub use crate::upgrade::Version;
 
+use crate::transport::DialOpts;
 use crate::{
     connection::ConnectedPoint,
     muxing::{StreamMuxer, StreamMuxerBox},
@@ -335,19 +336,16 @@ where
     type ListenerUpgrade = T::ListenerUpgrade;
     type Dial = T::Dial;
 
-    fn dial(&mut self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
-        self.0.dial(addr)
+    fn dial(
+        &mut self,
+        addr: Multiaddr,
+        opts: DialOpts,
+    ) -> Result<Self::Dial, TransportError<Self::Error>> {
+        self.0.dial(addr, opts)
     }
 
     fn remove_listener(&mut self, id: ListenerId) -> bool {
         self.0.remove_listener(id)
-    }
-
-    fn dial_as_listener(
-        &mut self,
-        addr: Multiaddr,
-    ) -> Result<Self::Dial, TransportError<Self::Error>> {
-        self.0.dial_as_listener(addr)
     }
 
     fn listen_on(
@@ -404,10 +402,14 @@ where
     type ListenerUpgrade = ListenerUpgradeFuture<T::ListenerUpgrade, U, C>;
     type Dial = DialUpgradeFuture<T::Dial, U, C>;
 
-    fn dial(&mut self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
+    fn dial(
+        &mut self,
+        addr: Multiaddr,
+        opts: DialOpts,
+    ) -> Result<Self::Dial, TransportError<Self::Error>> {
         let future = self
             .inner
-            .dial(addr)
+            .dial(addr, opts)
             .map_err(|err| err.map(TransportUpgradeError::Transport))?;
         Ok(DialUpgradeFuture {
             future: Box::pin(future),
@@ -417,20 +419,6 @@ where
 
     fn remove_listener(&mut self, id: ListenerId) -> bool {
         self.inner.remove_listener(id)
-    }
-
-    fn dial_as_listener(
-        &mut self,
-        addr: Multiaddr,
-    ) -> Result<Self::Dial, TransportError<Self::Error>> {
-        let future = self
-            .inner
-            .dial_as_listener(addr)
-            .map_err(|err| err.map(TransportUpgradeError::Transport))?;
-        Ok(DialUpgradeFuture {
-            future: Box::pin(future),
-            upgrade: future::Either::Left(Some(self.upgrade.clone())),
-        })
     }
 
     fn listen_on(

@@ -20,6 +20,7 @@
 
 use crate::handler::{self, Handler, InEvent};
 use crate::protocol::{Info, UpgradeError};
+use libp2p_core::transport::PortUse;
 use libp2p_core::{multiaddr, ConnectedPoint, Endpoint, Multiaddr};
 use libp2p_identity::PeerId;
 use libp2p_identity::PublicKey;
@@ -243,6 +244,7 @@ impl NetworkBehaviour for Behaviour {
         peer: PeerId,
         addr: &Multiaddr,
         _: Endpoint,
+        _: PortUse,
     ) -> Result<THandler<Self>, ConnectionDenied> {
         Ok(Handler::new(
             self.config.interval,

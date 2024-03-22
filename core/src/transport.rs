@@ -48,7 +48,7 @@ pub mod upgrade;
 mod boxed;
 mod optional;
 
-use crate::ConnectedPoint;
+use crate::{ConnectedPoint, Endpoint};
 
 pub use self::boxed::Boxed;
 pub use self::choice::OrTransport;
@@ -57,6 +57,30 @@ pub use self::optional::OptionalTransport;
 pub use self::upgrade::Upgrade;
 
 static NEXT_LISTENER_ID: AtomicUsize = AtomicUsize::new(1);
+
+/// The port use policy for a new connection.
+#[derive(Debug, Copy, Clone, Default, PartialEq, Eq, Hash)]
+pub enum PortUse {
+    /// Always allocate a new port for the dial.
+    New,
+    /// Best effor reusing of an existing port.
+    ///
+    /// If there is no listener present that can be used to dial, a new port is allocated.
+    #[default]
+    Reuse,
+}
+
+/// Options to customize the behaviour during dialing.
+#[derive(Debug, Copy, Clone)]
+pub struct DialOpts {
+    /// The endpoint establishing a new connection.
+    ///
+    /// When attempting a hole-punch, both parties simultaneously "dial" each other but one party has to be the "listener" on the final connection.
+    /// This option specifies the role of this node in the final connection.
+    pub role: Endpoint,
+    /// The port use policy for a new connection.
+    pub port_use: PortUse,
+}
 
 /// A transport provides connection-oriented communication between two peers
 /// through ordered streams of data (i.e. connections).
@@ -129,16 +153,10 @@ pub trait Transport {
     ///
     /// If [`TransportError::MultiaddrNotSupported`] is returned, it may be desirable to
     /// try an alternative [`Transport`], if available.
-    fn dial(&mut self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>>;
-
-    /// As [`Transport::dial`] but has the local node act as a listener on the outgoing connection.
-    ///
-    /// This option is needed for NAT and firewall hole punching.
-    ///
-    /// See [`ConnectedPoint::Dialer`] for related option.
-    fn dial_as_listener(
+    fn dial(
         &mut self,
         addr: Multiaddr,
+        opts: DialOpts,
     ) -> Result<Self::Dial, TransportError<Self::Error>>;
 
     /// Poll for [`TransportEvent`]s.

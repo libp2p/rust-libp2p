@@ -99,7 +99,7 @@ pub mod derive_prelude {
     pub use crate::ToSwarm;
     pub use either::Either;
     pub use futures::prelude as futures;
-    pub use libp2p_core::transport::ListenerId;
+    pub use libp2p_core::transport::{ListenerId, PortUse};
     pub use libp2p_core::ConnectedPoint;
     pub use libp2p_core::Endpoint;
     pub use libp2p_core::Multiaddr;
@@ -134,13 +134,15 @@ use connection::{
 };
 use dial_opts::{DialOpts, PeerCondition};
 use futures::{prelude::*, stream::FusedStream};
+
 use libp2p_core::{
     connection::ConnectedPoint,
     muxing::StreamMuxerBox,
     transport::{self, ListenerId, TransportError, TransportEvent},
-    Endpoint, Multiaddr, Transport,
+    Multiaddr, Transport,
 };
 use libp2p_identity::PeerId;
+
 use smallvec::SmallVec;
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::num::{NonZeroU32, NonZeroU8, NonZeroUsize};
@@ -529,18 +531,15 @@ where
             .into_iter()
             .map(|a| match peer_id.map_or(Ok(a.clone()), |p| a.with_p2p(p)) {
                 Ok(address) => {
-                    let (dial, span) = match dial_opts.role_override() {
-                        Endpoint::Dialer => (
-                            self.transport.dial(address.clone()),
-                            tracing::debug_span!(parent: tracing::Span::none(), "Transport::dial", %address),
-                        ),
-                        Endpoint::Listener => (
-                            self.transport.dial_as_listener(address.clone()),
-                            tracing::debug_span!(parent: tracing::Span::none(), "Transport::dial_as_listener", %address),
-                        ),
-                    };
+                    let dial = self.transport.dial(
+                        address.clone(),
+                        transport::DialOpts {
+                            role: dial_opts.role_override(),
+                            port_use: dial_opts.port_use(),
+                        },
+                    );
+                    let span = tracing::debug_span!(parent: tracing::Span::none(), "Transport::dial", %address);
                     span.follows_from(tracing::Span::current());
-
                     match dial {
                         Ok(fut) => fut
                             .map(|r| (address, r.map_err(TransportError::Other)))
@@ -561,6 +560,7 @@ where
             dials,
             peer_id,
             dial_opts.role_override(),
+            dial_opts.port_use(),
             dial_opts.dial_concurrency_override(),
             connection_id,
         );
@@ -598,9 +598,7 @@ where
         }
 
         self.behaviour
-            .on_swarm_event(FromSwarm::NewListener(behaviour::NewListener {
-                listener_id,
-            }));
+            .on_swarm_event(FromSwarm::NewListener(behaviour::NewListener { listener_id }));
 
         Ok(())
     }
@@ -611,9 +609,7 @@ where
     /// The address is broadcast to all [`NetworkBehaviour`]s via [`FromSwarm::ExternalAddrConfirmed`].
     pub fn add_external_address(&mut self, a: Multiaddr) {
         self.behaviour
-            .on_swarm_event(FromSwarm::ExternalAddrConfirmed(ExternalAddrConfirmed {
-                addr: &a,
-            }));
+            .on_swarm_event(FromSwarm::ExternalAddrConfirmed(ExternalAddrConfirmed { addr: &a }));
         self.confirmed_external_addr.insert(a);
     }
 
@@ -707,12 +703,14 @@ where
                     ConnectedPoint::Dialer {
                         address,
                         role_override,
+                        port_use,
                     } => {
                         match self.behaviour.handle_established_outbound_connection(
                             id,
                             peer_id,
                             &address,
                             role_override,
+                            port_use,
                         ) {
                             Ok(handler) => handler,
                             Err(cause) => {
@@ -1058,9 +1056,9 @@ where
                 );
                 let addrs = self.listened_addrs.remove(&listener_id).unwrap_or_default();
                 for addr in addrs.iter() {
-                    self.behaviour.on_swarm_event(FromSwarm::ExpiredListenAddr(
-                        ExpiredListenAddr { listener_id, addr },
-                    ));
+                    self.behaviour.on_swarm_event(
+                        FromSwarm::ExpiredListenAddr(ExpiredListenAddr { listener_id, addr })
+                    );
                 }
                 self.behaviour
                     .on_swarm_event(FromSwarm::ListenerClosed(ListenerClosed {
@@ -1776,7 +1774,7 @@ mod tests {
     use futures::future;
     use libp2p_core::multiaddr::multiaddr;
     use libp2p_core::transport::memory::MemoryTransportError;
-    use libp2p_core::transport::TransportEvent;
+    use libp2p_core::transport::{PortUse, TransportEvent};
     use libp2p_core::Endpoint;
     use libp2p_core::{multiaddr, transport, upgrade};
     use libp2p_identity as identity;
@@ -2156,9 +2154,9 @@ mod tests {
             {}
 
             match swarm2.poll_next_unpin(cx) {
-                Poll::Ready(Some(SwarmEvent::OutgoingConnectionError {
-                    peer_id, error, ..
-                })) => Poll::Ready((peer_id, error)),
+                Poll::Ready(Some(SwarmEvent::OutgoingConnectionError { peer_id, error, .. })) => {
+                    Poll::Ready((peer_id, error))
+                }
                 Poll::Ready(x) => panic!("unexpected {x:?}"),
                 Poll::Pending => Poll::Pending,
             }
@@ -2173,6 +2171,7 @@ mod tests {
                     ConnectedPoint::Dialer {
                         address: other_addr,
                         role_override: Endpoint::Dialer,
+                        port_use: PortUse::Reuse,
                     }
                 );
             }
@@ -2223,9 +2222,7 @@ mod tests {
                             return Poll::Ready(Ok(()));
                         }
                     }
-                    Poll::Ready(Some(SwarmEvent::IncomingConnectionError {
-                        local_addr, ..
-                    })) => {
+                    Poll::Ready(Some(SwarmEvent::IncomingConnectionError { local_addr, .. })) => {
                         assert!(!got_inc_err);
                         assert_eq!(local_addr, local_address);
                         got_inc_err = true;
@@ -2346,10 +2343,9 @@ mod tests {
         // This constitutes a fairly typical error for chained transports.
         let error = DialError::Transport(vec![(
             "/ip4/127.0.0.1/tcp/80".parse().unwrap(),
-            TransportError::Other(io::Error::new(
-                io::ErrorKind::Other,
-                MemoryTransportError::Unreachable,
-            )),
+            TransportError::Other(
+                io::Error::new(io::ErrorKind::Other, MemoryTransportError::Unreachable)
+            ),
         )]);
 
         let string = format!("{error}");
