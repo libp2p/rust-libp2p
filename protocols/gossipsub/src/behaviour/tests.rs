@@ -2397,7 +2397,7 @@ fn test_dont_graft_to_negative_scored_peers() {
 }
 
 ///Note that in this test also without a penalty the px would be ignored because of the
-/// acceptPXThreshold, but the spec still explicitely states the rule that px from negative
+/// acceptPXThreshold, but the spec still explicitly states the rule that px from negative
 /// peers should get ignored, therefore we test it here.
 #[test]
 fn test_ignore_px_from_negative_scored_peer() {
