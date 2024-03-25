@@ -34,7 +34,7 @@ use soketto::{
     handshake,
 };
 use std::{collections::HashMap, ops::DerefMut, sync::Arc};
-use std::{convert::TryInto, fmt, io, mem, pin::Pin, task::Context, task::Poll};
+use std::{fmt, io, mem, pin::Pin, task::Context, task::Poll};
 use url::Url;
 
 /// Max. number of payload bytes of a single frame.
@@ -521,7 +521,7 @@ fn parse_ws_dial_addr<T>(addr: Multiaddr) -> Result<WsAddress, Error<T>> {
     };
 
     // The original address, stripped of the `/ws` and `/wss` protocols,
-    // makes up the the address for the inner TCP-based transport.
+    // makes up the address for the inner TCP-based transport.
     let tcp_addr = match p2p {
         Some(p) => protocols.with(p),
         None => protocols,

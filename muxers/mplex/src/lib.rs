@@ -30,7 +30,7 @@ pub use config::{MaxBufferBehaviour, MplexConfig};
 
 use bytes::Bytes;
 use codec::LocalStreamId;
-use futures::{future, prelude::*, ready};
+use futures::{prelude::*, ready};
 use libp2p_core::muxing::{StreamMuxer, StreamMuxerEvent};
 use libp2p_core::upgrade::{InboundConnectionUpgrade, OutboundConnectionUpgrade, UpgradeInfo};
 use parking_lot::Mutex;
