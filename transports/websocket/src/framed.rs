@@ -521,7 +521,7 @@ fn parse_ws_dial_addr<T>(addr: Multiaddr) -> Result<WsAddress, Error<T>> {
     };
 
     // The original address, stripped of the `/ws` and `/wss` protocols,
-    // makes up the the address for the inner TCP-based transport.
+    // makes up the address for the inner TCP-based transport.
     let tcp_addr = match p2p {
         Some(p) => protocols.with(p),
         None => protocols,
