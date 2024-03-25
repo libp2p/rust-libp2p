@@ -31,7 +31,6 @@ use crate::Version;
 use bytes::{BufMut, Bytes, BytesMut};
 use futures::{io::IoSlice, prelude::*, ready};
 use std::{
-    convert::TryFrom,
     error::Error,
     fmt, io,
     pin::Pin,

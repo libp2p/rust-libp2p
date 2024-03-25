@@ -64,7 +64,7 @@ jobs:
       - name: Extract version from manifest
         run: |
           CRATE_VERSION=$(cargo metadata --format-version=1 --no-deps | jq -e -r '.packages[] | select(.name == "'"$CRATE"'") | .version')
-          
+
           echo "CRATE_VERSION=$CRATE_VERSION" >> $GITHUB_ENV
 
       - name: Enforce version in `workspace.dependencies` matches latest version
@@ -234,7 +234,7 @@ jobs:
       fail-fast: false
       matrix:
         rust-version: [
-          1.75.0, # current stable
+          1.77.0, # current stable
           beta,
         ]
     steps:
