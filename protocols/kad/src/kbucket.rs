@@ -75,7 +75,7 @@ mod key;
 pub use bucket::NodeStatus;
 pub use entry::*;
 
-use arrayvec::{self, ArrayVec};
+use arrayvec::ArrayVec;
 use bucket::KBucket;
 use std::collections::VecDeque;
 use std::time::{Duration, Instant};

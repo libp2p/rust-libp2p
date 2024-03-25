@@ -34,7 +34,7 @@ use soketto::{
     handshake,
 };
 use std::{collections::HashMap, ops::DerefMut, sync::Arc};
-use std::{convert::TryInto, fmt, io, mem, pin::Pin, task::Context, task::Poll};
+use std::{fmt, io, mem, pin::Pin, task::Context, task::Poll};
 use url::Url;
 
 /// Max. number of payload bytes of a single frame.
