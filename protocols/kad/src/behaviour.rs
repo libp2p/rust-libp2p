@@ -2203,7 +2203,7 @@ where
             Some(peer) => peer,
         };
 
-        // We should order addresses from decreasing likelyhood of connectivity, so start with
+        // We should order addresses from decreasing likelihood of connectivity, so start with
         // the addresses of that peer in the k-buckets.
         let key = kbucket::Key::from(peer_id);
         let mut peer_addrs =

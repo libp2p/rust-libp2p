@@ -717,7 +717,7 @@ impl<UserData, Upgrade> Future for SubstreamRequested<UserData, Upgrade> {
 
 /// The options for a planned connection & handler shutdown.
 ///
-/// A shutdown is planned anew based on the the return value of
+/// A shutdown is planned anew based on the return value of
 /// [`ConnectionHandler::connection_keep_alive`] of the underlying handler
 /// after every invocation of [`ConnectionHandler::poll`].
 ///
