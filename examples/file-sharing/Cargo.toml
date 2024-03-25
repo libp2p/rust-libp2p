@@ -10,11 +10,10 @@ release = false
 
 [dependencies]
 serde = { version = "1.0", features = ["derive"] }
-async-std = { version = "1.12", features = ["attributes"] }
-clap = { version = "4.4.10", features = ["derive"] }
-either = "1.9"
-futures = "0.3.29"
-libp2p = { path = "../../libp2p", features = [ "async-std", "cbor", "dns", "kad", "noise", "macros", "request-response", "tcp", "websocket", "yamux"] }
+tokio = { version = "1.36.0", features = ["full"] }
+clap = { version = "4.4.16", features = ["derive"] }
+futures = "0.3.30"
+libp2p = { path = "../../libp2p", features = [ "tokio", "cbor", "dns", "kad", "noise", "macros", "request-response", "tcp", "websocket", "yamux"] }
 tracing = "0.1.37"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 void = "1.0.2"

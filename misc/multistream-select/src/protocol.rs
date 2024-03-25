@@ -31,7 +31,6 @@ use crate::Version;
 use bytes::{BufMut, Bytes, BytesMut};
 use futures::{io::IoSlice, prelude::*, ready};
 use std::{
-    convert::TryFrom,
     error::Error,
     fmt, io,
     pin::Pin,
@@ -49,7 +48,7 @@ const MSG_PROTOCOL_NA: &[u8] = b"na\n";
 /// The encoded form of a multistream-select 'ls' message.
 const MSG_LS: &[u8] = b"ls\n";
 
-/// The multistream-select header lines preceeding negotiation.
+/// The multistream-select header lines preceding negotiation.
 ///
 /// Every [`Version`] has a corresponding header line.
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]

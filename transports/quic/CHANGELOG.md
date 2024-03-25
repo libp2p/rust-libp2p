@@ -1,7 +1,7 @@
 ## 0.10.2
 
 - Change `max_idle_timeout`to 10s.
-  See [PR XXXX](https://github.com/libp2p/rust-libp2p/pull/XXXX).
+  See [PR 4965](https://github.com/libp2p/rust-libp2p/pull/4965).
 
 ## 0.10.1
 

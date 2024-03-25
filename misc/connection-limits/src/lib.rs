@@ -79,6 +79,12 @@ impl Behaviour {
             established_per_peer: Default::default(),
         }
     }
+
+    /// Returns a mutable reference to [`ConnectionLimits`].
+    /// > **Note**: A new limit will not be enforced against existing connections.
+    pub fn limits_mut(&mut self) -> &mut ConnectionLimits {
+        &mut self.limits
+    }
 }
 
 fn check_limit(limit: Option<u32>, current: usize, kind: Kind) -> Result<(), ConnectionDenied> {

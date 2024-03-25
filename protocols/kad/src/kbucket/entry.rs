@@ -21,7 +21,7 @@
 //! The `Entry` API for quering and modifying the entries of a `KBucketsTable`
 //! representing the nodes participating in the Kademlia DHT.
 
-pub(crate) use super::bucket::{AppliedPending, InsertResult, Node, NodeStatus, K_VALUE};
+pub(crate) use super::bucket::{AppliedPending, InsertResult, Node, K_VALUE};
 pub use super::key::*;
 
 use super::*;
@@ -81,8 +81,6 @@ pub(crate) enum Entry<'a, TPeerId, TVal> {
     Pending(PendingEntry<'a, TPeerId, TVal>, NodeStatus),
     /// The entry is absent and may be inserted.
     Absent(AbsentEntry<'a, TPeerId, TVal>),
-    /// The entry represents the local node.
-    SelfEntry,
 }
 
 /// The internal representation of the different states of an `Entry`,
@@ -144,7 +142,6 @@ where
             Entry::Present(entry, _) => Some(entry.value()),
             Entry::Pending(entry, _) => Some(entry.value()),
             Entry::Absent(_) => None,
-            Entry::SelfEntry => None,
         }
     }
 }

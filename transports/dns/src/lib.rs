@@ -157,7 +157,6 @@ use smallvec::SmallVec;
 use std::io;
 use std::net::{Ipv4Addr, Ipv6Addr};
 use std::{
-    convert::TryFrom,
     error, fmt, iter,
     ops::DerefMut,
     pin::Pin,
@@ -277,7 +276,7 @@ where
         let resolver = self.resolver.clone();
         let inner = self.inner.clone();
 
-        // Asynchronlously resolve all DNS names in the address before proceeding
+        // Asynchronously resolve all DNS names in the address before proceeding
         // with dialing on the underlying transport.
         Ok(async move {
             let mut last_err = None;
@@ -416,6 +415,7 @@ pub enum Error<TErr> {
     /// The underlying transport encountered an error.
     Transport(TErr),
     /// DNS resolution failed.
+    #[allow(clippy::enum_variant_names)]
     ResolveError(ResolveError),
     /// DNS resolution was successful, but the underlying transport refused the resolved address.
     MultiaddrNotSupported(Multiaddr),
@@ -627,12 +627,7 @@ where
 #[cfg(all(test, any(feature = "tokio", feature = "async-std")))]
 mod tests {
     use super::*;
-    use futures::future::BoxFuture;
-    use libp2p_core::{
-        multiaddr::{Multiaddr, Protocol},
-        transport::{TransportError, TransportEvent},
-        Transport,
-    };
+    use libp2p_core::Transport;
     use libp2p_identity::PeerId;
 
     #[test]
