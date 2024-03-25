@@ -22,7 +22,7 @@ libp2p-identity = { workspace = true }
 quick-protobuf = "0.8"
 quick-protobuf-codec = { workspace = true }
 rand = "0.8"
-smallvec = "1.13.1"
+smallvec = "1.13.2"
 thiserror = "1.0.57"
 tracing = "0.1.37"
 
