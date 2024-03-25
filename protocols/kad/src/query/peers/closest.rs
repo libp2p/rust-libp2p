@@ -23,9 +23,8 @@ use super::*;
 use crate::kbucket::{Distance, Key, KeyBytes};
 use crate::{ALPHA_VALUE, K_VALUE};
 use instant::Instant;
-use libp2p_identity::PeerId;
 use std::collections::btree_map::{BTreeMap, Entry};
-use std::{iter::FromIterator, num::NonZeroUsize, time::Duration};
+use std::{num::NonZeroUsize, time::Duration};
 
 pub(crate) mod disjoint;
 /// A peer iterator for a dynamically changing list of peers, sorted by increasing
@@ -477,10 +476,9 @@ mod tests {
     use super::*;
     use crate::SHA_256_MH;
     use libp2p_core::multihash::Multihash;
-    use libp2p_identity::PeerId;
     use quickcheck::*;
     use rand::{rngs::StdRng, Rng, SeedableRng};
-    use std::{iter, time::Duration};
+    use std::iter;
 
     fn random_peers<R: Rng>(n: usize, g: &mut R) -> Vec<PeerId> {
         (0..n)
