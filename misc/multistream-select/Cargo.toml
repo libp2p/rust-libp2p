@@ -15,7 +15,7 @@ bytes = "1"
 futures = "0.3"
 tracing = "0.1.37"
 pin-project = "1.1.4"
-smallvec = "1.13.1"
+smallvec = "1.13.2"
 unsigned-varint = { workspace = true }
 
 [dev-dependencies]
