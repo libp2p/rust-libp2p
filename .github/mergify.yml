@@ -52,22 +52,24 @@ pull_request_rules:
         message: Approvals have been dismissed because the PR was updated after the `send-it` label was applied.
         changes_requested: false
 
-  # - name: Approve trivial maintainer PRs
-  #   conditions:
-  #     - base=master
-  #     - label=trivial
-  #     - author=@libp2p/rust-libp2p-maintainers
-  #   actions:
-  #     review:
+  - name: Approve trivial maintainer PRs
+    conditions:
+      - base=master
+      - label=trivial
+      - author=@libp2p/rust-libp2p-maintainers
+    actions:
+      review:
+        type: APPROVE
 
-  # - name: Approve dependabot PRs of semver-compatible updates
-  #   conditions:
-  #     - author=dependabot[bot]
-  #     - or:
-  #         - title~=bump [^\s]+ from ([1-9]+)\..+ to \1\.      # For major >= 1 versions, only approve updates with the same major version.
-  #         - title~=bump [^\s]+ from 0\.([\d]+)\..+ to 0\.\1\. # For major == 0 versions, only approve updates with the same minor version.
-  #   actions:
-  #     review:
+  - name: Approve dependabot PRs of semver-compatible updates
+    conditions:
+      - author=dependabot[bot]
+      - or:
+          - title~=bump [^\s]+ from ([1-9]+)\..+ to \1\.      # For major >= 1 versions, only approve updates with the same major version.
+          - title~=bump [^\s]+ from 0\.([\d]+)\..+ to 0\.\1\. # For major == 0 versions, only approve updates with the same minor version.
+    actions:
+      review:
+        type: APPROVE
 
 queue_rules:
   - name: default
