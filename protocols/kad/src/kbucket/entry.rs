@@ -21,7 +21,7 @@
 //! The `Entry` API for quering and modifying the entries of a `KBucketsTable`
 //! representing the nodes participating in the Kademlia DHT.
 
-pub(crate) use super::bucket::{AppliedPending, InsertResult, Node, NodeStatus, K_VALUE};
+pub(crate) use super::bucket::{AppliedPending, InsertResult, Node, K_VALUE};
 pub use super::key::*;
 
 use super::*;

@@ -110,22 +110,3 @@ impl Behaviour {
         }
     }
 }
-
-#[derive(Debug)]
-#[allow(clippy::large_enum_variant)]
-enum Event {
-    AutoNat(autonat::Event),
-    Identify(identify::Event),
-}
-
-impl From<identify::Event> for Event {
-    fn from(v: identify::Event) -> Self {
-        Self::Identify(v)
-    }
-}
-
-impl From<autonat::Event> for Event {
-    fn from(v: autonat::Event) -> Self {
-        Self::AutoNat(v)
-    }
-}
