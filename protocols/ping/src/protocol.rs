@@ -89,8 +89,6 @@ mod tests {
         multiaddr::multiaddr,
         transport::{memory::MemoryTransport, ListenerId, Transport},
     };
-    use rand::{thread_rng, Rng};
-    use std::time::Duration;
 
     #[test]
     fn ping_pong() {
