@@ -27,7 +27,6 @@ use libp2p_rendezvous as rendezvous;
 use libp2p_rendezvous::client::RegisterError;
 use libp2p_swarm::{DialError, Swarm, SwarmEvent};
 use libp2p_swarm_test::SwarmExt;
-use std::convert::TryInto;
 use std::time::Duration;
 use tracing_subscriber::EnvFilter;
 

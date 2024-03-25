@@ -22,7 +22,7 @@ use crate::protocol_stack;
 use libp2p_identity::PeerId;
 use libp2p_swarm::StreamProtocol;
 use prometheus_client::collector::Collector;
-use prometheus_client::encoding::{DescriptorEncoder, EncodeLabelSet, EncodeMetric};
+use prometheus_client::encoding::{DescriptorEncoder, EncodeMetric};
 use prometheus_client::metrics::counter::Counter;
 use prometheus_client::metrics::gauge::ConstGauge;
 use prometheus_client::metrics::MetricType;
@@ -136,11 +136,6 @@ impl<TBvEv> super::Recorder<libp2p_swarm::SwarmEvent<TBvEv>> for Metrics {
             }
         }
     }
-}
-
-#[derive(EncodeLabelSet, Hash, Clone, Eq, PartialEq, Debug)]
-struct AddressLabels {
-    protocols: String,
 }
 
 #[derive(Default, Debug, Clone)]
