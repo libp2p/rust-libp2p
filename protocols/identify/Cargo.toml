@@ -18,7 +18,7 @@ futures-bounded = { workspace = true }
 libp2p-core = { workspace = true }
 libp2p-swarm = { workspace = true }
 libp2p-identity = { workspace = true }
-lru = "0.12.2"
+lru = "0.12.3"
 quick-protobuf-codec = { workspace = true }
 quick-protobuf = "0.8"
 smallvec = "1.13.2"
