@@ -24,7 +24,7 @@ use libp2p_core::Multiaddr;
 use libp2p_identity::PeerId;
 use libp2p_memory_connection_limits::*;
 use std::time::Duration;
-use sysinfo::{RefreshKind, SystemExt};
+use sysinfo::{MemoryRefreshKind, RefreshKind};
 use util::*;
 
 use libp2p_swarm::{
@@ -36,7 +36,9 @@ use libp2p_swarm_test::SwarmExt;
 #[test]
 fn max_percentage() {
     const CONNECTION_LIMIT: usize = 20;
-    let system_info = sysinfo::System::new_with_specifics(RefreshKind::new().with_memory());
+    let system_info = sysinfo::System::new_with_specifics(
+        RefreshKind::new().with_memory(MemoryRefreshKind::new().with_ram()),
+    );
 
     let mut network = Swarm::new_ephemeral(|_| TestBehaviour {
         connection_limits: Behaviour::with_max_percentage(0.1),
