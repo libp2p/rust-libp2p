@@ -97,6 +97,7 @@ use std::{error, fmt, io, task::Context, task::Poll, time::Duration};
 /// Implementors of this trait should keep in mind that the connection can be closed at any time.
 /// When a connection is closed gracefully, the substreams used by the handler may still
 /// continue reading data until the remote closes its side of the connection.
+#[allow(deprecated)] // TODO: Remove when {In, Out}boundOpenInfo is fully removed.
 pub trait ConnectionHandler: Send + 'static {
     /// A type representing the message(s) a [`NetworkBehaviour`](crate::behaviour::NetworkBehaviour) can send to a [`ConnectionHandler`] via [`ToSwarm::NotifyHandler`](crate::behaviour::ToSwarm::NotifyHandler)
     type FromBehaviour: fmt::Debug + Send + 'static;
@@ -107,8 +108,10 @@ pub trait ConnectionHandler: Send + 'static {
     /// The outbound upgrade for the protocol(s) used by the handler.
     type OutboundProtocol: OutboundUpgradeSend;
     /// The type of additional information returned from `listen_protocol`.
+    #[deprecated]
     type InboundOpenInfo: Send + 'static;
     /// The type of additional information passed to an `OutboundSubstreamRequest`.
+    #[deprecated]
     type OutboundOpenInfo: Send + 'static;
 
     /// The [`InboundUpgrade`](libp2p_core::upgrade::InboundUpgrade) to apply on inbound
