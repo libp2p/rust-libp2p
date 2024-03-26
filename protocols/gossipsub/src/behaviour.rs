@@ -1297,7 +1297,7 @@ where
 
         for id in iwant_msgs {
             // If we have it and the IHAVE count is not above the threshold,
-            // foward the message.
+            // forward the message.
             if let Some((msg, count)) = self
                 .mcache
                 .get_with_iwant_counts(&id, peer_id)
