@@ -30,6 +30,7 @@ members = [
     "misc/rw-stream-sink",
     "misc/server",
     "misc/webrtc-utils",
+    "misc/logging",
     "muxers/mplex",
     "muxers/test-harness",
     "muxers/yamux",
