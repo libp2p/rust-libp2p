@@ -52,7 +52,7 @@ use libp2p_core::upgrade;
 use libp2p_core::upgrade::{NegotiationError, ProtocolError};
 use libp2p_core::Endpoint;
 use libp2p_identity::PeerId;
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::fmt::{Display, Formatter};
 use std::future::Future;
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -153,8 +153,11 @@ where
         SubstreamRequested<THandler::OutboundOpenInfo, THandler::OutboundProtocol>,
     >,
 
-    local_supported_protocols: HashSet<StreamProtocol>,
+    local_supported_protocols:
+        HashMap<AsStrHashEq<<THandler::InboundProtocol as UpgradeInfoSend>::Info>, bool>,
     remote_supported_protocols: HashSet<StreamProtocol>,
+    protocol_buffer: Vec<StreamProtocol>,
+
     idle_timeout: Duration,
     stream_counter: ActiveStreamCounter,
 }
@@ -187,11 +190,17 @@ where
         idle_timeout: Duration,
     ) -> Self {
         let initial_protocols = gather_supported_protocols(&handler);
+        let mut buffer = Vec::new();
+
         if !initial_protocols.is_empty() {
             handler.on_connection_event(ConnectionEvent::LocalProtocolsChange(
-                ProtocolsChange::Added(ProtocolsAdded::from_set(&initial_protocols)),
+                ProtocolsChange::from_initial_protocols(
+                    initial_protocols.keys().map(|e| &e.0),
+                    &mut buffer,
+                ),
             ));
         }
+
         Connection {
             muxing: muxer,
             handler,
@@ -203,6 +212,7 @@ where
             requested_substreams: Default::default(),
             local_supported_protocols: initial_protocols,
             remote_supported_protocols: Default::default(),
+            protocol_buffer: buffer,
             idle_timeout,
             stream_counter: ActiveStreamCounter::default(),
         }
@@ -250,6 +260,7 @@ where
             substream_upgrade_protocol_override,
             local_supported_protocols: supported_protocols,
             remote_supported_protocols,
+            protocol_buffer,
             idle_timeout,
             stream_counter,
             ..
@@ -287,25 +298,24 @@ where
                     ProtocolSupport::Added(protocols),
                 )) => {
                     if let Some(added) =
-                        ProtocolsChange::add(remote_supported_protocols, &protocols)
+                        ProtocolsChange::add(remote_supported_protocols, protocols, protocol_buffer)
                     {
                         handler.on_connection_event(ConnectionEvent::RemoteProtocolsChange(added));
-                        remote_supported_protocols.extend(protocols);
+                        remote_supported_protocols.extend(protocol_buffer.drain(..));
                     }
-
                     continue;
                 }
                 Poll::Ready(ConnectionHandlerEvent::ReportRemoteProtocols(
                     ProtocolSupport::Removed(protocols),
                 )) => {
-                    if let Some(removed) =
-                        ProtocolsChange::remove(remote_supported_protocols, &protocols)
-                    {
+                    if let Some(removed) = ProtocolsChange::remove(
+                        remote_supported_protocols,
+                        protocols,
+                        protocol_buffer,
+                    ) {
                         handler
                             .on_connection_event(ConnectionEvent::RemoteProtocolsChange(removed));
-                        remote_supported_protocols.retain(|p| !protocols.contains(p));
                     }
-
                     continue;
                 }
             }
@@ -431,16 +441,16 @@ where
                 }
             }
 
-            let new_protocols = gather_supported_protocols(handler);
-            let changes = ProtocolsChange::from_full_sets(supported_protocols, &new_protocols);
+            let changes = ProtocolsChange::from_full_sets(
+                supported_protocols,
+                handler.listen_protocol().upgrade().protocol_info(),
+                protocol_buffer,
+            );
 
             if !changes.is_empty() {
                 for change in changes {
                     handler.on_connection_event(ConnectionEvent::LocalProtocolsChange(change));
                 }
-
-                *supported_protocols = new_protocols;
-
                 continue; // Go back to the top, handler can potentially make progress again.
             }
 
@@ -454,12 +464,14 @@ where
     }
 }
 
-fn gather_supported_protocols(handler: &impl ConnectionHandler) -> HashSet<StreamProtocol> {
+fn gather_supported_protocols<C: ConnectionHandler>(
+    handler: &C,
+) -> HashMap<AsStrHashEq<<C::InboundProtocol as UpgradeInfoSend>::Info>, bool> {
     handler
         .listen_protocol()
         .upgrade()
         .protocol_info()
-        .filter_map(|i| StreamProtocol::try_from_owned(i.as_ref().to_owned()).ok())
+        .map(|info| (AsStrHashEq(info), true))
         .collect()
 }
 
@@ -734,6 +746,22 @@ enum Shutdown {
     Later(Delay),
 }
 
+pub(crate) struct AsStrHashEq<T>(pub(crate) T);
+
+impl<T: AsRef<str>> Eq for AsStrHashEq<T> {}
+
+impl<T: AsRef<str>> PartialEq for AsStrHashEq<T> {
+    fn eq(&self, other: &Self) -> bool {
+        self.0.as_ref() == other.0.as_ref()
+    }
+}
+
+impl<T: AsRef<str>> std::hash::Hash for AsStrHashEq<T> {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.0.as_ref().hash(state)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -844,6 +872,39 @@ mod tests {
         );
         assert_eq!(connection.handler.local_removed, vec![vec!["/foo"]]);
     }
+
+    // #[test]
+    // #[ignore]
+    // fn repoll_with_active_protocols() {
+    //     fn run_benchmark(protcol_count: usize, iters: usize) {
+    //         let mut connection = Connection::new(
+    //             StreamMuxerBox::new(PendingStreamMuxer),
+    //             ConfigurableProtocolConnectionHandler::default(),
+    //             None,
+    //             0,
+    //             Duration::ZERO,
+    //         );
+
+    //         let protocols = (0..protcol_count)
+    //             .map(|i| &*format!("/protocol-ffffffff/{}", i).leak())
+    //             .collect::<Vec<_>>();
+    //         connection.handler.listen_on(&protocols);
+
+    //         let now = Instant::now();
+    //         for _ in 0..iters {
+    //             let _ = connection.poll_noop_waker();
+    //         }
+    //         let elapsed = now.elapsed().checked_div(iters as u32).unwrap();
+    //         println!("{protcol_count} {elapsed:?}");
+    //     }
+
+    //     let iters = 3_000_000;
+    //     run_benchmark(2, iters);
+    //     run_benchmark(4, iters);
+    //     run_benchmark(10, iters);
+    //     run_benchmark(20, iters);
+    //     run_benchmark(1000, iters / 10);
+    // }
 
     #[test]
     fn only_propagtes_actual_changes_to_remote_protocols_to_handler() {
