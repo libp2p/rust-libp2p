@@ -347,8 +347,10 @@ where
         }
 
         if !discovered.is_empty() {
-            let event = Event::Discovered(discovered);
-            return Poll::Ready(ToSwarm::GenerateEvent(event));
+            return Poll::Ready(ToSwarm::NewExternalAddrOfPeer {
+                peer_id: discovered[0].0,
+                address: discovered[0].1.clone(),
+            });
         }
         // Emit expired event.
         let now = Instant::now();
