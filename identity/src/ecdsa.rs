@@ -94,6 +94,7 @@ pub struct SecretKey(SigningKey);
 
 impl SecretKey {
     /// Generate a new random ECDSA secret key.
+    #[cfg(feature = "rand")]
     pub fn generate() -> SecretKey {
         SecretKey(SigningKey::random(&mut rand::thread_rng()))
     }
