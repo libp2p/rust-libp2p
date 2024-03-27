@@ -18,7 +18,10 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use std::{error::Error, net::IpAddr};
+use std::{
+    error::Error,
+    net::{IpAddr, SocketAddr},
+};
 
 use crate::behaviour::{GatewayEvent, GatewayRequest};
 use futures::{
@@ -26,6 +29,7 @@ use futures::{
     SinkExt, StreamExt,
 };
 use igd_next::SearchOptions;
+use tracing::{debug, trace, trace_span, warn, Instrument};
 
 pub use crate::behaviour::Behaviour;
 
@@ -87,10 +91,13 @@ pub(crate) fn is_addr_global(addr: IpAddr) -> bool {
 pub(crate) struct Gateway {
     pub(crate) sender: mpsc::Sender<GatewayRequest>,
     pub(crate) receiver: mpsc::Receiver<GatewayEvent>,
+    pub(crate) internal_addr: SocketAddr,
     pub(crate) external_addr: IpAddr,
 }
 
-pub(crate) fn search_gateway() -> oneshot::Receiver<Result<Gateway, Box<dyn Error + Send + Sync>>> {
+pub(crate) fn search_gateway(
+    description: String,
+) -> oneshot::Receiver<Result<Gateway, Box<dyn Error + Send + Sync>>> {
     let (search_result_sender, search_result_receiver) = oneshot::channel();
 
     let (events_sender, mut task_receiver) = mpsc::channel(10);
@@ -113,56 +120,67 @@ pub(crate) fn search_gateway() -> oneshot::Receiver<Result<Gateway, Box<dyn Erro
             }
         };
 
-        // Check if receiver dropped.
-        if search_result_sender
-            .send(Ok(Gateway {
+        let gateway_internal_addr = gateway.addr;
+        let gateway_external_addr = external_addr;
+
+        async move {
+            trace!("Found gateway");
+
+            let found_gateway = Gateway {
                 sender: events_sender,
                 receiver: events_queue,
+                internal_addr: gateway.addr,
                 external_addr,
-            }))
-            .is_err()
-        {
-            return;
-        }
-
-        loop {
-            // The task sender has dropped so we can return.
-            let Some(req) = task_receiver.next().await else {
+            };
+            // Check if receiver dropped.
+            if search_result_sender.send(Ok(found_gateway)).is_err() {
                 return;
-            };
-            let event = match req {
-                GatewayRequest::AddMapping { mapping, duration } => {
-                    let gateway = gateway.clone();
-                    match gateway
-                        .add_port(
-                            mapping.protocol,
-                            mapping.internal_addr.port(),
-                            mapping.internal_addr,
-                            duration,
-                            "rust-libp2p mapping",
-                        )
-                        .await
-                    {
-                        Ok(()) => GatewayEvent::Mapped(mapping),
-                        Err(err) => GatewayEvent::MapFailure(mapping, err.into()),
+            }
+
+            loop {
+                // The task sender has dropped so we can return.
+                let Some(req) = task_receiver.next().await else {
+                    debug!("Command sender has gone => Stopping gateway loop");
+                    return;
+                };
+                let event = match req {
+                    GatewayRequest::AddMapping { mapping, duration } => {
+                        trace!(?mapping, "Asking gateway to add mapping");
+                        match gateway
+                            .add_port(
+                                mapping.protocol,
+                                mapping.internal_addr.port(),
+                                mapping.internal_addr,
+                                duration.as_secs() as u32,
+                                &description,
+                            )
+                            .await
+                        {
+                            Ok(()) => GatewayEvent::Mapped(mapping),
+                            Err(err) => GatewayEvent::MapFailure(mapping, err.into()),
+                        }
                     }
-                }
-                GatewayRequest::RemoveMapping(mapping) => {
-                    let gateway = gateway.clone();
-                    match gateway
-                        .remove_port(mapping.protocol, mapping.internal_addr.port())
-                        .await
-                    {
-                        Ok(()) => GatewayEvent::Removed(mapping),
-                        Err(err) => GatewayEvent::RemovalFailure(mapping, err.into()),
+                    GatewayRequest::RemoveMapping(mapping) => {
+                        trace!(?mapping, "Asking gateway to remove mapping");
+                        match gateway
+                            .remove_port(mapping.protocol, mapping.internal_addr.port())
+                            .await
+                        {
+                            Ok(()) => GatewayEvent::Removed(mapping),
+                            Err(err) => GatewayEvent::RemovalFailure(mapping, err.into()),
+                        }
                     }
-                }
-            };
-            task_sender
-                .send(event)
-                .await
-                .expect("receiver should be available");
+                };
+                if let Err(event) = task_sender
+                    .send(event)
+                    .await {
+                        warn!(?event, "Failed to send gateway event");
+                        return;
+                    }
+            }
         }
+        .instrument(trace_span!("gateway", gw_addr = %gateway_internal_addr, external_gw_addr = %gateway_external_addr))
+        .await
     });
 
     search_result_receiver

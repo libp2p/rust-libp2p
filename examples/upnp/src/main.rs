@@ -31,6 +31,10 @@ async fn main() -> Result<(), Box<dyn Error>> {
         .with_env_filter(EnvFilter::from_default_env())
         .try_init();
 
+    let config = upnp::Config::new()
+        .with_mapping_description("rust-libp2p-upnp-example")
+        .with_mapping_duration(std::time::Duration::from_secs(30));
+
     let mut swarm = libp2p::SwarmBuilder::with_new_identity()
         .with_tokio()
         .with_tcp(
@@ -38,12 +42,13 @@ async fn main() -> Result<(), Box<dyn Error>> {
             noise::Config::new,
             yamux::Config::default,
         )?
-        .with_behaviour(|_| upnp::tokio::Behaviour::default())?
+        .with_behaviour(|_| upnp::tokio::Behaviour::new(config))?
         .build();
 
     // Tell the swarm to listen on all interfaces and a random, OS-assigned
     // port.
-    swarm.listen_on("/ip4/0.0.0.0/tcp/0".parse()?)?;
+    swarm.listen_on("/ip4/0.0.0.0/tcp/5001".parse()?)?;
+    // swarm.listen_on("/ip4/192.168.1.33/tcp/0".parse()?)?;
 
     // Dial the peer identified by the multi-address given as the second
     // command-line argument, if any.
@@ -56,8 +61,11 @@ async fn main() -> Result<(), Box<dyn Error>> {
     loop {
         match swarm.select_next_some().await {
             SwarmEvent::NewListenAddr { address, .. } => println!("Listening on {address:?}"),
-            SwarmEvent::Behaviour(upnp::Event::NewExternalAddr(addr)) => {
-                println!("New external address: {addr}");
+            SwarmEvent::ExternalAddrConfirmed { address } => {
+                println!("New external address: {address}");
+            }
+            SwarmEvent::ExternalAddrExpired { address } => {
+                println!("Expired external address: {address}");
             }
             SwarmEvent::Behaviour(upnp::Event::GatewayNotFound) => {
                 println!("Gateway does not support UPnP");

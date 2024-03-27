@@ -31,7 +31,9 @@
 #[cfg(feature = "tokio")]
 mod behaviour;
 #[cfg(feature = "tokio")]
+mod mapping_list;
+#[cfg(feature = "tokio")]
 pub mod tokio;
 
 #[cfg(feature = "tokio")]
-pub use behaviour::Event;
+pub use behaviour::{Config, Event};
