@@ -5,7 +5,6 @@ use libp2p_identity::Keypair;
 use libp2p_identity::PeerId;
 use libp2p_identity::SigningError;
 use quick_protobuf::{BytesReader, Writer};
-use std::convert::TryInto;
 
 const PAYLOAD_TYPE: &str = "/libp2p/routing-state-record";
 const DOMAIN_SEP: &str = "libp2p-routing-state";

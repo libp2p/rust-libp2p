@@ -18,10 +18,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use std::{
-    marker::Unpin,
-    time::{Duration, Instant},
-};
+use std::time::{Duration, Instant};
 
 /// Simple wrapper for the different type of timers
 #[derive(Debug)]
