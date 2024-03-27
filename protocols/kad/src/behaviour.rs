@@ -2502,14 +2502,14 @@ where
         // Run the periodic provider announcement job.
         if let Some(mut job) = self.add_provider_job.take() {
             let num = usize::min(JOBS_MAX_NEW_QUERIES, jobs_query_capacity);
-            for _ in 0..num {
+            for i in 0..num {
                 if let Poll::Ready(r) = job.poll(cx, &mut self.store, now) {
                     self.start_add_provider(r.key, AddProviderContext::Republish)
                 } else {
+                    jobs_query_capacity -= i;
                     break;
                 }
             }
-            jobs_query_capacity -= num;
             self.add_provider_job = Some(job);
         }
 
