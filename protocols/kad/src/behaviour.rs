@@ -628,9 +628,7 @@ where
                     }
                     kbucket::InsertResult::Pending { disconnected } => {
                         self.queued_events.push_back(ToSwarm::Dial {
-                            opts: DialOpts::peer_id(disconnected.into_preimage())
-                                .condition(dial_opts::PeerCondition::NotDialing)
-                                .build(),
+                            opts: DialOpts::peer_id(disconnected.into_preimage()).build(),
                         });
                         RoutingUpdate::Pending
                     }
@@ -1379,7 +1377,6 @@ where
                                 if !self.connected_peers.contains(disconnected.preimage()) {
                                     self.queued_events.push_back(ToSwarm::Dial {
                                         opts: DialOpts::peer_id(disconnected.into_preimage())
-                                            .condition(dial_opts::PeerCondition::NotDialing)
                                             .build(),
                                     })
                                 }
@@ -2599,9 +2596,7 @@ where
                         } else if &peer_id != self.kbuckets.local_key().preimage() {
                             query.inner.pending_rpcs.push((peer_id, event));
                             self.queued_events.push_back(ToSwarm::Dial {
-                                opts: DialOpts::peer_id(peer_id)
-                                    .condition(dial_opts::PeerCondition::NotDialing)
-                                    .build(),
+                                opts: DialOpts::peer_id(peer_id).build(),
                             });
                         }
                     }
