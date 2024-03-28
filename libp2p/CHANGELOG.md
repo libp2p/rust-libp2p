@@ -1,3 +1,9 @@
+## 0.54.0 -- unreleased
+
+- Update individual crates.
+    - Update to [`libp2p-kad` `v0.46.0`](protocols/kad/CHANGELOG.md#0460).
+
+
 ## 0.53.2
 
 - Allow `SwarmBuilder::with_bandwidth_metrics` after `SwarmBuilder::with_websocket`.
