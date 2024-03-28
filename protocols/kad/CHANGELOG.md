@@ -10,6 +10,8 @@
 - Make it mandatory to provide protocol names when creating a `kad::Config`.
   Deprecate `kad::Config::default()`, replaced by `kad::Config::new(StreamProtocol)`.
   See [PR 5122](https://github.com/libp2p/rust-libp2p/pull/5122).
+- Compute `jobs_query_capacity` accurately.
+  See [PR 5148](https://github.com/libp2p/rust-libp2p/pull/5148).
 
 ## 0.45.3
 
