@@ -1180,16 +1180,12 @@ where
         target: &kbucket::Key<T>,
         source: &PeerId,
     ) -> Vec<KadPeer> {
-        if target == self.kbuckets.local_key() {
-            Vec::new()
-        } else {
-            self.kbuckets
-                .closest(target)
-                .filter(|e| e.node.key.preimage() != source)
-                .take(self.queries.config().replication_factor.get())
-                .map(KadPeer::from)
-                .collect()
-        }
+        self.kbuckets
+            .closest(target)
+            .filter(|e| e.node.key.preimage() != source)
+            .take(self.queries.config().replication_factor.get())
+            .map(KadPeer::from)
+            .collect()
     }
 
     /// Collects all peers who are known to be providers of the value for a given `Multihash`.
