@@ -1,4 +1,3 @@
-<<<<<<< HEAD
 ## 0.46.0 -- unreleased
 
 - Changed `FIND_NODE` response: now includes a list of closest peers when querying the recipient peer ID. Previously, this request yielded an empty response.
@@ -15,12 +14,6 @@
   See [PR 5122](https://github.com/libp2p/rust-libp2p/pull/5122).
 - Compute `jobs_query_capacity` accurately.
   See [PR 5148](https://github.com/libp2p/rust-libp2p/pull/5148).
-=======
-## 0.46.0 - unreleased
-
-- Update to DHT republish interval and expiration time defaults to 22h and 48h respectively, rationale in [libp2p/specs#451](https://github.com/libp2p/specs/pull/451)
-  See [PR 3230](https://github.com/libp2p/rust-libp2p/pull/3230)
->>>>>>> 47273a4e (added changelog entry)
 
 ## 0.45.3
 
