@@ -1,3 +1,8 @@
+## 0.46.0 -- unreleased
+
+- Changed `FIND_NODE` response: now includes a list of closest peers when querying the recipient peer ID. Previously, this request yielded an empty response.
+  See [PR 5270](https://github.com/libp2p/rust-libp2p/pull/5270)
+
 ## 0.45.4
 
 - Add periodic and automatic bootstrap.
