@@ -3,6 +3,8 @@
 - Update individual crates.
     - Update to [`libp2p-kad` `v0.46.0`](protocols/kad/CHANGELOG.md#0460).
 
+- Raise MSRV to 1.73.
+  See [PR 5266](https://github.com/libp2p/rust-libp2p/pull/5266).
 
 ## 0.53.2
 

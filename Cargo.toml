@@ -68,7 +68,7 @@ members = [
 resolver = "2"
 
 [workspace.package]
-rust-version = "1.73.0"
+rust-version = "1.75.0"
 
 [workspace.dependencies]
 asynchronous-codec = { version = "0.7.0" }
