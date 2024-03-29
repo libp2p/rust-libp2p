@@ -1,7 +1,7 @@
 ## 0.2.2
 - Fix a panic caused when `upnp::Gateway` is dropped and its events queue receiver is no longer
 available.
-  See [PR XXXX](https://github.com/libp2p/rust-libp2p/pull/XXXX).
+  See [PR 5273](https://github.com/libp2p/rust-libp2p/pull/5273).
 
 ## 0.2.1
 - Fix a panic caused when dropping `upnp::Behaviour` such as when used together with `Toggle`.
