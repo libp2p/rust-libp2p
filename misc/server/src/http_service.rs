@@ -18,16 +18,14 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use hyper::body::Incoming;
-use hyper::http::StatusCode;
-use hyper::server::conn::http1::Builder;
-use hyper::service::Service;
-use hyper::{Method, Request, Response};
+use axum::extract::State;
+use axum::http::StatusCode;
+use axum::response::Response;
+use axum::routing::get;
+use axum::Router;
 use prometheus_client::encoding::text::encode;
 use prometheus_client::registry::Registry;
-use std::future::Future;
 use std::net::SocketAddr;
-use std::pin::Pin;
 use std::sync::{Arc, Mutex};
 use tokio::net::TcpListener;
 
@@ -38,21 +36,26 @@ pub(crate) async fn metrics_server(
 ) -> Result<(), std::io::Error> {
     // Serve on localhost.
     let addr: SocketAddr = ([0, 0, 0, 0], 8888).into();
-    let tcp_listener_stream = TcpListener::bind(addr).await?;
-    let local_addr = tcp_listener_stream.local_addr()?;
     let service = MetricService::new(registry, metrics_path.clone());
+    let server = Router::new()
+        .route(&metrics_path, get(respond_with_metrics))
+        .fallback(respond_with_404_not_found)
+        .with_state(service);
+    let tcp_listener = TcpListener::bind(addr).await?;
+    let local_addr = tcp_listener.local_addr()?;
     tracing::info!(metrics_server=%format!("http://{}{}", local_addr, metrics_path));
-    loop {
-        let service = service.clone();
-        let (connection, _) = tcp_listener_stream.accept().await?;
-        tokio::spawn(async move {
-            let server =
-                Builder::new().serve_connection(hyper_util::rt::TokioIo::new(connection), service);
-            if let Err(e) = server.await {
-                tracing::error!("server error: {}", e);
-            }
-        });
-    }
+    axum::serve(tcp_listener, server.into_make_service())
+        .await
+        .unwrap();
+    Ok(())
+}
+
+async fn respond_with_metrics(state: State<MetricService>) -> Response<String> {
+    state.respond_with_metrics()
+}
+
+async fn respond_with_404_not_found(state: State<MetricService>) -> Response<String> {
+    state.respond_with_404_not_found()
 }
 
 #[derive(Clone)]
@@ -78,7 +81,7 @@ impl MetricService {
         let mut response: Response<String> = Response::default();
 
         response.headers_mut().insert(
-            hyper::header::CONTENT_TYPE,
+            axum::http::header::CONTENT_TYPE,
             METRICS_CONTENT_TYPE.try_into().unwrap(),
         );
 
@@ -99,48 +102,3 @@ impl MetricService {
             .unwrap()
     }
 }
-
-impl Service<Request<Incoming>> for MetricService {
-    type Response = Response<String>;
-    type Error = hyper::Error;
-    type Future = Pin<Box<dyn Future<Output = Result<Self::Response, Self::Error>> + Send>>;
-
-    fn call(&self, req: Request<Incoming>) -> Self::Future {
-        let req_path = req.uri().path();
-        let req_method = req.method();
-        let resp = if (req_method == Method::GET) && (req_path == self.metrics_path) {
-            // Encode and serve metrics from registry.
-            self.respond_with_metrics()
-        } else {
-            self.respond_with_404_not_found()
-        };
-        Box::pin(async { Ok(resp) })
-    }
-}
-
-// pub(crate) struct MakeMetricService {
-//     reg: SharedRegistry,
-//     metrics_path: String,
-// }
-
-// impl MakeMetricService {
-//     pub(crate) fn new(registry: Registry, metrics_path: String) -> MakeMetricService {
-//         MakeMetricService {
-//             reg: Arc::new(Mutex::new(registry)),
-//             metrics_path,
-//         }
-//     }
-// }
-
-// impl<T> Service<T> for MakeMetricService {
-//     type Response = MetricService;
-//     type Error = hyper::Error;
-//     type Future = Pin<Box<dyn Future<Output = Result<Self::Response, Self::Error>> + Send>>;
-
-//     fn call(&self, _: T) -> Self::Future {
-//         let reg = self.reg.clone();
-//         let metrics_path = self.metrics_path.clone();
-//         let fut = async move { Ok(MetricService { reg, metrics_path }) };
-//         Box::pin(fut)
-//     }
-// }

@@ -3184,12 +3184,11 @@ dependencies = [
 name = "libp2p-server"
 version = "0.12.7"
 dependencies = [
+ "axum 0.7.4",
  "base64 0.21.7",
  "clap",
  "futures",
  "futures-timer",
- "hyper 1.1.0",
- "hyper-util",
  "libp2p",
  "prometheus-client",
  "serde",
@@ -3662,9 +3661,8 @@ dependencies = [
 name = "metrics-example"
 version = "0.1.0"
 dependencies = [
+ "axum 0.7.4",
  "futures",
- "hyper 1.1.0",
- "hyper-util",
  "libp2p",
  "opentelemetry",
  "opentelemetry-otlp",
