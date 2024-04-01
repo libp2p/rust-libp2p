@@ -17,9 +17,9 @@ futures = "0.3.30"
 libp2p-core = { workspace = true }
 libp2p-identity = { workspace = true }
 parking_lot = "0.12.0"
-pin-project-lite = "0.2.13"
+pin-project-lite = "0.2.14"
 rw-stream-sink = { workspace = true }
-soketto = "0.7.0"
+soketto = "0.8.0"
 tracing = "0.1.37"
 url = "2.5"
 webpki-roots = "0.25"

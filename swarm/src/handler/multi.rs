@@ -35,7 +35,7 @@ use std::{
     error,
     fmt::{self, Debug},
     hash::Hash,
-    iter::{self, FromIterator},
+    iter,
     task::{Context, Poll},
     time::Duration,
 };

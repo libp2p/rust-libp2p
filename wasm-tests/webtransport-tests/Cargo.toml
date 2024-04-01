@@ -18,9 +18,9 @@ libp2p-webtransport-websys = { workspace = true }
 multiaddr = { workspace = true }
 multihash = { workspace = true }
 wasm-bindgen = "0.2.90"
-wasm-bindgen-futures = "0.4.41"
-wasm-bindgen-test = "0.3.41"
-web-sys = { version = "0.3.68", features = ["Response", "Window"] }
+wasm-bindgen-futures = "0.4.42"
+wasm-bindgen-test = "0.3.42"
+web-sys = { version = "0.3.69", features = ["Response", "Window"] }
 
 [lints]
 workspace = true

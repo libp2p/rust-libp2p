@@ -36,11 +36,7 @@ pub use provider::async_io;
 #[cfg(feature = "tokio")]
 pub use provider::tokio;
 
-use futures::{
-    future::{self, Ready},
-    prelude::*,
-    stream::SelectAll,
-};
+use futures::{future::Ready, prelude::*, stream::SelectAll};
 use futures_timer::Delay;
 use if_watch::IfEvent;
 use libp2p_core::{

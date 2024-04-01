@@ -37,6 +37,7 @@
 
 mod addresses;
 mod behaviour;
+mod bootstrap;
 mod handler;
 mod jobs;
 mod kbucket;
