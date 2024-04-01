@@ -605,7 +605,7 @@
 ## 0.34.0 [2022-02-22]
 
 - Rename `ProtocolsHandler` to `ConnectionHandler`. Upgrade should be as simple as renaming all
-  occurences of `ProtocolsHandler` to `ConnectionHandler` with your favorite text manipulation tool
+  occurrences of `ProtocolsHandler` to `ConnectionHandler` with your favorite text manipulation tool
   across your codebase. See [PR 2527].
 
 - Fold `libp2p-core`'s `Network` into `Swarm`. See [PR 2492].
