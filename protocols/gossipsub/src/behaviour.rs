@@ -528,7 +528,7 @@ where
             return Err(SubscriptionError::NotAllowed);
         }
 
-        if self.mesh.get(&topic_hash).is_some() {
+        if self.mesh.contains_key(&topic_hash) {
             tracing::debug!(%topic, "Topic is already in the mesh");
             return Ok(false);
         }
@@ -554,7 +554,7 @@ where
         tracing::debug!(%topic, "Unsubscribing from topic");
         let topic_hash = topic.hash();
 
-        if self.mesh.get(&topic_hash).is_none() {
+        if !self.mesh.contains_key(&topic_hash) {
             tracing::debug!(topic=%topic_hash, "Already unsubscribed from topic");
             // we are not subscribed
             return Ok(false);
