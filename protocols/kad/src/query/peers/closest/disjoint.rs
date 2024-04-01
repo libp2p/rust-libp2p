@@ -19,9 +19,6 @@
 // DEALINGS IN THE SOFTWARE.
 
 use super::*;
-use crate::kbucket::{Key, KeyBytes};
-use instant::Instant;
-use libp2p_identity::PeerId;
 use std::{
     collections::HashMap,
     iter::{Cycle, Map, Peekable},
@@ -438,7 +435,7 @@ impl<I: Iterator<Item = Key<PeerId>>> Iterator for ResultIter<I> {
 mod tests {
     use super::*;
 
-    use crate::{K_VALUE, SHA_256_MH};
+    use crate::SHA_256_MH;
     use libp2p_core::multihash::Multihash;
     use quickcheck::*;
     use std::collections::HashSet;
@@ -599,20 +596,6 @@ mod tests {
                 num_results: NumResults::arbitrary(g).0,
                 peer_timeout: Duration::from_secs(1),
             }
-        }
-    }
-
-    #[derive(Debug, Clone)]
-    struct PeerVec(Vec<Key<PeerId>>);
-
-    impl Arbitrary for PeerVec {
-        fn arbitrary(g: &mut Gen) -> Self {
-            PeerVec(
-                (0..g.gen_range(1..60u8))
-                    .map(|_| ArbitraryPeerId::arbitrary(g).0)
-                    .map(Key::from)
-                    .collect(),
-            )
         }
     }
 

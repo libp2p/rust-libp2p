@@ -294,7 +294,7 @@ where
 mod tests {
     use crate::quicksink::{make_sink, Action};
     use async_std::{io, task};
-    use futures::{channel::mpsc, prelude::*, stream};
+    use futures::{channel::mpsc, prelude::*};
 
     #[test]
     fn smoke_test() {

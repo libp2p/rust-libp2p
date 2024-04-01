@@ -1,5 +1,5 @@
 # syntax=docker/dockerfile:1.5-labs
-FROM rust:1.73.0 as builder
+FROM rust:1.75.0 as builder
 
 # Run with access to the target cache to speed up builds
 WORKDIR /workspace
