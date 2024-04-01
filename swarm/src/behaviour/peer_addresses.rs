@@ -101,7 +101,7 @@ mod tests {
     use super::*;
     use std::io;
 
-    use crate::{ConnectionId, DialError};
+    use crate::ConnectionId;
     use libp2p_core::{
         multiaddr::Protocol,
         transport::{memory::MemoryTransportError, TransportError},

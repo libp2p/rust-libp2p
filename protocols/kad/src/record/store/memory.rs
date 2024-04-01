@@ -21,9 +21,7 @@
 use super::*;
 
 use crate::kbucket;
-use libp2p_identity::PeerId;
 use smallvec::SmallVec;
-use std::borrow::Cow;
 use std::collections::{hash_map, hash_set, HashMap, HashSet};
 use std::iter;
 
@@ -217,7 +215,6 @@ impl RecordStore for MemoryStore {
 mod tests {
     use super::*;
     use crate::SHA_256_MH;
-    use libp2p_core::multihash::Multihash;
     use quickcheck::*;
     use rand::Rng;
 
