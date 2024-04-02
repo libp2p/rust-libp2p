@@ -9,7 +9,7 @@ license = "MIT"
 release = false
 
 [dependencies]
-tokio = { version = "1.36", features = ["rt-multi-thread", "macros"] }
+tokio = { version = "1.37", features = ["rt-multi-thread", "macros"] }
 async-trait = "0.1"
 clap = { version = "4.5.4", features = ["derive"] }
 env_logger = "0.10"
