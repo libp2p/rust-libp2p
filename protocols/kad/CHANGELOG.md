@@ -6,9 +6,8 @@
   See [PR 3230](https://github.com/libp2p/rust-libp2p/pull/3230)
 - Use default dial conditions more consistently.
   See [PR 4957](https://github.com/libp2p/rust-libp2p/pull/4957)
-
-## 0.45.4
-
+- QueryClose progress whenever closer in range, instead of having to be the closest.
+  See [PR 4934](https://github.com/libp2p/rust-libp2p/pull/4934).
 - Add periodic and automatic bootstrap.
   See [PR 4838](https://github.com/libp2p/rust-libp2p/pull/4838).
 - Make it mandatory to provide protocol names when creating a `kad::Config`.
