@@ -2570,7 +2570,7 @@ dependencies = [
 name = "keygen"
 version = "0.1.0"
 dependencies = [
- "base64 0.21.7",
+ "base64 0.22.0",
  "clap",
  "libp2p-core",
  "libp2p-identity",
@@ -2814,7 +2814,7 @@ version = "0.46.1"
 dependencies = [
  "async-std",
  "asynchronous-codec",
- "base64 0.21.7",
+ "base64 0.22.0",
  "byteorder",
  "bytes",
  "either",
@@ -2874,7 +2874,7 @@ name = "libp2p-identity"
 version = "0.2.8"
 dependencies = [
  "asn1_der",
- "base64 0.21.7",
+ "base64 0.22.0",
  "bs58",
  "criterion",
  "ed25519-dalek",
@@ -3268,7 +3268,7 @@ dependencies = [
 name = "libp2p-server"
 version = "0.12.7"
 dependencies = [
- "base64 0.21.7",
+ "base64 0.22.0",
  "clap",
  "futures",
  "futures-timer",
