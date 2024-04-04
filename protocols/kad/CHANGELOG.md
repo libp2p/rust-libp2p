@@ -4,6 +4,8 @@
   See [PR 5270](https://github.com/libp2p/rust-libp2p/pull/5270)
 - Update to DHT republish interval and expiration time defaults to 22h and 48h respectively, rationale in [libp2p/specs#451](https://github.com/libp2p/specs/pull/451)
   See [PR 3230](https://github.com/libp2p/rust-libp2p/pull/3230)
+- Use default dial conditions more consistently.
+  See [PR 4957](https://github.com/libp2p/rust-libp2p/pull/4957)
 - QueryClose progress whenever closer in range, instead of having to be the closest.
   See [PR 4934](https://github.com/libp2p/rust-libp2p/pull/4934).
 - Add periodic and automatic bootstrap.
@@ -67,6 +69,7 @@
 -->
 
 ## 0.44.5
+
 - Migrate to `quick-protobuf-codec` crate for codec logic.
   See [PR 4501].
 
@@ -192,7 +195,7 @@
   - Instead of a single event `OutboundQueryCompleted`, there are now multiple events emitted, allowing the user to process them as they come in (via the new `OutboundQueryProgressed`). See `ProgressStep` to identify the final `OutboundQueryProgressed` of a single query.
   - To finish a query early, i.e. before the final `OutboundQueryProgressed` of the query, a caller needs to call `query.finish()`.
   - There is no more automatic caching of records. The user has to manually call `put_record_to` on the `QueryInfo::GetRecord.cache_candidates` to cache a record to a close peer that did not return the record on the foregone query.
-  See [PR 2712].
+    See [PR 2712].
 
 [PR 3085]: https://github.com/libp2p/rust-libp2p/pull/3085
 [PR 3011]: https://github.com/libp2p/rust-libp2p/pull/3011
@@ -271,7 +274,7 @@
 
 - Require owned key in `get_record()` method (see [PR 2477]).
 
-- Merge NetworkBehaviour's inject_\* paired methods (see PR 2445).
+- Merge NetworkBehaviour's inject\_\* paired methods (see PR 2445).
 
 [PR 2477]: https://github.com/libp2p/rust-libp2p/pull/2477
 [PR 2445]: https://github.com/libp2p/rust-libp2p/pull/2445
