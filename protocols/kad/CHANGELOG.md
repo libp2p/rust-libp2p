@@ -27,6 +27,8 @@
   trigger when the routing table is updated and we have less that `K_VALUE` peers in it,
   trigger when a new listen address is discovered and we have no connected peers.
   See [PR 5474](https://github.com/libp2p/rust-libp2p/pull/5474).
+- Introduce `AsyncBehaviour`, a wrapper of `Behaviour` allowing to easily track Kademlia queries.
+  See [PR 5294](https://github.com/libp2p/rust-libp2p/pull/5294).
 
 ## 0.45.3
 

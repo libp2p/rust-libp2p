@@ -393,6 +393,43 @@ impl<TOutEvent, THandlerIn> ToSwarm<TOutEvent, THandlerIn> {
             },
         }
     }
+
+    /// Map the event the swarm will return to an optional one.
+    pub fn map_out_opt<E>(
+        self,
+        f: impl FnOnce(TOutEvent) -> Option<E>,
+    ) -> Option<ToSwarm<E, THandlerIn>> {
+        match self {
+            ToSwarm::GenerateEvent(e) => f(e).map(ToSwarm::GenerateEvent),
+            ToSwarm::Dial { opts } => Some(ToSwarm::Dial { opts }),
+            ToSwarm::ListenOn { opts } => Some(ToSwarm::ListenOn { opts }),
+            ToSwarm::RemoveListener { id } => Some(ToSwarm::RemoveListener { id }),
+            ToSwarm::NotifyHandler {
+                peer_id,
+                handler,
+                event,
+            } => Some(ToSwarm::NotifyHandler {
+                peer_id,
+                handler,
+                event,
+            }),
+            ToSwarm::NewExternalAddrCandidate(addr) => {
+                Some(ToSwarm::NewExternalAddrCandidate(addr))
+            }
+            ToSwarm::ExternalAddrConfirmed(addr) => Some(ToSwarm::ExternalAddrConfirmed(addr)),
+            ToSwarm::ExternalAddrExpired(addr) => Some(ToSwarm::ExternalAddrExpired(addr)),
+            ToSwarm::CloseConnection {
+                peer_id,
+                connection,
+            } => Some(ToSwarm::CloseConnection {
+                peer_id,
+                connection,
+            }),
+            ToSwarm::NewExternalAddrOfPeer { peer_id, address } => {
+                Some(ToSwarm::NewExternalAddrOfPeer { peer_id, address })
+            }
+        }
+    }
 }
 
 /// The options w.r.t. which connection handler to notify of an event.

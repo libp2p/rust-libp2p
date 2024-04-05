@@ -20,6 +20,8 @@
   The address is broadcast to all behaviours via `FromSwarm::NewExternalAddrOfPeer`.
   Protocols that want to collect these addresses can use the new `PeerAddresses` utility.
   See [PR 4371](https://github.com/libp2p/rust-libp2p/pull/4371).
+- Add utility function `map_out_opt` on `ToSwarm`.
+  See [PR 5294](https://github.com/libp2p/rust-libp2p/pull/5294). 
 
 ## 0.44.1
 
