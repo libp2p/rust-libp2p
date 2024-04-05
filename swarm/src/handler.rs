@@ -404,7 +404,7 @@ impl<'a> ProtocolsChange<'a> {
     ) -> SmallVec<[Self; 2]> {
         buffer.clear();
 
-	// Initially, set the boolean for all protocols to `false`, meaning "not visited".
+        // Initially, set the boolean for all protocols to `false`, meaning "not visited".
         for v in existing_protocols.values_mut() {
             *v = false;
         }
@@ -415,7 +415,7 @@ impl<'a> ProtocolsChange<'a> {
                 .entry(AsStrHashEq(new_protocol))
                 .and_modify(|v| *v = true) // Mark protocol as visited (i.e. we still support it)
                 .or_insert_with_key(|k| {
-		    // Encountered a previously unsupported protocol, remember it in `buffer`.
+                    // Encountered a previously unsupported protocol, remember it in `buffer`.
                     buffer.extend(StreamProtocol::try_from_owned(k.0.as_ref().to_owned()).ok());
                     true
                 });
@@ -427,17 +427,17 @@ impl<'a> ProtocolsChange<'a> {
         }
 
         let num_new_protocols = buffer.len();
-	// Drain all protocols that we haven't visited.
-	// For existing protocols that are not in `new_protocols`, the boolean will be false, meaning we need to remove it.
-        existing_protocols.retain(|p, is_supported| {
+        // Drain all protocols that we haven't visited.
+        // For existing protocols that are not in `new_protocols`, the boolean will be false, meaning we need to remove it.
+        existing_protocols.retain(|p, &mut is_supported| {
             if !is_supported {
                 buffer.extend(StreamProtocol::try_from_owned(p.0.as_ref().to_owned()).ok());
             }
-            
+
             is_supported
         });
 
-        let (added, removed) = buffer.split_at(added_count);
+        let (added, removed) = buffer.split_at(num_new_protocols);
         let mut changes = SmallVec::new();
         if !added.is_empty() {
             changes.push(ProtocolsChange::Added(ProtocolsAdded {
@@ -737,73 +737,159 @@ mod test {
             .collect()
     }
 
-    #[test]
-    fn test_protocol_remove() {
-        let cases = [
-            ["a b c", "a b", "c", "a b"],
-            ["a b c", "a b c", "", "a b c"],
-            ["a b c", "a b c d", "", "a b c"],
-            ["a b c", "d", "a b c", ""],
-            ["", "d", "", ""],
-        ]
-        .map(|arr| arr.map(preprocess));
-
-        for (i, [mut existing, to_remove, reminig, removed]) in cases.into_iter().enumerate() {
-            let mut buffer = Vec::new();
-
-            let change = ProtocolsChange::remove(&mut existing, to_remove, &mut buffer)
-                .into_iter()
-                .flat_map(|c| match c {
-                    ProtocolsChange::Added(_) => panic!("unexpected added"),
-                    ProtocolsChange::Removed(r) => r.cloned(),
-                })
-                .collect::<HashSet<_>>();
-
-            assert_eq!(existing, reminig, "{i}");
-            assert_eq!(change, removed, "{i}");
-        }
+    fn test_remove(
+        existing: &mut HashSet<StreamProtocol>,
+        to_remove: HashSet<StreamProtocol>,
+    ) -> HashSet<StreamProtocol> {
+        ProtocolsChange::remove(existing, to_remove, &mut Vec::new())
+            .into_iter()
+            .flat_map(|c| match c {
+                ProtocolsChange::Added(_) => panic!("unexpected added"),
+                ProtocolsChange::Removed(r) => r.cloned(),
+            })
+            .collect::<HashSet<_>>()
     }
 
     #[test]
-    fn test_from_full_sets() {
-        let cases = [
-            ["a b c", "a b", "", "c"],
-            ["a b", "a b c", "c", ""],
-            ["a b", "b c", "c", "a"],
-            ["a b", "c d", "c d", "a b"],
-            ["", "", "", ""],
-        ]
-        .map(|arr| arr.map(preprocess));
+    fn test_protocol_remove_subset() {
+        let mut existing = preprocess("a b c");
+        let to_remove = preprocess("a b");
 
-        for (i, [existing, new, added, removed]) in cases.into_iter().enumerate() {
-            let mut buffer = Vec::new();
-            let mut existing = existing
-                .iter()
-                .map(|p| (AsStrHashEq(p.as_ref()), true))
-                .collect::<HashMap<_, _>>();
+        let change = test_remove(&mut existing, to_remove);
 
-            let changes = ProtocolsChange::from_full_sets(
-                &mut existing,
-                new.iter().map(AsRef::as_ref),
-                &mut buffer,
-            );
+        assert_eq!(existing, preprocess("c"));
+        assert_eq!(change, preprocess("a b"));
+    }
 
-            let mut added_changes = HashSet::new();
-            let mut removed_changes = HashSet::new();
+    #[test]
+    fn test_protocol_remove_all() {
+        let mut existing = preprocess("a b c");
+        let to_remove = preprocess("a b c");
 
-            for change in changes {
-                match change {
-                    ProtocolsChange::Added(a) => {
-                        added_changes.extend(a.cloned());
-                    }
-                    ProtocolsChange::Removed(r) => {
-                        removed_changes.extend(r.cloned());
-                    }
+        let change = test_remove(&mut existing, to_remove);
+
+        assert_eq!(existing, preprocess(""));
+        assert_eq!(change, preprocess("a b c"));
+    }
+
+    #[test]
+    fn test_protocol_remove_superset() {
+        let mut existing = preprocess("a b c");
+        let to_remove = preprocess("a b c d");
+
+        let change = test_remove(&mut existing, to_remove);
+
+        assert_eq!(existing, preprocess(""));
+        assert_eq!(change, preprocess("a b c"));
+    }
+
+    #[test]
+    fn test_protocol_remove_none() {
+        let mut existing = preprocess("a b c");
+        let to_remove = preprocess("d");
+
+        let change = test_remove(&mut existing, to_remove);
+
+        assert_eq!(existing, preprocess("a b c"));
+        assert_eq!(change, preprocess(""));
+    }
+
+    #[test]
+    fn test_protocol_remove_none_from_empty() {
+        let mut existing = preprocess("");
+        let to_remove = preprocess("d");
+
+        let change = test_remove(&mut existing, to_remove);
+
+        assert_eq!(existing, preprocess(""));
+        assert_eq!(change, preprocess(""));
+    }
+
+    fn test_from_full_sets(
+        existing: HashSet<StreamProtocol>,
+        new: HashSet<StreamProtocol>,
+    ) -> [HashSet<StreamProtocol>; 2] {
+        let mut buffer = Vec::new();
+        let mut existing = existing
+            .iter()
+            .map(|p| (AsStrHashEq(p.as_ref()), true))
+            .collect::<HashMap<_, _>>();
+
+        let changes = ProtocolsChange::from_full_sets(
+            &mut existing,
+            new.iter().map(AsRef::as_ref),
+            &mut buffer,
+        );
+
+        let mut added_changes = HashSet::new();
+        let mut removed_changes = HashSet::new();
+
+        for change in changes {
+            match change {
+                ProtocolsChange::Added(a) => {
+                    added_changes.extend(a.cloned());
+                }
+                ProtocolsChange::Removed(r) => {
+                    removed_changes.extend(r.cloned());
                 }
             }
-
-            assert_eq!(added_changes, added, "{i}");
-            assert_eq!(removed_changes, removed, "{i}");
         }
+
+        [removed_changes, added_changes]
+    }
+
+    #[test]
+    fn test_from_full_stes_subset() {
+        let existing = preprocess("a b c");
+        let new = preprocess("a b");
+
+        let [removed_changes, added_changes] = test_from_full_sets(existing, new);
+
+        assert_eq!(added_changes, preprocess(""));
+        assert_eq!(removed_changes, preprocess("c"));
+    }
+
+    #[test]
+    fn test_from_full_sets_superset() {
+        let existing = preprocess("a b");
+        let new = preprocess("a b c");
+
+        let [removed_changes, added_changes] = test_from_full_sets(existing, new);
+
+        assert_eq!(added_changes, preprocess("c"));
+        assert_eq!(removed_changes, preprocess(""));
+    }
+
+    #[test]
+    fn test_from_full_sets_intersection() {
+        let existing = preprocess("a b c");
+        let new = preprocess("b c d");
+
+        let [removed_changes, added_changes] = test_from_full_sets(existing, new);
+
+        assert_eq!(added_changes, preprocess("d"));
+        assert_eq!(removed_changes, preprocess("a"));
+    }
+
+    #[test]
+    fn test_from_full_sets_disjoint() {
+        let existing = preprocess("a b c");
+        let new = preprocess("d e f");
+
+        let [removed_changes, added_changes] = test_from_full_sets(existing, new);
+
+        assert_eq!(added_changes, preprocess("d e f"));
+        assert_eq!(removed_changes, preprocess("a b c"));
+    }
+
+    #[test]
+    fn test_from_full_sets_empty() {
+        let existing = preprocess("");
+        let new = preprocess("");
+
+        let [removed_changes, added_changes] = test_from_full_sets(existing, new);
+
+        assert_eq!(added_changes, preprocess(""));
+        assert_eq!(removed_changes, preprocess(""));
     }
 }
