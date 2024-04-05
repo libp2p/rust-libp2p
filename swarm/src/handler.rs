@@ -415,6 +415,7 @@ impl<'a> ProtocolsChange<'a> {
                 .entry(AsStrHashEq(new_protocol))
                 .and_modify(|v| *v = true) // Mark protocol as visited (i.e. we still support it)
                 .or_insert_with_key(|k| {
+		    // Encountered a previously unsupported protocol, remember it in `buffer`.
                     buffer.extend(StreamProtocol::try_from_owned(k.0.as_ref().to_owned()).ok());
                     true
                 });
