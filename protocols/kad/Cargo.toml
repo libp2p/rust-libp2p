@@ -3,7 +3,7 @@ name = "libp2p-kad"
 edition = "2021"
 rust-version = { workspace = true }
 description = "Kademlia protocol for libp2p"
-version = "0.45.4"
+version = "0.46.0"
 authors = ["Parity Technologies <admin@parity.io>"]
 license = "MIT"
 repository = "https://github.com/libp2p/rust-libp2p"
@@ -25,7 +25,7 @@ quick-protobuf-codec = { workspace = true }
 libp2p-identity = { workspace = true, features = ["rand"] }
 rand = "0.8"
 sha2 = "0.10.8"
-smallvec = "1.13.1"
+smallvec = "1.13.2"
 uint = "0.9"
 void = "1.0"
 futures-timer = "3.0.3"

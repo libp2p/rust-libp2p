@@ -24,12 +24,12 @@ quick-protobuf-codec = { workspace = true }
 thiserror = "1.0"
 tracing = { workspace = true }
 void = "1"
-lru = "0.12.2"
+lru = "0.12.3"
 futures-bounded = { workspace = true }
 
 [dev-dependencies]
 async-std = { version = "1.12.0", features = ["attributes"] }
-clap = { version = "4.4.16", features = ["derive"] }
+clap = { version = "4.5.4", features = ["derive"] }
 libp2p-dns = { workspace = true, features = ["async-std"] }
 libp2p-identify = { workspace = true }
 libp2p-noise = { workspace = true }

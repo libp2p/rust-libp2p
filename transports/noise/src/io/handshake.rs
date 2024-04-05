@@ -248,7 +248,7 @@ where
         ..Default::default()
     };
 
-    pb.identity_sig = state.identity.signature.clone();
+    pb.identity_sig.clone_from(&state.identity.signature);
 
     // If this is the responder then send WebTransport certhashes to initiator, if any.
     if state.io.codec().is_responder() {

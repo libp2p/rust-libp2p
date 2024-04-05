@@ -3,7 +3,7 @@ name = "libp2p-upnp"
 edition = "2021"
 rust-version = "1.60.0"
 description = "UPnP support for libp2p transports"
-version = "0.2.1"
+version = "0.2.2"
 license = "MIT"
 repository = "https://github.com/libp2p/rust-libp2p"
 keywords = ["peer-to-peer", "libp2p", "networking"]
@@ -16,7 +16,7 @@ futures-timer = "3.0.3"
 igd-next = "0.14.3"
 libp2p-core = { workspace = true }
 libp2p-swarm = { workspace = true }
-tokio = { version = "1.36", default-features = false, features = ["rt"], optional = true }
+tokio = { version = "1.37", default-features = false, features = ["rt"], optional = true }
 tracing = { workspace = true }
 void = "1.0.2"
 

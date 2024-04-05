@@ -1,3 +1,11 @@
+## 0.44.1 - unreleased
+
+- Impose `Sync` on `ping::Failure::Other`.
+  `ping::Event` can now be shared between threads.
+  See [PR 5250]
+
+[PR 5250]: https://github.com/libp2p/rust-libp2p/pull/5250
+
 ## 0.44.0
 
 

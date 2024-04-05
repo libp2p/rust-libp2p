@@ -47,7 +47,6 @@ mod codec {
     use async_trait::async_trait;
     use cbor4ii::core::error::DecodeError;
     use futures::prelude::*;
-    use futures::{AsyncRead, AsyncWrite};
     use libp2p_swarm::StreamProtocol;
     use serde::{de::DeserializeOwned, Serialize};
     use std::{collections::TryReserveError, convert::Infallible, io, marker::PhantomData};
