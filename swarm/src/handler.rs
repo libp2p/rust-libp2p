@@ -404,6 +404,7 @@ impl<'a> ProtocolsChange<'a> {
     ) -> SmallVec<[Self; 2]> {
         buffer.clear();
 
+	// Initially, set the boolean for all protocols to `false`, meaning "not visited".
         for v in existing_protocols.values_mut() {
             *v = false;
         }
