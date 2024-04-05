@@ -55,7 +55,7 @@ where
     }
 }
 
-/// Parse reponse from `ReadableStreamDefaultReader::read`.
+/// Parse response from `ReadableStreamDefaultReader::read`.
 //
 // Ref: https://streams.spec.whatwg.org/#default-reader-prototype
 pub(crate) fn parse_reader_response(resp: &JsValue) -> Result<Option<JsValue>, JsValue> {

@@ -304,7 +304,7 @@
 
 - Add `From<&PublicKey> for PeerId` (see [PR 2145]).
 
-- Remove `TInEvent` and `TOutEvent` trait paramters on most public types.
+- Remove `TInEvent` and `TOutEvent` trait parameters on most public types.
   `TInEvent` and `TOutEvent` are implied through `THandler` and thus
   superflucious. Both are removed in favor of a derivation through `THandler`
   (see [PR 2183]).
