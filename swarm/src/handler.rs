@@ -409,7 +409,7 @@ impl<'a> ProtocolsChange<'a> {
             *v = false;
         }
 
-        let mut new_protocol_count = 0;
+        let mut new_protocol_count = 0; // We can only iterate `new_protocols` once, so keep track of its length separately.
         for new_protocol in new_protocols {
             existing_protocols
                 .entry(AsStrHashEq(new_protocol))
