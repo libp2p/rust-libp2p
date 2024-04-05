@@ -1,3 +1,8 @@
+## 0.44.1
+
+- Making the silence of the first ping error configurable.
+  [PR 5005](https://github.com/libp2p/rust-libp2p/pull/5005).
+
 ## 0.44.0
 
 

@@ -3090,7 +3090,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-ping"
-version = "0.44.0"
+version = "0.44.1"
 dependencies = [
  "async-std",
  "either",
