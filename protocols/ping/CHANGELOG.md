@@ -1,4 +1,4 @@
-## 0.45.0
+## 0.44.1 - unreleased
 
 - Impose `Sync` on `ping::Failure::Other`.
   `ping::Event` can now be shared between threads.
