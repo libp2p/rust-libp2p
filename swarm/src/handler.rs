@@ -427,13 +427,14 @@ impl<'a> ProtocolsChange<'a> {
         }
 
         let added_count = buffer.len();
-        existing_protocols.retain(|k, v| {
-            if *v {
-                true
-            } else {
-                buffer.extend(StreamProtocol::try_from_owned(k.0.as_ref().to_owned()).ok());
-                false
+	// Drain all protocols that we haven't visited.
+	// For existing protocols that are not in `new_protocols`, the boolean will be false, meaning we need to remove it.
+        existing_protocols.retain(|p, is_supported| {
+            if !is_supported {
+                buffer.extend(StreamProtocol::try_from_owned(p.0.as_ref().to_owned()).ok());
             }
+            
+            is_supported
         });
 
         let (added, removed) = buffer.split_at(added_count);
