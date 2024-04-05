@@ -426,7 +426,7 @@ impl<'a> ProtocolsChange<'a> {
             return SmallVec::new();
         }
 
-        let added_count = buffer.len();
+        let num_new_protocols = buffer.len();
 	// Drain all protocols that we haven't visited.
 	// For existing protocols that are not in `new_protocols`, the boolean will be false, meaning we need to remove it.
         existing_protocols.retain(|p, is_supported| {
