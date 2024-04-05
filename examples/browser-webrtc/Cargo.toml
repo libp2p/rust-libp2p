@@ -16,25 +16,25 @@ release = false
 crate-type = ["cdylib"]
 
 [dependencies]
-anyhow = "1.0.80"
+anyhow = "1.0.81"
 futures = "0.3.30"
 rand = "0.8"
 tracing = "0.1.37"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
-axum = "0.7.4"
+axum = "0.7.5"
 libp2p = { path = "../../libp2p", features = [ "ed25519", "macros", "ping", "tokio"] }
 libp2p-webrtc = { workspace = true, features = ["tokio"] }
 rust-embed = { version = "8.3.0", features = ["include-exclude", "interpolate-folder-path"] }
-tokio = { version = "1.36", features = ["macros", "net", "rt", "signal"] }
+tokio = { version = "1.37", features = ["macros", "net", "rt", "signal"] }
 tokio-util = { version = "0.7", features = ["compat"] }
 tower = "0.4"
 tower-http = { version = "0.5.2", features = ["cors"] }
 mime_guess = "2.0.4"
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
-js-sys = "0.3.67"
+js-sys = "0.3.69"
 libp2p = { path = "../../libp2p", features = [ "ed25519", "macros", "ping", "wasm-bindgen"] }
 libp2p-webrtc-websys = { workspace = true }
 tracing-wasm = "0.2.1"

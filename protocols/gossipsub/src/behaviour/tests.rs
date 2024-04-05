@@ -22,17 +22,12 @@
 
 use super::*;
 use crate::subscription_filter::WhitelistSubscriptionFilter;
-use crate::transform::{DataTransform, IdentityTransform};
-use crate::ValidationError;
-use crate::{
-    config::Config, config::ConfigBuilder, types::Rpc, IdentTopic as Topic, TopicScoreParams,
-};
+use crate::{config::ConfigBuilder, types::Rpc, IdentTopic as Topic};
 use async_std::net::Ipv4Addr;
 use byteorder::{BigEndian, ByteOrder};
-use libp2p_core::{ConnectedPoint, Endpoint};
+use libp2p_core::ConnectedPoint;
 use rand::Rng;
 use std::thread::sleep;
-use std::time::Duration;
 
 #[derive(Default, Debug)]
 struct InjectNodes<D, F>
@@ -396,7 +391,7 @@ fn test_subscribe() {
         .create_network();
 
     assert!(
-        gs.mesh.get(&topic_hashes[0]).is_some(),
+        gs.mesh.contains_key(&topic_hashes[0]),
         "Subscribe should add a new entry to the mesh[topic] hashmap"
     );
 
@@ -442,11 +437,11 @@ fn test_unsubscribe() {
 
     for topic_hash in &topic_hashes {
         assert!(
-            gs.topic_peers.get(topic_hash).is_some(),
+            gs.topic_peers.contains_key(topic_hash),
             "Topic_peers contain a topic entry"
         );
         assert!(
-            gs.mesh.get(topic_hash).is_some(),
+            gs.mesh.contains_key(topic_hash),
             "mesh should contain a topic entry"
         );
     }
@@ -479,7 +474,7 @@ fn test_unsubscribe() {
     // check we clean up internal structures
     for topic_hash in &topic_hashes {
         assert!(
-            gs.mesh.get(topic_hash).is_none(),
+            !gs.mesh.contains_key(topic_hash),
             "All topics should have been removed from the mesh"
         );
     }
@@ -624,7 +619,7 @@ fn test_publish_without_flood_publishing() {
         .create_network();
 
     assert!(
-        gs.mesh.get(&topic_hashes[0]).is_some(),
+        gs.mesh.contains_key(&topic_hashes[0]),
         "Subscribe should add a new entry to the mesh[topic] hashmap"
     );
 
@@ -703,7 +698,7 @@ fn test_fanout() {
         .create_network();
 
     assert!(
-        gs.mesh.get(&topic_hashes[0]).is_some(),
+        gs.mesh.contains_key(&topic_hashes[0]),
         "Subscribe should add a new entry to the mesh[topic] hashmap"
     );
     // Unsubscribe from topic
@@ -873,7 +868,7 @@ fn test_handle_received_subscriptions() {
     );
 
     assert!(
-        gs.peer_topics.get(&unknown_peer).is_none(),
+        !gs.peer_topics.contains_key(&unknown_peer),
         "Unknown peer should not have been added"
     );
 
@@ -1151,7 +1146,7 @@ fn test_handle_ihave_subscribed_and_msg_not_cached() {
 
     assert!(
         iwant_exists,
-        "Expected to send an IWANT control message for unkown message id"
+        "Expected to send an IWANT control message for unknown message id"
     );
 }
 
@@ -1272,7 +1267,7 @@ fn test_handle_graft_multiple_topics() {
     }
 
     assert!(
-        gs.mesh.get(&topic_hashes[2]).is_none(),
+        !gs.mesh.contains_key(&topic_hashes[2]),
         "Expected the second topic to not be in the mesh"
     );
 }
@@ -2397,7 +2392,7 @@ fn test_dont_graft_to_negative_scored_peers() {
 }
 
 ///Note that in this test also without a penalty the px would be ignored because of the
-/// acceptPXThreshold, but the spec still explicitely states the rule that px from negative
+/// acceptPXThreshold, but the spec still explicitly states the rule that px from negative
 /// peers should get ignored, therefore we test it here.
 #[test]
 fn test_ignore_px_from_negative_scored_peer() {
@@ -5100,7 +5095,7 @@ fn test_graft_without_subscribe() {
         .create_network();
 
     assert!(
-        gs.mesh.get(&topic_hashes[0]).is_some(),
+        gs.mesh.contains_key(&topic_hashes[0]),
         "Subscribe should add a new entry to the mesh[topic] hashmap"
     );
 

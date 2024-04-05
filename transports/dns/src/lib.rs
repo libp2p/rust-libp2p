@@ -157,7 +157,6 @@ use smallvec::SmallVec;
 use std::io;
 use std::net::{Ipv4Addr, Ipv6Addr};
 use std::{
-    convert::TryFrom,
     error, fmt, iter,
     ops::DerefMut,
     pin::Pin,
@@ -628,12 +627,7 @@ where
 #[cfg(all(test, any(feature = "tokio", feature = "async-std")))]
 mod tests {
     use super::*;
-    use futures::future::BoxFuture;
-    use libp2p_core::{
-        multiaddr::{Multiaddr, Protocol},
-        transport::{TransportError, TransportEvent},
-        Transport,
-    };
+    use libp2p_core::Transport;
     use libp2p_identity::PeerId;
 
     #[test]

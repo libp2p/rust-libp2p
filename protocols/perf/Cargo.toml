@@ -12,7 +12,7 @@ categories = ["network-programming", "asynchronous"]
 
 [dependencies]
 anyhow = "1"
-clap = { version = "4.4.16", features = ["derive"] }
+clap = { version = "4.5.4", features = ["derive"] }
 futures = "0.3.30"
 futures-bounded = { workspace = true }
 futures-timer = "3.0"
@@ -31,7 +31,7 @@ serde_json = "1.0"
 thiserror = "1.0"
 tracing = "0.1.37"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
-tokio = { version = "1.36", default-features = false, features = ["macros", "rt", "rt-multi-thread"] }
+tokio = { version = "1.37", default-features = false, features = ["macros", "rt", "rt-multi-thread"] }
 void = "1"
 
 [dev-dependencies]
