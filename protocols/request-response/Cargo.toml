@@ -22,7 +22,7 @@ rand = "0.8"
 serde = { version = "1.0", optional = true}
 serde_json = { version = "1.0.115", optional = true }
 smallvec = "1.13.2"
-tracing = "0.1.37"
+tracing = { workspace = true }
 void = "1.0.2"
 futures-timer = "3.0.3"
 futures-bounded = { workspace = true }

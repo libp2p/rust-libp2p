@@ -14,7 +14,7 @@ categories = ["network-programming", "asynchronous"]
 futures = "0.3.30"
 salsa20 = "0.10"
 sha3 = "0.10"
-tracing = "0.1.37"
+tracing = { workspace = true }
 rand = "0.8"
 pin-project = "1.1.5"
 
