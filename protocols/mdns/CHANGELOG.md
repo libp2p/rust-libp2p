@@ -1,3 +1,7 @@
+## 0.45.2 - unreleased
+- Fix `TokioTimer::at` panic.
+  See [PR 5297](https://github.com/libp2p/rust-libp2p/pull/5297).
+
 ## 0.45.1
 
 - Ensure `Multiaddr` handled and returned by `Behaviour` are `/p2p` terminated.

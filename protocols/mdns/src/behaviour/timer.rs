@@ -95,10 +95,12 @@ pub(crate) mod tokio {
     pub(crate) type TokioTimer = Timer<Interval>;
     impl Builder for TokioTimer {
         fn at(instant: Instant) -> Self {
-            // Taken from: https://docs.rs/async-io/1.7.0/src/async_io/lib.rs.html#91
             let mut inner = time::interval_at(
                 TokioInstant::from_std(instant),
-                Duration::new(std::u64::MAX, 1_000_000_000 - 1),
+                // Setting this to Duration::MAX panics,
+                // see https://github.com/libp2p/rust-libp2p/issues/5296, so we set it to a millenium,
+                // which while still impossible to reach is far from Duration::MAX.
+                Duration::from_secs(31_560_000_000),
             );
             inner.set_missed_tick_behavior(MissedTickBehavior::Skip);
             Self { inner }
@@ -126,6 +128,19 @@ pub(crate) mod tokio {
 
         fn size_hint(&self) -> (usize, Option<usize>) {
             (std::usize::MAX, None)
+        }
+    }
+
+    #[cfg(test)]
+    mod tests {
+        use futures::{future::poll_fn, StreamExt};
+
+        use super::Builder;
+
+        #[tokio::test]
+        async fn timer_does_not_panic() {
+            let mut timer = super::TokioTimer::at(std::time::Instant::now());
+            poll_fn(|cx| timer.poll_next_unpin(cx)).await;
         }
     }
 }
