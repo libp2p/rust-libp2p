@@ -34,7 +34,6 @@ use libp2p_swarm::{
 };
 use std::collections::{HashMap, HashSet};
 use std::iter;
-use std::iter::FromIterator;
 use std::task::{ready, Context, Poll};
 use std::time::Duration;
 
@@ -529,7 +528,6 @@ pub struct CookieNamespaceMismatch;
 #[cfg(test)]
 mod tests {
     use instant::SystemTime;
-    use std::option::Option::None;
 
     use libp2p_core::PeerRecord;
     use libp2p_identity as identity;

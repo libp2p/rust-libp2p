@@ -30,7 +30,7 @@ thiserror = "1"
 tinytemplate = "1.2"
 tokio = { workspace = true, features = ["net"], optional = true }
 tokio-util = { version = "0.7", features = ["compat"], optional = true }
-tracing = "0.1.37"
+tracing = { workspace = true }
 webrtc = { version = "0.9.0", optional = true }
 
 [features]

@@ -1,3 +1,11 @@
+## 0.54.0 -- unreleased
+
+- Update individual crates.
+    - Update to [`libp2p-kad` `v0.46.0`](protocols/kad/CHANGELOG.md#0460).
+
+- Raise MSRV to 1.73.
+  See [PR 5266](https://github.com/libp2p/rust-libp2p/pull/5266).
+
 ## 0.53.2
 
 - Allow `SwarmBuilder::with_bandwidth_metrics` after `SwarmBuilder::with_websocket`.
@@ -1185,7 +1193,7 @@ must not be skipped!
 - Merged `PeriodicPing` and `PingListen` into one `Ping` behaviour.
 - `Floodsub` now generates `FloodsubEvent`s instead of direct floodsub messages.
 - Added `ProtocolsHandler::connection_keep_alive`. If all the handlers return `false`, then the connection to the remote node will automatically be gracefully closed after a few seconds.
-- The crate now successfuly compiles for the `wasm32-unknown-unknown` target.
+- The crate now successfully compiles for the `wasm32-unknown-unknown` target.
 - Updated `ring` to version 0.13.
 - Updated `secp256k1` to version 0.12.
 - The enum returned by `RawSwarm::peer()` can now return `LocalNode`. This makes it impossible to accidentally attempt to dial the local node.

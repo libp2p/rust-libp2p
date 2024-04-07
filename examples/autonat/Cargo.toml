@@ -10,10 +10,10 @@ release = false
 
 [dependencies]
 tokio = { workspace = true, features = ["full"] }
-clap = { version = "4.4.16", features = ["derive"] }
+clap = { version = "4.5.4", features = ["derive"] }
 futures = "0.3.30"
 libp2p = { path = "../../libp2p", features = ["tokio", "tcp", "noise", "yamux", "autonat", "identify", "macros"] }
-tracing = "0.1.37"
+tracing = { workspace = true }
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 
 [lints]

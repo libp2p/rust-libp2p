@@ -22,32 +22,22 @@
 
 use super::*;
 
-use crate::kbucket::Distance;
 use crate::record::{store::MemoryStore, Key};
-use crate::{K_VALUE, PROTOCOL_NAME, SHA_256_MH};
+use crate::{PROTOCOL_NAME, SHA_256_MH};
 use futures::{executor::block_on, future::poll_fn, prelude::*};
 use futures_timer::Delay;
 use libp2p_core::{
-    connection::ConnectedPoint,
-    multiaddr::{multiaddr, Multiaddr, Protocol},
+    multiaddr::{multiaddr, Protocol},
     multihash::Multihash,
     transport::MemoryTransport,
-    upgrade, Endpoint, Transport,
+    upgrade, Transport,
 };
 use libp2p_identity as identity;
-use libp2p_identity::PeerId;
 use libp2p_noise as noise;
-use libp2p_swarm::behaviour::ConnectionEstablished;
-use libp2p_swarm::{self as swarm, ConnectionId, Swarm, SwarmEvent};
+use libp2p_swarm::{self as swarm, Swarm, SwarmEvent};
 use libp2p_yamux as yamux;
 use quickcheck::*;
 use rand::{random, rngs::StdRng, thread_rng, Rng, SeedableRng};
-use std::{
-    collections::{HashMap, HashSet},
-    num::NonZeroUsize,
-    time::Duration,
-    u64,
-};
 
 type TestSwarm = Swarm<Behaviour<MemoryStore>>;
 

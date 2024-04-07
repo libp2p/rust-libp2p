@@ -23,9 +23,8 @@ use super::*;
 use crate::kbucket::{Distance, Key, KeyBytes};
 use crate::{ALPHA_VALUE, K_VALUE};
 use instant::Instant;
-use libp2p_identity::PeerId;
 use std::collections::btree_map::{BTreeMap, Entry};
-use std::{iter::FromIterator, num::NonZeroUsize, time::Duration};
+use std::{num::NonZeroUsize, time::Duration};
 
 pub(crate) mod disjoint;
 /// A peer iterator for a dynamically changing list of peers, sorted by increasing
@@ -175,6 +174,20 @@ impl ClosestPeersIter {
             },
         }
 
+        let mut cur_range = distance;
+        let num_results = self.config.num_results.get();
+        // furthest_peer is the furthest peer in range among the closest_peers
+        let furthest_peer = self
+            .closest_peers
+            .iter()
+            .enumerate()
+            .nth(num_results - 1)
+            .map(|(_, peer)| peer)
+            .or_else(|| self.closest_peers.iter().last());
+        if let Some((dist, _)) = furthest_peer {
+            cur_range = *dist;
+        }
+
         // Incorporate the reported closer peers into the iterator.
         //
         // The iterator makes progress if:
@@ -190,9 +203,16 @@ impl ClosestPeersIter {
                 key,
                 state: PeerState::NotContacted,
             };
-            self.closest_peers.entry(distance).or_insert(peer);
 
-            progress = self.closest_peers.keys().next() == Some(&distance) || progress;
+            let is_first_insert = match self.closest_peers.entry(distance) {
+                Entry::Occupied(_) => false,
+                Entry::Vacant(entry) => {
+                    entry.insert(peer);
+                    true
+                }
+            };
+
+            progress = (is_first_insert && distance < cur_range) || progress;
         }
 
         // Update the iterator state.
@@ -477,10 +497,9 @@ mod tests {
     use super::*;
     use crate::SHA_256_MH;
     use libp2p_core::multihash::Multihash;
-    use libp2p_identity::PeerId;
     use quickcheck::*;
     use rand::{rngs::StdRng, Rng, SeedableRng};
-    use std::{iter, time::Duration};
+    use std::iter;
 
     fn random_peers<R: Rng>(n: usize, g: &mut R) -> Vec<PeerId> {
         (0..n)
