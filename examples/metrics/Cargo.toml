@@ -9,7 +9,7 @@ license = "MIT"
 release = false
 
 [dependencies]
-futures = "0.3.30"
+futures = { workspace = true }
 hyper = { version = "0.14", features = ["server", "tcp", "http1"] }
 libp2p = { path = "../../libp2p", features = ["tokio", "metrics", "ping", "noise", "identify", "tcp", "yamux", "macros"] }
 opentelemetry = { version = "0.22.0", features = ["metrics"] }

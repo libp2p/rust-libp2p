@@ -14,7 +14,7 @@ categories = ["network-programming", "asynchronous"]
 asynchronous-codec = { workspace = true }
 async-trait = "0.1"
 bimap = "0.6.3"
-futures = { version = "0.3", default-features = false, features = ["std"] }
+futures = { workspace = true, default-features = false, features = ["std"] }
 futures-timer = "3.0.3"
 instant = "0.1.12"
 libp2p-core = { workspace = true }

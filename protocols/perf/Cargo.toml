@@ -13,7 +13,7 @@ categories = ["network-programming", "asynchronous"]
 [dependencies]
 anyhow = "1"
 clap = { version = "4.5.4", features = ["derive"] }
-futures = "0.3.30"
+futures = { workspace = true }
 futures-bounded = { workspace = true }
 futures-timer = "3.0"
 instant = "0.1.12"
