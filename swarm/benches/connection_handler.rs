@@ -8,46 +8,158 @@ use libp2p_identity::PeerId;
 use libp2p_swarm::{ConnectionHandler, NetworkBehaviour, StreamProtocol};
 use std::convert::Infallible;
 
-criterion_main!(one_behavior_many_protocols);
+macro_rules! gen_behaviour {
+    ($($name:ident {$($field:ident),*};)*) => {$(
+        #[derive(libp2p_swarm::NetworkBehaviour, Default)]
+        struct $name {
+            $($field: PollerBehaviour,)*
+        }
 
-macro_rules! benchmark_one_behaviour_many_protocols {
-    ($(
-        $name:ident,
-    )*) => {
-        $(
-            #[tokio::main(flavor = "multi_thread", worker_threads = 1)]
-            async fn $name(c: &mut Criterion) {
-                let protocol_count = parse_counts(stringify!($name));
-                bench_run_one_behaviour_many_protocols(c, protocol_count, 10000);
+        impl BigBehaviour for $name {
+            fn behaviours(&mut self) -> &mut [PollerBehaviour] {
+                unsafe {
+                    std::slice::from_raw_parts_mut(
+                        self as *mut Self as *mut PollerBehaviour,
+                        std::mem::size_of::<Self>() / std::mem::size_of::<PollerBehaviour>(),
+                    )
+                }
             }
+        }
+    )*};
+}
+
+macro_rules! benchmarks {
+    ($(
+        $group:ident::[$(
+            $beh:ident::bench()
+                .name($name:ident)
+                .poll_count($count:expr)
+                .protocols_per_behaviour($protocols:expr),
+        )+];
+    )*) => {
+
+        $(
+            $(
+                #[tokio::main(flavor = "multi_thread", worker_threads = 1)]
+                async fn $name(c: &mut Criterion) {
+                    <$beh>::run_bench(c, $protocols, $count);
+                }
+            )+
+
+            criterion_group!($group, $($name),*);
         )*
 
-        criterion_group!(
-            one_behavior_many_protocols,
-            $(
-                $name,
-            )*
-        );
+        criterion_main!($($group),*);
     };
 }
 
-benchmark_one_behaviour_many_protocols! {
-    one_behavior_many_protocols_10,
-    one_behavior_many_protocols_100,
-    one_behavior_many_protocols_1000,
+// fans go brrr
+gen_behaviour! {
+    PollerBehaviour5 { a, b, c, d, e };
+    PollerBehaviour10 { a, b, c, d, e, f, g, h, i, j };
+    PollerBehaviour20 { a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p, q, r, s, t, u };
 }
 
-fn parse_counts(name: &str) -> usize {
-    name.split('_').next_back().unwrap().parse().unwrap()
+benchmarks! {
+    singles::[
+        PollerBehaviour::bench().name(b).poll_count(10000).protocols_per_behaviour(10),
+        PollerBehaviour::bench().name(c).poll_count(10000).protocols_per_behaviour(100),
+        PollerBehaviour::bench().name(d).poll_count(10000).protocols_per_behaviour(1000),
+    ];
+    big_5::[
+        PollerBehaviour5::bench().name(e).poll_count(10000).protocols_per_behaviour(2),
+        PollerBehaviour5::bench().name(f).poll_count(10000).protocols_per_behaviour(20),
+        PollerBehaviour5::bench().name(g).poll_count(10000).protocols_per_behaviour(200),
+    ];
+    top_10::[
+        PollerBehaviour10::bench().name(h).poll_count(10000).protocols_per_behaviour(1),
+        PollerBehaviour10::bench().name(i).poll_count(10000).protocols_per_behaviour(10),
+        PollerBehaviour10::bench().name(j).poll_count(10000).protocols_per_behaviour(100),
+    ];
+    lucky_20::[
+        PollerBehaviour20::bench().name(k).poll_count(5000).protocols_per_behaviour(1),
+        PollerBehaviour20::bench().name(l).poll_count(5000).protocols_per_behaviour(10),
+        PollerBehaviour20::bench().name(m).poll_count(5000).protocols_per_behaviour(100),
+    ];
 }
 
-fn new_swarm(protocol_count: usize, spam_count: usize) -> libp2p_swarm::Swarm<PollerBehaviour> {
-    // we leak to simulate static protocols witch is the common case
-    let protocols = (0..protocol_count)
-        .map(|i| StreamProtocol::new(format!("/protocol/{i}").leak()))
-        .collect::<Vec<_>>()
-        .leak();
+trait BigBehaviour: Sized {
+    fn behaviours(&mut self) -> &mut [PollerBehaviour];
 
+    fn for_each_beh(&mut self, f: impl FnMut(&mut PollerBehaviour)) {
+        self.behaviours().iter_mut().for_each(f);
+    }
+
+    fn any_beh(&mut self, f: impl FnMut(&mut PollerBehaviour) -> bool) -> bool {
+        self.behaviours().iter_mut().any(f)
+    }
+
+    fn run_bench(c: &mut Criterion, protocols_per_behaviour: usize, spam_count: usize)
+    where
+        Self: Default + NetworkBehaviour,
+    {
+        let mut swarm_a = new_swarm(Self::default());
+        let mut swarm_b = new_swarm(Self::default());
+
+        let behaviour_count = swarm_a.behaviours().len();
+        let protocol_count = behaviour_count * protocols_per_behaviour;
+        let protocols = (0..protocol_count)
+            .map(|i| StreamProtocol::new(format!("/protocol/{i}").leak()))
+            .collect::<Vec<_>>()
+            .leak();
+
+        let mut protocol_chunks = protocols.chunks(protocols_per_behaviour);
+        swarm_a.for_each_beh(|b| b.protocols = protocol_chunks.next().unwrap());
+        let mut protocol_chunks = protocols.chunks(protocols_per_behaviour);
+        swarm_b.for_each_beh(|b| b.protocols = protocol_chunks.next().unwrap());
+
+        swarm_a.for_each_beh(|b| b.spam_count = spam_count);
+        swarm_b.for_each_beh(|b| b.spam_count = 0);
+
+        swarm_a.for_each_beh(|b| b.other_peer = Some(*swarm_b.local_peer_id()));
+        swarm_b.for_each_beh(|b| b.other_peer = Some(*swarm_a.local_peer_id()));
+
+        static mut OFFSET: usize = 0;
+        let offset = unsafe {
+            OFFSET += 1;
+            OFFSET
+        };
+
+        swarm_a
+            .listen_on(format!("/memory/{offset}").parse().unwrap())
+            .unwrap();
+        swarm_b
+            .dial(format!("/memory/{offset}").parse::<Multiaddr>().unwrap())
+            .unwrap();
+
+        let name = format!(
+            "{}::bench().poll_count({}).protocols_per_behaviour({})",
+            std::any::type_name::<Self>(),
+            spam_count,
+            protocols_per_behaviour
+        );
+
+        c.bench_function(&name, |b| {
+            swarm_a.for_each_beh(|b| b.finished = false);
+            swarm_b.for_each_beh(|b| b.finished = false);
+            b.iter(|| {
+                futures::executor::block_on(async {
+                    while swarm_a.any_beh(|b| !b.finished) || swarm_b.any_beh(|b| !b.finished) {
+                        futures::future::select(swarm_b.next(), swarm_a.next()).await;
+                    }
+                });
+            });
+        });
+    }
+}
+
+impl<T: BigBehaviour + NetworkBehaviour> BigBehaviour for libp2p_swarm::Swarm<T> {
+    fn behaviours(&mut self) -> &mut [PollerBehaviour] {
+        self.behaviour_mut().behaviours()
+    }
+}
+
+fn new_swarm<T: NetworkBehaviour>(beh: T) -> libp2p_swarm::Swarm<T> {
     let swarm_a_keypair = libp2p_identity::Keypair::generate_ed25519();
     libp2p_swarm::Swarm::new(
         MemoryTransport::new()
@@ -55,56 +167,13 @@ fn new_swarm(protocol_count: usize, spam_count: usize) -> libp2p_swarm::Swarm<Po
             .authenticate(libp2p_plaintext::Config::new(&swarm_a_keypair))
             .multiplex(libp2p_yamux::Config::default())
             .boxed(),
-        PollerBehaviour {
-            spam_count,
-            protocols,
-            restarting: false,
-            finished: false,
-            other_peer: None,
-        },
+        beh,
         swarm_a_keypair.public().to_peer_id(),
         libp2p_swarm::Config::with_tokio_executor().with_idle_connection_timeout(Duration::MAX),
     )
 }
 
-fn bench_run_one_behaviour_many_protocols(
-    c: &mut Criterion,
-    protocol_count: usize,
-    spam_count: usize,
-) {
-    let mut sa = new_swarm(protocol_count, spam_count);
-    let mut sb = new_swarm(protocol_count, 0);
-
-    sa.behaviour_mut().other_peer = Some(*sb.local_peer_id());
-    sb.behaviour_mut().other_peer = Some(*sa.local_peer_id());
-
-    static mut OFFSET: usize = 0;
-    let offset = unsafe {
-        OFFSET += 1;
-        OFFSET
-    };
-
-    sa.listen_on(format!("/memory/{offset}").parse().unwrap())
-        .unwrap();
-    sb.dial(format!("/memory/{offset}").parse::<Multiaddr>().unwrap())
-        .unwrap();
-
-    c.bench_function(
-        &format!("one_behavior_many_protocols_{protocol_count}_{spam_count}"),
-        |b| {
-            sa.behaviour_mut().finished = false;
-            sb.behaviour_mut().finished = false;
-            b.iter(|| {
-                futures::executor::block_on(async {
-                    while !sa.behaviour().finished || !sb.behaviour().finished {
-                        futures::future::select(sb.next(), sa.next()).await;
-                    }
-                });
-            });
-        },
-    );
-}
-
+#[derive(Default)]
 struct PollerBehaviour {
     spam_count: usize,
     protocols: &'static [StreamProtocol],
@@ -175,6 +244,12 @@ impl NetworkBehaviour for PollerBehaviour {
         } else {
             std::task::Poll::Pending
         }
+    }
+}
+
+impl BigBehaviour for PollerBehaviour {
+    fn behaviours(&mut self) -> &mut [PollerBehaviour] {
+        std::slice::from_mut(self)
     }
 }
 
