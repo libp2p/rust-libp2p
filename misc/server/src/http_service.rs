@@ -20,7 +20,7 @@
 
 use axum::extract::State;
 use axum::http::StatusCode;
-use axum::response::Response;
+use axum::response::IntoResponse;
 use axum::routing::get;
 use axum::Router;
 use prometheus_client::encoding::text::encode;
@@ -44,18 +44,27 @@ pub(crate) async fn metrics_server(
     let tcp_listener = TcpListener::bind(addr).await?;
     let local_addr = tcp_listener.local_addr()?;
     tracing::info!(metrics_server=%format!("http://{}{}", local_addr, metrics_path));
-    axum::serve(tcp_listener, server.into_make_service())
-        .await
-        .unwrap();
+    axum::serve(tcp_listener, server.into_make_service()).await?;
     Ok(())
 }
 
-async fn respond_with_metrics(state: State<MetricService>) -> Response<String> {
-    state.respond_with_metrics()
+async fn respond_with_metrics(state: State<MetricService>) -> impl IntoResponse {
+    let mut sink = String::new();
+    let reg = state.get_reg();
+    encode(&mut sink, &reg.lock().unwrap()).unwrap();
+
+    (
+        StatusCode::OK,
+        [(axum::http::header::CONTENT_TYPE, METRICS_CONTENT_TYPE)],
+        sink,
+    )
 }
 
-async fn respond_with_404_not_found(state: State<MetricService>) -> Response<String> {
-    state.respond_with_404_not_found()
+async fn respond_with_404_not_found(state: State<MetricService>) -> impl IntoResponse {
+    (
+        StatusCode::NOT_FOUND,
+        format!("Not found try localhost:[port]/{}", state.metrics_path),
+    )
 }
 
 #[derive(Clone)]
@@ -76,29 +85,5 @@ impl MetricService {
 
     fn get_reg(&self) -> SharedRegistry {
         Arc::clone(&self.reg)
-    }
-    fn respond_with_metrics(&self) -> Response<String> {
-        let mut response: Response<String> = Response::default();
-
-        response.headers_mut().insert(
-            axum::http::header::CONTENT_TYPE,
-            METRICS_CONTENT_TYPE.try_into().unwrap(),
-        );
-
-        let reg = self.get_reg();
-        encode(&mut response.body_mut(), &reg.lock().unwrap()).unwrap();
-
-        *response.status_mut() = StatusCode::OK;
-
-        response
-    }
-    fn respond_with_404_not_found(&self) -> Response<String> {
-        Response::builder()
-            .status(StatusCode::NOT_FOUND)
-            .body(format!(
-                "Not found try localhost:[port]/{}",
-                self.metrics_path
-            ))
-            .unwrap()
     }
 }

@@ -20,7 +20,7 @@
 
 use axum::extract::State;
 use axum::http::StatusCode;
-use axum::response::Response;
+use axum::response::IntoResponse;
 use axum::routing::get;
 use axum::Router;
 use prometheus_client::encoding::text::encode;
@@ -39,12 +39,10 @@ pub(crate) async fn metrics_server(registry: Registry) -> Result<(), std::io::Er
         .route("/metrics", get(respond_with_metrics))
         .fallback(respond_with_404_not_found)
         .with_state(service);
-    let tcp_listener = TcpListener::bind(addr).await.unwrap();
+    let tcp_listener = TcpListener::bind(addr).await?;
     let local_addr = tcp_listener.local_addr()?;
     tracing::info!(metrics_server=%format!("http://{}/metrics", local_addr));
-    axum::serve(tcp_listener, server.into_make_service())
-        .await
-        .unwrap();
+    axum::serve(tcp_listener, server.into_make_service()).await?;
     Ok(())
 }
 
@@ -53,12 +51,23 @@ pub(crate) struct MetricService {
     reg: Arc<Mutex<Registry>>,
 }
 
-async fn respond_with_metrics(state: State<MetricService>) -> Response<String> {
-    state.respond_with_metrics()
+async fn respond_with_metrics(state: State<MetricService>) -> impl IntoResponse {
+    let mut sink = String::new();
+    let reg = state.get_reg();
+    encode(&mut sink, &reg.lock().unwrap()).unwrap();
+
+    (
+        StatusCode::OK,
+        [(axum::http::header::CONTENT_TYPE, METRICS_CONTENT_TYPE)],
+        sink,
+    )
 }
 
-async fn respond_with_404_not_found(state: State<MetricService>) -> Response<String> {
-    state.respond_with_404_not_found()
+async fn respond_with_404_not_found() -> impl IntoResponse {
+    (
+        StatusCode::NOT_FOUND,
+        "Not found try localhost:[port]/metrics",
+    )
 }
 
 type SharedRegistry = Arc<Mutex<Registry>>;
@@ -72,26 +81,5 @@ impl MetricService {
 
     fn get_reg(&self) -> SharedRegistry {
         Arc::clone(&self.reg)
-    }
-    fn respond_with_metrics(&self) -> Response<String> {
-        let mut response: Response<String> = Response::default();
-
-        response.headers_mut().insert(
-            axum::http::header::CONTENT_TYPE,
-            METRICS_CONTENT_TYPE.try_into().unwrap(),
-        );
-
-        let reg = self.get_reg();
-        encode(&mut response.body_mut(), &reg.lock().unwrap()).unwrap();
-
-        *response.status_mut() = StatusCode::OK;
-
-        response
-    }
-    fn respond_with_404_not_found(&self) -> Response<String> {
-        Response::builder()
-            .status(StatusCode::NOT_FOUND)
-            .body("Not found try localhost:[port]/metrics".to_string())
-            .unwrap()
     }
 }
