@@ -53,7 +53,7 @@ pub use map_out::MapOutEvent;
 pub use one_shot::{OneShotHandler, OneShotHandlerConfig};
 pub use pending::PendingConnectionHandler;
 pub use select::ConnectionHandlerSelect;
-use smallvec::{smallvec, SmallVec};
+use smallvec::SmallVec;
 
 use crate::StreamProtocol;
 use core::slice;
@@ -731,7 +731,7 @@ where
 mod test {
     use super::*;
 
-    fn preprocess(s: &'static str) -> HashSet<StreamProtocol> {
+    fn protocol_set_of(s: &'static str) -> HashSet<StreamProtocol> {
         s.split_whitespace()
             .map(|p| StreamProtocol::try_from_owned(format!("/{p}")).unwrap())
             .collect()
@@ -752,57 +752,57 @@ mod test {
 
     #[test]
     fn test_protocol_remove_subset() {
-        let mut existing = preprocess("a b c");
-        let to_remove = preprocess("a b");
+        let mut existing = protocol_set_of("a b c");
+        let to_remove = protocol_set_of("a b");
 
         let change = test_remove(&mut existing, to_remove);
 
-        assert_eq!(existing, preprocess("c"));
-        assert_eq!(change, preprocess("a b"));
+        assert_eq!(existing, protocol_set_of("c"));
+        assert_eq!(change, protocol_set_of("a b"));
     }
 
     #[test]
     fn test_protocol_remove_all() {
-        let mut existing = preprocess("a b c");
-        let to_remove = preprocess("a b c");
+        let mut existing = protocol_set_of("a b c");
+        let to_remove = protocol_set_of("a b c");
 
         let change = test_remove(&mut existing, to_remove);
 
-        assert_eq!(existing, preprocess(""));
-        assert_eq!(change, preprocess("a b c"));
+        assert_eq!(existing, protocol_set_of(""));
+        assert_eq!(change, protocol_set_of("a b c"));
     }
 
     #[test]
     fn test_protocol_remove_superset() {
-        let mut existing = preprocess("a b c");
-        let to_remove = preprocess("a b c d");
+        let mut existing = protocol_set_of("a b c");
+        let to_remove = protocol_set_of("a b c d");
 
         let change = test_remove(&mut existing, to_remove);
 
-        assert_eq!(existing, preprocess(""));
-        assert_eq!(change, preprocess("a b c"));
+        assert_eq!(existing, protocol_set_of(""));
+        assert_eq!(change, protocol_set_of("a b c"));
     }
 
     #[test]
     fn test_protocol_remove_none() {
-        let mut existing = preprocess("a b c");
-        let to_remove = preprocess("d");
+        let mut existing = protocol_set_of("a b c");
+        let to_remove = protocol_set_of("d");
 
         let change = test_remove(&mut existing, to_remove);
 
-        assert_eq!(existing, preprocess("a b c"));
-        assert_eq!(change, preprocess(""));
+        assert_eq!(existing, protocol_set_of("a b c"));
+        assert_eq!(change, protocol_set_of(""));
     }
 
     #[test]
     fn test_protocol_remove_none_from_empty() {
-        let mut existing = preprocess("");
-        let to_remove = preprocess("d");
+        let mut existing = protocol_set_of("");
+        let to_remove = protocol_set_of("d");
 
         let change = test_remove(&mut existing, to_remove);
 
-        assert_eq!(existing, preprocess(""));
-        assert_eq!(change, preprocess(""));
+        assert_eq!(existing, protocol_set_of(""));
+        assert_eq!(change, protocol_set_of(""));
     }
 
     fn test_from_full_sets(
@@ -840,56 +840,56 @@ mod test {
 
     #[test]
     fn test_from_full_stes_subset() {
-        let existing = preprocess("a b c");
-        let new = preprocess("a b");
+        let existing = protocol_set_of("a b c");
+        let new = protocol_set_of("a b");
 
         let [removed_changes, added_changes] = test_from_full_sets(existing, new);
 
-        assert_eq!(added_changes, preprocess(""));
-        assert_eq!(removed_changes, preprocess("c"));
+        assert_eq!(added_changes, protocol_set_of(""));
+        assert_eq!(removed_changes, protocol_set_of("c"));
     }
 
     #[test]
     fn test_from_full_sets_superset() {
-        let existing = preprocess("a b");
-        let new = preprocess("a b c");
+        let existing = protocol_set_of("a b");
+        let new = protocol_set_of("a b c");
 
         let [removed_changes, added_changes] = test_from_full_sets(existing, new);
 
-        assert_eq!(added_changes, preprocess("c"));
-        assert_eq!(removed_changes, preprocess(""));
+        assert_eq!(added_changes, protocol_set_of("c"));
+        assert_eq!(removed_changes, protocol_set_of(""));
     }
 
     #[test]
     fn test_from_full_sets_intersection() {
-        let existing = preprocess("a b c");
-        let new = preprocess("b c d");
+        let existing = protocol_set_of("a b c");
+        let new = protocol_set_of("b c d");
 
         let [removed_changes, added_changes] = test_from_full_sets(existing, new);
 
-        assert_eq!(added_changes, preprocess("d"));
-        assert_eq!(removed_changes, preprocess("a"));
+        assert_eq!(added_changes, protocol_set_of("d"));
+        assert_eq!(removed_changes, protocol_set_of("a"));
     }
 
     #[test]
     fn test_from_full_sets_disjoint() {
-        let existing = preprocess("a b c");
-        let new = preprocess("d e f");
+        let existing = protocol_set_of("a b c");
+        let new = protocol_set_of("d e f");
 
         let [removed_changes, added_changes] = test_from_full_sets(existing, new);
 
-        assert_eq!(added_changes, preprocess("d e f"));
-        assert_eq!(removed_changes, preprocess("a b c"));
+        assert_eq!(added_changes, protocol_set_of("d e f"));
+        assert_eq!(removed_changes, protocol_set_of("a b c"));
     }
 
     #[test]
     fn test_from_full_sets_empty() {
-        let existing = preprocess("");
-        let new = preprocess("");
+        let existing = protocol_set_of("");
+        let new = protocol_set_of("");
 
         let [removed_changes, added_changes] = test_from_full_sets(existing, new);
 
-        assert_eq!(added_changes, preprocess(""));
-        assert_eq!(removed_changes, preprocess(""));
+        assert_eq!(added_changes, protocol_set_of(""));
+        assert_eq!(removed_changes, protocol_set_of(""));
     }
 }
