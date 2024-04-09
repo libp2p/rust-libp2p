@@ -72,7 +72,7 @@ where
         let this = &mut *self;
 
         loop {
-            if this.bytes_sent > this.max_circuit_bytes {
+            if this.max_circuit_bytes > 0 && this.bytes_sent > this.max_circuit_bytes {
                 return Poll::Ready(Err(io::Error::new(
                     io::ErrorKind::Other,
                     "Max circuit bytes reached.",

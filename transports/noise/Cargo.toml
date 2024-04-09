@@ -23,7 +23,7 @@ rand = "0.8.3"
 sha2 = "0.10.8"
 static_assertions = "1"
 thiserror = "1.0.58"
-tracing = "0.1.37"
+tracing = { workspace = true }
 x25519-dalek = "2"
 zeroize = "1"
 

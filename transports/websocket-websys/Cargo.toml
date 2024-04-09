@@ -13,14 +13,14 @@ categories = ["network-programming", "asynchronous"]
 [dependencies]
 bytes = "1.6.0"
 futures = "0.3.30"
-js-sys = "0.3.67"
+js-sys = "0.3.69"
 libp2p-core = { workspace = true }
-tracing = "0.1.37"
+tracing = { workspace = true }
 parking_lot = "0.12.1"
 send_wrapper = "0.6.0"
 thiserror = "1.0.58"
 wasm-bindgen = "0.2.90"
-web-sys = { version = "0.3.68", features = ["BinaryType", "CloseEvent", "MessageEvent", "WebSocket", "Window", "WorkerGlobalScope"] }
+web-sys = { version = "0.3.69", features = ["BinaryType", "CloseEvent", "MessageEvent", "WebSocket", "Window", "WorkerGlobalScope"] }
 
 # Passing arguments to the docsrs builder in order to properly document cfg's.
 # More information: https://docs.rs/about/builds#cross-compiling

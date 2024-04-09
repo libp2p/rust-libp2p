@@ -22,9 +22,9 @@ libp2p-identity = { workspace = true }
 quick-protobuf = "0.8"
 quick-protobuf-codec = { workspace = true }
 thiserror = "1.0"
-tracing = "0.1.37"
+tracing = { workspace = true }
 void = "1"
-lru = "0.12.2"
+lru = "0.12.3"
 futures-bounded = { workspace = true }
 
 [dev-dependencies]
