@@ -24,7 +24,7 @@ quick-protobuf-codec = { workspace = true }
 rand = "0.8"
 smallvec = "1.13.2"
 thiserror = "1.0.58"
-tracing = "0.1.37"
+tracing = { workspace = true }
 
 # Passing arguments to the docsrs builder in order to properly document cfg's.
 # More information: https://docs.rs/about/builds#cross-compiling

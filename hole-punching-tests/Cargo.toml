@@ -10,7 +10,7 @@ anyhow = "1"
 env_logger = "0.10.2"
 futures = "0.3.30"
 libp2p = { path = "../libp2p", features = ["tokio", "dcutr", "identify", "macros", "noise", "ping", "relay", "tcp", "yamux", "quic"] }
-tracing = "0.1.37"
+tracing = { workspace = true }
 redis = { version = "0.23.0", default-features = false, features = ["tokio-comp"] }
 tokio = { version = "1.37.0", features = ["full"] }
 serde = { version = "1.0.197", features = ["derive"] }
