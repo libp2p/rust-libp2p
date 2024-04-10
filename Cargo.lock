@@ -3308,12 +3308,14 @@ name = "libp2p-swarm"
 version = "0.44.2"
 dependencies = [
  "async-std",
+ "criterion",
  "either",
  "fnv",
  "futures",
  "futures-timer",
  "getrandom 0.2.13",
  "instant",
+ "libp2p",
  "libp2p-core",
  "libp2p-identify",
  "libp2p-identity",
