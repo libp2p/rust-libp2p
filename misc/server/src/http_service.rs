@@ -36,7 +36,7 @@ pub(crate) async fn metrics_server(
 ) -> Result<(), std::io::Error> {
     // Serve on localhost.
     let addr: SocketAddr = ([0, 0, 0, 0], 8888).into();
-    let service = MetricService::new(registry, metrics_path.clone());
+    let service = MetricService::new(registry);
     let server = Router::new()
         .route(&metrics_path, get(respond_with_metrics))
         .with_state(service);
@@ -62,16 +62,14 @@ async fn respond_with_metrics(state: State<MetricService>) -> impl IntoResponse 
 #[derive(Clone)]
 pub(crate) struct MetricService {
     reg: Arc<Mutex<Registry>>,
-    metrics_path: String,
 }
 
 type SharedRegistry = Arc<Mutex<Registry>>;
 
 impl MetricService {
-    fn new(reg: Registry, metrics_path: String) -> Self {
+    fn new(reg: Registry) -> Self {
         Self {
             reg: Arc::new(Mutex::new(reg)),
-            metrics_path,
         }
     }
 
