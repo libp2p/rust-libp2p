@@ -126,10 +126,10 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> syn::Result<Toke
             .make_where_clause()
             .predicates
             .push(syn::parse_quote!(#field: #trait_to_impl));
-        generics
-            .make_where_clause()
-            .predicates
-            .push(syn::parse_quote!(<#field as #trait_to_impl>::ToSwarm: std::fmt::Debug));
+        //        generics
+        //            .make_where_clause()
+        //            .predicates
+        //            .push(syn::parse_quote!(<#field as #trait_to_impl>::ToSwarm: std::fmt::Debug));
     }
 
     let fields = data_struct
@@ -224,7 +224,7 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> syn::Result<Toke
                 if let std::task::Poll::Ready(event) = self.#fields.poll(cx) {
                     return std::task::Poll::Ready(event
                         .map_in(#t_handler_in_event::<Self>::#var_names)
-                        .map_out(|e| e.into()));
+                        .map_out(#ty::from));
                 }
             )*},
         ),
