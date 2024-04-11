@@ -1523,6 +1523,13 @@ impl Config {
         }
     }
 
+    #[doc(hidden)]
+    pub fn without_executor() -> Self {
+        Self {
+            pool_config: PoolConfig::new(None),
+        }
+    }
+
     /// Sets executor to the `wasm` executor.
     /// Background tasks will be executed by the browser on the next micro-tick.
     ///

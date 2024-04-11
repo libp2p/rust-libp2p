@@ -12,15 +12,15 @@ macro_rules! gen_behaviour {
     ($($name:ident {$($field:ident),*};)*) => {$(
         #[derive(libp2p_swarm::NetworkBehaviour, Default)]
         struct $name {
-            $($field: PollerBehaviour,)*
+            $($field: SpinningBehaviour,)*
         }
 
         impl BigBehaviour for $name {
-            fn behaviours(&mut self) -> &mut [PollerBehaviour] {
+            fn behaviours(&mut self) -> &mut [SpinningBehaviour] {
                 unsafe {
                     std::slice::from_raw_parts_mut(
-                        self as *mut Self as *mut PollerBehaviour,
-                        std::mem::size_of::<Self>() / std::mem::size_of::<PollerBehaviour>(),
+                        self as *mut Self as *mut SpinningBehaviour,
+                        std::mem::size_of::<Self>() / std::mem::size_of::<SpinningBehaviour>(),
                     )
                 }
             }
@@ -42,7 +42,7 @@ macro_rules! benchmarks {
             $(
                 #[tokio::main(flavor = "multi_thread", worker_threads = 1)]
                 async fn $name(c: &mut Criterion) {
-                    <$beh>::run_bench(c, $protocols, $count);
+                    <$beh>::run_bench(c, $protocols, $count, false);
                 }
             )+
 
@@ -55,47 +55,52 @@ macro_rules! benchmarks {
 
 // fans go brrr
 gen_behaviour! {
-    PollerBehaviour5 { a, b, c, d, e };
-    PollerBehaviour10 { a, b, c, d, e, f, g, h, i, j };
-    PollerBehaviour20 { a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p, q, r, s, t, u };
+    SpinningBehaviour5 { a, b, c, d, e };
+    SpinningBehaviour10 { a, b, c, d, e, f, g, h, i, j };
+    SpinningBehaviour20 { a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p, q, r, s, t, u };
 }
 
 benchmarks! {
     singles::[
-        PollerBehaviour::bench().name(b).poll_count(10000).protocols_per_behaviour(10),
-        PollerBehaviour::bench().name(c).poll_count(10000).protocols_per_behaviour(100),
-        PollerBehaviour::bench().name(d).poll_count(10000).protocols_per_behaviour(1000),
+        SpinningBehaviour::bench().name(b).poll_count(10000).protocols_per_behaviour(10),
+        SpinningBehaviour::bench().name(c).poll_count(10000).protocols_per_behaviour(100),
+        SpinningBehaviour::bench().name(d).poll_count(10000).protocols_per_behaviour(1000),
     ];
     big_5::[
-        PollerBehaviour5::bench().name(e).poll_count(10000).protocols_per_behaviour(2),
-        PollerBehaviour5::bench().name(f).poll_count(10000).protocols_per_behaviour(20),
-        PollerBehaviour5::bench().name(g).poll_count(10000).protocols_per_behaviour(200),
+        SpinningBehaviour5::bench().name(e).poll_count(10000).protocols_per_behaviour(2),
+        SpinningBehaviour5::bench().name(f).poll_count(10000).protocols_per_behaviour(20),
+        SpinningBehaviour5::bench().name(g).poll_count(10000).protocols_per_behaviour(200),
     ];
     top_10::[
-        PollerBehaviour10::bench().name(h).poll_count(10000).protocols_per_behaviour(1),
-        PollerBehaviour10::bench().name(i).poll_count(10000).protocols_per_behaviour(10),
-        PollerBehaviour10::bench().name(j).poll_count(10000).protocols_per_behaviour(100),
+        SpinningBehaviour10::bench().name(h).poll_count(10000).protocols_per_behaviour(1),
+        SpinningBehaviour10::bench().name(i).poll_count(10000).protocols_per_behaviour(10),
+        SpinningBehaviour10::bench().name(j).poll_count(10000).protocols_per_behaviour(100),
     ];
     lucky_20::[
-        PollerBehaviour20::bench().name(k).poll_count(5000).protocols_per_behaviour(1),
-        PollerBehaviour20::bench().name(l).poll_count(5000).protocols_per_behaviour(10),
-        PollerBehaviour20::bench().name(m).poll_count(5000).protocols_per_behaviour(100),
+        SpinningBehaviour20::bench().name(k).poll_count(5000).protocols_per_behaviour(1),
+        SpinningBehaviour20::bench().name(l).poll_count(5000).protocols_per_behaviour(10),
+        SpinningBehaviour20::bench().name(m).poll_count(5000).protocols_per_behaviour(100),
     ];
 }
+//fn main() {}
 
 trait BigBehaviour: Sized {
-    fn behaviours(&mut self) -> &mut [PollerBehaviour];
+    fn behaviours(&mut self) -> &mut [SpinningBehaviour];
 
-    fn for_each_beh(&mut self, f: impl FnMut(&mut PollerBehaviour)) {
+    fn for_each_beh(&mut self, f: impl FnMut(&mut SpinningBehaviour)) {
         self.behaviours().iter_mut().for_each(f);
     }
 
-    fn any_beh(&mut self, f: impl FnMut(&mut PollerBehaviour) -> bool) -> bool {
+    fn any_beh(&mut self, f: impl FnMut(&mut SpinningBehaviour) -> bool) -> bool {
         self.behaviours().iter_mut().any(f)
     }
 
-    fn run_bench(c: &mut Criterion, protocols_per_behaviour: usize, spam_count: usize)
-    where
+    fn run_bench(
+        c: &mut Criterion,
+        protocols_per_behaviour: usize,
+        spam_count: usize,
+        static_protocols: bool,
+    ) where
         Self: Default + NetworkBehaviour,
     {
         let mut swarm_a = new_swarm(Self::default());
@@ -104,17 +109,22 @@ trait BigBehaviour: Sized {
         let behaviour_count = swarm_a.behaviours().len();
         let protocol_count = behaviour_count * protocols_per_behaviour;
         let protocols = (0..protocol_count)
-            .map(|i| StreamProtocol::new(format!("/protocol/{i}").leak()))
-            .collect::<Vec<_>>()
-            .leak();
+            .map(|i| {
+                if static_protocols {
+                    StreamProtocol::new(format!("/protocol/{i}").leak())
+                } else {
+                    StreamProtocol::try_from_owned(format!("/protocol/{i}")).unwrap()
+                }
+            })
+            .collect::<Vec<_>>();
 
         let mut protocol_chunks = protocols.chunks(protocols_per_behaviour);
-        swarm_a.for_each_beh(|b| b.protocols = protocol_chunks.next().unwrap());
+        swarm_a.for_each_beh(|b| b.protocols = protocol_chunks.next().unwrap().to_vec());
         let mut protocol_chunks = protocols.chunks(protocols_per_behaviour);
-        swarm_b.for_each_beh(|b| b.protocols = protocol_chunks.next().unwrap());
+        swarm_b.for_each_beh(|b| b.protocols = protocol_chunks.next().unwrap().to_vec());
 
-        swarm_a.for_each_beh(|b| b.spam_count = spam_count);
-        swarm_b.for_each_beh(|b| b.spam_count = 0);
+        swarm_a.for_each_beh(|b| b.iter_count = spam_count);
+        swarm_b.for_each_beh(|b| b.iter_count = 0);
 
         swarm_a.for_each_beh(|b| b.other_peer = Some(*swarm_b.local_peer_id()));
         swarm_b.for_each_beh(|b| b.other_peer = Some(*swarm_a.local_peer_id()));
@@ -154,40 +164,42 @@ trait BigBehaviour: Sized {
 }
 
 impl<T: BigBehaviour + NetworkBehaviour> BigBehaviour for libp2p_swarm::Swarm<T> {
-    fn behaviours(&mut self) -> &mut [PollerBehaviour] {
+    fn behaviours(&mut self) -> &mut [SpinningBehaviour] {
         self.behaviour_mut().behaviours()
     }
 }
 
 fn new_swarm<T: NetworkBehaviour>(beh: T) -> libp2p_swarm::Swarm<T> {
-    let swarm_a_keypair = libp2p_identity::Keypair::generate_ed25519();
+    let keypair = libp2p_identity::Keypair::generate_ed25519();
     libp2p_swarm::Swarm::new(
         MemoryTransport::new()
             .upgrade(multistream_select::Version::V1)
-            .authenticate(libp2p_plaintext::Config::new(&swarm_a_keypair))
+            .authenticate(libp2p_plaintext::Config::new(&keypair))
             .multiplex(libp2p_yamux::Config::default())
             .boxed(),
         beh,
-        swarm_a_keypair.public().to_peer_id(),
-        libp2p_swarm::Config::with_tokio_executor().with_idle_connection_timeout(Duration::MAX),
+        keypair.public().to_peer_id(),
+        libp2p_swarm::Config::without_executor().with_idle_connection_timeout(Duration::MAX),
     )
 }
 
+/// Whole purpose of the behaviour is to rapidly call `poll` on the handler
+/// configured amount of times and then emmit event when finished.
 #[derive(Default)]
-struct PollerBehaviour {
-    spam_count: usize,
-    protocols: &'static [StreamProtocol],
+struct SpinningBehaviour {
+    iter_count: usize,
+    protocols: Vec<StreamProtocol>,
     restarting: bool,
     finished: bool,
     other_peer: Option<PeerId>,
 }
 
 #[derive(Debug)]
-struct FinishedSpamming;
+struct FinishedSpinning;
 
-impl NetworkBehaviour for PollerBehaviour {
-    type ConnectionHandler = PollerHandler;
-    type ToSwarm = FinishedSpamming;
+impl NetworkBehaviour for SpinningBehaviour {
+    type ConnectionHandler = SpinningHandler;
+    type ToSwarm = FinishedSpinning;
 
     fn handle_established_inbound_connection(
         &mut self,
@@ -196,9 +208,9 @@ impl NetworkBehaviour for PollerBehaviour {
         _local_addr: &libp2p_core::Multiaddr,
         _remote_addr: &libp2p_core::Multiaddr,
     ) -> Result<libp2p_swarm::THandler<Self>, libp2p_swarm::ConnectionDenied> {
-        Ok(PollerHandler {
-            spam_count: 0,
-            protocols: self.protocols,
+        Ok(SpinningHandler {
+            iter_count: 0,
+            protocols: self.protocols.clone(),
         })
     }
 
@@ -209,9 +221,9 @@ impl NetworkBehaviour for PollerBehaviour {
         _addr: &libp2p_core::Multiaddr,
         _role_override: libp2p_core::Endpoint,
     ) -> Result<libp2p_swarm::THandler<Self>, libp2p_swarm::ConnectionDenied> {
-        Ok(PollerHandler {
-            spam_count: self.spam_count,
-            protocols: self.protocols,
+        Ok(SpinningHandler {
+            iter_count: self.iter_count,
+            protocols: self.protocols.clone(),
         })
     }
 
@@ -233,13 +245,13 @@ impl NetworkBehaviour for PollerBehaviour {
     {
         if self.finished && !self.restarting {
             self.restarting = true;
-            std::task::Poll::Ready(libp2p_swarm::ToSwarm::GenerateEvent(FinishedSpamming))
+            std::task::Poll::Ready(libp2p_swarm::ToSwarm::GenerateEvent(FinishedSpinning))
         } else if !self.finished && self.restarting {
             self.restarting = false;
             std::task::Poll::Ready(libp2p_swarm::ToSwarm::NotifyHandler {
                 peer_id: self.other_peer.unwrap(),
                 handler: libp2p_swarm::NotifyHandler::Any,
-                event: Restart(self.spam_count),
+                event: Restart(self.iter_count),
             })
         } else {
             std::task::Poll::Pending
@@ -247,25 +259,24 @@ impl NetworkBehaviour for PollerBehaviour {
     }
 }
 
-impl BigBehaviour for PollerBehaviour {
-    fn behaviours(&mut self) -> &mut [PollerBehaviour] {
+impl BigBehaviour for SpinningBehaviour {
+    fn behaviours(&mut self) -> &mut [SpinningBehaviour] {
         std::slice::from_mut(self)
     }
 }
 
-#[derive(Default)]
-struct PollerHandler {
-    spam_count: usize,
-    protocols: &'static [StreamProtocol],
+struct SpinningHandler {
+    iter_count: usize,
+    protocols: Vec<StreamProtocol>,
 }
 
 #[derive(Debug)]
 struct Restart(usize);
 
-impl ConnectionHandler for PollerHandler {
+impl ConnectionHandler for SpinningHandler {
     type FromBehaviour = Restart;
 
-    type ToBehaviour = FinishedSpamming;
+    type ToBehaviour = FinishedSpinning;
 
     type InboundProtocol = Upgrade;
 
@@ -278,7 +289,7 @@ impl ConnectionHandler for PollerHandler {
     fn listen_protocol(
         &self,
     ) -> libp2p_swarm::SubstreamProtocol<Self::InboundProtocol, Self::InboundOpenInfo> {
-        libp2p_swarm::SubstreamProtocol::new(Upgrade(self.protocols), ())
+        libp2p_swarm::SubstreamProtocol::new(Upgrade(self.protocols.clone()), ())
     }
 
     fn poll(
@@ -291,25 +302,25 @@ impl ConnectionHandler for PollerHandler {
             Self::ToBehaviour,
         >,
     > {
-        if self.spam_count == usize::MAX {
+        if self.iter_count == usize::MAX {
             return std::task::Poll::Pending;
         }
 
-        if self.spam_count != 0 {
-            self.spam_count -= 1;
+        if self.iter_count != 0 {
+            self.iter_count -= 1;
             cx.waker().wake_by_ref();
             return std::task::Poll::Pending;
         }
 
-        self.spam_count = usize::MAX;
+        self.iter_count = usize::MAX;
         std::task::Poll::Ready(libp2p_swarm::ConnectionHandlerEvent::NotifyBehaviour(
-            FinishedSpamming,
+            FinishedSpinning,
         ))
     }
 
     fn on_behaviour_event(&mut self, event: Self::FromBehaviour) {
         match event {
-            Restart(spam_count) => self.spam_count = spam_count,
+            Restart(spam_count) => self.iter_count = spam_count,
         }
     }
 
@@ -325,14 +336,14 @@ impl ConnectionHandler for PollerHandler {
     }
 }
 
-pub struct Upgrade(&'static [StreamProtocol]);
+pub struct Upgrade(Vec<StreamProtocol>);
 
 impl UpgradeInfo for Upgrade {
-    type Info = &'static StreamProtocol;
-    type InfoIter = std::slice::Iter<'static, StreamProtocol>;
+    type Info = StreamProtocol;
+    type InfoIter = std::vec::IntoIter<StreamProtocol>;
 
     fn protocol_info(&self) -> Self::InfoIter {
-        self.0.iter()
+        self.0.clone().into_iter()
     }
 }
 
