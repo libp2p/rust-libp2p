@@ -26,8 +26,9 @@ mod syn_ext;
 use crate::syn_ext::RequireStrLit;
 use heck::ToUpperCamelCase;
 use proc_macro::TokenStream;
-use quote::quote;
+use quote::{format_ident, quote, ToTokens};
 use syn::punctuated::Punctuated;
+use syn::visit::Visit;
 use syn::{parse_macro_input, Data, DataStruct, DeriveInput, Meta, Token};
 
 /// Generates a delegating `NetworkBehaviour` implementation for the struct this is used for. See
@@ -53,10 +54,18 @@ fn build(ast: &DeriveInput) -> syn::Result<TokenStream> {
     }
 }
 
-/// The version for structs
+struct FindParam<'a> {
+    found: bool,
+    generics: &'a syn::Generics,
+}
+
+impl<'a> Visit<'a> for FindParam<'_> {
+    fn visit_ident(&mut self, i: &syn::Ident) {
+        self.found |= self.generics.type_params().any(|param| param.ident == *i);
+    }
+}
+
 fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> syn::Result<TokenStream> {
-    let name = &ast.ident;
-    let (_, ty_generics, where_clause) = ast.generics.split_for_impl();
     let BehaviourAttributes {
         prelude_path,
         user_specified_out_event,
@@ -64,10 +73,6 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> syn::Result<Toke
 
     let multiaddr = quote! { #prelude_path::Multiaddr };
     let trait_to_impl = quote! { #prelude_path::NetworkBehaviour };
-    let either_ident = quote! { #prelude_path::Either };
-    let network_behaviour_action = quote! { #prelude_path::ToSwarm };
-    let connection_handler = quote! { #prelude_path::ConnectionHandler };
-    let proto_select_ident = quote! { #prelude_path::ConnectionHandlerSelect };
     let peer_id = quote! { #prelude_path::PeerId };
     let connection_id = quote! { #prelude_path::ConnectionId };
     let from_swarm = quote! { #prelude_path::FromSwarm };
@@ -76,417 +81,625 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> syn::Result<Toke
     let t_handler_out_event = quote! { #prelude_path::THandlerOutEvent };
     let endpoint = quote! { #prelude_path::Endpoint };
     let connection_denied = quote! { #prelude_path::ConnectionDenied };
+    let to_swarm = quote! { #prelude_path::ToSwarm };
+    let connection_handler = quote! { #prelude_path::ConnectionHandler };
+    let substream_protocol = quote! { #prelude_path::SubstreamProtocol };
+    let connection_handler_event = quote! { #prelude_path::ConnectionHandlerEvent };
+    let connection_event = quote! { #prelude_path::ConnectionEvent };
+    let upgrade_info = quote! { #prelude_path::UpgradeInfo };
+    let upgrade_info_send = quote! { #prelude_path::UpgradeInfoSend };
+    let inbound_upgrade = quote! { #prelude_path::InboundUpgrade };
+    let inbound_upgrade_send = quote! { #prelude_path::InboundUpgradeSend };
+    let outbound_upgrade = quote! { #prelude_path::OutboundUpgrade };
+    let outbound_upgrade_send = quote! { #prelude_path::OutboundUpgradeSend };
+    let stream = quote! { #prelude_path::Stream };
+    let fully_negotiated_inbound = quote! { #prelude_path::FullyNegotiatedInbound };
+    let fully_negotiated_outbound = quote! { #prelude_path::FullyNegotiatedOutbound };
+    let address_change = quote! { #prelude_path::HandlerAddressChange };
+    let dial_upgrade_error = quote! { #prelude_path::DialUpgradeError };
+    let listen_upgrade_error = quote! { #prelude_path::ListenUpgradeError };
+    let stream_upgrade_error = quote! { #prelude_path::StreamUpgradeError };
 
-    // Build the generics.
-    let impl_generics = {
-        let tp = ast.generics.type_params();
-        let lf = ast.generics.lifetimes();
-        let cst = ast.generics.const_params();
-        quote! {<#(#lf,)* #(#tp,)* #(#cst,)*>}
-    };
-
-    let (out_event_name, out_event_definition, out_event_from_clauses) = {
-        // If we find a `#[behaviour(to_swarm = "Foo")]` attribute on the
-        // struct, we set `Foo` as the out event. If not, the `ToSwarm` is
-        // generated.
-        match user_specified_out_event {
-            // User provided `ToSwarm`.
-            Some(name) => {
-                let definition = None;
-                let from_clauses = data_struct
-                    .fields
-                    .iter()
-                    .map(|field| {
-                        let ty = &field.ty;
-                        quote! {#name: From< <#ty as #trait_to_impl>::ToSwarm >}
-                    })
-                    .collect::<Vec<_>>();
-                (name, definition, from_clauses)
-            }
-            // User did not provide `ToSwarm`. Generate it.
-            None => {
-                let enum_name_str = ast.ident.to_string() + "Event";
-                let enum_name: syn::Type =
-                    syn::parse_str(&enum_name_str).expect("ident + `Event` is a valid type");
-                let definition = {
-                    let fields = data_struct.fields.iter().map(|field| {
-                        let variant: syn::Variant = syn::parse_str(
-                            &field
-                                .ident
-                                .clone()
-                                .expect("Fields of NetworkBehaviour implementation to be named.")
-                                .to_string()
-                                .to_upper_camel_case(),
-                        )
-                        .expect("uppercased field name to be a valid enum variant");
-                        let ty = &field.ty;
-                        (variant, ty)
-                    });
-
-                    let enum_variants = fields
-                        .clone()
-                        .map(|(variant, ty)| quote! {#variant(<#ty as #trait_to_impl>::ToSwarm)});
-
-                    let visibility = &ast.vis;
-
-                    let additional = fields
-                        .clone()
-                        .map(|(_variant, tp)| quote! { #tp : #trait_to_impl })
-                        .collect::<Vec<_>>();
-
-                    let additional_debug = fields
-                        .clone()
-                        .map(|(_variant, ty)| quote! { <#ty as #trait_to_impl>::ToSwarm : ::core::fmt::Debug })
-                        .collect::<Vec<_>>();
-
-                    let where_clause = {
-                        if let Some(where_clause) = where_clause {
-                            if where_clause.predicates.trailing_punct() {
-                                Some(quote! {#where_clause #(#additional),* })
-                            } else {
-                                Some(quote! {#where_clause, #(#additional),*})
-                            }
-                        } else if additional.is_empty() {
-                            None
-                        } else {
-                            Some(quote! {where #(#additional),*})
-                        }
-                    };
-
-                    let where_clause_debug = where_clause
-                        .as_ref()
-                        .map(|where_clause| quote! {#where_clause, #(#additional_debug),*});
-
-                    let match_variants = fields.map(|(variant, _ty)| variant);
-                    let msg = format!("`NetworkBehaviour::ToSwarm` produced by {name}.");
-
-                    Some(quote! {
-                        #[doc = #msg]
-                        #visibility enum #enum_name #impl_generics
-                            #where_clause
-                        {
-                            #(#enum_variants),*
-                        }
-
-                        impl #impl_generics ::core::fmt::Debug for #enum_name #ty_generics #where_clause_debug {
-                            fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> Result<(), std::fmt::Error> {
-                                match &self {
-                                    #(#enum_name::#match_variants(event) => {
-                                        write!(f, "{}: {:?}", #enum_name_str, event)
-                                    }),*
-                                }
-                            }
-                        }
-                    })
-                };
-                let from_clauses = vec![];
-                (enum_name, definition, from_clauses)
-            }
+    let mut generics = ast.generics.clone();
+    generics.params.iter_mut().for_each(|param| {
+        if let syn::GenericParam::Type(ref mut type_param) = *param {
+            type_param.bounds.push(syn::parse_quote!('static));
         }
-    };
+    });
 
-    // Build the `where ...` clause of the trait implementation.
-    let where_clause = {
-        let additional = data_struct
-            .fields
-            .iter()
-            .map(|field| {
-                let ty = &field.ty;
-                quote! {#ty: #trait_to_impl}
-            })
-            .chain(out_event_from_clauses)
-            .collect::<Vec<_>>();
-
-        if let Some(where_clause) = where_clause {
-            if where_clause.predicates.trailing_punct() {
-                Some(quote! {#where_clause #(#additional),* })
-            } else {
-                Some(quote! {#where_clause, #(#additional),*})
-            }
-        } else {
-            Some(quote! {where #(#additional),*})
-        }
-    };
-
-    // Build the list of statements to put in the body of `on_swarm_event()`.
-    let on_swarm_event_stmts = {
-        data_struct
-            .fields
-            .iter()
-            .enumerate()
-            .map(|(field_n, field)| match field.ident {
-                Some(ref i) => quote! {
-                    self.#i.on_swarm_event(event);
-                },
-                None => quote! {
-                    self.#field_n.on_swarm_event(event);
-                },
-            })
-    };
-
-    // Build the list of variants to put in the body of `on_connection_handler_event()`.
-    //
-    // The event type is a construction of nested `#either_ident`s of the events of the children.
-    // We call `on_connection_handler_event` on the corresponding child.
-    let on_node_event_stmts =
-        data_struct
-            .fields
-            .iter()
-            .enumerate()
-            .enumerate()
-            .map(|(enum_n, (field_n, field))| {
-                let mut elem = if enum_n != 0 {
-                    quote! { #either_ident::Right(ev) }
-                } else {
-                    quote! { ev }
-                };
-
-                for _ in 0..data_struct.fields.len() - 1 - enum_n {
-                    elem = quote! { #either_ident::Left(#elem) };
-                }
-
-                Some(match field.ident {
-                    Some(ref i) => quote! { #elem => {
-                    #trait_to_impl::on_connection_handler_event(&mut self.#i, peer_id, connection_id, ev) }},
-                    None => quote! { #elem => {
-                    #trait_to_impl::on_connection_handler_event(&mut self.#field_n, peer_id, connection_id, ev) }},
-                })
-            });
-
-    // The [`ConnectionHandler`] associated type.
-    let connection_handler_ty = {
-        let mut ph_ty = None;
-        for field in data_struct.fields.iter() {
-            let ty = &field.ty;
-            let field_info = quote! { #t_handler<#ty> };
-            match ph_ty {
-                Some(ev) => ph_ty = Some(quote! { #proto_select_ident<#ev, #field_info> }),
-                ref mut ev @ None => *ev = Some(field_info),
-            }
-        }
-        // ph_ty = Some(quote! )
-        ph_ty.unwrap_or(quote! {()}) // TODO: `!` instead
-    };
-
-    // The content of `handle_pending_inbound_connection`.
-    let handle_pending_inbound_connection_stmts =
-        data_struct
-            .fields
-            .iter()
-            .enumerate()
-            .map(|(field_n, field)| {
-                match field.ident {
-                    Some(ref i) => quote! {
-                        #trait_to_impl::handle_pending_inbound_connection(&mut self.#i, connection_id, local_addr, remote_addr)?;
-                    },
-                    None => quote! {
-                        #trait_to_impl::handle_pending_inbound_connection(&mut self.#field_n, connection_id, local_addr, remote_addr)?;
-                    }
-                }
-            });
-
-    // The content of `handle_established_inbound_connection`.
-    let handle_established_inbound_connection = {
-        let mut out_handler = None;
-
-        for (field_n, field) in data_struct.fields.iter().enumerate() {
-            let field_name = match field.ident {
-                Some(ref i) => quote! { self.#i },
-                None => quote! { self.#field_n },
-            };
-
-            let builder = quote! {
-                #field_name.handle_established_inbound_connection(connection_id, peer, local_addr, remote_addr)?
-            };
-
-            match out_handler {
-                Some(h) => out_handler = Some(quote! { #connection_handler::select(#h, #builder) }),
-                ref mut h @ None => *h = Some(builder),
-            }
-        }
-
-        out_handler.unwrap_or(quote! {()}) // TODO: See test `empty`.
-    };
-
-    // The content of `handle_pending_outbound_connection`.
-    let handle_pending_outbound_connection = {
-        let extend_stmts =
-            data_struct
-                .fields
-                .iter()
-                .enumerate()
-                .map(|(field_n, field)| {
-                    match field.ident {
-                        Some(ref i) => quote! {
-                            combined_addresses.extend(#trait_to_impl::handle_pending_outbound_connection(&mut self.#i, connection_id, maybe_peer, addresses, effective_role)?);
-                        },
-                        None => quote! {
-                            combined_addresses.extend(#trait_to_impl::handle_pending_outbound_connection(&mut self.#field_n, connection_id, maybe_peer, addresses, effective_role)?);
-                        }
-                    }
-                });
-
-        quote! {
-            let mut combined_addresses = vec![];
-
-            #(#extend_stmts)*
-
-            Ok(combined_addresses)
-        }
-    };
-
-    // The content of `handle_established_outbound_connection`.
-    let handle_established_outbound_connection = {
-        let mut out_handler = None;
-
-        for (field_n, field) in data_struct.fields.iter().enumerate() {
-            let field_name = match field.ident {
-                Some(ref i) => quote! { self.#i },
-                None => quote! { self.#field_n },
-            };
-
-            let builder = quote! {
-                #field_name.handle_established_outbound_connection(connection_id, peer, addr, role_override)?
-            };
-
-            match out_handler {
-                Some(h) => out_handler = Some(quote! { #connection_handler::select(#h, #builder) }),
-                ref mut h @ None => *h = Some(builder),
-            }
-        }
-
-        out_handler.unwrap_or(quote! {()}) // TODO: See test `empty`.
-    };
-
-    // List of statements to put in `poll()`.
-    //
-    // We poll each child one by one and wrap around the output.
-    let poll_stmts = data_struct
+    let generic_fields = data_struct
         .fields
         .iter()
-        .enumerate()
-        .map(|(field_n, field)| {
-            let field = field
-                .ident
-                .clone()
-                .expect("Fields of NetworkBehaviour implementation to be named.");
-
-            let mut wrapped_event = if field_n != 0 {
-                quote! { #either_ident::Right(event) }
-            } else {
-                quote! { event }
+        .map(|field| &field.ty)
+        .filter(|ty| {
+            let mut visitor = FindParam {
+                found: false,
+                generics: &generics,
             };
-            for _ in 0..data_struct.fields.len() - 1 - field_n {
-                wrapped_event = quote! { #either_ident::Left(#wrapped_event) };
-            }
+            visitor.visit_type(ty);
+            visitor.found
+        })
+        .collect::<Vec<_>>();
 
-            // If the `NetworkBehaviour`'s `ToSwarm` is generated by the derive macro, wrap the sub
-            // `NetworkBehaviour` `ToSwarm` in the variant of the generated `ToSwarm`. If the
-            // `NetworkBehaviour`'s `ToSwarm` is provided by the user, use the corresponding `From`
-            // implementation.
-            let map_out_event = if out_event_definition.is_some() {
-                let event_variant: syn::Variant =
-                    syn::parse_str(&field.to_string().to_upper_camel_case())
-                        .expect("uppercased field name to be a valid enum variant name");
-                quote! { #out_event_name::#event_variant }
-            } else {
-                quote! { |e| e.into() }
-            };
+    for field in generic_fields.iter() {
+        generics
+            .make_where_clause()
+            .predicates
+            .push(syn::parse_quote!(#field: #trait_to_impl));
+        generics
+            .make_where_clause()
+            .predicates
+            .push(syn::parse_quote!(<#field as #trait_to_impl>::ToSwarm: std::fmt::Debug));
+    }
 
-            let map_in_event = quote! { |event| #wrapped_event };
+    let fields = data_struct
+        .fields
+        .iter()
+        .map(unwrap_field_name)
+        .collect::<syn::Result<Vec<_>>>()?;
+    let var_names = fields
+        .iter()
+        .copied()
+        .map(ident_to_camcel_case)
+        .collect::<Vec<_>>();
+    let behaviour_types = data_struct
+        .fields
+        .iter()
+        .map(|field| &field.ty)
+        .collect::<Vec<_>>();
+    let indices = (0..data_struct.fields.len()).collect::<Vec<_>>();
+    let placeholder_names = (0..data_struct.fields.len())
+        .map(|i| format_ident!("placeholder{}", i))
+        .collect::<Vec<_>>();
+    let beh_count = data_struct.fields.len();
 
+    let (impl_gen, type_gen, where_clause) = generics.split_for_impl();
+
+    let ci = |i| concat_idents(&ast.ident, i);
+
+    let handler = ci("Handler");
+    let to_beh = ci("ToBehaviour");
+    let from_beh = ci("FromBehaviour");
+    let iu = ci("InboundProtocol");
+    let ou = ci("OutboundProtocol");
+    let ioi = ci("InboundOpenInfo");
+    let ooi = ci("OutboundOpenInfo");
+    let iu_ui = ci("InboundUpgradeInfo");
+    let iu_uii = ci("InboundUpgradeInfoIter");
+    let iu_out = ci("InboundUpgradeOutput");
+    let iu_err = ci("InboundUpgradeError");
+    let iu_fut = ci("InboundUpgradeFuture");
+    let ou_ui = ci("OutboundUpgradeInfo");
+    let ou_uii = ci("OutboundUpgradeInfoIter");
+    let ou_out = ci("OutboundUpgradeOutput");
+    let ou_err = ci("OutboundUpgradeError");
+    let ou_fut = ci("OutboundUpgradeFuture");
+
+    let decl_enum = |derives, name: &_, ty: proc_macro2::TokenStream| {
+        quote! {
+            pub enum #name #impl_gen #where_clause {#(
+                #var_names(#prelude_path::#ty<#behaviour_types>),
+            )*}
+            #derives
+        }
+    };
+    let debug_enum = |name: &_, ty| {
+        decl_enum(
             quote! {
-                match #trait_to_impl::poll(&mut self.#field, cx) {
-                    std::task::Poll::Ready(e) => return std::task::Poll::Ready(e.map_out(#map_out_event).map_in(#map_in_event)),
-                    std::task::Poll::Pending => {},
+                impl #impl_gen std::fmt::Debug for #name #type_gen #where_clause {
+                    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                        match self {#(
+                            Self::#var_names(v) => write!(f, "{}({:?})", stringify!(#var_names), v),
+                        )*}
+                    }
                 }
-            }
-        });
+            },
+            name,
+            ty,
+        )
+    };
+    let plain_enum = |name: &_, ty| decl_enum(quote! {}, name, ty);
 
-    let out_event_reference = if out_event_definition.is_some() {
-        quote! { #out_event_name #ty_generics }
-    } else {
-        quote! { #out_event_name }
+    let enums = [
+        debug_enum(&to_beh, quote!(THandlerOutEvent)),
+        debug_enum(&from_beh, quote!(THandlerInEvent)),
+        plain_enum(&ou, quote!(THandlerOutProtocol)),
+        plain_enum(&ooi, quote!(THandlerOutOpenInfo)),
+        plain_enum(&iu_out, quote!(THandlerInUpgradeOutput)),
+        plain_enum(&iu_err, quote!(THandlerInUpgradeError)),
+        plain_enum(&iu_fut, quote!(THandlerInUpgradeFuture)),
+        plain_enum(&iu_ui, quote!(THandlerInUpgradeInfo)),
+        plain_enum(&ou_ui, quote!(THandlerOutUpgradeInfo)),
+        plain_enum(&ou_uii, quote!(THandlerOutUpgradeInfoIter)),
+        plain_enum(&ou_out, quote!(THandlerOutUpgradeOutput)),
+        plain_enum(&ou_err, quote!(THandlerOutUpgradeError)),
+        plain_enum(&ou_fut, quote!(THandlerOutUpgradeFuture)),
+    ];
+
+    let (event, event_impl, poll_impl) = match user_specified_out_event {
+        Some(ty) => (
+            ty.to_token_stream(),
+            quote! {},
+            quote! {#(
+                if let std::task::Poll::Ready(event) = self.#fields.poll(cx) {
+                    return std::task::Poll::Ready(event
+                        .map_in(#t_handler_in_event::<Self>::#var_names)
+                        .map_out(|e| e.into()));
+                }
+            )*},
+        ),
+        None => {
+            let ty = concat_idents(&ast.ident, "Event");
+            let def = debug_enum(&ty, quote!(TBehaviourOutEvent));
+            let poll = quote! {#(
+                if let std::task::Poll::Ready(event) = self.#fields.poll(cx) {
+                    return std::task::Poll::Ready(event
+                        .map_in(#t_handler_in_event::<Self>::#var_names)
+                        .map_out(Self::ToSwarm::#var_names));
+                }
+            )*};
+            (quote!(#ty #type_gen), def, poll)
+        }
     };
 
-    // Now the magic happens.
-    let final_quote = quote! {
-        #out_event_definition
+    let decl_struct =
+        |name, ty: proc_macro2::TokenStream, extra_fields: proc_macro2::TokenStream| {
+            quote! {
+                pub struct #name #impl_gen #where_clause {#(
+                    #fields: #prelude_path::#ty<#behaviour_types>,
+                )* #extra_fields}
+            }
+        };
+    let plain_struct = |name, ty| decl_struct(name, ty, quote!());
+    let indexed_struct = |name, ty| decl_struct(name, ty, quote!(field_index: usize,));
 
-        impl #impl_generics #trait_to_impl for #name #ty_generics
-        #where_clause
-        {
-            type ConnectionHandler = #connection_handler_ty;
-            type ToSwarm = #out_event_reference;
+    let structs = [
+        indexed_struct(&handler, quote!(THandler)),
+        indexed_struct(&iu_uii, quote!(THandlerInUpgradeInfoIter)),
+        plain_struct(&iu, quote!(THandlerInProtocol)),
+        plain_struct(&ioi, quote!(THandlerInOpenInfo)),
+    ];
 
-            #[allow(clippy::needless_question_mark)]
+    let name = &ast.ident;
+    Ok(quote! {
+        #event_impl
+
+        impl #impl_gen #trait_to_impl for #name #type_gen #where_clause {
+            type ToSwarm = #event;
+            type ConnectionHandler = #handler #type_gen;
+
             fn handle_pending_inbound_connection(
                 &mut self,
                 connection_id: #connection_id,
                 local_addr: &#multiaddr,
                 remote_addr: &#multiaddr,
-            ) -> Result<(), #connection_denied> {
-                #(#handle_pending_inbound_connection_stmts)*
+            ) -> std::result::Result<(), #connection_denied> {
+                #(
+                    self.#fields.handle_pending_inbound_connection(
+                        connection_id,
+                        local_addr,
+                        remote_addr,
+                    )?;
+                )*
 
                 Ok(())
             }
 
-            #[allow(clippy::needless_question_mark)]
             fn handle_established_inbound_connection(
                 &mut self,
                 connection_id: #connection_id,
                 peer: #peer_id,
                 local_addr: &#multiaddr,
                 remote_addr: &#multiaddr,
-            ) -> Result<#t_handler<Self>, #connection_denied> {
-                Ok(#handle_established_inbound_connection)
+            ) -> std::result::Result<#t_handler<Self>, #connection_denied> {
+                Ok(Self::ConnectionHandler {
+                    #(#fields: self.#fields.handle_established_inbound_connection(
+                        connection_id,
+                        peer,
+                        local_addr,
+                        remote_addr,
+                    )?,)*
+                    field_index: 0,
+                })
             }
 
-            #[allow(clippy::needless_question_mark)]
             fn handle_pending_outbound_connection(
                 &mut self,
                 connection_id: #connection_id,
                 maybe_peer: Option<#peer_id>,
                 addresses: &[#multiaddr],
                 effective_role: #endpoint,
-            ) -> Result<::std::vec::Vec<#multiaddr>, #connection_denied> {
-                #handle_pending_outbound_connection
+            ) -> std::result::Result<Vec<#multiaddr>, #connection_denied> {
+                let mut addrs = Vec::new();
+                #(
+                    addrs.extend(self.#fields.handle_pending_outbound_connection(
+                        connection_id,
+                        maybe_peer,
+                        addresses,
+                        effective_role,
+                    )?);
+                )*
+                Ok(addrs)
             }
 
-            #[allow(clippy::needless_question_mark)]
             fn handle_established_outbound_connection(
                 &mut self,
                 connection_id: #connection_id,
                 peer: #peer_id,
                 addr: &#multiaddr,
                 role_override: #endpoint,
-            ) -> Result<#t_handler<Self>, #connection_denied> {
-                Ok(#handle_established_outbound_connection)
+            ) -> std::result::Result<#t_handler<Self>, #connection_denied> {
+                Ok(Self::ConnectionHandler {
+                    #(#fields: self.#fields.handle_established_outbound_connection(
+                        connection_id,
+                        peer,
+                        addr,
+                        role_override,
+                    )?,)*
+                    field_index: 0,
+                })
+            }
+
+            fn on_swarm_event(&mut self, event: #from_swarm) {
+                #(self.#fields.on_swarm_event(event.clone());)*
             }
 
             fn on_connection_handler_event(
                 &mut self,
                 peer_id: #peer_id,
                 connection_id: #connection_id,
-                event: #t_handler_out_event<Self>
+                event: #t_handler_out_event<Self>,
             ) {
-                match event {
-                    #(#on_node_event_stmts),*
-                }
+                match event {#(
+                    #t_handler_out_event::<Self>::#var_names(event) => {
+                        self.#fields.on_connection_handler_event(
+                            peer_id,
+                            connection_id,
+                            event,
+                        );
+                    }
+                )*}
             }
 
-            fn poll(&mut self, cx: &mut std::task::Context) -> std::task::Poll<#network_behaviour_action<Self::ToSwarm, #t_handler_in_event<Self>>> {
-                #(#poll_stmts)*
+            fn poll(&mut self, cx: &mut std::task::Context<'_>)
+                -> std::task::Poll<#to_swarm<Self::ToSwarm, #t_handler_in_event<Self>>>
+            {
+                #poll_impl
+                std::task::Poll::Pending
+            }
+        }
+
+        #(#enums)*
+        #(#structs)*
+
+        impl #impl_gen #connection_handler for #handler #type_gen #where_clause {
+            type FromBehaviour = #from_beh #type_gen;
+            type ToBehaviour = #to_beh #type_gen;
+            type InboundProtocol = #iu #type_gen;
+            type OutboundProtocol = #ou #type_gen;
+            type InboundOpenInfo = #ioi #type_gen;
+            type OutboundOpenInfo = #ooi #type_gen;
+
+            fn listen_protocol(&self) -> #substream_protocol<Self::InboundProtocol, Self::InboundOpenInfo> {
+                #(let #fields = self.#fields.listen_protocol();)*
+                let timeout = std::time::Duration::from_secs(0) #(.max(*#fields.timeout()))*;
+                #(let (#fields, #placeholder_names) = #fields.into_upgrade();)*
+                let upgrade = #iu { #(#fields,)* };
+                let info = #ioi { #(#fields: #placeholder_names,)* };
+                #substream_protocol::new(upgrade, info).with_timeout(timeout)
+            }
+
+            fn connection_keep_alive(&self) -> bool {
+                false #(|| self.#fields.connection_keep_alive())*
+            }
+
+            fn poll(
+                &mut self,
+                cx: &mut std::task::Context<'_>,
+            ) -> std::task::Poll<
+                #connection_handler_event<Self::OutboundProtocol, Self::OutboundOpenInfo, Self::ToBehaviour>,
+            > {
+                for _ in 0..#beh_count {
+                    // save the poll position to avoid repolling exhaused handlers
+                    match self.field_index {
+                        #(#indices => match self.#fields.poll(cx) {
+                            std::task::Poll::Ready(event) =>
+                                return std::task::Poll::Ready(event
+                                    .map_custom(#to_beh::#var_names)
+                                    .map_outbound_open_info(#ooi::#var_names)
+                                    .map_protocol(#ou::#var_names)),
+                            std::task::Poll::Pending => {}
+                        },)*
+                        _ => {
+                            self.field_index = 0;
+                            continue;
+                        }
+                    }
+                    self.field_index += 1;
+                }
+
                 std::task::Poll::Pending
             }
 
-            fn on_swarm_event(&mut self, event: #from_swarm) {
-                #(#on_swarm_event_stmts)*
+            fn poll_close(&mut self, cx: &mut std::task::Context<'_>) -> std::task::Poll<Option<Self::ToBehaviour>> {
+                let mut found_pending = false;
+                for _ in 0..#beh_count {
+                    match self.field_index {
+                        #(#indices => match self.#fields.poll_close(cx) {
+                            std::task::Poll::Ready(Some(event)) =>
+                                return std::task::Poll::Ready(Some(#to_beh::#var_names(event))),
+                            std::task::Poll::Pending => found_pending = true,
+                            std::task::Poll::Ready(None) => {}
+                        },)*
+                        _ => {
+                            self.field_index = 0;
+                            continue;
+                        }
+                    }
+                    self.field_index += 1;
+                }
+
+                if found_pending {
+                    std::task::Poll::Pending
+                } else {
+                    std::task::Poll::Ready(None)
+                }
+            }
+
+            fn on_behaviour_event(&mut self, event: Self::FromBehaviour) {
+                match event {#(
+                    Self::FromBehaviour::#var_names(event) => self.#fields.on_behaviour_event(event),
+                )*}
+            }
+
+            fn on_connection_event(
+                &mut self,
+                event: #connection_event<
+                    Self::InboundProtocol,
+                    Self::OutboundProtocol,
+                    Self::InboundOpenInfo,
+                    Self::OutboundOpenInfo,
+                >,
+            ) {
+                match event {
+                    #connection_event::FullyNegotiatedOutbound(fully_negotiated_outbound) => {
+                        match (fully_negotiated_outbound.protocol, fully_negotiated_outbound.info) {
+                            #(
+                                (#ou_out::#var_names(protocol), #ooi::#var_names(info)) => {
+                                    self.#fields.on_connection_event(
+                                        #connection_event::FullyNegotiatedOutbound(#fully_negotiated_outbound {
+                                            protocol,
+                                            info,
+                                        }),
+                                    );
+                                }
+                            )*
+                            _ => unreachable!(),
+                        }
+                    }
+                    #connection_event::FullyNegotiatedInbound(fully_negotiated_inbound) => {
+                        match fully_negotiated_inbound.protocol {#(
+                            #iu_out::#var_names(protocol) => {
+                                self.#fields.on_connection_event(
+                                    #connection_event::FullyNegotiatedInbound(#fully_negotiated_inbound {
+                                        protocol,
+                                        info: fully_negotiated_inbound.info.#fields,
+                                    }),
+                                );
+                            }
+                        )*}
+                    }
+                    #connection_event::AddressChange(address) => {
+                        #(
+                            self.#fields
+                                .on_connection_event(#connection_event::AddressChange(#address_change {
+                                    new_address: address.new_address,
+                                }));
+                        )*
+                    }
+                    #connection_event::DialUpgradeError(dial_upgrade_error) => {
+                        match (dial_upgrade_error.error, dial_upgrade_error.info) {
+                            #(
+                                (#stream_upgrade_error::Apply(#ou_err::#var_names(error)), #ooi::#var_names(info)) => {
+                                    self.#fields
+                                        .on_connection_event(#connection_event::DialUpgradeError(#dial_upgrade_error {
+                                            error: #stream_upgrade_error::Apply(error),
+                                            info,
+                                        }));
+                                }
+                            )*
+                            #(
+                                (error, #ooi::#var_names(info)) => {
+                                    self.#fields
+                                        .on_connection_event(#connection_event::DialUpgradeError(#dial_upgrade_error {
+                                            error: error.map_upgrade_err(|_| unreachable!()),
+                                            info,
+                                        }));
+                                }
+                            )*
+                        }
+                    }
+                    #connection_event::ListenUpgradeError(listen_upgrade_error) => {
+                        match listen_upgrade_error.error {#(
+                            #iu_err::#var_names(error) => {
+                                self.#fields
+                                    .on_connection_event(#connection_event::ListenUpgradeError(#listen_upgrade_error {
+                                        error,
+                                        info: listen_upgrade_error.info.#fields,
+                                    }));
+                            }
+                        )*}
+                    }
+                    #connection_event::LocalProtocolsChange(supported_protocols) => {
+                        #(
+                            self.#fields
+                                .on_connection_event(#connection_event::LocalProtocolsChange(supported_protocols.clone()));
+                        )*
+                    }
+                    #connection_event::RemoteProtocolsChange(supported_protocols) => {
+                        #(
+                            self.#fields
+                                .on_connection_event(#connection_event::RemoteProtocolsChange(supported_protocols.clone()));
+                        )*
+                    }
+                    _ => {}
+                }
             }
         }
-    };
 
-    Ok(final_quote.into())
+
+        impl #impl_gen #upgrade_info for #ou #type_gen #where_clause {
+            type Info = #ou_ui #type_gen;
+            type InfoIter = #ou_uii #type_gen;
+
+            fn protocol_info(&self) -> Self::InfoIter {
+                match self {#(
+                    Self::#var_names(ou) => #ou_uii::#var_names(#upgrade_info_send::protocol_info(ou)),
+                )*}
+            }
+        }
+
+        impl #impl_gen AsRef<str> for #ou_ui #type_gen #where_clause {
+            fn as_ref(&self) -> &str {
+                match self {#(
+                    Self::#var_names(info) => AsRef::<str>::as_ref(info),
+                )*}
+            }
+        }
+
+        impl #impl_gen Clone for #ou_ui #type_gen #where_clause {
+            fn clone(&self) -> Self {
+                match self {#(
+                    Self::#var_names(info) => Self::#var_names(info.clone()),
+                )*}
+            }
+        }
+
+        impl #impl_gen #outbound_upgrade<#stream> for #ou #type_gen #where_clause {
+            type Output = #ou_out #type_gen;
+            type Error = #ou_err #type_gen;
+            type Future = #ou_fut #type_gen;
+
+            fn upgrade_outbound(self, socket: #stream, info: Self::Info) -> Self::Future {
+                match (self, info) {
+                    #((Self::#var_names(this), Self::Info::#var_names(info)) =>
+                        Self::Future::#var_names(#outbound_upgrade_send::upgrade_outbound(this, socket, info)),)*
+                    _ => unreachable!("incorect invocation")
+                }
+            }
+        }
+
+        impl #impl_gen Iterator for #ou_uii #type_gen #where_clause {
+            type Item = #ou_ui #type_gen;
+
+            fn next(&mut self) -> Option<Self::Item> {
+                match self {#(
+                    Self::#var_names(i) => i.next().map(#ou_ui::#var_names),
+                )*}
+            }
+        }
+
+        impl #impl_gen std::future::Future for #ou_fut #type_gen #where_clause {
+            type Output = std::result::Result<#ou_out #type_gen, #ou_err #type_gen>;
+
+            fn poll(self: std::pin::Pin<&mut Self>, cx: &mut std::task::Context<'_>) -> std::task::Poll<Self::Output> {
+                // SAFETY: we dont move anything out
+                unsafe {
+                    match self.get_unchecked_mut() {#(
+                        Self::#var_names(fut) => std::pin::Pin::new_unchecked(fut)
+                            .poll(cx).map_ok(#ou_out::#var_names).map_err(#ou_err::#var_names),
+                    )*}
+                }
+            }
+        }
+
+        impl #impl_gen #upgrade_info for #iu #type_gen #where_clause {
+            type Info = #iu_ui #type_gen;
+            type InfoIter = #iu_uii #type_gen;
+
+            fn protocol_info(&self) -> Self::InfoIter {
+                Self::InfoIter {
+                    #(#fields: #upgrade_info_send::protocol_info(&self.#fields),)*
+                    field_index: 0,
+                }
+            }
+        }
+
+        impl #impl_gen Iterator for #iu_uii #type_gen #where_clause {
+            type Item = #iu_ui #type_gen;
+
+            fn next(&mut self) -> Option<Self::Item> {
+                // simpl #impl_gene state machine that yields better performance than
+                // naive sequential calls of next
+                loop {
+                    match self.field_index {
+                        #(
+                            #indices => match self.#fields.next() {
+                                Some(info) => return Some(#iu_ui::#var_names(info)),
+                                None => {}
+                            },
+                        )*
+                        _ => return None,
+                    }
+                    self.field_index += 1;
+                }
+            }
+        }
+
+        impl #impl_gen AsRef<str> for #iu_ui #type_gen #where_clause {
+            fn as_ref(&self) -> &str {
+                match self {#(
+                    Self::#var_names(info) => AsRef::<str>::as_ref(info),
+                )*}
+            }
+        }
+
+        impl #impl_gen Clone for #iu_ui #type_gen #where_clause {
+            fn clone(&self) -> Self {
+                match self {#(
+                    Self::#var_names(info) => Self::#var_names(info.clone()),
+                )*}
+            }
+        }
+
+        impl #impl_gen #inbound_upgrade<#stream> for #iu #type_gen #where_clause {
+            type Output = #iu_out #type_gen;
+            type Error = #iu_err #type_gen;
+            type Future = #iu_fut #type_gen;
+
+            fn upgrade_inbound(self, socket: #stream, info: Self::Info) -> Self::Future {
+                match info {#(
+                    Self::Info::#var_names(info) =>
+                        Self::Future::#var_names(#inbound_upgrade_send::upgrade_inbound(self.#fields, socket, info)),
+                )*}
+            }
+        }
+
+        impl #impl_gen std::future::Future for #iu_fut #type_gen #where_clause {
+            type Output = std::result::Result<#iu_out #type_gen, #iu_err #type_gen>;
+
+            fn poll(self: std::pin::Pin<&mut Self>, cx: &mut std::task::Context<'_>) -> std::task::Poll<Self::Output> {
+                unsafe {
+                    match self.get_unchecked_mut() {#(
+                        Self::#var_names(fut) => std::pin::Pin::new_unchecked(fut)
+                            .poll(cx).map_ok(#iu_out::#var_names).map_err(#iu_err::#var_names),
+                    )*}
+                }
+            }
+        }
+
+    }.into())
+}
+
+fn ident_to_camcel_case(ident: &syn::Ident) -> syn::Ident {
+    syn::Ident::new(&ident.to_string().to_upper_camel_case(), ident.span())
+}
+
+fn unwrap_field_name(field: &syn::Field) -> syn::Result<&syn::Ident> {
+    field
+        .ident
+        .as_ref()
+        .ok_or_else(|| syn::Error::new_spanned(field, "fields must be named"))
 }
 
 struct BehaviourAttributes {
@@ -528,4 +741,8 @@ fn parse_attributes(ast: &DeriveInput) -> syn::Result<BehaviourAttributes> {
     }
 
     Ok(attributes)
+}
+
+fn concat_idents(a: &syn::Ident, b: &str) -> syn::Ident {
+    syn::Ident::new(&format!("{a}{b}"), a.span())
 }
