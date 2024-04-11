@@ -973,7 +973,7 @@ pub(crate) struct PoolConfig {
 impl PoolConfig {
     pub(crate) fn new(executor: Option<Box<dyn Executor + Send>>) -> Self {
         Self {
-            executor: None,
+            executor,
             task_command_buffer_size: 32,
             per_connection_event_buffer_size: 7,
             dial_concurrency_factor: NonZeroU8::new(8).expect("8 > 0"),
