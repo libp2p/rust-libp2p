@@ -39,7 +39,6 @@ pub(crate) async fn metrics_server(
     let service = MetricService::new(registry, metrics_path.clone());
     let server = Router::new()
         .route(&metrics_path, get(respond_with_metrics))
-        .fallback(respond_with_404_not_found)
         .with_state(service);
     let tcp_listener = TcpListener::bind(addr).await?;
     let local_addr = tcp_listener.local_addr()?;
@@ -57,13 +56,6 @@ async fn respond_with_metrics(state: State<MetricService>) -> impl IntoResponse 
         StatusCode::OK,
         [(axum::http::header::CONTENT_TYPE, METRICS_CONTENT_TYPE)],
         sink,
-    )
-}
-
-async fn respond_with_404_not_found(state: State<MetricService>) -> impl IntoResponse {
-    (
-        StatusCode::NOT_FOUND,
-        format!("Not found try localhost:[port]/{}", state.metrics_path),
     )
 }
 
