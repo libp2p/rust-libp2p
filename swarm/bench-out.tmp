@@ -1,0 +1,201 @@
+warning: unused import: `sync::Arc`
+ --> swarm/benches/connection_handler.rs:9:32
+  |
+9 | use std::{convert::Infallible, sync::Arc};
+  |                                ^^^^^^^^^
+  |
+  = note: `#[warn(unused_imports)]` on by default
+
+warning: `libp2p-swarm` (bench "connection_handler") generated 1 warning (run `cargo fix --bench "connection_handler"` to apply 1 suggestion)
+    Finished `bench` profile [optimized] target(s) in 0.15s
+     Running unittests src/lib.rs (/home/mlokis/work/rust/rust-libp2p/target/release/deps/libp2p_swarm-cbcdf906720dca43)
+
+running 38 tests
+test behaviour::external_addresses::tests::expired_external_addr_returns_correct_changed_value ... ignored
+test behaviour::external_addresses::tests::more_recent_external_addresses_are_prioritized ... ignored
+test behaviour::external_addresses::tests::new_external_addr_returns_correct_changed_value ... ignored
+test behaviour::external_addresses::tests::reporting_existing_external_address_moves_it_to_the_front ... ignored
+test behaviour::external_addresses::tests::when_pushing_more_than_max_addresses_oldest_is_evicted ... ignored
+test behaviour::listen_addresses::tests::expired_listen_addr_returns_correct_changed_value ... ignored
+test behaviour::listen_addresses::tests::new_listen_addr_returns_correct_changed_value ... ignored
+test behaviour::peer_addresses::tests::add_adds_address_to_cache_to_existing_key ... ignored
+test behaviour::peer_addresses::tests::add_adds_new_address_to_cache ... ignored
+test behaviour::peer_addresses::tests::addresses_of_peer_are_removed_when_received_dial_failure ... ignored
+test behaviour::peer_addresses::tests::existing_addr_is_not_added_to_cache ... ignored
+test behaviour::peer_addresses::tests::new_peer_addr_returns_correct_changed_value ... ignored
+test behaviour::peer_addresses::tests::new_peer_addr_saves_peer_addrs ... ignored
+test behaviour::peer_addresses::tests::remove_removes_address_if_present ... ignored
+test behaviour::peer_addresses::tests::remove_removes_address_provided_in_param ... ignored
+test behaviour::peer_addresses::tests::remove_returns_false_if_address_not_present ... ignored
+test behaviour::peer_addresses::tests::remove_returns_false_if_peer_not_present ... ignored
+test connection::supported_protocols::tests::protocols_change_added_returns_correct_changed_value ... ignored
+test connection::supported_protocols::tests::protocols_change_removed_returns_correct_changed_value ... ignored
+test connection::tests::checked_add_fraction_can_add_u64_max ... ignored
+test connection::tests::compute_new_shutdown_does_not_panic ... ignored
+test connection::tests::idle_timeout_with_keep_alive_no ... ignored
+test connection::tests::max_negotiating_inbound_streams ... ignored
+test connection::tests::only_propagtes_actual_changes_to_remote_protocols_to_handler ... ignored
+test connection::tests::outbound_stream_timeout_starts_on_request ... ignored
+test connection::tests::propagates_changes_to_supported_inbound_protocols ... ignored
+test handler::one_shot::tests::do_not_keep_idle_connection_alive ... ignored
+test stream_protocol::tests::stream_protocol_print ... ignored
+test tests::aborting_pending_connection_surfaces_error ... ignored
+test tests::concurrent_dialing ... ignored
+test tests::dial_error_prints_sources ... ignored
+test tests::dial_self ... ignored
+test tests::dial_self_by_id ... ignored
+test tests::invalid_peer_id ... ignored
+test tests::multiple_addresses_err ... ignored
+test tests::test_behaviour_disconnect_all ... ignored
+test tests::test_behaviour_disconnect_one ... ignored
+test tests::test_swarm_disconnect ... ignored
+
+test result: ok. 0 passed; 0 failed; 38 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running benches/connection_handler.rs (/home/mlokis/work/rust/rust-libp2p/target/release/deps/connection_handler-9f0c6989156f24f9)
+Gnuplot not found, using plotters backend
+Benchmarking connection_handler::SpinningBehaviour::bench().poll_count(10000).protocols_per_behaviour(10)
+Benchmarking connection_handler::SpinningBehaviour::bench().poll_count(10000).protocols_per_behaviour(10): Warming up for 3.0000 s
+Benchmarking connection_handler::SpinningBehaviour::bench().poll_count(10000).protocols_per_behaviour(10): Collecting 100 samples in estimated 5.0000 s (652M iterations)
+Benchmarking connection_handler::SpinningBehaviour::bench().poll_count(10000).protocols_per_behaviour(10): Analyzing
+connection_handler::SpinningBehaviour::bench().poll_count(10000).protocols_per_behaviour(10)
+                        time:   [7.6035 ns 7.7618 ns 7.9634 ns]
+                        change: [+46.884% +101.01% +188.79%] (p = 0.00 < 0.05)
+                        Performance has regressed.
+Found 14 outliers among 100 measurements (14.00%)
+  5 (5.00%) high mild
+  9 (9.00%) high severe
+
+Benchmarking connection_handler::SpinningBehaviour::bench().poll_count(10000).protocols_per_behaviour(100)
+Benchmarking connection_handler::SpinningBehaviour::bench().poll_count(10000).protocols_per_behaviour(100): Warming up for 3.0000 s
+Benchmarking connection_handler::SpinningBehaviour::bench().poll_count(10000).protocols_per_behaviour(100): Collecting 100 samples in estimated 5.0205 s (843k iterations)
+Benchmarking connection_handler::SpinningBehaviour::bench().poll_count(10000).protocols_per_behaviour(100): Analyzing
+connection_handler::SpinningBehaviour::bench().poll_count(10000).protocols_per_behaviour(100)
+                        time:   [17.956 µs 19.036 µs 20.382 µs]
+                        change: [+189586% +312058% +514568%] (p = 0.00 < 0.05)
+                        Performance has regressed.
+Found 14 outliers among 100 measurements (14.00%)
+  4 (4.00%) high mild
+  10 (10.00%) high severe
+
+Benchmarking connection_handler::SpinningBehaviour::bench().poll_count(10000).protocols_per_behaviour(1000)
+Benchmarking connection_handler::SpinningBehaviour::bench().poll_count(10000).protocols_per_behaviour(1000): Warming up for 3.0000 s
+
+Warning: Unable to complete 100 samples in 5.0s. You may wish to increase target time to 57.3s, or reduce sample count to 10.
+Benchmarking connection_handler::SpinningBehaviour::bench().poll_count(10000).protocols_per_behaviour(1000): Collecting 100 samples in estimated 57.296 s (100 iterations)
+Benchmarking connection_handler::SpinningBehaviour::bench().poll_count(10000).protocols_per_behaviour(1000): Analyzing
+connection_handler::SpinningBehaviour::bench().poll_count(10000).protocols_per_behaviour(1000)
+                        time:   [1.5639 s 1.6051 s 1.6499 s]
+                        change: [+7414.9% +7652.0% +7905.9%] (p = 0.00 < 0.05)
+                        Performance has regressed.
+Found 4 outliers among 100 measurements (4.00%)
+  3 (3.00%) high mild
+  1 (1.00%) high severe
+
+Benchmarking connection_handler::PollerBehaviour5::bench().poll_count(10000).protocols_per_behaviour(2)
+Benchmarking connection_handler::PollerBehaviour5::bench().poll_count(10000).protocols_per_behaviour(2): Warming up for 3.0000 s
+Benchmarking connection_handler::PollerBehaviour5::bench().poll_count(10000).protocols_per_behaviour(2): Collecting 100 samples in estimated 5.0000 s (649M iterations)
+Benchmarking connection_handler::PollerBehaviour5::bench().poll_count(10000).protocols_per_behaviour(2): Analyzing
+connection_handler::PollerBehaviour5::bench().poll_count(10000).protocols_per_behaviour(2)
+                        time:   [9.0094 ns 9.2876 ns 9.5575 ns]
+                        change: [+3.7805% +48.109% +110.34%] (p = 0.04 < 0.05)
+                        Performance has regressed.
+Found 13 outliers among 100 measurements (13.00%)
+  4 (4.00%) high mild
+  9 (9.00%) high severe
+
+Benchmarking connection_handler::PollerBehaviour5::bench().poll_count(10000).protocols_per_behaviour(20)
+Benchmarking connection_handler::PollerBehaviour5::bench().poll_count(10000).protocols_per_behaviour(20): Warming up for 3.0000 s
+Benchmarking connection_handler::PollerBehaviour5::bench().poll_count(10000).protocols_per_behaviour(20): Collecting 100 samples in estimated 5.0039 s (207k iterations)
+Benchmarking connection_handler::PollerBehaviour5::bench().poll_count(10000).protocols_per_behaviour(20): Analyzing
+connection_handler::PollerBehaviour5::bench().poll_count(10000).protocols_per_behaviour(20)
+                        time:   [57.170 µs 61.703 µs 67.540 µs]
+                        change: [+172759% +313410% +554174%] (p = 0.00 < 0.05)
+                        Performance has regressed.
+Found 13 outliers among 100 measurements (13.00%)
+  5 (5.00%) high mild
+  8 (8.00%) high severe
+
+Benchmarking connection_handler::PollerBehaviour5::bench().poll_count(10000).protocols_per_behaviour(200)
+Benchmarking connection_handler::PollerBehaviour5::bench().poll_count(10000).protocols_per_behaviour(200): Warming up for 3.0000 s
+
+Warning: Unable to complete 100 samples in 5.0s. You may wish to increase target time to 57.8s, or reduce sample count to 10.
+Benchmarking connection_handler::PollerBehaviour5::bench().poll_count(10000).protocols_per_behaviour(200): Collecting 100 samples in estimated 57.804 s (100 iterations)
+Benchmarking connection_handler::PollerBehaviour5::bench().poll_count(10000).protocols_per_behaviour(200): Analyzing
+connection_handler::PollerBehaviour5::bench().poll_count(10000).protocols_per_behaviour(200)
+                        time:   [1.7835 s 1.8163 s 1.8515 s]
+                        change: [+111.89% +117.60% +123.46%] (p = 0.00 < 0.05)
+                        Performance has regressed.
+
+Benchmarking connection_handler::PollerBehaviour10::bench().poll_count(10000).protocols_per_behaviour(1)
+Benchmarking connection_handler::PollerBehaviour10::bench().poll_count(10000).protocols_per_behaviour(1): Warming up for 3.0000 s
+Benchmarking connection_handler::PollerBehaviour10::bench().poll_count(10000).protocols_per_behaviour(1): Collecting 100 samples in estimated 5.0000 s (397M iterations)
+Benchmarking connection_handler::PollerBehaviour10::bench().poll_count(10000).protocols_per_behaviour(1): Analyzing
+connection_handler::PollerBehaviour10::bench().poll_count(10000).protocols_per_behaviour(1)
+                        time:   [12.783 ns 13.132 ns 13.534 ns]
+                        change: [-23.336% +22.887% +90.767%] (p = 0.42 > 0.05)
+                        No change in performance detected.
+Found 11 outliers among 100 measurements (11.00%)
+  4 (4.00%) high mild
+  7 (7.00%) high severe
+
+Benchmarking connection_handler::PollerBehaviour10::bench().poll_count(10000).protocols_per_behaviour(10)
+Benchmarking connection_handler::PollerBehaviour10::bench().poll_count(10000).protocols_per_behaviour(10): Warming up for 3.0000 s
+Benchmarking connection_handler::PollerBehaviour10::bench().poll_count(10000).protocols_per_behaviour(10): Collecting 100 samples in estimated 5.0397 s (429k iterations)
+Benchmarking connection_handler::PollerBehaviour10::bench().poll_count(10000).protocols_per_behaviour(10): Analyzing
+connection_handler::PollerBehaviour10::bench().poll_count(10000).protocols_per_behaviour(10)
+                        time:   [28.961 µs 31.101 µs 33.781 µs]
+                        change: [+549.87% +1095.6% +2066.8%] (p = 0.00 < 0.05)
+                        Performance has regressed.
+Found 12 outliers among 100 measurements (12.00%)
+  1 (1.00%) high mild
+  11 (11.00%) high severe
+
+Benchmarking connection_handler::PollerBehaviour10::bench().poll_count(10000).protocols_per_behaviour(100)
+Benchmarking connection_handler::PollerBehaviour10::bench().poll_count(10000).protocols_per_behaviour(100): Warming up for 3.0000 s
+
+Warning: Unable to complete 100 samples in 5.0s. You may wish to increase target time to 56.6s, or reduce sample count to 10.
+Benchmarking connection_handler::PollerBehaviour10::bench().poll_count(10000).protocols_per_behaviour(100): Collecting 100 samples in estimated 56.579 s (100 iterations)
+Benchmarking connection_handler::PollerBehaviour10::bench().poll_count(10000).protocols_per_behaviour(100): Analyzing
+connection_handler::PollerBehaviour10::bench().poll_count(10000).protocols_per_behaviour(100)
+                        time:   [1.8011 s 1.8359 s 1.8729 s]
+                        change: [+47.806% +51.715% +56.117%] (p = 0.00 < 0.05)
+                        Performance has regressed.
+
+Benchmarking connection_handler::PollerBehaviour20::bench().poll_count(5000).protocols_per_behaviour(1)
+Benchmarking connection_handler::PollerBehaviour20::bench().poll_count(5000).protocols_per_behaviour(1): Warming up for 3.0000 s
+Benchmarking connection_handler::PollerBehaviour20::bench().poll_count(5000).protocols_per_behaviour(1): Collecting 100 samples in estimated 5.0000 s (351M iterations)
+Benchmarking connection_handler::PollerBehaviour20::bench().poll_count(5000).protocols_per_behaviour(1): Analyzing
+connection_handler::PollerBehaviour20::bench().poll_count(5000).protocols_per_behaviour(1)
+                        time:   [15.085 ns 15.527 ns 16.108 ns]
+                        change: [-40.576% -7.7926% +42.042%] (p = 0.74 > 0.05)
+                        No change in performance detected.
+Found 12 outliers among 100 measurements (12.00%)
+  4 (4.00%) high mild
+  8 (8.00%) high severe
+
+Benchmarking connection_handler::PollerBehaviour20::bench().poll_count(5000).protocols_per_behaviour(10)
+Benchmarking connection_handler::PollerBehaviour20::bench().poll_count(5000).protocols_per_behaviour(10): Warming up for 3.0000 s
+Benchmarking connection_handler::PollerBehaviour20::bench().poll_count(5000).protocols_per_behaviour(10): Collecting 100 samples in estimated 5.6382 s (30k iterations)
+Benchmarking connection_handler::PollerBehaviour20::bench().poll_count(5000).protocols_per_behaviour(10): Analyzing
+connection_handler::PollerBehaviour20::bench().poll_count(5000).protocols_per_behaviour(10)
+                        time:   [470.49 µs 507.08 µs 553.35 µs]
+                        change: [+93.120% +249.05% +540.40%] (p = 0.00 < 0.05)
+                        Performance has regressed.
+Found 17 outliers among 100 measurements (17.00%)
+  6 (6.00%) high mild
+  11 (11.00%) high severe
+
+Benchmarking connection_handler::PollerBehaviour20::bench().poll_count(5000).protocols_per_behaviour(100)
+Benchmarking connection_handler::PollerBehaviour20::bench().poll_count(5000).protocols_per_behaviour(100): Warming up for 3.0000 s
+
+Warning: Unable to complete 100 samples in 5.0s. You may wish to increase target time to 59.9s, or reduce sample count to 10.
+Benchmarking connection_handler::PollerBehaviour20::bench().poll_count(5000).protocols_per_behaviour(100): Collecting 100 samples in estimated 59.925 s (100 iterations)
+Benchmarking connection_handler::PollerBehaviour20::bench().poll_count(5000).protocols_per_behaviour(100): Analyzing
+connection_handler::PollerBehaviour20::bench().poll_count(5000).protocols_per_behaviour(100)
+                        time:   [1.9931 s 2.0245 s 2.0578 s]
+                        change: [+9.9884% +12.365% +14.826%] (p = 0.00 < 0.05)
+                        Performance has regressed.
+Found 5 outliers among 100 measurements (5.00%)
+  5 (5.00%) high mild
+

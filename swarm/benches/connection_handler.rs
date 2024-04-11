@@ -6,7 +6,7 @@ use libp2p_core::{
 };
 use libp2p_identity::PeerId;
 use libp2p_swarm::{ConnectionHandler, NetworkBehaviour, StreamProtocol};
-use std::{convert::Infallible, sync::Arc};
+use std::convert::Infallible;
 
 macro_rules! gen_behaviour {
     ($($name:ident {$($field:ident),*};)*) => {$(
@@ -55,9 +55,9 @@ macro_rules! benchmarks {
 
 // fans go brrr
 gen_behaviour! {
-    PollerBehaviour5 { a, b, c, d, e };
-    PollerBehaviour10 { a, b, c, d, e, f, g, h, i, j };
-    PollerBehaviour20 { a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p, q, r, s, t, u };
+    SpinningBehaviour5 { a, b, c, d, e };
+    SpinningBehaviour10 { a, b, c, d, e, f, g, h, i, j };
+    SpinningBehaviour20 { a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p, q, r, s, t, u };
 }
 
 benchmarks! {
@@ -67,19 +67,19 @@ benchmarks! {
         SpinningBehaviour::bench().name(d).poll_count(10000).protocols_per_behaviour(1000),
     ];
     big_5::[
-        PollerBehaviour5::bench().name(e).poll_count(10000).protocols_per_behaviour(2),
-        PollerBehaviour5::bench().name(f).poll_count(10000).protocols_per_behaviour(20),
-        PollerBehaviour5::bench().name(g).poll_count(10000).protocols_per_behaviour(200),
+        SpinningBehaviour5::bench().name(e).poll_count(10000).protocols_per_behaviour(2),
+        SpinningBehaviour5::bench().name(f).poll_count(10000).protocols_per_behaviour(20),
+        SpinningBehaviour5::bench().name(g).poll_count(10000).protocols_per_behaviour(200),
     ];
     top_10::[
-        PollerBehaviour10::bench().name(h).poll_count(10000).protocols_per_behaviour(1),
-        PollerBehaviour10::bench().name(i).poll_count(10000).protocols_per_behaviour(10),
-        PollerBehaviour10::bench().name(j).poll_count(10000).protocols_per_behaviour(100),
+        SpinningBehaviour10::bench().name(h).poll_count(10000).protocols_per_behaviour(1),
+        SpinningBehaviour10::bench().name(i).poll_count(10000).protocols_per_behaviour(10),
+        SpinningBehaviour10::bench().name(j).poll_count(10000).protocols_per_behaviour(100),
     ];
     lucky_20::[
-        PollerBehaviour20::bench().name(k).poll_count(5000).protocols_per_behaviour(1),
-        PollerBehaviour20::bench().name(l).poll_count(5000).protocols_per_behaviour(10),
-        PollerBehaviour20::bench().name(m).poll_count(5000).protocols_per_behaviour(100),
+        SpinningBehaviour20::bench().name(k).poll_count(5000).protocols_per_behaviour(1),
+        SpinningBehaviour20::bench().name(l).poll_count(5000).protocols_per_behaviour(10),
+        SpinningBehaviour20::bench().name(m).poll_count(5000).protocols_per_behaviour(100),
     ];
 }
 //fn main() {}
@@ -184,7 +184,7 @@ fn new_swarm<T: NetworkBehaviour>(beh: T) -> libp2p_swarm::Swarm<T> {
 }
 
 /// Whole purpose of the behaviour is to rapidly call `poll` on the handler
-/// configured amount of times and then emmit event when finished
+/// configured amount of times and then emmit event when finished.
 #[derive(Default)]
 struct SpinningBehaviour {
     iter_count: usize,
