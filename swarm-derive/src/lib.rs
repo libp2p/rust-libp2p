@@ -54,17 +54,6 @@ fn build(ast: &DeriveInput) -> syn::Result<TokenStream> {
     }
 }
 
-struct FindParam<'a> {
-    found: bool,
-    generics: &'a syn::Generics,
-}
-
-impl<'a> Visit<'a> for FindParam<'_> {
-    fn visit_ident(&mut self, i: &syn::Ident) {
-        self.found |= self.generics.type_params().any(|param| param.ident == *i);
-    }
-}
-
 fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> syn::Result<TokenStream> {
     let BehaviourAttributes {
         prelude_path,
@@ -112,6 +101,17 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> syn::Result<Toke
         .iter()
         .map(|field| &field.ty)
         .filter(|ty| {
+            struct FindParam<'a> {
+                found: bool,
+                generics: &'a syn::Generics,
+            }
+
+            impl<'a> Visit<'a> for FindParam<'_> {
+                fn visit_ident(&mut self, i: &syn::Ident) {
+                    self.found |= self.generics.type_params().any(|param| param.ident == *i);
+                }
+            }
+
             let mut visitor = FindParam {
                 found: false,
                 generics: &generics,
@@ -126,10 +126,6 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> syn::Result<Toke
             .make_where_clause()
             .predicates
             .push(syn::parse_quote!(#field: #trait_to_impl));
-        //        generics
-        //            .make_where_clause()
-        //            .predicates
-        //            .push(syn::parse_quote!(<#field as #trait_to_impl>::ToSwarm: std::fmt::Debug));
     }
 
     let fields = data_struct
@@ -184,6 +180,15 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> syn::Result<Toke
         }
     };
     let debug_enum = |name: &_, ty| {
+        let mut generics = generics.clone();
+        for param in generic_fields.iter() {
+            generics
+                .make_where_clause()
+                .predicates
+                .push(syn::parse_quote!(#prelude_path::#ty<#param>: std::fmt::Debug));
+        }
+        let (impl_gen, type_gen, where_clause) = generics.split_for_impl();
+
         decl_enum(
             quote! {
                 impl #impl_gen std::fmt::Debug for #name #type_gen #where_clause {
@@ -216,18 +221,27 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> syn::Result<Toke
         plain_enum(&ou_fut, quote!(THandlerOutUpgradeFuture)),
     ];
 
+    let mut nb_generics = generics.clone();
     let (event, event_impl, poll_impl) = match user_specified_out_event {
-        Some(ty) => (
-            ty.to_token_stream(),
-            quote! {},
-            quote! {#(
-                if let std::task::Poll::Ready(event) = self.#fields.poll(cx) {
-                    return std::task::Poll::Ready(event
-                        .map_in(#t_handler_in_event::<Self>::#var_names)
-                        .map_out(#ty::from));
-                }
-            )*},
-        ),
+        Some(ty) => {
+            for param in generic_fields.iter() {
+                nb_generics
+                    .make_where_clause()
+                    .predicates
+                    .push(syn::parse_quote!(#ty: From<<#param as #trait_to_impl>::ToSwarm>));
+            }
+            (
+                ty.to_token_stream(),
+                quote! {},
+                quote! {#(
+                    if let std::task::Poll::Ready(event) = self.#fields.poll(cx) {
+                        return std::task::Poll::Ready(event
+                            .map_in(#t_handler_in_event::<Self>::#var_names)
+                            .map_out(#ty::from));
+                    }
+                )*},
+            )
+        }
         None => {
             let ty = concat_idents(&ast.ident, "Event");
             let def = debug_enum(&ty, quote!(TBehaviourOutEvent));
@@ -241,6 +255,8 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> syn::Result<Toke
             (quote!(#ty #type_gen), def, poll)
         }
     };
+
+    let (nb_impl_gen, nb_type_gen, nb_where_clause) = nb_generics.split_for_impl();
 
     let decl_struct =
         |name, ty: proc_macro2::TokenStream, extra_fields: proc_macro2::TokenStream| {
@@ -264,7 +280,7 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> syn::Result<Toke
     Ok(quote! {
         #event_impl
 
-        impl #impl_gen #trait_to_impl for #name #type_gen #where_clause {
+        impl #nb_impl_gen #trait_to_impl for #name #nb_type_gen #nb_where_clause {
             type ToSwarm = #event;
             type ConnectionHandler = #handler #type_gen;
 
@@ -276,9 +292,7 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> syn::Result<Toke
             ) -> std::result::Result<(), #connection_denied> {
                 #(
                     self.#fields.handle_pending_inbound_connection(
-                        connection_id,
-                        local_addr,
-                        remote_addr,
+                        connection_id, local_addr, remote_addr,
                     )?;
                 )*
 
@@ -294,10 +308,7 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> syn::Result<Toke
             ) -> std::result::Result<#t_handler<Self>, #connection_denied> {
                 Ok(Self::ConnectionHandler {
                     #(#fields: self.#fields.handle_established_inbound_connection(
-                        connection_id,
-                        peer,
-                        local_addr,
-                        remote_addr,
+                        connection_id, peer, local_addr, remote_addr,
                     )?,)*
                     field_index: 0,
                 })
@@ -313,10 +324,7 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> syn::Result<Toke
                 let mut addrs = Vec::new();
                 #(
                     addrs.extend(self.#fields.handle_pending_outbound_connection(
-                        connection_id,
-                        maybe_peer,
-                        addresses,
-                        effective_role,
+                        connection_id, maybe_peer, addresses, effective_role,
                     )?);
                 )*
                 Ok(addrs)
@@ -331,10 +339,7 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> syn::Result<Toke
             ) -> std::result::Result<#t_handler<Self>, #connection_denied> {
                 Ok(Self::ConnectionHandler {
                     #(#fields: self.#fields.handle_established_outbound_connection(
-                        connection_id,
-                        peer,
-                        addr,
-                        role_override,
+                        connection_id, peer, addr, role_override,
                     )?,)*
                     field_index: 0,
                 })
@@ -353,9 +358,7 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> syn::Result<Toke
                 match event {#(
                     #t_handler_out_event::<Self>::#var_names(event) => {
                         self.#fields.on_connection_handler_event(
-                            peer_id,
-                            connection_id,
-                            event,
+                            peer_id, connection_id, event,
                         );
                     }
                 )*}
@@ -399,7 +402,17 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> syn::Result<Toke
             ) -> std::task::Poll<
                 #connection_handler_event<Self::OutboundProtocol, Self::OutboundOpenInfo, Self::ToBehaviour>,
             > {
-                for _ in 0..#beh_count {
+               // #(
+               //     if let std::task::Poll::Ready(event) = self.#fields.poll(cx) {
+               //         return std::task::Poll::Ready(event
+               //             .map_custom(#to_beh::#var_names)
+               //             .map_outbound_open_info(#ooi::#var_names)
+               //             .map_protocol(#ou::#var_names));
+               //     }
+               // )*
+
+                let mut fuel = #beh_count;
+                while fuel > 0 {
                     // save the poll position to avoid repolling exhaused handlers
                     match self.field_index {
                         #(#indices => match self.#fields.poll(cx) {
@@ -416,6 +429,7 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> syn::Result<Toke
                         }
                     }
                     self.field_index += 1;
+                    fuel -= 1;
                 }
 
                 std::task::Poll::Pending
@@ -423,7 +437,8 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> syn::Result<Toke
 
             fn poll_close(&mut self, cx: &mut std::task::Context<'_>) -> std::task::Poll<Option<Self::ToBehaviour>> {
                 let mut found_pending = false;
-                for _ in 0..#beh_count {
+                let mut fuel = #beh_count;
+                while fuel > 0 {
                     match self.field_index {
                         #(#indices => match self.#fields.poll_close(cx) {
                             std::task::Poll::Ready(Some(event)) =>
@@ -437,6 +452,7 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> syn::Result<Toke
                         }
                     }
                     self.field_index += 1;
+                    fuel -= 1;
                 }
 
                 if found_pending {
@@ -468,8 +484,7 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> syn::Result<Toke
                                 (#ou_out::#var_names(protocol), #ooi::#var_names(info)) => {
                                     self.#fields.on_connection_event(
                                         #connection_event::FullyNegotiatedOutbound(#fully_negotiated_outbound {
-                                            protocol,
-                                            info,
+                                            protocol, info,
                                         }),
                                     );
                                 }
@@ -482,8 +497,7 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> syn::Result<Toke
                             #iu_out::#var_names(protocol) => {
                                 self.#fields.on_connection_event(
                                     #connection_event::FullyNegotiatedInbound(#fully_negotiated_inbound {
-                                        protocol,
-                                        info: fully_negotiated_inbound.info.#fields,
+                                        protocol, info: fully_negotiated_inbound.info.#fields,
                                     }),
                                 );
                             }
@@ -503,8 +517,7 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> syn::Result<Toke
                                 (#stream_upgrade_error::Apply(#ou_err::#var_names(error)), #ooi::#var_names(info)) => {
                                     self.#fields
                                         .on_connection_event(#connection_event::DialUpgradeError(#dial_upgrade_error {
-                                            error: #stream_upgrade_error::Apply(error),
-                                            info,
+                                            error: #stream_upgrade_error::Apply(error), info,
                                         }));
                                 }
                             )*
@@ -512,8 +525,7 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> syn::Result<Toke
                                 (error, #ooi::#var_names(info)) => {
                                     self.#fields
                                         .on_connection_event(#connection_event::DialUpgradeError(#dial_upgrade_error {
-                                            error: error.map_upgrade_err(|_| unreachable!()),
-                                            info,
+                                            error: error.map_upgrade_err(|_| unreachable!()), info,
                                         }));
                                 }
                             )*
@@ -524,8 +536,7 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> syn::Result<Toke
                             #iu_err::#var_names(error) => {
                                 self.#fields
                                     .on_connection_event(#connection_event::ListenUpgradeError(#listen_upgrade_error {
-                                        error,
-                                        info: listen_upgrade_error.info.#fields,
+                                        error, info: listen_upgrade_error.info.#fields,
                                     }));
                             }
                         )*}
