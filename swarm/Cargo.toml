@@ -35,6 +35,7 @@ tokio = { version = "1.37", features = ["rt"], optional = true }
 
 [features]
 macros = ["dep:libp2p-swarm-derive"]
+experimental-macros = ["macros", "libp2p-swarm-derive/experimental"]
 tokio = ["dep:tokio"]
 async-std = ["dep:async-std"]
 wasm-bindgen = ["dep:wasm-bindgen-futures", "dep:getrandom"]

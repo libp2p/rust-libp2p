@@ -27,5 +27,9 @@ all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
 rustc-args = ["--cfg", "docsrs"]
 
+[features]
+experimental = []
+
 [lints]
 workspace = true
+

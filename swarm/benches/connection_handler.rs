@@ -42,7 +42,7 @@ macro_rules! benchmarks {
             $(
                 #[tokio::main(flavor = "multi_thread", worker_threads = 1)]
                 async fn $name(c: &mut Criterion) {
-                    <$beh>::run_bench(c, $protocols, $count, false);
+                    <$beh>::run_bench(c, $protocols, $count, true);
                 }
             )+
 
@@ -116,12 +116,13 @@ trait BigBehaviour: Sized {
                     StreamProtocol::try_from_owned(format!("/protocol/{i}")).unwrap()
                 }
             })
-            .collect::<Vec<_>>();
+            .collect::<Vec<_>>()
+            .leak();
 
         let mut protocol_chunks = protocols.chunks(protocols_per_behaviour);
-        swarm_a.for_each_beh(|b| b.protocols = protocol_chunks.next().unwrap().to_vec());
+        swarm_a.for_each_beh(|b| b.protocols = protocol_chunks.next().unwrap());
         let mut protocol_chunks = protocols.chunks(protocols_per_behaviour);
-        swarm_b.for_each_beh(|b| b.protocols = protocol_chunks.next().unwrap().to_vec());
+        swarm_b.for_each_beh(|b| b.protocols = protocol_chunks.next().unwrap());
 
         swarm_a.for_each_beh(|b| b.iter_count = spam_count);
         swarm_b.for_each_beh(|b| b.iter_count = 0);
@@ -188,7 +189,7 @@ fn new_swarm<T: NetworkBehaviour>(beh: T) -> libp2p_swarm::Swarm<T> {
 #[derive(Default)]
 struct SpinningBehaviour {
     iter_count: usize,
-    protocols: Vec<StreamProtocol>,
+    protocols: &'static [StreamProtocol],
     restarting: bool,
     finished: bool,
     other_peer: Option<PeerId>,
@@ -210,7 +211,7 @@ impl NetworkBehaviour for SpinningBehaviour {
     ) -> Result<libp2p_swarm::THandler<Self>, libp2p_swarm::ConnectionDenied> {
         Ok(SpinningHandler {
             iter_count: 0,
-            protocols: self.protocols.clone(),
+            protocols: self.protocols,
         })
     }
 
@@ -267,7 +268,7 @@ impl BigBehaviour for SpinningBehaviour {
 
 struct SpinningHandler {
     iter_count: usize,
-    protocols: Vec<StreamProtocol>,
+    protocols: &'static [StreamProtocol],
 }
 
 #[derive(Debug)]
@@ -336,14 +337,14 @@ impl ConnectionHandler for SpinningHandler {
     }
 }
 
-pub struct Upgrade(Vec<StreamProtocol>);
+pub struct Upgrade(&'static [StreamProtocol]);
 
 impl UpgradeInfo for Upgrade {
-    type Info = StreamProtocol;
-    type InfoIter = std::vec::IntoIter<StreamProtocol>;
+    type Info = &'static StreamProtocol;
+    type InfoIter = std::slice::Iter<'static, StreamProtocol>;
 
     fn protocol_info(&self) -> Self::InfoIter {
-        self.0.clone().into_iter()
+        self.0.iter()
     }
 }
 
