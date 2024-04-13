@@ -16,7 +16,7 @@ proc-macro = true
 [dependencies]
 heck = "0.5"
 quote = "1.0"
-syn = { version = "2.0.57", default-features = false, features = ["clone-impls", "derive", "parsing", "printing", "proc-macro"] }
+syn = { version = "2.0.58", default-features = false, features = ["clone-impls", "derive", "parsing", "printing", "proc-macro"] }
 proc-macro2 = "1.0"
 
 # Passing arguments to the docsrs builder in order to properly document cfg's.
