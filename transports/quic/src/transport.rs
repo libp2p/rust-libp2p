@@ -472,7 +472,16 @@ impl<P: Provider> Listener<P> {
         }
 
         let endpoint_c = endpoint.clone();
-        let accept = async move { endpoint_c.accept().await }.boxed();
+        let accept = async move {
+            match endpoint_c.accept().await {
+                Some(incoming) => match incoming.accept() {
+                    Ok(connecting) => Some(connecting),
+                    Err(_) => None,
+                },
+                None => None,
+            }
+        }
+        .boxed();
 
         Ok(Listener {
             endpoint,
@@ -585,7 +594,16 @@ impl<P: Provider> Stream for Listener<P> {
             match self.accept.poll_unpin(cx) {
                 Poll::Ready(Some(connecting)) => {
                     let endpoint = self.endpoint.clone();
-                    self.accept = async move { endpoint.accept().await }.boxed();
+                    self.accept = async move {
+                        match endpoint.accept().await {
+                            Some(incoming) => match incoming.accept() {
+                                Ok(connecting) => Some(connecting),
+                                Err(_) => None,
+                            },
+                            None => None,
+                        }
+                    }
+                    .boxed();
 
                     let local_addr = socketaddr_to_multiaddr(&self.socket_addr(), self.version);
                     let remote_addr = connecting.remote_address();

@@ -55,7 +55,7 @@ impl Connecting {
         let identity = connection
             .peer_identity()
             .expect("connection got identity because it passed TLS handshake; qed");
-        let certificates: Box<Vec<rustls::Certificate>> =
+        let certificates: Box<Vec<rustls::pki_types::CertificateDer>> =
             identity.downcast().expect("we rely on rustls feature; qed");
         let end_entity = certificates
             .first()

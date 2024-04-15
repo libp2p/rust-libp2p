@@ -67,7 +67,9 @@ impl AsyncWrite for Stream {
         cx: &mut Context,
         buf: &[u8],
     ) -> Poll<io::Result<usize>> {
-        Pin::new(&mut self.send).poll_write(cx, buf)
+        Pin::new(&mut self.send)
+            .poll_write(cx, buf)
+            .map_err(|e| e.into())
     }
 
     fn poll_flush(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<io::Result<()>> {
