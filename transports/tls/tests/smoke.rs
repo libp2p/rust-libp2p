@@ -8,6 +8,9 @@ use std::time::Duration;
 
 #[tokio::test]
 async fn can_establish_connection() {
+    rustls::crypto::ring::default_provider()
+        .install_default()
+        .unwrap();
     let mut swarm1 = make_swarm();
     let mut swarm2 = make_swarm();
 
