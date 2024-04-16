@@ -32,7 +32,7 @@ use rustls::{
     },
     pki_types::CertificateDer,
     server::danger::{ClientCertVerified, ClientCertVerifier},
-    CertificateError, DigitallySignedStruct, DistinguishedName, SignatureScheme,
+    CertificateError, DigitallySignedStruct, DistinguishedName, OtherError, SignatureScheme,
     SupportedCipherSuite, SupportedProtocolVersion,
 };
 use std::sync::Arc;
@@ -235,25 +235,25 @@ fn verify_tls13_signature(
 
 impl From<certificate::ParseError> for rustls::Error {
     fn from(certificate::ParseError(e): certificate::ParseError) -> Self {
-        use webpki::Error::*;
         match e {
-            BadDer => rustls::Error::InvalidCertificate(CertificateError::BadEncoding),
-            e => rustls::Error::InvalidCertificate(CertificateError::Other(rustls::OtherError(
-                Arc::new(e),
+            webpki::Error::BadDer => {
+                rustls::Error::InvalidCertificate(CertificateError::BadEncoding)
+            }
+            other => rustls::Error::InvalidCertificate(CertificateError::Other(OtherError(
+                Arc::new(other),
             ))),
         }
     }
 }
 impl From<certificate::VerificationError> for rustls::Error {
     fn from(certificate::VerificationError(e): certificate::VerificationError) -> Self {
-        use webpki::Error::*;
         match e {
-            InvalidSignatureForPublicKey => {
+            webpki::Error::InvalidSignatureForPublicKey => {
                 rustls::Error::InvalidCertificate(CertificateError::BadSignature)
             }
-            other => rustls::Error::InvalidCertificate(CertificateError::Other(
-                rustls::OtherError(Arc::new(other)),
-            )),
+            other => rustls::Error::InvalidCertificate(CertificateError::Other(OtherError(
+                Arc::new(other),
+            ))),
         }
     }
 }

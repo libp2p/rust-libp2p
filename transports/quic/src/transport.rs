@@ -473,12 +473,15 @@ impl<P: Provider> Listener<P> {
 
         let endpoint_c = endpoint.clone();
         let accept = async move {
-            match endpoint_c.accept().await {
-                Some(incoming) => match incoming.accept() {
-                    Ok(connecting) => Some(connecting),
-                    Err(_) => None,
-                },
-                None => None,
+            loop {
+                let incoming = match endpoint_c.accept().await {
+                    Some(incoming) => incoming,
+                    None => return None,
+                };
+                match incoming.accept() {
+                    Ok(connecting) => return Some(connecting),
+                    Err(_) => continue,
+                }
             }
         }
         .boxed();
