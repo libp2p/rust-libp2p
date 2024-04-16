@@ -21,7 +21,7 @@
 #[cfg(feature = "rand")]
 use rand::Rng;
 use sha2::Digest as _;
-use std::{convert::TryFrom, fmt, str::FromStr};
+use std::{fmt, str::FromStr};
 use thiserror::Error;
 
 /// Local type-alias for multihash.

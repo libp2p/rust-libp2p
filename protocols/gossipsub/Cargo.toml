@@ -15,14 +15,14 @@ wasm-bindgen = ["getrandom/js", "instant/wasm-bindgen"]
 
 [dependencies]
 asynchronous-codec = { workspace = true }
-base64 = "0.21.7"
+base64 = "0.22.0"
 byteorder = "1.5.0"
-bytes = "1.5"
+bytes = "1.6"
 either = "1.9"
 fnv = "1.0.7"
 futures = "0.3.30"
 futures-ticker = "0.0.3"
-getrandom = "0.2.12"
+getrandom = "0.2.13"
 hex_fmt = "0.3.0"
 instant = "0.1.12"
 libp2p-core = { workspace = true }
@@ -31,11 +31,11 @@ libp2p-swarm = { workspace = true }
 quick-protobuf = "0.8"
 quick-protobuf-codec = { workspace = true }
 rand = "0.8"
-regex = "1.10.3"
+regex = "1.10.4"
 serde = { version = "1", optional = true, features = ["derive"] }
 sha2 = "0.10.8"
-smallvec = "1.12.0"
-tracing = "0.1.37"
+smallvec = "1.13.2"
+tracing = { workspace = true }
 void = "1.0.2"
 
 # Metrics dependencies

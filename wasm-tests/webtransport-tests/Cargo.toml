@@ -10,7 +10,7 @@ release = false
 
 [dependencies]
 futures = "0.3.30"
-getrandom = { version = "0.2.12", features = ["js"] }
+getrandom = { version = "0.2.13", features = ["js"] }
 libp2p-core = { workspace = true }
 libp2p-identity = { workspace = true, features = ["rand"] }
 libp2p-noise = { workspace = true }
@@ -18,9 +18,9 @@ libp2p-webtransport-websys = { workspace = true }
 multiaddr = { workspace = true }
 multihash = { workspace = true }
 wasm-bindgen = "0.2.90"
-wasm-bindgen-futures = "0.4.40"
-wasm-bindgen-test = "0.3.39"
-web-sys = { version = "0.3.67", features = ["Response", "Window"] }
+wasm-bindgen-futures = "0.4.42"
+wasm-bindgen-test = "0.3.42"
+web-sys = { version = "0.3.69", features = ["Response", "Window"] }
 
 [lints]
 workspace = true
