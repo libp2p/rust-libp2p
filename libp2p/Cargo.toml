@@ -140,7 +140,7 @@ libp2p-websocket = { workspace = true, optional = true }
 async-std = { version = "1.6.2", features = ["attributes"] }
 async-trait = "0.1"
 clap = { version = "4.1.6", features = ["derive"] }
-tokio = { version = "1.15", features = [ "io-util", "io-std", "macros", "rt", "rt-multi-thread"] }
+tokio = { workspace = true, features = [ "io-util", "io-std", "macros", "rt", "rt-multi-thread"] }
 
 libp2p-mplex = { workspace = true }
 libp2p-noise = { workspace = true }
