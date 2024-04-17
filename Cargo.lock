@@ -1826,9 +1826,9 @@ dependencies = [
 
 [[package]]
 name = "getrandom"
-version = "0.2.13"
+version = "0.2.14"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a06fddc2749e0528d2813f95e050e87e52c8cbbae56223b9babf73b3e53b0cc6"
+checksum = "94b22e06ecb0110981051723910cbf0b5f5e09a2062dd7663334ee79a9d1286c"
 dependencies = [
  "cfg-if",
  "js-sys",
@@ -2614,7 +2614,7 @@ dependencies = [
  "either",
  "futures",
  "futures-timer",
- "getrandom 0.2.13",
+ "getrandom 0.2.14",
  "instant",
  "libp2p-allow-block-list",
  "libp2p-autonat",
@@ -2824,7 +2824,7 @@ dependencies = [
  "fnv",
  "futures",
  "futures-ticker",
- "getrandom 0.2.13",
+ "getrandom 0.2.14",
  "hex",
  "hex_fmt",
  "instant",
@@ -3312,7 +3312,7 @@ dependencies = [
  "fnv",
  "futures",
  "futures-timer",
- "getrandom 0.2.13",
+ "getrandom 0.2.14",
  "instant",
  "libp2p-core",
  "libp2p-identify",
@@ -3487,7 +3487,7 @@ version = "0.3.0-alpha"
 dependencies = [
  "bytes",
  "futures",
- "getrandom 0.2.13",
+ "getrandom 0.2.14",
  "hex",
  "js-sys",
  "libp2p-core",
@@ -4717,7 +4717,7 @@ version = "0.6.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ec0be4795e2f6a28069bec0b5ff3e2ac9bafc99e6a9a7dc3547996c5c816922c"
 dependencies = [
- "getrandom 0.2.13",
+ "getrandom 0.2.14",
 ]
 
 [[package]]
@@ -4807,7 +4807,7 @@ version = "0.4.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b033d837a7cf162d7993aded9304e30a83213c648b6e389db233191f891e5c2b"
 dependencies = [
- "getrandom 0.2.13",
+ "getrandom 0.2.14",
  "redox_syscall 0.2.16",
  "thiserror",
 ]
@@ -4971,7 +4971,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "fb0205304757e5d899b9c2e448b867ffd03ae7f988002e47cd24954391394d0b"
 dependencies = [
  "cc",
- "getrandom 0.2.13",
+ "getrandom 0.2.14",
  "libc",
  "spin 0.9.8",
  "untrusted 0.9.0",
@@ -6419,7 +6419,7 @@ version = "1.4.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "79daa5ed5740825c40b389c5e50312b9c86df53fccd33f281df655642b43869d"
 dependencies = [
- "getrandom 0.2.13",
+ "getrandom 0.2.14",
 ]
 
 [[package]]
@@ -6845,7 +6845,7 @@ name = "webtransport-tests"
 version = "0.1.0"
 dependencies = [
  "futures",
- "getrandom 0.2.13",
+ "getrandom 0.2.14",
  "libp2p-core",
  "libp2p-identity",
  "libp2p-noise",
