@@ -122,7 +122,10 @@ impl Builder {
         I: IntoIterator<Item = Certificate<'static>>,
     {
         let certs: Vec<CertificateDer<'_>> = certs.into_iter().map(|c| c.0.to_owned()).collect();
-        let server = rustls::ServerConfig::builder()
+        let provider = rustls::crypto::ring::default_provider();
+        let server = rustls::ServerConfig::builder_with_provider(provider.into())
+            .with_safe_default_protocol_versions()
+            .unwrap()
             .with_no_client_auth()
             .with_single_cert(certs.clone(), key.0.clone_key())
             .map_err(|e| Error::Tls(Box::new(e)))?;
@@ -140,7 +143,10 @@ impl Builder {
 
     /// Finish configuration.
     pub fn finish(self) -> Config {
-        let client = rustls::ClientConfig::builder()
+        let provider = rustls::crypto::ring::default_provider();
+        let client = rustls::ClientConfig::builder_with_provider(provider.into())
+            .with_safe_default_protocol_versions()
+            .unwrap()
             .with_root_certificates(self.client_root_store)
             .with_no_client_auth();
 
