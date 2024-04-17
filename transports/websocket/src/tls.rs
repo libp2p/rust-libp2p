@@ -19,6 +19,7 @@
 // DEALINGS IN THE SOFTWARE.
 
 use futures_rustls::{rustls, TlsAcceptor, TlsConnector};
+use rustls::pki_types::{CertificateDer, PrivateKeyDer, ServerName};
 use std::{fmt, io, sync::Arc};
 
 /// TLS configuration.
@@ -35,32 +36,37 @@ impl fmt::Debug for Config {
 }
 
 /// Private key, DER-encoded ASN.1 in either PKCS#8 or PKCS#1 format.
-#[derive(Clone)]
-pub struct PrivateKey(rustls::PrivateKey);
+pub struct PrivateKey<'a>(PrivateKeyDer<'a>);
 
-impl PrivateKey {
+impl<'a> PrivateKey<'a> {
     /// Assert the given bytes are DER-encoded ASN.1 in either PKCS#8 or PKCS#1 format.
     pub fn new(bytes: Vec<u8>) -> Self {
-        PrivateKey(rustls::PrivateKey(bytes))
+        PrivateKey(PrivateKeyDer::try_from(bytes).unwrap())
+    }
+}
+
+impl<'a> Clone for PrivateKey<'a> {
+    fn clone(&self) -> Self {
+        PrivateKey(self.0.clone_key())
     }
 }
 
 /// Certificate, DER-encoded X.509 format.
 #[derive(Debug, Clone)]
-pub struct Certificate(rustls::Certificate);
+pub struct Certificate<'a>(CertificateDer<'a>);
 
-impl Certificate {
+impl<'a> Certificate<'a> {
     /// Assert the given bytes are in DER-encoded X.509 format.
     pub fn new(bytes: Vec<u8>) -> Self {
-        Certificate(rustls::Certificate(bytes))
+        Certificate(CertificateDer::from(bytes))
     }
 }
 
 impl Config {
     /// Create a new TLS configuration with the given server key and certificate chain.
-    pub fn new<I>(key: PrivateKey, certs: I) -> Result<Self, Error>
+    pub fn new<'a, I>(key: PrivateKey<'a>, certs: I) -> Result<Self, Error>
     where
-        I: IntoIterator<Item = Certificate>,
+        I: IntoIterator<Item = Certificate<'static>>,
     {
         let mut builder = Config::builder();
         builder.server(key, certs)?;
@@ -69,8 +75,10 @@ impl Config {
 
     /// Create a client-only configuration.
     pub fn client() -> Self {
-        let client = rustls::ClientConfig::builder()
-            .with_safe_defaults()
+        let provider = rustls::crypto::ring::default_provider();
+        let client = rustls::ClientConfig::builder_with_provider(provider.into())
+            .with_safe_default_protocol_versions()
+            .unwrap()
             .with_root_certificates(client_root_store())
             .with_no_client_auth();
         Config {
@@ -91,12 +99,12 @@ impl Config {
 /// Setup the rustls client configuration.
 fn client_root_store() -> rustls::RootCertStore {
     let mut client_root_store = rustls::RootCertStore::empty();
-    client_root_store.add_trust_anchors(webpki_roots::TLS_SERVER_ROOTS.iter().map(|ta| {
-        rustls::OwnedTrustAnchor::from_subject_spki_name_constraints(
-            ta.subject,
-            ta.spki,
-            ta.name_constraints,
-        )
+    client_root_store.extend(webpki_roots::TLS_SERVER_ROOTS.iter().map(|ta| {
+        rustls::pki_types::TrustAnchor {
+            subject: ta.subject.into(),
+            subject_public_key_info: ta.spki.into(),
+            name_constraints: ta.name_constraints.map(|v| v.into()),
+        }
     }));
     client_root_store
 }
@@ -109,15 +117,14 @@ pub struct Builder {
 
 impl Builder {
     /// Set server key and certificate chain.
-    pub fn server<I>(&mut self, key: PrivateKey, certs: I) -> Result<&mut Self, Error>
+    pub fn server<'a, I>(&mut self, key: PrivateKey<'a>, certs: I) -> Result<&mut Self, Error>
     where
-        I: IntoIterator<Item = Certificate>,
+        I: IntoIterator<Item = Certificate<'static>>,
     {
-        let certs = certs.into_iter().map(|c| c.0).collect();
+        let certs: Vec<CertificateDer<'_>> = certs.into_iter().map(|c| c.0.to_owned()).collect();
         let server = rustls::ServerConfig::builder()
-            .with_safe_defaults()
             .with_no_client_auth()
-            .with_single_cert(certs, key.0)
+            .with_single_cert(certs.clone(), key.0.clone_key())
             .map_err(|e| Error::Tls(Box::new(e)))?;
         self.server = Some(server);
         Ok(self)
@@ -126,7 +133,7 @@ impl Builder {
     /// Add an additional trust anchor.
     pub fn add_trust(&mut self, cert: &Certificate) -> Result<&mut Self, Error> {
         self.client_root_store
-            .add(&cert.0)
+            .add(cert.0.to_owned())
             .map_err(|e| Error::Tls(Box::new(e)))?;
         Ok(self)
     }
@@ -134,7 +141,6 @@ impl Builder {
     /// Finish configuration.
     pub fn finish(self) -> Config {
         let client = rustls::ClientConfig::builder()
-            .with_safe_defaults()
             .with_root_certificates(self.client_root_store)
             .with_no_client_auth();
 
@@ -145,8 +151,8 @@ impl Builder {
     }
 }
 
-pub(crate) fn dns_name_ref(name: &str) -> Result<rustls::ServerName, Error> {
-    rustls::ServerName::try_from(name).map_err(|_| Error::InvalidDnsName(name.into()))
+pub(crate) fn dns_name_ref(name: &str) -> Result<ServerName, Error> {
+    ServerName::try_from(name).map_err(|_| Error::InvalidDnsName(name.into()))
 }
 
 // Error //////////////////////////////////////////////////////////////////////////////////////////
