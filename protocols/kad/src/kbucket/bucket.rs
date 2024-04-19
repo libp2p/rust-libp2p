@@ -440,7 +440,7 @@ mod tests {
             for _ in 0..num_nodes {
                 let key = Key::from(PeerId::random());
                 let node = Node {
-                    key: key.clone(),
+                    key,
                     value: (),
                 };
                 let status = NodeStatus::arbitrary(g);
@@ -493,7 +493,7 @@ mod tests {
             for status in status {
                 let key = Key::from(PeerId::random());
                 let node = Node {
-                    key: key.clone(),
+                    key,
                     value: (),
                 };
                 let full = bucket.num_entries() == K_VALUE.get();
@@ -505,15 +505,12 @@ mod tests {
                     if full {
                         vec.pop_front();
                     }
-                    vec.push_back((status, key.clone()));
+                    vec.push_back((status, key));
                 }
             }
 
             // Get all nodes from the bucket, together with their status.
-            let mut nodes = bucket
-                .iter()
-                .map(|(n, s)| (s, n.key.clone()))
-                .collect::<Vec<_>>();
+            let mut nodes = bucket.iter().map(|(n, s)| (s, n.key)).collect::<Vec<_>>();
 
             // Split the list of nodes at the first connected node.
             let first_connected_pos = nodes.iter().position(|(s, _)| *s == NodeStatus::Connected);
@@ -553,10 +550,7 @@ mod tests {
             // Add a connected node, which is expected to be pending, scheduled to
             // replace the first (i.e. least-recently connected) node.
             let key = Key::from(PeerId::random());
-            let node = Node {
-                key: key.clone(),
-                value: (),
-            };
+            let node = Node { key, value: () };
             match bucket.insert(node.clone(), NodeStatus::Connected) {
                 InsertResult::Pending { disconnected } => {
                     assert_eq!(disconnected, first_disconnected.key)
@@ -609,10 +603,7 @@ mod tests {
 
         // Add a connected pending node.
         let key = Key::from(PeerId::random());
-        let node = Node {
-            key: key.clone(),
-            value: (),
-        };
+        let node = Node { key, value: () };
         if let InsertResult::Pending { disconnected } = bucket.insert(node, NodeStatus::Connected) {
             assert_eq!(&disconnected, &first_disconnected.key);
         } else {
@@ -647,13 +638,10 @@ mod tests {
 
             // Capture position and key of the random node to update.
             let pos = pos.0 % num_nodes;
-            let key = bucket.nodes[pos].key.clone();
+            let key = bucket.nodes[pos].key;
 
             // Record the (ordered) list of status of all nodes in the bucket.
-            let mut expected = bucket
-                .iter()
-                .map(|(n, s)| (n.key.clone(), s))
-                .collect::<Vec<_>>();
+            let mut expected = bucket.iter().map(|(n, s)| (n.key, s)).collect::<Vec<_>>();
 
             // Update the node in the bucket.
             bucket.update(&key, status);
@@ -665,11 +653,8 @@ mod tests {
                 NodeStatus::Disconnected => bucket.first_connected_pos.unwrap_or(num_nodes) - 1,
             };
             expected.remove(pos);
-            expected.insert(expected_pos, (key.clone(), status));
-            let actual = bucket
-                .iter()
-                .map(|(n, s)| (n.key.clone(), s))
-                .collect::<Vec<_>>();
+            expected.insert(expected_pos, (key, status));
+            let actual = bucket.iter().map(|(n, s)| (n.key, s)).collect::<Vec<_>>();
             expected == actual
         }
 

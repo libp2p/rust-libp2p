@@ -556,12 +556,12 @@ mod tests {
     #[test]
     fn new_iter() {
         fn prop(iter: ClosestPeersIter) {
-            let target = iter.target.clone();
+            let target = iter.target;
 
             let (keys, states): (Vec<_>, Vec<_>) = iter
                 .closest_peers
                 .values()
-                .map(|e| (e.key.clone(), &e.state))
+                .map(|e| (e.key, &e.state))
                 .unzip();
 
             let none_contacted = states.iter().all(|s| matches!(s, PeerState::NotContacted));
@@ -595,7 +595,7 @@ mod tests {
             let mut expected = iter
                 .closest_peers
                 .values()
-                .map(|e| e.key.clone())
+                .map(|e| e.key)
                 .collect::<Vec<_>>();
             let num_known = expected.len();
             let max_parallelism = usize::min(iter.config.parallelism.get(), num_known);
@@ -667,7 +667,7 @@ mod tests {
                 .values()
                 .all(|e| !matches!(e.state, PeerState::NotContacted | PeerState::Waiting { .. }));
 
-            let target = iter.target.clone();
+            let target = iter.target;
             let num_results = iter.config.num_results;
             let result = iter.into_result();
             let closest = result.map(Key::from).collect::<Vec<_>>();
@@ -744,7 +744,6 @@ mod tests {
                 .next()
                 .unwrap()
                 .key
-                .clone()
                 .into_preimage();
 
             // Poll the iterator for the first peer to be in progress.
