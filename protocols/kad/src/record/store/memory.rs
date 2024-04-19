@@ -157,7 +157,7 @@ impl RecordStore for MemoryStore {
             providers.as_mut()[i] = record;
         } else {
             // It is a new provider record for that key.
-            let local_key = self.local_key.clone();
+            let local_key = self.local_key;
             let key = kbucket::Key::new(record.key.clone());
             let provider = kbucket::Key::from(record.provider);
             if let Some(i) = providers.iter().position(|p| {
