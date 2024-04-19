@@ -15,6 +15,8 @@
   See [PR 5122](https://github.com/libp2p/rust-libp2p/pull/5122).
 - Compute `jobs_query_capacity` accurately.
   See [PR 5148](https://github.com/libp2p/rust-libp2p/pull/5148).
+- Derive `Copy` for `kbucket::key::Key<T>`.
+  See [PR 5317](https://github.com/libp2p/rust-libp2p/pull/5317).
 
 ## 0.45.3
 
