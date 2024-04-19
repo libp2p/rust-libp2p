@@ -439,10 +439,7 @@ mod tests {
             let num_nodes = g.gen_range(1..K_VALUE.get() + 1);
             for _ in 0..num_nodes {
                 let key = Key::from(PeerId::random());
-                let node = Node {
-                    key,
-                    value: (),
-                };
+                let node = Node { key, value: () };
                 let status = NodeStatus::arbitrary(g);
                 match bucket.insert(node, status) {
                     InsertResult::Inserted => {}
@@ -492,10 +489,7 @@ mod tests {
             // Fill the bucket, thereby populating the expected lists in insertion order.
             for status in status {
                 let key = Key::from(PeerId::random());
-                let node = Node {
-                    key,
-                    value: (),
-                };
+                let node = Node { key, value: () };
                 let full = bucket.num_entries() == K_VALUE.get();
                 if let InsertResult::Inserted = bucket.insert(node, status) {
                     let vec = match status {

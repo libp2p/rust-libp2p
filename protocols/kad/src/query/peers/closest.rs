@@ -600,7 +600,7 @@ mod tests {
             let num_known = expected.len();
             let max_parallelism = usize::min(iter.config.parallelism.get(), num_known);
 
-            let target = iter.target.clone();
+            let target = iter.target;
             let mut remaining;
             let mut num_failures = 0;
 
