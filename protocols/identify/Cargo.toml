@@ -25,7 +25,7 @@ smallvec = "1.13.2"
 thiserror = "1.0"
 tracing = { workspace = true }
 void = "1.0"
-either = "1.9.0"
+either = "1.11.0"
 
 [dev-dependencies]
 async-std = { version = "1.6.2", features = ["attributes"] }

@@ -16,7 +16,7 @@ futures-timer = "3.0.3"
 igd-next = "0.14.3"
 libp2p-core = { workspace = true }
 libp2p-swarm = { workspace = true }
-tokio = { version = "1.37", default-features = false, features = ["rt"], optional = true }
+tokio = { workspace = true, default-features = false, features = ["rt"], optional = true }
 tracing = { workspace = true }
 void = "1.0.2"
 

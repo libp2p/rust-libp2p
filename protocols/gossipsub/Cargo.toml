@@ -18,11 +18,11 @@ asynchronous-codec = { workspace = true }
 base64 = "0.22.0"
 byteorder = "1.5.0"
 bytes = "1.6"
-either = "1.9"
+either = "1.11"
 fnv = "1.0.7"
 futures = "0.3.30"
 futures-ticker = "0.0.3"
-getrandom = "0.2.12"
+getrandom = "0.2.14"
 hex_fmt = "0.3.0"
 instant = "0.1.12"
 libp2p-core = { workspace = true }
