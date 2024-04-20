@@ -12,7 +12,7 @@ categories = ["network-programming", "asynchronous"]
 
 [dependencies]
 asynchronous-codec = { workspace = true }
-either = "1.9.0"
+either = "1.11.0"
 futures = "0.3.30"
 futures-timer = "3.0"
 instant = "0.1.12"

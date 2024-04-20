@@ -14,7 +14,7 @@ futures = "0.3.29"
 libp2p = { path = "../../libp2p", features = [ "tokio", "quic"] }
 libp2p-stream = { path = "../../protocols/stream", version = "0.1.0-alpha" }
 rand = "0.8"
-tokio = { version = "1.37", features = ["full"] }
+tokio = { workspace = true, features = ["full"] }
 tracing = { workspace = true }
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 

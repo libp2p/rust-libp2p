@@ -931,7 +931,7 @@ where
     /// This parameter is used to call [`Behaviour::bootstrap`] periodically and automatically
     /// to ensure a healthy routing table.
     pub fn bootstrap(&mut self) -> Result<QueryId, NoKnownPeers> {
-        let local_key = self.kbuckets.local_key().clone();
+        let local_key = *self.kbuckets.local_key();
         let info = QueryInfo::Bootstrap {
             peer: *local_key.preimage(),
             remaining: None,
@@ -1396,7 +1396,7 @@ where
                 remaining,
                 mut step,
             } => {
-                let local_key = self.kbuckets.local_key().clone();
+                let local_key = *self.kbuckets.local_key();
                 let mut remaining = remaining.unwrap_or_else(|| {
                     debug_assert_eq!(&peer, local_key.preimage());
                     // The lookup for the local key finished. To complete the bootstrap process,
@@ -1446,7 +1446,7 @@ where
                     let peers = self.kbuckets.closest_keys(&target);
                     let inner = QueryInner::new(info);
                     self.queries
-                        .continue_iter_closest(query_id, target.clone(), peers, inner);
+                        .continue_iter_closest(query_id, target, peers, inner);
                 } else {
                     step.last = true;
                     self.bootstrap_status.on_finish();
@@ -1642,14 +1642,14 @@ where
                     remaining.take().and_then(|mut r| Some((r.next()?, r)))
                 {
                     let info = QueryInfo::Bootstrap {
-                        peer: target.clone().into_preimage(),
+                        peer: target.into_preimage(),
                         remaining: Some(remaining),
                         step: step.next(),
                     };
                     let peers = self.kbuckets.closest_keys(&target);
                     let inner = QueryInner::new(info);
                     self.queries
-                        .continue_iter_closest(query_id, target.clone(), peers, inner);
+                        .continue_iter_closest(query_id, target, peers, inner);
                 } else {
                     step.last = true;
                     self.bootstrap_status.on_finish();

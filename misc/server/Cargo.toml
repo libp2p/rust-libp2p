@@ -15,13 +15,13 @@ base64 = "0.22"
 clap = { version = "4.5.4", features = ["derive"] }
 futures = "0.3"
 futures-timer = "3"
-hyper = { version = "0.14", features = ["server", "tcp", "http1"] }
+axum = "0.7"
 libp2p = { workspace = true, features = ["autonat", "dns", "tokio", "noise", "tcp", "yamux", "identify", "kad", "ping", "relay", "metrics", "rsa", "macros", "quic", "websocket"] }
 prometheus-client = { workspace = true }
 serde = "1.0.197"
 serde_derive = "1.0.125"
 serde_json = "1.0"
-tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
+tokio = { workspace = true, features = ["rt-multi-thread", "macros"] }
 tracing = { workspace = true }
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 zeroize = "1"

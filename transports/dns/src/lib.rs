@@ -777,7 +777,7 @@ mod tests {
             // type record lookups may not work with the system DNS resolver.
             let config = ResolverConfig::quad9();
             let opts = ResolverOpts::default();
-            let rt = tokio_crate::runtime::Builder::new_current_thread()
+            let rt = ::tokio::runtime::Builder::new_current_thread()
                 .enable_io()
                 .enable_time()
                 .build()
