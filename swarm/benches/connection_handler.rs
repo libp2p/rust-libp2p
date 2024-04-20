@@ -184,7 +184,7 @@ fn new_swarm<T: NetworkBehaviour>(beh: T) -> libp2p_swarm::Swarm<T> {
 }
 
 /// Whole purpose of the behaviour is to rapidly call `poll` on the handler
-/// configured amount of times and then emmit event when finished.
+/// configured amount of times and then emit event when finished.
 #[derive(Default)]
 struct SpinningBehaviour {
     iter_count: usize,
