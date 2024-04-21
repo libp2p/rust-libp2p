@@ -19,12 +19,13 @@
 // DEALINGS IN THE SOFTWARE.
 
 use std::io;
-use std::time::{Duration, SystemTime};
+use std::time::Duration;
 
 use asynchronous_codec::{Framed, FramedParts};
 use bytes::Bytes;
 use futures::prelude::*;
 use futures_timer::Delay;
+use instant::SystemTime;
 use thiserror::Error;
 
 use libp2p_core::Multiaddr;
