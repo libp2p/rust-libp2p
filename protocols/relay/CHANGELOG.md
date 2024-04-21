@@ -1,3 +1,7 @@
+## 0.17.3
+- Use `instant` variant of `SystemTime` for wasm support.
+  See [PR XXXX](https://github.com/libp2p/rust-libp2p/pull/XXXX).
+
 ## 0.17.2
 
 - Fix support for unlimited relay connection according to spec.
