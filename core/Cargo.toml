@@ -11,7 +11,7 @@ keywords = ["peer-to-peer", "libp2p", "networking"]
 categories = ["network-programming", "asynchronous"]
 
 [dependencies]
-either = "1.9"
+either = "1.11"
 fnv = "1.0"
 futures = { workspace = true, features = ["executor", "thread-pool"] }
 futures-timer = "3"

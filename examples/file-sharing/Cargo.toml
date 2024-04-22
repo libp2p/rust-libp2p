@@ -10,7 +10,7 @@ release = false
 
 [dependencies]
 serde = { version = "1.0", features = ["derive"] }
-tokio = { version = "1.37.0", features = ["full"] }
+tokio = { workspace = true, features = ["full"] }
 clap = { version = "4.5.4", features = ["derive"] }
 futures = { workspace = true }
 libp2p = { path = "../../libp2p", features = [ "tokio", "cbor", "dns", "kad", "noise", "macros", "request-response", "tcp", "websocket", "yamux"] }

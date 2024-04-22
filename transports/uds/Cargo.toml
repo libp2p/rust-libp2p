@@ -14,7 +14,7 @@ categories = ["network-programming", "asynchronous"]
 async-std = { version = "1.6.2", optional = true }
 libp2p-core = { workspace = true }
 futures = { workspace = true }
-tokio = { version = "1.37", default-features = false, features = ["net"], optional = true }
+tokio = { workspace = true, default-features = false, features = ["net"], optional = true }
 tracing = { workspace = true }
 
 [dev-dependencies]

@@ -12,7 +12,7 @@ categories = ["network-programming", "asynchronous"]
 
 [dependencies]
 async-std-resolver = { version = "0.24", optional = true }
-async-trait = "0.1.79"
+async-trait = "0.1.80"
 futures = { workspace = true }
 libp2p-core = { workspace = true }
 libp2p-identity = { workspace = true }
@@ -23,7 +23,7 @@ tracing = { workspace = true }
 
 [dev-dependencies]
 libp2p-identity = { workspace = true, features = ["rand"] }
-tokio-crate = { package = "tokio", version = "1.0", default-features = false, features = ["rt", "time"] }
+tokio = { workspace = true, features = ["rt", "time"] }
 async-std-crate = { package = "async-std", version = "1.6" }
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 
