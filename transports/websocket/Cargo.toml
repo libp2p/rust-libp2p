@@ -22,7 +22,7 @@ rw-stream-sink = { workspace = true }
 soketto = "0.8.0"
 tracing = { workspace = true }
 url = "2.5"
-webpki-roots = "0.25"
+webpki-roots = "0.26"
 
 [dev-dependencies]
 libp2p-tcp = { workspace = true, features = ["async-io"] }
