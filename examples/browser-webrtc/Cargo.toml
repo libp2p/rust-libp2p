@@ -16,7 +16,7 @@ release = false
 crate-type = ["cdylib"]
 
 [dependencies]
-anyhow = "1.0.81"
+anyhow = "1.0.82"
 futures = "0.3.30"
 rand = "0.8"
 tracing = { workspace = true }
