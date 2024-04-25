@@ -344,7 +344,7 @@ enum ClosestBucketsIterState {
     /// The starting state of the iterator yields the first bucket index and
     /// then transitions to `ZoomIn`.
     Start(BucketIndex),
-    /// The iterator "zooms in" to yield the next bucket cotaining nodes that
+    /// The iterator "zooms in" to yield the next bucket containing nodes that
     /// are incrementally closer to the local node but further from the `target`.
     /// These buckets are identified by a `1` in the corresponding bit position
     /// of the distance bit string. When bucket `0` is reached, the iterator
