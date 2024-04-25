@@ -13,7 +13,7 @@ async-std = { version = "1.12", features = ["attributes"] }
 async-trait = "0.1"
 futures = "0.3.30"
 libp2p = { path = "../../libp2p", features = ["async-std", "dns", "dcutr", "identify", "macros", "noise", "ping", "relay", "rendezvous", "tcp", "tokio","yamux"] }
-tracing = "0.1.37"
+tracing = { workspace = true }
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 
 [lints]
