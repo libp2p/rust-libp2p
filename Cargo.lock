@@ -1453,9 +1453,9 @@ checksum = "a47c1c47d2f5964e29c61246e81db715514cd532db6b5116a25ea3c03d6780a2"
 
 [[package]]
 name = "elliptic-curve"
-version = "0.13.5"
+version = "0.13.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "968405c8fdc9b3bf4df0a6638858cc0b52462836ab6b1c87377785dd09cf1c0b"
+checksum = "b5e6043086bf7973472e0c7dff2142ea0b680d30e18d9cc40f267efbf222bd47"
 dependencies = [
  "base16ct",
  "crypto-bigint",
@@ -1736,7 +1736,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "35bd3cf68c183738046838e300353e4716c674dc5e56890de4826801a6622a28"
 dependencies = [
  "futures-io",
- "rustls 0.21.9",
+ "rustls 0.21.11",
 ]
 
 [[package]]
@@ -2237,7 +2237,7 @@ dependencies = [
  "http 1.0.0",
  "hyper 1.1.0",
  "hyper-util",
- "rustls 0.22.3",
+ "rustls 0.22.4",
  "rustls-pki-types",
  "tokio",
  "tokio-rustls",
@@ -3171,7 +3171,7 @@ dependencies = [
  "quinn",
  "rand 0.8.5",
  "ring 0.16.20",
- "rustls 0.21.9",
+ "rustls 0.21.11",
  "socket2 0.5.6",
  "thiserror",
  "tokio",
@@ -3396,7 +3396,7 @@ dependencies = [
  "libp2p-yamux",
  "rcgen",
  "ring 0.16.20",
- "rustls 0.21.9",
+ "rustls 0.21.11",
  "rustls-webpki 0.101.7",
  "thiserror",
  "tokio",
@@ -4613,7 +4613,7 @@ dependencies = [
  "quinn-proto",
  "quinn-udp",
  "rustc-hash",
- "rustls 0.21.9",
+ "rustls 0.21.11",
  "thiserror",
  "tokio",
  "tracing",
@@ -4629,7 +4629,7 @@ dependencies = [
  "rand 0.8.5",
  "ring 0.16.20",
  "rustc-hash",
- "rustls 0.21.9",
+ "rustls 0.21.11",
  "slab",
  "thiserror",
  "tinyvec",
@@ -4909,7 +4909,7 @@ dependencies = [
  "once_cell",
  "percent-encoding",
  "pin-project-lite",
- "rustls 0.22.3",
+ "rustls 0.22.4",
  "rustls-pemfile",
  "rustls-pki-types",
  "serde",
@@ -5144,9 +5144,9 @@ dependencies = [
 
 [[package]]
 name = "rustls"
-version = "0.21.9"
+version = "0.21.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "629648aced5775d558af50b2b4c7b02983a04b312126d45eeead26e7caa498b9"
+checksum = "7fecbfb7b1444f477b345853b1fce097a2c6fb637b2bfb87e6bc5db0f043fae4"
 dependencies = [
  "log",
  "ring 0.17.5",
@@ -5156,9 +5156,9 @@ dependencies = [
 
 [[package]]
 name = "rustls"
-version = "0.22.3"
+version = "0.22.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "99008d7ad0bbbea527ec27bddbc0e432c5b87d8175178cee68d2eec9c4a1813c"
+checksum = "bf4ef73721ac7bcd79b2b315da7779d8fc09718c6b3d2d1b2d94850eb8c18432"
 dependencies = [
  "log",
  "ring 0.17.5",
@@ -6008,7 +6008,7 @@ version = "0.25.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "775e0c0f0adb3a2f22a00c4745d728b479985fc15ee7ca6a2608388c5569860f"
 dependencies = [
- "rustls 0.22.3",
+ "rustls 0.22.4",
  "rustls-pki-types",
  "tokio",
 ]
@@ -6656,7 +6656,7 @@ dependencies = [
  "ring 0.16.20",
  "rtcp",
  "rtp",
- "rustls 0.21.9",
+ "rustls 0.21.11",
  "sdp",
  "serde",
  "serde_json",
@@ -6717,7 +6717,7 @@ dependencies = [
  "rand_core 0.6.4",
  "rcgen",
  "ring 0.16.20",
- "rustls 0.21.9",
+ "rustls 0.21.11",
  "sec1",
  "serde",
  "sha1",
