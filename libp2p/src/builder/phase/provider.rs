@@ -1,7 +1,7 @@
-use std::marker::PhantomData;
-use crate::SwarmBuilder;
 #[allow(unused_imports)]
 use super::*;
+use crate::SwarmBuilder;
+use std::marker::PhantomData;
 /// Represents the phase where a provider is not yet specified.
 /// This is a marker type used in the type-state pattern to ensure compile-time checks of the builder's state.
 pub enum NoProviderSpecified {}
