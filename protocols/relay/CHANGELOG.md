@@ -1,6 +1,6 @@
 ## 0.17.3
 - Use `instant` variant of `SystemTime` for wasm support.
-  See [PR XXXX](https://github.com/libp2p/rust-libp2p/pull/XXXX).
+  See [PR 5328](https://github.com/libp2p/rust-libp2p/pull/5328).
 
 ## 0.17.2
 
