@@ -292,7 +292,7 @@ impl Config {
         self.mesh_outbound_min
     }
 
-    /// Number of heartbeat ticks that specifcy the interval in which opportunistic grafting is
+    /// Number of heartbeat ticks that specify the interval in which opportunistic grafting is
     /// applied. Every `opportunistic_graft_ticks` we will attempt to select some high-scoring mesh
     /// peers to replace lower-scoring ones, if the median score of our mesh peers falls below a
     /// threshold (see <https://godoc.org/github.com/libp2p/go-libp2p-pubsub#PeerScoreThresholds>).
@@ -694,7 +694,7 @@ impl ConfigBuilder {
         self
     }
 
-    /// Number of heartbeat ticks that specifcy the interval in which opportunistic grafting is
+    /// Number of heartbeat ticks that specify the interval in which opportunistic grafting is
     /// applied. Every `opportunistic_graft_ticks` we will attempt to select some high-scoring mesh
     /// peers to replace lower-scoring ones, if the median score of our mesh peers falls below a
     /// threshold (see <https://godoc.org/github.com/libp2p/go-libp2p-pubsub#PeerScoreThresholds>).
