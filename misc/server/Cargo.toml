@@ -13,7 +13,7 @@ license = "MIT"
 [dependencies]
 base64 = "0.22"
 clap = { version = "4.5.4", features = ["derive"] }
-futures = "0.3"
+futures = { workspace = true }
 futures-timer = "3"
 axum = "0.7"
 libp2p = { workspace = true, features = ["autonat", "dns", "tokio", "noise", "tcp", "yamux", "identify", "kad", "ping", "relay", "metrics", "rsa", "macros", "quic", "websocket"] }
