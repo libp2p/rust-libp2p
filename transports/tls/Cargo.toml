@@ -9,13 +9,13 @@ license = "MIT"
 exclude = ["src/test_assets"]
 
 [dependencies]
-futures = { version = "0.3.30", default-features = false }
+futures = { workspace = true, default-features = false }
 futures-rustls = "0.24.0"
 libp2p-core = { workspace = true }
 libp2p-identity = { workspace = true }
 rcgen = "0.11.3"
 ring = "0.16.20"
-thiserror = "1.0.58"
+thiserror = "1.0.59"
 webpki = { version = "0.101.4", package = "rustls-webpki", features = ["std"] }
 x509-parser = "0.16.0"
 yasna = "0.5.2"

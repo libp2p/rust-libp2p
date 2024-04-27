@@ -1147,7 +1147,7 @@ where
                     addrs
                 };
 
-                // If address translation yielded nothing, broacast the original candidate address.
+                // If address translation yielded nothing, broadcast the original candidate address.
                 if translated_addresses.is_empty() {
                     self.behaviour
                         .on_swarm_event(FromSwarm::NewExternalAddrCandidate(
