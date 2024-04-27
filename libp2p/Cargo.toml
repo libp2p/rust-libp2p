@@ -93,7 +93,7 @@ upnp = ["dep:libp2p-upnp"]
 [dependencies]
 bytes = "1"
 either = "1.9.0"
-futures = "0.3.26"
+futures = { workspace = true }
 futures-timer = "3.0.2" # Explicit dependency to be used in `wasm-bindgen` feature
 getrandom = "0.2.3"     # Explicit dependency to be used in `wasm-bindgen` feature
 instant = "0.1.12"      # Explicit dependency to be used in `wasm-bindgen` feature

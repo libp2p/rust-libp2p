@@ -13,7 +13,7 @@ categories = ["network-programming", "asynchronous"]
 [dependencies]
 either = "1.11.0"
 fnv = "1.0"
-futures = "0.3.30"
+futures = { workspace = true }
 futures-timer = "3.0.3"
 getrandom = { version = "0.2.14", features = ["js"], optional = true } # Explicit dependency to be used in `wasm-bindgen` feature
 instant = "0.1.12"
@@ -43,7 +43,7 @@ wasm-bindgen = ["dep:wasm-bindgen-futures", "dep:getrandom"]
 [dev-dependencies]
 async-std = { version = "1.6.2", features = ["attributes"] }
 either = "1.11.0"
-futures = "0.3.30"
+futures = { workspace = true }
 libp2p-identify = { path = "../protocols/identify" }                # Using `path` here because this is a cyclic dev-dependency which otherwise breaks releasing.
 libp2p-identity = { workspace = true, features = ["ed25519"] }
 libp2p-kad = { path = "../protocols/kad" }                          # Using `path` here because this is a cyclic dev-dependency which otherwise breaks releasing.

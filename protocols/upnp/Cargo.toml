@@ -11,7 +11,7 @@ categories = ["network-programming", "asynchronous"]
 publish = true
 
 [dependencies]
-futures = "0.3.30"
+futures = { workspace = true }
 futures-timer = "3.0.3"
 igd-next = "0.14.3"
 libp2p-core = { workspace = true }

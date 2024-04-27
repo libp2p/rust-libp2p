@@ -125,6 +125,7 @@ rw-stream-sink = { version = "0.4.0", path = "misc/rw-stream-sink" }
 unsigned-varint = { version = "0.8.0" }
 tokio = { version = "1.37", default-features = false }
 tracing = "0.1.37"
+futures = "0.3.30"
 
 [patch.crates-io]
 

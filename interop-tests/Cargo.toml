@@ -14,7 +14,7 @@ crate-type = ["cdylib", "rlib"]
 [dependencies]
 anyhow = "1"
 either = "1.11.0"
-futures = "0.3.30"
+futures = { workspace = true }
 rand = "0.8.5"
 serde = { version = "1", features = ["derive"] }
 tracing = { workspace = true }
