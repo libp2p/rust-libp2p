@@ -10,9 +10,6 @@ repository = "https://github.com/libp2p/rust-libp2p"
 keywords = ["peer-to-peer", "libp2p", "networking"]
 categories = ["network-programming", "asynchronous"]
 
-[features]
-wasm-bindgen = ["instant/wasm-bindgen"]
-
 [dependencies]
 asynchronous-codec = { workspace = true }
 bytes = "1"
@@ -20,7 +17,6 @@ either = "1.11.0"
 futures = { workspace = true }
 futures-timer = "3"
 futures-bounded = { workspace = true }
-instant = "0.1.12"
 libp2p-core = { workspace = true }
 libp2p-swarm = { workspace = true }
 libp2p-identity = { workspace = true }
@@ -31,6 +27,7 @@ static_assertions = "1"
 thiserror = "1.0"
 tracing = { workspace = true }
 void = "1"
+web-time = "1"
 
 [dev-dependencies]
 libp2p-identity = { workspace = true, features = ["rand"] }

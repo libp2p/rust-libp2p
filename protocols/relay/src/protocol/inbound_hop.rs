@@ -18,8 +18,8 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use instant::SystemTime;
 use std::time::Duration;
+use web_time::SystemTime;
 
 use asynchronous_codec::{Framed, FramedParts};
 use bytes::Bytes;
