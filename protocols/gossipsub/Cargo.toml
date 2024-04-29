@@ -11,7 +11,7 @@ keywords = ["peer-to-peer", "libp2p", "networking"]
 categories = ["network-programming", "asynchronous"]
 
 [features]
-wasm-bindgen = ["getrandom/js", "instant/wasm-bindgen"]
+wasm-bindgen = ["getrandom/js"]
 
 [dependencies]
 asynchronous-codec = { workspace = true }
@@ -24,7 +24,7 @@ futures = { workspace = true }
 futures-ticker = "0.0.3"
 getrandom = "0.2.14"
 hex_fmt = "0.3.0"
-instant = "0.1.12"
+web-time = { workspace = true }
 libp2p-core = { workspace = true }
 libp2p-identity = { workspace = true, features = ["rand"] }
 libp2p-swarm = { workspace = true }

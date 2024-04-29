@@ -20,7 +20,7 @@ relay = ["libp2p-relay"]
 
 [dependencies]
 futures = { workspace = true }
-instant = "0.1.12"
+web-time = { workspace = true }
 libp2p-core = { workspace = true }
 libp2p-dcutr =  { workspace = true, optional = true }
 libp2p-gossipsub =  { workspace = true, optional = true }

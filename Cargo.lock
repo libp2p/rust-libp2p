@@ -2410,9 +2410,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7a5bbe824c507c5da5956355e86a746d82e0e1464f65d862cc5e71da70e94b2c"
 dependencies = [
  "cfg-if",
- "js-sys",
- "wasm-bindgen",
- "web-sys",
 ]
 
 [[package]]
@@ -2444,7 +2441,6 @@ dependencies = [
  "either",
  "futures",
  "futures-timer",
- "instant",
  "libp2p",
  "libp2p-mplex",
  "libp2p-noise",
@@ -2466,6 +2462,7 @@ dependencies = [
  "wasm-bindgen",
  "wasm-bindgen-futures",
  "wasm-logger",
+ "web-time",
 ]
 
 [[package]]
@@ -2615,7 +2612,6 @@ dependencies = [
  "futures",
  "futures-timer",
  "getrandom 0.2.14",
- "instant",
  "libp2p-allow-block-list",
  "libp2p-autonat",
  "libp2p-connection-limits",
@@ -2654,6 +2650,7 @@ dependencies = [
  "thiserror",
  "tokio",
  "tracing-subscriber",
+ "web-time",
 ]
 
 [[package]]
@@ -2678,7 +2675,6 @@ dependencies = [
  "asynchronous-codec",
  "futures",
  "futures-timer",
- "instant",
  "libp2p-core",
  "libp2p-identity",
  "libp2p-request-response",
@@ -2689,6 +2685,7 @@ dependencies = [
  "rand 0.8.5",
  "tracing",
  "tracing-subscriber",
+ "web-time",
 ]
 
 [[package]]
@@ -2717,7 +2714,6 @@ dependencies = [
  "fnv",
  "futures",
  "futures-timer",
- "instant",
  "libp2p-identity",
  "libp2p-mplex",
  "libp2p-noise",
@@ -2737,6 +2733,7 @@ dependencies = [
  "tracing",
  "unsigned-varint 0.8.0",
  "void",
+ "web-time",
 ]
 
 [[package]]
@@ -2750,7 +2747,6 @@ dependencies = [
  "futures",
  "futures-bounded",
  "futures-timer",
- "instant",
  "libp2p-core",
  "libp2p-dns",
  "libp2p-identify",
@@ -2771,6 +2767,7 @@ dependencies = [
  "tracing",
  "tracing-subscriber",
  "void",
+ "web-time",
 ]
 
 [[package]]
@@ -2827,7 +2824,6 @@ dependencies = [
  "getrandom 0.2.14",
  "hex",
  "hex_fmt",
- "instant",
  "libp2p-core",
  "libp2p-identity",
  "libp2p-noise",
@@ -2846,6 +2842,7 @@ dependencies = [
  "tracing",
  "tracing-subscriber",
  "void",
+ "web-time",
 ]
 
 [[package]]
@@ -2914,7 +2911,6 @@ dependencies = [
  "futures",
  "futures-bounded",
  "futures-timer",
- "instant",
  "libp2p-core",
  "libp2p-identify",
  "libp2p-identity",
@@ -2934,6 +2930,7 @@ dependencies = [
  "tracing-subscriber",
  "uint",
  "void",
+ "web-time",
 ]
 
 [[package]]
@@ -2985,7 +2982,6 @@ name = "libp2p-metrics"
 version = "0.14.1"
 dependencies = [
  "futures",
- "instant",
  "libp2p-core",
  "libp2p-dcutr",
  "libp2p-gossipsub",
@@ -2997,6 +2993,7 @@ dependencies = [
  "libp2p-swarm",
  "pin-project",
  "prometheus-client",
+ "web-time",
 ]
 
 [[package]]
@@ -3070,7 +3067,6 @@ dependencies = [
  "futures",
  "futures-bounded",
  "futures-timer",
- "instant",
  "libp2p",
  "libp2p-core",
  "libp2p-dns",
@@ -3089,6 +3085,7 @@ dependencies = [
  "tracing",
  "tracing-subscriber",
  "void",
+ "web-time",
 ]
 
 [[package]]
@@ -3099,7 +3096,6 @@ dependencies = [
  "either",
  "futures",
  "futures-timer",
- "instant",
  "libp2p-core",
  "libp2p-identity",
  "libp2p-swarm",
@@ -3109,6 +3105,7 @@ dependencies = [
  "tracing",
  "tracing-subscriber",
  "void",
+ "web-time",
 ]
 
 [[package]]
@@ -3189,7 +3186,6 @@ dependencies = [
  "futures",
  "futures-bounded",
  "futures-timer",
- "instant",
  "libp2p-core",
  "libp2p-identity",
  "libp2p-ping",
@@ -3206,6 +3202,7 @@ dependencies = [
  "tracing",
  "tracing-subscriber",
  "void",
+ "web-time",
 ]
 
 [[package]]
@@ -3217,7 +3214,6 @@ dependencies = [
  "bimap",
  "futures",
  "futures-timer",
- "instant",
  "libp2p-core",
  "libp2p-identify",
  "libp2p-identity",
@@ -3236,6 +3232,7 @@ dependencies = [
  "tracing",
  "tracing-subscriber",
  "void",
+ "web-time",
 ]
 
 [[package]]
@@ -3250,7 +3247,6 @@ dependencies = [
  "futures-bounded",
  "futures-timer",
  "futures_ringbuf",
- "instant",
  "libp2p-core",
  "libp2p-identity",
  "libp2p-noise",
@@ -3265,6 +3261,7 @@ dependencies = [
  "tracing",
  "tracing-subscriber",
  "void",
+ "web-time",
 ]
 
 [[package]]
@@ -3313,7 +3310,6 @@ dependencies = [
  "futures",
  "futures-timer",
  "getrandom 0.2.14",
- "instant",
  "libp2p-core",
  "libp2p-identify",
  "libp2p-identity",
@@ -3335,6 +3331,7 @@ dependencies = [
  "trybuild",
  "void",
  "wasm-bindgen-futures",
+ "web-time",
 ]
 
 [[package]]

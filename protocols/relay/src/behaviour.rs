@@ -27,7 +27,6 @@ use crate::multiaddr_ext::MultiaddrExt;
 use crate::proto;
 use crate::protocol::{inbound_hop, outbound_stop};
 use either::Either;
-use instant::Instant;
 use libp2p_core::multiaddr::Protocol;
 use libp2p_core::{ConnectedPoint, Endpoint, Multiaddr};
 use libp2p_identity::PeerId;
@@ -41,6 +40,7 @@ use std::num::NonZeroU32;
 use std::ops::Add;
 use std::task::{Context, Poll};
 use std::time::Duration;
+use web_time::Instant;
 
 /// Configuration for the relay [`Behaviour`].
 ///

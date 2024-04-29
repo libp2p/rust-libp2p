@@ -14,7 +14,7 @@ categories = ["network-programming", "asynchronous"]
 either = "1.11.0"
 futures = { workspace = true }
 futures-timer = "3.0.3"
-instant = "0.1.12"
+web-time = { workspace = true }
 libp2p-core = { workspace = true }
 libp2p-swarm = { workspace = true }
 libp2p-identity = { workspace = true }
