@@ -3,7 +3,7 @@ name = "libp2p-core"
 edition = "2021"
 rust-version = { workspace = true }
 description = "Core traits and structs of libp2p"
-version = "0.41.2"
+version = "0.41.3"
 authors = ["Parity Technologies <admin@parity.io>"]
 license = "MIT"
 repository = "https://github.com/libp2p/rust-libp2p"

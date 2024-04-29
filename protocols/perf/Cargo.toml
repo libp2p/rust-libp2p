@@ -3,7 +3,7 @@ name = "libp2p-perf"
 edition = "2021"
 rust-version = { workspace = true }
 description = "libp2p perf protocol implementation"
-version = "0.3.0"
+version = "0.3.1"
 authors = ["Max Inden <mail@max-inden.de>"]
 license = "MIT"
 repository = "https://github.com/libp2p/rust-libp2p"

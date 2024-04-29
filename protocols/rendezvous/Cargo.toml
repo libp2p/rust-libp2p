@@ -3,7 +3,7 @@ name = "libp2p-rendezvous"
 edition = "2021"
 rust-version = { workspace = true }
 description = "Rendezvous protocol for libp2p"
-version = "0.14.0"
+version = "0.14.1"
 authors = ["The COMIT guys <hello@comit.network>"]
 license = "MIT"
 repository = "https://github.com/libp2p/rust-libp2p"

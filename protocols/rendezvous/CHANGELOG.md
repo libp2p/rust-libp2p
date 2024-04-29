@@ -1,3 +1,7 @@
+## 0.14.1
+- Use `web-time` instead of `instant`.
+  See [PR XXXX](https://github.com/libp2p/rust-libp2p/pull/XXXX).
+
 ## 0.14.0
 
 

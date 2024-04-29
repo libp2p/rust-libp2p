@@ -2668,7 +2668,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-autonat"
-version = "0.12.0"
+version = "0.12.1"
 dependencies = [
  "async-std",
  "async-trait",
@@ -2707,7 +2707,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-core"
-version = "0.41.2"
+version = "0.41.3"
 dependencies = [
  "async-std",
  "either",
@@ -2738,7 +2738,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-dcutr"
-version = "0.11.0"
+version = "0.11.1"
 dependencies = [
  "async-std",
  "asynchronous-codec",
@@ -2810,7 +2810,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-gossipsub"
-version = "0.46.1"
+version = "0.46.2"
 dependencies = [
  "async-std",
  "asynchronous-codec",
@@ -2979,7 +2979,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-metrics"
-version = "0.14.1"
+version = "0.14.2"
 dependencies = [
  "futures",
  "libp2p-core",
@@ -3060,7 +3060,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-perf"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
  "anyhow",
  "clap",
@@ -3207,7 +3207,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-rendezvous"
-version = "0.14.0"
+version = "0.14.1"
 dependencies = [
  "async-trait",
  "asynchronous-codec",

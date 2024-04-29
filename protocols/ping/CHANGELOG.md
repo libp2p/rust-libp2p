@@ -4,6 +4,9 @@
   `ping::Event` can now be shared between threads.
   See [PR 5250]
 
+- Use `web-time` instead of `instant`.
+  See [PR XXXX](https://github.com/libp2p/rust-libp2p/pull/XXXX).
+
 [PR 5250]: https://github.com/libp2p/rust-libp2p/pull/5250
 
 ## 0.44.0

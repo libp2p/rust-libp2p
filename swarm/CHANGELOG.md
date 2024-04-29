@@ -5,6 +5,8 @@
   The address is broadcast to all behaviours via `FromSwarm::NewExternalAddrOfPeer`.
   Protocols that want to collect these addresses can use the new `PeerAddresses` utility.
   See [PR 4371](https://github.com/libp2p/rust-libp2p/pull/4371).
+- Use `web-time` instead of `instant`.
+  See [PR XXXX](https://github.com/libp2p/rust-libp2p/pull/XXXX).
 
 ## 0.44.1
 

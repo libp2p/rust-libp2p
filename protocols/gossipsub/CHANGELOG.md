@@ -1,3 +1,7 @@
+## 0.46.2
+- Use `web-time` instead of `instant`.
+  See [PR XXXX](https://github.com/libp2p/rust-libp2p/pull/XXXX).
+
 ## 0.46.1
 
 - Deprecate `Rpc` in preparation for removing it from the public API because it is an internal type.

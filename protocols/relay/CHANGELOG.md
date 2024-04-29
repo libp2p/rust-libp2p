@@ -2,6 +2,8 @@
 
 - Fix support for unlimited relay connection according to spec.
   See [PR 5244](https://github.com/libp2p/rust-libp2p/pull/5244).
+- Use `web-time` instead of `instant`.
+  See [PR XXXX](https://github.com/libp2p/rust-libp2p/pull/XXXX).
 
 ## 0.17.1
 

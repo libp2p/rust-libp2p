@@ -1,3 +1,7 @@
+## 0.3.1
+- Use `web-time` instead of `instant`.
+  See [PR XXXX](https://github.com/libp2p/rust-libp2p/pull/XXXX).
+
 ## 0.3.0
 
 - Continuously measure on single connection (iperf-style).

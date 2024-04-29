@@ -1,3 +1,7 @@
+## 0.12.1
+- Use `web-time` instead of `instant`.
+  See [PR XXXX](https://github.com/libp2p/rust-libp2p/pull/XXXX).
+
 ## 0.12.0
 
 - Remove `Clone`, `PartialEq` and `Eq` implementations on `Event` and its sub-structs.
