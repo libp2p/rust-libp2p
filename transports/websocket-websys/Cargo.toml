@@ -12,11 +12,11 @@ categories = ["network-programming", "asynchronous"]
 
 [dependencies]
 bytes = "1.6.0"
-futures = "0.3.30"
+futures = { workspace = true }
 js-sys = "0.3.69"
 libp2p-core = { workspace = true }
 tracing = { workspace = true }
-parking_lot = "0.12.1"
+parking_lot = "0.12.2"
 send_wrapper = "0.6.0"
 thiserror = "1.0.59"
 wasm-bindgen = "0.2.90"
