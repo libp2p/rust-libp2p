@@ -11,7 +11,7 @@ By running this example, users can gain a better understanding of how the Kademl
 
 The example code demonstrates how to perform Kademlia queries on the IPFS network using the Rust P2P Library.
 
-### Getting closes peers
+### Getting closest peers
 
 By specifying a peer ID as a parameter, the code will search for the closest peers to the given peer ID.
 
