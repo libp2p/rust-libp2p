@@ -90,8 +90,6 @@ mod tests {
         transport::{memory::MemoryTransport, DialOpts, ListenerId, PortUse, Transport},
         Endpoint,
     };
-    use rand::{thread_rng, Rng};
-    use std::time::Duration;
 
     #[test]
     fn ping_pong() {

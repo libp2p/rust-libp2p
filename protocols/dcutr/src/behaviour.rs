@@ -192,9 +192,9 @@ impl NetworkBehaviour for Behaviour {
             .insert(connection_id);
 
         assert!(
-            self.direct_to_relayed_connections
-                .get(&connection_id)
-                .is_none(),
+            !self
+                .direct_to_relayed_connections
+                .contains_key(&connection_id),
             "state mismatch"
         );
 

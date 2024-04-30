@@ -20,13 +20,7 @@
 
 use crate::transport::{DialOpts, ListenerId, Transport, TransportError, TransportEvent};
 use fnv::FnvHashMap;
-use futures::{
-    channel::mpsc,
-    future::{self, Ready},
-    prelude::*,
-    task::Context,
-    task::Poll,
-};
+use futures::{channel::mpsc, future::Ready, prelude::*, task::Context, task::Poll};
 use multiaddr::{Multiaddr, Protocol};
 use once_cell::sync::Lazy;
 use parking_lot::Mutex;

@@ -19,7 +19,6 @@
 // DEALINGS IN THE SOFTWARE.
 
 use futures_rustls::{rustls, TlsAcceptor, TlsConnector};
-use std::convert::TryFrom;
 use std::{fmt, io, sync::Arc};
 
 /// TLS configuration.

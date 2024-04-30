@@ -3,7 +3,7 @@ name = "libp2p"
 edition = "2021"
 rust-version = { workspace = true }
 description = "Peer-to-peer networking library"
-version = "0.53.2"
+version = "0.54.0"
 authors = ["Parity Technologies <admin@parity.io>"]
 license = "MIT"
 repository = "https://github.com/libp2p/rust-libp2p"
@@ -92,7 +92,7 @@ upnp = ["dep:libp2p-upnp"]
 [dependencies]
 bytes = "1"
 either = "1.9.0"
-futures = "0.3.26"
+futures = { workspace = true }
 futures-timer = "3.0.2" # Explicit dependency to be used in `wasm-bindgen` feature
 getrandom = "0.2.3"     # Explicit dependency to be used in `wasm-bindgen` feature
 instant = "0.1.12"      # Explicit dependency to be used in `wasm-bindgen` feature
@@ -140,7 +140,7 @@ libp2p-websocket = { workspace = true, optional = true }
 async-std = { version = "1.6.2", features = ["attributes"] }
 async-trait = "0.1"
 clap = { version = "4.1.6", features = ["derive"] }
-tokio = { version = "1.15", features = [ "io-util", "io-std", "macros", "rt", "rt-multi-thread"] }
+tokio = { workspace = true, features = [ "io-util", "io-std", "macros", "rt", "rt-multi-thread"] }
 
 libp2p-mplex = { workspace = true }
 libp2p-noise = { workspace = true }

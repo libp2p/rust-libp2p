@@ -21,7 +21,7 @@
 use crate::upgrade::{InboundConnectionUpgrade, OutboundConnectionUpgrade, UpgradeError};
 use crate::{connection::ConnectedPoint, Negotiated};
 use futures::{future::Either, prelude::*};
-use multistream_select::{self, DialerSelectFuture, ListenerSelectFuture};
+use multistream_select::{DialerSelectFuture, ListenerSelectFuture};
 use std::{mem, pin::Pin, task::Context, task::Poll};
 
 pub(crate) use multistream_select::Version;
