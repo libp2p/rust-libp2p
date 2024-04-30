@@ -802,9 +802,7 @@ mod tests {
                     .unwrap()
             ),
             Ok(SocketAddr::new(
-                IpAddr::V6(Ipv6Addr::new(
-                    65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535,
-                )),
+                IpAddr::V6(Ipv6Addr::new(65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535,)),
                 8080,
             ))
         );
@@ -1092,6 +1090,7 @@ mod tests {
 
     #[test]
     fn port_reuse_listening() {
+        env_logger::try_init().ok();
         let _ = tracing_subscriber::fmt()
             .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
             .try_init();
@@ -1276,10 +1275,11 @@ mod tests {
 
         #[cfg(feature = "tokio")]
         {
-            let rt = ::tokio::runtime::Builder::new_current_thread()
-                .enable_io()
-                .build()
-                .unwrap();
+            let rt =
+                ::tokio::runtime::Builder::new_current_thread()
+                    .enable_io()
+                    .build()
+                    .unwrap();
             assert!(rt.block_on(cycle_listeners::<tokio::Tcp>()));
         }
     }
@@ -1312,10 +1312,11 @@ mod tests {
         }
         #[cfg(feature = "tokio")]
         {
-            let rt = ::tokio::runtime::Builder::new_current_thread()
-                .enable_io()
-                .build()
-                .unwrap();
+            let rt =
+                ::tokio::runtime::Builder::new_current_thread()
+                    .enable_io()
+                    .build()
+                    .unwrap();
             rt.block_on(async {
                 test::<tokio::Tcp>();
             });
