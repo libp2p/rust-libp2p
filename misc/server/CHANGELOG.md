@@ -4,6 +4,8 @@
 
 - Use periodic and automatic bootstrap of Kademlia.
   See [PR 4838](https://github.com/libp2p/rust-libp2p/pull/4838).
+- Integrate Kademlia bootstrap function breaking change.
+  See [PR 5349](https://github.com/libp2p/rust-libp2p/pull/5349).
 
 ## 0.12.6
 

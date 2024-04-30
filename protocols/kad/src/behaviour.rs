@@ -914,12 +914,9 @@ where
     /// refreshed by initiating an additional bootstrapping query for each such
     /// bucket with random keys.
     ///
-    /// Returns `Ok` if bootstrapping has been initiated with a self-lookup, providing the
-    /// `QueryId` for the entire bootstrapping process. The progress of bootstrapping is
+    /// Returns the `QueryId` for the entire bootstrapping process. The progress of bootstrapping is
     /// reported via [`Event::OutboundQueryProgressed{QueryResult::Bootstrap}`] events,
     /// with one such event per bootstrapping query.
-    ///
-    /// Returns `Err` if bootstrapping is impossible due an empty routing table.
     ///
     /// > **Note**: Bootstrapping requires at least one node of the DHT to be known.
     /// > See [`Behaviour::add_address`].
@@ -938,13 +935,8 @@ where
             step: ProgressStep::first(),
         };
         let peers = self.kbuckets.closest_keys(&local_key).collect::<Vec<_>>();
-        if peers.is_empty() {
-            Err(NoKnownPeers())
-        } else {
-            self.bootstrap_status.on_started();
-            let inner = QueryInner::new(info);
-            Ok(self.queries.add_iter_closest(local_key, peers, inner))
-        }
+        let inner = QueryInner::new(info);
+        self.queries.add_iter_closest(local_key, peers, inner)
     }
 
     /// Establishes the local node as a provider of a value for the given key.
@@ -2527,9 +2519,7 @@ where
 
         // Poll bootstrap periodically and automatically.
         if let Poll::Ready(()) = self.bootstrap_status.poll_next_bootstrap(cx) {
-            if let Err(e) = self.bootstrap() {
-                tracing::warn!("Failed to trigger bootstrap: {e}");
-            }
+            self.bootstrap();
         }
 
         loop {
