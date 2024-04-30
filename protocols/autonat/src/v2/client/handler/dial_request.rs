@@ -254,7 +254,18 @@ async fn start_stream_handle(
         }
         Response::Dial(dial_response) => (dial_response, 0),
     };
-    coder.close().await?;
+    match coder.close().await {
+        Ok(_) => {}
+        Err(err) => {
+            if err.kind() == io::ErrorKind::ConnectionReset {
+                // The AutoNAT server may have already closed the stream (this is normal because the probe is finished), in this case we have this error:
+                // Err(Custom { kind: ConnectionReset, error: Stopped(0) })
+                // so we silently ignore this error
+            } else {
+                return Err(err.into());
+            }
+        }
+    }
 
     match res.status {
         ResponseStatus::E_REQUEST_REJECTED => {
