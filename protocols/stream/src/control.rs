@@ -103,6 +103,15 @@ impl fmt::Display for OpenStreamError {
     }
 }
 
+impl std::error::Error for OpenStreamError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            Self::Io(error) => Some(error),
+            _ => None,
+        }
+    }
+}
+
 /// A handle to inbound streams for a particular protocol.
 #[must_use = "Streams do nothing unless polled."]
 pub struct IncomingStreams {

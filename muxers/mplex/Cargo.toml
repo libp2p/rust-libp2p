@@ -12,21 +12,21 @@ categories = ["network-programming", "asynchronous"]
 
 [dependencies]
 bytes = "1"
-futures = "0.3.30"
+futures = { workspace = true }
 asynchronous-codec = { workspace = true }
 libp2p-core = { workspace = true }
 libp2p-identity = { workspace = true }
 nohash-hasher = "0.2"
 parking_lot = "0.12"
 rand = "0.8"
-smallvec = "1.12.0"
-tracing = "0.1.37"
+smallvec = "1.13.2"
+tracing = { workspace = true }
 unsigned-varint = { workspace = true, features = ["asynchronous_codec"] }
 
 [dev-dependencies]
 async-std = { version = "1.7.0", features = ["attributes"] }
 criterion = "0.5"
-futures = "0.3"
+futures = { workspace = true }
 libp2p-identity = { workspace = true, features = ["rand"] }
 libp2p-muxer-test-harness = { path = "../test-harness" }
 libp2p-plaintext = { workspace = true }

@@ -13,8 +13,8 @@ publish = true
 
 [dependencies]
 bytes = "1"
-futures = "0.3"
-getrandom = { version = "0.2.12", features = ["js"] }
+futures = { workspace = true }
+getrandom = { version = "0.2.14", features = ["js"] }
 hex = "0.4.3"
 js-sys = { version = "0.3" }
 libp2p-core = { workspace = true }
@@ -22,10 +22,10 @@ libp2p-identity = { workspace = true }
 libp2p-webrtc-utils = { workspace = true }
 send_wrapper = { version = "0.6.0", features = ["futures"] }
 thiserror = "1"
-tracing = "0.1.37"
+tracing = { workspace = true }
 wasm-bindgen = { version = "0.2.90" }
-wasm-bindgen-futures = { version = "0.4.39" }
-web-sys = { version = "0.3.67", features = ["Document", "Location", "MessageEvent", "Navigator", "RtcCertificate", "RtcConfiguration", "RtcDataChannel", "RtcDataChannelEvent", "RtcDataChannelInit", "RtcDataChannelState", "RtcDataChannelType", "RtcPeerConnection", "RtcSdpType", "RtcSessionDescription", "RtcSessionDescriptionInit", "Window"] }
+wasm-bindgen-futures = { version = "0.4.42" }
+web-sys = { version = "0.3.69", features = ["Document", "Location", "MessageEvent", "Navigator", "RtcCertificate", "RtcConfiguration", "RtcDataChannel", "RtcDataChannelEvent", "RtcDataChannelInit", "RtcDataChannelState", "RtcDataChannelType", "RtcPeerConnection", "RtcSdpType", "RtcSessionDescription", "RtcSessionDescriptionInit", "Window"] }
 
 [lints]
 workspace = true

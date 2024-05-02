@@ -11,8 +11,8 @@ repository = "https://github.com/libp2p/rust-libp2p"
 [dependencies]
 asynchronous-codec = { workspace = true }
 bytes = "1"
-curve25519-dalek = "4.1.1"
-futures = "0.3.30"
+curve25519-dalek = "4.1.2"
+futures = { workspace = true }
 libp2p-core = { workspace = true }
 libp2p-identity = { workspace = true, features = ["ed25519"] }
 multiaddr = { workspace = true }
@@ -22,13 +22,13 @@ quick-protobuf = "0.8"
 rand = "0.8.3"
 sha2 = "0.10.8"
 static_assertions = "1"
-thiserror = "1.0.56"
-tracing = "0.1.37"
+thiserror = "1.0.59"
+tracing = { workspace = true }
 x25519-dalek = "2"
 zeroize = "1"
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
-snow = { version = "0.9.5", features = ["ring-resolver"], default-features = false }
+snow = { version = "0.9.6", features = ["ring-resolver"], default-features = false }
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 snow = { version = "0.9.5", features = ["default-resolver"], default-features = false }

@@ -158,10 +158,10 @@ pub(crate) fn search_gateway() -> oneshot::Receiver<Result<Gateway, Box<dyn Erro
                     }
                 }
             };
-            task_sender
-                .send(event)
-                .await
-                .expect("receiver should be available");
+            // Gateway was dropped.
+            if task_sender.send(event).await.is_err() {
+                return;
+            }
         }
     });
 

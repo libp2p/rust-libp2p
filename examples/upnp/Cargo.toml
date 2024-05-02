@@ -9,8 +9,8 @@ license = "MIT"
 release = false
 
 [dependencies]
-tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
-futures = "0.3.30"
+tokio = { workspace = true, features = ["rt-multi-thread", "macros"] }
+futures = { workspace = true }
 libp2p = { path = "../../libp2p", features = ["tokio", "dns", "macros", "noise", "ping", "tcp", "yamux", "upnp"] }
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 
