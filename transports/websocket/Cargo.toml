@@ -12,11 +12,11 @@ categories = ["network-programming", "asynchronous"]
 
 [dependencies]
 futures-rustls = "0.24.0"
-either = "1.9.0"
-futures = "0.3.30"
+either = "1.11.0"
+futures = { workspace = true }
 libp2p-core = { workspace = true }
 libp2p-identity = { workspace = true }
-parking_lot = "0.12.0"
+parking_lot = "0.12.2"
 pin-project-lite = "0.2.14"
 rw-stream-sink = { workspace = true }
 soketto = "0.8.0"

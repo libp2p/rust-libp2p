@@ -12,7 +12,7 @@ categories = ["network-programming", "asynchronous"]
 
 [dependencies]
 asynchronous-codec = { workspace = true }
-futures = "0.3.30"
+futures = { workspace = true }
 futures-timer = "3.0.3"
 futures-bounded = { workspace = true }
 libp2p-core = { workspace = true }
@@ -25,7 +25,7 @@ smallvec = "1.13.2"
 thiserror = "1.0"
 tracing = { workspace = true }
 void = "1.0"
-either = "1.9.0"
+either = "1.11.0"
 
 [dev-dependencies]
 async-std = { version = "1.6.2", features = ["attributes"] }
