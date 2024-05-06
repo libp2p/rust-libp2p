@@ -17,7 +17,7 @@ futures = { workspace = true }
 libp2p-core = { workspace = true }
 libp2p-identity = { workspace = true }
 parking_lot = "0.12.2"
-hickory-resolver = { version = "0.24.0", default-features = false, features = ["system-config"] }
+hickory-resolver = { version = "0.24.1", default-features = false, features = ["system-config"] }
 smallvec = "1.13.2"
 tracing = { workspace = true }
 

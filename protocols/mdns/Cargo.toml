@@ -24,7 +24,7 @@ smallvec = "1.13.2"
 socket2 = { version = "0.5.6", features = ["all"] }
 tokio = { workspace = true, default-features = false, features = ["net", "time"], optional = true}
 tracing = { workspace = true }
-hickory-proto = { version = "0.24.0", default-features = false, features = ["mdns"] }
+hickory-proto = { version = "0.24.1", default-features = false, features = ["mdns"] }
 void = "1.0.2"
 
 [features]
