@@ -594,7 +594,7 @@ mod tests {
                 assert!(!bucket_ref.contains(&Distance(min.0 - 1)));
             }
 
-            if max != Distance(U256::max_value()) {
+            if max != Distance(U256::MAX) {
                 // ^ avoid overflow
                 assert!(!bucket_ref.contains(&Distance(max.0 + 1)));
             }
