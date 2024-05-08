@@ -154,7 +154,7 @@ impl<SMInner: AsyncRead> AsyncRead for InstrumentedStream<SMInner> {
         let this = self.project();
         let num_bytes = ready!(this.inner.poll_read(cx, buf))?;
         this.sinks.inbound.fetch_add(
-            u64::try_from(num_bytes).unwrap_or(u64::max_value()),
+            u64::try_from(num_bytes).unwrap_or(u64::MAX),
             Ordering::Relaxed,
         );
         Poll::Ready(Ok(num_bytes))
@@ -168,7 +168,7 @@ impl<SMInner: AsyncRead> AsyncRead for InstrumentedStream<SMInner> {
         let this = self.project();
         let num_bytes = ready!(this.inner.poll_read_vectored(cx, bufs))?;
         this.sinks.inbound.fetch_add(
-            u64::try_from(num_bytes).unwrap_or(u64::max_value()),
+            u64::try_from(num_bytes).unwrap_or(u64::MAX),
             Ordering::Relaxed,
         );
         Poll::Ready(Ok(num_bytes))
@@ -184,7 +184,7 @@ impl<SMInner: AsyncWrite> AsyncWrite for InstrumentedStream<SMInner> {
         let this = self.project();
         let num_bytes = ready!(this.inner.poll_write(cx, buf))?;
         this.sinks.outbound.fetch_add(
-            u64::try_from(num_bytes).unwrap_or(u64::max_value()),
+            u64::try_from(num_bytes).unwrap_or(u64::MAX),
             Ordering::Relaxed,
         );
         Poll::Ready(Ok(num_bytes))
@@ -198,7 +198,7 @@ impl<SMInner: AsyncWrite> AsyncWrite for InstrumentedStream<SMInner> {
         let this = self.project();
         let num_bytes = ready!(this.inner.poll_write_vectored(cx, bufs))?;
         this.sinks.outbound.fetch_add(
-            u64::try_from(num_bytes).unwrap_or(u64::max_value()),
+            u64::try_from(num_bytes).unwrap_or(u64::MAX),
             Ordering::Relaxed,
         );
         Poll::Ready(Ok(num_bytes))
