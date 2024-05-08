@@ -22,32 +22,22 @@
 
 use super::*;
 
-use crate::kbucket::Distance;
 use crate::record::{store::MemoryStore, Key};
-use crate::{K_VALUE, PROTOCOL_NAME, SHA_256_MH};
+use crate::{PROTOCOL_NAME, SHA_256_MH};
 use futures::{executor::block_on, future::poll_fn, prelude::*};
 use futures_timer::Delay;
 use libp2p_core::{
-    connection::ConnectedPoint,
-    multiaddr::{multiaddr, Multiaddr, Protocol},
+    multiaddr::{multiaddr, Protocol},
     multihash::Multihash,
     transport::MemoryTransport,
-    upgrade, Endpoint, Transport,
+    upgrade, Transport,
 };
 use libp2p_identity as identity;
-use libp2p_identity::PeerId;
 use libp2p_noise as noise;
-use libp2p_swarm::behaviour::ConnectionEstablished;
-use libp2p_swarm::{self as swarm, ConnectionId, Swarm, SwarmEvent};
+use libp2p_swarm::{self as swarm, Swarm, SwarmEvent};
 use libp2p_yamux as yamux;
 use quickcheck::*;
 use rand::{random, rngs::StdRng, thread_rng, Rng, SeedableRng};
-use std::{
-    collections::{HashMap, HashSet},
-    num::NonZeroUsize,
-    time::Duration,
-    u64,
-};
 
 type TestSwarm = Swarm<Behaviour<MemoryStore>>;
 
@@ -174,6 +164,9 @@ fn bootstrap() {
         let num_group = rng.gen_range(1..(num_total % K_VALUE.get()) + 2);
 
         let mut cfg = Config::new(PROTOCOL_NAME);
+        // Disabling periodic bootstrap and automatic bootstrap to prevent the bootstrap from triggering automatically.
+        cfg.set_periodic_bootstrap_interval(None);
+        cfg.set_automatic_bootstrap_throttle(None);
         if rng.gen() {
             cfg.disjoint_query_paths(true);
         }
@@ -252,7 +245,11 @@ fn query_iter() {
 
     fn run(rng: &mut impl Rng) {
         let num_total = rng.gen_range(2..20);
-        let mut swarms = build_connected_nodes(num_total, 1)
+        let mut config = Config::new(PROTOCOL_NAME);
+        // Disabling periodic bootstrap and automatic bootstrap to prevent the bootstrap from triggering automatically.
+        config.set_periodic_bootstrap_interval(None);
+        config.set_automatic_bootstrap_throttle(None);
+        let mut swarms = build_connected_nodes_with_config(num_total, 1, config)
             .into_iter()
             .map(|(_a, s)| s)
             .collect::<Vec<_>>();
@@ -500,6 +497,9 @@ fn put_record() {
 
         let mut config = Config::new(PROTOCOL_NAME);
         config.set_replication_factor(replication_factor);
+        // Disabling periodic bootstrap and automatic bootstrap to prevent the bootstrap from triggering automatically.
+        config.set_periodic_bootstrap_interval(None);
+        config.set_automatic_bootstrap_throttle(None);
         if rng.gen() {
             config.disjoint_query_paths(true);
         }
@@ -869,6 +869,9 @@ fn add_provider() {
 
         let mut config = Config::new(PROTOCOL_NAME);
         config.set_replication_factor(replication_factor);
+        // Disabling periodic bootstrap and automatic bootstrap to prevent the bootstrap from triggering automatically.
+        config.set_periodic_bootstrap_interval(None);
+        config.set_automatic_bootstrap_throttle(None);
         if rng.gen() {
             config.disjoint_query_paths(true);
         }
@@ -1094,6 +1097,9 @@ fn disjoint_query_does_not_finish_before_all_paths_did() {
     config.disjoint_query_paths(true);
     // I.e. setting the amount disjoint paths to be explored to 2.
     config.set_parallelism(NonZeroUsize::new(2).unwrap());
+    // Disabling periodic bootstrap and automatic bootstrap to prevent the bootstrap from triggering automatically.
+    config.set_periodic_bootstrap_interval(None);
+    config.set_automatic_bootstrap_throttle(None);
 
     let mut alice = build_node_with_config(config);
     let mut trudy = build_node(); // Trudy the intrudor, an adversary.

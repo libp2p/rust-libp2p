@@ -3,7 +3,7 @@ name = "libp2p-relay"
 edition = "2021"
 rust-version = { workspace = true }
 description = "Communications relaying for libp2p"
-version = "0.17.1"
+version = "0.17.2"
 authors = ["Parity Technologies <admin@parity.io>", "Max Inden <mail@max-inden.de>"]
 license = "MIT"
 repository = "https://github.com/libp2p/rust-libp2p"
@@ -13,11 +13,10 @@ categories = ["network-programming", "asynchronous"]
 [dependencies]
 asynchronous-codec = { workspace = true }
 bytes = "1"
-either = "1.9.0"
-futures = "0.3.30"
+either = "1.11.0"
+futures = { workspace = true }
 futures-timer = "3"
 futures-bounded = { workspace = true }
-instant = "0.1.12"
 libp2p-core = { workspace = true }
 libp2p-swarm = { workspace = true }
 libp2p-identity = { workspace = true }
@@ -26,8 +25,9 @@ quick-protobuf-codec = { workspace = true }
 rand = "0.8.4"
 static_assertions = "1"
 thiserror = "1.0"
-tracing = "0.1.37"
+tracing = { workspace = true }
 void = "1"
+web-time = "1"
 
 [dev-dependencies]
 libp2p-identity = { workspace = true, features = ["rand"] }

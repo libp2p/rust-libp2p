@@ -18,7 +18,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use futures::{future::BoxFuture, prelude::*, stream::SelectAll, stream::Stream};
+use futures::{future::BoxFuture, prelude::*, stream::SelectAll};
 use if_watch::{tokio::IfWatcher, IfEvent};
 use libp2p_core::{
     multiaddr::{Multiaddr, Protocol},
@@ -432,9 +432,9 @@ fn parse_webrtc_listen_addr(addr: &Multiaddr) -> Option<SocketAddr> {
 mod tests {
     use super::*;
     use futures::future::poll_fn;
-    use libp2p_core::{multiaddr::Protocol, Transport as _};
+    use libp2p_core::Transport as _;
     use rand::thread_rng;
-    use std::net::{IpAddr, Ipv6Addr};
+    use std::net::Ipv6Addr;
 
     #[test]
     fn missing_webrtc_protocol() {

@@ -256,7 +256,7 @@ mod tests {
         transport::{DialOpts, ListenerId, PortUse},
         Endpoint, Transport,
     };
-    use std::{self, borrow::Cow, path::Path};
+    use std::{borrow::Cow, path::Path};
 
     #[test]
     fn multiaddr_to_path_conversion() {

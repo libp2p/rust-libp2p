@@ -75,7 +75,7 @@ mod key;
 pub use bucket::NodeStatus;
 pub use entry::*;
 
-use arrayvec::{self, ArrayVec};
+use arrayvec::ArrayVec;
 use bucket::KBucket;
 use std::collections::VecDeque;
 use std::time::{Duration, Instant};
@@ -344,7 +344,7 @@ enum ClosestBucketsIterState {
     /// The starting state of the iterator yields the first bucket index and
     /// then transitions to `ZoomIn`.
     Start(BucketIndex),
-    /// The iterator "zooms in" to to yield the next bucket cotaining nodes that
+    /// The iterator "zooms in" to yield the next bucket containing nodes that
     /// are incrementally closer to the local node but further from the `target`.
     /// These buckets are identified by a `1` in the corresponding bit position
     /// of the distance bit string. When bucket `0` is reached, the iterator
@@ -534,7 +534,7 @@ mod tests {
         fn arbitrary(g: &mut Gen) -> TestTable {
             let local_key = Key::from(PeerId::random());
             let timeout = Duration::from_secs(g.gen_range(1..360));
-            let mut table = TestTable::new(local_key.clone().into(), timeout);
+            let mut table = TestTable::new(local_key.into(), timeout);
             let mut num_total = g.gen_range(0..100);
             for (i, b) in &mut table.buckets.iter_mut().enumerate().rev() {
                 let ix = BucketIndex(i);
@@ -543,10 +543,7 @@ mod tests {
                 for _ in 0..num {
                     let distance = ix.rand_distance(&mut rand::thread_rng());
                     let key = local_key.for_distance(distance);
-                    let node = Node {
-                        key: key.clone(),
-                        value: (),
-                    };
+                    let node = Node { key, value: () };
                     let status = NodeStatus::arbitrary(g);
                     match b.insert(node, status) {
                         InsertResult::Inserted => {}
@@ -597,7 +594,7 @@ mod tests {
                 assert!(!bucket_ref.contains(&Distance(min.0 - 1)));
             }
 
-            if max != Distance(U256::max_value()) {
+            if max != Distance(U256::MAX) {
                 // ^ avoid overflow
                 assert!(!bucket_ref.contains(&Distance(max.0 + 1)));
             }
@@ -643,7 +640,7 @@ mod tests {
     #[test]
     fn entry_self() {
         let local_key = Key::from(PeerId::random());
-        let mut table = KBucketsTable::<_, ()>::new(local_key.clone(), Duration::from_secs(5));
+        let mut table = KBucketsTable::<_, ()>::new(local_key, Duration::from_secs(5));
 
         assert!(table.entry(&local_key).is_none())
     }
@@ -671,7 +668,7 @@ mod tests {
         let mut expected_keys: Vec<_> = table
             .buckets
             .iter()
-            .flat_map(|t| t.iter().map(|(n, _)| n.key.clone()))
+            .flat_map(|t| t.iter().map(|(n, _)| n.key))
             .collect();
 
         for _ in 0..10 {
@@ -686,7 +683,7 @@ mod tests {
     #[test]
     fn applied_pending() {
         let local_key = Key::from(PeerId::random());
-        let mut table = KBucketsTable::<_, ()>::new(local_key.clone(), Duration::from_millis(1));
+        let mut table = KBucketsTable::<_, ()>::new(local_key, Duration::from_millis(1));
         let expected_applied;
         let full_bucket_index;
         loop {
@@ -698,10 +695,7 @@ mod tests {
                             match e.insert((), NodeStatus::Connected) {
                                 InsertResult::Pending { disconnected } => {
                                     expected_applied = AppliedPending {
-                                        inserted: Node {
-                                            key: key.clone(),
-                                            value: (),
-                                        },
+                                        inserted: Node { key, value: () },
                                         evicted: Some(Node {
                                             key: disconnected,
                                             value: (),

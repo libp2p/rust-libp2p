@@ -37,7 +37,7 @@ use std::rc::Rc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Mutex;
 use std::{pin::Pin, task::Context, task::Poll};
-use wasm_bindgen::{prelude::*, JsCast};
+use wasm_bindgen::prelude::*;
 use web_sys::{CloseEvent, Event, MessageEvent, WebSocket};
 
 use crate::web_context::WebContext;
@@ -436,13 +436,14 @@ impl AsyncWrite for Connection {
 
 impl Drop for Connection {
     fn drop(&mut self) {
-        const GO_AWAY_STATUS_CODE: u16 = 1001; // See https://www.rfc-editor.org/rfc/rfc6455.html#section-7.4.1.
+        // In browsers, userland code is not allowed to use any other status code than 1000: https://websockets.spec.whatwg.org/#dom-websocket-close
+        const REGULAR_CLOSE: u16 = 1000; // See https://www.rfc-editor.org/rfc/rfc6455.html#section-7.4.1.
 
         if let ReadyState::Connecting | ReadyState::Open = self.inner.ready_state() {
             let _ = self
                 .inner
                 .socket
-                .close_with_code_and_reason(GO_AWAY_STATUS_CODE, "connection dropped");
+                .close_with_code_and_reason(REGULAR_CLOSE, "connection dropped");
         }
 
         WebContext::new()
