@@ -1,5 +1,3 @@
-#![allow(deprecated)]
-
 use libp2p::autonat;
 use libp2p::identify;
 use libp2p::kad;
