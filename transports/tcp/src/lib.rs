@@ -47,11 +47,11 @@ use libp2p_core::{
 use provider::{Incoming, Provider};
 use socket2::{Domain, Socket, Type};
 use std::{
-    collections::{HashSet, VecDeque},
+    collections::{HashMap, HashSet, VecDeque},
     io,
     net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr, TcpListener},
     pin::Pin,
-    sync::{Arc, RwLock},
+    sync::{Arc, Mutex, RwLock},
     task::{Context, Poll, Waker},
     time::Duration,
 };
@@ -76,7 +76,7 @@ struct PortReuse {
     /// registered as eligible for port reuse when dialing
     listen_addrs: Arc<RwLock<HashSet<(IpAddr, Port)>>>,
     /// Contains a hashset of all multiaddr that where dialed from a reused port.
-    addr_dialed_from_reuse_port: Arc<RwLock<HashSet<Multiaddr>>>,
+    addr_dialed_from_reuse_poralways_reused_port: Arc<Mutex<HashMap<SocketAddr, bool>>>,
 }
 
 impl PortReuse {
@@ -130,18 +130,25 @@ impl PortReuse {
         None
     }
 
-    fn dialed_from_reuse_port(&self, addr: Multiaddr) {
-        self.addr_dialed_from_reuse_port
-            .write()
+    fn dialed_from_reuse_port(&self, addr: SocketAddr) {
+        self.addr_dialed_from_reuse_poralways_reused_port
+            .lock()
             .expect("`dialed_as_listener` never panic while holding the lock")
-            .insert(addr);
+            .entry(addr)
+            .or_insert(true);
     }
 
     fn was_dialed_from_reuse_port(&self, addr: &Multiaddr) -> bool {
-        self.addr_dialed_from_reuse_port
-            .read()
-            .expect("`already_dialed_as_listener` never panic while holding the lock")
-            .contains(addr)
+        if let Ok(socket_addr) = multiaddr_to_socketaddr(addr.clone()) {
+            *self
+                .addr_dialed_from_reuse_poralways_reused_port
+                .lock()
+                .expect("`already_dialed_as_listener` never panic while holding the lock")
+                .entry(socket_addr)
+                .or_insert(false)
+        } else {
+            false
+        }
     }
 }
 
@@ -391,7 +398,7 @@ where
                 socket
                     .bind(&socket_addr.into())
                     .map_err(TransportError::Other)?;
-                self.port_reuse.dialed_from_reuse_port(addr);
+                self.port_reuse.dialed_from_reuse_port(socket_addr);
             }
             _ => {}
         }
@@ -437,7 +444,7 @@ where
         if !is_tcp_addr(listen) || !is_tcp_addr(observed) {
             return None;
         }
-        if self.port_reuse.was_dialed_from_reuse_port(observed) {
+        if self.port_reuse.was_dialed_from_reuse_port(listen) {
             return Some(observed.clone());
         }
 
