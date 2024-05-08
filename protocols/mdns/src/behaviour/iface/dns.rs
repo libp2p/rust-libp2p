@@ -247,7 +247,7 @@ fn duration_to_secs(duration: Duration) -> u32 {
     let secs = duration
         .as_secs()
         .saturating_add(u64::from(duration.subsec_nanos() > 0));
-    cmp::min(secs, From::from(u32::max_value())) as u32
+    cmp::min(secs, From::from(u32::MAX)) as u32
 }
 
 /// Appends a big-endian u32 to `out`.
