@@ -15,12 +15,12 @@ wasm-bindgen = ["getrandom/js", "instant/wasm-bindgen"]
 
 [dependencies]
 asynchronous-codec = { workspace = true }
-base64 = "0.22.0"
+base64 = "0.22.1"
 byteorder = "1.5.0"
 bytes = "1.6"
 either = "1.11"
 fnv = "1.0.7"
-futures = "0.3.30"
+futures = { workspace = true }
 futures-ticker = "0.0.3"
 getrandom = "0.2.14"
 hex_fmt = "0.3.0"
