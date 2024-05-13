@@ -1740,6 +1740,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "futures-rustls"
+version = "0.26.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a8f2f12607f92c69b12ed746fabf9ca4f5c482cba46679c1a75b874ed7c26adb"
+dependencies = [
+ "futures-io",
+ "rustls 0.23.5",
+ "rustls-pki-types",
+]
+
+[[package]]
 name = "futures-sink"
 version = "0.3.30"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3387,7 +3398,7 @@ name = "libp2p-tls"
 version = "0.3.0"
 dependencies = [
  "futures",
- "futures-rustls",
+ "futures-rustls 0.24.0",
  "hex",
  "hex-literal",
  "libp2p-core",
@@ -3508,7 +3519,7 @@ dependencies = [
  "async-std",
  "either",
  "futures",
- "futures-rustls",
+ "futures-rustls 0.26.0",
  "libp2p-core",
  "libp2p-dns",
  "libp2p-identity",
@@ -5162,6 +5173,20 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "bf4ef73721ac7bcd79b2b315da7779d8fc09718c6b3d2d1b2d94850eb8c18432"
 dependencies = [
  "log",
+ "ring 0.17.8",
+ "rustls-pki-types",
+ "rustls-webpki 0.102.2",
+ "subtle",
+ "zeroize",
+]
+
+[[package]]
+name = "rustls"
+version = "0.23.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "afabcee0551bd1aa3e18e5adbf2c0544722014b899adb31bd186ec638d3da97e"
+dependencies = [
+ "once_cell",
  "ring 0.17.8",
  "rustls-pki-types",
  "rustls-webpki 0.102.2",
