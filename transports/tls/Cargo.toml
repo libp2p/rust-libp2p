@@ -9,7 +9,7 @@ license = "MIT"
 exclude = ["src/test_assets"]
 
 [dependencies]
-futures = { workspace = true, default-features = false }
+futures = { workspace = true }
 futures-rustls = "0.24.0"
 libp2p-core = { workspace = true }
 libp2p-identity = { workspace = true }
