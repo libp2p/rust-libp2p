@@ -28,7 +28,7 @@ use futures::{
 };
 use futures_timer::Delay;
 use libp2p_identity::PeerId;
-use rustls::pki_types::CertificateDer;
+use quinn::rustls::pki_types::CertificateDer;
 use std::{
     pin::Pin,
     task::{Context, Poll},
