@@ -1,3 +1,6 @@
+// TODO: remove when https://github.com/rust-lang/rust-clippy/issues/12377 fix lands in stable clippy.
+#![allow(clippy::empty_docs)]
+
 use wasm_bindgen::prelude::*;
 use web_sys::window;
 

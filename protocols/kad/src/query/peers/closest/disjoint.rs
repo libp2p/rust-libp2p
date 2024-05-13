@@ -460,7 +460,7 @@ mod tests {
                 peers.into_iter()
             });
 
-            ResultIter::new(target.clone(), iters)
+            ResultIter::new(target, iters)
         }
 
         fn shrink(&self) -> Box<dyn Iterator<Item = Self>> {
@@ -481,7 +481,7 @@ mod tests {
                 .collect();
 
             Box::new(ResultIterShrinker {
-                target: self.target.clone(),
+                target: self.target,
                 peers,
                 iters,
             })
@@ -511,7 +511,7 @@ mod tests {
                 Some(iter.into_iter())
             });
 
-            Some(ResultIter::new(self.target.clone(), iters))
+            Some(ResultIter::new(self.target, iters))
         }
     }
 
@@ -867,7 +867,7 @@ mod tests {
             let closest = drive_to_finish(
                 PeerIterator::Closest(ClosestPeersIter::with_config(
                     cfg.clone(),
-                    target.clone(),
+                    target,
                     known_closest_peers.clone(),
                 )),
                 graph.clone(),
@@ -877,7 +877,7 @@ mod tests {
             let disjoint = drive_to_finish(
                 PeerIterator::Disjoint(ClosestDisjointPeersIter::with_config(
                     cfg,
-                    target.clone(),
+                    target,
                     known_closest_peers.clone(),
                 )),
                 graph,
