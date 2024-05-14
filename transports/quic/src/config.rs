@@ -43,10 +43,10 @@ pub struct Config {
     /// concurrently by the remote peer.
     pub max_concurrent_stream_limit: u32,
 
-    /// Max unacknowledged data in bytes that may be send on a single stream.
+    /// Max unacknowledged data in bytes that may be sent on a single stream.
     pub max_stream_data: u32,
 
-    /// Max unacknowledged data in bytes that may be send in total on all streams
+    /// Max unacknowledged data in bytes that may be sent in total on all streams
     /// of a connection.
     pub max_connection_data: u32,
 
@@ -96,6 +96,14 @@ impl Config {
             keypair: keypair.clone(),
             mtu_discovery_config: Some(Default::default()),
         }
+    }
+
+    /// Set the upper bound to the max UDP payload size that MTU discovery will search for.
+    pub fn mtu_upper_bound(mut self, value: u16) -> Self {
+        self.mtu_discovery_config
+            .get_or_insert_with(Default::default)
+            .upper_bound(value);
+        self
     }
 
     /// Disable MTU path discovery (it is enabled by default).

@@ -1,6 +1,6 @@
 [package]
 name = "libp2p-quic"
-version = "0.10.2"
+version = "0.10.3"
 authors = ["Parity Technologies <admin@parity.io>"]
 edition = "2021"
 rust-version = { workspace = true }
