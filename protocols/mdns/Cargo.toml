@@ -16,6 +16,7 @@ async-io  = { version = "2.3.2", optional = true }
 data-encoding = "2.6.0"
 futures = { workspace = true }
 if-watch = "3.2.0"
+instant = "0.1.12"
 libp2p-core = { workspace = true }
 libp2p-swarm = { workspace = true }
 libp2p-identity = { workspace = true }

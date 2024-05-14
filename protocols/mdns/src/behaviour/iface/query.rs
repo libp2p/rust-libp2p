@@ -24,13 +24,13 @@ use hickory_proto::{
     op::Message,
     rr::{Name, RData},
 };
+use instant::{Duration, Instant};
 use libp2p_core::{
     address_translation,
     multiaddr::{Multiaddr, Protocol},
 };
 use libp2p_identity::PeerId;
-use std::time::Instant;
-use std::{fmt, net::SocketAddr, str, time::Duration};
+use std::{fmt, net::SocketAddr, str};
 
 /// A valid mDNS packet received by the service.
 #[derive(Debug)]

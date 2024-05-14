@@ -27,6 +27,7 @@ use crate::behaviour::{socket::AsyncSocket, timer::Builder};
 use crate::Config;
 use futures::channel::mpsc;
 use futures::{SinkExt, StreamExt};
+use instant::{Duration, Instant};
 use libp2p_core::Multiaddr;
 use libp2p_identity::PeerId;
 use libp2p_swarm::ListenAddresses;
@@ -39,7 +40,6 @@ use std::{
     net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr, UdpSocket},
     pin::Pin,
     task::{Context, Poll},
-    time::{Duration, Instant},
 };
 
 /// Initial interval for starting probe

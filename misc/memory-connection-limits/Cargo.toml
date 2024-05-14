@@ -14,6 +14,7 @@ memory-stats = { version = "1", features = ["always_use_statm"] }
 libp2p-core = { workspace = true }
 libp2p-swarm = { workspace = true }
 libp2p-identity = { workspace = true, features = ["peerid"] }
+instant = "0.1.12"
 sysinfo = "0.29"
 tracing = { workspace = true }
 void = "1"

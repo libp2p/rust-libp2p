@@ -18,6 +18,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
+use instant::{Duration, Instant};
 use libp2p_core::{Endpoint, Multiaddr};
 use libp2p_identity::PeerId;
 use libp2p_swarm::{
@@ -29,7 +30,6 @@ use void::Void;
 use std::{
     fmt,
     task::{Context, Poll},
-    time::{Duration, Instant},
 };
 
 /// A [`NetworkBehaviour`] that enforces a set of memory usage based limits.

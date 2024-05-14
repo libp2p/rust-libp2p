@@ -28,6 +28,7 @@ use crate::Config;
 use futures::channel::mpsc;
 use futures::{Stream, StreamExt};
 use if_watch::IfEvent;
+use instant::Instant;
 use libp2p_core::{Endpoint, Multiaddr};
 use libp2p_identity::PeerId;
 use libp2p_swarm::behaviour::FromSwarm;
@@ -39,7 +40,7 @@ use smallvec::SmallVec;
 use std::collections::hash_map::{Entry, HashMap};
 use std::future::Future;
 use std::sync::{Arc, RwLock};
-use std::{cmp, fmt, io, net::IpAddr, pin::Pin, task::Context, task::Poll, time::Instant};
+use std::{cmp, fmt, io, net::IpAddr, pin::Pin, task::Context, task::Poll};
 
 /// An abstraction to allow for compatibility with various async runtimes.
 pub trait Provider: 'static {

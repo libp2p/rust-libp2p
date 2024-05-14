@@ -1,5 +1,6 @@
 ## 0.45.1
 
+- Replace usage of `std::time` with `instant` crate for wasm compatibility.
 - Ensure `Multiaddr` handled and returned by `Behaviour` are `/p2p` terminated.
   See [PR 4596](https://github.com/libp2p/rust-libp2p/pull/4596).
 - Fix a bug in the `Behaviour::poll` method causing missed mdns packets.

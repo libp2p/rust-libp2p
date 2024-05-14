@@ -2957,6 +2957,7 @@ dependencies = [
  "futures",
  "hickory-proto",
  "if-watch",
+ "instant",
  "libp2p-core",
  "libp2p-identity",
  "libp2p-noise",
@@ -2978,6 +2979,7 @@ name = "libp2p-memory-connection-limits"
 version = "0.2.0"
 dependencies = [
  "async-std",
+ "instant",
  "libp2p-core",
  "libp2p-identify",
  "libp2p-identity",
