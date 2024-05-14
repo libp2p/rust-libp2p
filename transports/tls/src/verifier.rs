@@ -235,20 +235,20 @@ fn verify_tls13_signature(
 
 impl From<certificate::ParseError> for rustls::Error {
     fn from(certificate::ParseError(e): certificate::ParseError) -> Self {
+        use webpki::Error::*;
         match e {
-            webpki::Error::BadDer => {
-                rustls::Error::InvalidCertificate(CertificateError::BadEncoding)
+            BadDer => rustls::Error::InvalidCertificate(CertificateError::BadEncoding),
+            e => {
+                rustls::Error::InvalidCertificate(CertificateError::Other(OtherError(Arc::new(e))))
             }
-            other => rustls::Error::InvalidCertificate(CertificateError::Other(OtherError(
-                Arc::new(other),
-            ))),
         }
     }
 }
 impl From<certificate::VerificationError> for rustls::Error {
     fn from(certificate::VerificationError(e): certificate::VerificationError) -> Self {
+        use webpki::Error::*;
         match e {
-            webpki::Error::InvalidSignatureForPublicKey => {
+            InvalidSignatureForPublicKey => {
                 rustls::Error::InvalidCertificate(CertificateError::BadSignature)
             }
             other => rustls::Error::InvalidCertificate(CertificateError::Other(OtherError(

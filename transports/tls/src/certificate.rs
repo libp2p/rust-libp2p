@@ -24,10 +24,6 @@
 
 use libp2p_identity as identity;
 use libp2p_identity::PeerId;
-use rustls::{
-    pki_types::{CertificateDer, PrivateKeyDer, PrivatePkcs8KeyDer},
-    SignatureScheme,
-};
 use x509_parser::{prelude::*, signature_algorithm::SignatureAlgorithm};
 
 /// The libp2p Public Key Extension is a X.509 extension
@@ -48,18 +44,24 @@ static P2P_SIGNATURE_ALGORITHM: &rcgen::SignatureAlgorithm = &rcgen::PKCS_ECDSA_
 
 /// Generates a self-signed TLS certificate that includes a libp2p-specific
 /// certificate extension containing the public key of the given keypair.
-pub fn generate<'a, 'b>(
+pub fn generate(
     identity_keypair: &identity::Keypair,
-) -> Result<(CertificateDer<'a>, PrivateKeyDer<'b>), GenError> {
+) -> Result<
+    (
+        rustls::pki_types::CertificateDer<'static>,
+        rustls::pki_types::PrivateKeyDer<'static>,
+    ),
+    GenError,
+> {
     // Keypair used to sign the certificate.
     // SHOULD NOT be related to the host's key.
     // Endpoints MAY generate a new key and certificate
     // for every connection attempt, or they MAY reuse the same key
     // and certificate for multiple connections.
     let certificate_keypair = rcgen::KeyPair::generate(P2P_SIGNATURE_ALGORITHM)?;
-    let rustls_key = PrivateKeyDer::from(PrivatePkcs8KeyDer::from(
-        certificate_keypair.serialize_der(),
-    ));
+    let rustls_key = rustls::pki_types::PrivateKeyDer::from(
+        rustls::pki_types::PrivatePkcs8KeyDer::from(certificate_keypair.serialize_der()),
+    );
 
     let certificate = {
         let mut params = rcgen::CertificateParams::new(vec![]);
@@ -73,7 +75,7 @@ pub fn generate<'a, 'b>(
         rcgen::Certificate::from_params(params)?
     };
 
-    let rustls_certificate = CertificateDer::from(certificate.serialize_der()?);
+    let rustls_certificate = rustls::pki_types::CertificateDer::from(certificate.serialize_der()?);
 
     Ok((rustls_certificate, rustls_key))
 }
@@ -82,7 +84,9 @@ pub fn generate<'a, 'b>(
 ///
 /// For this to succeed, the certificate must contain the specified extension and the signature must
 /// match the embedded public key.
-pub fn parse<'a>(certificate: &'a CertificateDer<'a>) -> Result<P2pCertificate<'a>, ParseError> {
+pub fn parse<'a>(
+    certificate: &'a rustls::pki_types::CertificateDer<'a>,
+) -> Result<P2pCertificate<'a>, ParseError> {
     let certificate = parse_unverified(certificate.as_ref())?;
 
     certificate.verify()?;
@@ -242,7 +246,7 @@ impl P2pCertificate<'_> {
     /// in the certificate.
     pub fn verify_signature(
         &self,
-        signature_scheme: SignatureScheme,
+        signature_scheme: rustls::SignatureScheme,
         message: &[u8],
         signature: &[u8],
     ) -> Result<(), VerificationError> {
@@ -258,10 +262,10 @@ impl P2pCertificate<'_> {
     /// and hashing algorithm or if the `signature_scheme` is not supported.
     fn public_key(
         &self,
-        signature_scheme: SignatureScheme,
+        signature_scheme: rustls::SignatureScheme,
     ) -> Result<ring::signature::UnparsedPublicKey<&[u8]>, webpki::Error> {
         use ring::signature;
-        use SignatureScheme::*;
+        use rustls::SignatureScheme::*;
 
         let current_signature_scheme = self.signature_scheme()?;
         if signature_scheme != current_signature_scheme {
@@ -359,11 +363,11 @@ impl P2pCertificate<'_> {
     /// Return the signature scheme corresponding to [`AlgorithmIdentifier`]s
     /// of `subject_pki` and `signature_algorithm`
     /// according to <https://www.rfc-editor.org/rfc/rfc8446.html#section-4.2.3>.
-    fn signature_scheme(&self) -> Result<SignatureScheme, webpki::Error> {
+    fn signature_scheme(&self) -> Result<rustls::SignatureScheme, webpki::Error> {
         // Certificates MUST use the NamedCurve encoding for elliptic curve parameters.
         // Endpoints MUST abort the connection attempt if it is not used.
         use oid_registry::*;
-        use SignatureScheme::*;
+        use rustls::SignatureScheme::*;
 
         let signature_algorithm = &self.certificate.signature_algorithm;
         let pki_algorithm = &self.certificate.tbs_certificate.subject_pki.algorithm;
@@ -476,23 +480,27 @@ mod tests {
         };
     }
 
-    check_cert! {ed448, "./test_assets/ed448.der", SignatureScheme::ED448}
-    check_cert! {ed25519, "./test_assets/ed25519.der", SignatureScheme::ED25519}
-    check_cert! {rsa_pkcs1_sha256, "./test_assets/rsa_pkcs1_sha256.der", SignatureScheme::RSA_PKCS1_SHA256}
-    check_cert! {rsa_pkcs1_sha384, "./test_assets/rsa_pkcs1_sha384.der", SignatureScheme::RSA_PKCS1_SHA384}
-    check_cert! {rsa_pkcs1_sha512, "./test_assets/rsa_pkcs1_sha512.der", SignatureScheme::RSA_PKCS1_SHA512}
-    check_cert! {nistp256_sha256, "./test_assets/nistp256_sha256.der", SignatureScheme::ECDSA_NISTP256_SHA256}
-    check_cert! {nistp384_sha384, "./test_assets/nistp384_sha384.der", SignatureScheme::ECDSA_NISTP384_SHA384}
-    check_cert! {nistp521_sha512, "./test_assets/nistp521_sha512.der", SignatureScheme::ECDSA_NISTP521_SHA512}
+    check_cert! {ed448, "./test_assets/ed448.der", rustls::SignatureScheme::ED448}
+    check_cert! {ed25519, "./test_assets/ed25519.der", rustls::SignatureScheme::ED25519}
+    check_cert! {rsa_pkcs1_sha256, "./test_assets/rsa_pkcs1_sha256.der", rustls::SignatureScheme::RSA_PKCS1_SHA256}
+    check_cert! {rsa_pkcs1_sha384, "./test_assets/rsa_pkcs1_sha384.der", rustls::SignatureScheme::RSA_PKCS1_SHA384}
+    check_cert! {rsa_pkcs1_sha512, "./test_assets/rsa_pkcs1_sha512.der", rustls::SignatureScheme::RSA_PKCS1_SHA512}
+    check_cert! {nistp256_sha256, "./test_assets/nistp256_sha256.der", rustls::SignatureScheme::ECDSA_NISTP256_SHA256}
+    check_cert! {nistp384_sha384, "./test_assets/nistp384_sha384.der", rustls::SignatureScheme::ECDSA_NISTP384_SHA384}
+    check_cert! {nistp521_sha512, "./test_assets/nistp521_sha512.der", rustls::SignatureScheme::ECDSA_NISTP521_SHA512}
 
     #[test]
     fn rsa_pss_sha384() {
-        let cert =
-            CertificateDer::from(include_bytes!("./test_assets/rsa_pss_sha384.der").to_vec());
+        let cert = rustls::pki_types::CertificateDer::from(
+            include_bytes!("./test_assets/rsa_pss_sha384.der").to_vec(),
+        );
 
         let cert = parse(&cert).unwrap();
 
-        assert_eq!(cert.signature_scheme(), Ok(SignatureScheme::RSA_PSS_SHA384));
+        assert_eq!(
+            cert.signature_scheme(),
+            Ok(rustls::SignatureScheme::RSA_PSS_SHA384)
+        );
     }
 
     #[test]
@@ -506,7 +514,7 @@ mod tests {
 
     #[test]
     fn can_parse_certificate_with_ed25519_keypair() {
-        let certificate = CertificateDer::from(hex!("308201773082011ea003020102020900f5bd0debaa597f52300a06082a8648ce3d04030230003020170d3735303130313030303030305a180f34303936303130313030303030305a30003059301306072a8648ce3d020106082a8648ce3d030107034200046bf9871220d71dcb3483ecdfcbfcc7c103f8509d0974b3c18ab1f1be1302d643103a08f7a7722c1b247ba3876fe2c59e26526f479d7718a85202ddbe47562358a37f307d307b060a2b0601040183a25a01010101ff046a30680424080112207fda21856709c5ae12fd6e8450623f15f11955d384212b89f56e7e136d2e17280440aaa6bffabe91b6f30c35e3aa4f94b1188fed96b0ffdd393f4c58c1c047854120e674ce64c788406d1c2c4b116581fd7411b309881c3c7f20b46e54c7e6fe7f0f300a06082a8648ce3d040302034700304402207d1a1dbd2bda235ff2ec87daf006f9b04ba076a5a5530180cd9c2e8f6399e09d0220458527178c7e77024601dbb1b256593e9b96d961b96349d1f560114f61a87595").to_vec());
+        let certificate = rustls::pki_types::CertificateDer::from(hex!("308201773082011ea003020102020900f5bd0debaa597f52300a06082a8648ce3d04030230003020170d3735303130313030303030305a180f34303936303130313030303030305a30003059301306072a8648ce3d020106082a8648ce3d030107034200046bf9871220d71dcb3483ecdfcbfcc7c103f8509d0974b3c18ab1f1be1302d643103a08f7a7722c1b247ba3876fe2c59e26526f479d7718a85202ddbe47562358a37f307d307b060a2b0601040183a25a01010101ff046a30680424080112207fda21856709c5ae12fd6e8450623f15f11955d384212b89f56e7e136d2e17280440aaa6bffabe91b6f30c35e3aa4f94b1188fed96b0ffdd393f4c58c1c047854120e674ce64c788406d1c2c4b116581fd7411b309881c3c7f20b46e54c7e6fe7f0f300a06082a8648ce3d040302034700304402207d1a1dbd2bda235ff2ec87daf006f9b04ba076a5a5530180cd9c2e8f6399e09d0220458527178c7e77024601dbb1b256593e9b96d961b96349d1f560114f61a87595").to_vec());
 
         let peer_id = parse(&certificate).unwrap().peer_id();
 
@@ -520,7 +528,7 @@ mod tests {
 
     #[test]
     fn fails_to_parse_bad_certificate_with_ed25519_keypair() {
-        let certificate = CertificateDer::from(hex!("308201773082011da003020102020830a73c5d896a1109300a06082a8648ce3d04030230003020170d3735303130313030303030305a180f34303936303130313030303030305a30003059301306072a8648ce3d020106082a8648ce3d03010703420004bbe62df9a7c1c46b7f1f21d556deec5382a36df146fb29c7f1240e60d7d5328570e3b71d99602b77a65c9b3655f62837f8d66b59f1763b8c9beba3be07778043a37f307d307b060a2b0601040183a25a01010101ff046a3068042408011220ec8094573afb9728088860864f7bcea2d4fd412fef09a8e2d24d482377c20db60440ecabae8354afa2f0af4b8d2ad871e865cb5a7c0c8d3dbdbf42de577f92461a0ebb0a28703e33581af7d2a4f2270fc37aec6261fcc95f8af08f3f4806581c730a300a06082a8648ce3d040302034800304502202dfb17a6fa0f94ee0e2e6a3b9fb6e986f311dee27392058016464bd130930a61022100ba4b937a11c8d3172b81e7cd04aedb79b978c4379c2b5b24d565dd5d67d3cb3c").to_vec());
+        let certificate = rustls::pki_types::CertificateDer::from(hex!("308201773082011da003020102020830a73c5d896a1109300a06082a8648ce3d04030230003020170d3735303130313030303030305a180f34303936303130313030303030305a30003059301306072a8648ce3d020106082a8648ce3d03010703420004bbe62df9a7c1c46b7f1f21d556deec5382a36df146fb29c7f1240e60d7d5328570e3b71d99602b77a65c9b3655f62837f8d66b59f1763b8c9beba3be07778043a37f307d307b060a2b0601040183a25a01010101ff046a3068042408011220ec8094573afb9728088860864f7bcea2d4fd412fef09a8e2d24d482377c20db60440ecabae8354afa2f0af4b8d2ad871e865cb5a7c0c8d3dbdbf42de577f92461a0ebb0a28703e33581af7d2a4f2270fc37aec6261fcc95f8af08f3f4806581c730a300a06082a8648ce3d040302034800304502202dfb17a6fa0f94ee0e2e6a3b9fb6e986f311dee27392058016464bd130930a61022100ba4b937a11c8d3172b81e7cd04aedb79b978c4379c2b5b24d565dd5d67d3cb3c").to_vec());
 
         let error = parse(&certificate).unwrap_err();
 
@@ -529,7 +537,7 @@ mod tests {
 
     #[test]
     fn can_parse_certificate_with_ecdsa_keypair() {
-        let certificate = CertificateDer::from(hex!("308201c030820166a003020102020900eaf419a6e3edb4a6300a06082a8648ce3d04030230003020170d3735303130313030303030305a180f34303936303130313030303030305a30003059301306072a8648ce3d020106082a8648ce3d030107034200048dbf1116c7c608d6d5292bd826c3feb53483a89fce434bf64538a359c8e07538ff71f6766239be6a146dcc1a5f3bb934bcd4ae2ae1d4da28ac68b4a20593f06ba381c63081c33081c0060a2b0601040183a25a01010101ff0481ae3081ab045f0803125b3059301306072a8648ce3d020106082a8648ce3d0301070342000484b93fa456a74bd0153919f036db7bc63c802f055bc7023395d0203de718ee0fc7b570b767cdd858aca6c7c4113ff002e78bd2138ac1a3b26dde3519e06979ad04483046022100bc84014cea5a41feabdf4c161096564b9ccf4b62fbef4fe1cd382c84e11101780221009204f086a84cb8ed8a9ddd7868dc90c792ee434adf62c66f99a08a5eba11615b300a06082a8648ce3d0403020348003045022054b437be9a2edf591312d68ff24bf91367ad4143f76cf80b5658f232ade820da022100e23b48de9df9c25d4c83ddddf75d2676f0b9318ee2a6c88a736d85eab94a912f").to_vec());
+        let certificate = rustls::pki_types::CertificateDer::from(hex!("308201c030820166a003020102020900eaf419a6e3edb4a6300a06082a8648ce3d04030230003020170d3735303130313030303030305a180f34303936303130313030303030305a30003059301306072a8648ce3d020106082a8648ce3d030107034200048dbf1116c7c608d6d5292bd826c3feb53483a89fce434bf64538a359c8e07538ff71f6766239be6a146dcc1a5f3bb934bcd4ae2ae1d4da28ac68b4a20593f06ba381c63081c33081c0060a2b0601040183a25a01010101ff0481ae3081ab045f0803125b3059301306072a8648ce3d020106082a8648ce3d0301070342000484b93fa456a74bd0153919f036db7bc63c802f055bc7023395d0203de718ee0fc7b570b767cdd858aca6c7c4113ff002e78bd2138ac1a3b26dde3519e06979ad04483046022100bc84014cea5a41feabdf4c161096564b9ccf4b62fbef4fe1cd382c84e11101780221009204f086a84cb8ed8a9ddd7868dc90c792ee434adf62c66f99a08a5eba11615b300a06082a8648ce3d0403020348003045022054b437be9a2edf591312d68ff24bf91367ad4143f76cf80b5658f232ade820da022100e23b48de9df9c25d4c83ddddf75d2676f0b9318ee2a6c88a736d85eab94a912f").to_vec());
 
         let peer_id = parse(&certificate).unwrap().peer_id();
 
@@ -543,7 +551,7 @@ mod tests {
 
     #[test]
     fn can_parse_certificate_with_secp256k1_keypair() {
-        let certificate = CertificateDer::from(hex!("3082018230820128a003020102020900f3b305f55622cfdf300a06082a8648ce3d04030230003020170d3735303130313030303030305a180f34303936303130313030303030305a30003059301306072a8648ce3d020106082a8648ce3d0301070342000458f7e9581748ff9bdd933b655cc0e5552a1248f840658cc221dec2186b5a2fe4641b86ab7590a3422cdbb1000cf97662f27e5910d7569f22feed8829c8b52e0fa38188308185308182060a2b0601040183a25a01010101ff0471306f042508021221026b053094d1112bce799dc8026040ae6d4eb574157929f1598172061f753d9b1b04463044022040712707e97794c478d93989aaa28ae1f71c03af524a8a4bd2d98424948a782302207b61b7f074b696a25fb9e0059141a811cccc4cc28042d9301b9b2a4015e87470300a06082a8648ce3d04030203480030450220143ae4d86fdc8675d2480bb6912eca5e39165df7f572d836aa2f2d6acfab13f8022100831d1979a98f0c4a6fb5069ca374de92f1a1205c962a6d90ad3d7554cb7d9df4").to_vec());
+        let certificate = rustls::pki_types::CertificateDer::from(hex!("3082018230820128a003020102020900f3b305f55622cfdf300a06082a8648ce3d04030230003020170d3735303130313030303030305a180f34303936303130313030303030305a30003059301306072a8648ce3d020106082a8648ce3d0301070342000458f7e9581748ff9bdd933b655cc0e5552a1248f840658cc221dec2186b5a2fe4641b86ab7590a3422cdbb1000cf97662f27e5910d7569f22feed8829c8b52e0fa38188308185308182060a2b0601040183a25a01010101ff0471306f042508021221026b053094d1112bce799dc8026040ae6d4eb574157929f1598172061f753d9b1b04463044022040712707e97794c478d93989aaa28ae1f71c03af524a8a4bd2d98424948a782302207b61b7f074b696a25fb9e0059141a811cccc4cc28042d9301b9b2a4015e87470300a06082a8648ce3d04030203480030450220143ae4d86fdc8675d2480bb6912eca5e39165df7f572d836aa2f2d6acfab13f8022100831d1979a98f0c4a6fb5069ca374de92f1a1205c962a6d90ad3d7554cb7d9df4").to_vec());
 
         let peer_id = parse(&certificate).unwrap().peer_id();
 
