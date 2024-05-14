@@ -425,7 +425,7 @@ struct Listener<P: Provider> {
     socket: UdpSocket,
 
     /// A future to poll new incoming connections.
-    accept: BoxFuture<'static, Option<quinn::Connecting>>,
+    accept: BoxFuture<'static, Option<quinn::Incoming>>,
     /// Timeout for connection establishment on inbound connections.
     handshake_timeout: Duration,
 
@@ -472,19 +472,7 @@ impl<P: Provider> Listener<P> {
         }
 
         let endpoint_c = endpoint.clone();
-        let accept = async move {
-            loop {
-                let incoming = match endpoint_c.accept().await {
-                    Some(incoming) => incoming,
-                    None => return None,
-                };
-                match incoming.accept() {
-                    Ok(connecting) => return Some(connecting),
-                    Err(_) => continue,
-                }
-            }
-        }
-        .boxed();
+        let accept = async move { endpoint_c.accept().await }.boxed();
 
         Ok(Listener {
             endpoint,
@@ -595,18 +583,19 @@ impl<P: Provider> Stream for Listener<P> {
             }
 
             match self.accept.poll_unpin(cx) {
-                Poll::Ready(Some(connecting)) => {
+                Poll::Ready(Some(incoming)) => {
                     let endpoint = self.endpoint.clone();
-                    self.accept = async move {
-                        match endpoint.accept().await {
-                            Some(incoming) => match incoming.accept() {
-                                Ok(connecting) => Some(connecting),
-                                Err(_) => None,
-                            },
-                            None => None,
+                    self.accept = async move { endpoint.accept().await }.boxed();
+
+                    let connecting = match incoming.accept() {
+                        Ok(connecting) => connecting,
+                        Err(error) => {
+                            return Poll::Ready(Some(TransportEvent::ListenerError {
+                                listener_id: self.listener_id,
+                                error: Error::Connection(crate::ConnectionError(error)),
+                            }))
                         }
-                    }
-                    .boxed();
+                    };
 
                     let local_addr = socketaddr_to_multiaddr(&self.socket_addr(), self.version);
                     let remote_addr = connecting.remote_address();
