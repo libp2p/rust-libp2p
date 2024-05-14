@@ -1,3 +1,6 @@
+## 0.10.3
+- Allow configuring MTU discovery with `MtuDiscoveryConfig`.
+
 ## 0.10.2
 
 - Change `max_idle_timeout`to 10s.

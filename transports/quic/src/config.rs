@@ -90,6 +90,12 @@ impl Config {
         }
     }
 
+    // Set MTU discovery config
+    pub fn with_mtu_discovery_config(mut self, config: MtuDiscoveryConfig) -> Self {
+        self.mtu_discovery_config = Some(config);
+        self
+    }
+
     /// Disable MTU path discovery (it is enabled by default).
     pub fn disable_path_mtu_discovery(mut self) -> Self {
         self.mtu_discovery_config = None;
