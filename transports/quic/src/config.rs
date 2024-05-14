@@ -90,8 +90,8 @@ impl Config {
         }
     }
 
-    // Set MTU discovery config
-    pub fn with_mtu_upper_bound(mut self, value: u16) -> Self {
+    /// Set the upper bound to the max UDP payload size that MTU discovery will search for.
+    pub fn mtu_upper_bound(mut self, value: u16) -> Self {
         self.mtu_discovery_config.get_or_insert_with(Default::default).upper_bound(value);
         self
     }
