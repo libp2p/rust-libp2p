@@ -25,7 +25,7 @@ thiserror = "1.0.59"
 tokio = { workspace = true, default-features = false, features = ["net", "rt", "time"], optional = true }
 tracing = { workspace = true }
 socket2 = "0.5.6"
-ring = "0.17.8"
+ring = { workspace = true }
 
 [features]
 tokio = ["dep:tokio", "if-watch/tokio", "quinn/runtime-tokio"]
