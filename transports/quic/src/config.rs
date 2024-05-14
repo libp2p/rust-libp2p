@@ -61,9 +61,9 @@ pub struct Config {
     pub support_draft_29: bool,
 
     /// TLS client config for the inner [`quinn::ClientConfig`].
-    client_quic_config: Arc<QuicClientConfig>,
+    client_tls_config: Arc<QuicClientConfig>,
     /// TLS server config for the inner [`quinn::ServerConfig`].
-    server_quic_config: Arc<QuicServerConfig>,
+    server_tls_config: Arc<QuicServerConfig>,
     /// Libp2p identity of the node.
     keypair: libp2p_identity::Keypair,
 
@@ -74,13 +74,16 @@ pub struct Config {
 impl Config {
     /// Creates a new configuration object with default values.
     pub fn new(keypair: &libp2p_identity::Keypair) -> Self {
-        let client_tls_config = libp2p_tls::make_client_config(keypair, None).unwrap();
-        let client_quic_config = Arc::new(QuicClientConfig::try_from(client_tls_config).unwrap());
-        let server_tls_config = libp2p_tls::make_server_config(keypair).unwrap();
-        let server_quic_config = Arc::new(QuicServerConfig::try_from(server_tls_config).unwrap());
+        let client_tls_config = Arc::new(
+            QuicClientConfig::try_from(libp2p_tls::make_client_config(keypair, None).unwrap())
+                .unwrap(),
+        );
+        let server_tls_config = Arc::new(
+            QuicServerConfig::try_from(libp2p_tls::make_server_config(keypair).unwrap()).unwrap(),
+        );
         Self {
-            client_quic_config,
-            server_quic_config,
+            client_tls_config,
+            server_tls_config,
             support_draft_29: false,
             handshake_timeout: Duration::from_secs(5),
             max_idle_timeout: 10 * 1000,
@@ -113,8 +116,8 @@ pub(crate) struct QuinnConfig {
 impl From<Config> for QuinnConfig {
     fn from(config: Config) -> QuinnConfig {
         let Config {
-            client_quic_config,
-            server_quic_config,
+            client_tls_config,
+            server_tls_config,
             max_idle_timeout,
             max_concurrent_stream_limit,
             keep_alive_interval,
@@ -139,14 +142,14 @@ impl From<Config> for QuinnConfig {
         transport.mtu_discovery_config(mtu_discovery_config);
         let transport = Arc::new(transport);
 
-        let mut server_config = quinn::ServerConfig::with_crypto(server_quic_config);
+        let mut server_config = quinn::ServerConfig::with_crypto(server_tls_config);
         server_config.transport = Arc::clone(&transport);
         // Disables connection migration.
         // Long-term this should be enabled, however we then need to handle address change
         // on connections in the `Connection`.
         server_config.migration(false);
 
-        let mut client_config = quinn::ClientConfig::new(client_quic_config);
+        let mut client_config = quinn::ClientConfig::new(client_tls_config);
         client_config.transport_config(transport);
 
         let mut endpoint_config = keypair
