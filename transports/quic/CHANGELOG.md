@@ -1,3 +1,7 @@
+## 0.10.3
+- Allow configuring MTU discovery upper bound.
+  See [PR 5386](https://github.com/libp2p/rust-libp2p/pull/5386).
+
 ## 0.10.2
 
 - Change `max_idle_timeout`to 10s.
