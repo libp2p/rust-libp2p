@@ -299,7 +299,6 @@ pub(crate) async fn dial_back_response(stream: impl AsyncWrite + Unpin) -> io::R
         .send(msg)
         .await
         .map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
-    framed.close().await?;
 
     Ok(())
 }
@@ -315,7 +314,7 @@ pub(crate) async fn recv_dial_back_response(
         .next()
         .await
         .ok_or(io::Error::from(io::ErrorKind::UnexpectedEof))??;
-    framed.close().await?;
+
     if let Some(proto::mod_DialBackResponse::DialBackStatus::OK) = status {
         Ok(())
     } else {
