@@ -76,7 +76,6 @@ fn max_percentage() {
 
     std::thread::sleep(Duration::from_millis(100)); // Memory stats are only updated every 100ms internally, ensure they are up-to-date when we try to exceed it.
 
-    /*
     match network
         .dial(
             DialOpts::peer_id(target)
@@ -96,5 +95,4 @@ fn max_percentage() {
         }
         e => panic!("Unexpected error: {e:?}"),
     }
-    */
 }
