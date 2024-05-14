@@ -67,7 +67,6 @@ use std::net::SocketAddr;
 
 pub use config::Config;
 pub use connection::{Connecting, Connection, Stream};
-pub use quinn::MtuDiscoveryConfig;
 
 #[cfg(feature = "async-std")]
 pub use provider::async_std;

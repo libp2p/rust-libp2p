@@ -40,10 +40,10 @@ pub struct Config {
     /// concurrently by the remote peer.
     pub max_concurrent_stream_limit: u32,
 
-    /// Max unacknowledged data in bytes that may be send on a single stream.
+    /// Max unacknowledged data in bytes that may be sent on a single stream.
     pub max_stream_data: u32,
 
-    /// Max unacknowledged data in bytes that may be send in total on all streams
+    /// Max unacknowledged data in bytes that may be sent in total on all streams
     /// of a connection.
     pub max_connection_data: u32,
 
@@ -91,8 +91,8 @@ impl Config {
     }
 
     // Set MTU discovery config
-    pub fn with_mtu_discovery_config(mut self, config: MtuDiscoveryConfig) -> Self {
-        self.mtu_discovery_config = Some(config);
+    pub fn with_mtu_upper_bound(mut self, value: u16) -> Self {
+        self.mtu_discovery_config.get_or_insert_with(Default::default).upper_bound(value);
         self
     }
 
