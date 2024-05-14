@@ -19,7 +19,6 @@
 // DEALINGS IN THE SOFTWARE.
 
 use futures_rustls::{rustls, TlsAcceptor, TlsConnector};
-use rustls::pki_types::{CertificateDer, PrivateKeyDer, ServerName};
 use std::{fmt, io, sync::Arc};
 
 /// TLS configuration.
@@ -36,37 +35,40 @@ impl fmt::Debug for Config {
 }
 
 /// Private key, DER-encoded ASN.1 in either PKCS#8 or PKCS#1 format.
-pub struct PrivateKey<'a>(PrivateKeyDer<'a>);
+pub struct PrivateKey(rustls::pki_types::PrivateKeyDer<'static>);
 
-impl<'a> PrivateKey<'a> {
+impl PrivateKey {
     /// Assert the given bytes are DER-encoded ASN.1 in either PKCS#8 or PKCS#1 format.
     pub fn new(bytes: Vec<u8>) -> Self {
-        PrivateKey(PrivateKeyDer::try_from(bytes).unwrap())
+        PrivateKey(
+            rustls::pki_types::PrivateKeyDer::try_from(bytes)
+                .expect("unknown or invalid key format"),
+        )
     }
 }
 
-impl<'a> Clone for PrivateKey<'a> {
+impl Clone for PrivateKey {
     fn clone(&self) -> Self {
-        PrivateKey(self.0.clone_key())
+        Self(self.0.clone_key())
     }
 }
 
 /// Certificate, DER-encoded X.509 format.
 #[derive(Debug, Clone)]
-pub struct Certificate<'a>(CertificateDer<'a>);
+pub struct Certificate(rustls::pki_types::CertificateDer<'static>);
 
-impl<'a> Certificate<'a> {
+impl Certificate {
     /// Assert the given bytes are in DER-encoded X.509 format.
     pub fn new(bytes: Vec<u8>) -> Self {
-        Certificate(CertificateDer::from(bytes))
+        Certificate(rustls::pki_types::CertificateDer::from(bytes))
     }
 }
 
 impl Config {
     /// Create a new TLS configuration with the given server key and certificate chain.
-    pub fn new<'a, I>(key: PrivateKey<'a>, certs: I) -> Result<Self, Error>
+    pub fn new<I>(key: PrivateKey, certs: I) -> Result<Self, Error>
     where
-        I: IntoIterator<Item = Certificate<'static>>,
+        I: IntoIterator<Item = Certificate>,
     {
         let mut builder = Config::builder();
         builder.server(key, certs)?;
@@ -117,17 +119,17 @@ pub struct Builder {
 
 impl Builder {
     /// Set server key and certificate chain.
-    pub fn server<'a, I>(&mut self, key: PrivateKey<'a>, certs: I) -> Result<&mut Self, Error>
+    pub fn server<I>(&mut self, key: PrivateKey, certs: I) -> Result<&mut Self, Error>
     where
-        I: IntoIterator<Item = Certificate<'static>>,
+        I: IntoIterator<Item = Certificate>,
     {
-        let certs: Vec<CertificateDer<'_>> = certs.into_iter().map(|c| c.0.to_owned()).collect();
+        let certs = certs.into_iter().map(|c| c.0).collect();
         let provider = rustls::crypto::ring::default_provider();
         let server = rustls::ServerConfig::builder_with_provider(provider.into())
             .with_safe_default_protocol_versions()
             .unwrap()
             .with_no_client_auth()
-            .with_single_cert(certs.clone(), key.0.clone_key())
+            .with_single_cert(certs, key.0)
             .map_err(|e| Error::Tls(Box::new(e)))?;
         self.server = Some(server);
         Ok(self)
@@ -157,8 +159,9 @@ impl Builder {
     }
 }
 
-pub(crate) fn dns_name_ref(name: &str) -> Result<ServerName, Error> {
-    ServerName::try_from(name).map_err(|_| Error::InvalidDnsName(name.into()))
+pub(crate) fn dns_name_ref(name: &str) -> Result<rustls::pki_types::ServerName<'static>, Error> {
+    rustls::pki_types::ServerName::try_from(String::from(name))
+        .map_err(|_| Error::InvalidDnsName(name.into()))
 }
 
 // Error //////////////////////////////////////////////////////////////////////////////////////////

@@ -29,7 +29,6 @@ use libp2p_core::{
     Transport,
 };
 use parking_lot::Mutex;
-use rustls::pki_types::ServerName;
 use soketto::{
     connection::{self, CloseReason},
     handshake,
@@ -304,9 +303,9 @@ where
     }
 
     /// Attempts to dial the given address and perform a websocket handshake.
-    async fn dial_once<'a>(
+    async fn dial_once(
         transport: Arc<Mutex<T>>,
-        addr: WsAddress<'a>,
+        addr: WsAddress,
         tls_config: tls::Config,
         role_override: Endpoint,
     ) -> Result<Either<String, Connection<T::Output>>, Error<T::Error>> {
@@ -332,7 +331,7 @@ where
             tracing::trace!(?dns_name, "Starting TLS handshake");
             let stream = tls_config
                 .client
-                .connect(dns_name.to_owned(), stream)
+                .connect(dns_name.clone(), stream)
                 .map_err(|e| {
                     tracing::debug!(?dns_name, "TLS handshake failed: {}", e);
                     Error::Tls(tls::Error::from(e))
@@ -459,10 +458,10 @@ where
 }
 
 #[derive(Debug)]
-struct WsAddress<'a> {
+struct WsAddress {
     host_port: String,
     path: String,
-    dns_name: Option<ServerName<'a>>,
+    dns_name: Option<rustls::pki_types::ServerName<'static>>,
     use_tls: bool,
     tcp_addr: Multiaddr,
 }
@@ -472,7 +471,7 @@ struct WsAddress<'a> {
 ///
 /// Fails if the given `Multiaddr` does not represent a TCP/IP-based
 /// websocket protocol stack.
-fn parse_ws_dial_addr<'a, T>(addr: Multiaddr) -> Result<WsAddress<'a>, Error<T>> {
+fn parse_ws_dial_addr<T>(addr: Multiaddr) -> Result<WsAddress, Error<T>> {
     // The encapsulating protocol must be based on TCP/IP, possibly via DNS.
     // We peek at it in order to learn the hostname and port to use for
     // the websocket handshake.
@@ -491,16 +490,13 @@ fn parse_ws_dial_addr<'a, T>(addr: Multiaddr) -> Result<WsAddress<'a>, Error<T>>
             | (Some(Protocol::Dns4(h)), Some(Protocol::Tcp(port)))
             | (Some(Protocol::Dns6(h)), Some(Protocol::Tcp(port)))
             | (Some(Protocol::Dnsaddr(h)), Some(Protocol::Tcp(port))) => {
-                break (
-                    format!("{}:{}", &h, port),
-                    Some(tls::dns_name_ref(&h.clone())?.to_owned()),
-                );
+                break (format!("{}:{}", &h, port), Some(tls::dns_name_ref(&h)?))
             }
             (Some(_), Some(p)) => {
                 ip = Some(p);
                 tcp = protocols.next();
             }
-            _ => return Err(Error::InvalidMultiaddr(addr.to_owned())),
+            _ => return Err(Error::InvalidMultiaddr(addr)),
         }
     };
 
@@ -516,11 +512,11 @@ fn parse_ws_dial_addr<'a, T>(addr: Multiaddr) -> Result<WsAddress<'a>, Error<T>>
             Some(Protocol::Wss(path)) => {
                 if dns_name.is_none() {
                     tracing::debug!(addrress=%addr, "Missing DNS name in WSS address");
-                    return Err(Error::InvalidMultiaddr(addr.to_owned()));
+                    return Err(Error::InvalidMultiaddr(addr));
                 }
                 break (true, path.into_owned());
             }
-            _ => return Err(Error::InvalidMultiaddr(addr.to_owned())),
+            _ => return Err(Error::InvalidMultiaddr(addr)),
         }
     };
 
@@ -532,8 +528,8 @@ fn parse_ws_dial_addr<'a, T>(addr: Multiaddr) -> Result<WsAddress<'a>, Error<T>>
     };
 
     Ok(WsAddress {
-        host_port: host_port.to_owned(),
-        dns_name: dns_name.to_owned(),
+        host_port,
+        dns_name,
         path,
         use_tls,
         tcp_addr,
