@@ -102,7 +102,7 @@ libp2p-request-response = { version = "0.26.2", path = "protocols/request-respon
 libp2p-server = { version = "0.12.7", path = "misc/server" }
 libp2p-stream = { version = "0.1.0-alpha.1", path = "protocols/stream" }
 libp2p-swarm = { version = "0.44.2", path = "swarm" }
-libp2p-swarm-derive = { version = "=0.34.3", path = "swarm-derive" } # `libp2p-swarm-derive` may not be compatible with different `libp2p-swarm` non-breaking releases. E.g. `libp2p-swarm` might introduce a new enum variant `FromSwarm` (which is `#[non-exhaustive]`) in a non-breaking release. Older versions of `libp2p-swarm-derive` would not forward this enum variant within the `NetworkBehaviour` hierarchy. Thus the version pinning is required.
+libp2p-swarm-derive = { version = "=0.34.2", path = "swarm-derive" } # `libp2p-swarm-derive` may not be compatible with different `libp2p-swarm` non-breaking releases. E.g. `libp2p-swarm` might introduce a new enum variant `FromSwarm` (which is `#[non-exhaustive]`) in a non-breaking release. Older versions of `libp2p-swarm-derive` would not forward this enum variant within the `NetworkBehaviour` hierarchy. Thus the version pinning is required.
 libp2p-swarm-test = { version = "0.3.0", path = "swarm-test" }
 libp2p-tcp = { version = "0.41.0", path = "transports/tcp" }
 libp2p-tls = { version = "0.3.0", path = "transports/tls" }
@@ -125,6 +125,8 @@ rw-stream-sink = { version = "0.4.0", path = "misc/rw-stream-sink" }
 unsigned-varint = { version = "0.8.0" }
 tokio = { version = "1.37", default-features = false }
 tracing = "0.1.37"
+futures = "0.3.30"
+ring = "0.17.8"
 
 [patch.crates-io]
 

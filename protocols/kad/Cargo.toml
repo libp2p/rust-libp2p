@@ -16,7 +16,7 @@ bytes = "1"
 either = "1.11"
 fnv = "1.0"
 asynchronous-codec = { workspace = true }
-futures = "0.3.30"
+futures = { workspace = true }
 libp2p-core = { workspace = true }
 libp2p-swarm = { workspace = true }
 futures-bounded = { workspace = true }

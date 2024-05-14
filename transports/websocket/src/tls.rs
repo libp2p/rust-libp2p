@@ -35,24 +35,32 @@ impl fmt::Debug for Config {
 }
 
 /// Private key, DER-encoded ASN.1 in either PKCS#8 or PKCS#1 format.
-#[derive(Clone)]
-pub struct PrivateKey(rustls::PrivateKey);
+pub struct PrivateKey(rustls::pki_types::PrivateKeyDer<'static>);
 
 impl PrivateKey {
     /// Assert the given bytes are DER-encoded ASN.1 in either PKCS#8 or PKCS#1 format.
     pub fn new(bytes: Vec<u8>) -> Self {
-        PrivateKey(rustls::PrivateKey(bytes))
+        PrivateKey(
+            rustls::pki_types::PrivateKeyDer::try_from(bytes)
+                .expect("unknown or invalid key format"),
+        )
+    }
+}
+
+impl Clone for PrivateKey {
+    fn clone(&self) -> Self {
+        Self(self.0.clone_key())
     }
 }
 
 /// Certificate, DER-encoded X.509 format.
 #[derive(Debug, Clone)]
-pub struct Certificate(rustls::Certificate);
+pub struct Certificate(rustls::pki_types::CertificateDer<'static>);
 
 impl Certificate {
     /// Assert the given bytes are in DER-encoded X.509 format.
     pub fn new(bytes: Vec<u8>) -> Self {
-        Certificate(rustls::Certificate(bytes))
+        Certificate(rustls::pki_types::CertificateDer::from(bytes))
     }
 }
 
@@ -69,8 +77,10 @@ impl Config {
 
     /// Create a client-only configuration.
     pub fn client() -> Self {
-        let client = rustls::ClientConfig::builder()
-            .with_safe_defaults()
+        let provider = rustls::crypto::ring::default_provider();
+        let client = rustls::ClientConfig::builder_with_provider(provider.into())
+            .with_safe_default_protocol_versions()
+            .unwrap()
             .with_root_certificates(client_root_store())
             .with_no_client_auth();
         Config {
@@ -91,12 +101,12 @@ impl Config {
 /// Setup the rustls client configuration.
 fn client_root_store() -> rustls::RootCertStore {
     let mut client_root_store = rustls::RootCertStore::empty();
-    client_root_store.add_trust_anchors(webpki_roots::TLS_SERVER_ROOTS.iter().map(|ta| {
-        rustls::OwnedTrustAnchor::from_subject_spki_name_constraints(
-            ta.subject,
-            ta.spki,
-            ta.name_constraints,
-        )
+    client_root_store.extend(webpki_roots::TLS_SERVER_ROOTS.iter().map(|ta| {
+        rustls::pki_types::TrustAnchor {
+            subject: ta.subject.into(),
+            subject_public_key_info: ta.spki.into(),
+            name_constraints: ta.name_constraints.map(|v| v.into()),
+        }
     }));
     client_root_store
 }
@@ -114,8 +124,10 @@ impl Builder {
         I: IntoIterator<Item = Certificate>,
     {
         let certs = certs.into_iter().map(|c| c.0).collect();
-        let server = rustls::ServerConfig::builder()
-            .with_safe_defaults()
+        let provider = rustls::crypto::ring::default_provider();
+        let server = rustls::ServerConfig::builder_with_provider(provider.into())
+            .with_safe_default_protocol_versions()
+            .unwrap()
             .with_no_client_auth()
             .with_single_cert(certs, key.0)
             .map_err(|e| Error::Tls(Box::new(e)))?;
@@ -126,15 +138,17 @@ impl Builder {
     /// Add an additional trust anchor.
     pub fn add_trust(&mut self, cert: &Certificate) -> Result<&mut Self, Error> {
         self.client_root_store
-            .add(&cert.0)
+            .add(cert.0.to_owned())
             .map_err(|e| Error::Tls(Box::new(e)))?;
         Ok(self)
     }
 
     /// Finish configuration.
     pub fn finish(self) -> Config {
-        let client = rustls::ClientConfig::builder()
-            .with_safe_defaults()
+        let provider = rustls::crypto::ring::default_provider();
+        let client = rustls::ClientConfig::builder_with_provider(provider.into())
+            .with_safe_default_protocol_versions()
+            .unwrap()
             .with_root_certificates(self.client_root_store)
             .with_no_client_auth();
 
@@ -145,8 +159,9 @@ impl Builder {
     }
 }
 
-pub(crate) fn dns_name_ref(name: &str) -> Result<rustls::ServerName, Error> {
-    rustls::ServerName::try_from(name).map_err(|_| Error::InvalidDnsName(name.into()))
+pub(crate) fn dns_name_ref(name: &str) -> Result<rustls::pki_types::ServerName<'static>, Error> {
+    rustls::pki_types::ServerName::try_from(String::from(name))
+        .map_err(|_| Error::InvalidDnsName(name.into()))
 }
 
 // Error //////////////////////////////////////////////////////////////////////////////////////////

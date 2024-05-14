@@ -13,7 +13,7 @@ publish = true
 [dependencies]
 asynchronous-codec = { workspace = true }
 bytes = "1"
-futures = "0.3"
+futures = { workspace = true }
 hex = "0.4"
 libp2p-core = { workspace = true }
 libp2p-identity = { workspace = true }

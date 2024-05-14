@@ -14,7 +14,7 @@ crate-type = ["cdylib", "rlib"]
 [dependencies]
 anyhow = "1"
 either = "1.11.0"
-futures = "0.3.30"
+futures = { workspace = true }
 rand = "0.8.5"
 serde = { version = "1", features = ["derive"] }
 tracing = { workspace = true }
@@ -31,7 +31,7 @@ mime_guess = "2.0"
 redis = { version = "0.23.3", default-features = false, features = [
     "tokio-comp",
 ] }
-rust-embed = "8.3"
+rust-embed = "8.4"
 serde_json = "1"
 thirtyfour = "=0.32.0" # https://github.com/stevepryde/thirtyfour/issues/169
 tokio = { workspace = true, features = ["full"] }
