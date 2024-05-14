@@ -20,7 +20,7 @@
 
 use crate::{
     connection::ConnectedPoint,
-    transport::{ListenerId, Transport, TransportError, TransportEvent, DialOpts},
+    transport::{DialOpts, ListenerId, Transport, TransportError, TransportEvent},
 };
 use either::Either;
 use futures::prelude::*;

@@ -33,7 +33,7 @@ use futures::{future::BoxFuture, prelude::*, ready};
 use libp2p_core::{
     connection::ConnectedPoint,
     multiaddr::Multiaddr,
-    transport::{map::MapFuture, ListenerId, TransportError, TransportEvent},
+    transport::{map::MapFuture, DialOpts, ListenerId, TransportError, TransportEvent},
     Transport,
 };
 use rw_stream_sink::RwStreamSink;
@@ -202,15 +202,12 @@ where
         self.transport.remove_listener(id)
     }
 
-    fn dial(&mut self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
-        self.transport.dial(addr)
-    }
-
-    fn dial_as_listener(
+    fn dial(
         &mut self,
         addr: Multiaddr,
+        opts: DialOpts,
     ) -> Result<Self::Dial, TransportError<Self::Error>> {
-        self.transport.dial_as_listener(addr)
+        self.transport.dial(addr, opts)
     }
 
     fn address_translation(&self, server: &Multiaddr, observed: &Multiaddr) -> Option<Multiaddr> {
@@ -292,7 +289,11 @@ where
 mod tests {
     use super::WsConfig;
     use futures::prelude::*;
-    use libp2p_core::{multiaddr::Protocol, transport::ListenerId, Multiaddr, Transport};
+    use libp2p_core::{
+        multiaddr::Protocol,
+        transport::{DialOpts, ListenerId, PortUse},
+        Endpoint, Multiaddr, Transport,
+    };
     use libp2p_identity::PeerId;
     use libp2p_tcp as tcp;
 
@@ -339,7 +340,13 @@ mod tests {
 
         let outbound = new_ws_config()
             .boxed()
-            .dial(addr.with(Protocol::P2p(PeerId::random())))
+            .dial(
+                addr.with(Protocol::P2p(PeerId::random())),
+                DialOpts {
+                    role: Endpoint::Dialer,
+                    port_use: PortUse::New,
+                },
+            )
             .unwrap();
 
         let (a, b) = futures::join!(inbound, outbound);

@@ -283,6 +283,10 @@ where
         if port_use == PortUse::Reuse {
             socket.set_reuse_port(true)?;
         }
+
+        #[cfg(not(all(unix, not(any(target_os = "solaris", target_os = "illumos")))))]
+        let _ = port_use; // silence the unused warning on non-unix platforms (i.e. Windows)
+
         Ok(socket)
     }
 
@@ -1095,7 +1099,6 @@ mod tests {
 
     #[test]
     fn port_reuse_listening() {
-        env_logger::try_init().ok();
         let _ = tracing_subscriber::fmt()
             .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
             .try_init();

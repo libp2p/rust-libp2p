@@ -295,14 +295,14 @@ impl<T: crate::Transport + Unpin> crate::Transport for Transport<T> {
         match addr.iter().next() {
             Some(Protocol::Ip4(a)) => {
                 if !ipv4_global::is_global(a) {
-                    tracing::debug!(ip=?a, "Not dialing non global IP address");
+                    tracing::debug!(ip=%a, "Not dialing non global IP address");
                     return Err(TransportError::MultiaddrNotSupported(addr));
                 }
                 self.inner.dial(addr, opts)
             }
             Some(Protocol::Ip6(a)) => {
                 if !ipv6_global::is_global(a) {
-                    tracing::debug!(ip=?a, "Not dialing non global IP address");
+                    tracing::debug!(ip=%a, "Not dialing non global IP address");
                     return Err(TransportError::MultiaddrNotSupported(addr));
                 }
                 self.inner.dial(addr, opts)

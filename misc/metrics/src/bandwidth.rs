@@ -7,7 +7,7 @@ use futures::{
 };
 use libp2p_core::{
     muxing::{StreamMuxer, StreamMuxerEvent},
-    transport::{ListenerId, TransportError, TransportEvent},
+    transport::{DialOpts, ListenerId, TransportError, TransportEvent},
     Multiaddr,
 };
 use libp2p_identity::PeerId;
@@ -84,24 +84,15 @@ where
         self.transport.remove_listener(id)
     }
 
-    fn dial(&mut self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
-        let metrics = ConnectionMetrics::from_family_and_addr(&self.metrics, &addr);
-        Ok(self
-            .transport
-            .dial(addr.clone())?
-            .map_ok(Box::new(|(peer_id, stream_muxer)| {
-                (peer_id, Muxer::new(stream_muxer, metrics))
-            })))
-    }
-
-    fn dial_as_listener(
+    fn dial(
         &mut self,
         addr: Multiaddr,
+        dial_opts: DialOpts,
     ) -> Result<Self::Dial, TransportError<Self::Error>> {
         let metrics = ConnectionMetrics::from_family_and_addr(&self.metrics, &addr);
         Ok(self
             .transport
-            .dial_as_listener(addr.clone())?
+            .dial(addr.clone(), dial_opts)?
             .map_ok(Box::new(|(peer_id, stream_muxer)| {
                 (peer_id, Muxer::new(stream_muxer, metrics))
             })))
