@@ -2661,7 +2661,6 @@ dependencies = [
  "thiserror",
  "tokio",
  "tracing-subscriber",
- "web-time",
 ]
 
 [[package]]

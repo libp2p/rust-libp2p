@@ -95,7 +95,6 @@ either = "1.9.0"
 futures = { workspace = true }
 futures-timer = "3.0.2" # Explicit dependency to be used in `wasm-bindgen` feature
 getrandom = "0.2.3"     # Explicit dependency to be used in `wasm-bindgen` feature
-web-time = { workspace = true }      # Explicit dependency to be used in `wasm-bindgen` feature
 # TODO feature flag?
 rw-stream-sink = { workspace = true }
 
