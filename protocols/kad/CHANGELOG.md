@@ -1,6 +1,7 @@
 ## 0.46.0 -- unreleased
 
 - Replace usage of `std::time` with `instant` crate for wasm compatibility.
+  See [PR 5391](https://github.com/libp2p/rust-libp2p/pull/5391)
 - Changed `FIND_NODE` response: now includes a list of closest peers when querying the recipient peer ID. Previously, this request yielded an empty response.
   See [PR 5270](https://github.com/libp2p/rust-libp2p/pull/5270)
 - Update to DHT republish interval and expiration time defaults to 22h and 48h respectively, rationale in [libp2p/specs#451](https://github.com/libp2p/specs/pull/451)
