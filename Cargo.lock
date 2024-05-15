@@ -2976,7 +2976,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-memory-connection-limits"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "async-std",
  "instant",
