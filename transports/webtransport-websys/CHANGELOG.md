@@ -1,5 +1,6 @@
 ## 0.2.0
 
+* Fix unhandled exceptions thrown when calling `Webtransport::close`
 
 ## 0.1.0
 
