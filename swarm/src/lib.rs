@@ -106,6 +106,7 @@ pub mod derive_prelude {
     pub use libp2p_identity::PeerId;
 }
 
+use behaviour::NewExternalAddrCandidateEndpoint;
 pub use behaviour::{
     AddressChange, CloseConnection, ConnectionClosed, DialFailure, ExpiredListenAddr,
     ExternalAddrExpired, ExternalAddresses, FromSwarm, ListenAddresses, ListenFailure,
@@ -119,6 +120,7 @@ pub use handler::{
     ConnectionHandler, ConnectionHandlerEvent, ConnectionHandlerSelect, OneShotHandler,
     OneShotHandlerConfig, StreamUpgradeError, SubstreamProtocol,
 };
+use libp2p_core::transport::PortUse;
 #[cfg(feature = "macros")]
 pub use libp2p_swarm_derive::NetworkBehaviour;
 pub use listen_opts::ListenOpts;
@@ -1132,39 +1134,69 @@ where
 
                 self.pending_handler_event = Some((peer_id, handler, event));
             }
-            ToSwarm::NewExternalAddrCandidate(addr) => {
+            ToSwarm::NewExternalAddrCandidate {
+                endpoint,
+                observed_addr,
+            } => {
                 // Apply address translation to the candidate address.
                 // For TCP without port-reuse, the observed address contains an ephemeral port which needs to be replaced by the port of a listen address.
-                let translated_addresses = {
-                    let mut addrs: Vec<_> = self
-                        .listened_addrs
-                        .values()
-                        .flatten()
-                        .filter_map(|server| self.transport.address_translation(server, &addr))
-                        .collect();
-
-                    // remove duplicates
-                    addrs.sort_unstable();
-                    addrs.dedup();
-                    addrs
-                };
-
-                // If address translation yielded nothing, broadcast the original candidate address.
-                if translated_addresses.is_empty() {
-                    self.behaviour
-                        .on_swarm_event(FromSwarm::NewExternalAddrCandidate(
-                            NewExternalAddrCandidate { addr: &addr },
-                        ));
-                    self.pending_swarm_events
-                        .push_back(SwarmEvent::NewExternalAddrCandidate { address: addr });
-                } else {
-                    for addr in translated_addresses {
+                match endpoint {
+                    NewExternalAddrCandidateEndpoint::Listener
+                    | NewExternalAddrCandidateEndpoint::Dialer {
+                        port_use: PortUse::Reuse,
+                    } => {
+                        // no translation is required : use the observed address
                         self.behaviour
                             .on_swarm_event(FromSwarm::NewExternalAddrCandidate(
-                                NewExternalAddrCandidate { addr: &addr },
+                                NewExternalAddrCandidate {
+                                    addr: &observed_addr,
+                                },
                             ));
                         self.pending_swarm_events
-                            .push_back(SwarmEvent::NewExternalAddrCandidate { address: addr });
+                            .push_back(SwarmEvent::NewExternalAddrCandidate {
+                                address: observed_addr,
+                            });
+                    }
+                    NewExternalAddrCandidateEndpoint::Dialer {
+                        port_use: PortUse::New,
+                    } => {
+                        let mut translated_addresses: Vec<_> = self
+                            .listened_addrs
+                            .values()
+                            .flatten()
+                            .filter_map(|server| {
+                                self.transport.address_translation(server, &observed_addr)
+                            })
+                            .collect();
+
+                        // remove duplicates
+                        translated_addresses.sort_unstable();
+                        translated_addresses.dedup();
+
+                        // If address translation yielded nothing, broadcast the original candidate address.
+                        if translated_addresses.is_empty() {
+                            self.behaviour
+                                .on_swarm_event(FromSwarm::NewExternalAddrCandidate(
+                                    NewExternalAddrCandidate {
+                                        addr: &observed_addr,
+                                    },
+                                ));
+                            self.pending_swarm_events.push_back(
+                                SwarmEvent::NewExternalAddrCandidate {
+                                    address: observed_addr,
+                                },
+                            );
+                        } else {
+                            for addr in translated_addresses {
+                                self.behaviour
+                                    .on_swarm_event(FromSwarm::NewExternalAddrCandidate(
+                                        NewExternalAddrCandidate { addr: &addr },
+                                    ));
+                                self.pending_swarm_events.push_back(
+                                    SwarmEvent::NewExternalAddrCandidate { address: addr },
+                                );
+                            }
+                        }
                     }
                 }
             }

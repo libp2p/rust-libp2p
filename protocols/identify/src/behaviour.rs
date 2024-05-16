@@ -24,7 +24,10 @@ use libp2p_core::transport::PortUse;
 use libp2p_core::{multiaddr, ConnectedPoint, Endpoint, Multiaddr};
 use libp2p_identity::PeerId;
 use libp2p_identity::PublicKey;
-use libp2p_swarm::behaviour::{ConnectionClosed, ConnectionEstablished, DialFailure, FromSwarm};
+use libp2p_swarm::behaviour::{
+    ConnectionClosed, ConnectionEstablished, DialFailure, FromSwarm,
+    NewExternalAddrCandidateEndpoint,
+};
 use libp2p_swarm::{
     ConnectionDenied, DialError, ExternalAddresses, ListenAddresses, NetworkBehaviour,
     NotifyHandler, PeerAddresses, StreamUpgradeError, THandlerInEvent, ToSwarm,
@@ -52,6 +55,9 @@ pub struct Behaviour {
 
     /// The address a remote observed for us.
     our_observed_addresses: HashMap<ConnectionId, Multiaddr>,
+
+    /// Established connections information (Listener / Dialer / port_reuse or not)
+    connections_endpoints: HashMap<ConnectionId, NewExternalAddrCandidateEndpoint>,
 
     /// Pending events to be emitted when polled.
     events: VecDeque<ToSwarm<Event, InEvent>>,
@@ -154,6 +160,7 @@ impl Behaviour {
             config,
             connected: HashMap::new(),
             our_observed_addresses: Default::default(),
+            connections_endpoints: Default::default(),
             events: VecDeque::new(),
             discovered_peers,
             listen_addresses: Default::default(),
@@ -222,11 +229,14 @@ impl NetworkBehaviour for Behaviour {
 
     fn handle_established_inbound_connection(
         &mut self,
-        _: ConnectionId,
+        connection_id: ConnectionId,
         peer: PeerId,
         _: &Multiaddr,
         remote_addr: &Multiaddr,
     ) -> Result<THandler<Self>, ConnectionDenied> {
+        self.connections_endpoints
+            .insert(connection_id, NewExternalAddrCandidateEndpoint::Listener);
+
         Ok(Handler::new(
             self.config.interval,
             peer,
@@ -240,12 +250,17 @@ impl NetworkBehaviour for Behaviour {
 
     fn handle_established_outbound_connection(
         &mut self,
-        _: ConnectionId,
+        connection_id: ConnectionId,
         peer: PeerId,
         addr: &Multiaddr,
         _: Endpoint,
-        _: PortUse,
+        port_use: PortUse,
     ) -> Result<THandler<Self>, ConnectionDenied> {
+        self.connections_endpoints.insert(
+            connection_id,
+            NewExternalAddrCandidateEndpoint::Dialer { port_use },
+        );
+
         Ok(Handler::new(
             self.config.interval,
             peer,
@@ -287,11 +302,18 @@ impl NetworkBehaviour for Behaviour {
                     }
                 }
 
+                let endpoint = self
+                    .connections_endpoints
+                    .get(&id)
+                    .expect("we are connected");
+
                 match self.our_observed_addresses.entry(id) {
                     Entry::Vacant(not_yet_observed) => {
                         not_yet_observed.insert(observed.clone());
-                        self.events
-                            .push_back(ToSwarm::NewExternalAddrCandidate(observed));
+                        self.events.push_back(ToSwarm::NewExternalAddrCandidate {
+                            endpoint: *endpoint,
+                            observed_addr: observed,
+                        });
                     }
                     Entry::Occupied(already_observed) if already_observed.get() == &observed => {
                         // No-op, we already observed this address.
@@ -304,8 +326,10 @@ impl NetworkBehaviour for Behaviour {
                         );
 
                         *already_observed.get_mut() = observed.clone();
-                        self.events
-                            .push_back(ToSwarm::NewExternalAddrCandidate(observed));
+                        self.events.push_back(ToSwarm::NewExternalAddrCandidate {
+                            endpoint: *endpoint,
+                            observed_addr: observed,
+                        });
                     }
                 }
             }
@@ -396,6 +420,7 @@ impl NetworkBehaviour for Behaviour {
                 }
 
                 self.our_observed_addresses.remove(&connection_id);
+                self.connections_endpoints.remove(&connection_id);
             }
             FromSwarm::DialFailure(DialFailure { peer_id, error, .. }) => {
                 if let (Some(peer_id), Some(cache), DialError::Transport(errors)) =
