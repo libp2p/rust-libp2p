@@ -461,7 +461,7 @@ where
 struct WsAddress {
     host_port: String,
     path: String,
-    dns_name: Option<rustls::ServerName>,
+    dns_name: Option<rustls::pki_types::ServerName<'static>>,
     use_tls: bool,
     tcp_addr: Multiaddr,
 }
