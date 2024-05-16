@@ -256,6 +256,14 @@ impl NetworkBehaviour for Behaviour {
         _: Endpoint,
         port_use: PortUse,
     ) -> Result<THandler<Self>, ConnectionDenied> {
+        // Contrary to inbound events, outbound events are full-p2p qualified
+        // so we remove /p2p/ in order to be homogeneous
+        // this will avoid Autonatv2 to probe twice the same address (fully-p2p-qualified + not fully-p2p-qualified)
+        let mut addr = addr.clone();
+        if matches!(addr.iter().last(), Some(multiaddr::Protocol::P2p(_))) {
+            addr.pop();
+        }
+
         self.connections_endpoints.insert(
             connection_id,
             NewExternalAddrCandidateEndpoint::Dialer { port_use },
