@@ -108,7 +108,7 @@ jobs:
     name: Run all WASM tests
     runs-on: ubuntu-latest
     env:
-      CHROMEDRIVER_VERSION: '114.0.5735.90'
+      CHROMEDRIVER_VERSION: '125.0.6422.60'
     steps:
       - uses: actions/checkout@v4
 
