@@ -1,3 +1,7 @@
+## 0.2.1
+
+* Increase logs to debug level.
+
 ## 0.2.0
 
 
