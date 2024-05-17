@@ -1,6 +1,6 @@
-## 0.2.1 -- unreleased
+## 0.2.1 
 
-* Fix unhandled exceptions thrown when calling `Webtransport::close`
+* Fix unhandled exceptions thrown when calling `Webtransport::close`.
   See [PR 5390](https://github.com/libp2p/rust-libp2p/pull/5390)
 
 ## 0.2.0
