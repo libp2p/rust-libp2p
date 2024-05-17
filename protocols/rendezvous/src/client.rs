@@ -392,19 +392,33 @@ impl Behaviour {
             DiscoverResponse(Ok((registrations, cookie))) => {
                 if let Some((rendezvous_node, _ns)) = self.waiting_for_discovery.remove(request_id)
                 {
+                    self.events
+                        .extend(registrations.iter().flat_map(|registration| {
+                            let peer_id = registration.record.peer_id();
+                            registration
+                                .record
+                                .addresses()
+                                .iter()
+                                .filter(|addr| {
+                                    !self.discovered_peers.iter().any(
+                                        |((discovered_peer_id, _), addrs)| {
+                                            *discovered_peer_id == peer_id && addrs.contains(addr)
+                                        },
+                                    )
+                                })
+                                .map(|address| ToSwarm::NewExternalAddrOfPeer {
+                                    peer_id,
+                                    address: address.clone(),
+                                })
+                                .collect::<Vec<_>>()
+                        }));
+
                     self.discovered_peers
                         .extend(registrations.iter().map(|registration| {
                             let peer_id = registration.record.peer_id();
                             let namespace = registration.namespace.clone();
 
                             let addresses = registration.record.addresses().to_vec();
-
-                            self.events.extend(addresses.iter().map(|addr| {
-                                ToSwarm::NewExternalAddrOfPeer {
-                                    peer_id,
-                                    address: addr.clone(),
-                                }
-                            }));
 
                             ((peer_id, namespace), addresses)
                         }));
