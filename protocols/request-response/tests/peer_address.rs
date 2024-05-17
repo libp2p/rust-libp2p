@@ -8,6 +8,7 @@ use std::iter;
 use tracing_subscriber::EnvFilter;
 
 #[async_std::test]
+#[cfg(feature = "cbor")]
 async fn dial_succeeds_after_adding_peers_address() {
     let _ = tracing_subscriber::fmt()
         .with_env_filter(EnvFilter::from_default_env())

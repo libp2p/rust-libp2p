@@ -14,17 +14,17 @@ categories = ["network-programming", "asynchronous"]
 asynchronous-codec = { workspace = true }
 cuckoofilter = "0.5.0"
 fnv = "1.0"
-bytes = "1.5"
-futures = "0.3.30"
+bytes = "1.6"
+futures = { workspace = true }
 libp2p-core = { workspace = true }
 libp2p-swarm = { workspace = true }
 libp2p-identity = { workspace = true }
 quick-protobuf = "0.8"
 quick-protobuf-codec = { workspace = true }
 rand = "0.8"
-smallvec = "1.13.1"
-thiserror = "1.0.57"
-tracing = "0.1.37"
+smallvec = "1.13.2"
+thiserror = "1.0.59"
+tracing = { workspace = true }
 
 # Passing arguments to the docsrs builder in order to properly document cfg's.
 # More information: https://docs.rs/about/builds#cross-compiling
