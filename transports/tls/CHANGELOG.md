@@ -1,6 +1,6 @@
 ## 0.4.0
 
-- Upgrade `rustls` to `0.23`. See [PR XXXX](https://github.com/libp2p/rust-libp2p/pull/XXXX)
+- Upgrade `rustls` to `0.23`. See [PR 5385](https://github.com/libp2p/rust-libp2p/pull/5385)
 
 ## 0.3.0
 
