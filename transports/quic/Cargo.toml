@@ -21,10 +21,10 @@ parking_lot = "0.12.2"
 quinn = { version = "0.11.0", default-features = false, features = ["rustls", "futures-io"] }
 rand = "0.8.5"
 rustls = { version = "0.23.5", default-features = false }
-thiserror = "1.0.59"
+thiserror = "1.0.60"
 tokio = { workspace = true, default-features = false, features = ["net", "rt", "time"], optional = true }
 tracing = { workspace = true }
-socket2 = "0.5.6"
+socket2 = "0.5.7"
 ring = { workspace = true }
 
 [features]
