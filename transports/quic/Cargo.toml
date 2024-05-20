@@ -20,7 +20,7 @@ libp2p-identity = { workspace = true }
 parking_lot = "0.12.2"
 quinn = { version = "0.10.2", default-features = false, features = ["tls-rustls", "futures-io"] }
 rand = "0.8.5"
-rustls = { version = "0.21.9", default-features = false }
+rustls = { version = "0.23.5", default-features = false }
 thiserror = "1.0.60"
 tokio = { workspace = true, default-features = false, features = ["net", "rt", "time"], optional = true }
 tracing = { workspace = true }
