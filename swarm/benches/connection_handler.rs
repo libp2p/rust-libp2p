@@ -186,13 +186,13 @@ fn new_swarm<T: NetworkBehaviour>(beh: T) -> libp2p_swarm::Swarm<T> {
 }
 
 /// Whole purpose of the behaviour is to rapidly call `poll` on the handler
-/// configured amount of times and then emmit event when finished.
+/// configured amount of times and then emit event when finished.
 #[derive(Default)]
 struct SpinningBehaviour {
     iter_count: usize,
     protocols: &'static [StreamProtocol],
     finished: bool,
-    emmited: bool,
+    emitted: bool,
     other_peer: Option<PeerId>,
 }
 
@@ -245,8 +245,8 @@ impl NetworkBehaviour for SpinningBehaviour {
         _: &mut std::task::Context<'_>,
     ) -> std::task::Poll<libp2p_swarm::ToSwarm<Self::ToSwarm, libp2p_swarm::THandlerInEvent<Self>>>
     {
-        if self.finished && !self.emmited {
-            self.emmited = true;
+        if self.finished && !self.emitted {
+            self.emitted = true;
             std::task::Poll::Ready(libp2p_swarm::ToSwarm::GenerateEvent(FinishedSpinning))
         } else {
             std::task::Poll::Pending
