@@ -15,7 +15,7 @@ asynchronous-codec = { workspace = true }
 either = "1.11.0"
 futures = { workspace = true }
 futures-timer = "3.0"
-instant = "0.1.12"
+instant = "0.1.13"
 libp2p-core = { workspace = true }
 libp2p-swarm = { workspace = true }
 libp2p-identity = { workspace = true }
