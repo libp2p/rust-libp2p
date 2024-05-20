@@ -3209,7 +3209,7 @@ dependencies = [
  "quickcheck",
  "quinn",
  "rand 0.8.5",
- "ring 0.16.20",
+ "ring 0.17.8",
  "rustls 0.21.11",
  "socket2 0.5.7",
  "thiserror",
