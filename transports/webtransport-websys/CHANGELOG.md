@@ -1,4 +1,3 @@
-<<<<<<< HEAD
 ## 0.2.1
 
 * Fix unhandled exceptions thrown when calling `Webtransport::close`.
