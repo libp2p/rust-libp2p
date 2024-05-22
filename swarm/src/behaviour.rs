@@ -219,14 +219,6 @@ pub trait NetworkBehaviour: 'static {
         -> Poll<ToSwarm<Self::ToSwarm, THandlerInEvent<Self>>>;
 }
 
-#[derive(Debug, Copy, Clone)]
-pub enum NewExternalAddrCandidateEndpoint {
-    /// no translation is required
-    Listener,
-    /// translation is required when dialed with PortUse::New
-    Dialer { port_use: PortUse },
-}
-
 /// A command issued from a [`NetworkBehaviour`] for the [`Swarm`].
 ///
 /// [`Swarm`]: super::Swarm
@@ -290,10 +282,7 @@ pub enum ToSwarm<TOutEvent, TInEvent> {
     /// - A protocol such as identify obtained it from a remote.
     /// - The user provided it based on configuration.
     /// - We made an educated guess based on one of our listen addresses.
-    NewExternalAddrCandidate {
-        endpoint: NewExternalAddrCandidateEndpoint,
-        observed_addr: Multiaddr,
-    },
+    NewExternalAddrCandidate(Multiaddr),
 
     /// Indicates to the [`Swarm`](crate::Swarm) that the provided address is confirmed to be externally reachable.
     ///
@@ -352,13 +341,7 @@ impl<TOutEvent, TInEventOld> ToSwarm<TOutEvent, TInEventOld> {
                 peer_id,
                 connection,
             },
-            ToSwarm::NewExternalAddrCandidate {
-                endpoint,
-                observed_addr: addr,
-            } => ToSwarm::NewExternalAddrCandidate {
-                endpoint,
-                observed_addr: addr,
-            },
+            ToSwarm::NewExternalAddrCandidate(addr) => ToSwarm::NewExternalAddrCandidate(addr),
             ToSwarm::ExternalAddrConfirmed(addr) => ToSwarm::ExternalAddrConfirmed(addr),
             ToSwarm::ExternalAddrExpired(addr) => ToSwarm::ExternalAddrExpired(addr),
             ToSwarm::NewExternalAddrOfPeer {
@@ -389,13 +372,7 @@ impl<TOutEvent, THandlerIn> ToSwarm<TOutEvent, THandlerIn> {
                 handler,
                 event,
             },
-            ToSwarm::NewExternalAddrCandidate {
-                endpoint,
-                observed_addr: addr,
-            } => ToSwarm::NewExternalAddrCandidate {
-                endpoint,
-                observed_addr: addr,
-            },
+            ToSwarm::NewExternalAddrCandidate(addr) => ToSwarm::NewExternalAddrCandidate(addr),
             ToSwarm::ExternalAddrConfirmed(addr) => ToSwarm::ExternalAddrConfirmed(addr),
             ToSwarm::ExternalAddrExpired(addr) => ToSwarm::ExternalAddrExpired(addr),
             ToSwarm::CloseConnection {
