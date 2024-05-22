@@ -83,6 +83,42 @@ use std::time::{Duration, Instant};
 /// Maximum number of k-buckets.
 const NUM_BUCKETS: usize = 256;
 
+/// The configuration for `KBucketsTable`.
+#[derive(Debug, Clone)]
+pub(crate) struct KBucketConfig {
+    /// Maximal number of nodes that a bucket can contain.
+    bucket_size: usize,
+    /// Specifies the duration after creation of a [`PendingEntry`] after which
+    /// it becomes eligible for insertion into a full bucket, replacing the
+    /// least-recently (dis)connected node.
+    pending_timeout: Duration,
+}
+
+impl Default for KBucketConfig {
+    fn default() -> Self {
+        KBucketConfig {
+            bucket_size: K_VALUE.get(),
+            pending_timeout: Duration::from_secs(60),
+        }
+    }
+}
+
+impl KBucketConfig {
+    /// Modifies the maximal number of nodes that a bucket can contain.
+    pub(crate) fn set_bucket_size(&mut self, bucket_size: usize) {
+        if bucket_size > 0 {
+            self.bucket_size = bucket_size;
+        }
+    }
+
+    /// Modifies the duration after creation of a [`PendingEntry`] after which
+    /// it becomes eligible for insertion into a full bucket, replacing the
+    /// least-recently (dis)connected node.
+    pub(crate) fn set_pending_timeout(&mut self, pending_timeout: Duration) {
+        self.pending_timeout = pending_timeout;
+    }
+}
+
 /// A `KBucketsTable` represents a Kademlia routing table.
 #[derive(Debug, Clone)]
 pub(crate) struct KBucketsTable<TKey, TVal> {
@@ -150,16 +186,12 @@ where
     TVal: Clone,
 {
     /// Creates a new, empty Kademlia routing table with entries partitioned
-    /// into buckets as per the Kademlia protocol.
-    ///
-    /// The given `pending_timeout` specifies the duration after creation of
-    /// a [`PendingEntry`] after which it becomes eligible for insertion into
-    /// a full bucket, replacing the least-recently (dis)connected node.
-    pub(crate) fn new(local_key: TKey, pending_timeout: Duration) -> Self {
+    /// into buckets as per the Kademlia protocol using the provided config.
+    pub(crate) fn new(local_key: TKey, config: KBucketConfig) -> Self {
         KBucketsTable {
             local_key,
             buckets: (0..NUM_BUCKETS)
-                .map(|_| KBucket::new(pending_timeout))
+                .map(|_| KBucket::new(config.clone()))
                 .collect(),
             applied_pending: VecDeque::new(),
         }
@@ -534,7 +566,9 @@ mod tests {
         fn arbitrary(g: &mut Gen) -> TestTable {
             let local_key = Key::from(PeerId::random());
             let timeout = Duration::from_secs(g.gen_range(1..360));
-            let mut table = TestTable::new(local_key.into(), timeout);
+            let mut config = KBucketConfig::default();
+            config.set_pending_timeout(timeout);
+            let mut table = TestTable::new(local_key.into(), config);
             let mut num_total = g.gen_range(0..100);
             for (i, b) in &mut table.buckets.iter_mut().enumerate().rev() {
                 let ix = BucketIndex(i);
@@ -559,7 +593,9 @@ mod tests {
     fn buckets_are_non_overlapping_and_exhaustive() {
         let local_key = Key::from(PeerId::random());
         let timeout = Duration::from_secs(0);
-        let mut table = KBucketsTable::<KeyBytes, ()>::new(local_key.into(), timeout);
+        let mut config = KBucketConfig::default();
+        config.set_pending_timeout(timeout);
+        let mut table = KBucketsTable::<KeyBytes, ()>::new(local_key.into(), config);
 
         let mut prev_max = U256::from(0);
 
@@ -576,7 +612,9 @@ mod tests {
     fn bucket_contains_range() {
         fn prop(ix: u8) {
             let index = BucketIndex(ix as usize);
-            let mut bucket = KBucket::<Key<PeerId>, ()>::new(Duration::from_secs(0));
+            let mut config = KBucketConfig::default();
+            config.set_pending_timeout(Duration::from_secs(0));
+            let mut bucket = KBucket::<Key<PeerId>, ()>::new(config);
             let bucket_ref = KBucketRef {
                 index,
                 bucket: &mut bucket,
@@ -622,7 +660,7 @@ mod tests {
         let local_key = Key::from(PeerId::random());
         let other_id = Key::from(PeerId::random());
 
-        let mut table = KBucketsTable::<_, ()>::new(local_key, Duration::from_secs(5));
+        let mut table = KBucketsTable::<_, ()>::new(local_key, KBucketConfig::default());
         if let Some(Entry::Absent(entry)) = table.entry(&other_id) {
             match entry.insert((), NodeStatus::Connected) {
                 InsertResult::Inserted => (),
@@ -640,7 +678,7 @@ mod tests {
     #[test]
     fn entry_self() {
         let local_key = Key::from(PeerId::random());
-        let mut table = KBucketsTable::<_, ()>::new(local_key, Duration::from_secs(5));
+        let mut table = KBucketsTable::<_, ()>::new(local_key, KBucketConfig::default());
 
         assert!(table.entry(&local_key).is_none())
     }
@@ -648,7 +686,7 @@ mod tests {
     #[test]
     fn closest() {
         let local_key = Key::from(PeerId::random());
-        let mut table = KBucketsTable::<_, ()>::new(local_key, Duration::from_secs(5));
+        let mut table = KBucketsTable::<_, ()>::new(local_key, KBucketConfig::default());
         let mut count = 0;
         loop {
             if count == 100 {
@@ -683,7 +721,9 @@ mod tests {
     #[test]
     fn applied_pending() {
         let local_key = Key::from(PeerId::random());
-        let mut table = KBucketsTable::<_, ()>::new(local_key, Duration::from_millis(1));
+        let mut config = KBucketConfig::default();
+        config.set_pending_timeout(Duration::from_millis(1));
+        let mut table = KBucketsTable::<_, ()>::new(local_key, config);
         let expected_applied;
         let full_bucket_index;
         loop {
