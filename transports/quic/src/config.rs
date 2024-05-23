@@ -18,7 +18,10 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use quinn::{MtuDiscoveryConfig, VarInt};
+use quinn::{
+    crypto::rustls::{QuicClientConfig, QuicServerConfig},
+    MtuDiscoveryConfig, VarInt,
+};
 use std::{sync::Arc, time::Duration};
 
 /// Config for the transport.
@@ -58,9 +61,9 @@ pub struct Config {
     pub support_draft_29: bool,
 
     /// TLS client config for the inner [`quinn::ClientConfig`].
-    client_tls_config: Arc<rustls::ClientConfig>,
+    client_tls_config: Arc<QuicClientConfig>,
     /// TLS server config for the inner [`quinn::ServerConfig`].
-    server_tls_config: Arc<rustls::ServerConfig>,
+    server_tls_config: Arc<QuicServerConfig>,
     /// Libp2p identity of the node.
     keypair: libp2p_identity::Keypair,
 
@@ -71,8 +74,13 @@ pub struct Config {
 impl Config {
     /// Creates a new configuration object with default values.
     pub fn new(keypair: &libp2p_identity::Keypair) -> Self {
-        let client_tls_config = Arc::new(libp2p_tls::make_client_config(keypair, None).unwrap());
-        let server_tls_config = Arc::new(libp2p_tls::make_server_config(keypair).unwrap());
+        let client_tls_config = Arc::new(
+            QuicClientConfig::try_from(libp2p_tls::make_client_config(keypair, None).unwrap())
+                .unwrap(),
+        );
+        let server_tls_config = Arc::new(
+            QuicServerConfig::try_from(libp2p_tls::make_server_config(keypair).unwrap()).unwrap(),
+        );
         Self {
             client_tls_config,
             server_tls_config,
