@@ -24,10 +24,9 @@ use hickory_proto::{
     op::Message,
     rr::{Name, RData},
 };
-use libp2p_core::{
-    address_translation,
-    multiaddr::{Multiaddr, Protocol},
-};
+use libp2p_core::multiaddr::{Multiaddr, Protocol};
+use libp2p_swarm::address_translation;
+
 use libp2p_identity::PeerId;
 use std::time::Instant;
 use std::{fmt, net::SocketAddr, str, time::Duration};

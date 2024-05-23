@@ -169,14 +169,6 @@ macro_rules! codegen {
                 }
             }
 
-            fn address_translation(
-                &self,
-                _server: &Multiaddr,
-                _observed: &Multiaddr,
-            ) -> Option<Multiaddr> {
-                None
-            }
-
             fn poll(
                 mut self: Pin<&mut Self>,
                 cx: &mut Context<'_>,

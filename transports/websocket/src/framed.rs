@@ -156,10 +156,6 @@ where
         self.do_dial(addr, dial_opts)
     }
 
-    fn address_translation(&self, server: &Multiaddr, observed: &Multiaddr) -> Option<Multiaddr> {
-        self.transport.lock().address_translation(server, observed)
-    }
-
     fn poll(
         mut self: Pin<&mut Self>,
         cx: &mut Context<'_>,

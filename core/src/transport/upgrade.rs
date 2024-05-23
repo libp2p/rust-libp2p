@@ -356,10 +356,6 @@ where
         self.0.listen_on(id, addr)
     }
 
-    fn address_translation(&self, server: &Multiaddr, observed: &Multiaddr) -> Option<Multiaddr> {
-        self.0.address_translation(server, observed)
-    }
-
     fn poll(
         self: Pin<&mut Self>,
         cx: &mut Context<'_>,
@@ -429,10 +425,6 @@ where
         self.inner
             .listen_on(id, addr)
             .map_err(|err| err.map(TransportUpgradeError::Transport))
-    }
-
-    fn address_translation(&self, server: &Multiaddr, observed: &Multiaddr) -> Option<Multiaddr> {
-        self.inner.address_translation(server, observed)
     }
 
     fn poll(

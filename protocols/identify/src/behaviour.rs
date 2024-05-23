@@ -22,13 +22,13 @@ use crate::handler::{self, Handler, InEvent};
 use crate::protocol::{Info, UpgradeError};
 use libp2p_core::multiaddr::Protocol;
 use libp2p_core::transport::PortUse;
-use libp2p_core::{address_translation, multiaddr, ConnectedPoint, Endpoint, Multiaddr};
+use libp2p_core::{multiaddr, ConnectedPoint, Endpoint, Multiaddr};
 use libp2p_identity::PeerId;
 use libp2p_identity::PublicKey;
 use libp2p_swarm::behaviour::{ConnectionClosed, ConnectionEstablished, DialFailure, FromSwarm};
 use libp2p_swarm::{
-    ConnectionDenied, DialError, ExternalAddresses, ListenAddresses, NetworkBehaviour,
-    NotifyHandler, PeerAddresses, StreamUpgradeError, THandlerInEvent, ToSwarm,
+    address_translation, ConnectionDenied, DialError, ExternalAddresses, ListenAddresses,
+    NetworkBehaviour, NotifyHandler, PeerAddresses, StreamUpgradeError, THandlerInEvent, ToSwarm,
 };
 use libp2p_swarm::{ConnectionId, THandler, THandlerOutEvent};
 

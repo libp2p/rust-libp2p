@@ -249,15 +249,6 @@ impl<P: Provider> Transport for GenTransport<P> {
         }
     }
 
-    fn address_translation(&self, listen: &Multiaddr, observed: &Multiaddr) -> Option<Multiaddr> {
-        if !is_quic_addr(listen, self.support_draft_29)
-            || !is_quic_addr(observed, self.support_draft_29)
-        {
-            return None;
-        }
-        Some(observed.clone())
-    }
-
     fn dial(
         &mut self,
         addr: Multiaddr,
@@ -721,33 +712,6 @@ fn multiaddr_to_socketaddr(
         }
         _ => None,
     }
-}
-
-/// Whether an [`Multiaddr`] is a valid for the QUIC transport.
-fn is_quic_addr(addr: &Multiaddr, support_draft_29: bool) -> bool {
-    use Protocol::*;
-    let mut iter = addr.iter();
-    let Some(first) = iter.next() else {
-        return false;
-    };
-    let Some(second) = iter.next() else {
-        return false;
-    };
-    let Some(third) = iter.next() else {
-        return false;
-    };
-    let fourth = iter.next();
-    let fifth = iter.next();
-
-    matches!(first, Ip4(_) | Ip6(_) | Dns(_) | Dns4(_) | Dns6(_))
-        && matches!(second, Udp(_))
-        && if support_draft_29 {
-            matches!(third, QuicV1 | Quic)
-        } else {
-            matches!(third, QuicV1)
-        }
-        && matches!(fourth, Some(P2p(_)) | None)
-        && fifth.is_none()
 }
 
 /// Turns an IP address and port into the corresponding QUIC multiaddr.
