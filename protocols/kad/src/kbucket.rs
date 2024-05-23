@@ -75,7 +75,6 @@ mod key;
 pub use bucket::NodeStatus;
 pub use entry::*;
 
-use arrayvec::ArrayVec;
 use bucket::KBucket;
 use std::collections::VecDeque;
 use std::time::{Duration, Instant};
@@ -126,6 +125,8 @@ pub(crate) struct KBucketsTable<TKey, TVal> {
     local_key: TKey,
     /// The buckets comprising the routing table.
     buckets: Vec<KBucket<TKey, TVal>>,
+    /// The maximal number of nodes that a bucket can contain.
+    bucket_size: usize,
     /// The list of evicted entries that have been replaced with pending
     /// entries since the last call to [`KBucketsTable::take_applied_pending`].
     applied_pending: VecDeque<AppliedPending<TKey, TVal>>,
@@ -193,6 +194,7 @@ where
             buckets: (0..NUM_BUCKETS)
                 .map(|_| KBucket::new(config.clone()))
                 .collect(),
+            bucket_size: config.bucket_size,
             applied_pending: VecDeque::new(),
         }
     }
@@ -278,13 +280,16 @@ where
         T: AsRef<KeyBytes>,
     {
         let distance = self.local_key.as_ref().distance(target);
+        let bucket_size = self.bucket_size;
         ClosestIter {
             target,
             iter: None,
             table: self,
             buckets_iter: ClosestBucketsIter::new(distance),
-            fmap: |b: &KBucket<TKey, _>| -> ArrayVec<_, { K_VALUE.get() }> {
-                b.iter().map(|(n, _)| n.key.clone()).collect()
+            fmap: move |b: &KBucket<TKey, _>| -> Vec<_> {
+                let mut vec = Vec::with_capacity(bucket_size);
+                vec.extend(b.iter().map(|(n, _)| n.key.clone()));
+                vec
             },
         }
     }
@@ -300,13 +305,15 @@ where
         TVal: Clone,
     {
         let distance = self.local_key.as_ref().distance(target);
+        let bucket_size = self.bucket_size;
         ClosestIter {
             target,
             iter: None,
             table: self,
             buckets_iter: ClosestBucketsIter::new(distance),
-            fmap: |b: &KBucket<_, TVal>| -> ArrayVec<_, { K_VALUE.get() }> {
+            fmap: move |b: &KBucket<_, TVal>| -> Vec<_> {
                 b.iter()
+                    .take(bucket_size)
                     .map(|(n, status)| EntryView {
                         node: n.clone(),
                         status,
@@ -355,7 +362,7 @@ struct ClosestIter<'a, TTarget, TKey, TVal, TMap, TOut> {
     /// distance of the local key to the target.
     buckets_iter: ClosestBucketsIter,
     /// The iterator over the entries in the currently traversed bucket.
-    iter: Option<arrayvec::IntoIter<TOut, { K_VALUE.get() }>>,
+    iter: Option<std::vec::IntoIter<TOut>>,
     /// The projection function / mapping applied on each bucket as
     /// it is encountered, producing the next `iter`ator.
     fmap: TMap,
@@ -460,7 +467,7 @@ where
     TTarget: AsRef<KeyBytes>,
     TKey: Clone + AsRef<KeyBytes>,
     TVal: Clone,
-    TMap: Fn(&KBucket<TKey, TVal>) -> ArrayVec<TOut, { K_VALUE.get() }>,
+    TMap: Fn(&KBucket<TKey, TVal>) -> Vec<TOut>,
     TOut: AsRef<KeyBytes>,
 {
     type Item = TOut;
@@ -568,11 +575,12 @@ mod tests {
             let timeout = Duration::from_secs(g.gen_range(1..360));
             let mut config = KBucketConfig::default();
             config.set_pending_timeout(timeout);
+            let bucket_size = config.bucket_size;
             let mut table = TestTable::new(local_key.into(), config);
             let mut num_total = g.gen_range(0..100);
             for (i, b) in &mut table.buckets.iter_mut().enumerate().rev() {
                 let ix = BucketIndex(i);
-                let num = g.gen_range(0..usize::min(K_VALUE.get(), num_total) + 1);
+                let num = g.gen_range(0..usize::min(bucket_size, num_total) + 1);
                 num_total -= num;
                 for _ in 0..num {
                     let distance = ix.rand_distance(&mut rand::thread_rng());
