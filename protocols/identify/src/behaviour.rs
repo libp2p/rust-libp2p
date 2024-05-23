@@ -99,7 +99,7 @@ pub struct Behaviour {
     our_observed_addresses: HashMap<ConnectionId, Multiaddr>,
 
     /// The outbound connections established without port reuse (require translation)
-    outbound_connections_without_port_reuse: HashSet<ConnectionId>,
+    outbound_connections_with_ephemeral_port: HashSet<ConnectionId>,
 
     /// Pending events to be emitted when polled.
     events: VecDeque<ToSwarm<Event, InEvent>>,
@@ -202,7 +202,7 @@ impl Behaviour {
             config,
             connected: HashMap::new(),
             our_observed_addresses: Default::default(),
-            outbound_connections_without_port_reuse: Default::default(),
+            outbound_connections_with_ephemeral_port: Default::default(),
             events: VecDeque::new(),
             discovered_peers,
             listen_addresses: Default::default(),
@@ -270,7 +270,7 @@ impl Behaviour {
         observed: &Multiaddr,
     ) {
         if self
-            .outbound_connections_without_port_reuse
+            .outbound_connections_with_ephemeral_port
             .contains(&connection_id)
         {
             // Apply address translation to the candidate address.
@@ -307,12 +307,13 @@ impl Behaviour {
                         .push_back(ToSwarm::NewExternalAddrCandidate(addr));
                 }
             }
-        } else {
-            // outgoing connection dialed with port reuse
-            // incomming connection
-            self.events
-                .push_back(ToSwarm::NewExternalAddrCandidate(observed.clone()));
+            return;
         }
+
+        // outgoing connection dialed with port reuse
+        // incomming connection
+        self.events
+            .push_back(ToSwarm::NewExternalAddrCandidate(observed.clone()));
     }
 }
 
@@ -355,7 +356,7 @@ impl NetworkBehaviour for Behaviour {
         }
 
         if port_use == PortUse::New {
-            self.outbound_connections_without_port_reuse
+            self.outbound_connections_with_ephemeral_port
                 .insert(connection_id);
         }
 
@@ -507,7 +508,7 @@ impl NetworkBehaviour for Behaviour {
                 }
 
                 self.our_observed_addresses.remove(&connection_id);
-                self.outbound_connections_without_port_reuse
+                self.outbound_connections_with_ephemeral_port
                     .remove(&connection_id);
             }
             FromSwarm::DialFailure(DialFailure { peer_id, error, .. }) => {
