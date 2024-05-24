@@ -77,13 +77,14 @@ pub use entry::*;
 
 use bucket::KBucket;
 use std::collections::VecDeque;
+use std::num::NonZeroUsize;
 use std::time::{Duration, Instant};
 
 /// Maximum number of k-buckets.
 const NUM_BUCKETS: usize = 256;
 
 /// The configuration for `KBucketsTable`.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy)]
 pub(crate) struct KBucketConfig {
     /// Maximal number of nodes that a bucket can contain.
     bucket_size: usize,
@@ -104,10 +105,8 @@ impl Default for KBucketConfig {
 
 impl KBucketConfig {
     /// Modifies the maximal number of nodes that a bucket can contain.
-    pub(crate) fn set_bucket_size(&mut self, bucket_size: usize) {
-        if bucket_size > 0 {
-            self.bucket_size = bucket_size;
-        }
+    pub(crate) fn set_bucket_size(&mut self, bucket_size: NonZeroUsize) {
+        self.bucket_size = bucket_size.get();
     }
 
     /// Modifies the duration after creation of a [`PendingEntry`] after which
@@ -191,9 +190,7 @@ where
     pub(crate) fn new(local_key: TKey, config: KBucketConfig) -> Self {
         KBucketsTable {
             local_key,
-            buckets: (0..NUM_BUCKETS)
-                .map(|_| KBucket::new(config.clone()))
-                .collect(),
+            buckets: (0..NUM_BUCKETS).map(|_| KBucket::new(config)).collect(),
             bucket_size: config.bucket_size,
             applied_pending: VecDeque::new(),
         }

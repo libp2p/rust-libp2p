@@ -674,13 +674,18 @@ mod tests {
 
     #[test]
     fn test_custom_bucket_size() {
-        let bucket_sizes = [2, 20, 200, 2000];
+        let bucket_sizes: [NonZeroUsize; 4] = [
+            NonZeroUsize::new(2).unwrap(),
+            NonZeroUsize::new(20).unwrap(),
+            NonZeroUsize::new(200).unwrap(),
+            NonZeroUsize::new(2000).unwrap(),
+        ];
         for &size in &bucket_sizes {
             let mut config = KBucketConfig::default();
             config.set_bucket_size(size);
             let mut bucket = KBucket::<Key<PeerId>, ()>::new(config);
             fill_bucket(&mut bucket, NodeStatus::Disconnected);
-            assert_eq!(size, bucket.num_entries());
+            assert_eq!(size.get(), bucket.num_entries());
         }
     }
 }
