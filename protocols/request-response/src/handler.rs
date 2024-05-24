@@ -159,6 +159,9 @@ where
             }
         };
 
+        // Inbound connections are reported to the upper layer from within the worker task,
+        // so by failing to schedule the worker means the upper layer will never know
+        // about the inbound request. Because of that we do not report any inbound failure.
         if self
             .worker_streams
             .try_push(RequestId::Inbound(request_id), recv.boxed())
@@ -204,7 +207,8 @@ where
             .try_push(RequestId::Outbound(request_id), send.boxed())
             .is_err()
         {
-            tracing::warn!("Dropping outbound stream because we are at capacity")
+            self.pending_events
+                .push_back(Event::OutboundMaxStreamsReached(request_id));
         }
     }
 
@@ -276,6 +280,9 @@ where
     /// A response to an inbound request was omitted as a result
     /// of dropping the response `sender` of an inbound `Request`.
     ResponseOmission(InboundRequestId),
+    /// An outbound request could not be sent because maximum
+    /// concurrent streams reached.
+    OutboundMaxStreamsReached(OutboundRequestId),
     /// An outbound request timed out while sending the request
     /// or waiting for the response.
     OutboundTimeout(OutboundRequestId),
@@ -318,6 +325,10 @@ impl<TCodec: Codec> fmt::Debug for Event<TCodec> {
                 .finish(),
             Event::ResponseOmission(request_id) => f
                 .debug_tuple("Event::ResponseOmission")
+                .field(request_id)
+                .finish(),
+            Event::OutboundMaxStreamsReached(request_id) => f
+                .debug_tuple("Event::OutboundMaxStreamsReached")
                 .field(request_id)
                 .finish(),
             Event::OutboundTimeout(request_id) => f

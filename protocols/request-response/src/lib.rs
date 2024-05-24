@@ -169,6 +169,8 @@ pub enum Event<TRequest, TResponse, TChannelResponse = TResponse> {
 pub enum OutboundFailure {
     /// The request could not be sent because a dialing attempt failed.
     DialFailure,
+    /// The request could not be sent because maximum concurrent streams reached.
+    MaxStreamsReached,
     /// The request timed out before a response was received.
     ///
     /// It is not known whether the request may have been
@@ -189,6 +191,7 @@ impl fmt::Display for OutboundFailure {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             OutboundFailure::DialFailure => write!(f, "Failed to dial the requested peer"),
+            OutboundFailure::MaxStreamsReached => write!(f, "Maximum concurrent streams reached"),
             OutboundFailure::Timeout => write!(f, "Timeout while waiting for a response"),
             OutboundFailure::ConnectionClosed => {
                 write!(f, "Connection was closed before a response was received")
@@ -875,6 +878,17 @@ where
                         peer,
                         request_id,
                         error: InboundFailure::ResponseOmission,
+                    }));
+            }
+            handler::Event::OutboundMaxStreamsReached(request_id) => {
+                let removed = self.remove_pending_outbound_response(&peer, connection, request_id);
+                debug_assert!(removed, "Expect request_id to be pending before failing.");
+
+                self.pending_events
+                    .push_back(ToSwarm::GenerateEvent(Event::OutboundFailure {
+                        peer,
+                        request_id,
+                        error: OutboundFailure::MaxStreamsReached,
                     }));
             }
             handler::Event::OutboundTimeout(request_id) => {
