@@ -168,7 +168,9 @@ async fn report_outbound_failure_on_max_streams() {
         .try_init();
 
     // `swarm2` will be able to handle only 1 stream per time
-    let swarm2_config = request_response::Config::default().with_max_concurrent_streams(1);
+    let swarm2_config = request_response::Config::default()
+        .with_request_timeout(Duration::from_millis(100))
+        .with_max_concurrent_streams(1);
 
     let (peer1_id, mut swarm1) = new_swarm();
     let (peer2_id, mut swarm2) = new_swarm_with_config(swarm2_config);
