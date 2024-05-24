@@ -1,3 +1,8 @@
+## 0.27.0
+
+- Report outbound failure when max concurrent streams is reached.
+  See [PR 5417](https://github.com/libp2p/rust-libp2p/pull/5417).
+
 ## 0.26.2
 
 - Deprecate `Behaviour::add_address` in favor of `Swarm::add_peer_address`.
