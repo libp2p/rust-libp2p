@@ -1,3 +1,8 @@
+## 0.26.3
+
+- Avoid hanging at capacity and dial IO errors.
+  See [PR 5419](https://github.com/libp2p/rust-libp2p/pull/5419).
+
 ## 0.26.2
 
 - Deprecate `Behaviour::add_address` in favor of `Swarm::add_peer_address`.

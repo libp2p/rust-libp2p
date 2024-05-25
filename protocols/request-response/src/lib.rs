@@ -79,6 +79,7 @@ pub use handler::ProtocolSupport;
 use crate::handler::OutboundMessage;
 use futures::channel::oneshot;
 use handler::Handler;
+use instant::Instant;
 use libp2p_core::{ConnectedPoint, Endpoint, Multiaddr};
 use libp2p_identity::PeerId;
 use libp2p_swarm::{
@@ -428,6 +429,7 @@ where
             request_id,
             request,
             protocols: self.outbound_protocols.clone(),
+            time: Instant::now(),
         };
 
         if let Some(request) = self.try_send_request(peer, request) {

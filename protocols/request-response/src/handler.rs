@@ -28,6 +28,7 @@ use crate::{InboundRequestId, OutboundRequestId, EMPTY_QUEUE_SHRINK_THRESHOLD};
 
 use futures::channel::mpsc;
 use futures::{channel::oneshot, prelude::*};
+use instant::Instant;
 use libp2p_swarm::handler::{
     ConnectionEvent, DialUpgradeError, FullyNegotiatedInbound, FullyNegotiatedOutbound,
     ListenUpgradeError,
@@ -57,6 +58,10 @@ where
     inbound_protocols: SmallVec<[TCodec::Protocol; 2]>,
     /// The request/response message codec.
     codec: TCodec,
+
+    request_timeout: Duration,
+    max_concurrent_streams: usize,
+
     /// Queue of events to emit in `poll()`.
     pending_events: VecDeque<Event<TCodec>>,
     /// Outbound upgrades waiting to be emitted as an `OutboundSubstreamRequest`.
@@ -94,7 +99,7 @@ where
     pub(super) fn new(
         inbound_protocols: SmallVec<[TCodec::Protocol; 2]>,
         codec: TCodec,
-        substream_timeout: Duration,
+        request_timeout: Duration,
         inbound_request_id: Arc<AtomicU64>,
         max_concurrent_streams: usize,
     ) -> Self {
@@ -102,6 +107,8 @@ where
         Self {
             inbound_protocols,
             codec,
+            request_timeout,
+            max_concurrent_streams,
             pending_outbound: VecDeque::new(),
             requested_outbound: Default::default(),
             inbound_receiver,
@@ -109,7 +116,7 @@ where
             pending_events: VecDeque::new(),
             inbound_request_id,
             worker_streams: futures_bounded::FuturesMap::new(
-                substream_timeout,
+                request_timeout,
                 max_concurrent_streams,
             ),
         }
@@ -159,6 +166,9 @@ where
             }
         };
 
+        // Inbound connections are reported to the upper layer from within the worker task,
+        // so by failing to schedule the worker means the upper layer will never know
+        // about the inbound request. Because of that we do not report any inbound failure.
         if self
             .worker_streams
             .try_push(RequestId::Inbound(request_id), recv.boxed())
@@ -183,6 +193,21 @@ where
             .pop_front()
             .expect("negotiated a stream without a pending message");
 
+        // If timeout is already reached then there is no need to proceed further.
+        if message.time.elapsed() >= self.request_timeout {
+            self.pending_events
+                .push_back(Event::OutboundTimeout(message.request_id));
+            return;
+        }
+
+        // If we are at capacity, reschedule request later on.
+        //
+        // TODO(oblique): Implement `futures_bounded::FuturesMap::is_full`
+        if self.worker_streams.len() == self.max_concurrent_streams {
+            self.requested_outbound.push_back(message);
+            return;
+        }
+
         let mut codec = self.codec.clone();
         let request_id = message.request_id;
 
@@ -199,13 +224,10 @@ where
             })
         };
 
-        if self
-            .worker_streams
+        self.worker_streams
             .try_push(RequestId::Outbound(request_id), send.boxed())
-            .is_err()
-        {
-            tracing::warn!("Dropping outbound stream because we are at capacity")
-        }
+            .ok()
+            .expect("worker_streams at capacity");
     }
 
     fn on_dial_upgrade_error(
@@ -350,6 +372,7 @@ pub struct OutboundMessage<TCodec: Codec> {
     pub(crate) request_id: OutboundRequestId,
     pub(crate) request: TCodec::Request,
     pub(crate) protocols: SmallVec<[TCodec::Protocol; 2]>,
+    pub(crate) time: Instant,
 }
 
 impl<TCodec> fmt::Debug for OutboundMessage<TCodec>
@@ -441,20 +464,29 @@ where
             }));
         }
 
-        // Emit outbound requests.
-        if let Some(request) = self.pending_outbound.pop_front() {
-            let protocols = request.protocols.clone();
-            self.requested_outbound.push_back(request);
+        // Emit outbound requests if we are not at capacity.
+        if self.worker_streams.len() < self.max_concurrent_streams {
+            if let Some(request) = self.pending_outbound.pop_front() {
+                // If timeout is already reached then there is no need to proceed further.
+                if request.time.elapsed() >= self.request_timeout {
+                    return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(
+                        Event::OutboundTimeout(request.request_id),
+                    ));
+                }
 
-            return Poll::Ready(ConnectionHandlerEvent::OutboundSubstreamRequest {
-                protocol: SubstreamProtocol::new(Protocol { protocols }, ()),
-            });
-        }
+                let protocols = request.protocols.clone();
+                self.requested_outbound.push_back(request);
 
-        debug_assert!(self.pending_outbound.is_empty());
+                return Poll::Ready(ConnectionHandlerEvent::OutboundSubstreamRequest {
+                    protocol: SubstreamProtocol::new(Protocol { protocols }, ()),
+                });
+            }
 
-        if self.pending_outbound.capacity() > EMPTY_QUEUE_SHRINK_THRESHOLD {
-            self.pending_outbound.shrink_to_fit();
+            debug_assert!(self.pending_outbound.is_empty());
+
+            if self.pending_outbound.capacity() > EMPTY_QUEUE_SHRINK_THRESHOLD {
+                self.pending_outbound.shrink_to_fit();
+            }
         }
 
         Poll::Pending
