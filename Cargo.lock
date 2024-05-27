@@ -4663,9 +4663,9 @@ dependencies = [
 
 [[package]]
 name = "quinn"
-version = "0.11.0"
+version = "0.11.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4bb80dc034523335a9fcc34271931dd97e9132d1fb078695db500339eb72e712"
+checksum = "904e3d3ba178131798c6d9375db2b13b34337d489b089fc5ba0825a2ff1bee73"
 dependencies = [
  "async-io 2.3.2",
  "async-std",
@@ -4683,9 +4683,9 @@ dependencies = [
 
 [[package]]
 name = "quinn-proto"
-version = "0.11.1"
+version = "0.11.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a063a47a1aaee4b3b1c2dd44edb7867c10107a2ef171f3543ac40ec5e9092002"
+checksum = "e974563a4b1c2206bbc61191ca4da9c22e4308b4c455e8906751cc7828393f08"
 dependencies = [
  "bytes",
  "rand 0.8.5",
