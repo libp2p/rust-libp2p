@@ -15,7 +15,7 @@ either = "1.11.0"
 fnv = "1.0"
 futures = { workspace = true }
 futures-timer = "3.0.3"
-getrandom = { version = "0.2.14", features = ["js"], optional = true } # Explicit dependency to be used in `wasm-bindgen` feature
+getrandom = { version = "0.2.15", features = ["js"], optional = true } # Explicit dependency to be used in `wasm-bindgen` feature
 web-time = { workspace = true }
 libp2p-core = { workspace = true }
 libp2p-identity = { workspace = true }
