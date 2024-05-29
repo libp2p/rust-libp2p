@@ -2,8 +2,8 @@
 FROM rust:1.75.0 as chef
 RUN rustup target add wasm32-unknown-unknown
 RUN wget -q -O- https://github.com/rustwasm/wasm-pack/releases/download/v0.12.1/wasm-pack-v0.12.1-x86_64-unknown-linux-musl.tar.gz | tar -zx -C /usr/local/bin --strip-components 1 --wildcards "wasm-pack-*/wasm-pack"
-RUN wget -q -O- https://github.com/WebAssembly/binaryen/releases/download/version_115/binaryen-version_115-x86_64-linux.tar.gz | tar -zx -C /usr/local/bin --strip-components 2 --wildcards "binaryen-version_*/bin/wasm-opt"
-RUN wget -q -O- https://github.com/LukeMathWalker/cargo-chef/releases/download/v0.1.62/cargo-chef-x86_64-unknown-linux-gnu.tar.gz | tar -zx -C /usr/local/bin
+RUN wget -q -O- https://github.com/WebAssembly/binaryen/releases/download/version_117/binaryen-version_117-x86_64-linux.tar.gz | tar -zx -C /usr/local/bin --strip-components 2 --wildcards "binaryen-version_*/bin/wasm-opt"
+RUN wget -q -O- https://github.com/LukeMathWalker/cargo-chef/releases/download/v0.1.67/cargo-chef-x86_64-unknown-linux-gnu.tar.gz | tar -zx -C /usr/local/bin
 WORKDIR /app
 
 FROM chef AS planner
@@ -20,7 +20,7 @@ COPY . .
 RUN wasm-pack build --target web interop-tests
 RUN RUSTFLAGS='-C target-feature=+crt-static' cargo build --release --package interop-tests --target x86_64-unknown-linux-gnu --bin wasm_ping
 
-FROM selenium/standalone-chrome:115.0
+FROM selenium/standalone-chrome:125.0
 COPY --from=builder /app/target/x86_64-unknown-linux-gnu/release/wasm_ping /usr/local/bin/testplan
 ENV RUST_BACKTRACE=1
 ENTRYPOINT ["testplan"]
