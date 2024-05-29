@@ -22,7 +22,7 @@ either = "1.12"
 fnv = "1.0.7"
 futures = { workspace = true }
 futures-ticker = "0.0.3"
-getrandom = "0.2.14"
+getrandom = "0.2.15"
 hex_fmt = "0.3.0"
 instant = "0.1.13"
 libp2p-core = { workspace = true }
