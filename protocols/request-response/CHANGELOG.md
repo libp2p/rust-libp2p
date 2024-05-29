@@ -1,6 +1,6 @@
-## 0.27.0
+## 0.26.3
 
-- Report outbound failure when max concurrent streams is reached.
+- Report failure when streams are at capacity.
   See [PR 5417](https://github.com/libp2p/rust-libp2p/pull/5417).
 
 ## 0.26.2

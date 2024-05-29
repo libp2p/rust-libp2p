@@ -187,7 +187,7 @@ async fn report_outbound_failure_on_max_streams() {
         wait_no_events(&mut swarm1).await;
     };
 
-    // Expects OutboundFailure::MaxStreamsReached failure
+    // Expects OutboundFailure::Io failure
     let swarm2_task = async move {
         let (peer, _inbound_req_id, action, _resp_channel) =
             wait_request(&mut swarm2).await.unwrap();
@@ -205,7 +205,7 @@ async fn report_outbound_failure_on_max_streams() {
         let (peer, req_id_done, error) = wait_outbound_failure(&mut swarm2).await.unwrap();
         assert_eq!(peer, peer1_id);
         assert_eq!(req_id_done, outbound_req_id);
-        assert!(matches!(error, OutboundFailure::MaxStreamsReached));
+        assert!(matches!(error, OutboundFailure::Io(_)));
     };
 
     let swarm1_task = pin!(swarm1_task);
