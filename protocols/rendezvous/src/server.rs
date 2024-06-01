@@ -442,7 +442,7 @@ impl Registrations {
         match (discover_namespace.as_ref(), cookie_namespace) {
             // discover all namespace but cookie is specific to a namespace? => bad
             (None, Some(_)) => return Err(CookieNamespaceMismatch),
-            // discover for a namespace but cookie is for a different namesapce? => bad
+            // discover for a namespace but cookie is for a different namespace? => bad
             (Some(namespace), Some(cookie_namespace)) if namespace != cookie_namespace => {
                 return Err(CookieNamespaceMismatch)
             }

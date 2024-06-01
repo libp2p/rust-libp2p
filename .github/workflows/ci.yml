@@ -36,7 +36,7 @@ jobs:
         with:
           fetch-depth: 0
 
-      - uses: r7kamura/rust-problem-matchers@2c2f1016021a7455a6b5b4bbae31145f3b3cd83a #v1.4.0
+      - uses: r7kamura/rust-problem-matchers@9fe7ca9f6550e5d6358e179d451cc25ea6b54f98 #v1.5.0
 
       - uses: dtolnay/rust-toolchain@stable
 
@@ -107,8 +107,6 @@ jobs:
   wasm_tests:
     name: Run all WASM tests
     runs-on: ubuntu-latest
-    env:
-      CHROMEDRIVER_VERSION: '114.0.5735.90'
     steps:
       - uses: actions/checkout@v4
 
@@ -120,15 +118,8 @@ jobs:
         with:
           tool: wasm-pack@0.12.0
 
-      - name: Install Google Chrome
-        run: |
-          curl -o /tmp/google-chrome-stable_amd64.deb https://dl.google.com/linux/chrome/deb/pool/main/g/google-chrome-stable/google-chrome-stable_${CHROMEDRIVER_VERSION}-1_amd64.deb
-          sudo dpkg -i /tmp/google-chrome-stable_amd64.deb
-
       - name: Install chromedriver
         uses: nanasess/setup-chromedriver@v2
-        with:
-          chromedriver-version: ${{ env.CHROMEDRIVER_VERSION }}
 
       - name: Run all tests
         run: ./wasm-tests/run-all.sh
@@ -156,7 +147,7 @@ jobs:
         with:
           target: ${{ matrix.target }}
 
-      - uses: r7kamura/rust-problem-matchers@2c2f1016021a7455a6b5b4bbae31145f3b3cd83a #v1.4.0
+      - uses: r7kamura/rust-problem-matchers@9fe7ca9f6550e5d6358e179d451cc25ea6b54f98 #v1.5.0
 
       - uses: Swatinem/rust-cache@23bce251a8cd2ffc3c1075eaa2367cf899916d84 # v2.7.3
         with:
@@ -181,7 +172,7 @@ jobs:
         with:
           toolchain: ${{ env.MSRV }}
 
-      - uses: r7kamura/rust-problem-matchers@2c2f1016021a7455a6b5b4bbae31145f3b3cd83a #v1.4.0
+      - uses: r7kamura/rust-problem-matchers@9fe7ca9f6550e5d6358e179d451cc25ea6b54f98 #v1.5.0
 
       - uses: Swatinem/rust-cache@23bce251a8cd2ffc3c1075eaa2367cf899916d84 # v2.7.3
         with:
@@ -202,7 +193,7 @@ jobs:
 
       - uses: dtolnay/rust-toolchain@stable
 
-      - uses: r7kamura/rust-problem-matchers@2c2f1016021a7455a6b5b4bbae31145f3b3cd83a #v1.4.0
+      - uses: r7kamura/rust-problem-matchers@9fe7ca9f6550e5d6358e179d451cc25ea6b54f98 #v1.5.0
 
       - uses: Swatinem/rust-cache@23bce251a8cd2ffc3c1075eaa2367cf899916d84 # v2.7.3
         with:
@@ -219,7 +210,7 @@ jobs:
 
       - uses: dtolnay/rust-toolchain@stable
 
-      - uses: r7kamura/rust-problem-matchers@2c2f1016021a7455a6b5b4bbae31145f3b3cd83a #v1.4.0
+      - uses: r7kamura/rust-problem-matchers@9fe7ca9f6550e5d6358e179d451cc25ea6b54f98 #v1.5.0
 
       - uses: Swatinem/rust-cache@23bce251a8cd2ffc3c1075eaa2367cf899916d84 # v2.7.3
         with:
@@ -234,7 +225,7 @@ jobs:
       fail-fast: false
       matrix:
         rust-version: [
-          1.77.0, # current stable
+          1.78.0, # current stable
           beta,
         ]
     steps:
@@ -245,7 +236,7 @@ jobs:
           toolchain: ${{ matrix.rust-version }}
           components: clippy
 
-      - uses: r7kamura/rust-problem-matchers@2c2f1016021a7455a6b5b4bbae31145f3b3cd83a #v1.4.0
+      - uses: r7kamura/rust-problem-matchers@9fe7ca9f6550e5d6358e179d451cc25ea6b54f98 #v1.5.0
 
       - uses: Swatinem/rust-cache@23bce251a8cd2ffc3c1075eaa2367cf899916d84 # v2.7.3
         with:
@@ -261,7 +252,7 @@ jobs:
 
       - uses: dtolnay/rust-toolchain@stable
 
-      - uses: r7kamura/rust-problem-matchers@2c2f1016021a7455a6b5b4bbae31145f3b3cd83a #v1.4.0
+      - uses: r7kamura/rust-problem-matchers@9fe7ca9f6550e5d6358e179d451cc25ea6b54f98 #v1.5.0
 
       - uses: Swatinem/rust-cache@23bce251a8cd2ffc3c1075eaa2367cf899916d84 # v2.7.3
         with:
@@ -280,7 +271,7 @@ jobs:
 
       - uses: dtolnay/rust-toolchain@stable
 
-      - uses: r7kamura/rust-problem-matchers@2c2f1016021a7455a6b5b4bbae31145f3b3cd83a #v1.4.0
+      - uses: r7kamura/rust-problem-matchers@9fe7ca9f6550e5d6358e179d451cc25ea6b54f98 #v1.5.0
 
       - uses: Swatinem/rust-cache@23bce251a8cd2ffc3c1075eaa2367cf899916d84 # v2.7.3
         with:
@@ -330,7 +321,7 @@ jobs:
         with:
           components: rustfmt
 
-      - uses: r7kamura/rust-problem-matchers@2c2f1016021a7455a6b5b4bbae31145f3b3cd83a #v1.4.0
+      - uses: r7kamura/rust-problem-matchers@9fe7ca9f6550e5d6358e179d451cc25ea6b54f98 #v1.5.0
 
       - name: Check formatting
         run: cargo fmt -- --check
@@ -342,7 +333,7 @@ jobs:
 
       - uses: dtolnay/rust-toolchain@stable
 
-      - uses: r7kamura/rust-problem-matchers@2c2f1016021a7455a6b5b4bbae31145f3b3cd83a #v1.4.0
+      - uses: r7kamura/rust-problem-matchers@9fe7ca9f6550e5d6358e179d451cc25ea6b54f98 #v1.5.0
 
       - name: Ensure `full` feature contains all features
         run: |
@@ -379,7 +370,7 @@ jobs:
       - run: cargo install --version 0.10.0 pb-rs --locked
 
       - name: Glob match
-        uses: tj-actions/glob@v21
+        uses: tj-actions/glob@v22
         id: glob
         with:
           files: |

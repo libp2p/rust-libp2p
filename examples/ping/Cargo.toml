@@ -9,7 +9,7 @@ license = "MIT"
 release = false
 
 [dependencies]
-futures = "0.3.30"
+futures = { workspace = true }
 libp2p = { path = "../../libp2p", features = ["noise", "ping", "tcp", "tokio", "yamux"] }
 tokio = { workspace = true, features = ["full"] }
 tracing = { workspace = true }
