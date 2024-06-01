@@ -107,8 +107,6 @@ jobs:
   wasm_tests:
     name: Run all WASM tests
     runs-on: ubuntu-latest
-    env:
-      CHROMEDRIVER_VERSION: '114.0.5735.90'
     steps:
       - uses: actions/checkout@v4
 
@@ -120,15 +118,8 @@ jobs:
         with:
           tool: wasm-pack@0.12.0
 
-      - name: Install Google Chrome
-        run: |
-          curl -o /tmp/google-chrome-stable_amd64.deb https://dl.google.com/linux/chrome/deb/pool/main/g/google-chrome-stable/google-chrome-stable_${CHROMEDRIVER_VERSION}-1_amd64.deb
-          sudo dpkg -i /tmp/google-chrome-stable_amd64.deb
-
       - name: Install chromedriver
         uses: nanasess/setup-chromedriver@v2
-        with:
-          chromedriver-version: ${{ env.CHROMEDRIVER_VERSION }}
 
       - name: Run all tests
         run: ./wasm-tests/run-all.sh
