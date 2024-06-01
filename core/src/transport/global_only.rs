@@ -314,10 +314,6 @@ impl<T: crate::Transport + Unpin> crate::Transport for Transport<T> {
         }
     }
 
-    fn address_translation(&self, listen: &Multiaddr, observed: &Multiaddr) -> Option<Multiaddr> {
-        self.inner.address_translation(listen, observed)
-    }
-
     fn poll(
         mut self: Pin<&mut Self>,
         cx: &mut Context<'_>,

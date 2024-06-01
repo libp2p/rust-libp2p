@@ -175,24 +175,6 @@ pub trait Transport {
         cx: &mut Context<'_>,
     ) -> Poll<TransportEvent<Self::ListenerUpgrade, Self::Error>>;
 
-    /// Performs a transport-specific mapping of an address `observed` by a remote onto a
-    /// local `listen` address to yield an address for the local node that may be reachable
-    /// for other peers.
-    ///
-    /// This is relevant for transports where Network Address Translation (NAT) can occur
-    /// so that e.g. the peer is observed at a different IP than the IP of the local
-    /// listening address. See also [`address_translation`][crate::address_translation].
-    ///
-    /// Within [`libp2p::Swarm`](<https://docs.rs/libp2p/latest/libp2p/struct.Swarm.html>) this is
-    /// used when extending the listening addresses of the local peer with external addresses
-    /// observed by remote peers.
-    /// On transports where this is not relevant (i.e. no NATs are present) `None` should be
-    /// returned for the sake of de-duplication.
-    ///
-    /// Note: if the listen or observed address is not a valid address of this transport,
-    /// `None` should be returned as well.
-    fn address_translation(&self, listen: &Multiaddr, observed: &Multiaddr) -> Option<Multiaddr>;
-
     /// Boxes the transport, including custom transport errors.
     fn boxed(self) -> boxed::Boxed<Self::Output>
     where

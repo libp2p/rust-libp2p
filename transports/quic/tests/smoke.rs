@@ -117,14 +117,6 @@ async fn wrapped_with_delay() {
             self.0.lock().unwrap().remove_listener(id)
         }
 
-        fn address_translation(
-            &self,
-            listen: &Multiaddr,
-            observed: &Multiaddr,
-        ) -> Option<Multiaddr> {
-            self.0.lock().unwrap().address_translation(listen, observed)
-        }
-
         /// Delayed dial, i.e. calling [`Transport::dial`] on the inner [`Transport`] not within the
         /// synchronous [`Transport::dial`] method, but within the [`Future`] returned by the outer
         /// [`Transport::dial`].

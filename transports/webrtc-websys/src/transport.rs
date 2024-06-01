@@ -104,10 +104,6 @@ impl libp2p_core::Transport for Transport {
     ) -> Poll<TransportEvent<Self::ListenerUpgrade, Self::Error>> {
         Poll::Pending
     }
-
-    fn address_translation(&self, _listen: &Multiaddr, _observed: &Multiaddr) -> Option<Multiaddr> {
-        None
-    }
 }
 
 /// Checks if local Firefox.

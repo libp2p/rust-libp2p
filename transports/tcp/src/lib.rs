@@ -40,18 +40,17 @@ use futures::{future::Ready, prelude::*, stream::SelectAll};
 use futures_timer::Delay;
 use if_watch::IfEvent;
 use libp2p_core::{
-    address_translation,
     multiaddr::{Multiaddr, Protocol},
     transport::{DialOpts, ListenerId, PortUse, TransportError, TransportEvent},
 };
 use provider::{Incoming, Provider};
 use socket2::{Domain, Socket, Type};
 use std::{
-    collections::{HashMap, HashSet, VecDeque},
+    collections::{HashSet, VecDeque},
     io,
     net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr, TcpListener},
     pin::Pin,
-    sync::{Arc, Mutex, RwLock},
+    sync::{Arc, RwLock},
     task::{Context, Poll, Waker},
     time::Duration,
 };
@@ -75,8 +74,6 @@ struct PortReuse {
     /// The addresses and ports of the listening sockets
     /// registered as eligible for port reuse when dialing
     listen_addrs: Arc<RwLock<HashSet<(IpAddr, Port)>>>,
-    /// Contains a hashset of all multiaddr that where dialed from a reused port.
-    addr_dialed_from_reuse_poralways_reused_port: Arc<Mutex<HashMap<SocketAddr, bool>>>,
 }
 
 impl PortReuse {
@@ -128,27 +125,6 @@ impl PortReuse {
         }
 
         None
-    }
-
-    fn dialed_from_reuse_port(&self, addr: SocketAddr) {
-        self.addr_dialed_from_reuse_poralways_reused_port
-            .lock()
-            .expect("`dialed_as_listener` never panic while holding the lock")
-            .entry(addr)
-            .or_insert(true);
-    }
-
-    fn was_dialed_from_reuse_port(&self, addr: &Multiaddr) -> bool {
-        if let Ok(socket_addr) = multiaddr_to_socketaddr(addr.clone()) {
-            *self
-                .addr_dialed_from_reuse_poralways_reused_port
-                .lock()
-                .expect("`already_dialed_as_listener` never panic while holding the lock")
-                .entry(socket_addr)
-                .or_insert(false)
-        } else {
-            false
-        }
     }
 }
 
@@ -398,7 +374,6 @@ where
                 socket
                     .bind(&socket_addr.into())
                     .map_err(TransportError::Other)?;
-                self.port_reuse.dialed_from_reuse_port(socket_addr);
             }
             _ => {}
         }
@@ -421,34 +396,6 @@ where
             Ok(stream)
         }
         .boxed())
-    }
-
-    /// When port reuse is disabled and hence ephemeral local ports are
-    /// used for outgoing connections, the returned address is the
-    /// `observed` address with the port replaced by the port of the
-    /// `listen` address.
-    ///
-    /// If port reuse is enabled, `Some(observed)` is returned, as there
-    /// is a chance that the `observed` address _and_ port are reachable
-    /// for other peers if there is a NAT in the way that does endpoint-
-    /// independent filtering. Furthermore, even if that is not the case
-    /// and TCP hole punching techniques must be used for NAT traversal,
-    /// the `observed` address is still the one that a remote should connect
-    /// to for the purpose of the hole punching procedure, as it represents
-    /// the mapped IP and port of the NAT device in front of the local
-    /// node.
-    ///
-    /// `None` is returned if one of the given addresses is not a TCP/IP
-    /// address.
-    fn address_translation(&self, listen: &Multiaddr, observed: &Multiaddr) -> Option<Multiaddr> {
-        if !is_tcp_addr(listen) || !is_tcp_addr(observed) {
-            return None;
-        }
-        if self.port_reuse.was_dialed_from_reuse_port(listen) {
-            return Some(observed.clone());
-        }
-
-        address_translation(listen, observed)
     }
 
     /// Poll all listeners.
@@ -738,23 +685,6 @@ fn multiaddr_to_socketaddr(mut addr: Multiaddr) -> Result<SocketAddr, ()> {
 // Create a [`Multiaddr`] from the given IP address and port number.
 fn ip_to_multiaddr(ip: IpAddr, port: u16) -> Multiaddr {
     Multiaddr::empty().with(ip.into()).with(Protocol::Tcp(port))
-}
-
-fn is_tcp_addr(addr: &Multiaddr) -> bool {
-    use Protocol::*;
-
-    let mut iter = addr.iter();
-
-    let first = match iter.next() {
-        None => return false,
-        Some(p) => p,
-    };
-    let second = match iter.next() {
-        None => return false,
-        Some(p) => p,
-    };
-
-    matches!(first, Ip4(_) | Ip6(_) | Dns(_) | Dns4(_) | Dns6(_)) && matches!(second, Tcp(_))
 }
 
 #[cfg(test)]
@@ -1223,43 +1153,6 @@ mod tests {
     #[test]
     fn test_address_translation_tokio() {
         test_address_translation::<tokio::Transport>()
-    }
-
-    fn test_address_translation<T>()
-    where
-        T: Default + libp2p_core::Transport,
-    {
-        let transport = T::default();
-
-        let port = 42;
-        let tcp_listen_addr = Multiaddr::empty()
-            .with(Protocol::Ip4(Ipv4Addr::new(127, 0, 0, 1)))
-            .with(Protocol::Tcp(port));
-        let observed_ip = Ipv4Addr::new(123, 45, 67, 8);
-        let tcp_observed_addr = Multiaddr::empty()
-            .with(Protocol::Ip4(observed_ip))
-            .with(Protocol::Tcp(1))
-            .with(Protocol::P2p(PeerId::random()));
-
-        let translated = transport
-            .address_translation(&tcp_listen_addr, &tcp_observed_addr)
-            .unwrap();
-        let mut iter = translated.iter();
-        assert_eq!(iter.next(), Some(Protocol::Ip4(observed_ip)));
-        assert_eq!(iter.next(), Some(Protocol::Tcp(port)));
-        assert_eq!(iter.next(), None);
-
-        let quic_addr = Multiaddr::empty()
-            .with(Protocol::Ip4(Ipv4Addr::new(87, 65, 43, 21)))
-            .with(Protocol::Udp(1))
-            .with(Protocol::QuicV1);
-
-        assert!(transport
-            .address_translation(&tcp_listen_addr, &quic_addr)
-            .is_none());
-        assert!(transport
-            .address_translation(&quic_addr, &tcp_observed_addr)
-            .is_none());
     }
 
     #[test]

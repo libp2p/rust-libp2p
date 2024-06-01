@@ -116,10 +116,6 @@ impl libp2p_core::Transport for Transport {
     ) -> std::task::Poll<TransportEvent<Self::ListenerUpgrade, Self::Error>> {
         Poll::Pending
     }
-
-    fn address_translation(&self, _listen: &Multiaddr, _observed: &Multiaddr) -> Option<Multiaddr> {
-        None
-    }
 }
 
 // Try to convert Multiaddr to a Websocket url.

@@ -92,10 +92,6 @@ where
         Ok(future)
     }
 
-    fn address_translation(&self, server: &Multiaddr, observed: &Multiaddr) -> Option<Multiaddr> {
-        self.transport.address_translation(server, observed)
-    }
-
     fn poll(
         self: Pin<&mut Self>,
         cx: &mut Context<'_>,
