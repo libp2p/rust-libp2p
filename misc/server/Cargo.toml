@@ -18,7 +18,7 @@ futures-timer = "3"
 axum = "0.7"
 libp2p = { workspace = true, features = ["autonat", "dns", "tokio", "noise", "tcp", "yamux", "identify", "kad", "ping", "relay", "metrics", "rsa", "macros", "quic", "websocket"] }
 prometheus-client = { workspace = true }
-serde = "1.0.198"
+serde = "1.0.202"
 serde_derive = "1.0.125"
 serde_json = "1.0"
 tokio = { workspace = true, features = ["rt-multi-thread", "macros"] }
