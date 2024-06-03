@@ -11,7 +11,7 @@ keywords = ["peer-to-peer", "libp2p", "networking"]
 categories = ["network-programming", "asynchronous"]
 
 [dependencies]
-async-io = { version = "2.3.2", optional = true }
+async-io = { version = "2.3.3", optional = true }
 futures = { workspace = true }
 futures-timer = "3.0"
 if-watch = "3.2.0"
