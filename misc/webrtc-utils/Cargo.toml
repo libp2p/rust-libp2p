@@ -7,7 +7,7 @@ license = "MIT"
 name = "libp2p-webrtc-utils"
 repository = "https://github.com/libp2p/rust-libp2p"
 rust-version = { workspace = true }
-version = "0.2.0"
+version = "0.3.0"
 publish = true
 
 [dependencies]
