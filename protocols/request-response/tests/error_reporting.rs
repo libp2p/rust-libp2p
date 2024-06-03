@@ -167,7 +167,7 @@ async fn report_outbound_failure_on_max_streams() {
         .with_env_filter(EnvFilter::from_default_env())
         .try_init();
 
-    // `swarm2` will be able to handle only 1 stream per time
+    // `swarm2` will be able to handle only 1 stream per time.
     let swarm2_config = request_response::Config::default()
         .with_request_timeout(Duration::from_millis(100))
         .with_max_concurrent_streams(1);
@@ -183,11 +183,11 @@ async fn report_outbound_failure_on_max_streams() {
             .behaviour_mut()
             .send_request(&peer2_id, Action::FailOnMaxStreams);
 
-        // Keep the connection alive, otherwise swarm2 may receive `ConnectionClosed` instead
+        // Keep the connection alive, otherwise swarm2 may receive `ConnectionClosed` instead.
         wait_no_events(&mut swarm1).await;
     };
 
-    // Expects OutboundFailure::Io failure
+    // Expects OutboundFailure::Io failure.
     let swarm2_task = async move {
         let (peer, _inbound_req_id, action, _resp_channel) =
             wait_request(&mut swarm2).await.unwrap();
