@@ -19,8 +19,8 @@ ping = ["libp2p-ping"]
 relay = ["libp2p-relay"]
 
 [dependencies]
-futures = "0.3.30"
-instant = "0.1.12"
+futures = { workspace = true }
+instant = "0.1.13"
 libp2p-core = { workspace = true }
 libp2p-dcutr =  { workspace = true, optional = true }
 libp2p-gossipsub =  { workspace = true, optional = true }
@@ -30,7 +30,7 @@ libp2p-kad = { workspace = true, optional = true }
 libp2p-ping = { workspace = true, optional = true }
 libp2p-relay =  { workspace = true, optional = true }
 libp2p-swarm = { workspace = true }
-pin-project = "1.1.4"
+pin-project = "1.1.5"
 prometheus-client = { workspace = true }
 
 [dev-dependencies]

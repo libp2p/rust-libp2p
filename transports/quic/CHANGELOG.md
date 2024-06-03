@@ -1,3 +1,11 @@
+## 0.10.3
+
+- Update `quinn` to 0.11 and `libp2p-tls` to 0.4.0.
+  See [PR 5316](https://github.com/libp2p/rust-libp2p/pull/5316)
+
+- Allow configuring MTU discovery upper bound.
+  See [PR 5386](https://github.com/libp2p/rust-libp2p/pull/5386).
+
 ## 0.10.2
 
 - Change `max_idle_timeout`to 10s.

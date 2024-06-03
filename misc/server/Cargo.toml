@@ -1,6 +1,6 @@
 [package]
 name = "libp2p-server"
-version = "0.12.6"
+version = "0.12.7"
 authors = ["Max Inden <mail@max-inden.de>"]
 edition = "2021"
 repository = "https://github.com/libp2p/rust-libp2p"
@@ -11,18 +11,18 @@ license = "MIT"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-base64 = "0.21"
-clap = { version = "4.4.16", features = ["derive"] }
-futures = "0.3"
+base64 = "0.22"
+clap = { version = "4.5.4", features = ["derive"] }
+futures = { workspace = true }
 futures-timer = "3"
-hyper = { version = "0.14", features = ["server", "tcp", "http1"] }
+axum = "0.7"
 libp2p = { workspace = true, features = ["autonat", "dns", "tokio", "noise", "tcp", "yamux", "identify", "kad", "ping", "relay", "metrics", "rsa", "macros", "quic", "websocket"] }
 prometheus-client = { workspace = true }
-serde = "1.0.197"
+serde = "1.0.203"
 serde_derive = "1.0.125"
 serde_json = "1.0"
-tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
-tracing = "0.1.37"
+tokio = { workspace = true, features = ["rt-multi-thread", "macros"] }
+tracing = { workspace = true }
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 zeroize = "1"
 

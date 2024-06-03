@@ -37,7 +37,7 @@ use libp2p_core::Multiaddr;
 use libp2p_identity::PeerId;
 use libp2p_swarm::StreamProtocol;
 use std::marker::PhantomData;
-use std::{convert::TryFrom, time::Duration};
+use std::time::Duration;
 use std::{io, iter};
 use tracing::debug;
 

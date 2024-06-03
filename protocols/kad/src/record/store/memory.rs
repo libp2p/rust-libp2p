@@ -21,9 +21,7 @@
 use super::*;
 
 use crate::kbucket;
-use libp2p_identity::PeerId;
 use smallvec::SmallVec;
-use std::borrow::Cow;
 use std::collections::{hash_map, hash_set, HashMap, HashSet};
 use std::iter;
 
@@ -159,7 +157,7 @@ impl RecordStore for MemoryStore {
             providers.as_mut()[i] = record;
         } else {
             // It is a new provider record for that key.
-            let local_key = self.local_key.clone();
+            let local_key = self.local_key;
             let key = kbucket::Key::new(record.key.clone());
             let provider = kbucket::Key::from(record.provider);
             if let Some(i) = providers.iter().position(|p| {
@@ -217,7 +215,6 @@ impl RecordStore for MemoryStore {
 mod tests {
     use super::*;
     use crate::SHA_256_MH;
-    use libp2p_core::multihash::Multihash;
     use quickcheck::*;
     use rand::Rng;
 
