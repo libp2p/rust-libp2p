@@ -431,7 +431,7 @@ struct Listener<P: Provider> {
     socket: UdpSocket,
 
     /// A future to poll new incoming connections.
-    accept: BoxFuture<'static, Option<quinn::Connecting>>,
+    accept: BoxFuture<'static, Option<quinn::Incoming>>,
     /// Timeout for connection establishment on inbound connections.
     handshake_timeout: Duration,
 
@@ -589,9 +589,19 @@ impl<P: Provider> Stream for Listener<P> {
             }
 
             match self.accept.poll_unpin(cx) {
-                Poll::Ready(Some(connecting)) => {
+                Poll::Ready(Some(incoming)) => {
                     let endpoint = self.endpoint.clone();
                     self.accept = async move { endpoint.accept().await }.boxed();
+
+                    let connecting = match incoming.accept() {
+                        Ok(connecting) => connecting,
+                        Err(error) => {
+                            return Poll::Ready(Some(TransportEvent::ListenerError {
+                                listener_id: self.listener_id,
+                                error: Error::Connection(crate::ConnectionError(error)),
+                            }))
+                        }
+                    };
 
                     let local_addr = socketaddr_to_multiaddr(&self.socket_addr(), self.version);
                     let remote_addr = connecting.remote_address();
