@@ -1,3 +1,8 @@
+## 0.27.0 -- unreleased
+
+- Implement refactored `Transport`.
+  See [PR 4568](https://github.com/libp2p/rust-libp2p/pull/4568)
+
 ## 0.26.3
 
 - Report failure when streams are at capacity.

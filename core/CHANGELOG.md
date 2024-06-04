@@ -1,4 +1,4 @@
-## 0.42.0
+## 0.42.0 -- unreleased
 
 - Refactor `Transport` to allow the behaviour to tell the implementor of `Transport` to reuse an
 existing port or a new one.

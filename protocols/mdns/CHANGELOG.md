@@ -1,3 +1,8 @@
+## 0.46.0 -- unreleased
+
+- Implement refactored `Transport`.
+  See [PR 4568](https://github.com/libp2p/rust-libp2p/pull/4568)
+
 ## 0.45.1
 
 - Ensure `Multiaddr` handled and returned by `Behaviour` are `/p2p` terminated.

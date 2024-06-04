@@ -17,6 +17,8 @@
   See [PR 5148](https://github.com/libp2p/rust-libp2p/pull/5148).
 - Derive `Copy` for `kbucket::key::Key<T>`.
   See [PR 5317](https://github.com/libp2p/rust-libp2p/pull/5317).
+- Implement refactored `Transport`.
+  See [PR 4568](https://github.com/libp2p/rust-libp2p/pull/4568)
 
 ## 0.45.3
 

@@ -1,3 +1,8 @@
+## 0.4.0 -- unreleased
+
+- Implement refactored `Transport`.
+  See [PR 4568](https://github.com/libp2p/rust-libp2p/pull/4568)
+
 ## 0.3.0
 
 - Continuously measure on single connection (iperf-style).

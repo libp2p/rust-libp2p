@@ -1,3 +1,12 @@
+## 0.45.0 -- unreleased
+
+- Implement refactored `Transport`.
+  See [PR 4568]
+- Move `address_translation` into swarm.
+  See [PR 4568]
+
+[PR 4568]: https://github.com/libp2p/rust-libp2p/pull/4568
+
 ## 0.44.2
 
 - Allow `NetworkBehaviour`s to share addresses of peers.
