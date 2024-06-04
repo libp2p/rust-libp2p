@@ -280,11 +280,11 @@ impl Behaviour {
                     .listen_addresses
                     .iter()
                     .filter_map(|server| {
-                        if (is_tcp_addr(server) && is_tcp_addr(&observed))
-                            || (is_quic_addr(server, true) && is_quic_addr(&observed, true))
-                            || (is_quic_addr(server, false) && is_quic_addr(&observed, false))
+                        if (is_tcp_addr(server) && is_tcp_addr(observed))
+                            || (is_quic_addr(server, true) && is_quic_addr(observed, true))
+                            || (is_quic_addr(server, false) && is_quic_addr(observed, false))
                         {
-                            address_translation(server, &observed)
+                            address_translation(server, observed)
                         } else {
                             None
                         }
