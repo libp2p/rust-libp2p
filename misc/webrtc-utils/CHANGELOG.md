@@ -1,4 +1,4 @@
-## 0.3.0
+## 0.2.1
 
 - Fix end of stream handling when buffer is empty or not present.
   See [PR 5439](https://github.com/libp2p/rust-libp2p/pull/5439).
