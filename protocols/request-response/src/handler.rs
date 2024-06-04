@@ -242,11 +242,10 @@ where
             }
             StreamUpgradeError::Apply(e) => void::unreachable(e),
             StreamUpgradeError::Io(e) => {
-                tracing::debug!(
-                    "outbound stream for request {} failed: {e}, retrying",
-                    message.request_id
-                );
-                self.requested_outbound.push_back(message);
+                self.pending_events.push_back(Event::OutboundStreamFailed {
+                    request_id: message.request_id,
+                    error: e,
+                });
             }
         }
     }
