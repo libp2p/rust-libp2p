@@ -159,6 +159,9 @@ where
             }
         };
 
+        // Inbound connections are reported to the upper layer from within the above task,
+        // so by failing to schedule it, it means the upper layer will never know about the
+        // inbound request. Because of that we do not report any inbound failure.
         if self
             .worker_streams
             .try_push(RequestId::Inbound(request_id), recv.boxed())
@@ -204,7 +207,10 @@ where
             .try_push(RequestId::Outbound(request_id), send.boxed())
             .is_err()
         {
-            tracing::warn!("Dropping outbound stream because we are at capacity")
+            self.pending_events.push_back(Event::OutboundStreamFailed {
+                request_id: message.request_id,
+                error: io::Error::new(io::ErrorKind::Other, "max sub-streams reached"),
+            });
         }
     }
 
