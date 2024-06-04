@@ -696,7 +696,6 @@ mod tests {
     };
     use libp2p_core::Endpoint;
     use libp2p_core::Transport as _;
-    use libp2p_identity::PeerId;
 
     #[test]
     fn multiaddr_to_tcp_conversion() {
@@ -1141,18 +1140,6 @@ mod tests {
         }
 
         test("/ip4/127.0.0.1/tcp/12345/tcp/12345".parse().unwrap());
-    }
-
-    #[cfg(feature = "async-io")]
-    #[test]
-    fn test_address_translation_async_io() {
-        test_address_translation::<async_io::Transport>()
-    }
-
-    #[cfg(feature = "tokio")]
-    #[test]
-    fn test_address_translation_tokio() {
-        test_address_translation::<tokio::Transport>()
     }
 
     #[test]
