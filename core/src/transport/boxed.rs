@@ -63,7 +63,6 @@ trait Abstract<O> {
         addr: Multiaddr,
         opts: DialOpts,
     ) -> Result<Dial<O>, TransportError<io::Error>>;
-    fn address_translation(&self, server: &Multiaddr, observed: &Multiaddr) -> Option<Multiaddr>;
     fn poll(
         self: Pin<&mut Self>,
         cx: &mut Context<'_>,
@@ -98,10 +97,6 @@ where
             .map(|r| r.map_err(box_err))
             .map_err(|e| e.map(box_err))?;
         Ok(Box::pin(fut) as Dial<_>)
-    }
-
-    fn address_translation(&self, server: &Multiaddr, observed: &Multiaddr) -> Option<Multiaddr> {
-        Transport::address_translation(self, server, observed)
     }
 
     fn poll(
@@ -149,10 +144,6 @@ impl<O> Transport for Boxed<O> {
         opts: DialOpts,
     ) -> Result<Self::Dial, TransportError<Self::Error>> {
         self.inner.dial(addr, opts)
-    }
-
-    fn address_translation(&self, server: &Multiaddr, observed: &Multiaddr) -> Option<Multiaddr> {
-        self.inner.address_translation(server, observed)
     }
 
     fn poll(

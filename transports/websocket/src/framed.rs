@@ -156,10 +156,6 @@ where
         self.do_dial(addr, dial_opts)
     }
 
-    fn address_translation(&self, server: &Multiaddr, observed: &Multiaddr) -> Option<Multiaddr> {
-        self.transport.lock().address_translation(server, observed)
-    }
-
     fn poll(
         mut self: Pin<&mut Self>,
         cx: &mut Context<'_>,
@@ -505,7 +501,7 @@ fn parse_ws_dial_addr<T>(addr: Multiaddr) -> Result<WsAddress, Error<T>> {
             Some(Protocol::Ws(path)) => break (false, path.into_owned()),
             Some(Protocol::Wss(path)) => {
                 if dns_name.is_none() {
-                    tracing::debug!(addrress=%addr, "Missing DNS name in WSS address");
+                    tracing::debug!(address=%addr, "Missing DNS name in WSS address");
                     return Err(Error::InvalidMultiaddr(addr));
                 }
                 break (true, path.into_owned());

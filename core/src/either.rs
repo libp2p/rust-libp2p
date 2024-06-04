@@ -192,11 +192,4 @@ where
             },
         }
     }
-
-    fn address_translation(&self, server: &Multiaddr, observed: &Multiaddr) -> Option<Multiaddr> {
-        match self {
-            Either::Left(a) => a.address_translation(server, observed),
-            Either::Right(b) => b.address_translation(server, observed),
-        }
-    }
 }

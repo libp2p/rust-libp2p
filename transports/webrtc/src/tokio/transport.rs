@@ -162,10 +162,6 @@ impl libp2p_core::Transport for Transport {
         }
         .boxed())
     }
-
-    fn address_translation(&self, server: &Multiaddr, observed: &Multiaddr) -> Option<Multiaddr> {
-        libp2p_core::address_translation(server, observed)
-    }
 }
 
 /// A stream of incoming connections on one or more interfaces.

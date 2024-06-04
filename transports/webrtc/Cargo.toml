@@ -1,6 +1,6 @@
 [package]
 name = "libp2p-webrtc"
-version = "0.7.1-alpha"
+version = "0.8.0-alpha"
 authors = ["Parity Technologies <admin@parity.io>"]
 description = "WebRTC transport for libp2p"
 repository = "https://github.com/libp2p/rust-libp2p"
@@ -41,7 +41,7 @@ pem = ["webrtc?/pem"]
 libp2p-identity = { workspace = true, features = ["rand"] }
 tokio = { workspace = true, features = ["full"] }
 quickcheck = "1.0.3"
-tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+tracing-subscriber = { workspace = true, features = ["env-filter"] }
 
 
 [[test]]

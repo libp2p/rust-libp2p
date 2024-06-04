@@ -45,8 +45,6 @@ mod proto {
 pub use multiaddr;
 pub type Negotiated<T> = multistream_select::Negotiated<T>;
 
-mod translation;
-
 pub mod connection;
 pub mod either;
 pub mod muxing;
@@ -61,7 +59,6 @@ pub use multihash;
 pub use muxing::StreamMuxer;
 pub use peer_record::PeerRecord;
 pub use signed_envelope::SignedEnvelope;
-pub use translation::address_translation;
 pub use transport::Transport;
 pub use upgrade::{InboundUpgrade, OutboundUpgrade, UpgradeInfo};
 

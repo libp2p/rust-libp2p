@@ -117,14 +117,6 @@ async fn wrapped_with_delay() {
             self.0.lock().unwrap().remove_listener(id)
         }
 
-        fn address_translation(
-            &self,
-            listen: &Multiaddr,
-            observed: &Multiaddr,
-        ) -> Option<Multiaddr> {
-            self.0.lock().unwrap().address_translation(listen, observed)
-        }
-
         /// Delayed dial, i.e. calling [`Transport::dial`] on the inner [`Transport`] not within the
         /// synchronous [`Transport::dial`] method, but within the [`Future`] returned by the outer
         /// [`Transport::dial`].
@@ -434,7 +426,7 @@ async fn write_after_peer_dropped_stream() {
         .try_init();
     let (stream_a, mut stream_b) = build_streams::<quic::async_std::Provider>().await;
     drop(stream_a);
-    futures_timer::Delay::new(Duration::from_millis(1)).await;
+    futures_timer::Delay::new(Duration::from_millis(10)).await;
 
     let data = vec![0; 10];
     stream_b.write_all(&data).await.expect("Write failed.");

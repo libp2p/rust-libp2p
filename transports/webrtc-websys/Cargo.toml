@@ -8,13 +8,13 @@ license = "MIT"
 name = "libp2p-webrtc-websys"
 repository = "https://github.com/libp2p/rust-libp2p"
 rust-version = { workspace = true }
-version = "0.3.0-alpha"
+version = "0.4.0-alpha"
 publish = true
 
 [dependencies]
 bytes = "1"
 futures = { workspace = true }
-getrandom = { version = "0.2.14", features = ["js"] }
+getrandom = { version = "0.2.15", features = ["js"] }
 hex = "0.4.3"
 js-sys = { version = "0.3" }
 libp2p-core = { workspace = true }

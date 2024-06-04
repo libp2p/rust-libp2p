@@ -75,7 +75,7 @@ impl libp2p_core::Transport for Transport {
 
         let endpoint = Endpoint::from_multiaddr(&addr).map_err(|e| match e {
             e @ Error::InvalidMultiaddr(_) => {
-                tracing::warn!("{}", e);
+                tracing::debug!("{}", e);
                 TransportError::MultiaddrNotSupported(addr)
             }
             e => TransportError::Other(e),
@@ -98,9 +98,5 @@ impl libp2p_core::Transport for Transport {
         _cx: &mut Context<'_>,
     ) -> Poll<TransportEvent<Self::ListenerUpgrade, Self::Error>> {
         Poll::Pending
-    }
-
-    fn address_translation(&self, _listen: &Multiaddr, _observed: &Multiaddr) -> Option<Multiaddr> {
-        None
     }
 }

@@ -1,3 +1,8 @@
+## 0.8.0-alpha -- unreleased
+
+- Implement refactored `Transport`.
+  See [PR 4568](https://github.com/libp2p/rust-libp2p/pull/4568)
+
 ## 0.7.1-alpha
 
 - Bump `libp2p-webrtc-utils` dependency to `0.2.0`.

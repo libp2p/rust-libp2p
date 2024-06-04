@@ -2,7 +2,7 @@
 name = "libp2p-mdns"
 edition = "2021"
 rust-version = { workspace = true }
-version = "0.45.1"
+version = "0.46.0"
 description = "Implementation of the libp2p mDNS discovery method"
 authors = ["Parity Technologies <admin@parity.io>"]
 license = "MIT"
@@ -12,7 +12,7 @@ categories = ["network-programming", "asynchronous"]
 
 [dependencies]
 async-std  = { version = "1.12.0", optional = true }
-async-io  = { version = "2.3.2", optional = true }
+async-io  = { version = "2.3.3", optional = true }
 data-encoding = "2.6.0"
 futures = { workspace = true }
 if-watch = "3.2.0"
@@ -21,7 +21,7 @@ libp2p-swarm = { workspace = true }
 libp2p-identity = { workspace = true }
 rand = "0.8.3"
 smallvec = "1.13.2"
-socket2 = { version = "0.5.6", features = ["all"] }
+socket2 = { version = "0.5.7", features = ["all"] }
 tokio = { workspace = true, default-features = false, features = ["net", "time"], optional = true}
 tracing = { workspace = true }
 hickory-proto = { version = "0.24.0", default-features = false, features = ["mdns"] }
@@ -39,7 +39,7 @@ libp2p-tcp = { workspace = true, features = ["tokio", "async-io"] }
 libp2p-yamux = { workspace = true }
 tokio = { workspace = true, features = ["macros", "rt", "rt-multi-thread", "time"] }
 libp2p-swarm-test = { path = "../../swarm-test" }
-tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+tracing-subscriber = { workspace = true, features = ["env-filter"] }
 
 [[test]]
 name = "use-async-std"

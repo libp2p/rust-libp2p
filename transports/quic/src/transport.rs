@@ -249,15 +249,6 @@ impl<P: Provider> Transport for GenTransport<P> {
         }
     }
 
-    fn address_translation(&self, listen: &Multiaddr, observed: &Multiaddr) -> Option<Multiaddr> {
-        if !is_quic_addr(listen, self.support_draft_29)
-            || !is_quic_addr(observed, self.support_draft_29)
-        {
-            return None;
-        }
-        Some(observed.clone())
-    }
-
     fn dial(
         &mut self,
         addr: Multiaddr,
@@ -272,9 +263,9 @@ impl<P: Provider> Transport for GenTransport<P> {
                     None => {
                         // No listener. Get or create an explicit dialer.
                         let socket_family = socket_addr.ip().into();
-                        let dialer = match self.dialer.entry(socket_family) {
-                            Entry::Occupied(occupied) => occupied.get().clone(),
-                            Entry::Vacant(vacant) => {
+                        let dialer = match (dial_opts.port_use, self.dialer.entry(socket_family)) {
+                            (PortUse::Reuse, Entry::Occupied(occupied)) => occupied.get().clone(),
+                            (_, entry) => {
                                 if let Some(waker) = self.waker.take() {
                                     waker.wake();
                                 }
@@ -291,7 +282,11 @@ impl<P: Provider> Transport for GenTransport<P> {
                                 let endpoint_config = self.quinn_config.endpoint_config.clone();
                                 let endpoint = Self::new_endpoint(endpoint_config, None, socket)?;
 
-                                vacant.insert(endpoint.clone());
+                                if dial_opts.port_use == PortUse::Reuse {
+                                    if let Entry::Vacant(vacant) = entry {
+                                        vacant.insert(endpoint.clone());
+                                    }
+                                }
                                 endpoint
                             }
                         };
@@ -436,7 +431,7 @@ struct Listener<P: Provider> {
     socket: UdpSocket,
 
     /// A future to poll new incoming connections.
-    accept: BoxFuture<'static, Option<quinn::Connecting>>,
+    accept: BoxFuture<'static, Option<quinn::Incoming>>,
     /// Timeout for connection establishment on inbound connections.
     handshake_timeout: Duration,
 
@@ -594,9 +589,19 @@ impl<P: Provider> Stream for Listener<P> {
             }
 
             match self.accept.poll_unpin(cx) {
-                Poll::Ready(Some(connecting)) => {
+                Poll::Ready(Some(incoming)) => {
                     let endpoint = self.endpoint.clone();
                     self.accept = async move { endpoint.accept().await }.boxed();
+
+                    let connecting = match incoming.accept() {
+                        Ok(connecting) => connecting,
+                        Err(error) => {
+                            return Poll::Ready(Some(TransportEvent::ListenerError {
+                                listener_id: self.listener_id,
+                                error: Error::Connection(crate::ConnectionError(error)),
+                            }))
+                        }
+                    };
 
                     let local_addr = socketaddr_to_multiaddr(&self.socket_addr(), self.version);
                     let remote_addr = connecting.remote_address();
@@ -721,33 +726,6 @@ fn multiaddr_to_socketaddr(
         }
         _ => None,
     }
-}
-
-/// Whether an [`Multiaddr`] is a valid for the QUIC transport.
-fn is_quic_addr(addr: &Multiaddr, support_draft_29: bool) -> bool {
-    use Protocol::*;
-    let mut iter = addr.iter();
-    let Some(first) = iter.next() else {
-        return false;
-    };
-    let Some(second) = iter.next() else {
-        return false;
-    };
-    let Some(third) = iter.next() else {
-        return false;
-    };
-    let fourth = iter.next();
-    let fifth = iter.next();
-
-    matches!(first, Ip4(_) | Ip6(_) | Dns(_) | Dns4(_) | Dns6(_))
-        && matches!(second, Udp(_))
-        && if support_draft_29 {
-            matches!(third, QuicV1 | Quic)
-        } else {
-            matches!(third, QuicV1)
-        }
-        && matches!(fourth, Some(P2p(_)) | None)
-        && fifth.is_none()
 }
 
 /// Turns an IP address and port into the corresponding QUIC multiaddr.
@@ -926,7 +904,7 @@ mod tests {
                 "/ip4/123.45.67.8/udp/1234/quic-v1".parse().unwrap(),
                 DialOpts {
                     role: Endpoint::Dialer,
-                    port_use: PortUse::New,
+                    port_use: PortUse::Reuse,
                 },
             )
             .unwrap();

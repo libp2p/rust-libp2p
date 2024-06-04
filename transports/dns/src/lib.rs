@@ -237,10 +237,6 @@ where
         self.do_dial(addr, dial_opts)
     }
 
-    fn address_translation(&self, server: &Multiaddr, observed: &Multiaddr) -> Option<Multiaddr> {
-        self.inner.lock().address_translation(server, observed)
-    }
-
     fn poll(
         self: Pin<&mut Self>,
         cx: &mut Context<'_>,
@@ -666,10 +662,6 @@ mod tests {
                     Protocol::Dns(_) | Protocol::Dns4(_) | Protocol::Dns6(_) | Protocol::Dnsaddr(_)
                 )));
                 Ok(Box::pin(future::ready(Ok(()))))
-            }
-
-            fn address_translation(&self, _: &Multiaddr, _: &Multiaddr) -> Option<Multiaddr> {
-                None
             }
 
             fn poll(

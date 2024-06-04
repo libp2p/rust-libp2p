@@ -6,6 +6,9 @@
 - Raise MSRV to 1.73.
   See [PR 5266](https://github.com/libp2p/rust-libp2p/pull/5266).
 
+- Implement refactored `Transport`.
+  See [PR 4568](https://github.com/libp2p/rust-libp2p/pull/4568)
+
 ## 0.53.2
 
 - Allow `SwarmBuilder::with_bandwidth_metrics` after `SwarmBuilder::with_websocket`.

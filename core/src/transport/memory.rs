@@ -226,10 +226,6 @@ impl Transport for MemoryTransport {
         DialFuture::new(port).ok_or(TransportError::Other(MemoryTransportError::Unreachable))
     }
 
-    fn address_translation(&self, _server: &Multiaddr, _observed: &Multiaddr) -> Option<Multiaddr> {
-        None
-    }
-
     fn poll(
         mut self: Pin<&mut Self>,
         cx: &mut Context<'_>,
