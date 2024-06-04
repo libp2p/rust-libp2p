@@ -263,9 +263,9 @@ impl<P: Provider> Transport for GenTransport<P> {
                     None => {
                         // No listener. Get or create an explicit dialer.
                         let socket_family = socket_addr.ip().into();
-                        let dialer = match self.dialer.entry(socket_family) {
-                            Entry::Occupied(occupied) => occupied.get().clone(),
-                            Entry::Vacant(vacant) => {
+                        let dialer = match (dial_opts.port_use, self.dialer.entry(socket_family)) {
+                            (PortUse::Reuse, Entry::Occupied(occupied)) => occupied.get().clone(),
+                            (_, entry) => {
                                 if let Some(waker) = self.waker.take() {
                                     waker.wake();
                                 }
@@ -282,7 +282,11 @@ impl<P: Provider> Transport for GenTransport<P> {
                                 let endpoint_config = self.quinn_config.endpoint_config.clone();
                                 let endpoint = Self::new_endpoint(endpoint_config, None, socket)?;
 
-                                vacant.insert(endpoint.clone());
+                                if dial_opts.port_use == PortUse::Reuse {
+                                    if let Entry::Vacant(vacant) = entry {
+                                        vacant.insert(endpoint.clone());
+                                    }
+                                }
                                 endpoint
                             }
                         };
