@@ -18,7 +18,7 @@ futures = { workspace = true }
 rand = "0.8.5"
 serde = { version = "1", features = ["derive"] }
 tracing = { workspace = true }
-tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+tracing-subscriber = { workspace = true, features = ["env-filter"] }
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 axum = "0.7"
@@ -37,7 +37,7 @@ thirtyfour = "=0.32.0" # https://github.com/stevepryde/thirtyfour/issues/169
 tokio = { workspace = true, features = ["full"] }
 tower-http = { version = "0.5", features = ["cors", "fs", "trace"] }
 tracing = { workspace = true }
-tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+tracing-subscriber = { workspace = true, features = ["env-filter"] }
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 libp2p = { path = "../libp2p", features = [ "ping", "macros", "webtransport-websys", "wasm-bindgen", "identify", "websocket-websys", "yamux", "noise"] }
