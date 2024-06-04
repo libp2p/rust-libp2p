@@ -66,6 +66,9 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     loop {
         match swarm.select_next_some().await {
+            SwarmEvent::NewListenAddr { address, .. } => {
+                println!("Local node is listening on\n {}/p2p/{}", address, swarm.local_peer_id());
+            },
             SwarmEvent::Behaviour(BehaviourEvent::Ping(ping_event)) => {
                 tracing::info!(?ping_event);
                 metrics.record(&ping_event);
