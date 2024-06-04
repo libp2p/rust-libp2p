@@ -50,7 +50,7 @@ use thiserror::Error;
 /// 1. Establish relayed connections by dialing `/p2p-circuit` addresses.
 ///
 ///    ```
-///    # use libp2p_core::{Multiaddr, multiaddr::{Protocol}, Transport};
+///    # use libp2p_core::{Multiaddr, multiaddr::{Protocol}, Transport, transport::{DialOpts, PortUse}, connection::Endpoint};
 ///    # use libp2p_core::transport::memory::MemoryTransport;
 ///    # use libp2p_core::transport::choice::OrTransport;
 ///    # use libp2p_relay as relay;
@@ -67,7 +67,10 @@ use thiserror::Error;
 ///        .with(Protocol::P2p(relay_id.into())) // Relay peer id.
 ///        .with(Protocol::P2pCircuit) // Signal to connect via relay and not directly.
 ///        .with(Protocol::P2p(destination_id.into())); // Destination peer id.
-///    transport.dial(dst_addr_via_relay).unwrap();
+///    transport.dial(dst_addr_via_relay, DialOpts {
+///         port_use: PortUse::Reuse,
+///         role: Endpoint::Dialer,
+///    }).unwrap();
 ///    ```
 ///
 /// 3. Listen for incoming relayed connections via specific relay.
