@@ -904,7 +904,7 @@ mod tests {
                 "/ip4/123.45.67.8/udp/1234/quic-v1".parse().unwrap(),
                 DialOpts {
                     role: Endpoint::Dialer,
-                    port_use: PortUse::New,
+                    port_use: PortUse::Reuse,
                 },
             )
             .unwrap();
