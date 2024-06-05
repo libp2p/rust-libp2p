@@ -99,7 +99,7 @@ libp2p-pnet = { version = "0.24.0", path = "transports/pnet" }
 libp2p-quic = { version = "0.10.3", path = "transports/quic" }
 libp2p-relay = { version = "0.17.2", path = "protocols/relay" }
 libp2p-rendezvous = { version = "0.14.0", path = "protocols/rendezvous" }
-libp2p-request-response = { version = "0.26.2", path = "protocols/request-response" }
+libp2p-request-response = { version = "0.26.3", path = "protocols/request-response" }
 libp2p-server = { version = "0.12.7", path = "misc/server" }
 libp2p-stream = { version = "0.1.0-alpha.1", path = "protocols/stream" }
 libp2p-swarm = { version = "0.44.2", path = "swarm" }
@@ -124,8 +124,9 @@ quick-protobuf-codec = { version = "0.3.1", path = "misc/quick-protobuf-codec" }
 quickcheck = { package = "quickcheck-ext", path = "misc/quickcheck-ext" }
 rw-stream-sink = { version = "0.4.0", path = "misc/rw-stream-sink" }
 unsigned-varint = { version = "0.8.0" }
-tokio = { version = "1.37", default-features = false }
+tokio = { version = "1.38", default-features = false }
 tracing = "0.1.37"
+tracing-subscriber = "0.3"
 futures = "0.3.30"
 ring = "0.17.8"
 
