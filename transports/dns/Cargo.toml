@@ -25,7 +25,7 @@ tracing = { workspace = true }
 libp2p-identity = { workspace = true, features = ["rand"] }
 tokio = { workspace = true, features = ["rt", "time"] }
 async-std-crate = { package = "async-std", version = "1.6" }
-tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+tracing-subscriber = { workspace = true, features = ["env-filter"] }
 
 [features]
 async-std = ["async-std-resolver"]
