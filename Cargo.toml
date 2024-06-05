@@ -126,6 +126,7 @@ rw-stream-sink = { version = "0.4.0", path = "misc/rw-stream-sink" }
 unsigned-varint = { version = "0.8.0" }
 tokio = { version = "1.38", default-features = false }
 tracing = "0.1.37"
+tracing-subscriber = "0.3"
 futures = "0.3.30"
 ring = "0.17.8"
 
