@@ -11,6 +11,7 @@ use std::{convert::Infallible, sync::atomic::AtomicUsize};
 macro_rules! gen_behaviour {
     ($($name:ident {$($field:ident),*};)*) => {$(
         #[derive(libp2p_swarm::NetworkBehaviour, Default)]
+        #[behaviour(prelude = "libp2p_swarm::derive_prelude")]
         struct $name {
             $($field: SpinningBehaviour,)*
         }

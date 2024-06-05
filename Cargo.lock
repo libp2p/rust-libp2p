@@ -3386,7 +3386,6 @@ dependencies = [
  "futures-timer",
  "getrandom 0.2.15",
  "instant",
- "libp2p",
  "libp2p-core 0.41.2",
  "libp2p-identify",
  "libp2p-identity",
