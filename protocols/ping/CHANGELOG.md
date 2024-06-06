@@ -1,8 +1,14 @@
-## 0.44.1 - unreleased
+## 0.44.2
+
+- Fixes panic in WASM caused by retrying on dail errors.
+  See [PR 5447](https://github.com/libp2p/rust-libp2p/pull/5447).
+
+## 0.44.1
 
 - Impose `Sync` on `ping::Failure::Other`.
   `ping::Event` can now be shared between threads.
   See [PR 5250]
+
 
 [PR 5250]: https://github.com/libp2p/rust-libp2p/pull/5250
 
