@@ -1862,9 +1862,9 @@ checksum = "1391ab1f92ffcc08911957149833e682aa3fe252b9f45f966d2ef972274c97df"
 dependencies = [
  "aho-corasick",
  "bstr",
+ "fnv",
  "log",
- "regex-automata 0.4.4",
- "regex-syntax 0.8.2",
+ "regex",
 ]
 
 [[package]]
@@ -3338,6 +3338,7 @@ dependencies = [
  "futures-timer",
  "getrandom 0.2.15",
  "instant",
+ "libp2p",
  "libp2p-core 0.41.2",
  "libp2p-identify",
  "libp2p-identity",
@@ -4864,7 +4865,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "bd283d9651eeda4b2a83a43c1c91b266c40fd76ecd39a50a8c630ae69dc72891"
 dependencies = [
  "getrandom 0.2.15",
- "redox_syscall 0.2.16",
+ "libredox",
  "thiserror",
 ]
 
