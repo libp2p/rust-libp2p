@@ -1,7 +1,8 @@
 ## 0.42.0 -- unreleased
 
-- Refactor `Transport` to allow the behaviour to tell the implementor of `Transport` to reuse an
-existing port or a new one.
+- Introduce `DialOpts` to `Transport::dial` to:
+  a. remove `dial_as_listener`
+  b. introduce `PortReuse`, allowing callers to control port allocation of new connections
   See [PR 4568](https://https://github.com/libp2p/rust-libp2p/pull/4568)
     - Add new enum `PortUse`, defaulting on `PortUse::Reuse`.
     - Add new struct `DialOpts`, containing `PortUse` and `Endpoint`.
