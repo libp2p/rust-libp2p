@@ -183,6 +183,7 @@ impl Handler {
         >,
     ) {
         self.outbound = None; // Request a new substream on the next `poll`.
+        self.interval.reset(Duration::new(0, 0));
 
         let error = match error {
             StreamUpgradeError::NegotiationFailed => {
