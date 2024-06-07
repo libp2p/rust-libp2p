@@ -144,7 +144,7 @@ tokio = { workspace = true, features = [ "io-util", "io-std", "macros", "rt", "r
 libp2p-mplex = { workspace = true }
 libp2p-noise = { workspace = true }
 libp2p-tcp = { workspace = true, features = ["tokio"] }
-tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+tracing-subscriber = { workspace = true, features = ["env-filter"] }
 
 # Passing arguments to the docsrs builder in order to properly document cfg's.
 # More information: https://docs.rs/about/builds#cross-compiling

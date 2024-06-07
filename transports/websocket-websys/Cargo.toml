@@ -16,7 +16,7 @@ futures = { workspace = true }
 js-sys = "0.3.69"
 libp2p-core = { workspace = true }
 tracing = { workspace = true }
-parking_lot = "0.12.2"
+parking_lot = "0.12.3"
 send_wrapper = "0.6.0"
 thiserror = "1.0.61"
 wasm-bindgen = "0.2.90"
