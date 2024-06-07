@@ -1,3 +1,8 @@
+## 0.10.4
+
+- Use `libp2p-tls` from workspace.
+  See [PR 5452](https://github.com/libp2p/rust-libp2p/pull/5452).
+
 ## 0.10.3
 
 - Update `quinn` to 0.11 and `libp2p-tls` to 0.4.0.
