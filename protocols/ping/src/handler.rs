@@ -188,7 +188,7 @@ impl Handler {
         // and will be polled again later on in our `poll` because we reset `self.outbound`.
         //
         // `futures-timer` allows an expired timer to be polled again and returns
-        // immidietly a `Poll::Ready`. However in its WASM implementation there is
+        // immediately `Poll::Ready`. However in its WASM implementation there is
         // a bug that causes the expired timer to panic.
         //
         // This is a workaround until a proper fix is merged and released.
