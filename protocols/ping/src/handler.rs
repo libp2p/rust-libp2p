@@ -183,6 +183,17 @@ impl Handler {
         >,
     ) {
         self.outbound = None; // Request a new substream on the next `poll`.
+
+        // Timer is already polled and expired before substream request is initiated
+        // and will be polled again later on in our `poll` because we reset `self.outbound`.
+        //
+        // `futures-timer` allows an expired timer to be polled again and returns
+        // immidietly a `Poll::Ready`. However in its WASM implementation there is
+        // a bug that causes the expired timer to panic.
+        //
+        // This is a workaround until a proper fix is merged and released.
+        //
+        // See async-rs/futures-timer#74 and libp2p/rust-libp2p#5447 for more info.
         self.interval.reset(Duration::new(0, 0));
 
         let error = match error {
