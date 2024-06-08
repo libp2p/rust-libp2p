@@ -1,4 +1,4 @@
-## 0.12.7 - unreleased
+## 0.12.7
 
 ### Changed
 

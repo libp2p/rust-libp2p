@@ -1,4 +1,4 @@
-## 0.45.2 - unreleased
+## 0.45.2
 
 - Update `yamux` to version `v0.13.3`.`
 
