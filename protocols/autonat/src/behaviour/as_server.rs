@@ -22,7 +22,6 @@ use super::{
     Action, AutoNatCodec, Config, DialRequest, DialResponse, Event, HandleInnerEvent, ProbeId,
     ResponseError,
 };
-use instant::Instant;
 use libp2p_core::{multiaddr::Protocol, Multiaddr};
 use libp2p_identity::PeerId;
 use libp2p_request_response::{
@@ -36,6 +35,7 @@ use std::{
     collections::{HashMap, HashSet, VecDeque},
     num::NonZeroU8,
 };
+use web_time::Instant;
 
 /// Inbound probe failed.
 #[derive(Debug)]

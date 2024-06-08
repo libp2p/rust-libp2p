@@ -36,7 +36,6 @@ use crate::record::{
 use crate::K_VALUE;
 use crate::{jobs::*, protocol};
 use fnv::{FnvHashMap, FnvHashSet};
-use instant::Instant;
 use libp2p_core::{ConnectedPoint, Endpoint, Multiaddr};
 use libp2p_identity::PeerId;
 use libp2p_swarm::behaviour::{
@@ -57,6 +56,7 @@ use std::time::Duration;
 use std::vec;
 use thiserror::Error;
 use tracing::Level;
+use web_time::Instant;
 
 pub use crate::query::QueryStats;
 
