@@ -3081,7 +3081,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-ping"
-version = "0.44.1"
+version = "0.44.2"
 dependencies = [
  "async-std",
  "either",
@@ -3228,7 +3228,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-request-response"
-version = "0.26.3"
+version = "0.26.4"
 dependencies = [
  "anyhow",
  "async-std",
@@ -3293,7 +3293,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-swarm"
-version = "0.44.2"
+version = "0.44.3"
 dependencies = [
  "async-std",
  "either",
@@ -3491,7 +3491,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-websocket"
-version = "0.43.0"
+version = "0.44.0"
 dependencies = [
  "async-std",
  "either",
@@ -3552,7 +3552,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-yamux"
-version = "0.45.1"
+version = "0.45.2"
 dependencies = [
  "async-std",
  "either",

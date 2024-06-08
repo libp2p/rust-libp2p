@@ -1,3 +1,8 @@
+## 0.44.3 - unreleased
+
+- Use `web-time` instead of `instant`.
+  See [PR 5347](https://github.com/libp2p/rust-libp2p/pull/5347).
+
 ## 0.44.2
 
 - Allow `NetworkBehaviour`s to share addresses of peers.
@@ -5,8 +10,6 @@
   The address is broadcast to all behaviours via `FromSwarm::NewExternalAddrOfPeer`.
   Protocols that want to collect these addresses can use the new `PeerAddresses` utility.
   See [PR 4371](https://github.com/libp2p/rust-libp2p/pull/4371).
-- Use `web-time` instead of `instant`.
-  See [PR 5347](https://github.com/libp2p/rust-libp2p/pull/5347).
 
 ## 0.44.1
 
