@@ -4,7 +4,7 @@ edition = "2021"
 rust-version = { workspace = true }
 description = "NAT and firewall detection for libp2p"
 authors = ["David Craven <david@craven.ch>", "Elena Frank <elena.frank@protonmail.com>"]
-version = "0.12.0"
+version = "0.12.1"
 license = "MIT"
 repository = "https://github.com/libp2p/rust-libp2p"
 keywords = ["peer-to-peer", "libp2p", "networking"]
@@ -14,7 +14,7 @@ categories = ["network-programming", "asynchronous"]
 async-trait = "0.1"
 futures = { workspace = true }
 futures-timer = "3.0"
-instant = "0.1"
+web-time = { workspace = true }
 libp2p-core = { workspace = true }
 libp2p-swarm = { workspace = true }
 libp2p-request-response = { workspace = true }
