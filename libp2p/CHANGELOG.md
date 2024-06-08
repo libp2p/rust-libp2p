@@ -6,6 +6,9 @@
 - Raise MSRV to 1.73.
   See [PR 5266](https://github.com/libp2p/rust-libp2p/pull/5266).
 
+- Use `web-time` instead of `instant`.
+  See [PR 5347](https://github.com/libp2p/rust-libp2p/pull/5347).
+
 ## 0.53.2
 
 - Allow `SwarmBuilder::with_bandwidth_metrics` after `SwarmBuilder::with_websocket`.
