@@ -195,7 +195,7 @@ async fn report_outbound_failure_on_max_streams() {
         assert_eq!(action, Action::FailOnMaxStreams);
 
         // A task for sending back a response is already scheduled so max concurrent
-        // streams is reached and no new tasks can be sheduled.
+        // streams is reached and no new tasks can be scheduled.
         //
         // We produce the failure by creating new request before we response.
         let outbound_req_id = swarm2
