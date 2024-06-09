@@ -1,4 +1,4 @@
-## 0.46.0 -- unreleased
+## 0.46.0
 
 - Changed `FIND_NODE` response: now includes a list of closest peers when querying the recipient peer ID. Previously, this request yielded an empty response.
   See [PR 5270](https://github.com/libp2p/rust-libp2p/pull/5270)
