@@ -78,7 +78,6 @@ libp2p = { version = "0.54.0", path = "libp2p" }
 libp2p-allow-block-list = { version = "0.3.0", path = "misc/allow-block-list" }
 libp2p-autonat = { version = "0.13.0", path = "protocols/autonat" }
 libp2p-connection-limits = { version = "0.3.1", path = "misc/connection-limits" }
-<<<<<<< HEAD
 libp2p-core = { version = "0.42.0", path = "core" }
 libp2p-dcutr = { version = "0.12.0", path = "protocols/dcutr" }
 libp2p-dns = { version = "0.42.0", path = "transports/dns" }
