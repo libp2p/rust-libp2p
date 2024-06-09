@@ -207,7 +207,7 @@ impl<P: Provider> GenTransport<P> {
             SocketFamily::Ipv4 => SocketAddr::new(Ipv4Addr::UNSPECIFIED.into(), 0),
             SocketFamily::Ipv6 => SocketAddr::new(Ipv6Addr::UNSPECIFIED.into(), 0),
         };
-        let socket = UdpSocket::bind(listen_socket_addr).map_err(Self::Error::from)?;
+        let socket = UdpSocket::bind(listen_socket_addr)?;
         let endpoint_config = self.quinn_config.endpoint_config.clone();
         let endpoint = Self::new_endpoint(endpoint_config, None, socket)?;
         Ok(endpoint)
@@ -284,42 +284,15 @@ impl<P: Provider> Transport for GenTransport<P> {
                 } else {
                     let socket_family = socket_addr.ip().into();
                     let dialer = if dial_opts.port_use == PortUse::Reuse {
-                        match self.dialer.entry(socket_family) {
-                            Entry::Occupied(occupied) => occupied.get().clone(),
-                            Entry::Vacant(entry) => {
-                                if let Some(waker) = self.waker.take() {
-                                    waker.wake();
-                                }
-                                let listen_socket_addr = match socket_family {
-                                    SocketFamily::Ipv4 => {
-                                        SocketAddr::new(Ipv4Addr::UNSPECIFIED.into(), 0)
-                                    }
-                                    SocketFamily::Ipv6 => {
-                                        SocketAddr::new(Ipv6Addr::UNSPECIFIED.into(), 0)
-                                    }
-                                };
-                                let socket = UdpSocket::bind(listen_socket_addr)
-                                    .map_err(Self::Error::from)?;
-                                let endpoint_config = self.quinn_config.endpoint_config.clone();
-                                let endpoint = Self::new_endpoint(endpoint_config, None, socket)?;
-                                if let Entry::Vacant(vacant) = entry {
-                                    vacant.insert(endpoint.clone());
-                                }
-                                endpoint
-                            }
+                        if let Some(occupied) = self.dialer.get(&socket_family) {
+                            occupied.clone()
+                        } else {
+                            let endpoint = self.binded_socket(socket_addr)?;
+                            self.dialer.insert(socket_family, endpoint.clone());
+                            endpoint
                         }
                     } else {
-                        if let Some(waker) = self.waker.take() {
-                            waker.wake();
-                        }
-                        let listen_socket_addr = match socket_family {
-                            SocketFamily::Ipv4 => SocketAddr::new(Ipv4Addr::UNSPECIFIED.into(), 0),
-                            SocketFamily::Ipv6 => SocketAddr::new(Ipv6Addr::UNSPECIFIED.into(), 0),
-                        };
-                        let socket =
-                            UdpSocket::bind(listen_socket_addr).map_err(Self::Error::from)?;
-                        let endpoint_config = self.quinn_config.endpoint_config.clone();
-                        Self::new_endpoint(endpoint_config, None, socket)?
+                        self.binded_socket(socket_addr)?
                     };
                     dialer
                 };
