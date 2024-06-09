@@ -27,8 +27,9 @@ use libp2p_identity::PeerId;
 use libp2p_identity::PublicKey;
 use libp2p_swarm::behaviour::{ConnectionClosed, ConnectionEstablished, DialFailure, FromSwarm};
 use libp2p_swarm::{
-    _address_translation, ConnectionDenied, DialError, ExternalAddresses, ListenAddresses,
-    NetworkBehaviour, NotifyHandler, PeerAddresses, StreamUpgradeError, THandlerInEvent, ToSwarm,
+    ConnectionDenied, DialError, ExternalAddresses, ListenAddresses, NetworkBehaviour,
+    NotifyHandler, PeerAddresses, StreamUpgradeError, THandlerInEvent, ToSwarm,
+    _address_translation,
 };
 use libp2p_swarm::{ConnectionId, THandler, THandlerOutEvent};
 
