@@ -16,7 +16,7 @@ async-trait = "0.1"
 bimap = "0.6.3"
 futures = { workspace = true, features = ["std"] }
 futures-timer = "3.0.3"
-instant = "0.1.13"
+web-time = { workspace = true }
 libp2p-core = { workspace = true }
 libp2p-swarm = { workspace = true }
 libp2p-identity = { workspace = true }

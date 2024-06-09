@@ -1,3 +1,7 @@
+## 0.45.2
+
+- Update `yamux` to version `v0.13.3`.`
+
 ## 0.45.1
 
 - Deprecate `WindowUpdateMode::on_receive`.

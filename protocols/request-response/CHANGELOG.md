@@ -2,6 +2,11 @@
 
 <!-- Update to libp2p-swarm v0.45.0 -->
 
+## 0.26.4
+
+- Use `web-time` instead of `instant`.
+  See [PR 5347](https://github.com/libp2p/rust-libp2p/pull/5347).
+
 ## 0.26.3
 
 - Report failure when streams are at capacity.

@@ -2,6 +2,10 @@
 
 <!-- Update to libp2p-swarm v0.45.0 -->
 
+## 0.17.3
+- Use `web-time` instead of `instant`.
+  See [PR 5347](https://github.com/libp2p/rust-libp2p/pull/5347).
+
 ## 0.17.2
 
 - Fix support for unlimited relay connection according to spec.

@@ -36,7 +36,6 @@ use crate::record::{
 use crate::K_VALUE;
 use crate::{jobs::*, protocol};
 use fnv::{FnvHashMap, FnvHashSet};
-use instant::Instant;
 use libp2p_core::{transport::PortUse, ConnectedPoint, Endpoint, Multiaddr};
 use libp2p_identity::PeerId;
 use libp2p_swarm::behaviour::{
@@ -57,6 +56,7 @@ use std::time::Duration;
 use std::vec;
 use thiserror::Error;
 use tracing::Level;
+use web_time::Instant;
 
 pub use crate::query::QueryStats;
 
@@ -429,7 +429,7 @@ impl Config {
     /// Sets the time to wait before calling [`Behaviour::bootstrap`] after a new peer is inserted in the routing table.
     /// This prevent cascading bootstrap requests when multiple peers are inserted into the routing table "at the same time".
     /// This also allows to wait a little bit for other potential peers to be inserted into the routing table before
-    /// triggering a bootstrap, giving more context to the future bootstrap request.  
+    /// triggering a bootstrap, giving more context to the future bootstrap request.
     ///
     /// * Default to `500` ms.
     /// * Set to `Some(Duration::ZERO)` to never wait before triggering a bootstrap request when a new peer

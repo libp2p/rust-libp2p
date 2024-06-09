@@ -12,6 +12,9 @@
 - Move `address_translation` from `libp2p-core` to `libp2p-swarm` and `libp2p-identify`.
   See [PR 4568].
 
+- Use `web-time` instead of `instant`.
+  See [PR 5347](https://github.com/libp2p/rust-libp2p/pull/5347).
+
 [PR 4568]: https://github.com/libp2p/rust-libp2p/pull/4568
 
 ## 0.53.2

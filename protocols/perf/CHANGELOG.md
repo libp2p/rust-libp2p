@@ -2,6 +2,10 @@
 
 <!-- Update to libp2p-swarm v0.45.0 -->
 
+## 0.3.1
+- Use `web-time` instead of `instant`.
+  See [PR 5347](https://github.com/libp2p/rust-libp2p/pull/5347).
+
 ## 0.3.0
 
 - Continuously measure on single connection (iperf-style).
