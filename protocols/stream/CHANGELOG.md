@@ -1,7 +1,6 @@
-## 0.2.0-alpha -- unreleased
+## 0.2.0-alpha
 
-- Implement refactored `Transport`.
-  See [PR 4568](https://github.com/libp2p/rust-libp2p/pull/4568)
+<!-- Update to libp2p-swarm v0.45.0 -->
 
 ## 0.1.0-alpha.1
 - Implement Error for `OpenStreamError`.

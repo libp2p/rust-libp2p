@@ -1,4 +1,4 @@
-## 0.54.0 -- unreleased
+## 0.54.0
 
 - Update individual crates.
     - Update to [`libp2p-kad` `v0.46.0`](protocols/kad/CHANGELOG.md#0460).
@@ -7,7 +7,12 @@
   See [PR 5266](https://github.com/libp2p/rust-libp2p/pull/5266).
 
 - Implement refactored `Transport`.
-  See [PR 4568](https://github.com/libp2p/rust-libp2p/pull/4568)
+  See [PR 4568].
+
+- Move `address_translation` from `libp2p-core` to `libp2p-swarm` and `libp2p-identify`.
+  See [PR 4568].
+
+[PR 4568]: https://github.com/libp2p/rust-libp2p/pull/4568
 
 ## 0.53.2
 

@@ -27,7 +27,7 @@ use libp2p_identity::PeerId;
 use libp2p_identity::PublicKey;
 use libp2p_swarm::behaviour::{ConnectionClosed, ConnectionEstablished, DialFailure, FromSwarm};
 use libp2p_swarm::{
-    address_translation, ConnectionDenied, DialError, ExternalAddresses, ListenAddresses,
+    _address_translation, ConnectionDenied, DialError, ExternalAddresses, ListenAddresses,
     NetworkBehaviour, NotifyHandler, PeerAddresses, StreamUpgradeError, THandlerInEvent, ToSwarm,
 };
 use libp2p_swarm::{ConnectionId, THandler, THandlerOutEvent};
@@ -284,7 +284,7 @@ impl Behaviour {
                             || (is_quic_addr(server, true) && is_quic_addr(observed, true))
                             || (is_quic_addr(server, false) && is_quic_addr(observed, false))
                         {
-                            address_translation(server, observed)
+                            _address_translation(server, observed)
                         } else {
                             None
                         }

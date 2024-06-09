@@ -1,7 +1,6 @@
-## 0.18.0 -- unreleased
+## 0.18.0
 
-- Implement refactored `Transport`.
-  See [PR 4568](https://github.com/libp2p/rust-libp2p/pull/4568)
+<!-- Update to libp2p-swarm v0.45.0 -->
 
 ## 0.17.2
 

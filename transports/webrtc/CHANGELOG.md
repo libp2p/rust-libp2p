@@ -1,4 +1,4 @@
-## 0.8.0-alpha -- unreleased
+## 0.8.0-alpha
 
 - Implement refactored `Transport`.
   See [PR 4568](https://github.com/libp2p/rust-libp2p/pull/4568)

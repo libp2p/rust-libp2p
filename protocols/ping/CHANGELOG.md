@@ -3,11 +3,9 @@
 - Impose `Sync` on `ping::Failure::Other`.
   `ping::Event` can now be shared between threads.
   See [PR 5250]
-- Implement refactored `Transport`.
-  See [PR 4568]
+<!-- Update to libp2p-swarm v0.45.0 -->
 
 [PR 5250]: https://github.com/libp2p/rust-libp2p/pull/5250
-[PR 4568]: https://github.com/libp2p/rust-libp2p/pull/4568
 
 ## 0.44.0
 
