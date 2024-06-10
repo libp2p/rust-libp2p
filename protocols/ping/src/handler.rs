@@ -190,10 +190,10 @@ impl Handler {
         // `futures-timer` allows an expired timer to be polled again and returns
         // immediately `Poll::Ready`. However in its WASM implementation there is
         // a bug that causes the expired timer to panic.
-        //
         // This is a workaround until a proper fix is merged and released.
+        // See libp2p/rust-libp2p#5447 for more info.
         //
-        // See async-rs/futures-timer#74 and libp2p/rust-libp2p#5447 for more info.
+        // TODO: remove when async-rs/futures-timer#74 gets merged.
         self.interval.reset(Duration::new(0, 0));
 
         let error = match error {
