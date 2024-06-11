@@ -275,7 +275,7 @@ where
             return Err(HandleFail::RequestRejected);
         }
     };
-    *all_addrs = addrs.clone();
+    all_addrs.clone_from(&addrs);
     let idx = 0;
     let addr = addrs.pop().ok_or(HandleFail::DialRefused)?;
     *tested_addrs = Some(addr.clone());
