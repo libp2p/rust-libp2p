@@ -68,7 +68,7 @@ pub mod dial_opts;
 pub mod dummy;
 pub mod handler;
 mod listen_opts;
-pub mod translation;
+mod translation;
 
 /// Bundles all symbols required for the [`libp2p_swarm_derive::NetworkBehaviour`] macro.
 #[doc(hidden)]
