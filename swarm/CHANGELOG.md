@@ -1,11 +1,16 @@
-## 0.45.0 -- unreleased
+## 0.45.0
 
 - Implement refactored `Transport`.
   See [PR 4568]
-- Move `address_translation` into swarm.
+- Move `address_translation` into swarm and into `libp2p-identify`.
   See [PR 4568]
 
 [PR 4568]: https://github.com/libp2p/rust-libp2p/pull/4568
+
+## 0.44.3
+
+- Use `web-time` instead of `instant`.
+  See [PR 5347](https://github.com/libp2p/rust-libp2p/pull/5347).
 
 ## 0.44.2
 

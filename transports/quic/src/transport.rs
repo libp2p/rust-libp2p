@@ -197,6 +197,21 @@ impl<P: Provider> GenTransport<P> {
 
         Ok(socket.into())
     }
+
+    fn binded_socket(&mut self, socket_addr: SocketAddr) -> Result<quinn::Endpoint, Error> {
+        let socket_family = socket_addr.ip().into();
+        if let Some(waker) = self.waker.take() {
+            waker.wake();
+        }
+        let listen_socket_addr = match socket_family {
+            SocketFamily::Ipv4 => SocketAddr::new(Ipv4Addr::UNSPECIFIED.into(), 0),
+            SocketFamily::Ipv6 => SocketAddr::new(Ipv6Addr::UNSPECIFIED.into(), 0),
+        };
+        let socket = UdpSocket::bind(listen_socket_addr)?;
+        let endpoint_config = self.quinn_config.endpoint_config.clone();
+        let endpoint = Self::new_endpoint(endpoint_config, None, socket)?;
+        Ok(endpoint)
+    }
 }
 
 impl<P: Provider> Transport for GenTransport<P> {
@@ -259,40 +274,27 @@ impl<P: Provider> Transport for GenTransport<P> {
 
         match (dial_opts.role, dial_opts.port_use) {
             (Endpoint::Dialer, _) | (Endpoint::Listener, PortUse::Reuse) => {
-                let endpoint = match self.eligible_listener(&socket_addr) {
-                    None => {
-                        // No listener. Get or create an explicit dialer.
-                        let socket_family = socket_addr.ip().into();
-                        let dialer = match (dial_opts.port_use, self.dialer.entry(socket_family)) {
-                            (PortUse::Reuse, Entry::Occupied(occupied)) => occupied.get().clone(),
-                            (_, entry) => {
-                                if let Some(waker) = self.waker.take() {
-                                    waker.wake();
-                                }
-                                let listen_socket_addr = match socket_family {
-                                    SocketFamily::Ipv4 => {
-                                        SocketAddr::new(Ipv4Addr::UNSPECIFIED.into(), 0)
-                                    }
-                                    SocketFamily::Ipv6 => {
-                                        SocketAddr::new(Ipv6Addr::UNSPECIFIED.into(), 0)
-                                    }
-                                };
-                                let socket = UdpSocket::bind(listen_socket_addr)
-                                    .map_err(Self::Error::from)?;
-                                let endpoint_config = self.quinn_config.endpoint_config.clone();
-                                let endpoint = Self::new_endpoint(endpoint_config, None, socket)?;
-
-                                if dial_opts.port_use == PortUse::Reuse {
-                                    if let Entry::Vacant(vacant) = entry {
-                                        vacant.insert(endpoint.clone());
-                                    }
-                                }
-                                endpoint
-                            }
-                        };
-                        dialer
-                    }
-                    Some(listener) => listener.endpoint.clone(),
+                let endpoint = if let Some(listener) = dial_opts
+                    .port_use
+                    .eq(&PortUse::Reuse)
+                    .then(|| self.eligible_listener(&socket_addr))
+                    .flatten()
+                {
+                    listener.endpoint.clone()
+                } else {
+                    let socket_family = socket_addr.ip().into();
+                    let dialer = if dial_opts.port_use == PortUse::Reuse {
+                        if let Some(occupied) = self.dialer.get(&socket_family) {
+                            occupied.clone()
+                        } else {
+                            let endpoint = self.binded_socket(socket_addr)?;
+                            self.dialer.insert(socket_family, endpoint.clone());
+                            endpoint
+                        }
+                    } else {
+                        self.binded_socket(socket_addr)?
+                    };
+                    dialer
                 };
                 let handshake_timeout = self.handshake_timeout;
                 let mut client_config = self.quinn_config.client_config.clone();

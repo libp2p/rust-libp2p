@@ -34,7 +34,6 @@ use futures_ticker::Ticker;
 use prometheus_client::registry::Registry;
 use rand::{seq::SliceRandom, thread_rng};
 
-use instant::Instant;
 use libp2p_core::{
     multiaddr::Protocol::Ip4, multiaddr::Protocol::Ip6, transport::PortUse, Endpoint, Multiaddr,
 };
@@ -46,6 +45,7 @@ use libp2p_swarm::{
     ConnectionDenied, ConnectionId, NetworkBehaviour, NotifyHandler, THandler, THandlerInEvent,
     THandlerOutEvent, ToSwarm,
 };
+use web_time::{Instant, SystemTime};
 
 use crate::backoff::BackoffStorage;
 use crate::config::{Config, ValidationMode};
@@ -66,7 +66,6 @@ use crate::types::{
 use crate::types::{PeerConnections, PeerKind, RpcOut};
 use crate::{rpc_proto::proto, TopicScoreParams};
 use crate::{PublishError, SubscriptionError, ValidationError};
-use instant::SystemTime;
 use quick_protobuf::{MessageWrite, Writer};
 use std::{cmp::Ordering::Equal, fmt::Debug};
 

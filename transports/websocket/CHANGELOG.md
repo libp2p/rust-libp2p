@@ -1,7 +1,9 @@
-## 0.44.0 -- unreleased
+## 0.44.0
 
 - Implement refactored `Transport`.
   See [PR 4568](https://github.com/libp2p/rust-libp2p/pull/4568)
+
+## 0.43.1
 
 ## 0.43.0
 

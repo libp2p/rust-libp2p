@@ -534,7 +534,7 @@ pub struct CookieNamespaceMismatch;
 
 #[cfg(test)]
 mod tests {
-    use instant::SystemTime;
+    use web_time::SystemTime;
 
     use libp2p_core::PeerRecord;
     use libp2p_identity as identity;

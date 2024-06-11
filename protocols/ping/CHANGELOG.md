@@ -1,13 +1,22 @@
-## 0.45.0 - unreleased
+## 0.45.0
+
+<!-- Update to libp2p-swarm v0.45.0 -->
+
+## 0.44.2
+
+- Use `web-time` instead of `instant`.
+  See [PR 5347](https://github.com/libp2p/rust-libp2p/pull/5347).
+
+- Fix panic in WASM caused by retrying on dial upgrade errors.
+  See [PR 5447](https://github.com/libp2p/rust-libp2p/pull/5447).
+
+## 0.44.1
 
 - Impose `Sync` on `ping::Failure::Other`.
   `ping::Event` can now be shared between threads.
   See [PR 5250]
-- Implement refactored `Transport`.
-  See [PR 4568]
 
 [PR 5250]: https://github.com/libp2p/rust-libp2p/pull/5250
-[PR 4568]: https://github.com/libp2p/rust-libp2p/pull/4568
 
 ## 0.44.0
 

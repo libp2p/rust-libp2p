@@ -1,8 +1,3 @@
-## 0.13.0 -- unreleased
-
-- Implement refactored `Transport`.
-  See [PR 4568](https://github.com/libp2p/rust-libp2p/pull/4568)
-
 ## 0.12.0
 
 - Remove `Clone`, `PartialEq` and `Eq` implementations on `Event` and its sub-structs.

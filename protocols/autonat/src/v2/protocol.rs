@@ -5,7 +5,7 @@ use std::io::ErrorKind;
 
 use asynchronous_codec::{Framed, FramedRead, FramedWrite};
 
-use futures::{AsyncRead, AsyncWrite, AsyncWriteExt, SinkExt, StreamExt};
+use futures::{AsyncRead, AsyncWrite, SinkExt, StreamExt};
 use libp2p_core::Multiaddr;
 
 use quick_protobuf_codec::Codec;

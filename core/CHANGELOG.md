@@ -1,28 +1,23 @@
-## 0.42.0 -- unreleased
+## 0.42.0
 
-- Refactor `Transport` to allow the behaviour to tell the implementor of `Transport` to reuse an
-existing port or a new one.
-  See [PR 4568](https://https://github.com/libp2p/rust-libp2p/pull/4568)
+- Introduce `DialOpts` to `Transport::dial` to:
+  a. remove `dial_as_listener`
+  b. introduce `PortReuse`, allowing callers to control port allocation of new connections
+  See [PR 4568]
     - Add new enum `PortUse`, defaulting on `PortUse::Reuse`.
     - Add new struct `DialOpts`, containing `PortUse` and `Endpoint`.
     - Add field `port_use` to `ConnectedPoint`.
     - Add new parameter to `Transport::dial`: `DialOpts`.
     - Remove `Transport::dial_as_listener` and move into `Transport::dial`. To dial as listener, one
       has to set the `endpoint` field in `DialOpts` to `Endpoint::Listener`.
-    - Adjust utility transports:
-        - `AndThen`
-        - `Boxed`
-        - `Choice`
-        - `Dummy`
-        - `GlobalOnly`
-        - `Map`
-        - `MapErr`
-        - `Memory`
-        - `Optional`
-        - `Timeout`
-        - `Upgrade`
 - Remove `Transport::address_translation` and move this functionality into `libp2p_swarm`.
-  See [umgefahren/libp2p PR 4](https://github.com/umgefahren/rust-libp2p/pull/4)
+  See [PR 4568].
+
+[PR 4568]: https://github.com/libp2p/rust-libp2p/pull/4568
+
+## 0.41.3
+- Use `web-time` instead of `instant`.
+  See [PR 5347](https://github.com/libp2p/rust-libp2p/pull/5347).
 
 ## 0.41.2
 

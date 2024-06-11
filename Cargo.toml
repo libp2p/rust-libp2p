@@ -88,7 +88,7 @@ libp2p-identity = { version = "0.2.8" }
 libp2p-kad = { version = "0.46.0", path = "protocols/kad" }
 libp2p-mdns = { version = "0.46.0", path = "protocols/mdns" }
 libp2p-memory-connection-limits = { version = "0.2.0", path = "misc/memory-connection-limits" }
-libp2p-metrics = { version = "0.14.1", path = "misc/metrics" }
+libp2p-metrics = { version = "0.14.2", path = "misc/metrics" }
 libp2p-mplex = { version = "0.41.0", path = "muxers/mplex" }
 libp2p-noise = { version = "0.44.0", path = "transports/noise" }
 libp2p-perf = { version = "0.4.0", path = "protocols/perf" }
@@ -109,12 +109,12 @@ libp2p-tls = { version = "0.4.0", path = "transports/tls" }
 libp2p-uds = { version = "0.41.0", path = "transports/uds" }
 libp2p-upnp = { version = "0.3.0", path = "protocols/upnp" }
 libp2p-webrtc = { version = "0.8.0-alpha", path = "transports/webrtc" }
-libp2p-webrtc-utils = { version = "0.2.0", path = "misc/webrtc-utils" }
+libp2p-webrtc-utils = { version = "0.2.1", path = "misc/webrtc-utils" }
 libp2p-webrtc-websys = { version = "0.4.0-alpha", path = "transports/webrtc-websys" }
 libp2p-websocket = { version = "0.44.0", path = "transports/websocket" }
 libp2p-websocket-websys = { version = "0.4.0", path = "transports/websocket-websys" }
 libp2p-webtransport-websys = { version = "0.4.0", path = "transports/webtransport-websys" }
-libp2p-yamux = { version = "0.45.1", path = "muxers/yamux" }
+libp2p-yamux = { version = "0.45.2", path = "muxers/yamux" }
 multiaddr = "0.18.1"
 multihash = "0.19.1"
 multistream-select = { version = "0.13.0", path = "misc/multistream-select" }
@@ -127,7 +127,9 @@ tokio = { version = "1.38", default-features = false }
 tracing = "0.1.37"
 tracing-subscriber = "0.3"
 futures = "0.3.30"
+web-time = "1.1.0"
 ring = "0.17.8"
+rcgen = "0.11.3"
 
 [patch.crates-io]
 
