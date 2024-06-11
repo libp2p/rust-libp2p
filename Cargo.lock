@@ -2664,9 +2664,14 @@ dependencies = [
  "async-std",
  "async-trait",
  "asynchronous-codec",
+ "bytes",
+ "either",
  "futures",
+ "futures-bounded",
  "futures-timer",
+ "instant",
  "libp2p-core",
+ "libp2p-identify",
  "libp2p-identity",
  "libp2p-request-response",
  "libp2p-swarm",
@@ -2674,9 +2679,12 @@ dependencies = [
  "quick-protobuf",
  "quick-protobuf-codec",
  "rand 0.8.5",
+ "rand_core 0.6.4",
+ "thiserror",
+ "tokio",
  "tracing",
  "tracing-subscriber",
- "web-time",
+ "void",
 ]
 
 [[package]]
