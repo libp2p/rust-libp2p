@@ -86,7 +86,7 @@ libp2p-gossipsub = { version = "0.46.2", path = "protocols/gossipsub" }
 libp2p-identify = { version = "0.44.2", path = "protocols/identify" }
 libp2p-identity = { version = "0.2.8" }
 libp2p-kad = { version = "0.46.0", path = "protocols/kad" }
-libp2p-mdns = { version = "0.45.1", path = "protocols/mdns" }
+libp2p-mdns = { version = "0.45.2", path = "protocols/mdns" }
 libp2p-memory-connection-limits = { version = "0.2.0", path = "misc/memory-connection-limits" }
 libp2p-metrics = { version = "0.14.2", path = "misc/metrics" }
 libp2p-mplex = { version = "0.41.0", path = "muxers/mplex" }
