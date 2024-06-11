@@ -72,7 +72,7 @@ rust-version = "1.75.0"
 
 [workspace.dependencies]
 asynchronous-codec = { version = "0.7.0" }
-futures-bounded = { version = "0.2.3" }
+futures-bounded = { version = "0.2.4" }
 futures-rustls = { version = "0.26.0", default-features = false }
 libp2p = { version = "0.54.0", path = "libp2p" }
 libp2p-allow-block-list = { version = "0.3.0", path = "misc/allow-block-list" }
