@@ -1,10 +1,13 @@
-## 0.54.0 -- unreleased
+## 0.54.0
 
 - Update individual crates.
     - Update to [`libp2p-kad` `v0.46.0`](protocols/kad/CHANGELOG.md#0460).
 
 - Raise MSRV to 1.73.
   See [PR 5266](https://github.com/libp2p/rust-libp2p/pull/5266).
+
+- Use `web-time` instead of `instant`.
+  See [PR 5347](https://github.com/libp2p/rust-libp2p/pull/5347).
 
 ## 0.53.2
 

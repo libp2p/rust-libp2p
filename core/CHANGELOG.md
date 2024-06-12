@@ -1,3 +1,7 @@
+## 0.41.3 
+- Use `web-time` instead of `instant`.
+  See [PR 5347](https://github.com/libp2p/rust-libp2p/pull/5347).
+
 ## 0.41.2
 
 - Implement `std::fmt::Display` on `ListenerId`.
