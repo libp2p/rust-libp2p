@@ -34,7 +34,6 @@ use futures_ticker::Ticker;
 use prometheus_client::registry::Registry;
 use rand::{seq::SliceRandom, thread_rng};
 
-use instant::Instant;
 use libp2p_core::{multiaddr::Protocol::Ip4, multiaddr::Protocol::Ip6, Endpoint, Multiaddr};
 use libp2p_identity::Keypair;
 use libp2p_identity::PeerId;
@@ -44,6 +43,7 @@ use libp2p_swarm::{
     ConnectionDenied, ConnectionId, NetworkBehaviour, NotifyHandler, THandler, THandlerInEvent,
     THandlerOutEvent, ToSwarm,
 };
+use web_time::{Instant, SystemTime};
 
 use crate::backoff::BackoffStorage;
 use crate::config::{Config, ValidationMode};
@@ -64,7 +64,6 @@ use crate::types::{
 use crate::types::{PeerConnections, PeerKind, RpcOut};
 use crate::{rpc_proto::proto, TopicScoreParams};
 use crate::{PublishError, SubscriptionError, ValidationError};
-use instant::SystemTime;
 use quick_protobuf::{MessageWrite, Writer};
 use std::{cmp::Ordering::Equal, fmt::Debug};
 
@@ -550,6 +549,7 @@ where
     /// Unsubscribes from a topic.
     ///
     /// Returns [`Ok(true)`] if we were subscribed to this topic.
+    #[allow(clippy::unnecessary_wraps)]
     pub fn unsubscribe<H: Hasher>(&mut self, topic: &Topic<H>) -> Result<bool, PublishError> {
         tracing::debug!(%topic, "Unsubscribing from topic");
         let topic_hash = topic.hash();
@@ -2552,6 +2552,7 @@ where
     /// Helper function which forwards a message to mesh\[topic\] peers.
     ///
     /// Returns true if at least one peer was messaged.
+    #[allow(clippy::unnecessary_wraps)]
     fn forward_msg(
         &mut self,
         msg_id: &MessageId,
