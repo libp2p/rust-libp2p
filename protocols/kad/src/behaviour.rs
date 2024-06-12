@@ -36,7 +36,6 @@ use crate::record::{
 use crate::K_VALUE;
 use crate::{jobs::*, protocol};
 use fnv::{FnvHashMap, FnvHashSet};
-use instant::Instant;
 use libp2p_core::{ConnectedPoint, Endpoint, Multiaddr};
 use libp2p_identity::PeerId;
 use libp2p_swarm::behaviour::{
@@ -57,6 +56,7 @@ use std::time::Duration;
 use std::vec;
 use thiserror::Error;
 use tracing::Level;
+use web_time::Instant;
 
 pub use crate::query::QueryStats;
 
@@ -925,11 +925,11 @@ where
     /// > See [`Behaviour::add_address`].
     ///
     /// > **Note**: Bootstrap does not require to be called manually. It is periodically
-    /// invoked at regular intervals based on the configured `periodic_bootstrap_interval` (see
-    /// [`Config::set_periodic_bootstrap_interval`] for details) and it is also automatically invoked
-    /// when a new peer is inserted in the routing table.
-    /// This parameter is used to call [`Behaviour::bootstrap`] periodically and automatically
-    /// to ensure a healthy routing table.
+    /// > invoked at regular intervals based on the configured `periodic_bootstrap_interval` (see
+    /// > [`Config::set_periodic_bootstrap_interval`] for details) and it is also automatically invoked
+    /// > when a new peer is inserted in the routing table.
+    /// > This parameter is used to call [`Behaviour::bootstrap`] periodically and automatically
+    /// > to ensure a healthy routing table.
     pub fn bootstrap(&mut self) -> Result<QueryId, NoKnownPeers> {
         let local_key = *self.kbuckets.local_key();
         let info = QueryInfo::Bootstrap {

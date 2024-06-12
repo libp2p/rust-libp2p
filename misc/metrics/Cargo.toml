@@ -3,7 +3,7 @@ name = "libp2p-metrics"
 edition = "2021"
 rust-version = { workspace = true }
 description = "Metrics for libp2p"
-version = "0.14.1"
+version = "0.14.2"
 authors = ["Max Inden <mail@max-inden.de>"]
 license = "MIT"
 repository = "https://github.com/libp2p/rust-libp2p"
@@ -20,7 +20,7 @@ relay = ["libp2p-relay"]
 
 [dependencies]
 futures = { workspace = true }
-instant = "0.1.12"
+web-time = { workspace = true }
 libp2p-core = { workspace = true }
 libp2p-dcutr =  { workspace = true, optional = true }
 libp2p-gossipsub =  { workspace = true, optional = true }

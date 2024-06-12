@@ -197,7 +197,7 @@ fn decrypt(
     ciphertext: &mut BytesMut,
     decrypt_fn: impl FnOnce(&[u8], &mut [u8]) -> Result<usize, snow::Error>,
 ) -> io::Result<Option<Bytes>> {
-    let Some(ciphertext) = decode_length_prefixed(ciphertext)? else {
+    let Some(ciphertext) = decode_length_prefixed(ciphertext) else {
         return Ok(None);
     };
 
@@ -223,9 +223,9 @@ fn encode_length_prefixed(src: &[u8], dst: &mut BytesMut) {
     dst.extend_from_slice(src);
 }
 
-fn decode_length_prefixed(src: &mut BytesMut) -> Result<Option<Bytes>, io::Error> {
+fn decode_length_prefixed(src: &mut BytesMut) -> Option<Bytes> {
     if src.len() < size_of::<u16>() {
-        return Ok(None);
+        return None;
     }
 
     let mut len_bytes = [0u8; U16_LENGTH];
@@ -235,8 +235,8 @@ fn decode_length_prefixed(src: &mut BytesMut) -> Result<Option<Bytes>, io::Error
     if src.len() - U16_LENGTH >= len {
         // Skip the length header we already read.
         src.advance(U16_LENGTH);
-        Ok(Some(src.split_to(len).freeze()))
+        Some(src.split_to(len).freeze())
     } else {
-        Ok(None)
+        None
     }
 }
