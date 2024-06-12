@@ -28,7 +28,7 @@ libp2p-noise = { workspace = true }
 libp2p-tls = { workspace = true }
 libp2p-webrtc = { workspace = true, features = ["tokio"] }
 mime_guess = "2.0"
-redis = { version = "0.23.3", default-features = false, features = [
+redis = { version = "0.24.0", default-features = false, features = [
     "tokio-comp",
 ] }
 rust-embed = "8.4"
