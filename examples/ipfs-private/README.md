@@ -24,11 +24,11 @@ To run the example, follow these steps:
 2.  Once the example is running, you can interact with the IPFS node using the following commands:
 
     -   **Pubsub (Gossipsub):** You can use the gossipsub protocol to send and receive messages on the "chat" topic.
-    To send a message, type it in the console and press Enter.
-    The message will be broadcasted to other connected nodes using gossipsub.
+        To send a message, type it in the console and press Enter.
+        The message will be broadcasted to other connected nodes using gossipsub.
 
     -   **Ping:** You can ping other connected nodes to test network connectivity.
-    The example will display the round-trip time (RTT) for successful pings or indicate if a timeout occurs.
+        The example will display the round-trip time (RTT) for successful pings or indicate if a timeout occurs.
 
 
 ## Conclusion

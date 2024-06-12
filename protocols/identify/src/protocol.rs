@@ -25,7 +25,6 @@ use libp2p_core::{multiaddr, Multiaddr};
 use libp2p_identity as identity;
 use libp2p_identity::PublicKey;
 use libp2p_swarm::StreamProtocol;
-use std::convert::TryFrom;
 use std::io;
 use thiserror::Error;
 

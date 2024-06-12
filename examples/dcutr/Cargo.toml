@@ -9,14 +9,14 @@ license = "MIT"
 release = false
 
 [dependencies]
-clap = { version = "4.4.12", features = ["derive"] }
-futures = "0.3.30"
+clap = { version = "4.5.6", features = ["derive"] }
+futures = { workspace = true }
 futures-timer = "3.0"
 libp2p = { path = "../../libp2p", features = [ "dns", "dcutr", "identify", "macros", "noise", "ping", "quic", "relay", "rendezvous", "tcp", "tokio", "yamux"] }
 log = "0.4"
-tokio = { version = "1.35", features = ["macros", "net", "rt", "signal"] }
-tracing = "0.1.37"
-tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+tokio = { workspace = true, features = ["macros", "net", "rt", "signal"] }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true, features = ["env-filter"] }
 
 [lints]
 workspace = true

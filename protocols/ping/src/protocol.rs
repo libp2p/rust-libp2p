@@ -19,10 +19,10 @@
 // DEALINGS IN THE SOFTWARE.
 
 use futures::prelude::*;
-use instant::Instant;
 use libp2p_swarm::StreamProtocol;
 use rand::{distributions, prelude::*};
 use std::{io, time::Duration};
+use web_time::Instant;
 
 pub const PROTOCOL_NAME: StreamProtocol = StreamProtocol::new("/ipfs/ping/1.0.0");
 
@@ -89,8 +89,6 @@ mod tests {
         multiaddr::multiaddr,
         transport::{memory::MemoryTransport, ListenerId, Transport},
     };
-    use rand::{thread_rng, Rng};
-    use std::time::Duration;
 
     #[test]
     fn ping_pong() {

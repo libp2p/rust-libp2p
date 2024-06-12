@@ -16,7 +16,7 @@ To run the example, follow these steps:
    Replace `<seed>` with a seed value used to generate a deterministic peer ID for the relay node.
 
 2. The relay node will start listening for incoming connections.
-It will print the listening address once it is ready.
+   It will print the listening address once it is ready.
 
 3. Connect other **libp2p** nodes to the relay node by specifying the relay's listening address as one of the bootstrap nodes in their configuration.
 

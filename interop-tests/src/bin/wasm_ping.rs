@@ -130,6 +130,8 @@ async fn open_in_browser() -> Result<(Child, WebDriver)> {
     // run a webdriver client
     let mut caps = DesiredCapabilities::chrome();
     caps.set_headless()?;
+    caps.set_disable_dev_shm_usage()?;
+    caps.set_no_sandbox()?;
     let driver = WebDriver::new("http://localhost:45782", caps).await?;
     // go to the wasm test service
     driver.goto(format!("http://{BIND_ADDR}")).await?;
