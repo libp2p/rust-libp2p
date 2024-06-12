@@ -199,7 +199,7 @@ pub(crate) mod wasm {
 
     use crate::{BlpopRequest, Muxer, SecProtocol, Transport};
 
-    pub(crate) type Instant = instant::Instant;
+    pub(crate) type Instant = web_time::Instant;
 
     pub(crate) fn init_logger() {
         console_error_panic_hook::set_once();

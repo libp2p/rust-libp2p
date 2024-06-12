@@ -2,7 +2,7 @@
 name = "libp2p-identify"
 edition = "2021"
 rust-version = { workspace = true }
-description = "Nodes identifcation protocol for libp2p"
+description = "Nodes identification protocol for libp2p"
 version = "0.44.2"
 authors = ["Parity Technologies <admin@parity.io>"]
 license = "MIT"
@@ -31,7 +31,7 @@ either = "1.12.0"
 async-std = { version = "1.6.2", features = ["attributes"] }
 libp2p-swarm-test = { path = "../../swarm-test" }
 libp2p-swarm = { workspace = true, features = ["macros"] }
-tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+tracing-subscriber = { workspace = true, features = ["env-filter"] }
 
 # Passing arguments to the docsrs builder in order to properly document cfg's.
 # More information: https://docs.rs/about/builds#cross-compiling
