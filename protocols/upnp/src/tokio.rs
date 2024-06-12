@@ -100,9 +100,7 @@ pub(crate) fn search_gateway() -> oneshot::Receiver<Result<Gateway, Box<dyn Erro
         let gateway = match igd_next::aio::tokio::search_gateway(SearchOptions::default()).await {
             Ok(gateway) => gateway,
             Err(err) => {
-                search_result_sender
-                    .send(Err(err.into()))
-                    .expect("receiver shouldn't have been dropped");
+                let _ = search_result_sender.send(Err(err.into()));
                 return;
             }
         };
@@ -110,20 +108,22 @@ pub(crate) fn search_gateway() -> oneshot::Receiver<Result<Gateway, Box<dyn Erro
         let external_addr = match gateway.get_external_ip().await {
             Ok(addr) => addr,
             Err(err) => {
-                search_result_sender
-                    .send(Err(err.into()))
-                    .expect("receiver shouldn't have been dropped");
+                let _ = search_result_sender.send(Err(err.into()));
                 return;
             }
         };
 
-        search_result_sender
+        // Check if receiver dropped.
+        if search_result_sender
             .send(Ok(Gateway {
                 sender: events_sender,
                 receiver: events_queue,
                 external_addr,
             }))
-            .expect("receiver shouldn't have been dropped");
+            .is_err()
+        {
+            return;
+        }
 
         loop {
             // The task sender has dropped so we can return.
@@ -158,10 +158,10 @@ pub(crate) fn search_gateway() -> oneshot::Receiver<Result<Gateway, Box<dyn Erro
                     }
                 }
             };
-            task_sender
-                .send(event)
-                .await
-                .expect("receiver should be available");
+            // Gateway was dropped.
+            if task_sender.send(event).await.is_err() {
+                return;
+            }
         }
     });
 

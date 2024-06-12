@@ -182,7 +182,6 @@ impl From<Error> for io::Error {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::proto;
     use asynchronous_codec::FramedRead;
     use futures::io::Cursor;
     use futures::{FutureExt, StreamExt};

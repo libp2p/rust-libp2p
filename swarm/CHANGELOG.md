@@ -1,3 +1,16 @@
+## 0.44.3
+
+- Use `web-time` instead of `instant`.
+  See [PR 5347](https://github.com/libp2p/rust-libp2p/pull/5347).
+
+## 0.44.2
+
+- Allow `NetworkBehaviour`s to share addresses of peers.
+  This is enabled via the new `ToSwarm::NewExternalAddrOfPeer` event.
+  The address is broadcast to all behaviours via `FromSwarm::NewExternalAddrOfPeer`.
+  Protocols that want to collect these addresses can use the new `PeerAddresses` utility.
+  See [PR 4371](https://github.com/libp2p/rust-libp2p/pull/4371).
+
 ## 0.44.1
 
 - Implement `Clone` & `Copy` for `FromSwarm.
@@ -597,7 +610,7 @@
 ## 0.34.0 [2022-02-22]
 
 - Rename `ProtocolsHandler` to `ConnectionHandler`. Upgrade should be as simple as renaming all
-  occurences of `ProtocolsHandler` to `ConnectionHandler` with your favorite text manipulation tool
+  occurrences of `ProtocolsHandler` to `ConnectionHandler` with your favorite text manipulation tool
   across your codebase. See [PR 2527].
 
 - Fold `libp2p-core`'s `Network` into `Swarm`. See [PR 2492].

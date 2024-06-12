@@ -48,6 +48,7 @@
 //!      any system APIs (like libc's `gethostbyname`). Again this is
 //!      problematic on platforms like Android, where there's a lot of
 //!      complexity hidden behind the system APIs.
+//!
 //! If the implementation requires different characteristics, one should
 //! consider providing their own implementation of [`Transport`] or use
 //! platform specific APIs to extract the host's DNS configuration (if possible)
@@ -157,7 +158,6 @@ use smallvec::SmallVec;
 use std::io;
 use std::net::{Ipv4Addr, Ipv6Addr};
 use std::{
-    convert::TryFrom,
     error, fmt, iter,
     ops::DerefMut,
     pin::Pin,
@@ -232,14 +232,14 @@ where
     }
 
     fn dial(&mut self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
-        self.do_dial(addr, Endpoint::Dialer)
+        Ok(self.do_dial(addr, Endpoint::Dialer))
     }
 
     fn dial_as_listener(
         &mut self,
         addr: Multiaddr,
     ) -> Result<Self::Dial, TransportError<Self::Error>> {
-        self.do_dial(addr, Endpoint::Listener)
+        Ok(self.do_dial(addr, Endpoint::Listener))
     }
 
     fn address_translation(&self, server: &Multiaddr, observed: &Multiaddr) -> Option<Multiaddr> {
@@ -270,16 +270,13 @@ where
         &mut self,
         addr: Multiaddr,
         role_override: Endpoint,
-    ) -> Result<
-        <Self as libp2p_core::Transport>::Dial,
-        TransportError<<Self as libp2p_core::Transport>::Error>,
-    > {
+    ) -> <Self as libp2p_core::Transport>::Dial {
         let resolver = self.resolver.clone();
         let inner = self.inner.clone();
 
         // Asynchronously resolve all DNS names in the address before proceeding
         // with dialing on the underlying transport.
-        Ok(async move {
+        async move {
             let mut last_err = None;
             let mut dns_lookups = 0;
             let mut dial_attempts = 0;
@@ -405,7 +402,7 @@ where
             }))
         }
         .boxed()
-        .right_future())
+        .right_future()
     }
 }
 
@@ -628,12 +625,7 @@ where
 #[cfg(all(test, any(feature = "tokio", feature = "async-std")))]
 mod tests {
     use super::*;
-    use futures::future::BoxFuture;
-    use libp2p_core::{
-        multiaddr::{Multiaddr, Protocol},
-        transport::{TransportError, TransportEvent},
-        Transport,
-    };
+    use libp2p_core::Transport;
     use libp2p_identity::PeerId;
 
     #[test]
@@ -783,7 +775,7 @@ mod tests {
             // type record lookups may not work with the system DNS resolver.
             let config = ResolverConfig::quad9();
             let opts = ResolverOpts::default();
-            let rt = tokio_crate::runtime::Builder::new_current_thread()
+            let rt = ::tokio::runtime::Builder::new_current_thread()
                 .enable_io()
                 .enable_time()
                 .build()

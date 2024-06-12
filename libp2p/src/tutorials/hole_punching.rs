@@ -69,7 +69,7 @@
 //! Now let's make sure that the server is public, in other words let's make sure one can reach it
 //! through the Internet. First, either manually replace `$RELAY_SERVER_IP` in the following
 //! commands or `export RELAY_SERVER_IP=ipaddr` with the appropriate relay server `ipaddr` in
-//! the dailing client and listening client.
+//! the dialing client and listening client.
 //!
 //! Now, from the dialing client:
 //!

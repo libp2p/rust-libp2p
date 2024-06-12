@@ -9,11 +9,11 @@ license = "MIT"
 release = false
 
 [dependencies]
-futures = "0.3.30"
+futures = { workspace = true }
 libp2p = { path = "../../libp2p", features = ["noise", "ping", "tcp", "tokio", "yamux"] }
-tokio = { version = "1.35.1", features = ["full"] }
-tracing = "0.1.37"
-tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+tokio = { workspace = true, features = ["full"] }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true, features = ["env-filter"] }
 
 [lints]
 workspace = true

@@ -94,7 +94,7 @@ impl<TOut> Transport for DummyTransport<TOut> {
     }
 }
 
-/// Implementation of `AsyncRead` and `AsyncWrite`. Not meant to be instanciated.
+/// Implementation of `AsyncRead` and `AsyncWrite`. Not meant to be instantiated.
 pub struct DummyStream(());
 
 impl fmt::Debug for DummyStream {
