@@ -144,7 +144,7 @@ libp2p-identity = { path = "identity" }
 [workspace.lints]
 rust.unreachable_pub = "warn"
 clippy.used_underscore_binding = "warn"
-clippy.pedantic = "allow"
+clippy.pedantic = { level = "allow", priority = -1 }
 clippy.type_complexity = "allow"
 clippy.unnecessary_wraps = "warn"
 clippy.manual_let_else = "warn"
