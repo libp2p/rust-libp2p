@@ -1,4 +1,7 @@
-## 0.44.3
+## 0.45.0
+
+- Add peer_id to `FromSwarm::ListenFailure`.
+  See [PR 4818](https://github.com/libp2p/rust-libp2p/pull/4818).
 
 - Use `web-time` instead of `instant`.
   See [PR 5347](https://github.com/libp2p/rust-libp2p/pull/5347).
@@ -44,8 +47,6 @@
   See [PR 4721](https://github.com/libp2p/rust-libp2p/pull/4721).
 - Remove deprecated symbols.
   See [PR 4737](https://github.com/libp2p/rust-libp2p/pull/4737).
-- Add peer_id to `FromSwarm::ListenFailure`.
-  See [PR 4818](https://github.com/libp2p/rust-libp2p/pull/4818).
 
 ## 0.43.7
 
