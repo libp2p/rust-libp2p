@@ -171,7 +171,7 @@ impl futures::Future for ThrottleTimer {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use instant::Instant;
+    use web_time::Instant;
 
     const MS_5: Duration = Duration::from_millis(5);
     const MS_100: Duration = Duration::from_millis(100);

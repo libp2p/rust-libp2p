@@ -3,7 +3,7 @@ name = "libp2p-webtransport-websys"
 edition = "2021"
 rust-version = { workspace = true }
 description = "WebTransport for libp2p under WASM environment"
-version = "0.2.0"
+version = "0.3.0"
 authors = [
     "Yiannis Marangos <yiannis@eiger.co>",
     "oblique <psyberbits@gmail.com>",
@@ -22,7 +22,7 @@ libp2p-noise = { workspace = true }
 multiaddr = { workspace = true }
 multihash = { workspace = true }
 send_wrapper = { version = "0.6.0", features = ["futures"] }
-thiserror = "1.0.59"
+thiserror = "1.0.61"
 tracing = { workspace = true }
 wasm-bindgen = "0.2.90"
 wasm-bindgen-futures = "0.4.42"

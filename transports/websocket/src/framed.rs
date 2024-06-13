@@ -461,7 +461,7 @@ where
 struct WsAddress {
     host_port: String,
     path: String,
-    dns_name: Option<rustls::ServerName>,
+    dns_name: Option<rustls::pki_types::ServerName<'static>>,
     use_tls: bool,
     tcp_addr: Multiaddr,
 }
@@ -511,7 +511,7 @@ fn parse_ws_dial_addr<T>(addr: Multiaddr) -> Result<WsAddress, Error<T>> {
             Some(Protocol::Ws(path)) => break (false, path.into_owned()),
             Some(Protocol::Wss(path)) => {
                 if dns_name.is_none() {
-                    tracing::debug!(addrress=%addr, "Missing DNS name in WSS address");
+                    tracing::debug!(address=%addr, "Missing DNS name in WSS address");
                     return Err(Error::InvalidMultiaddr(addr));
                 }
                 break (true, path.into_owned());
