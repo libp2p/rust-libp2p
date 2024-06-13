@@ -9,6 +9,9 @@
 - Use `web-time` instead of `instant`.
   See [PR 5347](https://github.com/libp2p/rust-libp2p/pull/5347).
 
+- Remove redundant async signature.
+  See [PR XXXX](https://github.com/libp2p/rust-libp2p/pull/XXXX).
+
 ## 0.53.2
 
 - Allow `SwarmBuilder::with_bandwidth_metrics` after `SwarmBuilder::with_websocket`.

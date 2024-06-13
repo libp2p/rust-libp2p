@@ -73,7 +73,7 @@ impl<Provider, T: AuthenticatedMultiplexedTransport>
 impl<T: AuthenticatedMultiplexedTransport>
     SwarmBuilder<super::provider::AsyncStd, OtherTransportPhase<T>>
 {
-    pub async fn with_dns(
+    pub fn with_dns(
         self,
     ) -> Result<
         SwarmBuilder<
@@ -82,7 +82,7 @@ impl<T: AuthenticatedMultiplexedTransport>
         >,
         std::io::Error,
     > {
-        self.without_any_other_transports().with_dns().await
+        self.without_any_other_transports().with_dns()
     }
 }
 #[cfg(all(not(target_arch = "wasm32"), feature = "tokio", feature = "dns"))]
