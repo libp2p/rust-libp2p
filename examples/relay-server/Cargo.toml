@@ -9,13 +9,13 @@ license = "MIT"
 release = false
 
 [dependencies]
-clap = { version = "4.4.10", features = ["derive"] }
+clap = { version = "4.5.6", features = ["derive"] }
 async-std = { version = "1.12", features = ["attributes"] }
 async-trait = "0.1"
-futures = "0.3.2"
+futures = { workspace = true }
 libp2p = { path = "../../libp2p", features = [ "async-std", "noise", "macros", "ping", "tcp", "identify", "yamux", "relay", "quic"] }
-tracing = "0.1.37"
-tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true, features = ["env-filter"] }
 
 [lints]
 workspace = true

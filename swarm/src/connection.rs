@@ -44,7 +44,6 @@ use futures::stream::FuturesUnordered;
 use futures::StreamExt;
 use futures::{stream, FutureExt};
 use futures_timer::Delay;
-use instant::Instant;
 use libp2p_core::connection::ConnectedPoint;
 use libp2p_core::multiaddr::Multiaddr;
 use libp2p_core::muxing::{StreamMuxerBox, StreamMuxerEvent, StreamMuxerExt, SubstreamBox};
@@ -59,6 +58,7 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use std::task::Waker;
 use std::time::Duration;
 use std::{fmt, io, mem, pin::Pin, task::Context, task::Poll};
+use web_time::Instant;
 
 static NEXT_CONNECTION_ID: AtomicUsize = AtomicUsize::new(1);
 
@@ -373,7 +373,7 @@ where
                 match shutdown {
                     Shutdown::None => {}
                     Shutdown::Asap => return Poll::Ready(Err(ConnectionError::KeepAliveTimeout)),
-                    Shutdown::Later(delay, _) => match Future::poll(Pin::new(delay), cx) {
+                    Shutdown::Later(delay) => match Future::poll(Pin::new(delay), cx) {
                         Poll::Ready(_) => {
                             return Poll::Ready(Err(ConnectionError::KeepAliveTimeout))
                         }
@@ -470,15 +470,12 @@ fn compute_new_shutdown(
 ) -> Option<Shutdown> {
     match (current_shutdown, handler_keep_alive) {
         (_, false) if idle_timeout == Duration::ZERO => Some(Shutdown::Asap),
-        (Shutdown::Later(_, _), false) => None, // Do nothing, i.e. let the shutdown timer continue to tick.
+        (Shutdown::Later(_), false) => None, // Do nothing, i.e. let the shutdown timer continue to tick.
         (_, false) => {
             let now = Instant::now();
             let safe_keep_alive = checked_add_fraction(now, idle_timeout);
 
-            Some(Shutdown::Later(
-                Delay::new(safe_keep_alive),
-                now + safe_keep_alive,
-            ))
+            Some(Shutdown::Later(Delay::new(safe_keep_alive)))
         }
         (_, true) => Some(Shutdown::None),
     }
@@ -720,7 +717,7 @@ impl<UserData, Upgrade> Future for SubstreamRequested<UserData, Upgrade> {
 
 /// The options for a planned connection & handler shutdown.
 ///
-/// A shutdown is planned anew based on the the return value of
+/// A shutdown is planned anew based on the return value of
 /// [`ConnectionHandler::connection_keep_alive`] of the underlying handler
 /// after every invocation of [`ConnectionHandler::poll`].
 ///
@@ -734,7 +731,7 @@ enum Shutdown {
     /// A shut down is planned as soon as possible.
     Asap,
     /// A shut down is planned for when a `Delay` has elapsed.
-    Later(Delay, Instant),
+    Later(Delay),
 }
 
 #[cfg(test)]
@@ -947,11 +944,10 @@ mod tests {
                 let shutdown = match self.0 {
                     Shutdown::None => Shutdown::None,
                     Shutdown::Asap => Shutdown::Asap,
-                    Shutdown::Later(_, instant) => Shutdown::Later(
+                    Shutdown::Later(_) => Shutdown::Later(
                         // compute_new_shutdown does not touch the delay. Delay does not
                         // implement Clone. Thus use a placeholder delay.
                         Delay::new(Duration::from_secs(1)),
-                        instant,
                     ),
                 };
 
@@ -964,12 +960,7 @@ mod tests {
                 let shutdown = match g.gen_range(1u8..4) {
                     1 => Shutdown::None,
                     2 => Shutdown::Asap,
-                    3 => Shutdown::Later(
-                        Delay::new(Duration::from_secs(u32::arbitrary(g) as u64)),
-                        Instant::now()
-                            .checked_add(Duration::arbitrary(g))
-                            .unwrap_or(Instant::now()),
-                    ),
+                    3 => Shutdown::Later(Delay::new(Duration::from_secs(u32::arbitrary(g) as u64))),
                     _ => unreachable!(),
                 };
 
@@ -1000,7 +991,9 @@ mod tests {
             self: Pin<&mut Self>,
             _: &mut Context<'_>,
         ) -> Poll<Result<Self::Substream, Self::Error>> {
-            Poll::Ready(Ok(PendingSubstream(Arc::downgrade(&self.counter))))
+            Poll::Ready(Ok(PendingSubstream {
+                _weak: Arc::downgrade(&self.counter),
+            }))
         }
 
         fn poll_outbound(
@@ -1055,7 +1048,9 @@ mod tests {
         }
     }
 
-    struct PendingSubstream(Weak<()>);
+    struct PendingSubstream {
+        _weak: Weak<()>,
+    }
 
     impl AsyncRead for PendingSubstream {
         fn poll_read(

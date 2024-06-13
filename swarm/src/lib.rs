@@ -84,6 +84,7 @@ pub mod derive_prelude {
     pub use crate::behaviour::ListenerClosed;
     pub use crate::behaviour::ListenerError;
     pub use crate::behaviour::NewExternalAddrCandidate;
+    pub use crate::behaviour::NewExternalAddrOfPeer;
     pub use crate::behaviour::NewListenAddr;
     pub use crate::behaviour::NewListener;
     pub use crate::connection::ConnectionId;
@@ -108,8 +109,8 @@ pub mod derive_prelude {
 pub use behaviour::{
     AddressChange, CloseConnection, ConnectionClosed, DialFailure, ExpiredListenAddr,
     ExternalAddrExpired, ExternalAddresses, FromSwarm, ListenAddresses, ListenFailure,
-    ListenerClosed, ListenerError, NetworkBehaviour, NewExternalAddrCandidate, NewListenAddr,
-    NotifyHandler, ToSwarm,
+    ListenerClosed, ListenerError, NetworkBehaviour, NewExternalAddrCandidate,
+    NewExternalAddrOfPeer, NewListenAddr, NotifyHandler, PeerAddresses, ToSwarm,
 };
 pub use connection::pool::ConnectionCounters;
 pub use connection::{ConnectionError, ConnectionId, SupportedProtocols};
@@ -145,7 +146,6 @@ use std::collections::{HashMap, HashSet, VecDeque};
 use std::num::{NonZeroU32, NonZeroU8, NonZeroUsize};
 use std::time::Duration;
 use std::{
-    convert::TryFrom,
     error, fmt, io,
     pin::Pin,
     task::{Context, Poll},
@@ -298,6 +298,8 @@ pub enum SwarmEvent<TBehaviourOutEvent> {
     ExternalAddrConfirmed { address: Multiaddr },
     /// An external address of the local node expired, i.e. is no-longer confirmed.
     ExternalAddrExpired { address: Multiaddr },
+    /// We have discovered a new address of a peer.
+    NewExternalAddrOfPeer { peer_id: PeerId, address: Multiaddr },
 }
 
 impl<TBehaviourOutEvent> SwarmEvent<TBehaviourOutEvent> {
@@ -623,6 +625,17 @@ where
         self.confirmed_external_addr.remove(addr);
     }
 
+    /// Add a new external address of a remote peer.
+    ///
+    /// The address is broadcast to all [`NetworkBehaviour`]s via [`FromSwarm::NewExternalAddrOfPeer`].
+    pub fn add_peer_address(&mut self, peer_id: PeerId, addr: Multiaddr) {
+        self.behaviour
+            .on_swarm_event(FromSwarm::NewExternalAddrOfPeer(NewExternalAddrOfPeer {
+                peer_id,
+                addr: &addr,
+            }))
+    }
+
     /// Disconnects a peer by its peer ID, closing all connections to said peer.
     ///
     /// Returns `Ok(())` if there was one or more established connections to the peer.
@@ -741,6 +754,7 @@ where
                                         send_back_addr: &send_back_addr,
                                         error: &listen_error,
                                         connection_id: id,
+                                        peer_id: Some(peer_id),
                                     },
                                 ));
 
@@ -854,6 +868,7 @@ where
                         send_back_addr: &send_back_addr,
                         error: &error,
                         connection_id: id,
+                        peer_id: None,
                     }));
                 self.pending_swarm_events
                     .push_back(SwarmEvent::IncomingConnectionError {
@@ -957,6 +972,7 @@ where
                                 send_back_addr: &send_back_addr,
                                 error: &listen_error,
                                 connection_id,
+                                peer_id: None,
                             }));
 
                         self.pending_swarm_events
@@ -1134,7 +1150,7 @@ where
                     addrs
                 };
 
-                // If address translation yielded nothing, broacast the original candidate address.
+                // If address translation yielded nothing, broadcast the original candidate address.
                 if translated_addresses.is_empty() {
                     self.behaviour
                         .on_swarm_event(FromSwarm::NewExternalAddrCandidate(
@@ -1176,6 +1192,15 @@ where
                     self.pool.disconnect(peer_id);
                 }
             },
+            ToSwarm::NewExternalAddrOfPeer { peer_id, address } => {
+                self.behaviour
+                    .on_swarm_event(FromSwarm::NewExternalAddrOfPeer(NewExternalAddrOfPeer {
+                        peer_id,
+                        addr: &address,
+                    }));
+                self.pending_swarm_events
+                    .push_back(SwarmEvent::NewExternalAddrOfPeer { peer_id, address });
+            }
         }
     }
 
@@ -1748,14 +1773,10 @@ impl NetworkInfo {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::dummy;
     use crate::test::{CallTraceBehaviour, MockBehaviour};
-    use futures::future;
     use libp2p_core::multiaddr::multiaddr;
     use libp2p_core::transport::memory::MemoryTransportError;
-    use libp2p_core::transport::TransportEvent;
-    use libp2p_core::Endpoint;
-    use libp2p_core::{multiaddr, transport, upgrade};
+    use libp2p_core::{multiaddr, upgrade};
     use libp2p_identity as identity;
     use libp2p_plaintext as plaintext;
     use libp2p_yamux as yamux;
@@ -1809,7 +1830,7 @@ mod tests {
             && swarm2.is_connected(swarm1.local_peer_id())
     }
 
-    fn swarms_disconnected<TBehaviour: NetworkBehaviour>(
+    fn swarms_disconnected<TBehaviour>(
         swarm1: &Swarm<CallTraceBehaviour<TBehaviour>>,
         swarm2: &Swarm<CallTraceBehaviour<TBehaviour>>,
     ) -> bool

@@ -22,10 +22,9 @@ use super::*;
 
 use crate::kbucket::{Distance, Key, KeyBytes};
 use crate::{ALPHA_VALUE, K_VALUE};
-use instant::Instant;
-use libp2p_identity::PeerId;
 use std::collections::btree_map::{BTreeMap, Entry};
-use std::{iter::FromIterator, num::NonZeroUsize, time::Duration};
+use std::{num::NonZeroUsize, time::Duration};
+use web_time::Instant;
 
 pub(crate) mod disjoint;
 /// A peer iterator for a dynamically changing list of peers, sorted by increasing
@@ -175,10 +174,28 @@ impl ClosestPeersIter {
             },
         }
 
-        let num_closest = self.closest_peers.len();
-        let mut progress = false;
+        let mut cur_range = distance;
+        let num_results = self.config.num_results.get();
+        // furthest_peer is the furthest peer in range among the closest_peers
+        let furthest_peer = self
+            .closest_peers
+            .iter()
+            .enumerate()
+            .nth(num_results - 1)
+            .map(|(_, peer)| peer)
+            .or_else(|| self.closest_peers.iter().last());
+        if let Some((dist, _)) = furthest_peer {
+            cur_range = *dist;
+        }
 
         // Incorporate the reported closer peers into the iterator.
+        //
+        // The iterator makes progress if:
+        //     1, the iterator did not yet accumulate enough closest peers.
+        //   OR
+        //     2, any of the new peers is closer to the target than any peer seen so far
+        //        (i.e. is the first entry after being incorporated)
+        let mut progress = self.closest_peers.len() < self.config.num_results.get();
         for peer in closer_peers {
             let key = peer.into();
             let distance = self.target.distance(&key);
@@ -186,12 +203,16 @@ impl ClosestPeersIter {
                 key,
                 state: PeerState::NotContacted,
             };
-            self.closest_peers.entry(distance).or_insert(peer);
-            // The iterator makes progress if the new peer is either closer to the target
-            // than any peer seen so far (i.e. is the first entry), or the iterator did
-            // not yet accumulate enough closest peers.
-            progress = self.closest_peers.keys().next() == Some(&distance)
-                || num_closest < self.config.num_results.get();
+
+            let is_first_insert = match self.closest_peers.entry(distance) {
+                Entry::Occupied(_) => false,
+                Entry::Vacant(entry) => {
+                    entry.insert(peer);
+                    true
+                }
+            };
+
+            progress = (is_first_insert && distance < cur_range) || progress;
         }
 
         // Update the iterator state.
@@ -476,10 +497,9 @@ mod tests {
     use super::*;
     use crate::SHA_256_MH;
     use libp2p_core::multihash::Multihash;
-    use libp2p_identity::PeerId;
     use quickcheck::*;
     use rand::{rngs::StdRng, Rng, SeedableRng};
-    use std::{iter, time::Duration};
+    use std::iter;
 
     fn random_peers<R: Rng>(n: usize, g: &mut R) -> Vec<PeerId> {
         (0..n)
@@ -536,12 +556,12 @@ mod tests {
     #[test]
     fn new_iter() {
         fn prop(iter: ClosestPeersIter) {
-            let target = iter.target.clone();
+            let target = iter.target;
 
             let (keys, states): (Vec<_>, Vec<_>) = iter
                 .closest_peers
                 .values()
-                .map(|e| (e.key.clone(), &e.state))
+                .map(|e| (e.key, &e.state))
                 .unzip();
 
             let none_contacted = states.iter().all(|s| matches!(s, PeerState::NotContacted));
@@ -575,12 +595,12 @@ mod tests {
             let mut expected = iter
                 .closest_peers
                 .values()
-                .map(|e| e.key.clone())
+                .map(|e| e.key)
                 .collect::<Vec<_>>();
             let num_known = expected.len();
             let max_parallelism = usize::min(iter.config.parallelism.get(), num_known);
 
-            let target = iter.target.clone();
+            let target = iter.target;
             let mut remaining;
             let mut num_failures = 0;
 
@@ -647,7 +667,7 @@ mod tests {
                 .values()
                 .all(|e| !matches!(e.state, PeerState::NotContacted | PeerState::Waiting { .. }));
 
-            let target = iter.target.clone();
+            let target = iter.target;
             let num_results = iter.config.num_results;
             let result = iter.into_result();
             let closest = result.map(Key::from).collect::<Vec<_>>();
@@ -724,7 +744,6 @@ mod tests {
                 .next()
                 .unwrap()
                 .key
-                .clone()
                 .into_preimage();
 
             // Poll the iterator for the first peer to be in progress.

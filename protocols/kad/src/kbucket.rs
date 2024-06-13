@@ -75,10 +75,11 @@ mod key;
 pub use bucket::NodeStatus;
 pub use entry::*;
 
-use arrayvec::{self, ArrayVec};
+use arrayvec::ArrayVec;
 use bucket::KBucket;
 use std::collections::VecDeque;
-use std::time::{Duration, Instant};
+use std::time::Duration;
+use web_time::Instant;
 
 /// Maximum number of k-buckets.
 const NUM_BUCKETS: usize = 256;
@@ -172,17 +173,16 @@ where
 
     /// Returns an `Entry` for the given key, representing the state of the entry
     /// in the routing table.
-    pub(crate) fn entry<'a>(&'a mut self, key: &'a TKey) -> Entry<'a, TKey, TVal> {
-        let index = BucketIndex::new(&self.local_key.as_ref().distance(key));
-        if let Some(i) = index {
-            let bucket = &mut self.buckets[i.get()];
-            if let Some(applied) = bucket.apply_pending() {
-                self.applied_pending.push_back(applied)
-            }
-            Entry::new(bucket, key)
-        } else {
-            Entry::SelfEntry
+    ///
+    /// Returns `None` in case the key points to the local node.
+    pub(crate) fn entry<'a>(&'a mut self, key: &'a TKey) -> Option<Entry<'a, TKey, TVal>> {
+        let index = BucketIndex::new(&self.local_key.as_ref().distance(key))?;
+
+        let bucket = &mut self.buckets[index.get()];
+        if let Some(applied) = bucket.apply_pending() {
+            self.applied_pending.push_back(applied)
         }
+        Some(Entry::new(bucket, key))
     }
 
     /// Returns an iterator over all buckets.
@@ -345,7 +345,7 @@ enum ClosestBucketsIterState {
     /// The starting state of the iterator yields the first bucket index and
     /// then transitions to `ZoomIn`.
     Start(BucketIndex),
-    /// The iterator "zooms in" to to yield the next bucket cotaining nodes that
+    /// The iterator "zooms in" to yield the next bucket containing nodes that
     /// are incrementally closer to the local node but further from the `target`.
     /// These buckets are identified by a `1` in the corresponding bit position
     /// of the distance bit string. When bucket `0` is reached, the iterator
@@ -535,7 +535,7 @@ mod tests {
         fn arbitrary(g: &mut Gen) -> TestTable {
             let local_key = Key::from(PeerId::random());
             let timeout = Duration::from_secs(g.gen_range(1..360));
-            let mut table = TestTable::new(local_key.clone().into(), timeout);
+            let mut table = TestTable::new(local_key.into(), timeout);
             let mut num_total = g.gen_range(0..100);
             for (i, b) in &mut table.buckets.iter_mut().enumerate().rev() {
                 let ix = BucketIndex(i);
@@ -544,10 +544,7 @@ mod tests {
                 for _ in 0..num {
                     let distance = ix.rand_distance(&mut rand::thread_rng());
                     let key = local_key.for_distance(distance);
-                    let node = Node {
-                        key: key.clone(),
-                        value: (),
-                    };
+                    let node = Node { key, value: () };
                     let status = NodeStatus::arbitrary(g);
                     match b.insert(node, status) {
                         InsertResult::Inserted => {}
@@ -598,7 +595,7 @@ mod tests {
                 assert!(!bucket_ref.contains(&Distance(min.0 - 1)));
             }
 
-            if max != Distance(U256::max_value()) {
+            if max != Distance(U256::MAX) {
                 // ^ avoid overflow
                 assert!(!bucket_ref.contains(&Distance(max.0 + 1)));
             }
@@ -627,7 +624,7 @@ mod tests {
         let other_id = Key::from(PeerId::random());
 
         let mut table = KBucketsTable::<_, ()>::new(local_key, Duration::from_secs(5));
-        if let Entry::Absent(entry) = table.entry(&other_id) {
+        if let Some(Entry::Absent(entry)) = table.entry(&other_id) {
             match entry.insert((), NodeStatus::Connected) {
                 InsertResult::Inserted => (),
                 _ => panic!(),
@@ -644,11 +641,9 @@ mod tests {
     #[test]
     fn entry_self() {
         let local_key = Key::from(PeerId::random());
-        let mut table = KBucketsTable::<_, ()>::new(local_key.clone(), Duration::from_secs(5));
-        match table.entry(&local_key) {
-            Entry::SelfEntry => (),
-            _ => panic!(),
-        }
+        let mut table = KBucketsTable::<_, ()>::new(local_key, Duration::from_secs(5));
+
+        assert!(table.entry(&local_key).is_none())
     }
 
     #[test]
@@ -661,7 +656,7 @@ mod tests {
                 break;
             }
             let key = Key::from(PeerId::random());
-            if let Entry::Absent(e) = table.entry(&key) {
+            if let Some(Entry::Absent(e)) = table.entry(&key) {
                 match e.insert((), NodeStatus::Connected) {
                     InsertResult::Inserted => count += 1,
                     _ => continue,
@@ -674,7 +669,7 @@ mod tests {
         let mut expected_keys: Vec<_> = table
             .buckets
             .iter()
-            .flat_map(|t| t.iter().map(|(n, _)| n.key.clone()))
+            .flat_map(|t| t.iter().map(|(n, _)| n.key))
             .collect();
 
         for _ in 0..10 {
@@ -689,22 +684,19 @@ mod tests {
     #[test]
     fn applied_pending() {
         let local_key = Key::from(PeerId::random());
-        let mut table = KBucketsTable::<_, ()>::new(local_key.clone(), Duration::from_millis(1));
+        let mut table = KBucketsTable::<_, ()>::new(local_key, Duration::from_millis(1));
         let expected_applied;
         let full_bucket_index;
         loop {
             let key = Key::from(PeerId::random());
-            if let Entry::Absent(e) = table.entry(&key) {
+            if let Some(Entry::Absent(e)) = table.entry(&key) {
                 match e.insert((), NodeStatus::Disconnected) {
                     InsertResult::Full => {
-                        if let Entry::Absent(e) = table.entry(&key) {
+                        if let Some(Entry::Absent(e)) = table.entry(&key) {
                             match e.insert((), NodeStatus::Connected) {
                                 InsertResult::Pending { disconnected } => {
                                     expected_applied = AppliedPending {
-                                        inserted: Node {
-                                            key: key.clone(),
-                                            value: (),
-                                        },
+                                        inserted: Node { key, value: () },
                                         evicted: Some(Node {
                                             key: disconnected,
                                             value: (),
@@ -732,12 +724,12 @@ mod tests {
         full_bucket.pending_mut().unwrap().set_ready_at(elapsed);
 
         match table.entry(&expected_applied.inserted.key) {
-            Entry::Present(_, NodeStatus::Connected) => {}
+            Some(Entry::Present(_, NodeStatus::Connected)) => {}
             x => panic!("Unexpected entry: {x:?}"),
         }
 
         match table.entry(&expected_applied.evicted.as_ref().unwrap().key) {
-            Entry::Absent(_) => {}
+            Some(Entry::Absent(_)) => {}
             x => panic!("Unexpected entry: {x:?}"),
         }
 

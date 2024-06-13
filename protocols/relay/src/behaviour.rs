@@ -27,7 +27,6 @@ use crate::multiaddr_ext::MultiaddrExt;
 use crate::proto;
 use crate::protocol::{inbound_hop, outbound_stop};
 use either::Either;
-use instant::Instant;
 use libp2p_core::multiaddr::Protocol;
 use libp2p_core::{ConnectedPoint, Endpoint, Multiaddr};
 use libp2p_identity::PeerId;
@@ -41,6 +40,7 @@ use std::num::NonZeroU32;
 use std::ops::Add;
 use std::task::{Context, Poll};
 use std::time::Duration;
+use web_time::Instant;
 
 /// Configuration for the relay [`Behaviour`].
 ///
@@ -202,12 +202,12 @@ pub enum Event {
         dst_peer_id: PeerId,
         error: inbound_hop::Error,
     },
-    /// An inbound cirucit request has been accepted.
+    /// An inbound circuit request has been accepted.
     CircuitReqAccepted {
         src_peer_id: PeerId,
         dst_peer_id: PeerId,
     },
-    /// An outbound connect for an inbound cirucit request failed.
+    /// An outbound connect for an inbound circuit request failed.
     #[deprecated(
         note = "Will be removed in favor of logging them internally, see <https://github.com/libp2p/rust-libp2p/issues/4757> for details."
     )]
