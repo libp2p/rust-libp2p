@@ -82,7 +82,7 @@ tcp = ["dep:libp2p-tcp"]
 tls = ["dep:libp2p-tls"]
 tokio = [ "libp2p-swarm/tokio", "libp2p-mdns?/tokio", "libp2p-tcp?/tokio", "libp2p-dns?/tokio", "libp2p-quic?/tokio", "libp2p-upnp?/tokio"]
 uds = ["dep:libp2p-uds"]
-wasm-bindgen = [ "futures-timer/wasm-bindgen", "instant/wasm-bindgen", "getrandom/js", "libp2p-swarm/wasm-bindgen", "libp2p-gossipsub?/wasm-bindgen",]
+wasm-bindgen = [ "futures-timer/wasm-bindgen", "getrandom/js", "libp2p-swarm/wasm-bindgen", "libp2p-gossipsub?/wasm-bindgen"]
 websocket-websys = ["dep:libp2p-websocket-websys"]
 websocket = ["dep:libp2p-websocket"]
 webtransport-websys = ["dep:libp2p-webtransport-websys"]
@@ -92,10 +92,9 @@ upnp = ["dep:libp2p-upnp"]
 [dependencies]
 bytes = "1"
 either = "1.9.0"
-futures = "0.3.26"
+futures = { workspace = true }
 futures-timer = "3.0.2" # Explicit dependency to be used in `wasm-bindgen` feature
 getrandom = "0.2.3"     # Explicit dependency to be used in `wasm-bindgen` feature
-instant = "0.1.12"      # Explicit dependency to be used in `wasm-bindgen` feature
 # TODO feature flag?
 rw-stream-sink = { workspace = true }
 
@@ -145,7 +144,7 @@ tokio = { workspace = true, features = [ "io-util", "io-std", "macros", "rt", "r
 libp2p-mplex = { workspace = true }
 libp2p-noise = { workspace = true }
 libp2p-tcp = { workspace = true, features = ["tokio"] }
-tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+tracing-subscriber = { workspace = true, features = ["env-filter"] }
 
 # Passing arguments to the docsrs builder in order to properly document cfg's.
 # More information: https://docs.rs/about/builds#cross-compiling

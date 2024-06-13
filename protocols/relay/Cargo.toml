@@ -3,7 +3,7 @@ name = "libp2p-relay"
 edition = "2021"
 rust-version = { workspace = true }
 description = "Communications relaying for libp2p"
-version = "0.17.2"
+version = "0.17.3"
 authors = ["Parity Technologies <admin@parity.io>", "Max Inden <mail@max-inden.de>"]
 license = "MIT"
 repository = "https://github.com/libp2p/rust-libp2p"
@@ -13,11 +13,11 @@ categories = ["network-programming", "asynchronous"]
 [dependencies]
 asynchronous-codec = { workspace = true }
 bytes = "1"
-either = "1.11.0"
-futures = "0.3.30"
+either = "1.12.0"
+futures = { workspace = true }
 futures-timer = "3"
 futures-bounded = { workspace = true }
-instant = "0.1.12"
+web-time = { workspace = true }
 libp2p-core = { workspace = true }
 libp2p-swarm = { workspace = true }
 libp2p-identity = { workspace = true }
@@ -37,7 +37,7 @@ libp2p-swarm = { workspace = true, features = ["macros", "async-std"] }
 libp2p-swarm-test = { workspace = true }
 libp2p-yamux = { workspace = true }
 quickcheck = { workspace = true }
-tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+tracing-subscriber = { workspace = true, features = ["env-filter"] }
 
 
 # Passing arguments to the docsrs builder in order to properly document cfg's.

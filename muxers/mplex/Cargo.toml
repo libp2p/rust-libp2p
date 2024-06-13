@@ -12,7 +12,7 @@ categories = ["network-programming", "asynchronous"]
 
 [dependencies]
 bytes = "1"
-futures = "0.3.30"
+futures = { workspace = true }
 asynchronous-codec = { workspace = true }
 libp2p-core = { workspace = true }
 libp2p-identity = { workspace = true }
@@ -26,13 +26,13 @@ unsigned-varint = { workspace = true, features = ["asynchronous_codec"] }
 [dev-dependencies]
 async-std = { version = "1.7.0", features = ["attributes"] }
 criterion = "0.5"
-futures = "0.3"
+futures = { workspace = true }
 libp2p-identity = { workspace = true, features = ["rand"] }
 libp2p-muxer-test-harness = { path = "../test-harness" }
 libp2p-plaintext = { workspace = true }
 libp2p-tcp = { workspace = true, features = ["async-io"] }
 quickcheck = { workspace = true }
-tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+tracing-subscriber = { workspace = true, features = ["env-filter"] }
 
 [[bench]]
 name = "split_send_size"

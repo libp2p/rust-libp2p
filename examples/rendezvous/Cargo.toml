@@ -11,11 +11,11 @@ release = false
 [dependencies]
 async-std = { version = "1.12", features = ["attributes"] }
 async-trait = "0.1"
-futures = "0.3.30"
+futures = { workspace = true }
 libp2p = { path = "../../libp2p", features = [ "async-std", "identify", "macros", "noise", "ping", "rendezvous", "tcp", "tokio", "yamux"] }
 tokio = { workspace = true, features = ["rt-multi-thread", "macros", "time"] }
 tracing = { workspace = true }
-tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+tracing-subscriber = { workspace = true, features = ["env-filter"] }
 
 [lints]
 workspace = true

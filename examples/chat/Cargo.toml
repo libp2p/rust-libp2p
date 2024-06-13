@@ -11,10 +11,10 @@ release = false
 [dependencies]
 tokio = { workspace = true, features = ["full"] }
 async-trait = "0.1"
-futures = "0.3.30"
+futures = { workspace = true }
 libp2p = { path = "../../libp2p", features = [ "tokio", "gossipsub", "mdns", "noise", "macros", "tcp", "yamux", "quic"] }
 tracing = { workspace = true }
-tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+tracing-subscriber = { workspace = true, features = ["env-filter"] }
 
 [lints]
 workspace = true

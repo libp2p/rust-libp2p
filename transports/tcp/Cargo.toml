@@ -3,7 +3,7 @@ name = "libp2p-tcp"
 edition = "2021"
 rust-version = { workspace = true }
 description = "TCP/IP transport protocol for libp2p"
-version = "0.41.0"
+version = "0.41.1"
 authors = ["Parity Technologies <admin@parity.io>"]
 license = "MIT"
 repository = "https://github.com/libp2p/rust-libp2p"
@@ -11,14 +11,14 @@ keywords = ["peer-to-peer", "libp2p", "networking"]
 categories = ["network-programming", "asynchronous"]
 
 [dependencies]
-async-io = { version = "2.3.2", optional = true }
-futures = "0.3.30"
+async-io = { version = "2.3.3", optional = true }
+futures = { workspace = true }
 futures-timer = "3.0"
 if-watch = "3.2.0"
-libc = "0.2.153"
+libc = "0.2.155"
 libp2p-core = { workspace = true }
 libp2p-identity = { workspace = true }
-socket2 = { version = "0.5.6", features = ["all"] }
+socket2 = { version = "0.5.7", features = ["all"] }
 tokio = { workspace = true, default-features = false, features = ["net"], optional = true }
 tracing = { workspace = true }
 
@@ -30,7 +30,7 @@ async-io = ["dep:async-io", "if-watch/smol"]
 async-std = { version = "1.6.5", features = ["attributes"] }
 libp2p-identity = { workspace = true, features = ["rand"] }
 tokio = { workspace = true, features = ["full"] }
-tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+tracing-subscriber = { workspace = true, features = ["env-filter"] }
 
 # Passing arguments to the docsrs builder in order to properly document cfg's.
 # More information: https://docs.rs/about/builds#cross-compiling
