@@ -28,7 +28,6 @@ use futures::future::{BoxFuture, FutureExt, TryFutureExt};
 use futures::io::AsyncWriteExt;
 use futures::stream::{FuturesUnordered, StreamExt};
 use futures_timer::Delay;
-use instant::Instant;
 use libp2p_core::upgrade::ReadyUpgrade;
 use libp2p_core::{ConnectedPoint, Multiaddr};
 use libp2p_identity::PeerId;
@@ -43,6 +42,7 @@ use std::collections::{HashMap, VecDeque};
 use std::task::{Context, Poll};
 use std::time::Duration;
 use std::{fmt, io};
+use web_time::Instant;
 
 const MAX_CONCURRENT_STREAMS_PER_CONNECTION: usize = 10;
 const STREAM_TIMEOUT: Duration = Duration::from_secs(60);

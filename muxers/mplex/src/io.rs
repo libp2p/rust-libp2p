@@ -224,7 +224,7 @@ where
             // yield to give the current task a chance to read
             // from the respective substreams.
             if num_buffered == self.config.max_buffer_len {
-                cx.waker().clone().wake();
+                cx.waker().wake_by_ref();
                 return Poll::Pending;
             }
 
@@ -456,7 +456,7 @@ where
             // next frame for `id`, yield to give the current task
             // a chance to read from the other substream(s).
             if num_buffered == self.config.max_buffer_len {
-                cx.waker().clone().wake();
+                cx.waker().wake_by_ref();
                 return Poll::Pending;
             }
 
@@ -663,7 +663,7 @@ where
                     connection=%self.id,
                     "No task to read from blocked stream. Waking current task."
                 );
-                cx.waker().clone().wake();
+                cx.waker().wake_by_ref();
             } else if let Some(id) = stream_id {
                 // We woke some other task, but are still interested in
                 // reading `Data` frames from the current stream when unblocked.
@@ -912,9 +912,7 @@ where
     /// Fails the entire multiplexed stream if too many pending `Reset`
     /// frames accumulate when using [`MaxBufferBehaviour::ResetStream`].
     fn buffer(&mut self, id: LocalStreamId, data: Bytes) -> io::Result<()> {
-        let state = if let Some(state) = self.substreams.get_mut(&id) {
-            state
-        } else {
+        let Some(state) = self.substreams.get_mut(&id) else {
             tracing::trace!(
                 connection=%self.id,
                 substream=%id,
@@ -924,9 +922,7 @@ where
             return Ok(());
         };
 
-        let buf = if let Some(buf) = state.recv_buf_open() {
-            buf
-        } else {
+        let Some(buf) = state.recv_buf_open() else {
             tracing::trace!(
                 connection=%self.id,
                 substream=%id,

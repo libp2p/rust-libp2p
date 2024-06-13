@@ -94,6 +94,7 @@ pub struct SecretKey(SigningKey);
 
 impl SecretKey {
     /// Generate a new random ECDSA secret key.
+    #[cfg(feature = "rand")]
     pub fn generate() -> SecretKey {
         SecretKey(SigningKey::random(&mut rand::thread_rng()))
     }
@@ -151,9 +152,8 @@ pub struct PublicKey(VerifyingKey);
 impl PublicKey {
     /// Verify an ECDSA signature on a message using the public key.
     pub fn verify(&self, msg: &[u8], sig: &[u8]) -> bool {
-        let sig = match Signature::from_der(sig) {
-            Ok(sig) => sig,
-            Err(_) => return false,
+        let Ok(sig) = Signature::from_der(sig) else {
+            return false;
         };
         self.0.verify(msg, &sig).is_ok()
     }

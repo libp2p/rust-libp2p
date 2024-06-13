@@ -18,6 +18,7 @@ use libp2p_webrtc as webrtc;
 use rand::thread_rng;
 use std::net::{Ipv4Addr, SocketAddr};
 use std::time::Duration;
+use tokio::net::TcpListener;
 use tower_http::cors::{Any, CorsLayer};
 
 #[tokio::main]
@@ -38,7 +39,7 @@ async fn main() -> anyhow::Result<()> {
         .with_behaviour(|_| ping::Behaviour::default())?
         .with_swarm_config(|cfg| {
             cfg.with_idle_connection_timeout(
-                Duration::from_secs(30), // Allows us to observe the pings.
+                Duration::from_secs(u64::MAX), // Allows us to observe the pings.
             )
         })
         .build();
@@ -92,9 +93,8 @@ struct StaticFiles;
 
 /// Serve the Multiaddr we are listening on and the host files.
 pub(crate) async fn serve(libp2p_transport: Multiaddr) {
-    let listen_addr = match libp2p_transport.iter().next() {
-        Some(Protocol::Ip4(addr)) => addr,
-        _ => panic!("Expected 1st protocol to be IP4"),
+    let Some(Protocol::Ip4(listen_addr)) = libp2p_transport.iter().next() else {
+        panic!("Expected 1st protocol to be IP4")
     };
 
     let server = Router::new()
@@ -113,10 +113,12 @@ pub(crate) async fn serve(libp2p_transport: Multiaddr) {
 
     tracing::info!(url=%format!("http://{addr}"), "Serving client files at url");
 
-    axum::Server::bind(&addr)
-        .serve(server.into_make_service())
-        .await
-        .unwrap();
+    axum::serve(
+        TcpListener::bind((listen_addr, 8080)).await.unwrap(),
+        server.into_make_service(),
+    )
+    .await
+    .unwrap();
 }
 
 #[derive(Clone)]

@@ -30,9 +30,9 @@ use crate::kbucket::{Key, KeyBytes};
 use crate::{ALPHA_VALUE, K_VALUE};
 use either::Either;
 use fnv::FnvHashMap;
-use instant::Instant;
 use libp2p_identity::PeerId;
 use std::{num::NonZeroUsize, time::Duration};
+use web_time::Instant;
 
 /// A `QueryPool` provides an aggregate state machine for driving `Query`s to completion.
 ///
@@ -224,6 +224,12 @@ impl<TInner> QueryPool<TInner> {
 /// Unique identifier for an active query.
 #[derive(Debug, Copy, Clone, Hash, PartialEq, Eq)]
 pub struct QueryId(usize);
+
+impl std::fmt::Display for QueryId {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
 
 /// The configuration for queries in a `QueryPool`.
 #[derive(Debug, Clone)]

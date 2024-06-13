@@ -1,7 +1,6 @@
 use base64::Engine;
 use clap::Parser;
 use futures::stream::StreamExt;
-use futures_timer::Delay;
 use libp2p::identity;
 use libp2p::identity::PeerId;
 use libp2p::kad;
@@ -14,16 +13,12 @@ use prometheus_client::registry::Registry;
 use std::error::Error;
 use std::path::PathBuf;
 use std::str::FromStr;
-use std::task::Poll;
-use std::time::Duration;
 use tracing_subscriber::EnvFilter;
 use zeroize::Zeroizing;
 
 mod behaviour;
 mod config;
 mod http_service;
-
-const BOOTSTRAP_INTERVAL: Duration = Duration::from_secs(5 * 60);
 
 #[derive(Debug, Parser)]
 #[clap(name = "libp2p server", about = "A rust-libp2p server binary.")]
@@ -55,6 +50,8 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     let config = Zeroizing::new(config::Config::from_file(opt.config.as_path())?);
 
+    let mut metric_registry = Registry::default();
+
     let local_keypair = {
         let keypair = identity::Keypair::from_protobuf_encoding(&Zeroizing::new(
             base64::engine::general_purpose::STANDARD
@@ -80,6 +77,9 @@ async fn main() -> Result<(), Box<dyn Error>> {
         )?
         .with_quic()
         .with_dns()?
+        .with_websocket(noise::Config::new, yamux::Config::default)
+        .await?
+        .with_bandwidth_metrics(&mut metric_registry)
         .with_behaviour(|key| {
             behaviour::Behaviour::new(key.public(), opt.enable_kademlia, opt.enable_autonat)
         })?
@@ -109,7 +109,6 @@ async fn main() -> Result<(), Box<dyn Error>> {
         swarm.external_addresses().collect::<Vec<_>>()
     );
 
-    let mut metric_registry = Registry::default();
     let metrics = Metrics::new(&mut metric_registry);
     let build_info = Info::new(vec![("version".to_string(), env!("CARGO_PKG_VERSION"))]);
     metric_registry.register(
@@ -123,18 +122,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         }
     });
 
-    let mut bootstrap_timer = Delay::new(BOOTSTRAP_INTERVAL);
-
     loop {
-        if let Poll::Ready(()) = futures::poll!(&mut bootstrap_timer) {
-            bootstrap_timer.reset(BOOTSTRAP_INTERVAL);
-            let _ = swarm
-                .behaviour_mut()
-                .kademlia
-                .as_mut()
-                .map(|k| k.bootstrap());
-        }
-
         let event = swarm.next().await.expect("Swarm not to terminate.");
         metrics.record(&event);
         match event {

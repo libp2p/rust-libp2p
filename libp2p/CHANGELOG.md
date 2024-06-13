@@ -1,3 +1,26 @@
+## 0.54.0
+
+- Update individual crates.
+    - Update to [`libp2p-kad` `v0.46.0`](protocols/kad/CHANGELOG.md#0460).
+
+- Raise MSRV to 1.73.
+  See [PR 5266](https://github.com/libp2p/rust-libp2p/pull/5266).
+
+- Use `web-time` instead of `instant`.
+  See [PR 5347](https://github.com/libp2p/rust-libp2p/pull/5347).
+
+## 0.53.2
+
+- Allow `SwarmBuilder::with_bandwidth_metrics` after `SwarmBuilder::with_websocket`.
+  See [PR 4937](https://github.com/libp2p/rust-libp2p/pull/4937).
+
+## 0.53.1
+
+- Allow `SwarmBuilder::with_quic_config` to be called without `with_tcp` first.
+  See [PR 4821](https://github.com/libp2p/rust-libp2p/pull/4821).
+- Introduce `SwarmBuilder::with_dns_config`.
+  See [PR 4808](https://github.com/libp2p/rust-libp2p/pull/4808).
+
 ## 0.53.0
 
 - Raise MSRV to 1.73.
@@ -11,6 +34,9 @@
 - Remove deprecated `development_transport`.
   Use `libp2p::SwarmBuilder` instead.
   See [PR 4732](https://github.com/libp2p/rust-libp2p/pull/4732).
+- Introduce `SwarmBuilder::with_bandwidth_metrics` exposing Prometheus bandwidth metrics per transport protocol stack and direction (in-/ outbound).
+  Deprecate `Transport::with_bandwidth_logging` and `SwarmBuilder::with_bandwidth_logging` in favor of the new `SwarmBuilder::with_bandwidth_metrics`.
+  See [PR 4727](https://github.com/libp2p/rust-libp2p/pull/4727).
 
 ## 0.52.4
 
@@ -1170,7 +1196,7 @@ must not be skipped!
 - Merged `PeriodicPing` and `PingListen` into one `Ping` behaviour.
 - `Floodsub` now generates `FloodsubEvent`s instead of direct floodsub messages.
 - Added `ProtocolsHandler::connection_keep_alive`. If all the handlers return `false`, then the connection to the remote node will automatically be gracefully closed after a few seconds.
-- The crate now successfuly compiles for the `wasm32-unknown-unknown` target.
+- The crate now successfully compiles for the `wasm32-unknown-unknown` target.
 - Updated `ring` to version 0.13.
 - Updated `secp256k1` to version 0.12.
 - The enum returned by `RawSwarm::peer()` can now return `LocalNode`. This makes it impossible to accidentally attempt to dial the local node.

@@ -1,3 +1,13 @@
+## 0.14.2
+- Use `web-time` instead of `instant`.
+  See [PR 5347](https://github.com/libp2p/rust-libp2p/pull/5347).
+
+## 0.14.1
+
+- Add `BandwidthTransport`, wrapping an existing `Transport`, exposing Prometheus bandwidth metrics.
+  See also `SwarmBuilder::with_bandwidth_metrics`.
+  See [PR 4727](https://github.com/libp2p/rust-libp2p/pull/4727).
+
 ## 0.14.0
 
 - Add metrics for `SwarmEvent::{NewExternalAddrCandidate,ExternalAddrConfirmed,ExternalAddrExpired}`.

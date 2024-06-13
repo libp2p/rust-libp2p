@@ -1,3 +1,8 @@
+## 0.41.1
+
+- Add hidden API that removes unnecessary async for `async-std`.
+  See [PR 4808](https://github.com/libp2p/rust-libp2p/pull/4808).
+
 ## 0.41.0
 
 - Make `tokio::Transport::custom` and `async_std::Transport::custom` constructors infallible.

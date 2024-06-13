@@ -425,7 +425,7 @@ struct Listener<P: Provider> {
     socket: UdpSocket,
 
     /// A future to poll new incoming connections.
-    accept: BoxFuture<'static, Option<quinn::Connecting>>,
+    accept: BoxFuture<'static, Option<quinn::Incoming>>,
     /// Timeout for connection establishment on inbound connections.
     handshake_timeout: Duration,
 
@@ -522,9 +522,8 @@ impl<P: Provider> Listener<P> {
     /// Poll for a next If Event.
     fn poll_if_addr(&mut self, cx: &mut Context<'_>) -> Poll<<Self as Stream>::Item> {
         let endpoint_addr = self.socket_addr();
-        let if_watcher = match self.if_watcher.as_mut() {
-            Some(iw) => iw,
-            None => return Poll::Pending,
+        let Some(if_watcher) = self.if_watcher.as_mut() else {
+            return Poll::Pending;
         };
         loop {
             match ready!(P::poll_if_event(if_watcher, cx)) {
@@ -584,9 +583,19 @@ impl<P: Provider> Stream for Listener<P> {
             }
 
             match self.accept.poll_unpin(cx) {
-                Poll::Ready(Some(connecting)) => {
+                Poll::Ready(Some(incoming)) => {
                     let endpoint = self.endpoint.clone();
                     self.accept = async move { endpoint.accept().await }.boxed();
+
+                    let connecting = match incoming.accept() {
+                        Ok(connecting) => connecting,
+                        Err(error) => {
+                            return Poll::Ready(Some(TransportEvent::ListenerError {
+                                listener_id: self.listener_id,
+                                error: Error::Connection(crate::ConnectionError(error)),
+                            }))
+                        }
+                    };
 
                     let local_addr = socketaddr_to_multiaddr(&self.socket_addr(), self.version);
                     let remote_addr = connecting.remote_address();
@@ -717,17 +726,14 @@ fn multiaddr_to_socketaddr(
 fn is_quic_addr(addr: &Multiaddr, support_draft_29: bool) -> bool {
     use Protocol::*;
     let mut iter = addr.iter();
-    let first = match iter.next() {
-        Some(p) => p,
-        None => return false,
+    let Some(first) = iter.next() else {
+        return false;
     };
-    let second = match iter.next() {
-        Some(p) => p,
-        None => return false,
+    let Some(second) = iter.next() else {
+        return false;
     };
-    let third = match iter.next() {
-        Some(p) => p,
-        None => return false,
+    let Some(third) = iter.next() else {
+        return false;
     };
     let fourth = iter.next();
     let fifth = iter.next();
@@ -758,10 +764,8 @@ fn socketaddr_to_multiaddr(socket_addr: &SocketAddr, version: ProtocolVersion) -
 #[cfg(test)]
 #[cfg(any(feature = "async-std", feature = "tokio"))]
 mod tests {
-    use futures::future::poll_fn;
-    use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
-
     use super::*;
+    use futures::future::poll_fn;
 
     #[test]
     fn multiaddr_to_udp_conversion() {

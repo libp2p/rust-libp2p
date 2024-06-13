@@ -19,9 +19,6 @@
 // DEALINGS IN THE SOFTWARE.
 
 use super::*;
-use crate::kbucket::{Key, KeyBytes};
-use instant::Instant;
-use libp2p_identity::PeerId;
 use std::{
     collections::HashMap,
     iter::{Cycle, Map, Peekable},
@@ -406,9 +403,8 @@ impl<I: Iterator<Item = Key<PeerId>>> Iterator for ResultIter<I> {
             .iter_mut()
             // Find the iterator with the next closest peer.
             .fold(Option::<&mut Peekable<_>>::None, |iter_a, iter_b| {
-                let iter_a = match iter_a {
-                    Some(iter_a) => iter_a,
-                    None => return Some(iter_b),
+                let Some(iter_a) = iter_a else {
+                    return Some(iter_b);
                 };
 
                 match (iter_a.peek(), iter_b.peek()) {
@@ -439,7 +435,7 @@ impl<I: Iterator<Item = Key<PeerId>>> Iterator for ResultIter<I> {
 mod tests {
     use super::*;
 
-    use crate::{K_VALUE, SHA_256_MH};
+    use crate::SHA_256_MH;
     use libp2p_core::multihash::Multihash;
     use quickcheck::*;
     use std::collections::HashSet;
@@ -464,7 +460,7 @@ mod tests {
                 peers.into_iter()
             });
 
-            ResultIter::new(target.clone(), iters)
+            ResultIter::new(target, iters)
         }
 
         fn shrink(&self) -> Box<dyn Iterator<Item = Self>> {
@@ -485,7 +481,7 @@ mod tests {
                 .collect();
 
             Box::new(ResultIterShrinker {
-                target: self.target.clone(),
+                target: self.target,
                 peers,
                 iters,
             })
@@ -515,7 +511,7 @@ mod tests {
                 Some(iter.into_iter())
             });
 
-            Some(ResultIter::new(self.target.clone(), iters))
+            Some(ResultIter::new(self.target, iters))
         }
     }
 
@@ -600,20 +596,6 @@ mod tests {
                 num_results: NumResults::arbitrary(g).0,
                 peer_timeout: Duration::from_secs(1),
             }
-        }
-    }
-
-    #[derive(Debug, Clone)]
-    struct PeerVec(Vec<Key<PeerId>>);
-
-    impl Arbitrary for PeerVec {
-        fn arbitrary(g: &mut Gen) -> Self {
-            PeerVec(
-                (0..g.gen_range(1..60u8))
-                    .map(|_| ArbitraryPeerId::arbitrary(g).0)
-                    .map(Key::from)
-                    .collect(),
-            )
         }
     }
 
@@ -885,7 +867,7 @@ mod tests {
             let closest = drive_to_finish(
                 PeerIterator::Closest(ClosestPeersIter::with_config(
                     cfg.clone(),
-                    target.clone(),
+                    target,
                     known_closest_peers.clone(),
                 )),
                 graph.clone(),
@@ -895,7 +877,7 @@ mod tests {
             let disjoint = drive_to_finish(
                 PeerIterator::Disjoint(ClosestDisjointPeersIter::with_config(
                     cfg,
-                    target.clone(),
+                    target,
                     known_closest_peers.clone(),
                 )),
                 graph,

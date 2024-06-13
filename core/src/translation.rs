@@ -65,7 +65,7 @@ mod tests {
             expected: Multiaddr,
         }
 
-        let tests = vec![
+        let tests = [
             // Basic ipv4.
             Test {
                 original: "/ip4/192.0.2.1/tcp/1".parse().unwrap(),

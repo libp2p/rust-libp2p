@@ -22,7 +22,6 @@ use super::{
     Action, AutoNatCodec, Config, DialRequest, DialResponse, Event, HandleInnerEvent, ProbeId,
     ResponseError,
 };
-use instant::Instant;
 use libp2p_core::{multiaddr::Protocol, Multiaddr};
 use libp2p_identity::PeerId;
 use libp2p_request_response::{
@@ -36,6 +35,7 @@ use std::{
     collections::{HashMap, HashSet, VecDeque},
     num::NonZeroU8,
 };
+use web_time::Instant;
 
 /// Inbound probe failed.
 #[derive(Debug)]
@@ -326,13 +326,13 @@ impl<'a> AsServer<'a> {
         demanded: Vec<Multiaddr>,
         observed_remote_at: &Multiaddr,
     ) -> Vec<Multiaddr> {
-        let observed_ip = match observed_remote_at
+        let Some(observed_ip) = observed_remote_at
             .into_iter()
             .find(|p| matches!(p, Protocol::Ip4(_) | Protocol::Ip6(_)))
-        {
-            Some(ip) => ip,
-            None => return Vec::new(),
+        else {
+            return Vec::new();
         };
+
         let mut distinct = HashSet::new();
         demanded
             .into_iter()

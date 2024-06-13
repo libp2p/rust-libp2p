@@ -18,7 +18,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use futures::{future::BoxFuture, prelude::*, stream::SelectAll, stream::Stream};
+use futures::{future::BoxFuture, prelude::*, stream::SelectAll};
 use if_watch::{tokio::IfWatcher, IfEvent};
 use libp2p_core::{
     multiaddr::{Multiaddr, Protocol},
@@ -257,9 +257,8 @@ impl ListenStream {
     }
 
     fn poll_if_watcher(&mut self, cx: &mut Context<'_>) -> Poll<<Self as Stream>::Item> {
-        let if_watcher = match self.if_watcher.as_mut() {
-            Some(w) => w,
-            None => return Poll::Pending,
+        let Some(if_watcher) = self.if_watcher.as_mut() else {
+            return Poll::Pending;
         };
 
         while let Poll::Ready(event) = if_watcher.poll_if_event(cx) {
@@ -412,12 +411,11 @@ fn parse_webrtc_listen_addr(addr: &Multiaddr) -> Option<SocketAddr> {
         _ => return None,
     };
 
-    let port = iter.next()?;
-    let webrtc = iter.next()?;
-
-    let port = match (port, webrtc) {
-        (Protocol::Udp(port), Protocol::WebRTCDirect) => port,
-        _ => return None,
+    let Protocol::Udp(port) = iter.next()? else {
+        return None;
+    };
+    let Protocol::WebRTCDirect = iter.next()? else {
+        return None;
     };
 
     if iter.next().is_some() {
@@ -433,9 +431,9 @@ fn parse_webrtc_listen_addr(addr: &Multiaddr) -> Option<SocketAddr> {
 mod tests {
     use super::*;
     use futures::future::poll_fn;
-    use libp2p_core::{multiaddr::Protocol, Transport as _};
+    use libp2p_core::Transport as _;
     use rand::thread_rng;
-    use std::net::{IpAddr, Ipv6Addr};
+    use std::net::Ipv6Addr;
 
     #[test]
     fn missing_webrtc_protocol() {

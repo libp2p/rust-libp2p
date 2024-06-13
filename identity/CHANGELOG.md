@@ -1,3 +1,13 @@
+## 0.2.9
+
+- Add `rand` feature gate to ecdsa methods requiring a random number generator.
+  See [PR 5212](https://github.com/libp2p/rust-libp2p/pull/5212).
+
+## 0.2.8
+
+- Bump `ring` to `0.17.5.
+  See [PR 4779](https://github.com/libp2p/rust-libp2p/pull/4779).
+
 ## 0.2.7
 
 - Add `rand` feature to gate methods requiring a random number generator, enabling use in restricted environments (e.g. smartcontracts).

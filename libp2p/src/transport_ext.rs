@@ -20,21 +20,20 @@
 
 //! Provides the `TransportExt` trait.
 
+#[allow(deprecated)]
+use crate::bandwidth::{BandwidthLogging, BandwidthSinks};
 use crate::core::{
     muxing::{StreamMuxer, StreamMuxerBox},
     transport::Boxed,
 };
-use crate::{
-    bandwidth::{BandwidthLogging, BandwidthSinks},
-    Transport,
-};
+use crate::Transport;
 use libp2p_identity::PeerId;
 use std::sync::Arc;
 
 /// Trait automatically implemented on all objects that implement `Transport`. Provides some
 /// additional utilities.
 pub trait TransportExt: Transport {
-    /// Adds a layer on the `Transport` that logs all trafic that passes through the streams
+    /// Adds a layer on the `Transport` that logs all traffic that passes through the streams
     /// created by it.
     ///
     /// This method returns an `Arc<BandwidthSinks>` that can be used to retrieve the total number
@@ -66,6 +65,10 @@ pub trait TransportExt: Transport {
     ///
     /// let (transport, sinks) = transport.with_bandwidth_logging();
     /// ```
+    #[allow(deprecated)]
+    #[deprecated(
+        note = "Use `libp2p::SwarmBuilder::with_bandwidth_metrics` or `libp2p_metrics::BandwidthTransport` instead."
+    )]
     fn with_bandwidth_logging<S>(self) -> (Boxed<(PeerId, StreamMuxerBox)>, Arc<BandwidthSinks>)
     where
         Self: Sized + Send + Unpin + 'static,

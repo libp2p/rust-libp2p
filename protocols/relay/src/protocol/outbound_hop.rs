@@ -19,13 +19,14 @@
 // DEALINGS IN THE SOFTWARE.
 
 use std::io;
-use std::time::{Duration, SystemTime};
+use std::time::Duration;
 
 use asynchronous_codec::{Framed, FramedParts};
 use bytes::Bytes;
 use futures::prelude::*;
 use futures_timer::Delay;
 use thiserror::Error;
+use web_time::SystemTime;
 
 use libp2p_core::Multiaddr;
 use libp2p_identity::PeerId;
@@ -47,7 +48,7 @@ pub enum ConnectError {
     #[error("Remote does not support the `{HOP_PROTOCOL_NAME}` protocol")]
     Unsupported,
     #[error("IO error")]
-    Io(#[source] io::Error),
+    Io(#[from] io::Error),
     #[error("Protocol error")]
     Protocol(#[from] ProtocolViolation),
 }
@@ -61,7 +62,7 @@ pub enum ReserveError {
     #[error("Remote does not support the `{HOP_PROTOCOL_NAME}` protocol")]
     Unsupported,
     #[error("IO error")]
-    Io(#[source] io::Error),
+    Io(#[from] io::Error),
     #[error("Protocol error")]
     Protocol(#[from] ProtocolViolation),
 }

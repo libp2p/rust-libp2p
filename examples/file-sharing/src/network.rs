@@ -1,5 +1,6 @@
 use futures::channel::{mpsc, oneshot};
 use futures::prelude::*;
+use futures::StreamExt;
 
 use libp2p::{
     core::Multiaddr,
@@ -15,6 +16,7 @@ use libp2p::StreamProtocol;
 use serde::{Deserialize, Serialize};
 use std::collections::{hash_map, HashMap, HashSet};
 use std::error::Error;
+use std::time::Duration;
 
 /// Creates the network components, namely:
 ///
@@ -39,7 +41,7 @@ pub(crate) async fn new(
     let peer_id = id_keys.public().to_peer_id();
 
     let mut swarm = libp2p::SwarmBuilder::with_existing_identity(id_keys)
-        .with_async_std()
+        .with_tokio()
         .with_tcp(
             tcp::Config::default(),
             noise::Config::new,
@@ -58,6 +60,7 @@ pub(crate) async fn new(
                 request_response::Config::default(),
             ),
         })?
+        .with_swarm_config(|c| c.with_idle_connection_timeout(Duration::from_secs(60)))
         .build();
 
     swarm
@@ -195,8 +198,8 @@ impl EventLoop {
 
     pub(crate) async fn run(mut self) {
         loop {
-            futures::select! {
-                event = self.swarm.next() => self.handle_event(event.expect("Swarm stream to be infinite.")).await  ,
+            tokio::select! {
+                event = self.swarm.select_next_some() => self.handle_event(event).await,
                 command = self.command_receiver.next() => match command {
                     Some(c) => self.handle_command(c).await,
                     // Command channel closed, thus shutting down the network event loop.

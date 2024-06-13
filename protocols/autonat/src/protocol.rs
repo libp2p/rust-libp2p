@@ -27,7 +27,7 @@ use libp2p_core::Multiaddr;
 use libp2p_identity::PeerId;
 use libp2p_request_response::{self as request_response};
 use libp2p_swarm::StreamProtocol;
-use std::{convert::TryFrom, io};
+use std::io;
 
 /// The protocol name used for negotiating with multistream-select.
 pub const DEFAULT_PROTOCOL_NAME: StreamProtocol = StreamProtocol::new("/libp2p/autonat/1.0.0");
@@ -119,22 +119,14 @@ impl DialRequest {
         if msg.type_pb != Some(proto::MessageType::DIAL) {
             return Err(io::Error::new(io::ErrorKind::InvalidData, "invalid type"));
         }
-        let (peer_id, addrs) = if let Some(proto::Dial {
-            peer:
-                Some(proto::PeerInfo {
-                    id: Some(peer_id),
-                    addrs,
-                }),
-        }) = msg.dial
-        {
-            (peer_id, addrs)
-        } else {
-            tracing::debug!("Received malformed dial message");
-            return Err(io::Error::new(
-                io::ErrorKind::InvalidData,
-                "invalid dial message",
-            ));
-        };
+
+        let peer_id_result = msg.dial.and_then(|dial| {
+            dial.peer
+                .and_then(|peer_info| peer_info.id.map(|peer_id| (peer_id, peer_info.addrs)))
+        });
+
+        let (peer_id, addrs) = peer_id_result
+            .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidData, "invalid dial message"))?;
 
         let peer_id = {
             PeerId::try_from(peer_id.to_vec())

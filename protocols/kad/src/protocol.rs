@@ -31,14 +31,15 @@ use crate::record::{self, Record};
 use asynchronous_codec::{Decoder, Encoder, Framed};
 use bytes::BytesMut;
 use futures::prelude::*;
-use instant::Instant;
 use libp2p_core::upgrade::{InboundUpgrade, OutboundUpgrade, UpgradeInfo};
 use libp2p_core::Multiaddr;
 use libp2p_identity::PeerId;
 use libp2p_swarm::StreamProtocol;
 use std::marker::PhantomData;
-use std::{convert::TryFrom, time::Duration};
+use std::time::Duration;
 use std::{io, iter};
+use tracing::debug;
+use web_time::Instant;
 
 /// The protocol name used for negotiating with multistream-select.
 pub(crate) const DEFAULT_PROTO_NAME: StreamProtocol = StreamProtocol::new("/ipfs/kad/1.0.0");
@@ -103,11 +104,12 @@ impl TryFrom<proto::Peer> for KadPeer {
 
         let mut addrs = Vec::with_capacity(peer.addrs.len());
         for addr in peer.addrs.into_iter() {
-            match Multiaddr::try_from(addr) {
-                Ok(a) => addrs.push(a),
-                Err(e) => {
-                    tracing::debug!("Unable to parse multiaddr: {e}");
+            match Multiaddr::try_from(addr).map(|addr| addr.with_p2p(node_id)) {
+                Ok(Ok(a)) => addrs.push(a),
+                Ok(Err(a)) => {
+                    debug!("Unable to parse multiaddr: {a} is not compatible with {node_id}")
                 }
+                Err(e) => debug!("Unable to parse multiaddr: {e}"),
             };
         }
 
@@ -142,6 +144,21 @@ pub struct ProtocolConfig {
 }
 
 impl ProtocolConfig {
+    /// Builds a new `ProtocolConfig` with the given protocol name.
+    pub fn new(protocol_name: StreamProtocol) -> Self {
+        ProtocolConfig {
+            protocol_names: vec![protocol_name],
+            max_packet_size: DEFAULT_MAX_PACKET_SIZE,
+        }
+    }
+
+    /// Returns the default configuration.
+    #[deprecated(note = "Use `ProtocolConfig::new` instead")]
+    #[allow(clippy::should_implement_trait)]
+    pub fn default() -> Self {
+        Default::default()
+    }
+
     /// Returns the configured protocol name.
     pub fn protocol_names(&self) -> &[StreamProtocol] {
         &self.protocol_names
@@ -149,6 +166,7 @@ impl ProtocolConfig {
 
     /// Modifies the protocol names used on the wire. Can be used to create incompatibilities
     /// between networks on purpose.
+    #[deprecated(note = "Use `ProtocolConfig::new` instead")]
     pub fn set_protocol_names(&mut self, names: Vec<StreamProtocol>) {
         self.protocol_names = names;
     }
@@ -160,6 +178,9 @@ impl ProtocolConfig {
 }
 
 impl Default for ProtocolConfig {
+    /// Returns the default configuration.
+    ///
+    /// Deprecated: use `ProtocolConfig::new` instead.
     fn default() -> Self {
         ProtocolConfig {
             protocol_names: iter::once(DEFAULT_PROTO_NAME).collect(),
@@ -193,9 +214,9 @@ impl<A, B> Codec<A, B> {
 
 impl<A: Into<proto::Message>, B> Encoder for Codec<A, B> {
     type Error = io::Error;
-    type Item = A;
+    type Item<'a> = A;
 
-    fn encode(&mut self, item: Self::Item, dst: &mut BytesMut) -> Result<(), Self::Error> {
+    fn encode(&mut self, item: Self::Item<'_>, dst: &mut BytesMut) -> Result<(), Self::Error> {
         Ok(self.codec.encode(item.into(), dst)?)
     }
 }
@@ -597,9 +618,33 @@ mod tests {
     use super::*;
 
     #[test]
+    fn append_p2p() {
+        let peer_id = PeerId::random();
+        let multiaddr = "/ip6/2001:db8::/tcp/1234".parse::<Multiaddr>().unwrap();
+
+        let payload = proto::Peer {
+            id: peer_id.to_bytes(),
+            addrs: vec![multiaddr.to_vec()],
+            connection: proto::ConnectionType::CAN_CONNECT,
+        };
+
+        let peer = KadPeer::try_from(payload).unwrap();
+
+        assert_eq!(peer.multiaddrs, vec![multiaddr.with_p2p(peer_id).unwrap()])
+    }
+
+    #[test]
     fn skip_invalid_multiaddr() {
-        let valid_multiaddr: Multiaddr = "/ip6/2001:db8::/tcp/1234".parse().unwrap();
-        let valid_multiaddr_bytes = valid_multiaddr.to_vec();
+        let peer_id = PeerId::random();
+        let multiaddr = "/ip6/2001:db8::/tcp/1234".parse::<Multiaddr>().unwrap();
+
+        let valid_multiaddr = multiaddr.clone().with_p2p(peer_id).unwrap();
+
+        let multiaddr_with_incorrect_peer_id = {
+            let other_peer_id = PeerId::random();
+            assert_ne!(peer_id, other_peer_id);
+            multiaddr.with_p2p(other_peer_id).unwrap()
+        };
 
         let invalid_multiaddr = {
             let a = vec![255; 8];
@@ -608,12 +653,16 @@ mod tests {
         };
 
         let payload = proto::Peer {
-            id: PeerId::random().to_bytes(),
-            addrs: vec![valid_multiaddr_bytes, invalid_multiaddr],
+            id: peer_id.to_bytes(),
+            addrs: vec![
+                valid_multiaddr.to_vec(),
+                multiaddr_with_incorrect_peer_id.to_vec(),
+                invalid_multiaddr,
+            ],
             connection: proto::ConnectionType::CAN_CONNECT,
         };
 
-        let peer = KadPeer::try_from(payload).expect("not to fail");
+        let peer = KadPeer::try_from(payload).unwrap();
 
         assert_eq!(peer.multiaddrs, vec![valid_multiaddr])
     }

@@ -26,7 +26,6 @@ use super::{
 };
 use futures::FutureExt;
 use futures_timer::Delay;
-use instant::Instant;
 use libp2p_core::Multiaddr;
 use libp2p_identity::PeerId;
 use libp2p_request_response::{self as request_response, OutboundFailure, OutboundRequestId};
@@ -37,6 +36,7 @@ use std::{
     task::{Context, Poll},
     time::Duration,
 };
+use web_time::Instant;
 
 /// Outbound probe failed or was aborted.
 #[derive(Debug)]
@@ -278,13 +278,9 @@ impl<'a> AsClient<'a> {
             tracing::debug!("Outbound dial-back request aborted: No dial-back addresses");
             return Err(OutboundProbeError::NoAddresses);
         }
-        let server = match self.random_server() {
-            Some(s) => s,
-            None => {
-                tracing::debug!("Outbound dial-back request aborted: No qualified server");
-                return Err(OutboundProbeError::NoServer);
-            }
-        };
+
+        let server = self.random_server().ok_or(OutboundProbeError::NoServer)?;
+
         let request_id = self.inner.send_request(
             &server,
             DialRequest {
@@ -301,11 +297,8 @@ impl<'a> AsClient<'a> {
     // Set the delay to the next probe based on the time of our last probe
     // and the specified delay.
     fn schedule_next_probe(&mut self, delay: Duration) {
-        let last_probe_instant = match self.last_probe {
-            Some(instant) => instant,
-            None => {
-                return;
-            }
+        let Some(last_probe_instant) = self.last_probe else {
+            return;
         };
         let schedule_next = *last_probe_instant + delay;
         self.schedule_probe

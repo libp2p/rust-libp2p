@@ -20,6 +20,8 @@
 
 //! Libp2p websocket transports built on [web-sys](https://rustwasm.github.io/wasm-bindgen/web-sys/index.html).
 
+mod web_context;
+
 use bytes::BytesMut;
 use futures::task::AtomicWaker;
 use futures::{future::Ready, io, prelude::*};
@@ -34,8 +36,10 @@ use std::rc::Rc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Mutex;
 use std::{pin::Pin, task::Context, task::Poll};
-use wasm_bindgen::{prelude::*, JsCast};
-use web_sys::{window, CloseEvent, Event, MessageEvent, WebSocket};
+use wasm_bindgen::prelude::*;
+use web_sys::{CloseEvent, Event, MessageEvent, WebSocket};
+
+use crate::web_context::WebContext;
 
 /// A Websocket transport that can be used in a wasm environment.
 ///
@@ -300,8 +304,8 @@ impl Connection {
                 }
             }
         });
-        let buffered_amount_low_interval = window()
-            .expect("to have a window")
+        let buffered_amount_low_interval = WebContext::new()
+            .expect("to have a window or worker context")
             .set_interval_with_callback_and_timeout_and_arguments(
                 on_buffered_amount_low_closure.as_ref().unchecked_ref(),
                 100, // Chosen arbitrarily and likely worth tuning. Due to low impact of the /ws transport, no further effort was invested at the time.
@@ -430,17 +434,18 @@ impl AsyncWrite for Connection {
 
 impl Drop for Connection {
     fn drop(&mut self) {
-        const GO_AWAY_STATUS_CODE: u16 = 1001; // See https://www.rfc-editor.org/rfc/rfc6455.html#section-7.4.1.
+        // In browsers, userland code is not allowed to use any other status code than 1000: https://websockets.spec.whatwg.org/#dom-websocket-close
+        const REGULAR_CLOSE: u16 = 1000; // See https://www.rfc-editor.org/rfc/rfc6455.html#section-7.4.1.
 
         if let ReadyState::Connecting | ReadyState::Open = self.inner.ready_state() {
             let _ = self
                 .inner
                 .socket
-                .close_with_code_and_reason(GO_AWAY_STATUS_CODE, "connection dropped");
+                .close_with_code_and_reason(REGULAR_CLOSE, "connection dropped");
         }
 
-        window()
-            .expect("to have a window")
-            .clear_interval_with_handle(self.inner.buffered_amount_low_interval)
+        WebContext::new()
+            .expect("to have a window or worker context")
+            .clear_interval_with_handle(self.inner.buffered_amount_low_interval);
     }
 }

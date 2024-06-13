@@ -55,7 +55,7 @@
 //!        edition = "2021"
 //!
 //!    [dependencies]
-//!        libp2p = { version = "0.52", features = ["tcp", "dns", "async-std", "noise", "yamux", "websocket", "ping", "macros"] }
+//!        libp2p = { version = "0.52", features = ["tcp", "tls", "dns", "async-std", "noise", "yamux", "websocket", "ping", "macros"] }
 //!        futures = "0.3.21"
 //!        async-std = { version = "1.12.0", features = ["attributes"] }
 //!        tracing-subscriber = { version = "0.3", features = ["env-filter"] }
@@ -95,7 +95,6 @@
 //! trait.
 //!
 //! ```rust
-//! use libp2p::{identity, PeerId};
 //! use std::error::Error;
 //! use tracing_subscriber::EnvFilter;
 //!
@@ -106,9 +105,9 @@
 //!     let mut swarm = libp2p::SwarmBuilder::with_new_identity()
 //!         .with_async_std()
 //!         .with_tcp(
-//!             libp2p_tcp::Config::default(),
-//!             libp2p_tls::Config::new,
-//!             libp2p_yamux::Config::default,
+//!             libp2p::tcp::Config::default(),
+//!             libp2p::tls::Config::new,
+//!             libp2p::yamux::Config::default,
 //!         )?;
 //!
 //!     Ok(())
@@ -138,8 +137,7 @@
 //! With the above in mind, let's extend our example, creating a [`ping::Behaviour`](crate::ping::Behaviour) at the end:
 //!
 //! ```rust
-//! use libp2p::swarm::NetworkBehaviour;
-//! use libp2p::{identity, ping, PeerId};
+//! use libp2p::ping;
 //! use tracing_subscriber::EnvFilter;
 //! use std::error::Error;
 //!
@@ -150,9 +148,9 @@
 //!     let mut swarm = libp2p::SwarmBuilder::with_new_identity()
 //!         .with_async_std()
 //!         .with_tcp(
-//!             libp2p_tcp::Config::default(),
-//!             libp2p_tls::Config::new,
-//!             libp2p_yamux::Config::default,
+//!             libp2p::tcp::Config::default(),
+//!             libp2p::tls::Config::new,
+//!             libp2p::yamux::Config::default,
 //!         )?
 //!         .with_behaviour(|_| ping::Behaviour::default())?;
 //!
@@ -168,8 +166,7 @@
 //! to the [`Transport`] as well as events from the [`Transport`] to the [`NetworkBehaviour`].
 //!
 //! ```rust
-//! use libp2p::swarm::NetworkBehaviour;
-//! use libp2p::{identity, ping, PeerId};
+//! use libp2p::ping;
 //! use std::error::Error;
 //! use tracing_subscriber::EnvFilter;
 //!
@@ -180,9 +177,9 @@
 //!     let mut swarm = libp2p::SwarmBuilder::with_new_identity()
 //!         .with_async_std()
 //!         .with_tcp(
-//!             libp2p_tcp::Config::default(),
-//!             libp2p_tls::Config::new,
-//!             libp2p_yamux::Config::default,
+//!             libp2p::tcp::Config::default(),
+//!             libp2p::tls::Config::new,
+//!             libp2p::yamux::Config::default,
 //!         )?
 //!         .with_behaviour(|_| ping::Behaviour::default())?
 //!         .build();
@@ -202,8 +199,7 @@
 //! Thus, without any other behaviour in place, we would not be able to observe the pings.
 //!
 //! ```rust
-//! use libp2p::swarm::NetworkBehaviour;
-//! use libp2p::{identity, ping, PeerId};
+//! use libp2p::ping;
 //! use std::error::Error;
 //! use std::time::Duration;
 //! use tracing_subscriber::EnvFilter;
@@ -215,12 +211,12 @@
 //!     let mut swarm = libp2p::SwarmBuilder::with_new_identity()
 //!         .with_async_std()
 //!         .with_tcp(
-//!             libp2p_tcp::Config::default(),
-//!             libp2p_tls::Config::new,
-//!             libp2p_yamux::Config::default,
+//!             libp2p::tcp::Config::default(),
+//!             libp2p::tls::Config::new,
+//!             libp2p::yamux::Config::default,
 //!         )?
 //!         .with_behaviour(|_| ping::Behaviour::default())?
-//!         .with_swarm_config(|cfg| cfg.with_idle_connection_timeout(Duration::from_secs(30))) // Allows us to observe pings for 30 seconds.
+//!         .with_swarm_config(|cfg| cfg.with_idle_connection_timeout(Duration::from_secs(u64::MAX))) // Allows us to observe pings indefinitely.
 //!         .build();
 //!
 //!     Ok(())
@@ -254,7 +250,7 @@
 //! remote peer.
 //!
 //! ```rust
-//! use libp2p::{identity, ping, Multiaddr, PeerId};
+//! use libp2p::{ping, Multiaddr};
 //! use std::error::Error;
 //! use std::time::Duration;
 //! use tracing_subscriber::EnvFilter;
@@ -266,12 +262,12 @@
 //!     let mut swarm = libp2p::SwarmBuilder::with_new_identity()
 //!         .with_async_std()
 //!         .with_tcp(
-//!             libp2p_tcp::Config::default(),
-//!             libp2p_tls::Config::new,
-//!             libp2p_yamux::Config::default,
+//!             libp2p::tcp::Config::default(),
+//!             libp2p::tls::Config::new,
+//!             libp2p::yamux::Config::default,
 //!         )?
 //!         .with_behaviour(|_| ping::Behaviour::default())?
-//!         .with_swarm_config(|cfg| cfg.with_idle_connection_timeout(Duration::from_secs(30))) // Allows us to observe pings for 30 seconds.
+//!         .with_swarm_config(|cfg| cfg.with_idle_connection_timeout(Duration::from_secs(u64::MAX))) // Allows us to observe pings indefinitely..
 //!         .build();
 //!
 //!     // Tell the swarm to listen on all interfaces and a random, OS-assigned
@@ -298,8 +294,8 @@
 //!
 //! ```no_run
 //! use futures::prelude::*;
-//! use libp2p::swarm::{NetworkBehaviour, SwarmEvent};
-//! use libp2p::{identity, ping, Multiaddr, PeerId};
+//! use libp2p::swarm::SwarmEvent;
+//! use libp2p::{ping, Multiaddr};
 //! use std::error::Error;
 //! use std::time::Duration;
 //! use tracing_subscriber::EnvFilter;
@@ -311,12 +307,12 @@
 //!     let mut swarm = libp2p::SwarmBuilder::with_new_identity()
 //!         .with_async_std()
 //!         .with_tcp(
-//!             libp2p_tcp::Config::default(),
-//!             libp2p_tls::Config::new,
-//!             libp2p_yamux::Config::default,
+//!             libp2p::tcp::Config::default(),
+//!             libp2p::tls::Config::new,
+//!             libp2p::yamux::Config::default,
 //!         )?
 //!         .with_behaviour(|_| ping::Behaviour::default())?
-//!         .with_swarm_config(|cfg| cfg.with_idle_connection_timeout(Duration::from_secs(30))) // Allows us to observe pings for 30 seconds.
+//!         .with_swarm_config(|cfg| cfg.with_idle_connection_timeout(Duration::from_secs(u64::MAX))) // Allows us to observe pings indefinitely.
 //!         .build();
 //!
 //!     // Tell the swarm to listen on all interfaces and a random, OS-assigned

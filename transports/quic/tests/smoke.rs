@@ -408,7 +408,7 @@ async fn write_after_peer_dropped_stream() {
         .try_init();
     let (stream_a, mut stream_b) = build_streams::<quic::async_std::Provider>().await;
     drop(stream_a);
-    futures_timer::Delay::new(Duration::from_millis(1)).await;
+    futures_timer::Delay::new(Duration::from_millis(10)).await;
 
     let data = vec![0; 10];
     stream_b.write_all(&data).await.expect("Write failed.");
@@ -653,15 +653,13 @@ async fn answer_inbound_streams<P: Provider + Spawn, const BUFFER_SIZE: usize>(
     mut connection: StreamMuxerBox,
 ) {
     loop {
-        let mut inbound_stream = match future::poll_fn(|cx| {
+        let Ok(mut inbound_stream) = future::poll_fn(|cx| {
             let _ = connection.poll_unpin(cx)?;
-
             connection.poll_inbound_unpin(cx)
         })
         .await
-        {
-            Ok(s) => s,
-            Err(_) => return,
+        else {
+            return;
         };
 
         P::spawn(async move {

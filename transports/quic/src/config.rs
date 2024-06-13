@@ -18,7 +18,10 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use quinn::VarInt;
+use quinn::{
+    crypto::rustls::{QuicClientConfig, QuicServerConfig},
+    MtuDiscoveryConfig, VarInt,
+};
 use std::{sync::Arc, time::Duration};
 
 /// Config for the transport.
@@ -40,10 +43,10 @@ pub struct Config {
     /// concurrently by the remote peer.
     pub max_concurrent_stream_limit: u32,
 
-    /// Max unacknowledged data in bytes that may be send on a single stream.
+    /// Max unacknowledged data in bytes that may be sent on a single stream.
     pub max_stream_data: u32,
 
-    /// Max unacknowledged data in bytes that may be send in total on all streams
+    /// Max unacknowledged data in bytes that may be sent in total on all streams
     /// of a connection.
     pub max_connection_data: u32,
 
@@ -58,32 +61,55 @@ pub struct Config {
     pub support_draft_29: bool,
 
     /// TLS client config for the inner [`quinn::ClientConfig`].
-    client_tls_config: Arc<rustls::ClientConfig>,
+    client_tls_config: Arc<QuicClientConfig>,
     /// TLS server config for the inner [`quinn::ServerConfig`].
-    server_tls_config: Arc<rustls::ServerConfig>,
+    server_tls_config: Arc<QuicServerConfig>,
     /// Libp2p identity of the node.
     keypair: libp2p_identity::Keypair,
+
+    /// Parameters governing MTU discovery. See [`MtuDiscoveryConfig`] for details.
+    mtu_discovery_config: Option<MtuDiscoveryConfig>,
 }
 
 impl Config {
     /// Creates a new configuration object with default values.
     pub fn new(keypair: &libp2p_identity::Keypair) -> Self {
-        let client_tls_config = Arc::new(libp2p_tls::make_client_config(keypair, None).unwrap());
-        let server_tls_config = Arc::new(libp2p_tls::make_server_config(keypair).unwrap());
+        let client_tls_config = Arc::new(
+            QuicClientConfig::try_from(libp2p_tls::make_client_config(keypair, None).unwrap())
+                .unwrap(),
+        );
+        let server_tls_config = Arc::new(
+            QuicServerConfig::try_from(libp2p_tls::make_server_config(keypair).unwrap()).unwrap(),
+        );
         Self {
             client_tls_config,
             server_tls_config,
             support_draft_29: false,
             handshake_timeout: Duration::from_secs(5),
-            max_idle_timeout: 30 * 1000,
+            max_idle_timeout: 10 * 1000,
             max_concurrent_stream_limit: 256,
-            keep_alive_interval: Duration::from_secs(15),
+            keep_alive_interval: Duration::from_secs(5),
             max_connection_data: 15_000_000,
 
             // Ensure that one stream is not consuming the whole connection.
             max_stream_data: 10_000_000,
             keypair: keypair.clone(),
+            mtu_discovery_config: Some(Default::default()),
         }
+    }
+
+    /// Set the upper bound to the max UDP payload size that MTU discovery will search for.
+    pub fn mtu_upper_bound(mut self, value: u16) -> Self {
+        self.mtu_discovery_config
+            .get_or_insert_with(Default::default)
+            .upper_bound(value);
+        self
+    }
+
+    /// Disable MTU path discovery (it is enabled by default).
+    pub fn disable_path_mtu_discovery(mut self) -> Self {
+        self.mtu_discovery_config = None;
+        self
     }
 }
 
@@ -108,6 +134,7 @@ impl From<Config> for QuinnConfig {
             support_draft_29,
             handshake_timeout: _,
             keypair,
+            mtu_discovery_config,
         } = config;
         let mut transport = quinn::TransportConfig::default();
         // Disable uni-directional streams.
@@ -120,6 +147,7 @@ impl From<Config> for QuinnConfig {
         transport.allow_spin(false);
         transport.stream_receive_window(max_stream_data.into());
         transport.receive_window(max_connection_data.into());
+        transport.mtu_discovery_config(mtu_discovery_config);
         let transport = Arc::new(transport);
 
         let mut server_config = quinn::ServerConfig::with_crypto(server_tls_config);

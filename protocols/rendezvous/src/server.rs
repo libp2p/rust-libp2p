@@ -34,7 +34,6 @@ use libp2p_swarm::{
 };
 use std::collections::{HashMap, HashSet};
 use std::iter;
-use std::iter::FromIterator;
 use std::task::{ready, Context, Poll};
 use std::time::Duration;
 
@@ -155,6 +154,7 @@ impl NetworkBehaviour for Behaviour {
             .on_connection_handler_event(peer_id, connection, event);
     }
 
+    #[tracing::instrument(level = "trace", name = "NetworkBehaviour::poll", skip(self, cx))]
     fn poll(
         &mut self,
         cx: &mut Context<'_>,
@@ -214,20 +214,12 @@ impl NetworkBehaviour for Behaviour {
                     }) => {
                         continue;
                     }
-                    ToSwarm::Dial { .. }
-                    | ToSwarm::ListenOn { .. }
-                    | ToSwarm::RemoveListener { .. }
-                    | ToSwarm::NotifyHandler { .. }
-                    | ToSwarm::NewExternalAddrCandidate(_)
-                    | ToSwarm::ExternalAddrConfirmed(_)
-                    | ToSwarm::ExternalAddrExpired(_)
-                    | ToSwarm::CloseConnection { .. } => {
-                        let new_to_swarm = to_swarm
+                    other => {
+                        let new_to_swarm = other
                             .map_out(|_| unreachable!("we manually map `GenerateEvent` variants"));
 
                         return Poll::Ready(new_to_swarm);
                     }
-                    _ => {}
                 };
             }
 
@@ -450,7 +442,7 @@ impl Registrations {
         match (discover_namespace.as_ref(), cookie_namespace) {
             // discover all namespace but cookie is specific to a namespace? => bad
             (None, Some(_)) => return Err(CookieNamespaceMismatch),
-            // discover for a namespace but cookie is for a different namesapce? => bad
+            // discover for a namespace but cookie is for a different namespace? => bad
             (Some(namespace), Some(cookie_namespace)) if namespace != cookie_namespace => {
                 return Err(CookieNamespaceMismatch)
             }
@@ -535,8 +527,7 @@ pub struct CookieNamespaceMismatch;
 
 #[cfg(test)]
 mod tests {
-    use instant::SystemTime;
-    use std::option::Option::None;
+    use web_time::SystemTime;
 
     use libp2p_core::PeerRecord;
     use libp2p_identity as identity;

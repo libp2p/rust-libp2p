@@ -1,4 +1,13 @@
-## 0.41.1 - unreleased
+## 0.41.3 
+- Use `web-time` instead of `instant`.
+  See [PR 5347](https://github.com/libp2p/rust-libp2p/pull/5347).
+
+## 0.41.2
+
+- Implement `std::fmt::Display` on `ListenerId`.
+  See [PR 4936](https://github.com/libp2p/rust-libp2p/pull/4936).
+
+## 0.41.1
 
 - Implement `{In,Out}boundConnectionUpgrade` for `SelectUpgrade`.
   See [PR 4812](https://github.com/libp2p/rust-libp2p/pull/4812).
@@ -299,7 +308,7 @@
 
 - Add `From<&PublicKey> for PeerId` (see [PR 2145]).
 
-- Remove `TInEvent` and `TOutEvent` trait paramters on most public types.
+- Remove `TInEvent` and `TOutEvent` trait parameters on most public types.
   `TInEvent` and `TOutEvent` are implied through `THandler` and thus
   superflucious. Both are removed in favor of a derivation through `THandler`
   (see [PR 2183]).

@@ -18,15 +18,14 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use instant::Instant;
 use libp2p_core::multiaddr::{Multiaddr, Protocol};
 use libp2p_identity::PeerId;
 use std::collections::{HashMap, VecDeque};
-use std::convert::TryInto;
 use std::hash::Hash;
 use std::net::IpAddr;
 use std::num::NonZeroU32;
 use std::time::Duration;
+use web_time::Instant;
 
 /// Allows rate limiting access to some resource based on the [`PeerId`] and
 /// [`Multiaddr`] of a remote peer.
@@ -124,7 +123,7 @@ impl<Id: Eq + PartialEq + Hash + Clone> GenericRateLimiter<Id> {
         // Note when used with a high number of buckets: This loop refills all the to-be-refilled
         // buckets at once, thus potentially delaying the parent call to `try_next`.
         loop {
-            match self.refill_schedule.get(0) {
+            match self.refill_schedule.front() {
                 // Only continue if (a) there is a bucket and (b) the bucket has not already been
                 // refilled recently.
                 Some((last_refill, _)) if now.duration_since(*last_refill) >= self.interval => {}
@@ -173,7 +172,6 @@ impl<Id: Eq + PartialEq + Hash + Clone> GenericRateLimiter<Id> {
 mod tests {
     use super::*;
     use quickcheck::{QuickCheck, TestResult};
-    use std::num::NonZeroU32;
 
     #[test]
     fn first() {

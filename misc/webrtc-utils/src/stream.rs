@@ -146,8 +146,14 @@ where
                     }
 
                     debug_assert!(read_buffer.is_empty());
-                    if let Some(message) = message {
-                        *read_buffer = message.into();
+                    match message {
+                        Some(msg) if !msg.is_empty() => {
+                            *read_buffer = msg.into();
+                        }
+                        _ => {
+                            tracing::debug!("poll_read buffer is empty, received None");
+                            return Poll::Ready(Ok(0));
+                        }
                     }
                 }
                 None => {
@@ -260,10 +266,9 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::stream::framed_dc::codec;
     use asynchronous_codec::Encoder;
     use bytes::BytesMut;
-    use quick_protobuf::{MessageWrite, Writer};
-    use unsigned_varint::codec::UviBytes;
 
     #[test]
     fn max_data_len() {
@@ -275,21 +280,13 @@ mod tests {
             message: Some(message.to_vec()),
         };
 
-        let mut encoded_msg = Vec::new();
-        let mut writer = Writer::new(&mut encoded_msg);
-        protobuf
-            .write_message(&mut writer)
-            .expect("Encoding to succeed");
-        assert_eq!(encoded_msg.len(), message.len() + PROTO_OVERHEAD);
+        let mut codec = codec();
 
-        let mut uvi = UviBytes::default();
         let mut dst = BytesMut::new();
-        uvi.encode(encoded_msg.as_slice(), &mut dst).unwrap();
+        codec.encode(protobuf, &mut dst).unwrap();
 
         // Ensure the varint prefixed and protobuf encoded largest message is no longer than the
         // maximum limit specified in the libp2p WebRTC specification.
         assert_eq!(dst.len(), MAX_MSG_LEN);
-
-        assert_eq!(dst.len() - encoded_msg.len(), VARINT_LEN);
     }
 }

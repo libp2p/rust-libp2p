@@ -1,6 +1,6 @@
 [package]
 name = "libp2p-quic"
-version = "0.10.0"
+version = "0.10.3"
 authors = ["Parity Technologies <admin@parity.io>"]
 edition = "2021"
 rust-version = { workspace = true }
@@ -10,22 +10,22 @@ license = "MIT"
 
 [dependencies]
 async-std = { version = "1.12.0", optional = true }
-bytes = "1.5.0"
-futures = "0.3.29"
-futures-timer = "3.0.2"
-if-watch = "3.1.0"
+bytes = "1.6.0"
+futures = { workspace = true }
+futures-timer = "3.0.3"
+if-watch = "3.2.0"
 libp2p-core = { workspace = true }
 libp2p-tls = { workspace = true }
 libp2p-identity = { workspace = true }
-parking_lot = "0.12.0"
-quinn = { version = "0.10.2", default-features = false, features = ["tls-rustls", "futures-io"] }
+parking_lot = "0.12.3"
+quinn = { version = "0.11.2", default-features = false, features = ["rustls", "futures-io"] }
 rand = "0.8.5"
-rustls = { version = "0.21.8", default-features = false }
-thiserror = "1.0.50"
-tokio = { version = "1.33.0", default-features = false, features = ["net", "rt", "time"], optional = true }
-tracing = "0.1.37"
-socket2 = "0.5.5"
-ring = "0.16.20"
+rustls = { version = "0.23.9", default-features = false }
+thiserror = "1.0.61"
+tokio = { workspace = true, default-features = false, features = ["net", "rt", "time"], optional = true }
+tracing = { workspace = true }
+socket2 = "0.5.7"
+ring = { workspace = true }
 
 [features]
 tokio = ["dep:tokio", "if-watch/tokio", "quinn/runtime-tokio"]
@@ -46,8 +46,8 @@ libp2p-noise = { workspace = true }
 libp2p-tcp = { workspace = true, features = ["async-io"] }
 libp2p-yamux = { workspace = true }
 quickcheck = "1"
-tokio = { version = "1.33.0", features = ["macros", "rt-multi-thread", "time"] }
-tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+tokio = { workspace = true, features = ["macros", "rt-multi-thread", "time"] }
+tracing-subscriber = { workspace = true, features = ["env-filter"] }
 
 [[test]]
 name = "stream_compliance"

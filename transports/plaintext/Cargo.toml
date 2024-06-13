@@ -11,13 +11,13 @@ keywords = ["peer-to-peer", "libp2p", "networking"]
 categories = ["network-programming", "asynchronous"]
 
 [dependencies]
-asynchronous-codec = "0.6"
+asynchronous-codec = { workspace = true }
 bytes = "1"
-futures = "0.3.29"
+futures = { workspace = true }
 libp2p-core = { workspace = true }
 libp2p-identity = { workspace = true }
 quick-protobuf = "0.8"
-tracing = "0.1.37"
+tracing = { workspace = true }
 quick-protobuf-codec = { workspace = true }
 
 [dev-dependencies]
@@ -25,7 +25,7 @@ libp2p-identity = { workspace = true, features = ["ed25519", "rand"] }
 quickcheck = { workspace = true }
 rand = "0.8"
 futures_ringbuf = "0.4.0"
-tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+tracing-subscriber = { workspace = true, features = ["env-filter"] }
 
 # Passing arguments to the docsrs builder in order to properly document cfg's. 
 # More information: https://docs.rs/about/builds#cross-compiling

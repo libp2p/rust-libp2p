@@ -18,7 +18,8 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use std::time::{Duration, SystemTime};
+use std::time::Duration;
+use web_time::SystemTime;
 
 use asynchronous_codec::{Framed, FramedParts};
 use bytes::Bytes;
@@ -201,10 +202,7 @@ pub(crate) async fn handle_inbound_request(
                 None => return Err(Error::MissingPeer),
             };
 
-            let dst = match peer_id_res {
-                Ok(res) => res,
-                Err(_) => return Err(Error::ParsePeerId),
-            };
+            let dst = peer_id_res.map_err(|_| Error::ParsePeerId)?;
 
             Either::Right(CircuitReq { dst, substream })
         }

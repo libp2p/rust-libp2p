@@ -18,6 +18,8 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
+#![allow(deprecated)]
+
 use crate::core::muxing::{StreamMuxer, StreamMuxerEvent};
 
 use futures::{
@@ -101,6 +103,9 @@ where
 }
 
 /// Allows obtaining the average bandwidth of the streams.
+#[deprecated(
+    note = "Use `libp2p::SwarmBuilder::with_bandwidth_metrics` or `libp2p_metrics::BandwidthTransport` instead."
+)]
 pub struct BandwidthSinks {
     inbound: AtomicU64,
     outbound: AtomicU64,
@@ -149,7 +154,7 @@ impl<SMInner: AsyncRead> AsyncRead for InstrumentedStream<SMInner> {
         let this = self.project();
         let num_bytes = ready!(this.inner.poll_read(cx, buf))?;
         this.sinks.inbound.fetch_add(
-            u64::try_from(num_bytes).unwrap_or(u64::max_value()),
+            u64::try_from(num_bytes).unwrap_or(u64::MAX),
             Ordering::Relaxed,
         );
         Poll::Ready(Ok(num_bytes))
@@ -163,7 +168,7 @@ impl<SMInner: AsyncRead> AsyncRead for InstrumentedStream<SMInner> {
         let this = self.project();
         let num_bytes = ready!(this.inner.poll_read_vectored(cx, bufs))?;
         this.sinks.inbound.fetch_add(
-            u64::try_from(num_bytes).unwrap_or(u64::max_value()),
+            u64::try_from(num_bytes).unwrap_or(u64::MAX),
             Ordering::Relaxed,
         );
         Poll::Ready(Ok(num_bytes))
@@ -179,7 +184,7 @@ impl<SMInner: AsyncWrite> AsyncWrite for InstrumentedStream<SMInner> {
         let this = self.project();
         let num_bytes = ready!(this.inner.poll_write(cx, buf))?;
         this.sinks.outbound.fetch_add(
-            u64::try_from(num_bytes).unwrap_or(u64::max_value()),
+            u64::try_from(num_bytes).unwrap_or(u64::MAX),
             Ordering::Relaxed,
         );
         Poll::Ready(Ok(num_bytes))
@@ -193,7 +198,7 @@ impl<SMInner: AsyncWrite> AsyncWrite for InstrumentedStream<SMInner> {
         let this = self.project();
         let num_bytes = ready!(this.inner.poll_write_vectored(cx, bufs))?;
         this.sinks.outbound.fetch_add(
-            u64::try_from(num_bytes).unwrap_or(u64::max_value()),
+            u64::try_from(num_bytes).unwrap_or(u64::MAX),
             Ordering::Relaxed,
         );
         Poll::Ready(Ok(num_bytes))
