@@ -428,9 +428,9 @@ dependencies = [
 
 [[package]]
 name = "async-std-resolver"
-version = "0.24.1"
+version = "0.24.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bc3b454643291f9a4a3bbdb35fa62efa4ba7be5ea13fe243e3be4352182ff4b8"
+checksum = "3c0ed2b6671c13d2c28756c5a64e04759c1e0b5d3d7ac031f521c3561e21fbcb"
 dependencies = [
  "async-std",
  "async-trait",
@@ -3353,7 +3353,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-tcp"
-version = "0.41.1"
+version = "0.42.0"
 dependencies = [
  "async-io 2.3.3",
  "async-std",
@@ -4728,9 +4728,9 @@ dependencies = [
 
 [[package]]
 name = "rayon"
-version = "1.8.0"
+version = "1.10.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9c27db03db7734835b3f53954b534c91069375ce6ccaa2e065441e07d9b6cdb1"
+checksum = "b418a60154510ca1a002a752ca9714984e21e4241e804d32555251faf8b78ffa"
 dependencies = [
  "either",
  "rayon-core",
@@ -4738,9 +4738,9 @@ dependencies = [
 
 [[package]]
 name = "rayon-core"
-version = "1.12.0"
+version = "1.12.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5ce3fb6ad83f861aac485e76e1985cd109d9a3713802152be56c3b1f0e0658ed"
+checksum = "1465873a3dfdaa8ae7cb14b4383657caab0b3e8a0aa9ae8e04b044854c8dfce2"
 dependencies = [
  "crossbeam-deque",
  "crossbeam-utils",
@@ -5806,9 +5806,9 @@ dependencies = [
 
 [[package]]
 name = "sysinfo"
-version = "0.30.5"
+version = "0.30.12"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1fb4f3438c8f6389c864e61221cbc97e9bca98b4daf39a5beb7bea660f528bb2"
+checksum = "732ffa00f53e6b2af46208fba5718d9662a421049204e156328b66791ffa15ae"
 dependencies = [
  "cfg-if",
  "core-foundation-sys",
