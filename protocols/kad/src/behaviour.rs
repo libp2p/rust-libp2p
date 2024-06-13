@@ -914,9 +914,12 @@ where
     /// refreshed by initiating an additional bootstrapping query for each such
     /// bucket with random keys.
     ///
-    /// Returns the `QueryId` for the entire bootstrapping process. The progress of bootstrapping is
+    /// Returns `Ok` if bootstrapping has been initiated with a self-lookup, providing the
+    /// `QueryId` for the entire bootstrapping process. The progress of bootstrapping is
     /// reported via [`Event::OutboundQueryProgressed{QueryResult::Bootstrap}`] events,
     /// with one such event per bootstrapping query.
+    ///
+    /// Returns `Err` if bootstrapping is impossible due an empty routing table.
     ///
     /// > **Note**: Bootstrapping requires at least one node of the DHT to be known.
     /// > See [`Behaviour::add_address`].
@@ -928,6 +931,7 @@ where
     /// > This parameter is used to call [`Behaviour::bootstrap`] periodically and automatically
     /// > to ensure a healthy routing table.
     pub fn bootstrap(&mut self) -> Result<QueryId, NoKnownPeers> {
+        self.bootstrap_status.on_started();
         let local_key = *self.kbuckets.local_key();
         let info = QueryInfo::Bootstrap {
             peer: *local_key.preimage(),
@@ -935,8 +939,13 @@ where
             step: ProgressStep::first(),
         };
         let peers = self.kbuckets.closest_keys(&local_key).collect::<Vec<_>>();
-        let inner = QueryInner::new(info);
-        self.queries.add_iter_closest(local_key, peers, inner)
+        if peers.is_empty() {
+            self.bootstrap_status.on_finish();
+            Err(NoKnownPeers())
+        } else {
+            let inner = QueryInner::new(info);
+            Ok(self.queries.add_iter_closest(local_key, peers, inner))
+        }
     }
 
     /// Establishes the local node as a provider of a value for the given key.
@@ -2519,7 +2528,9 @@ where
 
         // Poll bootstrap periodically and automatically.
         if let Poll::Ready(()) = self.bootstrap_status.poll_next_bootstrap(cx) {
-            self.bootstrap();
+            if let Err(e) = self.bootstrap() {
+                tracing::warn!("Failed to trigger bootstrap: {e}");
+            }
         }
 
         loop {

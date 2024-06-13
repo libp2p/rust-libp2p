@@ -178,7 +178,7 @@ fn bootstrap() {
 
         let swarm_ids: Vec<_> = swarms.iter().map(Swarm::local_peer_id).cloned().collect();
 
-        let qid = swarms[0].behaviour_mut().bootstrap();
+        let qid = swarms[0].behaviour_mut().bootstrap().unwrap();
 
         // Expected known peers
         let expected_known = swarm_ids.iter().skip(1).cloned().collect::<HashSet<_>>();

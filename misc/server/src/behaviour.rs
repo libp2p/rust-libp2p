@@ -49,7 +49,7 @@ impl Behaviour {
             for peer in &BOOTNODES {
                 kademlia.add_address(&PeerId::from_str(peer).unwrap(), bootaddr.clone());
             }
-            kademlia.bootstrap();
+            kademlia.bootstrap().unwrap();
             Some(kademlia)
         } else {
             None
