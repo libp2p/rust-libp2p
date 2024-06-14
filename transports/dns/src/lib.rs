@@ -235,7 +235,7 @@ where
         addr: Multiaddr,
         dial_opts: DialOpts,
     ) -> Result<Self::Dial, TransportError<Self::Error>> {
-        self.do_dial(addr, dial_opts)
+        Ok(self.do_dial(addr, dial_opts))
     }
 
     fn poll(
@@ -262,10 +262,7 @@ where
         &mut self,
         addr: Multiaddr,
         dial_opts: DialOpts,
-    ) -> Result<
-        <Self as libp2p_core::Transport>::Dial,
-        TransportError<<Self as libp2p_core::Transport>::Error>,
-    > {
+    ) -> <Self as libp2p_core::Transport>::Dial {
         let resolver = self.resolver.clone();
         let inner = self.inner.clone();
 
