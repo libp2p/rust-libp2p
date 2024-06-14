@@ -3,7 +3,6 @@ use libp2p_swarm::StreamProtocol;
 pub mod client;
 pub(crate) mod protocol;
 pub mod server;
-mod global_ip;
 
 pub(crate) mod generated {
     #![allow(unreachable_pub)]
