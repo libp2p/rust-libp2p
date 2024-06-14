@@ -34,6 +34,8 @@ pub(crate) enum DialBackStatus {
     DialErr,
     /// Failure during dial back
     DialBackErr,
+    /// Unreachable
+    Unreachable,
 }
 
 #[derive(Debug)]
@@ -185,6 +187,13 @@ impl From<HandleFail> for DialResponse {
                 dial_status: match result {
                     Err(DialBackStatus::DialErr) => DialStatus::E_DIAL_ERROR,
                     Err(DialBackStatus::DialBackErr) => DialStatus::E_DIAL_BACK_ERROR,
+                    Err(DialBackStatus::Unreachable) => {
+                        return Self {
+                            status: ResponseStatus::E_DIAL_REFUSED,
+                            addr_idx: 0,
+                            dial_status: DialStatus::UNUSED,
+                        }
+                    }
                     Ok(()) => DialStatus::OK,
                 },
             },

@@ -6,13 +6,16 @@ use std::{
 
 use crate::v2::server::handler::dial_request::DialBackStatus;
 use either::Either;
-use libp2p_core::{transport::PortUse, Endpoint, Multiaddr};
+use libp2p_core::{
+    transport::{PortUse, TransportError},
+    Endpoint, Multiaddr,
+};
 use libp2p_identity::PeerId;
-use libp2p_swarm::dial_opts::PeerCondition;
 use libp2p_swarm::{
     dial_opts::DialOpts, dummy, ConnectionDenied, ConnectionHandler, ConnectionId, DialFailure,
     FromSwarm, NetworkBehaviour, ToSwarm,
 };
+use libp2p_swarm::{dial_opts::PeerCondition, DialError};
 use rand_core::{OsRng, RngCore};
 
 use crate::v2::server::handler::{
@@ -91,11 +94,25 @@ where
     }
 
     fn on_swarm_event(&mut self, event: FromSwarm) {
-        if let FromSwarm::DialFailure(DialFailure { connection_id, .. }) = event {
+        if let FromSwarm::DialFailure(DialFailure {
+            connection_id,
+            error,
+            ..
+        }) = event
+        {
             if let Some(DialBackCommand { back_channel, .. }) =
                 self.dialing_dial_back.remove(&connection_id)
             {
-                let _ = back_channel.send(Err(DialBackStatus::DialErr));
+                let dial_back_status = if let DialError::Transport(errors) = error {
+                    if errors.into_iter().any(|(_, e)| matches!(e, TransportError::Other(ie) if is_network_unreachable(ie))) {
+                        DialBackStatus::Unreachable
+                    } else {
+                        DialBackStatus::DialErr
+                    }
+                } else {
+                    DialBackStatus::DialErr
+                };
+                let _ = back_channel.send(Err(dial_back_status));
             }
         }
     }
@@ -152,4 +169,10 @@ pub struct Event {
     pub data_amount: usize,
     /// The result of the test.
     pub result: Result<(), io::Error>,
+}
+
+fn is_network_unreachable(err: &io::Error) -> bool {
+    err.raw_os_error()
+        .map(|e| e == libc::ENETUNREACH)
+        .unwrap_or(false)
 }
