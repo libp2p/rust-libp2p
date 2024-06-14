@@ -1,5 +1,6 @@
 use std::{
     io,
+    sync::OnceLock,
     task::{Context, Poll},
     time::Duration,
 };
@@ -11,6 +12,7 @@ use futures::{
 };
 use futures_bounded::FuturesSet;
 use libp2p_core::{
+    multiaddr::Protocol,
     upgrade::{DeniedUpgrade, ReadyUpgrade},
     Multiaddr,
 };
@@ -19,10 +21,12 @@ use libp2p_swarm::{
     handler::{ConnectionEvent, FullyNegotiatedInbound, ListenUpgradeError},
     ConnectionHandler, ConnectionHandlerEvent, StreamProtocol, SubstreamProtocol,
 };
+use network_interface::{Addr, NetworkInterface, NetworkInterfaceConfig};
 use rand_core::RngCore;
 
 use crate::v2::{
     generated::structs::{mod_DialResponse::ResponseStatus, DialStatus},
+    global_ip::{ipv4_global, ipv6_global},
     protocol::{Coder, DialDataRequest, DialRequest, DialResponse, Request, Response},
     server::behaviour::Event,
     Nonce, DIAL_REQUEST_PROTOCOL,
@@ -265,7 +269,7 @@ async fn handle_request_internal<I>(
 where
     I: AsyncRead + AsyncWrite + Unpin,
 {
-    let DialRequest { mut addrs, nonce } = match coder
+    let DialRequest { addrs, nonce } = match coder
         .next()
         .await
         .map_err(|_| HandleFail::InternalError(0))?
@@ -276,8 +280,17 @@ where
         }
     };
     all_addrs.clone_from(&addrs);
-    let idx = 0;
-    let addr = addrs.pop().ok_or(HandleFail::DialRefused)?;
+    let (idx, addr) = addrs
+        .into_iter()
+        .enumerate()
+        .find(|(_, addr)| {
+            addr.iter().any(|proto| match proto {
+                Protocol::Ip4(addr) if ipv4_global::is_global(addr) => support_ipv4(),
+                Protocol::Ip6(addr) if ipv6_global::is_global(addr) => support_ipv6(),
+                _ => false,
+            })
+        })
+        .ok_or(HandleFail::DialRefused)?;
     *tested_addrs = Some(addr.clone());
     *data_amount = 0;
     if addr != observed_multiaddr {
@@ -328,5 +341,35 @@ where
         status: ResponseStatus::OK,
         addr_idx: idx,
         dial_status: DialStatus::OK,
+    })
+}
+
+fn support_ipv4() -> bool {
+    static IPV4_SUPPORT: OnceLock<bool> = OnceLock::new();
+    *IPV4_SUPPORT.get_or_init(|| {
+        NetworkInterface::show()
+            .unwrap_or_default()
+            .iter()
+            .any(|interface| {
+                interface
+                    .addr
+                    .iter()
+                    .any(|addr| matches!(addr, Addr::V4(a) if ipv4_global::is_global(a.ip) ))
+            })
+    })
+}
+
+fn support_ipv6() -> bool {
+    static IPV6_SUPPORT: OnceLock<bool> = OnceLock::new();
+    *IPV6_SUPPORT.get_or_init(|| {
+        NetworkInterface::show()
+            .unwrap_or_default()
+            .iter()
+            .any(|interface| {
+                interface
+                    .addr
+                    .iter()
+                    .any(|addr| matches!(addr, Addr::V6(a) if ipv6_global::is_global(a.ip) ))
+            })
     })
 }
