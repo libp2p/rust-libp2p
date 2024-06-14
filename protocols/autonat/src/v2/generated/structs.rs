@@ -120,7 +120,7 @@ impl Default for OneOfmsg {
 #[derive(Debug, Default, PartialEq, Clone)]
 pub struct DialRequest {
     pub addrs: Vec<Vec<u8>>,
-    pub nonce: Option<u64>,
+    pub nonce: u64,
 }
 
 impl<'a> MessageRead<'a> for DialRequest {
@@ -129,7 +129,7 @@ impl<'a> MessageRead<'a> for DialRequest {
         while !r.is_eof() {
             match r.next_tag(bytes) {
                 Ok(10) => msg.addrs.push(r.read_bytes(bytes)?.to_owned()),
-                Ok(17) => msg.nonce = Some(r.read_fixed64(bytes)?),
+                Ok(17) => msg.nonce = r.read_fixed64(bytes)?,
                 Ok(t) => { r.read_unknown(bytes, t)?; }
                 Err(e) => return Err(e),
             }
@@ -142,12 +142,12 @@ impl MessageWrite for DialRequest {
     fn get_size(&self) -> usize {
         0
         + self.addrs.iter().map(|s| 1 + sizeof_len((s).len())).sum::<usize>()
-        + self.nonce.as_ref().map_or(0, |_| 1 + 8)
+        + if self.nonce == 0u64 { 0 } else { 1 + 8 }
     }
 
     fn write_message<W: WriterBackend>(&self, w: &mut Writer<W>) -> Result<()> {
         for s in &self.addrs { w.write_with_tag(10, |w| w.write_bytes(&**s))?; }
-        if let Some(ref s) = self.nonce { w.write_with_tag(17, |w| w.write_fixed64(*s))?; }
+        if self.nonce != 0u64 { w.write_with_tag(17, |w| w.write_fixed64(*&self.nonce))?; }
         Ok(())
     }
 }
@@ -155,8 +155,8 @@ impl MessageWrite for DialRequest {
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Debug, Default, PartialEq, Clone)]
 pub struct DialDataRequest {
-    pub addrIdx: Option<u32>,
-    pub numBytes: Option<u64>,
+    pub addrIdx: u32,
+    pub numBytes: u64,
 }
 
 impl<'a> MessageRead<'a> for DialDataRequest {
@@ -164,8 +164,8 @@ impl<'a> MessageRead<'a> for DialDataRequest {
         let mut msg = Self::default();
         while !r.is_eof() {
             match r.next_tag(bytes) {
-                Ok(8) => msg.addrIdx = Some(r.read_uint32(bytes)?),
-                Ok(16) => msg.numBytes = Some(r.read_uint64(bytes)?),
+                Ok(8) => msg.addrIdx = r.read_uint32(bytes)?,
+                Ok(16) => msg.numBytes = r.read_uint64(bytes)?,
                 Ok(t) => { r.read_unknown(bytes, t)?; }
                 Err(e) => return Err(e),
             }
@@ -177,13 +177,13 @@ impl<'a> MessageRead<'a> for DialDataRequest {
 impl MessageWrite for DialDataRequest {
     fn get_size(&self) -> usize {
         0
-        + self.addrIdx.as_ref().map_or(0, |m| 1 + sizeof_varint(*(m) as u64))
-        + self.numBytes.as_ref().map_or(0, |m| 1 + sizeof_varint(*(m) as u64))
+        + if self.addrIdx == 0u32 { 0 } else { 1 + sizeof_varint(*(&self.addrIdx) as u64) }
+        + if self.numBytes == 0u64 { 0 } else { 1 + sizeof_varint(*(&self.numBytes) as u64) }
     }
 
     fn write_message<W: WriterBackend>(&self, w: &mut Writer<W>) -> Result<()> {
-        if let Some(ref s) = self.addrIdx { w.write_with_tag(8, |w| w.write_uint32(*s))?; }
-        if let Some(ref s) = self.numBytes { w.write_with_tag(16, |w| w.write_uint64(*s))?; }
+        if self.addrIdx != 0u32 { w.write_with_tag(8, |w| w.write_uint32(*&self.addrIdx))?; }
+        if self.numBytes != 0u64 { w.write_with_tag(16, |w| w.write_uint64(*&self.numBytes))?; }
         Ok(())
     }
 }
@@ -191,9 +191,9 @@ impl MessageWrite for DialDataRequest {
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Debug, Default, PartialEq, Clone)]
 pub struct DialResponse {
-    pub status: Option<structs::mod_DialResponse::ResponseStatus>,
-    pub addrIdx: Option<u32>,
-    pub dialStatus: Option<structs::DialStatus>,
+    pub status: structs::mod_DialResponse::ResponseStatus,
+    pub addrIdx: u32,
+    pub dialStatus: structs::DialStatus,
 }
 
 impl<'a> MessageRead<'a> for DialResponse {
@@ -201,9 +201,9 @@ impl<'a> MessageRead<'a> for DialResponse {
         let mut msg = Self::default();
         while !r.is_eof() {
             match r.next_tag(bytes) {
-                Ok(8) => msg.status = Some(r.read_enum(bytes)?),
-                Ok(16) => msg.addrIdx = Some(r.read_uint32(bytes)?),
-                Ok(24) => msg.dialStatus = Some(r.read_enum(bytes)?),
+                Ok(8) => msg.status = r.read_enum(bytes)?,
+                Ok(16) => msg.addrIdx = r.read_uint32(bytes)?,
+                Ok(24) => msg.dialStatus = r.read_enum(bytes)?,
                 Ok(t) => { r.read_unknown(bytes, t)?; }
                 Err(e) => return Err(e),
             }
@@ -215,15 +215,15 @@ impl<'a> MessageRead<'a> for DialResponse {
 impl MessageWrite for DialResponse {
     fn get_size(&self) -> usize {
         0
-        + self.status.as_ref().map_or(0, |m| 1 + sizeof_varint(*(m) as u64))
-        + self.addrIdx.as_ref().map_or(0, |m| 1 + sizeof_varint(*(m) as u64))
-        + self.dialStatus.as_ref().map_or(0, |m| 1 + sizeof_varint(*(m) as u64))
+        + if self.status == structs::mod_DialResponse::ResponseStatus::E_INTERNAL_ERROR { 0 } else { 1 + sizeof_varint(*(&self.status) as u64) }
+        + if self.addrIdx == 0u32 { 0 } else { 1 + sizeof_varint(*(&self.addrIdx) as u64) }
+        + if self.dialStatus == structs::DialStatus::UNUSED { 0 } else { 1 + sizeof_varint(*(&self.dialStatus) as u64) }
     }
 
     fn write_message<W: WriterBackend>(&self, w: &mut Writer<W>) -> Result<()> {
-        if let Some(ref s) = self.status { w.write_with_tag(8, |w| w.write_enum(*s as i32))?; }
-        if let Some(ref s) = self.addrIdx { w.write_with_tag(16, |w| w.write_uint32(*s))?; }
-        if let Some(ref s) = self.dialStatus { w.write_with_tag(24, |w| w.write_enum(*s as i32))?; }
+        if self.status != structs::mod_DialResponse::ResponseStatus::E_INTERNAL_ERROR { w.write_with_tag(8, |w| w.write_enum(*&self.status as i32))?; }
+        if self.addrIdx != 0u32 { w.write_with_tag(16, |w| w.write_uint32(*&self.addrIdx))?; }
+        if self.dialStatus != structs::DialStatus::UNUSED { w.write_with_tag(24, |w| w.write_enum(*&self.dialStatus as i32))?; }
         Ok(())
     }
 }
@@ -274,7 +274,7 @@ impl<'a> From<&'a str> for ResponseStatus {
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Debug, Default, PartialEq, Clone)]
 pub struct DialDataResponse {
-    pub data: Option<Vec<u8>>,
+    pub data: Vec<u8>,
 }
 
 impl<'a> MessageRead<'a> for DialDataResponse {
@@ -282,7 +282,7 @@ impl<'a> MessageRead<'a> for DialDataResponse {
         let mut msg = Self::default();
         while !r.is_eof() {
             match r.next_tag(bytes) {
-                Ok(10) => msg.data = Some(r.read_bytes(bytes)?.to_owned()),
+                Ok(10) => msg.data = r.read_bytes(bytes)?.to_owned(),
                 Ok(t) => { r.read_unknown(bytes, t)?; }
                 Err(e) => return Err(e),
             }
@@ -294,11 +294,11 @@ impl<'a> MessageRead<'a> for DialDataResponse {
 impl MessageWrite for DialDataResponse {
     fn get_size(&self) -> usize {
         0
-        + self.data.as_ref().map_or(0, |m| 1 + sizeof_len((m).len()))
+        + if self.data.is_empty() { 0 } else { 1 + sizeof_len((&self.data).len()) }
     }
 
     fn write_message<W: WriterBackend>(&self, w: &mut Writer<W>) -> Result<()> {
-        if let Some(ref s) = self.data { w.write_with_tag(10, |w| w.write_bytes(&**s))?; }
+        if !self.data.is_empty() { w.write_with_tag(10, |w| w.write_bytes(&**&self.data))?; }
         Ok(())
     }
 }
@@ -306,7 +306,7 @@ impl MessageWrite for DialDataResponse {
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Debug, Default, PartialEq, Clone)]
 pub struct DialBack {
-    pub nonce: Option<u64>,
+    pub nonce: u64,
 }
 
 impl<'a> MessageRead<'a> for DialBack {
@@ -314,7 +314,7 @@ impl<'a> MessageRead<'a> for DialBack {
         let mut msg = Self::default();
         while !r.is_eof() {
             match r.next_tag(bytes) {
-                Ok(9) => msg.nonce = Some(r.read_fixed64(bytes)?),
+                Ok(9) => msg.nonce = r.read_fixed64(bytes)?,
                 Ok(t) => { r.read_unknown(bytes, t)?; }
                 Err(e) => return Err(e),
             }
@@ -326,11 +326,11 @@ impl<'a> MessageRead<'a> for DialBack {
 impl MessageWrite for DialBack {
     fn get_size(&self) -> usize {
         0
-        + self.nonce.as_ref().map_or(0, |_| 1 + 8)
+        + if self.nonce == 0u64 { 0 } else { 1 + 8 }
     }
 
     fn write_message<W: WriterBackend>(&self, w: &mut Writer<W>) -> Result<()> {
-        if let Some(ref s) = self.nonce { w.write_with_tag(9, |w| w.write_fixed64(*s))?; }
+        if self.nonce != 0u64 { w.write_with_tag(9, |w| w.write_fixed64(*&self.nonce))?; }
         Ok(())
     }
 }
@@ -338,7 +338,7 @@ impl MessageWrite for DialBack {
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Debug, Default, PartialEq, Clone)]
 pub struct DialBackResponse {
-    pub status: Option<structs::mod_DialBackResponse::DialBackStatus>,
+    pub status: structs::mod_DialBackResponse::DialBackStatus,
 }
 
 impl<'a> MessageRead<'a> for DialBackResponse {
@@ -346,7 +346,7 @@ impl<'a> MessageRead<'a> for DialBackResponse {
         let mut msg = Self::default();
         while !r.is_eof() {
             match r.next_tag(bytes) {
-                Ok(8) => msg.status = Some(r.read_enum(bytes)?),
+                Ok(8) => msg.status = r.read_enum(bytes)?,
                 Ok(t) => { r.read_unknown(bytes, t)?; }
                 Err(e) => return Err(e),
             }
@@ -358,11 +358,11 @@ impl<'a> MessageRead<'a> for DialBackResponse {
 impl MessageWrite for DialBackResponse {
     fn get_size(&self) -> usize {
         0
-        + self.status.as_ref().map_or(0, |m| 1 + sizeof_varint(*(m) as u64))
+        + if self.status == structs::mod_DialBackResponse::DialBackStatus::OK { 0 } else { 1 + sizeof_varint(*(&self.status) as u64) }
     }
 
     fn write_message<W: WriterBackend>(&self, w: &mut Writer<W>) -> Result<()> {
-        if let Some(ref s) = self.status { w.write_with_tag(8, |w| w.write_enum(*s as i32))?; }
+        if self.status != structs::mod_DialBackResponse::DialBackStatus::OK { w.write_with_tag(8, |w| w.write_enum(*&self.status as i32))?; }
         Ok(())
     }
 }
