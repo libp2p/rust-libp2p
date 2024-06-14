@@ -2,7 +2,7 @@
 name = "libp2p-identify"
 edition = "2021"
 rust-version = { workspace = true }
-description = "Nodes identifcation protocol for libp2p"
+description = "Nodes identification protocol for libp2p"
 version = "0.45.0"
 authors = ["Parity Technologies <admin@parity.io>"]
 license = "MIT"
