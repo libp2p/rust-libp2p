@@ -104,7 +104,7 @@ where
                 self.dialing_dial_back.remove(&connection_id)
             {
                 let dial_back_status = if let DialError::Transport(errors) = error {
-                    if errors.into_iter().any(|(_, e)| matches!(e, TransportError::Other(ie) if is_network_unreachable(ie))) {
+                    if errors.iter().any(|(_, e)| matches!(e, TransportError::Other(ie) if is_network_unreachable(ie))) {
                         DialBackStatus::Unreachable
                     } else {
                         DialBackStatus::DialErr
@@ -171,8 +171,14 @@ pub struct Event {
     pub result: Result<(), io::Error>,
 }
 
+#[cfg(not(all(target_family = "wasm", target_os = "unknown")))]
 fn is_network_unreachable(err: &io::Error) -> bool {
     err.raw_os_error()
         .map(|e| e == libc::ENETUNREACH)
         .unwrap_or(false)
+}
+
+#[cfg(all(target_family = "wasm", target_os = "unknown"))]
+fn is_network_unreachable(_err: &io::Error) -> bool {
+    false
 }
