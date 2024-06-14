@@ -48,6 +48,7 @@
 //!      any system APIs (like libc's `gethostbyname`). Again this is
 //!      problematic on platforms like Android, where there's a lot of
 //!      complexity hidden behind the system APIs.
+//!
 //! If the implementation requires different characteristics, one should
 //! consider providing their own implementation of [`Transport`] or use
 //! platform specific APIs to extract the host's DNS configuration (if possible)
@@ -270,7 +271,7 @@ where
 
         // Asynchronously resolve all DNS names in the address before proceeding
         // with dialing on the underlying transport.
-        Ok(async move {
+        async move {
             let mut last_err = None;
             let mut dns_lookups = 0;
             let mut dial_attempts = 0;
@@ -393,7 +394,7 @@ where
             }))
         }
         .boxed()
-        .right_future())
+        .right_future()
     }
 }
 

@@ -142,7 +142,7 @@ impl Config {
     pub fn new() -> Self {
         Self {
             ttl: None,
-            nodelay: None,
+            nodelay: Some(false), // Disable Nagle's algorithm by default
             backlog: 1024,
         }
     }
