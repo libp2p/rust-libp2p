@@ -94,24 +94,11 @@ where
     }
 
     fn on_swarm_event(&mut self, event: FromSwarm) {
-        if let FromSwarm::DialFailure(DialFailure {
-            connection_id,
-            error,
-            ..
-        }) = event
-        {
+        if let FromSwarm::DialFailure(DialFailure { connection_id, .. }) = event {
             if let Some(DialBackCommand { back_channel, .. }) =
                 self.dialing_dial_back.remove(&connection_id)
             {
-                let dial_back_status = if let DialError::Transport(errors) = error {
-                    if errors.iter().any(|(_, e)| matches!(e, TransportError::Other(ie) if is_network_unreachable(ie))) {
-                        DialBackStatus::Unreachable
-                    } else {
-                        DialBackStatus::DialErr
-                    }
-                } else {
-                    DialBackStatus::DialErr
-                };
+                let dial_back_status = DialBackStatus::DialErr;
                 let _ = back_channel.send(Err(dial_back_status));
             }
         }
@@ -169,16 +156,4 @@ pub struct Event {
     pub data_amount: usize,
     /// The result of the test.
     pub result: Result<(), io::Error>,
-}
-
-#[cfg(not(all(target_family = "wasm", target_os = "unknown")))]
-fn is_network_unreachable(err: &io::Error) -> bool {
-    err.raw_os_error()
-        .map(|e| e == libc::ENETUNREACH)
-        .unwrap_or(false)
-}
-
-#[cfg(all(target_family = "wasm", target_os = "unknown"))]
-fn is_network_unreachable(_err: &io::Error) -> bool {
-    false
 }

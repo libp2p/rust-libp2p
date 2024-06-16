@@ -2698,7 +2698,6 @@ dependencies = [
  "futures-bounded",
  "futures-timer",
  "instant",
- "libc",
  "libp2p-core",
  "libp2p-identify",
  "libp2p-identity",
