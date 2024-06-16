@@ -30,7 +30,7 @@ use libp2p_relay as relay;
 use libp2p_swarm::{Config, NetworkBehaviour, Swarm, SwarmEvent};
 use libp2p_swarm_test::SwarmExt as _;
 use std::time::Duration;
-use tracing_subscriber::EnvFilter;
+// use tracing_subscriber::EnvFilter;
 
 #[async_std::test]
 async fn connect() {
