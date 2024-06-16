@@ -35,7 +35,7 @@ use tracing_subscriber::EnvFilter;
 #[async_std::test]
 async fn connect() {
     let _ = tracing_subscriber::fmt()
-        .with_env_filter(EnvFilter::from_default_env())
+        .with_env_filter("debug")
         .try_init();
 
     let mut relay = build_relay();
