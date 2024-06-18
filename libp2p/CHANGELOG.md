@@ -9,7 +9,7 @@
 - Use `web-time` instead of `instant`.
   See [PR 5347](https://github.com/libp2p/rust-libp2p/pull/5347).
 
-- Remove redundant async signature.
+- Remove redundant async signature from builder methods.
   See [PR 5468](https://github.com/libp2p/rust-libp2p/pull/5468).
 
 ## 0.53.2
