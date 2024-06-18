@@ -150,7 +150,7 @@ impl<Provider, T: AuthenticatedMultiplexedTransport> SwarmBuilder<Provider, Quic
 }
 #[cfg(all(not(target_arch = "wasm32"), feature = "async-std", feature = "dns"))]
 impl<T: AuthenticatedMultiplexedTransport> SwarmBuilder<super::provider::AsyncStd, QuicPhase<T>> {
-    pub async fn with_dns(
+    pub fn with_dns(
         self,
     ) -> Result<
         SwarmBuilder<
