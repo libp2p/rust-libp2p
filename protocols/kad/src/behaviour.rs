@@ -604,7 +604,8 @@ where
                 };
                 match entry.insert(addresses.clone(), status) {
                     kbucket::InsertResult::Inserted => {
-                        self.bootstrap_status.on_new_peer_in_routing_table();
+                        self.trigger_bootstrap_if_routing_table_is_almost_empty();
+
                         self.queued_events.push_back(ToSwarm::GenerateEvent(
                             Event::RoutingUpdated {
                                 peer: *peer,
@@ -1324,7 +1325,8 @@ where
                         let addresses = Addresses::new(a);
                         match entry.insert(addresses.clone(), new_status) {
                             kbucket::InsertResult::Inserted => {
-                                self.bootstrap_status.on_new_peer_in_routing_table();
+                                self.trigger_bootstrap_if_routing_table_is_almost_empty();
+
                                 let event = Event::RoutingUpdated {
                                     peer,
                                     is_new_peer: true,
@@ -1372,6 +1374,15 @@ where
                 }
             }
             _ => {}
+        }
+    }
+
+    /// A new peer has been inserted in the routing table but we check if the routing
+    /// table is currently small (less that `K_VALUE` peers are present) and only
+    /// trigger a bootstrap in that case
+    fn trigger_bootstrap_if_routing_table_is_almost_empty(&mut self) {
+        if self.kbuckets().count() < K_VALUE.get() {
+            self.bootstrap_status.trigger();
         }
     }
 
@@ -2613,6 +2624,12 @@ where
             }
             FromSwarm::DialFailure(dial_failure) => self.on_dial_failure(dial_failure),
             FromSwarm::AddressChange(address_change) => self.on_address_change(address_change),
+            FromSwarm::NewListenAddr(_) if self.connected_peers.is_empty() => {
+                // A new listen addr was just discovered and we have no connected peers,
+                // it can mean that our network interfaces were not up but they are now
+                // so it might be a good idea to trigger a bootstrap.
+                self.bootstrap_status.trigger();
+            }
             _ => {}
         }
     }
