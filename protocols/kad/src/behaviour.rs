@@ -931,7 +931,6 @@ where
     /// > This parameter is used to call [`Behaviour::bootstrap`] periodically and automatically
     /// > to ensure a healthy routing table.
     pub fn bootstrap(&mut self) -> Result<QueryId, NoKnownPeers> {
-        self.bootstrap_status.on_started();
         let local_key = *self.kbuckets.local_key();
         let info = QueryInfo::Bootstrap {
             peer: *local_key.preimage(),
@@ -940,9 +939,10 @@ where
         };
         let peers = self.kbuckets.closest_keys(&local_key).collect::<Vec<_>>();
         if peers.is_empty() {
-            self.bootstrap_status.on_finish();
+            self.bootstrap_status.reset_timers();
             Err(NoKnownPeers())
         } else {
+            self.bootstrap_status.on_started();
             let inner = QueryInner::new(info);
             Ok(self.queries.add_iter_closest(local_key, peers, inner))
         }
