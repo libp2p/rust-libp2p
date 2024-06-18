@@ -308,7 +308,7 @@ jobs:
       RUSTFLAGS: ''
     steps:
       - uses: actions/checkout@v4
-      - run: wget -q -O- https://github.com/obi1kenobi/cargo-semver-checks/releases/download/v0.27.0/cargo-semver-checks-x86_64-unknown-linux-gnu.tar.gz | tar -xz -C ~/.cargo/bin
+      - run: wget -q -O- https://github.com/obi1kenobi/cargo-semver-checks/releases/download/v0.31.0/cargo-semver-checks-x86_64-unknown-linux-gnu.tar.gz | tar -xz -C ~/.cargo/bin
         shell: bash
       - uses: obi1kenobi/cargo-semver-checks-action@c7306483f698c511eaf7416d1bf2e1958c90140f # v2
 
