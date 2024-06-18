@@ -19,6 +19,8 @@
   See [PR 5317](https://github.com/libp2p/rust-libp2p/pull/5317).
 - Use `web-time` instead of `instant`.
   See [PR 5347](https://github.com/libp2p/rust-libp2p/pull/5347).
+- Correctly handle the `NoKnownPeers` error on automatic bootstrap.
+  See [PR 5349](https://github.com/libp2p/rust-libp2p/pull/5349).
 
 ## 0.45.3
 
