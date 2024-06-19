@@ -604,7 +604,7 @@ where
                 };
                 match entry.insert(addresses.clone(), status) {
                     kbucket::InsertResult::Inserted => {
-                        self.trigger_bootstrap_if_routing_table_is_almost_empty();
+                        self.bootstrap_on_low_peers();
 
                         self.queued_events.push_back(ToSwarm::GenerateEvent(
                             Event::RoutingUpdated {
@@ -1325,7 +1325,7 @@ where
                         let addresses = Addresses::new(a);
                         match entry.insert(addresses.clone(), new_status) {
                             kbucket::InsertResult::Inserted => {
-                                self.trigger_bootstrap_if_routing_table_is_almost_empty();
+                                self.bootstrap_on_low_peers();
 
                                 let event = Event::RoutingUpdated {
                                     peer,
@@ -1380,7 +1380,7 @@ where
     /// A new peer has been inserted in the routing table but we check if the routing
     /// table is currently small (less that `K_VALUE` peers are present) and only
     /// trigger a bootstrap in that case
-    fn trigger_bootstrap_if_routing_table_is_almost_empty(&mut self) {
+    fn bootstrap_on_low_peers(&mut self) {
         if self.kbuckets().count() < K_VALUE.get() {
             self.bootstrap_status.trigger();
         }
