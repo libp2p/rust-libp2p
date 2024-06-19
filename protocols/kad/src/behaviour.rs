@@ -23,7 +23,6 @@
 mod test;
 
 use crate::addresses::Addresses;
-use crate::bootstrap;
 use crate::handler::{Handler, HandlerEvent, HandlerIn, RequestId};
 use crate::kbucket::{self, Distance, KBucketsTable, NodeStatus};
 use crate::protocol::{ConnectionType, KadPeer, ProtocolConfig};
@@ -33,6 +32,7 @@ use crate::record::{
     store::{self, RecordStore},
     ProviderRecord, Record,
 };
+use crate::{bootstrap, K_VALUE};
 use crate::{jobs::*, protocol};
 use fnv::FnvHashSet;
 use libp2p_core::{ConnectedPoint, Endpoint, Multiaddr};
@@ -1381,7 +1381,12 @@ where
     /// table is currently small (less that `K_VALUE` peers are present) and only
     /// trigger a bootstrap in that case
     fn bootstrap_on_low_peers(&mut self) {
-        if self.kbuckets().count() < K_VALUE.get() {
+        if self
+            .kbuckets()
+            .map(|kbucket| kbucket.num_entries())
+            .sum::<usize>()
+            < K_VALUE.get()
+        {
             self.bootstrap_status.trigger();
         }
     }
