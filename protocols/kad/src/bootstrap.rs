@@ -61,19 +61,23 @@ impl Status {
         }
     }
 
+    pub(crate) fn reset_timers(&mut self) {
+        // Canceling the `throttle_timer` if any and resetting the `delay` if any.
+        self.throttle_timer = None;
+
+        if let Some((interval, delay)) = self.interval_and_delay.as_mut() {
+            delay.reset(*interval);
+        }
+    }
+
     pub(crate) fn on_started(&mut self) {
         // No periodic or automatic bootstrap will be triggered as long as
         // `self.current_bootstrap_requests > 0` but the user could still manually
         // trigger a bootstrap.
         self.current_bootstrap_requests += 1;
 
-        // Canceling the `throttle_timer` if any since a bootstrap request is being triggered right now.
-        self.throttle_timer = None;
-
-        // Resetting the `delay` if any since a bootstrap request is being triggered right now.
-        if let Some((interval, delay)) = self.interval_and_delay.as_mut() {
-            delay.reset(*interval);
-        }
+        // Resetting the Status timers since a bootstrap request is being triggered right now.
+        self.reset_timers();
     }
 
     pub(crate) fn on_finish(&mut self) {

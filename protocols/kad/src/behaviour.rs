@@ -939,6 +939,7 @@ where
         };
         let peers = self.kbuckets.closest_keys(&local_key).collect::<Vec<_>>();
         if peers.is_empty() {
+            self.bootstrap_status.reset_timers();
             Err(NoKnownPeers())
         } else {
             self.bootstrap_status.on_started();
