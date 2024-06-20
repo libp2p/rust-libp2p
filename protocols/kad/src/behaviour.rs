@@ -1700,7 +1700,7 @@ where
                             .inner
                             .addresses
                             .remove(&peer_id)
-                            .expect("peer not present in address map")
+                            .unwrap_or_default()
                             .to_vec();
                         FoundPeer { peer_id, addrs }
                     })
