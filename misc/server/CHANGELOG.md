@@ -4,6 +4,8 @@
 
 - Use periodic and automatic bootstrap of Kademlia.
   See [PR 4838](https://github.com/libp2p/rust-libp2p/pull/4838).
+- Update to [`libp2p-identify` `v0.45.0`](protocols/identify/CHANGELOG.md#0450).
+  See [PR 4981](https://github.com/libp2p/rust-libp2p/pull/4981).
 
 ## 0.12.6
 
