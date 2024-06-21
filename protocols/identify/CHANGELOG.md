@@ -1,3 +1,8 @@
+## 0.45.0
+
+- Add `ConnectionId` in `Event`.
+  See [PR 4981](https://github.com/libp2p/rust-libp2p/pull/4981).
+
 ## 0.44.2
 
 - Emit `ToSwarm::NewExternalAddrOfPeer` for all external addresses of remote peers.

@@ -2837,7 +2837,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-identify"
-version = "0.44.2"
+version = "0.45.0"
 dependencies = [
  "async-std",
  "asynchronous-codec",
