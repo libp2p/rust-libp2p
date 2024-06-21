@@ -36,7 +36,7 @@ use crate::record::{
 use crate::K_VALUE;
 use crate::{jobs::*, protocol};
 use fnv::{FnvHashMap, FnvHashSet};
-use libp2p_core::{ConnectedPoint, Endpoint, Multiaddr};
+use libp2p_core::{ConnectedPoint, Endpoint, Multiaddr, PeerInfo};
 use libp2p_identity::PeerId;
 use libp2p_swarm::behaviour::{
     AddressChange, ConnectionClosed, ConnectionEstablished, DialFailure, FromSwarm,
@@ -1390,7 +1390,7 @@ where
     fn query_finished(&mut self, q: Query<QueryInner>) -> Option<Event> {
         let query_id = q.id();
         tracing::trace!(query=?query_id, "Query finished");
-        let result = q.into_result();
+        let mut result = q.into_result();
         match result.inner.info {
             QueryInfo::Bootstrap {
                 peer,
@@ -1466,14 +1466,23 @@ where
 
             QueryInfo::GetClosestPeers { key, mut step } => {
                 step.last = true;
+                let peers = result
+                    .peers
+                    .map(|peer_id| {
+                        let addrs = result
+                            .inner
+                            .addresses
+                            .remove(&peer_id)
+                            .unwrap_or_default()
+                            .to_vec();
+                        PeerInfo { peer_id, addrs }
+                    })
+                    .collect();
 
                 Some(Event::OutboundQueryProgressed {
                     id: query_id,
                     stats: result.stats,
-                    result: QueryResult::GetClosestPeers(Ok(GetClosestPeersOk {
-                        key,
-                        peers: result.peers.collect(),
-                    })),
+                    result: QueryResult::GetClosestPeers(Ok(GetClosestPeersOk { key, peers })),
                     step,
                 })
             }
@@ -1629,7 +1638,7 @@ where
     fn query_timeout(&mut self, query: Query<QueryInner>) -> Option<Event> {
         let query_id = query.id();
         tracing::trace!(query=?query_id, "Query timed out");
-        let result = query.into_result();
+        let mut result = query.into_result();
         match result.inner.info {
             QueryInfo::Bootstrap {
                 peer,
@@ -1684,13 +1693,25 @@ where
 
             QueryInfo::GetClosestPeers { key, mut step } => {
                 step.last = true;
+                let peers = result
+                    .peers
+                    .map(|peer_id| {
+                        let addrs = result
+                            .inner
+                            .addresses
+                            .remove(&peer_id)
+                            .unwrap_or_default()
+                            .to_vec();
+                        PeerInfo { peer_id, addrs }
+                    })
+                    .collect();
 
                 Some(Event::OutboundQueryProgressed {
                     id: query_id,
                     stats: result.stats,
                     result: QueryResult::GetClosestPeers(Err(GetClosestPeersError::Timeout {
                         key,
-                        peers: result.peers.collect(),
+                        peers,
                     })),
                     step,
                 })
@@ -2978,14 +2999,14 @@ pub type GetClosestPeersResult = Result<GetClosestPeersOk, GetClosestPeersError>
 #[derive(Debug, Clone)]
 pub struct GetClosestPeersOk {
     pub key: Vec<u8>,
-    pub peers: Vec<PeerId>,
+    pub peers: Vec<PeerInfo>,
 }
 
 /// The error result of [`Behaviour::get_closest_peers`].
 #[derive(Debug, Clone, Error)]
 pub enum GetClosestPeersError {
     #[error("the request timed out")]
-    Timeout { key: Vec<u8>, peers: Vec<PeerId> },
+    Timeout { key: Vec<u8>, peers: Vec<PeerInfo> },
 }
 
 impl GetClosestPeersError {

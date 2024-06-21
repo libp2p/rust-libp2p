@@ -1,3 +1,7 @@
+## 0.47.0
+- Included multiaddresses of found peers alongside peer IDs in `GetClosestPeers` query results.
+  See [PR 5475](https://github.com/libp2p/rust-libp2p/pull/5475)
+
 ## 0.46.0
 
 - Changed `FIND_NODE` response: now includes a list of closest peers when querying the recipient peer ID. Previously, this request yielded an empty response.
