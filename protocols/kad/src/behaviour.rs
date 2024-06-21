@@ -36,7 +36,7 @@ use crate::record::{
 use crate::K_VALUE;
 use crate::{jobs::*, protocol};
 use fnv::{FnvHashMap, FnvHashSet};
-use libp2p_core::{ConnectedPoint, Endpoint, Multiaddr};
+use libp2p_core::{ConnectedPoint, Endpoint, Multiaddr, PeerInfo};
 use libp2p_identity::PeerId;
 use libp2p_swarm::behaviour::{
     AddressChange, ConnectionClosed, ConnectionEstablished, DialFailure, FromSwarm,
@@ -1475,7 +1475,7 @@ where
                             .remove(&peer_id)
                             .unwrap_or_default()
                             .to_vec();
-                        FoundPeer { peer_id, addrs }
+                        PeerInfo { peer_id, addrs }
                     })
                     .collect();
 
@@ -1702,7 +1702,7 @@ where
                             .remove(&peer_id)
                             .unwrap_or_default()
                             .to_vec();
-                        FoundPeer { peer_id, addrs }
+                        PeerInfo { peer_id, addrs }
                     })
                     .collect();
 
@@ -2999,21 +2999,14 @@ pub type GetClosestPeersResult = Result<GetClosestPeersOk, GetClosestPeersError>
 #[derive(Debug, Clone)]
 pub struct GetClosestPeersOk {
     pub key: Vec<u8>,
-    pub peers: Vec<FoundPeer>,
-}
-
-/// Found peer with addresses
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct FoundPeer {
-    pub peer_id: PeerId,
-    pub addrs: Vec<Multiaddr>,
+    pub peers: Vec<PeerInfo>,
 }
 
 /// The error result of [`Behaviour::get_closest_peers`].
 #[derive(Debug, Clone, Error)]
 pub enum GetClosestPeersError {
     #[error("the request timed out")]
-    Timeout { key: Vec<u8>, peers: Vec<FoundPeer> },
+    Timeout { key: Vec<u8>, peers: Vec<PeerInfo> },
 }
 
 impl GetClosestPeersError {
