@@ -27,7 +27,7 @@ use crate::bootstrap;
 use crate::handler::{Handler, HandlerEvent, HandlerIn, RequestId};
 use crate::kbucket::{self, Distance, KBucketsTable, NodeStatus};
 use crate::protocol::{ConnectionType, KadPeer, ProtocolConfig};
-use crate::query::{Query, QueryConfig, QueryId, QueryPool, QueryPoolState};
+use crate::query::{Query, QueryConfig, QueryId, QueryInner, QueryPool, QueryPoolState};
 use crate::record::{
     self,
     store::{self, RecordStore},
@@ -76,7 +76,7 @@ pub struct Behaviour<TStore> {
     record_filtering: StoreInserts,
 
     /// The currently active (i.e. in-progress) queries.
-    queries: QueryPool<QueryInner>,
+    queries: QueryPool,
 
     /// The currently connected peers.
     ///
@@ -429,7 +429,7 @@ impl Config {
     /// Sets the time to wait before calling [`Behaviour::bootstrap`] after a new peer is inserted in the routing table.
     /// This prevent cascading bootstrap requests when multiple peers are inserted into the routing table "at the same time".
     /// This also allows to wait a little bit for other potential peers to be inserted into the routing table before
-    /// triggering a bootstrap, giving more context to the future bootstrap request.  
+    /// triggering a bootstrap, giving more context to the future bootstrap request.
     ///
     /// * Default to `500` ms.
     /// * Set to `Some(Duration::ZERO)` to never wait before triggering a bootstrap request when a new peer
@@ -1387,7 +1387,7 @@ where
     }
 
     /// Handles a finished (i.e. successful) query.
-    fn query_finished(&mut self, q: Query<QueryInner>) -> Option<Event> {
+    fn query_finished(&mut self, q: Query) -> Option<Event> {
         let query_id = q.id();
         tracing::trace!(query=?query_id, "Query finished");
         let mut result = q.into_result();
@@ -1635,7 +1635,7 @@ where
     }
 
     /// Handles a query that timed out.
-    fn query_timeout(&mut self, query: Query<QueryInner>) -> Option<Event> {
+    fn query_timeout(&mut self, query: Query) -> Option<Event> {
         let query_id = query.id();
         tracing::trace!(query=?query_id, "Query timed out");
         let mut result = query.into_result();
@@ -3114,31 +3114,6 @@ impl From<kbucket::EntryView<kbucket::Key<PeerId>, Addresses>> for KadPeer {
     }
 }
 
-//////////////////////////////////////////////////////////////////////////////
-// Internal query state
-
-struct QueryInner {
-    /// The query-specific state.
-    info: QueryInfo,
-    /// Addresses of peers discovered during a query.
-    addresses: FnvHashMap<PeerId, SmallVec<[Multiaddr; 8]>>,
-    /// A map of pending requests to peers.
-    ///
-    /// A request is pending if the targeted peer is not currently connected
-    /// and these requests are sent as soon as a connection to the peer is established.
-    pending_rpcs: SmallVec<[(PeerId, HandlerIn); K_VALUE.get()]>,
-}
-
-impl QueryInner {
-    fn new(info: QueryInfo) -> Self {
-        QueryInner {
-            info,
-            addresses: Default::default(),
-            pending_rpcs: SmallVec::default(),
-        }
-    }
-}
-
 /// The context of a [`QueryInfo::AddProvider`] query.
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum AddProviderContext {
@@ -3324,7 +3299,7 @@ pub enum PutRecordPhase {
 
 /// A mutable reference to a running query.
 pub struct QueryMut<'a> {
-    query: &'a mut Query<QueryInner>,
+    query: &'a mut Query,
 }
 
 impl<'a> QueryMut<'a> {
@@ -3354,7 +3329,7 @@ impl<'a> QueryMut<'a> {
 
 /// An immutable reference to a running query.
 pub struct QueryRef<'a> {
-    query: &'a Query<QueryInner>,
+    query: &'a Query,
 }
 
 impl<'a> QueryRef<'a> {

@@ -20,45 +20,71 @@
 
 mod peers;
 
+use libp2p_core::Multiaddr;
 use peers::closest::{
     disjoint::ClosestDisjointPeersIter, ClosestPeersIter, ClosestPeersIterConfig,
 };
 use peers::fixed::FixedPeersIter;
 use peers::PeersIterState;
+use smallvec::SmallVec;
 
+use crate::handler::HandlerIn;
 use crate::kbucket::{Key, KeyBytes};
-use crate::{ALPHA_VALUE, K_VALUE};
+use crate::{QueryInfo, ALPHA_VALUE, K_VALUE};
 use either::Either;
 use fnv::FnvHashMap;
 use libp2p_identity::PeerId;
 use std::{num::NonZeroUsize, time::Duration};
 use web_time::Instant;
 
+/// The internal `Query` state.
+pub(crate) struct QueryInner {
+    /// The query-specific state.
+    pub(crate) info: QueryInfo,
+    /// Addresses of peers discovered during a query.
+    pub(crate) addresses: FnvHashMap<PeerId, SmallVec<[Multiaddr; 8]>>,
+    /// A map of pending requests to peers.
+    ///
+    /// A request is pending if the targeted peer is not currently connected
+    /// and these requests are sent as soon as a connection to the peer is established.
+    pub(crate) pending_rpcs: SmallVec<[(PeerId, HandlerIn); K_VALUE.get()]>,
+}
+
+impl QueryInner {
+    pub(crate) fn new(info: QueryInfo) -> Self {
+        QueryInner {
+            info,
+            addresses: Default::default(),
+            pending_rpcs: SmallVec::default(),
+        }
+    }
+}
+
 /// A `QueryPool` provides an aggregate state machine for driving `Query`s to completion.
 ///
 /// Internally, a `Query` is in turn driven by an underlying `QueryPeerIter`
 /// that determines the peer selection strategy, i.e. the order in which the
 /// peers involved in the query should be contacted.
-pub(crate) struct QueryPool<TInner> {
+pub(crate) struct QueryPool {
     next_id: usize,
     config: QueryConfig,
-    queries: FnvHashMap<QueryId, Query<TInner>>,
+    queries: FnvHashMap<QueryId, Query>,
 }
 
 /// The observable states emitted by [`QueryPool::poll`].
-pub(crate) enum QueryPoolState<'a, TInner> {
+pub(crate) enum QueryPoolState<'a> {
     /// The pool is idle, i.e. there are no queries to process.
     Idle,
     /// At least one query is waiting for results. `Some(request)` indicates
     /// that a new request is now being waited on.
-    Waiting(Option<(&'a mut Query<TInner>, PeerId)>),
+    Waiting(Option<(&'a mut Query, PeerId)>),
     /// A query has finished.
-    Finished(Query<TInner>),
+    Finished(Query),
     /// A query has timed out.
-    Timeout(Query<TInner>),
+    Timeout(Query),
 }
 
-impl<TInner> QueryPool<TInner> {
+impl QueryPool {
     /// Creates a new `QueryPool` with the given configuration.
     pub(crate) fn new(config: QueryConfig) -> Self {
         QueryPool {
@@ -74,7 +100,7 @@ impl<TInner> QueryPool<TInner> {
     }
 
     /// Returns an iterator over the queries in the pool.
-    pub(crate) fn iter(&self) -> impl Iterator<Item = &Query<TInner>> {
+    pub(crate) fn iter(&self) -> impl Iterator<Item = &Query> {
         self.queries.values()
     }
 
@@ -84,12 +110,12 @@ impl<TInner> QueryPool<TInner> {
     }
 
     /// Returns an iterator that allows modifying each query in the pool.
-    pub(crate) fn iter_mut(&mut self) -> impl Iterator<Item = &mut Query<TInner>> {
+    pub(crate) fn iter_mut(&mut self) -> impl Iterator<Item = &mut Query> {
         self.queries.values_mut()
     }
 
     /// Adds a query to the pool that contacts a fixed set of peers.
-    pub(crate) fn add_fixed<I>(&mut self, peers: I, inner: TInner) -> QueryId
+    pub(crate) fn add_fixed<I>(&mut self, peers: I, inner: QueryInner) -> QueryId
     where
         I: IntoIterator<Item = PeerId>,
     {
@@ -101,7 +127,7 @@ impl<TInner> QueryPool<TInner> {
     /// Continues an earlier query with a fixed set of peers, reusing
     /// the given query ID, which must be from a query that finished
     /// earlier.
-    pub(crate) fn continue_fixed<I>(&mut self, id: QueryId, peers: I, inner: TInner)
+    pub(crate) fn continue_fixed<I>(&mut self, id: QueryId, peers: I, inner: QueryInner)
     where
         I: IntoIterator<Item = PeerId>,
     {
@@ -113,7 +139,12 @@ impl<TInner> QueryPool<TInner> {
     }
 
     /// Adds a query to the pool that iterates towards the closest peers to the target.
-    pub(crate) fn add_iter_closest<T, I>(&mut self, target: T, peers: I, inner: TInner) -> QueryId
+    pub(crate) fn add_iter_closest<T, I>(
+        &mut self,
+        target: T,
+        peers: I,
+        inner: QueryInner,
+    ) -> QueryId
     where
         T: Into<KeyBytes> + Clone,
         I: IntoIterator<Item = Key<PeerId>>,
@@ -129,7 +160,7 @@ impl<TInner> QueryPool<TInner> {
         id: QueryId,
         target: T,
         peers: I,
-        inner: TInner,
+        inner: QueryInner,
     ) where
         T: Into<KeyBytes> + Clone,
         I: IntoIterator<Item = Key<PeerId>>,
@@ -159,17 +190,17 @@ impl<TInner> QueryPool<TInner> {
     }
 
     /// Returns a reference to a query with the given ID, if it is in the pool.
-    pub(crate) fn get(&self, id: &QueryId) -> Option<&Query<TInner>> {
+    pub(crate) fn get(&self, id: &QueryId) -> Option<&Query> {
         self.queries.get(id)
     }
 
     /// Returns a mutablereference to a query with the given ID, if it is in the pool.
-    pub(crate) fn get_mut(&mut self, id: &QueryId) -> Option<&mut Query<TInner>> {
+    pub(crate) fn get_mut(&mut self, id: &QueryId) -> Option<&mut Query> {
         self.queries.get_mut(id)
     }
 
     /// Polls the pool to advance the queries.
-    pub(crate) fn poll(&mut self, now: Instant) -> QueryPoolState<'_, TInner> {
+    pub(crate) fn poll(&mut self, now: Instant) -> QueryPoolState<'_> {
         let mut finished = None;
         let mut timeout = None;
         let mut waiting = None;
@@ -264,7 +295,7 @@ impl Default for QueryConfig {
 }
 
 /// A query in a `QueryPool`.
-pub(crate) struct Query<TInner> {
+pub(crate) struct Query {
     /// The unique ID of the query.
     id: QueryId,
     /// The peer iterator that drives the query state.
@@ -272,7 +303,7 @@ pub(crate) struct Query<TInner> {
     /// Execution statistics of the query.
     stats: QueryStats,
     /// The opaque inner query state.
-    pub(crate) inner: TInner,
+    pub(crate) inner: QueryInner,
 }
 
 /// The peer selection strategies that can be used by queries.
@@ -282,9 +313,9 @@ enum QueryPeerIter {
     Fixed(FixedPeersIter),
 }
 
-impl<TInner> Query<TInner> {
+impl Query {
     /// Creates a new query without starting it.
-    fn new(id: QueryId, peer_iter: QueryPeerIter, inner: TInner) -> Self {
+    fn new(id: QueryId, peer_iter: QueryPeerIter, inner: QueryInner) -> Self {
         Query {
             id,
             inner,
@@ -406,7 +437,7 @@ impl<TInner> Query<TInner> {
     }
 
     /// Consumes the query, producing the final `QueryResult`.
-    pub(crate) fn into_result(self) -> QueryResult<TInner, impl Iterator<Item = PeerId>> {
+    pub(crate) fn into_result(self) -> QueryResult<QueryInner, impl Iterator<Item = PeerId>> {
         let peers = match self.peer_iter {
             QueryPeerIter::Closest(iter) => Either::Left(Either::Left(iter.into_result())),
             QueryPeerIter::ClosestDisjoint(iter) => Either::Left(Either::Right(iter.into_result())),
