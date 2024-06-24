@@ -1187,7 +1187,7 @@ fn disjoint_query_does_not_finish_before_all_paths_did() {
         .behaviour()
         .queries
         .iter()
-        .for_each(|q| match &q.inner.info {
+        .for_each(|q| match &q.info {
             QueryInfo::GetRecord { step, .. } => {
                 assert_eq!(usize::from(step.count), 2);
             }

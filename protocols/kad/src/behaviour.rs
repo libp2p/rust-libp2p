@@ -1156,7 +1156,7 @@ where
                     "Peer reported by source in query"
                 );
                 let addrs = peer.multiaddrs.iter().cloned().collect();
-                query.inner.addresses.insert(peer.node_id, addrs);
+                query.addresses.insert(peer.node_id, addrs);
             }
             query.on_success(source, others_iter.cloned().map(|kp| kp.node_id))
         }
@@ -1380,7 +1380,7 @@ where
         let query_id = q.id();
         tracing::trace!(query=?query_id, "Query finished");
         let mut result = q.into_result();
-        match result.inner.info {
+        match result.info {
             QueryInfo::Bootstrap {
                 peer,
                 remaining,
@@ -1458,7 +1458,6 @@ where
                     .peers
                     .map(|peer_id| {
                         let addrs = result
-                            .inner
                             .addresses
                             .remove(&peer_id)
                             .unwrap_or_default()
@@ -1626,7 +1625,7 @@ where
         let query_id = query.id();
         tracing::trace!(query=?query_id, "Query timed out");
         let mut result = query.into_result();
-        match result.inner.info {
+        match result.info {
             QueryInfo::Bootstrap {
                 peer,
                 mut remaining,
@@ -1683,7 +1682,6 @@ where
                     .peers
                     .map(|peer_id| {
                         let addrs = result
-                            .inner
                             .addresses
                             .remove(&peer_id)
                             .unwrap_or_default()
@@ -1965,7 +1963,7 @@ where
         }
 
         for query in self.queries.iter_mut() {
-            if let Some(addrs) = query.inner.addresses.get_mut(&peer_id) {
+            if let Some(addrs) = query.addresses.get_mut(&peer_id) {
                 addrs.retain(|a| a != address);
             }
         }
@@ -2037,10 +2035,10 @@ where
         //
         // Given two connected nodes: local node A and remote node B. Say node B
         // is not in node A's routing table. Additionally node B is part of the
-        // `QueryInner::addresses` list of an ongoing query on node A. Say Node
+        // `Query::addresses` list of an ongoing query on node A. Say Node
         // B triggers an address change and then disconnects. Later on the
         // earlier mentioned query on node A would like to connect to node B.
-        // Without replacing the address in the `QueryInner::addresses` set node
+        // Without replacing the address in the `Query::addresses` set node
         // A would attempt to dial the old and not the new address.
         //
         // While upholding correctness, iterating through all discovered
@@ -2048,7 +2046,7 @@ where
         // large performance impact. If so, the code below might be worth
         // revisiting.
         for query in self.queries.iter_mut() {
-            if let Some(addrs) = query.inner.addresses.get_mut(&peer) {
+            if let Some(addrs) = query.addresses.get_mut(&peer) {
                 for addr in addrs.iter_mut() {
                     if addr == old {
                         *addr = new.clone();
@@ -2123,11 +2121,10 @@ where
         // Queue events for sending pending RPCs to the connected peer.
         // There can be only one pending RPC for a particular peer and query per definition.
         for (_peer_id, event) in self.queries.iter_mut().filter_map(|q| {
-            q.inner
-                .pending_rpcs
+            q.pending_rpcs
                 .iter()
                 .position(|(p, _)| p == &peer)
-                .map(|p| q.inner.pending_rpcs.remove(p))
+                .map(|p| q.pending_rpcs.remove(p))
         }) {
             handler.on_behaviour_event(event)
         }
@@ -2218,7 +2215,7 @@ where
 
         // We add to that a temporary list of addresses from the ongoing queries.
         for query in self.queries.iter() {
-            if let Some(addrs) = query.inner.addresses.get(&peer_id) {
+            if let Some(addrs) = query.addresses.get(&peer_id) {
                 peer_addrs.extend(addrs.iter().cloned())
             }
         }
@@ -2319,7 +2316,7 @@ where
                         ref mut providers_found,
                         ref mut step,
                         ..
-                    } = query.inner.info
+                    } = query.info
                     {
                         *providers_found += provider_peers.len();
                         let providers = provider_peers.iter().map(|p| p.node_id).collect();
@@ -2411,7 +2408,7 @@ where
                         ref mut step,
                         ref mut found_a_record,
                         cache_candidates,
-                    } = &mut query.inner.info
+                    } = &mut query.info
                     {
                         if let Some(record) = record {
                             *found_a_record = true;
@@ -2465,7 +2462,7 @@ where
                         phase: PutRecordPhase::PutRecord { success, .. },
                         quorum,
                         ..
-                    } = &mut query.inner.info
+                    } = &mut query.info
                     {
                         success.push(source);
 
@@ -2577,7 +2574,7 @@ where
                         }
                     }
                     QueryPoolState::Waiting(Some((query, peer_id))) => {
-                        let event = query.inner.info.to_request(query.id());
+                        let event = query.info.to_request(query.id());
                         // TODO: AddProvider requests yield no response, so the query completes
                         // as soon as all requests have been sent. However, the handler should
                         // better emit an event when the request has been sent (and report
@@ -2586,7 +2583,7 @@ where
                         if let QueryInfo::AddProvider {
                             phase: AddProviderPhase::AddProvider { .. },
                             ..
-                        } = &query.inner.info
+                        } = &query.info
                         {
                             query.on_success(&peer_id, vec![])
                         }
@@ -2598,7 +2595,7 @@ where
                                 handler: NotifyHandler::Any,
                             });
                         } else if &peer_id != self.kbuckets.local_key().preimage() {
-                            query.inner.pending_rpcs.push((peer_id, event));
+                            query.pending_rpcs.push((peer_id, event));
                             self.queued_events.push_back(ToSwarm::Dial {
                                 opts: DialOpts::peer_id(peer_id).build(),
                             });
@@ -3295,7 +3292,7 @@ impl<'a> QueryMut<'a> {
 
     /// Gets information about the type and state of the query.
     pub fn info(&self) -> &QueryInfo {
-        &self.query.inner.info
+        &self.query.info
     }
 
     /// Gets execution statistics about the query.
@@ -3325,7 +3322,7 @@ impl<'a> QueryRef<'a> {
 
     /// Gets information about the type and state of the query.
     pub fn info(&self) -> &QueryInfo {
-        &self.query.inner.info
+        &self.query.info
     }
 
     /// Gets execution statistics about the query.

@@ -37,29 +37,6 @@ use libp2p_identity::PeerId;
 use std::{num::NonZeroUsize, time::Duration};
 use web_time::Instant;
 
-/// The internal `Query` state.
-pub(crate) struct QueryInner {
-    /// The query-specific state.
-    pub(crate) info: QueryInfo,
-    /// Addresses of peers discovered during a query.
-    pub(crate) addresses: FnvHashMap<PeerId, SmallVec<[Multiaddr; 8]>>,
-    /// A map of pending requests to peers.
-    ///
-    /// A request is pending if the targeted peer is not currently connected
-    /// and these requests are sent as soon as a connection to the peer is established.
-    pub(crate) pending_rpcs: SmallVec<[(PeerId, HandlerIn); K_VALUE.get()]>,
-}
-
-impl QueryInner {
-    pub(crate) fn new(info: QueryInfo) -> Self {
-        QueryInner {
-            info,
-            addresses: Default::default(),
-            pending_rpcs: SmallVec::default(),
-        }
-    }
-}
-
 /// A `QueryPool` provides an aggregate state machine for driving `Query`s to completion.
 ///
 /// Internally, a `Query` is in turn driven by an underlying `QueryPeerIter`
@@ -297,8 +274,15 @@ pub(crate) struct Query {
     peer_iter: QueryPeerIter,
     /// Execution statistics of the query.
     stats: QueryStats,
-    /// The opaque inner query state.
-    pub(crate) inner: QueryInner,
+    /// The query-specific state.
+    pub(crate) info: QueryInfo,
+    /// Addresses of peers discovered during a query.
+    pub(crate) addresses: FnvHashMap<PeerId, SmallVec<[Multiaddr; 8]>>,
+    /// A map of pending requests to peers.
+    ///
+    /// A request is pending if the targeted peer is not currently connected
+    /// and these requests are sent as soon as a connection to the peer is established.
+    pub(crate) pending_rpcs: SmallVec<[(PeerId, HandlerIn); K_VALUE.get()]>,
 }
 
 /// The peer selection strategies that can be used by queries.
@@ -313,8 +297,10 @@ impl Query {
     fn new(id: QueryId, peer_iter: QueryPeerIter, info: QueryInfo) -> Self {
         Query {
             id,
-            inner: QueryInner::new(info),
+            info,
             peer_iter,
+            addresses: Default::default(),
+            pending_rpcs: SmallVec::default(),
             stats: QueryStats::empty(),
         }
     }
@@ -432,7 +418,7 @@ impl Query {
     }
 
     /// Consumes the query, producing the final `QueryResult`.
-    pub(crate) fn into_result(self) -> QueryResult<QueryInner, impl Iterator<Item = PeerId>> {
+    pub(crate) fn into_result(self) -> QueryResult<impl Iterator<Item = PeerId>> {
         let peers = match self.peer_iter {
             QueryPeerIter::Closest(iter) => Either::Left(Either::Left(iter.into_result())),
             QueryPeerIter::ClosestDisjoint(iter) => Either::Left(Either::Right(iter.into_result())),
@@ -440,20 +426,23 @@ impl Query {
         };
         QueryResult {
             peers,
-            inner: self.inner,
+            info: self.info,
             stats: self.stats,
+            addresses: self.addresses,
         }
     }
 }
 
 /// The result of a `Query`.
-pub(crate) struct QueryResult<TInner, TPeers> {
+pub(crate) struct QueryResult<TPeers> {
     /// The opaque inner query state.
-    pub(crate) inner: TInner,
+    pub(crate) info: QueryInfo,
     /// The successfully contacted peers.
     pub(crate) peers: TPeers,
     /// The collected query statistics.
     pub(crate) stats: QueryStats,
+    /// Addresses of peers discovered during a query.
+    pub(crate) addresses: FnvHashMap<PeerId, SmallVec<[Multiaddr; 8]>>,
 }
 
 /// Execution statistics of a query.
