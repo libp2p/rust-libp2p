@@ -23,7 +23,7 @@
 use super::*;
 
 use crate::record::{store::MemoryStore, Key};
-use crate::{PROTOCOL_NAME, SHA_256_MH};
+use crate::{K_VALUE, PROTOCOL_NAME, SHA_256_MH};
 use futures::{executor::block_on, future::poll_fn, prelude::*};
 use futures_timer::Delay;
 use libp2p_core::{

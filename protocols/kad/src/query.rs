@@ -115,42 +115,37 @@ impl QueryPool {
     }
 
     /// Adds a query to the pool that contacts a fixed set of peers.
-    pub(crate) fn add_fixed<I>(&mut self, peers: I, inner: QueryInner) -> QueryId
+    pub(crate) fn add_fixed<I>(&mut self, peers: I, info: QueryInfo) -> QueryId
     where
         I: IntoIterator<Item = PeerId>,
     {
         let id = self.next_query_id();
-        self.continue_fixed(id, peers, inner);
+        self.continue_fixed(id, peers, info);
         id
     }
 
     /// Continues an earlier query with a fixed set of peers, reusing
     /// the given query ID, which must be from a query that finished
     /// earlier.
-    pub(crate) fn continue_fixed<I>(&mut self, id: QueryId, peers: I, inner: QueryInner)
+    pub(crate) fn continue_fixed<I>(&mut self, id: QueryId, peers: I, info: QueryInfo)
     where
         I: IntoIterator<Item = PeerId>,
     {
         assert!(!self.queries.contains_key(&id));
         let parallelism = self.config.replication_factor;
         let peer_iter = QueryPeerIter::Fixed(FixedPeersIter::new(peers, parallelism));
-        let query = Query::new(id, peer_iter, inner);
+        let query = Query::new(id, peer_iter, info);
         self.queries.insert(id, query);
     }
 
     /// Adds a query to the pool that iterates towards the closest peers to the target.
-    pub(crate) fn add_iter_closest<T, I>(
-        &mut self,
-        target: T,
-        peers: I,
-        inner: QueryInner,
-    ) -> QueryId
+    pub(crate) fn add_iter_closest<T, I>(&mut self, target: T, peers: I, info: QueryInfo) -> QueryId
     where
         T: Into<KeyBytes> + Clone,
         I: IntoIterator<Item = Key<PeerId>>,
     {
         let id = self.next_query_id();
-        self.continue_iter_closest(id, target, peers, inner);
+        self.continue_iter_closest(id, target, peers, info);
         id
     }
 
@@ -160,7 +155,7 @@ impl QueryPool {
         id: QueryId,
         target: T,
         peers: I,
-        inner: QueryInner,
+        info: QueryInfo,
     ) where
         T: Into<KeyBytes> + Clone,
         I: IntoIterator<Item = Key<PeerId>>,
@@ -179,7 +174,7 @@ impl QueryPool {
             QueryPeerIter::Closest(ClosestPeersIter::with_config(cfg, target, peers))
         };
 
-        let query = Query::new(id, peer_iter, inner);
+        let query = Query::new(id, peer_iter, info);
         self.queries.insert(id, query);
     }
 
@@ -315,10 +310,10 @@ enum QueryPeerIter {
 
 impl Query {
     /// Creates a new query without starting it.
-    fn new(id: QueryId, peer_iter: QueryPeerIter, inner: QueryInner) -> Self {
+    fn new(id: QueryId, peer_iter: QueryPeerIter, info: QueryInfo) -> Self {
         Query {
             id,
-            inner,
+            inner: QueryInner::new(info),
             peer_iter,
             stats: QueryStats::empty(),
         }

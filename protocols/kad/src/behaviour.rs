@@ -27,15 +27,14 @@ use crate::bootstrap;
 use crate::handler::{Handler, HandlerEvent, HandlerIn, RequestId};
 use crate::kbucket::{self, Distance, KBucketsTable, NodeStatus};
 use crate::protocol::{ConnectionType, KadPeer, ProtocolConfig};
-use crate::query::{Query, QueryConfig, QueryId, QueryInner, QueryPool, QueryPoolState};
+use crate::query::{Query, QueryConfig, QueryId, QueryPool, QueryPoolState};
 use crate::record::{
     self,
     store::{self, RecordStore},
     ProviderRecord, Record,
 };
-use crate::K_VALUE;
 use crate::{jobs::*, protocol};
-use fnv::{FnvHashMap, FnvHashSet};
+use fnv::FnvHashSet;
 use libp2p_core::{ConnectedPoint, Endpoint, Multiaddr, PeerInfo};
 use libp2p_identity::PeerId;
 use libp2p_swarm::behaviour::{
@@ -47,7 +46,6 @@ use libp2p_swarm::{
     ListenAddresses, NetworkBehaviour, NotifyHandler, StreamProtocol, THandler, THandlerInEvent,
     THandlerOutEvent, ToSwarm,
 };
-use smallvec::SmallVec;
 use std::collections::{BTreeMap, HashMap, HashSet, VecDeque};
 use std::fmt;
 use std::num::NonZeroUsize;
@@ -270,7 +268,7 @@ impl Config {
     /// Sets the replication factor to use.
     ///
     /// The replication factor determines to how many closest peers
-    /// a record is replicated. The default is [`K_VALUE`].
+    /// a record is replicated. The default is [`crate::K_VALUE`].
     pub fn set_replication_factor(&mut self, replication_factor: NonZeroUsize) -> &mut Self {
         self.query_config.replication_factor = replication_factor;
         self
@@ -725,8 +723,7 @@ where
             step: ProgressStep::first(),
         };
         let peer_keys: Vec<kbucket::Key<PeerId>> = self.kbuckets.closest_keys(&target).collect();
-        let inner = QueryInner::new(info);
-        self.queries.add_iter_closest(target, peer_keys, inner)
+        self.queries.add_iter_closest(target, peer_keys, info)
     }
 
     /// Returns closest peers to the given key; takes peers from local routing table only.
@@ -775,8 +772,7 @@ where
             }
         };
         let peers = self.kbuckets.closest_keys(&target);
-        let inner = QueryInner::new(info);
-        let id = self.queries.add_iter_closest(target.clone(), peers, inner);
+        let id = self.queries.add_iter_closest(target.clone(), peers, info);
 
         // No queries were actually done for the results yet.
         let stats = QueryStats::empty();
@@ -832,8 +828,7 @@ where
             quorum,
             phase: PutRecordPhase::GetClosestPeers,
         };
-        let inner = QueryInner::new(info);
-        Ok(self.queries.add_iter_closest(target.clone(), peers, inner))
+        Ok(self.queries.add_iter_closest(target.clone(), peers, info))
     }
 
     /// Stores a record at specific peers, without storing it locally.
@@ -878,8 +873,7 @@ where
                 get_closest_peers_stats: QueryStats::empty(),
             },
         };
-        let inner = QueryInner::new(info);
-        self.queries.add_fixed(peers, inner)
+        self.queries.add_fixed(peers, info)
     }
 
     /// Removes the record with the given key from _local_ storage,
@@ -943,8 +937,7 @@ where
             Err(NoKnownPeers())
         } else {
             self.bootstrap_status.on_started();
-            let inner = QueryInner::new(info);
-            Ok(self.queries.add_iter_closest(local_key, peers, inner))
+            Ok(self.queries.add_iter_closest(local_key, peers, info))
         }
     }
 
@@ -989,8 +982,7 @@ where
             key,
             phase: AddProviderPhase::GetClosestPeers,
         };
-        let inner = QueryInner::new(info);
-        let id = self.queries.add_iter_closest(target.clone(), peers, inner);
+        let id = self.queries.add_iter_closest(target.clone(), peers, info);
         Ok(id)
     }
 
@@ -1030,8 +1022,7 @@ where
 
         let target = kbucket::Key::new(key.clone());
         let peers = self.kbuckets.closest_keys(&target);
-        let inner = QueryInner::new(info);
-        let id = self.queries.add_iter_closest(target.clone(), peers, inner);
+        let id = self.queries.add_iter_closest(target.clone(), peers, info);
 
         // No queries were actually done for the results yet.
         let stats = QueryStats::empty();
@@ -1254,8 +1245,7 @@ where
         };
         let target = kbucket::Key::new(key);
         let peers = self.kbuckets.closest_keys(&target);
-        let inner = QueryInner::new(info);
-        self.queries.add_iter_closest(target.clone(), peers, inner);
+        self.queries.add_iter_closest(target.clone(), peers, info);
     }
 
     /// Starts an iterative `PUT_VALUE` query for the given record.
@@ -1269,8 +1259,7 @@ where
             context,
             phase: PutRecordPhase::GetClosestPeers,
         };
-        let inner = QueryInner::new(info);
-        self.queries.add_iter_closest(target.clone(), peers, inner);
+        self.queries.add_iter_closest(target.clone(), peers, info);
     }
 
     /// Updates the routing table with a new connection status and address of a peer.
@@ -1445,9 +1434,8 @@ where
                         step: step.next(),
                     };
                     let peers = self.kbuckets.closest_keys(&target);
-                    let inner = QueryInner::new(info);
                     self.queries
-                        .continue_iter_closest(query_id, target, peers, inner);
+                        .continue_iter_closest(query_id, target, peers, info);
                 } else {
                     step.last = true;
                     self.bootstrap_status.on_finish();
@@ -1509,7 +1497,7 @@ where
             } => {
                 let provider_id = self.local_peer_id;
                 let external_addresses = self.external_addresses.iter().cloned().collect();
-                let inner = QueryInner::new(QueryInfo::AddProvider {
+                let info = QueryInfo::AddProvider {
                     context,
                     key,
                     phase: AddProviderPhase::AddProvider {
@@ -1517,8 +1505,8 @@ where
                         external_addresses,
                         get_closest_peers_stats: result.stats,
                     },
-                });
-                self.queries.continue_fixed(query_id, result.peers, inner);
+                };
+                self.queries.continue_fixed(query_id, result.peers, info);
                 None
             }
 
@@ -1584,8 +1572,7 @@ where
                         get_closest_peers_stats: result.stats,
                     },
                 };
-                let inner = QueryInner::new(info);
-                self.queries.continue_fixed(query_id, result.peers, inner);
+                self.queries.continue_fixed(query_id, result.peers, info);
                 None
             }
 
@@ -1657,9 +1644,8 @@ where
                         step: step.next(),
                     };
                     let peers = self.kbuckets.closest_keys(&target);
-                    let inner = QueryInner::new(info);
                     self.queries
-                        .continue_iter_closest(query_id, target, peers, inner);
+                        .continue_iter_closest(query_id, target, peers, info);
                 } else {
                     step.last = true;
                     self.bootstrap_status.on_finish();
