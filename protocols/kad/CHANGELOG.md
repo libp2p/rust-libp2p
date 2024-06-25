@@ -1,4 +1,4 @@
-## 0.46.0 -- not released
+## 0.46.0
 
 - Included multiaddresses of found peers alongside peer IDs in `GetClosestPeers` query results.
   See [PR 5475](https://github.com/libp2p/rust-libp2p/pull/5475)
