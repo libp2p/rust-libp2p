@@ -2697,7 +2697,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-core"
-version = "0.41.4"
+version = "0.41.3"
 dependencies = [
  "async-std",
  "either",

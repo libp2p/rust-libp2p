@@ -35,7 +35,7 @@ use crate::record::{
 };
 use crate::{jobs::*, protocol};
 use fnv::FnvHashSet;
-use libp2p_core::{ConnectedPoint, Endpoint, Multiaddr, PeerInfo};
+use libp2p_core::{ConnectedPoint, Endpoint, Multiaddr};
 use libp2p_identity::PeerId;
 use libp2p_swarm::behaviour::{
     AddressChange, ConnectionClosed, ConnectionEstablished, DialFailure, FromSwarm,
@@ -2636,6 +2636,13 @@ where
             _ => {}
         }
     }
+}
+
+/// Peer Info combines a Peer ID with a set of multiaddrs that the peer is listening on.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PeerInfo {
+    pub peer_id: PeerId,
+    pub addrs: Vec<Multiaddr>,
 }
 
 /// A quorum w.r.t. the configured replication factor specifies the minimum

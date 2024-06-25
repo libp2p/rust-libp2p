@@ -69,10 +69,3 @@ pub use upgrade::{InboundUpgrade, OutboundUpgrade, UpgradeInfo};
 #[derive(Debug, thiserror::Error)]
 #[error(transparent)]
 pub struct DecodeError(quick_protobuf::Error);
-
-/// Peer Info combines a Peer ID with a set of multiaddrs that the peer is listening on.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct PeerInfo {
-    pub peer_id: PeerId,
-    pub addrs: Vec<Multiaddr>,
-}
