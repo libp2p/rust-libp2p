@@ -28,6 +28,7 @@ use peers::fixed::FixedPeersIter;
 use peers::PeersIterState;
 use smallvec::SmallVec;
 
+use crate::behaviour::PeerInfo;
 use crate::handler::HandlerIn;
 use crate::kbucket::{Key, KeyBytes};
 use crate::{QueryInfo, ALPHA_VALUE, K_VALUE};
@@ -271,18 +272,49 @@ pub(crate) struct Query {
     /// The unique ID of the query.
     id: QueryId,
     /// The peer iterator that drives the query state.
-    peer_iter: QueryPeerIter,
+    pub(crate) peers: QueryPeers,
     /// Execution statistics of the query.
-    stats: QueryStats,
+    pub(crate) stats: QueryStats,
     /// The query-specific state.
     pub(crate) info: QueryInfo,
-    /// Addresses of peers discovered during a query.
-    pub(crate) addresses: FnvHashMap<PeerId, SmallVec<[Multiaddr; 8]>>,
     /// A map of pending requests to peers.
     ///
     /// A request is pending if the targeted peer is not currently connected
     /// and these requests are sent as soon as a connection to the peer is established.
     pub(crate) pending_rpcs: SmallVec<[(PeerId, HandlerIn); K_VALUE.get()]>,
+}
+
+/// The peer iterator that drives the query state,
+pub(crate) struct QueryPeers {
+    /// Addresses of peers discovered during a query.
+    pub(crate) addresses: FnvHashMap<PeerId, SmallVec<[Multiaddr; 8]>>,
+    /// The peer iterator that drives the query state.
+    peer_iter: QueryPeerIter,
+}
+
+impl QueryPeers {
+    /// Consumes the peers iterator, producing a final `Iterator` over the discovered `PeerId`s.
+    pub(crate) fn into_peerids_iter(self) -> impl Iterator<Item = PeerId> {
+        match self.peer_iter {
+            QueryPeerIter::Closest(iter) => Either::Left(Either::Left(iter.into_result())),
+            QueryPeerIter::ClosestDisjoint(iter) => Either::Left(Either::Right(iter.into_result())),
+            QueryPeerIter::Fixed(iter) => Either::Right(iter.into_result()),
+        }
+    }
+
+    /// Consumes the peers iterator, producing a final `Iterator` over the discovered `PeerId`s
+    /// with their matching `Multiaddr`s.
+    pub(crate) fn into_peerinfos_iter(mut self) -> impl Iterator<Item = PeerInfo> {
+        match self.peer_iter {
+            QueryPeerIter::Closest(iter) => Either::Left(Either::Left(iter.into_result())),
+            QueryPeerIter::ClosestDisjoint(iter) => Either::Left(Either::Right(iter.into_result())),
+            QueryPeerIter::Fixed(iter) => Either::Right(iter.into_result()),
+        }
+        .map(move |peer_id| {
+            let addrs = self.addresses.remove(&peer_id).unwrap_or_default().to_vec();
+            PeerInfo { peer_id, addrs }
+        })
+    }
 }
 
 /// The peer selection strategies that can be used by queries.
@@ -298,8 +330,10 @@ impl Query {
         Query {
             id,
             info,
-            peer_iter,
-            addresses: Default::default(),
+            peers: QueryPeers {
+                addresses: Default::default(),
+                peer_iter,
+            },
             pending_rpcs: SmallVec::default(),
             stats: QueryStats::empty(),
         }
@@ -317,7 +351,7 @@ impl Query {
 
     /// Informs the query that the attempt to contact `peer` failed.
     pub(crate) fn on_failure(&mut self, peer: &PeerId) {
-        let updated = match &mut self.peer_iter {
+        let updated = match &mut self.peers.peer_iter {
             QueryPeerIter::Closest(iter) => iter.on_failure(peer),
             QueryPeerIter::ClosestDisjoint(iter) => iter.on_failure(peer),
             QueryPeerIter::Fixed(iter) => iter.on_failure(peer),
@@ -334,7 +368,7 @@ impl Query {
     where
         I: IntoIterator<Item = PeerId>,
     {
-        let updated = match &mut self.peer_iter {
+        let updated = match &mut self.peers.peer_iter {
             QueryPeerIter::Closest(iter) => iter.on_success(peer, new_peers),
             QueryPeerIter::ClosestDisjoint(iter) => iter.on_success(peer, new_peers),
             QueryPeerIter::Fixed(iter) => iter.on_success(peer),
@@ -346,7 +380,7 @@ impl Query {
 
     /// Advances the state of the underlying peer iterator.
     fn next(&mut self, now: Instant) -> PeersIterState<'_> {
-        let state = match &mut self.peer_iter {
+        let state = match &mut self.peers.peer_iter {
             QueryPeerIter::Closest(iter) => iter.next(now),
             QueryPeerIter::ClosestDisjoint(iter) => iter.next(now),
             QueryPeerIter::Fixed(iter) => iter.next(),
@@ -380,7 +414,7 @@ impl Query {
     where
         I: IntoIterator<Item = &'a PeerId>,
     {
-        match &mut self.peer_iter {
+        match &mut self.peers.peer_iter {
             QueryPeerIter::Closest(iter) => {
                 iter.finish();
                 true
@@ -398,7 +432,7 @@ impl Query {
     /// A finished query immediately stops yielding new peers to contact and will be
     /// reported by [`QueryPool::poll`] via [`QueryPoolState::Finished`].
     pub(crate) fn finish(&mut self) {
-        match &mut self.peer_iter {
+        match &mut self.peers.peer_iter {
             QueryPeerIter::Closest(iter) => iter.finish(),
             QueryPeerIter::ClosestDisjoint(iter) => iter.finish(),
             QueryPeerIter::Fixed(iter) => iter.finish(),
@@ -410,39 +444,12 @@ impl Query {
     /// A finished query is eventually reported by `QueryPool::next()` and
     /// removed from the pool.
     pub(crate) fn is_finished(&self) -> bool {
-        match &self.peer_iter {
+        match &self.peers.peer_iter {
             QueryPeerIter::Closest(iter) => iter.is_finished(),
             QueryPeerIter::ClosestDisjoint(iter) => iter.is_finished(),
             QueryPeerIter::Fixed(iter) => iter.is_finished(),
         }
     }
-
-    /// Consumes the query, producing the final `QueryResult`.
-    pub(crate) fn into_result(self) -> QueryResult<impl Iterator<Item = PeerId>> {
-        let peers = match self.peer_iter {
-            QueryPeerIter::Closest(iter) => Either::Left(Either::Left(iter.into_result())),
-            QueryPeerIter::ClosestDisjoint(iter) => Either::Left(Either::Right(iter.into_result())),
-            QueryPeerIter::Fixed(iter) => Either::Right(iter.into_result()),
-        };
-        QueryResult {
-            peers,
-            info: self.info,
-            stats: self.stats,
-            addresses: self.addresses,
-        }
-    }
-}
-
-/// The result of a `Query`.
-pub(crate) struct QueryResult<TPeers> {
-    /// The opaque inner query state.
-    pub(crate) info: QueryInfo,
-    /// The successfully contacted peers.
-    pub(crate) peers: TPeers,
-    /// The collected query statistics.
-    pub(crate) stats: QueryStats,
-    /// Addresses of peers discovered during a query.
-    pub(crate) addresses: FnvHashMap<PeerId, SmallVec<[Multiaddr; 8]>>,
 }
 
 /// Execution statistics of a query.

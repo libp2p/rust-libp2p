@@ -1156,7 +1156,7 @@ where
                     "Peer reported by source in query"
                 );
                 let addrs = peer.multiaddrs.iter().cloned().collect();
-                query.addresses.insert(peer.node_id, addrs);
+                query.peers.addresses.insert(peer.node_id, addrs);
             }
             query.on_success(source, others_iter.cloned().map(|kp| kp.node_id))
         }
@@ -1379,8 +1379,7 @@ where
     fn query_finished(&mut self, q: Query) -> Option<Event> {
         let query_id = q.id();
         tracing::trace!(query=?query_id, "Query finished");
-        let mut result = q.into_result();
-        match result.info {
+        match q.info {
             QueryInfo::Bootstrap {
                 peer,
                 remaining,
@@ -1443,7 +1442,7 @@ where
 
                 Some(Event::OutboundQueryProgressed {
                     id: query_id,
-                    stats: result.stats,
+                    stats: q.stats,
                     result: QueryResult::Bootstrap(Ok(BootstrapOk {
                         peer,
                         num_remaining,
@@ -1454,22 +1453,14 @@ where
 
             QueryInfo::GetClosestPeers { key, mut step } => {
                 step.last = true;
-                let peers = result
-                    .peers
-                    .map(|peer_id| {
-                        let addrs = result
-                            .addresses
-                            .remove(&peer_id)
-                            .unwrap_or_default()
-                            .to_vec();
-                        PeerInfo { peer_id, addrs }
-                    })
-                    .collect();
 
                 Some(Event::OutboundQueryProgressed {
                     id: query_id,
-                    stats: result.stats,
-                    result: QueryResult::GetClosestPeers(Ok(GetClosestPeersOk { key, peers })),
+                    stats: q.stats,
+                    result: QueryResult::GetClosestPeers(Ok(GetClosestPeersOk {
+                        key,
+                        peers: q.peers.into_peerinfos_iter().collect(),
+                    })),
                     step,
                 })
             }
@@ -1479,10 +1470,10 @@ where
 
                 Some(Event::OutboundQueryProgressed {
                     id: query_id,
-                    stats: result.stats,
+                    stats: q.stats,
                     result: QueryResult::GetProviders(Ok(
                         GetProvidersOk::FinishedWithNoAdditionalRecord {
-                            closest_peers: result.peers.collect(),
+                            closest_peers: q.peers.into_peerids_iter().collect(),
                         },
                     )),
                     step,
@@ -1502,10 +1493,11 @@ where
                     phase: AddProviderPhase::AddProvider {
                         provider_id,
                         external_addresses,
-                        get_closest_peers_stats: result.stats,
+                        get_closest_peers_stats: q.stats,
                     },
                 };
-                self.queries.continue_fixed(query_id, result.peers, info);
+                self.queries
+                    .continue_fixed(query_id, q.peers.into_peerids_iter(), info);
                 None
             }
 
@@ -1520,13 +1512,13 @@ where
             } => match context {
                 AddProviderContext::Publish => Some(Event::OutboundQueryProgressed {
                     id: query_id,
-                    stats: get_closest_peers_stats.merge(result.stats),
+                    stats: get_closest_peers_stats.merge(q.stats),
                     result: QueryResult::StartProviding(Ok(AddProviderOk { key })),
                     step: ProgressStep::first_and_last(),
                 }),
                 AddProviderContext::Republish => Some(Event::OutboundQueryProgressed {
                     id: query_id,
-                    stats: get_closest_peers_stats.merge(result.stats),
+                    stats: get_closest_peers_stats.merge(q.stats),
                     result: QueryResult::RepublishProvider(Ok(AddProviderOk { key })),
                     step: ProgressStep::first_and_last(),
                 }),
@@ -1545,12 +1537,12 @@ where
                 } else {
                     Err(GetRecordError::NotFound {
                         key,
-                        closest_peers: result.peers.collect(),
+                        closest_peers: q.peers.into_peerids_iter().collect(),
                     })
                 };
                 Some(Event::OutboundQueryProgressed {
                     id: query_id,
-                    stats: result.stats,
+                    stats: q.stats,
                     result: QueryResult::GetRecord(results),
                     step,
                 })
@@ -1568,10 +1560,11 @@ where
                     quorum,
                     phase: PutRecordPhase::PutRecord {
                         success: vec![],
-                        get_closest_peers_stats: result.stats,
+                        get_closest_peers_stats: q.stats,
                     },
                 };
-                self.queries.continue_fixed(query_id, result.peers, info);
+                self.queries
+                    .continue_fixed(query_id, q.peers.into_peerids_iter(), info);
                 None
             }
 
@@ -1600,14 +1593,14 @@ where
                     PutRecordContext::Publish | PutRecordContext::Custom => {
                         Some(Event::OutboundQueryProgressed {
                             id: query_id,
-                            stats: get_closest_peers_stats.merge(result.stats),
+                            stats: get_closest_peers_stats.merge(q.stats),
                             result: QueryResult::PutRecord(mk_result(record.key)),
                             step: ProgressStep::first_and_last(),
                         })
                     }
                     PutRecordContext::Republish => Some(Event::OutboundQueryProgressed {
                         id: query_id,
-                        stats: get_closest_peers_stats.merge(result.stats),
+                        stats: get_closest_peers_stats.merge(q.stats),
                         result: QueryResult::RepublishRecord(mk_result(record.key)),
                         step: ProgressStep::first_and_last(),
                     }),
@@ -1624,8 +1617,7 @@ where
     fn query_timeout(&mut self, query: Query) -> Option<Event> {
         let query_id = query.id();
         tracing::trace!(query=?query_id, "Query timed out");
-        let mut result = query.into_result();
-        match result.info {
+        match query.info {
             QueryInfo::Bootstrap {
                 peer,
                 mut remaining,
@@ -1652,7 +1644,7 @@ where
 
                 Some(Event::OutboundQueryProgressed {
                     id: query_id,
-                    stats: result.stats,
+                    stats: query.stats,
                     result: QueryResult::Bootstrap(Err(BootstrapError::Timeout {
                         peer,
                         num_remaining,
@@ -1664,13 +1656,13 @@ where
             QueryInfo::AddProvider { context, key, .. } => Some(match context {
                 AddProviderContext::Publish => Event::OutboundQueryProgressed {
                     id: query_id,
-                    stats: result.stats,
+                    stats: query.stats,
                     result: QueryResult::StartProviding(Err(AddProviderError::Timeout { key })),
                     step: ProgressStep::first_and_last(),
                 },
                 AddProviderContext::Republish => Event::OutboundQueryProgressed {
                     id: query_id,
-                    stats: result.stats,
+                    stats: query.stats,
                     result: QueryResult::RepublishProvider(Err(AddProviderError::Timeout { key })),
                     step: ProgressStep::first_and_last(),
                 },
@@ -1678,24 +1670,12 @@ where
 
             QueryInfo::GetClosestPeers { key, mut step } => {
                 step.last = true;
-                let peers = result
-                    .peers
-                    .map(|peer_id| {
-                        let addrs = result
-                            .addresses
-                            .remove(&peer_id)
-                            .unwrap_or_default()
-                            .to_vec();
-                        PeerInfo { peer_id, addrs }
-                    })
-                    .collect();
-
                 Some(Event::OutboundQueryProgressed {
                     id: query_id,
-                    stats: result.stats,
+                    stats: query.stats,
                     result: QueryResult::GetClosestPeers(Err(GetClosestPeersError::Timeout {
                         key,
-                        peers,
+                        peers: query.peers.into_peerinfos_iter().collect(),
                     })),
                     step,
                 })
@@ -1719,14 +1699,14 @@ where
                     PutRecordContext::Publish | PutRecordContext::Custom => {
                         Some(Event::OutboundQueryProgressed {
                             id: query_id,
-                            stats: result.stats,
+                            stats: query.stats,
                             result: QueryResult::PutRecord(err),
                             step: ProgressStep::first_and_last(),
                         })
                     }
                     PutRecordContext::Republish => Some(Event::OutboundQueryProgressed {
                         id: query_id,
-                        stats: result.stats,
+                        stats: query.stats,
                         result: QueryResult::RepublishRecord(err),
                         step: ProgressStep::first_and_last(),
                     }),
@@ -1751,7 +1731,7 @@ where
 
                 Some(Event::OutboundQueryProgressed {
                     id: query_id,
-                    stats: result.stats,
+                    stats: query.stats,
                     result: QueryResult::GetRecord(Err(GetRecordError::Timeout { key })),
                     step,
                 })
@@ -1762,10 +1742,10 @@ where
 
                 Some(Event::OutboundQueryProgressed {
                     id: query_id,
-                    stats: result.stats,
+                    stats: query.stats,
                     result: QueryResult::GetProviders(Err(GetProvidersError::Timeout {
                         key,
-                        closest_peers: result.peers.collect(),
+                        closest_peers: query.peers.into_peerids_iter().collect(),
                     })),
                     step,
                 })
@@ -1963,7 +1943,7 @@ where
         }
 
         for query in self.queries.iter_mut() {
-            if let Some(addrs) = query.addresses.get_mut(&peer_id) {
+            if let Some(addrs) = query.peers.addresses.get_mut(&peer_id) {
                 addrs.retain(|a| a != address);
             }
         }
@@ -2046,7 +2026,7 @@ where
         // large performance impact. If so, the code below might be worth
         // revisiting.
         for query in self.queries.iter_mut() {
-            if let Some(addrs) = query.addresses.get_mut(&peer) {
+            if let Some(addrs) = query.peers.addresses.get_mut(&peer) {
                 for addr in addrs.iter_mut() {
                     if addr == old {
                         *addr = new.clone();
@@ -2215,7 +2195,7 @@ where
 
         // We add to that a temporary list of addresses from the ongoing queries.
         for query in self.queries.iter() {
-            if let Some(addrs) = query.addresses.get(&peer_id) {
+            if let Some(addrs) = query.peers.addresses.get(&peer_id) {
                 peer_addrs.extend(addrs.iter().cloned())
             }
         }
