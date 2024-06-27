@@ -745,6 +745,8 @@ enum Shutdown {
     Later(Delay),
 }
 
+// Instead of allocating new string from `T::as_ref()` we wrap in in zero cost struct that
+// allows us to use the `T: AsRef<str>` as a key in hashmap
 pub(crate) struct AsStrHashEq<T>(pub(crate) T);
 
 impl<T: AsRef<str>> Eq for AsStrHashEq<T> {}
