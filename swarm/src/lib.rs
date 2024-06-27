@@ -1414,6 +1414,7 @@ impl Config {
     }
 
     #[doc(hidden)]
+    /// Used on connection benchmarks.
     pub fn without_executor() -> Self {
         Self {
             pool_config: PoolConfig::new(None),
