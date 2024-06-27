@@ -1,6 +1,6 @@
 ## 0.44.3
 
-- Optimizing internal connection `fn poll`. New implementation now scales much better with number of listen protocols active.
+- Optimize internal connection `fn poll`. New implementation now scales much better with number of listen protocols active.
   No changes to public API introduced.
   See [PR 5026](https://github.com/libp2p/rust-libp2p/pull/5026)
 
