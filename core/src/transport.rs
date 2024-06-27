@@ -256,7 +256,7 @@ impl ListenerId {
     }
 }
 
-impl std::fmt::Display for ListenerId {
+impl fmt::Display for ListenerId {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}", self.0)
     }

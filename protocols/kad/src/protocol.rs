@@ -31,7 +31,6 @@ use crate::record::{self, Record};
 use asynchronous_codec::{Decoder, Encoder, Framed};
 use bytes::BytesMut;
 use futures::prelude::*;
-use instant::Instant;
 use libp2p_core::upgrade::{InboundUpgrade, OutboundUpgrade, UpgradeInfo};
 use libp2p_core::Multiaddr;
 use libp2p_identity::PeerId;
@@ -40,6 +39,7 @@ use std::marker::PhantomData;
 use std::time::Duration;
 use std::{io, iter};
 use tracing::debug;
+use web_time::Instant;
 
 /// The protocol name used for negotiating with multistream-select.
 pub(crate) const DEFAULT_PROTO_NAME: StreamProtocol = StreamProtocol::new("/ipfs/kad/1.0.0");

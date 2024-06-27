@@ -43,7 +43,6 @@ use futures::stream::FuturesUnordered;
 use futures::StreamExt;
 use futures::{stream, FutureExt};
 use futures_timer::Delay;
-use instant::Instant;
 use libp2p_core::connection::ConnectedPoint;
 use libp2p_core::multiaddr::Multiaddr;
 use libp2p_core::muxing::{StreamMuxerBox, StreamMuxerEvent, StreamMuxerExt, SubstreamBox};
@@ -58,6 +57,7 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use std::task::Waker;
 use std::time::Duration;
 use std::{fmt, io, mem, pin::Pin, task::Context, task::Poll};
+use web_time::Instant;
 
 static NEXT_CONNECTION_ID: AtomicUsize = AtomicUsize::new(1);
 

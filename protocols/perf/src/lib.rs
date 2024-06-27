@@ -26,8 +26,8 @@
 
 use std::fmt::Display;
 
-use instant::Duration;
 use libp2p_swarm::StreamProtocol;
+use web_time::Duration;
 
 pub mod client;
 mod protocol;
