@@ -115,6 +115,8 @@ impl ReservationReq {
 pub struct CircuitReq {
     dst: PeerId,
     substream: Framed<Stream, quick_protobuf_codec::Codec<proto::HopMessage>>,
+    max_circuit_duration: Duration,
+    max_circuit_bytes: u64,
 }
 
 impl CircuitReq {
@@ -127,7 +129,15 @@ impl CircuitReq {
             type_pb: proto::HopMessageType::STATUS,
             peer: None,
             reservation: None,
-            limit: None,
+            limit: Some(proto::Limit {
+                duration: Some(
+                    self.max_circuit_duration
+                        .as_secs()
+                        .try_into()
+                        .expect("`max_circuit_duration` not to exceed `u32::MAX`."),
+                ),
+                data: Some(self.max_circuit_bytes),
+            }),
             status: Some(proto::Status::OK),
         };
 
