@@ -214,7 +214,7 @@ pub(crate) async fn handle_inbound_request(
 
             let dst = peer_id_res.map_err(|_| Error::ParsePeerId)?;
 
-            Either::Right(CircuitReq { dst, substream })
+            Either::Right(CircuitReq { dst, substream , max_circuit_duration, max_circuit_bytes})
         }
         Type::STATUS => return Err(Error::UnexpectedTypeStatus),
     };
