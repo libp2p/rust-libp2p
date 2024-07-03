@@ -59,9 +59,9 @@ pub use behaviour::{
     AddProviderContext, AddProviderError, AddProviderOk, AddProviderPhase, AddProviderResult,
     BootstrapError, BootstrapOk, BootstrapResult, GetClosestPeersError, GetClosestPeersOk,
     GetClosestPeersResult, GetProvidersError, GetProvidersOk, GetProvidersResult, GetRecordError,
-    GetRecordOk, GetRecordResult, InboundRequest, Mode, NoKnownPeers, PeerRecord, PutRecordContext,
-    PutRecordError, PutRecordOk, PutRecordPhase, PutRecordResult, QueryInfo, QueryMut, QueryRef,
-    QueryResult, QueryStats, RoutingUpdate,
+    GetRecordOk, GetRecordResult, InboundRequest, Mode, NoKnownPeers, PeerInfo, PeerRecord,
+    PutRecordContext, PutRecordError, PutRecordOk, PutRecordPhase, PutRecordResult, QueryInfo,
+    QueryMut, QueryRef, QueryResult, QueryStats, RoutingUpdate,
 };
 pub use behaviour::{
     Behaviour, BucketInserts, Caching, Config, Event, ProgressStep, Quorum, StoreInserts,

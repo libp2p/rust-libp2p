@@ -23,7 +23,7 @@
 use super::*;
 
 use crate::record::{store::MemoryStore, Key};
-use crate::{PROTOCOL_NAME, SHA_256_MH};
+use crate::{K_VALUE, PROTOCOL_NAME, SHA_256_MH};
 use futures::{executor::block_on, future::poll_fn, prelude::*};
 use futures_timer::Delay;
 use libp2p_core::{
@@ -294,9 +294,11 @@ fn query_iter() {
                             assert_eq!(&ok.key[..], search_target.to_bytes().as_slice());
                             assert_eq!(swarm_ids[i], expected_swarm_id);
                             assert_eq!(swarm.behaviour_mut().queries.size(), 0);
-                            assert!(expected_peer_ids.iter().all(|p| ok.peers.contains(p)));
+                            let peer_ids =
+                                ok.peers.into_iter().map(|p| p.peer_id).collect::<Vec<_>>();
+                            assert!(expected_peer_ids.iter().all(|p| peer_ids.contains(p)));
                             let key = kbucket::Key::new(ok.key);
-                            assert_eq!(expected_distances, distances(&key, ok.peers));
+                            assert_eq!(expected_distances, distances(&key, peer_ids));
                             return Poll::Ready(());
                         }
                         // Ignore any other event.
@@ -408,7 +410,7 @@ fn unresponsive_not_returned_indirect() {
                     }))) => {
                         assert_eq!(&ok.key[..], search_target.to_bytes().as_slice());
                         assert_eq!(ok.peers.len(), 1);
-                        assert_eq!(ok.peers[0], first_peer_id);
+                        assert_eq!(ok.peers[0].peer_id, first_peer_id);
                         return Poll::Ready(());
                     }
                     // Ignore any other event.
@@ -1185,7 +1187,7 @@ fn disjoint_query_does_not_finish_before_all_paths_did() {
         .behaviour()
         .queries
         .iter()
-        .for_each(|q| match &q.inner.info {
+        .for_each(|q| match &q.info {
             QueryInfo::GetRecord { step, .. } => {
                 assert_eq!(usize::from(step.count), 2);
             }

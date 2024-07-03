@@ -1,4 +1,7 @@
-## 0.44.3
+## 0.45.0
+
+- Add peer_id to `FromSwarm::ListenFailure`.
+  See [PR 4818](https://github.com/libp2p/rust-libp2p/pull/4818).
 
 - Use `web-time` instead of `instant`.
   See [PR 5347](https://github.com/libp2p/rust-libp2p/pull/5347).
