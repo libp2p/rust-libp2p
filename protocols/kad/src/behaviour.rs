@@ -23,7 +23,6 @@
 mod test;
 
 use crate::addresses::Addresses;
-use crate::bootstrap;
 use crate::handler::{Handler, HandlerEvent, HandlerIn, RequestId};
 use crate::kbucket::{self, Distance, KBucketsTable, NodeStatus};
 use crate::protocol::{ConnectionType, KadPeer, ProtocolConfig};
@@ -33,6 +32,7 @@ use crate::record::{
     store::{self, RecordStore},
     ProviderRecord, Record,
 };
+use crate::{bootstrap, K_VALUE};
 use crate::{jobs::*, protocol};
 use fnv::FnvHashSet;
 use libp2p_core::{ConnectedPoint, Endpoint, Multiaddr};
@@ -604,7 +604,8 @@ where
                 };
                 match entry.insert(addresses.clone(), status) {
                     kbucket::InsertResult::Inserted => {
-                        self.bootstrap_status.on_new_peer_in_routing_table();
+                        self.bootstrap_on_low_peers();
+
                         self.queued_events.push_back(ToSwarm::GenerateEvent(
                             Event::RoutingUpdated {
                                 peer: *peer,
@@ -1324,7 +1325,8 @@ where
                         let addresses = Addresses::new(a);
                         match entry.insert(addresses.clone(), new_status) {
                             kbucket::InsertResult::Inserted => {
-                                self.bootstrap_status.on_new_peer_in_routing_table();
+                                self.bootstrap_on_low_peers();
+
                                 let event = Event::RoutingUpdated {
                                     peer,
                                     is_new_peer: true,
@@ -1372,6 +1374,20 @@ where
                 }
             }
             _ => {}
+        }
+    }
+
+    /// A new peer has been inserted in the routing table but we check if the routing
+    /// table is currently small (less that `K_VALUE` peers are present) and only
+    /// trigger a bootstrap in that case
+    fn bootstrap_on_low_peers(&mut self) {
+        if self
+            .kbuckets()
+            .map(|kbucket| kbucket.num_entries())
+            .sum::<usize>()
+            < K_VALUE.get()
+        {
+            self.bootstrap_status.trigger();
         }
     }
 
@@ -2613,6 +2629,12 @@ where
             }
             FromSwarm::DialFailure(dial_failure) => self.on_dial_failure(dial_failure),
             FromSwarm::AddressChange(address_change) => self.on_address_change(address_change),
+            FromSwarm::NewListenAddr(_) if self.connected_peers.is_empty() => {
+                // A new listen addr was just discovered and we have no connected peers,
+                // it can mean that our network interfaces were not up but they are now
+                // so it might be a good idea to trigger a bootstrap.
+                self.bootstrap_status.trigger();
+            }
             _ => {}
         }
     }
