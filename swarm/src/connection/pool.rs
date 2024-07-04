@@ -70,6 +70,7 @@ impl ExecSwitch {
         }
     }
 
+    #[track_caller]
     fn spawn(&mut self, task: impl Future<Output = ()> + Send + 'static) {
         let task = task.boxed();
 
