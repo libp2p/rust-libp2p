@@ -745,8 +745,9 @@ enum Shutdown {
     Later(Delay),
 }
 
-// Instead of allocating new string from `T::as_ref()` we wrap in in zero cost struct that
-// allows us to use the `T: AsRef<str>` as a key in hashmap
+// Structure used to avoid allocations when storing the protocols in the `HashMap.
+// Instead of allocating a new `String` for the key, 
+// we use `T::as_ref()` in `Hash`, `Eq` and `PartialEq` requirements.
 pub(crate) struct AsStrHashEq<T>(pub(crate) T);
 
 impl<T: AsRef<str>> Eq for AsStrHashEq<T> {}
