@@ -1,6 +1,5 @@
 use async_std::stream::StreamExt;
 use criterion::{criterion_group, criterion_main, Criterion};
-use instant::Duration;
 use libp2p_core::{
     transport::MemoryTransport, InboundUpgrade, Multiaddr, OutboundUpgrade, Transport, UpgradeInfo,
 };
