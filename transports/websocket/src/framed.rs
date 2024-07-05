@@ -571,8 +571,20 @@ fn location_to_multiaddr<T>(location: &str) -> Result<Multiaddr, Error<T>> {
 /// The websocket connection.
 pub struct Connection<T> {
     receiver: BoxStream<'static, Result<Incoming, connection::Error>>,
-    sender: Pin<Box<dyn Sink<OutgoingData, Error = connection::Error> + Send>>,
+    sender: ConnectionSender,
     _marker: std::marker::PhantomData<T>,
+}
+
+/// Keep track of the connection state from the sender's perspective.
+enum ConnectionSender {
+    /// The sender must not be polled again after it returns `Poll::Ready(Err)`.
+    ///
+    /// When the sender enters the error state
+    Alive {
+        sender: Pin<Box<dyn Sink<OutgoingData, Error = connection::Error> + Send>>,
+    },
+    /// The sender has returned an error and must not be polled again.
+    Dead,
 }
 
 /// Data or control information received over the websocket connection.
@@ -703,7 +715,9 @@ where
         });
         Connection {
             receiver: stream.boxed(),
-            sender: Box::pin(sink),
+            sender: ConnectionSender::Alive {
+                sender: Box::pin(sink),
+            },
             _marker: std::marker::PhantomData,
         }
     }
@@ -744,26 +758,69 @@ where
     type Error = io::Error;
 
     fn poll_ready(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
-        Pin::new(&mut self.sender)
-            .poll_ready(cx)
-            .map_err(|e| io::Error::new(io::ErrorKind::Other, e))
+        match &mut self.sender {
+            ConnectionSender::Alive { sender } => match Pin::new(sender).poll_ready(cx) {
+                Poll::Ready(Ok(())) => Poll::Ready(Ok(())),
+                Poll::Ready(Err(e)) => {
+                    self.sender = ConnectionSender::Dead;
+                    Poll::Ready(Err(io::Error::new(io::ErrorKind::Other, e)))
+                }
+                Poll::Pending => Poll::Pending,
+            },
+            ConnectionSender::Dead => Poll::Ready(Err(io::Error::new(
+                io::ErrorKind::Other,
+                "Connection sender is dead, poll_ready called after an error",
+            ))),
+        }
     }
 
     fn start_send(mut self: Pin<&mut Self>, item: OutgoingData) -> io::Result<()> {
-        Pin::new(&mut self.sender)
-            .start_send(item)
-            .map_err(|e| io::Error::new(io::ErrorKind::Other, e))
+        match &mut self.sender {
+            ConnectionSender::Alive { sender } => match Pin::new(sender).start_send(item) {
+                Ok(()) => Ok(()),
+                Err(e) => {
+                    self.sender = ConnectionSender::Dead;
+                    Err(io::Error::new(io::ErrorKind::Other, e))
+                }
+            },
+            ConnectionSender::Dead => Err(io::Error::new(
+                io::ErrorKind::Other,
+                "Connection sender is dead, start_send called after an error",
+            )),
+        }
     }
 
     fn poll_flush(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
-        Pin::new(&mut self.sender)
-            .poll_flush(cx)
-            .map_err(|e| io::Error::new(io::ErrorKind::Other, e))
+        match &mut self.sender {
+            ConnectionSender::Alive { sender } => match Pin::new(sender).poll_flush(cx) {
+                Poll::Ready(Ok(())) => Poll::Ready(Ok(())),
+                Poll::Ready(Err(e)) => {
+                    self.sender = ConnectionSender::Dead;
+                    Poll::Ready(Err(io::Error::new(io::ErrorKind::Other, e)))
+                }
+                Poll::Pending => Poll::Pending,
+            },
+            ConnectionSender::Dead => Poll::Ready(Err(io::Error::new(
+                io::ErrorKind::Other,
+                "Connection sender is dead, poll_flush called after an error",
+            ))),
+        }
     }
 
     fn poll_close(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
-        Pin::new(&mut self.sender)
-            .poll_close(cx)
-            .map_err(|e| io::Error::new(io::ErrorKind::Other, e))
+        match &mut self.sender {
+            ConnectionSender::Alive { sender } => match Pin::new(sender).poll_close(cx) {
+                Poll::Ready(Ok(())) => Poll::Ready(Ok(())),
+                Poll::Ready(Err(e)) => {
+                    self.sender = ConnectionSender::Dead;
+                    Poll::Ready(Err(io::Error::new(io::ErrorKind::Other, e)))
+                }
+                Poll::Pending => Poll::Pending,
+            },
+            ConnectionSender::Dead => Poll::Ready(Err(io::Error::new(
+                io::ErrorKind::Other,
+                "Connection sender is dead, poll_close called after an error",
+            ))),
+        }
     }
 }
