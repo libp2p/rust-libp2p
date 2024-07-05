@@ -746,7 +746,7 @@ enum Shutdown {
 }
 
 // Structure used to avoid allocations when storing the protocols in the `HashMap.
-// Instead of allocating a new `String` for the key, 
+// Instead of allocating a new `String` for the key,
 // we use `T::as_ref()` in `Hash`, `Eq` and `PartialEq` requirements.
 pub(crate) struct AsStrHashEq<T>(pub(crate) T);
 
