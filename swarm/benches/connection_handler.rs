@@ -7,6 +7,7 @@ use libp2p_core::{
 use libp2p_identity::PeerId;
 use libp2p_swarm::{ConnectionHandler, NetworkBehaviour, StreamProtocol};
 use std::{convert::Infallible, sync::atomic::AtomicUsize};
+use web_time::Duration;
 
 macro_rules! gen_behaviour {
     ($($name:ident {$($field:ident),*};)*) => {$(
