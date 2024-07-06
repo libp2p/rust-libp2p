@@ -1,15 +1,11 @@
 
-## 0.45.1
+## 0.45.0
 
 - Optimize internal connection `fn poll`. New implementation now scales much better with number of listen protocols active.
   No changes to public API introduced.
   See [PR 5026](https://github.com/libp2p/rust-libp2p/pull/5026)
-
-## 0.45.0
-
 - Add peer_id to `FromSwarm::ListenFailure`.
   See [PR 4818](https://github.com/libp2p/rust-libp2p/pull/4818).
-
 - Use `web-time` instead of `instant`.
   See [PR 5347](https://github.com/libp2p/rust-libp2p/pull/5347).
 - Add `#[track_caller]` on all `spawn` wrappers.
