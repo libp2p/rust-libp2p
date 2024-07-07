@@ -1,3 +1,8 @@
+## 0.45.2
+
+- Add `#[track_caller]` on all `spawn` wrappers.
+  See [PR 5465](https://github.com/libp2p/rust-libp2p/pull/5465).
+
 ## 0.45.1
 
 - Ensure `Multiaddr` handled and returned by `Behaviour` are `/p2p` terminated.

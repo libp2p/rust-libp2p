@@ -3,7 +3,7 @@ name = "libp2p-request-response"
 edition = "2021"
 rust-version = { workspace = true }
 description = "Generic Request/Response Protocols"
-version = "0.26.3"
+version = "0.26.4"
 authors = ["Parity Technologies <admin@parity.io>"]
 license = "MIT"
 repository = "https://github.com/libp2p/rust-libp2p"
@@ -14,7 +14,7 @@ categories = ["network-programming", "asynchronous"]
 async-trait = "0.1"
 cbor4ii = { version = "0.3.2", features = ["serde1", "use_std"], optional = true }
 futures = { workspace = true }
-instant = "0.1.13"
+web-time = { workspace = true }
 libp2p-core = { workspace = true }
 libp2p-swarm = { workspace = true }
 libp2p-identity = { workspace = true }

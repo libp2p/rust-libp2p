@@ -13,7 +13,7 @@ use libp2p_webrtc_utils::MAX_MSG_LEN;
 use wasm_bindgen::prelude::*;
 use web_sys::{Event, MessageEvent, RtcDataChannel, RtcDataChannelEvent, RtcDataChannelState};
 
-/// [`PollDataChannel`] is a wrapper around around [`RtcDataChannel`] which implements [`AsyncRead`] and [`AsyncWrite`].
+/// [`PollDataChannel`] is a wrapper around [`RtcDataChannel`] which implements [`AsyncRead`] and [`AsyncWrite`].
 #[derive(Debug, Clone)]
 pub(crate) struct PollDataChannel {
     /// The [`RtcDataChannel`] being wrapped.

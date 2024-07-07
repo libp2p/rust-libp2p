@@ -148,6 +148,9 @@ pub trait NetworkBehaviour: 'static {
     /// At this point, we have verified their [`PeerId`] and we know, which particular [`Multiaddr`] succeeded in the dial.
     /// In order to actually use this connection, this function must return a [`ConnectionHandler`].
     /// Returning an error will immediately close the connection.
+    ///
+    /// Note when any composed behaviour returns an error the connection will be closed and a
+    /// [`FromSwarm::ListenFailure`] event will be emitted.
     fn handle_established_inbound_connection(
         &mut self,
         _connection_id: ConnectionId,
@@ -184,6 +187,9 @@ pub trait NetworkBehaviour: 'static {
     /// At this point, we have verified their [`PeerId`] and we know, which particular [`Multiaddr`] succeeded in the dial.
     /// In order to actually use this connection, this function must return a [`ConnectionHandler`].
     /// Returning an error will immediately close the connection.
+    ///
+    /// Note when any composed behaviour returns an error the connection will be closed and a
+    /// [`FromSwarm::DialFailure`] event will be emitted.
     fn handle_established_outbound_connection(
         &mut self,
         _connection_id: ConnectionId,
@@ -269,7 +275,7 @@ pub enum ToSwarm<TOutEvent, TInEvent> {
     /// The emphasis on a **new** candidate is important.
     /// Protocols MUST take care to only emit a candidate once per "source".
     /// For example, the observed address of a TCP connection does not change throughout its lifetime.
-    /// Thus, only one candidate should be emitted per connection.    
+    /// Thus, only one candidate should be emitted per connection.
     ///
     /// This makes the report frequency of an address a meaningful data-point for consumers of this event.
     /// This address will be shared with all [`NetworkBehaviour`]s via [`FromSwarm::NewExternalAddrCandidate`].
@@ -509,6 +515,7 @@ pub struct ListenFailure<'a> {
     pub send_back_addr: &'a Multiaddr,
     pub error: &'a ListenError,
     pub connection_id: ConnectionId,
+    pub peer_id: Option<PeerId>,
 }
 
 /// [`FromSwarm`] variant that informs the behaviour that a new listener was created.

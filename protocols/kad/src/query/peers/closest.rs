@@ -22,9 +22,9 @@ use super::*;
 
 use crate::kbucket::{Distance, Key, KeyBytes};
 use crate::{ALPHA_VALUE, K_VALUE};
-use instant::Instant;
 use std::collections::btree_map::{BTreeMap, Entry};
 use std::{num::NonZeroUsize, time::Duration};
+use web_time::Instant;
 
 pub(crate) mod disjoint;
 /// A peer iterator for a dynamically changing list of peers, sorted by increasing

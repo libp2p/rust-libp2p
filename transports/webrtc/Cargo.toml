@@ -23,9 +23,9 @@ libp2p-identity = { workspace = true }
 libp2p-webrtc-utils = { workspace = true }
 multihash = { workspace = true }
 rand = "0.8"
-rcgen = "0.11.3"
+rcgen = { workspace = true }
 serde = { version = "1.0", features = ["derive"] }
-stun = "0.5"
+stun = "0.6"
 thiserror = "1"
 tinytemplate = "1.2"
 tokio = { workspace = true, features = ["net"], optional = true }
