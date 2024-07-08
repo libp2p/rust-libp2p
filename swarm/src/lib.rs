@@ -88,8 +88,21 @@ pub mod derive_prelude {
     pub use crate::behaviour::NewListenAddr;
     pub use crate::behaviour::NewListener;
     pub use crate::connection::ConnectionId;
+    pub use crate::handler::AddressChange as HandlerAddressChange;
+    pub use crate::handler::ConnectionEvent;
+    pub use crate::handler::DialUpgradeError;
+    pub use crate::handler::FullyNegotiatedInbound;
+    pub use crate::handler::FullyNegotiatedOutbound;
+    pub use crate::handler::ListenUpgradeError;
+    pub use crate::handler::StreamUpgradeError;
+    pub use crate::handler::SubstreamProtocol;
+    pub use crate::handler::UpgradeInfoSend;
+    pub use crate::stream::Stream;
+    pub use crate::upgrade::InboundUpgradeSend;
+    pub use crate::upgrade::OutboundUpgradeSend;
     pub use crate::ConnectionDenied;
     pub use crate::ConnectionHandler;
+    pub use crate::ConnectionHandlerEvent;
     pub use crate::ConnectionHandlerSelect;
     pub use crate::DialError;
     pub use crate::NetworkBehaviour;
@@ -100,10 +113,43 @@ pub mod derive_prelude {
     pub use either::Either;
     pub use futures::prelude as futures;
     pub use libp2p_core::transport::ListenerId;
+    pub use libp2p_core::upgrade::InboundUpgrade;
+    pub use libp2p_core::upgrade::OutboundUpgrade;
+    pub use libp2p_core::upgrade::UpgradeInfo;
     pub use libp2p_core::ConnectedPoint;
     pub use libp2p_core::Endpoint;
     pub use libp2p_core::Multiaddr;
     pub use libp2p_identity::PeerId;
+
+    pub type TBehaviourOutEvent<TBehaviour> = <TBehaviour as NetworkBehaviour>::ToSwarm;
+    pub type THandlerInProtocol<TBehaviour> =
+        <THandler<TBehaviour> as ConnectionHandler>::InboundProtocol;
+    pub type THandlerInOpenInfo<TBehaviour> =
+        <THandler<TBehaviour> as ConnectionHandler>::InboundOpenInfo;
+    pub type THandlerOutProtocol<TBehaviour> =
+        <THandler<TBehaviour> as ConnectionHandler>::OutboundProtocol;
+    pub type THandlerOutOpenInfo<TBehaviour> =
+        <THandler<TBehaviour> as ConnectionHandler>::OutboundOpenInfo;
+    pub type THandlerInUpgradeInfo<TBehaviour> =
+        <THandlerInProtocol<TBehaviour> as UpgradeInfoSend>::Info;
+    pub type THandlerOutUpgradeInfo<TBehaviour> =
+        <THandlerOutProtocol<TBehaviour> as UpgradeInfoSend>::Info;
+    pub type THandlerInUpgradeInfoIter<TBehaviour> =
+        <THandlerInProtocol<TBehaviour> as UpgradeInfoSend>::InfoIter;
+    pub type THandlerOutUpgradeInfoIter<TBehaviour> =
+        <THandlerOutProtocol<TBehaviour> as UpgradeInfoSend>::InfoIter;
+    pub type THandlerInUpgradeOutput<TBehaviour> =
+        <THandlerInProtocol<TBehaviour> as InboundUpgradeSend>::Output;
+    pub type THandlerOutUpgradeOutput<TBehaviour> =
+        <THandlerOutProtocol<TBehaviour> as OutboundUpgradeSend>::Output;
+    pub type THandlerInUpgradeError<TBehaviour> =
+        <THandlerInProtocol<TBehaviour> as InboundUpgradeSend>::Error;
+    pub type THandlerOutUpgradeError<TBehaviour> =
+        <THandlerOutProtocol<TBehaviour> as OutboundUpgradeSend>::Error;
+    pub type THandlerInUpgradeFuture<TBehaviour> =
+        <THandlerInProtocol<TBehaviour> as InboundUpgradeSend>::Future;
+    pub type THandlerOutUpgradeFuture<TBehaviour> =
+        <THandlerOutProtocol<TBehaviour> as OutboundUpgradeSend>::Future;
 }
 
 pub use behaviour::{
