@@ -1,3 +1,7 @@
+## 0.45.1
+
+- Adding `experimental-macros` feature to enable new `NetworkBehaviour` macro implementation, please refer to `libp2p-swarm-derive` crates changelog for more details.
+  See [PR 5486](https://github.com/libp2p/rust-libp2p/pull/5486)
 
 ## 0.45.0
 
