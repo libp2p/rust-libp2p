@@ -92,7 +92,7 @@ libp2p-metrics = { version = "0.14.2", path = "misc/metrics" }
 libp2p-mplex = { version = "0.41.0", path = "muxers/mplex" }
 libp2p-muxer-test-harness = { path = "muxers/test-harness" }
 libp2p-noise = { version = "0.44.0", path = "transports/noise" }
-libp2p-perf = { version = "0.3.1", path = "protocols/perf" }
+libp2p-perf = { version = "0.4.0", path = "protocols/perf" }
 libp2p-ping = { version = "0.44.2", path = "protocols/ping" }
 libp2p-plaintext = { version = "0.41.0", path = "transports/plaintext" }
 libp2p-pnet = { version = "0.24.0", path = "transports/pnet" }
