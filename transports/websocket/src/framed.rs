@@ -577,9 +577,7 @@ pub struct Connection<T> {
 
 /// Keep track of the connection state from the sender's perspective.
 enum ConnectionSender {
-    /// The sender must not be polled again after it returns `Poll::Ready(Err)`.
-    ///
-    /// When the sender enters the error state
+    /// The sender is alive and can be polled.
     Alive {
         sender: Pin<Box<dyn Sink<OutgoingData, Error = connection::Error> + Send>>,
     },
