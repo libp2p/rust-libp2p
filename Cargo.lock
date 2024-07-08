@@ -2595,7 +2595,7 @@ checksum = "97b3888a4aecf77e811145cadf6eef5901f4782c53886191b2f693f24761847c"
 
 [[package]]
 name = "libp2p"
-version = "0.54.0"
+version = "0.54.1"
 dependencies = [
  "async-std",
  "async-trait",
@@ -3294,7 +3294,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-swarm"
-version = "0.45.0"
+version = "0.45.1"
 dependencies = [
  "async-std",
  "criterion",
@@ -3303,7 +3303,6 @@ dependencies = [
  "futures",
  "futures-timer",
  "getrandom 0.2.15",
- "libp2p",
  "libp2p-core",
  "libp2p-identify",
  "libp2p-identity",
