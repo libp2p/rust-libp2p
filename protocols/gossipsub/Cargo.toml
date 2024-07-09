@@ -3,7 +3,7 @@ name = "libp2p-gossipsub"
 edition = "2021"
 rust-version = { workspace = true }
 description = "Gossipsub protocol for libp2p"
-version = "0.46.2"
+version = "0.47.0"
 authors = ["Age Manning <Age@AgeManning.com>"]
 license = "MIT"
 repository = "https://github.com/libp2p/rust-libp2p"
