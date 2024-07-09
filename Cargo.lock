@@ -3504,6 +3504,7 @@ dependencies = [
  "rcgen",
  "rw-stream-sink",
  "soketto",
+ "thiserror",
  "tracing",
  "url",
  "webpki-roots 0.25.2",
