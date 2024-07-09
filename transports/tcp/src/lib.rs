@@ -36,11 +36,7 @@ pub use provider::async_io;
 #[cfg(feature = "tokio")]
 pub use provider::tokio;
 
-use futures::{
-    future::{self, Ready},
-    prelude::*,
-    stream::SelectAll,
-};
+use futures::{future::Ready, prelude::*, stream::SelectAll};
 use futures_timer::Delay;
 use if_watch::IfEvent;
 use libp2p_core::{
@@ -165,7 +161,7 @@ impl Config {
     pub fn new() -> Self {
         Self {
             ttl: None,
-            nodelay: None,
+            nodelay: Some(false), // Disable Nagle's algorithm by default
             backlog: 1024,
             enable_port_reuse: false,
         }

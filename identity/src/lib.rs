@@ -34,7 +34,7 @@
 //! All key types have functions to enable conversion to/from their binary representations.
 
 #![cfg_attr(docsrs, feature(doc_cfg, doc_auto_cfg))]
-
+#![allow(unreachable_pub)]
 #[cfg(any(
     feature = "ecdsa",
     feature = "secp256k1",
@@ -42,7 +42,6 @@
     feature = "rsa"
 ))]
 mod proto {
-    #![allow(unreachable_pub)]
     include!("generated/mod.rs");
     pub(crate) use self::keys_proto::*;
 }

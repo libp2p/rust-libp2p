@@ -117,7 +117,7 @@ where
 mod tests {
     use super::RwStreamSink;
     use async_std::task;
-    use futures::{channel::mpsc, prelude::*, stream};
+    use futures::{channel::mpsc, prelude::*};
     use std::{
         pin::Pin,
         task::{Context, Poll},

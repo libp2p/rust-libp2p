@@ -22,17 +22,12 @@
 
 use super::*;
 use crate::subscription_filter::WhitelistSubscriptionFilter;
-use crate::transform::{DataTransform, IdentityTransform};
-use crate::ValidationError;
-use crate::{
-    config::Config, config::ConfigBuilder, types::Rpc, IdentTopic as Topic, TopicScoreParams,
-};
+use crate::{config::ConfigBuilder, types::Rpc, IdentTopic as Topic};
 use async_std::net::Ipv4Addr;
 use byteorder::{BigEndian, ByteOrder};
-use libp2p_core::{ConnectedPoint, Endpoint};
+use libp2p_core::ConnectedPoint;
 use rand::Rng;
 use std::thread::sleep;
-use std::time::Duration;
 
 #[derive(Default, Debug)]
 struct InjectNodes<D, F>
@@ -162,7 +157,7 @@ fn inject_nodes1() -> InjectNodes<IdentityTransform, AllowAllSubscriptionFilter>
 
 fn add_peer<D, F>(
     gs: &mut Behaviour<D, F>,
-    topic_hashes: &Vec<TopicHash>,
+    topic_hashes: &[TopicHash],
     outbound: bool,
     explicit: bool,
 ) -> PeerId
@@ -175,7 +170,7 @@ where
 
 fn add_peer_with_addr<D, F>(
     gs: &mut Behaviour<D, F>,
-    topic_hashes: &Vec<TopicHash>,
+    topic_hashes: &[TopicHash],
     outbound: bool,
     explicit: bool,
     address: Multiaddr,
@@ -196,7 +191,7 @@ where
 
 fn add_peer_with_addr_and_kind<D, F>(
     gs: &mut Behaviour<D, F>,
-    topic_hashes: &Vec<TopicHash>,
+    topic_hashes: &[TopicHash],
     outbound: bool,
     explicit: bool,
     address: Multiaddr,
@@ -273,6 +268,7 @@ where
                 connection_id,
                 endpoint: &fake_endpoint,
                 remaining_established: active_connections,
+                cause: None,
             }));
         }
     }
@@ -396,7 +392,7 @@ fn test_subscribe() {
         .create_network();
 
     assert!(
-        gs.mesh.get(&topic_hashes[0]).is_some(),
+        gs.mesh.contains_key(&topic_hashes[0]),
         "Subscribe should add a new entry to the mesh[topic] hashmap"
     );
 
@@ -442,11 +438,11 @@ fn test_unsubscribe() {
 
     for topic_hash in &topic_hashes {
         assert!(
-            gs.topic_peers.get(topic_hash).is_some(),
+            gs.topic_peers.contains_key(topic_hash),
             "Topic_peers contain a topic entry"
         );
         assert!(
-            gs.mesh.get(topic_hash).is_some(),
+            gs.mesh.contains_key(topic_hash),
             "mesh should contain a topic entry"
         );
     }
@@ -479,7 +475,7 @@ fn test_unsubscribe() {
     // check we clean up internal structures
     for topic_hash in &topic_hashes {
         assert!(
-            gs.mesh.get(topic_hash).is_none(),
+            !gs.mesh.contains_key(topic_hash),
             "All topics should have been removed from the mesh"
         );
     }
@@ -624,7 +620,7 @@ fn test_publish_without_flood_publishing() {
         .create_network();
 
     assert!(
-        gs.mesh.get(&topic_hashes[0]).is_some(),
+        gs.mesh.contains_key(&topic_hashes[0]),
         "Subscribe should add a new entry to the mesh[topic] hashmap"
     );
 
@@ -703,7 +699,7 @@ fn test_fanout() {
         .create_network();
 
     assert!(
-        gs.mesh.get(&topic_hashes[0]).is_some(),
+        gs.mesh.contains_key(&topic_hashes[0]),
         "Subscribe should add a new entry to the mesh[topic] hashmap"
     );
     // Unsubscribe from topic
@@ -873,7 +869,7 @@ fn test_handle_received_subscriptions() {
     );
 
     assert!(
-        gs.peer_topics.get(&unknown_peer).is_none(),
+        !gs.peer_topics.contains_key(&unknown_peer),
         "Unknown peer should not have been added"
     );
 
@@ -1151,7 +1147,7 @@ fn test_handle_ihave_subscribed_and_msg_not_cached() {
 
     assert!(
         iwant_exists,
-        "Expected to send an IWANT control message for unkown message id"
+        "Expected to send an IWANT control message for unknown message id"
     );
 }
 
@@ -1272,7 +1268,7 @@ fn test_handle_graft_multiple_topics() {
     }
 
     assert!(
-        gs.mesh.get(&topic_hashes[2]).is_none(),
+        !gs.mesh.contains_key(&topic_hashes[2]),
         "Expected the second topic to not be in the mesh"
     );
 }
@@ -2397,7 +2393,7 @@ fn test_dont_graft_to_negative_scored_peers() {
 }
 
 ///Note that in this test also without a penalty the px would be ignored because of the
-/// acceptPXThreshold, but the spec still explicitely states the rule that px from negative
+/// acceptPXThreshold, but the spec still explicitly states the rule that px from negative
 /// peers should get ignored, therefore we test it here.
 #[test]
 fn test_ignore_px_from_negative_scored_peer() {
@@ -3165,7 +3161,7 @@ fn test_scoring_p1() {
     );
 }
 
-fn random_message(seq: &mut u64, topics: &Vec<TopicHash>) -> RawMessage {
+fn random_message(seq: &mut u64, topics: &[TopicHash]) -> RawMessage {
     let mut rng = rand::thread_rng();
     *seq += 1;
     RawMessage {
@@ -4027,20 +4023,20 @@ fn test_scoring_p6() {
     //create 5 peers with the same ip
     let addr = Multiaddr::from(Ipv4Addr::new(10, 1, 2, 3));
     let peers = vec![
-        add_peer_with_addr(&mut gs, &vec![], false, false, addr.clone()),
-        add_peer_with_addr(&mut gs, &vec![], false, false, addr.clone()),
-        add_peer_with_addr(&mut gs, &vec![], true, false, addr.clone()),
-        add_peer_with_addr(&mut gs, &vec![], true, false, addr.clone()),
-        add_peer_with_addr(&mut gs, &vec![], true, true, addr.clone()),
+        add_peer_with_addr(&mut gs, &[], false, false, addr.clone()),
+        add_peer_with_addr(&mut gs, &[], false, false, addr.clone()),
+        add_peer_with_addr(&mut gs, &[], true, false, addr.clone()),
+        add_peer_with_addr(&mut gs, &[], true, false, addr.clone()),
+        add_peer_with_addr(&mut gs, &[], true, true, addr.clone()),
     ];
 
     //create 4 other peers with other ip
     let addr2 = Multiaddr::from(Ipv4Addr::new(10, 1, 2, 4));
     let others = vec![
-        add_peer_with_addr(&mut gs, &vec![], false, false, addr2.clone()),
-        add_peer_with_addr(&mut gs, &vec![], false, false, addr2.clone()),
-        add_peer_with_addr(&mut gs, &vec![], true, false, addr2.clone()),
-        add_peer_with_addr(&mut gs, &vec![], true, false, addr2.clone()),
+        add_peer_with_addr(&mut gs, &[], false, false, addr2.clone()),
+        add_peer_with_addr(&mut gs, &[], false, false, addr2.clone()),
+        add_peer_with_addr(&mut gs, &[], true, false, addr2.clone()),
+        add_peer_with_addr(&mut gs, &[], true, false, addr2.clone()),
     ];
 
     //no penalties yet
@@ -4551,7 +4547,7 @@ fn test_limit_number_of_message_ids_inside_ihave() {
     //emit gossip
     gs.emit_gossip();
 
-    // both peers should have gotten 100 random ihave messages, to asser the randomness, we
+    // both peers should have gotten 100 random ihave messages, to assert the randomness, we
     // assert that both have not gotten the same set of messages, but have an intersection
     // (which is the case with very high probability, the probabiltity of failure is < 10^-58).
 
@@ -5100,7 +5096,7 @@ fn test_graft_without_subscribe() {
         .create_network();
 
     assert!(
-        gs.mesh.get(&topic_hashes[0]).is_some(),
+        gs.mesh.contains_key(&topic_hashes[0]),
         "Subscribe should add a new entry to the mesh[topic] hashmap"
     );
 

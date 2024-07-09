@@ -7,13 +7,13 @@ license = "MIT"
 name = "libp2p-webrtc-utils"
 repository = "https://github.com/libp2p/rust-libp2p"
 rust-version = { workspace = true }
-version = "0.2.0"
+version = "0.2.1"
 publish = true
 
 [dependencies]
 asynchronous-codec = { workspace = true }
 bytes = "1"
-futures = "0.3"
+futures = { workspace = true }
 hex = "0.4"
 libp2p-core = { workspace = true }
 libp2p-identity = { workspace = true }
@@ -25,7 +25,7 @@ serde = { version = "1.0", features = ["derive"] }
 sha2 = "0.10.8"
 thiserror = "1"
 tinytemplate = "1.2"
-tracing = "0.1.37"
+tracing = { workspace = true }
 
 [dev-dependencies]
 hex-literal = "0.4"

@@ -95,12 +95,12 @@ pub enum Failure {
     Unsupported,
     /// The ping failed for reasons other than a timeout.
     Other {
-        error: Box<dyn std::error::Error + Send + 'static>,
+        error: Box<dyn std::error::Error + Send + Sync + 'static>,
     },
 }
 
 impl Failure {
-    fn other(e: impl std::error::Error + Send + 'static) -> Self {
+    fn other(e: impl std::error::Error + Send + Sync + 'static) -> Self {
         Self::Other { error: Box::new(e) }
     }
 }
@@ -183,6 +183,18 @@ impl Handler {
         >,
     ) {
         self.outbound = None; // Request a new substream on the next `poll`.
+
+        // Timer is already polled and expired before substream request is initiated
+        // and will be polled again later on in our `poll` because we reset `self.outbound`.
+        //
+        // `futures-timer` allows an expired timer to be polled again and returns
+        // immediately `Poll::Ready`. However in its WASM implementation there is
+        // a bug that causes the expired timer to panic.
+        // This is a workaround until a proper fix is merged and released.
+        // See libp2p/rust-libp2p#5447 for more info.
+        //
+        // TODO: remove when async-rs/futures-timer#74 gets merged.
+        self.interval.reset(Duration::new(0, 0));
 
         let error = match error {
             StreamUpgradeError::NegotiationFailed => {

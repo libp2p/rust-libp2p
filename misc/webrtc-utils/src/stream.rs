@@ -146,8 +146,14 @@ where
                     }
 
                     debug_assert!(read_buffer.is_empty());
-                    if let Some(message) = message {
-                        *read_buffer = message.into();
+                    match message {
+                        Some(msg) if !msg.is_empty() => {
+                            *read_buffer = msg.into();
+                        }
+                        _ => {
+                            tracing::debug!("poll_read buffer is empty, received None");
+                            return Poll::Ready(Ok(0));
+                        }
                     }
                 }
                 None => {

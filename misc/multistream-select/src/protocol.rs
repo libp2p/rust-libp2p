@@ -31,7 +31,6 @@ use crate::Version;
 use bytes::{BufMut, Bytes, BytesMut};
 use futures::{io::IoSlice, prelude::*, ready};
 use std::{
-    convert::TryFrom,
     error::Error,
     fmt, io,
     pin::Pin,
@@ -49,7 +48,7 @@ const MSG_PROTOCOL_NA: &[u8] = b"na\n";
 /// The encoded form of a multistream-select 'ls' message.
 const MSG_LS: &[u8] = b"ls\n";
 
-/// The multistream-select header lines preceeding negotiation.
+/// The multistream-select header lines preceding negotiation.
 ///
 /// Every [`Version`] has a corresponding header line.
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
@@ -137,24 +136,21 @@ pub(crate) enum Message {
 
 impl Message {
     /// Encodes a `Message` into its byte representation.
-    fn encode(&self, dest: &mut BytesMut) -> Result<(), ProtocolError> {
+    fn encode(&self, dest: &mut BytesMut) {
         match self {
             Message::Header(HeaderLine::V1) => {
                 dest.reserve(MSG_MULTISTREAM_1_0.len());
                 dest.put(MSG_MULTISTREAM_1_0);
-                Ok(())
             }
             Message::Protocol(p) => {
                 let len = p.as_ref().len() + 1; // + 1 for \n
                 dest.reserve(len);
                 dest.put(p.0.as_ref());
                 dest.put_u8(b'\n');
-                Ok(())
             }
             Message::ListProtocols => {
                 dest.reserve(MSG_LS.len());
                 dest.put(MSG_LS);
-                Ok(())
             }
             Message::Protocols(ps) => {
                 let mut buf = uvi::encode::usize_buffer();
@@ -167,12 +163,10 @@ impl Message {
                 encoded.push(b'\n');
                 dest.reserve(encoded.len());
                 dest.put(encoded.as_ref());
-                Ok(())
             }
             Message::NotAvailable => {
                 dest.reserve(MSG_PROTOCOL_NA.len());
                 dest.put(MSG_PROTOCOL_NA);
-                Ok(())
             }
         }
     }
@@ -289,7 +283,7 @@ where
 
     fn start_send(self: Pin<&mut Self>, item: Message) -> Result<(), Self::Error> {
         let mut buf = BytesMut::new();
-        item.encode(&mut buf)?;
+        item.encode(&mut buf);
         self.project()
             .inner
             .start_send(buf.freeze())
@@ -500,8 +494,7 @@ mod tests {
     fn encode_decode_message() {
         fn prop(msg: Message) {
             let mut buf = BytesMut::new();
-            msg.encode(&mut buf)
-                .unwrap_or_else(|_| panic!("Encoding message failed: {msg:?}"));
+            msg.encode(&mut buf);
             match Message::decode(buf.freeze()) {
                 Ok(m) => assert_eq!(m, msg),
                 Err(e) => panic!("Decoding failed: {e:?}"),

@@ -162,7 +162,7 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> syn::Result<Toke
 
                     Some(quote! {
                         #[doc = #msg]
-                        #visibility enum #enum_name #ty_generics
+                        #visibility enum #enum_name #impl_generics
                             #where_clause
                         {
                             #(#enum_variants),*

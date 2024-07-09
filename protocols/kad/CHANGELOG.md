@@ -1,3 +1,33 @@
+## 0.46.0
+
+- Included multiaddresses of found peers alongside peer IDs in `GetClosestPeers` query results.
+  See [PR 5475](https://github.com/libp2p/rust-libp2p/pull/5475)
+- Changed `FIND_NODE` response: now includes a list of closest peers when querying the recipient peer ID. Previously, this request yielded an empty response.
+  See [PR 5270](https://github.com/libp2p/rust-libp2p/pull/5270)
+- Update to DHT republish interval and expiration time defaults to 22h and 48h respectively, rationale in [libp2p/specs#451](https://github.com/libp2p/specs/pull/451)
+  See [PR 3230](https://github.com/libp2p/rust-libp2p/pull/3230)
+- Use default dial conditions more consistently.
+  See [PR 4957](https://github.com/libp2p/rust-libp2p/pull/4957)
+- QueryClose progress whenever closer in range, instead of having to be the closest.
+  See [PR 4934](https://github.com/libp2p/rust-libp2p/pull/4934).
+- Add periodic and automatic bootstrap.
+  See [PR 4838](https://github.com/libp2p/rust-libp2p/pull/4838).
+- Make it mandatory to provide protocol names when creating a `kad::Config`.
+  Deprecate `kad::Config::default()`, replaced by `kad::Config::new(StreamProtocol)`.
+  See [PR 5122](https://github.com/libp2p/rust-libp2p/pull/5122).
+- Compute `jobs_query_capacity` accurately.
+  See [PR 5148](https://github.com/libp2p/rust-libp2p/pull/5148).
+- Derive `Copy` for `kbucket::key::Key<T>`.
+  See [PR 5317](https://github.com/libp2p/rust-libp2p/pull/5317).
+- Use `web-time` instead of `instant`.
+  See [PR 5347](https://github.com/libp2p/rust-libp2p/pull/5347).
+- Correctly handle the `NoKnownPeers` error on automatic bootstrap.
+  See [PR 5349](https://github.com/libp2p/rust-libp2p/pull/5349).
+- Improve automatic bootstrap triggering conditions:
+  trigger when the routing table is updated and we have less that `K_VALUE` peers in it,
+  trigger when a new listen address is discovered and we have no connected peers.
+  See [PR 5474](https://github.com/libp2p/rust-libp2p/pull/5474).
+
 ## 0.45.3
 
 - The progress of the close query iterator shall be decided by ANY of the new peers.
@@ -51,6 +81,7 @@
 -->
 
 ## 0.44.5
+
 - Migrate to `quick-protobuf-codec` crate for codec logic.
   See [PR 4501].
 
@@ -176,7 +207,7 @@
   - Instead of a single event `OutboundQueryCompleted`, there are now multiple events emitted, allowing the user to process them as they come in (via the new `OutboundQueryProgressed`). See `ProgressStep` to identify the final `OutboundQueryProgressed` of a single query.
   - To finish a query early, i.e. before the final `OutboundQueryProgressed` of the query, a caller needs to call `query.finish()`.
   - There is no more automatic caching of records. The user has to manually call `put_record_to` on the `QueryInfo::GetRecord.cache_candidates` to cache a record to a close peer that did not return the record on the foregone query.
-  See [PR 2712].
+    See [PR 2712].
 
 [PR 3085]: https://github.com/libp2p/rust-libp2p/pull/3085
 [PR 3011]: https://github.com/libp2p/rust-libp2p/pull/3011
@@ -255,7 +286,7 @@
 
 - Require owned key in `get_record()` method (see [PR 2477]).
 
-- Merge NetworkBehaviour's inject_\* paired methods (see PR 2445).
+- Merge NetworkBehaviour's inject\_\* paired methods (see PR 2445).
 
 [PR 2477]: https://github.com/libp2p/rust-libp2p/pull/2477
 [PR 2445]: https://github.com/libp2p/rust-libp2p/pull/2445

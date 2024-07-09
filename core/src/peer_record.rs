@@ -1,11 +1,10 @@
 use crate::signed_envelope::SignedEnvelope;
 use crate::{proto, signed_envelope, DecodeError, Multiaddr};
-use instant::SystemTime;
 use libp2p_identity::Keypair;
 use libp2p_identity::PeerId;
 use libp2p_identity::SigningError;
 use quick_protobuf::{BytesReader, Writer};
-use std::convert::TryInto;
+use web_time::SystemTime;
 
 const PAYLOAD_TYPE: &str = "/libp2p/routing-state-record";
 const DOMAIN_SEP: &str = "libp2p-routing-state";
