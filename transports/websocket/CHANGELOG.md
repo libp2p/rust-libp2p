@@ -1,3 +1,9 @@
+## 0.42.2
+
+- fix: Avoid websocket panic on polling after errors. See [PR XXXX].
+
+[PR XXXX]: https://github.com/libp2p/rust-libp2p/pull/XXXX
+
 ## 0.42.1
 
 - Bump `futures-rustls` to `0.24.0`.
