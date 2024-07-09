@@ -1,6 +1,6 @@
 [package]
 name = "libp2p-quic"
-version = "0.10.2"
+version = "0.10.3"
 authors = ["Parity Technologies <admin@parity.io>"]
 edition = "2021"
 rust-version = { workspace = true }
@@ -17,17 +17,19 @@ if-watch = "3.2.0"
 libp2p-core = { workspace = true }
 libp2p-tls = { workspace = true }
 libp2p-identity = { workspace = true }
-parking_lot = "0.12.2"
-quinn = { version = "0.10.2", default-features = false, features = ["tls-rustls", "futures-io"] }
+parking_lot = "0.12.3"
+quinn = { version = "0.11.2", default-features = false, features = ["rustls", "futures-io"] }
 rand = "0.8.5"
-rustls = { version = "0.21.9", default-features = false }
-thiserror = "1.0.59"
+rustls = { version = "0.23.9", default-features = false }
+thiserror = "1.0.61"
 tokio = { workspace = true, default-features = false, features = ["net", "rt", "time"], optional = true }
 tracing = { workspace = true }
-socket2 = "0.5.6"
-ring = "0.16.20"
-sha2 = "0.10.7"
+socket2 = "0.5.7"
+ring = { workspace = true }
+
+sha2 = "0.10"
 hex = "0.4"
+hex-literal = "0.4"
 
 # WebTransport
 http = "1.0.0"
@@ -53,12 +55,12 @@ rustc-args = ["--cfg", "docsrs"]
 async-std = { version = "1.12.0", features = ["attributes"] }
 libp2p-identity = { workspace = true, features = ["rand"] }
 libp2p-muxer-test-harness = { path = "../../muxers/test-harness" }
+libp2p-noise = { workspace = true }
 libp2p-tcp = { workspace = true, features = ["async-io"] }
 libp2p-yamux = { workspace = true }
 quickcheck = "1"
 tokio = { workspace = true, features = ["macros", "rt-multi-thread", "time"] }
-tracing-subscriber = { version = "0.3", features = ["env-filter"] }
-hex-literal = "0.4"
+tracing-subscriber = { workspace = true, features = ["env-filter"] }
 
 [[test]]
 name = "stream_compliance"

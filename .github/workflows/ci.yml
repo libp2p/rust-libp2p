@@ -57,7 +57,7 @@ jobs:
           cargo metadata --format-version=1 --no-deps | \
           jq -e -r '.packages[] | select(.name == "'"$CRATE"'") | .dependencies | all(.name != "libp2p")'
 
-      - uses: taiki-e/cache-cargo-install-action@924d49e0af41f449f0ad549559bc608ee4653562 # v1
+      - uses: taiki-e/cache-cargo-install-action@v2
         with:
           tool: tomlq
 
@@ -70,7 +70,7 @@ jobs:
       - name: Enforce version in `workspace.dependencies` matches latest version
         if: env.CRATE != 'libp2p'
         run: |
-          SPECIFIED_VERSION=$(tomlq "workspace.dependencies.$CRATE.version" --file ./Cargo.toml)
+          SPECIFIED_VERSION=$(tq "workspace.dependencies.$CRATE.version" --file ./Cargo.toml)
 
           echo "Package version: $CRATE_VERSION";
           echo "Specified version: $SPECIFIED_VERSION";
@@ -107,8 +107,6 @@ jobs:
   wasm_tests:
     name: Run all WASM tests
     runs-on: ubuntu-latest
-    env:
-      CHROMEDRIVER_VERSION: '114.0.5735.90'
     steps:
       - uses: actions/checkout@v4
 
@@ -116,19 +114,12 @@ jobs:
         with:
           target: wasm32-unknown-unknown
 
-      - uses: taiki-e/cache-cargo-install-action@v1
+      - uses: taiki-e/cache-cargo-install-action@v2
         with:
           tool: wasm-pack@0.12.0
 
-      - name: Install Google Chrome
-        run: |
-          curl -o /tmp/google-chrome-stable_amd64.deb https://dl.google.com/linux/chrome/deb/pool/main/g/google-chrome-stable/google-chrome-stable_${CHROMEDRIVER_VERSION}-1_amd64.deb
-          sudo dpkg -i /tmp/google-chrome-stable_amd64.deb
-
       - name: Install chromedriver
         uses: nanasess/setup-chromedriver@v2
-        with:
-          chromedriver-version: ${{ env.CHROMEDRIVER_VERSION }}
 
       - name: Run all tests
         run: ./wasm-tests/run-all.sh
@@ -295,7 +286,7 @@ jobs:
             cargo check --manifest-path "$toml";
           done
 
-      - uses: taiki-e/cache-cargo-install-action@v1
+      - uses: taiki-e/cache-cargo-install-action@v2
         with:
           tool: wasm-pack@0.12.0
 
@@ -317,7 +308,7 @@ jobs:
       RUSTFLAGS: ''
     steps:
       - uses: actions/checkout@v4
-      - run: wget -q -O- https://github.com/obi1kenobi/cargo-semver-checks/releases/download/v0.27.0/cargo-semver-checks-x86_64-unknown-linux-gnu.tar.gz | tar -xz -C ~/.cargo/bin
+      - run: wget -q -O- https://github.com/obi1kenobi/cargo-semver-checks/releases/download/v0.31.0/cargo-semver-checks-x86_64-unknown-linux-gnu.tar.gz | tar -xz -C ~/.cargo/bin
         shell: bash
       - uses: obi1kenobi/cargo-semver-checks-action@c7306483f698c511eaf7416d1bf2e1958c90140f # v2
 
@@ -379,7 +370,7 @@ jobs:
       - run: cargo install --version 0.10.0 pb-rs --locked
 
       - name: Glob match
-        uses: tj-actions/glob@v21
+        uses: tj-actions/glob@v22
         id: glob
         with:
           files: |

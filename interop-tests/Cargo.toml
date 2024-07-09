@@ -18,7 +18,7 @@ futures = { workspace = true }
 rand = "0.8.5"
 serde = { version = "1", features = ["derive"] }
 tracing = { workspace = true }
-tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+tracing-subscriber = { workspace = true, features = ["env-filter"] }
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 axum = "0.7"
@@ -28,16 +28,16 @@ libp2p-noise = { workspace = true }
 libp2p-tls = { workspace = true }
 libp2p-webrtc = { workspace = true, features = ["tokio"] }
 mime_guess = "2.0"
-redis = { version = "0.23.3", default-features = false, features = [
+redis = { version = "0.24.0", default-features = false, features = [
     "tokio-comp",
 ] }
-rust-embed = "8.3"
+rust-embed = "8.4"
 serde_json = "1"
 thirtyfour = "=0.32.0" # https://github.com/stevepryde/thirtyfour/issues/169
 tokio = { workspace = true, features = ["full"] }
 tower-http = { version = "0.5", features = ["cors", "fs", "trace"] }
 tracing = { workspace = true }
-tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+tracing-subscriber = { workspace = true, features = ["env-filter"] }
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 libp2p = { path = "../libp2p", features = [ "ping", "macros", "webtransport-websys", "wasm-bindgen", "identify", "websocket-websys", "yamux", "noise"] }
@@ -46,7 +46,7 @@ libp2p-webrtc-websys = { workspace = true }
 wasm-bindgen = { version = "0.2" }
 wasm-bindgen-futures = { version = "0.4" }
 wasm-logger = { version = "0.2.0" }
-instant = "0.1.12"
+web-time = { workspace = true }
 reqwest = { version = "0.12", features = ["json"] }
 console_error_panic_hook = { version = "0.1.7" }
 futures-timer = "3.0.3"

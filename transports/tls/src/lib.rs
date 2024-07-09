@@ -46,11 +46,13 @@ pub fn make_client_config(
 ) -> Result<rustls::ClientConfig, certificate::GenError> {
     let (certificate, private_key) = certificate::generate(keypair)?;
 
-    let mut crypto = rustls::ClientConfig::builder()
-        .with_cipher_suites(verifier::CIPHERSUITES)
-        .with_safe_default_kx_groups()
+    let mut provider = rustls::crypto::ring::default_provider();
+    provider.cipher_suites = verifier::CIPHERSUITES.to_vec();
+
+    let mut crypto = rustls::ClientConfig::builder_with_provider(provider.into())
         .with_protocol_versions(verifier::PROTOCOL_VERSIONS)
         .expect("Cipher suites and kx groups are configured; qed")
+        .dangerous()
         .with_custom_certificate_verifier(Arc::new(
             verifier::Libp2pCertificateVerifier::with_remote_peer_id(remote_peer_id),
         ))
@@ -67,9 +69,10 @@ pub fn make_server_config(
 ) -> Result<rustls::ServerConfig, certificate::GenError> {
     let (certificate, private_key) = certificate::generate(keypair)?;
 
-    let mut crypto = rustls::ServerConfig::builder()
-        .with_cipher_suites(verifier::CIPHERSUITES)
-        .with_safe_default_kx_groups()
+    let mut provider = rustls::crypto::ring::default_provider();
+    provider.cipher_suites = verifier::CIPHERSUITES.to_vec();
+
+    let mut crypto = rustls::ServerConfig::builder_with_provider(provider.into())
         .with_protocol_versions(verifier::PROTOCOL_VERSIONS)
         .expect("Cipher suites and kx groups are configured; qed")
         .with_client_cert_verifier(Arc::new(verifier::Libp2pCertificateVerifier::new()))
