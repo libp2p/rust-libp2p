@@ -207,21 +207,30 @@ where
         let identity = Keypair::generate_ed25519();
         let peer_id = PeerId::from(identity.public());
 
+        #[cfg(feature = "async-std")]
+        let fallback_transport = libp2p_tcp::async_io::Transport::default();
+
+        #[cfg(feature = "tokio")]
+        let fallback_transport = libp2p_tcp::tokio::Transport::default();
+
         let transport = MemoryTransport::default()
-            .or_transport(libp2p_tcp::async_io::Transport::default())
+            .or_transport(fallback_transport)
             .upgrade(Version::V1)
             .authenticate(plaintext::Config::new(&identity))
             .multiplex(yamux::Config::default())
             .timeout(Duration::from_secs(20))
             .boxed();
 
-        Swarm::new(
-            transport,
-            behaviour_fn(identity),
-            peer_id,
-            swarm::Config::with_async_std_executor()
-                .with_idle_connection_timeout(Duration::from_secs(5)), // Some tests need connections to be kept alive beyond what the individual behaviour configures.,
-        )
+        #[cfg(feature = "async-std")]
+        let mut config = swarm::Config::with_async_std_executor();
+
+        #[cfg(feature = "tokio")]
+        let mut config = swarm::Config::with_tokio_executor();
+
+        // Some tests need connections to be kept alive beyond what the individual behaviour configures.
+        config = config.with_idle_connection_timeout(Duration::from_secs(5));
+
+        Swarm::new(transport, behaviour_fn(identity), peer_id, config)
     }
 
     async fn connect<T>(&mut self, other: &mut Swarm<T>)

@@ -16,8 +16,8 @@ async-trait = "0.1.74"
 libp2p-core = { workspace = true }
 libp2p-identity = { workspace = true, features = ["rand"] }
 libp2p-plaintext = { workspace = true }
-libp2p-swarm = { workspace = true, features = ["async-std"] }
-libp2p-tcp = { workspace = true, features = ["async-io"] }
+libp2p-swarm = { workspace = true }
+libp2p-tcp = { workspace = true }
 libp2p-yamux = { workspace = true }
 futures = "0.3.29"
 rand = "0.8.5"
@@ -26,3 +26,8 @@ futures-timer = "3.0.2"
 
 [lints]
 workspace = true
+
+[features]
+default = ["async-std"]
+async-std = ["libp2p-swarm/async-std", "libp2p-tcp/async-io"]
+tokio = ["libp2p-swarm/tokio", "libp2p-tcp/tokio"]
