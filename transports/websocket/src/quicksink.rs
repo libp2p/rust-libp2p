@@ -346,4 +346,31 @@ mod tests {
             assert_eq!(&expected[..], &actual[..])
         });
     }
+
+    #[test]
+    fn error_does_not_panic() {
+        task::block_on(async {
+            let sink = make_sink(io::stdout(), |mut _stdout, _action| async move {
+                Err(io::Error::new(io::ErrorKind::Other, "oh no"))
+            });
+
+            futures::pin_mut!(sink);
+
+            let result = sink.send("hello").await;
+            match result {
+                Err(crate::quicksink::Error::Send(e)) => {
+                    assert_eq!(e.kind(), io::ErrorKind::Other);
+                    assert_eq!(e.to_string(), "oh no")
+                }
+                _ => panic!("unexpected result: {:?}", result),
+            };
+
+            // Call send again, expect not to panic.
+            let result = sink.send("hello").await;
+            match result {
+                Err(crate::quicksink::Error::Closed) => {}
+                _ => panic!("unexpected result: {:?}", result),
+            };
+        })
+    }
 }
