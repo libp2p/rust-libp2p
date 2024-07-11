@@ -1,6 +1,8 @@
 ## 0.17.3
 - Use `web-time` instead of `instant`.
   See [PR 5347](https://github.com/libp2p/rust-libp2p/pull/5347).
+- Fix manual closure of relayed listener.
+  See [PR 5491](https://github.com/libp2p/rust-libp2p/pull/5491)
 
 ## 0.17.2
 
