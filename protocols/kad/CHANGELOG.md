@@ -23,6 +23,10 @@
   See [PR 5347](https://github.com/libp2p/rust-libp2p/pull/5347).
 - Correctly handle the `NoKnownPeers` error on automatic bootstrap.
   See [PR 5349](https://github.com/libp2p/rust-libp2p/pull/5349).
+- Improve automatic bootstrap triggering conditions:
+  trigger when the routing table is updated and we have less that `K_VALUE` peers in it,
+  trigger when a new listen address is discovered and we have no connected peers.
+  See [PR 5474](https://github.com/libp2p/rust-libp2p/pull/5474).
 
 ## 0.45.3
 
