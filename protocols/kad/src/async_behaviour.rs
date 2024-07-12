@@ -1,6 +1,10 @@
-use std::{collections::HashMap, task::Poll};
+use std::{
+    collections::HashMap,
+    pin::{pin, Pin},
+    task::{Context, Poll},
+};
 
-use futures::{channel::mpsc, StreamExt};
+use futures::{channel::mpsc, ready, Future, FutureExt, StreamExt};
 use libp2p_core::{Endpoint, Multiaddr};
 use libp2p_identity::PeerId;
 use libp2p_swarm::{
@@ -21,30 +25,19 @@ pub struct AsyncQueryResult<T> {
     pub result: T,
     pub stats: QueryStats,
 }
-impl<T> AsyncQueryResult<T> {
-    fn map<Out>(self, f: impl Fn(T) -> Out) -> AsyncQueryResult<Out> {
-        AsyncQueryResult {
-            id: self.id,
-            stats: self.stats,
-            result: f(self.result),
-        }
-    }
-}
-
-type UnboundedQueryResultSender<T> = mpsc::UnboundedSender<AsyncQueryResult<T>>;
 
 enum QueryResultSender {
-    Bootstrap(UnboundedQueryResultSender<BootstrapResult>),
-    GetClosestPeers(UnboundedQueryResultSender<GetClosestPeersResult>),
-    GetProviders(UnboundedQueryResultSender<GetProvidersResult>),
-    StartProviding(UnboundedQueryResultSender<AddProviderResult>),
-    GetRecord(UnboundedQueryResultSender<GetRecordResult>),
-    PutRecord(UnboundedQueryResultSender<PutRecordResult>),
+    Bootstrap(mpsc::Sender<AsyncQueryResult<BootstrapResult>>),
+    GetClosestPeers(mpsc::Sender<AsyncQueryResult<GetClosestPeersResult>>),
+    GetProviders(mpsc::Sender<AsyncQueryResult<GetProvidersResult>>),
+    StartProviding(mpsc::Sender<AsyncQueryResult<AddProviderResult>>),
+    GetRecord(mpsc::Sender<AsyncQueryResult<GetRecordResult>>),
+    PutRecord(mpsc::Sender<AsyncQueryResult<PutRecordResult>>),
 }
 
 /// A handle to receive [`AsyncQueryResult`].
 #[must_use = "Streams do nothing unless polled."]
-pub struct AsyncQueryResultStream<T>(mpsc::UnboundedReceiver<AsyncQueryResult<T>>);
+pub struct AsyncQueryResultStream<T>(mpsc::Receiver<AsyncQueryResult<T>>);
 impl<T> futures::Stream for AsyncQueryResultStream<T> {
     type Item = AsyncQueryResult<T>;
 
@@ -99,7 +92,10 @@ where
         }
     }
 
-    fn handle_inner_event(&mut self, event: Event) -> Option<<Self as NetworkBehaviour>::ToSwarm> {
+    async fn handle_inner_event(
+        &mut self,
+        event: Event,
+    ) -> Option<<Self as NetworkBehaviour>::ToSwarm> {
         match event {
             Event::OutboundQueryProgressed {
                 id,
@@ -107,27 +103,7 @@ where
                 stats,
                 step,
             } => {
-                fn do_send<T>(
-                    sender: &UnboundedQueryResultSender<T>,
-                    id: QueryId,
-                    result: T,
-                    stats: QueryStats,
-                ) -> Option<AsyncQueryResult<T>> {
-                    match sender.unbounded_send(AsyncQueryResult { id, result, stats }) {
-                        Ok(_) => {
-                            // The event has been successfully sent into the channel so there is no
-                            // need to forward it backup to the swarm.
-                            None
-                        }
-                        Err(err) => {
-                            // The receiver is closed. This is probably normal (the user got what he needed and dropped the receiver).
-                            // So we don't log anything but we still forward this event back up to the swarm.
-                            Some(err.into_inner())
-                        }
-                    }
-                }
-
-                let Some(sender) = self.query_result_senders.get(&id) else {
+                let Some(sender) = self.query_result_senders.get_mut(&id) else {
                     // This query was either not triggered by the user or the receiver has been dropped and removed
                     // so we simply forward it back up to the swarm like nothing happened.
                     return Some(Event::OutboundQueryProgressed {
@@ -137,30 +113,28 @@ where
                         step,
                     });
                 };
+
                 let event = match (result, sender) {
                     (QueryResult::Bootstrap(result), QueryResultSender::Bootstrap(sender)) => {
-                        do_send(sender, id, result, stats).map(|qr| qr.map(QueryResult::Bootstrap))
+                        Sending::new(AsyncQueryResult { id, result, stats }, sender).await
                     }
                     (
                         QueryResult::GetClosestPeers(result),
                         QueryResultSender::GetClosestPeers(sender),
-                    ) => do_send(sender, id, result, stats)
-                        .map(|qr| qr.map(QueryResult::GetClosestPeers)),
+                    ) => Sending::new(AsyncQueryResult { id, result, stats }, sender).await,
                     (
                         QueryResult::GetProviders(result),
                         QueryResultSender::GetProviders(sender),
-                    ) => do_send(sender, id, result, stats)
-                        .map(|qr| qr.map(QueryResult::GetProviders)),
+                    ) => Sending::new(AsyncQueryResult { id, result, stats }, sender).await,
                     (
                         QueryResult::StartProviding(result),
                         QueryResultSender::StartProviding(sender),
-                    ) => do_send(sender, id, result, stats)
-                        .map(|qr| qr.map(QueryResult::StartProviding)),
+                    ) => Sending::new(AsyncQueryResult { id, result, stats }, sender).await,
                     (QueryResult::GetRecord(result), QueryResultSender::GetRecord(sender)) => {
-                        do_send(sender, id, result, stats).map(|qr| qr.map(QueryResult::GetRecord))
+                        Sending::new(AsyncQueryResult { id, result, stats }, sender).await
                     }
                     (QueryResult::PutRecord(result), QueryResultSender::PutRecord(sender)) => {
-                        do_send(sender, id, result, stats).map(|qr| qr.map(QueryResult::PutRecord))
+                        Sending::new(AsyncQueryResult { id, result, stats }, sender).await
                     }
                     (result, _) => {
                         unreachable!("Wrong sender type for query {id} : unable to send {result:?}")
@@ -195,9 +169,9 @@ where
     fn add_query<T>(
         &mut self,
         query_id: QueryId,
-        f: impl Fn(UnboundedQueryResultSender<T>) -> QueryResultSender,
+        f: impl Fn(mpsc::Sender<AsyncQueryResult<T>>) -> QueryResultSender,
     ) -> AsyncQueryResultStream<T> {
-        let (tx, rx) = mpsc::unbounded();
+        let (tx, rx) = mpsc::channel(0);
         self.query_result_senders.insert(query_id, f(tx));
         AsyncQueryResultStream(rx)
     }
@@ -346,11 +320,96 @@ where
         cx: &mut std::task::Context<'_>,
     ) -> Poll<ToSwarm<Self::ToSwarm, THandlerInEvent<Self>>> {
         while let Poll::Ready(event) = self.inner.poll(cx) {
-            if let Some(event) = event.map_out_opt(|e| self.handle_inner_event(e)) {
-                return Poll::Ready(event);
-            }
+            match event {
+                ToSwarm::GenerateEvent(event) => {
+                    if let Some(event) = ready!(pin!(self.handle_inner_event(event)).poll_unpin(cx))
+                    {
+                        return Poll::Ready(ToSwarm::GenerateEvent(event));
+                    }
+                }
+                event => return Poll::Ready(event),
+            };
         }
 
         Poll::Pending
+    }
+}
+
+struct Sending<'a, T> {
+    item: Option<AsyncQueryResult<T>>,
+    sender: &'a mut mpsc::Sender<AsyncQueryResult<T>>,
+}
+
+impl<'a, T> Sending<'a, T> {
+    fn new(item: AsyncQueryResult<T>, sender: &'a mut mpsc::Sender<AsyncQueryResult<T>>) -> Self {
+        Self {
+            item: Some(item),
+            sender,
+        }
+    }
+}
+
+impl<'a, T> Future for Sending<'a, T>
+where
+    T: Unpin + Into<QueryResult>,
+{
+    type Output = Option<AsyncQueryResult<QueryResult>>;
+
+    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        let this = self.get_mut();
+
+        match this.sender.poll_ready(cx) {
+            Poll::Ready(result) => {
+                let Some(item) = this.item.take() else {
+                    unreachable!("item is always set at initialization and futures must not be polled again after returning ready");
+                };
+                let output = match result {
+                    Ok(_) => this.sender.try_send(item).err().map(|err| err.into_inner()),
+                    Err(_) => Some(item),
+                };
+                Poll::Ready(output.map(|item| AsyncQueryResult {
+                    id: item.id,
+                    result: item.result.into(),
+                    stats: item.stats,
+                }))
+            }
+            Poll::Pending => Poll::Pending,
+        }
+    }
+}
+
+impl From<BootstrapResult> for QueryResult {
+    fn from(value: BootstrapResult) -> Self {
+        Self::Bootstrap(value)
+    }
+}
+
+impl From<GetClosestPeersResult> for QueryResult {
+    fn from(value: GetClosestPeersResult) -> Self {
+        Self::GetClosestPeers(value)
+    }
+}
+
+impl From<GetProvidersResult> for QueryResult {
+    fn from(value: GetProvidersResult) -> Self {
+        Self::GetProviders(value)
+    }
+}
+
+impl From<AddProviderResult> for QueryResult {
+    fn from(value: AddProviderResult) -> Self {
+        Self::StartProviding(value)
+    }
+}
+
+impl From<GetRecordResult> for QueryResult {
+    fn from(value: GetRecordResult) -> Self {
+        Self::GetRecord(value)
+    }
+}
+
+impl From<PutRecordResult> for QueryResult {
+    fn from(value: PutRecordResult) -> Self {
+        Self::PutRecord(value)
     }
 }
