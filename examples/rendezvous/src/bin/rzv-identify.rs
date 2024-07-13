@@ -76,8 +76,13 @@ async fn main() {
             }
             // once `/identify` did its job, we know our external address and can register
             SwarmEvent::Behaviour(MyBehaviourEvent::Identify(identify::Event::Received {
+                info,
                 ..
             })) => {
+                // register our external address. this is not normal behaviour, usually
+                // local addresses need to be added manually. this is done for the sake of
+                // running the example.
+                swarm.add_external_address(info.observed_addr);
                 if let Err(error) = swarm.behaviour_mut().rendezvous.register(
                     rendezvous::Namespace::from_static("rendezvous"),
                     rendezvous_point,
