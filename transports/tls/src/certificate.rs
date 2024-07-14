@@ -229,9 +229,12 @@ fn make_libp2p_extension(
         yasna::encode_der(&(serialized_pubkey, signature))
     };
 
-    // This extension MAY be marked critical.
     let mut ext = rcgen::CustomExtension::from_oid_content(&P2P_EXT_OID, extension_content);
-    ext.set_criticality(true);
+    // This extension MAY be marked critical as per the libp2p TLS spec.
+    // But rustls =0.23.11 will throw a `[rustls_webpki::Error::UnsupportedCriticalExtension]`
+    // when verifying the certificate consistency (see https://github.com/rustls/rustls/pull/2034).
+    // So we explicitly set it to non-critical.
+    ext.set_criticality(false);
 
     Ok(ext)
 }
