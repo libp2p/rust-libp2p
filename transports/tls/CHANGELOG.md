@@ -1,3 +1,8 @@
+## 0.4.1
+
+- Mark TLS extension as non-critical to prevent panic with `rustls` version `0.23.11`.
+  See [PR 5498](https://github.com/libp2p/rust-libp2p/pull/5498).
+
 ## 0.4.0
 
 - Upgrade `rustls` to `0.23`. See [PR 5385](https://github.com/libp2p/rust-libp2p/pull/5385)
