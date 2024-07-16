@@ -1,8 +1,8 @@
 ## 0.42.2
 
-- fix: Avoid websocket panic on polling after errors. See [PR XXXX].
+- fix: Avoid websocket panic on polling after errors. See [PR 5494].
 
-[PR XXXX]: https://github.com/libp2p/rust-libp2p/pull/XXXX
+[PR 5494]: https://github.com/libp2p/rust-libp2p/pull/5494
 
 ## 0.42.1
 
