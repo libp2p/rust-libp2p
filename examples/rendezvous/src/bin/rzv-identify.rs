@@ -79,9 +79,8 @@ async fn main() {
                 info,
                 ..
             })) => {
-                // register our external address. this is not normal behaviour under identify, usually
-                // local addresses need to be added manually. this is done for the sake of
-                // running the example.
+                // Register our external address. Needs to be done explicitly 
+                // for this case, as it's a local address.
                 swarm.add_external_address(info.observed_addr);
                 if let Err(error) = swarm.behaviour_mut().rendezvous.register(
                     rendezvous::Namespace::from_static("rendezvous"),
