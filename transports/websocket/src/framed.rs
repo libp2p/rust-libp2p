@@ -18,7 +18,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::{error::Error, tls};
+use crate::{error::Error, quicksink, tls};
 use either::Either;
 use futures::{future::BoxFuture, prelude::*, ready, stream::BoxStream};
 use futures_rustls::{client, rustls, server};
@@ -571,7 +571,7 @@ fn location_to_multiaddr<T>(location: &str) -> Result<Multiaddr, Error<T>> {
 /// The websocket connection.
 pub struct Connection<T> {
     receiver: BoxStream<'static, Result<Incoming, connection::Error>>,
-    sender: Pin<Box<dyn Sink<OutgoingData, Error = connection::Error> + Send>>,
+    sender: Pin<Box<dyn Sink<OutgoingData, Error = quicksink::Error<connection::Error>> + Send>>,
     _marker: std::marker::PhantomData<T>,
 }
 
