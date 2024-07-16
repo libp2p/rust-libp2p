@@ -14,6 +14,8 @@
   See [PR 5347](https://github.com/libp2p/rust-libp2p/pull/5347).
 - Add `#[track_caller]` on all `spawn` wrappers.
   See [PR 5465](https://github.com/libp2p/rust-libp2p/pull/5465).
+- Add ConnectionError to FromSwarm::ConnectionClosed.
+  See [PR 5485](https://github.com/libp2p/rust-libp2p/pull/5485).
 
 ## 0.44.2
 
