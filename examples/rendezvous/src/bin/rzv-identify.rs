@@ -79,7 +79,7 @@ async fn main() {
                 info,
                 ..
             })) => {
-                // Register our external address. Needs to be done explicitly 
+                // Register our external address. Needs to be done explicitly
                 // for this case, as it's a local address.
                 swarm.add_external_address(info.observed_addr);
                 if let Err(error) = swarm.behaviour_mut().rendezvous.register(
