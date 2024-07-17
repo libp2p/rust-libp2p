@@ -909,6 +909,7 @@ where
                         peer_id,
                         connection_id: id,
                         endpoint: &endpoint,
+                        cause: error.as_ref(),
                         remaining_established: num_established as usize,
                     }));
                 self.pending_swarm_events

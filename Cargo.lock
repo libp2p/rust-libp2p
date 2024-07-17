@@ -2801,7 +2801,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-gossipsub"
-version = "0.46.2"
+version = "0.47.0"
 dependencies = [
  "async-std",
  "asynchronous-codec",
@@ -3051,7 +3051,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-perf"
-version = "0.3.1"
+version = "0.4.0"
 dependencies = [
  "anyhow",
  "clap",
@@ -3492,7 +3492,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-websocket"
-version = "0.43.1"
+version = "0.43.2"
 dependencies = [
  "async-std",
  "either",
@@ -3507,6 +3507,7 @@ dependencies = [
  "rcgen",
  "rw-stream-sink",
  "soketto",
+ "thiserror",
  "tracing",
  "url",
  "webpki-roots 0.25.2",
