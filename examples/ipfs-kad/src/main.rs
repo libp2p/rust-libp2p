@@ -59,7 +59,8 @@ async fn main() -> Result<()> {
         .with_dns()?
         .with_behaviour(|key| {
             // Create a Kademlia behaviour.
-            let mut cfg = kad::Config::new(IPFS_PROTO_NAME);
+            let mut cfg = kad::Config::default();
+            cfg.set_protocol_names(vec![IPFS_PROTO_NAME]);
             cfg.set_query_timeout(Duration::from_secs(5 * 60));
             let store = kad::store::MemoryStore::new(key.public().to_peer_id());
             kad::Behaviour::with_config(key.public().to_peer_id(), store, cfg)
