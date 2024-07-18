@@ -75,7 +75,10 @@ impl rustls::client::ResolvesClientCert for AlwaysResolvesCert {
 }
 
 impl rustls::server::ResolvesServerCert for AlwaysResolvesCert {
-    fn resolve(&self, _client_hello: rustls::server::ClientHello<'_>) -> Option<Arc<rustls::sign::CertifiedKey>> {
+    fn resolve(
+        &self,
+        _client_hello: rustls::server::ClientHello<'_>,
+    ) -> Option<Arc<rustls::sign::CertifiedKey>> {
         Some(Arc::clone(&self.0))
     }
 }
