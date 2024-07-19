@@ -97,6 +97,12 @@ pub struct Config {
     ///
     /// Disabled by default.
     pub cache_size: usize,
+
+    /// Whether to include our listen addresses in our responses. If enabled,
+    /// we will effectively only share our external addresses.
+    ///
+    /// Disabled by default.
+    pub hide_listen_addrs: bool,
 }
 
 impl Config {
@@ -110,6 +116,7 @@ impl Config {
             interval: Duration::from_secs(5 * 60),
             push_listen_addr_updates: false,
             cache_size: 100,
+            hide_listen_addrs: false,
         }
     }
 
@@ -137,6 +144,12 @@ impl Config {
     /// Configures the size of the LRU cache, caching addresses of discovered peers.
     pub fn with_cache_size(mut self, cache_size: usize) -> Self {
         self.cache_size = cache_size;
+        self
+    }
+
+    /// Configures whether we prevent sending out our listen addresses.
+    pub fn with_hide_listen_addrs(mut self, b: bool) -> Self {
+        self.hide_listen_addrs = b;
         self
     }
 }
@@ -207,11 +220,11 @@ impl Behaviour {
     }
 
     fn all_addresses(&self) -> HashSet<Multiaddr> {
-        self.listen_addresses
-            .iter()
-            .chain(self.external_addresses.iter())
-            .cloned()
-            .collect()
+        let mut addrs = HashSet::from_iter(self.external_addresses.iter().cloned());
+        if !self.config.hide_listen_addrs {
+            addrs.extend(self.listen_addresses.iter().cloned());
+        };
+        addrs
     }
 }
 
