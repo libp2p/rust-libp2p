@@ -3,6 +3,7 @@
 - Add `ConnectionId` in `Event`.
   See [PR 4981](https://github.com/libp2p/rust-libp2p/pull/4981).
 - Add `hide_listen_addrs` option to prevent leaking (local) listen addresses.
+  See [PR 5507](https://github.com/libp2p/rust-libp2p/pull/5507).
 
 ## 0.44.2
 
