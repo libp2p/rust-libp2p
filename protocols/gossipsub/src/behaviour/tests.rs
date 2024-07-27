@@ -270,6 +270,7 @@ where
                 connection_id,
                 endpoint: &fake_endpoint,
                 remaining_established: active_connections,
+                cause: None,
             }));
         }
     }

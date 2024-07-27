@@ -5,6 +5,8 @@
 ## 0.17.3
 - Use `web-time` instead of `instant`.
   See [PR 5347](https://github.com/libp2p/rust-libp2p/pull/5347).
+- Add resource limits to `CircuitReq` to be set
+  See [PR 5493](https://github.com/libp2p/rust-libp2p/pull/5493)  
 
 ## 0.17.2
 

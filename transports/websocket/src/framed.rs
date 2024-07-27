@@ -561,7 +561,7 @@ fn location_to_multiaddr<T>(location: &str) -> Result<Multiaddr, Error<T>> {
 /// The websocket connection.
 pub struct Connection<T> {
     receiver: BoxStream<'static, Result<Incoming, connection::Error>>,
-    sender: Pin<Box<dyn Sink<OutgoingData, Error = connection::Error> + Send>>,
+    sender: Pin<Box<dyn Sink<OutgoingData, Error = quicksink::Error<connection::Error>> + Send>>,
     _marker: std::marker::PhantomData<T>,
 }
 

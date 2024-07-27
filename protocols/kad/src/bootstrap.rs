@@ -44,7 +44,8 @@ impl Status {
         }
     }
 
-    pub(crate) fn on_new_peer_in_routing_table(&mut self) {
+    /// Trigger a bootstrap now or after the configured `automatic_throttle` if configured.
+    pub(crate) fn trigger(&mut self) {
         // Registering `self.throttle_timer` means scheduling a bootstrap.
         // A bootstrap will be triggered when `self.throttle_timer` finishes.
         // A `throttle_timer` is useful to not trigger a batch of bootstraps when a
@@ -61,19 +62,23 @@ impl Status {
         }
     }
 
+    pub(crate) fn reset_timers(&mut self) {
+        // Canceling the `throttle_timer` if any and resetting the `delay` if any.
+        self.throttle_timer = None;
+
+        if let Some((interval, delay)) = self.interval_and_delay.as_mut() {
+            delay.reset(*interval);
+        }
+    }
+
     pub(crate) fn on_started(&mut self) {
         // No periodic or automatic bootstrap will be triggered as long as
         // `self.current_bootstrap_requests > 0` but the user could still manually
         // trigger a bootstrap.
         self.current_bootstrap_requests += 1;
 
-        // Canceling the `throttle_timer` if any since a bootstrap request is being triggered right now.
-        self.throttle_timer = None;
-
-        // Resetting the `delay` if any since a bootstrap request is being triggered right now.
-        if let Some((interval, delay)) = self.interval_and_delay.as_mut() {
-            delay.reset(*interval);
-        }
+        // Resetting the Status timers since a bootstrap request is being triggered right now.
+        self.reset_timers();
     }
 
     pub(crate) fn on_finish(&mut self) {
@@ -197,7 +202,7 @@ mod tests {
             "bootstrap to not be triggered immediately because periodic bootstrap is in ~1s"
         );
 
-        status.on_new_peer_in_routing_table(); // Connected to a new peer though!
+        status.trigger(); // Connected to a new peer though!
         assert!(
             status.next().now_or_never().is_some(),
             "bootstrap to be triggered immediately because we connected to a new peer"
@@ -222,7 +227,7 @@ mod tests {
             "bootstrap to not be triggered immediately because periodic bootstrap is in ~1s"
         );
 
-        status.on_new_peer_in_routing_table(); // Connected to a new peer though!
+        status.trigger(); // Connected to a new peer though!
         assert!(
             status.next().now_or_never().is_none(),
             "bootstrap to not be triggered immediately because throttle is 5ms"
@@ -243,7 +248,7 @@ mod tests {
         // User manually triggered a bootstrap
         do_bootstrap(&mut status);
 
-        status.on_new_peer_in_routing_table(); // Connected to a new peer though!
+        status.trigger(); // Connected to a new peer though!
 
         assert!(
             status.next().now_or_never().is_some(),
@@ -256,7 +261,7 @@ mod tests {
     ) {
         let mut status = Status::new(Some(MS_100), Some(MS_5));
 
-        status.on_new_peer_in_routing_table();
+        status.trigger();
 
         let start = Instant::now();
         await_and_do_bootstrap(&mut status).await;
@@ -276,7 +281,7 @@ mod tests {
     ) {
         let mut status = Status::new(None, Some(Duration::ZERO));
 
-        status.on_new_peer_in_routing_table();
+        status.trigger();
 
         status.next().await;
     }
@@ -300,10 +305,10 @@ mod tests {
     ) {
         let mut status = Status::new(None, Some(MS_100));
 
-        status.on_new_peer_in_routing_table();
+        status.trigger();
         for _ in 0..10 {
             Delay::new(MS_100 / 2).await;
-            status.on_new_peer_in_routing_table(); // should reset throttle_timer
+            status.trigger(); // should reset throttle_timer
         }
         assert!(
             status.next().now_or_never().is_none(),

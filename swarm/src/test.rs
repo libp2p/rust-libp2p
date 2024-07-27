@@ -303,6 +303,7 @@ where
             connection_id,
             endpoint,
             remaining_established,
+            cause,
         }: ConnectionClosed,
     ) {
         let mut other_closed_connections = self
@@ -352,6 +353,7 @@ where
                 connection_id,
                 endpoint,
                 remaining_established,
+                cause,
             }));
     }
 }

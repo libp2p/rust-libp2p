@@ -2,6 +2,11 @@
 
 - Implement refactored `Transport`.
   See [PR 4568](https://github.com/libp2p/rust-libp2p/pull/4568)
+## 0.43.2
+
+- fix: Avoid websocket panic on polling after errors. See [PR 5482].
+
+[PR 5482]: https://github.com/libp2p/rust-libp2p/pull/5482
 
 ## 0.43.1
 

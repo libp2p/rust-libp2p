@@ -914,6 +914,7 @@ where
                         peer_id,
                         connection_id: id,
                         endpoint: &endpoint,
+                        cause: error.as_ref(),
                         remaining_established: num_established as usize,
                     }));
                 self.pending_swarm_events
@@ -1390,6 +1391,14 @@ impl Config {
     pub fn with_executor(executor: impl Executor + Send + 'static) -> Self {
         Self {
             pool_config: PoolConfig::new(Some(Box::new(executor))),
+        }
+    }
+
+    #[doc(hidden)]
+    /// Used on connection benchmarks.
+    pub fn without_executor() -> Self {
+        Self {
+            pool_config: PoolConfig::new(None),
         }
     }
 

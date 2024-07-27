@@ -56,6 +56,7 @@ pub trait Provider: 'static {
     /// Create a new instance of the `IfWatcher` type.
     fn new_watcher() -> Result<Self::Watcher, std::io::Error>;
 
+    #[track_caller]
     fn spawn(task: impl Future<Output = ()> + Send + 'static) -> Self::TaskHandle;
 }
 
