@@ -287,12 +287,12 @@ impl<P: Provider> Transport for GenTransport<P> {
                         if let Some(occupied) = self.dialer.get(&socket_family) {
                             occupied.clone()
                         } else {
-                            let endpoint = self.binded_socket(socket_addr)?;
+                            let endpoint = self.bound_socket(socket_addr)?;
                             self.dialer.insert(socket_family, endpoint.clone());
                             endpoint
                         }
                     } else {
-                        self.binded_socket(socket_addr)?
+                        self.bound_socket(socket_addr)?
                     };
                     dialer
                 };
