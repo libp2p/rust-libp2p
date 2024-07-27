@@ -406,7 +406,7 @@ impl NetworkBehaviour for Behaviour {
                 match self.our_observed_addresses.entry(connection_id) {
                     Entry::Vacant(not_yet_observed) => {
                         not_yet_observed.insert(observed.clone());
-                        self.emit_new_external_addr_candidate_event(id, &observed);
+                        self.emit_new_external_addr_candidate_event(connection_id, &observed);
                     }
                     Entry::Occupied(already_observed) if already_observed.get() == &observed => {
                         // No-op, we already observed this address.
@@ -419,7 +419,7 @@ impl NetworkBehaviour for Behaviour {
                         );
 
                         *already_observed.get_mut() = observed.clone();
-                        self.emit_new_external_addr_candidate_event(id, &observed);
+                        self.emit_new_external_addr_candidate_event(connection_id, &observed);
                     }
                 }
             }
