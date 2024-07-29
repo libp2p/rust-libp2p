@@ -3,6 +3,9 @@
   See [PR 5347](https://github.com/libp2p/rust-libp2p/pull/5347).
 - Fix manual closure of relayed listener.
   See [PR 5491](https://github.com/libp2p/rust-libp2p/pull/5491)
+- Add resource limits to `CircuitReq` to be set
+  See [PR 5493](https://github.com/libp2p/rust-libp2p/pull/5493)  
+
 
 ## 0.17.2
 
