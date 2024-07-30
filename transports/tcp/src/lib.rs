@@ -254,9 +254,9 @@ where
         if let Some(nodelay) = self.config.nodelay {
             socket.set_nodelay(nodelay)?;
         }
+        socket.set_reuse_address(true)?;
         #[cfg(all(unix, not(any(target_os = "solaris", target_os = "illumos"))))]
         if port_use == PortUse::Reuse {
-            socket.set_reuse_address(true)?;
             socket.set_reuse_port(true)?;
         }
 
