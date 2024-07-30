@@ -384,6 +384,8 @@ impl NetworkBehaviour for Behaviour {
                 info.listen_addrs
                     .retain(|addr| multiaddr_matches_peer_id(addr, &peer_id));
 
+                info.listen_addrs.sort_by_key(value_of_multiaddr);
+
                 let observed = info.observed_addr.clone();
                 self.events
                     .push_back(ToSwarm::GenerateEvent(Event::Received {
@@ -597,6 +599,18 @@ fn multiaddr_matches_peer_id(addr: &Multiaddr, peer_id: &PeerId) -> bool {
         return multi_addr_peer_id == *peer_id;
     }
     true
+}
+
+fn value_of_multiaddr(addr: &Multiaddr) -> u8 {
+    for protocol in addr.iter() {
+        match protocol {
+            Protocol::Memory(_) => return u8::MAX,
+            Protocol::Tcp(_) => return u8::MAX - 1,
+            Protocol::Udp(_) => return u8::MAX - 2,
+            _ => {}
+        }
+    }
+    u8::MIN
 }
 
 struct PeerCache(Option<PeerAddresses>);
