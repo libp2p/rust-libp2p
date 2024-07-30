@@ -604,13 +604,11 @@ fn multiaddr_matches_peer_id(addr: &Multiaddr, peer_id: &PeerId) -> bool {
 fn value_of_multiaddr(addr: &Multiaddr) -> u8 {
     for protocol in addr.iter() {
         match protocol {
-            Protocol::Memory(_) => return u8::MAX,
-            Protocol::Tcp(_) => return u8::MAX - 1,
-            Protocol::Udp(_) => return u8::MAX - 2,
+            Protocol::Memory(_) => return u8::MIN,
             _ => {}
         }
     }
-    u8::MIN
+    u8::MAX
 }
 
 struct PeerCache(Option<PeerAddresses>);
