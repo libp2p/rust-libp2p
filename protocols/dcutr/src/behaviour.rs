@@ -269,6 +269,7 @@ impl NetworkBehaviour for Behaviour {
                 let opts = DialOpts::peer_id(event_source)
                     .addresses(remote_addrs)
                     .condition(dial_opts::PeerCondition::Always)
+                    .allocate_new_port()
                     .build();
 
                 let maybe_direct_connection_id = opts.connection_id();
