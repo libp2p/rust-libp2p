@@ -179,7 +179,7 @@ pub(crate) mod native {
 
         pub(crate) async fn rpush(&self, key: &str, value: String) -> Result<()> {
             let mut conn = self.0.get_async_connection().await?;
-            Ok(conn.rpush(key, value).await?)
+            conn.rpush(key, value).await.map_err(Into::into)
         }
     }
 }

@@ -26,6 +26,25 @@ use web_time::Instant;
 
 pub const PROTOCOL_NAME: StreamProtocol = StreamProtocol::new("/ipfs/ping/1.0.0");
 
+/// The `Ping` protocol upgrade.
+///
+/// The ping protocol sends 32 bytes of random data in configurable
+/// intervals over a single outbound substream, expecting to receive
+/// the same bytes as a response. At the same time, incoming pings
+/// on inbound substreams are answered by sending back the received bytes.
+///
+/// At most a single inbound and outbound substream is kept open at
+/// any time. In case of a ping timeout or another error on a substream, the
+/// substream is dropped.
+///
+/// Successful pings report the round-trip time.
+///
+/// > **Note**: The round-trip time of a ping may be subject to delays induced
+/// >           by the underlying transport, e.g. in the case of TCP there is
+/// >           Nagle's algorithm, delayed acks and similar configuration options
+/// >           which can affect latencies especially on otherwise low-volume
+/// >           connections.
+
 const PING_SIZE: usize = 32;
 
 /// Sends a ping and waits for the pong.
