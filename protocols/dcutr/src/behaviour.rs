@@ -27,7 +27,7 @@ use libp2p_core::multiaddr::Protocol;
 use libp2p_core::transport::PortUse;
 use libp2p_core::{Endpoint, Multiaddr};
 use libp2p_identity::PeerId;
-use libp2p_swarm::behaviour::{ConnectionClosed, DialFailure, FromSwarm};
+use libp2p_swarm::behaviour::{ConnectionClosed, ConnectionEstablished, DialFailure, FromSwarm};
 use libp2p_swarm::dial_opts::{self, DialOpts};
 use libp2p_swarm::{
     dummy, ConnectionDenied, ConnectionHandler, ConnectionId, NewExternalAddrCandidate, THandler,
@@ -302,7 +302,6 @@ impl NetworkBehaviour for Behaviour {
                     .condition(dial_opts::PeerCondition::Always)
                     .addresses(remote_addrs)
                     .override_role()
-                    .allocate_new_port()
                     .build();
 
                 let maybe_direct_connection_id = opts.connection_id();
