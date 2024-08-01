@@ -27,7 +27,7 @@ use libp2p_core::multiaddr::Protocol;
 use libp2p_core::transport::PortUse;
 use libp2p_core::{Endpoint, Multiaddr};
 use libp2p_identity::PeerId;
-use libp2p_swarm::behaviour::{ConnectionClosed, ConnectionEstablished, DialFailure, FromSwarm};
+use libp2p_swarm::behaviour::{ConnectionClosed, DialFailure, FromSwarm};
 use libp2p_swarm::dial_opts::{self, DialOpts};
 use libp2p_swarm::{
     dummy, ConnectionDenied, ConnectionHandler, ConnectionId, NewExternalAddrCandidate, THandler,
