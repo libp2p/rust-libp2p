@@ -1,6 +1,6 @@
 ## 0.3.4
 
-- Add support for `/tls/ws`.
+- Add support for `/tls/ws` and keep `/wss` backward compatible.
   See [PR 5523](https://github.com/libp2p/rust-libp2p/pull/5523).
 
 ## 0.3.3
