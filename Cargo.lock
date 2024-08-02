@@ -3515,7 +3515,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-websocket-websys"
-version = "0.3.2"
+version = "0.3.3"
 dependencies = [
  "bytes",
  "futures",

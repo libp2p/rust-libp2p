@@ -1538,9 +1538,7 @@ impl Config {
 #[derive(Debug)]
 pub enum DialError {
     /// The peer identity obtained on the connection matches the local peer.
-    LocalPeerId {
-        endpoint: ConnectedPoint,
-    },
+    LocalPeerId { endpoint: ConnectedPoint },
     /// No addresses have been provided by [`NetworkBehaviour::handle_pending_outbound_connection`] and [`DialOpts`].
     NoAddresses,
     /// The provided [`dial_opts::PeerCondition`] evaluated to false and thus
@@ -1553,9 +1551,10 @@ pub enum DialError {
         obtained: PeerId,
         endpoint: ConnectedPoint,
     },
-    Denied {
-        cause: ConnectionDenied,
-    },
+    /// One of the [`NetworkBehaviour`]s rejected the outbound connection
+    /// via [`NetworkBehaviour::handle_pending_outbound_connection`] or
+    /// [`NetworkBehaviour::handle_established_outbound_connection`].
+    Denied { cause: ConnectionDenied },
     /// An error occurred while negotiating the transport protocol(s) on a connection.
     Transport(Vec<(Multiaddr, TransportError<io::Error>)>),
 }
