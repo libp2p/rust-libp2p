@@ -23,5 +23,11 @@ mod tests {
         let protocol_stack = as_string(&ma);
 
         assert_eq!(protocol_stack, "/ip6/tcp/wss/p2p");
+
+        let ma = Multiaddr::try_from("/ip6/2001:8a0:7ac5:4201:3ac9:86ff:fe31:7095/:tcp/8000/tls/ws/p2p/QmcgpsyWgH8Y8ajJz1Cu72KnS5uo2Aa2LpzU7kinSupNKC").expect("testbad");
+
+        let protocol_stack = as_string(&ma);
+
+        assert_eq!(protocol_stack, "/ip6/tcp/tls/ws/p2p");
     }
 }
