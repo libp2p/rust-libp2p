@@ -56,6 +56,7 @@ pub mod transport;
 pub mod upgrade;
 
 pub use connection::{ConnectedPoint, Endpoint};
+pub use libp2p_identity::PeerId;
 pub use multiaddr::Multiaddr;
 pub use multihash;
 pub use muxing::StreamMuxer;

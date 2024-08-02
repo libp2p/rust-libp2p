@@ -447,6 +447,12 @@ impl AsyncWrite for Connection {
 
 impl Drop for Connection {
     fn drop(&mut self) {
+        // Unset event listeners, as otherwise they will be called by JS after the handlers have already been dropped.
+        self.inner.socket.set_onclose(None);
+        self.inner.socket.set_onerror(None);
+        self.inner.socket.set_onopen(None);
+        self.inner.socket.set_onmessage(None);
+
         // In browsers, userland code is not allowed to use any other status code than 1000: https://websockets.spec.whatwg.org/#dom-websocket-close
         const REGULAR_CLOSE: u16 = 1000; // See https://www.rfc-editor.org/rfc/rfc6455.html#section-7.4.1.
 

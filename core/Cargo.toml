@@ -35,8 +35,8 @@ void = "1"
 
 [dev-dependencies]
 async-std = { version = "1.6.2", features = ["attributes"] }
-libp2p-mplex = { path = "../muxers/mplex" }                    # Using `path` here because this is a cyclic dev-dependency which otherwise breaks releasing.
-libp2p-noise = { path = "../transports/noise" }                # Using `path` here because this is a cyclic dev-dependency which otherwise breaks releasing.
+libp2p-mplex = { path = "../muxers/mplex" } # Using `path` here because this is a cyclic dev-dependency which otherwise breaks releasing.
+libp2p-noise = { path = "../transports/noise" } # Using `path` here because this is a cyclic dev-dependency which otherwise breaks releasing.
 multihash = { workspace = true, features = ["arb"] }
 quickcheck = { workspace = true }
 libp2p-identity = { workspace = true, features = ["ed25519", "rand"] }

@@ -23,7 +23,6 @@
 mod test;
 
 use crate::addresses::Addresses;
-use crate::bootstrap;
 use crate::handler::{Handler, HandlerEvent, HandlerIn, RequestId};
 use crate::kbucket::{self, Distance, KBucketsTable, NodeStatus};
 use crate::protocol::{ConnectionType, KadPeer, ProtocolConfig};
@@ -33,9 +32,9 @@ use crate::record::{
     store::{self, RecordStore},
     ProviderRecord, Record,
 };
-use crate::K_VALUE;
+use crate::{bootstrap, K_VALUE};
 use crate::{jobs::*, protocol};
-use fnv::{FnvHashMap, FnvHashSet};
+use fnv::FnvHashSet;
 use libp2p_core::{ConnectedPoint, Endpoint, Multiaddr};
 use libp2p_identity::PeerId;
 use libp2p_swarm::behaviour::{
@@ -47,7 +46,6 @@ use libp2p_swarm::{
     ListenAddresses, NetworkBehaviour, NotifyHandler, StreamProtocol, THandler, THandlerInEvent,
     THandlerOutEvent, ToSwarm,
 };
-use smallvec::SmallVec;
 use std::collections::{BTreeMap, HashMap, HashSet, VecDeque};
 use std::fmt;
 use std::num::NonZeroUsize;
@@ -76,7 +74,7 @@ pub struct Behaviour<TStore> {
     record_filtering: StoreInserts,
 
     /// The currently active (i.e. in-progress) queries.
-    queries: QueryPool<QueryInner>,
+    queries: QueryPool,
 
     /// The currently connected peers.
     ///
@@ -270,7 +268,7 @@ impl Config {
     /// Sets the replication factor to use.
     ///
     /// The replication factor determines to how many closest peers
-    /// a record is replicated. The default is [`K_VALUE`].
+    /// a record is replicated. The default is [`crate::K_VALUE`].
     pub fn set_replication_factor(&mut self, replication_factor: NonZeroUsize) -> &mut Self {
         self.query_config.replication_factor = replication_factor;
         self
@@ -429,7 +427,7 @@ impl Config {
     /// Sets the time to wait before calling [`Behaviour::bootstrap`] after a new peer is inserted in the routing table.
     /// This prevent cascading bootstrap requests when multiple peers are inserted into the routing table "at the same time".
     /// This also allows to wait a little bit for other potential peers to be inserted into the routing table before
-    /// triggering a bootstrap, giving more context to the future bootstrap request.  
+    /// triggering a bootstrap, giving more context to the future bootstrap request.
     ///
     /// * Default to `500` ms.
     /// * Set to `Some(Duration::ZERO)` to never wait before triggering a bootstrap request when a new peer
@@ -606,7 +604,8 @@ where
                 };
                 match entry.insert(addresses.clone(), status) {
                     kbucket::InsertResult::Inserted => {
-                        self.bootstrap_status.on_new_peer_in_routing_table();
+                        self.bootstrap_on_low_peers();
+
                         self.queued_events.push_back(ToSwarm::GenerateEvent(
                             Event::RoutingUpdated {
                                 peer: *peer,
@@ -725,8 +724,7 @@ where
             step: ProgressStep::first(),
         };
         let peer_keys: Vec<kbucket::Key<PeerId>> = self.kbuckets.closest_keys(&target).collect();
-        let inner = QueryInner::new(info);
-        self.queries.add_iter_closest(target, peer_keys, inner)
+        self.queries.add_iter_closest(target, peer_keys, info)
     }
 
     /// Returns closest peers to the given key; takes peers from local routing table only.
@@ -775,8 +773,7 @@ where
             }
         };
         let peers = self.kbuckets.closest_keys(&target);
-        let inner = QueryInner::new(info);
-        let id = self.queries.add_iter_closest(target.clone(), peers, inner);
+        let id = self.queries.add_iter_closest(target.clone(), peers, info);
 
         // No queries were actually done for the results yet.
         let stats = QueryStats::empty();
@@ -832,8 +829,7 @@ where
             quorum,
             phase: PutRecordPhase::GetClosestPeers,
         };
-        let inner = QueryInner::new(info);
-        Ok(self.queries.add_iter_closest(target.clone(), peers, inner))
+        Ok(self.queries.add_iter_closest(target.clone(), peers, info))
     }
 
     /// Stores a record at specific peers, without storing it locally.
@@ -878,8 +874,7 @@ where
                 get_closest_peers_stats: QueryStats::empty(),
             },
         };
-        let inner = QueryInner::new(info);
-        self.queries.add_fixed(peers, inner)
+        self.queries.add_fixed(peers, info)
     }
 
     /// Removes the record with the given key from _local_ storage,
@@ -925,11 +920,11 @@ where
     /// > See [`Behaviour::add_address`].
     ///
     /// > **Note**: Bootstrap does not require to be called manually. It is periodically
-    /// invoked at regular intervals based on the configured `periodic_bootstrap_interval` (see
-    /// [`Config::set_periodic_bootstrap_interval`] for details) and it is also automatically invoked
-    /// when a new peer is inserted in the routing table.
-    /// This parameter is used to call [`Behaviour::bootstrap`] periodically and automatically
-    /// to ensure a healthy routing table.
+    /// > invoked at regular intervals based on the configured `periodic_bootstrap_interval` (see
+    /// > [`Config::set_periodic_bootstrap_interval`] for details) and it is also automatically invoked
+    /// > when a new peer is inserted in the routing table.
+    /// > This parameter is used to call [`Behaviour::bootstrap`] periodically and automatically
+    /// > to ensure a healthy routing table.
     pub fn bootstrap(&mut self) -> Result<QueryId, NoKnownPeers> {
         let local_key = *self.kbuckets.local_key();
         let info = QueryInfo::Bootstrap {
@@ -939,11 +934,11 @@ where
         };
         let peers = self.kbuckets.closest_keys(&local_key).collect::<Vec<_>>();
         if peers.is_empty() {
+            self.bootstrap_status.reset_timers();
             Err(NoKnownPeers())
         } else {
             self.bootstrap_status.on_started();
-            let inner = QueryInner::new(info);
-            Ok(self.queries.add_iter_closest(local_key, peers, inner))
+            Ok(self.queries.add_iter_closest(local_key, peers, info))
         }
     }
 
@@ -988,8 +983,7 @@ where
             key,
             phase: AddProviderPhase::GetClosestPeers,
         };
-        let inner = QueryInner::new(info);
-        let id = self.queries.add_iter_closest(target.clone(), peers, inner);
+        let id = self.queries.add_iter_closest(target.clone(), peers, info);
         Ok(id)
     }
 
@@ -1029,8 +1023,7 @@ where
 
         let target = kbucket::Key::new(key.clone());
         let peers = self.kbuckets.closest_keys(&target);
-        let inner = QueryInner::new(info);
-        let id = self.queries.add_iter_closest(target.clone(), peers, inner);
+        let id = self.queries.add_iter_closest(target.clone(), peers, info);
 
         // No queries were actually done for the results yet.
         let stats = QueryStats::empty();
@@ -1164,7 +1157,7 @@ where
                     "Peer reported by source in query"
                 );
                 let addrs = peer.multiaddrs.iter().cloned().collect();
-                query.inner.addresses.insert(peer.node_id, addrs);
+                query.peers.addresses.insert(peer.node_id, addrs);
             }
             query.on_success(source, others_iter.cloned().map(|kp| kp.node_id))
         }
@@ -1253,8 +1246,7 @@ where
         };
         let target = kbucket::Key::new(key);
         let peers = self.kbuckets.closest_keys(&target);
-        let inner = QueryInner::new(info);
-        self.queries.add_iter_closest(target.clone(), peers, inner);
+        self.queries.add_iter_closest(target.clone(), peers, info);
     }
 
     /// Starts an iterative `PUT_VALUE` query for the given record.
@@ -1268,8 +1260,7 @@ where
             context,
             phase: PutRecordPhase::GetClosestPeers,
         };
-        let inner = QueryInner::new(info);
-        self.queries.add_iter_closest(target.clone(), peers, inner);
+        self.queries.add_iter_closest(target.clone(), peers, info);
     }
 
     /// Updates the routing table with a new connection status and address of a peer.
@@ -1334,7 +1325,8 @@ where
                         let addresses = Addresses::new(a);
                         match entry.insert(addresses.clone(), new_status) {
                             kbucket::InsertResult::Inserted => {
-                                self.bootstrap_status.on_new_peer_in_routing_table();
+                                self.bootstrap_on_low_peers();
+
                                 let event = Event::RoutingUpdated {
                                     peer,
                                     is_new_peer: true,
@@ -1385,12 +1377,25 @@ where
         }
     }
 
+    /// A new peer has been inserted in the routing table but we check if the routing
+    /// table is currently small (less that `K_VALUE` peers are present) and only
+    /// trigger a bootstrap in that case
+    fn bootstrap_on_low_peers(&mut self) {
+        if self
+            .kbuckets()
+            .map(|kbucket| kbucket.num_entries())
+            .sum::<usize>()
+            < K_VALUE.get()
+        {
+            self.bootstrap_status.trigger();
+        }
+    }
+
     /// Handles a finished (i.e. successful) query.
-    fn query_finished(&mut self, q: Query<QueryInner>) -> Option<Event> {
+    fn query_finished(&mut self, q: Query) -> Option<Event> {
         let query_id = q.id();
         tracing::trace!(query=?query_id, "Query finished");
-        let result = q.into_result();
-        match result.inner.info {
+        match q.info {
             QueryInfo::Bootstrap {
                 peer,
                 remaining,
@@ -1444,9 +1449,8 @@ where
                         step: step.next(),
                     };
                     let peers = self.kbuckets.closest_keys(&target);
-                    let inner = QueryInner::new(info);
                     self.queries
-                        .continue_iter_closest(query_id, target, peers, inner);
+                        .continue_iter_closest(query_id, target, peers, info);
                 } else {
                     step.last = true;
                     self.bootstrap_status.on_finish();
@@ -1454,7 +1458,7 @@ where
 
                 Some(Event::OutboundQueryProgressed {
                     id: query_id,
-                    stats: result.stats,
+                    stats: q.stats,
                     result: QueryResult::Bootstrap(Ok(BootstrapOk {
                         peer,
                         num_remaining,
@@ -1468,10 +1472,10 @@ where
 
                 Some(Event::OutboundQueryProgressed {
                     id: query_id,
-                    stats: result.stats,
+                    stats: q.stats,
                     result: QueryResult::GetClosestPeers(Ok(GetClosestPeersOk {
                         key,
-                        peers: result.peers.collect(),
+                        peers: q.peers.into_peerinfos_iter().collect(),
                     })),
                     step,
                 })
@@ -1482,10 +1486,10 @@ where
 
                 Some(Event::OutboundQueryProgressed {
                     id: query_id,
-                    stats: result.stats,
+                    stats: q.stats,
                     result: QueryResult::GetProviders(Ok(
                         GetProvidersOk::FinishedWithNoAdditionalRecord {
-                            closest_peers: result.peers.collect(),
+                            closest_peers: q.peers.into_peerids_iter().collect(),
                         },
                     )),
                     step,
@@ -1499,16 +1503,17 @@ where
             } => {
                 let provider_id = self.local_peer_id;
                 let external_addresses = self.external_addresses.iter().cloned().collect();
-                let inner = QueryInner::new(QueryInfo::AddProvider {
+                let info = QueryInfo::AddProvider {
                     context,
                     key,
                     phase: AddProviderPhase::AddProvider {
                         provider_id,
                         external_addresses,
-                        get_closest_peers_stats: result.stats,
+                        get_closest_peers_stats: q.stats,
                     },
-                });
-                self.queries.continue_fixed(query_id, result.peers, inner);
+                };
+                self.queries
+                    .continue_fixed(query_id, q.peers.into_peerids_iter(), info);
                 None
             }
 
@@ -1523,13 +1528,13 @@ where
             } => match context {
                 AddProviderContext::Publish => Some(Event::OutboundQueryProgressed {
                     id: query_id,
-                    stats: get_closest_peers_stats.merge(result.stats),
+                    stats: get_closest_peers_stats.merge(q.stats),
                     result: QueryResult::StartProviding(Ok(AddProviderOk { key })),
                     step: ProgressStep::first_and_last(),
                 }),
                 AddProviderContext::Republish => Some(Event::OutboundQueryProgressed {
                     id: query_id,
-                    stats: get_closest_peers_stats.merge(result.stats),
+                    stats: get_closest_peers_stats.merge(q.stats),
                     result: QueryResult::RepublishProvider(Ok(AddProviderOk { key })),
                     step: ProgressStep::first_and_last(),
                 }),
@@ -1548,12 +1553,12 @@ where
                 } else {
                     Err(GetRecordError::NotFound {
                         key,
-                        closest_peers: result.peers.collect(),
+                        closest_peers: q.peers.into_peerids_iter().collect(),
                     })
                 };
                 Some(Event::OutboundQueryProgressed {
                     id: query_id,
-                    stats: result.stats,
+                    stats: q.stats,
                     result: QueryResult::GetRecord(results),
                     step,
                 })
@@ -1571,11 +1576,11 @@ where
                     quorum,
                     phase: PutRecordPhase::PutRecord {
                         success: vec![],
-                        get_closest_peers_stats: result.stats,
+                        get_closest_peers_stats: q.stats,
                     },
                 };
-                let inner = QueryInner::new(info);
-                self.queries.continue_fixed(query_id, result.peers, inner);
+                self.queries
+                    .continue_fixed(query_id, q.peers.into_peerids_iter(), info);
                 None
             }
 
@@ -1604,14 +1609,14 @@ where
                     PutRecordContext::Publish | PutRecordContext::Custom => {
                         Some(Event::OutboundQueryProgressed {
                             id: query_id,
-                            stats: get_closest_peers_stats.merge(result.stats),
+                            stats: get_closest_peers_stats.merge(q.stats),
                             result: QueryResult::PutRecord(mk_result(record.key)),
                             step: ProgressStep::first_and_last(),
                         })
                     }
                     PutRecordContext::Republish => Some(Event::OutboundQueryProgressed {
                         id: query_id,
-                        stats: get_closest_peers_stats.merge(result.stats),
+                        stats: get_closest_peers_stats.merge(q.stats),
                         result: QueryResult::RepublishRecord(mk_result(record.key)),
                         step: ProgressStep::first_and_last(),
                     }),
@@ -1625,11 +1630,10 @@ where
     }
 
     /// Handles a query that timed out.
-    fn query_timeout(&mut self, query: Query<QueryInner>) -> Option<Event> {
+    fn query_timeout(&mut self, query: Query) -> Option<Event> {
         let query_id = query.id();
         tracing::trace!(query=?query_id, "Query timed out");
-        let result = query.into_result();
-        match result.inner.info {
+        match query.info {
             QueryInfo::Bootstrap {
                 peer,
                 mut remaining,
@@ -1647,9 +1651,8 @@ where
                         step: step.next(),
                     };
                     let peers = self.kbuckets.closest_keys(&target);
-                    let inner = QueryInner::new(info);
                     self.queries
-                        .continue_iter_closest(query_id, target, peers, inner);
+                        .continue_iter_closest(query_id, target, peers, info);
                 } else {
                     step.last = true;
                     self.bootstrap_status.on_finish();
@@ -1657,7 +1660,7 @@ where
 
                 Some(Event::OutboundQueryProgressed {
                     id: query_id,
-                    stats: result.stats,
+                    stats: query.stats,
                     result: QueryResult::Bootstrap(Err(BootstrapError::Timeout {
                         peer,
                         num_remaining,
@@ -1669,13 +1672,13 @@ where
             QueryInfo::AddProvider { context, key, .. } => Some(match context {
                 AddProviderContext::Publish => Event::OutboundQueryProgressed {
                     id: query_id,
-                    stats: result.stats,
+                    stats: query.stats,
                     result: QueryResult::StartProviding(Err(AddProviderError::Timeout { key })),
                     step: ProgressStep::first_and_last(),
                 },
                 AddProviderContext::Republish => Event::OutboundQueryProgressed {
                     id: query_id,
-                    stats: result.stats,
+                    stats: query.stats,
                     result: QueryResult::RepublishProvider(Err(AddProviderError::Timeout { key })),
                     step: ProgressStep::first_and_last(),
                 },
@@ -1683,13 +1686,12 @@ where
 
             QueryInfo::GetClosestPeers { key, mut step } => {
                 step.last = true;
-
                 Some(Event::OutboundQueryProgressed {
                     id: query_id,
-                    stats: result.stats,
+                    stats: query.stats,
                     result: QueryResult::GetClosestPeers(Err(GetClosestPeersError::Timeout {
                         key,
-                        peers: result.peers.collect(),
+                        peers: query.peers.into_peerinfos_iter().collect(),
                     })),
                     step,
                 })
@@ -1713,14 +1715,14 @@ where
                     PutRecordContext::Publish | PutRecordContext::Custom => {
                         Some(Event::OutboundQueryProgressed {
                             id: query_id,
-                            stats: result.stats,
+                            stats: query.stats,
                             result: QueryResult::PutRecord(err),
                             step: ProgressStep::first_and_last(),
                         })
                     }
                     PutRecordContext::Republish => Some(Event::OutboundQueryProgressed {
                         id: query_id,
-                        stats: result.stats,
+                        stats: query.stats,
                         result: QueryResult::RepublishRecord(err),
                         step: ProgressStep::first_and_last(),
                     }),
@@ -1745,7 +1747,7 @@ where
 
                 Some(Event::OutboundQueryProgressed {
                     id: query_id,
-                    stats: result.stats,
+                    stats: query.stats,
                     result: QueryResult::GetRecord(Err(GetRecordError::Timeout { key })),
                     step,
                 })
@@ -1756,10 +1758,10 @@ where
 
                 Some(Event::OutboundQueryProgressed {
                     id: query_id,
-                    stats: result.stats,
+                    stats: query.stats,
                     result: QueryResult::GetProviders(Err(GetProvidersError::Timeout {
                         key,
-                        closest_peers: result.peers.collect(),
+                        closest_peers: query.peers.into_peerids_iter().collect(),
                     })),
                     step,
                 })
@@ -1957,7 +1959,7 @@ where
         }
 
         for query in self.queries.iter_mut() {
-            if let Some(addrs) = query.inner.addresses.get_mut(&peer_id) {
+            if let Some(addrs) = query.peers.addresses.get_mut(&peer_id) {
                 addrs.retain(|a| a != address);
             }
         }
@@ -2029,10 +2031,10 @@ where
         //
         // Given two connected nodes: local node A and remote node B. Say node B
         // is not in node A's routing table. Additionally node B is part of the
-        // `QueryInner::addresses` list of an ongoing query on node A. Say Node
+        // `Query::addresses` list of an ongoing query on node A. Say Node
         // B triggers an address change and then disconnects. Later on the
         // earlier mentioned query on node A would like to connect to node B.
-        // Without replacing the address in the `QueryInner::addresses` set node
+        // Without replacing the address in the `Query::addresses` set node
         // A would attempt to dial the old and not the new address.
         //
         // While upholding correctness, iterating through all discovered
@@ -2040,7 +2042,7 @@ where
         // large performance impact. If so, the code below might be worth
         // revisiting.
         for query in self.queries.iter_mut() {
-            if let Some(addrs) = query.inner.addresses.get_mut(&peer) {
+            if let Some(addrs) = query.peers.addresses.get_mut(&peer) {
                 for addr in addrs.iter_mut() {
                     if addr == old {
                         *addr = new.clone();
@@ -2115,11 +2117,10 @@ where
         // Queue events for sending pending RPCs to the connected peer.
         // There can be only one pending RPC for a particular peer and query per definition.
         for (_peer_id, event) in self.queries.iter_mut().filter_map(|q| {
-            q.inner
-                .pending_rpcs
+            q.pending_rpcs
                 .iter()
                 .position(|(p, _)| p == &peer)
-                .map(|p| q.inner.pending_rpcs.remove(p))
+                .map(|p| q.pending_rpcs.remove(p))
         }) {
             handler.on_behaviour_event(event)
         }
@@ -2210,7 +2211,7 @@ where
 
         // We add to that a temporary list of addresses from the ongoing queries.
         for query in self.queries.iter() {
-            if let Some(addrs) = query.inner.addresses.get(&peer_id) {
+            if let Some(addrs) = query.peers.addresses.get(&peer_id) {
                 peer_addrs.extend(addrs.iter().cloned())
             }
         }
@@ -2311,7 +2312,7 @@ where
                         ref mut providers_found,
                         ref mut step,
                         ..
-                    } = query.inner.info
+                    } = query.info
                     {
                         *providers_found += provider_peers.len();
                         let providers = provider_peers.iter().map(|p| p.node_id).collect();
@@ -2403,7 +2404,7 @@ where
                         ref mut step,
                         ref mut found_a_record,
                         cache_candidates,
-                    } = &mut query.inner.info
+                    } = &mut query.info
                     {
                         if let Some(record) = record {
                             *found_a_record = true;
@@ -2457,7 +2458,7 @@ where
                         phase: PutRecordPhase::PutRecord { success, .. },
                         quorum,
                         ..
-                    } = &mut query.inner.info
+                    } = &mut query.info
                     {
                         success.push(source);
 
@@ -2569,7 +2570,7 @@ where
                         }
                     }
                     QueryPoolState::Waiting(Some((query, peer_id))) => {
-                        let event = query.inner.info.to_request(query.id());
+                        let event = query.info.to_request(query.id());
                         // TODO: AddProvider requests yield no response, so the query completes
                         // as soon as all requests have been sent. However, the handler should
                         // better emit an event when the request has been sent (and report
@@ -2578,7 +2579,7 @@ where
                         if let QueryInfo::AddProvider {
                             phase: AddProviderPhase::AddProvider { .. },
                             ..
-                        } = &query.inner.info
+                        } = &query.info
                         {
                             query.on_success(&peer_id, vec![])
                         }
@@ -2590,7 +2591,7 @@ where
                                 handler: NotifyHandler::Any,
                             });
                         } else if &peer_id != self.kbuckets.local_key().preimage() {
-                            query.inner.pending_rpcs.push((peer_id, event));
+                            query.pending_rpcs.push((peer_id, event));
                             self.queued_events.push_back(ToSwarm::Dial {
                                 opts: DialOpts::peer_id(peer_id).build(),
                             });
@@ -2628,9 +2629,22 @@ where
             }
             FromSwarm::DialFailure(dial_failure) => self.on_dial_failure(dial_failure),
             FromSwarm::AddressChange(address_change) => self.on_address_change(address_change),
+            FromSwarm::NewListenAddr(_) if self.connected_peers.is_empty() => {
+                // A new listen addr was just discovered and we have no connected peers,
+                // it can mean that our network interfaces were not up but they are now
+                // so it might be a good idea to trigger a bootstrap.
+                self.bootstrap_status.trigger();
+            }
             _ => {}
         }
     }
+}
+
+/// Peer Info combines a Peer ID with a set of multiaddrs that the peer is listening on.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PeerInfo {
+    pub peer_id: PeerId,
+    pub addrs: Vec<Multiaddr>,
 }
 
 /// A quorum w.r.t. the configured replication factor specifies the minimum
@@ -2977,14 +2991,14 @@ pub type GetClosestPeersResult = Result<GetClosestPeersOk, GetClosestPeersError>
 #[derive(Debug, Clone)]
 pub struct GetClosestPeersOk {
     pub key: Vec<u8>,
-    pub peers: Vec<PeerId>,
+    pub peers: Vec<PeerInfo>,
 }
 
 /// The error result of [`Behaviour::get_closest_peers`].
 #[derive(Debug, Clone, Error)]
 pub enum GetClosestPeersError {
     #[error("the request timed out")]
-    Timeout { key: Vec<u8>, peers: Vec<PeerId> },
+    Timeout { key: Vec<u8>, peers: Vec<PeerInfo> },
 }
 
 impl GetClosestPeersError {
@@ -3088,31 +3102,6 @@ impl From<kbucket::EntryView<kbucket::Key<PeerId>, Addresses>> for KadPeer {
                 NodeStatus::Connected => ConnectionType::Connected,
                 NodeStatus::Disconnected => ConnectionType::NotConnected,
             },
-        }
-    }
-}
-
-//////////////////////////////////////////////////////////////////////////////
-// Internal query state
-
-struct QueryInner {
-    /// The query-specific state.
-    info: QueryInfo,
-    /// Addresses of peers discovered during a query.
-    addresses: FnvHashMap<PeerId, SmallVec<[Multiaddr; 8]>>,
-    /// A map of pending requests to peers.
-    ///
-    /// A request is pending if the targeted peer is not currently connected
-    /// and these requests are sent as soon as a connection to the peer is established.
-    pending_rpcs: SmallVec<[(PeerId, HandlerIn); K_VALUE.get()]>,
-}
-
-impl QueryInner {
-    fn new(info: QueryInfo) -> Self {
-        QueryInner {
-            info,
-            addresses: Default::default(),
-            pending_rpcs: SmallVec::default(),
         }
     }
 }
@@ -3302,7 +3291,7 @@ pub enum PutRecordPhase {
 
 /// A mutable reference to a running query.
 pub struct QueryMut<'a> {
-    query: &'a mut Query<QueryInner>,
+    query: &'a mut Query,
 }
 
 impl<'a> QueryMut<'a> {
@@ -3312,7 +3301,7 @@ impl<'a> QueryMut<'a> {
 
     /// Gets information about the type and state of the query.
     pub fn info(&self) -> &QueryInfo {
-        &self.query.inner.info
+        &self.query.info
     }
 
     /// Gets execution statistics about the query.
@@ -3332,7 +3321,7 @@ impl<'a> QueryMut<'a> {
 
 /// An immutable reference to a running query.
 pub struct QueryRef<'a> {
-    query: &'a Query<QueryInner>,
+    query: &'a Query,
 }
 
 impl<'a> QueryRef<'a> {
@@ -3342,7 +3331,7 @@ impl<'a> QueryRef<'a> {
 
     /// Gets information about the type and state of the query.
     pub fn info(&self) -> &QueryInfo {
-        &self.query.inner.info
+        &self.query.info
     }
 
     /// Gets execution statistics about the query.

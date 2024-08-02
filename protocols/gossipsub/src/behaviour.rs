@@ -549,6 +549,7 @@ where
     /// Unsubscribes from a topic.
     ///
     /// Returns [`Ok(true)`] if we were subscribed to this topic.
+    #[allow(clippy::unnecessary_wraps)]
     pub fn unsubscribe<H: Hasher>(&mut self, topic: &Topic<H>) -> Result<bool, PublishError> {
         tracing::debug!(%topic, "Unsubscribing from topic");
         let topic_hash = topic.hash();
@@ -2551,6 +2552,7 @@ where
     /// Helper function which forwards a message to mesh\[topic\] peers.
     ///
     /// Returns true if at least one peer was messaged.
+    #[allow(clippy::unnecessary_wraps)]
     fn forward_msg(
         &mut self,
         msg_id: &MessageId,

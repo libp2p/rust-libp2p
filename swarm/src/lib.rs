@@ -754,6 +754,7 @@ where
                                         send_back_addr: &send_back_addr,
                                         error: &listen_error,
                                         connection_id: id,
+                                        peer_id: Some(peer_id),
                                     },
                                 ));
 
@@ -867,6 +868,7 @@ where
                         send_back_addr: &send_back_addr,
                         error: &error,
                         connection_id: id,
+                        peer_id: None,
                     }));
                 self.pending_swarm_events
                     .push_back(SwarmEvent::IncomingConnectionError {
@@ -907,6 +909,7 @@ where
                         peer_id,
                         connection_id: id,
                         endpoint: &endpoint,
+                        cause: error.as_ref(),
                         remaining_established: num_established as usize,
                     }));
                 self.pending_swarm_events
@@ -970,6 +973,7 @@ where
                                 send_back_addr: &send_back_addr,
                                 error: &listen_error,
                                 connection_id,
+                                peer_id: None,
                             }));
 
                         self.pending_swarm_events
@@ -1413,6 +1417,14 @@ impl Config {
         }
     }
 
+    #[doc(hidden)]
+    /// Used on connection benchmarks.
+    pub fn without_executor() -> Self {
+        Self {
+            pool_config: PoolConfig::new(None),
+        }
+    }
+
     /// Sets executor to the `wasm` executor.
     /// Background tasks will be executed by the browser on the next micro-tick.
     ///
@@ -1526,9 +1538,7 @@ impl Config {
 #[derive(Debug)]
 pub enum DialError {
     /// The peer identity obtained on the connection matches the local peer.
-    LocalPeerId {
-        endpoint: ConnectedPoint,
-    },
+    LocalPeerId { endpoint: ConnectedPoint },
     /// No addresses have been provided by [`NetworkBehaviour::handle_pending_outbound_connection`] and [`DialOpts`].
     NoAddresses,
     /// The provided [`dial_opts::PeerCondition`] evaluated to false and thus
@@ -1541,9 +1551,10 @@ pub enum DialError {
         obtained: PeerId,
         endpoint: ConnectedPoint,
     },
-    Denied {
-        cause: ConnectionDenied,
-    },
+    /// One of the [`NetworkBehaviour`]s rejected the outbound connection
+    /// via [`NetworkBehaviour::handle_pending_outbound_connection`] or
+    /// [`NetworkBehaviour::handle_established_outbound_connection`].
+    Denied { cause: ConnectionDenied },
     /// An error occurred while negotiating the transport protocol(s) on a connection.
     Transport(Vec<(Multiaddr, TransportError<io::Error>)>),
 }
