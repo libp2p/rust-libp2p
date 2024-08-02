@@ -874,7 +874,7 @@ mod tests {
         let info = parse_ws_dial_addr::<io::Error>(addr.clone()).unwrap();
         assert_eq!(info.host_port, "example.com:2222");
         assert_eq!(info.path, "/");
-        assert_eq!(info.use_tls, true);
+        assert!(info.use_tls);
         assert_eq!(info.dns_name, "example.com".try_into().ok());
         assert_eq!(&info.tcp_addr, &tcp_addr);
 
@@ -887,7 +887,7 @@ mod tests {
         let info = parse_ws_dial_addr::<io::Error>(addr).unwrap();
         assert_eq!(info.host_port, "example.com:2222");
         assert_eq!(info.path, "/");
-        assert_eq!(info.use_tls, true);
+        assert!(info.use_tls);
         assert_eq!(info.dns_name, "example.com".try_into().ok());
         assert_eq!(info.tcp_addr, tcp_addr.clone().with(p2p.clone()));
 
@@ -896,7 +896,7 @@ mod tests {
         let info = parse_ws_dial_addr::<io::Error>(addr).unwrap();
         assert_eq!(info.host_port, "example.com:2222");
         assert_eq!(info.path, "/");
-        assert_eq!(info.use_tls, true);
+        assert!(info.use_tls);
         assert_eq!(info.dns_name, "example.com".try_into().ok());
         assert_eq!(&info.tcp_addr, &tcp_addr);
 
@@ -908,7 +908,7 @@ mod tests {
         let info = parse_ws_dial_addr::<io::Error>(addr).unwrap();
         assert_eq!(info.host_port, "example.com:2222");
         assert_eq!(info.path, "/");
-        assert_eq!(info.use_tls, true);
+        assert!(info.use_tls);
         assert_eq!(info.dns_name, "example.com".try_into().ok());
         assert_eq!(info.tcp_addr, tcp_addr.clone().with(p2p.clone()));
 
@@ -917,7 +917,7 @@ mod tests {
         let info = parse_ws_dial_addr::<io::Error>(addr).unwrap();
         assert_eq!(info.host_port, "example.com:2222");
         assert_eq!(info.path, "/");
-        assert_eq!(info.use_tls, false);
+        assert!(!info.use_tls);
         assert_eq!(info.dns_name, "example.com".try_into().ok());
         assert_eq!(&info.tcp_addr, &tcp_addr);
 
@@ -929,7 +929,7 @@ mod tests {
         let info = parse_ws_dial_addr::<io::Error>(addr).unwrap();
         assert_eq!(info.host_port, "example.com:2222");
         assert_eq!(info.path, "/");
-        assert_eq!(info.use_tls, false);
+        assert!(!info.use_tls);
         assert_eq!(info.dns_name, "example.com".try_into().ok());
         assert_eq!(info.tcp_addr, tcp_addr.clone().with(p2p.clone()));
 
@@ -938,7 +938,7 @@ mod tests {
         let info = parse_ws_dial_addr::<io::Error>(addr).unwrap();
         assert_eq!(info.host_port, "127.0.0.1:2222");
         assert_eq!(info.path, "/");
-        assert_eq!(info.use_tls, false);
+        assert!(!info.use_tls);
         assert!(info.dns_name.is_none());
         assert_eq!(info.tcp_addr, "/ip4/127.0.0.1/tcp/2222".parse().unwrap());
 
