@@ -70,8 +70,6 @@ async fn connect() {
     .await;
     async_std::task::spawn(dst.loop_on_next());
 
-    async_std::task::sleep(Duration::from_secs(1)).await;
-
     src.dial_and_wait(dst_relayed_addr.clone()).await;
 
     let dst_addr = dst_tcp_addr.with(Protocol::P2p(dst_peer_id));
