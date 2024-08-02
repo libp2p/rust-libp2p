@@ -112,8 +112,8 @@ libp2p-upnp = { version = "0.2.2", path = "protocols/upnp" }
 libp2p-webrtc = { version = "0.7.1-alpha", path = "transports/webrtc" }
 libp2p-webrtc-utils = { version = "0.2.1", path = "misc/webrtc-utils" }
 libp2p-webrtc-websys = { version = "0.3.0-alpha", path = "transports/webrtc-websys" }
-libp2p-websocket = { version = "0.43.2", path = "transports/websocket" }
-libp2p-websocket-websys = { version = "0.3.3", path = "transports/websocket-websys" }
+libp2p-websocket = { version = "0.43.3", path = "transports/websocket" }
+libp2p-websocket-websys = { version = "0.3.4", path = "transports/websocket-websys" }
 libp2p-webtransport-websys = { version = "0.3.0", path = "transports/webtransport-websys" }
 libp2p-yamux = { version = "0.45.2", path = "muxers/yamux" }
 multiaddr = "0.18.1"

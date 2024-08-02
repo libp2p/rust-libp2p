@@ -1,3 +1,8 @@
+## 0.43.3
+
+- Add support for `/tls/ws`.
+  See [PR 5523](https://github.com/libp2p/rust-libp2p/pull/5523).
+
 ## 0.43.2
 
 - fix: Avoid websocket panic on polling after errors. See [PR 5482].

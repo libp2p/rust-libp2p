@@ -3492,7 +3492,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-websocket"
-version = "0.43.2"
+version = "0.43.3"
 dependencies = [
  "async-std",
  "either",
@@ -3515,7 +3515,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-websocket-websys"
-version = "0.3.3"
+version = "0.3.4"
 dependencies = [
  "bytes",
  "futures",
