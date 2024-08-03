@@ -371,29 +371,28 @@ where
             .create_socket(socket_addr, opts.port_use)
             .map_err(TransportError::Other)?;
 
-        let mut bound_to_local = false;
-
-        match self.port_reuse.local_dial_addr(&socket_addr.ip()) {
+        let bind_addr = match self.port_reuse.local_dial_addr(&socket_addr.ip()) {
             Some(socket_addr) if opts.port_use == PortUse::Reuse => {
                 tracing::trace!(address=%addr, "Binding dial socket to listen socket address");
-                socket
-                    .bind(&socket_addr.into())
-                    .map_err(TransportError::Other)?;
-                bound_to_local = true;
+                Some(socket_addr)
             }
-            _ => {}
-        }
+            _ => None,
+        };
 
         let local_config = self.config.clone();
 
         Ok(async move {
+            if let Some(bind_addr) = bind_addr {
+                socket.bind(&bind_addr.into())?;
+            }
+
             // [`Transport::dial`] should do no work unless the returned [`Future`] is polled. Thus
             // do the `connect` call within the [`Future`].
-            let socket = match socket.connect(&socket_addr.into()) {
-                Ok(()) => socket,
-                Err(err) if err.raw_os_error() == Some(libc::EINPROGRESS) => socket,
-                Err(err) if err.kind() == io::ErrorKind::WouldBlock => socket,
-                Err(err) if err.kind() == io::ErrorKind::AddrNotAvailable && bound_to_local => {
+            let socket = match (socket.connect(&socket_addr.into()), bind_addr) {
+                (Ok(()), _) => socket,
+                (Err(err), _) if err.raw_os_error() == Some(libc::EINPROGRESS) => socket,
+                (Err(err), _) if err.kind() == io::ErrorKind::WouldBlock => socket,
+                (Err(err), Some(bind_addr)) if err.kind() == io::ErrorKind::AddrNotAvailable  => {
                     // The socket was bound to a local address that is no longer available.
                     // Retry without binding.
                     tracing::debug!(connect_addr = %socket_addr, ?bind_addr, "Failed to connect using existing socket because we already have a connection, re-dialing with new port");
@@ -406,7 +405,7 @@ where
                         Err(err) => return Err(err),
                     }
                 }
-                Err(err) => return Err(err),
+                (Err(err), _) => return Err(err),
             };
 
             let stream = T::new_stream(socket.into()).await?;
