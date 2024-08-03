@@ -198,7 +198,7 @@ impl<P: Provider> GenTransport<P> {
         Ok(socket.into())
     }
 
-    fn binded_socket(&mut self, socket_addr: SocketAddr) -> Result<quinn::Endpoint, Error> {
+    fn bound_socket(&mut self, socket_addr: SocketAddr) -> Result<quinn::Endpoint, Error> {
         let socket_family = socket_addr.ip().into();
         if let Some(waker) = self.waker.take() {
             waker.wake();
@@ -287,12 +287,12 @@ impl<P: Provider> Transport for GenTransport<P> {
                         if let Some(occupied) = self.dialer.get(&socket_family) {
                             occupied.clone()
                         } else {
-                            let endpoint = self.binded_socket(socket_addr)?;
+                            let endpoint = self.bound_socket(socket_addr)?;
                             self.dialer.insert(socket_family, endpoint.clone());
                             endpoint
                         }
                     } else {
-                        self.binded_socket(socket_addr)?
+                        self.bound_socket(socket_addr)?
                     };
                     dialer
                 };

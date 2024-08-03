@@ -426,7 +426,7 @@ async fn write_after_peer_dropped_stream() {
         .try_init();
     let (stream_a, mut stream_b) = build_streams::<quic::async_std::Provider>().await;
     drop(stream_a);
-    futures_timer::Delay::new(Duration::from_millis(10)).await;
+    futures_timer::Delay::new(Duration::from_millis(100)).await;
 
     let data = vec![0; 10];
     stream_b.write_all(&data).await.expect("Write failed.");

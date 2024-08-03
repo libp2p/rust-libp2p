@@ -2,6 +2,7 @@
 
 - Update individual crates.
     - Update to [`libp2p-kad` `v0.46.0`](protocols/kad/CHANGELOG.md#0460).
+    - Update to [`libp2p-identify` `v0.45.0`](protocols/identify/CHANGELOG.md#0450).
 
 - Raise MSRV to 1.73.
   See [PR 5266](https://github.com/libp2p/rust-libp2p/pull/5266).
@@ -17,6 +18,9 @@
 
 - Use `web-time` instead of `instant`.
   See [PR 5347](https://github.com/libp2p/rust-libp2p/pull/5347).
+
+- Remove redundant async signature from builder methods.
+  See [PR 5468](https://github.com/libp2p/rust-libp2p/pull/5468).
 
 [PR 4568]: https://github.com/libp2p/rust-libp2p/pull/4568
 

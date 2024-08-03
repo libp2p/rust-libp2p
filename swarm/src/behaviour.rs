@@ -32,8 +32,12 @@ use crate::connection::ConnectionId;
 use crate::dial_opts::DialOpts;
 use crate::listen_opts::ListenOpts;
 use crate::{
-    ConnectionDenied, ConnectionHandler, DialError, ListenError, THandler, THandlerInEvent,
-    THandlerOutEvent,
+    ConnectionDenied, ConnectionError, ConnectionHandler, DialError, ListenError, THandler,
+    THandlerInEvent, THandlerOutEvent,
+};
+use libp2p_core::{
+    transport::{ListenerId, PortUse},
+    ConnectedPoint, Endpoint, Multiaddr,
 };
 use libp2p_core::{
     transport::{ListenerId, PortUse},
@@ -485,6 +489,7 @@ pub struct ConnectionClosed<'a> {
     pub peer_id: PeerId,
     pub connection_id: ConnectionId,
     pub endpoint: &'a ConnectedPoint,
+    pub cause: Option<&'a ConnectionError>,
     pub remaining_established: usize,
 }
 

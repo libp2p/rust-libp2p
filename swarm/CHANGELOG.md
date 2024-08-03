@@ -1,3 +1,4 @@
+
 ## 0.45.0
 
 - Implement refactored `Transport`.
@@ -8,11 +9,17 @@
 [PR 4568]: https://github.com/libp2p/rust-libp2p/pull/4568
 
 ## 0.44.3
+- Optimize internal connection `fn poll`. New implementation now scales much better with number of listen protocols active.
+  No changes to public API introduced.
+  See [PR 5026](https://github.com/libp2p/rust-libp2p/pull/5026)
 - Add peer_id to `FromSwarm::ListenFailure`.
   See [PR 4818](https://github.com/libp2p/rust-libp2p/pull/4818).
-
 - Use `web-time` instead of `instant`.
   See [PR 5347](https://github.com/libp2p/rust-libp2p/pull/5347).
+- Add `#[track_caller]` on all `spawn` wrappers.
+  See [PR 5465](https://github.com/libp2p/rust-libp2p/pull/5465).
+- Add ConnectionError to FromSwarm::ConnectionClosed.
+  See [PR 5485](https://github.com/libp2p/rust-libp2p/pull/5485).
 
 ## 0.44.2
 

@@ -26,6 +26,8 @@ use libp2p_identity as identity;
 use libp2p_identity::PeerId;
 use x509_parser::{prelude::*, signature_algorithm::SignatureAlgorithm};
 
+use std::sync::Arc;
+
 /// The libp2p Public Key Extension is a X.509 extension
 /// with the Object Identifier 1.3.6.1.4.1.53594.1.1,
 /// allocated by IANA to the libp2p project at Protocol Labs.
@@ -41,6 +43,45 @@ const P2P_SIGNING_PREFIX: [u8; 21] = *b"libp2p-tls-handshake:";
 // Certificates MUST use the NamedCurve encoding for elliptic curve parameters.
 // Similarly, hash functions with an output length less than 256 bits MUST NOT be used.
 static P2P_SIGNATURE_ALGORITHM: &rcgen::SignatureAlgorithm = &rcgen::PKCS_ECDSA_P256_SHA256;
+
+#[derive(Debug)]
+pub(crate) struct AlwaysResolvesCert(Arc<rustls::sign::CertifiedKey>);
+
+impl AlwaysResolvesCert {
+    pub(crate) fn new(
+        cert: rustls::pki_types::CertificateDer<'static>,
+        key: &rustls::pki_types::PrivateKeyDer<'_>,
+    ) -> Result<Self, rustls::Error> {
+        let certified_key = rustls::sign::CertifiedKey::new(
+            vec![cert],
+            rustls::crypto::ring::sign::any_ecdsa_type(key)?,
+        );
+        Ok(Self(Arc::new(certified_key)))
+    }
+}
+
+impl rustls::client::ResolvesClientCert for AlwaysResolvesCert {
+    fn resolve(
+        &self,
+        _root_hint_subjects: &[&[u8]],
+        _sigschemes: &[rustls::SignatureScheme],
+    ) -> Option<Arc<rustls::sign::CertifiedKey>> {
+        Some(Arc::clone(&self.0))
+    }
+
+    fn has_certs(&self) -> bool {
+        true
+    }
+}
+
+impl rustls::server::ResolvesServerCert for AlwaysResolvesCert {
+    fn resolve(
+        &self,
+        _client_hello: rustls::server::ClientHello<'_>,
+    ) -> Option<Arc<rustls::sign::CertifiedKey>> {
+        Some(Arc::clone(&self.0))
+    }
+}
 
 /// Generates a self-signed TLS certificate that includes a libp2p-specific
 /// certificate extension containing the public key of the given keypair.

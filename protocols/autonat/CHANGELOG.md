@@ -1,3 +1,15 @@
+## 0.13.0
+
+- Due to the refactor of `Transport` it's no longer required to create a seperate transport for
+AutoNAT where port reuse is disabled. This information is now passed by the behaviour.
+  See [PR 4568](https://github.com/libp2p/rust-libp2p/pull/4568).
+
+<!-- Update to libp2p-swarm v0.45.0 -->
+
+## 0.12.1
+- Use `web-time` instead of `instant`.
+  See [PR 5347](https://github.com/libp2p/rust-libp2p/pull/5347).
+
 ## 0.12.0
 
 - Remove `Clone`, `PartialEq` and `Eq` implementations on `Event` and its sub-structs.

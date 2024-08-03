@@ -294,9 +294,7 @@ impl RedisClient {
 
         tracing::debug!("Pushing {key}={value} to redis");
 
-        self.inner.rpush(key, value).await?;
-
-        Ok(())
+        self.inner.rpush(key, value).await.map_err(Into::into)
     }
 
     async fn pop<V>(&mut self, key: &str) -> Result<V>

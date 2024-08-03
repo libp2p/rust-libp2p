@@ -1,6 +1,8 @@
 ## 0.47.0
 
 <!-- Update to libp2p-swarm v0.45.0 -->
+- Add ConnectionError to FromSwarm::ConnectionClosed.
+  See [PR 5485](https://github.com/libp2p/rust-libp2p/pull/5485).
 
 ## 0.46.2
 - Use `web-time` instead of `instant`.

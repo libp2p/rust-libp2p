@@ -189,6 +189,35 @@ impl Config {
     pub fn port_reuse(self, _port_reuse: bool) -> Self {
         self
     }
+
+    fn create_socket(&self, socket_addr: SocketAddr, port_use: PortUse) -> io::Result<Socket> {
+        let socket = Socket::new(
+            Domain::for_address(socket_addr),
+            Type::STREAM,
+            Some(socket2::Protocol::TCP),
+        )?;
+        if socket_addr.is_ipv6() {
+            socket.set_only_v6(true)?;
+        }
+        if let Some(ttl) = self.ttl {
+            socket.set_ttl(ttl)?;
+        }
+        if let Some(nodelay) = self.nodelay {
+            socket.set_nodelay(nodelay)?;
+        }
+        socket.set_reuse_address(true)?;
+        #[cfg(all(unix, not(any(target_os = "solaris", target_os = "illumos"))))]
+        if port_use == PortUse::Reuse {
+            socket.set_reuse_port(true)?;
+        }
+
+        #[cfg(not(all(unix, not(any(target_os = "solaris", target_os = "illumos")))))]
+        let _ = port_use; // silence the unused warning on non-unix platforms (i.e. Windows)
+
+        socket.set_nonblocking(true)?;
+
+        Ok(socket)
+    }
 }
 
 impl Default for Config {
@@ -239,39 +268,12 @@ where
         }
     }
 
-    fn create_socket(&self, socket_addr: SocketAddr, port_use: PortUse) -> io::Result<Socket> {
-        let socket = Socket::new(
-            Domain::for_address(socket_addr),
-            Type::STREAM,
-            Some(socket2::Protocol::TCP),
-        )?;
-        if socket_addr.is_ipv6() {
-            socket.set_only_v6(true)?;
-        }
-        if let Some(ttl) = self.config.ttl {
-            socket.set_ttl(ttl)?;
-        }
-        if let Some(nodelay) = self.config.nodelay {
-            socket.set_nodelay(nodelay)?;
-        }
-        socket.set_reuse_address(true)?;
-        #[cfg(all(unix, not(any(target_os = "solaris", target_os = "illumos"))))]
-        if port_use == PortUse::Reuse {
-            socket.set_reuse_port(true)?;
-        }
-
-        #[cfg(not(all(unix, not(any(target_os = "solaris", target_os = "illumos")))))]
-        let _ = port_use; // silence the unused warning on non-unix platforms (i.e. Windows)
-
-        Ok(socket)
-    }
-
     fn do_listen(
         &mut self,
         id: ListenerId,
         socket_addr: SocketAddr,
     ) -> io::Result<ListenStream<T>> {
-        let socket = self.create_socket(socket_addr, PortUse::Reuse)?;
+        let socket = self.config.create_socket(socket_addr, PortUse::Reuse)?;
         socket.bind(&socket_addr.into())?;
         socket.listen(self.config.backlog as _)?;
         socket.set_nonblocking(true)?;
@@ -365,31 +367,45 @@ where
         tracing::debug!(address=%socket_addr, "dialing address");
 
         let socket = self
+            .config
             .create_socket(socket_addr, opts.port_use)
             .map_err(TransportError::Other)?;
 
-        match self.port_reuse.local_dial_addr(&socket_addr.ip()) {
+        let bind_addr = match self.port_reuse.local_dial_addr(&socket_addr.ip()) {
             Some(socket_addr) if opts.port_use == PortUse::Reuse => {
                 tracing::trace!(address=%addr, "Binding dial socket to listen socket address");
-                socket
-                    .bind(&socket_addr.into())
-                    .map_err(TransportError::Other)?;
+                Some(socket_addr)
             }
-            _ => {}
-        }
+            _ => None,
+        };
 
-        socket
-            .set_nonblocking(true)
-            .map_err(TransportError::Other)?;
+        let local_config = self.config.clone();
 
         Ok(async move {
+            if let Some(bind_addr) = bind_addr {
+                socket.bind(&bind_addr.into())?;
+            }
+
             // [`Transport::dial`] should do no work unless the returned [`Future`] is polled. Thus
             // do the `connect` call within the [`Future`].
-            match socket.connect(&socket_addr.into()) {
-                Ok(()) => {}
-                Err(err) if err.raw_os_error() == Some(libc::EINPROGRESS) => {}
-                Err(err) if err.kind() == io::ErrorKind::WouldBlock => {}
-                Err(err) => return Err(err),
+            let socket = match (socket.connect(&socket_addr.into()), bind_addr) {
+                (Ok(()), _) => socket,
+                (Err(err), _) if err.raw_os_error() == Some(libc::EINPROGRESS) => socket,
+                (Err(err), _) if err.kind() == io::ErrorKind::WouldBlock => socket,
+                (Err(err), Some(bind_addr)) if err.kind() == io::ErrorKind::AddrNotAvailable  => {
+                    // The socket was bound to a local address that is no longer available.
+                    // Retry without binding.
+                    tracing::debug!(connect_addr = %socket_addr, ?bind_addr, "Failed to connect using existing socket because we already have a connection, re-dialing with new port");
+                    std::mem::drop(socket);
+                    let socket = local_config.create_socket(socket_addr, PortUse::New)?;
+                    match socket.connect(&socket_addr.into()) {
+                        Ok(()) => socket,
+                        Err(err) if err.raw_os_error() == Some(libc::EINPROGRESS) => socket,
+                        Err(err) if err.kind() == io::ErrorKind::WouldBlock => socket,
+                        Err(err) => return Err(err),
+                    }
+                }
+                (Err(err), _) => return Err(err),
             };
 
             let stream = T::new_stream(socket.into()).await?;

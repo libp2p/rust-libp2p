@@ -44,8 +44,7 @@ pub const PROTOCOL_NAME: StreamProtocol = StreamProtocol::new("/ipfs/ping/1.0.0"
 /// >           Nagle's algorithm, delayed acks and similar configuration options
 /// >           which can affect latencies especially on otherwise low-volume
 /// >           connections.
-#[derive(Default, Debug, Copy, Clone)]
-pub(crate) struct Ping;
+
 const PING_SIZE: usize = 32;
 
 /// Sends a ping and waits for the pong.

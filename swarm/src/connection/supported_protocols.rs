@@ -40,7 +40,6 @@ impl SupportedProtocols {
 mod tests {
     use super::*;
     use crate::handler::{ProtocolsAdded, ProtocolsRemoved};
-    use once_cell::sync::Lazy;
 
     #[test]
     fn protocols_change_added_returns_correct_changed_value() {
@@ -70,19 +69,24 @@ mod tests {
     }
 
     fn add_foo() -> ProtocolsChange<'static> {
-        ProtocolsChange::Added(ProtocolsAdded::from_set(&FOO_PROTOCOLS))
+        ProtocolsChange::Added(ProtocolsAdded {
+            protocols: FOO_PROTOCOLS.iter(),
+        })
     }
 
     fn add_foo_bar() -> ProtocolsChange<'static> {
-        ProtocolsChange::Added(ProtocolsAdded::from_set(&FOO_BAR_PROTOCOLS))
+        ProtocolsChange::Added(ProtocolsAdded {
+            protocols: FOO_BAR_PROTOCOLS.iter(),
+        })
     }
 
     fn remove_foo() -> ProtocolsChange<'static> {
-        ProtocolsChange::Removed(ProtocolsRemoved::from_set(&FOO_PROTOCOLS))
+        ProtocolsChange::Removed(ProtocolsRemoved {
+            protocols: FOO_PROTOCOLS.iter(),
+        })
     }
 
-    static FOO_PROTOCOLS: Lazy<HashSet<StreamProtocol>> =
-        Lazy::new(|| HashSet::from([StreamProtocol::new("/foo")]));
-    static FOO_BAR_PROTOCOLS: Lazy<HashSet<StreamProtocol>> =
-        Lazy::new(|| HashSet::from([StreamProtocol::new("/foo"), StreamProtocol::new("/bar")]));
+    static FOO_PROTOCOLS: &[StreamProtocol] = &[StreamProtocol::new("/foo")];
+    static FOO_BAR_PROTOCOLS: &[StreamProtocol] =
+        &[StreamProtocol::new("/foo"), StreamProtocol::new("/bar")];
 }

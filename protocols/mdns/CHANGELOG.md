@@ -1,6 +1,10 @@
 ## 0.46.0
 
 <!-- Update to libp2p-swarm v0.45.0 -->
+## 0.45.2
+
+- Add `#[track_caller]` on all `spawn` wrappers.
+  See [PR 5465](https://github.com/libp2p/rust-libp2p/pull/5465).
 
 ## 0.45.1
 
