@@ -396,7 +396,7 @@ where
                 Err(err) if err.kind() == io::ErrorKind::AddrNotAvailable && bound_to_local => {
                     // The socket was bound to a local address that is no longer available.
                     // Retry without binding.
-                    tracing::trace!("Retrying dial without binding to local address");
+                    tracing::debug!(connect_addr = %socket_addr, ?bind_addr, "Failed to connect using existing socket because we already have a connection, re-dialing with new port");
                     std::mem::drop(socket);
                     let socket = local_config.create_socket(socket_addr, PortUse::New)?;
                     match socket.connect(&socket_addr.into()) {
