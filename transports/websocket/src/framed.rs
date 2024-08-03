@@ -22,7 +22,7 @@ use crate::{error::Error, quicksink, tls};
 use either::Either;
 use futures::{future::BoxFuture, prelude::*, ready, stream::BoxStream};
 use futures_rustls::rustls::pki_types::ServerName;
-use futures_rustls::{client, rustls, server};
+use futures_rustls::{client, server};
 use libp2p_core::{
     multiaddr::{Multiaddr, Protocol},
     transport::{DialOpts, ListenerId, TransportError, TransportEvent},
