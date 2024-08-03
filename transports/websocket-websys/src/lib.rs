@@ -26,6 +26,7 @@ use bytes::BytesMut;
 use futures::task::AtomicWaker;
 use futures::{future::Ready, io, prelude::*};
 use js_sys::Array;
+use libp2p_core::transport::DialOpts;
 use libp2p_core::{
     multiaddr::{Multiaddr, Protocol},
     transport::{ListenerId, TransportError, TransportEvent},
@@ -86,7 +87,15 @@ impl libp2p_core::Transport for Transport {
         false
     }
 
-    fn dial(&mut self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
+    fn dial(
+        &mut self,
+        addr: Multiaddr,
+        dial_opts: DialOpts,
+    ) -> Result<Self::Dial, TransportError<Self::Error>> {
+        if dial_opts.role.is_listener() {
+            return Err(TransportError::MultiaddrNotSupported(addr));
+        }
+
         let url = extract_websocket_url(&addr)
             .ok_or_else(|| TransportError::MultiaddrNotSupported(addr))?;
 
@@ -101,22 +110,11 @@ impl libp2p_core::Transport for Transport {
         .boxed())
     }
 
-    fn dial_as_listener(
-        &mut self,
-        addr: Multiaddr,
-    ) -> Result<Self::Dial, TransportError<Self::Error>> {
-        Err(TransportError::MultiaddrNotSupported(addr))
-    }
-
     fn poll(
         self: Pin<&mut Self>,
         _cx: &mut Context<'_>,
     ) -> std::task::Poll<TransportEvent<Self::ListenerUpgrade, Self::Error>> {
         Poll::Pending
-    }
-
-    fn address_translation(&self, _listen: &Multiaddr, _observed: &Multiaddr) -> Option<Multiaddr> {
-        None
     }
 }
 
@@ -434,6 +432,12 @@ impl AsyncWrite for Connection {
 
 impl Drop for Connection {
     fn drop(&mut self) {
+        // Unset event listeners, as otherwise they will be called by JS after the handlers have already been dropped.
+        self.inner.socket.set_onclose(None);
+        self.inner.socket.set_onerror(None);
+        self.inner.socket.set_onopen(None);
+        self.inner.socket.set_onmessage(None);
+
         // In browsers, userland code is not allowed to use any other status code than 1000: https://websockets.spec.whatwg.org/#dom-websocket-close
         const REGULAR_CLOSE: u16 = 1000; // See https://www.rfc-editor.org/rfc/rfc6455.html#section-7.4.1.
 

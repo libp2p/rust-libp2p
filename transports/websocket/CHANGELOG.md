@@ -1,7 +1,12 @@
-## 0.43.3
+## 0.44.1
 
 - Allow wss connections on IP addresses.
   See [PR 5525](https://github.com/libp2p/rust-libp2p/pull/5525).
+
+## 0.44.0
+
+- Implement refactored `Transport`.
+  See [PR 4568](https://github.com/libp2p/rust-libp2p/pull/4568)
 
 ## 0.43.2
 

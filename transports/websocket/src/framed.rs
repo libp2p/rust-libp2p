@@ -24,9 +24,8 @@ use futures::{future::BoxFuture, prelude::*, ready, stream::BoxStream};
 use futures_rustls::rustls::pki_types::ServerName;
 use futures_rustls::{client, rustls, server};
 use libp2p_core::{
-    connection::Endpoint,
     multiaddr::{Multiaddr, Protocol},
-    transport::{ListenerId, TransportError, TransportEvent},
+    transport::{DialOpts, ListenerId, TransportError, TransportEvent},
     Transport,
 };
 use parking_lot::Mutex;
@@ -151,19 +150,12 @@ where
         self.transport.lock().remove_listener(id)
     }
 
-    fn dial(&mut self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
-        self.do_dial(addr, Endpoint::Dialer)
-    }
-
-    fn dial_as_listener(
+    fn dial(
         &mut self,
         addr: Multiaddr,
+        dial_opts: DialOpts,
     ) -> Result<Self::Dial, TransportError<Self::Error>> {
-        self.do_dial(addr, Endpoint::Listener)
-    }
-
-    fn address_translation(&self, server: &Multiaddr, observed: &Multiaddr) -> Option<Multiaddr> {
-        self.transport.lock().address_translation(server, observed)
+        self.do_dial(addr, dial_opts)
     }
 
     fn poll(
@@ -265,7 +257,7 @@ where
     fn do_dial(
         &mut self,
         addr: Multiaddr,
-        role_override: Endpoint,
+        dial_opts: DialOpts,
     ) -> Result<<Self as Transport>::Dial, TransportError<<Self as Transport>::Error>> {
         let mut addr = match parse_ws_dial_addr(addr) {
             Ok(addr) => addr,
@@ -284,8 +276,7 @@ where
 
         let future = async move {
             loop {
-                match Self::dial_once(transport.clone(), addr, tls_config.clone(), role_override)
-                    .await
+                match Self::dial_once(transport.clone(), addr, tls_config.clone(), dial_opts).await
                 {
                     Ok(Either::Left(redirect)) => {
                         if remaining_redirects == 0 {
@@ -309,18 +300,17 @@ where
         transport: Arc<Mutex<T>>,
         addr: WsAddress,
         tls_config: tls::Config,
-        role_override: Endpoint,
+        dial_opts: DialOpts,
     ) -> Result<Either<String, Connection<T::Output>>, Error<T::Error>> {
         tracing::trace!(address=?addr, "Dialing websocket address");
 
-        let dial = match role_override {
-            Endpoint::Dialer => transport.lock().dial(addr.tcp_addr),
-            Endpoint::Listener => transport.lock().dial_as_listener(addr.tcp_addr),
-        }
-        .map_err(|e| match e {
-            TransportError::MultiaddrNotSupported(a) => Error::InvalidMultiaddr(a),
-            TransportError::Other(e) => Error::Transport(e),
-        })?;
+        let dial = transport
+            .lock()
+            .dial(addr.tcp_addr, dial_opts)
+            .map_err(|e| match e {
+                TransportError::MultiaddrNotSupported(a) => Error::InvalidMultiaddr(a),
+                TransportError::Other(e) => Error::Transport(e),
+            })?;
 
         let stream = dial.map_err(Error::Transport).await?;
         tracing::trace!(port=%addr.host_port, "TCP connection established");
