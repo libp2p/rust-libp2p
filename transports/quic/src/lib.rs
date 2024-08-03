@@ -57,16 +57,19 @@
 
 #![cfg_attr(docsrs, feature(doc_cfg, doc_auto_cfg))]
 
+mod certificate_manager;
 mod config;
 mod connection;
 mod hole_punching;
 mod provider;
 mod transport;
+mod webtransport;
 
 use std::net::SocketAddr;
 
 pub use config::Config;
 pub use connection::{Connecting, Connection, Stream};
+use libp2p_tls::certificate;
 
 #[cfg(feature = "async-std")]
 pub use provider::async_std;
@@ -101,6 +104,12 @@ pub enum Error {
     /// Error when holepunching for a remote is already in progress
     #[error("Already punching hole for {0}).")]
     HolePunchInProgress(SocketAddr),
+
+    #[error(transparent)]
+    CertificateGenerationError(#[from] certificate::GenError),
+
+    #[error("WebTransport error.")]
+    WebTransportError,
 }
 
 /// Dialing a remote peer failed.

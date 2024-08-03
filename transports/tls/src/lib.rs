@@ -27,7 +27,7 @@
 
 pub mod certificate;
 mod upgrade;
-mod verifier;
+pub mod verifier;
 
 use certificate::AlwaysResolvesCert;
 use libp2p_identity::Keypair;
@@ -38,7 +38,7 @@ pub use futures_rustls::TlsStream;
 pub use upgrade::Config;
 pub use upgrade::UpgradeError;
 
-const P2P_ALPN: [u8; 6] = *b"libp2p";
+pub const P2P_ALPN: [u8; 6] = *b"libp2p";
 
 /// Create a TLS client configuration for libp2p.
 pub fn make_client_config(
