@@ -3492,7 +3492,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-websocket"
-version = "0.44.1"
+version = "0.44.0"
 dependencies = [
  "async-std",
  "either",
