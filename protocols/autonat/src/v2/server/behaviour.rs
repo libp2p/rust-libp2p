@@ -6,16 +6,13 @@ use std::{
 
 use crate::v2::server::handler::dial_request::DialBackStatus;
 use either::Either;
-use libp2p_core::{
-    transport::{PortUse, TransportError},
-    Endpoint, Multiaddr,
-};
+use libp2p_core::{transport::PortUse, Endpoint, Multiaddr};
 use libp2p_identity::PeerId;
+use libp2p_swarm::dial_opts::PeerCondition;
 use libp2p_swarm::{
     dial_opts::DialOpts, dummy, ConnectionDenied, ConnectionHandler, ConnectionId, DialFailure,
     FromSwarm, NetworkBehaviour, ToSwarm,
 };
-use libp2p_swarm::{dial_opts::PeerCondition, DialError};
 use rand_core::{OsRng, RngCore};
 
 use crate::v2::server::handler::{

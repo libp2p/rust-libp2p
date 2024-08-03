@@ -39,10 +39,6 @@ use libp2p_core::{
     transport::{ListenerId, PortUse},
     ConnectedPoint, Endpoint, Multiaddr,
 };
-use libp2p_core::{
-    transport::{ListenerId, PortUse},
-    ConnectedPoint, Endpoint, Multiaddr,
-};
 use libp2p_identity::PeerId;
 use std::{task::Context, task::Poll};
 

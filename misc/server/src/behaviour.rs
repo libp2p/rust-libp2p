@@ -1,3 +1,5 @@
+#![allow(deprecated)]
+
 use libp2p::autonat;
 use libp2p::identify;
 use libp2p::kad;
@@ -24,7 +26,7 @@ pub(crate) struct Behaviour {
     ping: ping::Behaviour,
     identify: identify::Behaviour,
     pub(crate) kademlia: Toggle<kad::Behaviour<kad::store::MemoryStore>>,
-    autonat: Toggle<autonat::Behaviour>,
+    autonat: Toggle<autonat::v1::Behaviour>,
 }
 
 impl Behaviour {
@@ -57,7 +59,7 @@ impl Behaviour {
         .into();
 
         let autonat = if enable_autonat {
-            Some(autonat::Behaviour::new(
+            Some(autonat::v1::Behaviour::new(
                 PeerId::from(pub_key.clone()),
                 Default::default(),
             ))
