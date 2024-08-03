@@ -35,7 +35,10 @@ use crate::{
     ConnectionDenied, ConnectionError, ConnectionHandler, DialError, ListenError, THandler,
     THandlerInEvent, THandlerOutEvent,
 };
-use libp2p_core::{transport::ListenerId, ConnectedPoint, Endpoint, Multiaddr};
+use libp2p_core::{
+    transport::{ListenerId, PortUse},
+    ConnectedPoint, Endpoint, Multiaddr,
+};
 use libp2p_identity::PeerId;
 use std::{task::Context, task::Poll};
 
@@ -196,6 +199,7 @@ pub trait NetworkBehaviour: 'static {
         peer: PeerId,
         addr: &Multiaddr,
         role_override: Endpoint,
+        port_use: PortUse,
     ) -> Result<THandler<Self>, ConnectionDenied>;
 
     /// Informs the behaviour about an event from the [`Swarm`](crate::Swarm).

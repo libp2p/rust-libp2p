@@ -31,7 +31,7 @@ use futures::sink::SinkExt;
 use futures::stream::SelectAll;
 use futures::stream::{Stream, StreamExt};
 use libp2p_core::multiaddr::{Multiaddr, Protocol};
-use libp2p_core::transport::{ListenerId, TransportError, TransportEvent};
+use libp2p_core::transport::{DialOpts, ListenerId, TransportError, TransportEvent};
 use libp2p_identity::PeerId;
 use std::collections::VecDeque;
 use std::pin::Pin;
@@ -49,7 +49,7 @@ use thiserror::Error;
 /// 1. Establish relayed connections by dialing `/p2p-circuit` addresses.
 ///
 ///    ```
-///    # use libp2p_core::{Multiaddr, multiaddr::{Protocol}, Transport};
+///    # use libp2p_core::{Multiaddr, multiaddr::{Protocol}, Transport, transport::{DialOpts, PortUse}, connection::Endpoint};
 ///    # use libp2p_core::transport::memory::MemoryTransport;
 ///    # use libp2p_core::transport::choice::OrTransport;
 ///    # use libp2p_relay as relay;
@@ -66,7 +66,10 @@ use thiserror::Error;
 ///        .with(Protocol::P2p(relay_id.into())) // Relay peer id.
 ///        .with(Protocol::P2pCircuit) // Signal to connect via relay and not directly.
 ///        .with(Protocol::P2p(destination_id.into())); // Destination peer id.
-///    transport.dial(dst_addr_via_relay).unwrap();
+///    transport.dial(dst_addr_via_relay, DialOpts {
+///         port_use: PortUse::Reuse,
+///         role: Endpoint::Dialer,
+///    }).unwrap();
 ///    ```
 ///
 /// 3. Listen for incoming relayed connections via specific relay.
@@ -165,7 +168,19 @@ impl libp2p_core::Transport for Transport {
         }
     }
 
-    fn dial(&mut self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
+    fn dial(
+        &mut self,
+        addr: Multiaddr,
+        dial_opts: DialOpts,
+    ) -> Result<Self::Dial, TransportError<Self::Error>> {
+        if dial_opts.role.is_listener() {
+            // [`Endpoint::Listener`] is used for NAT and firewall
+            // traversal. One would coordinate such traversal via a previously
+            // established relayed connection, but never using a relayed connection
+            // itself.
+            return Err(TransportError::MultiaddrNotSupported(addr));
+        }
+
         let RelayedMultiaddr {
             relay_peer_id,
             relay_addr,
@@ -196,24 +211,6 @@ impl libp2p_core::Transport for Transport {
             Ok(stream)
         }
         .boxed())
-    }
-
-    fn dial_as_listener(
-        &mut self,
-        addr: Multiaddr,
-    ) -> Result<Self::Dial, TransportError<Self::Error>>
-    where
-        Self: Sized,
-    {
-        // [`Transport::dial_as_listener`] is used for NAT and firewall
-        // traversal. One would coordinate such traversal via a previously
-        // established relayed connection, but never using a relayed connection
-        // itself.
-        Err(TransportError::MultiaddrNotSupported(addr))
-    }
-
-    fn address_translation(&self, _server: &Multiaddr, _observed: &Multiaddr) -> Option<Multiaddr> {
-        None
     }
 
     fn poll(

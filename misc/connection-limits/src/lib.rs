@@ -18,7 +18,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use libp2p_core::{ConnectedPoint, Endpoint, Multiaddr};
+use libp2p_core::{transport::PortUse, ConnectedPoint, Endpoint, Multiaddr};
 use libp2p_identity::PeerId;
 use libp2p_swarm::{
     behaviour::{ConnectionEstablished, DialFailure, ListenFailure},
@@ -278,6 +278,7 @@ impl NetworkBehaviour for Behaviour {
         peer: PeerId,
         _: &Multiaddr,
         _: Endpoint,
+        _: PortUse,
     ) -> Result<THandler<Self>, ConnectionDenied> {
         self.pending_outbound_connections.remove(&connection_id);
 
@@ -569,6 +570,7 @@ mod tests {
             _peer: PeerId,
             _addr: &Multiaddr,
             _role_override: Endpoint,
+            _port_use: PortUse,
         ) -> Result<THandler<Self>, ConnectionDenied> {
             Err(ConnectionDenied::new(std::io::Error::new(
                 std::io::ErrorKind::Other,

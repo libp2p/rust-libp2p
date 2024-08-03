@@ -1,6 +1,8 @@
 use futures::future::FutureExt;
 use libp2p_core::muxing::StreamMuxerBox;
-use libp2p_core::transport::{Boxed, ListenerId, Transport as _, TransportError, TransportEvent};
+use libp2p_core::transport::{
+    Boxed, DialOpts, ListenerId, Transport as _, TransportError, TransportEvent,
+};
 use libp2p_identity::{Keypair, PeerId};
 use multiaddr::Multiaddr;
 use std::future::Future;
@@ -62,7 +64,15 @@ impl libp2p_core::Transport for Transport {
         false
     }
 
-    fn dial(&mut self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
+    fn dial(
+        &mut self,
+        addr: Multiaddr,
+        dial_opts: DialOpts,
+    ) -> Result<Self::Dial, TransportError<Self::Error>> {
+        if dial_opts.role.is_listener() {
+            return Err(TransportError::MultiaddrNotSupported(addr));
+        }
+
         let endpoint = Endpoint::from_multiaddr(&addr).map_err(|e| match e {
             e @ Error::InvalidMultiaddr(_) => {
                 tracing::debug!("{}", e);
@@ -83,21 +93,10 @@ impl libp2p_core::Transport for Transport {
         .boxed())
     }
 
-    fn dial_as_listener(
-        &mut self,
-        addr: Multiaddr,
-    ) -> Result<Self::Dial, TransportError<Self::Error>> {
-        Err(TransportError::MultiaddrNotSupported(addr))
-    }
-
     fn poll(
         self: Pin<&mut Self>,
         _cx: &mut Context<'_>,
     ) -> Poll<TransportEvent<Self::ListenerUpgrade, Self::Error>> {
         Poll::Pending
-    }
-
-    fn address_translation(&self, _listen: &Multiaddr, _observed: &Multiaddr) -> Option<Multiaddr> {
-        None
     }
 }
