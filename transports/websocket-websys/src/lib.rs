@@ -122,7 +122,6 @@ impl libp2p_core::Transport for Transport {
 
 // Try to convert Multiaddr to a Websocket url.
 fn extract_websocket_url(addr: &Multiaddr) -> Option<String> {
-    let mut domain_found = false;
     let mut protocols = addr.iter();
     let host_port = match (protocols.next(), protocols.next()) {
         (Some(Protocol::Ip4(ip)), Some(Protocol::Tcp(port))) => {
@@ -135,26 +134,15 @@ fn extract_websocket_url(addr: &Multiaddr) -> Option<String> {
         | (Some(Protocol::Dns4(h)), Some(Protocol::Tcp(port)))
         | (Some(Protocol::Dns6(h)), Some(Protocol::Tcp(port)))
         | (Some(Protocol::Dnsaddr(h)), Some(Protocol::Tcp(port))) => {
-            domain_found = true;
             format!("{}:{}", &h, port)
         }
         _ => return None,
     };
 
     let (scheme, wspath) = match (protocols.next(), protocols.next()) {
-        (Some(Protocol::Tls), Some(Protocol::Ws(path))) => {
-            if !domain_found {
-                return None;
-            }
-            ("wss", path.into_owned())
-        }
+        (Some(Protocol::Tls), Some(Protocol::Ws(path))) => ("wss", path.into_owned()),
         (Some(Protocol::Ws(path)), _) => ("ws", path.into_owned()),
-        (Some(Protocol::Wss(path)), _) => {
-            if !domain_found {
-                return None;
-            }
-            ("wss", path.into_owned())
-        }
+        (Some(Protocol::Wss(path)), _) => ("wss", path.into_owned()),
         _ => return None,
     };
 

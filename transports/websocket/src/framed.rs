@@ -508,7 +508,8 @@ fn parse_ws_dial_addr<T>(addr: Multiaddr) -> Result<WsAddress, Error<T>> {
             }
             (Some(Protocol::Dns(h)), Some(Protocol::Tcp(port)))
             | (Some(Protocol::Dns4(h)), Some(Protocol::Tcp(port)))
-            | (Some(Protocol::Dns6(h)), Some(Protocol::Tcp(port))) => {
+            | (Some(Protocol::Dns6(h)), Some(Protocol::Tcp(port)))
+            | (Some(Protocol::Dnsaddr(h)), Some(Protocol::Tcp(port))) => {
                 break (format!("{}:{}", &h, port), Some(tls::dns_name_ref(&h)?))
             }
             (Some(_), Some(p)) => {
