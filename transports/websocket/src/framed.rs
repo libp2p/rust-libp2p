@@ -125,7 +125,10 @@ where
         })?;
 
         if proto.use_tls() && self.tls_config.server.is_none() {
-            tracing::debug!("/tls/ws address but TLS server support is not configured");
+            tracing::debug!(
+                "{} address but TLS server support is not configured",
+                proto.prefix()
+            );
             return Err(TransportError::MultiaddrNotSupported(addr));
         }
 
@@ -462,6 +465,14 @@ impl<'a> WsListenProto<'a> {
             WsListenProto::Ws(_) => false,
             WsListenProto::Wss(_) => true,
             WsListenProto::TlsWs(_) => true,
+        }
+    }
+
+    pub(crate) fn prefix(&self) -> &'static str {
+        match self {
+            WsListenProto::Ws(_) => "/ws",
+            WsListenProto::Wss(_) => "/wss",
+            WsListenProto::TlsWs(_) => "/tls/ws",
         }
     }
 }
