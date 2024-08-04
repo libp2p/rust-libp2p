@@ -24,6 +24,7 @@
 //! underlying `Transport`.
 // TODO: add example
 
+use crate::transport::DialOpts;
 use crate::{
     transport::{ListenerId, TransportError, TransportEvent},
     Multiaddr, Transport,
@@ -99,33 +100,19 @@ where
         self.inner.remove_listener(id)
     }
 
-    fn dial(&mut self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
-        let dial = self
-            .inner
-            .dial(addr)
-            .map_err(|err| err.map(TransportTimeoutError::Other))?;
-        Ok(Timeout {
-            inner: dial,
-            timer: Delay::new(self.outgoing_timeout),
-        })
-    }
-
-    fn dial_as_listener(
+    fn dial(
         &mut self,
         addr: Multiaddr,
+        opts: DialOpts,
     ) -> Result<Self::Dial, TransportError<Self::Error>> {
         let dial = self
             .inner
-            .dial_as_listener(addr)
+            .dial(addr, opts)
             .map_err(|err| err.map(TransportTimeoutError::Other))?;
         Ok(Timeout {
             inner: dial,
             timer: Delay::new(self.outgoing_timeout),
         })
-    }
-
-    fn address_translation(&self, server: &Multiaddr, observed: &Multiaddr) -> Option<Multiaddr> {
-        self.inner.address_translation(server, observed)
     }
 
     fn poll(

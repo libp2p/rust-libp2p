@@ -4,7 +4,7 @@ edition = "2021"
 rust-version = { workspace = true }
 description = "NAT and firewall detection for libp2p"
 authors = ["David Craven <david@craven.ch>", "Elena Frank <elena.frank@protonmail.com>"]
-version = "0.12.1"
+version = "0.13.0"
 license = "MIT"
 repository = "https://github.com/libp2p/rust-libp2p"
 keywords = ["peer-to-peer", "libp2p", "networking"]

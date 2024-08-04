@@ -5,7 +5,7 @@ use std::{
 };
 
 use futures::{channel::mpsc, StreamExt};
-use libp2p_core::{Endpoint, Multiaddr};
+use libp2p_core::{transport::PortUse, Endpoint, Multiaddr};
 use libp2p_identity::PeerId;
 use libp2p_swarm::{
     self as swarm, dial_opts::DialOpts, ConnectionDenied, ConnectionId, FromSwarm,
@@ -82,6 +82,7 @@ impl NetworkBehaviour for Behaviour {
         peer: PeerId,
         _: &Multiaddr,
         _: Endpoint,
+        _: PortUse,
     ) -> Result<THandler<Self>, ConnectionDenied> {
         Ok(Handler::new(
             peer,

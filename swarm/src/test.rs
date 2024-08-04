@@ -26,6 +26,7 @@ use crate::{
     ConnectionDenied, ConnectionHandler, ConnectionId, NetworkBehaviour, THandler, THandlerInEvent,
     THandlerOutEvent, ToSwarm,
 };
+use libp2p_core::transport::PortUse;
 use libp2p_core::{multiaddr::Multiaddr, transport::ListenerId, ConnectedPoint, Endpoint};
 use libp2p_identity::PeerId;
 use std::collections::HashMap;
@@ -91,6 +92,7 @@ where
         _: PeerId,
         _: &Multiaddr,
         _: Endpoint,
+        _: PortUse,
     ) -> Result<THandler, ConnectionDenied> {
         Ok(self.handler_proto.clone())
     }
@@ -427,6 +429,7 @@ where
         peer: PeerId,
         addr: &Multiaddr,
         role_override: Endpoint,
+        port_use: PortUse,
     ) -> Result<THandler<Self>, ConnectionDenied> {
         self.handle_established_outbound_connection.push((
             peer,
@@ -434,8 +437,13 @@ where
             role_override,
             connection_id,
         ));
-        self.inner
-            .handle_established_outbound_connection(connection_id, peer, addr, role_override)
+        self.inner.handle_established_outbound_connection(
+            connection_id,
+            peer,
+            addr,
+            role_override,
+            port_use,
+        )
     }
 
     fn on_swarm_event(&mut self, event: FromSwarm) {

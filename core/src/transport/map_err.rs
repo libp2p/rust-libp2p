@@ -18,7 +18,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::transport::{ListenerId, Transport, TransportError, TransportEvent};
+use crate::transport::{DialOpts, ListenerId, Transport, TransportError, TransportEvent};
 use futures::prelude::*;
 use multiaddr::Multiaddr;
 use std::{error, pin::Pin, task::Context, task::Poll};
@@ -65,33 +65,19 @@ where
         self.transport.remove_listener(id)
     }
 
-    fn dial(&mut self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
-        let map = self.map.clone();
-        match self.transport.dial(addr) {
-            Ok(future) => Ok(MapErrDial {
-                inner: future,
-                map: Some(map),
-            }),
-            Err(err) => Err(err.map(map)),
-        }
-    }
-
-    fn dial_as_listener(
+    fn dial(
         &mut self,
         addr: Multiaddr,
+        opts: DialOpts,
     ) -> Result<Self::Dial, TransportError<Self::Error>> {
         let map = self.map.clone();
-        match self.transport.dial_as_listener(addr) {
+        match self.transport.dial(addr, opts) {
             Ok(future) => Ok(MapErrDial {
                 inner: future,
                 map: Some(map),
             }),
             Err(err) => Err(err.map(map)),
         }
-    }
-
-    fn address_translation(&self, server: &Multiaddr, observed: &Multiaddr) -> Option<Multiaddr> {
-        self.transport.address_translation(server, observed)
     }
 
     fn poll(

@@ -19,6 +19,7 @@
 // DEALINGS IN THE SOFTWARE.
 
 use crate::muxing::StreamMuxerEvent;
+use crate::transport::DialOpts;
 use crate::{
     muxing::StreamMuxer,
     transport::{ListenerId, Transport, TransportError, TransportEvent},
@@ -172,48 +173,23 @@ where
         }
     }
 
-    fn dial(&mut self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
-        use TransportError::*;
-        match self {
-            Either::Left(a) => match a.dial(addr) {
-                Ok(connec) => Ok(EitherFuture::First(connec)),
-                Err(MultiaddrNotSupported(addr)) => Err(MultiaddrNotSupported(addr)),
-                Err(Other(err)) => Err(Other(Either::Left(err))),
-            },
-            Either::Right(b) => match b.dial(addr) {
-                Ok(connec) => Ok(EitherFuture::Second(connec)),
-                Err(MultiaddrNotSupported(addr)) => Err(MultiaddrNotSupported(addr)),
-                Err(Other(err)) => Err(Other(Either::Right(err))),
-            },
-        }
-    }
-
-    fn dial_as_listener(
+    fn dial(
         &mut self,
         addr: Multiaddr,
-    ) -> Result<Self::Dial, TransportError<Self::Error>>
-    where
-        Self: Sized,
-    {
+        opts: DialOpts,
+    ) -> Result<Self::Dial, TransportError<Self::Error>> {
         use TransportError::*;
         match self {
-            Either::Left(a) => match a.dial_as_listener(addr) {
+            Either::Left(a) => match a.dial(addr, opts) {
                 Ok(connec) => Ok(EitherFuture::First(connec)),
                 Err(MultiaddrNotSupported(addr)) => Err(MultiaddrNotSupported(addr)),
                 Err(Other(err)) => Err(Other(Either::Left(err))),
             },
-            Either::Right(b) => match b.dial_as_listener(addr) {
+            Either::Right(b) => match b.dial(addr, opts) {
                 Ok(connec) => Ok(EitherFuture::Second(connec)),
                 Err(MultiaddrNotSupported(addr)) => Err(MultiaddrNotSupported(addr)),
                 Err(Other(err)) => Err(Other(Either::Right(err))),
             },
-        }
-    }
-
-    fn address_translation(&self, server: &Multiaddr, observed: &Multiaddr) -> Option<Multiaddr> {
-        match self {
-            Either::Left(a) => a.address_translation(server, observed),
-            Either::Right(b) => b.address_translation(server, observed),
         }
     }
 }
