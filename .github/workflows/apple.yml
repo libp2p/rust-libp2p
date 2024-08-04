@@ -1,0 +1,45 @@
+name: Apple platform
+
+on:
+    pull_request:
+    push:
+        branches:
+            - master
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+
+jobs:
+  test-ios:
+      name: Test iOS
+      runs-on: macos-latest
+      steps:
+        - uses: actions/checkout@v4
+          with:
+            fetch-depth: 0
+
+        - uses: dtolnay/rust-toolchain@stable
+          with:
+            targets: x86_64-apple-ios
+
+        - name: Install cargo dinghy
+          uses: taiki-e/cache-cargo-install-action@v2
+          with:
+            tool: cargo-dinghy
+
+        - name: Start simulator
+          id: boot-simulator
+          run: |
+              RUNTIME_ID=$(xcrun simctl list runtimes | grep iOS | cut -d ' ' -f 7 | tail -1)
+              export SIM_ID=$(xcrun simctl create My-iphone-se com.apple.CoreSimulator.SimDeviceType.iPhone-SE-3rd-generation $RUNTIME_ID)
+              xcrun simctl boot $SIM_ID
+              echo "sim-id=$SIM_ID" >> $GITHUB_OUTPUT
+
+        - name: Run test
+          env:
+              SIM_ID: ${{ steps.boot-simulator.outputs.sim-id }}
+          run: |
+              cargo dinghy -d $SIM_ID test --workspace --all-features
+
