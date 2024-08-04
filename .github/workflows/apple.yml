@@ -40,6 +40,5 @@ jobs:
         - name: Run test
           env:
               SIM_ID: ${{ steps.boot-simulator.outputs.sim-id }}
-          run: |
-              cargo dinghy -d $SIM_ID test --workspace --all-features
+          run: cargo dinghy -d $SIM_ID test --workspace --all-features
 
