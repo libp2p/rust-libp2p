@@ -181,6 +181,12 @@ jobs:
               unstable: true
               deviceType: Apple-Watch-Ultra-2-49mm
               deviceName: my-apple-watch
+            - name: visionOS
+              target: aarch64-apple-visionos-sim
+              platform: auto-visionos-aarch64-sim
+              unstable: true
+              deviceType: Apple-Vision-Pro
+              deviceName: my-apple-vision-pro
     runs-on: macos-latest
     env:
       NAME: ${{ matrix.name }}
