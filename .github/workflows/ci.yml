@@ -229,7 +229,7 @@ jobs:
       - name: Run all tests
         env:
             SIM_ID: ${{ steps.boot-simulator.outputs.sim-id }}
-        run: cargo dinghy -d $SIM_ID test --workspace --all-features $BUILD_STD
+        run: cargo dinghy -d $SIM_ID -p $PLATFORM test --workspace --all-features $BUILD_STD
 
   msrv:
     name: Compile with MSRV
