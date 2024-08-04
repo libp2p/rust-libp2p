@@ -158,7 +158,6 @@ jobs:
 
   apple:
     name: Test on ${{ matrix.name }}
-    needs: gather_published_crates
     strategy:
       fail-fast: false
       matrix:
