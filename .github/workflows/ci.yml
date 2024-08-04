@@ -158,9 +158,11 @@ jobs:
 
   apple:
     name: Test on ${{ matrix.name }}
+    needs: gather_published_crates
     strategy:
       fail-fast: false
       matrix:
+        crate: ${{ fromJSON(needs.gather_published_crates.outputs.members) }}
         include:
             - name: ios
               target: aarch64-apple-ios-sim
@@ -193,6 +195,7 @@ jobs:
       DEVICE_TYPE: ${{ matrix.deviceType }}
       DEVICE_NAME: ${{ matrix.deviceName }}
       BUILD_STD: ${{ matrix.unstable && '-Z build-std' || '' }}
+      PACKAGES: -p ${{ join(matrix.crate, ' -p ') }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -210,7 +213,7 @@ jobs:
             components: rust-src
 
       - name: Check if compiles on ${{ matrix.name }}
-        run: cargo check --workspace --all-features --target=${{ matrix.target }} $BUILD_STD --tests
+        run: cargo check $PACKAGES --all-features --target=${{ matrix.target }} $BUILD_STD --tests
 
       - name: Install cargo dinghy
         uses: taiki-e/cache-cargo-install-action@v2
@@ -228,7 +231,7 @@ jobs:
       - name: Run all tests
         env:
             SIM_ID: ${{ steps.boot-simulator.outputs.sim-id }}
-        run: cargo dinghy -d $SIM_ID -p $PLATFORM test --workspace --all-features $BUILD_STD
+        run: cargo dinghy -d $SIM_ID -p $PLATFORM test $PACKAGES --all-features $BUILD_STD
 
   msrv:
     name: Compile with MSRV
