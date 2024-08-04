@@ -210,7 +210,6 @@ jobs:
         if: ${{ matrix.unstable }}
         with:
             toolchain: nightly
-            targets: ${{ matrix.target }}
             components: rust-src
 
       - name: Check if compiles on ${{ matrix.name }}
