@@ -35,6 +35,9 @@ async fn test_discovery_async_std_ipv4() {
     run_discovery_test(Config::default()).await
 }
 
+// This test (typically) doesn't work on macOS because that port and address are already used execlusively by
+// mdnsResponder, which is a system service.
+#[cfg_attr(target_vendor = "apple", ignore)]
 #[async_std::test]
 async fn test_discovery_async_std_ipv6() {
     let _ = tracing_subscriber::fmt()
