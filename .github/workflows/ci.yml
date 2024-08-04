@@ -157,12 +157,11 @@ jobs:
       - run: cargo check --package libp2p --all-features --target=${{ matrix.target }}
 
   apple:
-    name: Test ${{ matrix.crate }} on ${{ matrix.name }}
+    name: Test on ${{ matrix.name }}
     needs: gather_published_crates
     strategy:
       fail-fast: false
       matrix:
-        # crate: ${{ fromJSON(needs.gather_published_crates.outputs.members) }}
         include:
             - name: ios
               target: aarch64-apple-ios-sim
@@ -184,13 +183,11 @@ jobs:
               deviceName: my-apple-watch
     runs-on: macos-latest
     env:
-      # CRATE: ${{ matrix.crate }}
-      CRATE: libp2p
       NAME: ${{ matrix.name }}
       PLATFORM: ${{ matrix.platform }}
       DEVICE_TYPE: ${{ matrix.deviceType }}
       DEVICE_NAME: ${{ matrix.deviceName }}
-      BUILD_STD: ${{ matrix.unstable && '' || '-Z build-std' }}
+      BUILD_STD: ${{ matrix.unstable && '-Z build-std' || '' }}
     steps:
       - uses: actions/checkout@v4
         with:
