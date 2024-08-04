@@ -162,7 +162,6 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        crate: ${{ fromJSON(needs.gather_published_crates.outputs.members) }}
         include:
             - name: ios
               target: aarch64-apple-ios-sim
@@ -195,7 +194,7 @@ jobs:
       DEVICE_TYPE: ${{ matrix.deviceType }}
       DEVICE_NAME: ${{ matrix.deviceName }}
       BUILD_STD: ${{ matrix.unstable && '-Z build-std' || '' }}
-      PACKAGES: -p ${{ join(matrix.crate, ' -p ') }}
+      PACKAGES: -p ${{ join(fromJSON(needs.gather_published_crates.outputs.members), ' -p ') }}
     steps:
       - uses: actions/checkout@v4
         with:
