@@ -44,6 +44,7 @@ pub(crate) fn build_struct(
     let dial_upgrade_error = quote! { #prelude_path::DialUpgradeError };
     let listen_upgrade_error = quote! { #prelude_path::ListenUpgradeError };
     let stream_upgrade_error = quote! { #prelude_path::StreamUpgradeError };
+    let port_use = quote! { #prelude_path::PortUse };
 
     let mut generics = ast.generics.clone();
     generics.params.iter_mut().for_each(|param| {
@@ -292,10 +293,11 @@ pub(crate) fn build_struct(
                 peer: #peer_id,
                 addr: &#multiaddr,
                 role_override: #endpoint,
+                port_use: #port_use,
             ) -> std::result::Result<#t_handler<Self>, #connection_denied> {
                 Ok(Self::ConnectionHandler {
                     #(#fields: self.#fields.handle_established_outbound_connection(
-                        connection_id, peer, addr, role_override,
+                        connection_id, peer, addr, role_override, port_use,
                     )?,)*
                     field_index: 0,
                 })
