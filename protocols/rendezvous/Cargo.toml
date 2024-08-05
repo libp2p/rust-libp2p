@@ -3,7 +3,7 @@ name = "libp2p-rendezvous"
 edition = "2021"
 rust-version = { workspace = true }
 description = "Rendezvous protocol for libp2p"
-version = "0.15.0"
+version = "0.15.1"
 authors = ["The COMIT guys <hello@comit.network>"]
 license = "MIT"
 repository = "https://github.com/libp2p/rust-libp2p"
@@ -29,7 +29,7 @@ tracing = { workspace = true }
 void = "1"
 
 [dev-dependencies]
-libp2p-swarm = { workspace = true, features = ["experimental-macros", "macros", "tokio"] }
+libp2p-swarm = { workspace = true, features = ["experimental-macros", "tokio"] }
 libp2p-noise = { workspace = true }
 libp2p-ping = { workspace = true }
 libp2p-identify = { workspace = true }

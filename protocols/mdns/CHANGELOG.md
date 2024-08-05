@@ -1,6 +1,7 @@
-## 0.46.0
+## 0.46.1
 
-<!-- Update to libp2p-swarm v0.45.0 -->
+- Add experimental macros to tests.
+
 ## 0.45.2
 
 - Add `#[track_caller]` on all `spawn` wrappers.

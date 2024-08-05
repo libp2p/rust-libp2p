@@ -1,3 +1,7 @@
+## 0.24.1
+
+- Add experimental macros to tests.
+
 ## 0.24.0
 
 

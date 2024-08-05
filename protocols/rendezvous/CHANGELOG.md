@@ -1,6 +1,6 @@
-## 0.15.0
+## 0.15.1
 
-<!-- Update to libp2p-swarm v0.45.0 -->
+- Adding experimental macros to tests.
 
 ## 0.14.1
 - Use `web-time` instead of `instant`.

@@ -1,6 +1,9 @@
+## 0.45.1
+
+- Add experimental macros to tests.
+
 ## 0.45.0
 
-<!-- Update to libp2p-swarm v0.45.0 -->
 
 ## 0.44.2
 
