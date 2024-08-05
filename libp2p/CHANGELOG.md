@@ -7,11 +7,22 @@
 - Raise MSRV to 1.73.
   See [PR 5266](https://github.com/libp2p/rust-libp2p/pull/5266).
 
+- Implement refactored `Transport`.
+  See [PR 4568].
+
+- Move `address_translation` from `libp2p-core` to `libp2p-swarm` and `libp2p-identify`. To now get
+  address translation behaviour, i.e. discovery of extern address (candidates) based on connecting
+  to other peers, one needs to use `libp2p-identify` now. This pertains to you if your nodes can be
+  behind NATs and they aren't aware of their true external address.
+  See [PR 4568].
+
 - Use `web-time` instead of `instant`.
   See [PR 5347](https://github.com/libp2p/rust-libp2p/pull/5347).
 
 - Remove redundant async signature from builder methods.
   See [PR 5468](https://github.com/libp2p/rust-libp2p/pull/5468).
+
+[PR 4568]: https://github.com/libp2p/rust-libp2p/pull/4568
 
 ## 0.53.2
 

@@ -1,3 +1,8 @@
+## 0.11.0
+
+- Implement refactored `Transport`.
+  See [PR 4568](https://github.com/libp2p/rust-libp2p/pull/4568)
+
 ## 0.10.3
 
 - Update `quinn` to 0.11 and `libp2p-tls` to 0.4.0.

@@ -25,7 +25,7 @@ use std::{
     task::{Context, Poll},
 };
 
-use libp2p_core::Multiaddr;
+use libp2p_core::{transport::PortUse, Multiaddr};
 use libp2p_identity::PeerId;
 use libp2p_swarm::{
     derive_prelude::ConnectionEstablished, ConnectionClosed, ConnectionId, FromSwarm,
@@ -92,6 +92,7 @@ impl NetworkBehaviour for Behaviour {
         _peer: PeerId,
         _addr: &Multiaddr,
         _role_override: libp2p_core::Endpoint,
+        _port_use: PortUse,
     ) -> Result<libp2p_swarm::THandler<Self>, libp2p_swarm::ConnectionDenied> {
         Ok(Handler::default())
     }
