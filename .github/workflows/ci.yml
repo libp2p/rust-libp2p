@@ -157,7 +157,7 @@ jobs:
       - run: cargo check --package libp2p --all-features --target=${{ matrix.target }}
 
   apple:
-    name: Test on ${{ matrix.name }}
+    name: Test ${{ matrix.crate }} on ${{ matrix.name }}
     needs: gather_published_crates
     strategy:
       fail-fast: false
