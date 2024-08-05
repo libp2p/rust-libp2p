@@ -79,7 +79,6 @@ Conduct](https://github.com/ipfs/community/blob/master/code-of-conduct.md).
 (In alphabetical order.)
 
 - João Oliveira ([@jxs](https://github.com/jxs))
-- Thomas Eizinger ([@thomaseizinger](https://github.com/thomaseizinger))
 
 ## Notable users
 
@@ -102,3 +101,4 @@ Conduct](https://github.com/ipfs/community/blob/master/code-of-conduct.md).
 - [Substrate](https://github.com/paritytech/substrate) - Framework for blockchain innovation,
 used by [Polkadot](https://www.parity.io/technologies/polkadot/).
 - [Taple](https://github.com/opencanarias/taple-core) - Sustainable DLT for asset and process traceability by [OpenCanarias](https://www.opencanarias.com/en/).
+- [Ceylon](https://github.com/ceylonai/ceylon) - A Multi-Agent System (MAS) Development Framwork.

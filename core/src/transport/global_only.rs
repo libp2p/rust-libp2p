@@ -20,7 +20,7 @@
 
 use crate::{
     multiaddr::{Multiaddr, Protocol},
-    transport::{ListenerId, TransportError, TransportEvent},
+    transport::{DialOpts, ListenerId, TransportError, TransportEvent},
 };
 use std::{
     pin::Pin,
@@ -287,57 +287,31 @@ impl<T: crate::Transport + Unpin> crate::Transport for Transport<T> {
         self.inner.remove_listener(id)
     }
 
-    fn dial(&mut self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
-        match addr.iter().next() {
-            Some(Protocol::Ip4(a)) => {
-                if !ipv4_global::is_global(a) {
-                    tracing::debug!(ip=%a, "Not dialing non global IP address");
-                    return Err(TransportError::MultiaddrNotSupported(addr));
-                }
-                self.inner.dial(addr)
-            }
-            Some(Protocol::Ip6(a)) => {
-                if !ipv6_global::is_global(a) {
-                    tracing::debug!(ip=%a, "Not dialing non global IP address");
-                    return Err(TransportError::MultiaddrNotSupported(addr));
-                }
-                self.inner.dial(addr)
-            }
-            _ => {
-                tracing::debug!(address=%addr, "Not dialing unsupported Multiaddress");
-                Err(TransportError::MultiaddrNotSupported(addr))
-            }
-        }
-    }
-
-    fn dial_as_listener(
+    fn dial(
         &mut self,
         addr: Multiaddr,
+        opts: DialOpts,
     ) -> Result<Self::Dial, TransportError<Self::Error>> {
         match addr.iter().next() {
             Some(Protocol::Ip4(a)) => {
                 if !ipv4_global::is_global(a) {
-                    tracing::debug!(ip=?a, "Not dialing non global IP address");
+                    tracing::debug!(ip=%a, "Not dialing non global IP address");
                     return Err(TransportError::MultiaddrNotSupported(addr));
                 }
-                self.inner.dial_as_listener(addr)
+                self.inner.dial(addr, opts)
             }
             Some(Protocol::Ip6(a)) => {
                 if !ipv6_global::is_global(a) {
-                    tracing::debug!(ip=?a, "Not dialing non global IP address");
+                    tracing::debug!(ip=%a, "Not dialing non global IP address");
                     return Err(TransportError::MultiaddrNotSupported(addr));
                 }
-                self.inner.dial_as_listener(addr)
+                self.inner.dial(addr, opts)
             }
             _ => {
                 tracing::debug!(address=%addr, "Not dialing unsupported Multiaddress");
                 Err(TransportError::MultiaddrNotSupported(addr))
             }
         }
-    }
-
-    fn address_translation(&self, listen: &Multiaddr, observed: &Multiaddr) -> Option<Multiaddr> {
-        self.inner.address_translation(listen, observed)
     }
 
     fn poll(

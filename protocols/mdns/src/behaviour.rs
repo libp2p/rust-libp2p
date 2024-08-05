@@ -28,6 +28,7 @@ use crate::Config;
 use futures::channel::mpsc;
 use futures::{Stream, StreamExt};
 use if_watch::IfEvent;
+use libp2p_core::transport::PortUse;
 use libp2p_core::{Endpoint, Multiaddr};
 use libp2p_identity::PeerId;
 use libp2p_swarm::behaviour::FromSwarm;
@@ -263,6 +264,7 @@ where
         _: PeerId,
         _: &Multiaddr,
         _: Endpoint,
+        _: PortUse,
     ) -> Result<THandler<Self>, ConnectionDenied> {
         Ok(dummy::ConnectionHandler)
     }

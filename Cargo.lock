@@ -1728,7 +1728,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a8f2f12607f92c69b12ed746fabf9ca4f5c482cba46679c1a75b874ed7c26adb"
 dependencies = [
  "futures-io",
- "rustls 0.23.9",
+ "rustls 0.23.11",
  "rustls-pki-types",
 ]
 
@@ -2660,7 +2660,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-autonat"
-version = "0.12.1"
+version = "0.13.0"
 dependencies = [
  "async-std",
  "async-trait",
@@ -2699,7 +2699,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-core"
-version = "0.41.3"
+version = "0.42.0"
 dependencies = [
  "async-std",
  "either",
@@ -2730,7 +2730,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-dcutr"
-version = "0.11.1"
+version = "0.12.0"
 dependencies = [
  "async-std",
  "asynchronous-codec",
@@ -2764,7 +2764,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-dns"
-version = "0.41.1"
+version = "0.42.0"
 dependencies = [
  "async-std",
  "async-std-resolver",
@@ -2782,7 +2782,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-floodsub"
-version = "0.44.0"
+version = "0.45.0"
 dependencies = [
  "asynchronous-codec",
  "bytes",
@@ -2927,7 +2927,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-mdns"
-version = "0.45.2"
+version = "0.46.0"
 dependencies = [
  "async-io 2.3.3",
  "async-std",
@@ -3082,7 +3082,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-ping"
-version = "0.44.2"
+version = "0.45.0"
 dependencies = [
  "async-std",
  "either",
@@ -3141,7 +3141,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-quic"
-version = "0.10.3"
+version = "0.11.0"
 dependencies = [
  "async-std",
  "bytes",
@@ -3160,7 +3160,7 @@ dependencies = [
  "quinn",
  "rand 0.8.5",
  "ring 0.17.8",
- "rustls 0.23.9",
+ "rustls 0.23.11",
  "socket2 0.5.7",
  "thiserror",
  "tokio",
@@ -3170,7 +3170,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-relay"
-version = "0.17.3"
+version = "0.18.0"
 dependencies = [
  "asynchronous-codec",
  "bytes",
@@ -3199,7 +3199,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-rendezvous"
-version = "0.14.1"
+version = "0.15.0"
 dependencies = [
  "async-trait",
  "asynchronous-codec",
@@ -3229,7 +3229,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-request-response"
-version = "0.26.4"
+version = "0.27.0"
 dependencies = [
  "anyhow",
  "async-std",
@@ -3278,7 +3278,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-stream"
-version = "0.1.0-alpha.1"
+version = "0.2.0-alpha"
 dependencies = [
  "futures",
  "libp2p-core",
@@ -3374,7 +3374,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-tls"
-version = "0.4.0"
+version = "0.4.1"
 dependencies = [
  "futures",
  "futures-rustls",
@@ -3386,7 +3386,7 @@ dependencies = [
  "libp2p-yamux",
  "rcgen",
  "ring 0.17.8",
- "rustls 0.23.9",
+ "rustls 0.23.11",
  "rustls-webpki 0.101.7",
  "thiserror",
  "tokio",
@@ -3396,7 +3396,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-uds"
-version = "0.40.0"
+version = "0.41.0"
 dependencies = [
  "async-std",
  "futures",
@@ -3408,7 +3408,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-upnp"
-version = "0.2.2"
+version = "0.3.0"
 dependencies = [
  "futures",
  "futures-timer",
@@ -3422,7 +3422,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-webrtc"
-version = "0.7.1-alpha"
+version = "0.8.0-alpha"
 dependencies = [
  "async-trait",
  "bytes",
@@ -3473,7 +3473,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-webrtc-websys"
-version = "0.3.0-alpha"
+version = "0.4.0-alpha"
 dependencies = [
  "bytes",
  "futures",
@@ -3493,7 +3493,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-websocket"
-version = "0.43.2"
+version = "0.44.0"
 dependencies = [
  "async-std",
  "either",
@@ -3516,7 +3516,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-websocket-websys"
-version = "0.3.2"
+version = "0.4.0"
 dependencies = [
  "bytes",
  "futures",
@@ -3535,7 +3535,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-webtransport-websys"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "futures",
  "js-sys",
@@ -4103,9 +4103,9 @@ checksum = "624a8340c38c1b80fd549087862da4ba43e08858af025b236e509b6649fc13d5"
 
 [[package]]
 name = "openssl"
-version = "0.10.60"
+version = "0.10.66"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "79a4c6c3a2b158f7f8f2a2fc5a969fa3a068df6fc9dbb4a43845436e3af7c800"
+checksum = "9529f4786b70a3e8c61e11179af17ab6188ad8d0ded78c5529441ed39d4bd9c1"
 dependencies = [
  "bitflags 2.4.1",
  "cfg-if",
@@ -4135,9 +4135,9 @@ checksum = "ff011a302c396a5197692431fc1948019154afc178baf7d8e37367442a4601cf"
 
 [[package]]
 name = "openssl-sys"
-version = "0.9.96"
+version = "0.9.103"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3812c071ba60da8b5677cc12bcb1d42989a65553772897a7e0355545a819838f"
+checksum = "7f9e8deee91df40a943c71b917e5874b951d32a802526c85721ce3b776c929d6"
 dependencies = [
  "cc",
  "libc",
@@ -4624,7 +4624,7 @@ dependencies = [
  "quinn-proto",
  "quinn-udp",
  "rustc-hash",
- "rustls 0.23.9",
+ "rustls 0.23.11",
  "thiserror",
  "tokio",
  "tracing",
@@ -4640,7 +4640,7 @@ dependencies = [
  "rand 0.8.5",
  "ring 0.17.8",
  "rustc-hash",
- "rustls 0.23.9",
+ "rustls 0.23.11",
  "slab",
  "thiserror",
  "tinyvec",
@@ -5164,21 +5164,21 @@ dependencies = [
  "log",
  "ring 0.17.8",
  "rustls-pki-types",
- "rustls-webpki 0.102.4",
+ "rustls-webpki 0.102.5",
  "subtle",
  "zeroize",
 ]
 
 [[package]]
 name = "rustls"
-version = "0.23.9"
+version = "0.23.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a218f0f6d05669de4eabfb24f31ce802035c952429d037507b4a4a39f0e60c5b"
+checksum = "4828ea528154ae444e5a642dbb7d5623354030dc9822b83fd9bb79683c7399d0"
 dependencies = [
  "once_cell",
  "ring 0.17.8",
  "rustls-pki-types",
- "rustls-webpki 0.102.4",
+ "rustls-webpki 0.102.5",
  "subtle",
  "zeroize",
 ]
@@ -5211,9 +5211,9 @@ dependencies = [
 
 [[package]]
 name = "rustls-webpki"
-version = "0.102.4"
+version = "0.102.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ff448f7e92e913c4b7d4c6d8e4540a1724b319b4152b8aef6d4cf8339712b33e"
+checksum = "f9a6fccd794a42c2c105b513a2f62bc3fd8f3ba57a4593677ceb0bd035164d78"
 dependencies = [
  "ring 0.17.8",
  "rustls-pki-types",

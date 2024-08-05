@@ -5,6 +5,14 @@
 
 ## 0.45.0
 
+- Implement refactored `Transport`.
+  See [PR 4568]
+- Move `address_translation` into swarm and into `libp2p-identify`.
+  See [PR 4568]
+
+[PR 4568]: https://github.com/libp2p/rust-libp2p/pull/4568
+
+## 0.44.3
 - Optimize internal connection `fn poll`. New implementation now scales much better with number of listen protocols active.
   No changes to public API introduced.
   See [PR 5026](https://github.com/libp2p/rust-libp2p/pull/5026)

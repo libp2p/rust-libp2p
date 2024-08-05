@@ -1,4 +1,6 @@
 ## 0.47.0
+
+<!-- Update to libp2p-swarm v0.45.0 -->
 - Add ConnectionError to FromSwarm::ConnectionClosed.
   See [PR 5485](https://github.com/libp2p/rust-libp2p/pull/5485).
 
@@ -9,7 +11,7 @@
 ## 0.46.1
 
 - Deprecate `Rpc` in preparation for removing it from the public API because it is an internal type.
-  See [PR 4833](https://github.com/libp2p/rust-libp2p/pull/4833). 
+  See [PR 4833](https://github.com/libp2p/rust-libp2p/pull/4833).
 
 ## 0.46.0
 

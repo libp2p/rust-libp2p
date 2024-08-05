@@ -1,3 +1,7 @@
+## 0.45.0
+
+<!-- Update to libp2p-swarm v0.45.0 -->
+
 ## 0.44.2
 
 - Use `web-time` instead of `instant`.
@@ -11,7 +15,6 @@
 - Impose `Sync` on `ping::Failure::Other`.
   `ping::Event` can now be shared between threads.
   See [PR 5250]
-
 
 [PR 5250]: https://github.com/libp2p/rust-libp2p/pull/5250
 
