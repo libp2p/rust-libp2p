@@ -34,7 +34,7 @@ async-io = ["dep:async-io", "dep:async-std", "if-watch/smol"]
 [dev-dependencies]
 async-std = { version = "1.9.0", features = ["attributes"] }
 libp2p-noise = { workspace = true }
-libp2p-swarm = { workspace = true, features = ["tokio", "async-std"] }
+libp2p-swarm = { workspace = true, features = ["experimental-macros", "tokio", "async-std"] }
 libp2p-tcp = { workspace = true, features = ["tokio", "async-io"] }
 libp2p-yamux = { workspace = true }
 tokio = { workspace = true, features = ["macros", "rt", "rt-multi-thread", "time"] }

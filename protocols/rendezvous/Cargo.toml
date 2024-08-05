@@ -29,7 +29,7 @@ tracing = { workspace = true }
 void = "1"
 
 [dev-dependencies]
-libp2p-swarm = { workspace = true, features = ["macros", "tokio"] }
+libp2p-swarm = { workspace = true, features = ["experimental-macros", "macros", "tokio"] }
 libp2p-noise = { workspace = true }
 libp2p-ping = { workspace = true }
 libp2p-identify = { workspace = true }
