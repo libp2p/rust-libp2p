@@ -360,15 +360,6 @@ pub(crate) fn build_struct(
             ) -> std::task::Poll<
                 #connection_handler_event<Self::OutboundProtocol, Self::OutboundOpenInfo, Self::ToBehaviour>,
             > {
-               // #(
-               //     if let std::task::Poll::Ready(event) = self.#fields.poll(cx) {
-               //         return std::task::Poll::Ready(event
-               //             .map_custom(#to_beh::#var_names)
-               //             .map_outbound_open_info(#ooi::#var_names)
-               //             .map_protocol(#ou::#var_names));
-               //     }
-               // )*
-
                 let mut fuel = #beh_count;
                 while fuel > 0 {
                     // save the poll position to avoid repolling exhaused handlers

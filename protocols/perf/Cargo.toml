@@ -22,7 +22,7 @@ libp2p-core = { workspace = true }
 libp2p-dns = { workspace = true, features = ["tokio"] }
 libp2p-identity = { workspace = true, features = ["rand"] }
 libp2p-quic = { workspace = true, features = ["tokio"] }
-libp2p-swarm = { workspace = true, features = ["experimental-macros", "macros", "tokio"] }
+libp2p-swarm = { workspace = true, features = ["macros", "tokio"] }
 libp2p-tcp = { workspace = true, features = ["tokio"] }
 libp2p-tls = { workspace = true }
 libp2p-yamux = { workspace = true }

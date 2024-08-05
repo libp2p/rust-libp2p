@@ -122,35 +122,42 @@ pub mod derive_prelude {
     pub use libp2p_core::Multiaddr;
     pub use libp2p_identity::PeerId;
 
-    pub type TBehaviourOutEvent<TBehaviour> = <TBehaviour as NetworkBehaviour>::ToSwarm;
-    pub type THandlerInProtocol<TBehaviour> =
-        <THandler<TBehaviour> as ConnectionHandler>::InboundProtocol;
-    pub type THandlerInOpenInfo<TBehaviour> =
-        <THandler<TBehaviour> as ConnectionHandler>::InboundOpenInfo;
-    pub type THandlerOutProtocol<TBehaviour> =
-        <THandler<TBehaviour> as ConnectionHandler>::OutboundProtocol;
-    pub type THandlerOutOpenInfo<TBehaviour> =
-        <THandler<TBehaviour> as ConnectionHandler>::OutboundOpenInfo;
-    pub type THandlerInUpgradeInfo<TBehaviour> =
-        <THandlerInProtocol<TBehaviour> as UpgradeInfoSend>::Info;
-    pub type THandlerOutUpgradeInfo<TBehaviour> =
-        <THandlerOutProtocol<TBehaviour> as UpgradeInfoSend>::Info;
-    pub type THandlerInUpgradeInfoIter<TBehaviour> =
-        <THandlerInProtocol<TBehaviour> as UpgradeInfoSend>::InfoIter;
-    pub type THandlerOutUpgradeInfoIter<TBehaviour> =
-        <THandlerOutProtocol<TBehaviour> as UpgradeInfoSend>::InfoIter;
-    pub type THandlerInUpgradeOutput<TBehaviour> =
-        <THandlerInProtocol<TBehaviour> as InboundUpgradeSend>::Output;
-    pub type THandlerOutUpgradeOutput<TBehaviour> =
-        <THandlerOutProtocol<TBehaviour> as OutboundUpgradeSend>::Output;
-    pub type THandlerInUpgradeError<TBehaviour> =
-        <THandlerInProtocol<TBehaviour> as InboundUpgradeSend>::Error;
-    pub type THandlerOutUpgradeError<TBehaviour> =
-        <THandlerOutProtocol<TBehaviour> as OutboundUpgradeSend>::Error;
-    pub type THandlerInUpgradeFuture<TBehaviour> =
-        <THandlerInProtocol<TBehaviour> as InboundUpgradeSend>::Future;
-    pub type THandlerOutUpgradeFuture<TBehaviour> =
-        <THandlerOutProtocol<TBehaviour> as OutboundUpgradeSend>::Future;
+    #[cfg(feature = "experimental-macros")]
+    #[doc(hidden)]
+    pub mod experimental {
+        use super::*;
+        pub type TBehaviourOutEvent<TBehaviour> = <TBehaviour as NetworkBehaviour>::ToSwarm;
+        pub type THandlerInProtocol<TBehaviour> =
+            <THandler<TBehaviour> as ConnectionHandler>::InboundProtocol;
+        pub type THandlerInOpenInfo<TBehaviour> =
+            <THandler<TBehaviour> as ConnectionHandler>::InboundOpenInfo;
+        pub type THandlerOutProtocol<TBehaviour> =
+            <THandler<TBehaviour> as ConnectionHandler>::OutboundProtocol;
+        pub type THandlerOutOpenInfo<TBehaviour> =
+            <THandler<TBehaviour> as ConnectionHandler>::OutboundOpenInfo;
+        pub type THandlerInUpgradeInfo<TBehaviour> =
+            <THandlerInProtocol<TBehaviour> as UpgradeInfoSend>::Info;
+        pub type THandlerOutUpgradeInfo<TBehaviour> =
+            <THandlerOutProtocol<TBehaviour> as UpgradeInfoSend>::Info;
+        pub type THandlerInUpgradeInfoIter<TBehaviour> =
+            <THandlerInProtocol<TBehaviour> as UpgradeInfoSend>::InfoIter;
+        pub type THandlerOutUpgradeInfoIter<TBehaviour> =
+            <THandlerOutProtocol<TBehaviour> as UpgradeInfoSend>::InfoIter;
+        pub type THandlerInUpgradeOutput<TBehaviour> =
+            <THandlerInProtocol<TBehaviour> as InboundUpgradeSend>::Output;
+        pub type THandlerOutUpgradeOutput<TBehaviour> =
+            <THandlerOutProtocol<TBehaviour> as OutboundUpgradeSend>::Output;
+        pub type THandlerInUpgradeError<TBehaviour> =
+            <THandlerInProtocol<TBehaviour> as InboundUpgradeSend>::Error;
+        pub type THandlerOutUpgradeError<TBehaviour> =
+            <THandlerOutProtocol<TBehaviour> as OutboundUpgradeSend>::Error;
+        pub type THandlerInUpgradeFuture<TBehaviour> =
+            <THandlerInProtocol<TBehaviour> as InboundUpgradeSend>::Future;
+        pub type THandlerOutUpgradeFuture<TBehaviour> =
+            <THandlerOutProtocol<TBehaviour> as OutboundUpgradeSend>::Future;
+    }
+    #[cfg(feature = "experimental-macros")]
+    pub use experimental::*;
 }
 
 pub use behaviour::{
