@@ -12,7 +12,7 @@ release = false
 clap = { version = "4.5.6", features = ["derive"] }
 futures = { workspace = true }
 futures-timer = "3.0"
-libp2p = { path = "../../libp2p", features = [ "dns", "dcutr", "identify", "macros", "noise", "ping", "quic", "relay", "rendezvous", "tcp", "tokio", "yamux"] }
+libp2p = { path = "../../libp2p", features = [ "dns", "dcutr", "identify", "experimental-macros", "noise", "ping", "quic", "relay", "rendezvous", "tcp", "tokio", "yamux"] }
 log = "0.4"
 tokio = { workspace = true, features = ["macros", "net", "rt", "signal"] }
 tracing = { workspace = true }

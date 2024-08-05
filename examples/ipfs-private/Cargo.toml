@@ -13,7 +13,8 @@ tokio = { workspace = true, features = ["rt-multi-thread", "macros", "io-std"] }
 async-trait = "0.1"
 either = "1.12"
 futures = { workspace = true }
-libp2p = { path = "../../libp2p", features = [ "tokio", "gossipsub", "dns", "identify", "kad", "macros", "noise", "ping", "pnet", "tcp", "websocket", "yamux"] }
+libp2p = { path = "../../libp2p", features = [ "tokio", "gossipsub", "dns", "identify", "kad",
+    "experimental-macros", "noise", "ping", "pnet", "tcp", "websocket", "yamux"] }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true, features = ["env-filter"] }
 
