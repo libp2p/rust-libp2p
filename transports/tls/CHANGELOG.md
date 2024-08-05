@@ -1,3 +1,7 @@
+## 0.4.2
+
+- Adding experimental macros to tests.
+
 ## 0.4.1
 
 - Fix a panic caused by `rustls` parsing the libp2p TLS extension.
