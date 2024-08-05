@@ -12,14 +12,14 @@ categories = ["network-programming", "asynchronous"]
 
 
 [dependencies]
-async-trait = "0.1"
+async-trait = { version = "0.1", optional = true }
 asynchronous-codec = { workspace = true }
 bytes = { version = "1", optional = true }
 either = { version = "1.9.0", optional = true }
 futures = { workspace = true }
 futures-bounded = { workspace = true, optional = true }
 futures-timer = "3.0"
-instant = "0.1"
+web-time = { workspace = true, optional = true }
 libp2p-core = { workspace = true }
 libp2p-identity = { workspace = true }
 libp2p-request-response = { workspace = true, optional = true }
@@ -42,7 +42,7 @@ libp2p-swarm = { workspace = true, features = ["macros"]}
 
 [features]
 default = ["v1", "v2"]
-v1 = ["dep:libp2p-request-response"]
+v1 = ["dep:libp2p-request-response", "dep:web-time", "dep:async-trait"]
 v2 = ["dep:bytes", "dep:either", "dep:futures-bounded", "dep:thiserror", "dep:void", "dep:rand_core"]
 
 [lints]

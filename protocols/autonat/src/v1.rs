@@ -19,9 +19,12 @@
 // DEALINGS IN THE SOFTWARE.
 
 //! Implementation of the [AutoNAT](https://github.com/libp2p/specs/blob/master/autonat/README.md) protocol.
+//!
+//! ## Eventual Deprecation
+//! This version of the protocol will eventually be deprecated in favor of [v2](crate::v2).
+//! We recommend using v2 for new projects.
 
 #![cfg_attr(docsrs, feature(doc_cfg, doc_auto_cfg))]
-#![cfg_attr(not(test), deprecated(note = "Please use `v2` module instead."))]
 
 pub(crate) mod behaviour;
 pub(crate) mod protocol;

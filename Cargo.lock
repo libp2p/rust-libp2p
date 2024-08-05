@@ -2698,7 +2698,6 @@ dependencies = [
  "futures",
  "futures-bounded",
  "futures-timer",
- "instant",
  "libp2p-core",
  "libp2p-identify",
  "libp2p-identity",
@@ -2714,6 +2713,7 @@ dependencies = [
  "tracing",
  "tracing-subscriber",
  "void",
+ "web-time 1.1.0",
 ]
 
 [[package]]

@@ -1,20 +1,15 @@
-## 0.14.0-alpha
+## 0.13.0
 
+- Due to the refactor of `Transport` it's no longer required to create a seperate transport for
+AutoNAT where port reuse is disabled. This information is now passed by the behaviour.
+  See [PR 4568](https://github.com/libp2p/rust-libp2p/pull/4568).
 - Introduce the new AutoNATv2 protocol.
   It's split into a client and a server part, represented in their respective modules
   Features:
     - Since the server now always dials back over a newly allocated port, this made refactor(*): Transport redesign #4568 necessary; the client can be sure of the reachability state for other peers, even if the connection to the server was made through a hole punch.
     - The server can now test addresses different from the observed address (i.e., the connection to the server was made through a `p2p-circuit`). To mitigate against DDoS attacks, the client has to send more data to the server than the dial-back costs.
   See [PR 5526].
-- Deprecate the now unnecessary first version of AutoNAT. See [PR 5526].
-
 [PR 5526]: https://github.com/libp2p/rust-libp2p/pull/5526
-
-## 0.13.0
-
-- Due to the refactor of `Transport` it's no longer required to create a seperate transport for
-AutoNAT where port reuse is disabled. This information is now passed by the behaviour.
-  See [PR 4568](https://github.com/libp2p/rust-libp2p/pull/4568).
 
 <!-- Update to libp2p-swarm v0.45.0 -->
 
