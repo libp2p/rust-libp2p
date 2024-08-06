@@ -6,7 +6,8 @@ AutoNAT where port reuse is disabled. This information is now passed by the beha
 - Introduce the new AutoNATv2 protocol.
   It's split into a client and a server part, represented in their respective modules
   Features:
-    - Since the server now always dials back over a newly allocated port, this made refactor(*): Transport redesign #4568 necessary; the client can be sure of the reachability state for other peers, even if the connection to the server was made through a hole punch.
+    - The server now always dials back over a newly allocated port.
+      This more accurately reflects the reachability state for other peers and avoids accidental hole punching.
     - The server can now test addresses different from the observed address (i.e., the connection to the server was made through a `p2p-circuit`). To mitigate against DDoS attacks, the client has to send more data to the server than the dial-back costs.
   See [PR 5526].
 [PR 5526]: https://github.com/libp2p/rust-libp2p/pull/5526
