@@ -9,8 +9,7 @@ AutoNAT where port reuse is disabled. This information is now passed by the beha
     - The server now always dials back over a newly allocated port.
       This more accurately reflects the reachability state for other peers and avoids accidental hole punching.
     - The server can now test addresses different from the observed address (i.e., the connection to the server was made through a `p2p-circuit`). To mitigate against DDoS attacks, the client has to send more data to the server than the dial-back costs.
-  See [PR 5526].
-[PR 5526]: https://github.com/libp2p/rust-libp2p/pull/5526
+  See [PR 5526](https://github.com/libp2p/rust-libp2p/pull/5526).
 
 <!-- Update to libp2p-swarm v0.45.0 -->
 
