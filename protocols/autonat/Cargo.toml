@@ -45,9 +45,6 @@ default = ["v1", "v2"]
 v1 = ["dep:libp2p-request-response", "dep:web-time", "dep:async-trait"]
 v2 = ["dep:bytes", "dep:either", "dep:futures-bounded", "dep:thiserror", "dep:void", "dep:rand_core"]
 
-[lints]
-workspace = true
-
 # Passing arguments to the docsrs builder in order to properly document cfg's.
 # More information: https://docs.rs/about/builds#cross-compiling
 [package.metadata.docs.rs]
