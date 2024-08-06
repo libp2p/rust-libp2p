@@ -67,8 +67,6 @@ required-features = ["macros"]
 # More information: https://docs.rs/about/builds#cross-compiling
 [package.metadata.docs.rs]
 all-features = true
-rustdoc-args = ["--cfg", "docsrs"]
-rustc-args = ["--cfg", "docsrs"]
 
 [[bench]]
 name = "connection_handler"
