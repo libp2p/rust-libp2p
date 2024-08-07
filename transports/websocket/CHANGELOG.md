@@ -2,6 +2,9 @@
 
 - Implement refactored `Transport`.
   See [PR 4568](https://github.com/libp2p/rust-libp2p/pull/4568)
+- Allow wss connections on IP addresses.
+  See [PR 5525](https://github.com/libp2p/rust-libp2p/pull/5525).
+
 ## 0.43.2
 
 - fix: Avoid websocket panic on polling after errors. See [PR 5482].
