@@ -40,8 +40,6 @@ libp2p-identity = { workspace = true, features = ["rand"] }
 # More information: https://docs.rs/about/builds#cross-compiling
 [package.metadata.docs.rs]
 all-features = true
-rustc-args = ["--cfg", "docsrs"]
-rustdoc-args = ["--cfg", "docsrs"]
 
 [lints]
 workspace = true
