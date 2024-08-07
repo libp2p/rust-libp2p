@@ -152,38 +152,45 @@ impl RecordStore for MemoryStore {
         }
         .or_insert_with(Default::default);
 
-        if let Some(i) = providers.iter().position(|p| p.provider == record.provider) {
-            // In-place update of an existing provider record.
-            providers.as_mut()[i] = record;
-        } else {
-            // It is a new provider record for that key.
-            let local_key = self.local_key;
-            let key = kbucket::Key::new(record.key.clone());
-            let provider = kbucket::Key::from(record.provider);
-            if let Some(i) = providers.iter().position(|p| {
-                let pk = kbucket::Key::from(p.provider);
-                provider.distance(&key) < pk.distance(&key)
-            }) {
-                // Insert the new provider.
-                if local_key.preimage() == &record.provider {
+        for p in providers.iter_mut() {
+            if p.provider == record.provider {
+                // In-place update of an existing provider record.
+                if self.local_key.preimage() == &record.provider {
+                    self.provided.remove(p);
                     self.provided.insert(record.clone());
                 }
-                providers.insert(i, record);
-                // Remove the excess provider, if any.
-                if providers.len() > self.config.max_providers_per_key {
-                    if let Some(p) = providers.pop() {
-                        self.provided.remove(&p);
-                    }
-                }
-            } else if providers.len() < self.config.max_providers_per_key {
-                // The distance of the new provider to the key is larger than
-                // the distance of any existing provider, but there is still room.
-                if local_key.preimage() == &record.provider {
-                    self.provided.insert(record.clone());
-                }
-                providers.push(record);
+                *p = record;
+                return Ok(());
             }
         }
+
+        // It is a new provider record for that key.
+        let key = kbucket::Key::new(record.key.clone());
+        let provider = kbucket::Key::from(record.provider);
+        let position = providers
+            .iter()
+            .position(|p| key.distance(&provider) <= key.distance(&kbucket::Key::from(p.provider)))
+            .unwrap_or_else(|| providers.len());
+        if position == providers.len() && providers.len() == self.config.max_providers_per_key {
+            // The new provider is further away from the key than any existing provider,
+            // and there is no room for it.
+            return Ok(());
+        }
+
+        // Insert the new provider.
+        if self.local_key.preimage() == &record.provider {
+            self.provided.insert(record.clone());
+        }
+        if providers.len() == self.config.max_providers_per_key {
+            // Remove the excess provider, if any.
+            if let Some(p) = providers.pop() {
+                if self.local_key.preimage() == &p.provider {
+                    self.provided.remove(&p);
+                }
+            }
+        }
+        providers.insert(position, record);
+
         Ok(())
     }
 
@@ -300,6 +307,55 @@ mod tests {
         rec.expires = Some(Instant::now());
         assert!(store.add_provider(rec.clone()).is_ok());
         assert_eq!(vec![rec.clone()], store.providers(&rec.key).to_vec());
+    }
+
+    #[test]
+    fn update_provided() {
+        let prv = PeerId::random();
+        let mut store = MemoryStore::new(prv);
+        let key = random_multihash();
+        let mut rec = ProviderRecord::new(key, prv, Vec::new());
+        assert!(store.add_provider(rec.clone()).is_ok());
+        assert_eq!(
+            vec![Cow::Borrowed(&rec)],
+            store.provided().collect::<Vec<_>>()
+        );
+        rec.expires = Some(Instant::now());
+        assert!(store.add_provider(rec.clone()).is_ok());
+        assert_eq!(
+            vec![Cow::Borrowed(&rec)],
+            store.provided().collect::<Vec<_>>()
+        );
+    }
+
+    #[test]
+    fn max_providers_per_key() {
+        let key = kbucket::Key::new(Key::from(random_multihash()));
+        // Find two peers such that `other` is closer to `key` than `prv`.
+        let mut prv = PeerId::random();
+        let mut other = PeerId::random();
+        while kbucket::Key::from(prv).distance(&key) <= kbucket::Key::from(other).distance(&key) {
+            prv = PeerId::random();
+            other = PeerId::random();
+        }
+
+        let mut store = MemoryStore::with_config(
+            prv,
+            MemoryStoreConfig {
+                max_providers_per_key: 1,
+                ..Default::default()
+            },
+        );
+        let mut rec = ProviderRecord::new(key.preimage().clone(), prv, Vec::new());
+        assert!(store.add_provider(rec.clone()).is_ok());
+        assert_eq!(
+            vec![Cow::Borrowed(&rec)],
+            store.provided().collect::<Vec<_>>()
+        );
+        rec.provider = other;
+        assert!(store.add_provider(rec.clone()).is_ok());
+        assert_eq!(vec![rec], store.providers(key.preimage()));
+        assert_eq!(store.provided().count(), 0);
     }
 
     #[test]
