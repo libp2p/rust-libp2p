@@ -4,6 +4,8 @@
   See [PR 4568](https://github.com/libp2p/rust-libp2p/pull/4568)
 - Allow wss connections on IP addresses.
   See [PR 5525](https://github.com/libp2p/rust-libp2p/pull/5525).
+- Add support for `/tls/ws` and keep `/wss` backward compatible.
+  See [PR 5523](https://github.com/libp2p/rust-libp2p/pull/5523).
 
 ## 0.43.2
 
