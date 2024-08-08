@@ -339,7 +339,7 @@ impl Behaviour {
             ConnectedPoint::Dialer {
                 address,
                 role_override: Endpoint::Dialer,
-                ..
+                port_use: _,
             } => {
                 if let Some(event) = self.as_server().on_outbound_connection(&peer, address) {
                     self.pending_actions
@@ -349,7 +349,7 @@ impl Behaviour {
             ConnectedPoint::Dialer {
                 address: _,
                 role_override: Endpoint::Listener,
-                ..
+                port_use: _,
             } => {
                 // Outgoing connection was dialed as a listener. In other words outgoing connection
                 // was dialed as part of a hole punch. `libp2p-autonat` never attempts to hole

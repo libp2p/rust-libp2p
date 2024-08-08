@@ -137,9 +137,10 @@ fn extract_websocket_url(addr: &Multiaddr) -> Option<String> {
         _ => return None,
     };
 
-    let (scheme, wspath) = match protocols.next() {
-        Some(Protocol::Ws(path)) => ("ws", path.into_owned()),
-        Some(Protocol::Wss(path)) => ("wss", path.into_owned()),
+    let (scheme, wspath) = match (protocols.next(), protocols.next()) {
+        (Some(Protocol::Tls), Some(Protocol::Ws(path))) => ("wss", path.into_owned()),
+        (Some(Protocol::Ws(path)), _) => ("ws", path.into_owned()),
+        (Some(Protocol::Wss(path)), _) => ("wss", path.into_owned()),
         _ => return None,
     };
 
@@ -451,5 +452,105 @@ impl Drop for Connection {
         WebContext::new()
             .expect("to have a window or worker context")
             .clear_interval_with_handle(self.inner.buffered_amount_low_interval);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use libp2p_identity::PeerId;
+
+    #[test]
+    fn extract_url() {
+        let peer_id = PeerId::random();
+
+        // Check `/tls/ws`
+        let addr = "/dns4/example.com/tcp/2222/tls/ws"
+            .parse::<Multiaddr>()
+            .unwrap();
+        let url = extract_websocket_url(&addr).unwrap();
+        assert_eq!(url, "wss://example.com:2222/");
+
+        // Check `/tls/ws` with `/p2p`
+        let addr = format!("/dns4/example.com/tcp/2222/tls/ws/p2p/{peer_id}")
+            .parse()
+            .unwrap();
+        let url = extract_websocket_url(&addr).unwrap();
+        assert_eq!(url, "wss://example.com:2222/");
+
+        // Check `/tls/ws` with `/ip4`
+        let addr = "/ip4/127.0.0.1/tcp/2222/tls/ws"
+            .parse::<Multiaddr>()
+            .unwrap();
+        let url = extract_websocket_url(&addr).unwrap();
+        assert_eq!(url, "wss://127.0.0.1:2222/");
+
+        // Check `/tls/ws` with `/ip6`
+        let addr = "/ip6/::1/tcp/2222/tls/ws".parse::<Multiaddr>().unwrap();
+        let url = extract_websocket_url(&addr).unwrap();
+        assert_eq!(url, "wss://[::1]:2222/");
+
+        // Check `/wss`
+        let addr = "/dns4/example.com/tcp/2222/wss"
+            .parse::<Multiaddr>()
+            .unwrap();
+        let url = extract_websocket_url(&addr).unwrap();
+        assert_eq!(url, "wss://example.com:2222/");
+
+        // Check `/wss` with `/p2p`
+        let addr = format!("/dns4/example.com/tcp/2222/wss/p2p/{peer_id}")
+            .parse()
+            .unwrap();
+        let url = extract_websocket_url(&addr).unwrap();
+        assert_eq!(url, "wss://example.com:2222/");
+
+        // Check `/wss` with `/ip4`
+        let addr = "/ip4/127.0.0.1/tcp/2222/wss".parse::<Multiaddr>().unwrap();
+        let url = extract_websocket_url(&addr).unwrap();
+        assert_eq!(url, "wss://127.0.0.1:2222/");
+
+        // Check `/wss` with `/ip6`
+        let addr = "/ip6/::1/tcp/2222/wss".parse::<Multiaddr>().unwrap();
+        let url = extract_websocket_url(&addr).unwrap();
+        assert_eq!(url, "wss://[::1]:2222/");
+
+        // Check `/ws`
+        let addr = "/dns4/example.com/tcp/2222/ws"
+            .parse::<Multiaddr>()
+            .unwrap();
+        let url = extract_websocket_url(&addr).unwrap();
+        assert_eq!(url, "ws://example.com:2222/");
+
+        // Check `/ws` with `/p2p`
+        let addr = format!("/dns4/example.com/tcp/2222/ws/p2p/{peer_id}")
+            .parse()
+            .unwrap();
+        let url = extract_websocket_url(&addr).unwrap();
+        assert_eq!(url, "ws://example.com:2222/");
+
+        // Check `/ws` with `/ip4`
+        let addr = "/ip4/127.0.0.1/tcp/2222/ws".parse::<Multiaddr>().unwrap();
+        let url = extract_websocket_url(&addr).unwrap();
+        assert_eq!(url, "ws://127.0.0.1:2222/");
+
+        // Check `/ws` with `/ip6`
+        let addr = "/ip6/::1/tcp/2222/ws".parse::<Multiaddr>().unwrap();
+        let url = extract_websocket_url(&addr).unwrap();
+        assert_eq!(url, "ws://[::1]:2222/");
+
+        // Check `/ws` with `/ip4`
+        let addr = "/ip4/127.0.0.1/tcp/2222/ws".parse::<Multiaddr>().unwrap();
+        let url = extract_websocket_url(&addr).unwrap();
+        assert_eq!(url, "ws://127.0.0.1:2222/");
+
+        // Check that `/tls/wss` is invalid
+        let addr = "/ip4/127.0.0.1/tcp/2222/tls/wss"
+            .parse::<Multiaddr>()
+            .unwrap();
+        assert!(extract_websocket_url(&addr).is_none());
+
+        // Check non-ws address
+        let addr = "/ip4/127.0.0.1/tcp/2222".parse::<Multiaddr>().unwrap();
+        assert!(extract_websocket_url(&addr).is_none());
     }
 }

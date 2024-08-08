@@ -21,7 +21,8 @@
 use crate::{error::Error, quicksink, tls};
 use either::Either;
 use futures::{future::BoxFuture, prelude::*, ready, stream::BoxStream};
-use futures_rustls::{client, rustls, server};
+use futures_rustls::rustls::pki_types::ServerName;
+use futures_rustls::{client, server};
 use libp2p_core::{
     multiaddr::{Multiaddr, Protocol},
     transport::{DialOpts, ListenerId, TransportError, TransportEvent},
@@ -32,6 +33,8 @@ use soketto::{
     connection::{self, CloseReason},
     handshake,
 };
+use std::borrow::Cow;
+use std::net::IpAddr;
 use std::{collections::HashMap, ops::DerefMut, sync::Arc};
 use std::{fmt, io, mem, pin::Pin, task::Context, task::Poll};
 use url::Url;
@@ -49,10 +52,7 @@ pub struct WsConfig<T> {
     tls_config: tls::Config,
     max_redirects: u8,
     /// Websocket protocol of the inner listener.
-    ///
-    /// This is the suffix of the address provided in `listen_on`.
-    /// Can only be [`Protocol::Ws`] or [`Protocol::Wss`].
-    listener_protos: HashMap<ListenerId, Protocol<'static>>,
+    listener_protos: HashMap<ListenerId, WsListenProto<'static>>,
 }
 
 impl<T> WsConfig<T>
@@ -119,22 +119,19 @@ where
         id: ListenerId,
         addr: Multiaddr,
     ) -> Result<(), TransportError<Self::Error>> {
-        let mut inner_addr = addr.clone();
-        let proto = match inner_addr.pop() {
-            Some(p @ Protocol::Wss(_)) => {
-                if self.tls_config.server.is_some() {
-                    p
-                } else {
-                    tracing::debug!("/wss address but TLS server support is not configured");
-                    return Err(TransportError::MultiaddrNotSupported(addr));
-                }
-            }
-            Some(p @ Protocol::Ws(_)) => p,
-            _ => {
-                tracing::debug!(address=%addr, "Address is not a websocket multiaddr");
-                return Err(TransportError::MultiaddrNotSupported(addr));
-            }
-        };
+        let (inner_addr, proto) = parse_ws_listen_addr(&addr).ok_or_else(|| {
+            tracing::debug!(address=%addr, "Address is not a websocket multiaddr");
+            TransportError::MultiaddrNotSupported(addr.clone())
+        })?;
+
+        if proto.use_tls() && self.tls_config.server.is_none() {
+            tracing::debug!(
+                "{} address but TLS server support is not configured",
+                proto.prefix()
+            );
+            return Err(TransportError::MultiaddrNotSupported(addr));
+        }
+
         match self.transport.lock().listen_on(id, inner_addr) {
             Ok(()) => {
                 self.listener_protos.insert(id, proto);
@@ -173,11 +170,10 @@ where
                 mut listen_addr,
             } => {
                 // Append the ws / wss protocol back to the inner address.
-                let proto = self
-                    .listener_protos
+                self.listener_protos
                     .get(&listener_id)
-                    .expect("Protocol was inserted in Transport::listen_on.");
-                listen_addr.push(proto.clone());
+                    .expect("Protocol was inserted in Transport::listen_on.")
+                    .append_on_addr(&mut listen_addr);
                 tracing::debug!(address=%listen_addr, "Listening on address");
                 TransportEvent::NewAddress {
                     listener_id,
@@ -188,11 +184,10 @@ where
                 listener_id,
                 mut listen_addr,
             } => {
-                let proto = self
-                    .listener_protos
+                self.listener_protos
                     .get(&listener_id)
-                    .expect("Protocol was inserted in Transport::listen_on.");
-                listen_addr.push(proto.clone());
+                    .expect("Protocol was inserted in Transport::listen_on.")
+                    .append_on_addr(&mut listen_addr);
                 TransportEvent::AddressExpired {
                     listener_id,
                     listen_addr,
@@ -224,13 +219,9 @@ where
                     .listener_protos
                     .get(&listener_id)
                     .expect("Protocol was inserted in Transport::listen_on.");
-                let use_tls = match proto {
-                    Protocol::Wss(_) => true,
-                    Protocol::Ws(_) => false,
-                    _ => unreachable!("Map contains only ws and wss protocols."),
-                };
-                local_addr.push(proto.clone());
-                send_back_addr.push(proto.clone());
+                let use_tls = proto.use_tls();
+                proto.append_on_addr(&mut local_addr);
+                proto.append_on_addr(&mut send_back_addr);
                 let upgrade = self.map_upgrade(upgrade, send_back_addr.clone(), use_tls);
                 TransportEvent::Incoming {
                     listener_id,
@@ -315,15 +306,12 @@ where
 
         let stream = if addr.use_tls {
             // begin TLS session
-            let dns_name = addr
-                .dns_name
-                .expect("for use_tls we have checked that dns_name is some");
-            tracing::trace!(?dns_name, "Starting TLS handshake");
+            tracing::trace!(?addr.server_name, "Starting TLS handshake");
             let stream = tls_config
                 .client
-                .connect(dns_name.clone(), stream)
+                .connect(addr.server_name.clone(), stream)
                 .map_err(|e| {
-                    tracing::debug!(?dns_name, "TLS handshake failed: {}", e);
+                    tracing::debug!(?addr.server_name, "TLS handshake failed: {}", e);
                     Error::Tls(tls::Error::from(e))
                 })
                 .await?;
@@ -447,11 +435,53 @@ where
     }
 }
 
+#[derive(Debug, PartialEq)]
+pub(crate) enum WsListenProto<'a> {
+    Ws(Cow<'a, str>),
+    Wss(Cow<'a, str>),
+    TlsWs(Cow<'a, str>),
+}
+
+impl<'a> WsListenProto<'a> {
+    pub(crate) fn append_on_addr(&self, addr: &mut Multiaddr) {
+        match self {
+            WsListenProto::Ws(path) => {
+                addr.push(Protocol::Ws(path.clone()));
+            }
+            // `/tls/ws` and `/wss` are equivalend, however we regenerate
+            // the one that user passed at `listen_on` for backward compatibility.
+            WsListenProto::Wss(path) => {
+                addr.push(Protocol::Wss(path.clone()));
+            }
+            WsListenProto::TlsWs(path) => {
+                addr.push(Protocol::Tls);
+                addr.push(Protocol::Ws(path.clone()));
+            }
+        }
+    }
+
+    pub(crate) fn use_tls(&self) -> bool {
+        match self {
+            WsListenProto::Ws(_) => false,
+            WsListenProto::Wss(_) => true,
+            WsListenProto::TlsWs(_) => true,
+        }
+    }
+
+    pub(crate) fn prefix(&self) -> &'static str {
+        match self {
+            WsListenProto::Ws(_) => "/ws",
+            WsListenProto::Wss(_) => "/wss",
+            WsListenProto::TlsWs(_) => "/tls/ws",
+        }
+    }
+}
+
 #[derive(Debug)]
 struct WsAddress {
     host_port: String,
     path: String,
-    dns_name: Option<rustls::pki_types::ServerName<'static>>,
+    server_name: ServerName<'static>,
     use_tls: bool,
     tcp_addr: Multiaddr,
 }
@@ -468,19 +498,21 @@ fn parse_ws_dial_addr<T>(addr: Multiaddr) -> Result<WsAddress, Error<T>> {
     let mut protocols = addr.iter();
     let mut ip = protocols.next();
     let mut tcp = protocols.next();
-    let (host_port, dns_name) = loop {
+    let (host_port, server_name) = loop {
         match (ip, tcp) {
             (Some(Protocol::Ip4(ip)), Some(Protocol::Tcp(port))) => {
-                break (format!("{ip}:{port}"), None)
+                let server_name = ServerName::IpAddress(IpAddr::V4(ip).into());
+                break (format!("{ip}:{port}"), server_name);
             }
             (Some(Protocol::Ip6(ip)), Some(Protocol::Tcp(port))) => {
-                break (format!("{ip}:{port}"), None)
+                let server_name = ServerName::IpAddress(IpAddr::V6(ip).into());
+                break (format!("[{ip}]:{port}"), server_name);
             }
             (Some(Protocol::Dns(h)), Some(Protocol::Tcp(port)))
             | (Some(Protocol::Dns4(h)), Some(Protocol::Tcp(port)))
             | (Some(Protocol::Dns6(h)), Some(Protocol::Tcp(port)))
             | (Some(Protocol::Dnsaddr(h)), Some(Protocol::Tcp(port))) => {
-                break (format!("{}:{}", &h, port), Some(tls::dns_name_ref(&h)?))
+                break (format!("{h}:{port}"), tls::dns_name_ref(&h)?)
             }
             (Some(_), Some(p)) => {
                 ip = Some(p);
@@ -498,14 +530,15 @@ fn parse_ws_dial_addr<T>(addr: Multiaddr) -> Result<WsAddress, Error<T>> {
     let (use_tls, path) = loop {
         match protocols.pop() {
             p @ Some(Protocol::P2p(_)) => p2p = p,
-            Some(Protocol::Ws(path)) => break (false, path.into_owned()),
-            Some(Protocol::Wss(path)) => {
-                if dns_name.is_none() {
-                    tracing::debug!(address=%addr, "Missing DNS name in WSS address");
-                    return Err(Error::InvalidMultiaddr(addr));
+            Some(Protocol::Ws(path)) => match protocols.pop() {
+                Some(Protocol::Tls) => break (true, path.into_owned()),
+                Some(p) => {
+                    protocols.push(p);
+                    break (false, path.into_owned());
                 }
-                break (true, path.into_owned());
-            }
+                None => return Err(Error::InvalidMultiaddr(addr)),
+            },
+            Some(Protocol::Wss(path)) => break (true, path.into_owned()),
             _ => return Err(Error::InvalidMultiaddr(addr)),
         }
     };
@@ -519,11 +552,27 @@ fn parse_ws_dial_addr<T>(addr: Multiaddr) -> Result<WsAddress, Error<T>> {
 
     Ok(WsAddress {
         host_port,
-        dns_name,
+        server_name,
         path,
         use_tls,
         tcp_addr,
     })
+}
+
+fn parse_ws_listen_addr(addr: &Multiaddr) -> Option<(Multiaddr, WsListenProto<'static>)> {
+    let mut inner_addr = addr.clone();
+
+    match inner_addr.pop()? {
+        Protocol::Wss(path) => Some((inner_addr, WsListenProto::Wss(path))),
+        Protocol::Ws(path) => match inner_addr.pop()? {
+            Protocol::Tls => Some((inner_addr, WsListenProto::TlsWs(path))),
+            p => {
+                inner_addr.push(p);
+                Some((inner_addr, WsListenProto::Ws(path)))
+            }
+        },
+        _ => None,
+    }
 }
 
 // Given a location URL, build a new websocket [`Multiaddr`].
@@ -542,7 +591,8 @@ fn location_to_multiaddr<T>(location: &str) -> Result<Multiaddr, Error<T>> {
             }
             let s = url.scheme();
             if s.eq_ignore_ascii_case("https") | s.eq_ignore_ascii_case("wss") {
-                a.push(Protocol::Wss(url.path().into()))
+                a.push(Protocol::Tls);
+                a.push(Protocol::Ws(url.path().into()));
             } else if s.eq_ignore_ascii_case("http") | s.eq_ignore_ascii_case("ws") {
                 a.push(Protocol::Ws(url.path().into()))
             } else {
@@ -755,5 +805,196 @@ where
         Pin::new(&mut self.sender)
             .poll_close(cx)
             .map_err(|e| io::Error::new(io::ErrorKind::Other, e))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use libp2p_identity::PeerId;
+    use std::io;
+
+    #[test]
+    fn listen_addr() {
+        let tcp_addr = "/ip4/0.0.0.0/tcp/2222".parse::<Multiaddr>().unwrap();
+
+        // Check `/tls/ws`
+        let addr = tcp_addr
+            .clone()
+            .with(Protocol::Tls)
+            .with(Protocol::Ws("/".into()));
+        let (inner_addr, proto) = parse_ws_listen_addr(&addr).unwrap();
+        assert_eq!(&inner_addr, &tcp_addr);
+        assert_eq!(proto, WsListenProto::TlsWs("/".into()));
+
+        let mut listen_addr = tcp_addr.clone();
+        proto.append_on_addr(&mut listen_addr);
+        assert_eq!(listen_addr, addr);
+
+        // Check `/wss`
+        let addr = tcp_addr.clone().with(Protocol::Wss("/".into()));
+        let (inner_addr, proto) = parse_ws_listen_addr(&addr).unwrap();
+        assert_eq!(&inner_addr, &tcp_addr);
+        assert_eq!(proto, WsListenProto::Wss("/".into()));
+
+        let mut listen_addr = tcp_addr.clone();
+        proto.append_on_addr(&mut listen_addr);
+        assert_eq!(listen_addr, addr);
+
+        // Check `/ws`
+        let addr = tcp_addr.clone().with(Protocol::Ws("/".into()));
+        let (inner_addr, proto) = parse_ws_listen_addr(&addr).unwrap();
+        assert_eq!(&inner_addr, &tcp_addr);
+        assert_eq!(proto, WsListenProto::Ws("/".into()));
+
+        let mut listen_addr = tcp_addr.clone();
+        proto.append_on_addr(&mut listen_addr);
+        assert_eq!(listen_addr, addr);
+    }
+
+    #[test]
+    fn dial_addr() {
+        let peer_id = PeerId::random();
+
+        // Check `/tls/ws`
+        let addr = "/dns4/example.com/tcp/2222/tls/ws"
+            .parse::<Multiaddr>()
+            .unwrap();
+        let info = parse_ws_dial_addr::<io::Error>(addr).unwrap();
+        assert_eq!(info.host_port, "example.com:2222");
+        assert_eq!(info.path, "/");
+        assert!(info.use_tls);
+        assert_eq!(info.server_name, "example.com".try_into().unwrap());
+        assert_eq!(info.tcp_addr, "/dns4/example.com/tcp/2222".parse().unwrap());
+
+        // Check `/tls/ws` with `/p2p`
+        let addr = format!("/dns4/example.com/tcp/2222/tls/ws/p2p/{peer_id}")
+            .parse()
+            .unwrap();
+        let info = parse_ws_dial_addr::<io::Error>(addr).unwrap();
+        assert_eq!(info.host_port, "example.com:2222");
+        assert_eq!(info.path, "/");
+        assert!(info.use_tls);
+        assert_eq!(info.server_name, "example.com".try_into().unwrap());
+        assert_eq!(
+            info.tcp_addr,
+            format!("/dns4/example.com/tcp/2222/p2p/{peer_id}")
+                .parse()
+                .unwrap()
+        );
+
+        // Check `/tls/ws` with `/ip4`
+        let addr = "/ip4/127.0.0.1/tcp/2222/tls/ws"
+            .parse::<Multiaddr>()
+            .unwrap();
+        let info = parse_ws_dial_addr::<io::Error>(addr).unwrap();
+        assert_eq!(info.host_port, "127.0.0.1:2222");
+        assert_eq!(info.path, "/");
+        assert!(info.use_tls);
+        assert_eq!(info.server_name, "127.0.0.1".try_into().unwrap());
+        assert_eq!(info.tcp_addr, "/ip4/127.0.0.1/tcp/2222".parse().unwrap());
+
+        // Check `/tls/ws` with `/ip6`
+        let addr = "/ip6/::1/tcp/2222/tls/ws".parse::<Multiaddr>().unwrap();
+        let info = parse_ws_dial_addr::<io::Error>(addr).unwrap();
+        assert_eq!(info.host_port, "[::1]:2222");
+        assert_eq!(info.path, "/");
+        assert!(info.use_tls);
+        assert_eq!(info.server_name, "::1".try_into().unwrap());
+        assert_eq!(info.tcp_addr, "/ip6/::1/tcp/2222".parse().unwrap());
+
+        // Check `/wss`
+        let addr = "/dns4/example.com/tcp/2222/wss"
+            .parse::<Multiaddr>()
+            .unwrap();
+        let info = parse_ws_dial_addr::<io::Error>(addr).unwrap();
+        assert_eq!(info.host_port, "example.com:2222");
+        assert_eq!(info.path, "/");
+        assert!(info.use_tls);
+        assert_eq!(info.server_name, "example.com".try_into().unwrap());
+        assert_eq!(info.tcp_addr, "/dns4/example.com/tcp/2222".parse().unwrap());
+
+        // Check `/wss` with `/p2p`
+        let addr = format!("/dns4/example.com/tcp/2222/wss/p2p/{peer_id}")
+            .parse()
+            .unwrap();
+        let info = parse_ws_dial_addr::<io::Error>(addr).unwrap();
+        assert_eq!(info.host_port, "example.com:2222");
+        assert_eq!(info.path, "/");
+        assert!(info.use_tls);
+        assert_eq!(info.server_name, "example.com".try_into().unwrap());
+        assert_eq!(
+            info.tcp_addr,
+            format!("/dns4/example.com/tcp/2222/p2p/{peer_id}")
+                .parse()
+                .unwrap()
+        );
+
+        // Check `/wss` with `/ip4`
+        let addr = "/ip4/127.0.0.1/tcp/2222/wss".parse::<Multiaddr>().unwrap();
+        let info = parse_ws_dial_addr::<io::Error>(addr).unwrap();
+        assert_eq!(info.host_port, "127.0.0.1:2222");
+        assert_eq!(info.path, "/");
+        assert!(info.use_tls);
+        assert_eq!(info.server_name, "127.0.0.1".try_into().unwrap());
+        assert_eq!(info.tcp_addr, "/ip4/127.0.0.1/tcp/2222".parse().unwrap());
+
+        // Check `/wss` with `/ip6`
+        let addr = "/ip6/::1/tcp/2222/wss".parse::<Multiaddr>().unwrap();
+        let info = parse_ws_dial_addr::<io::Error>(addr).unwrap();
+        assert_eq!(info.host_port, "[::1]:2222");
+        assert_eq!(info.path, "/");
+        assert!(info.use_tls);
+        assert_eq!(info.server_name, "::1".try_into().unwrap());
+        assert_eq!(info.tcp_addr, "/ip6/::1/tcp/2222".parse().unwrap());
+
+        // Check `/ws`
+        let addr = "/dns4/example.com/tcp/2222/ws"
+            .parse::<Multiaddr>()
+            .unwrap();
+        let info = parse_ws_dial_addr::<io::Error>(addr).unwrap();
+        assert_eq!(info.host_port, "example.com:2222");
+        assert_eq!(info.path, "/");
+        assert!(!info.use_tls);
+        assert_eq!(info.server_name, "example.com".try_into().unwrap());
+        assert_eq!(info.tcp_addr, "/dns4/example.com/tcp/2222".parse().unwrap());
+
+        // Check `/ws` with `/p2p`
+        let addr = format!("/dns4/example.com/tcp/2222/ws/p2p/{peer_id}")
+            .parse()
+            .unwrap();
+        let info = parse_ws_dial_addr::<io::Error>(addr).unwrap();
+        assert_eq!(info.host_port, "example.com:2222");
+        assert_eq!(info.path, "/");
+        assert!(!info.use_tls);
+        assert_eq!(info.server_name, "example.com".try_into().unwrap());
+        assert_eq!(
+            info.tcp_addr,
+            format!("/dns4/example.com/tcp/2222/p2p/{peer_id}")
+                .parse()
+                .unwrap()
+        );
+
+        // Check `/ws` with `/ip4`
+        let addr = "/ip4/127.0.0.1/tcp/2222/ws".parse::<Multiaddr>().unwrap();
+        let info = parse_ws_dial_addr::<io::Error>(addr).unwrap();
+        assert_eq!(info.host_port, "127.0.0.1:2222");
+        assert_eq!(info.path, "/");
+        assert!(!info.use_tls);
+        assert_eq!(info.server_name, "127.0.0.1".try_into().unwrap());
+        assert_eq!(info.tcp_addr, "/ip4/127.0.0.1/tcp/2222".parse().unwrap());
+
+        // Check `/ws` with `/ip6`
+        let addr = "/ip6/::1/tcp/2222/ws".parse::<Multiaddr>().unwrap();
+        let info = parse_ws_dial_addr::<io::Error>(addr).unwrap();
+        assert_eq!(info.host_port, "[::1]:2222");
+        assert_eq!(info.path, "/");
+        assert!(!info.use_tls);
+        assert_eq!(info.server_name, "::1".try_into().unwrap());
+        assert_eq!(info.tcp_addr, "/ip6/::1/tcp/2222".parse().unwrap());
+
+        // Check non-ws address
+        let addr = "/ip4/127.0.0.1/tcp/2222".parse::<Multiaddr>().unwrap();
+        parse_ws_dial_addr::<io::Error>(addr).unwrap_err();
     }
 }
