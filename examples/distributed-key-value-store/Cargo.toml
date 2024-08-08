@@ -12,7 +12,8 @@ release = false
 async-std = { version = "1.12", features = ["attributes"] }
 async-trait = "0.1"
 futures = { workspace = true }
-libp2p = { path = "../../libp2p", features = [ "async-std", "dns", "kad", "mdns", "noise", "macros", "tcp", "yamux"] }
+libp2p = { path = "../../libp2p", features = [ "async-std", "dns", "kad", "mdns", "noise",
+    "experimental-macros", "tcp", "yamux"] }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true, features = ["env-filter"] }
 

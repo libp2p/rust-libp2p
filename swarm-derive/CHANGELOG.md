@@ -1,3 +1,12 @@
+## 0.34.3
+
+- Add experimental version of network behaviour derive behind `experimental` feature.
+  New macro generates human readable types instead of creating type-level linked-lists that are hard to work with. Notably, error type returned by the swarm is now similar to swarm event.
+  This change also improves compile time, mainly for bigger swarm behaviours.
+  Majority of generated types are now also more compact (no linked-lists of generic enums) and matching on them produces faster code (likely also smaller binary size).
+  Some types were also optimized into state machines (`<Behaviour>ConnectionHandler` and `<Behaviour>ListenProtocolIter`) that avoids re-polling handlers/iterators that are known to be exhausted.
+  See [PR 5486](https://github.com/libp2p/rust-libp2p/pull/5486)
+
 ## 0.34.2
 
 - Generate code for `libp2p-swarm`'s `FromSwarm::NewExternalAddrOfPeer` enum variant.

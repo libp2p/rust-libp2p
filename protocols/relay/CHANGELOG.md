@@ -1,3 +1,7 @@
+## 0.18.1
+
+- Add experimental macros to tests.
+
 ## 0.18.0
 
 <!-- Update to libp2p-swarm v0.45.0 -->
@@ -8,7 +12,7 @@
 - Fix manual closure of relayed listener.
   See [PR 5491](https://github.com/libp2p/rust-libp2p/pull/5491)
 - Add resource limits to `CircuitReq` to be set
-  See [PR 5493](https://github.com/libp2p/rust-libp2p/pull/5493)  
+  See [PR 5493](https://github.com/libp2p/rust-libp2p/pull/5493)
 
 
 ## 0.17.2

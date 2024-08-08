@@ -9,7 +9,7 @@ license = "MIT"
 anyhow = "1"
 env_logger = "0.10.2"
 futures = { workspace = true }
-libp2p = { path = "../libp2p", features = ["tokio", "dcutr", "identify", "macros", "noise", "ping", "relay", "tcp", "yamux", "quic"] }
+libp2p = { path = "../libp2p", features = ["tokio", "dcutr", "identify", "experimental-macros", "noise", "ping", "relay", "tcp", "yamux", "quic"] }
 tracing = { workspace = true }
 redis = { version = "0.24.0", default-features = false, features = ["tokio-comp"] }
 tokio = { workspace = true, features = ["full"] }

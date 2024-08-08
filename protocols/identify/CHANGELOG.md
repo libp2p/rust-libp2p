@@ -1,3 +1,7 @@
+## 0.45.1
+
+- Add experimental macros to tests.
+
 ## 0.45.0
 
 - Address translation is moved here from `libp2p-core`.
