@@ -1,5 +1,8 @@
 ## 0.46.0
 
+- Issue a warning if configured for IPv6 on Apple platforms and a more explanatory error when
+  binding to that port fails. See [PR 5527](https://github.com/libp2p/rust-libp2p/pull/5526).
+
 <!-- Update to libp2p-swarm v0.45.0 -->
 ## 0.45.2
 
