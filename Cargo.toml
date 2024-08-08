@@ -2,6 +2,7 @@
 members = [
     "core",
     "examples/autonat",
+    "examples/autonatv2",
     "examples/browser-webrtc",
     "examples/chat",
     "examples/dcutr",
