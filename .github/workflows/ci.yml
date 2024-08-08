@@ -57,7 +57,7 @@ jobs:
           cargo metadata --format-version=1 --no-deps | \
           jq -e -r '.packages[] | select(.name == "'"$CRATE"'") | .dependencies | all(.name != "libp2p")'
 
-      - uses: taiki-e/cache-cargo-install-action@924d49e0af41f449f0ad549559bc608ee4653562 # v1
+      - uses: taiki-e/cache-cargo-install-action@v2
         with:
           tool: tomlq
 
@@ -70,7 +70,7 @@ jobs:
       - name: Enforce version in `workspace.dependencies` matches latest version
         if: env.CRATE != 'libp2p'
         run: |
-          SPECIFIED_VERSION=$(tomlq "workspace.dependencies.$CRATE.version" --file ./Cargo.toml)
+          SPECIFIED_VERSION=$(tq "workspace.dependencies.$CRATE.version" --file ./Cargo.toml)
 
           echo "Package version: $CRATE_VERSION";
           echo "Specified version: $SPECIFIED_VERSION";
@@ -114,7 +114,7 @@ jobs:
         with:
           target: wasm32-unknown-unknown
 
-      - uses: taiki-e/cache-cargo-install-action@v1
+      - uses: taiki-e/cache-cargo-install-action@v2
         with:
           tool: wasm-pack@0.12.0
 
@@ -286,7 +286,7 @@ jobs:
             cargo check --manifest-path "$toml";
           done
 
-      - uses: taiki-e/cache-cargo-install-action@v1
+      - uses: taiki-e/cache-cargo-install-action@v2
         with:
           tool: wasm-pack@0.12.0
 
@@ -308,9 +308,9 @@ jobs:
       RUSTFLAGS: ''
     steps:
       - uses: actions/checkout@v4
-      - run: wget -q -O- https://github.com/obi1kenobi/cargo-semver-checks/releases/download/v0.27.0/cargo-semver-checks-x86_64-unknown-linux-gnu.tar.gz | tar -xz -C ~/.cargo/bin
+      - run: wget -q -O- https://github.com/obi1kenobi/cargo-semver-checks/releases/download/v0.33.0/cargo-semver-checks-x86_64-unknown-linux-gnu.tar.gz | tar -xz -C ~/.cargo/bin
         shell: bash
-      - uses: obi1kenobi/cargo-semver-checks-action@c7306483f698c511eaf7416d1bf2e1958c90140f # v2
+      - uses: obi1kenobi/cargo-semver-checks-action@7272cc2caa468d3e009a2b0a9cc366839348237b # v2.6
 
   rustfmt:
     runs-on: ubuntu-latest
@@ -370,7 +370,7 @@ jobs:
       - run: cargo install --version 0.10.0 pb-rs --locked
 
       - name: Glob match
-        uses: tj-actions/glob@v21
+        uses: tj-actions/glob@v22
         id: glob
         with:
           files: |
@@ -398,6 +398,6 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v4
-    - uses: EmbarkStudios/cargo-deny-action@v1
+    - uses: EmbarkStudios/cargo-deny-action@v2
       with:
         command: check advisories bans licenses sources

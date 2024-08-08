@@ -3,7 +3,7 @@ name = "libp2p-webtransport-websys"
 edition = "2021"
 rust-version = { workspace = true }
 description = "WebTransport for libp2p under WASM environment"
-version = "0.2.1"
+version = "0.4.0"
 authors = [
     "Yiannis Marangos <yiannis@eiger.co>",
     "oblique <psyberbits@gmail.com>",
@@ -44,8 +44,6 @@ multibase = "0.9.1"
 # More information: https://docs.rs/about/builds#cross-compiling
 [package.metadata.docs.rs]
 all-features = true
-rustdoc-args = ["--cfg", "docsrs"]
-rustc-args = ["--cfg", "docsrs"]
 
 [lints]
 workspace = true

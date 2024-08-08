@@ -79,7 +79,7 @@ pub use handler::ProtocolSupport;
 use crate::handler::OutboundMessage;
 use futures::channel::oneshot;
 use handler::Handler;
-use libp2p_core::{ConnectedPoint, Endpoint, Multiaddr};
+use libp2p_core::{transport::PortUse, ConnectedPoint, Endpoint, Multiaddr};
 use libp2p_identity::PeerId;
 use libp2p_swarm::{
     behaviour::{AddressChange, ConnectionClosed, DialFailure, FromSwarm},
@@ -772,6 +772,7 @@ where
         peer: PeerId,
         remote_address: &Multiaddr,
         _: Endpoint,
+        _: PortUse,
     ) -> Result<THandler<Self>, ConnectionDenied> {
         let mut handler = Handler::new(
             self.inbound_protocols.clone(),

@@ -1,3 +1,7 @@
+## 0.3.0
+
+<!-- Update to libp2p-swarm v0.45.0 -->
+
 ## 0.2.2
 - Fix a panic caused when `upnp::Gateway` is dropped and its events queue receiver is no longer
 available.

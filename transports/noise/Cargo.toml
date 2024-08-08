@@ -36,15 +36,13 @@ snow = { version = "0.9.5", features = ["default-resolver"], default-features = 
 [dev-dependencies]
 futures_ringbuf = "0.4.0"
 quickcheck = { workspace = true }
-tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+tracing-subscriber = { workspace = true, features = ["env-filter"] }
 libp2p-identity = { workspace = true, features = ["rand"] }
 
 # Passing arguments to the docsrs builder in order to properly document cfg's.
 # More information: https://docs.rs/about/builds#cross-compiling
 [package.metadata.docs.rs]
 all-features = true
-rustdoc-args = ["--cfg", "docsrs"]
-rustc-args = ["--cfg", "docsrs"]
 
 [lints]
 workspace = true

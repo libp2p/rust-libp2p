@@ -1,3 +1,8 @@
+## 0.2.1
+
+- Fix end of stream handling when buffer is empty or not present.
+  See [PR 5439](https://github.com/libp2p/rust-libp2p/pull/5439).
+
 ## 0.2.0
 
 - Update to latest version of `libp2p-noise`.

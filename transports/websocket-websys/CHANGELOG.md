@@ -1,3 +1,12 @@
+## 0.4.0
+
+- Implement refactored `Transport`.
+  See [PR 4568](https://github.com/libp2p/rust-libp2p/pull/4568)
+## 0.3.3
+
+- Fix use-after-free handler invocation from JS side.
+  See [PR 5521](https://github.com/libp2p/rust-libp2p/pull/5521).
+
 ## 0.3.2
 
 - Change close code in drop implementation to `1000` given that in browsers only

@@ -20,6 +20,8 @@
 
 use crate::handler::{self, Handler, InEvent};
 use crate::protocol::{Info, UpgradeError};
+use libp2p_core::multiaddr::Protocol;
+use libp2p_core::transport::PortUse;
 use libp2p_core::{multiaddr, ConnectedPoint, Endpoint, Multiaddr};
 use libp2p_identity::PeerId;
 use libp2p_identity::PublicKey;
@@ -27,6 +29,7 @@ use libp2p_swarm::behaviour::{ConnectionClosed, ConnectionEstablished, DialFailu
 use libp2p_swarm::{
     ConnectionDenied, DialError, ExternalAddresses, ListenAddresses, NetworkBehaviour,
     NotifyHandler, PeerAddresses, StreamUpgradeError, THandlerInEvent, ToSwarm,
+    _address_translation,
 };
 use libp2p_swarm::{ConnectionId, THandler, THandlerOutEvent};
 
@@ -38,6 +41,50 @@ use std::{
     task::Poll,
     time::Duration,
 };
+
+/// Whether an [`Multiaddr`] is a valid for the QUIC transport.
+fn is_quic_addr(addr: &Multiaddr, v1: bool) -> bool {
+    use Protocol::*;
+    let mut iter = addr.iter();
+    let Some(first) = iter.next() else {
+        return false;
+    };
+    let Some(second) = iter.next() else {
+        return false;
+    };
+    let Some(third) = iter.next() else {
+        return false;
+    };
+    let fourth = iter.next();
+    let fifth = iter.next();
+
+    matches!(first, Ip4(_) | Ip6(_) | Dns(_) | Dns4(_) | Dns6(_))
+        && matches!(second, Udp(_))
+        && if v1 {
+            matches!(third, QuicV1)
+        } else {
+            matches!(third, Quic)
+        }
+        && matches!(fourth, Some(P2p(_)) | None)
+        && fifth.is_none()
+}
+
+fn is_tcp_addr(addr: &Multiaddr) -> bool {
+    use Protocol::*;
+
+    let mut iter = addr.iter();
+
+    let first = match iter.next() {
+        None => return false,
+        Some(p) => p,
+    };
+    let second = match iter.next() {
+        None => return false,
+        Some(p) => p,
+    };
+
+    matches!(first, Ip4(_) | Ip6(_) | Dns(_) | Dns4(_) | Dns6(_)) && matches!(second, Tcp(_))
+}
 
 /// Network behaviour that automatically identifies nodes periodically, returns information
 /// about them, and answers identify queries from other nodes.
@@ -51,6 +98,9 @@ pub struct Behaviour {
 
     /// The address a remote observed for us.
     our_observed_addresses: HashMap<ConnectionId, Multiaddr>,
+
+    /// The outbound connections established without port reuse (require translation)
+    outbound_connections_with_ephemeral_port: HashSet<ConnectionId>,
 
     /// Pending events to be emitted when polled.
     events: VecDeque<ToSwarm<Event, InEvent>>,
@@ -153,6 +203,7 @@ impl Behaviour {
             config,
             connected: HashMap::new(),
             our_observed_addresses: Default::default(),
+            outbound_connections_with_ephemeral_port: Default::default(),
             events: VecDeque::new(),
             discovered_peers,
             listen_addresses: Default::default(),
@@ -213,6 +264,58 @@ impl Behaviour {
             .cloned()
             .collect()
     }
+
+    fn emit_new_external_addr_candidate_event(
+        &mut self,
+        connection_id: ConnectionId,
+        observed: &Multiaddr,
+    ) {
+        if self
+            .outbound_connections_with_ephemeral_port
+            .contains(&connection_id)
+        {
+            // Apply address translation to the candidate address.
+            // For TCP without port-reuse, the observed address contains an ephemeral port which needs to be replaced by the port of a listen address.
+            let translated_addresses = {
+                let mut addrs: Vec<_> = self
+                    .listen_addresses
+                    .iter()
+                    .filter_map(|server| {
+                        if (is_tcp_addr(server) && is_tcp_addr(observed))
+                            || (is_quic_addr(server, true) && is_quic_addr(observed, true))
+                            || (is_quic_addr(server, false) && is_quic_addr(observed, false))
+                        {
+                            _address_translation(server, observed)
+                        } else {
+                            None
+                        }
+                    })
+                    .collect();
+
+                // remove duplicates
+                addrs.sort_unstable();
+                addrs.dedup();
+                addrs
+            };
+
+            // If address translation yielded nothing, broadcast the original candidate address.
+            if translated_addresses.is_empty() {
+                self.events
+                    .push_back(ToSwarm::NewExternalAddrCandidate(observed.clone()));
+            } else {
+                for addr in translated_addresses {
+                    self.events
+                        .push_back(ToSwarm::NewExternalAddrCandidate(addr));
+                }
+            }
+            return;
+        }
+
+        // outgoing connection dialed with port reuse
+        // incomming connection
+        self.events
+            .push_back(ToSwarm::NewExternalAddrCandidate(observed.clone()));
+    }
 }
 
 impl NetworkBehaviour for Behaviour {
@@ -239,11 +342,25 @@ impl NetworkBehaviour for Behaviour {
 
     fn handle_established_outbound_connection(
         &mut self,
-        _: ConnectionId,
+        connection_id: ConnectionId,
         peer: PeerId,
         addr: &Multiaddr,
         _: Endpoint,
+        port_use: PortUse,
     ) -> Result<THandler<Self>, ConnectionDenied> {
+        // Contrary to inbound events, outbound events are full-p2p qualified
+        // so we remove /p2p/ in order to be homogeneous
+        // this will avoid Autonatv2 to probe twice the same address (fully-p2p-qualified + not fully-p2p-qualified)
+        let mut addr = addr.clone();
+        if matches!(addr.iter().last(), Some(multiaddr::Protocol::P2p(_))) {
+            addr.pop();
+        }
+
+        if port_use == PortUse::New {
+            self.outbound_connections_with_ephemeral_port
+                .insert(connection_id);
+        }
+
         Ok(Handler::new(
             self.config.interval,
             peer,
@@ -258,7 +375,7 @@ impl NetworkBehaviour for Behaviour {
     fn on_connection_handler_event(
         &mut self,
         peer_id: PeerId,
-        id: ConnectionId,
+        connection_id: ConnectionId,
         event: THandlerOutEvent<Self>,
     ) {
         match event {
@@ -270,6 +387,7 @@ impl NetworkBehaviour for Behaviour {
                 let observed = info.observed_addr.clone();
                 self.events
                     .push_back(ToSwarm::GenerateEvent(Event::Received {
+                        connection_id,
                         peer_id,
                         info: info.clone(),
                     }));
@@ -285,11 +403,10 @@ impl NetworkBehaviour for Behaviour {
                     }
                 }
 
-                match self.our_observed_addresses.entry(id) {
+                match self.our_observed_addresses.entry(connection_id) {
                     Entry::Vacant(not_yet_observed) => {
                         not_yet_observed.insert(observed.clone());
-                        self.events
-                            .push_back(ToSwarm::NewExternalAddrCandidate(observed));
+                        self.emit_new_external_addr_candidate_event(connection_id, &observed);
                     }
                     Entry::Occupied(already_observed) if already_observed.get() == &observed => {
                         // No-op, we already observed this address.
@@ -298,26 +415,33 @@ impl NetworkBehaviour for Behaviour {
                         tracing::info!(
                             old_address=%already_observed.get(),
                             new_address=%observed,
-                            "Our observed address on connection {id} changed",
+                            "Our observed address on connection {connection_id} changed",
                         );
 
                         *already_observed.get_mut() = observed.clone();
-                        self.events
-                            .push_back(ToSwarm::NewExternalAddrCandidate(observed));
+                        self.emit_new_external_addr_candidate_event(connection_id, &observed);
                     }
                 }
             }
             handler::Event::Identification => {
-                self.events
-                    .push_back(ToSwarm::GenerateEvent(Event::Sent { peer_id }));
+                self.events.push_back(ToSwarm::GenerateEvent(Event::Sent {
+                    connection_id,
+                    peer_id,
+                }));
             }
             handler::Event::IdentificationPushed(info) => {
-                self.events
-                    .push_back(ToSwarm::GenerateEvent(Event::Pushed { peer_id, info }));
+                self.events.push_back(ToSwarm::GenerateEvent(Event::Pushed {
+                    connection_id,
+                    peer_id,
+                    info,
+                }));
             }
             handler::Event::IdentificationError(error) => {
-                self.events
-                    .push_back(ToSwarm::GenerateEvent(Event::Error { peer_id, error }));
+                self.events.push_back(ToSwarm::GenerateEvent(Event::Error {
+                    connection_id,
+                    peer_id,
+                    error,
+                }));
             }
         }
     }
@@ -394,6 +518,8 @@ impl NetworkBehaviour for Behaviour {
                 }
 
                 self.our_observed_addresses.remove(&connection_id);
+                self.outbound_connections_with_ephemeral_port
+                    .remove(&connection_id);
             }
             FromSwarm::DialFailure(DialFailure { peer_id, error, .. }) => {
                 if let (Some(peer_id), Some(cache), DialError::Transport(errors)) =
@@ -415,6 +541,8 @@ impl NetworkBehaviour for Behaviour {
 pub enum Event {
     /// Identification information has been received from a peer.
     Received {
+        /// Identifier of the connection.
+        connection_id: ConnectionId,
         /// The peer that has been identified.
         peer_id: PeerId,
         /// The information provided by the peer.
@@ -423,12 +551,16 @@ pub enum Event {
     /// Identification information of the local node has been sent to a peer in
     /// response to an identification request.
     Sent {
+        /// Identifier of the connection.
+        connection_id: ConnectionId,
         /// The peer that the information has been sent to.
         peer_id: PeerId,
     },
     /// Identification information of the local node has been actively pushed to
     /// a peer.
     Pushed {
+        /// Identifier of the connection.
+        connection_id: ConnectionId,
         /// The peer that the information has been sent to.
         peer_id: PeerId,
         /// The full Info struct we pushed to the remote peer. Clients must
@@ -437,11 +569,24 @@ pub enum Event {
     },
     /// Error while attempting to identify the remote.
     Error {
+        /// Identifier of the connection.
+        connection_id: ConnectionId,
         /// The peer with whom the error originated.
         peer_id: PeerId,
         /// The error that occurred.
         error: StreamUpgradeError<UpgradeError>,
     },
+}
+
+impl Event {
+    pub fn connection_id(&self) -> ConnectionId {
+        match self {
+            Event::Received { connection_id, .. }
+            | Event::Sent { connection_id, .. }
+            | Event::Pushed { connection_id, .. }
+            | Event::Error { connection_id, .. } => *connection_id,
+        }
+    }
 }
 
 /// If there is a given peer_id in the multiaddr, make sure it is the same as

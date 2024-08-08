@@ -1,6 +1,6 @@
 [package]
 name = "libp2p-identity"
-version = "0.2.8"
+version = "0.2.9"
 edition = "2021"
 description = "Data structures and algorithms for identifying peers in libp2p."
 rust-version = "1.73.0" # MUST NOT inherit from workspace because we don't want to publish breaking changes to `libp2p-identity`.
@@ -27,7 +27,7 @@ serde = { version = "1", optional = true, features = ["derive"] }
 sha2 = { version = "0.10.8", optional = true }
 thiserror = { version = "1.0", optional = true }
 void = { version = "1.0", optional = true }
-zeroize = { version = "1.7", optional = true }
+zeroize = { version = "1.8", optional = true }
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 ring = { workspace = true, features = ["alloc", "std"], optional = true }
@@ -56,8 +56,6 @@ harness = false
 # More information: https://docs.rs/about/builds#cross-compiling
 [package.metadata.docs.rs]
 all-features = true
-rustdoc-args = ["--cfg", "docsrs"]
-rustc-args = ["--cfg", "docsrs"]
 
 [lints]
 workspace = true

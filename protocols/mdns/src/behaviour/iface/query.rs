@@ -24,10 +24,9 @@ use hickory_proto::{
     op::Message,
     rr::{Name, RData},
 };
-use libp2p_core::{
-    address_translation,
-    multiaddr::{Multiaddr, Protocol},
-};
+use libp2p_core::multiaddr::{Multiaddr, Protocol};
+use libp2p_swarm::_address_translation;
+
 use libp2p_identity::PeerId;
 use std::time::Instant;
 use std::{fmt, net::SocketAddr, str, time::Duration};
@@ -179,7 +178,7 @@ impl MdnsResponse {
                 let new_expiration = now + peer.ttl();
 
                 peer.addresses().iter().filter_map(move |address| {
-                    let new_addr = address_translation(address, &observed)?;
+                    let new_addr = _address_translation(address, &observed)?;
                     let new_addr = new_addr.with_p2p(*peer.id()).ok()?;
 
                     Some((*peer.id(), new_addr, new_expiration))

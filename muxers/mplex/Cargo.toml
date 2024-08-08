@@ -32,7 +32,7 @@ libp2p-muxer-test-harness = { path = "../test-harness" }
 libp2p-plaintext = { workspace = true }
 libp2p-tcp = { workspace = true, features = ["async-io"] }
 quickcheck = { workspace = true }
-tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+tracing-subscriber = { workspace = true, features = ["env-filter"] }
 
 [[bench]]
 name = "split_send_size"
@@ -42,8 +42,6 @@ harness = false
 # More information: https://docs.rs/about/builds#cross-compiling
 [package.metadata.docs.rs]
 all-features = true
-rustdoc-args = ["--cfg", "docsrs"]
-rustc-args = ["--cfg", "docsrs"]
 
 [lints]
 workspace = true

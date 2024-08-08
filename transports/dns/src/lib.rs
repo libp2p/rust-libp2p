@@ -48,6 +48,7 @@
 //!      any system APIs (like libc's `gethostbyname`). Again this is
 //!      problematic on platforms like Android, where there's a lot of
 //!      complexity hidden behind the system APIs.
+//!
 //! If the implementation requires different characteristics, one should
 //! consider providing their own implementation of [`Transport`] or use
 //! platform specific APIs to extract the host's DNS configuration (if possible)
@@ -148,9 +149,8 @@ pub mod tokio {
 use async_trait::async_trait;
 use futures::{future::BoxFuture, prelude::*};
 use libp2p_core::{
-    connection::Endpoint,
     multiaddr::{Multiaddr, Protocol},
-    transport::{ListenerId, TransportError, TransportEvent},
+    transport::{DialOpts, ListenerId, TransportError, TransportEvent},
 };
 use parking_lot::Mutex;
 use smallvec::SmallVec;
@@ -230,19 +230,12 @@ where
         self.inner.lock().remove_listener(id)
     }
 
-    fn dial(&mut self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
-        self.do_dial(addr, Endpoint::Dialer)
-    }
-
-    fn dial_as_listener(
+    fn dial(
         &mut self,
         addr: Multiaddr,
+        dial_opts: DialOpts,
     ) -> Result<Self::Dial, TransportError<Self::Error>> {
-        self.do_dial(addr, Endpoint::Listener)
-    }
-
-    fn address_translation(&self, server: &Multiaddr, observed: &Multiaddr) -> Option<Multiaddr> {
-        self.inner.lock().address_translation(server, observed)
+        Ok(self.do_dial(addr, dial_opts))
     }
 
     fn poll(
@@ -268,17 +261,14 @@ where
     fn do_dial(
         &mut self,
         addr: Multiaddr,
-        role_override: Endpoint,
-    ) -> Result<
-        <Self as libp2p_core::Transport>::Dial,
-        TransportError<<Self as libp2p_core::Transport>::Error>,
-    > {
+        dial_opts: DialOpts,
+    ) -> <Self as libp2p_core::Transport>::Dial {
         let resolver = self.resolver.clone();
         let inner = self.inner.clone();
 
         // Asynchronously resolve all DNS names in the address before proceeding
         // with dialing on the underlying transport.
-        Ok(async move {
+        async move {
             let mut last_err = None;
             let mut dns_lookups = 0;
             let mut dial_attempts = 0;
@@ -357,10 +347,7 @@ where
                     tracing::debug!(address=%addr, "Dialing address");
 
                     let transport = inner.clone();
-                    let dial = match role_override {
-                        Endpoint::Dialer => transport.lock().dial(addr),
-                        Endpoint::Listener => transport.lock().dial_as_listener(addr),
-                    };
+                    let dial = transport.lock().dial(addr, dial_opts);
                     let result = match dial {
                         Ok(out) => {
                             // We only count attempts that the inner transport
@@ -404,7 +391,7 @@ where
             }))
         }
         .boxed()
-        .right_future())
+        .right_future()
     }
 }
 
@@ -627,7 +614,12 @@ where
 #[cfg(all(test, any(feature = "tokio", feature = "async-std")))]
 mod tests {
     use super::*;
-    use libp2p_core::Transport;
+    use futures::future::BoxFuture;
+    use libp2p_core::{
+        multiaddr::{Multiaddr, Protocol},
+        transport::{PortUse, TransportError, TransportEvent},
+        Endpoint, Transport,
+    };
     use libp2p_identity::PeerId;
 
     #[test]
@@ -657,24 +649,17 @@ mod tests {
                 false
             }
 
-            fn dial(&mut self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
+            fn dial(
+                &mut self,
+                addr: Multiaddr,
+                _: DialOpts,
+            ) -> Result<Self::Dial, TransportError<Self::Error>> {
                 // Check that all DNS components have been resolved, i.e. replaced.
                 assert!(!addr.iter().any(|p| matches!(
                     p,
                     Protocol::Dns(_) | Protocol::Dns4(_) | Protocol::Dns6(_) | Protocol::Dnsaddr(_)
                 )));
                 Ok(Box::pin(future::ready(Ok(()))))
-            }
-
-            fn dial_as_listener(
-                &mut self,
-                addr: Multiaddr,
-            ) -> Result<Self::Dial, TransportError<Self::Error>> {
-                self.dial(addr)
-            }
-
-            fn address_translation(&self, _: &Multiaddr, _: &Multiaddr) -> Option<Multiaddr> {
-                None
             }
 
             fn poll(
@@ -692,30 +677,34 @@ mod tests {
             T::Dial: Send,
             R: Clone + Send + Sync + Resolver + 'static,
         {
+            let dial_opts = DialOpts {
+                role: Endpoint::Dialer,
+                port_use: PortUse::Reuse,
+            };
             // Success due to existing A record for example.com.
             let _ = transport
-                .dial("/dns4/example.com/tcp/20000".parse().unwrap())
+                .dial("/dns4/example.com/tcp/20000".parse().unwrap(), dial_opts)
                 .unwrap()
                 .await
                 .unwrap();
 
             // Success due to existing AAAA record for example.com.
             let _ = transport
-                .dial("/dns6/example.com/tcp/20000".parse().unwrap())
+                .dial("/dns6/example.com/tcp/20000".parse().unwrap(), dial_opts)
                 .unwrap()
                 .await
                 .unwrap();
 
             // Success due to pass-through, i.e. nothing to resolve.
             let _ = transport
-                .dial("/ip4/1.2.3.4/tcp/20000".parse().unwrap())
+                .dial("/ip4/1.2.3.4/tcp/20000".parse().unwrap(), dial_opts)
                 .unwrap()
                 .await
                 .unwrap();
 
             // Success due to the DNS TXT records at _dnsaddr.bootstrap.libp2p.io.
             let _ = transport
-                .dial("/dnsaddr/bootstrap.libp2p.io".parse().unwrap())
+                .dial("/dnsaddr/bootstrap.libp2p.io".parse().unwrap(), dial_opts)
                 .unwrap()
                 .await
                 .unwrap();
@@ -724,7 +713,7 @@ mod tests {
             // an entry with suffix `/p2p/QmNnooDu7bfjPFoTZYxMNLWUQJyrVwtbZg5gBMjTezGAJN`,
             // i.e. a bootnode with such a peer ID.
             let _ = transport
-                .dial("/dnsaddr/bootstrap.libp2p.io/p2p/QmNnooDu7bfjPFoTZYxMNLWUQJyrVwtbZg5gBMjTezGAJN".parse().unwrap())
+                .dial("/dnsaddr/bootstrap.libp2p.io/p2p/QmNnooDu7bfjPFoTZYxMNLWUQJyrVwtbZg5gBMjTezGAJN".parse().unwrap(), dial_opts)
                 .unwrap()
                 .await
                 .unwrap();
@@ -736,6 +725,7 @@ mod tests {
                     format!("/dnsaddr/bootstrap.libp2p.io/p2p/{}", PeerId::random())
                         .parse()
                         .unwrap(),
+                    dial_opts,
                 )
                 .unwrap()
                 .await
@@ -747,7 +737,10 @@ mod tests {
 
             // Failure due to no records.
             match transport
-                .dial("/dns4/example.invalid/tcp/20000".parse().unwrap())
+                .dial(
+                    "/dns4/example.invalid/tcp/20000".parse().unwrap(),
+                    dial_opts,
+                )
                 .unwrap()
                 .await
             {

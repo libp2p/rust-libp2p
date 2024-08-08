@@ -37,9 +37,9 @@ use futures::{
     ready,
     stream::FuturesUnordered,
 };
-use instant::{Duration, Instant};
 use libp2p_core::connection::Endpoint;
 use libp2p_core::muxing::{StreamMuxerBox, StreamMuxerExt};
+use libp2p_core::transport::PortUse;
 use std::task::Waker;
 use std::{
     collections::HashMap,
@@ -51,6 +51,7 @@ use std::{
 };
 use tracing::Instrument;
 use void::Void;
+use web_time::{Duration, Instant};
 
 mod concurrent_dial;
 mod task;
@@ -70,6 +71,7 @@ impl ExecSwitch {
         }
     }
 
+    #[track_caller]
     fn spawn(&mut self, task: impl Future<Output = ()> + Send + 'static) {
         let task = task.boxed();
 
@@ -423,6 +425,7 @@ where
         >,
         peer: Option<PeerId>,
         role_override: Endpoint,
+        port_use: PortUse,
         dial_concurrency_factor_override: Option<NonZeroU8>,
         connection_id: ConnectionId,
     ) {
@@ -443,7 +446,10 @@ where
             .instrument(span),
         );
 
-        let endpoint = PendingPoint::Dialer { role_override };
+        let endpoint = PendingPoint::Dialer {
+            role_override,
+            port_use,
+        };
 
         self.counters.inc_pending(&endpoint);
         self.pending.insert(
@@ -649,10 +655,17 @@ where
                     self.counters.dec_pending(&endpoint);
 
                     let (endpoint, concurrent_dial_errors) = match (endpoint, outgoing) {
-                        (PendingPoint::Dialer { role_override }, Some((address, errors))) => (
+                        (
+                            PendingPoint::Dialer {
+                                role_override,
+                                port_use,
+                            },
+                            Some((address, errors)),
+                        ) => (
                             ConnectedPoint::Dialer {
                                 address,
                                 role_override,
+                                port_use,
                             },
                             Some(errors),
                         ),

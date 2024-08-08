@@ -13,7 +13,7 @@ categories = ["network-programming", "asynchronous"]
 [dependencies]
 arrayvec = "0.7.4"
 bytes = "1"
-either = "1.12"
+either = "1.11"
 fnv = "1.0"
 asynchronous-codec = { workspace = true }
 futures = { workspace = true }
@@ -29,7 +29,7 @@ smallvec = "1.13.2"
 uint = "0.9"
 void = "1.0"
 futures-timer = "3.0.3"
-instant = "0.1.13"
+web-time = { workspace = true }
 serde = { version = "1.0", optional = true, features = ["derive"] }
 thiserror = "1"
 tracing = { workspace = true }
@@ -43,7 +43,7 @@ libp2p-swarm = { path = "../../swarm", features = ["macros"] }
 libp2p-swarm-test = { path = "../../swarm-test" }
 libp2p-yamux = { workspace = true }
 quickcheck = { workspace = true }
-tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+tracing-subscriber = { workspace = true, features = ["env-filter"] }
 
 [features]
 serde = ["dep:serde", "bytes/serde"]
@@ -52,8 +52,6 @@ serde = ["dep:serde", "bytes/serde"]
 # More information: https://docs.rs/about/builds#cross-compiling
 [package.metadata.docs.rs]
 all-features = true
-rustdoc-args = ["--cfg", "docsrs"]
-rustc-args = ["--cfg", "docsrs"]
 
 [lints]
 workspace = true

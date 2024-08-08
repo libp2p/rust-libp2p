@@ -206,6 +206,7 @@ where
         ConnectedPoint::Dialer {
             address,
             role_override: Endpoint::Dialer,
+            port_use: PortUse::Reuse,
         }
     } else {
         ConnectedPoint::Listener {
@@ -256,6 +257,7 @@ where
         let fake_endpoint = ConnectedPoint::Dialer {
             address: Multiaddr::empty(),
             role_override: Endpoint::Dialer,
+            port_use: PortUse::Reuse,
         }; // this is not relevant
            // peer_connections.connections should never be empty.
 
@@ -268,6 +270,7 @@ where
                 connection_id,
                 endpoint: &fake_endpoint,
                 remaining_established: active_connections,
+                cause: None,
             }));
         }
     }
@@ -561,6 +564,7 @@ fn test_join() {
             endpoint: &ConnectedPoint::Dialer {
                 address: "/ip4/127.0.0.1".parse::<Multiaddr>().unwrap(),
                 role_override: Endpoint::Dialer,
+                port_use: PortUse::Reuse,
             },
             failed_addresses: &[],
             other_established: 0,
@@ -4051,6 +4055,7 @@ fn test_scoring_p6() {
             endpoint: &ConnectedPoint::Dialer {
                 address: addr.clone(),
                 role_override: Endpoint::Dialer,
+                port_use: PortUse::Reuse,
             },
             failed_addresses: &[],
             other_established: 0,
@@ -4072,6 +4077,7 @@ fn test_scoring_p6() {
             endpoint: &ConnectedPoint::Dialer {
                 address: addr2.clone(),
                 role_override: Endpoint::Dialer,
+                port_use: PortUse::Reuse,
             },
             failed_addresses: &[],
             other_established: 1,
@@ -4102,6 +4108,7 @@ fn test_scoring_p6() {
         endpoint: &ConnectedPoint::Dialer {
             address: addr,
             role_override: Endpoint::Dialer,
+            port_use: PortUse::Reuse,
         },
         failed_addresses: &[],
         other_established: 2,
@@ -4546,7 +4553,7 @@ fn test_limit_number_of_message_ids_inside_ihave() {
     //emit gossip
     gs.emit_gossip();
 
-    // both peers should have gotten 100 random ihave messages, to asser the randomness, we
+    // both peers should have gotten 100 random ihave messages, to assert the randomness, we
     // assert that both have not gotten the same set of messages, but have an intersection
     // (which is the case with very high probability, the probabiltity of failure is < 10^-58).
 

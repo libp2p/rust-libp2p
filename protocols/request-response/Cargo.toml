@@ -3,7 +3,7 @@ name = "libp2p-request-response"
 edition = "2021"
 rust-version = { workspace = true }
 description = "Generic Request/Response Protocols"
-version = "0.26.2"
+version = "0.27.0"
 authors = ["Parity Technologies <admin@parity.io>"]
 license = "MIT"
 repository = "https://github.com/libp2p/rust-libp2p"
@@ -14,7 +14,7 @@ categories = ["network-programming", "asynchronous"]
 async-trait = "0.1"
 cbor4ii = { version = "0.3.2", features = ["serde1", "use_std"], optional = true }
 futures = { workspace = true }
-instant = "0.1.13"
+web-time = { workspace = true }
 libp2p-core = { workspace = true }
 libp2p-swarm = { workspace = true }
 libp2p-identity = { workspace = true }
@@ -41,14 +41,12 @@ rand = "0.8"
 libp2p-swarm-test = { path = "../../swarm-test" }
 futures_ringbuf = "0.4.0"
 serde = { version = "1.0", features = ["derive"] }
-tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+tracing-subscriber = { workspace = true, features = ["env-filter"] }
 
 # Passing arguments to the docsrs builder in order to properly document cfg's.
 # More information: https://docs.rs/about/builds#cross-compiling
 [package.metadata.docs.rs]
 all-features = true
-rustdoc-args = ["--cfg", "docsrs"]
-rustc-args = ["--cfg", "docsrs"]
 
 [lints]
 workspace = true

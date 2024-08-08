@@ -23,15 +23,15 @@
 //! # Important Discrepancies
 //!
 //! - **Peer Discovery with Identify** In other libp2p implementations, the
-//! [Identify](https://github.com/libp2p/specs/tree/master/identify) protocol might be seen as a core protocol. Rust-libp2p
-//! tries to stay as generic as possible, and does not make this assumption.
-//! This means that the Identify protocol must be manually hooked up to Kademlia through calls
-//! to [`Behaviour::add_address`].
-//! If you choose not to use the Identify protocol, and do not provide an alternative peer
-//! discovery mechanism, a Kademlia node will not discover nodes beyond the network's
-//! [boot nodes](https://docs.libp2p.io/concepts/glossary/#boot-node). Without the Identify protocol,
-//! existing nodes in the kademlia network cannot obtain the listen addresses
-//! of nodes querying them, and thus will not be able to add them to their routing table.
+//!   [Identify](https://github.com/libp2p/specs/tree/master/identify) protocol might be seen as a core protocol. Rust-libp2p
+//!   tries to stay as generic as possible, and does not make this assumption.
+//!   This means that the Identify protocol must be manually hooked up to Kademlia through calls
+//!   to [`Behaviour::add_address`].
+//!   If you choose not to use the Identify protocol, and do not provide an alternative peer
+//!   discovery mechanism, a Kademlia node will not discover nodes beyond the network's
+//!   [boot nodes](https://docs.libp2p.io/concepts/glossary/#boot-node). Without the Identify protocol,
+//!   existing nodes in the kademlia network cannot obtain the listen addresses
+//!   of nodes querying them, and thus will not be able to add them to their routing table.
 
 #![cfg_attr(docsrs, feature(doc_cfg, doc_auto_cfg))]
 
@@ -59,9 +59,9 @@ pub use behaviour::{
     AddProviderContext, AddProviderError, AddProviderOk, AddProviderPhase, AddProviderResult,
     BootstrapError, BootstrapOk, BootstrapResult, GetClosestPeersError, GetClosestPeersOk,
     GetClosestPeersResult, GetProvidersError, GetProvidersOk, GetProvidersResult, GetRecordError,
-    GetRecordOk, GetRecordResult, InboundRequest, Mode, NoKnownPeers, PeerRecord, PutRecordContext,
-    PutRecordError, PutRecordOk, PutRecordPhase, PutRecordResult, QueryInfo, QueryMut, QueryRef,
-    QueryResult, QueryStats, RoutingUpdate,
+    GetRecordOk, GetRecordResult, InboundRequest, Mode, NoKnownPeers, PeerInfo, PeerRecord,
+    PutRecordContext, PutRecordError, PutRecordOk, PutRecordPhase, PutRecordResult, QueryInfo,
+    QueryMut, QueryRef, QueryResult, QueryStats, RoutingUpdate,
 };
 pub use behaviour::{
     Behaviour, BucketInserts, Caching, Config, Event, ProgressStep, Quorum, StoreInserts,

@@ -3,18 +3,18 @@ name = "autonat-example"
 version = "0.1.0"
 edition = "2021"
 publish = false
-license = "MIT"
+license = "MIT or Apache-2.0"
 
 [package.metadata.release]
 release = false
 
 [dependencies]
 tokio = { workspace = true, features = ["full"] }
-clap = { version = "4.5.4", features = ["derive"] }
+clap = { version = "4.5.6", features = ["derive"] }
 futures = { workspace = true }
 libp2p = { path = "../../libp2p", features = ["tokio", "tcp", "noise", "yamux", "autonat", "identify", "macros"] }
 tracing = { workspace = true }
-tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+tracing-subscriber = { workspace = true, features = ["env-filter"] }
 
 [lints]
 workspace = true

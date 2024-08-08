@@ -28,7 +28,7 @@ pub use as_client::{OutboundProbeError, OutboundProbeEvent};
 use as_server::AsServer;
 pub use as_server::{InboundProbeError, InboundProbeEvent};
 use futures_timer::Delay;
-use instant::Instant;
+use libp2p_core::transport::PortUse;
 use libp2p_core::{multiaddr::Protocol, ConnectedPoint, Endpoint, Multiaddr};
 use libp2p_identity::PeerId;
 use libp2p_request_response::{
@@ -45,6 +45,7 @@ use std::{
     task::{Context, Poll},
     time::Duration,
 };
+use web_time::Instant;
 
 /// Config for the [`Behaviour`].
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -338,6 +339,7 @@ impl Behaviour {
             ConnectedPoint::Dialer {
                 address,
                 role_override: Endpoint::Dialer,
+                ..
             } => {
                 if let Some(event) = self.as_server().on_outbound_connection(&peer, address) {
                     self.pending_actions
@@ -347,6 +349,7 @@ impl Behaviour {
             ConnectedPoint::Dialer {
                 address: _,
                 role_override: Endpoint::Listener,
+                ..
             } => {
                 // Outgoing connection was dialed as a listener. In other words outgoing connection
                 // was dialed as part of a hole punch. `libp2p-autonat` never attempts to hole
@@ -512,9 +515,15 @@ impl NetworkBehaviour for Behaviour {
         peer: PeerId,
         addr: &Multiaddr,
         role_override: Endpoint,
+        port_use: PortUse,
     ) -> Result<THandler<Self>, ConnectionDenied> {
-        self.inner
-            .handle_established_outbound_connection(connection_id, peer, addr, role_override)
+        self.inner.handle_established_outbound_connection(
+            connection_id,
+            peer,
+            addr,
+            role_override,
+            port_use,
+        )
     }
 
     fn on_swarm_event(&mut self, event: FromSwarm) {

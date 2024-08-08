@@ -3,7 +3,7 @@ name = "libp2p-rendezvous"
 edition = "2021"
 rust-version = { workspace = true }
 description = "Rendezvous protocol for libp2p"
-version = "0.14.0"
+version = "0.15.0"
 authors = ["The COMIT guys <hello@comit.network>"]
 license = "MIT"
 repository = "https://github.com/libp2p/rust-libp2p"
@@ -16,7 +16,7 @@ async-trait = "0.1"
 bimap = "0.6.3"
 futures = { workspace = true, features = ["std"] }
 futures-timer = "3.0.3"
-instant = "0.1.13"
+web-time = { workspace = true }
 libp2p-core = { workspace = true }
 libp2p-swarm = { workspace = true }
 libp2p-identity = { workspace = true }
@@ -38,14 +38,12 @@ libp2p-tcp = { workspace = true, features = ["tokio"] }
 libp2p-yamux = { workspace = true }
 rand = "0.8"
 tokio = { workspace = true, features = [ "rt-multi-thread", "time", "macros", "sync", "process", "fs", "net" ] }
-tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+tracing-subscriber = { workspace = true, features = ["env-filter"] }
 
 # Passing arguments to the docsrs builder in order to properly document cfg's.
 # More information: https://docs.rs/about/builds#cross-compiling
 [package.metadata.docs.rs]
 all-features = true
-rustdoc-args = ["--cfg", "docsrs"]
-rustc-args = ["--cfg", "docsrs"]
 
 [lints]
 workspace = true

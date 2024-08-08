@@ -174,13 +174,12 @@ pub(crate) mod native {
 
         pub(crate) async fn blpop(&self, key: &str, timeout: u64) -> Result<Vec<String>> {
             let mut conn = self.0.get_async_connection().await?;
-            Ok(conn.blpop(key, timeout as usize).await?)
+            Ok(conn.blpop(key, timeout as f64).await?)
         }
 
         pub(crate) async fn rpush(&self, key: &str, value: String) -> Result<()> {
             let mut conn = self.0.get_async_connection().await?;
-            conn.rpush(key, value).await?;
-            Ok(())
+            conn.rpush(key, value).await.map_err(Into::into)
         }
     }
 }
@@ -199,7 +198,7 @@ pub(crate) mod wasm {
 
     use crate::{BlpopRequest, Muxer, SecProtocol, Transport};
 
-    pub(crate) type Instant = instant::Instant;
+    pub(crate) type Instant = web_time::Instant;
 
     pub(crate) fn init_logger() {
         console_error_panic_hook::set_once();

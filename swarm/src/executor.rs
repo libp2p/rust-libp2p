@@ -11,6 +11,7 @@ use std::{future::Future, pin::Pin};
 /// >           about running `Future`s on a separate task.
 pub trait Executor {
     /// Run the given future in the background until it ends.
+    #[track_caller]
     fn exec(&self, future: Pin<Box<dyn Future<Output = ()> + Send>>);
 }
 

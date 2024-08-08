@@ -3,7 +3,7 @@ name = "libp2p-upnp"
 edition = "2021"
 rust-version = "1.60.0"
 description = "UPnP support for libp2p transports"
-version = "0.2.2"
+version = "0.3.0"
 license = "MIT"
 repository = "https://github.com/libp2p/rust-libp2p"
 keywords = ["peer-to-peer", "libp2p", "networking"]
@@ -30,5 +30,3 @@ workspace = true
 # More information: https://docs.rs/about/builds#cross-compiling
 [package.metadata.docs.rs]
 all-features = true
-rustdoc-args = ["--cfg", "docsrs"]
-rustc-args = ["--cfg", "docsrs"]
