@@ -472,7 +472,7 @@ impl Handler {
             info: (),
         }: FullyNegotiatedOutbound<
             <Self as ConnectionHandler>::OutboundProtocol,
-            <Self as ConnectionHandler>::OutboundOpenInfo,
+            (),
         >,
     ) {
         if let Some(sender) = self.pending_streams.pop_front() {
@@ -494,7 +494,7 @@ impl Handler {
         &mut self,
         FullyNegotiatedInbound { protocol, .. }: FullyNegotiatedInbound<
             <Self as ConnectionHandler>::InboundProtocol,
-            <Self as ConnectionHandler>::InboundOpenInfo,
+            (),
         >,
     ) {
         // If `self.allow_listening` is false, then we produced a `DeniedUpgrade` and `protocol`
@@ -599,7 +599,7 @@ impl ConnectionHandler for Handler {
     type OutboundOpenInfo = ();
     type InboundOpenInfo = ();
 
-    fn listen_protocol(&self) -> SubstreamProtocol<Self::InboundProtocol, Self::InboundOpenInfo> {
+    fn listen_protocol(&self) -> SubstreamProtocol<Self::InboundProtocol, ()> {
         match self.mode {
             Mode::Server => SubstreamProtocol::new(Either::Left(self.protocol_config.clone()), ()),
             Mode::Client => SubstreamProtocol::new(Either::Right(upgrade::DeniedUpgrade), ()),
@@ -711,7 +711,7 @@ impl ConnectionHandler for Handler {
         &mut self,
         cx: &mut Context<'_>,
     ) -> Poll<
-        ConnectionHandlerEvent<Self::OutboundProtocol, Self::OutboundOpenInfo, Self::ToBehaviour>,
+        ConnectionHandlerEvent<Self::OutboundProtocol, (), Self::ToBehaviour>,
     > {
         loop {
             match &mut self.protocol_status {
@@ -782,8 +782,8 @@ impl ConnectionHandler for Handler {
         event: ConnectionEvent<
             Self::InboundProtocol,
             Self::OutboundProtocol,
-            Self::InboundOpenInfo,
-            Self::OutboundOpenInfo,
+            (),
+            (),
         >,
     ) {
         match event {

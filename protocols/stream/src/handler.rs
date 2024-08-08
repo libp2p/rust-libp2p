@@ -53,7 +53,7 @@ impl ConnectionHandler for Handler {
 
     fn listen_protocol(
         &self,
-    ) -> swarm::SubstreamProtocol<Self::InboundProtocol, Self::InboundOpenInfo> {
+    ) -> swarm::SubstreamProtocol<Self::InboundProtocol, ()> {
         swarm::SubstreamProtocol::new(
             Upgrade {
                 supported_protocols: Shared::lock(&self.shared).supported_inbound_protocols(),
@@ -68,7 +68,7 @@ impl ConnectionHandler for Handler {
     ) -> Poll<
         swarm::ConnectionHandlerEvent<
             Self::OutboundProtocol,
-            Self::OutboundOpenInfo,
+            (),
             Self::ToBehaviour,
         >,
     > {
@@ -104,8 +104,8 @@ impl ConnectionHandler for Handler {
         event: ConnectionEvent<
             Self::InboundProtocol,
             Self::OutboundProtocol,
-            Self::InboundOpenInfo,
-            Self::OutboundOpenInfo,
+            (),
+            (),
         >,
     ) {
         match event {

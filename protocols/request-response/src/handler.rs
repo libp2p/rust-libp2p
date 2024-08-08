@@ -127,7 +127,7 @@ where
             info: (),
         }: FullyNegotiatedInbound<
             <Self as ConnectionHandler>::InboundProtocol,
-            <Self as ConnectionHandler>::InboundOpenInfo,
+            (),
         >,
     ) {
         let mut codec = self.codec.clone();
@@ -178,7 +178,7 @@ where
             info: (),
         }: FullyNegotiatedOutbound<
             <Self as ConnectionHandler>::OutboundProtocol,
-            <Self as ConnectionHandler>::OutboundOpenInfo,
+            (),
         >,
     ) {
         let message = self
@@ -217,7 +217,7 @@ where
     fn on_dial_upgrade_error(
         &mut self,
         DialUpgradeError { error, info: () }: DialUpgradeError<
-            <Self as ConnectionHandler>::OutboundOpenInfo,
+            (),
             <Self as ConnectionHandler>::OutboundProtocol,
         >,
     ) {
@@ -252,7 +252,7 @@ where
     fn on_listen_upgrade_error(
         &mut self,
         ListenUpgradeError { error, .. }: ListenUpgradeError<
-            <Self as ConnectionHandler>::InboundOpenInfo,
+            (),
             <Self as ConnectionHandler>::InboundProtocol,
         >,
     ) {
@@ -377,7 +377,7 @@ where
     type OutboundOpenInfo = ();
     type InboundOpenInfo = ();
 
-    fn listen_protocol(&self) -> SubstreamProtocol<Self::InboundProtocol, Self::InboundOpenInfo> {
+    fn listen_protocol(&self) -> SubstreamProtocol<Self::InboundProtocol, ()> {
         SubstreamProtocol::new(
             Protocol {
                 protocols: self.inbound_protocols.clone(),
@@ -470,8 +470,8 @@ where
         event: ConnectionEvent<
             Self::InboundProtocol,
             Self::OutboundProtocol,
-            Self::InboundOpenInfo,
-            Self::OutboundOpenInfo,
+            (),
+            (),
         >,
     ) {
         match event {
