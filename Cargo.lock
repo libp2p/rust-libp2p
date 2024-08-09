@@ -3330,7 +3330,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-swarm"
-version = "0.45.0"
+version = "0.45.1"
 dependencies = [
  "async-std",
  "criterion",
@@ -3365,7 +3365,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-swarm-derive"
-version = "0.34.2"
+version = "0.35.0"
 dependencies = [
  "heck 0.5.0",
  "proc-macro2",
