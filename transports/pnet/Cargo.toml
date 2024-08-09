@@ -3,7 +3,7 @@ name = "libp2p-pnet"
 edition = "2021"
 rust-version = { workspace = true }
 description = "Private swarm support for libp2p"
-version = "0.24.0"
+version = "0.25.0"
 authors = ["Parity Technologies <admin@parity.io>"]
 license = "MIT"
 repository = "https://github.com/libp2p/rust-libp2p"
@@ -29,7 +29,7 @@ libp2p-yamux = { workspace = true }
 quickcheck = { workspace = true }
 tokio = { workspace = true, features = ["full"] }
 
-# Passing arguments to the docsrs builder in order to properly document cfg's. 
+# Passing arguments to the docsrs builder in order to properly document cfg's.
 # More information: https://docs.rs/about/builds#cross-compiling
 [package.metadata.docs.rs]
 all-features = true

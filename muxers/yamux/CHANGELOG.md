@@ -1,3 +1,7 @@
+## 0.46.0
+
+<!-- Update to libp2p-swarm v0.45.0 -->
+
 ## 0.45.2
 
 - Update `yamux` to version `v0.13.3`.`
