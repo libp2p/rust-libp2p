@@ -63,8 +63,12 @@ pub use io::Output;
 use crate::handshake::State;
 use crate::io::handshake;
 use crate::protocol::{noise_params_into_builder, AuthenticKeypair, Keypair, PARAMS_XX};
+use futures::future::BoxFuture;
 use futures::prelude::*;
-use libp2p_core::upgrade::{InboundConnectionUpgrade, OutboundConnectionUpgrade};
+use libp2p_core::upgrade::{
+    InboundConnectionUpgrade, InboundSecurityUpgrade, OutboundConnectionUpgrade,
+    OutboundSecurityUpgrade,
+};
 use libp2p_core::UpgradeInfo;
 use libp2p_identity as identity;
 use libp2p_identity::PeerId;
@@ -179,19 +183,8 @@ where
     type Error = Error;
     type Future = Pin<Box<dyn Future<Output = Result<Self::Output, Self::Error>> + Send>>;
 
-    fn upgrade_inbound(self, socket: T, _: Self::Info) -> Self::Future {
-        async move {
-            let mut state = self.into_responder(socket)?;
-
-            handshake::recv_empty(&mut state).await?;
-            handshake::send_identity(&mut state).await?;
-            handshake::recv_identity(&mut state).await?;
-
-            let (pk, io) = state.finish()?;
-
-            Ok((pk.to_peer_id(), io))
-        }
-        .boxed()
+    fn upgrade_inbound(self, socket: T, info: Self::Info) -> Self::Future {
+        InboundSecurityUpgrade::secure_inbound(self, socket, info)
     }
 }
 
@@ -203,7 +196,50 @@ where
     type Error = Error;
     type Future = Pin<Box<dyn Future<Output = Result<Self::Output, Self::Error>> + Send>>;
 
-    fn upgrade_outbound(self, socket: T, _: Self::Info) -> Self::Future {
+    fn upgrade_outbound(self, socket: T, info: Self::Info) -> Self::Future {
+        OutboundSecurityUpgrade::secure_outbound(self, socket, info, None)
+    }
+}
+
+impl<T> InboundSecurityUpgrade<T> for Config
+where
+    T: AsyncRead + AsyncWrite + Unpin + Send + 'static,
+{
+    type Output = Output<T>;
+    type Error = Error;
+    type Future = BoxFuture<'static, Result<(PeerId, Self::Output), Self::Error>>;
+
+    fn secure_inbound(self, socket: T, _: Self::Info) -> Self::Future {
+        async move {
+            let mut state = self.into_responder(socket)?;
+
+            handshake::recv_empty(&mut state).await?;
+            handshake::send_identity(&mut state).await?;
+            handshake::recv_identity(&mut state).await?;
+
+            let (pk, io) = state.finish()?;
+
+            let peer_id = pk.to_peer_id();
+            Ok((peer_id, io))
+        }
+        .boxed()
+    }
+}
+
+impl<T> OutboundSecurityUpgrade<T> for Config
+where
+    T: AsyncRead + AsyncWrite + Unpin + Send + 'static,
+{
+    type Output = Output<T>;
+    type Error = Error;
+    type Future = BoxFuture<'static, Result<(PeerId, Self::Output), Self::Error>>;
+
+    fn secure_outbound(
+        self,
+        socket: T,
+        _: Self::Info,
+        expected_peer_id: Option<PeerId>,
+    ) -> Self::Future {
         async move {
             let mut state = self.into_initiator(socket)?;
 
@@ -213,7 +249,16 @@ where
 
             let (pk, io) = state.finish()?;
 
-            Ok((pk.to_peer_id(), io))
+            let peer_id = pk.to_peer_id();
+            match expected_peer_id {
+                Some(expected_peer_id) if expected_peer_id != peer_id => {
+                    Err(Error::PeerIdMismatch {
+                        peer_id,
+                        expected_peer_id,
+                    })
+                }
+                _ => Ok((peer_id, io)),
+            }
         }
         .boxed()
     }
@@ -244,6 +289,11 @@ pub enum Error {
     SigningError(#[from] libp2p_identity::SigningError),
     #[error("Expected WebTransport certhashes ({}) are not a subset of received ones ({})", certhashes_to_string(.0), certhashes_to_string(.1))]
     UnknownWebTransportCerthashes(HashSet<Multihash<64>>, HashSet<Multihash<64>>),
+    #[error("Invalid peer ID (actual {peer_id:?}, expected {expected_peer_id:?})")]
+    PeerIdMismatch {
+        peer_id: PeerId,
+        expected_peer_id: PeerId,
+    },
 }
 
 #[derive(Debug, thiserror::Error)]
