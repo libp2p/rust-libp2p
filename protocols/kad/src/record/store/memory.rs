@@ -164,32 +164,18 @@ impl RecordStore for MemoryStore {
             }
         }
 
-        // It is a new provider record for that key.
-        let key = kbucket::Key::new(record.key.clone());
-        let provider = kbucket::Key::from(record.provider);
-        let position = providers
-            .iter()
-            .position(|p| key.distance(&provider) <= key.distance(&kbucket::Key::from(p.provider)))
-            .unwrap_or_else(|| providers.len());
-        if position == providers.len() && providers.len() == self.config.max_providers_per_key {
-            // The new provider is further away from the key than any existing provider,
-            // and there is no room for it.
+        // If the providers list is full, we ignore the new provider.
+        // This strategy can mitigate Sybil attacks, in which an attacker
+        // floods the network with fake provider records.
+        if providers.len() == self.config.max_providers_per_key {
             return Ok(());
         }
 
-        // Insert the new provider.
+        // Otherwise, insert the new provider record.
         if self.local_key.preimage() == &record.provider {
             self.provided.insert(record.clone());
         }
-        if providers.len() == self.config.max_providers_per_key {
-            // Remove the excess provider, if any.
-            if let Some(p) = providers.pop() {
-                if self.local_key.preimage() == &p.provider {
-                    self.provided.remove(&p);
-                }
-            }
-        }
-        providers.insert(position, record);
+        providers.push(record);
 
         Ok(())
     }
@@ -209,7 +195,9 @@ impl RecordStore for MemoryStore {
             let providers = e.get_mut();
             if let Some(i) = providers.iter().position(|p| &p.provider == provider) {
                 let p = providers.remove(i);
-                self.provided.remove(&p);
+                if &p.provider == self.local_key.preimage() {
+                    self.provided.remove(&p);
+                }
             }
             if providers.is_empty() {
                 e.remove();
@@ -255,30 +243,6 @@ mod tests {
             assert!(!store.providers(&r.key).contains(&r));
         }
         quickcheck(prop as fn(_))
-    }
-
-    #[test]
-    fn providers_ordered_by_distance_to_key() {
-        fn prop(providers: Vec<kbucket::Key<PeerId>>) -> bool {
-            let mut store = MemoryStore::new(PeerId::random());
-            let key = Key::from(random_multihash());
-
-            let mut records = providers
-                .into_iter()
-                .map(|p| ProviderRecord::new(key.clone(), p.into_preimage(), Vec::new()))
-                .collect::<Vec<_>>();
-
-            for r in &records {
-                assert!(store.add_provider(r.clone()).is_ok());
-            }
-
-            records.sort_by_key(distance);
-            records.truncate(store.config.max_providers_per_key);
-
-            records == store.providers(&key).to_vec()
-        }
-
-        quickcheck(prop as fn(_) -> _)
     }
 
     #[test]
@@ -330,32 +294,23 @@ mod tests {
 
     #[test]
     fn max_providers_per_key() {
+        let config = MemoryStoreConfig::default();
         let key = kbucket::Key::new(Key::from(random_multihash()));
-        // Find two peers such that `other` is closer to `key` than `prv`.
-        let mut prv = PeerId::random();
-        let mut other = PeerId::random();
-        while kbucket::Key::from(prv).distance(&key) <= kbucket::Key::from(other).distance(&key) {
-            prv = PeerId::random();
-            other = PeerId::random();
+
+        let mut store = MemoryStore::with_config(PeerId::random(), config.clone());
+        let peers = (0..config.max_providers_per_key)
+            .map(|_| PeerId::random())
+            .collect::<Vec<_>>();
+        for peer in &peers {
+            let rec = ProviderRecord::new(key.preimage().clone(), peer.clone(), Vec::new());
+            assert!(store.add_provider(rec).is_ok());
         }
 
-        let mut store = MemoryStore::with_config(
-            prv,
-            MemoryStoreConfig {
-                max_providers_per_key: 1,
-                ..Default::default()
-            },
-        );
-        let mut rec = ProviderRecord::new(key.preimage().clone(), prv, Vec::new());
+        // The new provider cannot be added because the key is already saturated.
+        let peer = PeerId::random();
+        let rec = ProviderRecord::new(key.preimage().clone(), peer.clone(), Vec::new());
         assert!(store.add_provider(rec.clone()).is_ok());
-        assert_eq!(
-            vec![Cow::Borrowed(&rec)],
-            store.provided().collect::<Vec<_>>()
-        );
-        rec.provider = other;
-        assert!(store.add_provider(rec.clone()).is_ok());
-        assert_eq!(vec![rec], store.providers(key.preimage()));
-        assert_eq!(store.provided().count(), 0);
+        assert!(!store.providers(&rec.key).contains(&rec));
     }
 
     #[test]
