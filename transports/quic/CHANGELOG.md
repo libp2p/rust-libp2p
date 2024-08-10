@@ -1,8 +1,8 @@
 ## 0.11.1
 
-- Update `libp2p-tls` to version `0.5.0`, see [PR XXXX]
+- Update `libp2p-tls` to version `0.5.0`, see [PR 5547]
 
-[PR XXXX]: https://github.com/libp2p/rust-libp2p/pull/XXXX
+[PR 5547]: https://github.com/libp2p/rust-libp2p/pull/5547
 
 ## 0.11.0
 
