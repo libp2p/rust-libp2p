@@ -71,22 +71,22 @@ async fn two_servers_add_each_other_to_routing_table() {
 
     async_std::task::spawn(server1.loop_on_next());
 
-    let external_event_peer = server2
+    let new_external_addr_event_peer = server2
         .wait(|e| match e {
             SwarmEvent::NewExternalAddrOfPeer { peer_id, .. } => Some(peer_id),
             _ => None,
         })
         .await;
 
-    let routing_updated_peer = server2
+    let routing_updated_event_peer = server2
         .wait(|e| match e {
             SwarmEvent::Behaviour(Kad(RoutingUpdated { peer, .. })) => Some(peer),
             _ => None,
         })
         .await;
 
-    assert_eq!(external_event_peer, server1_peer_id);
-    assert_eq!(routing_updated_peer, server1_peer_id);
+    assert_eq!(new_external_addr_event_peer, server1_peer_id);
+    assert_eq!(routing_updated_event_peer, server1_peer_id);
 }
 
 #[async_std::test]
