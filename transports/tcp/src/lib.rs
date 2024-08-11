@@ -173,7 +173,7 @@ impl Config {
     ///
     /// The new implementation works on a per-connaction basis, defined by the behaviour. This
     /// removes the necessaity to configure the transport for port reuse, instead the behaviour
-    /// requiring this behaviour can decide wether to use port reuse or not.
+    /// requiring this behaviour can decide whether to use port reuse or not.
     ///
     /// The API to configure port reuse is part of [`Transport`] and the option can be found in
     /// [`libp2p_core::transport::DialOpts`].
