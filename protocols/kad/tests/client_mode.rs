@@ -23,14 +23,21 @@ async fn server_gets_added_to_routing_table_by_client() {
     let server_peer_id = *server.local_peer_id();
     async_std::task::spawn(server.loop_on_next());
 
-    let peer = client
+    let external_event_peer = client
+        .wait(|e| match e {
+            SwarmEvent::NewExternalAddrOfPeer { peer_id, .. } => Some(peer_id),
+            _ => None,
+        })
+        .await;
+    let routing_updated_peer = client
         .wait(|e| match e {
             SwarmEvent::Behaviour(Kad(RoutingUpdated { peer, .. })) => Some(peer),
             _ => None,
         })
         .await;
 
-    assert_eq!(peer, server_peer_id);
+    assert_eq!(external_event_peer, server_peer_id);
+    assert_eq!(routing_updated_peer, server_peer_id);
 }
 
 #[async_std::test]
@@ -64,14 +71,22 @@ async fn two_servers_add_each_other_to_routing_table() {
 
     async_std::task::spawn(server1.loop_on_next());
 
-    let peer = server2
+    let external_event_peer = server2
+        .wait(|e| match e {
+            SwarmEvent::NewExternalAddrOfPeer { peer_id, .. } => Some(peer_id),
+            _ => None,
+        })
+        .await;
+
+    let routing_updated_peer = server2
         .wait(|e| match e {
             SwarmEvent::Behaviour(Kad(RoutingUpdated { peer, .. })) => Some(peer),
             _ => None,
         })
         .await;
 
-    assert_eq!(peer, server1_peer_id);
+    assert_eq!(external_event_peer, server1_peer_id);
+    assert_eq!(routing_updated_peer, server1_peer_id);
 }
 
 #[async_std::test]
@@ -126,6 +141,12 @@ async fn set_client_to_server_mode() {
 
     let server_peer_id = *server.local_peer_id();
 
+    let peer_id = client
+        .wait(|e| match e {
+            SwarmEvent::NewExternalAddrOfPeer { peer_id, .. } => Some(peer_id),
+            _ => None,
+        })
+        .await;
     let client_event = client.wait(|e| match e {
         SwarmEvent::Behaviour(Kad(RoutingUpdated { peer, .. })) => Some(peer),
         _ => None,
@@ -138,6 +159,7 @@ async fn set_client_to_server_mode() {
     let (peer, info) = futures::future::join(client_event, server_event).await;
 
     assert_eq!(peer, server_peer_id);
+    assert_eq!(peer_id, server_peer_id);
     assert!(info
         .protocols
         .iter()
