@@ -1,3 +1,8 @@
+## 0.46.1 - unreleased
+
+- Emit `ToSwarm::NewExternalAddrOfPeer`.
+  See [PR 5549](https://github.com/libp2p/rust-libp2p/pull/5549)
+
 ## 0.46.0
 
 - Included multiaddresses of found peers alongside peer IDs in `GetClosestPeers` query results.
