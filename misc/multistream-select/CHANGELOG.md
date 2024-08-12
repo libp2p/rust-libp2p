@@ -1,4 +1,7 @@
-## 0.13.0 
+## 0.13.1
+
+
+## 0.13.0
 
 - Don't wait for negotiation on `<Negotiated as AsyncWrite>::poll_close`.
   This can save one round-trip for protocols that use stream closing as an operation in ones protocol, e.g. using stream closing to signal the end of a request.

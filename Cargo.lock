@@ -3876,7 +3876,7 @@ dependencies = [
 
 [[package]]
 name = "multistream-select"
-version = "0.13.0"
+version = "0.13.1"
 dependencies = [
  "async-std",
  "bytes",

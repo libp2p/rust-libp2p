@@ -3,7 +3,7 @@ name = "multistream-select"
 edition = "2021"
 rust-version = { workspace = true }
 description = "Multistream-select negotiation protocol for libp2p"
-version = "0.13.0"
+version = "0.13.1"
 authors = ["Parity Technologies <admin@parity.io>"]
 license = "MIT"
 repository = "https://github.com/libp2p/rust-libp2p"
