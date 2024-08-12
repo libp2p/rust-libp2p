@@ -1,5 +1,10 @@
 ## 0.4.1
 
+- Add `tokio` runtime support and make `tokio` and `async-std` runtimes optional behind features.
+  See [PR 5551].
+
+[PR 5551]: https://github.com/libp2p/rust-libp2p/pull/5551
+
 ## 0.4.0
 
 <!-- Update to libp2p-swarm v0.45.0 -->
