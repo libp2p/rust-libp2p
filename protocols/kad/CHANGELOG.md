@@ -1,4 +1,4 @@
-## 0.46.1 - unreleased
+## 0.46.1
 
 - Emit `ToSwarm::NewExternalAddrOfPeer`.
   See [PR 5549](https://github.com/libp2p/rust-libp2p/pull/5549)
