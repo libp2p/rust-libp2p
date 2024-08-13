@@ -216,11 +216,6 @@ mod tests {
     fn random_multihash() -> Multihash<64> {
         Multihash::wrap(SHA_256_MH, &rand::thread_rng().gen::<[u8; 32]>()).unwrap()
     }
-
-    fn distance(r: &ProviderRecord) -> kbucket::Distance {
-        kbucket::Key::new(r.key.clone()).distance(&kbucket::Key::from(r.provider))
-    }
-
     #[test]
     fn put_get_remove_record() {
         fn prop(r: Record) {
@@ -301,14 +296,14 @@ mod tests {
         let peers = (0..config.max_providers_per_key)
             .map(|_| PeerId::random())
             .collect::<Vec<_>>();
-        for peer in &peers {
-            let rec = ProviderRecord::new(key.preimage().clone(), peer.clone(), Vec::new());
+        for peer in peers {
+            let rec = ProviderRecord::new(key.preimage().clone(), peer, Vec::new());
             assert!(store.add_provider(rec).is_ok());
         }
 
         // The new provider cannot be added because the key is already saturated.
         let peer = PeerId::random();
-        let rec = ProviderRecord::new(key.preimage().clone(), peer.clone(), Vec::new());
+        let rec = ProviderRecord::new(key.preimage().clone(), peer, Vec::new());
         assert!(store.add_provider(rec.clone()).is_ok());
         assert!(!store.providers(&rec.key).contains(&rec));
     }
