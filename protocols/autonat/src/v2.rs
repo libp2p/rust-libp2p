@@ -4,8 +4,8 @@
 //!
 //! The new version fixes the issues of the first version:
 //! - The server now always dials back over a newly allocated port. This greatly reduces the risk of
-//!     false positives that often occured in the first version, when the clinet-server connection
-//!     occured over a hole-punched port.
+//!     false positives that often occurred in the first version, when the clinet-server connection
+//!     occurred over a hole-punched port.
 //! - The server protects against DoS attacks by requiring the client to send more data to the
 //!     server then the dial back puts on the client, thus making the protocol unatractive for an
 //!     attacker.
