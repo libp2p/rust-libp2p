@@ -1,3 +1,8 @@
+## 0.45.1
+
+- Update `libp2p-swarm-derive` to version `0.35.0`, see [PR 5545]
+
+[PR 5545]: https://github.com/libp2p/rust-libp2p/pull/5545
 
 ## 0.45.0
 

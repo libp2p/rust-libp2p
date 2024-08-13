@@ -8,9 +8,9 @@
 - Included multiaddresses of found peers alongside peer IDs in `GetClosestPeers` query results.
   See [PR 5475](https://github.com/libp2p/rust-libp2p/pull/5475)
 - Changed `FIND_NODE` response: now includes a list of closest peers when querying the recipient peer ID. Previously, this request yielded an empty response.
-  See [PR 5270](https://github.com/libp2p/rust-libp2p/pull/5270)
-- Update to DHT republish interval and expiration time defaults to 22h and 48h respectively, rationale in [libp2p/specs#451](https://github.com/libp2p/specs/pull/451)
-  See [PR 3230](https://github.com/libp2p/rust-libp2p/pull/3230)
+  See [PR 5270](https://github.com/libp2p/rust-libp2p/pull/5270).
+- Update to DHT republish interval and expiration time defaults to 22h and 48h respectively, rationale in [libp2p/specs#451](https://github.com/libp2p/specs/pull/451).
+  See [PR 3230](https://github.com/libp2p/rust-libp2p/pull/3230).
 - Use default dial conditions more consistently.
   See [PR 4957](https://github.com/libp2p/rust-libp2p/pull/4957)
 - QueryClose progress whenever closer in range, instead of having to be the closest.
@@ -24,6 +24,8 @@
   See [PR 5148](https://github.com/libp2p/rust-libp2p/pull/5148).
 - Derive `Copy` for `kbucket::key::Key<T>`.
   See [PR 5317](https://github.com/libp2p/rust-libp2p/pull/5317).
+⁻ `KBucket` size can now be modified without changing the `K_VALUE`.
+  See [PR 5414](https://github.com/libp2p/rust-libp2p/pull/5414).
 - Use `web-time` instead of `instant`.
   See [PR 5347](https://github.com/libp2p/rust-libp2p/pull/5347).
 <!-- Update to libp2p-swarm v0.45.0 -->
