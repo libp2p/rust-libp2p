@@ -35,7 +35,7 @@
 
 -->
 
-[PR 4648]: (https://github.com/libp2p/rust-libp2p/pull/4648)
+[PR 4648]: https://github.com/libp2p/rust-libp2p/pull/4648
 
 <!-- Internal changes
 
