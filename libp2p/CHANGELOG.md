@@ -1,3 +1,8 @@
+## 0.54.1
+
+- Update individual crates.
+    - Update to [`libp2p-kad` `v0.46.1`](protocols/kad/CHANGELOG.md#0461).
+
 ## 0.54.0
 
 - Update individual crates.
