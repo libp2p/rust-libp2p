@@ -263,7 +263,7 @@ fn query_iter() {
 
         match swarms[0].behaviour_mut().query(&qid) {
             Some(q) => match q.info() {
-                QueryInfo::GetClosestPeers { key, step } => {
+                QueryInfo::GetClosestPeers { key, step, .. } => {
                     assert_eq!(&key[..], search_target.to_bytes().as_slice());
                     assert_eq!(usize::from(step.count), 1);
                 }
