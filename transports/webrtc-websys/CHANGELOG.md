@@ -1,3 +1,8 @@
+## 0.4.0-alpha
+
+- Implement refactored `Transport`.
+  See [PR 4568](https://github.com/libp2p/rust-libp2p/pull/4568)
+
 ## 0.3.0-alpha
 
 - Bump version in order to publish a new version dependent on latest `libp2p-core`.

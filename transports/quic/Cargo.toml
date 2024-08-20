@@ -1,6 +1,6 @@
 [package]
 name = "libp2p-quic"
-version = "0.10.3"
+version = "0.11.1"
 authors = ["Parity Technologies <admin@parity.io>"]
 edition = "2021"
 rust-version = { workspace = true }
@@ -42,8 +42,6 @@ async-std = ["dep:async-std", "if-watch/smol", "quinn/runtime-async-std"]
 # More information: https://docs.rs/about/builds#cross-compiling
 [package.metadata.docs.rs]
 all-features = true
-rustdoc-args = ["--cfg", "docsrs"]
-rustc-args = ["--cfg", "docsrs"]
 
 [dev-dependencies]
 async-std = { version = "1.12.0", features = ["attributes"] }

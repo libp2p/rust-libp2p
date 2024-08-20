@@ -1,3 +1,8 @@
+## 0.35.0
+
+- Implement refactored `Transport`.
+  See [PR 4568](https://github.com/libp2p/rust-libp2p/pull/4568)
+
 ## 0.34.2
 
 - Generate code for `libp2p-swarm`'s `FromSwarm::NewExternalAddrOfPeer` enum variant.

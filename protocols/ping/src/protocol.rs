@@ -44,8 +44,7 @@ pub const PROTOCOL_NAME: StreamProtocol = StreamProtocol::new("/ipfs/ping/1.0.0"
 /// >           Nagle's algorithm, delayed acks and similar configuration options
 /// >           which can affect latencies especially on otherwise low-volume
 /// >           connections.
-#[derive(Default, Debug, Copy, Clone)]
-pub(crate) struct Ping;
+
 const PING_SIZE: usize = 32;
 
 /// Sends a ping and waits for the pong.
@@ -87,7 +86,8 @@ mod tests {
     use futures::StreamExt;
     use libp2p_core::{
         multiaddr::multiaddr,
-        transport::{memory::MemoryTransport, ListenerId, Transport},
+        transport::{memory::MemoryTransport, DialOpts, ListenerId, PortUse, Transport},
+        Endpoint,
     };
 
     #[test]
@@ -111,7 +111,13 @@ mod tests {
 
         async_std::task::block_on(async move {
             let c = MemoryTransport::new()
-                .dial(listener_addr)
+                .dial(
+                    listener_addr,
+                    DialOpts {
+                        role: Endpoint::Dialer,
+                        port_use: PortUse::Reuse,
+                    },
+                )
                 .unwrap()
                 .await
                 .unwrap();
