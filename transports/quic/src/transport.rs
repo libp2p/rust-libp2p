@@ -302,7 +302,7 @@ impl<P: Provider> Transport for GenTransport<P> {
         dial_opts: DialOpts,
     ) -> Result<Self::Dial, TransportError<Self::Error>> {
         let (socket_addr, version, peer_id, wt) =
-            self.remote_multiaddr_to_socketaddr(addr.clone(), true)?;
+            self.remote_multiaddr_to_socketaddr(&addr, true)?;
 
         if wt {
             return Err(TransportError::MultiaddrNotSupported(addr));
@@ -344,7 +344,7 @@ impl<P: Provider> Transport for GenTransport<P> {
                     let connecting = endpoint
                         .connect_with(client_config, socket_addr, "l")
                         .map_err(ConnectError)?;
-                    Connecting::new(connecting, handshake_timeout).await
+                    Connecting::new(connecting, ConnectingMode::QUIC, handshake_timeout).await
                 }))
             }
             (Endpoint::Listener, _) => {
