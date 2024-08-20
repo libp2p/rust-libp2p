@@ -62,6 +62,7 @@ mod connection;
 mod hole_punching;
 mod provider;
 mod transport;
+mod webtransport;
 
 use std::net::SocketAddr;
 

@@ -18,11 +18,17 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
+use std::{sync::Arc, time::Duration};
+
 use quinn::{
     crypto::rustls::{QuicClientConfig, QuicServerConfig},
     MtuDiscoveryConfig, VarInt,
 };
-use std::{sync::Arc, time::Duration};
+
+use libp2p_core::multihash::Multihash;
+
+use crate::webtransport;
+use crate::webtransport::Certificate;
 
 /// Config for the transport.
 #[derive(Clone)]
@@ -69,18 +75,36 @@ pub struct Config {
 
     /// Parameters governing MTU discovery. See [`MtuDiscoveryConfig`] for details.
     mtu_discovery_config: Option<MtuDiscoveryConfig>,
+
+    webtransport_certhashes: Vec<Multihash<64>>,
 }
 
 impl Config {
     /// Creates a new configuration object with default values.
-    pub fn new(keypair: &libp2p_identity::Keypair) -> Self {
+    pub fn new(keypair: &libp2p_identity::Keypair, webtransport_cert: Option<Certificate>) -> Self {
         let client_tls_config = Arc::new(
             QuicClientConfig::try_from(libp2p_tls::make_client_config(keypair, None).unwrap())
                 .unwrap(),
         );
+        let server_config = match &webtransport_cert {
+            None => libp2p_tls::make_server_config(keypair).unwrap(),
+            Some(c) => {
+                libp2p_tls::make_webtransport_server_config(
+                    &c.cert,
+                    &c.private_key,
+                    webtransport::alpn_protocols()
+                ).unwrap()
+            },
+        };
         let server_tls_config = Arc::new(
-            QuicServerConfig::try_from(libp2p_tls::make_server_config(keypair).unwrap()).unwrap(),
+            QuicServerConfig::try_from(server_config).unwrap(),
         );
+
+        let webtransport_certhashes: Vec<Multihash<64>> = match webtransport_cert {
+            Some(c) => vec!(c.cert_hash()),
+            None => vec!()
+        };
+
         Self {
             client_tls_config,
             server_tls_config,
@@ -95,6 +119,7 @@ impl Config {
             max_stream_data: 10_000_000,
             keypair: keypair.clone(),
             mtu_discovery_config: Some(Default::default()),
+            webtransport_certhashes,
         }
     }
 
@@ -119,6 +144,8 @@ pub(crate) struct QuinnConfig {
     pub(crate) client_config: quinn::ClientConfig,
     pub(crate) server_config: quinn::ServerConfig,
     pub(crate) endpoint_config: quinn::EndpointConfig,
+    pub(crate) keypair: libp2p_identity::Keypair,
+    pub(crate) webtransport_certhashes: Vec<Multihash<64>>,
 }
 
 impl From<Config> for QuinnConfig {
@@ -135,6 +162,7 @@ impl From<Config> for QuinnConfig {
             handshake_timeout: _,
             keypair,
             mtu_discovery_config,
+            webtransport_certhashes,
         } = config;
         let mut transport = quinn::TransportConfig::default();
         // Disable uni-directional streams.
@@ -176,6 +204,8 @@ impl From<Config> for QuinnConfig {
             client_config,
             server_config,
             endpoint_config,
+            keypair,
+            webtransport_certhashes
         }
     }
 }
