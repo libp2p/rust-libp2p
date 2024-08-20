@@ -35,24 +35,23 @@ pub enum WebtransportConnectingError {
 impl Display for WebtransportConnectingError {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
-            WebtransportConnectingError::UnexpectedProtocol(p) =>
-                write!(f, "Unexpected request protocol {:?}", p),
-            WebtransportConnectingError::UnexpectedMethod(m) =>
-                write!(f, "Unexpected initial request method {:?}", m),
-            WebtransportConnectingError::UnexpectedPath(p) =>
-                write!(f, "Unexpected initial request path {}", p),
-            WebtransportConnectingError::UnexpectedQuery(q) =>
-                write!(f, "Unexpected initial request query {}", q),
-            WebtransportConnectingError::ConnectionError(e) =>
-                write!(f, "Connection error: {}", e),
-            WebtransportConnectingError::Http3Error(e) =>
-                write!(f, "Http3 error: {}", e),
-            WebtransportConnectingError::NoiseError(e) =>
-                write!(f, "Noise error: {}", e),
-            WebtransportConnectingError::NoMoreStreams =>
-                write!(f, "No more streams"),
-            WebtransportConnectingError::CrateError(e) =>
-                write!(f, "{}", e),
+            WebtransportConnectingError::UnexpectedProtocol(p) => {
+                write!(f, "Unexpected request protocol {:?}", p)
+            }
+            WebtransportConnectingError::UnexpectedMethod(m) => {
+                write!(f, "Unexpected initial request method {:?}", m)
+            }
+            WebtransportConnectingError::UnexpectedPath(p) => {
+                write!(f, "Unexpected initial request path {}", p)
+            }
+            WebtransportConnectingError::UnexpectedQuery(q) => {
+                write!(f, "Unexpected initial request query {}", q)
+            }
+            WebtransportConnectingError::ConnectionError(e) => write!(f, "Connection error: {}", e),
+            WebtransportConnectingError::Http3Error(e) => write!(f, "Http3 error: {}", e),
+            WebtransportConnectingError::NoiseError(e) => write!(f, "Noise error: {}", e),
+            WebtransportConnectingError::NoMoreStreams => write!(f, "No more streams"),
+            WebtransportConnectingError::CrateError(e) => write!(f, "{}", e),
         }
     }
 }

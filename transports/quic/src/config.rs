@@ -88,21 +88,18 @@ impl Config {
         );
         let server_config = match &webtransport_cert {
             None => libp2p_tls::make_server_config(keypair).unwrap(),
-            Some(c) => {
-                libp2p_tls::make_webtransport_server_config(
-                    &c.cert,
-                    &c.private_key,
-                    webtransport::alpn_protocols()
-                ).unwrap()
-            },
+            Some(c) => libp2p_tls::make_webtransport_server_config(
+                &c.cert,
+                &c.private_key,
+                webtransport::alpn_protocols(),
+            )
+            .unwrap(),
         };
-        let server_tls_config = Arc::new(
-            QuicServerConfig::try_from(server_config).unwrap(),
-        );
+        let server_tls_config = Arc::new(QuicServerConfig::try_from(server_config).unwrap());
 
         let webtransport_certhashes: Vec<Multihash<64>> = match webtransport_cert {
-            Some(c) => vec!(c.cert_hash()),
-            None => vec!()
+            Some(c) => vec![c.cert_hash()],
+            None => vec![],
         };
 
         Self {
@@ -205,7 +202,7 @@ impl From<Config> for QuinnConfig {
             server_config,
             endpoint_config,
             keypair,
-            webtransport_certhashes
+            webtransport_certhashes,
         }
     }
 }

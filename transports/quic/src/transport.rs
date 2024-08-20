@@ -31,6 +31,8 @@ use futures::{prelude::*, stream::SelectAll};
 
 use if_watch::IfEvent;
 
+use libp2p_core::multihash::Multihash;
+use libp2p_core::muxing::StreamMuxerBox;
 use libp2p_core::{
     multiaddr::{Multiaddr, Protocol},
     transport::{ListenerId, TransportError, TransportEvent},
@@ -40,6 +42,7 @@ use libp2p_identity::PeerId;
 use socket2::{Domain, Socket, Type};
 use std::collections::hash_map::{DefaultHasher, Entry};
 use std::collections::{HashMap, HashSet};
+use std::fmt::{Debug, Formatter};
 use std::hash::{Hash, Hasher};
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, UdpSocket};
 use std::time::Duration;
@@ -49,9 +52,6 @@ use std::{
     pin::Pin,
     task::{Context, Poll, Waker},
 };
-use std::fmt::{Debug, Formatter};
-use libp2p_core::multihash::Multihash;
-use libp2p_core::muxing::StreamMuxerBox;
 
 /// Implementation of the [`Transport`] trait for QUIC.
 ///
@@ -140,8 +140,9 @@ impl<P: Provider> GenTransport<P> {
         (SocketAddr, ProtocolVersion, Option<PeerId>, bool),
         TransportError<<Self as Transport>::Error>,
     > {
-        let (socket_addr, version, peer_id, wt) = multiaddr_to_socketaddr(addr, self.support_draft_29)
-            .ok_or_else(|| TransportError::MultiaddrNotSupported(addr.clone()))?;
+        let (socket_addr, version, peer_id, wt) =
+            multiaddr_to_socketaddr(addr, self.support_draft_29)
+                .ok_or_else(|| TransportError::MultiaddrNotSupported(addr.clone()))?;
         if check_unspecified_addr && (socket_addr.port() == 0 || socket_addr.ip().is_unspecified())
         {
             return Err(TransportError::MultiaddrNotSupported(addr.clone()));
@@ -211,7 +212,8 @@ impl<P: Provider> Transport for GenTransport<P> {
         listener_id: ListenerId,
         addr: Multiaddr,
     ) -> Result<(), TransportError<Self::Error>> {
-        let (socket_addr, version, _peer_id, wt) = self.remote_multiaddr_to_socketaddr(&addr, false)?;
+        let (socket_addr, version, _peer_id, wt) =
+            self.remote_multiaddr_to_socketaddr(&addr, false)?;
 
         if wt && self.quinn_config.webtransport_certhashes.is_empty() {
             return Err(TransportError::MultiaddrNotSupported(addr));
@@ -220,8 +222,11 @@ impl<P: Provider> Transport for GenTransport<P> {
         let noise_config = libp2p_noise::Config::new(&self.quinn_config.keypair)
             .expect("Getting a noise configuration from the node keypair");
 
-        if let Some(listener) = self.listeners.iter_mut()
-            .find(|l| !l.is_closed && l.socket_addr() == socket_addr) {
+        if let Some(listener) = self
+            .listeners
+            .iter_mut()
+            .find(|l| !l.is_closed && l.socket_addr() == socket_addr)
+        {
             listener.update(wt, &self.quinn_config.webtransport_certhashes, noise_config);
         } else {
             let socket = self.create_socket(socket_addr).map_err(Self::Error::from)?;
@@ -231,7 +236,10 @@ impl<P: Provider> Transport for GenTransport<P> {
             let endpoint = Self::new_endpoint(endpoint_config, Some(server_config), socket)?;
 
             let mode = if wt {
-                ConnectingMode::WebTransport(self.quinn_config.webtransport_certhashes.clone(), noise_config)
+                ConnectingMode::WebTransport(
+                    self.quinn_config.webtransport_certhashes.clone(),
+                    noise_config,
+                )
             } else {
                 ConnectingMode::QUIC
             };
@@ -281,7 +289,8 @@ impl<P: Provider> Transport for GenTransport<P> {
     }
 
     fn dial(&mut self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
-        let (socket_addr, version, _peer_id, wt) = self.remote_multiaddr_to_socketaddr(&addr, true)?;
+        let (socket_addr, version, _peer_id, wt) =
+            self.remote_multiaddr_to_socketaddr(&addr, true)?;
 
         if wt {
             return Err(TransportError::MultiaddrNotSupported(addr));
@@ -602,10 +611,12 @@ impl<P: Provider> Listener<P> {
         }
     }
 
-    fn update(&mut self,
-              is_webtransport: bool,
-              cert_hashes: &Vec<Multihash<64>>,
-              noise_cfg: libp2p_noise::Config) {
+    fn update(
+        &mut self,
+        is_webtransport: bool,
+        cert_hashes: &Vec<Multihash<64>>,
+        noise_cfg: libp2p_noise::Config,
+    ) {
         let cur_mode = &self.mode;
         match cur_mode {
             ConnectingMode::QUIC => {
@@ -721,10 +732,13 @@ impl ConnectingMode {
     pub(crate) fn update_multiaddr(&self, addr: Multiaddr) -> Multiaddr {
         fn add_web_transport_protocol(v: &Vec<Multihash<64>>, addr: Multiaddr) -> Multiaddr {
             let mut vec = v.clone();
-            let mut res = addr.with(Protocol::WebTransport)
-                .with(Protocol::Certhash(vec.pop().expect("Gets the last element")));
+            let mut res = addr.with(Protocol::WebTransport).with(Protocol::Certhash(
+                vec.pop().expect("Gets the last element"),
+            ));
             if !vec.is_empty() {
-                res = res.with(Protocol::Certhash(vec.pop().expect("Gets the last element")));
+                res = res.with(Protocol::Certhash(
+                    vec.pop().expect("Gets the last element"),
+                ));
             };
 
             res
@@ -741,12 +755,13 @@ impl ConnectingMode {
 impl Debug for ConnectingMode {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         match self {
-            ConnectingMode::QUIC =>
-                write!(f, "ConnectingMode::QUIC"),
-            ConnectingMode::WebTransport(certs, _) =>
-                write!(f, "ConnectingMode::WebTransport(hashes:{:?})", certs),
-            ConnectingMode::Mixed(certs, _) =>
-                write!(f, "ConnectingMode::Mixed(hashes:{:?})", certs),
+            ConnectingMode::QUIC => write!(f, "ConnectingMode::QUIC"),
+            ConnectingMode::WebTransport(certs, _) => {
+                write!(f, "ConnectingMode::WebTransport(hashes:{:?})", certs)
+            }
+            ConnectingMode::Mixed(certs, _) => {
+                write!(f, "ConnectingMode::Mixed(hashes:{:?})", certs)
+            }
         }
     }
 }
@@ -824,12 +839,18 @@ fn multiaddr_to_socketaddr(
     };
 
     match (proto1, proto2) {
-        (Protocol::Ip4(ip), Protocol::Udp(port)) => {
-            Some((SocketAddr::new(ip.into(), port), version, peer_id, is_webtransport))
-        }
-        (Protocol::Ip6(ip), Protocol::Udp(port)) => {
-            Some((SocketAddr::new(ip.into(), port), version, peer_id, is_webtransport))
-        }
+        (Protocol::Ip4(ip), Protocol::Udp(port)) => Some((
+            SocketAddr::new(ip.into(), port),
+            version,
+            peer_id,
+            is_webtransport,
+        )),
+        (Protocol::Ip6(ip), Protocol::Udp(port)) => Some((
+            SocketAddr::new(ip.into(), port),
+            version,
+            peer_id,
+            is_webtransport,
+        )),
         _ => None,
     }
 }
@@ -979,7 +1000,9 @@ mod tests {
 
         assert_eq!(
             multiaddr_to_socketaddr(
-                &"/ip4/127.0.0.1/udp/1234/quic/webtransport".parse::<Multiaddr>().unwrap(),
+                &"/ip4/127.0.0.1/udp/1234/quic/webtransport"
+                    .parse::<Multiaddr>()
+                    .unwrap(),
                 true,
             ),
             Some((

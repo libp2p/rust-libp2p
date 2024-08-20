@@ -6,8 +6,8 @@ use std::sync::Arc;
 use std::task::{Context, Poll};
 
 use bytes::Bytes;
-use futures::{AsyncRead, AsyncWrite, FutureExt};
 use futures::future::BoxFuture;
+use futures::{AsyncRead, AsyncWrite, FutureExt};
 use h3::quic;
 use h3_webtransport::server::{AcceptedBi, WebTransportSession};
 use h3_webtransport::stream::{RecvStream, SendStream};
@@ -32,7 +32,7 @@ pub(crate) struct Connection {
 impl Connection {
     pub(crate) fn new(
         session: Arc<WebTransportSession<h3_quinn::Connection, Bytes>>,
-        connection: quinn::Connection
+        connection: quinn::Connection,
     ) -> Self {
         Self {
             session,
@@ -47,7 +47,10 @@ impl StreamMuxer for Connection {
     type Substream = Stream;
     type Error = Error;
 
-    fn poll_inbound(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<Self::Substream, Self::Error>> {
+    fn poll_inbound(
+        self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+    ) -> Poll<Result<Self::Substream, Self::Error>> {
         let this = self.get_mut();
         let t_session = Arc::clone(&this.session);
 
@@ -60,7 +63,10 @@ impl StreamMuxer for Connection {
         Poll::Ready(Ok(res))
     }
 
-    fn poll_outbound(self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Result<Self::Substream, Self::Error>> {
+    fn poll_outbound(
+        self: Pin<&mut Self>,
+        _cx: &mut Context<'_>,
+    ) -> Poll<Result<Self::Substream, Self::Error>> {
         panic!("WebTransport implementation doesn't support outbound streams.")
     }
 
@@ -82,7 +88,10 @@ impl StreamMuxer for Connection {
         Poll::Ready(Ok(()))
     }
 
-    fn poll(self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Result<StreamMuxerEvent, Self::Error>> {
+    fn poll(
+        self: Pin<&mut Self>,
+        _cx: &mut Context<'_>,
+    ) -> Poll<Result<StreamMuxerEvent, Self::Error>> {
         // TODO: If connection migration is enabled (currently disabled) address
         // change on the connection needs to be handled.
         Poll::Pending
@@ -99,12 +108,20 @@ pub(crate) struct Stream {
 
 impl Stream {
     pub(crate) fn new(send: SendPart, recv: RecvPart) -> Self {
-        Self { send, recv, close_result: None }
+        Self {
+            send,
+            recv,
+            close_result: None,
+        }
     }
 }
 
 impl AsyncRead for Stream {
-    fn poll_read(mut self: Pin<&mut Self>, cx: &mut Context<'_>, buf: &mut [u8]) -> Poll<io::Result<usize>> {
+    fn poll_read(
+        mut self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+        buf: &mut [u8],
+    ) -> Poll<io::Result<usize>> {
         if let Some(close_result) = self.close_result {
             if close_result.is_err() {
                 return Poll::Ready(Ok(0));
@@ -116,7 +133,11 @@ impl AsyncRead for Stream {
 }
 
 impl AsyncWrite for Stream {
-    fn poll_write(mut self: Pin<&mut Self>, cx: &mut Context<'_>, buf: &[u8]) -> Poll<io::Result<usize>> {
+    fn poll_write(
+        mut self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+        buf: &[u8],
+    ) -> Poll<io::Result<usize>> {
         Pin::new(&mut self.send)
             .poll_write(cx, buf)
             .map_err(Into::into)
@@ -164,9 +185,9 @@ pub(crate) async fn accept_webtransport_stream(
             let (send, recv) = quic::BidiStream::split(stream);
             Ok(Stream::new(send, recv))
         }
-        Ok(_) => Err(
-            WebtransportError(String::from("Only bidirectional streams are supported")).into()
-        ),
+        Ok(_) => {
+            Err(WebtransportError(String::from("Only bidirectional streams are supported")).into())
+        }
         Err(e) => Err(Error::Io(io::Error::new(ErrorKind::Other, e))),
     }
 }

@@ -1,23 +1,24 @@
-use std::io;
-use std::io::{Cursor, Read, Write};
-use rustls::pki_types::{CertificateDer, PrivateKeyDer};
-use time::{Duration, OffsetDateTime};
 use libp2p_core::multihash::Multihash;
 use libp2p_tls::certificate;
+use rustls::pki_types::{CertificateDer, PrivateKeyDer};
 use sha2::Digest;
+use std::io;
+use std::io::{Cursor, Read, Write};
+use time::{Duration, OffsetDateTime};
 
 const MULTIHASH_SHA256_CODE: u64 = 0x12;
 const CERT_VALID_PERIOD: Duration = Duration::days(14);
 
 pub(crate) fn alpn_protocols() -> Vec<Vec<u8>> {
-    vec![b"libp2p".to_vec(),
-         b"h3".to_vec(),
-         b"h3-32".to_vec(),
-         b"h3-31".to_vec(),
-         b"h3-30".to_vec(),
-         b"h3-29".to_vec(), ]
+    vec![
+        b"libp2p".to_vec(),
+        b"h3".to_vec(),
+        b"h3-32".to_vec(),
+        b"h3-31".to_vec(),
+        b"h3-30".to_vec(),
+        b"h3-29".to_vec(),
+    ]
 }
-
 
 /*
 I would like to avoid interacting with the file system as much as possible.
@@ -68,7 +69,8 @@ impl Certificate {
         identity_keypair: &libp2p_identity::Keypair,
         not_before: OffsetDateTime,
     ) -> Result<Self, Error> {
-        let not_after = not_before.clone()
+        let not_after = not_before
+            .clone()
             .checked_add(CERT_VALID_PERIOD)
             .expect("Addition does not overflow");
         let (cert, private_key) = certificate::generate_with_validity_period(
@@ -77,30 +79,34 @@ impl Certificate {
             not_after.clone(),
         )?;
 
-        Ok(Self { cert, private_key, not_before, not_after })
+        Ok(Self {
+            cert,
+            private_key,
+            not_before,
+            not_after,
+        })
     }
 
     pub(crate) fn cert_hash(&self) -> Multihash<64> {
         Multihash::wrap(
-            MULTIHASH_SHA256_CODE, sha2::Sha256::digest(&self.cert.as_ref().as_ref()).as_ref(),
-        ).expect("fingerprint's len to be 32 bytes")
+            MULTIHASH_SHA256_CODE,
+            sha2::Sha256::digest(&self.cert.as_ref().as_ref()).as_ref(),
+        )
+        .expect("fingerprint's len to be 32 bytes")
     }
 
     pub fn to_bytes(&self) -> Vec<u8> {
         let mut bytes = Vec::new();
 
-        Self::write_data(&mut bytes, self.cert.as_ref())
-            .expect("Write cert data");
+        Self::write_data(&mut bytes, self.cert.as_ref()).expect("Write cert data");
         Self::write_data(&mut bytes, self.private_key.secret_der())
             .expect("Write private_key data");
 
         let nb_buff = self.not_before.unix_timestamp().to_be_bytes();
-        std::io::Write::write(&mut bytes, &nb_buff)
-            .expect("Write not_before");
+        std::io::Write::write(&mut bytes, &nb_buff).expect("Write not_before");
 
         let na_buff = self.not_after.unix_timestamp().to_be_bytes();
-        std::io::Write::write(&mut bytes, &na_buff)
-            .expect("Write not_after");
+        std::io::Write::write(&mut bytes, &na_buff).expect("Write not_after");
 
         bytes
     }
@@ -117,7 +123,12 @@ impl Certificate {
         let not_before = OffsetDateTime::from_unix_timestamp(nb).unwrap();
         let not_after = OffsetDateTime::from_unix_timestamp(na).unwrap();
 
-        Ok(Self { cert, private_key, not_before, not_after })
+        Ok(Self {
+            cert,
+            private_key,
+            not_before,
+            not_after,
+        })
     }
 
     fn write_data<W: Write>(w: &mut W, data: &[u8]) -> Result<(), io::Error> {
@@ -158,8 +169,7 @@ mod tests {
         let cert = super::Certificate::generate(&keypair, not_before).unwrap();
 
         let binary_data = cert.to_bytes();
-        let actual = super::Certificate::parse(binary_data.as_slice())
-            .unwrap();
+        let actual = super::Certificate::parse(binary_data.as_slice()).unwrap();
 
         assert_eq!(actual, cert);
     }
