@@ -425,6 +425,68 @@ fn unresponsive_not_returned_indirect() {
     }))
 }
 
+// Test the result of get_closest_peers with different num_results
+// Note that the result is capped after exceeds K_VALUE
+#[test]
+fn get_closest_with_different_num_results() {
+    let k_value = K_VALUE.get();
+    for replication_factor in [5, k_value / 2, k_value] {
+        for num_results in k_value / 2..k_value * 2 {
+            get_closest_with_different_num_results_inner(num_results, replication_factor)
+        }
+    }
+}
+
+fn get_closest_with_different_num_results_inner(num_results: usize, replication_factor: usize) {
+    let k_value = K_VALUE.get();
+    let num_of_nodes = 3 * k_value;
+    let mut cfg = Config::new(PROTOCOL_NAME);
+    cfg.set_replication_factor(NonZeroUsize::new(replication_factor).unwrap());
+    let swarms = build_connected_nodes_with_config(num_of_nodes, replication_factor - 1, cfg);
+
+    let mut swarms = swarms
+        .into_iter()
+        .map(|(_addr, swarm)| swarm)
+        .collect::<Vec<_>>();
+
+    // Ask first to search a random value.
+    let search_target = PeerId::random();
+    let Some(num_results_nonzero) = std::num::NonZeroUsize::new(num_results) else {
+        panic!("Unexpected NonZeroUsize val of {num_results}");
+    };
+    swarms[0]
+        .behaviour_mut()
+        .get_n_closest_peers(search_target, num_results_nonzero);
+
+    block_on(poll_fn(move |ctx| {
+        for swarm in &mut swarms {
+            loop {
+                match swarm.poll_next_unpin(ctx) {
+                    Poll::Ready(Some(SwarmEvent::Behaviour(Event::OutboundQueryProgressed {
+                        result: QueryResult::GetClosestPeers(Ok(ok)),
+                        ..
+                    }))) => {
+                        assert_eq!(&ok.key[..], search_target.to_bytes().as_slice());
+                        if num_results > k_value {
+                            assert_eq!(ok.peers.len(), k_value, "Failed with replication_factor: {replication_factor}, num_results: {num_results}");
+                        } else {
+                            assert_eq!(ok.peers.len(), num_results, "Failed with replication_factor: {replication_factor}, num_results: {num_results}");
+                        }
+
+                        return Poll::Ready(());
+                    }
+                    // Ignore any other event.
+                    Poll::Ready(Some(_)) => (),
+                    e @ Poll::Ready(_) => panic!("Unexpected return value: {e:?}"),
+                    Poll::Pending => break,
+                }
+            }
+        }
+
+        Poll::Pending
+    }))
+}
+
 #[test]
 fn get_record_not_found() {
     let mut swarms = build_nodes(3);
