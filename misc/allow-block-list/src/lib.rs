@@ -61,6 +61,7 @@
 //! # }
 //! ```
 
+use libp2p_core::transport::PortUse;
 use libp2p_core::{Endpoint, Multiaddr};
 use libp2p_identity::PeerId;
 use libp2p_swarm::{
@@ -225,6 +226,7 @@ where
         peer: PeerId,
         _: &Multiaddr,
         _: Endpoint,
+        _: PortUse,
     ) -> Result<THandler<Self>, ConnectionDenied> {
         self.state.enforce(&peer)?;
 

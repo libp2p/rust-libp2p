@@ -3,7 +3,7 @@ name = "libp2p-websocket"
 edition = "2021"
 rust-version = { workspace = true }
 description = "WebSocket transport for libp2p"
-version = "0.43.1"
+version = "0.44.0"
 authors = ["Parity Technologies <admin@parity.io>"]
 license = "MIT"
 repository = "https://github.com/libp2p/rust-libp2p"
@@ -21,6 +21,7 @@ pin-project-lite = "0.2.14"
 rw-stream-sink = { workspace = true }
 soketto = "0.8.0"
 tracing = { workspace = true }
+thiserror = "1.0.61"
 url = "2.5"
 webpki-roots = "0.25"
 
@@ -35,8 +36,6 @@ rcgen = { workspace = true }
 # More information: https://docs.rs/about/builds#cross-compiling
 [package.metadata.docs.rs]
 all-features = true
-rustdoc-args = ["--cfg", "docsrs"]
-rustc-args = ["--cfg", "docsrs"]
 
 [lints]
 workspace = true

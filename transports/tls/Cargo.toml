@@ -1,6 +1,6 @@
 [package]
 name = "libp2p-tls"
-version = "0.4.0"
+version = "0.5.0"
 edition = "2021"
 rust-version = { workspace = true }
 description = "TLS configuration based on libp2p TLS specs."
@@ -40,8 +40,6 @@ tokio = { workspace = true, features = ["full"] }
 # More information: https://docs.rs/about/builds#cross-compiling
 [package.metadata.docs.rs]
 all-features = true
-rustdoc-args = ["--cfg", "docsrs"]
-rustc-args = ["--cfg", "docsrs"]
 
 [lints]
 workspace = true

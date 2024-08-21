@@ -64,7 +64,7 @@ async fn main() -> Result<()> {
     let mut swarm = libp2p::SwarmBuilder::with_new_identity()
         .with_tokio()
         .with_tcp(
-            tcp::Config::new().port_reuse(true).nodelay(true),
+            tcp::Config::new().nodelay(true),
             noise::Config::new,
             yamux::Config::default,
         )?
@@ -294,9 +294,7 @@ impl RedisClient {
 
         tracing::debug!("Pushing {key}={value} to redis");
 
-        self.inner.rpush(key, value).await?;
-
-        Ok(())
+        self.inner.rpush(key, value).await.map_err(Into::into)
     }
 
     async fn pop<V>(&mut self, key: &str) -> Result<V>

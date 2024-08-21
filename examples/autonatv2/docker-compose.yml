@@ -1,0 +1,16 @@
+version: '3'
+
+services:
+    autonatv2:
+        build:
+            context: ../..
+            dockerfile: examples/autonatv2/Dockerfile
+        ports:
+            - 4884:4884
+    jaeger:
+        image: jaegertracing/all-in-one
+        ports:
+            - 6831:6831/udp
+            - 6832:6832/udp
+            - 16686:16686
+            - 14268:14268

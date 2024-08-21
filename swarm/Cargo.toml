@@ -3,7 +3,7 @@ name = "libp2p-swarm"
 edition = "2021"
 rust-version = { workspace = true }
 description = "The libp2p swarm"
-version = "0.45.0"
+version = "0.45.1"
 authors = ["Parity Technologies <admin@parity.io>"]
 license = "MIT"
 repository = "https://github.com/libp2p/rust-libp2p"
@@ -67,8 +67,6 @@ required-features = ["macros"]
 # More information: https://docs.rs/about/builds#cross-compiling
 [package.metadata.docs.rs]
 all-features = true
-rustdoc-args = ["--cfg", "docsrs"]
-rustc-args = ["--cfg", "docsrs"]
 
 [[bench]]
 name = "connection_handler"
