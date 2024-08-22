@@ -352,7 +352,7 @@ impl Config {
         self.published_message_ids_cache_time
     }
 
-    /// The max number of messages a `ConnectionHandler` can buffer.
+    /// The max number of messages a `ConnectionHandler` can buffer. The default is 1000.
     pub fn connection_handler_queue_len(&self) -> usize {
         self.connection_handler_queue_len
     }
@@ -423,7 +423,7 @@ impl Default for ConfigBuilder {
                 max_ihave_messages: 10,
                 iwant_followup_time: Duration::from_secs(3),
                 published_message_ids_cache_time: Duration::from_secs(10),
-                connection_handler_queue_len: 100,
+                connection_handler_queue_len: 1000,
             },
             invalid_protocol: false,
         }
@@ -789,6 +789,7 @@ impl ConfigBuilder {
         self
     }
 
+    /// The max number of messages a `ConnectionHandler` can buffer. The default is 5000.
     pub fn connection_handler_queue_len(&mut self, len: usize) {
         self.config.connection_handler_queue_len = len;
     }
