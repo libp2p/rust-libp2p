@@ -35,8 +35,9 @@ use futures_ticker::Ticker;
 use prometheus_client::registry::Registry;
 use rand::{seq::SliceRandom, thread_rng};
 
-use instant::Instant;
-use libp2p_core::{multiaddr::Protocol::Ip4, multiaddr::Protocol::Ip6, Endpoint, Multiaddr};
+use libp2p_core::{
+    multiaddr::Protocol::Ip4, multiaddr::Protocol::Ip6, transport::PortUse, Endpoint, Multiaddr,
+};
 use libp2p_identity::Keypair;
 use libp2p_identity::PeerId;
 use libp2p_swarm::{
@@ -45,6 +46,7 @@ use libp2p_swarm::{
     ConnectionDenied, ConnectionId, NetworkBehaviour, NotifyHandler, THandler, THandlerInEvent,
     THandlerOutEvent, ToSwarm,
 };
+use web_time::{Instant, SystemTime};
 
 use crate::gossip_promises::GossipPromises;
 use crate::handler::{Handler, HandlerEvent, HandlerIn};
@@ -68,7 +70,6 @@ use crate::{
 };
 use crate::{rpc_proto::proto, TopicScoreParams};
 use crate::{PublishError, SubscriptionError, ValidationError};
-use instant::SystemTime;
 use quick_protobuf::{MessageWrite, Writer};
 use std::{cmp::Ordering::Equal, fmt::Debug};
 
@@ -532,7 +533,7 @@ where
             return Err(SubscriptionError::NotAllowed);
         }
 
-        if self.mesh.get(&topic_hash).is_some() {
+        if self.mesh.contains_key(&topic_hash) {
             tracing::debug!(%topic, "Topic is already in the mesh");
             return Ok(false);
         }
@@ -558,11 +559,12 @@ where
     /// Unsubscribes from a topic.
     ///
     /// Returns [`Ok(true)`] if we were subscribed to this topic.
+    #[allow(clippy::unnecessary_wraps)]
     pub fn unsubscribe<H: Hasher>(&mut self, topic: &Topic<H>) -> Result<bool, PublishError> {
         tracing::debug!(%topic, "Unsubscribing from topic");
         let topic_hash = topic.hash();
 
-        if self.mesh.get(&topic_hash).is_none() {
+        if !self.mesh.contains_key(&topic_hash) {
             tracing::debug!(topic=%topic_hash, "Already unsubscribed from topic");
             // we are not subscribed
             return Ok(false);
@@ -1320,7 +1322,7 @@ where
 
         for id in iwant_msgs {
             // If we have it and the IHAVE count is not above the threshold,
-            // foward the message.
+            // forward the message.
             if let Some((msg, count)) = self
                 .mcache
                 .get_with_iwant_counts(&id, peer_id)
@@ -2601,6 +2603,7 @@ where
     /// Helper function which forwards a message to mesh\[topic\] peers.
     ///
     /// Returns true if at least one peer was messaged.
+    #[allow(clippy::unnecessary_wraps)]
     fn forward_msg(
         &mut self,
         msg_id: &MessageId,
@@ -3061,6 +3064,7 @@ where
         peer_id: PeerId,
         _: &Multiaddr,
         _: Endpoint,
+        _: PortUse,
     ) -> Result<THandler<Self>, ConnectionDenied> {
         let (priority_sender, priority_receiver) =
             channel(self.config.connection_handler_queue_len());

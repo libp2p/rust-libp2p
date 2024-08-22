@@ -27,12 +27,12 @@ pub use error::ConnectionError;
 pub(crate) use error::{
     PendingConnectionError, PendingInboundConnectionError, PendingOutboundConnectionError,
 };
+use libp2p_core::transport::PortUse;
 pub use supported_protocols::SupportedProtocols;
 
 use crate::handler::{
     AddressChange, ConnectionEvent, ConnectionHandler, DialUpgradeError, FullyNegotiatedInbound,
-    FullyNegotiatedOutbound, ListenUpgradeError, ProtocolSupport, ProtocolsAdded, ProtocolsChange,
-    UpgradeInfoSend,
+    FullyNegotiatedOutbound, ListenUpgradeError, ProtocolSupport, ProtocolsChange, UpgradeInfoSend,
 };
 use crate::stream::ActiveStreamCounter;
 use crate::upgrade::{InboundUpgradeSend, OutboundUpgradeSend};
@@ -44,7 +44,6 @@ use futures::stream::FuturesUnordered;
 use futures::StreamExt;
 use futures::{stream, FutureExt};
 use futures_timer::Delay;
-use instant::Instant;
 use libp2p_core::connection::ConnectedPoint;
 use libp2p_core::multiaddr::Multiaddr;
 use libp2p_core::muxing::{StreamMuxerBox, StreamMuxerEvent, StreamMuxerExt, SubstreamBox};
@@ -52,13 +51,14 @@ use libp2p_core::upgrade;
 use libp2p_core::upgrade::{NegotiationError, ProtocolError};
 use libp2p_core::Endpoint;
 use libp2p_identity::PeerId;
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::fmt::{Display, Formatter};
 use std::future::Future;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::task::Waker;
 use std::time::Duration;
 use std::{fmt, io, mem, pin::Pin, task::Context, task::Poll};
+use web_time::Instant;
 
 static NEXT_CONNECTION_ID: AtomicUsize = AtomicUsize::new(1);
 
@@ -153,8 +153,11 @@ where
         SubstreamRequested<THandler::OutboundOpenInfo, THandler::OutboundProtocol>,
     >,
 
-    local_supported_protocols: HashSet<StreamProtocol>,
+    local_supported_protocols:
+        HashMap<AsStrHashEq<<THandler::InboundProtocol as UpgradeInfoSend>::Info>, bool>,
     remote_supported_protocols: HashSet<StreamProtocol>,
+    protocol_buffer: Vec<StreamProtocol>,
+
     idle_timeout: Duration,
     stream_counter: ActiveStreamCounter,
 }
@@ -187,11 +190,17 @@ where
         idle_timeout: Duration,
     ) -> Self {
         let initial_protocols = gather_supported_protocols(&handler);
+        let mut buffer = Vec::new();
+
         if !initial_protocols.is_empty() {
             handler.on_connection_event(ConnectionEvent::LocalProtocolsChange(
-                ProtocolsChange::Added(ProtocolsAdded::from_set(&initial_protocols)),
+                ProtocolsChange::from_initial_protocols(
+                    initial_protocols.keys().map(|e| &e.0),
+                    &mut buffer,
+                ),
             ));
         }
+
         Connection {
             muxing: muxer,
             handler,
@@ -203,6 +212,7 @@ where
             requested_substreams: Default::default(),
             local_supported_protocols: initial_protocols,
             remote_supported_protocols: Default::default(),
+            protocol_buffer: buffer,
             idle_timeout,
             stream_counter: ActiveStreamCounter::default(),
         }
@@ -250,6 +260,7 @@ where
             substream_upgrade_protocol_override,
             local_supported_protocols: supported_protocols,
             remote_supported_protocols,
+            protocol_buffer,
             idle_timeout,
             stream_counter,
             ..
@@ -287,25 +298,24 @@ where
                     ProtocolSupport::Added(protocols),
                 )) => {
                     if let Some(added) =
-                        ProtocolsChange::add(remote_supported_protocols, &protocols)
+                        ProtocolsChange::add(remote_supported_protocols, protocols, protocol_buffer)
                     {
                         handler.on_connection_event(ConnectionEvent::RemoteProtocolsChange(added));
-                        remote_supported_protocols.extend(protocols);
+                        remote_supported_protocols.extend(protocol_buffer.drain(..));
                     }
-
                     continue;
                 }
                 Poll::Ready(ConnectionHandlerEvent::ReportRemoteProtocols(
                     ProtocolSupport::Removed(protocols),
                 )) => {
-                    if let Some(removed) =
-                        ProtocolsChange::remove(remote_supported_protocols, &protocols)
-                    {
+                    if let Some(removed) = ProtocolsChange::remove(
+                        remote_supported_protocols,
+                        protocols,
+                        protocol_buffer,
+                    ) {
                         handler
                             .on_connection_event(ConnectionEvent::RemoteProtocolsChange(removed));
-                        remote_supported_protocols.retain(|p| !protocols.contains(p));
                     }
-
                     continue;
                 }
             }
@@ -373,7 +383,7 @@ where
                 match shutdown {
                     Shutdown::None => {}
                     Shutdown::Asap => return Poll::Ready(Err(ConnectionError::KeepAliveTimeout)),
-                    Shutdown::Later(delay, _) => match Future::poll(Pin::new(delay), cx) {
+                    Shutdown::Later(delay) => match Future::poll(Pin::new(delay), cx) {
                         Poll::Ready(_) => {
                             return Poll::Ready(Err(ConnectionError::KeepAliveTimeout))
                         }
@@ -431,16 +441,16 @@ where
                 }
             }
 
-            let new_protocols = gather_supported_protocols(handler);
-            let changes = ProtocolsChange::from_full_sets(supported_protocols, &new_protocols);
+            let changes = ProtocolsChange::from_full_sets(
+                supported_protocols,
+                handler.listen_protocol().upgrade().protocol_info(),
+                protocol_buffer,
+            );
 
             if !changes.is_empty() {
                 for change in changes {
                     handler.on_connection_event(ConnectionEvent::LocalProtocolsChange(change));
                 }
-
-                *supported_protocols = new_protocols;
-
                 continue; // Go back to the top, handler can potentially make progress again.
             }
 
@@ -454,12 +464,14 @@ where
     }
 }
 
-fn gather_supported_protocols(handler: &impl ConnectionHandler) -> HashSet<StreamProtocol> {
+fn gather_supported_protocols<C: ConnectionHandler>(
+    handler: &C,
+) -> HashMap<AsStrHashEq<<C::InboundProtocol as UpgradeInfoSend>::Info>, bool> {
     handler
         .listen_protocol()
         .upgrade()
         .protocol_info()
-        .filter_map(|i| StreamProtocol::try_from_owned(i.as_ref().to_owned()).ok())
+        .map(|info| (AsStrHashEq(info), true))
         .collect()
 }
 
@@ -470,15 +482,12 @@ fn compute_new_shutdown(
 ) -> Option<Shutdown> {
     match (current_shutdown, handler_keep_alive) {
         (_, false) if idle_timeout == Duration::ZERO => Some(Shutdown::Asap),
-        (Shutdown::Later(_, _), false) => None, // Do nothing, i.e. let the shutdown timer continue to tick.
+        (Shutdown::Later(_), false) => None, // Do nothing, i.e. let the shutdown timer continue to tick.
         (_, false) => {
             let now = Instant::now();
             let safe_keep_alive = checked_add_fraction(now, idle_timeout);
 
-            Some(Shutdown::Later(
-                Delay::new(safe_keep_alive),
-                now + safe_keep_alive,
-            ))
+            Some(Shutdown::Later(Delay::new(safe_keep_alive)))
         }
         (_, true) => Some(Shutdown::None),
     }
@@ -720,7 +729,7 @@ impl<UserData, Upgrade> Future for SubstreamRequested<UserData, Upgrade> {
 
 /// The options for a planned connection & handler shutdown.
 ///
-/// A shutdown is planned anew based on the the return value of
+/// A shutdown is planned anew based on the return value of
 /// [`ConnectionHandler::connection_keep_alive`] of the underlying handler
 /// after every invocation of [`ConnectionHandler::poll`].
 ///
@@ -734,7 +743,26 @@ enum Shutdown {
     /// A shut down is planned as soon as possible.
     Asap,
     /// A shut down is planned for when a `Delay` has elapsed.
-    Later(Delay, Instant),
+    Later(Delay),
+}
+
+// Structure used to avoid allocations when storing the protocols in the `HashMap.
+// Instead of allocating a new `String` for the key,
+// we use `T::as_ref()` in `Hash`, `Eq` and `PartialEq` requirements.
+pub(crate) struct AsStrHashEq<T>(pub(crate) T);
+
+impl<T: AsRef<str>> Eq for AsStrHashEq<T> {}
+
+impl<T: AsRef<str>> PartialEq for AsStrHashEq<T> {
+    fn eq(&self, other: &Self) -> bool {
+        self.0.as_ref() == other.0.as_ref()
+    }
+}
+
+impl<T: AsRef<str>> std::hash::Hash for AsStrHashEq<T> {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.0.as_ref().hash(state)
+    }
 }
 
 #[cfg(test)]
@@ -947,11 +975,10 @@ mod tests {
                 let shutdown = match self.0 {
                     Shutdown::None => Shutdown::None,
                     Shutdown::Asap => Shutdown::Asap,
-                    Shutdown::Later(_, instant) => Shutdown::Later(
+                    Shutdown::Later(_) => Shutdown::Later(
                         // compute_new_shutdown does not touch the delay. Delay does not
                         // implement Clone. Thus use a placeholder delay.
                         Delay::new(Duration::from_secs(1)),
-                        instant,
                     ),
                 };
 
@@ -964,12 +991,7 @@ mod tests {
                 let shutdown = match g.gen_range(1u8..4) {
                     1 => Shutdown::None,
                     2 => Shutdown::Asap,
-                    3 => Shutdown::Later(
-                        Delay::new(Duration::from_secs(u32::arbitrary(g) as u64)),
-                        Instant::now()
-                            .checked_add(Duration::arbitrary(g))
-                            .unwrap_or(Instant::now()),
-                    ),
+                    3 => Shutdown::Later(Delay::new(Duration::from_secs(u32::arbitrary(g) as u64))),
                     _ => unreachable!(),
                 };
 
@@ -1000,7 +1022,9 @@ mod tests {
             self: Pin<&mut Self>,
             _: &mut Context<'_>,
         ) -> Poll<Result<Self::Substream, Self::Error>> {
-            Poll::Ready(Ok(PendingSubstream(Arc::downgrade(&self.counter))))
+            Poll::Ready(Ok(PendingSubstream {
+                _weak: Arc::downgrade(&self.counter),
+            }))
         }
 
         fn poll_outbound(
@@ -1055,7 +1079,9 @@ mod tests {
         }
     }
 
-    struct PendingSubstream(Weak<()>);
+    struct PendingSubstream {
+        _weak: Weak<()>,
+    }
 
     impl AsyncRead for PendingSubstream {
         fn poll_read(
@@ -1327,6 +1353,7 @@ enum PendingPoint {
     Dialer {
         /// Same as [`ConnectedPoint::Dialer`] `role_override`.
         role_override: Endpoint,
+        port_use: PortUse,
     },
     /// The socket comes from a listener.
     Listener {
@@ -1340,7 +1367,14 @@ enum PendingPoint {
 impl From<ConnectedPoint> for PendingPoint {
     fn from(endpoint: ConnectedPoint) -> Self {
         match endpoint {
-            ConnectedPoint::Dialer { role_override, .. } => PendingPoint::Dialer { role_override },
+            ConnectedPoint::Dialer {
+                role_override,
+                port_use,
+                ..
+            } => PendingPoint::Dialer {
+                role_override,
+                port_use,
+            },
             ConnectedPoint::Listener {
                 local_addr,
                 send_back_addr,

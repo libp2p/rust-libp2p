@@ -1,3 +1,23 @@
+## 0.18.0
+
+<!-- Update to libp2p-swarm v0.45.0 -->
+
+## 0.17.3
+- Use `web-time` instead of `instant`.
+  See [PR 5347](https://github.com/libp2p/rust-libp2p/pull/5347).
+- Fix manual closure of relayed listener.
+  See [PR 5491](https://github.com/libp2p/rust-libp2p/pull/5491)
+- Add resource limits to `CircuitReq` to be set
+  See [PR 5493](https://github.com/libp2p/rust-libp2p/pull/5493)  
+
+
+## 0.17.2
+
+- Fix support for unlimited relay connection according to spec.
+  See [PR 5244](https://github.com/libp2p/rust-libp2p/pull/5244).
+- use `web_time` `Instant` and `SystemTime` versions for wasm support.
+  See [PR 5328](https://github.com/libp2p/rust-libp2p/pull/5328).
+
 ## 0.17.1
 
 - Automatically register relayed addresses as external addresses.

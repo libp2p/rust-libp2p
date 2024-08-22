@@ -31,6 +31,8 @@ use futures::{prelude::*, stream::SelectAll};
 
 use if_watch::IfEvent;
 
+use libp2p_core::transport::{DialOpts, PortUse};
+use libp2p_core::Endpoint;
 use libp2p_core::{
     multiaddr::{Multiaddr, Protocol},
     transport::{ListenerId, TransportError, TransportEvent},
@@ -195,6 +197,21 @@ impl<P: Provider> GenTransport<P> {
 
         Ok(socket.into())
     }
+
+    fn bound_socket(&mut self, socket_addr: SocketAddr) -> Result<quinn::Endpoint, Error> {
+        let socket_family = socket_addr.ip().into();
+        if let Some(waker) = self.waker.take() {
+            waker.wake();
+        }
+        let listen_socket_addr = match socket_family {
+            SocketFamily::Ipv4 => SocketAddr::new(Ipv4Addr::UNSPECIFIED.into(), 0),
+            SocketFamily::Ipv6 => SocketAddr::new(Ipv6Addr::UNSPECIFIED.into(), 0),
+        };
+        let socket = UdpSocket::bind(listen_socket_addr)?;
+        let endpoint_config = self.quinn_config.endpoint_config.clone();
+        let endpoint = Self::new_endpoint(endpoint_config, None, socket)?;
+        Ok(endpoint)
+    }
 }
 
 impl<P: Provider> Transport for GenTransport<P> {
@@ -247,119 +264,110 @@ impl<P: Provider> Transport for GenTransport<P> {
         }
     }
 
-    fn address_translation(&self, listen: &Multiaddr, observed: &Multiaddr) -> Option<Multiaddr> {
-        if !is_quic_addr(listen, self.support_draft_29)
-            || !is_quic_addr(observed, self.support_draft_29)
-        {
-            return None;
-        }
-        Some(observed.clone())
-    }
-
-    fn dial(&mut self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
-        let (socket_addr, version, _peer_id) = self.remote_multiaddr_to_socketaddr(addr, true)?;
-
-        let endpoint = match self.eligible_listener(&socket_addr) {
-            None => {
-                // No listener. Get or create an explicit dialer.
-                let socket_family = socket_addr.ip().into();
-                let dialer = match self.dialer.entry(socket_family) {
-                    Entry::Occupied(occupied) => occupied.get().clone(),
-                    Entry::Vacant(vacant) => {
-                        if let Some(waker) = self.waker.take() {
-                            waker.wake();
-                        }
-                        let listen_socket_addr = match socket_family {
-                            SocketFamily::Ipv4 => SocketAddr::new(Ipv4Addr::UNSPECIFIED.into(), 0),
-                            SocketFamily::Ipv6 => SocketAddr::new(Ipv6Addr::UNSPECIFIED.into(), 0),
-                        };
-                        let socket =
-                            UdpSocket::bind(listen_socket_addr).map_err(Self::Error::from)?;
-                        let endpoint_config = self.quinn_config.endpoint_config.clone();
-                        let endpoint = Self::new_endpoint(endpoint_config, None, socket)?;
-
-                        vacant.insert(endpoint.clone());
-                        endpoint
-                    }
-                };
-                dialer
-            }
-            Some(listener) => listener.endpoint.clone(),
-        };
-        let handshake_timeout = self.handshake_timeout;
-        let mut client_config = self.quinn_config.client_config.clone();
-        if version == ProtocolVersion::Draft29 {
-            client_config.version(0xff00_001d);
-        }
-        Ok(Box::pin(async move {
-            // This `"l"` seems necessary because an empty string is an invalid domain
-            // name. While we don't use domain names, the underlying rustls library
-            // is based upon the assumption that we do.
-            let connecting = endpoint
-                .connect_with(client_config, socket_addr, "l")
-                .map_err(ConnectError)?;
-            Connecting::new(connecting, handshake_timeout).await
-        }))
-    }
-
-    fn dial_as_listener(
+    fn dial(
         &mut self,
         addr: Multiaddr,
+        dial_opts: DialOpts,
     ) -> Result<Self::Dial, TransportError<Self::Error>> {
-        let (socket_addr, _version, peer_id) =
+        let (socket_addr, version, peer_id) =
             self.remote_multiaddr_to_socketaddr(addr.clone(), true)?;
-        let peer_id = peer_id.ok_or(TransportError::MultiaddrNotSupported(addr.clone()))?;
 
-        let socket = self
-            .eligible_listener(&socket_addr)
-            .ok_or(TransportError::Other(
-                Error::NoActiveListenerForDialAsListener,
-            ))?
-            .try_clone_socket()
-            .map_err(Self::Error::from)?;
-
-        tracing::debug!("Preparing for hole-punch from {addr}");
-
-        let hole_puncher = hole_puncher::<P>(socket, socket_addr, self.handshake_timeout);
-
-        let (sender, receiver) = oneshot::channel();
-
-        match self.hole_punch_attempts.entry(socket_addr) {
-            Entry::Occupied(mut sender_entry) => {
-                // Stale senders, i.e. from failed hole punches are not removed.
-                // Thus, we can just overwrite a stale sender.
-                if !sender_entry.get().is_canceled() {
-                    return Err(TransportError::Other(Error::HolePunchInProgress(
-                        socket_addr,
-                    )));
+        match (dial_opts.role, dial_opts.port_use) {
+            (Endpoint::Dialer, _) | (Endpoint::Listener, PortUse::Reuse) => {
+                let endpoint = if let Some(listener) = dial_opts
+                    .port_use
+                    .eq(&PortUse::Reuse)
+                    .then(|| self.eligible_listener(&socket_addr))
+                    .flatten()
+                {
+                    listener.endpoint.clone()
+                } else {
+                    let socket_family = socket_addr.ip().into();
+                    let dialer = if dial_opts.port_use == PortUse::Reuse {
+                        if let Some(occupied) = self.dialer.get(&socket_family) {
+                            occupied.clone()
+                        } else {
+                            let endpoint = self.bound_socket(socket_addr)?;
+                            self.dialer.insert(socket_family, endpoint.clone());
+                            endpoint
+                        }
+                    } else {
+                        self.bound_socket(socket_addr)?
+                    };
+                    dialer
+                };
+                let handshake_timeout = self.handshake_timeout;
+                let mut client_config = self.quinn_config.client_config.clone();
+                if version == ProtocolVersion::Draft29 {
+                    client_config.version(0xff00_001d);
                 }
-                sender_entry.insert(sender);
+                Ok(Box::pin(async move {
+                    // This `"l"` seems necessary because an empty string is an invalid domain
+                    // name. While we don't use domain names, the underlying rustls library
+                    // is based upon the assumption that we do.
+                    let connecting = endpoint
+                        .connect_with(client_config, socket_addr, "l")
+                        .map_err(ConnectError)?;
+                    Connecting::new(connecting, handshake_timeout).await
+                }))
             }
-            Entry::Vacant(entry) => {
-                entry.insert(sender);
-            }
-        };
+            (Endpoint::Listener, _) => {
+                let peer_id = peer_id.ok_or(TransportError::MultiaddrNotSupported(addr.clone()))?;
 
-        Ok(Box::pin(async move {
-            futures::pin_mut!(hole_puncher);
-            match futures::future::select(receiver, hole_puncher).await {
-                Either::Left((message, _)) => {
-                    let (inbound_peer_id, connection) = message
-                        .expect("hole punch connection sender is never dropped before receiver")
-                        .await?;
-                    if inbound_peer_id != peer_id {
-                        tracing::warn!(
-                            peer=%peer_id,
-                            inbound_peer=%inbound_peer_id,
-                            socket_address=%socket_addr,
-                            "expected inbound connection from socket_address to resolve to peer but got inbound peer"
-                        );
+                let socket = self
+                    .eligible_listener(&socket_addr)
+                    .ok_or(TransportError::Other(
+                        Error::NoActiveListenerForDialAsListener,
+                    ))?
+                    .try_clone_socket()
+                    .map_err(Self::Error::from)?;
+
+                tracing::debug!("Preparing for hole-punch from {addr}");
+
+                let hole_puncher = hole_puncher::<P>(socket, socket_addr, self.handshake_timeout);
+
+                let (sender, receiver) = oneshot::channel();
+
+                match self.hole_punch_attempts.entry(socket_addr) {
+                    Entry::Occupied(mut sender_entry) => {
+                        // Stale senders, i.e. from failed hole punches are not removed.
+                        // Thus, we can just overwrite a stale sender.
+                        if !sender_entry.get().is_canceled() {
+                            return Err(TransportError::Other(Error::HolePunchInProgress(
+                                socket_addr,
+                            )));
+                        }
+                        sender_entry.insert(sender);
                     }
-                    Ok((inbound_peer_id, connection))
-                }
-                Either::Right((hole_punch_err, _)) => Err(hole_punch_err),
+                    Entry::Vacant(entry) => {
+                        entry.insert(sender);
+                    }
+                };
+
+                Ok(Box::pin(async move {
+                    futures::pin_mut!(hole_puncher);
+                    match futures::future::select(receiver, hole_puncher).await {
+                        Either::Left((message, _)) => {
+                            let (inbound_peer_id, connection) = message
+                                .expect(
+                                    "hole punch connection sender is never dropped before receiver",
+                                )
+                                .await?;
+                            if inbound_peer_id != peer_id {
+                                tracing::warn!(
+                                    peer=%peer_id,
+                                    inbound_peer=%inbound_peer_id,
+                                    socket_address=%socket_addr,
+                                    "expected inbound connection from socket_address to resolve to peer but got inbound peer"
+                                );
+                            }
+                            Ok((inbound_peer_id, connection))
+                        }
+                        Either::Right((hole_punch_err, _)) => Err(hole_punch_err),
+                    }
+                }))
             }
-        }))
+        }
     }
 
     fn poll(
@@ -425,7 +433,7 @@ struct Listener<P: Provider> {
     socket: UdpSocket,
 
     /// A future to poll new incoming connections.
-    accept: BoxFuture<'static, Option<quinn::Connecting>>,
+    accept: BoxFuture<'static, Option<quinn::Incoming>>,
     /// Timeout for connection establishment on inbound connections.
     handshake_timeout: Duration,
 
@@ -583,9 +591,19 @@ impl<P: Provider> Stream for Listener<P> {
             }
 
             match self.accept.poll_unpin(cx) {
-                Poll::Ready(Some(connecting)) => {
+                Poll::Ready(Some(incoming)) => {
                     let endpoint = self.endpoint.clone();
                     self.accept = async move { endpoint.accept().await }.boxed();
+
+                    let connecting = match incoming.accept() {
+                        Ok(connecting) => connecting,
+                        Err(error) => {
+                            return Poll::Ready(Some(TransportEvent::ListenerError {
+                                listener_id: self.listener_id,
+                                error: Error::Connection(crate::ConnectionError(error)),
+                            }))
+                        }
+                    };
 
                     let local_addr = socketaddr_to_multiaddr(&self.socket_addr(), self.version);
                     let remote_addr = connecting.remote_address();
@@ -712,33 +730,6 @@ fn multiaddr_to_socketaddr(
     }
 }
 
-/// Whether an [`Multiaddr`] is a valid for the QUIC transport.
-fn is_quic_addr(addr: &Multiaddr, support_draft_29: bool) -> bool {
-    use Protocol::*;
-    let mut iter = addr.iter();
-    let Some(first) = iter.next() else {
-        return false;
-    };
-    let Some(second) = iter.next() else {
-        return false;
-    };
-    let Some(third) = iter.next() else {
-        return false;
-    };
-    let fourth = iter.next();
-    let fifth = iter.next();
-
-    matches!(first, Ip4(_) | Ip6(_) | Dns(_) | Dns4(_) | Dns6(_))
-        && matches!(second, Udp(_))
-        && if support_draft_29 {
-            matches!(third, QuicV1 | Quic)
-        } else {
-            matches!(third, QuicV1)
-        }
-        && matches!(fourth, Some(P2p(_)) | None)
-        && fifth.is_none()
-}
-
 /// Turns an IP address and port into the corresponding QUIC multiaddr.
 fn socketaddr_to_multiaddr(socket_addr: &SocketAddr, version: ProtocolVersion) -> Multiaddr {
     let quic_proto = match version {
@@ -754,10 +745,8 @@ fn socketaddr_to_multiaddr(socket_addr: &SocketAddr, version: ProtocolVersion) -
 #[cfg(test)]
 #[cfg(any(feature = "async-std", feature = "tokio"))]
 mod tests {
-    use futures::future::poll_fn;
-    use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
-
     use super::*;
+    use futures::future::poll_fn;
 
     #[test]
     fn multiaddr_to_udp_conversion() {
@@ -913,7 +902,13 @@ mod tests {
         let mut transport = crate::tokio::Transport::new(config);
 
         let _dial = transport
-            .dial("/ip4/123.45.67.8/udp/1234/quic-v1".parse().unwrap())
+            .dial(
+                "/ip4/123.45.67.8/udp/1234/quic-v1".parse().unwrap(),
+                DialOpts {
+                    role: Endpoint::Dialer,
+                    port_use: PortUse::Reuse,
+                },
+            )
             .unwrap();
 
         assert!(transport.dialer.contains_key(&SocketFamily::Ipv4));

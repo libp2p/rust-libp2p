@@ -26,6 +26,7 @@ use bytes::BytesMut;
 use futures::task::AtomicWaker;
 use futures::{future::Ready, io, prelude::*};
 use js_sys::Array;
+use libp2p_core::transport::DialOpts;
 use libp2p_core::{
     multiaddr::{Multiaddr, Protocol},
     transport::{ListenerId, TransportError, TransportEvent},
@@ -36,7 +37,7 @@ use std::rc::Rc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Mutex;
 use std::{pin::Pin, task::Context, task::Poll};
-use wasm_bindgen::{prelude::*, JsCast};
+use wasm_bindgen::prelude::*;
 use web_sys::{CloseEvent, Event, MessageEvent, WebSocket};
 
 use crate::web_context::WebContext;
@@ -86,7 +87,15 @@ impl libp2p_core::Transport for Transport {
         false
     }
 
-    fn dial(&mut self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
+    fn dial(
+        &mut self,
+        addr: Multiaddr,
+        dial_opts: DialOpts,
+    ) -> Result<Self::Dial, TransportError<Self::Error>> {
+        if dial_opts.role.is_listener() {
+            return Err(TransportError::MultiaddrNotSupported(addr));
+        }
+
         let url = extract_websocket_url(&addr)
             .ok_or_else(|| TransportError::MultiaddrNotSupported(addr))?;
 
@@ -101,22 +110,11 @@ impl libp2p_core::Transport for Transport {
         .boxed())
     }
 
-    fn dial_as_listener(
-        &mut self,
-        addr: Multiaddr,
-    ) -> Result<Self::Dial, TransportError<Self::Error>> {
-        Err(TransportError::MultiaddrNotSupported(addr))
-    }
-
     fn poll(
         self: Pin<&mut Self>,
         _cx: &mut Context<'_>,
     ) -> std::task::Poll<TransportEvent<Self::ListenerUpgrade, Self::Error>> {
         Poll::Pending
-    }
-
-    fn address_translation(&self, _listen: &Multiaddr, _observed: &Multiaddr) -> Option<Multiaddr> {
-        None
     }
 }
 
@@ -139,9 +137,10 @@ fn extract_websocket_url(addr: &Multiaddr) -> Option<String> {
         _ => return None,
     };
 
-    let (scheme, wspath) = match protocols.next() {
-        Some(Protocol::Ws(path)) => ("ws", path.into_owned()),
-        Some(Protocol::Wss(path)) => ("wss", path.into_owned()),
+    let (scheme, wspath) = match (protocols.next(), protocols.next()) {
+        (Some(Protocol::Tls), Some(Protocol::Ws(path))) => ("wss", path.into_owned()),
+        (Some(Protocol::Ws(path)), _) => ("ws", path.into_owned()),
+        (Some(Protocol::Wss(path)), _) => ("wss", path.into_owned()),
         _ => return None,
     };
 
@@ -434,17 +433,124 @@ impl AsyncWrite for Connection {
 
 impl Drop for Connection {
     fn drop(&mut self) {
-        const GO_AWAY_STATUS_CODE: u16 = 1001; // See https://www.rfc-editor.org/rfc/rfc6455.html#section-7.4.1.
+        // Unset event listeners, as otherwise they will be called by JS after the handlers have already been dropped.
+        self.inner.socket.set_onclose(None);
+        self.inner.socket.set_onerror(None);
+        self.inner.socket.set_onopen(None);
+        self.inner.socket.set_onmessage(None);
+
+        // In browsers, userland code is not allowed to use any other status code than 1000: https://websockets.spec.whatwg.org/#dom-websocket-close
+        const REGULAR_CLOSE: u16 = 1000; // See https://www.rfc-editor.org/rfc/rfc6455.html#section-7.4.1.
 
         if let ReadyState::Connecting | ReadyState::Open = self.inner.ready_state() {
             let _ = self
                 .inner
                 .socket
-                .close_with_code_and_reason(GO_AWAY_STATUS_CODE, "connection dropped");
+                .close_with_code_and_reason(REGULAR_CLOSE, "connection dropped");
         }
 
         WebContext::new()
             .expect("to have a window or worker context")
             .clear_interval_with_handle(self.inner.buffered_amount_low_interval);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use libp2p_identity::PeerId;
+
+    #[test]
+    fn extract_url() {
+        let peer_id = PeerId::random();
+
+        // Check `/tls/ws`
+        let addr = "/dns4/example.com/tcp/2222/tls/ws"
+            .parse::<Multiaddr>()
+            .unwrap();
+        let url = extract_websocket_url(&addr).unwrap();
+        assert_eq!(url, "wss://example.com:2222/");
+
+        // Check `/tls/ws` with `/p2p`
+        let addr = format!("/dns4/example.com/tcp/2222/tls/ws/p2p/{peer_id}")
+            .parse()
+            .unwrap();
+        let url = extract_websocket_url(&addr).unwrap();
+        assert_eq!(url, "wss://example.com:2222/");
+
+        // Check `/tls/ws` with `/ip4`
+        let addr = "/ip4/127.0.0.1/tcp/2222/tls/ws"
+            .parse::<Multiaddr>()
+            .unwrap();
+        let url = extract_websocket_url(&addr).unwrap();
+        assert_eq!(url, "wss://127.0.0.1:2222/");
+
+        // Check `/tls/ws` with `/ip6`
+        let addr = "/ip6/::1/tcp/2222/tls/ws".parse::<Multiaddr>().unwrap();
+        let url = extract_websocket_url(&addr).unwrap();
+        assert_eq!(url, "wss://[::1]:2222/");
+
+        // Check `/wss`
+        let addr = "/dns4/example.com/tcp/2222/wss"
+            .parse::<Multiaddr>()
+            .unwrap();
+        let url = extract_websocket_url(&addr).unwrap();
+        assert_eq!(url, "wss://example.com:2222/");
+
+        // Check `/wss` with `/p2p`
+        let addr = format!("/dns4/example.com/tcp/2222/wss/p2p/{peer_id}")
+            .parse()
+            .unwrap();
+        let url = extract_websocket_url(&addr).unwrap();
+        assert_eq!(url, "wss://example.com:2222/");
+
+        // Check `/wss` with `/ip4`
+        let addr = "/ip4/127.0.0.1/tcp/2222/wss".parse::<Multiaddr>().unwrap();
+        let url = extract_websocket_url(&addr).unwrap();
+        assert_eq!(url, "wss://127.0.0.1:2222/");
+
+        // Check `/wss` with `/ip6`
+        let addr = "/ip6/::1/tcp/2222/wss".parse::<Multiaddr>().unwrap();
+        let url = extract_websocket_url(&addr).unwrap();
+        assert_eq!(url, "wss://[::1]:2222/");
+
+        // Check `/ws`
+        let addr = "/dns4/example.com/tcp/2222/ws"
+            .parse::<Multiaddr>()
+            .unwrap();
+        let url = extract_websocket_url(&addr).unwrap();
+        assert_eq!(url, "ws://example.com:2222/");
+
+        // Check `/ws` with `/p2p`
+        let addr = format!("/dns4/example.com/tcp/2222/ws/p2p/{peer_id}")
+            .parse()
+            .unwrap();
+        let url = extract_websocket_url(&addr).unwrap();
+        assert_eq!(url, "ws://example.com:2222/");
+
+        // Check `/ws` with `/ip4`
+        let addr = "/ip4/127.0.0.1/tcp/2222/ws".parse::<Multiaddr>().unwrap();
+        let url = extract_websocket_url(&addr).unwrap();
+        assert_eq!(url, "ws://127.0.0.1:2222/");
+
+        // Check `/ws` with `/ip6`
+        let addr = "/ip6/::1/tcp/2222/ws".parse::<Multiaddr>().unwrap();
+        let url = extract_websocket_url(&addr).unwrap();
+        assert_eq!(url, "ws://[::1]:2222/");
+
+        // Check `/ws` with `/ip4`
+        let addr = "/ip4/127.0.0.1/tcp/2222/ws".parse::<Multiaddr>().unwrap();
+        let url = extract_websocket_url(&addr).unwrap();
+        assert_eq!(url, "ws://127.0.0.1:2222/");
+
+        // Check that `/tls/wss` is invalid
+        let addr = "/ip4/127.0.0.1/tcp/2222/tls/wss"
+            .parse::<Multiaddr>()
+            .unwrap();
+        assert!(extract_websocket_url(&addr).is_none());
+
+        // Check non-ws address
+        let addr = "/ip4/127.0.0.1/tcp/2222".parse::<Multiaddr>().unwrap();
+        assert!(extract_websocket_url(&addr).is_none());
     }
 }

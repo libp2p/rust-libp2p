@@ -24,6 +24,7 @@ use bimap::BiMap;
 use futures::future::BoxFuture;
 use futures::stream::FuturesUnordered;
 use futures::{FutureExt, StreamExt};
+use libp2p_core::transport::PortUse;
 use libp2p_core::{Endpoint, Multiaddr};
 use libp2p_identity::PeerId;
 use libp2p_request_response::ProtocolSupport;
@@ -34,7 +35,6 @@ use libp2p_swarm::{
 };
 use std::collections::{HashMap, HashSet};
 use std::iter;
-use std::iter::FromIterator;
 use std::task::{ready, Context, Poll};
 use std::time::Duration;
 
@@ -140,9 +140,15 @@ impl NetworkBehaviour for Behaviour {
         peer: PeerId,
         addr: &Multiaddr,
         role_override: Endpoint,
+        port_use: PortUse,
     ) -> Result<THandler<Self>, ConnectionDenied> {
-        self.inner
-            .handle_established_outbound_connection(connection_id, peer, addr, role_override)
+        self.inner.handle_established_outbound_connection(
+            connection_id,
+            peer,
+            addr,
+            role_override,
+            port_use,
+        )
     }
 
     fn on_connection_handler_event(
@@ -443,7 +449,7 @@ impl Registrations {
         match (discover_namespace.as_ref(), cookie_namespace) {
             // discover all namespace but cookie is specific to a namespace? => bad
             (None, Some(_)) => return Err(CookieNamespaceMismatch),
-            // discover for a namespace but cookie is for a different namesapce? => bad
+            // discover for a namespace but cookie is for a different namespace? => bad
             (Some(namespace), Some(cookie_namespace)) if namespace != cookie_namespace => {
                 return Err(CookieNamespaceMismatch)
             }
@@ -528,8 +534,7 @@ pub struct CookieNamespaceMismatch;
 
 #[cfg(test)]
 mod tests {
-    use instant::SystemTime;
-    use std::option::Option::None;
+    use web_time::SystemTime;
 
     use libp2p_core::PeerRecord;
     use libp2p_identity as identity;

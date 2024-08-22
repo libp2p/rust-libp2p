@@ -3,7 +3,7 @@ name = "libp2p-swarm-derive"
 edition = "2021"
 rust-version = { workspace = true }
 description = "Procedural macros of libp2p-swarm"
-version = "0.34.1"
+version = "0.35.0"
 authors = ["Parity Technologies <admin@parity.io>"]
 license = "MIT"
 repository = "https://github.com/libp2p/rust-libp2p"
@@ -14,17 +14,15 @@ categories = ["network-programming", "asynchronous"]
 proc-macro = true
 
 [dependencies]
-heck = "0.4"
+heck = "0.5"
 quote = "1.0"
-syn = { version = "2.0.39", default-features = false, features = ["clone-impls", "derive", "parsing", "printing", "proc-macro"] }
+syn = { version = "2.0.66", default-features = false, features = ["clone-impls", "derive", "parsing", "printing", "proc-macro"] }
 proc-macro2 = "1.0"
 
 # Passing arguments to the docsrs builder in order to properly document cfg's.
 # More information: https://docs.rs/about/builds#cross-compiling
 [package.metadata.docs.rs]
 all-features = true
-rustdoc-args = ["--cfg", "docsrs"]
-rustc-args = ["--cfg", "docsrs"]
 
 [lints]
 workspace = true

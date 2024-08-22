@@ -4,6 +4,7 @@ use super::Error;
 use futures::future::FutureExt;
 use libp2p_core::multiaddr::Multiaddr;
 use libp2p_core::muxing::StreamMuxerBox;
+use libp2p_core::transport::DialOpts;
 use libp2p_core::transport::{Boxed, ListenerId, Transport as _, TransportError, TransportEvent};
 use libp2p_identity::{Keypair, PeerId};
 use std::future::Future;
@@ -62,7 +63,15 @@ impl libp2p_core::Transport for Transport {
         false
     }
 
-    fn dial(&mut self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
+    fn dial(
+        &mut self,
+        addr: Multiaddr,
+        dial_opts: DialOpts,
+    ) -> Result<Self::Dial, TransportError<Self::Error>> {
+        if dial_opts.role.is_listener() {
+            return Err(TransportError::MultiaddrNotSupported(addr));
+        }
+
         if maybe_local_firefox() {
             return Err(TransportError::Other(
                 "Firefox does not support WebRTC over localhost or 127.0.0.1"
@@ -89,22 +98,11 @@ impl libp2p_core::Transport for Transport {
         .boxed())
     }
 
-    fn dial_as_listener(
-        &mut self,
-        addr: Multiaddr,
-    ) -> Result<Self::Dial, TransportError<Self::Error>> {
-        Err(TransportError::MultiaddrNotSupported(addr))
-    }
-
     fn poll(
         self: Pin<&mut Self>,
         _cx: &mut Context<'_>,
     ) -> Poll<TransportEvent<Self::ListenerUpgrade, Self::Error>> {
         Poll::Pending
-    }
-
-    fn address_translation(&self, _listen: &Multiaddr, _observed: &Multiaddr) -> Option<Multiaddr> {
-        None
     }
 }
 

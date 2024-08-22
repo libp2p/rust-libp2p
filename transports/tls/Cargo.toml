@@ -1,6 +1,6 @@
 [package]
 name = "libp2p-tls"
-version = "0.3.0"
+version = "0.5.0"
 edition = "2021"
 rust-version = { workspace = true }
 description = "TLS configuration based on libp2p TLS specs."
@@ -9,22 +9,23 @@ license = "MIT"
 exclude = ["src/test_assets"]
 
 [dependencies]
-futures = { version = "0.3.29", default-features = false }
-futures-rustls = "0.24.0"
+futures = { workspace = true }
+futures-rustls = { workspace = true }
 libp2p-core = { workspace = true }
 libp2p-identity = { workspace = true }
-rcgen = "0.11.3"
-ring = "0.16.20"
-thiserror = "1.0.50"
+rcgen = { workspace = true }
+ring = { workspace = true }
+thiserror = "1.0.61"
 webpki = { version = "0.101.4", package = "rustls-webpki", features = ["std"] }
-x509-parser = "0.15.1"
+x509-parser = "0.16.0"
 yasna = "0.5.2"
 
 # Exposed dependencies. Breaking changes to these are breaking changes to us.
 [dependencies.rustls]
-version = "0.21.9"
+version = "0.23.9"
 default-features = false
-features = ["dangerous_configuration"] # Must enable this to allow for custom verification code.
+features = ["ring", "std"] # Must enable this to allow for custom verification code.
+
 
 [dev-dependencies]
 hex = "0.4.3"
@@ -33,14 +34,12 @@ libp2p-core = { workspace = true }
 libp2p-identity = { workspace = true, features = ["ed25519", "rsa", "secp256k1", "ecdsa", "rand"] }
 libp2p-swarm = { workspace = true, features = ["tokio"] }
 libp2p-yamux = { workspace = true }
-tokio = { version = "1.34.0", features = ["full"] }
+tokio = { workspace = true, features = ["full"] }
 
 # Passing arguments to the docsrs builder in order to properly document cfg's.
 # More information: https://docs.rs/about/builds#cross-compiling
 [package.metadata.docs.rs]
 all-features = true
-rustdoc-args = ["--cfg", "docsrs"]
-rustc-args = ["--cfg", "docsrs"]
 
 [lints]
 workspace = true

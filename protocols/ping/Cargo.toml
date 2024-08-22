@@ -3,7 +3,7 @@ name = "libp2p-ping"
 edition = "2021"
 rust-version = { workspace = true }
 description = "Ping protocol for libp2p"
-version = "0.44.0"
+version = "0.45.0"
 authors = ["Parity Technologies <admin@parity.io>"]
 license = "MIT"
 repository = "https://github.com/libp2p/rust-libp2p"
@@ -11,15 +11,15 @@ keywords = ["peer-to-peer", "libp2p", "networking"]
 categories = ["network-programming", "asynchronous"]
 
 [dependencies]
-either = "1.9.0"
-futures = "0.3.29"
-futures-timer = "3.0.2"
-instant = "0.1.12"
+either = "1.11.0"
+futures = { workspace = true }
+futures-timer = "3.0.3"
+web-time = { workspace = true }
 libp2p-core = { workspace = true }
 libp2p-swarm = { workspace = true }
 libp2p-identity = { workspace = true }
 rand = "0.8"
-tracing = "0.1.37"
+tracing = { workspace = true }
 void = "1.0"
 
 [dev-dependencies]
@@ -27,14 +27,12 @@ async-std = "1.6.2"
 libp2p-swarm = { workspace = true, features = ["macros"] }
 libp2p-swarm-test = { path = "../../swarm-test" }
 quickcheck = { workspace = true }
-tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+tracing-subscriber = { workspace = true, features = ["env-filter"] }
 
 # Passing arguments to the docsrs builder in order to properly document cfg's.
 # More information: https://docs.rs/about/builds#cross-compiling
 [package.metadata.docs.rs]
 all-features = true
-rustdoc-args = ["--cfg", "docsrs"]
-rustc-args = ["--cfg", "docsrs"]
 
 [lints]
 workspace = true

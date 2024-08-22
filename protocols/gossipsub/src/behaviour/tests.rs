@@ -35,7 +35,6 @@ use libp2p_core::{ConnectedPoint, Endpoint};
 use rand::Rng;
 use std::future::poll_fn;
 use std::thread::sleep;
-use std::time::Duration;
 
 #[derive(Default, Debug)]
 struct InjectNodes<D, F>
@@ -175,7 +174,7 @@ fn inject_nodes1() -> InjectNodes<IdentityTransform, AllowAllSubscriptionFilter>
 
 fn add_peer<D, F>(
     gs: &mut Behaviour<D, F>,
-    topic_hashes: &Vec<TopicHash>,
+    topic_hashes: &[TopicHash],
     outbound: bool,
     explicit: bool,
 ) -> (PeerId, RpcReceiver)
@@ -188,7 +187,7 @@ where
 
 fn add_peer_with_addr<D, F>(
     gs: &mut Behaviour<D, F>,
-    topic_hashes: &Vec<TopicHash>,
+    topic_hashes: &[TopicHash],
     outbound: bool,
     explicit: bool,
     address: Multiaddr,
@@ -209,7 +208,7 @@ where
 
 fn add_peer_with_addr_and_kind<D, F>(
     gs: &mut Behaviour<D, F>,
-    topic_hashes: &Vec<TopicHash>,
+    topic_hashes: &[TopicHash],
     outbound: bool,
     explicit: bool,
     address: Multiaddr,
@@ -224,6 +223,7 @@ where
         ConnectedPoint::Dialer {
             address,
             role_override: Endpoint::Dialer,
+            port_use: PortUse::Reuse,
         }
     } else {
         ConnectedPoint::Listener {
@@ -295,6 +295,7 @@ where
         let fake_endpoint = ConnectedPoint::Dialer {
             address: Multiaddr::empty(),
             role_override: Endpoint::Dialer,
+            port_use: PortUse::Reuse,
         }; // this is not relevant
            // peer_connections.connections should never be empty.
 
@@ -307,6 +308,7 @@ where
                 connection_id: *connection_id,
                 endpoint: &fake_endpoint,
                 remaining_established: active_connections,
+                cause: None,
             }));
         }
     }
@@ -430,7 +432,7 @@ async fn test_subscribe() {
         .create_network();
 
     assert!(
-        gs.mesh.get(&topic_hashes[0]).is_some(),
+        gs.mesh.contains_key(&topic_hashes[0]),
         "Subscribe should add a new entry to the mesh[topic] hashmap"
     );
 
@@ -471,11 +473,11 @@ async fn test_unsubscribe() {
 
     for topic_hash in &topic_hashes {
         assert!(
-            gs.topic_peers.get(topic_hash).is_some(),
+            gs.topic_peers.contains_key(topic_hash),
             "Topic_peers contain a topic entry"
         );
         assert!(
-            gs.mesh.get(topic_hash).is_some(),
+            gs.mesh.contains_key(topic_hash),
             "mesh should contain a topic entry"
         );
     }
@@ -507,7 +509,7 @@ async fn test_unsubscribe() {
     // check we clean up internal structures
     for topic_hash in &topic_hashes {
         assert!(
-            gs.mesh.get(topic_hash).is_none(),
+            !gs.mesh.contains_key(topic_hash),
             "All topics should have been removed from the mesh"
         );
     }
@@ -607,6 +609,7 @@ fn test_join() {
             endpoint: &ConnectedPoint::Dialer {
                 address,
                 role_override: Endpoint::Dialer,
+                port_use: PortUse::Reuse,
             },
             failed_addresses: &[],
             other_established: 0,
@@ -665,7 +668,7 @@ async fn test_publish_without_flood_publishing() {
         .create_network();
 
     assert!(
-        gs.mesh.get(&topic_hashes[0]).is_some(),
+        gs.mesh.contains_key(&topic_hashes[0]),
         "Subscribe should add a new entry to the mesh[topic] hashmap"
     );
 
@@ -743,7 +746,7 @@ async fn test_fanout() {
         .create_network();
 
     assert!(
-        gs.mesh.get(&topic_hashes[0]).is_some(),
+        gs.mesh.contains_key(&topic_hashes[0]),
         "Subscribe should add a new entry to the mesh[topic] hashmap"
     );
     // Unsubscribe from topic
@@ -914,7 +917,7 @@ fn test_handle_received_subscriptions() {
     );
 
     assert!(
-        gs.peer_topics.get(&unknown_peer).is_none(),
+        !gs.peer_topics.contains_key(&unknown_peer),
         "Unknown peer should not have been added"
     );
 
@@ -1195,7 +1198,7 @@ fn test_handle_ihave_subscribed_and_msg_not_cached() {
 
     assert!(
         iwant_exists,
-        "Expected to send an IWANT control message for unkown message id"
+        "Expected to send an IWANT control message for unknown message id"
     );
 }
 
@@ -1316,7 +1319,7 @@ fn test_handle_graft_multiple_topics() {
     }
 
     assert!(
-        gs.mesh.get(&topic_hashes[2]).is_none(),
+        !gs.mesh.contains_key(&topic_hashes[2]),
         "Expected the second topic to not be in the mesh"
     );
 }
@@ -2510,7 +2513,7 @@ fn test_dont_graft_to_negative_scored_peers() {
 }
 
 ///Note that in this test also without a penalty the px would be ignored because of the
-/// acceptPXThreshold, but the spec still explicitely states the rule that px from negative
+/// acceptPXThreshold, but the spec still explicitly states the rule that px from negative
 /// peers should get ignored, therefore we test it here.
 #[test]
 fn test_ignore_px_from_negative_scored_peer() {
@@ -3299,7 +3302,7 @@ fn test_scoring_p1() {
     );
 }
 
-fn random_message(seq: &mut u64, topics: &Vec<TopicHash>) -> RawMessage {
+fn random_message(seq: &mut u64, topics: &[TopicHash]) -> RawMessage {
     let mut rng = rand::thread_rng();
     *seq += 1;
     RawMessage {
@@ -4190,6 +4193,7 @@ fn test_scoring_p6() {
             endpoint: &ConnectedPoint::Dialer {
                 address: addr.clone(),
                 role_override: Endpoint::Dialer,
+                port_use: PortUse::Reuse,
             },
             failed_addresses: &[],
             other_established: 0,
@@ -4211,6 +4215,7 @@ fn test_scoring_p6() {
             endpoint: &ConnectedPoint::Dialer {
                 address: addr2.clone(),
                 role_override: Endpoint::Dialer,
+                port_use: PortUse::Reuse,
             },
             failed_addresses: &[],
             other_established: 1,
@@ -4241,6 +4246,7 @@ fn test_scoring_p6() {
         endpoint: &ConnectedPoint::Dialer {
             address: addr,
             role_override: Endpoint::Dialer,
+            port_use: PortUse::Reuse,
         },
         failed_addresses: &[],
         other_established: 2,
@@ -4695,7 +4701,7 @@ async fn test_limit_number_of_message_ids_inside_ihave() {
     //emit gossip
     gs.emit_gossip();
 
-    // both peers should have gotten 100 random ihave messages, to asser the randomness, we
+    // both peers should have gotten 100 random ihave messages, to assert the randomness, we
     // assert that both have not gotten the same set of messages, but have an intersection
     // (which is the case with very high probability, the probabiltity of failure is < 10^-58).
 
@@ -5255,7 +5261,7 @@ fn test_graft_without_subscribe() {
         .create_network();
 
     assert!(
-        gs.mesh.get(&topic_hashes[0]).is_some(),
+        gs.mesh.contains_key(&topic_hashes[0]),
         "Subscribe should add a new entry to the mesh[topic] hashmap"
     );
 

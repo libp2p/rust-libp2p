@@ -26,7 +26,6 @@ use asynchronous_codec::Framed;
 use futures::future::Either;
 use futures::prelude::*;
 use futures::StreamExt;
-use instant::Instant;
 use libp2p_core::upgrade::DeniedUpgrade;
 use libp2p_swarm::handler::{
     ConnectionEvent, ConnectionHandler, ConnectionHandlerEvent, DialUpgradeError,
@@ -37,6 +36,7 @@ use std::{
     pin::Pin,
     task::{Context, Poll},
 };
+use web_time::Instant;
 
 /// The event emitted by the Handler. This informs the behaviour of various events created
 /// by the handler.

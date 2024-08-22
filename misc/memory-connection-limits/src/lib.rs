@@ -18,7 +18,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use libp2p_core::{Endpoint, Multiaddr};
+use libp2p_core::{transport::PortUse, Endpoint, Multiaddr};
 use libp2p_identity::PeerId;
 use libp2p_swarm::{
     dummy, ConnectionDenied, ConnectionId, FromSwarm, NetworkBehaviour, THandler, THandlerInEvent,
@@ -31,6 +31,7 @@ use std::{
     task::{Context, Poll},
     time::{Duration, Instant},
 };
+use sysinfo::MemoryRefreshKind;
 
 /// A [`NetworkBehaviour`] that enforces a set of memory usage based limits.
 ///
@@ -90,10 +91,12 @@ impl Behaviour {
     ///
     /// New inbound and outbound connections will be denied when the threshold is reached.
     pub fn with_max_percentage(percentage: f64) -> Self {
-        use sysinfo::{RefreshKind, SystemExt};
+        use sysinfo::{RefreshKind, System};
 
-        let system_memory_bytes =
-            sysinfo::System::new_with_specifics(RefreshKind::new().with_memory()).total_memory();
+        let system_memory_bytes = System::new_with_specifics(
+            RefreshKind::new().with_memory(MemoryRefreshKind::new().with_ram()),
+        )
+        .total_memory();
 
         Self::with_max_bytes((system_memory_bytes as f64 * percentage).round() as usize)
     }
@@ -174,6 +177,7 @@ impl NetworkBehaviour for Behaviour {
         _: PeerId,
         _: &Multiaddr,
         _: Endpoint,
+        _: PortUse,
     ) -> Result<THandler<Self>, ConnectionDenied> {
         Ok(dummy::ConnectionHandler)
     }

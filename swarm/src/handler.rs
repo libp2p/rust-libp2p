@@ -46,22 +46,19 @@ mod one_shot;
 mod pending;
 mod select;
 
+use crate::connection::AsStrHashEq;
 pub use crate::upgrade::{InboundUpgradeSend, OutboundUpgradeSend, SendWrapper, UpgradeInfoSend};
 pub use map_in::MapInEvent;
 pub use map_out::MapOutEvent;
 pub use one_shot::{OneShotHandler, OneShotHandlerConfig};
 pub use pending::PendingConnectionHandler;
 pub use select::ConnectionHandlerSelect;
+use smallvec::SmallVec;
 
 use crate::StreamProtocol;
-use ::either::Either;
+use core::slice;
 use libp2p_core::Multiaddr;
-use once_cell::sync::Lazy;
-use smallvec::SmallVec;
-use std::collections::hash_map::RandomState;
-use std::collections::hash_set::{Difference, Intersection};
-use std::collections::HashSet;
-use std::iter::Peekable;
+use std::collections::{HashMap, HashSet};
 use std::{error, fmt, io, task::Context, task::Poll, time::Duration};
 
 /// A handler for a set of protocols used on a connection with a remote.
@@ -137,6 +134,7 @@ pub trait ConnectionHandler: Send + 'static {
     ///
     /// - Protocols like [circuit-relay v2](https://github.com/libp2p/specs/blob/master/relay/circuit-v2.md) need to keep a connection alive beyond these circumstances and can thus override this method.
     /// - Protocols like [ping](https://github.com/libp2p/specs/blob/master/ping/ping.md) **don't** want to keep a connection alive despite an active streams.
+    ///
     /// In that case, protocol authors can use [`Stream::ignore_for_keep_alive`](crate::Stream::ignore_for_keep_alive) to opt-out a particular stream from the keep-alive algorithm.
     fn connection_keep_alive(&self) -> bool {
         false
@@ -334,64 +332,124 @@ pub enum ProtocolsChange<'a> {
 }
 
 impl<'a> ProtocolsChange<'a> {
+    /// Compute the protocol change for the initial set of protocols.
+    pub(crate) fn from_initial_protocols<'b, T: AsRef<str> + 'b>(
+        new_protocols: impl IntoIterator<Item = &'b T>,
+        buffer: &'a mut Vec<StreamProtocol>,
+    ) -> Self {
+        buffer.clear();
+        buffer.extend(
+            new_protocols
+                .into_iter()
+                .filter_map(|i| StreamProtocol::try_from_owned(i.as_ref().to_owned()).ok()),
+        );
+
+        ProtocolsChange::Added(ProtocolsAdded {
+            protocols: buffer.iter(),
+        })
+    }
+
     /// Compute the [`ProtocolsChange`] that results from adding `to_add` to `existing_protocols`.
     ///
     /// Returns `None` if the change is a no-op, i.e. `to_add` is a subset of `existing_protocols`.
     pub(crate) fn add(
-        existing_protocols: &'a HashSet<StreamProtocol>,
-        to_add: &'a HashSet<StreamProtocol>,
+        existing_protocols: &HashSet<StreamProtocol>,
+        to_add: HashSet<StreamProtocol>,
+        buffer: &'a mut Vec<StreamProtocol>,
     ) -> Option<Self> {
-        let mut actually_added_protocols = to_add.difference(existing_protocols).peekable();
+        buffer.clear();
+        buffer.extend(
+            to_add
+                .into_iter()
+                .filter(|i| !existing_protocols.contains(i)),
+        );
 
-        actually_added_protocols.peek()?;
+        if buffer.is_empty() {
+            return None;
+        }
 
-        Some(ProtocolsChange::Added(ProtocolsAdded {
-            protocols: actually_added_protocols,
+        Some(Self::Added(ProtocolsAdded {
+            protocols: buffer.iter(),
         }))
     }
 
-    /// Compute the [`ProtocolsChange`] that results from removing `to_remove` from `existing_protocols`.
+    /// Compute the [`ProtocolsChange`] that results from removing `to_remove` from `existing_protocols`. Removes the protocols from `existing_protocols`.
     ///
     /// Returns `None` if the change is a no-op, i.e. none of the protocols in `to_remove` are in `existing_protocols`.
     pub(crate) fn remove(
-        existing_protocols: &'a HashSet<StreamProtocol>,
-        to_remove: &'a HashSet<StreamProtocol>,
+        existing_protocols: &mut HashSet<StreamProtocol>,
+        to_remove: HashSet<StreamProtocol>,
+        buffer: &'a mut Vec<StreamProtocol>,
     ) -> Option<Self> {
-        let mut actually_removed_protocols = existing_protocols.intersection(to_remove).peekable();
+        buffer.clear();
+        buffer.extend(
+            to_remove
+                .into_iter()
+                .filter_map(|i| existing_protocols.take(&i)),
+        );
 
-        actually_removed_protocols.peek()?;
+        if buffer.is_empty() {
+            return None;
+        }
 
-        Some(ProtocolsChange::Removed(ProtocolsRemoved {
-            protocols: Either::Right(actually_removed_protocols),
+        Some(Self::Removed(ProtocolsRemoved {
+            protocols: buffer.iter(),
         }))
     }
 
     /// Compute the [`ProtocolsChange`]s required to go from `existing_protocols` to `new_protocols`.
-    pub(crate) fn from_full_sets(
-        existing_protocols: &'a HashSet<StreamProtocol>,
-        new_protocols: &'a HashSet<StreamProtocol>,
+    pub(crate) fn from_full_sets<T: AsRef<str>>(
+        existing_protocols: &mut HashMap<AsStrHashEq<T>, bool>,
+        new_protocols: impl IntoIterator<Item = T>,
+        buffer: &'a mut Vec<StreamProtocol>,
     ) -> SmallVec<[Self; 2]> {
-        if existing_protocols == new_protocols {
+        buffer.clear();
+
+        // Initially, set the boolean for all protocols to `false`, meaning "not visited".
+        for v in existing_protocols.values_mut() {
+            *v = false;
+        }
+
+        let mut new_protocol_count = 0; // We can only iterate `new_protocols` once, so keep track of its length separately.
+        for new_protocol in new_protocols {
+            existing_protocols
+                .entry(AsStrHashEq(new_protocol))
+                .and_modify(|v| *v = true) // Mark protocol as visited (i.e. we still support it)
+                .or_insert_with_key(|k| {
+                    // Encountered a previously unsupported protocol, remember it in `buffer`.
+                    buffer.extend(StreamProtocol::try_from_owned(k.0.as_ref().to_owned()).ok());
+                    true
+                });
+            new_protocol_count += 1;
+        }
+
+        if new_protocol_count == existing_protocols.len() && buffer.is_empty() {
             return SmallVec::new();
         }
 
+        let num_new_protocols = buffer.len();
+        // Drain all protocols that we haven't visited.
+        // For existing protocols that are not in `new_protocols`, the boolean will be false, meaning we need to remove it.
+        existing_protocols.retain(|p, &mut is_supported| {
+            if !is_supported {
+                buffer.extend(StreamProtocol::try_from_owned(p.0.as_ref().to_owned()).ok());
+            }
+
+            is_supported
+        });
+
+        let (added, removed) = buffer.split_at(num_new_protocols);
         let mut changes = SmallVec::new();
-
-        let mut added_protocols = new_protocols.difference(existing_protocols).peekable();
-        let mut removed_protocols = existing_protocols.difference(new_protocols).peekable();
-
-        if added_protocols.peek().is_some() {
+        if !added.is_empty() {
             changes.push(ProtocolsChange::Added(ProtocolsAdded {
-                protocols: added_protocols,
+                protocols: added.iter(),
             }));
         }
-
-        if removed_protocols.peek().is_some() {
+        if !removed.is_empty() {
             changes.push(ProtocolsChange::Removed(ProtocolsRemoved {
-                protocols: Either::Left(removed_protocols),
+                protocols: removed.iter(),
             }));
         }
-
         changes
     }
 }
@@ -399,33 +457,13 @@ impl<'a> ProtocolsChange<'a> {
 /// An [`Iterator`] over all protocols that have been added.
 #[derive(Debug, Clone)]
 pub struct ProtocolsAdded<'a> {
-    protocols: Peekable<Difference<'a, StreamProtocol, RandomState>>,
-}
-
-impl<'a> ProtocolsAdded<'a> {
-    pub(crate) fn from_set(protocols: &'a HashSet<StreamProtocol, RandomState>) -> Self {
-        ProtocolsAdded {
-            protocols: protocols.difference(&EMPTY_HASHSET).peekable(),
-        }
-    }
+    pub(crate) protocols: slice::Iter<'a, StreamProtocol>,
 }
 
 /// An [`Iterator`] over all protocols that have been removed.
 #[derive(Debug, Clone)]
 pub struct ProtocolsRemoved<'a> {
-    protocols: Either<
-        Peekable<Difference<'a, StreamProtocol, RandomState>>,
-        Peekable<Intersection<'a, StreamProtocol, RandomState>>,
-    >,
-}
-
-impl<'a> ProtocolsRemoved<'a> {
-    #[cfg(test)]
-    pub(crate) fn from_set(protocols: &'a HashSet<StreamProtocol, RandomState>) -> Self {
-        ProtocolsRemoved {
-            protocols: Either::Left(protocols.difference(&EMPTY_HASHSET).peekable()),
-        }
-    }
+    pub(crate) protocols: slice::Iter<'a, StreamProtocol>,
 }
 
 impl<'a> Iterator for ProtocolsAdded<'a> {
@@ -690,6 +728,169 @@ where
     }
 }
 
-/// A statically declared, empty [`HashSet`] allows us to work around borrow-checker rules for
-/// [`ProtocolsAdded::from_set`]. The lifetimes don't work unless we have a [`HashSet`] with a `'static' lifetime.
-static EMPTY_HASHSET: Lazy<HashSet<StreamProtocol>> = Lazy::new(HashSet::new);
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    fn protocol_set_of(s: &'static str) -> HashSet<StreamProtocol> {
+        s.split_whitespace()
+            .map(|p| StreamProtocol::try_from_owned(format!("/{p}")).unwrap())
+            .collect()
+    }
+
+    fn test_remove(
+        existing: &mut HashSet<StreamProtocol>,
+        to_remove: HashSet<StreamProtocol>,
+    ) -> HashSet<StreamProtocol> {
+        ProtocolsChange::remove(existing, to_remove, &mut Vec::new())
+            .into_iter()
+            .flat_map(|c| match c {
+                ProtocolsChange::Added(_) => panic!("unexpected added"),
+                ProtocolsChange::Removed(r) => r.cloned(),
+            })
+            .collect::<HashSet<_>>()
+    }
+
+    #[test]
+    fn test_protocol_remove_subset() {
+        let mut existing = protocol_set_of("a b c");
+        let to_remove = protocol_set_of("a b");
+
+        let change = test_remove(&mut existing, to_remove);
+
+        assert_eq!(existing, protocol_set_of("c"));
+        assert_eq!(change, protocol_set_of("a b"));
+    }
+
+    #[test]
+    fn test_protocol_remove_all() {
+        let mut existing = protocol_set_of("a b c");
+        let to_remove = protocol_set_of("a b c");
+
+        let change = test_remove(&mut existing, to_remove);
+
+        assert_eq!(existing, protocol_set_of(""));
+        assert_eq!(change, protocol_set_of("a b c"));
+    }
+
+    #[test]
+    fn test_protocol_remove_superset() {
+        let mut existing = protocol_set_of("a b c");
+        let to_remove = protocol_set_of("a b c d");
+
+        let change = test_remove(&mut existing, to_remove);
+
+        assert_eq!(existing, protocol_set_of(""));
+        assert_eq!(change, protocol_set_of("a b c"));
+    }
+
+    #[test]
+    fn test_protocol_remove_none() {
+        let mut existing = protocol_set_of("a b c");
+        let to_remove = protocol_set_of("d");
+
+        let change = test_remove(&mut existing, to_remove);
+
+        assert_eq!(existing, protocol_set_of("a b c"));
+        assert_eq!(change, protocol_set_of(""));
+    }
+
+    #[test]
+    fn test_protocol_remove_none_from_empty() {
+        let mut existing = protocol_set_of("");
+        let to_remove = protocol_set_of("d");
+
+        let change = test_remove(&mut existing, to_remove);
+
+        assert_eq!(existing, protocol_set_of(""));
+        assert_eq!(change, protocol_set_of(""));
+    }
+
+    fn test_from_full_sets(
+        existing: HashSet<StreamProtocol>,
+        new: HashSet<StreamProtocol>,
+    ) -> [HashSet<StreamProtocol>; 2] {
+        let mut buffer = Vec::new();
+        let mut existing = existing
+            .iter()
+            .map(|p| (AsStrHashEq(p.as_ref()), true))
+            .collect::<HashMap<_, _>>();
+
+        let changes = ProtocolsChange::from_full_sets(
+            &mut existing,
+            new.iter().map(AsRef::as_ref),
+            &mut buffer,
+        );
+
+        let mut added_changes = HashSet::new();
+        let mut removed_changes = HashSet::new();
+
+        for change in changes {
+            match change {
+                ProtocolsChange::Added(a) => {
+                    added_changes.extend(a.cloned());
+                }
+                ProtocolsChange::Removed(r) => {
+                    removed_changes.extend(r.cloned());
+                }
+            }
+        }
+
+        [removed_changes, added_changes]
+    }
+
+    #[test]
+    fn test_from_full_stes_subset() {
+        let existing = protocol_set_of("a b c");
+        let new = protocol_set_of("a b");
+
+        let [removed_changes, added_changes] = test_from_full_sets(existing, new);
+
+        assert_eq!(added_changes, protocol_set_of(""));
+        assert_eq!(removed_changes, protocol_set_of("c"));
+    }
+
+    #[test]
+    fn test_from_full_sets_superset() {
+        let existing = protocol_set_of("a b");
+        let new = protocol_set_of("a b c");
+
+        let [removed_changes, added_changes] = test_from_full_sets(existing, new);
+
+        assert_eq!(added_changes, protocol_set_of("c"));
+        assert_eq!(removed_changes, protocol_set_of(""));
+    }
+
+    #[test]
+    fn test_from_full_sets_intersection() {
+        let existing = protocol_set_of("a b c");
+        let new = protocol_set_of("b c d");
+
+        let [removed_changes, added_changes] = test_from_full_sets(existing, new);
+
+        assert_eq!(added_changes, protocol_set_of("d"));
+        assert_eq!(removed_changes, protocol_set_of("a"));
+    }
+
+    #[test]
+    fn test_from_full_sets_disjoint() {
+        let existing = protocol_set_of("a b c");
+        let new = protocol_set_of("d e f");
+
+        let [removed_changes, added_changes] = test_from_full_sets(existing, new);
+
+        assert_eq!(added_changes, protocol_set_of("d e f"));
+        assert_eq!(removed_changes, protocol_set_of("a b c"));
+    }
+
+    #[test]
+    fn test_from_full_sets_empty() {
+        let existing = protocol_set_of("");
+        let new = protocol_set_of("");
+
+        let [removed_changes, added_changes] = test_from_full_sets(existing, new);
+
+        assert_eq!(added_changes, protocol_set_of(""));
+        assert_eq!(removed_changes, protocol_set_of(""));
+    }
+}

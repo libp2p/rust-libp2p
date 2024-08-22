@@ -3,7 +3,7 @@ name = "libp2p-metrics"
 edition = "2021"
 rust-version = { workspace = true }
 description = "Metrics for libp2p"
-version = "0.14.1"
+version = "0.15.0"
 authors = ["Max Inden <mail@max-inden.de>"]
 license = "MIT"
 repository = "https://github.com/libp2p/rust-libp2p"
@@ -19,8 +19,8 @@ ping = ["libp2p-ping"]
 relay = ["libp2p-relay"]
 
 [dependencies]
-futures = "0.3.26"
-instant = "0.1.12"
+futures = { workspace = true }
+web-time = { workspace = true }
 libp2p-core = { workspace = true }
 libp2p-dcutr =  { workspace = true, optional = true }
 libp2p-gossipsub =  { workspace = true, optional = true }
@@ -30,7 +30,7 @@ libp2p-kad = { workspace = true, optional = true }
 libp2p-ping = { workspace = true, optional = true }
 libp2p-relay =  { workspace = true, optional = true }
 libp2p-swarm = { workspace = true }
-pin-project = "1.0.0"
+pin-project = "1.1.5"
 prometheus-client = { workspace = true }
 
 [dev-dependencies]
@@ -40,8 +40,6 @@ libp2p-identity = { workspace = true, features = ["rand"] }
 # More information: https://docs.rs/about/builds#cross-compiling
 [package.metadata.docs.rs]
 all-features = true
-rustc-args = ["--cfg", "docsrs"]
-rustdoc-args = ["--cfg", "docsrs"]
 
 [lints]
 workspace = true

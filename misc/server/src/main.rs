@@ -1,7 +1,6 @@
 use base64::Engine;
 use clap::Parser;
 use futures::stream::StreamExt;
-use futures_timer::Delay;
 use libp2p::identity;
 use libp2p::identity::PeerId;
 use libp2p::kad;
@@ -14,16 +13,12 @@ use prometheus_client::registry::Registry;
 use std::error::Error;
 use std::path::PathBuf;
 use std::str::FromStr;
-use std::task::Poll;
-use std::time::Duration;
 use tracing_subscriber::EnvFilter;
 use zeroize::Zeroizing;
 
 mod behaviour;
 mod config;
 mod http_service;
-
-const BOOTSTRAP_INTERVAL: Duration = Duration::from_secs(5 * 60);
 
 #[derive(Debug, Parser)]
 #[clap(name = "libp2p server", about = "A rust-libp2p server binary.")]
@@ -76,7 +71,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let mut swarm = libp2p::SwarmBuilder::with_existing_identity(local_keypair)
         .with_tokio()
         .with_tcp(
-            tcp::Config::default().port_reuse(true).nodelay(true),
+            tcp::Config::default().nodelay(true),
             noise::Config::new,
             yamux::Config::default,
         )?
@@ -127,18 +122,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         }
     });
 
-    let mut bootstrap_timer = Delay::new(BOOTSTRAP_INTERVAL);
-
     loop {
-        if let Poll::Ready(()) = futures::poll!(&mut bootstrap_timer) {
-            bootstrap_timer.reset(BOOTSTRAP_INTERVAL);
-            let _ = swarm
-                .behaviour_mut()
-                .kademlia
-                .as_mut()
-                .map(|k| k.bootstrap());
-        }
-
         let event = swarm.next().await.expect("Swarm not to terminate.");
         metrics.record(&event);
         match event {
@@ -154,6 +138,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
                             protocols,
                             ..
                         },
+                    ..
                 } = e
                 {
                     if protocols.iter().any(|p| *p == kad::PROTOCOL_NAME) {

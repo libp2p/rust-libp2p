@@ -1,3 +1,34 @@
+## 0.54.1
+
+- Update individual crates.
+    - Update to [`libp2p-metrics` `0.15.0`](misc/metrics/CHANGELOG.md#0150).
+
+## 0.54.0
+
+- Update individual crates.
+    - Update to [`libp2p-kad` `v0.46.0`](protocols/kad/CHANGELOG.md#0460).
+    - Update to [`libp2p-identify` `v0.45.0`](protocols/identify/CHANGELOG.md#0450).
+
+- Raise MSRV to 1.73.
+  See [PR 5266](https://github.com/libp2p/rust-libp2p/pull/5266).
+
+- Implement refactored `Transport`.
+  See [PR 4568].
+
+- Move `address_translation` from `libp2p-core` to `libp2p-swarm` and `libp2p-identify`. To now get
+  address translation behaviour, i.e. discovery of extern address (candidates) based on connecting
+  to other peers, one needs to use `libp2p-identify` now. This pertains to you if your nodes can be
+  behind NATs and they aren't aware of their true external address.
+  See [PR 4568].
+
+- Use `web-time` instead of `instant`.
+  See [PR 5347](https://github.com/libp2p/rust-libp2p/pull/5347).
+
+- Remove redundant async signature from builder methods.
+  See [PR 5468](https://github.com/libp2p/rust-libp2p/pull/5468).
+
+[PR 4568]: https://github.com/libp2p/rust-libp2p/pull/4568
+
 ## 0.53.2
 
 - Allow `SwarmBuilder::with_bandwidth_metrics` after `SwarmBuilder::with_websocket`.
@@ -1185,7 +1216,7 @@ must not be skipped!
 - Merged `PeriodicPing` and `PingListen` into one `Ping` behaviour.
 - `Floodsub` now generates `FloodsubEvent`s instead of direct floodsub messages.
 - Added `ProtocolsHandler::connection_keep_alive`. If all the handlers return `false`, then the connection to the remote node will automatically be gracefully closed after a few seconds.
-- The crate now successfuly compiles for the `wasm32-unknown-unknown` target.
+- The crate now successfully compiles for the `wasm32-unknown-unknown` target.
 - Updated `ring` to version 0.13.
 - Updated `secp256k1` to version 0.12.
 - The enum returned by `RawSwarm::peer()` can now return `LocalNode`. This makes it impossible to accidentally attempt to dial the local node.

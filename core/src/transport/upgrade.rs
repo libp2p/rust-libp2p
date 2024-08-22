@@ -22,6 +22,7 @@
 
 pub use crate::upgrade::Version;
 
+use crate::transport::DialOpts;
 use crate::{
     connection::ConnectedPoint,
     muxing::{StreamMuxer, StreamMuxerBox},
@@ -335,19 +336,16 @@ where
     type ListenerUpgrade = T::ListenerUpgrade;
     type Dial = T::Dial;
 
-    fn dial(&mut self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
-        self.0.dial(addr)
+    fn dial(
+        &mut self,
+        addr: Multiaddr,
+        opts: DialOpts,
+    ) -> Result<Self::Dial, TransportError<Self::Error>> {
+        self.0.dial(addr, opts)
     }
 
     fn remove_listener(&mut self, id: ListenerId) -> bool {
         self.0.remove_listener(id)
-    }
-
-    fn dial_as_listener(
-        &mut self,
-        addr: Multiaddr,
-    ) -> Result<Self::Dial, TransportError<Self::Error>> {
-        self.0.dial_as_listener(addr)
     }
 
     fn listen_on(
@@ -356,10 +354,6 @@ where
         addr: Multiaddr,
     ) -> Result<(), TransportError<Self::Error>> {
         self.0.listen_on(id, addr)
-    }
-
-    fn address_translation(&self, server: &Multiaddr, observed: &Multiaddr) -> Option<Multiaddr> {
-        self.0.address_translation(server, observed)
     }
 
     fn poll(
@@ -404,10 +398,14 @@ where
     type ListenerUpgrade = ListenerUpgradeFuture<T::ListenerUpgrade, U, C>;
     type Dial = DialUpgradeFuture<T::Dial, U, C>;
 
-    fn dial(&mut self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
+    fn dial(
+        &mut self,
+        addr: Multiaddr,
+        opts: DialOpts,
+    ) -> Result<Self::Dial, TransportError<Self::Error>> {
         let future = self
             .inner
-            .dial(addr)
+            .dial(addr, opts)
             .map_err(|err| err.map(TransportUpgradeError::Transport))?;
         Ok(DialUpgradeFuture {
             future: Box::pin(future),
@@ -419,20 +417,6 @@ where
         self.inner.remove_listener(id)
     }
 
-    fn dial_as_listener(
-        &mut self,
-        addr: Multiaddr,
-    ) -> Result<Self::Dial, TransportError<Self::Error>> {
-        let future = self
-            .inner
-            .dial_as_listener(addr)
-            .map_err(|err| err.map(TransportUpgradeError::Transport))?;
-        Ok(DialUpgradeFuture {
-            future: Box::pin(future),
-            upgrade: future::Either::Left(Some(self.upgrade.clone())),
-        })
-    }
-
     fn listen_on(
         &mut self,
         id: ListenerId,
@@ -441,10 +425,6 @@ where
         self.inner
             .listen_on(id, addr)
             .map_err(|err| err.map(TransportUpgradeError::Transport))
-    }
-
-    fn address_translation(&self, server: &Multiaddr, observed: &Multiaddr) -> Option<Multiaddr> {
-        self.inner.address_translation(server, observed)
     }
 
     fn poll(
@@ -520,7 +500,7 @@ where
 
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         // We use a `this` variable because the compiler can't mutably borrow multiple times
-        // accross a `Deref`.
+        // across a `Deref`.
         let this = &mut *self;
 
         loop {
@@ -579,7 +559,7 @@ where
 
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         // We use a `this` variable because the compiler can't mutably borrow multiple times
-        // accross a `Deref`.
+        // across a `Deref`.
         let this = &mut *self;
 
         loop {

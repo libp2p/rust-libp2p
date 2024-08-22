@@ -17,14 +17,13 @@ jobs:
       run: cargo +nightly doc --no-deps --workspace -F full
       env:
         RUSTDOCFLAGS: "--cfg docsrs"
-        RUSTFLAGS: "--cfg docsrs"
     - name: Add index file
       run: |
         mkdir host-docs
         echo "<meta http-equiv=\"refresh\" content=\"0; url=libp2p\">" > target/doc/index.html
         cp -r target/doc/* ./host-docs
     - name: Upload documentation
-      uses: actions/upload-pages-artifact@v2.0.0
+      uses: actions/upload-pages-artifact@v3.0.1
       with:
         path: "host-docs/"
 
@@ -42,5 +41,5 @@ jobs:
     steps:
       - name: Deploy to GitHub Pages
         id: deployment
-        uses: actions/deploy-pages@v3
+        uses: actions/deploy-pages@v4
 
