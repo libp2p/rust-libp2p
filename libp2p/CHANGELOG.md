@@ -1,3 +1,8 @@
+## 0.54.1
+
+- Update individual crates.
+    - Update to [`libp2p-metrics` `0.15.0`](misc/metrics/CHANGELOG.md#0150).
+
 ## 0.54.0
 
 - Update individual crates.

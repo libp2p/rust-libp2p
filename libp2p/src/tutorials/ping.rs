@@ -44,7 +44,7 @@
 //! 3. Adding `libp2p` as well as `futures` as dependencies in the
 //!    `Cargo.toml` file. Current crate versions may be found at
 //!    [crates.io](https://crates.io/).
-//!    We will also include `async-std` with the
+//!    We will also include `tokio` with the
 //!    "attributes" feature to allow for an `async main`.
 //!    At the time of writing we have:
 //!
@@ -55,9 +55,9 @@
 //!        edition = "2021"
 //!
 //!    [dependencies]
-//!        libp2p = { version = "0.52", features = ["tcp", "tls", "dns", "async-std", "noise", "yamux", "websocket", "ping", "macros"] }
-//!        futures = "0.3.21"
-//!        async-std = { version = "1.12.0", features = ["attributes"] }
+//!        libp2p = { version = "0.54", features = ["noise", "ping", "tcp", "tokio", "yamux"] }
+//!        futures = "0.3.30"
+//!        tokio = { version = "1.37.0", features = ["full"] }
 //!        tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 //!    ```
 //!
@@ -74,9 +74,11 @@
 //! use std::error::Error;
 //! use tracing_subscriber::EnvFilter;
 //!
-//! #[async_std::main]
+//! #[tokio::main]
 //! async fn main() -> Result<(), Box<dyn Error>> {
-//!     tracing_subscriber::fmt().with_env_filter(EnvFilter::from_default_env()).init();
+//!     let _ = tracing_subscriber::fmt()
+//!         .with_env_filter(EnvFilter::from_default_env())
+//!         .try_init();
 //!
 //!     let mut swarm = libp2p::SwarmBuilder::with_new_identity();
 //!
@@ -89,7 +91,7 @@
 //! ## Transport
 //!
 //! Next up we need to construct a transport. Each transport in libp2p provides encrypted streams.
-//! E.g. combining TCP to establish connections, TLS to encrypt these connections and Yamux to run
+//! E.g. combining TCP to establish connections, NOISE to encrypt these connections and Yamux to run
 //! one or more streams on a connection. Another libp2p transport is QUIC, providing encrypted
 //! streams out-of-the-box. We will stick to TCP for now. Each of these implement the [`Transport`]
 //! trait.
@@ -97,17 +99,20 @@
 //! ```rust
 //! use std::error::Error;
 //! use tracing_subscriber::EnvFilter;
+//! use libp2p::{noise, tcp, yamux};
 //!
-//! #[async_std::main]
+//! #[tokio::main]
 //! async fn main() -> Result<(), Box<dyn Error>> {
-//!     tracing_subscriber::fmt().with_env_filter(EnvFilter::from_default_env()).init();
+//!     let _ = tracing_subscriber::fmt()
+//!         .with_env_filter(EnvFilter::from_default_env())
+//!         .try_init();
 //!
 //!     let mut swarm = libp2p::SwarmBuilder::with_new_identity()
-//!         .with_async_std()
+//!         .with_tokio()
 //!         .with_tcp(
-//!             libp2p::tcp::Config::default(),
-//!             libp2p::tls::Config::new,
-//!             libp2p::yamux::Config::default,
+//!             tcp::Config::default(),
+//!             noise::Config::new,
+//!             yamux::Config::default,
 //!         )?;
 //!
 //!     Ok(())
@@ -137,20 +142,22 @@
 //! With the above in mind, let's extend our example, creating a [`ping::Behaviour`](crate::ping::Behaviour) at the end:
 //!
 //! ```rust
-//! use libp2p::ping;
-//! use tracing_subscriber::EnvFilter;
 //! use std::error::Error;
+//! use tracing_subscriber::EnvFilter;
+//! use libp2p::{noise, ping, tcp, yamux};
 //!
-//! #[async_std::main]
+//! #[tokio::main]
 //! async fn main() -> Result<(), Box<dyn Error>> {
-//!     tracing_subscriber::fmt().with_env_filter(EnvFilter::from_default_env()).init();
+//!     let _ = tracing_subscriber::fmt()
+//!         .with_env_filter(EnvFilter::from_default_env())
+//!         .try_init();
 //!
 //!     let mut swarm = libp2p::SwarmBuilder::with_new_identity()
-//!         .with_async_std()
+//!         .with_tokio()
 //!         .with_tcp(
-//!             libp2p::tcp::Config::default(),
-//!             libp2p::tls::Config::new,
-//!             libp2p::yamux::Config::default,
+//!             tcp::Config::default(),
+//!             noise::Config::new,
+//!             yamux::Config::default,
 //!         )?
 //!         .with_behaviour(|_| ping::Behaviour::default())?;
 //!
@@ -166,20 +173,22 @@
 //! to the [`Transport`] as well as events from the [`Transport`] to the [`NetworkBehaviour`].
 //!
 //! ```rust
-//! use libp2p::ping;
 //! use std::error::Error;
 //! use tracing_subscriber::EnvFilter;
+//! use libp2p::{noise, ping, tcp, yamux};
 //!
-//! #[async_std::main]
+//! #[tokio::main]
 //! async fn main() -> Result<(), Box<dyn Error>> {
-//!     tracing_subscriber::fmt().with_env_filter(EnvFilter::from_default_env()).init();
+//!     let _ = tracing_subscriber::fmt()
+//!         .with_env_filter(EnvFilter::from_default_env())
+//!         .try_init();
 //!
 //!     let mut swarm = libp2p::SwarmBuilder::with_new_identity()
-//!         .with_async_std()
+//!         .with_tokio()
 //!         .with_tcp(
-//!             libp2p::tcp::Config::default(),
-//!             libp2p::tls::Config::new,
-//!             libp2p::yamux::Config::default,
+//!             tcp::Config::default(),
+//!             noise::Config::new,
+//!             yamux::Config::default,
 //!         )?
 //!         .with_behaviour(|_| ping::Behaviour::default())?
 //!         .build();
@@ -199,24 +208,25 @@
 //! Thus, without any other behaviour in place, we would not be able to observe the pings.
 //!
 //! ```rust
-//! use libp2p::ping;
-//! use std::error::Error;
-//! use std::time::Duration;
+//! use std::{error::Error, time::Duration};
 //! use tracing_subscriber::EnvFilter;
+//! use libp2p::{noise, ping, tcp, yamux};
 //!
-//! #[async_std::main]
+//! #[tokio::main]
 //! async fn main() -> Result<(), Box<dyn Error>> {
-//!     tracing_subscriber::fmt().with_env_filter(EnvFilter::from_default_env()).init();
+//!     let _ = tracing_subscriber::fmt()
+//!         .with_env_filter(EnvFilter::from_default_env())
+//!         .try_init();
 //!
 //!     let mut swarm = libp2p::SwarmBuilder::with_new_identity()
-//!         .with_async_std()
+//!         .with_tokio()
 //!         .with_tcp(
-//!             libp2p::tcp::Config::default(),
-//!             libp2p::tls::Config::new,
-//!             libp2p::yamux::Config::default,
+//!             tcp::Config::default(),
+//!             noise::Config::new,
+//!             yamux::Config::default,
 //!         )?
 //!         .with_behaviour(|_| ping::Behaviour::default())?
-//!         .with_swarm_config(|cfg| cfg.with_idle_connection_timeout(Duration::from_secs(u64::MAX))) // Allows us to observe pings indefinitely.
+//!         .with_swarm_config(|cfg| cfg.with_idle_connection_timeout(Duration::from_secs(u64::MAX)))
 //!         .build();
 //!
 //!     Ok(())
@@ -250,24 +260,25 @@
 //! remote peer.
 //!
 //! ```rust
-//! use libp2p::{ping, Multiaddr};
-//! use std::error::Error;
-//! use std::time::Duration;
+//! use std::{error::Error, time::Duration};
 //! use tracing_subscriber::EnvFilter;
+//! use libp2p::{noise, ping, tcp, yamux, Multiaddr};
 //!
-//! #[async_std::main]
+//! #[tokio::main]
 //! async fn main() -> Result<(), Box<dyn Error>> {
-//!     tracing_subscriber::fmt().with_env_filter(EnvFilter::from_default_env()).init();
+//!     let _ = tracing_subscriber::fmt()
+//!         .with_env_filter(EnvFilter::from_default_env())
+//!         .try_init();
 //!
 //!     let mut swarm = libp2p::SwarmBuilder::with_new_identity()
-//!         .with_async_std()
+//!         .with_tokio()
 //!         .with_tcp(
-//!             libp2p::tcp::Config::default(),
-//!             libp2p::tls::Config::new,
-//!             libp2p::yamux::Config::default,
+//!             tcp::Config::default(),
+//!             noise::Config::new,
+//!             yamux::Config::default,
 //!         )?
 //!         .with_behaviour(|_| ping::Behaviour::default())?
-//!         .with_swarm_config(|cfg| cfg.with_idle_connection_timeout(Duration::from_secs(u64::MAX))) // Allows us to observe pings indefinitely..
+//!         .with_swarm_config(|cfg| cfg.with_idle_connection_timeout(Duration::from_secs(u64::MAX)))
 //!         .build();
 //!
 //!     // Tell the swarm to listen on all interfaces and a random, OS-assigned
@@ -293,26 +304,26 @@
 //! outgoing connection in case we specify an address on the CLI.
 //!
 //! ```no_run
-//! use futures::prelude::*;
-//! use libp2p::swarm::SwarmEvent;
-//! use libp2p::{ping, Multiaddr};
-//! use std::error::Error;
-//! use std::time::Duration;
+//! use std::{error::Error, time::Duration};
 //! use tracing_subscriber::EnvFilter;
+//! use libp2p::{noise, ping, tcp, yamux, Multiaddr, swarm::SwarmEvent};
+//! use futures::prelude::*;
 //!
-//! #[async_std::main]
+//! #[tokio::main]
 //! async fn main() -> Result<(), Box<dyn Error>> {
-//!     tracing_subscriber::fmt().with_env_filter(EnvFilter::from_default_env()).init();
+//!     let _ = tracing_subscriber::fmt()
+//!         .with_env_filter(EnvFilter::from_default_env())
+//!         .try_init();
 //!
 //!     let mut swarm = libp2p::SwarmBuilder::with_new_identity()
-//!         .with_async_std()
+//!         .with_tokio()
 //!         .with_tcp(
-//!             libp2p::tcp::Config::default(),
-//!             libp2p::tls::Config::new,
-//!             libp2p::yamux::Config::default,
+//!             tcp::Config::default(),
+//!             noise::Config::new,
+//!             yamux::Config::default,
 //!         )?
 //!         .with_behaviour(|_| ping::Behaviour::default())?
-//!         .with_swarm_config(|cfg| cfg.with_idle_connection_timeout(Duration::from_secs(u64::MAX))) // Allows us to observe pings indefinitely.
+//!         .with_swarm_config(|cfg| cfg.with_idle_connection_timeout(Duration::from_secs(u64::MAX)))
 //!         .build();
 //!
 //!     // Tell the swarm to listen on all interfaces and a random, OS-assigned
