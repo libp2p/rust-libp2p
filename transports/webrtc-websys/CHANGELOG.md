@@ -9,6 +9,8 @@
   See [PR 4959](https://github.com/libp2p/rust-libp2p/pull/4959).
 - Remove `libp2p_noise` from the public API.
   See [PR 4969](https://github.com/libp2p/rust-libp2p/pull/4969).
+- Bump version of web-sys and update `__Nonexhaustive` to `__Invalid`
+  See [PR]()   
 
 ## 0.2.0-alpha
 
