@@ -144,6 +144,7 @@ impl PollDataChannel {
                 return Poll::Ready(Err(io::ErrorKind::BrokenPipe.into()))
             }
             RtcDataChannelState::Open | RtcDataChannelState::__Invalid => {}
+            _ => {}
         }
 
         if self.overloaded.load(Ordering::SeqCst) {

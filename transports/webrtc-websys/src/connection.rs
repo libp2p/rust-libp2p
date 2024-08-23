@@ -186,11 +186,11 @@ impl RtcPeerConnection {
 
         let certificate = JsFuture::from(certificate_promise).await?;
 
-        let mut config = RtcConfiguration::default();
+        let config = RtcConfiguration::default();
         // wrap certificate in a js Array first before adding it to the config object
         let certificate_arr = js_sys::Array::new();
         certificate_arr.push(&certificate);
-        config.certificates(&certificate_arr);
+        config.set_certificates(&certificate_arr);
 
         let inner = web_sys::RtcPeerConnection::new_with_configuration(&config)?;
 
@@ -214,8 +214,9 @@ impl RtcPeerConnection {
 
         let dc = match negotiated {
             true => {
-                let mut options = RtcDataChannelInit::new();
-                options.negotiated(true).id(0); // id is only ever set to zero when negotiated is true
+                let options = RtcDataChannelInit::new();
+                options.set_negotiated(true);
+                options.set_id(0); // id is only ever set to zero when negotiated is true
 
                 self.inner
                     .create_data_channel_with_data_channel_dict(LABEL, &options)
