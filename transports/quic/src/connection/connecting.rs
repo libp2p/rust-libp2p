@@ -173,8 +173,7 @@ async fn webtransport_connecting(
                     let webtr_stream =
                         webtransport::accept_webtransport_stream(&arc_session).await?;
 
-                    let mut certs = HashSet::new();
-                    certs.insert(certhashes.first().unwrap().clone());
+                    let certs = certhashes.iter().cloned().collect::<HashSet<_>>();
                     let t_noise = noise_config.with_webtransport_certhashes(certs);
                     t_noise.upgrade_inbound(webtr_stream, "").await?;
 
