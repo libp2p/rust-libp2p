@@ -879,6 +879,8 @@ fn socketaddr_to_multiaddr(socket_addr: &SocketAddr, version: ProtocolVersion) -
 mod tests {
     use super::*;
     use futures::future::poll_fn;
+    use time::OffsetDateTime;
+    use crate::webtransport;
 
     #[test]
     fn multiaddr_to_udp_conversion() {
@@ -1025,6 +1027,65 @@ mod tests {
                         matches!(listen_addr.iter().nth(1), Some(Protocol::Udp(port)) if port != 0)
                     );
                     assert!(matches!(listen_addr.iter().nth(2), Some(Protocol::QuicV1)));
+                }
+                e => panic!("Unexpected event: {e:?}"),
+            }
+            assert!(transport.remove_listener(id), "Expect listener to exist.");
+            match poll_fn(|cx| Pin::new(&mut transport).as_mut().poll(cx)).await {
+                TransportEvent::ListenerClosed {
+                    listener_id,
+                    reason: Ok(()),
+                } => {
+                    assert_eq!(listener_id, id);
+                }
+                e => panic!("Unexpected event: {e:?}"),
+            }
+            // Poll once again so that the listener has the chance to return `Poll::Ready(None)` and
+            // be removed from the list of listeners.
+            assert!(poll_fn(|cx| Pin::new(&mut transport).as_mut().poll(cx))
+                .now_or_never()
+                .is_none());
+            assert!(transport.listeners.is_empty());
+        }
+    }
+
+    #[cfg(feature = "async-std")]
+    #[async_std::test]
+    async fn test_close_webtransport_listener() {
+        let keypair = libp2p_identity::Keypair::generate_ed25519();
+        let not_before = OffsetDateTime::now_utc();
+        let cert = webtransport::Certificate::generate(&keypair, not_before)
+            .expect("Certificate generation");
+        let certhash = cert.cert_hash();
+        let config = Config::new(&keypair, Some(cert));
+        let mut transport = crate::async_std::Transport::new(config);
+        assert!(poll_fn(|cx| Pin::new(&mut transport).as_mut().poll(cx))
+            .now_or_never()
+            .is_none());
+
+        // Run test twice to check that there is no unexpected behaviour if `Transport.listener`
+        // is temporarily empty.
+        for _ in 0..2 {
+            let id = ListenerId::next();
+            transport
+                .listen_on(id, "/ip4/0.0.0.0/udp/0/quic-v1/webtransport".parse().unwrap())
+                .unwrap();
+
+            match poll_fn(|cx| Pin::new(&mut transport).as_mut().poll(cx)).await {
+                TransportEvent::NewAddress {
+                    listener_id,
+                    listen_addr,
+                } => {
+                    assert_eq!(listener_id, id);
+                    assert!(
+                        matches!(listen_addr.iter().next(), Some(Protocol::Ip4(a)) if !a.is_unspecified())
+                    );
+                    assert!(
+                        matches!(listen_addr.iter().nth(1), Some(Protocol::Udp(port)) if port != 0)
+                    );
+                    assert!(matches!(listen_addr.iter().nth(2), Some(Protocol::QuicV1)));
+                    assert!(matches!(listen_addr.iter().nth(3), Some(Protocol::WebTransport)));
+                    assert!(matches!(listen_addr.iter().nth(4), Some(Protocol::Certhash(h)) if h == certhash));
                 }
                 e => panic!("Unexpected event: {e:?}"),
             }
