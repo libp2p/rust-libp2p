@@ -878,9 +878,9 @@ fn socketaddr_to_multiaddr(socket_addr: &SocketAddr, version: ProtocolVersion) -
 #[cfg(any(feature = "async-std", feature = "tokio"))]
 mod tests {
     use super::*;
+    use crate::webtransport;
     use futures::future::poll_fn;
     use time::OffsetDateTime;
-    use crate::webtransport;
 
     #[test]
     fn multiaddr_to_udp_conversion() {
@@ -1068,7 +1068,10 @@ mod tests {
         for _ in 0..2 {
             let id = ListenerId::next();
             transport
-                .listen_on(id, "/ip4/0.0.0.0/udp/0/quic-v1/webtransport".parse().unwrap())
+                .listen_on(
+                    id,
+                    "/ip4/0.0.0.0/udp/0/quic-v1/webtransport".parse().unwrap(),
+                )
                 .unwrap();
 
             match poll_fn(|cx| Pin::new(&mut transport).as_mut().poll(cx)).await {
@@ -1084,8 +1087,13 @@ mod tests {
                         matches!(listen_addr.iter().nth(1), Some(Protocol::Udp(port)) if port != 0)
                     );
                     assert!(matches!(listen_addr.iter().nth(2), Some(Protocol::QuicV1)));
-                    assert!(matches!(listen_addr.iter().nth(3), Some(Protocol::WebTransport)));
-                    assert!(matches!(listen_addr.iter().nth(4), Some(Protocol::Certhash(h)) if h == certhash));
+                    assert!(matches!(
+                        listen_addr.iter().nth(3),
+                        Some(Protocol::WebTransport)
+                    ));
+                    assert!(
+                        matches!(listen_addr.iter().nth(4), Some(Protocol::Certhash(h)) if h == certhash)
+                    );
                 }
                 e => panic!("Unexpected event: {e:?}"),
             }
