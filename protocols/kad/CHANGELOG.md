@@ -1,7 +1,10 @@
-## 0.46.1
+## 0.46.2
 
 - Emit `ToSwarm::NewExternalAddrOfPeer`.
   See [PR 5549](https://github.com/libp2p/rust-libp2p/pull/5549)
+
+## 0.46.1
+
 - Use new provider record update strategy to prevent Sybil attack.
   See [PR 5536](https://github.com/libp2p/rust-libp2p/pull/5536).
 
