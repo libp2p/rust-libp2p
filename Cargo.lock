@@ -3509,7 +3509,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-webrtc-websys"
-version = "0.4.0-alpha"
+version = "0.4.0-alpha.2"
 dependencies = [
  "bytes",
  "futures",
