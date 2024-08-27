@@ -20,7 +20,7 @@
 
 use std::task::{Context, Poll};
 
-use libp2p_core::{Endpoint, Multiaddr};
+use libp2p_core::{transport::PortUse, Endpoint, Multiaddr};
 use libp2p_identity::PeerId;
 use libp2p_swarm::{
     dummy, ConnectionDenied, ConnectionId, FromSwarm, NetworkBehaviour, THandler, THandlerInEvent,
@@ -102,6 +102,7 @@ impl<const MEM_PENDING: usize, const MEM_ESTABLISHED: usize> NetworkBehaviour
         _: PeerId,
         _: &Multiaddr,
         _: Endpoint,
+        _: PortUse,
     ) -> Result<THandler<Self>, ConnectionDenied> {
         self.handle_established();
         Ok(dummy::ConnectionHandler)

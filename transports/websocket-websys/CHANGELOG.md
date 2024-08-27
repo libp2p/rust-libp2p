@@ -1,3 +1,10 @@
+## 0.4.0
+
+- Implement refactored `Transport`.
+  See [PR 4568](https://github.com/libp2p/rust-libp2p/pull/4568)
+- Add support for `/tls/ws` and keep `/wss` backward compatible.
+  See [PR 5523](https://github.com/libp2p/rust-libp2p/pull/5523).
+
 ## 0.3.3
 
 - Fix use-after-free handler invocation from JS side.

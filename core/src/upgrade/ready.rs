@@ -31,7 +31,7 @@ pub struct ReadyUpgrade<P> {
 }
 
 impl<P> ReadyUpgrade<P> {
-    pub fn new(protocol_name: P) -> Self {
+    pub const fn new(protocol_name: P) -> Self {
         Self { protocol_name }
     }
 }

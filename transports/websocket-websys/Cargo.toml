@@ -3,7 +3,7 @@ name = "libp2p-websocket-websys"
 edition = "2021"
 rust-version = "1.60.0"
 description = "WebSocket for libp2p under WASM environment"
-version = "0.3.3"
+version = "0.4.0"
 authors = ["Vince Vasta <vince.vasta@gmail.com>"]
 license = "MIT"
 repository = "https://github.com/libp2p/rust-libp2p"
@@ -26,8 +26,6 @@ web-sys = { version = "0.3.69", features = ["BinaryType", "CloseEvent", "Message
 # More information: https://docs.rs/about/builds#cross-compiling
 [package.metadata.docs.rs]
 all-features = true
-rustdoc-args = ["--cfg", "docsrs"]
-rustc-args = ["--cfg", "docsrs"]
 
 [dev-dependencies]
 libp2p-yamux = { workspace = true }

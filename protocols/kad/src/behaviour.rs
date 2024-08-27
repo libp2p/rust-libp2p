@@ -24,7 +24,7 @@ mod test;
 
 use crate::addresses::Addresses;
 use crate::handler::{Handler, HandlerEvent, HandlerIn, RequestId};
-use crate::kbucket::{self, Distance, KBucketsTable, NodeStatus};
+use crate::kbucket::{self, Distance, KBucketConfig, KBucketsTable, NodeStatus};
 use crate::protocol::{ConnectionType, KadPeer, ProtocolConfig};
 use crate::query::{Query, QueryConfig, QueryId, QueryPool, QueryPoolState};
 use crate::record::{
@@ -35,7 +35,7 @@ use crate::record::{
 use crate::{bootstrap, K_VALUE};
 use crate::{jobs::*, protocol};
 use fnv::FnvHashSet;
-use libp2p_core::{ConnectedPoint, Endpoint, Multiaddr};
+use libp2p_core::{transport::PortUse, ConnectedPoint, Endpoint, Multiaddr};
 use libp2p_identity::PeerId;
 use libp2p_swarm::behaviour::{
     AddressChange, ConnectionClosed, ConnectionEstablished, DialFailure, FromSwarm,
@@ -172,7 +172,7 @@ pub enum StoreInserts {
 /// The configuration is consumed by [`Behaviour::new`].
 #[derive(Debug, Clone)]
 pub struct Config {
-    kbucket_pending_timeout: Duration,
+    kbucket_config: KBucketConfig,
     query_config: QueryConfig,
     protocol_config: ProtocolConfig,
     record_ttl: Option<Duration>,
@@ -215,7 +215,7 @@ impl Config {
     /// Builds a new `Config` with the given protocol name.
     pub fn new(protocol_name: StreamProtocol) -> Self {
         Config {
-            kbucket_pending_timeout: Duration::from_secs(60),
+            kbucket_config: KBucketConfig::default(),
             query_config: QueryConfig::default(),
             protocol_config: ProtocolConfig::new(protocol_name),
             record_ttl: Some(Duration::from_secs(48 * 60 * 60)),
@@ -424,6 +424,24 @@ impl Config {
         self
     }
 
+    /// Sets the configuration for the k-buckets.
+    ///
+    /// * Default to K_VALUE.
+    pub fn set_kbucket_size(&mut self, size: NonZeroUsize) -> &mut Self {
+        self.kbucket_config.set_bucket_size(size);
+        self
+    }
+
+    /// Sets the timeout duration after creation of a pending entry after which
+    /// it becomes eligible for insertion into a full bucket, replacing the
+    /// least-recently (dis)connected node.
+    ///
+    /// * Default to `60` s.
+    pub fn set_kbucket_pending_timeout(&mut self, timeout: Duration) -> &mut Self {
+        self.kbucket_config.set_pending_timeout(timeout);
+        self
+    }
+
     /// Sets the time to wait before calling [`Behaviour::bootstrap`] after a new peer is inserted in the routing table.
     /// This prevent cascading bootstrap requests when multiple peers are inserted into the routing table "at the same time".
     /// This also allows to wait a little bit for other potential peers to be inserted into the routing table before
@@ -481,7 +499,7 @@ where
         Behaviour {
             store,
             caching: config.caching,
-            kbuckets: KBucketsTable::new(local_key, config.kbucket_pending_timeout),
+            kbuckets: KBucketsTable::new(local_key, config.kbucket_config),
             kbucket_inserts: config.kbucket_inserts,
             protocol_config: config.protocol_config,
             record_filtering: config.record_filtering,
@@ -2168,10 +2186,12 @@ where
         peer: PeerId,
         addr: &Multiaddr,
         role_override: Endpoint,
+        port_use: PortUse,
     ) -> Result<THandler<Self>, ConnectionDenied> {
         let connected_point = ConnectedPoint::Dialer {
             address: addr.clone(),
             role_override,
+            port_use,
         };
 
         let mut handler = Handler::new(
@@ -2542,13 +2562,19 @@ where
             // Drain applied pending entries from the routing table.
             if let Some(entry) = self.kbuckets.take_applied_pending() {
                 let kbucket::Node { key, value } = entry.inserted;
+                let peer_id = key.into_preimage();
+                self.queued_events
+                    .push_back(ToSwarm::NewExternalAddrOfPeer {
+                        peer_id,
+                        address: value.first().clone(),
+                    });
                 let event = Event::RoutingUpdated {
                     bucket_range: self
                         .kbuckets
                         .bucket(&key)
                         .map(|b| b.range())
                         .expect("Self to never be applied from pending."),
-                    peer: key.into_preimage(),
+                    peer: peer_id,
                     is_new_peer: true,
                     addresses: value,
                     old_peer: entry.evicted.map(|n| n.key.into_preimage()),

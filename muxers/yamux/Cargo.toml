@@ -3,7 +3,7 @@ name = "libp2p-yamux"
 edition = "2021"
 rust-version = { workspace = true }
 description = "Yamux multiplexing protocol for libp2p"
-version = "0.45.2"
+version = "0.46.0"
 authors = ["Parity Technologies <admin@parity.io>"]
 license = "MIT"
 repository = "https://github.com/libp2p/rust-libp2p"
@@ -27,8 +27,6 @@ libp2p-muxer-test-harness = { path = "../test-harness" }
 # More information: https://docs.rs/about/builds#cross-compiling
 [package.metadata.docs.rs]
 all-features = true
-rustdoc-args = ["--cfg", "docsrs"]
-rustc-args = ["--cfg", "docsrs"]
 
 [lints]
 workspace = true
