@@ -2,7 +2,7 @@
 
 - Implement refactored `Transport`.
   See [PR 4568](https://github.com/libp2p/rust-libp2p/pull/4568)
-- Bump version of web-sys and wasm-bindgen
+- Bump version of web-sys and wasm-bindgen.
   See [PR 5569](https://github.com/libp2p/rust-libp2p/pull/5569) 
 
 ## 0.3.0
