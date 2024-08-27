@@ -86,7 +86,7 @@ libp2p-floodsub = { version = "0.45.0", path = "protocols/floodsub" }
 libp2p-gossipsub = { version = "0.47.0", path = "protocols/gossipsub" }
 libp2p-identify = { version = "0.45.0", path = "protocols/identify" }
 libp2p-identity = { version = "0.2.9" }
-libp2p-kad = { version = "0.46.2", path = "protocols/kad" }
+libp2p-kad = { version = "0.47.0", path = "protocols/kad" }
 libp2p-mdns = { version = "0.46.0", path = "protocols/mdns" }
 libp2p-memory-connection-limits = { version = "0.3.0", path = "misc/memory-connection-limits" }
 libp2p-metrics = { version = "0.15.0", path = "misc/metrics" }
@@ -111,7 +111,7 @@ libp2p-uds = { version = "0.41.0", path = "transports/uds" }
 libp2p-upnp = { version = "0.3.0", path = "protocols/upnp" }
 libp2p-webrtc = { version = "0.8.0-alpha", path = "transports/webrtc" }
 libp2p-webrtc-utils = { version = "0.3.0", path = "misc/webrtc-utils" }
-libp2p-webrtc-websys = { version = "0.4.0-alpha", path = "transports/webrtc-websys" }
+libp2p-webrtc-websys = { version = "0.4.0-alpha.2", path = "transports/webrtc-websys" }
 libp2p-websocket = { version = "0.44.0", path = "transports/websocket" }
 libp2p-websocket-websys = { version = "0.4.0", path = "transports/websocket-websys" }
 libp2p-webtransport-websys = { version = "0.4.0", path = "transports/webtransport-websys" }
