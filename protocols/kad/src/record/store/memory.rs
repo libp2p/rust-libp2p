@@ -152,38 +152,31 @@ impl RecordStore for MemoryStore {
         }
         .or_insert_with(Default::default);
 
-        if let Some(i) = providers.iter().position(|p| p.provider == record.provider) {
-            // In-place update of an existing provider record.
-            providers.as_mut()[i] = record;
-        } else {
-            // It is a new provider record for that key.
-            let local_key = self.local_key;
-            let key = kbucket::Key::new(record.key.clone());
-            let provider = kbucket::Key::from(record.provider);
-            if let Some(i) = providers.iter().position(|p| {
-                let pk = kbucket::Key::from(p.provider);
-                provider.distance(&key) < pk.distance(&key)
-            }) {
-                // Insert the new provider.
-                if local_key.preimage() == &record.provider {
+        for p in providers.iter_mut() {
+            if p.provider == record.provider {
+                // In-place update of an existing provider record.
+                if self.local_key.preimage() == &record.provider {
+                    self.provided.remove(p);
                     self.provided.insert(record.clone());
                 }
-                providers.insert(i, record);
-                // Remove the excess provider, if any.
-                if providers.len() > self.config.max_providers_per_key {
-                    if let Some(p) = providers.pop() {
-                        self.provided.remove(&p);
-                    }
-                }
-            } else if providers.len() < self.config.max_providers_per_key {
-                // The distance of the new provider to the key is larger than
-                // the distance of any existing provider, but there is still room.
-                if local_key.preimage() == &record.provider {
-                    self.provided.insert(record.clone());
-                }
-                providers.push(record);
+                *p = record;
+                return Ok(());
             }
         }
+
+        // If the providers list is full, we ignore the new provider.
+        // This strategy can mitigate Sybil attacks, in which an attacker
+        // floods the network with fake provider records.
+        if providers.len() == self.config.max_providers_per_key {
+            return Ok(());
+        }
+
+        // Otherwise, insert the new provider record.
+        if self.local_key.preimage() == &record.provider {
+            self.provided.insert(record.clone());
+        }
+        providers.push(record);
+
         Ok(())
     }
 
@@ -202,7 +195,9 @@ impl RecordStore for MemoryStore {
             let providers = e.get_mut();
             if let Some(i) = providers.iter().position(|p| &p.provider == provider) {
                 let p = providers.remove(i);
-                self.provided.remove(&p);
+                if &p.provider == self.local_key.preimage() {
+                    self.provided.remove(&p);
+                }
             }
             if providers.is_empty() {
                 e.remove();
@@ -221,11 +216,6 @@ mod tests {
     fn random_multihash() -> Multihash<64> {
         Multihash::wrap(SHA_256_MH, &rand::thread_rng().gen::<[u8; 32]>()).unwrap()
     }
-
-    fn distance(r: &ProviderRecord) -> kbucket::Distance {
-        kbucket::Key::new(r.key.clone()).distance(&kbucket::Key::from(r.provider))
-    }
-
     #[test]
     fn put_get_remove_record() {
         fn prop(r: Record) {
@@ -248,30 +238,6 @@ mod tests {
             assert!(!store.providers(&r.key).contains(&r));
         }
         quickcheck(prop as fn(_))
-    }
-
-    #[test]
-    fn providers_ordered_by_distance_to_key() {
-        fn prop(providers: Vec<kbucket::Key<PeerId>>) -> bool {
-            let mut store = MemoryStore::new(PeerId::random());
-            let key = Key::from(random_multihash());
-
-            let mut records = providers
-                .into_iter()
-                .map(|p| ProviderRecord::new(key.clone(), p.into_preimage(), Vec::new()))
-                .collect::<Vec<_>>();
-
-            for r in &records {
-                assert!(store.add_provider(r.clone()).is_ok());
-            }
-
-            records.sort_by_key(distance);
-            records.truncate(store.config.max_providers_per_key);
-
-            records == store.providers(&key).to_vec()
-        }
-
-        quickcheck(prop as fn(_) -> _)
     }
 
     #[test]
@@ -300,6 +266,46 @@ mod tests {
         rec.expires = Some(Instant::now());
         assert!(store.add_provider(rec.clone()).is_ok());
         assert_eq!(vec![rec.clone()], store.providers(&rec.key).to_vec());
+    }
+
+    #[test]
+    fn update_provided() {
+        let prv = PeerId::random();
+        let mut store = MemoryStore::new(prv);
+        let key = random_multihash();
+        let mut rec = ProviderRecord::new(key, prv, Vec::new());
+        assert!(store.add_provider(rec.clone()).is_ok());
+        assert_eq!(
+            vec![Cow::Borrowed(&rec)],
+            store.provided().collect::<Vec<_>>()
+        );
+        rec.expires = Some(Instant::now());
+        assert!(store.add_provider(rec.clone()).is_ok());
+        assert_eq!(
+            vec![Cow::Borrowed(&rec)],
+            store.provided().collect::<Vec<_>>()
+        );
+    }
+
+    #[test]
+    fn max_providers_per_key() {
+        let config = MemoryStoreConfig::default();
+        let key = kbucket::Key::new(Key::from(random_multihash()));
+
+        let mut store = MemoryStore::with_config(PeerId::random(), config.clone());
+        let peers = (0..config.max_providers_per_key)
+            .map(|_| PeerId::random())
+            .collect::<Vec<_>>();
+        for peer in peers {
+            let rec = ProviderRecord::new(key.preimage().clone(), peer, Vec::new());
+            assert!(store.add_provider(rec).is_ok());
+        }
+
+        // The new provider cannot be added because the key is already saturated.
+        let peer = PeerId::random();
+        let rec = ProviderRecord::new(key.preimage().clone(), peer, Vec::new());
+        assert!(store.add_provider(rec.clone()).is_ok());
+        assert!(!store.providers(&rec.key).contains(&rec));
     }
 
     #[test]

@@ -75,7 +75,7 @@ rust-version = "1.75.0"
 asynchronous-codec = { version = "0.7.0" }
 futures-bounded = { version = "0.2.4" }
 futures-rustls = { version = "0.26.0", default-features = false }
-libp2p = { version = "0.54.0", path = "libp2p" }
+libp2p = { version = "0.54.1", path = "libp2p" }
 libp2p-allow-block-list = { version = "0.4.0", path = "misc/allow-block-list" }
 libp2p-autonat = { version = "0.13.0", path = "protocols/autonat" }
 libp2p-connection-limits = { version = "0.4.0", path = "misc/connection-limits" }
@@ -86,10 +86,10 @@ libp2p-floodsub = { version = "0.45.0", path = "protocols/floodsub" }
 libp2p-gossipsub = { version = "0.47.0", path = "protocols/gossipsub" }
 libp2p-identify = { version = "0.45.0", path = "protocols/identify" }
 libp2p-identity = { version = "0.2.9" }
-libp2p-kad = { version = "0.46.0", path = "protocols/kad" }
+libp2p-kad = { version = "0.46.2", path = "protocols/kad" }
 libp2p-mdns = { version = "0.46.0", path = "protocols/mdns" }
 libp2p-memory-connection-limits = { version = "0.3.0", path = "misc/memory-connection-limits" }
-libp2p-metrics = { version = "0.14.2", path = "misc/metrics" }
+libp2p-metrics = { version = "0.15.0", path = "misc/metrics" }
 libp2p-mplex = { version = "0.42.0", path = "muxers/mplex" }
 libp2p-noise = { version = "0.45.0", path = "transports/noise" }
 libp2p-perf = { version = "0.4.0", path = "protocols/perf" }

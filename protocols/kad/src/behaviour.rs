@@ -2562,13 +2562,19 @@ where
             // Drain applied pending entries from the routing table.
             if let Some(entry) = self.kbuckets.take_applied_pending() {
                 let kbucket::Node { key, value } = entry.inserted;
+                let peer_id = key.into_preimage();
+                self.queued_events
+                    .push_back(ToSwarm::NewExternalAddrOfPeer {
+                        peer_id,
+                        address: value.first().clone(),
+                    });
                 let event = Event::RoutingUpdated {
                     bucket_range: self
                         .kbuckets
                         .bucket(&key)
                         .map(|b| b.range())
                         .expect("Self to never be applied from pending."),
-                    peer: key.into_preimage(),
+                    peer: peer_id,
                     is_new_peer: true,
                     addresses: value,
                     old_peer: entry.evicted.map(|n| n.key.into_preimage()),
