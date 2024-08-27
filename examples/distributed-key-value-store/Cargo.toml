@@ -9,10 +9,9 @@ license = "MIT"
 release = false
 
 [dependencies]
-async-std = { version = "1.12", features = ["attributes"] }
-async-trait = "0.1"
+tokio = { version = "1.37.0", features = ["full"] }
 futures = { workspace = true }
-libp2p = { path = "../../libp2p", features = [ "async-std", "dns", "kad", "mdns", "noise", "macros", "tcp", "yamux"] }
+libp2p = { path = "../../libp2p", features = [ "tokio", "dns", "kad", "mdns", "noise", "macros", "tcp", "yamux"] }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true, features = ["env-filter"] }
 
