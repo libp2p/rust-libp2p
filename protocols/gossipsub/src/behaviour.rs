@@ -34,7 +34,9 @@ use futures_ticker::Ticker;
 use prometheus_client::registry::Registry;
 use rand::{seq::SliceRandom, thread_rng};
 
-use libp2p_core::{multiaddr::Protocol::Ip4, multiaddr::Protocol::Ip6, Endpoint, Multiaddr};
+use libp2p_core::{
+    multiaddr::Protocol::Ip4, multiaddr::Protocol::Ip6, transport::PortUse, Endpoint, Multiaddr,
+};
 use libp2p_identity::Keypair;
 use libp2p_identity::PeerId;
 use libp2p_swarm::{
@@ -3012,6 +3014,7 @@ where
         _: PeerId,
         _: &Multiaddr,
         _: Endpoint,
+        _: PortUse,
     ) -> Result<THandler<Self>, ConnectionDenied> {
         Ok(Handler::new(self.config.protocol_config()))
     }

@@ -179,8 +179,7 @@ pub(crate) mod native {
 
         pub(crate) async fn rpush(&self, key: &str, value: String) -> Result<()> {
             let mut conn = self.0.get_async_connection().await?;
-            conn.rpush(key, value).await?;
-            Ok(())
+            conn.rpush(key, value).await.map_err(Into::into)
         }
     }
 }
@@ -246,7 +245,7 @@ pub(crate) mod wasm {
                     .with_behaviour(behaviour_constructor)?
                     .with_swarm_config(|c| c.with_idle_connection_timeout(Duration::from_secs(5)))
                     .build(),
-                format!("/ip4/{ip}/tcp/0/wss"),
+                format!("/ip4/{ip}/tcp/0/tls/ws"),
             ),
             (Transport::Ws, Some(SecProtocol::Noise), Some(Muxer::Yamux)) => (
                 libp2p::SwarmBuilder::with_new_identity()
@@ -263,7 +262,7 @@ pub(crate) mod wasm {
                     .with_behaviour(behaviour_constructor)?
                     .with_swarm_config(|c| c.with_idle_connection_timeout(Duration::from_secs(5)))
                     .build(),
-                format!("/ip4/{ip}/tcp/0/wss"),
+                format!("/ip4/{ip}/tcp/0/tls/ws"),
             ),
             (Transport::WebRtcDirect, None, None) => (
                 libp2p::SwarmBuilder::with_new_identity()

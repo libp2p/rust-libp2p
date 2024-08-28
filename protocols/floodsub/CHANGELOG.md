@@ -1,3 +1,7 @@
+## 0.45.0
+
+<!-- Update to libp2p-swarm v0.45.0 -->
+
 ## 0.44.0
 
 - Change publish to require `data: impl Into<Bytes>` to internally avoid any costly cloning / allocation.

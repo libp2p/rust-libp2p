@@ -8,4 +8,4 @@ Before you run the tests you need to install the following:
 
 # Run tests
 
-Just call `run-all.sh` or `run.sh` in the test directory you are interested.
+Just call `run-all.sh` or `run.sh` in the test directory if you are interested.

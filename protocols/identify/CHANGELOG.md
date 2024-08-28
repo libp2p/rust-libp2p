@@ -1,5 +1,10 @@
 ## 0.45.0
 
+- Address translation is moved here from `libp2p-core`.
+  See [PR 4568](https://github.com/libp2p/rust-libp2p/pull/4568)
+
+<!-- Update to libp2p-swarm v0.45.0 -->
+
 - Add `ConnectionId` in `Event`.
   See [PR 4981](https://github.com/libp2p/rust-libp2p/pull/4981).
 - Add `hide_listen_addrs` option to prevent leaking (local) listen addresses.

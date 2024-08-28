@@ -3,7 +3,7 @@ name = "libp2p-swarm-derive"
 edition = "2021"
 rust-version = { workspace = true }
 description = "Procedural macros of libp2p-swarm"
-version = "0.34.2"
+version = "0.35.0"
 authors = ["Parity Technologies <admin@parity.io>"]
 license = "MIT"
 repository = "https://github.com/libp2p/rust-libp2p"
@@ -23,8 +23,6 @@ proc-macro2 = "1.0"
 # More information: https://docs.rs/about/builds#cross-compiling
 [package.metadata.docs.rs]
 all-features = true
-rustdoc-args = ["--cfg", "docsrs"]
-rustc-args = ["--cfg", "docsrs"]
 
 [lints]
 workspace = true

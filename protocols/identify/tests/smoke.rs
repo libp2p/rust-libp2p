@@ -1,5 +1,4 @@
 use futures::StreamExt;
-use libp2p_core::multiaddr::Protocol;
 use libp2p_identify as identify;
 use libp2p_swarm::{Swarm, SwarmEvent};
 use libp2p_swarm_test::SwarmExt;
@@ -59,12 +58,7 @@ async fn periodic_identify() {
             assert_eq!(s1_info.protocol_version, "c");
             assert_eq!(s1_info.agent_version, "d");
             assert!(!s1_info.protocols.is_empty());
-            assert_eq!(
-                s1_info.observed_addr,
-                swarm1_memory_listen
-                    .clone()
-                    .with(Protocol::P2p(swarm1_peer_id))
-            );
+            assert_eq!(s1_info.observed_addr, swarm1_memory_listen);
             assert!(s1_info.listen_addrs.contains(&swarm2_tcp_listen_addr));
             assert!(s1_info.listen_addrs.contains(&swarm2_memory_listen));
 

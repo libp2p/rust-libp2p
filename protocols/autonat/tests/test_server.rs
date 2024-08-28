@@ -92,6 +92,7 @@ async fn test_dial_back() {
                     ConnectedPoint::Dialer {
                         address,
                         role_override: Endpoint::Dialer,
+                        ..
                     },
                 num_established,
                 concurrent_dial_errors,
@@ -300,6 +301,7 @@ async fn test_dial_multiple_addr() {
                     ConnectedPoint::Dialer {
                         address,
                         role_override: Endpoint::Dialer,
+                        ..
                     },
                 concurrent_dial_errors,
                 ..
