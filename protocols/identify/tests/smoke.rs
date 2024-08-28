@@ -1,9 +1,10 @@
 use futures::StreamExt;
 use libp2p_identify as identify;
-use libp2p_swarm::{Swarm, SwarmEvent};
+use libp2p_swarm::{PeerAddressesConfig, Swarm, SwarmEvent};
 use libp2p_swarm_test::SwarmExt;
 use std::collections::HashSet;
 use std::iter;
+use std::num::NonZeroUsize;
 use std::time::{Duration, Instant};
 use tracing_subscriber::EnvFilter;
 
@@ -161,7 +162,10 @@ async fn emits_unique_listen_addresses() {
             identify::Config::new("a".to_string(), identity.public())
                 .with_agent_version("b".to_string())
                 .with_interval(Duration::from_secs(1))
-                .with_cache_size(10),
+                .with_cache_config(Some(PeerAddressesConfig {
+                    number_of_peers: NonZeroUsize::new(10).expect("10 != 0"),
+                    ..Default::default()
+                })),
         )
     });
     let mut swarm2 = Swarm::new_ephemeral(|identity| {

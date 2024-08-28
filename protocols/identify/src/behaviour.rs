@@ -28,13 +28,12 @@ use libp2p_identity::PublicKey;
 use libp2p_swarm::behaviour::{ConnectionClosed, ConnectionEstablished, DialFailure, FromSwarm};
 use libp2p_swarm::{
     ConnectionDenied, DialError, ExternalAddresses, ListenAddresses, NetworkBehaviour,
-    NotifyHandler, PeerAddresses, StreamUpgradeError, THandlerInEvent, ToSwarm,
-    _address_translation,
+    NotifyHandler, PeerAddresses, PeerAddressesConfig, StreamUpgradeError, THandlerInEvent,
+    ToSwarm, _address_translation,
 };
 use libp2p_swarm::{ConnectionId, THandler, THandlerOutEvent};
 
 use std::collections::hash_map::Entry;
-use std::num::NonZeroUsize;
 use std::{
     collections::{HashMap, HashSet, VecDeque},
     task::Context,
@@ -142,11 +141,8 @@ pub struct Config {
     /// Disabled by default.
     pub push_listen_addr_updates: bool,
 
-    /// How many entries of discovered peers to keep before we discard
-    /// the least-recently used one.
-    ///
-    /// Disabled by default.
-    pub cache_size: usize,
+    /// Configuration for the LRU cache of discovered peers.
+    pub cache_config: Option<PeerAddressesConfig>,
 }
 
 impl Config {
@@ -159,7 +155,7 @@ impl Config {
             local_public_key,
             interval: Duration::from_secs(5 * 60),
             push_listen_addr_updates: false,
-            cache_size: 100,
+            cache_config: Some(Default::default()),
         }
     }
 
@@ -184,9 +180,11 @@ impl Config {
         self
     }
 
-    /// Configures the size of the LRU cache, caching addresses of discovered peers.
-    pub fn with_cache_size(mut self, cache_size: usize) -> Self {
-        self.cache_size = cache_size;
+    /// Configuration for the LRU cache responsible for caching addresses of discovered peers.
+    ///
+    /// If set to [`None`], caching is disabled.
+    pub fn with_cache_config(mut self, cache_config: Option<PeerAddressesConfig>) -> Self {
+        self.cache_config = cache_config;
         self
     }
 }
@@ -194,10 +192,7 @@ impl Config {
 impl Behaviour {
     /// Creates a new identify [`Behaviour`].
     pub fn new(config: Config) -> Self {
-        let discovered_peers = match NonZeroUsize::new(config.cache_size) {
-            None => PeerCache::disabled(),
-            Some(size) => PeerCache::enabled(size),
-        };
+        let discovered_peers = PeerCache::new(config.cache_config.clone());
 
         Self {
             config,
@@ -602,12 +597,8 @@ fn multiaddr_matches_peer_id(addr: &Multiaddr, peer_id: &PeerId) -> bool {
 struct PeerCache(Option<PeerAddresses>);
 
 impl PeerCache {
-    fn disabled() -> Self {
-        Self(None)
-    }
-
-    fn enabled(size: NonZeroUsize) -> Self {
-        Self(Some(PeerAddresses::new(size)))
+    fn new(cache_config: Option<PeerAddressesConfig>) -> Self {
+        Self(cache_config.map(PeerAddresses::new))
     }
 
     fn get(&mut self, peer: &PeerId) -> Vec<Multiaddr> {

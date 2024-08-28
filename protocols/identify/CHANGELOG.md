@@ -1,3 +1,8 @@
+## 0.46.0
+
+- Update to the new `PeerAddresses` API with `PeerAddressesConfig`, changing `with_cache_size` to `with_cache_config`.
+  See [PR 5574](https://github.com/libp2p/rust-libp2p/pull/5574).
+
 ## 0.45.0
 
 - Address translation is moved here from `libp2p-core`.

@@ -8,16 +8,39 @@ use lru::LruCache;
 
 use std::num::NonZeroUsize;
 
+#[derive(Debug, Clone)]
+/// Configuration of a [`PeerAddresses`] instance.
+pub struct PeerAddressesConfig {
+    /// Capacity of the [`PeerAddresses`] cache.
+    pub number_of_peers: NonZeroUsize,
+
+    /// Maximum number of cached addresses per peer.
+    pub number_of_addresses_by_peer: NonZeroUsize,
+}
+
+impl Default for PeerAddressesConfig {
+    fn default() -> Self {
+        Self {
+            number_of_peers: NonZeroUsize::new(100).expect("100 != 0"),
+            number_of_addresses_by_peer: NonZeroUsize::new(10).expect("10 != 0"),
+        }
+    }
+}
+
 /// Struct for tracking peers' external addresses of the [`Swarm`](crate::Swarm).
 #[derive(Debug)]
-pub struct PeerAddresses(LruCache<PeerId, LruCache<Multiaddr, ()>>);
+pub struct PeerAddresses {
+    config: PeerAddressesConfig,
+    inner: LruCache<PeerId, LruCache<Multiaddr, ()>>,
+}
 
 impl PeerAddresses {
     /// Creates a [`PeerAddresses`] cache with capacity for the given number of peers.
     ///
-    /// For each peer, we will at most store 10 addresses.
-    pub fn new(number_of_peers: NonZeroUsize) -> Self {
-        Self(LruCache::new(number_of_peers))
+    /// For each peer, we will at most store `config.number_of_addresses_by_peer` addresses.
+    pub fn new(config: PeerAddressesConfig) -> Self {
+        let inner = LruCache::new(config.number_of_peers);
+        Self { config, inner }
     }
 
     /// Feed a [`FromSwarm`] event to this struct.
@@ -50,12 +73,12 @@ impl PeerAddresses {
     pub fn add(&mut self, peer: PeerId, address: Multiaddr) -> bool {
         match prepare_addr(&peer, &address) {
             Ok(address) => {
-                if let Some(cached) = self.0.get_mut(&peer) {
+                if let Some(cached) = self.inner.get_mut(&peer) {
                     cached.put(address, ()).is_none()
                 } else {
-                    let mut set = LruCache::new(NonZeroUsize::new(10).expect("10 > 0"));
+                    let mut set = LruCache::new(self.config.number_of_addresses_by_peer);
                     set.put(address, ());
-                    self.0.put(peer, set);
+                    self.inner.put(peer, set);
 
                     true
                 }
@@ -66,7 +89,7 @@ impl PeerAddresses {
 
     /// Returns peer's external addresses.
     pub fn get(&mut self, peer: &PeerId) -> impl Iterator<Item = Multiaddr> + '_ {
-        self.0
+        self.inner
             .get(peer)
             .into_iter()
             .flat_map(|c| c.iter().map(|(m, ())| m))
@@ -76,7 +99,7 @@ impl PeerAddresses {
     /// Removes address from peer addresses cache.
     /// Returns true if the address was removed.
     pub fn remove(&mut self, peer: &PeerId, address: &Multiaddr) -> bool {
-        match self.0.get_mut(peer) {
+        match self.inner.get_mut(peer) {
             Some(addrs) => match prepare_addr(peer, address) {
                 Ok(address) => addrs.pop(&address).is_some(),
                 Err(_) => false,
@@ -92,7 +115,7 @@ fn prepare_addr(peer: &PeerId, addr: &Multiaddr) -> Result<Multiaddr, Multiaddr>
 
 impl Default for PeerAddresses {
     fn default() -> Self {
-        Self(LruCache::new(NonZeroUsize::new(100).unwrap()))
+        Self::new(Default::default())
     }
 }
 
