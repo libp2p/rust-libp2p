@@ -20,6 +20,7 @@ macro_rules! impl_with_swarm_config {
                         behaviour: self.phase.behaviour,
                         transport: self.phase.transport,
                         swarm_config: constructor($config),
+                        connection_timeout: DEFAULT_CONNECTION_TIMEOUT,
                     },
                     keypair: self.keypair,
                     phantom: std::marker::PhantomData,
