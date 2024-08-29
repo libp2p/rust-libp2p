@@ -635,6 +635,30 @@ where
             match self.mesh.get(&topic_hash) {
                 // Mesh peers
                 Some(mesh_peers) => {
+                    // We have a mesh set. We want to make sure to publish to at least `mesh_n`
+                    // peers (if possible).
+                    let needed_extra_peers = self.config.mesh_n().saturating_sub(mesh_peers.len());
+
+                    if needed_extra_peers > 0 {
+                        // We don't have `mesh_n` peers in our mesh, we will randomly select extras
+                        // and publish to them.
+
+                        // Get a random set of peers that are appropriate to send messages too.
+                        let peer_list = get_random_peers(
+                            &self.connected_peers,
+                            &topic_hash,
+                            needed_extra_peers,
+                            |peer| {
+                                !mesh_peers.contains(peer)
+                                    && !self.explicit_peers.contains(peer)
+                                    && !self
+                                        .score_below_threshold(peer, |pst| pst.publish_threshold)
+                                        .0
+                            },
+                        );
+                        recipient_peers.extend(peer_list);
+                    }
+
                     recipient_peers.extend(mesh_peers);
                 }
                 // Gossipsub peers
@@ -2118,10 +2142,9 @@ where
                         if outbound <= self.config.mesh_outbound_min() {
                             // do not remove anymore outbound peers
                             continue;
-                        } else {
-                            // an outbound peer gets removed
-                            outbound -= 1;
                         }
+                        // an outbound peer gets removed
+                        outbound -= 1;
                     }
 
                     // remove the peer

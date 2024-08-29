@@ -674,8 +674,8 @@ fn test_publish_without_flood_publishing() {
     let config: Config = Config::default();
     assert_eq!(
         publishes.len(),
-        config.mesh_n_low(),
-        "Should send a publish message to all known peers"
+        config.mesh_n(),
+        "Should send a publish message to at least mesh_n peers"
     );
 
     assert!(
