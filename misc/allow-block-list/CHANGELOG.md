@@ -1,3 +1,9 @@
+## 0.4.1
+
+- Add getters & setters for the allowed/blocked peers.
+  Return a `bool` for every "insert/remove" function, informing if a change was performed.
+  See [PR 5572](https://github.com/libp2p/rust-libp2p/pull/5572).
+
 ## 0.4.0
 
 <!-- Update to libp2p-swarm v0.45.0 -->
