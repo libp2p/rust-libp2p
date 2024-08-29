@@ -164,7 +164,15 @@ impl NetworkBehaviour for Behaviour {
         if local_addr.is_relayed() {
             return Ok(Either::Right(dummy::ConnectionHandler));
         }
-        let mut handler = Handler::new(self.local_peer_id, peer, remote_addr.clone());
+
+        let mut handler = match remote_addr.clone().with_p2p(peer) {
+            Ok(remote_addr) => Handler::new(self.local_peer_id, peer, remote_addr),
+            Err(remote_addr) => {
+                return Err(ConnectionDenied::new(format!(
+                    "addr {remote_addr} contains a PeerId not matching {peer}"
+                )))
+            }
+        };
 
         if let Some(event) = self.pending_handler_commands.remove(&connection_id) {
             handler.on_behaviour_event(event)
