@@ -59,7 +59,6 @@ fn reservation() {
         .with(Protocol::P2p(relay_peer_id))
         .with(Protocol::P2pCircuit);
     let mut client = build_client();
-    let client_peer_id = *client.local_peer_id();
 
     client.listen_on(client_addr.clone()).unwrap();
 
@@ -69,7 +68,7 @@ fn reservation() {
     // Wait for initial reservation.
     pool.run_until(wait_for_reservation(
         &mut client,
-        client_addr.clone().with(Protocol::P2p(client_peer_id)),
+        client_addr.clone(),
         relay_peer_id,
         false, // No renewal.
     ));
@@ -77,7 +76,7 @@ fn reservation() {
     // Wait for renewal.
     pool.run_until(wait_for_reservation(
         &mut client,
-        client_addr.with(Protocol::P2p(client_peer_id)),
+        client_addr,
         relay_peer_id,
         true, // Renewal.
     ));
@@ -99,11 +98,9 @@ fn new_reservation_to_same_relay_replaces_old() {
     spawn_swarm_on_pool(&pool, relay);
 
     let mut client = build_client();
-    let client_peer_id = *client.local_peer_id();
     let client_addr = relay_addr
         .with(Protocol::P2p(relay_peer_id))
         .with(Protocol::P2pCircuit);
-    let client_addr_with_peer_id = client_addr.clone().with(Protocol::P2p(client_peer_id));
 
     let old_listener = client.listen_on(client_addr.clone()).unwrap();
 
@@ -113,7 +110,7 @@ fn new_reservation_to_same_relay_replaces_old() {
     // Wait for first (old) reservation.
     pool.run_until(wait_for_reservation(
         &mut client,
-        client_addr_with_peer_id.clone(),
+        client_addr.clone(),
         relay_peer_id,
         false, // No renewal.
     ));
@@ -123,12 +120,17 @@ fn new_reservation_to_same_relay_replaces_old() {
 
     // Wait for
     // - listener of old reservation to close
+    // - old external addr to expire
     // - new reservation to be accepted
     // - new listener address to be reported
+    // - new external addr to be reported
     pool.run_until(async {
         let mut old_listener_closed = false;
+        let mut old_external_addr_expired = false;
         let mut new_reservation_accepted = false;
-        let mut new_listener_address_reported = false;
+        let mut new_listen_address_reported = false;
+        let mut new_external_addr_confirmed = false;
+
         loop {
             match client.select_next_some().await {
                 SwarmEvent::ListenerClosed {
@@ -136,13 +138,9 @@ fn new_reservation_to_same_relay_replaces_old() {
                     listener_id,
                     ..
                 } => {
-                    assert_eq!(addresses, vec![client_addr_with_peer_id.clone()]);
+                    assert_eq!(addresses, vec![client_addr.clone()]);
                     assert_eq!(listener_id, old_listener);
-
                     old_listener_closed = true;
-                    if new_reservation_accepted && new_listener_address_reported {
-                        break;
-                    }
                 }
                 SwarmEvent::Behaviour(ClientEvent::Relay(
                     relay::client::Event::ReservationReqAccepted {
@@ -151,32 +149,35 @@ fn new_reservation_to_same_relay_replaces_old() {
                     },
                 )) => {
                     assert_eq!(relay_peer_id, peer_id);
-
                     new_reservation_accepted = true;
-                    if old_listener_closed && new_listener_address_reported {
-                        break;
-                    }
                 }
                 SwarmEvent::NewListenAddr {
                     address,
                     listener_id,
                 } => {
-                    assert_eq!(address, client_addr_with_peer_id);
+                    assert_eq!(address, client_addr);
                     assert_eq!(listener_id, new_listener);
-
-                    new_listener_address_reported = true;
-                    if old_listener_closed && new_reservation_accepted {
-                        break;
-                    }
+                    new_listen_address_reported = true;
                 }
                 SwarmEvent::ExternalAddrConfirmed { address } => {
-                    assert_eq!(
-                        address,
-                        client_addr.clone().with(Protocol::P2p(client_peer_id))
-                    );
+                    assert_eq!(address, client_addr);
+                    new_external_addr_confirmed = true;
+                }
+                SwarmEvent::ExternalAddrExpired { address } => {
+                    assert_eq!(address, client_addr);
+                    old_external_addr_expired = true;
                 }
                 SwarmEvent::Behaviour(ClientEvent::Ping(_)) => {}
                 e => panic!("{e:?}"),
+            };
+
+            if old_listener_closed
+                && old_external_addr_expired
+                && new_reservation_accepted
+                && new_listen_address_reported
+                && new_external_addr_confirmed
+            {
+                break;
             }
         }
     });
@@ -201,8 +202,7 @@ fn connect() {
     let dst_peer_id = *dst.local_peer_id();
     let dst_addr = relay_addr
         .with(Protocol::P2p(relay_peer_id))
-        .with(Protocol::P2pCircuit)
-        .with(Protocol::P2p(dst_peer_id));
+        .with(Protocol::P2pCircuit);
 
     dst.listen_on(dst_addr.clone()).unwrap();
 
@@ -218,7 +218,7 @@ fn connect() {
     let mut src = build_client();
     let src_peer_id = *src.local_peer_id();
 
-    src.dial(dst_addr).unwrap();
+    src.dial(dst_addr.with(Protocol::P2p(dst_peer_id))).unwrap();
 
     pool.run_until(futures::future::join(
         connection_established_to(&mut src, relay_peer_id, dst_peer_id),
@@ -418,7 +418,6 @@ fn reuse_connection() {
     let mut client = build_client_with_config(
         Config::with_async_std_executor().with_idle_connection_timeout(Duration::from_secs(1)),
     );
-    let client_peer_id = *client.local_peer_id();
 
     client.dial(relay_addr).unwrap();
     assert!(pool.run_until(wait_for_dial(&mut client, relay_peer_id)));
@@ -427,7 +426,7 @@ fn reuse_connection() {
 
     pool.run_until(wait_for_reservation(
         &mut client,
-        client_addr.with(Protocol::P2p(client_peer_id)),
+        client_addr,
         relay_peer_id,
         false, // No renewal.
     ));
@@ -524,11 +523,13 @@ async fn wait_for_reservation(
 ) {
     let mut new_listen_addr = false;
     let mut reservation_req_accepted = false;
+    let mut external_addr_confirmed = false;
 
     loop {
         match client.select_next_some().await {
             SwarmEvent::ExternalAddrConfirmed { address } if !is_renewal => {
                 assert_eq!(address, client_addr);
+                external_addr_confirmed = true;
             }
             SwarmEvent::Behaviour(ClientEvent::Relay(
                 relay::client::Event::ReservationReqAccepted {
@@ -538,18 +539,20 @@ async fn wait_for_reservation(
                 },
             )) if relay_peer_id == peer_id && renewal == is_renewal => {
                 reservation_req_accepted = true;
-                if new_listen_addr {
-                    break;
-                }
             }
-            SwarmEvent::NewListenAddr { address, .. } if address == client_addr => {
+            SwarmEvent::NewListenAddr { address, .. } if !is_renewal => {
+                assert_eq!(address, client_addr);
                 new_listen_addr = true;
-                if reservation_req_accepted {
-                    break;
-                }
             }
             SwarmEvent::Behaviour(ClientEvent::Ping(_)) => {}
             e => panic!("{e:?}"),
+        }
+
+        if reservation_req_accepted
+            && (external_addr_confirmed || is_renewal)
+            && (new_listen_addr || is_renewal)
+        {
+            break;
         }
     }
 }

@@ -57,8 +57,7 @@ async fn connect() {
 
     let dst_relayed_addr = relay_tcp_addr
         .with(Protocol::P2p(relay_peer_id))
-        .with(Protocol::P2pCircuit)
-        .with(Protocol::P2p(dst_peer_id));
+        .with(Protocol::P2pCircuit);
     dst.listen_on(dst_relayed_addr.clone()).unwrap();
 
     wait_for_reservation(
@@ -70,7 +69,8 @@ async fn connect() {
     .await;
     async_std::task::spawn(dst.loop_on_next());
 
-    src.dial_and_wait(dst_relayed_addr.clone()).await;
+    src.dial_and_wait(dst_relayed_addr.with(Protocol::P2p(dst_peer_id)))
+        .await;
 
     let dst_addr = dst_tcp_addr.with(Protocol::P2p(dst_peer_id));
 
