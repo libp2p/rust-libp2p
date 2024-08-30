@@ -300,9 +300,9 @@
 
   In other words:
 
-  | Search                                                            | Replace                                                         |
-  | ----------------------------------------------------------------- | --------------------------------------------------------------- |
-  | `NetworkBehaviourAction<Self::OutEvent, Self::ConnectionHandler>` | `NetworkBehaviourAction<Self::OutEvent, THandlerInEvent<Self>>` |
+  |Search|Replace|
+    |---|---|
+  |`NetworkBehaviourAction<Self::OutEvent, Self::ConnectionHandler>`|`NetworkBehaviourAction<Self::OutEvent, THandlerInEvent<Self>>`|
 
   If you reference `NetworkBehaviourAction` somewhere else as well,
   you may have to fill in the type of `ConnectionHandler::InEvent` manually as the 2nd parameter.
