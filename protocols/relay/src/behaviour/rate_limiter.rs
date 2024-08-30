@@ -78,7 +78,7 @@ pub(crate) struct GenericRateLimiter<Id> {
     buckets: HashMap<Id, u32>,
 }
 
-/// Configuration for a [`GenericRateLimiter`].
+/// Configuration for a `GenericRateLimiter`.
 #[derive(Debug, Clone, Copy)]
 pub struct GenericRateLimiterConfig {
     /// The maximum number of tokens in the bucket at any point in time.
