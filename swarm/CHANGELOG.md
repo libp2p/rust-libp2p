@@ -1,3 +1,8 @@
+## 0.45.2
+
+- Don't report `NewExternalAddrCandidate` for confirmed external addresses.
+  See [PR XXXX](https://github.com/libp2p/rust-libp2p/pull/XXXX).
+
 ## 0.45.1
 
 - Update `libp2p-swarm-derive` to version `0.35.0`, see [PR 5545]
@@ -295,9 +300,9 @@
 
   In other words:
 
-  |Search|Replace|
-    |---|---|
-  |`NetworkBehaviourAction<Self::OutEvent, Self::ConnectionHandler>`|`NetworkBehaviourAction<Self::OutEvent, THandlerInEvent<Self>>`|
+  | Search                                                            | Replace                                                         |
+  | ----------------------------------------------------------------- | --------------------------------------------------------------- |
+  | `NetworkBehaviourAction<Self::OutEvent, Self::ConnectionHandler>` | `NetworkBehaviourAction<Self::OutEvent, THandlerInEvent<Self>>` |
 
   If you reference `NetworkBehaviourAction` somewhere else as well,
   you may have to fill in the type of `ConnectionHandler::InEvent` manually as the 2nd parameter.
