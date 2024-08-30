@@ -1,7 +1,7 @@
 ## 0.12.1
 
 - Handle empty hole-punch candidates at relayed connection startup.
-  See [PR XXXX](https://github.com/libp2p/rust-libp2p/pull/XXXX).
+  See [PR 5583](https://github.com/libp2p/rust-libp2p/pull/5583).
 
 ## 0.12.0
 
