@@ -1,7 +1,7 @@
 ## 0.18.1
 
 - Allow to configure default rate limiters.
-  See [PR XXXX](https://github.com/libp2p/rust-libp2p/pull/XXXX).
+  See [PR 5584](https://github.com/libp2p/rust-libp2p/pull/5584).
 
 ## 0.18.0
 
