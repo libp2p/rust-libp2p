@@ -37,12 +37,14 @@ pub trait RateLimiter: Send {
     fn try_next(&mut self, peer: PeerId, addr: &Multiaddr, now: Instant) -> bool;
 }
 
-pub(crate) fn new_per_peer(config: GenericRateLimiterConfig) -> Box<dyn RateLimiter> {
+/// For each peer ID one reservation/circuit every `config.interval` minutes with up to `config.limit` reservations per hour.
+pub fn new_per_peer(config: GenericRateLimiterConfig) -> Box<dyn RateLimiter> {
     let mut limiter = GenericRateLimiter::new(config);
     Box::new(move |peer_id, _addr: &Multiaddr, now| limiter.try_next(peer_id, now))
 }
 
-pub(crate) fn new_per_ip(config: GenericRateLimiterConfig) -> Box<dyn RateLimiter> {
+/// For each source IP address one reservation/circuit every `config.interval` minutes with up to `config.limit` reservations per hour.
+pub fn new_per_ip(config: GenericRateLimiterConfig) -> Box<dyn RateLimiter> {
     let mut limiter = GenericRateLimiter::new(config);
     Box::new(move |_peer_id, addr: &Multiaddr, now| {
         multiaddr_to_ip(addr)
@@ -78,11 +80,11 @@ pub(crate) struct GenericRateLimiter<Id> {
 
 /// Configuration for a [`GenericRateLimiter`].
 #[derive(Debug, Clone, Copy)]
-pub(crate) struct GenericRateLimiterConfig {
-    // The maximum number of tokens in the bucket at any point in time.
-    pub(crate) limit: NonZeroU32,
-    // The interval at which a single token is added to the bucket.
-    pub(crate) interval: Duration,
+pub struct GenericRateLimiterConfig {
+    /// The maximum number of tokens in the bucket at any point in time.
+    pub limit: NonZeroU32,
+    /// The interval at which a single token is added to the bucket.
+    pub interval: Duration,
 }
 
 impl<Id: Eq + PartialEq + Hash + Clone> GenericRateLimiter<Id> {
