@@ -1,7 +1,7 @@
 ## 0.45.2
 
 - Don't report `NewExternalAddrCandidate` for confirmed external addresses.
-  See [PR XXXX](https://github.com/libp2p/rust-libp2p/pull/XXXX).
+  See [PR 5582](https://github.com/libp2p/rust-libp2p/pull/5582).
 
 ## 0.45.1
 
