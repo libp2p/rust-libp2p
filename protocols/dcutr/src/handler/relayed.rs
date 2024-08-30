@@ -32,18 +32,21 @@ use libp2p_swarm::handler::{
     ListenUpgradeError,
 };
 use libp2p_swarm::{
-    ConnectionHandler, ConnectionHandlerEvent, StreamProtocol, StreamUpgradeError,
+    ConnectionHandler, ConnectionHandlerEvent, Stream, StreamProtocol, StreamUpgradeError,
     SubstreamProtocol,
 };
+use lru::LruCache;
 use protocol::{inbound, outbound};
 use std::collections::VecDeque;
 use std::io;
 use std::task::{Context, Poll};
 use std::time::Duration;
+use tracing::{debug, warn};
 
 #[derive(Debug)]
 pub enum Command {
     Connect,
+    NewExternalAddrCandidate(Multiaddr),
 }
 
 #[derive(Debug)]
@@ -67,25 +70,73 @@ pub struct Handler {
 
     // Inbound DCUtR handshakes
     inbound_stream: futures_bounded::FuturesSet<Result<Vec<Multiaddr>, inbound::Error>>,
+    pending_inbound_stream: Option<Stream>,
 
     // Outbound DCUtR handshake.
     outbound_stream: futures_bounded::FuturesSet<Result<Vec<Multiaddr>, outbound::Error>>,
 
     /// The addresses we will send to the other party for hole-punching attempts.
-    holepunch_candidates: Vec<Multiaddr>,
+    holepunch_candidates: LruCache<Multiaddr, ()>,
+    pending_outbound_stream: Option<Stream>,
 
     attempts: u8,
 }
 
 impl Handler {
-    pub fn new(endpoint: ConnectedPoint, holepunch_candidates: Vec<Multiaddr>) -> Self {
+    pub fn new(endpoint: ConnectedPoint, holepunch_candidates: LruCache<Multiaddr, ()>) -> Self {
         Self {
             endpoint,
             queued_events: Default::default(),
             inbound_stream: futures_bounded::FuturesSet::new(Duration::from_secs(10), 1),
+            pending_inbound_stream: None,
             outbound_stream: futures_bounded::FuturesSet::new(Duration::from_secs(10), 1),
+            pending_outbound_stream: None,
             holepunch_candidates,
             attempts: 0,
+        }
+    }
+
+    fn set_stream(&mut self, stream_type: StreamType, stream: Stream) {
+        if self.holepunch_candidates.is_empty() {
+            debug!(
+                "New {stream_type} connect stream but holepunch_candidates is empty. Buffering it."
+            );
+            let has_replaced_old_stream = match stream_type {
+                StreamType::Inbound => self.pending_inbound_stream.replace(stream).is_some(),
+                StreamType::Outbound => self.pending_outbound_stream.replace(stream).is_some(),
+            };
+            if has_replaced_old_stream {
+                warn!("New {stream_type} connect stream while still buffering previous one. Replacing previous with new.");
+            }
+        } else {
+            let holepunch_candidates = self
+                .holepunch_candidates
+                .iter()
+                .map(|(a, _)| a)
+                .cloned()
+                .collect();
+
+            let has_replaced_old_stream = match stream_type {
+                StreamType::Inbound => {
+                    // TODO: when upstreaming this fix, ask libp2p about merging the `attempts` incrementation.
+                    self.attempts += 1;
+
+                    // FIXME: actually does not replace !!
+                    self.inbound_stream
+                        .try_push(inbound::handshake(stream, holepunch_candidates))
+                        .is_err()
+                }
+                StreamType::Outbound => {
+                    // FIXME: actually does not replace !!
+                    self.outbound_stream
+                        .try_push(outbound::handshake(stream, holepunch_candidates))
+                        .is_err()
+                }
+            };
+
+            if has_replaced_old_stream {
+                warn!("New {stream_type} connect stream while still upgrading previous one. Replacing previous with new.");
+            }
         }
     }
 
@@ -99,21 +150,7 @@ impl Handler {
         >,
     ) {
         match output {
-            future::Either::Left(stream) => {
-                if self
-                    .inbound_stream
-                    .try_push(inbound::handshake(
-                        stream,
-                        self.holepunch_candidates.clone(),
-                    ))
-                    .is_err()
-                {
-                    tracing::warn!(
-                        "New inbound connect stream while still upgrading previous one. Replacing previous with new.",
-                    );
-                }
-                self.attempts += 1;
-            }
+            future::Either::Left(stream) => self.set_stream(StreamType::Inbound, stream),
             // A connection listener denies all incoming substreams, thus none can ever be fully negotiated.
             future::Either::Right(output) => void::unreachable(output),
         }
@@ -132,18 +169,7 @@ impl Handler {
             self.endpoint.is_listener(),
             "A connection dialer never initiates a connection upgrade."
         );
-        if self
-            .outbound_stream
-            .try_push(outbound::handshake(
-                stream,
-                self.holepunch_candidates.clone(),
-            ))
-            .is_err()
-        {
-            tracing::warn!(
-                "New outbound connect stream while still upgrading previous one. Replacing previous with new.",
-            );
-        }
+        self.set_stream(StreamType::Outbound, stream);
     }
 
     fn on_listen_upgrade_error(
@@ -208,7 +234,21 @@ impl ConnectionHandler for Handler {
                     .push_back(ConnectionHandlerEvent::OutboundSubstreamRequest {
                         protocol: SubstreamProtocol::new(ReadyUpgrade::new(PROTOCOL_NAME), ()),
                     });
+
+                // TODO: when upstreaming this fix, ask libp2p about merging the `attempts` incrementation.
+                // Indeed, even if the `queued_event` above will be trigger on stream opening, it might not start
                 self.attempts += 1;
+            }
+            Command::NewExternalAddrCandidate(address) => {
+                self.holepunch_candidates.push(address, ());
+
+                if let Some(stream) = self.pending_inbound_stream.take() {
+                    self.set_stream(StreamType::Inbound, stream);
+                }
+
+                if let Some(stream) = self.pending_outbound_stream.take() {
+                    self.set_stream(StreamType::Outbound, stream);
+                }
             }
         }
     }
@@ -305,6 +345,20 @@ impl ConnectionHandler for Handler {
                 self.on_dial_upgrade_error(dial_upgrade_error)
             }
             _ => {}
+        }
+    }
+}
+
+enum StreamType {
+    Inbound,
+    Outbound,
+}
+
+impl std::fmt::Display for StreamType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Inbound => write!(f, "inbound"),
+            Self::Outbound => write!(f, "outbound"),
         }
     }
 }

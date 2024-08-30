@@ -70,8 +70,8 @@ pub struct Behaviour {
     /// Queue of actions to return when polled.
     queued_events: VecDeque<ToSwarm<Event, Either<handler::relayed::Command, Void>>>,
 
-    /// All direct (non-relayed) connections.
-    direct_connections: HashMap<PeerId, HashSet<ConnectionId>>,
+    /// All relayed connections.
+    relayed_connections: HashMap<PeerId, HashSet<ConnectionId>>,
 
     address_candidates: Candidates,
 
@@ -86,15 +86,15 @@ impl Behaviour {
     pub fn new(local_peer_id: PeerId) -> Self {
         Behaviour {
             queued_events: Default::default(),
-            direct_connections: Default::default(),
+            relayed_connections: Default::default(),
             address_candidates: Candidates::new(local_peer_id),
             direct_to_relayed_connections: Default::default(),
             outgoing_direct_connection_attempts: Default::default(),
         }
     }
 
-    fn observed_addresses(&self) -> Vec<Multiaddr> {
-        self.address_candidates.iter().cloned().collect()
+    fn observed_addresses(&self) -> LruCache<Multiaddr, ()> {
+        self.address_candidates.inner.clone()
     }
 
     fn on_dial_failure(
@@ -148,17 +148,17 @@ impl Behaviour {
             ..
         }: ConnectionClosed,
     ) {
-        if !connected_point.is_relayed() {
+        if connected_point.is_relayed() {
             let connections = self
-                .direct_connections
+                .relayed_connections
                 .get_mut(&peer_id)
-                .expect("Peer of direct connection to be tracked.");
+                .expect("Peer of relayed connection to be tracked.");
             connections
                 .remove(&connection_id)
                 .then_some(())
-                .expect("Direct connection to be tracked.");
+                .expect("Relayed connection to be tracked.");
             if connections.is_empty() {
-                self.direct_connections.remove(&peer_id);
+                self.relayed_connections.remove(&peer_id);
             }
         }
     }
@@ -176,6 +176,11 @@ impl NetworkBehaviour for Behaviour {
         remote_addr: &Multiaddr,
     ) -> Result<THandler<Self>, ConnectionDenied> {
         if is_relayed(local_addr) {
+            self.relayed_connections
+                .entry(peer)
+                .or_default()
+                .insert(connection_id);
+
             let connected_point = ConnectedPoint::Listener {
                 local_addr: local_addr.clone(),
                 send_back_addr: remote_addr.clone(),
@@ -186,10 +191,6 @@ impl NetworkBehaviour for Behaviour {
 
             return Ok(Either::Left(handler)); // TODO: We could make two `handler::relayed::Handler` here, one inbound one outbound.
         }
-        self.direct_connections
-            .entry(peer)
-            .or_default()
-            .insert(connection_id);
 
         assert!(
             !self
@@ -210,6 +211,11 @@ impl NetworkBehaviour for Behaviour {
         port_use: PortUse,
     ) -> Result<THandler<Self>, ConnectionDenied> {
         if is_relayed(addr) {
+            self.relayed_connections
+                .entry(peer)
+                .or_default()
+                .insert(connection_id);
+
             return Ok(Either::Left(handler::relayed::Handler::new(
                 ConnectedPoint::Dialer {
                     address: addr.clone(),
@@ -219,11 +225,6 @@ impl NetworkBehaviour for Behaviour {
                 self.observed_addresses(),
             ))); // TODO: We could make two `handler::relayed::Handler` here, one inbound one outbound.
         }
-
-        self.direct_connections
-            .entry(peer)
-            .or_default()
-            .insert(connection_id);
 
         // Whether this is a connection requested by this behaviour.
         if let Some(&relayed_connection_id) = self.direct_to_relayed_connections.get(&connection_id)
@@ -334,7 +335,21 @@ impl NetworkBehaviour for Behaviour {
             }
             FromSwarm::DialFailure(dial_failure) => self.on_dial_failure(dial_failure),
             FromSwarm::NewExternalAddrCandidate(NewExternalAddrCandidate { addr }) => {
-                self.address_candidates.add(addr.clone());
+                if let Some(address) = self.address_candidates.add(addr.clone()) {
+                    for (peer, connections) in &self.relayed_connections {
+                        for connection in connections {
+                            self.queued_events.push_back(ToSwarm::NotifyHandler {
+                                handler: NotifyHandler::One(*connection),
+                                peer_id: *peer,
+                                event: Either::Left(
+                                    handler::relayed::Command::NewExternalAddrCandidate(
+                                        address.clone(),
+                                    ),
+                                ),
+                            })
+                        }
+                    }
+                }
             }
             _ => {}
         }
@@ -360,20 +375,21 @@ impl Candidates {
         }
     }
 
-    fn add(&mut self, mut address: Multiaddr) {
+    /// Format the address and push it into the LruCache if it is not relayed.
+    ///
+    /// Returns the provided address formatted if it was pushed.
+    /// Returns `None` otherwise.
+    fn add(&mut self, mut address: Multiaddr) -> Option<Multiaddr> {
         if is_relayed(&address) {
-            return;
+            return None;
         }
 
         if address.iter().last() != Some(Protocol::P2p(self.me)) {
             address.push(Protocol::P2p(self.me));
         }
 
-        self.inner.push(address, ());
-    }
-
-    fn iter(&self) -> impl Iterator<Item = &Multiaddr> {
-        self.inner.iter().map(|(a, _)| a)
+        self.inner.push(address.clone(), ());
+        Some(address)
     }
 }
 
