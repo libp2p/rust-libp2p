@@ -1344,9 +1344,10 @@ where
         // For each topic, if a peer has grafted us, then we necessarily must be in their mesh
         // and they must be subscribed to the topic. Ensure we have recorded the mapping.
         for topic in &topics {
-            connected_peer.topics.insert(topic.clone());
-            if let Some(m) = self.metrics.as_mut() {
-                m.inc_topic_peers(topic);
+            if connected_peer.topics.insert(topic.clone()) {
+                if let Some(m) = self.metrics.as_mut() {
+                    m.inc_topic_peers(topic);
+                }
             }
         }
 
@@ -1872,6 +1873,10 @@ where
                             topic=%topic_hash,
                             "SUBSCRIPTION: Adding gossip peer to topic"
                         );
+
+                        if let Some(m) = self.metrics.as_mut() {
+                            m.inc_topic_peers(topic_hash);
+                        }
                     }
 
                     // if the mesh needs peers add the peer to the mesh
