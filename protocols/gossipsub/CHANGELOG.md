@@ -1,4 +1,4 @@
-## 0.47.0
+## 0.47.1
 
 - Attempt to publish to at least mesh_n peers when flood publish is disabled.
   See [PR XXXX](https://github.com/libp2p/rust-libp2p/pull/XXXX).
