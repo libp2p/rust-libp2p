@@ -138,8 +138,16 @@ impl QueryPool {
         T: Into<KeyBytes> + Clone,
         I: IntoIterator<Item = Key<PeerId>>,
     {
+        let num_results = match info {
+            QueryInfo::GetClosestPeers {
+                num_results: Some(val),
+                ..
+            } => val,
+            _ => self.config.replication_factor,
+        };
+
         let cfg = ClosestPeersIterConfig {
-            num_results: self.config.replication_factor,
+            num_results,
             parallelism: self.config.parallelism,
             ..ClosestPeersIterConfig::default()
         };
