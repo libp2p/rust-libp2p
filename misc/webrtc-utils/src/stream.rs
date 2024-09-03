@@ -47,7 +47,7 @@ mod state;
 /// <https://issues.webrtc.org/issues/40644524>
 pub const MAX_MSG_LEN: usize = 256 * 1024; // 256 KiB
 /// Length of varint, in bytes.
-const VARINT_LEN: usize = 2;
+const VARINT_LEN: usize = 4;
 /// Overhead of the protobuf encoding, in bytes.
 const PROTO_OVERHEAD: usize = 5;
 /// Maximum length of data, in bytes.
