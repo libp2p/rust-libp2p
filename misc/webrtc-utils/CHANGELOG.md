@@ -1,3 +1,8 @@
+## 0.4.0
+
+- Increase WebRTC max message size from 16 KiB to 256 KiB.
+  See [PR 5589](https://github.com/libp2p/rust-libp2p/pull/5589)
+
 ## 0.3.0
 
 <!-- Update to libp2p-swarm v0.45.0 -->

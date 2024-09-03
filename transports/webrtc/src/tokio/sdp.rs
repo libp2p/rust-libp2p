@@ -140,5 +140,5 @@ a=ice-pwd:{pwd}
 a=fingerprint:{fingerprint_algorithm} {fingerprint_value}
 a=setup:actpass
 a=sctp-port:5000
-a=max-message-size:16384
+a=max-message-size:262144
 ";
