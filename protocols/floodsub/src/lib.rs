@@ -23,6 +23,7 @@
 #![cfg_attr(docsrs, feature(doc_cfg, doc_auto_cfg))]
 
 use libp2p_identity::PeerId;
+use protocol::DEFAULT_MAX_MESSAGE_LEN_BYTES;
 
 pub mod protocol;
 
@@ -48,6 +49,9 @@ pub struct FloodsubConfig {
     /// `true` if messages published by local node should be propagated as messages received from
     /// the network, `false` by default.
     pub subscribe_local_messages: bool,
+
+    /// Maximum message length in bytes. Defaults to 2KiB.
+    pub max_message_len: usize,
 }
 
 impl FloodsubConfig {
@@ -55,6 +59,20 @@ impl FloodsubConfig {
         Self {
             local_peer_id,
             subscribe_local_messages: false,
+            max_message_len: DEFAULT_MAX_MESSAGE_LEN_BYTES,
         }
+    }
+
+    /// Set whether or not messages published by local node should be
+    /// propagated as messages received from the network.
+    pub fn with_subscribe_local_messages(mut self, subscribe_local_messages: bool) -> Self {
+        self.subscribe_local_messages = subscribe_local_messages;
+        self
+    }
+
+    /// Set the maximum message length in bytes.
+    pub fn with_max_message_len(mut self, max_message_len: usize) -> Self {
+        self.max_message_len = max_message_len;
+        self
     }
 }
