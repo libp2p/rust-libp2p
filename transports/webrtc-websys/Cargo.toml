@@ -8,7 +8,7 @@ license = "MIT"
 name = "libp2p-webrtc-websys"
 repository = "https://github.com/libp2p/rust-libp2p"
 rust-version = { workspace = true }
-version = "0.3.0-alpha"
+version = "0.4.0-alpha.2"
 publish = true
 
 [dependencies]
@@ -25,7 +25,7 @@ thiserror = "1"
 tracing = { workspace = true }
 wasm-bindgen = { version = "0.2.90" }
 wasm-bindgen-futures = { version = "0.4.42" }
-web-sys = { version = "0.3.69", features = ["Document", "Location", "MessageEvent", "Navigator", "RtcCertificate", "RtcConfiguration", "RtcDataChannel", "RtcDataChannelEvent", "RtcDataChannelInit", "RtcDataChannelState", "RtcDataChannelType", "RtcPeerConnection", "RtcSdpType", "RtcSessionDescription", "RtcSessionDescriptionInit", "Window"] }
+web-sys = { version = "0.3.70", features = ["Document", "Location", "MessageEvent", "Navigator", "RtcCertificate", "RtcConfiguration", "RtcDataChannel", "RtcDataChannelEvent", "RtcDataChannelInit", "RtcDataChannelState", "RtcDataChannelType", "RtcPeerConnection", "RtcSdpType", "RtcSessionDescription", "RtcSessionDescriptionInit", "Window"] }
 
 [lints]
 workspace = true

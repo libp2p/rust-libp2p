@@ -3,7 +3,7 @@ name = "libp2p-kad"
 edition = "2021"
 rust-version = { workspace = true }
 description = "Kademlia protocol for libp2p"
-version = "0.46.0"
+version = "0.47.0"
 authors = ["Parity Technologies <admin@parity.io>"]
 license = "MIT"
 repository = "https://github.com/libp2p/rust-libp2p"
@@ -52,8 +52,6 @@ serde = ["dep:serde", "bytes/serde"]
 # More information: https://docs.rs/about/builds#cross-compiling
 [package.metadata.docs.rs]
 all-features = true
-rustdoc-args = ["--cfg", "docsrs"]
-rustc-args = ["--cfg", "docsrs"]
 
 [lints]
 workspace = true

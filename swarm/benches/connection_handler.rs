@@ -223,6 +223,7 @@ impl NetworkBehaviour for SpinningBehaviour {
         _peer: libp2p_identity::PeerId,
         _addr: &libp2p_core::Multiaddr,
         _role_override: libp2p_core::Endpoint,
+        _port_use: libp2p_core::transport::PortUse,
     ) -> Result<libp2p_swarm::THandler<Self>, libp2p_swarm::ConnectionDenied> {
         Ok(SpinningHandler {
             iter_count: self.iter_count,

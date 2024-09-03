@@ -225,7 +225,7 @@ jobs:
       fail-fast: false
       matrix:
         rust-version: [
-          1.78.0, # current stable
+          1.80.0, # current stable
           beta,
         ]
     steps:
@@ -308,9 +308,9 @@ jobs:
       RUSTFLAGS: ''
     steps:
       - uses: actions/checkout@v4
-      - run: wget -q -O- https://github.com/obi1kenobi/cargo-semver-checks/releases/download/v0.31.0/cargo-semver-checks-x86_64-unknown-linux-gnu.tar.gz | tar -xz -C ~/.cargo/bin
+      - run: wget -q -O- https://github.com/obi1kenobi/cargo-semver-checks/releases/download/v0.33.0/cargo-semver-checks-x86_64-unknown-linux-gnu.tar.gz | tar -xz -C ~/.cargo/bin
         shell: bash
-      - uses: obi1kenobi/cargo-semver-checks-action@7272cc2caa468d3e009a2b0a9cc366839348237b # v2
+      - uses: obi1kenobi/cargo-semver-checks-action@7272cc2caa468d3e009a2b0a9cc366839348237b # v2.6
 
   rustfmt:
     runs-on: ubuntu-latest
@@ -398,6 +398,6 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v4
-    - uses: EmbarkStudios/cargo-deny-action@v1
+    - uses: EmbarkStudios/cargo-deny-action@v2
       with:
         command: check advisories bans licenses sources

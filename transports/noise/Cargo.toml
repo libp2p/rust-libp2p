@@ -3,7 +3,7 @@ name = "libp2p-noise"
 edition = "2021"
 rust-version = { workspace = true }
 description = "Cryptographic handshake protocol using the noise framework."
-version = "0.44.0"
+version = "0.45.0"
 authors = ["Parity Technologies <admin@parity.io>"]
 license = "MIT"
 repository = "https://github.com/libp2p/rust-libp2p"
@@ -43,8 +43,6 @@ libp2p-identity = { workspace = true, features = ["rand"] }
 # More information: https://docs.rs/about/builds#cross-compiling
 [package.metadata.docs.rs]
 all-features = true
-rustdoc-args = ["--cfg", "docsrs"]
-rustc-args = ["--cfg", "docsrs"]
 
 [lints]
 workspace = true

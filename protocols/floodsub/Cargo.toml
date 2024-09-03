@@ -3,7 +3,7 @@ name = "libp2p-floodsub"
 edition = "2021"
 rust-version = { workspace = true }
 description = "Floodsub protocol for libp2p"
-version = "0.44.0"
+version = "0.45.0"
 authors = ["Parity Technologies <admin@parity.io>"]
 license = "MIT"
 repository = "https://github.com/libp2p/rust-libp2p"
@@ -30,8 +30,6 @@ tracing = { workspace = true }
 # More information: https://docs.rs/about/builds#cross-compiling
 [package.metadata.docs.rs]
 all-features = true
-rustdoc-args = ["--cfg", "docsrs"]
-rustc-args = ["--cfg", "docsrs"]
 
 [lints]
 workspace = true
