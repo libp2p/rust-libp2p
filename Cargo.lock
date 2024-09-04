@@ -3473,7 +3473,7 @@ dependencies = [
  "multihash",
  "quickcheck",
  "rand 0.8.5",
- "rcgen 0.12.1",
+ "rcgen 0.11.3",
  "serde",
  "stun 0.6.0",
  "thiserror",
