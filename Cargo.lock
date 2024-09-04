@@ -2311,10 +2311,9 @@ dependencies = [
 name = "identify-example"
 version = "0.1.0"
 dependencies = [
- "async-std",
- "async-trait",
  "futures",
  "libp2p",
+ "tokio",
  "tracing",
  "tracing-subscriber",
 ]
@@ -2838,7 +2837,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-gossipsub"
-version = "0.47.0"
+version = "0.47.1"
 dependencies = [
  "async-std",
  "asynchronous-codec",
@@ -4984,8 +4983,6 @@ dependencies = [
 name = "rendezvous-example"
 version = "0.1.0"
 dependencies = [
- "async-std",
- "async-trait",
  "futures",
  "libp2p",
  "tokio",

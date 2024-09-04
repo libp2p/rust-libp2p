@@ -1,3 +1,8 @@
+## 0.47.1
+
+- Attempt to publish to at least mesh_n peers when flood publish is disabled.
+  See [PR 5578](https://github.com/libp2p/rust-libp2p/pull/5578).
+
 ## 0.47.0
 
 <!-- Update to libp2p-swarm v0.45.0 -->
