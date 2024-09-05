@@ -99,24 +99,21 @@ pub fn generate(
     // Endpoints MAY generate a new key and certificate
     // for every connection attempt, or they MAY reuse the same key
     // and certificate for multiple connections.
-    let certificate_keypair = rcgen::KeyPair::generate(P2P_SIGNATURE_ALGORITHM)?;
+    let certificate_keypair = rcgen::KeyPair::generate_for(P2P_SIGNATURE_ALGORITHM)?;
     let rustls_key = rustls::pki_types::PrivateKeyDer::from(
         rustls::pki_types::PrivatePkcs8KeyDer::from(certificate_keypair.serialize_der()),
     );
 
     let certificate = {
-        let mut params = rcgen::CertificateParams::new(vec![]);
-        params.distinguished_name = rcgen::DistinguishedName::new();
+        let mut params = rcgen::CertificateParams::new(vec![])?;
         params.custom_extensions.push(make_libp2p_extension(
             identity_keypair,
             &certificate_keypair,
         )?);
-        params.alg = P2P_SIGNATURE_ALGORITHM;
-        params.key_pair = Some(certificate_keypair);
-        rcgen::Certificate::from_params(params)?
+        params.self_signed(&certificate_keypair)?
     };
 
-    let rustls_certificate = rustls::pki_types::CertificateDer::from(certificate.serialize_der()?);
+    let rustls_certificate = certificate.der().clone();
 
     Ok((rustls_certificate, rustls_key))
 }
