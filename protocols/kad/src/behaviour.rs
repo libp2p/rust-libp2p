@@ -1111,6 +1111,11 @@ where
         }
     }
 
+    /// Get the [`Mode`] in which the DHT is currently operating.
+    pub fn mode(&self) -> Mode {
+        self.mode
+    }
+
     fn reconfigure_mode(&mut self) {
         if self.connections.is_empty() {
             return;
