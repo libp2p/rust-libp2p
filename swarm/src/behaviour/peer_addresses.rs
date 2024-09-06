@@ -12,10 +12,10 @@ use std::num::NonZeroUsize;
 /// Configuration of a [`PeerAddresses`] instance.
 pub struct PeerAddressesConfig {
     /// Capacity of the [`PeerAddresses`] cache.
-    pub number_of_peers: NonZeroUsize,
+    number_of_peers: NonZeroUsize,
 
     /// Maximum number of cached addresses per peer.
-    pub number_of_addresses_per_peer: NonZeroUsize,
+    number_of_addresses_per_peer: NonZeroUsize,
 }
 
 impl PeerAddressesConfig {

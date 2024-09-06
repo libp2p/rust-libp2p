@@ -199,17 +199,11 @@ impl Config {
     /// Configures the size of the LRU cache, caching addresses of discovered peers.
     #[deprecated(since = "0.45.1", note = "Use `Config::with_cache_config` instead.")]
     pub fn with_cache_size(mut self, cache_size: usize) -> Self {
-        match NonZeroUsize::new(cache_size) {
-            Some(cache_size) => {
-                if let Some(cache_config) = &mut self.cache_config {
-                    cache_config.number_of_peers = cache_size;
-                } else {
-                    self.cache_config =
-                        Some(PeerAddressesConfig::default().with_number_of_peers(cache_size))
-                }
-            }
-            None => self.cache_config = None,
-        }
+        self.cache_config = NonZeroUsize::new(cache_size).map(|cache_size| {
+            self.cache_config
+                .unwrap_or_default()
+                .with_number_of_peers(cache_size)
+        });
         self
     }
 
