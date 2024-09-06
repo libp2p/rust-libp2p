@@ -142,6 +142,11 @@ pub struct Config {
     /// Disabled by default.
     pub push_listen_addr_updates: bool,
 
+    /// How many entries of discovered peers to keep before we discard
+    /// the least-recently used one.
+    #[deprecated(since = "0.45.1", note = "Use `Config::cache_config` instead.")]
+    pub cache_size: usize,
+
     /// Configuration for the LRU cache of discovered peers.
     pub cache_config: Option<PeerAddressesConfig>,
 
@@ -156,13 +161,15 @@ impl Config {
     /// Creates a new configuration for the identify [`Behaviour`] that
     /// advertises the given protocol version and public key.
     pub fn new(protocol_version: String, local_public_key: PublicKey) -> Self {
+        #[allow(deprecated)]
         Self {
             protocol_version,
             agent_version: format!("rust-libp2p/{}", env!("CARGO_PKG_VERSION")),
             local_public_key,
             interval: Duration::from_secs(5 * 60),
             push_listen_addr_updates: false,
-            cache_config: Some(Default::default()),
+            cache_size: 100,
+            cache_config: None, // TODO: when removing `cache_size`, replace `None` with `Some(Default::default())`
             hide_listen_addrs: false,
         }
     }
@@ -197,13 +204,12 @@ impl Config {
     }
 
     /// Configures the size of the LRU cache, caching addresses of discovered peers.
+    ///
+    /// If `cache_config` is set, then `cache_size` is ignored.
     #[deprecated(since = "0.45.1", note = "Use `Config::with_cache_config` instead.")]
+    #[allow(deprecated)]
     pub fn with_cache_size(mut self, cache_size: usize) -> Self {
-        self.cache_config = NonZeroUsize::new(cache_size).map(|cache_size| {
-            self.cache_config
-                .unwrap_or_default()
-                .with_number_of_peers(cache_size)
-        });
+        self.cache_size = cache_size;
         self
     }
 
@@ -216,7 +222,14 @@ impl Config {
 
 impl Behaviour {
     /// Creates a new identify [`Behaviour`].
-    pub fn new(config: Config) -> Self {
+    pub fn new(mut config: Config) -> Self {
+        #[allow(deprecated)]
+        // If `cache_config` value is not set but `cache_size` is, we build `cache_config` from `cache_size`.
+        if config.cache_config.is_none() {
+            config.cache_config = NonZeroUsize::new(config.cache_size)
+                .map(|cache_size| PeerAddressesConfig::default().with_number_of_peers(cache_size));
+        }
+
         let discovered_peers = PeerCache::new(config.cache_config.clone());
 
         Self {
