@@ -46,6 +46,7 @@ pub struct Floodsub {
     /// Events that need to be yielded to the outside when polling.
     events: VecDeque<ToSwarm<FloodsubEvent, FloodsubRpc>>,
 
+    /// The floodsub configuration
     config: FloodsubConfig,
 
     /// List of peers to send messages to.
@@ -345,7 +346,7 @@ impl NetworkBehaviour for Floodsub {
         _: &Multiaddr,
     ) -> Result<THandler<Self>, ConnectionDenied> {
         Ok(OneShotHandler::new(
-            SubstreamProtocol::new(FloodsubProtocol::new(self.config.max_message_len), ()),
+            SubstreamProtocol::new(FloodsubProtocol::from_config(&self.config), ()),
             OneShotHandlerConfig::default(),
         ))
     }
@@ -359,7 +360,7 @@ impl NetworkBehaviour for Floodsub {
         _: PortUse,
     ) -> Result<THandler<Self>, ConnectionDenied> {
         Ok(OneShotHandler::new(
-            SubstreamProtocol::new(FloodsubProtocol::new(self.config.max_message_len), ()),
+            SubstreamProtocol::new(FloodsubProtocol::from_config(&self.config), ()),
             OneShotHandlerConfig::default(),
         ))
     }
