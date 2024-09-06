@@ -195,7 +195,7 @@ impl Config {
         self
     }
 
-    /// Configuration for the LRU cache responsible for caching addresses of discovered peers.
+    /// Configures the LRU cache responsible for caching addresses of discovered peers.
     ///
     /// If set to [`None`], caching is disabled.
     pub fn with_cache_config(mut self, cache_config: Option<PeerAddressesConfig>) -> Self {
