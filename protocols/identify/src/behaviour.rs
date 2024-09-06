@@ -34,6 +34,7 @@ use libp2p_swarm::{
 use libp2p_swarm::{ConnectionId, THandler, THandlerOutEvent};
 
 use std::collections::hash_map::Entry;
+use std::num::NonZeroUsize;
 use std::{
     collections::{HashMap, HashSet, VecDeque},
     task::Context,
@@ -192,6 +193,23 @@ impl Config {
     /// If set to [`None`], caching is disabled.
     pub fn with_cache_config(mut self, cache_config: Option<PeerAddressesConfig>) -> Self {
         self.cache_config = cache_config;
+        self
+    }
+
+    /// Configures the size of the LRU cache, caching addresses of discovered peers.
+    #[deprecated(since = "0.45.1", note = "Use `Config::with_cache_config` instead.")]
+    pub fn with_cache_size(mut self, cache_size: usize) -> Self {
+        match NonZeroUsize::new(cache_size) {
+            Some(cache_size) => {
+                if let Some(cache_config) = &mut self.cache_config {
+                    cache_config.number_of_peers = cache_size;
+                } else {
+                    self.cache_config =
+                        Some(PeerAddressesConfig::default().with_number_of_peers(cache_size))
+                }
+            }
+            None => self.cache_config = None,
+        }
         self
     }
 

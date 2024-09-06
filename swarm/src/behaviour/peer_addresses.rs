@@ -15,14 +15,31 @@ pub struct PeerAddressesConfig {
     pub number_of_peers: NonZeroUsize,
 
     /// Maximum number of cached addresses per peer.
-    pub number_of_addresses_by_peer: NonZeroUsize,
+    pub number_of_addresses_per_peer: NonZeroUsize,
+}
+
+impl PeerAddressesConfig {
+    /// Configure the capacity of the [`PeerAddresses`] cache.
+    pub fn with_number_of_peers(mut self, number_of_peers: NonZeroUsize) -> Self {
+        self.number_of_peers = number_of_peers;
+        self
+    }
+
+    /// Configure the maximum number of cached addresses per peer.
+    pub fn with_number_of_addresses_by_peer(
+        mut self,
+        number_of_addresses_per_peer: NonZeroUsize,
+    ) -> Self {
+        self.number_of_addresses_per_peer = number_of_addresses_per_peer;
+        self
+    }
 }
 
 impl Default for PeerAddressesConfig {
     fn default() -> Self {
         Self {
             number_of_peers: NonZeroUsize::new(100).expect("100 != 0"),
-            number_of_addresses_by_peer: NonZeroUsize::new(10).expect("10 != 0"),
+            number_of_addresses_per_peer: NonZeroUsize::new(10).expect("10 != 0"),
         }
     }
 }
@@ -76,7 +93,7 @@ impl PeerAddresses {
                 if let Some(cached) = self.inner.get_mut(&peer) {
                     cached.put(address, ()).is_none()
                 } else {
-                    let mut set = LruCache::new(self.config.number_of_addresses_by_peer);
+                    let mut set = LruCache::new(self.config.number_of_addresses_per_peer);
                     set.put(address, ());
                     self.inner.put(peer, set);
 

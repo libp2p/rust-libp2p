@@ -1,12 +1,10 @@
-## 0.46.0
-
-- Update to the new `PeerAddresses` API with `PeerAddressesConfig`, changing `with_cache_size` to `with_cache_config`.
-  See [PR 5574](https://github.com/libp2p/rust-libp2p/pull/5574).
-
 ## 0.45.1
 
 - Add `hide_listen_addrs` option to prevent leaking (local) listen addresses.
   See [PR 5507](https://github.com/libp2p/rust-libp2p/pull/5507).
+- Add `with_cache_config` to fully configure the identify cache using the new `PeerAddressesConfig`.
+  Deprecating `with_cache_size` in favor of the new `with_cache_config`.
+  See [PR 5574](https://github.com/libp2p/rust-libp2p/pull/5574).
 
 ## 0.45.0
 
