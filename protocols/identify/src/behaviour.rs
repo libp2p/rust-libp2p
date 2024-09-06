@@ -199,6 +199,11 @@ impl Config {
     ///
     /// If set to [`None`], caching is disabled.
     pub fn with_cache_config(mut self, cache_config: Option<PeerAddressesConfig>) -> Self {
+        #[allow(deprecated)]
+        {
+            // set cache_size to 0 to ensure if user call `with_cache_config(None)`, caching do get disabled.
+            self.cache_size = 0;
+        }
         self.cache_config = cache_config;
         self
     }
