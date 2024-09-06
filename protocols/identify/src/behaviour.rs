@@ -143,6 +143,12 @@ pub struct Config {
 
     /// Configuration for the LRU cache of discovered peers.
     pub cache_config: Option<PeerAddressesConfig>,
+
+    /// Whether to include our listen addresses in our responses. If enabled,
+    /// we will effectively only share our external addresses.
+    ///
+    /// Disabled by default.
+    pub hide_listen_addrs: bool,
 }
 
 impl Config {
@@ -156,6 +162,7 @@ impl Config {
             interval: Duration::from_secs(5 * 60),
             push_listen_addr_updates: false,
             cache_config: Some(Default::default()),
+            hide_listen_addrs: false,
         }
     }
 
@@ -185,6 +192,12 @@ impl Config {
     /// If set to [`None`], caching is disabled.
     pub fn with_cache_config(mut self, cache_config: Option<PeerAddressesConfig>) -> Self {
         self.cache_config = cache_config;
+        self
+    }
+
+    /// Configures whether we prevent sending out our listen addresses.
+    pub fn with_hide_listen_addrs(mut self, b: bool) -> Self {
+        self.hide_listen_addrs = b;
         self
     }
 }
@@ -253,11 +266,11 @@ impl Behaviour {
     }
 
     fn all_addresses(&self) -> HashSet<Multiaddr> {
-        self.listen_addresses
-            .iter()
-            .chain(self.external_addresses.iter())
-            .cloned()
-            .collect()
+        let mut addrs = HashSet::from_iter(self.external_addresses.iter().cloned());
+        if !self.config.hide_listen_addrs {
+            addrs.extend(self.listen_addresses.iter().cloned());
+        };
+        addrs
     }
 
     fn emit_new_external_addr_candidate_event(
