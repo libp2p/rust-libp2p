@@ -18,8 +18,8 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
+use crate::proto;
 use crate::topic::Topic;
-use crate::{proto, FloodsubConfig};
 use asynchronous_codec::Framed;
 use bytes::Bytes;
 use futures::{
@@ -49,11 +49,10 @@ impl FloodsubProtocol {
         Self::default()
     }
 
-    /// Builds a new `FloodsubProtocol` taking parameters from the given configuration.
-    pub fn from_config(config: &FloodsubConfig) -> Self {
-        Self {
-            max_message_len: config.max_message_len,
-        }
+    /// Set the maximum message length.
+    pub fn with_max_message_len(mut self, max_message_len: usize) -> Self {
+        self.max_message_len = max_message_len;
+        self
     }
 }
 

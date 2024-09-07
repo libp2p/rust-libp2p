@@ -346,7 +346,10 @@ impl NetworkBehaviour for Floodsub {
         _: &Multiaddr,
     ) -> Result<THandler<Self>, ConnectionDenied> {
         Ok(OneShotHandler::new(
-            SubstreamProtocol::new(FloodsubProtocol::from_config(&self.config), ()),
+            SubstreamProtocol::new(
+                FloodsubProtocol::new().with_max_message_len(self.config.max_message_len),
+                (),
+            ),
             OneShotHandlerConfig::default(),
         ))
     }
@@ -360,7 +363,10 @@ impl NetworkBehaviour for Floodsub {
         _: PortUse,
     ) -> Result<THandler<Self>, ConnectionDenied> {
         Ok(OneShotHandler::new(
-            SubstreamProtocol::new(FloodsubProtocol::from_config(&self.config), ()),
+            SubstreamProtocol::new(
+                FloodsubProtocol::new().with_max_message_len(self.config.max_message_len),
+                (),
+            ),
             OneShotHandlerConfig::default(),
         ))
     }
