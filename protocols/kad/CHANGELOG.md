@@ -1,3 +1,11 @@
+## 0.47.0
+
+- Expose a kad query facility allowing specify num_results dynamicly.
+  See [PR 5555](https://github.com/libp2p/rust-libp2p/pull/5555).
+- Add `mode` getter on `Behaviour`.
+  See [PR 5573](https://github.com/libp2p/rust-libp2p/pull/5573).
+  
+
 ## 0.46.2
 
 - Emit `ToSwarm::NewExternalAddrOfPeer`.
