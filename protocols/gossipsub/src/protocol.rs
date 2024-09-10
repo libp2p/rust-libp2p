@@ -23,7 +23,8 @@ use crate::handler::HandlerEvent;
 use crate::rpc_proto::proto;
 use crate::topic::TopicHash;
 use crate::types::{
-    ControlAction, MessageId, PeerInfo, PeerKind, RawMessage, Rpc, Subscription, SubscriptionAction,
+    ControlAction, Graft, IHave, IWant, MessageId, PeerInfo, PeerKind, Prune, RawMessage, Rpc,
+    Subscription, SubscriptionAction,
 };
 use crate::ValidationError;
 use asynchronous_codec::{Decoder, Encoder, Framed};
@@ -412,33 +413,39 @@ impl Decoder for GossipsubCodec {
             let ihave_msgs: Vec<ControlAction> = rpc_control
                 .ihave
                 .into_iter()
-                .map(|ihave| ControlAction::IHave {
-                    topic_hash: TopicHash::from_raw(ihave.topic_id.unwrap_or_default()),
-                    message_ids: ihave
-                        .message_ids
-                        .into_iter()
-                        .map(MessageId::from)
-                        .collect::<Vec<_>>(),
+                .map(|ihave| {
+                    ControlAction::IHave(IHave {
+                        topic_hash: TopicHash::from_raw(ihave.topic_id.unwrap_or_default()),
+                        message_ids: ihave
+                            .message_ids
+                            .into_iter()
+                            .map(MessageId::from)
+                            .collect::<Vec<_>>(),
+                    })
                 })
                 .collect();
 
             let iwant_msgs: Vec<ControlAction> = rpc_control
                 .iwant
                 .into_iter()
-                .map(|iwant| ControlAction::IWant {
-                    message_ids: iwant
-                        .message_ids
-                        .into_iter()
-                        .map(MessageId::from)
-                        .collect::<Vec<_>>(),
+                .map(|iwant| {
+                    ControlAction::IWant(IWant {
+                        message_ids: iwant
+                            .message_ids
+                            .into_iter()
+                            .map(MessageId::from)
+                            .collect::<Vec<_>>(),
+                    })
                 })
                 .collect();
 
             let graft_msgs: Vec<ControlAction> = rpc_control
                 .graft
                 .into_iter()
-                .map(|graft| ControlAction::Graft {
-                    topic_hash: TopicHash::from_raw(graft.topic_id.unwrap_or_default()),
+                .map(|graft| {
+                    ControlAction::Graft(Graft {
+                        topic_hash: TopicHash::from_raw(graft.topic_id.unwrap_or_default()),
+                    })
                 })
                 .collect();
 
@@ -462,11 +469,11 @@ impl Decoder for GossipsubCodec {
                     .collect::<Vec<PeerInfo>>();
 
                 let topic_hash = TopicHash::from_raw(prune.topic_id.unwrap_or_default());
-                prune_msgs.push(ControlAction::Prune {
+                prune_msgs.push(ControlAction::Prune(Prune {
                     topic_hash,
                     peers,
                     backoff: prune.backoff,
-                });
+                }));
             }
 
             control_msgs.extend(ihave_msgs);
@@ -501,7 +508,7 @@ impl Decoder for GossipsubCodec {
 mod tests {
     use super::*;
     use crate::config::Config;
-    use crate::{Behaviour, ConfigBuilder};
+    use crate::{Behaviour, ConfigBuilder, MessageAuthenticity};
     use crate::{IdentTopic as Topic, Version};
     use libp2p_identity::Keypair;
     use quickcheck::*;
@@ -516,8 +523,9 @@ mod tests {
             // generate an arbitrary GossipsubMessage using the behaviour signing functionality
             let config = Config::default();
             let mut gs: Behaviour =
-                Behaviour::new(crate::MessageAuthenticity::Signed(keypair.0), config).unwrap();
-            let data = (0..g.gen_range(10..10024u32))
+                Behaviour::new(MessageAuthenticity::Signed(keypair.0), config).unwrap();
+            let mut data_g = quickcheck::Gen::new(10024);
+            let data = (0..u8::arbitrary(&mut data_g))
                 .map(|_| u8::arbitrary(g))
                 .collect::<Vec<_>>();
             let topic_id = TopicId::arbitrary(g).0;
@@ -530,7 +538,8 @@ mod tests {
 
     impl Arbitrary for TopicId {
         fn arbitrary(g: &mut Gen) -> Self {
-            let topic_string: String = (0..g.gen_range(20..1024u32))
+            let mut data_g = quickcheck::Gen::new(1024);
+            let topic_string: String = (0..u8::arbitrary(&mut data_g))
                 .map(|_| char::arbitrary(g))
                 .collect::<String>();
             TopicId(Topic::new(topic_string).into())

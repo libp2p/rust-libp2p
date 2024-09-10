@@ -19,17 +19,59 @@
 // DEALINGS IN THE SOFTWARE.
 
 //! A collection of types using the Gossipsub system.
+use crate::metrics::Metrics;
 use crate::TopicHash;
+use async_channel::{Receiver, Sender};
+use futures::{stream::Peekable, Stream, StreamExt};
+use futures_timer::Delay;
 use libp2p_identity::PeerId;
 use libp2p_swarm::ConnectionId;
 use prometheus_client::encoding::EncodeLabelValue;
 use quick_protobuf::MessageWrite;
 use std::fmt::Debug;
+use std::future::Future;
+use std::pin::Pin;
+use std::sync::{
+    atomic::{AtomicUsize, Ordering},
+    Arc,
+};
+use std::task::{Context, Poll};
+use std::time::Duration;
 use std::{collections::BTreeSet, fmt};
 
 use crate::rpc_proto::proto;
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
+
+/// The type of messages that have expired while attempting to send to a peer.
+#[derive(Clone, Debug, Default)]
+pub struct FailedMessages {
+    /// The number of publish messages that failed to be published in a heartbeat.
+    pub publish: usize,
+    /// The number of forward messages that failed to be published in a heartbeat.
+    pub forward: usize,
+    /// The number of messages that were failed to be sent to the priority queue as it was full.
+    pub priority: usize,
+    /// The number of messages that were failed to be sent to the non-priority queue as it was full.
+    pub non_priority: usize,
+}
+
+impl FailedMessages {
+    /// The total number of messages that expired due a timeout.
+    pub fn total_timeout(&self) -> usize {
+        self.publish + self.forward
+    }
+
+    /// The total number of messages that failed due to the queue being full.
+    pub fn total_queue_full(&self) -> usize {
+        self.priority + self.non_priority
+    }
+
+    /// The total failed messages in a heartbeat.
+    pub fn total(&self) -> usize {
+        self.total_timeout() + self.total_queue_full()
+    }
+}
 
 #[derive(Debug)]
 /// Validation kinds from the application for received messages.
@@ -71,7 +113,7 @@ impl std::fmt::Debug for MessageId {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone)]
 pub(crate) struct PeerConnections {
     /// The kind of protocol the peer supports.
     pub(crate) kind: PeerKind,
@@ -79,6 +121,8 @@ pub(crate) struct PeerConnections {
     pub(crate) connections: Vec<ConnectionId>,
     /// Subscribed topics.
     pub(crate) topics: BTreeSet<TopicHash>,
+    /// The rpc sender to the peer.
+    pub(crate) sender: RpcSender,
 }
 
 /// Describes the types of peers that can exist in the gossipsub context.
@@ -197,8 +241,8 @@ pub enum SubscriptionAction {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct PeerInfo {
-    pub peer_id: Option<PeerId>,
+pub(crate) struct PeerInfo {
+    pub(crate) peer_id: Option<PeerId>,
     //TODO add this when RFC: Signed Address Records got added to the spec (see pull request
     // https://github.com/libp2p/specs/pull/217)
     //pub signed_peer_record: ?,
@@ -208,46 +252,68 @@ pub struct PeerInfo {
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum ControlAction {
     /// Node broadcasts known messages per topic - IHave control message.
-    IHave {
-        /// The topic of the messages.
-        topic_hash: TopicHash,
-        /// A list of known message ids (peer_id + sequence _number) as a string.
-        message_ids: Vec<MessageId>,
-    },
+    IHave(IHave),
     /// The node requests specific message ids (peer_id + sequence _number) - IWant control message.
-    IWant {
-        /// A list of known message ids (peer_id + sequence _number) as a string.
-        message_ids: Vec<MessageId>,
-    },
+    IWant(IWant),
     /// The node has been added to the mesh - Graft control message.
-    Graft {
-        /// The mesh topic the peer should be added to.
-        topic_hash: TopicHash,
-    },
+    Graft(Graft),
     /// The node has been removed from the mesh - Prune control message.
-    Prune {
-        /// The mesh topic the peer should be removed from.
-        topic_hash: TopicHash,
-        /// A list of peers to be proposed to the removed peer as peer exchange
-        peers: Vec<PeerInfo>,
-        /// The backoff time in seconds before we allow to reconnect
-        backoff: Option<u64>,
-    },
+    Prune(Prune),
+}
+
+/// Node broadcasts known messages per topic - IHave control message.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct IHave {
+    /// The topic of the messages.
+    pub(crate) topic_hash: TopicHash,
+    /// A list of known message ids (peer_id + sequence _number) as a string.
+    pub(crate) message_ids: Vec<MessageId>,
+}
+
+/// The node requests specific message ids (peer_id + sequence _number) - IWant control message.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct IWant {
+    /// A list of known message ids (peer_id + sequence _number) as a string.
+    pub(crate) message_ids: Vec<MessageId>,
+}
+
+/// The node has been added to the mesh - Graft control message.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct Graft {
+    /// The mesh topic the peer should be added to.
+    pub(crate) topic_hash: TopicHash,
+}
+
+/// The node has been removed from the mesh - Prune control message.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct Prune {
+    /// The mesh topic the peer should be removed from.
+    pub(crate) topic_hash: TopicHash,
+    /// A list of peers to be proposed to the removed peer as peer exchange
+    pub(crate) peers: Vec<PeerInfo>,
+    /// The backoff time in seconds before we allow to reconnect
+    pub(crate) backoff: Option<u64>,
 }
 
 /// A Gossipsub RPC message sent.
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug)]
 pub enum RpcOut {
-    /// Publish a Gossipsub message on network.
-    Publish(RawMessage),
-    /// Forward a Gossipsub message to the network.
-    Forward(RawMessage),
+    /// Publish a Gossipsub message on network. [`Delay`] tags the time we attempted to send it.
+    Publish { message: RawMessage, timeout: Delay },
+    /// Forward a Gossipsub message on network. [`Delay`] tags the time we attempted to send it.
+    Forward { message: RawMessage, timeout: Delay },
     /// Subscribe a topic.
     Subscribe(TopicHash),
     /// Unsubscribe a topic.
     Unsubscribe(TopicHash),
-    /// List of Gossipsub control messages.
-    Control(ControlAction),
+    /// Send a GRAFT control message.
+    Graft(Graft),
+    /// Send a PRUNE control message.
+    Prune(Prune),
+    /// Send a IHave control message.
+    IHave(IHave),
+    /// Send a IWant control message.
+    IWant(IWant),
 }
 
 impl RpcOut {
@@ -262,12 +328,18 @@ impl From<RpcOut> for proto::RPC {
     /// Converts the RPC into protobuf format.
     fn from(rpc: RpcOut) -> Self {
         match rpc {
-            RpcOut::Publish(message) => proto::RPC {
+            RpcOut::Publish {
+                message,
+                timeout: _,
+            } => proto::RPC {
                 subscriptions: Vec::new(),
                 publish: vec![message.into()],
                 control: None,
             },
-            RpcOut::Forward(message) => proto::RPC {
+            RpcOut::Forward {
+                message,
+                timeout: _,
+            } => proto::RPC {
                 publish: vec![message.into()],
                 subscriptions: Vec::new(),
                 control: None,
@@ -288,7 +360,7 @@ impl From<RpcOut> for proto::RPC {
                 }],
                 control: None,
             },
-            RpcOut::Control(ControlAction::IHave {
+            RpcOut::IHave(IHave {
                 topic_hash,
                 message_ids,
             }) => proto::RPC {
@@ -304,7 +376,7 @@ impl From<RpcOut> for proto::RPC {
                     prune: vec![],
                 }),
             },
-            RpcOut::Control(ControlAction::IWant { message_ids }) => proto::RPC {
+            RpcOut::IWant(IWant { message_ids }) => proto::RPC {
                 publish: Vec::new(),
                 subscriptions: Vec::new(),
                 control: Some(proto::ControlMessage {
@@ -316,7 +388,7 @@ impl From<RpcOut> for proto::RPC {
                     prune: vec![],
                 }),
             },
-            RpcOut::Control(ControlAction::Graft { topic_hash }) => proto::RPC {
+            RpcOut::Graft(Graft { topic_hash }) => proto::RPC {
                 publish: Vec::new(),
                 subscriptions: vec![],
                 control: Some(proto::ControlMessage {
@@ -328,7 +400,7 @@ impl From<RpcOut> for proto::RPC {
                     prune: vec![],
                 }),
             },
-            RpcOut::Control(ControlAction::Prune {
+            RpcOut::Prune(Prune {
                 topic_hash,
                 peers,
                 backoff,
@@ -420,33 +492,33 @@ impl From<Rpc> for proto::RPC {
         for action in rpc.control_msgs {
             match action {
                 // collect all ihave messages
-                ControlAction::IHave {
+                ControlAction::IHave(IHave {
                     topic_hash,
                     message_ids,
-                } => {
+                }) => {
                     let rpc_ihave = proto::ControlIHave {
                         topic_id: Some(topic_hash.into_string()),
                         message_ids: message_ids.into_iter().map(|msg_id| msg_id.0).collect(),
                     };
                     control.ihave.push(rpc_ihave);
                 }
-                ControlAction::IWant { message_ids } => {
+                ControlAction::IWant(IWant { message_ids }) => {
                     let rpc_iwant = proto::ControlIWant {
                         message_ids: message_ids.into_iter().map(|msg_id| msg_id.0).collect(),
                     };
                     control.iwant.push(rpc_iwant);
                 }
-                ControlAction::Graft { topic_hash } => {
+                ControlAction::Graft(Graft { topic_hash }) => {
                     let rpc_graft = proto::ControlGraft {
                         topic_id: Some(topic_hash.into_string()),
                     };
                     control.graft.push(rpc_graft);
                 }
-                ControlAction::Prune {
+                ControlAction::Prune(Prune {
                     topic_hash,
                     peers,
                     backoff,
-                } => {
+                }) => {
                     let rpc_prune = proto::ControlPrune {
                         topic_id: Some(topic_hash.into_string()),
                         peers: peers
@@ -512,5 +584,235 @@ impl AsRef<str> for PeerKind {
 impl fmt::Display for PeerKind {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str(self.as_ref())
+    }
+}
+
+/// `RpcOut` sender that is priority aware.
+#[derive(Debug, Clone)]
+pub(crate) struct RpcSender {
+    cap: usize,
+    len: Arc<AtomicUsize>,
+    pub(crate) priority_sender: Sender<RpcOut>,
+    pub(crate) non_priority_sender: Sender<RpcOut>,
+    priority_receiver: Receiver<RpcOut>,
+    non_priority_receiver: Receiver<RpcOut>,
+}
+
+impl RpcSender {
+    /// Create a RpcSender.
+    pub(crate) fn new(cap: usize) -> RpcSender {
+        let (priority_sender, priority_receiver) = async_channel::unbounded();
+        let (non_priority_sender, non_priority_receiver) = async_channel::bounded(cap / 2);
+        let len = Arc::new(AtomicUsize::new(0));
+        RpcSender {
+            cap: cap / 2,
+            len,
+            priority_sender,
+            non_priority_sender,
+            priority_receiver,
+            non_priority_receiver,
+        }
+    }
+
+    /// Create a new Receiver to the sender.
+    pub(crate) fn new_receiver(&self) -> RpcReceiver {
+        RpcReceiver {
+            priority_len: self.len.clone(),
+            priority: Box::pin(self.priority_receiver.clone().peekable()),
+            non_priority: Box::pin(self.non_priority_receiver.clone().peekable()),
+        }
+    }
+
+    /// Send a `RpcOut::Graft` message to the `RpcReceiver`
+    /// this is high priority.
+    pub(crate) fn graft(&mut self, graft: Graft) {
+        self.priority_sender
+            .try_send(RpcOut::Graft(graft))
+            .expect("Channel is unbounded and should always be open");
+    }
+
+    /// Send a `RpcOut::Prune` message to the `RpcReceiver`
+    /// this is high priority.
+    pub(crate) fn prune(&mut self, prune: Prune) {
+        self.priority_sender
+            .try_send(RpcOut::Prune(prune))
+            .expect("Channel is unbounded and should always be open");
+    }
+
+    /// Send a `RpcOut::IHave` message to the `RpcReceiver`
+    /// this is low priority, if the queue is full an Err is returned.
+    #[allow(clippy::result_large_err)]
+    pub(crate) fn ihave(&mut self, ihave: IHave) -> Result<(), RpcOut> {
+        self.non_priority_sender
+            .try_send(RpcOut::IHave(ihave))
+            .map_err(|err| err.into_inner())
+    }
+
+    /// Send a `RpcOut::IHave` message to the `RpcReceiver`
+    /// this is low priority, if the queue is full an Err is returned.
+    #[allow(clippy::result_large_err)]
+    pub(crate) fn iwant(&mut self, iwant: IWant) -> Result<(), RpcOut> {
+        self.non_priority_sender
+            .try_send(RpcOut::IWant(iwant))
+            .map_err(|err| err.into_inner())
+    }
+
+    /// Send a `RpcOut::Subscribe` message to the `RpcReceiver`
+    /// this is high priority.
+    pub(crate) fn subscribe(&mut self, topic: TopicHash) {
+        self.priority_sender
+            .try_send(RpcOut::Subscribe(topic))
+            .expect("Channel is unbounded and should always be open");
+    }
+
+    /// Send a `RpcOut::Unsubscribe` message to the `RpcReceiver`
+    /// this is high priority.
+    pub(crate) fn unsubscribe(&mut self, topic: TopicHash) {
+        self.priority_sender
+            .try_send(RpcOut::Unsubscribe(topic))
+            .expect("Channel is unbounded and should always be open");
+    }
+
+    /// Send a `RpcOut::Publish` message to the `RpcReceiver`
+    /// this is high priority. If message sending fails, an `Err` is returned.
+    pub(crate) fn publish(
+        &mut self,
+        message: RawMessage,
+        timeout: Duration,
+        metrics: Option<&mut Metrics>,
+    ) -> Result<(), ()> {
+        if self.len.load(Ordering::Relaxed) >= self.cap {
+            return Err(());
+        }
+        self.priority_sender
+            .try_send(RpcOut::Publish {
+                message: message.clone(),
+                timeout: Delay::new(timeout),
+            })
+            .expect("Channel is unbounded and should always be open");
+        self.len.fetch_add(1, Ordering::Relaxed);
+
+        if let Some(m) = metrics {
+            m.msg_sent(&message.topic, message.raw_protobuf_len());
+        }
+
+        Ok(())
+    }
+
+    /// Send a `RpcOut::Forward` message to the `RpcReceiver`
+    /// this is high priority. If the queue is full the message is discarded.
+    pub(crate) fn forward(
+        &mut self,
+        message: RawMessage,
+        timeout: Duration,
+        metrics: Option<&mut Metrics>,
+    ) -> Result<(), ()> {
+        self.non_priority_sender
+            .try_send(RpcOut::Forward {
+                message: message.clone(),
+                timeout: Delay::new(timeout),
+            })
+            .map_err(|_| ())?;
+
+        if let Some(m) = metrics {
+            m.msg_sent(&message.topic, message.raw_protobuf_len());
+        }
+
+        Ok(())
+    }
+
+    /// Returns the current size of the priority queue.
+    pub(crate) fn priority_len(&self) -> usize {
+        self.len.load(Ordering::Relaxed)
+    }
+
+    /// Returns the current size of the non-priority queue.
+    pub(crate) fn non_priority_len(&self) -> usize {
+        self.non_priority_sender.len()
+    }
+}
+
+/// `RpcOut` sender that is priority aware.
+#[derive(Debug)]
+pub struct RpcReceiver {
+    /// The maximum length of the priority queue.
+    pub(crate) priority_len: Arc<AtomicUsize>,
+    /// The priority queue receiver.
+    pub(crate) priority: Pin<Box<Peekable<Receiver<RpcOut>>>>,
+    /// The non priority queue receiver.
+    pub(crate) non_priority: Pin<Box<Peekable<Receiver<RpcOut>>>>,
+}
+
+impl RpcReceiver {
+    // Peek the next message in the queues and return it if its timeout has elapsed.
+    // Returns `None` if there aren't any more messages on the stream or none is stale.
+    pub(crate) fn poll_stale(&mut self, cx: &mut Context<'_>) -> Poll<Option<RpcOut>> {
+        // Peek priority queue.
+        let priority = match self.priority.as_mut().poll_peek_mut(cx) {
+            Poll::Ready(Some(RpcOut::Publish {
+                message: _,
+                ref mut timeout,
+            })) => {
+                if Pin::new(timeout).poll(cx).is_ready() {
+                    // Return the message.
+                    let dropped = futures::ready!(self.priority.poll_next_unpin(cx))
+                        .expect("There should be a message");
+                    return Poll::Ready(Some(dropped));
+                }
+                Poll::Ready(None)
+            }
+            poll => poll,
+        };
+
+        let non_priority = match self.non_priority.as_mut().poll_peek_mut(cx) {
+            Poll::Ready(Some(RpcOut::Forward {
+                message: _,
+                ref mut timeout,
+            })) => {
+                if Pin::new(timeout).poll(cx).is_ready() {
+                    // Return the message.
+                    let dropped = futures::ready!(self.non_priority.poll_next_unpin(cx))
+                        .expect("There should be a message");
+                    return Poll::Ready(Some(dropped));
+                }
+                Poll::Ready(None)
+            }
+            poll => poll,
+        };
+
+        match (priority, non_priority) {
+            (Poll::Ready(None), Poll::Ready(None)) => Poll::Ready(None),
+            _ => Poll::Pending,
+        }
+    }
+
+    /// Poll queues and return true if both are empty.
+    pub(crate) fn poll_is_empty(&mut self, cx: &mut Context<'_>) -> bool {
+        matches!(
+            (
+                self.priority.as_mut().poll_peek(cx),
+                self.non_priority.as_mut().poll_peek(cx),
+            ),
+            (Poll::Ready(None), Poll::Ready(None))
+        )
+    }
+}
+
+impl Stream for RpcReceiver {
+    type Item = RpcOut;
+
+    fn poll_next(
+        mut self: std::pin::Pin<&mut Self>,
+        cx: &mut std::task::Context<'_>,
+    ) -> std::task::Poll<Option<Self::Item>> {
+        // The priority queue is first polled.
+        if let Poll::Ready(rpc) = Pin::new(&mut self.priority).poll_next(cx) {
+            if let Some(RpcOut::Publish { .. }) = rpc {
+                self.priority_len.fetch_sub(1, Ordering::Relaxed);
+            }
+            return Poll::Ready(rpc);
+        }
+        // Then we poll the non priority.
+        Pin::new(&mut self.non_priority).poll_next(cx)
     }
 }

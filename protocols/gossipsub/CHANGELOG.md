@@ -3,6 +3,13 @@
 - Attempt to publish to at least mesh_n peers when flood publish is disabled.
   See [PR 5578](https://github.com/libp2p/rust-libp2p/pull/5578).
 
+- Introduce back pressure and penalize slow peers. Drop stale messages that timeout before being
+  delivered.
+  See [PR 5595](https://github.com/libp2p/rust-libp2p/pull/5595).
+- Change `Behaviour::unsubscribe` and `Behaviour::report_message_validation_result`
+  to `bool` they don't need to be a `Result`.
+  See [PR 5595](https://github.com/libp2p/rust-libp2p/pull/5595).
+
 ## 0.47.0
 
 <!-- Update to libp2p-swarm v0.45.0 -->

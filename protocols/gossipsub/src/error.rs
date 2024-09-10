@@ -36,6 +36,9 @@ pub enum PublishError {
     MessageTooLarge,
     /// The compression algorithm failed.
     TransformFailed(std::io::Error),
+    /// Messages could not be sent because all queues for peers were full. The usize represents the
+    /// number of peers that have full queues.
+    AllQueuesFull(usize),
 }
 
 impl std::fmt::Display for PublishError {
