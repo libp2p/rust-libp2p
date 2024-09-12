@@ -22,7 +22,6 @@
 #![doc = include_str!("../README.md")]
 
 use clap::Parser;
-use futures::executor::block_on;
 use futures::StreamExt;
 use libp2p::{
     core::multiaddr::Protocol,
@@ -82,27 +81,27 @@ async fn main() -> Result<(), Box<dyn Error>> {
         .with(Protocol::QuicV1);
     swarm.listen_on(listen_addr_quic)?;
 
-    block_on(async {
-        loop {
-            match swarm.next().await.expect("Infinite Stream.") {
-                SwarmEvent::Behaviour(event) => {
-                    if let BehaviourEvent::Identify(identify::Event::Received {
-                        info: identify::Info { observed_addr, .. },
-                        ..
-                    }) = &event
-                    {
-                        swarm.add_external_address(observed_addr.clone());
-                    }
 
-                    println!("{event:?}")
+    loop {
+        match swarm.next().await.expect("Infinite Stream.") {
+            SwarmEvent::Behaviour(event) => {
+                if let BehaviourEvent::Identify(identify::Event::Received {
+                    info: identify::Info { observed_addr, .. },
+                    ..
+                }) = &event
+                {
+                    swarm.add_external_address(observed_addr.clone());
                 }
-                SwarmEvent::NewListenAddr { address, .. } => {
-                    println!("Listening on {address:?}");
-                }
-                _ => {}
+
+                println!("{event:?}")
             }
+            SwarmEvent::NewListenAddr { address, .. } => {
+                println!("Listening on {address:?}");
+            }
+            _ => {}
         }
-    })
+    }
+
 }
 
 #[derive(NetworkBehaviour)]
