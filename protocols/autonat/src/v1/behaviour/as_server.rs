@@ -107,6 +107,21 @@ impl<'a> HandleInnerEvent for AsServer<'a> {
                     },
             } => {
                 let probe_id = self.probe_id.next();
+                if !self.connected.contains_key(&peer) {
+                    tracing::debug!(
+                        %peer,
+                        "Reject inbound dial request from peer since it is not connected"
+                    );
+
+                    return VecDeque::from([ToSwarm::GenerateEvent(Event::InboundProbe(
+                        InboundProbeEvent::Error {
+                            probe_id,
+                            peer,
+                            error: InboundProbeError::Response(ResponseError::DialRefused),
+                        },
+                    ))]);
+                }
+
                 match self.resolve_inbound_request(peer, request) {
                     Ok(addrs) => {
                         tracing::debug!(

@@ -1,3 +1,6 @@
+## 0.13.1
+- Verify that an incoming AutoNAT dial comes from a connected peer. See [PR 5597](https://github.com/libp2p/rust-libp2p/pull/5597).
+
 ## 0.13.0
 
 - Due to the refactor of `Transport` it's no longer required to create a seperate transport for
