@@ -25,14 +25,14 @@ use libp2p::{core::multiaddr::Multiaddr, identify, noise, swarm::SwarmEvent, tcp
 use std::{error::Error, time::Duration};
 use tracing_subscriber::EnvFilter;
 
-#[async_std::main]
+#[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
     let _ = tracing_subscriber::fmt()
         .with_env_filter(EnvFilter::from_default_env())
         .try_init();
 
     let mut swarm = libp2p::SwarmBuilder::with_new_identity()
-        .with_async_std()
+        .with_tokio()
         .with_tcp(
             tcp::Config::default(),
             noise::Config::new,
