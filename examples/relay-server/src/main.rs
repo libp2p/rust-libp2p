@@ -81,7 +81,6 @@ async fn main() -> Result<(), Box<dyn Error>> {
         .with(Protocol::QuicV1);
     swarm.listen_on(listen_addr_quic)?;
 
-
     loop {
         match swarm.next().await.expect("Infinite Stream.") {
             SwarmEvent::Behaviour(event) => {
@@ -101,7 +100,6 @@ async fn main() -> Result<(), Box<dyn Error>> {
             _ => {}
         }
     }
-
 }
 
 #[derive(NetworkBehaviour)]
