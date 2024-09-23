@@ -1,3 +1,8 @@
+## 0.11.2
+
+- Add support for the `ip6zone` Multiaddr protocol.
+  See [PR 5609](https://github.com/libp2p/rust-libp2p/pull/5609).
+
 ## 0.11.1
 
 - Update `libp2p-tls` to version `0.5.0`, see [PR 5547]
