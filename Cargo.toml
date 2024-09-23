@@ -116,7 +116,7 @@ libp2p-websocket = { version = "0.44.0", path = "transports/websocket" }
 libp2p-websocket-websys = { version = "0.4.0", path = "transports/websocket-websys" }
 libp2p-webtransport-websys = { version = "0.4.0", path = "transports/webtransport-websys" }
 libp2p-yamux = { version = "0.46.0", path = "muxers/yamux" }
-multiaddr = "0.18.1"
+multiaddr = "0.18.2"
 multihash = "0.19.1"
 multistream-select = { version = "0.13.0", path = "misc/multistream-select" }
 prometheus-client = "0.22.2"
