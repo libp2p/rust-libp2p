@@ -28,6 +28,7 @@
 use crate::{Message, RawMessage, TopicHash};
 
 /// A general trait of transforming a [`RawMessage`] into a [`Message`]. The
+///
 /// [`RawMessage`] is obtained from the wire and the [`Message`] is used to
 /// calculate the [`crate::MessageId`] of the message and is what is sent to the application.
 ///

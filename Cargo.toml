@@ -77,7 +77,7 @@ futures-bounded = { version = "0.2.4" }
 futures-rustls = { version = "0.26.0", default-features = false }
 libp2p = { version = "0.54.1", path = "libp2p" }
 libp2p-allow-block-list = { version = "0.4.1", path = "misc/allow-block-list" }
-libp2p-autonat = { version = "0.13.0", path = "protocols/autonat" }
+libp2p-autonat = { version = "0.13.1", path = "protocols/autonat" }
 libp2p-connection-limits = { version = "0.4.0", path = "misc/connection-limits" }
 libp2p-core = { version = "0.42.0", path = "core" }
 libp2p-dcutr = { version = "0.12.0", path = "protocols/dcutr" }

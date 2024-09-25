@@ -1,6 +1,5 @@
 name: Interoperability Testing
 on:
-  pull_request:
   push:
     branches:
       - "master"
@@ -24,8 +23,9 @@ jobs:
       - name: Build ${{ matrix.flavour }} image
         run: ./scripts/build-interop-image.sh
         env:
-          AWS_ACCESS_KEY_ID: ${{ vars.TEST_PLANS_BUILD_CACHE_KEY_ID }}
-          AWS_SECRET_ACCESS_KEY: ${{ secrets.TEST_PLANS_BUILD_CACHE_KEY }}
+          AWS_BUCKET_NAME: ${{ vars.S3_LIBP2P_BUILD_CACHE_BUCKET_NAME }}
+          AWS_ACCESS_KEY_ID: ${{ vars.S3_LIBP2P_BUILD_CACHE_AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.S3_LIBP2P_BUILD_CACHE_AWS_SECRET_ACCESS_KEY }}
           FLAVOUR: ${{ matrix.flavour }}
 
       - name: Run ${{ matrix.flavour }} tests
@@ -33,9 +33,9 @@ jobs:
         with:
           test-filter: ${{ matrix.flavour }}-rust-libp2p-head
           extra-versions: ${{ github.workspace }}/interop-tests/${{ matrix.flavour }}-ping-version.json
-          s3-cache-bucket: libp2p-by-tf-aws-bootstrap
-          s3-access-key-id: ${{ vars.TEST_PLANS_BUILD_CACHE_KEY_ID }}
-          s3-secret-access-key: ${{ secrets.TEST_PLANS_BUILD_CACHE_KEY }}
+          s3-cache-bucket: ${{ vars.S3_LIBP2P_BUILD_CACHE_BUCKET_NAME }}
+          s3-access-key-id: ${{ vars.S3_LIBP2P_BUILD_CACHE_AWS_ACCESS_KEY_ID }}
+          s3-secret-access-key: ${{ secrets.S3_LIBP2P_BUILD_CACHE_AWS_SECRET_ACCESS_KEY }}
           worker-count: 16
   run-holepunching-interop:
     name: Run hole-punch interoperability tests
@@ -50,7 +50,7 @@ jobs:
         with:
           test-filter: rust-libp2p-head
           extra-versions: ${{ github.workspace }}/hole-punching-tests/version.json
-          s3-cache-bucket: libp2p-by-tf-aws-bootstrap
-          s3-access-key-id: ${{ vars.TEST_PLANS_BUILD_CACHE_KEY_ID }}
-          s3-secret-access-key: ${{ secrets.TEST_PLANS_BUILD_CACHE_KEY }}
+          s3-cache-bucket: ${{ vars.S3_LIBP2P_BUILD_CACHE_BUCKET_NAME }}
+          s3-access-key-id: ${{ vars.S3_LIBP2P_BUILD_CACHE_AWS_ACCESS_KEY_ID }}
+          s3-secret-access-key: ${{ secrets.S3_LIBP2P_BUILD_CACHE_AWS_SECRET_ACCESS_KEY }}
           worker-count: 16
