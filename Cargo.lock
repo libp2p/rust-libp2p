@@ -3293,7 +3293,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-server"
-version = "0.12.7"
+version = "0.12.8"
 dependencies = [
  "axum 0.7.5",
  "base64 0.22.1",
