@@ -216,6 +216,8 @@ async fn start_stream_handle(
         .map_err(|e| match e {
             StreamUpgradeError::NegotiationFailed => Error::UnsupportedProtocol,
             StreamUpgradeError::Timeout => Error::Io(io::ErrorKind::TimedOut.into()),
+            // TODO: remove when Rust 1.82 is MSRV
+            #[allow(unreachable_patterns)]
             StreamUpgradeError::Apply(v) => void::unreachable(v),
             StreamUpgradeError::Io(e) => Error::Io(e),
         })?;
