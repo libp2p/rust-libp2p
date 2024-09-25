@@ -3365,7 +3365,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-swarm-derive"
-version = "0.35.0"
+version = "0.35.1"
 dependencies = [
  "heck 0.5.0",
  "proc-macro2",
