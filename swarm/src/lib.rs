@@ -111,7 +111,8 @@ pub use behaviour::{
     AddressChange, CloseConnection, ConnectionClosed, DialFailure, ExpiredListenAddr,
     ExternalAddrExpired, ExternalAddresses, FromSwarm, ListenAddresses, ListenFailure,
     ListenerClosed, ListenerError, NetworkBehaviour, NewExternalAddrCandidate,
-    NewExternalAddrOfPeer, NewListenAddr, NotifyHandler, PeerAddresses, ToSwarm,
+    NewExternalAddrOfPeer, NewListenAddr, NotifyHandler, PeerAddresses, PeerAddressesConfig,
+    ToSwarm,
 };
 pub use connection::pool::ConnectionCounters;
 pub use connection::{ConnectionError, ConnectionId, SupportedProtocols};

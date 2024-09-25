@@ -1,3 +1,8 @@
+## 0.45.2
+
+- Add `PeerAddressesConfig` and the possibility to configure the number of addresses cached per peer.
+  See [PR 5574](https://github.com/libp2p/rust-libp2p/pull/5574).
+
 ## 0.45.1
 
 - Update `libp2p-swarm-derive` to version `0.35.0`, see [PR 5545]
