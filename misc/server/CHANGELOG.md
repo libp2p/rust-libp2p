@@ -3,7 +3,7 @@
 ### Changed
 
 - Remove deprecated [`libp2p-lookup`](https://github.com/mxinden/libp2p-lookup) from Dockerfile.
-  See PR XXXX
+  See [PR 5610](https://github.com/libp2p/rust-libp2p/pull/5610).
 
 ## 0.12.7
 
