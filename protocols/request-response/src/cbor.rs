@@ -143,6 +143,8 @@ mod codec {
 
     fn decode_into_io_error(err: cbor4ii::serde::DecodeError<Infallible>) -> io::Error {
         match err {
+            // TODO: remove when Rust 1.82 is MSRV
+            #[allow(unreachable_patterns)]
             cbor4ii::serde::DecodeError::Core(DecodeError::Read(e)) => {
                 io::Error::new(io::ErrorKind::Other, e)
             }

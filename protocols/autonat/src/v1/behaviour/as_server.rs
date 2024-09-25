@@ -17,7 +17,6 @@
 // LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
-
 use super::{
     Action, AutoNatCodec, Config, DialRequest, DialResponse, Event, HandleInnerEvent, ProbeId,
     ResponseError,
@@ -108,6 +107,21 @@ impl<'a> HandleInnerEvent for AsServer<'a> {
                     },
             } => {
                 let probe_id = self.probe_id.next();
+                if !self.connected.contains_key(&peer) {
+                    tracing::debug!(
+                        %peer,
+                        "Reject inbound dial request from peer since it is not connected"
+                    );
+
+                    return VecDeque::from([ToSwarm::GenerateEvent(Event::InboundProbe(
+                        InboundProbeEvent::Error {
+                            probe_id,
+                            peer,
+                            error: InboundProbeError::Response(ResponseError::DialRefused),
+                        },
+                    ))]);
+                }
+
                 match self.resolve_inbound_request(peer, request) {
                     Ok(addrs) => {
                         tracing::debug!(

@@ -1,3 +1,8 @@
+## 0.45.1
+
+- Add `hide_listen_addrs` option to prevent leaking (local) listen addresses.
+  See [PR 5507](https://github.com/libp2p/rust-libp2p/pull/5507).
+
 ## 0.45.0
 
 - Address translation is moved here from `libp2p-core`.

@@ -24,7 +24,7 @@ mod test;
 
 use crate::addresses::Addresses;
 use crate::handler::{Handler, HandlerEvent, HandlerIn, RequestId};
-use crate::kbucket::{self, Distance, KBucketsTable, NodeStatus};
+use crate::kbucket::{self, Distance, KBucketConfig, KBucketsTable, NodeStatus};
 use crate::protocol::{ConnectionType, KadPeer, ProtocolConfig};
 use crate::query::{Query, QueryConfig, QueryId, QueryPool, QueryPoolState};
 use crate::record::{
@@ -172,7 +172,7 @@ pub enum StoreInserts {
 /// The configuration is consumed by [`Behaviour::new`].
 #[derive(Debug, Clone)]
 pub struct Config {
-    kbucket_pending_timeout: Duration,
+    kbucket_config: KBucketConfig,
     query_config: QueryConfig,
     protocol_config: ProtocolConfig,
     record_ttl: Option<Duration>,
@@ -215,7 +215,7 @@ impl Config {
     /// Builds a new `Config` with the given protocol name.
     pub fn new(protocol_name: StreamProtocol) -> Self {
         Config {
-            kbucket_pending_timeout: Duration::from_secs(60),
+            kbucket_config: KBucketConfig::default(),
             query_config: QueryConfig::default(),
             protocol_config: ProtocolConfig::new(protocol_name),
             record_ttl: Some(Duration::from_secs(48 * 60 * 60)),
@@ -424,6 +424,24 @@ impl Config {
         self
     }
 
+    /// Sets the configuration for the k-buckets.
+    ///
+    /// * Default to K_VALUE.
+    pub fn set_kbucket_size(&mut self, size: NonZeroUsize) -> &mut Self {
+        self.kbucket_config.set_bucket_size(size);
+        self
+    }
+
+    /// Sets the timeout duration after creation of a pending entry after which
+    /// it becomes eligible for insertion into a full bucket, replacing the
+    /// least-recently (dis)connected node.
+    ///
+    /// * Default to `60` s.
+    pub fn set_kbucket_pending_timeout(&mut self, timeout: Duration) -> &mut Self {
+        self.kbucket_config.set_pending_timeout(timeout);
+        self
+    }
+
     /// Sets the time to wait before calling [`Behaviour::bootstrap`] after a new peer is inserted in the routing table.
     /// This prevent cascading bootstrap requests when multiple peers are inserted into the routing table "at the same time".
     /// This also allows to wait a little bit for other potential peers to be inserted into the routing table before
@@ -481,7 +499,7 @@ where
         Behaviour {
             store,
             caching: config.caching,
-            kbuckets: KBucketsTable::new(local_key, config.kbucket_pending_timeout),
+            kbuckets: KBucketsTable::new(local_key, config.kbucket_config),
             kbucket_inserts: config.kbucket_inserts,
             protocol_config: config.protocol_config,
             record_filtering: config.record_filtering,
@@ -717,11 +735,37 @@ where
     where
         K: Into<kbucket::Key<K>> + Into<Vec<u8>> + Clone,
     {
+        self.get_closest_peers_inner(key, None)
+    }
+
+    /// Initiates an iterative query for the closest peers to the given key.
+    /// The expected responding peers is specified by `num_results`
+    /// Note that the result is capped after exceeds K_VALUE
+    ///
+    /// The result of the query is delivered in a
+    /// [`Event::OutboundQueryProgressed{QueryResult::GetClosestPeers}`].
+    pub fn get_n_closest_peers<K>(&mut self, key: K, num_results: NonZeroUsize) -> QueryId
+    where
+        K: Into<kbucket::Key<K>> + Into<Vec<u8>> + Clone,
+    {
+        // The inner code never expect higher than K_VALUE results to be returned.
+        // And removing such cap will be tricky,
+        // since it would involve forging a new key and additional requests.
+        // Hence bound to K_VALUE here to set clear expectation and prevent unexpected behaviour.
+        let capped_num_results = std::cmp::min(num_results, K_VALUE);
+        self.get_closest_peers_inner(key, Some(capped_num_results))
+    }
+
+    fn get_closest_peers_inner<K>(&mut self, key: K, num_results: Option<NonZeroUsize>) -> QueryId
+    where
+        K: Into<kbucket::Key<K>> + Into<Vec<u8>> + Clone,
+    {
         let target: kbucket::Key<K> = key.clone().into();
         let key: Vec<u8> = key.into();
         let info = QueryInfo::GetClosestPeers {
             key,
             step: ProgressStep::first(),
+            num_results,
         };
         let peer_keys: Vec<kbucket::Key<PeerId>> = self.kbuckets.closest_keys(&target).collect();
         self.queries.add_iter_closest(target, peer_keys, info)
@@ -1065,6 +1109,11 @@ where
         if let Some(waker) = self.no_events_waker.take() {
             waker.wake();
         }
+    }
+
+    /// Get the [`Mode`] in which the DHT is currently operating.
+    pub fn mode(&self) -> Mode {
+        self.mode
     }
 
     fn reconfigure_mode(&mut self) {
@@ -1467,7 +1516,7 @@ where
                 })
             }
 
-            QueryInfo::GetClosestPeers { key, mut step } => {
+            QueryInfo::GetClosestPeers { key, mut step, .. } => {
                 step.last = true;
 
                 Some(Event::OutboundQueryProgressed {
@@ -1684,7 +1733,7 @@ where
                 },
             }),
 
-            QueryInfo::GetClosestPeers { key, mut step } => {
+            QueryInfo::GetClosestPeers { key, mut step, .. } => {
                 step.last = true;
                 Some(Event::OutboundQueryProgressed {
                     id: query_id,
@@ -2544,13 +2593,19 @@ where
             // Drain applied pending entries from the routing table.
             if let Some(entry) = self.kbuckets.take_applied_pending() {
                 let kbucket::Node { key, value } = entry.inserted;
+                let peer_id = key.into_preimage();
+                self.queued_events
+                    .push_back(ToSwarm::NewExternalAddrOfPeer {
+                        peer_id,
+                        address: value.first().clone(),
+                    });
                 let event = Event::RoutingUpdated {
                     bucket_range: self
                         .kbuckets
                         .bucket(&key)
                         .map(|b| b.range())
                         .expect("Self to never be applied from pending."),
-                    peer: key.into_preimage(),
+                    peer: peer_id,
                     is_new_peer: true,
                     addresses: value,
                     old_peer: entry.evicted.map(|n| n.key.into_preimage()),
@@ -3157,6 +3212,8 @@ pub enum QueryInfo {
         key: Vec<u8>,
         /// Current index of events.
         step: ProgressStep,
+        /// If required, `num_results` specifies expected responding peers
+        num_results: Option<NonZeroUsize>,
     },
 
     /// A (repeated) query initiated by [`Behaviour::get_providers`].

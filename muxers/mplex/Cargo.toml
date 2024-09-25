@@ -3,7 +3,7 @@ name = "libp2p-mplex"
 edition = "2021"
 rust-version = { workspace = true }
 description = "Mplex multiplexing protocol for libp2p"
-version = "0.41.0"
+version = "0.42.0"
 authors = ["Parity Technologies <admin@parity.io>"]
 license = "MIT"
 repository = "https://github.com/libp2p/rust-libp2p"
@@ -38,12 +38,10 @@ tracing-subscriber = { workspace = true, features = ["env-filter"] }
 name = "split_send_size"
 harness = false
 
-# Passing arguments to the docsrs builder in order to properly document cfg's. 
+# Passing arguments to the docsrs builder in order to properly document cfg's.
 # More information: https://docs.rs/about/builds#cross-compiling
 [package.metadata.docs.rs]
 all-features = true
-rustdoc-args = ["--cfg", "docsrs"]
-rustc-args = ["--cfg", "docsrs"]
 
 [lints]
 workspace = true
