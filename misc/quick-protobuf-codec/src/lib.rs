@@ -12,6 +12,7 @@ mod generated;
 pub use generated::test as proto;
 
 /// [`Codec`] implements [`Encoder`] and [`Decoder`], uses [`unsigned_varint`]
+///
 /// to prefix messages with their length and uses [`quick_protobuf`] and a provided
 /// `struct` implementing [`MessageRead`] and [`MessageWrite`] to do the encoding.
 pub struct Codec<In, Out = In> {
