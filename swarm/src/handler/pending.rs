@@ -52,6 +52,8 @@ impl ConnectionHandler for PendingConnectionHandler {
     }
 
     fn on_behaviour_event(&mut self, v: Self::FromBehaviour) {
+        // TODO: remove when Rust 1.82 is MSRV
+        #[allow(unreachable_patterns)]
         void::unreachable(v)
     }
 
@@ -74,9 +76,13 @@ impl ConnectionHandler for PendingConnectionHandler {
         >,
     ) {
         match event {
+            // TODO: remove when Rust 1.82 is MSRV
+            #[allow(unreachable_patterns)]
             ConnectionEvent::FullyNegotiatedInbound(FullyNegotiatedInbound {
                 protocol, ..
             }) => void::unreachable(protocol),
+            // TODO: remove when Rust 1.82 is MSRV
+            #[allow(unreachable_patterns)]
             ConnectionEvent::FullyNegotiatedOutbound(FullyNegotiatedOutbound {
                 protocol,
                 info: _info,
@@ -87,6 +93,8 @@ impl ConnectionHandler for PendingConnectionHandler {
                     void::unreachable(_info);
                 }
             }
+            // TODO: remove when Rust 1.82 is MSRV
+            #[allow(unreachable_patterns)]
             ConnectionEvent::AddressChange(_)
             | ConnectionEvent::DialUpgradeError(_)
             | ConnectionEvent::ListenUpgradeError(_)

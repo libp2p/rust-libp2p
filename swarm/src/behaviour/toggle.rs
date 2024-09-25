@@ -210,6 +210,8 @@ where
     ) {
         let out = match out {
             future::Either::Left(out) => out,
+            // TODO: remove when Rust 1.82 is MSRV
+            #[allow(unreachable_patterns)]
             future::Either::Right(v) => void::unreachable(v),
         };
 
@@ -251,6 +253,8 @@ where
 
         let err = match err {
             Either::Left(e) => e,
+            // TODO: remove when Rust 1.82 is MSRV
+            #[allow(unreachable_patterns)]
             Either::Right(v) => void::unreachable(v),
         };
 
