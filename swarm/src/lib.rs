@@ -1193,12 +1193,14 @@ where
                 self.pending_handler_event = Some((peer_id, handler, event));
             }
             ToSwarm::NewExternalAddrCandidate(addr) => {
-                self.behaviour
-                    .on_swarm_event(FromSwarm::NewExternalAddrCandidate(
-                        NewExternalAddrCandidate { addr: &addr },
-                    ));
-                self.pending_swarm_events
-                    .push_back(SwarmEvent::NewExternalAddrCandidate { address: addr });
+                if !self.confirmed_external_addr.contains(&addr) {
+                    self.behaviour
+                        .on_swarm_event(FromSwarm::NewExternalAddrCandidate(
+                            NewExternalAddrCandidate { addr: &addr },
+                        ));
+                    self.pending_swarm_events
+                        .push_back(SwarmEvent::NewExternalAddrCandidate { address: addr });
+                }
             }
             ToSwarm::ExternalAddrConfirmed(addr) => {
                 self.add_external_address(addr.clone());
