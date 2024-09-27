@@ -510,8 +510,7 @@ fn parse_ws_dial_addr<T>(addr: Multiaddr) -> Result<WsAddress, Error<T>> {
             }
             (Some(Protocol::Dns(h)), Some(Protocol::Tcp(port)))
             | (Some(Protocol::Dns4(h)), Some(Protocol::Tcp(port)))
-            | (Some(Protocol::Dns6(h)), Some(Protocol::Tcp(port)))
-            | (Some(Protocol::Dnsaddr(h)), Some(Protocol::Tcp(port))) => {
+            | (Some(Protocol::Dns6(h)), Some(Protocol::Tcp(port))) => {
                 break (format!("{h}:{port}"), tls::dns_name_ref(&h)?)
             }
             (Some(_), Some(p)) => {
@@ -992,6 +991,12 @@ mod tests {
         assert!(!info.use_tls);
         assert_eq!(info.server_name, "::1".try_into().unwrap());
         assert_eq!(info.tcp_addr, "/ip6/::1/tcp/2222".parse().unwrap());
+
+        // Check `/dnsaddr`
+        let addr = "/dnsaddr/example.com/tcp/2222/ws"
+            .parse::<Multiaddr>()
+            .unwrap();
+        parse_ws_dial_addr::<io::Error>(addr).unwrap_err();
 
         // Check non-ws address
         let addr = "/ip4/127.0.0.1/tcp/2222".parse::<Multiaddr>().unwrap();
