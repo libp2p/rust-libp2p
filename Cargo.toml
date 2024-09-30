@@ -151,8 +151,4 @@ clippy.manual_let_else = "warn"
 clippy.dbg_macro = "warn"
 
 [workspace.metadata.release]
-pre-release-hook = [
-    "/bin/sh",
-    '-c',
-    '/bin/sh $WORKSPACE_ROOT/scripts/add-changelog-header.sh',
-] # Nested use of shell to expand variables.
+pre-release-hook = ["/bin/sh", '-c', '/bin/sh $WORKSPACE_ROOT/scripts/add-changelog-header.sh'] # Nested use of shell to expand variables.
