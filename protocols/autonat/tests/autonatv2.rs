@@ -1,5 +1,6 @@
 use libp2p_autonat::v2::client::{self, Config};
 use libp2p_autonat::v2::server;
+use libp2p_core::multiaddr::Protocol;
 use libp2p_core::transport::TransportError;
 use libp2p_core::Multiaddr;
 use libp2p_swarm::{
@@ -21,17 +22,10 @@ async fn confirm_successful() {
 
     let cor_server_peer = *alice.local_peer_id();
     let cor_client_peer = *bob.local_peer_id();
-    let bob_external_addrs = Arc::new(bob.external_addresses().cloned().collect::<Vec<_>>());
-    let alice_bob_external_addrs = bob_external_addrs.clone();
+    let bob_tcp_listeners = Arc::new(tcp_listeners(&bob));
+    let alice_bob_tcp_listeners = bob_tcp_listeners.clone();
 
     let alice_task = async {
-        let _ = alice
-            .wait(|event| match event {
-                SwarmEvent::NewExternalAddrCandidate { .. } => Some(()),
-                _ => None,
-            })
-            .await;
-
         let (dialed_peer_id, dialed_connection_id) = alice
             .wait(|event| match event {
                 SwarmEvent::Dialing {
@@ -76,10 +70,10 @@ async fn confirm_successful() {
             })
             .await;
 
-        assert_eq!(tested_addr, bob_external_addrs.first().cloned().unwrap());
+        assert_eq!(tested_addr, bob_tcp_listeners.first().cloned().unwrap());
         assert_eq!(data_amount, 0);
         assert_eq!(client, cor_client_peer);
-        assert_eq!(&all_addrs[..], &bob_external_addrs[..]);
+        assert_eq!(&all_addrs[..], &bob_tcp_listeners[..]);
         assert!(result.is_ok(), "Result: {result:?}");
     };
 
@@ -122,7 +116,7 @@ async fn confirm_successful() {
             .await;
         assert_eq!(
             tested_addr,
-            alice_bob_external_addrs.first().cloned().unwrap()
+            alice_bob_tcp_listeners.first().cloned().unwrap()
         );
         assert_eq!(bytes_sent, 0);
         assert_eq!(server, cor_server_peer);
@@ -446,7 +440,7 @@ async fn new_client() -> Swarm<CombinedClient> {
             identity.public().clone(),
         )),
     });
-    node.listen().with_tcp_addr_external().await;
+    node.listen().await;
     node
 }
 
@@ -490,13 +484,6 @@ async fn bootstrap() -> (Swarm<CombinedServer>, Swarm<CombinedClient>) {
     let cor_client_peer = *bob.local_peer_id();
 
     let alice_task = async {
-        let _ = alice
-            .wait(|event| match event {
-                SwarmEvent::NewExternalAddrCandidate { .. } => Some(()),
-                _ => None,
-            })
-            .await;
-
         let (dialed_peer_id, dialed_connection_id) = alice
             .wait(|event| match event {
                 SwarmEvent::Dialing {
@@ -565,4 +552,15 @@ async fn bootstrap() -> (Swarm<CombinedServer>, Swarm<CombinedClient>) {
 
     tokio::join!(alice_task, bob_task);
     (alice, bob)
+}
+
+fn tcp_listeners<T: NetworkBehaviour>(swarm: &Swarm<T>) -> Vec<Multiaddr> {
+    swarm
+        .listeners()
+        .filter(|addr| {
+            addr.iter()
+                .any(|protocol| matches!(protocol, Protocol::Tcp(_)))
+        })
+        .cloned()
+        .collect::<Vec<_>>()
 }
