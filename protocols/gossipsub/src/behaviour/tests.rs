@@ -580,7 +580,7 @@ fn test_join() {
             new_receivers.insert(
                 peer_id,
                 RpcReceiver {
-                    priority_len: c.priority_len,
+                    priority_queue_len: c.priority_queue_len,
                     priority: c.priority,
                     non_priority: c.non_priority,
                 },
@@ -1153,7 +1153,7 @@ fn test_handle_iwant_msg_cached_shifted() {
             (
                 peer_id,
                 RpcReceiver {
-                    priority_len: c.priority_len,
+                    priority_queue_len: c.priority_queue_len,
                     priority: c.priority,
                     non_priority: c.non_priority,
                 },
@@ -1405,7 +1405,7 @@ fn count_control_msgs(
         new_receivers.insert(
             peer_id,
             RpcReceiver {
-                priority_len: c.priority_len,
+                priority_queue_len: c.priority_queue_len,
                 priority: c.priority,
                 non_priority: c.non_priority,
             },
@@ -1430,7 +1430,7 @@ fn flush_events<D: DataTransform, F: TopicSubscriptionFilter>(
         new_receivers.insert(
             peer_id,
             RpcReceiver {
-                priority_len: c.priority_len,
+                priority_queue_len: c.priority_queue_len,
                 priority: c.priority,
                 non_priority: c.non_priority,
             },

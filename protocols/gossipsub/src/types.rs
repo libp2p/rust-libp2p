@@ -601,6 +601,10 @@ pub(crate) struct RpcSender {
 impl RpcSender {
     /// Create a RpcSender.
     pub(crate) fn new(cap: usize) -> RpcSender {
+        // We intentionally do not bound the channel, as we still need to send control messages
+        // such as `GRAFT`, `PRUNE`, `SUBSCRIBE`, and `UNSUBSCRIBE`.
+        // That's also why we define `cap` and divide it by two,
+        // to ensure there is capacity for both priority and non_priority messages.
         let (priority_sender, priority_receiver) = async_channel::unbounded();
         let (non_priority_sender, non_priority_receiver) = async_channel::bounded(cap / 2);
         let len = Arc::new(AtomicUsize::new(0));
@@ -617,7 +621,7 @@ impl RpcSender {
     /// Create a new Receiver to the sender.
     pub(crate) fn new_receiver(&self) -> RpcReceiver {
         RpcReceiver {
-            priority_len: self.len.clone(),
+            priority_queue_len: self.len.clone(),
             priority: Box::pin(self.priority_receiver.clone().peekable()),
             non_priority: Box::pin(self.non_priority_receiver.clone().peekable()),
         }
@@ -722,12 +726,12 @@ impl RpcSender {
     }
 
     /// Returns the current size of the priority queue.
-    pub(crate) fn priority_len(&self) -> usize {
+    pub(crate) fn priority_queue_len(&self) -> usize {
         self.len.load(Ordering::Relaxed)
     }
 
     /// Returns the current size of the non-priority queue.
-    pub(crate) fn non_priority_len(&self) -> usize {
+    pub(crate) fn non_priority_queue_len(&self) -> usize {
         self.non_priority_sender.len()
     }
 }
@@ -736,7 +740,7 @@ impl RpcSender {
 #[derive(Debug)]
 pub struct RpcReceiver {
     /// The maximum length of the priority queue.
-    pub(crate) priority_len: Arc<AtomicUsize>,
+    pub(crate) priority_queue_len: Arc<AtomicUsize>,
     /// The priority queue receiver.
     pub(crate) priority: Pin<Box<Peekable<Receiver<RpcOut>>>>,
     /// The non priority queue receiver.
@@ -808,7 +812,7 @@ impl Stream for RpcReceiver {
         // The priority queue is first polled.
         if let Poll::Ready(rpc) = Pin::new(&mut self.priority).poll_next(cx) {
             if let Some(RpcOut::Publish { .. }) = rpc {
-                self.priority_len.fetch_sub(1, Ordering::Relaxed);
+                self.priority_queue_len.fetch_sub(1, Ordering::Relaxed);
             }
             return Poll::Ready(rpc);
         }
