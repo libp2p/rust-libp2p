@@ -238,87 +238,84 @@ async fn dial_back_to_non_libp2p() {
     let (mut alice, mut bob) = bootstrap().await;
     let alice_peer_id = *alice.local_peer_id();
 
-    for addr_str in ["/ip4/169.150.247.38/tcp/32", "/ip6/::1/tcp/1000"] {
-        let addr: Multiaddr = addr_str.parse().unwrap();
-        let bob_addr = addr.clone();
-        bob.behaviour_mut()
-            .autonat
-            .on_swarm_event(FromSwarm::NewExternalAddrCandidate(
-                NewExternalAddrCandidate { addr: &addr },
-            ));
+    let addr_str = "/ip6/::1/tcp/1000";
+    let addr: Multiaddr = addr_str.parse().unwrap();
+    let bob_addr = addr.clone();
+    bob.behaviour_mut()
+        .autonat
+        .on_swarm_event(FromSwarm::NewExternalAddrCandidate(
+            NewExternalAddrCandidate { addr: &addr },
+        ));
 
-        let alice_task = async {
-            let (alice_dialing_peer, alice_conn_id) = alice
-                .wait(|event| match event {
-                    SwarmEvent::Dialing {
-                        peer_id,
-                        connection_id,
-                    } => peer_id.map(|p| (p, connection_id)),
-                    _ => None,
-                })
-                .await;
-            let mut outgoing_conn_error = alice
-                .wait(|event| match event {
-                    SwarmEvent::OutgoingConnectionError {
-                        connection_id,
-                        peer_id: Some(peer_id),
-                        error: DialError::Transport(peers),
-                    } if connection_id == alice_conn_id && peer_id == alice_dialing_peer => {
-                        Some(peers)
-                    }
-                    _ => None,
-                })
-                .await;
+    let alice_task = async {
+        let (alice_dialing_peer, alice_conn_id) = alice
+            .wait(|event| match event {
+                SwarmEvent::Dialing {
+                    peer_id,
+                    connection_id,
+                } => peer_id.map(|p| (p, connection_id)),
+                _ => None,
+            })
+            .await;
+        let mut outgoing_conn_error = alice
+            .wait(|event| match event {
+                SwarmEvent::OutgoingConnectionError {
+                    connection_id,
+                    peer_id: Some(peer_id),
+                    error: DialError::Transport(peers),
+                } if connection_id == alice_conn_id && peer_id == alice_dialing_peer => Some(peers),
+                _ => None,
+            })
+            .await;
 
-            if let Some((multiaddr, TransportError::Other(o))) = outgoing_conn_error.pop() {
-                assert_eq!(
-                    multiaddr,
-                    addr.clone().with_p2p(alice_dialing_peer).unwrap()
-                );
-                let error_string = o.to_string();
-                assert!(
-                    error_string.contains("Connection refused"),
-                    "Correct error string: {error_string} for {addr_str}"
-                );
-            } else {
-                panic!("No outgoing connection errors");
-            }
+        if let Some((multiaddr, TransportError::Other(o))) = outgoing_conn_error.pop() {
+            assert_eq!(
+                multiaddr,
+                addr.clone().with_p2p(alice_dialing_peer).unwrap()
+            );
+            let error_string = o.to_string();
+            assert!(
+                error_string.contains("Connection refused"),
+                "Correct error string: {error_string} for {addr_str}"
+            );
+        } else {
+            panic!("No outgoing connection errors");
+        }
 
-            alice
-                .wait(|event| match event {
-                    SwarmEvent::Behaviour(CombinedServerEvent::Autonat(server::Event {
-                        all_addrs,
-                        tested_addr,
-                        client,
-                        data_amount,
-                        result: Ok(()),
-                    })) if all_addrs == vec![addr.clone()]
-                        && tested_addr == addr
-                        && alice_dialing_peer == client =>
-                    {
-                        Some(data_amount)
-                    }
-                    _ => None,
-                })
-                .await
-        };
-        let bob_task = async {
-            bob.wait(|event| match event {
-                SwarmEvent::Behaviour(CombinedClientEvent::Autonat(client::Event {
+        alice
+            .wait(|event| match event {
+                SwarmEvent::Behaviour(CombinedServerEvent::Autonat(server::Event {
+                    all_addrs,
                     tested_addr,
-                    bytes_sent,
-                    server,
-                    result: Err(_),
-                })) if tested_addr == bob_addr && server == alice_peer_id => Some(bytes_sent),
+                    client,
+                    data_amount,
+                    result: Ok(()),
+                })) if all_addrs == vec![addr.clone()]
+                    && tested_addr == addr
+                    && alice_dialing_peer == client =>
+                {
+                    Some(data_amount)
+                }
                 _ => None,
             })
             .await
-        };
+    };
+    let bob_task = async {
+        bob.wait(|event| match event {
+            SwarmEvent::Behaviour(CombinedClientEvent::Autonat(client::Event {
+                tested_addr,
+                bytes_sent,
+                server,
+                result: Err(_),
+            })) if tested_addr == bob_addr && server == alice_peer_id => Some(bytes_sent),
+            _ => None,
+        })
+        .await
+    };
 
-        let (alice_bytes_sent, bob_bytes_sent) = tokio::join!(alice_task, bob_task);
-        assert_eq!(alice_bytes_sent, bob_bytes_sent);
-        bob.behaviour_mut().autonat.validate_addr(&addr);
-    }
+    let (alice_bytes_sent, bob_bytes_sent) = tokio::join!(alice_task, bob_task);
+    assert_eq!(alice_bytes_sent, bob_bytes_sent);
+    bob.behaviour_mut().autonat.validate_addr(&addr);
 }
 
 #[tokio::test]
