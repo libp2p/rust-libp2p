@@ -41,12 +41,13 @@ mod state;
 
 /// Maximum length of a message.
 ///
-/// "As long as message interleaving is not supported, the sender SHOULD limit the maximum message
-/// size to 16 KB to avoid monopolization."
-/// Source: <https://www.rfc-editor.org/rfc/rfc8831#name-transferring-user-data-on-a>
-pub const MAX_MSG_LEN: usize = 16 * 1024;
+/// See:
+/// <https://github.com/libp2p/specs/pull/628>
+/// <https://blog.mozilla.org/webrtc/large-data-channel-messages/>
+/// <https://issues.webrtc.org/issues/40644524>
+pub const MAX_MSG_LEN: usize = 256 * 1024; // 256 KiB
 /// Length of varint, in bytes.
-const VARINT_LEN: usize = 2;
+const VARINT_LEN: usize = 4;
 /// Overhead of the protobuf encoding, in bytes.
 const PROTO_OVERHEAD: usize = 5;
 /// Maximum length of data, in bytes.

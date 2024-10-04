@@ -90,7 +90,7 @@ a=ice-pwd:{pwd}
 a=fingerprint:{fingerprint_algorithm} {fingerprint_value}
 a=setup:passive
 a=sctp-port:5000
-a=max-message-size:16384
+a=max-message-size:262144
 a=candidate:1467250027 1 UDP 1467250027 {target_ip} {target_port} typ host
 a=end-of-candidates
 ";

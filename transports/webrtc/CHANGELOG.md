@@ -1,3 +1,7 @@
+## 0.9.0-alpha
+- Increase WebRTC max message size from 16 KiB to 256 KiB.
+  See [PR 5589](https://github.com/libp2p/rust-libp2p/pull/5589)
+
 ## 0.8.0-alpha
 
 - Implement refactored `Transport`.

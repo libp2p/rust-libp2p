@@ -1,3 +1,8 @@
+## 0.5.0-alpha
+
+- Increase WebRTC max message size from 16 KiB to 256 KiB.
+  See [PR 5589](https://github.com/libp2p/rust-libp2p/pull/5589)
+
 ## 0.4.0-alpha.2
 
 - Bump version of web-sys and update `__Nonexhaustive` to `__Invalid`.
