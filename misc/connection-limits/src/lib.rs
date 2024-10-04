@@ -355,6 +355,8 @@ impl NetworkBehaviour for Behaviour {
         _: ConnectionId,
         event: THandlerOutEvent<Self>,
     ) {
+        // TODO: remove when Rust 1.82 is MSRV
+        #[allow(unreachable_patterns)]
         void::unreachable(event)
     }
 
@@ -586,6 +588,8 @@ mod tests {
             _connection_id: ConnectionId,
             event: THandlerOutEvent<Self>,
         ) {
+            // TODO: remove when Rust 1.82 is MSRV
+            #[allow(unreachable_patterns)]
             void::unreachable(event)
         }
 
