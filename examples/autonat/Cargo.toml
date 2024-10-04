@@ -12,7 +12,8 @@ release = false
 tokio = { workspace = true, features = ["full"] }
 clap = { version = "4.5.6", features = ["derive"] }
 futures = { workspace = true }
-libp2p = { path = "../../libp2p", features = ["tokio", "tcp", "noise", "yamux", "autonat", "identify", "macros"] }
+libp2p = { path = "../../libp2p", features = ["tokio", "tcp", "noise", "yamux", "autonat",
+    "identify", "experimental-macros"] }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true, features = ["env-filter"] }
 

@@ -1,3 +1,5 @@
+#![cfg(feature = "cbor")]
+
 use libp2p_core::ConnectedPoint;
 use libp2p_request_response as request_response;
 use libp2p_request_response::ProtocolSupport;

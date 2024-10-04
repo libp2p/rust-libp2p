@@ -33,7 +33,7 @@ void = "1"
 libp2p-identity = { workspace = true, features = ["rand"] }
 libp2p-ping = { workspace = true }
 libp2p-plaintext = { workspace = true }
-libp2p-swarm = { workspace = true, features = ["macros", "async-std"] }
+libp2p-swarm = { workspace = true, features = ["experimental-macros", "macros", "async-std"] }
 libp2p-swarm-test = { workspace = true }
 libp2p-yamux = { workspace = true }
 quickcheck = { workspace = true }

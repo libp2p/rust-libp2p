@@ -49,6 +49,7 @@ full = [
     "webtransport-websys",
     "yamux",
     "upnp",
+    "experimental-macros",
 ]
 
 async-std = [ "libp2p-swarm/async-std", "libp2p-mdns?/async-io", "libp2p-tcp?/async-io", "libp2p-dns?/async-std", "libp2p-quic?/async-std",]
@@ -64,6 +65,7 @@ identify = ["dep:libp2p-identify", "libp2p-metrics?/identify"]
 json = ["libp2p-request-response?/json"]
 kad = ["dep:libp2p-kad", "libp2p-metrics?/kad"]
 macros = ["libp2p-swarm/macros"]
+experimental-macros = ["macros", "libp2p-swarm/experimental-macros"]
 mdns = ["dep:libp2p-mdns"]
 memory-connection-limits = ["dep:libp2p-memory-connection-limits"]
 metrics = ["dep:libp2p-metrics"]

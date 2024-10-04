@@ -22,7 +22,7 @@ pin-project = "1.1.5"
 libp2p-core = { workspace = true }
 libp2p-identity = { workspace = true, features = ["ed25519", "rsa", "ecdsa","secp256k1", "rand"] }
 libp2p-noise = { workspace = true }
-libp2p-swarm = { workspace = true, features = ["tokio"] }
+libp2p-swarm = { workspace = true, features = ["experimental-macros", "tokio"] }
 libp2p-tcp = { workspace = true, features = ["tokio"] }
 libp2p-websocket = { workspace = true }
 libp2p-yamux = { workspace = true }

@@ -1,5 +1,8 @@
 ## 0.45.2
 
+- Adding `experimental-macros` feature to enable new `NetworkBehaviour` macro implementation, please refer to `libp2p-swarm-derive` crates changelog for more details.
+  See [PR 5486](https://github.com/libp2p/rust-libp2p/pull/5486)
+
 - Don't report `NewExternalAddrCandidate` for confirmed external addresses.
   See [PR 5582](https://github.com/libp2p/rust-libp2p/pull/5582).
 

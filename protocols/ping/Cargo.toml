@@ -24,7 +24,7 @@ void = "1.0"
 
 [dev-dependencies]
 async-std = "1.6.2"
-libp2p-swarm = { workspace = true, features = ["macros"] }
+libp2p-swarm = { workspace = true, features = ["experimental-macros", "macros"] }
 libp2p-swarm-test = { path = "../../swarm-test" }
 quickcheck = { workspace = true }
 tracing-subscriber = { workspace = true, features = ["env-filter"] }

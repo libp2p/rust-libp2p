@@ -11,7 +11,7 @@ release = false
 [dependencies]
 tokio = { workspace = true, features = ["rt-multi-thread", "macros"] }
 futures = { workspace = true }
-libp2p = { path = "../../libp2p", features = ["tokio", "dns", "macros", "noise", "ping", "tcp", "yamux", "upnp"] }
+libp2p = { path = "../../libp2p", features = ["tokio", "dns", "experimental-macros", "noise", "ping", "tcp", "yamux", "upnp"] }
 tracing-subscriber = { workspace = true, features = ["env-filter"] }
 
 [lints]
