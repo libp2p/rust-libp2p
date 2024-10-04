@@ -4,6 +4,7 @@ use libp2p_core::transport::{DialOpts, ListenerId, PortUse};
 use libp2p_core::{Endpoint, Transport};
 use libp2p_quic as quic;
 use std::time::Duration;
+use libp2p_core::muxing::StreamMuxerBox;
 
 #[async_std::test]
 async fn close_implies_flush() {
@@ -19,7 +20,7 @@ async fn read_after_close() {
     libp2p_muxer_test_harness::read_after_close(alice, bob).await;
 }
 
-async fn connected_peers() -> (quic::Connection, quic::Connection) {
+async fn connected_peers() -> (StreamMuxerBox, StreamMuxerBox) {
     let mut dialer = new_transport().boxed();
     let mut listener = new_transport().boxed();
 
@@ -75,7 +76,7 @@ async fn connected_peers() -> (quic::Connection, quic::Connection) {
 
 fn new_transport() -> quic::async_std::Transport {
     let keypair = libp2p_identity::Keypair::generate_ed25519();
-    let mut config = quic::Config::new(&keypair);
+    let mut config = quic::Config::new(&keypair, None);
     config.handshake_timeout = Duration::from_secs(1);
 
     quic::async_std::Transport::new(config)
