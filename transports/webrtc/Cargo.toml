@@ -16,7 +16,7 @@ bytes = "1"
 futures = { workspace = true }
 futures-timer = "3"
 hex = "0.4"
-if-watch = "3.2"
+if-watch = {package = "if-watch-plus", version="1.0.0"}
 libp2p-core = { workspace = true }
 libp2p-noise = { workspace = true }
 libp2p-identity = { workspace = true }

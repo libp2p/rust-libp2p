@@ -14,7 +14,7 @@ categories = ["network-programming", "asynchronous"]
 async-io = { version = "2.3.3", optional = true }
 futures = { workspace = true }
 futures-timer = "3.0"
-if-watch = "3.2.0"
+if-watch = {package="if-watch-plus", version="1.0.0"}
 libc = "0.2.155"
 libp2p-core = { workspace = true }
 libp2p-identity = { workspace = true }
