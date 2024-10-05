@@ -1,3 +1,7 @@
+## 0.8.1-alpha
+- Changed unmaintained `if-watch@3.2.0` to `if-watch-plus@1.0.0`
+See [PR 5624](https://github.com/libp2p/rust-libp2p/pull/5624)
+
 ## 0.8.0-alpha
 
 - Implement refactored `Transport`.

@@ -1,3 +1,7 @@
+## 0.46.1
+- Changed unmaintained `if-watch@3.2.0` to `if-watch-plus@1.0.0`
+See [PR 5624](https://github.com/libp2p/rust-libp2p/pull/5624)
+
 ## 0.46.0
 
 <!-- Update to libp2p-swarm v0.45.0 -->
