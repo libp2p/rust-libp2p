@@ -13,7 +13,7 @@ publish = true
 [dependencies]
 futures = { workspace = true }
 futures-timer = "3.0.3"
-igd-next = "0.14.3"
+igd-next = "0.15.1"
 libp2p-core = { workspace = true }
 libp2p-swarm = { workspace = true }
 tokio = { workspace = true, default-features = false, features = ["rt"], optional = true }
