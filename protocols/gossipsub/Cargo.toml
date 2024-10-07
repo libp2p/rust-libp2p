@@ -37,6 +37,7 @@ sha2 = "0.10.8"
 smallvec = "1.13.2"
 tracing = { workspace = true }
 void = "1.0.2"
+instant = { version = "0.1.13", features = ["wasm-bindgen"] }
 
 # Metrics dependencies
 prometheus-client = { workspace = true }
