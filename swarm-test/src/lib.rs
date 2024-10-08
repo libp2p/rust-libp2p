@@ -21,14 +21,10 @@
 use async_trait::async_trait;
 use futures::future::{BoxFuture, Either};
 use futures::{FutureExt, StreamExt};
-use libp2p_core::{
-    multiaddr::Protocol, transport::MemoryTransport, upgrade::Version, Multiaddr, Transport,
-};
-use libp2p_identity::{Keypair, PeerId};
-use libp2p_plaintext as plaintext;
+use libp2p_core::{multiaddr::Protocol, Multiaddr};
+use libp2p_identity::PeerId;
 use libp2p_swarm::dial_opts::PeerCondition;
-use libp2p_swarm::{self as swarm, dial_opts::DialOpts, NetworkBehaviour, Swarm, SwarmEvent};
-use libp2p_yamux as yamux;
+use libp2p_swarm::{dial_opts::DialOpts, NetworkBehaviour, Swarm, SwarmEvent};
 use std::fmt::Debug;
 use std::future::IntoFuture;
 use std::time::Duration;
@@ -38,12 +34,23 @@ use std::time::Duration;
 pub trait SwarmExt {
     type NB: NetworkBehaviour;
 
-    /// Create a new [`Swarm`] with an ephemeral identity.
+    /// Create a new [`Swarm`] with an ephemeral identity and the `async-std` runtime.
     ///
-    /// The swarm will use a [`MemoryTransport`] together with a [`plaintext::Config`] authentication layer and
-    /// [`yamux::Config`] as the multiplexer. However, these details should not be relied upon by the test
+    /// The swarm will use a [`libp2p_core::transport::MemoryTransport`] together with a [`libp2p_plaintext::Config`] authentication layer and
+    /// [`libp2p_yamux::Config`] as the multiplexer. However, these details should not be relied upon by the test
     /// and may change at any time.
-    fn new_ephemeral(behaviour_fn: impl FnOnce(Keypair) -> Self::NB) -> Self
+    #[cfg(feature = "async-std")]
+    fn new_ephemeral(behaviour_fn: impl FnOnce(libp2p_identity::Keypair) -> Self::NB) -> Self
+    where
+        Self: Sized;
+
+    /// Create a new [`Swarm`] with an ephemeral identity and the `tokio` runtime.
+    ///
+    /// The swarm will use a [`libp2p_core::transport::MemoryTransport`] together with a [`libp2p_plaintext::Config`] authentication layer and
+    /// [`libp2p_yamux::Config`] as the multiplexer. However, these details should not be relied upon by the test
+    /// and may change at any time.
+    #[cfg(feature = "tokio")]
+    fn new_ephemeral_tokio(behaviour_fn: impl FnOnce(libp2p_identity::Keypair) -> Self::NB) -> Self
     where
         Self: Sized;
 
@@ -200,18 +207,22 @@ where
 {
     type NB = B;
 
-    fn new_ephemeral(behaviour_fn: impl FnOnce(Keypair) -> Self::NB) -> Self
+    #[cfg(feature = "async-std")]
+    fn new_ephemeral(behaviour_fn: impl FnOnce(libp2p_identity::Keypair) -> Self::NB) -> Self
     where
         Self: Sized,
     {
+        use libp2p_core::{transport::MemoryTransport, upgrade::Version, Transport as _};
+        use libp2p_identity::Keypair;
+
         let identity = Keypair::generate_ed25519();
         let peer_id = PeerId::from(identity.public());
 
         let transport = MemoryTransport::default()
             .or_transport(libp2p_tcp::async_io::Transport::default())
             .upgrade(Version::V1)
-            .authenticate(plaintext::Config::new(&identity))
-            .multiplex(yamux::Config::default())
+            .authenticate(libp2p_plaintext::Config::new(&identity))
+            .multiplex(libp2p_yamux::Config::default())
             .timeout(Duration::from_secs(20))
             .boxed();
 
@@ -219,7 +230,35 @@ where
             transport,
             behaviour_fn(identity),
             peer_id,
-            swarm::Config::with_async_std_executor()
+            libp2p_swarm::Config::with_async_std_executor()
+                .with_idle_connection_timeout(Duration::from_secs(5)), // Some tests need connections to be kept alive beyond what the individual behaviour configures.,
+        )
+    }
+
+    #[cfg(feature = "tokio")]
+    fn new_ephemeral_tokio(behaviour_fn: impl FnOnce(libp2p_identity::Keypair) -> Self::NB) -> Self
+    where
+        Self: Sized,
+    {
+        use libp2p_core::{transport::MemoryTransport, upgrade::Version, Transport as _};
+        use libp2p_identity::Keypair;
+
+        let identity = Keypair::generate_ed25519();
+        let peer_id = PeerId::from(identity.public());
+
+        let transport = MemoryTransport::default()
+            .or_transport(libp2p_tcp::tokio::Transport::default())
+            .upgrade(Version::V1)
+            .authenticate(libp2p_plaintext::Config::new(&identity))
+            .multiplex(libp2p_yamux::Config::default())
+            .timeout(Duration::from_secs(20))
+            .boxed();
+
+        Swarm::new(
+            transport,
+            behaviour_fn(identity),
+            peer_id,
+            libp2p_swarm::Config::with_tokio_executor()
                 .with_idle_connection_timeout(Duration::from_secs(5)), // Some tests need connections to be kept alive beyond what the individual behaviour configures.,
         )
     }
