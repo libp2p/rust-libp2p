@@ -35,6 +35,7 @@ use libp2p_swarm::{
     dial_opts::DialOpts, CloseConnection, ConnectionDenied, ConnectionId, NetworkBehaviour,
     NotifyHandler, OneShotHandler, THandler, THandlerInEvent, THandlerOutEvent, ToSwarm,
 };
+use libp2p_swarm::{OneShotHandlerConfig, SubstreamProtocol};
 use smallvec::SmallVec;
 use std::collections::hash_map::{DefaultHasher, HashMap};
 use std::task::{Context, Poll};
@@ -45,6 +46,7 @@ pub struct Floodsub {
     /// Events that need to be yielded to the outside when polling.
     events: VecDeque<ToSwarm<FloodsubEvent, FloodsubRpc>>,
 
+    /// The floodsub configuration
     config: FloodsubConfig,
 
     /// List of peers to send messages to.
@@ -97,6 +99,7 @@ impl Floodsub {
                             topic,
                             action: FloodsubSubscriptionAction::Subscribe,
                         }],
+                        max_message_len: self.config.max_message_len,
                     },
                 });
             }
@@ -133,6 +136,7 @@ impl Floodsub {
                         topic: topic.clone(),
                         action: FloodsubSubscriptionAction::Subscribe,
                     }],
+                    max_message_len: self.config.max_message_len,
                 },
             });
         }
@@ -163,6 +167,7 @@ impl Floodsub {
                         topic: topic.clone(),
                         action: FloodsubSubscriptionAction::Unsubscribe,
                     }],
+                    max_message_len: self.config.max_message_len,
                 },
             });
         }
@@ -263,6 +268,7 @@ impl Floodsub {
                 event: FloodsubRpc {
                     subscriptions: Vec::new(),
                     messages: vec![message.clone()],
+                    max_message_len: self.config.max_message_len,
                 },
             });
         }
@@ -293,6 +299,7 @@ impl Floodsub {
                             topic,
                             action: FloodsubSubscriptionAction::Subscribe,
                         }],
+                        max_message_len: self.config.max_message_len,
                     },
                 });
             }
@@ -338,7 +345,13 @@ impl NetworkBehaviour for Floodsub {
         _: &Multiaddr,
         _: &Multiaddr,
     ) -> Result<THandler<Self>, ConnectionDenied> {
-        Ok(Default::default())
+        Ok(OneShotHandler::new(
+            SubstreamProtocol::new(
+                FloodsubProtocol::new().with_max_message_len(self.config.max_message_len),
+                (),
+            ),
+            OneShotHandlerConfig::default(),
+        ))
     }
 
     fn handle_established_outbound_connection(
@@ -349,7 +362,13 @@ impl NetworkBehaviour for Floodsub {
         _: Endpoint,
         _: PortUse,
     ) -> Result<THandler<Self>, ConnectionDenied> {
-        Ok(Default::default())
+        Ok(OneShotHandler::new(
+            SubstreamProtocol::new(
+                FloodsubProtocol::new().with_max_message_len(self.config.max_message_len),
+                (),
+            ),
+            OneShotHandlerConfig::default(),
+        ))
     }
 
     fn on_connection_handler_event(
@@ -460,6 +479,7 @@ impl NetworkBehaviour for Floodsub {
                         FloodsubRpc {
                             subscriptions: Vec::new(),
                             messages: vec![message.clone()],
+                            max_message_len: self.config.max_message_len,
                         },
                     ));
                 }
