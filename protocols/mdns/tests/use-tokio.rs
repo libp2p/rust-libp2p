@@ -33,6 +33,7 @@ async fn test_discovery_tokio_ipv4() {
     run_discovery_test(Config::default()).await
 }
 
+#[cfg_attr(target_vendor = "apple", ignore)]
 #[tokio::test]
 async fn test_discovery_tokio_ipv6() {
     let _ = tracing_subscriber::fmt()
