@@ -1,9 +1,12 @@
+## 0.4.1
+
+- Add `#[track_caller]` to `SwarmExt` methods
+
 ## 0.4.0
 
 <!-- Update to libp2p-swarm v0.45.0 -->
 
 ## 0.3.0
-
 
 ## 0.2.0
 

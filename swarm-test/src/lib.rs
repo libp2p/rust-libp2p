@@ -52,6 +52,7 @@ pub trait SwarmExt {
     /// This will take addresses from the `other` [`Swarm`] via [`Swarm::external_addresses`].
     /// By default, this iterator will not yield any addresses.
     /// To add listen addresses as external addresses, use [`ListenFuture::with_memory_addr_external`] or [`ListenFuture::with_tcp_addr_external`].
+    #[track_caller]
     async fn connect<T>(&mut self, other: &mut Swarm<T>)
     where
         T: NetworkBehaviour + Send,
@@ -63,9 +64,11 @@ pub trait SwarmExt {
     /// This function only abstracts away the "dial and wait for `ConnectionEstablished` event" part.
     ///
     /// Because we don't have access to the other [`Swarm`], we can't guarantee that it makes progress.
+    #[track_caller]
     async fn dial_and_wait(&mut self, addr: Multiaddr) -> PeerId;
 
     /// Wait for specified condition to return `Some`.
+    #[track_caller]
     async fn wait<E, P>(&mut self, predicate: P) -> E
     where
         P: Fn(SwarmEvent<<Self::NB as NetworkBehaviour>::ToSwarm>) -> Option<E>,
@@ -79,11 +82,13 @@ pub trait SwarmExt {
     /// Returns the next [`SwarmEvent`] or times out after 10 seconds.
     ///
     /// If the 10s timeout does not fit your usecase, please fall back to `StreamExt::next`.
+    #[track_caller]
     async fn next_swarm_event(&mut self) -> SwarmEvent<<Self::NB as NetworkBehaviour>::ToSwarm>;
 
     /// Returns the next behaviour event or times out after 10 seconds.
     ///
     /// If the 10s timeout does not fit your usecase, please fall back to `StreamExt::next`.
+    #[track_caller]
     async fn next_behaviour_event(&mut self) -> <Self::NB as NetworkBehaviour>::ToSwarm;
 
     async fn loop_on_next(self);
