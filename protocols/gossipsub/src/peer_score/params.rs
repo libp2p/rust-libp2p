@@ -148,6 +148,11 @@ pub struct PeerScoreParams {
 
     /// Time to remember counters for a disconnected peer.
     pub retain_score: Duration,
+
+    /// Slow peer penalty conditions
+    pub slow_peer_weight: f64,
+    pub slow_peer_threshold: f64,
+    pub slow_peer_decay: f64,
 }
 
 impl Default for PeerScoreParams {
@@ -165,6 +170,9 @@ impl Default for PeerScoreParams {
             decay_interval: Duration::from_secs(DEFAULT_DECAY_INTERVAL),
             decay_to_zero: DEFAULT_DECAY_TO_ZERO,
             retain_score: Duration::from_secs(3600),
+            slow_peer_weight: -0.2,
+            slow_peer_threshold: 0.0,
+            slow_peer_decay: 0.2,
         }
     }
 }

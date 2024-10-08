@@ -14,6 +14,7 @@ categories = ["network-programming", "asynchronous"]
 wasm-bindgen = ["getrandom/js"]
 
 [dependencies]
+async-channel = "2.3.1"
 asynchronous-codec = { workspace = true }
 base64 = "0.22.1"
 byteorder = "1.5.0"
@@ -22,6 +23,7 @@ either = "1.11"
 fnv = "1.0.7"
 futures = { workspace = true }
 futures-ticker = "0.0.3"
+futures-timer = "3.0.2"
 getrandom = "0.2.15"
 hex_fmt = "0.3.0"
 web-time = { workspace = true }
