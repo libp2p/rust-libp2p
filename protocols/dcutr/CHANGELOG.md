@@ -1,3 +1,8 @@
+## 0.12.1
+
+- Handle empty hole-punch candidates at relayed connection startup.
+  See [PR 5583](https://github.com/libp2p/rust-libp2p/pull/5583).
+
 ## 0.12.0
 
 <!-- Update to libp2p-swarm v0.45.0 -->
