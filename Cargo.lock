@@ -2918,7 +2918,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-mdns"
-version = "0.46.0"
+version = "0.46.1"
 dependencies = [
  "async-io 2.3.3",
  "async-std",
@@ -3132,7 +3132,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-quic"
-version = "0.11.1"
+version = "0.11.2"
 dependencies = [
  "async-std",
  "bytes",
@@ -3347,7 +3347,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-tcp"
-version = "0.42.0"
+version = "0.42.1"
 dependencies = [
  "async-io 2.3.3",
  "async-std",
@@ -3413,7 +3413,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-webrtc"
-version = "0.8.0-alpha"
+version = "0.8.1-alpha"
 dependencies = [
  "async-trait",
  "bytes",

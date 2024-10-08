@@ -87,7 +87,7 @@ libp2p-gossipsub = { version = "0.47.1", path = "protocols/gossipsub" }
 libp2p-identify = { version = "0.45.1", path = "protocols/identify" }
 libp2p-identity = { version = "0.2.9" }
 libp2p-kad = { version = "0.47.0", path = "protocols/kad" }
-libp2p-mdns = { version = "0.46.0", path = "protocols/mdns" }
+libp2p-mdns = { version = "0.46.1", path = "protocols/mdns" }
 libp2p-memory-connection-limits = { version = "0.3.0", path = "misc/memory-connection-limits" }
 libp2p-metrics = { version = "0.15.0", path = "misc/metrics" }
 libp2p-mplex = { version = "0.42.0", path = "muxers/mplex" }
@@ -96,7 +96,7 @@ libp2p-perf = { version = "0.4.0", path = "protocols/perf" }
 libp2p-ping = { version = "0.45.0", path = "protocols/ping" }
 libp2p-plaintext = { version = "0.42.0", path = "transports/plaintext" }
 libp2p-pnet = { version = "0.25.0", path = "transports/pnet" }
-libp2p-quic = { version = "0.11.1", path = "transports/quic" }
+libp2p-quic = { version = "0.11.2", path = "transports/quic" }
 libp2p-relay = { version = "0.18.0", path = "protocols/relay" }
 libp2p-rendezvous = { version = "0.15.0", path = "protocols/rendezvous" }
 libp2p-request-response = { version = "0.27.0", path = "protocols/request-response" }
@@ -105,11 +105,11 @@ libp2p-stream = { version = "0.2.0-alpha", path = "protocols/stream" }
 libp2p-swarm = { version = "0.45.2", path = "swarm" }
 libp2p-swarm-derive = { version = "=0.35.0", path = "swarm-derive" } # `libp2p-swarm-derive` may not be compatible with different `libp2p-swarm` non-breaking releases. E.g. `libp2p-swarm` might introduce a new enum variant `FromSwarm` (which is `#[non-exhaustive]`) in a non-breaking release. Older versions of `libp2p-swarm-derive` would not forward this enum variant within the `NetworkBehaviour` hierarchy. Thus the version pinning is required.
 libp2p-swarm-test = { version = "0.4.0", path = "swarm-test" }
-libp2p-tcp = { version = "0.42.0", path = "transports/tcp" }
+libp2p-tcp = { version = "0.42.1", path = "transports/tcp" }
 libp2p-tls = { version = "0.5.0", path = "transports/tls" }
 libp2p-uds = { version = "0.41.0", path = "transports/uds" }
 libp2p-upnp = { version = "0.3.0", path = "protocols/upnp" }
-libp2p-webrtc = { version = "0.8.0-alpha", path = "transports/webrtc" }
+libp2p-webrtc = { version = "0.8.1-alpha", path = "transports/webrtc" }
 libp2p-webrtc-utils = { version = "0.3.0", path = "misc/webrtc-utils" }
 libp2p-webrtc-websys = { version = "0.4.0-alpha.2", path = "transports/webrtc-websys" }
 libp2p-websocket = { version = "0.44.0", path = "transports/websocket" }
