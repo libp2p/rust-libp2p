@@ -1,6 +1,11 @@
+## 0.4.1
+
+- Add `tokio` support.
+
 ## 0.4.0
 
 <!-- Update to libp2p-swarm v0.45.0 -->
+
 
 ## 0.3.0
 
