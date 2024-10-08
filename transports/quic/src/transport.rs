@@ -43,7 +43,7 @@ use socket2::{Domain, Socket, Type};
 use std::collections::hash_map::{DefaultHasher, Entry};
 use std::collections::{HashMap, HashSet};
 use std::hash::{Hash, Hasher};
-use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, UdpSocket};
+use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddrV6, UdpSocket};
 use std::time::Duration;
 use std::{fmt, io};
 use std::{
@@ -700,9 +700,42 @@ fn multiaddr_to_socketaddr(
     support_draft_29: bool,
 ) -> Option<(SocketAddr, ProtocolVersion, Option<PeerId>)> {
     let mut iter = addr.iter();
-    let proto1 = iter.next()?;
-    let proto2 = iter.next()?;
-    let proto3 = iter.next()?;
+
+    let socket_addr = match iter.next()? {
+        Protocol::Ip4(ip) => {
+            let Protocol::Udp(port) = iter.next()? else {
+                return None;
+            };
+
+            SocketAddr::new(ip.into(), port)
+        }
+        Protocol::Ip6(ip) => {
+            let mut next = iter.next()?;
+
+            let if_index = if let Protocol::Ip6zone(zone) = next {
+                next = iter.next()?;
+
+                zone.parse()
+                    .ok()
+                    .or_else(|| if_nametoindex(zone.as_ref()).ok())?
+            } else {
+                0
+            };
+
+            let Protocol::Udp(port) = next else {
+                return None;
+            };
+
+            SocketAddrV6::new(ip, port, 0, if_index).into()
+        }
+        _ => return None,
+    };
+
+    let version = match iter.next()? {
+        Protocol::QuicV1 => ProtocolVersion::V1,
+        Protocol::Quic if support_draft_29 => ProtocolVersion::Draft29,
+        _ => return None,
+    };
 
     let mut peer_id = None;
     for proto in iter {
@@ -713,21 +746,8 @@ fn multiaddr_to_socketaddr(
             _ => return None,
         }
     }
-    let version = match proto3 {
-        Protocol::QuicV1 => ProtocolVersion::V1,
-        Protocol::Quic if support_draft_29 => ProtocolVersion::Draft29,
-        _ => return None,
-    };
 
-    match (proto1, proto2) {
-        (Protocol::Ip4(ip), Protocol::Udp(port)) => {
-            Some((SocketAddr::new(ip.into(), port), version, peer_id))
-        }
-        (Protocol::Ip6(ip), Protocol::Udp(port)) => {
-            Some((SocketAddr::new(ip.into(), port), version, peer_id))
-        }
-        _ => None,
-    }
+    Some((socket_addr, version, peer_id))
 }
 
 /// Turns an IP address and port into the corresponding QUIC multiaddr.
@@ -736,10 +756,62 @@ fn socketaddr_to_multiaddr(socket_addr: &SocketAddr, version: ProtocolVersion) -
         ProtocolVersion::V1 => Protocol::QuicV1,
         ProtocolVersion::Draft29 => Protocol::Quic,
     };
-    Multiaddr::empty()
-        .with(socket_addr.ip().into())
-        .with(Protocol::Udp(socket_addr.port()))
-        .with(quic_proto)
+    match socket_addr {
+        SocketAddr::V6(socket_addr) if socket_addr.scope_id() != 0 => {
+            let scope_id = socket_addr.scope_id();
+
+            let zone = if_indextoname(scope_id).unwrap_or_else(|_| scope_id.to_string());
+
+            Multiaddr::empty()
+                .with(Protocol::Ip6(*socket_addr.ip()))
+                .with(Protocol::Ip6zone(zone.into()))
+                .with(Protocol::Udp(socket_addr.port()))
+                .with(quic_proto)
+        }
+        _ => Multiaddr::empty()
+            .with(socket_addr.ip().into())
+            .with(Protocol::Udp(socket_addr.port()))
+            .with(quic_proto),
+    }
+}
+
+/// Returns the index of the network interface corresponding to the given name.
+#[cfg(unix)]
+fn if_nametoindex(name: impl Into<Vec<u8>>) -> io::Result<u32> {
+    let if_name = std::ffi::CString::new(name)?;
+    match unsafe { libc::if_nametoindex(if_name.as_ptr()) } {
+        0 => Err(io::Error::last_os_error()),
+        if_index => Ok(if_index),
+    }
+}
+
+/// Returns the name of the network interface corresponding to the given interface index.
+#[cfg(unix)]
+fn if_indextoname(name: u32) -> io::Result<String> {
+    let mut buffer = [0; libc::IF_NAMESIZE];
+    let maybe_name = unsafe { libc::if_indextoname(name, buffer.as_mut_ptr()) };
+    if maybe_name.is_null() {
+        Err(io::Error::last_os_error())
+    } else {
+        let cstr = unsafe { std::ffi::CStr::from_ptr(maybe_name) };
+        Ok(cstr.to_string_lossy().into_owned())
+    }
+}
+
+#[cfg(not(unix))]
+fn if_nametoindex(name: impl Into<Vec<u8>>) -> io::Result<u32> {
+    Err(io::Error::new(
+        io::ErrorKind::Other,
+        "if_nametoindex is not supported on this platform",
+    ))
+}
+
+#[cfg(not(unix))]
+fn if_indextoname(name: u32) -> io::Result<String> {
+    Err(io::Error::new(
+        io::ErrorKind::Other,
+        "if_indextoname is not supported on this platform",
+    ))
 }
 
 #[cfg(test)]
@@ -804,6 +876,32 @@ mod tests {
                 None
             ))
         );
+        assert_eq!(
+            multiaddr_to_socketaddr(
+                &"/ip6/::1/ip6zone/lo/udp/12345/quic-v1"
+                    .parse::<Multiaddr>()
+                    .unwrap(),
+                false
+            ),
+            Some((
+                SocketAddrV6::new(
+                    Ipv6Addr::new(0, 0, 0, 0, 0, 0, 0, 1),
+                    12345,
+                    0,
+                    if_nametoindex("lo").unwrap()
+                )
+                .into(),
+                ProtocolVersion::V1,
+                None
+            ))
+        );
+        assert!(multiaddr_to_socketaddr(
+            &"/ip6/::1/ip6zone/doesnotexist/udp/12345/quic-v1"
+                .parse::<Multiaddr>()
+                .unwrap(),
+            false
+        )
+        .is_none());
         assert_eq!(
             multiaddr_to_socketaddr(
                 &"/ip6/ffff:ffff:ffff:ffff:ffff:ffff:ffff:ffff/udp/8080/quic-v1"
