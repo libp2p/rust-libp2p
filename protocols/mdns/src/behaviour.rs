@@ -358,7 +358,7 @@ where
                 self.discovered_nodes.push((peer, addr.clone(), expiration));
                 self.pending_events
                     .push_back(ToSwarm::NewExternalAddrOfPeer {
-                        peer_id:peer.clone(),
+                        peer_id: peer,
                         address: addr.clone(),
                     });
                 discovered.push((peer, addr));
