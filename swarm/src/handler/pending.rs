@@ -47,7 +47,7 @@ impl ConnectionHandler for PendingConnectionHandler {
     type OutboundOpenInfo = Void;
     type InboundOpenInfo = ();
 
-    fn listen_protocol(&self) -> SubstreamProtocol<Self::InboundProtocol, Self::InboundOpenInfo> {
+    fn listen_protocol(&self) -> SubstreamProtocol<Self::InboundProtocol, ()> {
         SubstreamProtocol::new(PendingUpgrade::new(self.protocol_name.clone()), ())
     }
 
@@ -61,7 +61,7 @@ impl ConnectionHandler for PendingConnectionHandler {
         &mut self,
         _: &mut Context<'_>,
     ) -> Poll<
-        ConnectionHandlerEvent<Self::OutboundProtocol, Self::OutboundOpenInfo, Self::ToBehaviour>,
+        ConnectionHandlerEvent<Self::OutboundProtocol, Void, Self::ToBehaviour>,
     > {
         Poll::Pending
     }
@@ -71,8 +71,8 @@ impl ConnectionHandler for PendingConnectionHandler {
         event: ConnectionEvent<
             Self::InboundProtocol,
             Self::OutboundProtocol,
-            Self::InboundOpenInfo,
-            Self::OutboundOpenInfo,
+            (),
+            Void,
         >,
     ) {
         match event {
