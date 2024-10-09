@@ -296,11 +296,6 @@ where
         &mut self,
         cx: &mut Context<'_>,
     ) -> Poll<ToSwarm<Self::ToSwarm, THandlerInEvent<Self>>> {
-        // If there are pending addresses to be emitted we emit them.
-        if let Some(event) = self.pending_events.pop_front() {
-            return Poll::Ready(event);
-        }
-
         // Poll ifwatch.
         while let Poll::Ready(Some(event)) = Pin::new(&mut self.if_watch).poll_next(cx) {
             match event {
@@ -369,6 +364,12 @@ where
             let event = Event::Discovered(discovered);
             return Poll::Ready(ToSwarm::GenerateEvent(event));
         }
+
+        // If there are pending addresses to be emitted we emit them.
+        if let Some(event) = self.pending_events.pop_front() {
+            return Poll::Ready(event);
+        }
+
         // Emit expired event.
         let now = Instant::now();
         let mut closest_expiration = None;
