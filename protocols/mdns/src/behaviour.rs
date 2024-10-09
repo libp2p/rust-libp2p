@@ -38,9 +38,11 @@ use libp2p_swarm::{
 };
 use smallvec::SmallVec;
 use std::collections::hash_map::{Entry, HashMap};
+use std::collections::VecDeque;
 use std::future::Future;
 use std::sync::{Arc, RwLock};
 use std::{cmp, fmt, io, net::IpAddr, pin::Pin, task::Context, task::Poll, time::Instant};
+use void::Void;
 
 /// An abstraction to allow for compatibility with various async runtimes.
 pub trait Provider: 'static {
@@ -174,6 +176,9 @@ where
     listen_addresses: Arc<RwLock<ListenAddresses>>,
 
     local_peer_id: PeerId,
+
+    /// Queued events to return when the behaviour is being polled.
+    pending_events: VecDeque<ToSwarm<Event, Void>>,
 }
 
 impl<P> Behaviour<P>
@@ -193,6 +198,7 @@ where
             discovered_nodes: Default::default(),
             closest_expiration: Default::default(),
             listen_addresses: Default::default(),
+            pending_events: VecDeque::new(),
             local_peer_id,
         })
     }
@@ -345,6 +351,11 @@ where
             } else {
                 tracing::info!(%peer, address=%addr, "discovered peer on address");
                 self.discovered_nodes.push((peer, addr.clone(), expiration));
+                self.pending_events
+                    .push_back(ToSwarm::NewExternalAddrOfPeer {
+                        peer_id: peer,
+                        address: addr.clone(),
+                    });
                 discovered.push((peer, addr));
             }
         }
@@ -353,6 +364,12 @@ where
             let event = Event::Discovered(discovered);
             return Poll::Ready(ToSwarm::GenerateEvent(event));
         }
+
+        // If there are pending addresses to be emitted we emit them.
+        if let Some(event) = self.pending_events.pop_front() {
+            return Poll::Ready(event);
+        }
+
         // Emit expired event.
         let now = Instant::now();
         let mut closest_expiration = None;
