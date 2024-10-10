@@ -24,7 +24,10 @@ use futures::future::BoxFuture;
 use futures::AsyncWrite;
 use futures::{AsyncRead, FutureExt};
 use futures_rustls::TlsStream;
-use libp2p_core::upgrade::{InboundConnectionUpgrade, OutboundConnectionUpgrade};
+use libp2p_core::upgrade::{
+    InboundConnectionUpgrade, InboundSecurityUpgrade, OutboundConnectionUpgrade,
+    OutboundSecurityUpgrade,
+};
 use libp2p_core::UpgradeInfo;
 use libp2p_identity as identity;
 use libp2p_identity::PeerId;
@@ -43,12 +46,18 @@ pub enum UpgradeError {
     ClientUpgrade(std::io::Error),
     #[error("Failed to parse certificate")]
     BadCertificate(#[from] certificate::ParseError),
+    #[error("Invalid peer ID (actual {peer_id:?}, expected {expected_peer_id:?})")]
+    PeerIdMismatch {
+        peer_id: PeerId,
+        expected_peer_id: PeerId,
+    },
 }
 
 #[derive(Clone)]
 pub struct Config {
     server: rustls::ServerConfig,
     client: rustls::ClientConfig,
+    keypair: identity::Keypair,
 }
 
 impl Config {
@@ -56,6 +65,7 @@ impl Config {
         Ok(Self {
             server: crate::make_server_config(identity)?,
             client: crate::make_client_config(identity, None)?,
+            keypair: identity.clone(),
         })
     }
 }
@@ -77,7 +87,33 @@ where
     type Error = UpgradeError;
     type Future = BoxFuture<'static, Result<Self::Output, Self::Error>>;
 
-    fn upgrade_inbound(self, socket: C, _: Self::Info) -> Self::Future {
+    fn upgrade_inbound(self, socket: C, info: Self::Info) -> Self::Future {
+        InboundSecurityUpgrade::secure_inbound(self, socket, info)
+    }
+}
+
+impl<C> OutboundConnectionUpgrade<C> for Config
+where
+    C: AsyncRead + AsyncWrite + Send + Unpin + 'static,
+{
+    type Output = (PeerId, TlsStream<C>);
+    type Error = UpgradeError;
+    type Future = BoxFuture<'static, Result<Self::Output, Self::Error>>;
+
+    fn upgrade_outbound(self, socket: C, info: Self::Info) -> Self::Future {
+        OutboundSecurityUpgrade::secure_outbound(self, socket, info, None)
+    }
+}
+
+impl<C> InboundSecurityUpgrade<C> for Config
+where
+    C: AsyncRead + AsyncWrite + Send + Unpin + 'static,
+{
+    type Output = TlsStream<C>;
+    type Error = UpgradeError;
+    type Future = BoxFuture<'static, Result<(PeerId, Self::Output), Self::Error>>;
+
+    fn secure_inbound(self, socket: C, _: Self::Info) -> Self::Future {
         async move {
             let stream = futures_rustls::TlsAcceptor::from(Arc::new(self.server))
                 .accept(socket)
@@ -92,17 +128,30 @@ where
     }
 }
 
-impl<C> OutboundConnectionUpgrade<C> for Config
+impl<C> OutboundSecurityUpgrade<C> for Config
 where
     C: AsyncRead + AsyncWrite + Send + Unpin + 'static,
 {
-    type Output = (PeerId, TlsStream<C>);
+    type Output = TlsStream<C>;
     type Error = UpgradeError;
-    type Future = BoxFuture<'static, Result<Self::Output, Self::Error>>;
+    type Future = BoxFuture<'static, Result<(PeerId, Self::Output), Self::Error>>;
 
-    fn upgrade_outbound(self, socket: C, _: Self::Info) -> Self::Future {
+    fn secure_outbound(
+        mut self,
+        socket: C,
+        _: Self::Info,
+        expected_peer_id: Option<PeerId>,
+    ) -> Self::Future {
         async move {
-            // Spec: In order to keep this flexibility for future versions, clients that only support the version of the handshake defined in this document MUST NOT send any value in the Server Name Indication.
+            // Create new ad-hoc client and server configuration by passing the expected PeerId
+            let keypair = libp2p_identity::Keypair::generate_ed25519();
+            self.server = crate::make_server_config(&keypair)?;
+            self.client = crate::make_client_config(&keypair, expected_peer_id)?;
+            self.keypair = keypair;
+
+            // Spec: In order to keep this flexibility for future versions, clients that only support
+            // the version of the handshake defined in this document MUST NOT send any value in the
+            // Server Name Indication.
             // Setting `ServerName` to unspecified will disable the use of the SNI extension.
             let name = ServerName::IpAddress(rustls::pki_types::IpAddr::from(IpAddr::V4(
                 Ipv4Addr::UNSPECIFIED,
