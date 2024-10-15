@@ -1,3 +1,7 @@
+## 0.47.2
+
+- Add `instant = { version = "0.1.13", features = ["wasm-bindgen"] }` for browser compatibility
+
 ## 0.47.1
 
 - Attempt to publish to at least mesh_n peers when flood publish is disabled.

@@ -83,7 +83,7 @@ libp2p-core = { version = "0.42.0", path = "core" }
 libp2p-dcutr = { version = "0.12.0", path = "protocols/dcutr" }
 libp2p-dns = { version = "0.42.0", path = "transports/dns" }
 libp2p-floodsub = { version = "0.45.0", path = "protocols/floodsub" }
-libp2p-gossipsub = { version = "0.47.1", path = "protocols/gossipsub" }
+libp2p-gossipsub = { version = "0.47.2", path = "protocols/gossipsub" }
 libp2p-identify = { version = "0.45.1", path = "protocols/identify" }
 libp2p-identity = { version = "0.2.9" }
 libp2p-kad = { version = "0.47.0", path = "protocols/kad" }
