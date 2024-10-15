@@ -11,7 +11,7 @@ use libp2p::{
     core::muxing::StreamMuxerBox,
     core::Transport,
     multiaddr::{Multiaddr, Protocol},
-    ping,
+    autonat,
     swarm::SwarmEvent,
 };
 use libp2p_webrtc as webrtc;
@@ -36,7 +36,7 @@ async fn main() -> anyhow::Result<()> {
             )
             .map(|(peer_id, conn), _| (peer_id, StreamMuxerBox::new(conn))))
         })?
-        .with_behaviour(|_| ping::Behaviour::default())?
+        .with_behaviour(|key| autonat::Behaviour::new(key.public().to_peer_id(), Default::default()))?
         .with_swarm_config(|cfg| {
             cfg.with_idle_connection_timeout(
                 Duration::from_secs(u64::MAX), // Allows us to observe the pings.
