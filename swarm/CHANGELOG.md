@@ -1,5 +1,7 @@
 ## 0.45.2
 
+- Don't report `NewExternalAddrCandidate` for confirmed external addresses.
+  See [PR 5582](https://github.com/libp2p/rust-libp2p/pull/5582).
 - Add `PeerAddressesConfig` and the possibility to configure the number of addresses cached per peer.
   See [PR 5574](https://github.com/libp2p/rust-libp2p/pull/5574).
 
