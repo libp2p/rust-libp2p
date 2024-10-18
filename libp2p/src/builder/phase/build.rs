@@ -14,9 +14,6 @@ pub struct BuildPhase<T, B> {
     pub(crate) connection_timeout: Duration,
 }
 
-#[allow(unused)] // used in `../swarm.rs` but due to feature flag combinations, clippy gives an unnecessary warning.
-pub(crate) const DEFAULT_CONNECTION_TIMEOUT: Duration = Duration::from_secs(10);
-
 impl<Provider, T: AuthenticatedMultiplexedTransport, B: libp2p_swarm::NetworkBehaviour>
     SwarmBuilder<Provider, BuildPhase<T, B>>
 {

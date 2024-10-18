@@ -1,6 +1,9 @@
 #[allow(unused_imports)]
 use super::*;
 
+#[allow(unused)] // used below but due to feature flag combinations, clippy gives an unnecessary warning.
+const DEFAULT_CONNECTION_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(10);
+
 #[allow(dead_code)]
 pub struct SwarmPhase<T, B> {
     pub(crate) behaviour: B,
