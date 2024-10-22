@@ -1,7 +1,7 @@
 ## 0.48.0
 
 - Apply `max_transmit_size` to the inner message instead of the final payload.
-  See [Discussion 5598](https://github.com/libp2p/rust-libp2p/discussions/5598).
+  See [PR 5642](https://github.com/libp2p/rust-libp2p/pull/5642).
 
 ## 0.47.1
 
