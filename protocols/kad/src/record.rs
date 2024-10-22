@@ -78,7 +78,7 @@ pub struct Record {
     /// Key of the record.
     pub key: Key,
     /// Value of the record.
-    pub value: Vec<u8>,
+    pub value: Bytes,
     /// The (original) publisher of the record.
     pub publisher: Option<PeerId>,
     /// The expiration time as measured by a local, monotonic clock.
@@ -87,7 +87,7 @@ pub struct Record {
 
 impl Record {
     /// Creates a new record for insertion into the DHT.
-    pub fn new<K>(key: K, value: Vec<u8>) -> Self
+    pub fn new<K>(key: K, value: Bytes) -> Self
     where
         K: Into<Key>,
     {
@@ -176,7 +176,7 @@ mod tests {
         fn arbitrary(g: &mut Gen) -> Record {
             Record {
                 key: Key::arbitrary(g),
-                value: Vec::arbitrary(g),
+                value: Bytes::from(Vec::arbitrary(g)),
                 publisher: if bool::arbitrary(g) {
                     Some(PeerId::random())
                 } else {

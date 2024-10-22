@@ -1,10 +1,14 @@
+## 0.48.0 - Unreleased
+- Set Record.value to be `Bytes` instead of `Vec<u8>` to make clones lighter
+  See [PR 4753](https://github.com/libp2p/rust-libp2p/pull/4753).
+
 ## 0.47.0
 
 - Expose a kad query facility allowing specify num_results dynamicly.
   See [PR 5555](https://github.com/libp2p/rust-libp2p/pull/5555).
 - Add `mode` getter on `Behaviour`.
   See [PR 5573](https://github.com/libp2p/rust-libp2p/pull/5573).
-  
+
 
 ## 0.46.2
 
