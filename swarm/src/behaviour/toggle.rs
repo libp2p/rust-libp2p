@@ -197,7 +197,8 @@ pub struct ToggleConnectionHandler<TInner> {
 impl<TInner> ToggleConnectionHandler<TInner>
 where
     TInner: ConnectionHandler,
-{
+{   
+    #[allow(deprecated)] // TODO: Remove when {In, Out}boundOpenInfo is fully removed.
     fn on_fully_negotiated_inbound(
         &mut self,
         FullyNegotiatedInbound {
@@ -229,7 +230,7 @@ where
             panic!("Unexpected Either::Right in enabled `on_fully_negotiated_inbound`.")
         }
     }
-
+    #[allow(deprecated)] // TODO: Remove when {In, Out}boundOpenInfo is fully removed.
     fn on_listen_upgrade_error(
         &mut self,
         ListenUpgradeError { info, error: err }: ListenUpgradeError<
@@ -265,6 +266,7 @@ where
     }
 }
 
+#[allow(deprecated)] // TODO: Remove when {In, Out}boundOpenInfo is fully removed.
 impl<TInner> ConnectionHandler for ToggleConnectionHandler<TInner>
 where
     TInner: ConnectionHandler,

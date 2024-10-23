@@ -145,6 +145,7 @@ where
     TProto1: ConnectionHandler,
     TProto2: ConnectionHandler,
 {
+    #[allow(deprecated)] // TODO: Remove when {In, Out}boundOpenInfo is fully removed.
     fn on_listen_upgrade_error(
         &mut self,
         ListenUpgradeError {
@@ -174,6 +175,7 @@ where
     }
 }
 
+#[allow(deprecated)] // TODO: Remove when {In, Out}boundOpenInfo is fully removed.
 impl<TProto1, TProto2> ConnectionHandler for ConnectionHandlerSelect<TProto1, TProto2>
 where
     TProto1: ConnectionHandler,

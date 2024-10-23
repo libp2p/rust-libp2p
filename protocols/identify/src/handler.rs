@@ -152,7 +152,7 @@ impl Handler {
             protocol: output, ..
         }: FullyNegotiatedInbound<
             <Self as ConnectionHandler>::InboundProtocol,
-            <Self as ConnectionHandler>::InboundOpenInfo,
+            (),
         >,
     ) {
         match output {
@@ -191,7 +191,7 @@ impl Handler {
             protocol: output, ..
         }: FullyNegotiatedOutbound<
             <Self as ConnectionHandler>::OutboundProtocol,
-            <Self as ConnectionHandler>::OutboundOpenInfo,
+            (),
         >,
     ) {
         match output {
@@ -287,7 +287,7 @@ impl ConnectionHandler for Handler {
     type OutboundOpenInfo = ();
     type InboundOpenInfo = ();
 
-    fn listen_protocol(&self) -> SubstreamProtocol<Self::InboundProtocol, Self::InboundOpenInfo> {
+    fn listen_protocol(&self) -> SubstreamProtocol<Self::InboundProtocol, ()> {
         SubstreamProtocol::new(
             SelectUpgrade::new(
                 ReadyUpgrade::new(PROTOCOL_NAME),
@@ -318,7 +318,7 @@ impl ConnectionHandler for Handler {
     fn poll(
         &mut self,
         cx: &mut Context<'_>,
-    ) -> Poll<ConnectionHandlerEvent<Self::OutboundProtocol, Self::OutboundOpenInfo, Event>> {
+    ) -> Poll<ConnectionHandlerEvent<Self::OutboundProtocol, (), Event>> {
         if let Some(event) = self.events.pop() {
             return Poll::Ready(event);
         }
@@ -384,8 +384,8 @@ impl ConnectionHandler for Handler {
         event: ConnectionEvent<
             Self::InboundProtocol,
             Self::OutboundProtocol,
-            Self::InboundOpenInfo,
-            Self::OutboundOpenInfo,
+            (),
+            (),
         >,
     ) {
         match event {
