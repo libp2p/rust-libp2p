@@ -32,12 +32,14 @@ use libp2p_swarm::{
     ConnectionDenied, ConnectionId, ExternalAddresses, FromSwarm, NetworkBehaviour, THandler,
     THandlerInEvent, THandlerOutEvent, ToSwarm,
 };
-use std::collections::HashMap;
+use std::collections::{HashMap, VecDeque};
 use std::iter;
 use std::task::{Context, Poll};
 use std::time::Duration;
 
 pub struct Behaviour {
+    events: VecDeque<ToSwarm<<Self as NetworkBehaviour>::ToSwarm, THandlerInEvent<Self>>>,
+
     inner: libp2p_request_response::Behaviour<crate::codec::Codec>,
 
     keypair: Keypair,
@@ -62,6 +64,7 @@ impl Behaviour {
     /// Create a new instance of the rendezvous [`NetworkBehaviour`].
     pub fn new(keypair: Keypair) -> Self {
         Self {
+            events: Default::default(),
             inner: libp2p_request_response::Behaviour::with_codec(
                 crate::codec::Codec::default(),
                 iter::once((crate::PROTOCOL_IDENT, ProtocolSupport::Outbound)),
@@ -251,8 +254,11 @@ impl NetworkBehaviour for Behaviour {
         cx: &mut Context<'_>,
     ) -> Poll<ToSwarm<Self::ToSwarm, THandlerInEvent<Self>>> {
         use libp2p_request_response as req_res;
-
         loop {
+            if let Some(event) = self.events.pop_front() {
+                return Poll::Ready(event);
+            }
+
             match self.inner.poll(cx) {
                 Poll::Ready(ToSwarm::GenerateEvent(req_res::Event::Message {
                     message:
@@ -393,6 +399,27 @@ impl Behaviour {
             DiscoverResponse(Ok((registrations, cookie))) => {
                 if let Some((rendezvous_node, _ns)) = self.waiting_for_discovery.remove(request_id)
                 {
+                    self.events
+                        .extend(registrations.iter().flat_map(|registration| {
+                            let peer_id = registration.record.peer_id();
+                            registration
+                                .record
+                                .addresses()
+                                .iter()
+                                .filter(|addr| {
+                                    !self.discovered_peers.iter().any(
+                                        |((discovered_peer_id, _), addrs)| {
+                                            *discovered_peer_id == peer_id && addrs.contains(addr)
+                                        },
+                                    )
+                                })
+                                .map(|address| ToSwarm::NewExternalAddrOfPeer {
+                                    peer_id,
+                                    address: address.clone(),
+                                })
+                                .collect::<Vec<_>>()
+                        }));
+
                     self.discovered_peers
                         .extend(registrations.iter().map(|registration| {
                             let peer_id = registration.record.peer_id();
