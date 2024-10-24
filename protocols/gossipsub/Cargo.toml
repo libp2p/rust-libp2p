@@ -3,7 +3,7 @@ name = "libp2p-gossipsub"
 edition = "2021"
 rust-version = { workspace = true }
 description = "Gossipsub protocol for libp2p"
-version = "0.47.1"
+version = "0.47.2"
 authors = ["Age Manning <Age@AgeManning.com>"]
 license = "MIT"
 repository = "https://github.com/libp2p/rust-libp2p"
@@ -37,6 +37,7 @@ sha2 = "0.10.8"
 smallvec = "1.13.2"
 tracing = { workspace = true }
 void = "1.0.2"
+instant = { version = "0.1.13", features = ["wasm-bindgen"] }
 
 # Metrics dependencies
 prometheus-client = { workspace = true }
