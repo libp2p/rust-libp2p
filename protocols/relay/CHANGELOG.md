@@ -1,3 +1,9 @@
+## 0.18.1
+
+- Fix relayed `ExternalAddr` not expiring when stopping to listen through relay.
+  Removing `/p2p/<local_peer_id>` part from the listen and external addresses reported by the relay `Behaviour`.
+  See [PR 5577](https://github.com/libp2p/rust-libp2p/pull/5577).
+
 ## 0.18.0
 
 <!-- Update to libp2p-swarm v0.45.0 -->

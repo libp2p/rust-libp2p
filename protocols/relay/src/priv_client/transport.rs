@@ -33,7 +33,7 @@ use futures::stream::{Stream, StreamExt};
 use libp2p_core::multiaddr::{Multiaddr, Protocol};
 use libp2p_core::transport::{DialOpts, ListenerId, TransportError, TransportEvent};
 use libp2p_identity::PeerId;
-use std::collections::VecDeque;
+use std::collections::{HashSet, VecDeque};
 use std::pin::Pin;
 use std::task::{Context, Poll, Waker};
 use thiserror::Error;
@@ -154,6 +154,7 @@ impl libp2p_core::Transport for Transport {
             from_behaviour,
             is_closed: false,
             waker: None,
+            listened_addrs: Default::default(),
         };
         self.listeners.push(listener);
         Ok(())
@@ -311,6 +312,8 @@ pub(crate) struct Listener {
     /// the sender side of the `from_behaviour` channel is dropped.
     is_closed: bool,
     waker: Option<Waker>,
+    /// Addresses listened through relay
+    listened_addrs: HashSet<Multiaddr>,
 }
 
 impl Listener {
@@ -368,14 +371,45 @@ impl Stream for Listener {
                         self.queued_events.is_empty(),
                         "Assert empty due to previous `pop_front` attempt."
                     );
-                    // Returned as [`ListenerEvent::NewAddress`] in next iteration of loop.
-                    self.queued_events = addrs
+
+                    let reserved_addresses = addrs
                         .into_iter()
-                        .map(|listen_addr| TransportEvent::NewAddress {
-                            listener_id: self.listener_id,
-                            listen_addr,
+                        .map(|mut addr| {
+                            // Every transport (tcp / quic / etc) gives addresses without the last
+                            // p2p part, so pop it if present.
+                            if matches!(addr.iter().last(), Some(Protocol::P2p(_))) {
+                                addr.pop();
+                            }
+                            addr
                         })
-                        .collect();
+                        .collect::<HashSet<_>>();
+
+                    let expired_addresses = self
+                        .listened_addrs
+                        .difference(&reserved_addresses)
+                        .map(Clone::clone)
+                        .collect::<Vec<_>>();
+                    let new_addresses = reserved_addresses
+                        .difference(&self.listened_addrs)
+                        .map(Clone::clone)
+                        .collect::<Vec<_>>();
+                    let listener_id = self.listener_id;
+
+                    for listen_addr in expired_addresses {
+                        self.listened_addrs.remove(&listen_addr);
+                        self.queued_events
+                            .push_back(TransportEvent::AddressExpired {
+                                listener_id,
+                                listen_addr,
+                            });
+                    }
+                    for listen_addr in new_addresses {
+                        self.listened_addrs.insert(listen_addr.clone());
+                        self.queued_events.push_back(TransportEvent::NewAddress {
+                            listener_id,
+                            listen_addr,
+                        });
+                    }
                 }
                 ToListenerMsg::IncomingRelayedConnection {
                     stream,
