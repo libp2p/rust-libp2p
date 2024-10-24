@@ -22,8 +22,7 @@
 #![doc = include_str!("../README.md")]
 
 use clap::Parser;
-use futures::executor::block_on;
-use futures::stream::StreamExt;
+use futures::StreamExt;
 use libp2p::{
     core::multiaddr::Protocol,
     core::Multiaddr,
@@ -35,7 +34,8 @@ use std::error::Error;
 use std::net::{Ipv4Addr, Ipv6Addr};
 use tracing_subscriber::EnvFilter;
 
-fn main() -> Result<(), Box<dyn Error>> {
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn Error>> {
     let _ = tracing_subscriber::fmt()
         .with_env_filter(EnvFilter::from_default_env())
         .try_init();
@@ -46,7 +46,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let local_key: identity::Keypair = generate_ed25519(opt.secret_key_seed);
 
     let mut swarm = libp2p::SwarmBuilder::with_existing_identity(local_key)
-        .with_async_std()
+        .with_tokio()
         .with_tcp(
             tcp::Config::default(),
             noise::Config::new,
@@ -81,27 +81,25 @@ fn main() -> Result<(), Box<dyn Error>> {
         .with(Protocol::QuicV1);
     swarm.listen_on(listen_addr_quic)?;
 
-    block_on(async {
-        loop {
-            match swarm.next().await.expect("Infinite Stream.") {
-                SwarmEvent::Behaviour(event) => {
-                    if let BehaviourEvent::Identify(identify::Event::Received {
-                        info: identify::Info { observed_addr, .. },
-                        ..
-                    }) = &event
-                    {
-                        swarm.add_external_address(observed_addr.clone());
-                    }
+    loop {
+        match swarm.next().await.expect("Infinite Stream.") {
+            SwarmEvent::Behaviour(event) => {
+                if let BehaviourEvent::Identify(identify::Event::Received {
+                    info: identify::Info { observed_addr, .. },
+                    ..
+                }) = &event
+                {
+                    swarm.add_external_address(observed_addr.clone());
+                }
 
-                    println!("{event:?}")
-                }
-                SwarmEvent::NewListenAddr { address, .. } => {
-                    println!("Listening on {address:?}");
-                }
-                _ => {}
+                println!("{event:?}")
             }
+            SwarmEvent::NewListenAddr { address, .. } => {
+                println!("Listening on {address:?}");
+            }
+            _ => {}
         }
-    })
+    }
 }
 
 #[derive(NetworkBehaviour)]
