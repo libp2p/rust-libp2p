@@ -120,6 +120,7 @@ pub use handler::{
     ConnectionHandler, ConnectionHandlerEvent, ConnectionHandlerSelect, OneShotHandler,
     OneShotHandlerConfig, StreamUpgradeError, SubstreamProtocol,
 };
+use libp2p_core::multiaddr::Protocol;
 #[cfg(feature = "macros")]
 pub use libp2p_swarm_derive::NetworkBehaviour;
 pub use listen_opts::ListenOpts;
@@ -509,10 +510,25 @@ where
                 }
             }
 
-            let mut unique_addresses = HashSet::new();
+            let mut unique_addresses: HashSet<_> = HashSet::new();
             addresses_from_opts.retain(|addr| {
-                !self.listened_addrs.values().flatten().any(|a| a == addr)
-                    && unique_addresses.insert(addr.clone())
+                if !unique_addresses.insert(addr.clone()) {
+                    // Address already added, don't dial it twice.
+                    false
+                } else {
+                    // Check the address against the local peer listen addresses
+                    // to prevent the local peer of dialing himself.
+
+                    if addr.iter().any(|p| p == Protocol::P2pCircuit) {
+                        // Address is relayed. It's ok to dial a peer that listens
+                        // on the same relay that the local peer does.
+                        true
+                    } else {
+                        // Address is not relayed. Prevent dial on any addresses
+                        // the local peer listens on.
+                        !self.listened_addrs.values().flatten().any(|a| a == addr)
+                    }
+                }
             });
 
             if addresses_from_opts.is_empty() {
