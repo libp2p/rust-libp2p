@@ -32,18 +32,35 @@ use libp2p_identity::PeerId;
 use libp2p_swarm::StreamProtocol;
 use std::{io, iter, pin::Pin};
 
-const MAX_MESSAGE_LEN_BYTES: usize = 2048;
+pub(crate) const DEFAULT_MAX_MESSAGE_LEN_BYTES: usize = 2048;
 
 const PROTOCOL_NAME: StreamProtocol = StreamProtocol::new("/floodsub/1.0.0");
 
 /// Implementation of `ConnectionUpgrade` for the floodsub protocol.
-#[derive(Debug, Clone, Default)]
-pub struct FloodsubProtocol {}
+#[derive(Debug, Clone)]
+pub struct FloodsubProtocol {
+    /// Maximum message length in bytes.
+    pub max_message_len: usize,
+}
 
 impl FloodsubProtocol {
-    /// Builds a new `FloodsubProtocol`.
-    pub fn new() -> FloodsubProtocol {
-        FloodsubProtocol {}
+    /// Builds a new `FloodsubProtocol` with default parameters.
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Set the maximum message length.
+    pub fn with_max_message_len(mut self, max_message_len: usize) -> Self {
+        self.max_message_len = max_message_len;
+        self
+    }
+}
+
+impl Default for FloodsubProtocol {
+    fn default() -> Self {
+        Self {
+            max_message_len: DEFAULT_MAX_MESSAGE_LEN_BYTES,
+        }
     }
 }
 
@@ -68,7 +85,7 @@ where
         Box::pin(async move {
             let mut framed = Framed::new(
                 socket,
-                quick_protobuf_codec::Codec::<proto::RPC>::new(MAX_MESSAGE_LEN_BYTES),
+                quick_protobuf_codec::Codec::<proto::RPC>::new(self.max_message_len),
             );
 
             let rpc = framed
@@ -102,6 +119,7 @@ where
                         topic: Topic::new(sub.topic_id.unwrap_or_default()),
                     })
                     .collect(),
+                max_message_len: self.max_message_len,
             })
         })
     }
@@ -132,6 +150,8 @@ pub struct FloodsubRpc {
     pub messages: Vec<FloodsubMessage>,
     /// List of subscriptions.
     pub subscriptions: Vec<FloodsubSubscription>,
+    /// Maximum message length in bytes.
+    pub max_message_len: usize,
 }
 
 impl UpgradeInfo for FloodsubRpc {
@@ -155,7 +175,7 @@ where
         Box::pin(async move {
             let mut framed = Framed::new(
                 socket,
-                quick_protobuf_codec::Codec::<proto::RPC>::new(MAX_MESSAGE_LEN_BYTES),
+                quick_protobuf_codec::Codec::<proto::RPC>::new(self.max_message_len),
             );
             framed.send(self.into_rpc()).await?;
             framed.close().await?;

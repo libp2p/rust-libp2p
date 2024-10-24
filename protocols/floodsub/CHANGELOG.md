@@ -1,3 +1,8 @@
+## 0.46.0
+
+- Add a `max_message_len` option to `FloodsubConfig` for configuring the maximum message length.
+  See [PR 5588](https://github.com/libp2p/rust-libp2p/pull/5588)
+
 ## 0.45.0
 
 <!-- Update to libp2p-swarm v0.45.0 -->
