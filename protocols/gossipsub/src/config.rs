@@ -174,7 +174,8 @@ impl Config {
 
     /// The maximum byte size for each gossipsub RPC (default is 65536 bytes).
     ///
-    /// This represents the maximum size of the entire protobuf payload. It must be at least
+    /// This represents the maximum size of the published message. It is additionally wrapped
+    /// in a protobuf struct, so the actual wire size may be a bit larger. It must be at least
     /// large enough to support basic control messages. If Peer eXchange is enabled, this
     /// must be large enough to transmit the desired peer information on pruning. It must be at
     /// least 100 bytes. Default is 65536 bytes.
