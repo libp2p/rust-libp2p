@@ -36,6 +36,7 @@
 #![cfg_attr(docsrs, feature(doc_cfg, doc_auto_cfg))]
 
 mod addresses;
+mod async_behaviour;
 mod behaviour;
 mod bootstrap;
 mod handler;
@@ -55,6 +56,7 @@ mod proto {
 }
 
 pub use addresses::Addresses;
+pub use async_behaviour::{AsyncBehaviour, AsyncQueryResult, AsyncQueryResultStream};
 pub use behaviour::{
     AddProviderContext, AddProviderError, AddProviderOk, AddProviderPhase, AddProviderResult,
     BootstrapError, BootstrapOk, BootstrapResult, GetClosestPeersError, GetClosestPeersOk,
