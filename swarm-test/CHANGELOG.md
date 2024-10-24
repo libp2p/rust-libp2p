@@ -1,4 +1,4 @@
-## 0.4.1
+## 0.5.0
 
 - Add `tokio` runtime support and make `tokio` and `async-std` runtimes optional behind features.
   See [PR 5551].
