@@ -28,8 +28,8 @@ use libp2p_identity::PublicKey;
 use libp2p_swarm::behaviour::{ConnectionClosed, ConnectionEstablished, DialFailure, FromSwarm};
 use libp2p_swarm::{
     ConnectionDenied, DialError, ExternalAddresses, ListenAddresses, NetworkBehaviour,
-    NotifyHandler, PeerAddresses, StreamUpgradeError, THandlerInEvent, ToSwarm,
-    _address_translation,
+    NotifyHandler, PeerAddresses, PeerAddressesConfig, StreamUpgradeError, THandlerInEvent,
+    ToSwarm, _address_translation,
 };
 use libp2p_swarm::{ConnectionId, THandler, THandlerOutEvent};
 
@@ -144,9 +144,11 @@ pub struct Config {
 
     /// How many entries of discovered peers to keep before we discard
     /// the least-recently used one.
-    ///
-    /// Disabled by default.
+    #[deprecated(since = "0.45.1", note = "Use `Config::cache_config` instead.")]
     pub cache_size: usize,
+
+    /// Configuration for the LRU cache of discovered peers.
+    pub cache_config: Option<PeerAddressesConfig>,
 
     /// Whether to include our listen addresses in our responses. If enabled,
     /// we will effectively only share our external addresses.
@@ -159,6 +161,7 @@ impl Config {
     /// Creates a new configuration for the identify [`Behaviour`] that
     /// advertises the given protocol version and public key.
     pub fn new(protocol_version: String, local_public_key: PublicKey) -> Self {
+        #[allow(deprecated)]
         Self {
             protocol_version,
             agent_version: format!("rust-libp2p/{}", env!("CARGO_PKG_VERSION")),
@@ -166,6 +169,7 @@ impl Config {
             interval: Duration::from_secs(5 * 60),
             push_listen_addr_updates: false,
             cache_size: 100,
+            cache_config: None, // TODO: when removing `cache_size`, replace `None` with `Some(Default::default())`
             hide_listen_addrs: false,
         }
     }
@@ -191,7 +195,24 @@ impl Config {
         self
     }
 
+    /// Configures the LRU cache responsible for caching addresses of discovered peers.
+    ///
+    /// If set to [`None`], caching is disabled.
+    pub fn with_cache_config(mut self, cache_config: Option<PeerAddressesConfig>) -> Self {
+        #[allow(deprecated)]
+        {
+            // set cache_size to 0 to ensure if user call `with_cache_config(None)`, caching do get disabled.
+            self.cache_size = 0;
+        }
+        self.cache_config = cache_config;
+        self
+    }
+
     /// Configures the size of the LRU cache, caching addresses of discovered peers.
+    ///
+    /// If `cache_config` is set, then `cache_size` is ignored.
+    #[deprecated(since = "0.45.1", note = "Use `Config::with_cache_config` instead.")]
+    #[allow(deprecated)]
     pub fn with_cache_size(mut self, cache_size: usize) -> Self {
         self.cache_size = cache_size;
         self
@@ -206,11 +227,15 @@ impl Config {
 
 impl Behaviour {
     /// Creates a new identify [`Behaviour`].
-    pub fn new(config: Config) -> Self {
-        let discovered_peers = match NonZeroUsize::new(config.cache_size) {
-            None => PeerCache::disabled(),
-            Some(size) => PeerCache::enabled(size),
-        };
+    pub fn new(mut config: Config) -> Self {
+        #[allow(deprecated)]
+        // If `cache_config` value is not set but `cache_size` is, we build `cache_config` from `cache_size`.
+        if config.cache_config.is_none() {
+            config.cache_config = NonZeroUsize::new(config.cache_size)
+                .map(|cache_size| PeerAddressesConfig::default().with_number_of_peers(cache_size));
+        }
+
+        let discovered_peers = PeerCache::new(config.cache_config.clone());
 
         Self {
             config,
@@ -615,12 +640,8 @@ fn multiaddr_matches_peer_id(addr: &Multiaddr, peer_id: &PeerId) -> bool {
 struct PeerCache(Option<PeerAddresses>);
 
 impl PeerCache {
-    fn disabled() -> Self {
-        Self(None)
-    }
-
-    fn enabled(size: NonZeroUsize) -> Self {
-        Self(Some(PeerAddresses::new(size)))
+    fn new(cache_config: Option<PeerAddressesConfig>) -> Self {
+        Self(cache_config.map(PeerAddresses::new))
     }
 
     fn get(&mut self, peer: &PeerId) -> Vec<Multiaddr> {
