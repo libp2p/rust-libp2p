@@ -219,6 +219,23 @@ where
         }
         self.closest_expiration = Some(P::Timer::at(now));
     }
+
+    #[cfg(not(target_vendor = "apple"))]
+    fn apple_warning(&self) {}
+
+    #[cfg(target_vendor = "apple")]
+    fn apple_warning(&self) {
+        static APPLE_WARNING: std::sync::atomic::AtomicBool =
+            std::sync::atomic::AtomicBool::new(false);
+        let is_ipv6 = self.config.enable_ipv6;
+        if APPLE_WARNING.load(std::sync::atomic::Ordering::Relaxed) {
+            return;
+        }
+        APPLE_WARNING.store(true, std::sync::atomic::Ordering::Relaxed);
+        if is_ipv6 {
+            tracing::warn!("You are using IPv6 with mDNS on an Apple device. This may fail due to the mDNSResponder, a system service, using that port. For more infos: `man mdnsresponder`");
+        }
+    }
 }
 
 impl<P> NetworkBehaviour for Behaviour<P>
@@ -290,6 +307,8 @@ where
         &mut self,
         cx: &mut Context<'_>,
     ) -> Poll<ToSwarm<Self::ToSwarm, THandlerInEvent<Self>>> {
+        self.apple_warning();
+
         // Poll ifwatch.
         while let Poll::Ready(Some(event)) = Pin::new(&mut self.if_watch).poll_next(cx) {
             match event {
@@ -315,7 +334,12 @@ where
                                 e.insert(P::spawn(iface_state));
                             }
                             Err(err) => {
-                                tracing::error!("failed to create `InterfaceState`: {}", err)
+                                const IS_APPLE: bool = cfg!(target_vendor = "apple");
+                                if IS_APPLE && addr.is_ipv6() {
+                                    tracing::error!("failed to create `InterfaceState`: {}. This is likely because the mDNSResponder, a system service, is using that port. For more infos: `man mdnsresponder`", err)
+                                } else {
+                                    tracing::error!("failed to create `InterfaceState`: {}", err)
+                                }
                             }
                         }
                     }
