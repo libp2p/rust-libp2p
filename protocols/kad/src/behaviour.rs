@@ -771,12 +771,30 @@ where
         self.queries.add_iter_closest(target, peer_keys, info)
     }
 
-    /// Returns closest peers to the given key; takes peers from local routing table only.
+    /// Returns all peers ordered by distance to the given key; takes peers from local routing table
+    /// only.
     pub fn get_closest_local_peers<'a, K: Clone>(
         &'a mut self,
         key: &'a kbucket::Key<K>,
     ) -> impl Iterator<Item = kbucket::Key<PeerId>> + 'a {
         self.kbuckets.closest_keys(key)
+    }
+
+    /// Finds the closest peers to a `key` in the context of a request by the `source` peer, such
+    /// that the `source` peer is never included in the result.
+    ///
+    /// Takes peers from local routing table only. Only returns number of peers equal to configured
+    /// replication factor.
+    pub fn find_closest_local_peers<'a, K: Clone>(
+        &'a mut self,
+        key: &'a kbucket::Key<K>,
+        source: &'a PeerId,
+    ) -> impl Iterator<Item = KadPeer> + 'a {
+        self.kbuckets
+            .closest(key)
+            .filter(move |e| e.node.key.preimage() != source)
+            .take(self.queries.config().replication_factor.get())
+            .map(KadPeer::from)
     }
 
     /// Performs a lookup for a record in the DHT.
@@ -1210,22 +1228,6 @@ where
             }
             query.on_success(source, others_iter.cloned().map(|kp| kp.node_id))
         }
-    }
-
-    /// Finds the closest peers to a `target` in the context of a request by
-    /// the `source` peer, such that the `source` peer is never included in the
-    /// result.
-    fn find_closest<T: Clone>(
-        &mut self,
-        target: &kbucket::Key<T>,
-        source: &PeerId,
-    ) -> Vec<KadPeer> {
-        self.kbuckets
-            .closest(target)
-            .filter(|e| e.node.key.preimage() != source)
-            .take(self.queries.config().replication_factor.get())
-            .map(KadPeer::from)
-            .collect()
     }
 
     /// Collects all peers who are known to be providers of the value for a given `Multihash`.
@@ -2300,7 +2302,9 @@ where
             }
 
             HandlerEvent::FindNodeReq { key, request_id } => {
-                let closer_peers = self.find_closest(&kbucket::Key::new(key), &source);
+                let closer_peers = self
+                    .find_closest_local_peers(&kbucket::Key::new(key), &source)
+                    .collect::<Vec<_>>();
 
                 self.queued_events
                     .push_back(ToSwarm::GenerateEvent(Event::InboundRequest {
@@ -2328,7 +2332,9 @@ where
 
             HandlerEvent::GetProvidersReq { key, request_id } => {
                 let provider_peers = self.provider_peers(&key, &source);
-                let closer_peers = self.find_closest(&kbucket::Key::new(key), &source);
+                let closer_peers = self
+                    .find_closest_local_peers(&kbucket::Key::new(key), &source)
+                    .collect::<Vec<_>>();
 
                 self.queued_events
                     .push_back(ToSwarm::GenerateEvent(Event::InboundRequest {
@@ -2422,7 +2428,9 @@ where
                     None => None,
                 };
 
-                let closer_peers = self.find_closest(&kbucket::Key::new(key), &source);
+                let closer_peers = self
+                    .find_closest_local_peers(&kbucket::Key::new(key), &source)
+                    .collect::<Vec<_>>();
 
                 self.queued_events
                     .push_back(ToSwarm::GenerateEvent(Event::InboundRequest {
