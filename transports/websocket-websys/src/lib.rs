@@ -130,8 +130,7 @@ fn extract_websocket_url(addr: &Multiaddr) -> Option<String> {
         }
         (Some(Protocol::Dns(h)), Some(Protocol::Tcp(port)))
         | (Some(Protocol::Dns4(h)), Some(Protocol::Tcp(port)))
-        | (Some(Protocol::Dns6(h)), Some(Protocol::Tcp(port)))
-        | (Some(Protocol::Dnsaddr(h)), Some(Protocol::Tcp(port))) => {
+        | (Some(Protocol::Dns6(h)), Some(Protocol::Tcp(port))) => {
             format!("{}:{}", &h, port)
         }
         _ => return None,
@@ -545,6 +544,12 @@ mod tests {
 
         // Check that `/tls/wss` is invalid
         let addr = "/ip4/127.0.0.1/tcp/2222/tls/wss"
+            .parse::<Multiaddr>()
+            .unwrap();
+        assert!(extract_websocket_url(&addr).is_none());
+
+        // Check `/dnsaddr`
+        let addr = "/dnsaddr/example.com/tcp/2222/ws"
             .parse::<Multiaddr>()
             .unwrap();
         assert!(extract_websocket_url(&addr).is_none());

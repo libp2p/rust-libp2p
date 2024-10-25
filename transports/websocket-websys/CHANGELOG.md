@@ -1,3 +1,8 @@
+## 0.4.1
+
+- fix: Return `None` when extracting a `/dnsaddr` address
+  See [PR 5613](https://github.com/libp2p/rust-libp2p/pull/5613)
+
 ## 0.4.0
 
 - Implement refactored `Transport`.
