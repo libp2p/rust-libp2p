@@ -583,7 +583,7 @@ where
             .data_transform
             .outbound_transform(&topic, data.clone())?;
 
-        // check that the size doesn't exceed the max transmission size
+        // check that the size doesn't exceed the max transmission size.
         if transformed_data.len() > self.config.max_transmit_size() {
             return Err(PublishError::MessageTooLarge);
         }
