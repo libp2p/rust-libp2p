@@ -191,7 +191,7 @@ impl<'de> Deserialize<'de> for PeerId {
 
         struct PeerIdVisitor;
 
-        impl<'de> Visitor<'de> for PeerIdVisitor {
+        impl Visitor<'_> for PeerIdVisitor {
             type Value = PeerId;
 
             fn expecting(&self, f: &mut fmt::Formatter) -> fmt::Result {

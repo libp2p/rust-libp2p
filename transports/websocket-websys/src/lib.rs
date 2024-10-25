@@ -96,8 +96,8 @@ impl libp2p_core::Transport for Transport {
             return Err(TransportError::MultiaddrNotSupported(addr));
         }
 
-        let url = extract_websocket_url(&addr)
-            .ok_or_else(|| TransportError::MultiaddrNotSupported(addr))?;
+        let url =
+            extract_websocket_url(&addr).ok_or(TransportError::MultiaddrNotSupported(addr))?;
 
         Ok(async move {
             let socket = match WebSocket::new(&url) {
