@@ -583,6 +583,11 @@ where
             .data_transform
             .outbound_transform(&topic, data.clone())?;
 
+        // check that the size doesn't exceed the max transmission size.
+        if transformed_data.len() > self.config.max_transmit_size() {
+            return Err(PublishError::MessageTooLarge);
+        }
+
         let raw_message = self.build_raw_message(topic, transformed_data)?;
 
         // calculate the message id from the un-transformed data
@@ -592,11 +597,6 @@ where
             sequence_number: raw_message.sequence_number,
             topic: raw_message.topic.clone(),
         });
-
-        // check that the size doesn't exceed the max transmission size
-        if raw_message.raw_protobuf_len() > self.config.max_transmit_size() {
-            return Err(PublishError::MessageTooLarge);
-        }
 
         // Check the if the message has been published before
         if self.duplicate_cache.contains(&msg_id) {
