@@ -3361,7 +3361,7 @@ pub struct QueryMut<'a> {
     query: &'a mut Query,
 }
 
-impl<'a> QueryMut<'a> {
+impl QueryMut<'_> {
     pub fn id(&self) -> QueryId {
         self.query.id()
     }
@@ -3391,7 +3391,7 @@ pub struct QueryRef<'a> {
     query: &'a Query,
 }
 
-impl<'a> QueryRef<'a> {
+impl QueryRef<'_> {
     pub fn id(&self) -> QueryId {
         self.query.id()
     }
