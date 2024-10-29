@@ -3484,6 +3484,7 @@ dependencies = [
  "multiaddr",
  "multibase",
  "multihash",
+ "once_cell",
  "send_wrapper 0.6.0",
  "thiserror",
  "tracing",

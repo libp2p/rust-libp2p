@@ -442,7 +442,7 @@ pub(crate) enum WsListenProto<'a> {
     TlsWs(Cow<'a, str>),
 }
 
-impl<'a> WsListenProto<'a> {
+impl WsListenProto<'_> {
     pub(crate) fn append_on_addr(&self, addr: &mut Multiaddr) {
         match self {
             WsListenProto::Ws(path) => {

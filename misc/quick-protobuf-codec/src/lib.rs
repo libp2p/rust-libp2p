@@ -120,7 +120,7 @@ impl<'a> BytesMutWriterBackend<'a> {
     }
 }
 
-impl<'a> WriterBackend for BytesMutWriterBackend<'a> {
+impl WriterBackend for BytesMutWriterBackend<'_> {
     fn pb_write_u8(&mut self, x: u8) -> quick_protobuf::Result<()> {
         self.dst.put_u8(x);
 

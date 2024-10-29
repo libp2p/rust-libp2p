@@ -226,7 +226,7 @@ pub enum ConnectionEvent<'a, IP: InboundUpgradeSend, OP: OutboundUpgradeSend, IO
     RemoteProtocolsChange(ProtocolsChange<'a>),
 }
 
-impl<'a, IP, OP, IOI, OOI> fmt::Debug for ConnectionEvent<'a, IP, OP, IOI, OOI>
+impl<IP, OP, IOI, OOI> fmt::Debug for ConnectionEvent<'_, IP, OP, IOI, OOI>
 where
     IP: InboundUpgradeSend + fmt::Debug,
     IP::Output: fmt::Debug,
@@ -262,8 +262,8 @@ where
     }
 }
 
-impl<'a, IP: InboundUpgradeSend, OP: OutboundUpgradeSend, IOI, OOI>
-    ConnectionEvent<'a, IP, OP, IOI, OOI>
+impl<IP: InboundUpgradeSend, OP: OutboundUpgradeSend, IOI, OOI>
+    ConnectionEvent<'_, IP, OP, IOI, OOI>
 {
     /// Whether the event concerns an outbound stream.
     pub fn is_outbound(&self) -> bool {

@@ -516,7 +516,7 @@ pub(crate) struct IncomingInfo<'a> {
     pub(crate) send_back_addr: &'a Multiaddr,
 }
 
-impl<'a> IncomingInfo<'a> {
+impl IncomingInfo<'_> {
     /// Builds the [`ConnectedPoint`] corresponding to the incoming connection.
     pub(crate) fn create_connected_point(&self) -> ConnectedPoint {
         ConnectedPoint::Listener {

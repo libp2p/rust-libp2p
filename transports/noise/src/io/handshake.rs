@@ -73,7 +73,6 @@ where
     /// will be sent and received on the given I/O resource and using the
     /// provided session for cryptographic operations according to the chosen
     /// Noise handshake pattern.
-
     pub(crate) fn new(
         io: T,
         session: snow::HandshakeState,

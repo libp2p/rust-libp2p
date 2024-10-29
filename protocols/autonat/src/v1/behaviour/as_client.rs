@@ -98,7 +98,7 @@ pub(crate) struct AsClient<'a> {
     pub(crate) other_candidates: &'a HashSet<Multiaddr>,
 }
 
-impl<'a> HandleInnerEvent for AsClient<'a> {
+impl HandleInnerEvent for AsClient<'_> {
     fn handle_event(
         &mut self,
         event: request_response::Event<DialRequest, DialResponse>,
@@ -179,7 +179,7 @@ impl<'a> HandleInnerEvent for AsClient<'a> {
     }
 }
 
-impl<'a> AsClient<'a> {
+impl AsClient<'_> {
     pub(crate) fn poll_auto_probe(&mut self, cx: &mut Context<'_>) -> Poll<OutboundProbeEvent> {
         match self.schedule_probe.poll_unpin(cx) {
             Poll::Ready(()) => {

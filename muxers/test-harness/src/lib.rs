@@ -206,7 +206,7 @@ enum Event {
     ProtocolComplete,
 }
 
-impl<'m, M> Stream for Harness<'m, M>
+impl<M> Stream for Harness<'_, M>
 where
     M: StreamMuxer + Unpin,
 {
