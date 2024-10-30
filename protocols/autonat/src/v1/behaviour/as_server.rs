@@ -91,7 +91,7 @@ pub(crate) struct AsServer<'a> {
     >,
 }
 
-impl<'a> HandleInnerEvent for AsServer<'a> {
+impl HandleInnerEvent for AsServer<'_> {
     fn handle_event(
         &mut self,
         event: request_response::Event<DialRequest, DialResponse>,
@@ -208,7 +208,7 @@ impl<'a> HandleInnerEvent for AsServer<'a> {
     }
 }
 
-impl<'a> AsServer<'a> {
+impl AsServer<'_> {
     pub(crate) fn on_outbound_connection(
         &mut self,
         peer: &PeerId,

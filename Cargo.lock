@@ -1361,10 +1361,10 @@ dependencies = [
 name = "distributed-key-value-store-example"
 version = "0.1.0"
 dependencies = [
- "async-std",
  "async-trait",
  "futures",
  "libp2p",
+ "tokio",
  "tracing",
  "tracing-subscriber",
 ]
@@ -2741,7 +2741,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-gossipsub"
-version = "0.47.1"
+version = "0.48.0"
 dependencies = [
  "async-std",
  "asynchronous-codec",
@@ -3023,7 +3023,6 @@ dependencies = [
 name = "libp2p-ping"
 version = "0.45.0"
 dependencies = [
- "async-std",
  "either",
  "futures",
  "futures-timer",
@@ -3033,6 +3032,7 @@ dependencies = [
  "libp2p-swarm-test",
  "quickcheck-ext",
  "rand 0.8.5",
+ "tokio",
  "tracing",
  "tracing-subscriber",
  "void",
@@ -3278,7 +3278,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-swarm-test"
-version = "0.4.1"
+version = "0.5.0"
 dependencies = [
  "async-trait",
  "futures",
@@ -3484,6 +3484,7 @@ dependencies = [
  "multiaddr",
  "multibase",
  "multihash",
+ "once_cell",
  "send_wrapper 0.6.0",
  "thiserror",
  "tracing",
