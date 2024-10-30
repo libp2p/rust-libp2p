@@ -3023,7 +3023,6 @@ dependencies = [
 name = "libp2p-ping"
 version = "0.45.0"
 dependencies = [
- "async-std",
  "either",
  "futures",
  "futures-timer",
@@ -3033,6 +3032,7 @@ dependencies = [
  "libp2p-swarm-test",
  "quickcheck-ext",
  "rand 0.8.5",
+ "tokio",
  "tracing",
  "tracing-subscriber",
  "void",

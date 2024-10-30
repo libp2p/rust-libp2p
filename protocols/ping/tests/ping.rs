@@ -27,15 +27,15 @@ use libp2p_swarm_test::SwarmExt;
 use quickcheck::*;
 use std::{num::NonZeroU8, time::Duration};
 
-#[test]
-fn ping_pong() {
+#[tokio::test]
+async fn ping_pong() {
     fn prop(count: NonZeroU8) {
         let cfg = ping::Config::new().with_interval(Duration::from_millis(10));
 
         let mut swarm1 = Swarm::new_ephemeral(|_| ping::Behaviour::new(cfg.clone()));
         let mut swarm2 = Swarm::new_ephemeral(|_| ping::Behaviour::new(cfg.clone()));
 
-        async_std::task::block_on(async {
+        tokio::spawn(async move {
             swarm1.listen().with_memory_addr_external().await;
             swarm2.connect(&mut swarm1).await;
 
@@ -61,16 +61,16 @@ fn assert_ping_rtt_less_than_50ms(e: ping::Event) {
     assert!(rtt < Duration::from_millis(50))
 }
 
-#[test]
-fn unsupported_doesnt_fail() {
+#[tokio::test]
+async fn unsupported_doesnt_fail() {
     let mut swarm1 = Swarm::new_ephemeral(|_| dummy::Behaviour);
     let mut swarm2 = Swarm::new_ephemeral(|_| ping::Behaviour::new(ping::Config::new()));
 
-    let result = async_std::task::block_on(async {
+    let result = {
         swarm1.listen().with_memory_addr_external().await;
         swarm2.connect(&mut swarm1).await;
         let swarm1_peer_id = *swarm1.local_peer_id();
-        async_std::task::spawn(swarm1.loop_on_next());
+        tokio::spawn(swarm1.loop_on_next());
 
         loop {
             match swarm2.next_swarm_event().await {
@@ -89,7 +89,7 @@ fn unsupported_doesnt_fail() {
                 _ => {}
             }
         }
-    });
+    };
 
     result.expect("node with ping should not fail connection due to unsupported protocol");
 }
