@@ -23,11 +23,11 @@ tracing = { workspace = true }
 void = "1.0"
 
 [dev-dependencies]
-async-std = "1.6.2"
 libp2p-swarm = { workspace = true, features = ["macros"] }
 libp2p-swarm-test = { path = "../../swarm-test" }
 quickcheck = { workspace = true }
 tracing-subscriber = { workspace = true, features = ["env-filter"] }
+tokio = {workspace = true, features = ["rt", "macros"]}
 
 # Passing arguments to the docsrs builder in order to properly document cfg's.
 # More information: https://docs.rs/about/builds#cross-compiling
