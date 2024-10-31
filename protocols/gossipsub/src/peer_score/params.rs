@@ -149,7 +149,9 @@ pub struct PeerScoreParams {
     /// Time to remember counters for a disconnected peer.
     pub retain_score: Duration,
 
-    /// Slow peer penalty conditions
+    /// Slow peer penalty conditions,
+    /// by default `slow_peer_weight` is 50 times lower than `behaviour_penalty_weight`
+    /// i.e. 50 slow peer penalties match 1 behaviour penalty.
     pub slow_peer_weight: f64,
     pub slow_peer_threshold: f64,
     pub slow_peer_decay: f64,
