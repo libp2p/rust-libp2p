@@ -501,6 +501,8 @@ impl Handler {
         // is a `Void`.
         let protocol = match protocol {
             future::Either::Left(p) => p,
+            // TODO: remove when Rust 1.82 is MSRV
+            #[allow(unreachable_patterns)]
             future::Either::Right(p) => void::unreachable(p),
         };
 

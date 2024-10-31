@@ -143,6 +143,8 @@ where
                     );
                 }
             }
+            // TODO: remove when Rust 1.82 is MSRV
+            #[allow(unreachable_patterns)]
             ConnectionEvent::ListenUpgradeError(ListenUpgradeError { error, .. }) => {
                 tracing::debug!("inbound request failed: {:?}", error);
             }

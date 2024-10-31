@@ -96,6 +96,8 @@ impl ConnectionHandler for Handler {
     }
 
     fn on_behaviour_event(&mut self, event: Self::FromBehaviour) {
+        // TODO: remove when Rust 1.82 is MSRV
+        #[allow(unreachable_patterns)]
         void::unreachable(event)
     }
 
@@ -143,6 +145,8 @@ impl ConnectionHandler for Handler {
                     swarm::StreamUpgradeError::Timeout => {
                         OpenStreamError::Io(io::Error::from(io::ErrorKind::TimedOut))
                     }
+                    // TODO: remove when Rust 1.82 is MSRV
+                    #[allow(unreachable_patterns)]
                     swarm::StreamUpgradeError::Apply(v) => void::unreachable(v),
                     swarm::StreamUpgradeError::NegotiationFailed => {
                         OpenStreamError::UnsupportedProtocol(p)

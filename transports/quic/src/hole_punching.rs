@@ -20,6 +20,8 @@ pub(crate) async fn hole_puncher<P: Provider>(
     match futures::future::select(P::sleep(timeout_duration), punch_holes_future).await {
         Either::Left(_) => Error::HandshakeTimedOut,
         Either::Right((Err(hole_punch_err), _)) => hole_punch_err,
+        // TODO: remove when Rust 1.82 is MSRV
+        #[allow(unreachable_patterns)]
         Either::Right((Ok(never), _)) => match never {},
     }
 }

@@ -112,6 +112,8 @@ where
             Either::Left(Either::Left(Err(e))) => {
                 tracing::debug!("dial back error: {e:?}");
             }
+            // TODO: remove when Rust 1.82 is MSRV
+            #[allow(unreachable_patterns)]
             Either::Left(Either::Right(v)) => void::unreachable(v),
             Either::Right(Either::Left(cmd)) => {
                 let addr = cmd.addr.clone();

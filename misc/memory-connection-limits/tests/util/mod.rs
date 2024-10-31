@@ -116,6 +116,8 @@ impl<const MEM_PENDING: usize, const MEM_ESTABLISHED: usize> NetworkBehaviour
         _: ConnectionId,
         event: THandlerOutEvent<Self>,
     ) {
+        // TODO: remove when Rust 1.82 is MSRV
+        #[allow(unreachable_patterns)]
         void::unreachable(event)
     }
 

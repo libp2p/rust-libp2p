@@ -577,6 +577,8 @@ fn custom_out_event_no_type_parameters() {
             _connection: ConnectionId,
             message: THandlerOutEvent<Self>,
         ) {
+            // TODO: remove when Rust 1.82 is MSRV
+            #[allow(unreachable_patterns)]
             void::unreachable(message);
         }
 

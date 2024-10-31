@@ -73,6 +73,8 @@ impl ConnectionHandler for Handler {
     }
 
     fn on_behaviour_event(&mut self, v: Self::FromBehaviour) {
+        // TODO: remove when Rust 1.82 is MSRV
+        #[allow(unreachable_patterns)]
         void::unreachable(v)
     }
 
@@ -98,16 +100,22 @@ impl ConnectionHandler for Handler {
                     tracing::warn!("Dropping inbound stream because we are at capacity");
                 }
             }
+            // TODO: remove when Rust 1.82 is MSRV
+            #[allow(unreachable_patterns)]
             ConnectionEvent::FullyNegotiatedOutbound(FullyNegotiatedOutbound { info, .. }) => {
                 void::unreachable(info)
             }
 
+            // TODO: remove when Rust 1.82 is MSRV
+            #[allow(unreachable_patterns)]
             ConnectionEvent::DialUpgradeError(DialUpgradeError { info, .. }) => {
                 void::unreachable(info)
             }
             ConnectionEvent::AddressChange(_)
             | ConnectionEvent::LocalProtocolsChange(_)
             | ConnectionEvent::RemoteProtocolsChange(_) => {}
+            // TODO: remove when Rust 1.82 is MSRV
+            #[allow(unreachable_patterns)]
             ConnectionEvent::ListenUpgradeError(ListenUpgradeError { info: (), error }) => {
                 void::unreachable(error)
             }

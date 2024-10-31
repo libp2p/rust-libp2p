@@ -240,6 +240,8 @@ where
                 self.pending_events
                     .push_back(Event::OutboundUnsupportedProtocols(message.request_id));
             }
+            // TODO: remove when Rust 1.82 is MSRV
+            #[allow(unreachable_patterns)]
             StreamUpgradeError::Apply(e) => void::unreachable(e),
             StreamUpgradeError::Io(e) => {
                 self.pending_events.push_back(Event::OutboundStreamFailed {
@@ -256,6 +258,8 @@ where
             <Self as ConnectionHandler>::InboundProtocol,
         >,
     ) {
+        // TODO: remove when Rust 1.82 is MSRV
+        #[allow(unreachable_patterns)]
         void::unreachable(error)
     }
 }
@@ -484,6 +488,8 @@ where
             ConnectionEvent::DialUpgradeError(dial_upgrade_error) => {
                 self.on_dial_upgrade_error(dial_upgrade_error)
             }
+            // TODO: remove when Rust 1.82 is MSRV
+            #[allow(unreachable_patterns)]
             ConnectionEvent::ListenUpgradeError(listen_upgrade_error) => {
                 self.on_listen_upgrade_error(listen_upgrade_error)
             }

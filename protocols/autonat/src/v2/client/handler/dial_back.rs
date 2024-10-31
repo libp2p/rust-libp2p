@@ -83,6 +83,8 @@ impl ConnectionHandler for Handler {
                     tracing::warn!("Dial back request dropped, too many requests in flight");
                 }
             }
+            // TODO: remove when Rust 1.82 is MSRVprotocols/autonat/src/v2/client/handler/dial_back.rs
+            #[allow(unreachable_patterns)]
             ConnectionEvent::ListenUpgradeError(ListenUpgradeError { error, .. }) => {
                 void::unreachable(error);
             }
