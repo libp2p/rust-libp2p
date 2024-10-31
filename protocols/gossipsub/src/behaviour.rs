@@ -743,7 +743,9 @@ where
                 ) {
                     Ok(_) => publish_failed = false,
                     Err(_) => {
-                        self.failed_messages.entry(*peer_id).or_default().priority += 1;
+                        let failed_messages = self.failed_messages.entry(*peer_id).or_default();
+                        failed_messages.priority += 1;
+                        failed_messages.publish += 1;
 
                         tracing::warn!(peer_id=%peer_id, "Publish queue full. Could not publish to peer");
                         // Downscore the peer due to failed message.
@@ -1382,10 +1384,9 @@ where
                             peer_score.failed_message_slow_peer(peer_id);
                         }
                         // Increment the failed message count
-                        self.failed_messages
-                            .entry(*peer_id)
-                            .or_default()
-                            .non_priority += 1;
+                        let failed_messages = self.failed_messages.entry(*peer_id).or_default();
+                        failed_messages.forward += 1;
+                        failed_messages.non_priority += 1;
                     }
                 } else {
                     tracing::error!(peer = %peer_id,
@@ -2714,10 +2715,9 @@ where
                             peer_score.failed_message_slow_peer(peer_id);
                         }
                         // Increment the failed message count
-                        self.failed_messages
-                            .entry(*peer_id)
-                            .or_default()
-                            .non_priority += 1;
+                        let failed_messages = self.failed_messages.entry(*peer_id).or_default();
+                        failed_messages.forward += 1;
+                        failed_messages.non_priority += 1;
                     }
                 } else {
                     tracing::error!(peer = %peer_id,
