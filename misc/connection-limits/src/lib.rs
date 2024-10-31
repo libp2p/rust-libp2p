@@ -18,7 +18,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use libp2p_core::{ConnectedPoint, Endpoint, Multiaddr};
+use libp2p_core::{transport::PortUse, ConnectedPoint, Endpoint, Multiaddr};
 use libp2p_identity::PeerId;
 use libp2p_swarm::{
     behaviour::{ConnectionEstablished, DialFailure, ListenFailure},
@@ -80,21 +80,22 @@ impl Behaviour {
         }
     }
 
-    fn check_limit(
-        &mut self,
-        limit: Option<u32>,
-        current: usize,
-        kind: Kind,
-    ) -> Result<(), ConnectionDenied> {
-        let limit = limit.unwrap_or(u32::MAX);
-        let current = current as u32;
-
-        if current >= limit {
-            return Err(ConnectionDenied::new(Exceeded { limit, kind }));
-        }
-
-        Ok(())
+    /// Returns a mutable reference to [`ConnectionLimits`].
+    /// > **Note**: A new limit will not be enforced against existing connections.
+    pub fn limits_mut(&mut self) -> &mut ConnectionLimits {
+        &mut self.limits
     }
+}
+
+fn check_limit(limit: Option<u32>, current: usize, kind: Kind) -> Result<(), ConnectionDenied> {
+    let limit = limit.unwrap_or(u32::MAX);
+    let current = current as u32;
+
+    if current >= limit {
+        return Err(ConnectionDenied::new(Exceeded { limit, kind }));
+    }
+
+    Ok(())
 }
 
 /// A connection limit has been exceeded.
@@ -210,7 +211,7 @@ impl NetworkBehaviour for Behaviour {
         _: &Multiaddr,
         _: &Multiaddr,
     ) -> Result<(), ConnectionDenied> {
-        self.check_limit(
+        check_limit(
             self.limits.max_pending_incoming,
             self.pending_inbound_connections.len(),
             Kind::PendingIncoming,
@@ -230,12 +231,12 @@ impl NetworkBehaviour for Behaviour {
     ) -> Result<THandler<Self>, ConnectionDenied> {
         self.pending_inbound_connections.remove(&connection_id);
 
-        self.check_limit(
+        check_limit(
             self.limits.max_established_incoming,
             self.established_inbound_connections.len(),
             Kind::EstablishedIncoming,
         )?;
-        self.check_limit(
+        check_limit(
             self.limits.max_established_per_peer,
             self.established_per_peer
                 .get(&peer)
@@ -243,7 +244,7 @@ impl NetworkBehaviour for Behaviour {
                 .unwrap_or(0),
             Kind::EstablishedPerPeer,
         )?;
-        self.check_limit(
+        check_limit(
             self.limits.max_established_total,
             self.established_inbound_connections.len()
                 + self.established_outbound_connections.len(),
@@ -260,7 +261,7 @@ impl NetworkBehaviour for Behaviour {
         _: &[Multiaddr],
         _: Endpoint,
     ) -> Result<Vec<Multiaddr>, ConnectionDenied> {
-        self.check_limit(
+        check_limit(
             self.limits.max_pending_outgoing,
             self.pending_outbound_connections.len(),
             Kind::PendingOutgoing,
@@ -277,15 +278,16 @@ impl NetworkBehaviour for Behaviour {
         peer: PeerId,
         _: &Multiaddr,
         _: Endpoint,
+        _: PortUse,
     ) -> Result<THandler<Self>, ConnectionDenied> {
         self.pending_outbound_connections.remove(&connection_id);
 
-        self.check_limit(
+        check_limit(
             self.limits.max_established_outgoing,
             self.established_outbound_connections.len(),
             Kind::EstablishedOutgoing,
         )?;
-        self.check_limit(
+        check_limit(
             self.limits.max_established_per_peer,
             self.established_per_peer
                 .get(&peer)
@@ -293,7 +295,7 @@ impl NetworkBehaviour for Behaviour {
                 .unwrap_or(0),
             Kind::EstablishedPerPeer,
         )?;
-        self.check_limit(
+        check_limit(
             self.limits.max_established_total,
             self.established_inbound_connections.len()
                 + self.established_outbound_connections.len(),
@@ -353,6 +355,8 @@ impl NetworkBehaviour for Behaviour {
         _: ConnectionId,
         event: THandlerOutEvent<Self>,
     ) {
+        // TODO: remove when Rust 1.82 is MSRV
+        #[allow(unreachable_patterns)]
         void::unreachable(event)
     }
 
@@ -568,6 +572,7 @@ mod tests {
             _peer: PeerId,
             _addr: &Multiaddr,
             _role_override: Endpoint,
+            _port_use: PortUse,
         ) -> Result<THandler<Self>, ConnectionDenied> {
             Err(ConnectionDenied::new(std::io::Error::new(
                 std::io::ErrorKind::Other,
@@ -583,6 +588,8 @@ mod tests {
             _connection_id: ConnectionId,
             event: THandlerOutEvent<Self>,
         ) {
+            // TODO: remove when Rust 1.82 is MSRV
+            #[allow(unreachable_patterns)]
             void::unreachable(event)
         }
 

@@ -30,14 +30,6 @@
 //     Ok::<_, io::Error>(stdout)
 // });
 // ```
-//
-// # Panics
-//
-// - If any of the [`Sink`] methods produce an error, the sink transitions
-// to a failure state and none of its methods must be called afterwards or
-// else a panic will occur.
-// - If [`Sink::poll_close`] has been called, no other sink method must be
-// called afterwards or else a panic will be caused.
 
 use futures::{ready, sink::Sink};
 use pin_project_lite::pin_project;
@@ -102,6 +94,15 @@ enum State {
     Failed,
 }
 
+/// Errors the `Sink` may return.
+#[derive(Debug, thiserror::Error)]
+pub(crate) enum Error<E> {
+    #[error("Error while sending over the sink, {0}")]
+    Send(E),
+    #[error("The Sink has closed")]
+    Closed,
+}
+
 pin_project! {
     /// `SinkImpl` implements the `Sink` trait.
     #[derive(Debug)]
@@ -119,7 +120,7 @@ where
     F: FnMut(S, Action<A>) -> T,
     T: Future<Output = Result<S, E>>,
 {
-    type Error = E;
+    type Error = Error<E>;
 
     fn poll_ready(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Result<(), Self::Error>> {
         let mut this = self.project();
@@ -135,7 +136,7 @@ where
                     Err(e) => {
                         this.future.set(None);
                         *this.state = State::Failed;
-                        Poll::Ready(Err(e))
+                        Poll::Ready(Err(Error::Send(e)))
                     }
                 }
             }
@@ -143,20 +144,19 @@ where
                 Ok(_) => {
                     this.future.set(None);
                     *this.state = State::Closed;
-                    panic!("SinkImpl::poll_ready called on a closing sink.")
+                    Poll::Ready(Err(Error::Closed))
                 }
                 Err(e) => {
                     this.future.set(None);
                     *this.state = State::Failed;
-                    Poll::Ready(Err(e))
+                    Poll::Ready(Err(Error::Send(e)))
                 }
             },
             State::Empty => {
                 assert!(this.param.is_some());
                 Poll::Ready(Ok(()))
             }
-            State::Closed => panic!("SinkImpl::poll_ready called on a closed sink."),
-            State::Failed => panic!("SinkImpl::poll_ready called after error."),
+            State::Closed | State::Failed => Poll::Ready(Err(Error::Closed)),
         }
     }
 
@@ -193,7 +193,7 @@ where
                     Err(e) => {
                         this.future.set(None);
                         *this.state = State::Failed;
-                        return Poll::Ready(Err(e));
+                        return Poll::Ready(Err(Error::Send(e)));
                     }
                 },
                 State::Flushing => {
@@ -207,7 +207,7 @@ where
                         Err(e) => {
                             this.future.set(None);
                             *this.state = State::Failed;
-                            return Poll::Ready(Err(e));
+                            return Poll::Ready(Err(Error::Send(e)));
                         }
                     }
                 }
@@ -221,11 +221,10 @@ where
                     Err(e) => {
                         this.future.set(None);
                         *this.state = State::Failed;
-                        return Poll::Ready(Err(e));
+                        return Poll::Ready(Err(Error::Send(e)));
                     }
                 },
-                State::Closed => return Poll::Ready(Ok(())),
-                State::Failed => panic!("SinkImpl::poll_flush called after error."),
+                State::Closed | State::Failed => return Poll::Ready(Err(Error::Closed)),
             }
         }
     }
@@ -253,7 +252,7 @@ where
                     Err(e) => {
                         this.future.set(None);
                         *this.state = State::Failed;
-                        return Poll::Ready(Err(e));
+                        return Poll::Ready(Err(Error::Send(e)));
                     }
                 },
                 State::Flushing => {
@@ -266,7 +265,7 @@ where
                         Err(e) => {
                             this.future.set(None);
                             *this.state = State::Failed;
-                            return Poll::Ready(Err(e));
+                            return Poll::Ready(Err(Error::Send(e)));
                         }
                     }
                 }
@@ -280,11 +279,11 @@ where
                     Err(e) => {
                         this.future.set(None);
                         *this.state = State::Failed;
-                        return Poll::Ready(Err(e));
+                        return Poll::Ready(Err(Error::Send(e)));
                     }
                 },
                 State::Closed => return Poll::Ready(Ok(())),
-                State::Failed => panic!("SinkImpl::poll_closed called after error."),
+                State::Failed => return Poll::Ready(Err(Error::Closed)),
             }
         }
     }
@@ -294,7 +293,7 @@ where
 mod tests {
     use crate::quicksink::{make_sink, Action};
     use async_std::{io, task};
-    use futures::{channel::mpsc, prelude::*, stream};
+    use futures::{channel::mpsc, prelude::*};
 
     #[test]
     fn smoke_test() {
@@ -346,5 +345,32 @@ mod tests {
 
             assert_eq!(&expected[..], &actual[..])
         });
+    }
+
+    #[test]
+    fn error_does_not_panic() {
+        task::block_on(async {
+            let sink = make_sink(io::stdout(), |mut _stdout, _action| async move {
+                Err(io::Error::new(io::ErrorKind::Other, "oh no"))
+            });
+
+            futures::pin_mut!(sink);
+
+            let result = sink.send("hello").await;
+            match result {
+                Err(crate::quicksink::Error::Send(e)) => {
+                    assert_eq!(e.kind(), io::ErrorKind::Other);
+                    assert_eq!(e.to_string(), "oh no")
+                }
+                _ => panic!("unexpected result: {:?}", result),
+            };
+
+            // Call send again, expect not to panic.
+            let result = sink.send("hello").await;
+            match result {
+                Err(crate::quicksink::Error::Closed) => {}
+                _ => panic!("unexpected result: {:?}", result),
+            };
+        })
     }
 }

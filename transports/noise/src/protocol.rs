@@ -292,8 +292,6 @@ impl snow::types::Dh for Keypair {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::protocol::PARAMS_XX;
-    use once_cell::sync::Lazy;
 
     #[test]
     fn handshake_hashes_disagree_if_prologue_differs() {

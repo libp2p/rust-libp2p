@@ -4,7 +4,7 @@
 Please write a summary of your changes and why you made them.
 This section will appear as the commit message after merging.
 Please craft it accordingly.
-For a quick primer on good commit mesages, check out this blog post: https://cbea.ms/git-commit/
+For a quick primer on good commit messages, check out this blog post: https://cbea.ms/git-commit/
 
 Please include any relevant issues in here, for example:
 

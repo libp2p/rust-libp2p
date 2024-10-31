@@ -150,7 +150,7 @@ impl<Provider, T: AuthenticatedMultiplexedTransport> SwarmBuilder<Provider, Quic
 }
 #[cfg(all(not(target_arch = "wasm32"), feature = "async-std", feature = "dns"))]
 impl<T: AuthenticatedMultiplexedTransport> SwarmBuilder<super::provider::AsyncStd, QuicPhase<T>> {
-    pub async fn with_dns(
+    pub fn with_dns(
         self,
     ) -> Result<
         SwarmBuilder<
@@ -162,7 +162,6 @@ impl<T: AuthenticatedMultiplexedTransport> SwarmBuilder<super::provider::AsyncSt
         self.without_quic()
             .without_any_other_transports()
             .with_dns()
-            .await
     }
 }
 #[cfg(all(not(target_arch = "wasm32"), feature = "tokio", feature = "dns"))]

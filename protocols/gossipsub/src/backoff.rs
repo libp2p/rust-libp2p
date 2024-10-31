@@ -20,13 +20,13 @@
 
 //! Data structure for efficiently storing known back-off's when pruning peers.
 use crate::topic::TopicHash;
-use instant::Instant;
 use libp2p_identity::PeerId;
 use std::collections::{
     hash_map::{Entry, HashMap},
     HashSet,
 };
 use std::time::Duration;
+use web_time::Instant;
 
 #[derive(Copy, Clone)]
 struct HeartbeatIndex(usize);
@@ -48,8 +48,7 @@ pub(crate) struct BackoffStorage {
 
 impl BackoffStorage {
     fn heartbeats(d: &Duration, heartbeat_interval: &Duration) -> usize {
-        ((d.as_nanos() + heartbeat_interval.as_nanos() - 1) / heartbeat_interval.as_nanos())
-            as usize
+        d.as_nanos().div_ceil(heartbeat_interval.as_nanos()) as usize
     }
 
     pub(crate) fn new(

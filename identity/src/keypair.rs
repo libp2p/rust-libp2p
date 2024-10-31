@@ -24,6 +24,14 @@
     feature = "ed25519",
     feature = "rsa"
 ))]
+#[cfg(feature = "ed25519")]
+use crate::ed25519;
+#[cfg(any(
+    feature = "ecdsa",
+    feature = "secp256k1",
+    feature = "ed25519",
+    feature = "rsa"
+))]
 use crate::error::OtherVariantError;
 use crate::error::{DecodingError, SigningError};
 #[cfg(any(
@@ -40,16 +48,6 @@ use crate::proto;
     feature = "rsa"
 ))]
 use quick_protobuf::{BytesReader, Writer};
-#[cfg(any(
-    feature = "ecdsa",
-    feature = "secp256k1",
-    feature = "ed25519",
-    feature = "rsa"
-))]
-use std::convert::TryFrom;
-
-#[cfg(feature = "ed25519")]
-use crate::ed25519;
 
 #[cfg(all(feature = "rsa", not(target_arch = "wasm32")))]
 use crate::rsa;

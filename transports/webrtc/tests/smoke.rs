@@ -23,8 +23,8 @@ use futures::future::{BoxFuture, Either};
 use futures::stream::StreamExt;
 use futures::{future, ready, AsyncReadExt, AsyncWriteExt, FutureExt, SinkExt};
 use libp2p_core::muxing::{StreamMuxerBox, StreamMuxerExt};
-use libp2p_core::transport::{Boxed, ListenerId, TransportEvent};
-use libp2p_core::{Multiaddr, Transport};
+use libp2p_core::transport::{Boxed, DialOpts, ListenerId, PortUse, TransportEvent};
+use libp2p_core::{Endpoint, Multiaddr, Transport};
 use libp2p_identity::PeerId;
 use libp2p_webrtc as webrtc;
 use rand::{thread_rng, RngCore};
@@ -322,7 +322,17 @@ struct Dial<'a> {
 impl<'a> Dial<'a> {
     fn new(dialer: &'a mut Boxed<(PeerId, StreamMuxerBox)>, addr: Multiaddr) -> Self {
         Self {
-            dial_task: dialer.dial(addr).unwrap().map(|r| r.unwrap()).boxed(),
+            dial_task: dialer
+                .dial(
+                    addr,
+                    DialOpts {
+                        role: Endpoint::Dialer,
+                        port_use: PortUse::Reuse,
+                    },
+                )
+                .unwrap()
+                .map(|r| r.unwrap())
+                .boxed(),
             dialer,
         }
     }

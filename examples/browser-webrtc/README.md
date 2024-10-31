@@ -5,6 +5,8 @@ It uses [wasm-pack](https://rustwasm.github.io/docs/wasm-pack/) to build the pro
 
 ## Running the example
 
+Ensure you have `wasm-pack` [installed](https://rustwasm.github.io/wasm-pack/).
+
 1. Build the client library:
 ```shell
 wasm-pack build --target web --out-dir static

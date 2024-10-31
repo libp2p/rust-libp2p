@@ -159,6 +159,9 @@ where
             }
         };
 
+        // Inbound connections are reported to the upper layer from within the above task,
+        // so by failing to schedule it, it means the upper layer will never know about the
+        // inbound request. Because of that we do not report any inbound failure.
         if self
             .worker_streams
             .try_push(RequestId::Inbound(request_id), recv.boxed())
@@ -204,7 +207,10 @@ where
             .try_push(RequestId::Outbound(request_id), send.boxed())
             .is_err()
         {
-            tracing::warn!("Dropping outbound stream because we are at capacity")
+            self.pending_events.push_back(Event::OutboundStreamFailed {
+                request_id: message.request_id,
+                error: io::Error::new(io::ErrorKind::Other, "max sub-streams reached"),
+            });
         }
     }
 
@@ -234,13 +240,14 @@ where
                 self.pending_events
                     .push_back(Event::OutboundUnsupportedProtocols(message.request_id));
             }
+            // TODO: remove when Rust 1.82 is MSRV
+            #[allow(unreachable_patterns)]
             StreamUpgradeError::Apply(e) => void::unreachable(e),
             StreamUpgradeError::Io(e) => {
-                tracing::debug!(
-                    "outbound stream for request {} failed: {e}, retrying",
-                    message.request_id
-                );
-                self.requested_outbound.push_back(message);
+                self.pending_events.push_back(Event::OutboundStreamFailed {
+                    request_id: message.request_id,
+                    error: e,
+                });
             }
         }
     }
@@ -251,6 +258,8 @@ where
             <Self as ConnectionHandler>::InboundProtocol,
         >,
     ) {
+        // TODO: remove when Rust 1.82 is MSRV
+        #[allow(unreachable_patterns)]
         void::unreachable(error)
     }
 }
@@ -479,6 +488,8 @@ where
             ConnectionEvent::DialUpgradeError(dial_upgrade_error) => {
                 self.on_dial_upgrade_error(dial_upgrade_error)
             }
+            // TODO: remove when Rust 1.82 is MSRV
+            #[allow(unreachable_patterns)]
             ConnectionEvent::ListenUpgradeError(listen_upgrade_error) => {
                 self.on_listen_upgrade_error(listen_upgrade_error)
             }

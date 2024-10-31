@@ -28,6 +28,7 @@ use futures::prelude::*;
 use futures::{channel::oneshot, future::join};
 use libp2p_core::muxing::StreamMuxerExt;
 use libp2p_core::transport::ListenerId;
+use libp2p_core::Endpoint;
 use libp2p_core::{multiaddr::multiaddr, muxing, transport, upgrade, Multiaddr, Transport};
 use libp2p_identity as identity;
 use libp2p_identity::PeerId;
@@ -101,7 +102,7 @@ fn prepare(c: &mut Criterion) {
 fn run(
     receiver_trans: &mut BenchTransport,
     sender_trans: &mut BenchTransport,
-    payload: &Vec<u8>,
+    payload: &[u8],
     listen_addr: &Multiaddr,
 ) {
     receiver_trans
@@ -146,7 +147,17 @@ fn run(
     // Spawn and block on the sender, i.e. until all data is sent.
     let sender = async move {
         let addr = addr_receiver.await.unwrap();
-        let (_peer, mut conn) = sender_trans.dial(addr).unwrap().await.unwrap();
+        let (_peer, mut conn) = sender_trans
+            .dial(
+                addr,
+                transport::DialOpts {
+                    role: Endpoint::Dialer,
+                    port_use: transport::PortUse::Reuse,
+                },
+            )
+            .unwrap()
+            .await
+            .unwrap();
         // Just calling `poll_outbound` without `poll` is fine here because mplex makes progress through all `poll_` functions. It is hacky though.
         let mut stream = poll_fn(|cx| conn.poll_outbound_unpin(cx)).await.unwrap();
         let mut off = 0;

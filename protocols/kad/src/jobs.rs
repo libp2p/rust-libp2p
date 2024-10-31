@@ -64,13 +64,13 @@
 use crate::record::{self, store::RecordStore, ProviderRecord, Record};
 use futures::prelude::*;
 use futures_timer::Delay;
-use instant::Instant;
 use libp2p_identity::PeerId;
 use std::collections::HashSet;
 use std::pin::Pin;
 use std::task::{Context, Poll};
 use std::time::Duration;
 use std::vec;
+use web_time::Instant;
 
 /// The maximum number of queries towards which background jobs
 /// are allowed to start new queries on an invocation of

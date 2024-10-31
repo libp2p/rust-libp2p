@@ -16,9 +16,8 @@ This repository is the central place for Rust development of the [libp2p](https:
   many protocols in this repository.
 
 - For **security related issues** please [file a private security vulnerability
-  report](https://github.com/libp2p/rust-libp2p/security/advisories/new)
-  or reach out to [security@libp2p.io](mailto:security@libp2p.io). Please do not
-  file a public issue on GitHub.
+  report](https://github.com/libp2p/rust-libp2p/security/advisories/new) . Please do not file a
+  public issue on GitHub.
 
 - To **report bugs, suggest improvements or request new features** please open a
   GitHub issue on this repository.
@@ -79,9 +78,8 @@ Conduct](https://github.com/ipfs/community/blob/master/code-of-conduct.md).
 
 (In alphabetical order.)
 
+- Guillaume Michel ([@guillaumemichel](https://github.com/guillaumemichel))
 - João Oliveira ([@jxs](https://github.com/jxs))
-- Max Inden ([@mxinden](https://github.com/mxinden/))
-- Thomas Eizinger ([@thomaseizinger](https://github.com/thomaseizinger))
 
 ## Notable users
 
@@ -104,3 +102,4 @@ Conduct](https://github.com/ipfs/community/blob/master/code-of-conduct.md).
 - [Substrate](https://github.com/paritytech/substrate) - Framework for blockchain innovation,
 used by [Polkadot](https://www.parity.io/technologies/polkadot/).
 - [Taple](https://github.com/opencanarias/taple-core) - Sustainable DLT for asset and process traceability by [OpenCanarias](https://www.opencanarias.com/en/).
+- [Ceylon](https://github.com/ceylonai/ceylon) - A Multi-Agent System (MAS) Development Framework.

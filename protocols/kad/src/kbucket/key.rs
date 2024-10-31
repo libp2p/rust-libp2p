@@ -39,7 +39,7 @@ construct_uint! {
 ///
 /// `Key`s have an XOR metric as defined in the Kademlia paper, i.e. the bitwise XOR of
 /// the hash digests, interpreted as an integer. See [`Key::distance`].
-#[derive(Clone, Debug)]
+#[derive(Clone, Copy, Debug)]
 pub struct Key<T> {
     preimage: T,
     bytes: KeyBytes,
@@ -145,7 +145,7 @@ impl<T> Hash for Key<T> {
 }
 
 /// The raw bytes of a key in the DHT keyspace.
-#[derive(PartialEq, Eq, Clone, Debug)]
+#[derive(PartialEq, Eq, Clone, Copy, Debug)]
 pub struct KeyBytes(GenericArray<u8, U32>);
 
 impl KeyBytes {

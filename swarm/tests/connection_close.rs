@@ -1,3 +1,4 @@
+use libp2p_core::transport::PortUse;
 use libp2p_core::upgrade::DeniedUpgrade;
 use libp2p_core::{Endpoint, Multiaddr};
 use libp2p_identity::PeerId;
@@ -66,6 +67,7 @@ impl NetworkBehaviour for Behaviour {
         _: PeerId,
         _: &Multiaddr,
         _: Endpoint,
+        _: PortUse,
     ) -> Result<THandler<Self>, ConnectionDenied> {
         Ok(HandlerWithState {
             precious_state: self.state,

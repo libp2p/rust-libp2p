@@ -1,3 +1,16 @@
+## 0.5.0
+
+<!-- Update to libp2p-swarm v0.45.0 -->
+
+## 0.4.1
+
+- Fix a panic caused by `rustls` parsing the libp2p TLS extension.
+  See [PR 5498](https://github.com/libp2p/rust-libp2p/pull/5498).
+
+## 0.4.0
+
+- Upgrade `rustls` to `0.23`. See [PR 5385](https://github.com/libp2p/rust-libp2p/pull/5385)
+
 ## 0.3.0
 
 - Migrate to `{In,Out}boundConnectionUpgrade` traits.

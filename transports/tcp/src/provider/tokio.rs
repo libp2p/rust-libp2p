@@ -24,7 +24,6 @@ use futures::{
     future::{BoxFuture, FutureExt},
     prelude::*,
 };
-use std::convert::TryFrom;
 use std::io;
 use std::net;
 use std::pin::Pin;

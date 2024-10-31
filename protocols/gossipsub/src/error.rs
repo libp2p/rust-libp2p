@@ -126,7 +126,7 @@ impl From<std::io::Error> for PublishError {
 pub enum ConfigBuilderError {
     /// Maximum transmission size is too small.
     MaxTransmissionSizeTooSmall,
-    /// Histroy length less than history gossip length.
+    /// History length less than history gossip length.
     HistoryLengthTooSmall,
     /// The ineauality doesn't hold mesh_outbound_min <= mesh_n_low <= mesh_n <= mesh_n_high
     MeshParametersInvalid,
@@ -146,7 +146,7 @@ impl std::fmt::Display for ConfigBuilderError {
             Self::MaxTransmissionSizeTooSmall => {
                 write!(f, "Maximum transmission size is too small")
             }
-            Self::HistoryLengthTooSmall => write!(f, "Histroy length less than history gossip length"),
+            Self::HistoryLengthTooSmall => write!(f, "History length less than history gossip length"),
             Self::MeshParametersInvalid => write!(f, "The ineauality doesn't hold mesh_outbound_min <= mesh_n_low <= mesh_n <= mesh_n_high"),
             Self::MeshOutboundInvalid => write!(f, "The inequality doesn't hold mesh_outbound_min <= self.config.mesh_n / 2"),
             Self::UnsubscribeBackoffIsZero => write!(f, "unsubscribe_backoff is zero"),

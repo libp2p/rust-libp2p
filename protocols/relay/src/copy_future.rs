@@ -30,7 +30,6 @@ use futures::io::{AsyncBufRead, BufReader};
 use futures::io::{AsyncRead, AsyncWrite};
 use futures::ready;
 use futures_timer::Delay;
-use std::convert::TryInto;
 use std::io;
 use std::pin::Pin;
 use std::task::{Context, Poll};
@@ -73,7 +72,7 @@ where
         let this = &mut *self;
 
         loop {
-            if this.bytes_sent > this.max_circuit_bytes {
+            if this.max_circuit_bytes > 0 && this.bytes_sent > this.max_circuit_bytes {
                 return Poll::Ready(Err(io::Error::new(
                     io::ErrorKind::Other,
                     "Max circuit bytes reached.",
@@ -164,12 +163,9 @@ fn forward_data<S: AsyncBufRead + Unpin, D: AsyncWrite + Unpin>(
 mod tests {
     use super::*;
     use futures::executor::block_on;
-    use futures::io::{AsyncRead, AsyncWrite, BufReader, BufWriter};
+    use futures::io::BufWriter;
     use quickcheck::QuickCheck;
     use std::io::ErrorKind;
-    use std::pin::Pin;
-    use std::task::{Context, Poll};
-    use std::time::Duration;
 
     #[test]
     fn quickcheck() {

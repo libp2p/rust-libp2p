@@ -575,7 +575,7 @@ mod tests {
 
     #[test]
     #[cfg(all(feature = "tokio", feature = "quic"))]
-    fn quic_bandwidth_metrics() -> Result<(), Box<dyn std::error::Error>> {
+    fn quic_bandwidth_metrics() {
         let _ = SwarmBuilder::with_new_identity()
             .with_tokio()
             .with_quic()
@@ -583,8 +583,6 @@ mod tests {
             .with_behaviour(|_| libp2p_swarm::dummy::Behaviour)
             .unwrap()
             .build();
-
-        Ok(())
     }
 
     #[test]

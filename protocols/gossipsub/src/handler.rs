@@ -26,7 +26,6 @@ use asynchronous_codec::Framed;
 use futures::future::Either;
 use futures::prelude::*;
 use futures::StreamExt;
-use instant::Instant;
 use libp2p_core::upgrade::DeniedUpgrade;
 use libp2p_swarm::handler::{
     ConnectionEvent, ConnectionHandler, ConnectionHandlerEvent, DialUpgradeError,
@@ -38,6 +37,7 @@ use std::{
     pin::Pin,
     task::{Context, Poll},
 };
+use web_time::Instant;
 
 /// The event emitted by the Handler. This informs the behaviour of various events created
 /// by the handler.
@@ -493,6 +493,8 @@ impl ConnectionHandler for Handler {
                         ..
                     }) => match protocol {
                         Either::Left(protocol) => handler.on_fully_negotiated_inbound(protocol),
+                        // TODO: remove when Rust 1.82 is MSRV
+                        #[allow(unreachable_patterns)]
                         Either::Right(v) => void::unreachable(v),
                     },
                     ConnectionEvent::FullyNegotiatedOutbound(fully_negotiated_outbound) => {
@@ -504,6 +506,8 @@ impl ConnectionHandler for Handler {
                     }) => {
                         tracing::debug!("Dial upgrade error: Protocol negotiation timeout");
                     }
+                    // TODO: remove when Rust 1.82 is MSRV
+                    #[allow(unreachable_patterns)]
                     ConnectionEvent::DialUpgradeError(DialUpgradeError {
                         error: StreamUpgradeError::Apply(e),
                         ..

@@ -59,6 +59,7 @@ pull_request_rules:
       - author=@libp2p/rust-libp2p-maintainers
     actions:
       review:
+        type: APPROVE
 
   - name: Approve dependabot PRs of semver-compatible updates
     conditions:
@@ -68,6 +69,7 @@ pull_request_rules:
           - title~=bump [^\s]+ from 0\.([\d]+)\..+ to 0\.\1\. # For major == 0 versions, only approve updates with the same minor version.
     actions:
       review:
+        type: APPROVE
 
 queue_rules:
   - name: default

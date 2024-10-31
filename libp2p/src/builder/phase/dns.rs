@@ -8,8 +8,7 @@ pub struct DnsPhase<T> {
 
 #[cfg(all(not(target_arch = "wasm32"), feature = "async-std", feature = "dns"))]
 impl<T: AuthenticatedMultiplexedTransport> SwarmBuilder<super::provider::AsyncStd, DnsPhase<T>> {
-    // TODO: Remove `async`
-    pub async fn with_dns(
+    pub fn with_dns(
         self,
     ) -> Result<
         SwarmBuilder<

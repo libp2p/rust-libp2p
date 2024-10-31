@@ -18,15 +18,9 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::transport::{ListenerId, Transport, TransportError, TransportEvent};
+use crate::transport::{DialOpts, ListenerId, Transport, TransportError, TransportEvent};
 use fnv::FnvHashMap;
-use futures::{
-    channel::mpsc,
-    future::{self, Ready},
-    prelude::*,
-    task::Context,
-    task::Poll,
-};
+use futures::{channel::mpsc, future::Ready, prelude::*, task::Context, task::Poll};
 use multiaddr::{Multiaddr, Protocol};
 use once_cell::sync::Lazy;
 use parking_lot::Mutex;
@@ -214,7 +208,11 @@ impl Transport for MemoryTransport {
         }
     }
 
-    fn dial(&mut self, addr: Multiaddr) -> Result<DialFuture, TransportError<Self::Error>> {
+    fn dial(
+        &mut self,
+        addr: Multiaddr,
+        _opts: DialOpts,
+    ) -> Result<DialFuture, TransportError<Self::Error>> {
         let port = if let Ok(port) = parse_memory_addr(&addr) {
             if let Some(port) = NonZeroU64::new(port) {
                 port
@@ -226,17 +224,6 @@ impl Transport for MemoryTransport {
         };
 
         DialFuture::new(port).ok_or(TransportError::Other(MemoryTransportError::Unreachable))
-    }
-
-    fn dial_as_listener(
-        &mut self,
-        addr: Multiaddr,
-    ) -> Result<DialFuture, TransportError<Self::Error>> {
-        self.dial(addr)
-    }
-
-    fn address_translation(&self, _server: &Multiaddr, _observed: &Multiaddr) -> Option<Multiaddr> {
-        None
     }
 
     fn poll(
@@ -411,6 +398,8 @@ impl<T> Drop for Chan<T> {
 
 #[cfg(test)]
 mod tests {
+    use crate::{transport::PortUse, Endpoint};
+
     use super::*;
 
     #[test]
@@ -495,7 +484,13 @@ mod tests {
     fn port_not_in_use() {
         let mut transport = MemoryTransport::default();
         assert!(transport
-            .dial("/memory/810172461024613".parse().unwrap())
+            .dial(
+                "/memory/810172461024613".parse().unwrap(),
+                DialOpts {
+                    role: Endpoint::Dialer,
+                    port_use: PortUse::New
+                }
+            )
             .is_err());
         transport
             .listen_on(
@@ -504,7 +499,13 @@ mod tests {
             )
             .unwrap();
         assert!(transport
-            .dial("/memory/810172461024613".parse().unwrap())
+            .dial(
+                "/memory/810172461024613".parse().unwrap(),
+                DialOpts {
+                    role: Endpoint::Dialer,
+                    port_use: PortUse::New
+                }
+            )
             .is_ok());
     }
 
@@ -571,7 +572,17 @@ mod tests {
 
         let mut t2 = MemoryTransport::default();
         let dialer = async move {
-            let mut socket = t2.dial(cloned_t1_addr).unwrap().await.unwrap();
+            let mut socket = t2
+                .dial(
+                    cloned_t1_addr,
+                    DialOpts {
+                        role: Endpoint::Dialer,
+                        port_use: PortUse::New,
+                    },
+                )
+                .unwrap()
+                .await
+                .unwrap();
             socket.write_all(&msg).await.unwrap();
         };
 
@@ -607,7 +618,13 @@ mod tests {
 
         let dialer = async move {
             MemoryTransport::default()
-                .dial(listener_addr_cloned)
+                .dial(
+                    listener_addr_cloned,
+                    DialOpts {
+                        role: Endpoint::Dialer,
+                        port_use: PortUse::New,
+                    },
+                )
                 .unwrap()
                 .await
                 .unwrap();
@@ -658,7 +675,13 @@ mod tests {
 
         let dialer = async move {
             let chan = MemoryTransport::default()
-                .dial(listener_addr_cloned)
+                .dial(
+                    listener_addr_cloned,
+                    DialOpts {
+                        role: Endpoint::Dialer,
+                        port_use: PortUse::New,
+                    },
+                )
                 .unwrap()
                 .await
                 .unwrap();

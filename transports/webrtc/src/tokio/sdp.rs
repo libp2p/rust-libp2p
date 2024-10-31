@@ -98,7 +98,7 @@ pub(crate) fn offer(addr: SocketAddr, client_ufrag: &str) -> RTCSessionDescripti
 //
 // a=ice-options:ice2
 //
-//     Indicates that we are complying with RFC8839 (as oppposed to the legacy RFC5245).
+//     Indicates that we are complying with RFC8839 (as opposed to the legacy RFC5245).
 //
 // a=ice-ufrag:<ICE user>
 // a=ice-pwd:<ICE password>

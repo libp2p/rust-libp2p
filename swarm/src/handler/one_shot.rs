@@ -232,6 +232,6 @@ mod tests {
             }
         }));
 
-        assert!(matches!(handler.connection_keep_alive(), false));
+        assert!(!handler.connection_keep_alive());
     }
 }

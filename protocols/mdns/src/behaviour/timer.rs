@@ -18,10 +18,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use std::{
-    marker::Unpin,
-    time::{Duration, Instant},
-};
+use std::time::{Duration, Instant};
 
 /// Simple wrapper for the different type of timers
 #[derive(Debug)]
@@ -101,7 +98,7 @@ pub(crate) mod tokio {
             // Taken from: https://docs.rs/async-io/1.7.0/src/async_io/lib.rs.html#91
             let mut inner = time::interval_at(
                 TokioInstant::from_std(instant),
-                Duration::new(std::u64::MAX, 1_000_000_000 - 1),
+                Duration::new(u64::MAX, 1_000_000_000 - 1),
             );
             inner.set_missed_tick_behavior(MissedTickBehavior::Skip);
             Self { inner }
@@ -128,7 +125,7 @@ pub(crate) mod tokio {
         }
 
         fn size_hint(&self) -> (usize, Option<usize>) {
-            (std::usize::MAX, None)
+            (usize::MAX, None)
         }
     }
 }

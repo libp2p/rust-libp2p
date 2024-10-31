@@ -52,9 +52,9 @@
 //! can be used by the user to control the behaviour of the protocol.
 //!
 //! > **Note**: You can use the `apply_inbound` or `apply_outbound` methods to try upgrade a
-//!             connection or substream. However if you use the recommended `Swarm` or
-//!             `ConnectionHandler` APIs, the upgrade is automatically handled for you and you don't
-//!             need to use these methods.
+//! > connection or substream. However if you use the recommended `Swarm` or
+//! > `ConnectionHandler` APIs, the upgrade is automatically handled for you and you don't
+//! > need to use these methods.
 //!
 
 mod apply;

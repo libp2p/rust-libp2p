@@ -174,7 +174,8 @@ impl Config {
 
     /// The maximum byte size for each gossipsub RPC (default is 65536 bytes).
     ///
-    /// This represents the maximum size of the entire protobuf payload. It must be at least
+    /// This represents the maximum size of the published message. It is additionally wrapped
+    /// in a protobuf struct, so the actual wire size may be a bit larger. It must be at least
     /// large enough to support basic control messages. If Peer eXchange is enabled, this
     /// must be large enough to transmit the desired peer information on pruning. It must be at
     /// least 100 bytes. Default is 65536 bytes.
@@ -262,9 +263,9 @@ impl Config {
         self.unsubscribe_backoff
     }
 
-    /// Number of heartbeat slots considered as slack for backoffs. This gurantees that we wait
+    /// Number of heartbeat slots considered as slack for backoffs. This guarantees that we wait
     /// at least backoff_slack heartbeats after a backoff is over before we try to graft. This
-    /// solves problems occuring through high latencies. In particular if
+    /// solves problems occurring through high latencies. In particular if
     /// `backoff_slack * heartbeat_interval` is longer than any latencies between processing
     /// prunes on our side and processing prunes on the receiving side this guarantees that we
     /// get not punished for too early grafting. The default is 1.
@@ -292,7 +293,7 @@ impl Config {
         self.mesh_outbound_min
     }
 
-    /// Number of heartbeat ticks that specifcy the interval in which opportunistic grafting is
+    /// Number of heartbeat ticks that specify the interval in which opportunistic grafting is
     /// applied. Every `opportunistic_graft_ticks` we will attempt to select some high-scoring mesh
     /// peers to replace lower-scoring ones, if the median score of our mesh peers falls below a
     /// threshold (see <https://godoc.org/github.com/libp2p/go-libp2p-pubsub#PeerScoreThresholds>).
@@ -660,9 +661,9 @@ impl ConfigBuilder {
         self
     }
 
-    /// Number of heartbeat slots considered as slack for backoffs. This gurantees that we wait
+    /// Number of heartbeat slots considered as slack for backoffs. This guarantees that we wait
     /// at least backoff_slack heartbeats after a backoff is over before we try to graft. This
-    /// solves problems occuring through high latencies. In particular if
+    /// solves problems occurring through high latencies. In particular if
     /// `backoff_slack * heartbeat_interval` is longer than any latencies between processing
     /// prunes on our side and processing prunes on the receiving side this guarantees that we
     /// get not punished for too early grafting. The default is 1.
@@ -694,7 +695,7 @@ impl ConfigBuilder {
         self
     }
 
-    /// Number of heartbeat ticks that specifcy the interval in which opportunistic grafting is
+    /// Number of heartbeat ticks that specify the interval in which opportunistic grafting is
     /// applied. Every `opportunistic_graft_ticks` we will attempt to select some high-scoring mesh
     /// peers to replace lower-scoring ones, if the median score of our mesh peers falls below a
     /// threshold (see <https://godoc.org/github.com/libp2p/go-libp2p-pubsub#PeerScoreThresholds>).
@@ -860,10 +861,8 @@ impl std::fmt::Debug for Config {
 mod test {
     use super::*;
     use crate::topic::IdentityHash;
-    use crate::types::PeerKind;
     use crate::Topic;
     use libp2p_core::UpgradeInfo;
-    use libp2p_swarm::StreamProtocol;
     use std::collections::hash_map::DefaultHasher;
     use std::hash::{Hash, Hasher};
 

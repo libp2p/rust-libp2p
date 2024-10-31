@@ -36,7 +36,11 @@ use crate::tokio::{is_addr_global, Gateway};
 use futures::{channel::oneshot, Future, StreamExt};
 use futures_timer::Delay;
 use igd_next::PortMappingProtocol;
-use libp2p_core::{multiaddr, transport::ListenerId, Endpoint, Multiaddr};
+use libp2p_core::{
+    multiaddr,
+    transport::{ListenerId, PortUse},
+    Endpoint, Multiaddr,
+};
 use libp2p_swarm::{
     derive_prelude::PeerId, dummy, ConnectionDenied, ConnectionId, ExpiredListenAddr, FromSwarm,
     NetworkBehaviour, NewListenAddr, ToSwarm,
@@ -248,6 +252,7 @@ impl NetworkBehaviour for Behaviour {
         _peer: PeerId,
         _addr: &Multiaddr,
         _role_override: Endpoint,
+        _port_use: PortUse,
     ) -> Result<libp2p_swarm::THandler<Self>, libp2p_swarm::ConnectionDenied> {
         Ok(dummy::ConnectionHandler)
     }

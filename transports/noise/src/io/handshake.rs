@@ -73,7 +73,6 @@ where
     /// will be sent and received on the given I/O resource and using the
     /// provided session for cryptographic operations according to the chosen
     /// Noise handshake pattern.
-
     pub(crate) fn new(
         io: T,
         session: snow::HandshakeState,
@@ -248,7 +247,7 @@ where
         ..Default::default()
     };
 
-    pb.identity_sig = state.identity.signature.clone();
+    pb.identity_sig.clone_from(&state.identity.signature);
 
     // If this is the responder then send WebTransport certhashes to initiator, if any.
     if state.io.codec().is_responder() {

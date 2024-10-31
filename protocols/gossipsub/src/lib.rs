@@ -43,16 +43,16 @@
 //! implementations, due to undefined elements in the current specification.
 //!
 //! - **Topics** -  In gossipsub, topics configurable by the `hash_topics` configuration parameter.
-//! Topics are of type [`TopicHash`]. The current go implementation uses raw utf-8 strings, and this
-//! is default configuration in rust-libp2p. Topics can be hashed (SHA256 hashed then base64
-//! encoded) by setting the `hash_topics` configuration parameter to true.
+//!   Topics are of type [`TopicHash`]. The current go implementation uses raw utf-8 strings, and this
+//!   is default configuration in rust-libp2p. Topics can be hashed (SHA256 hashed then base64
+//!   encoded) by setting the `hash_topics` configuration parameter to true.
 //!
 //! - **Sequence Numbers** - A message on the gossipsub network is identified by the source
-//! [`PeerId`](libp2p_identity::PeerId) and a nonce (sequence number) of the message. The sequence numbers in
-//! this implementation are sent as raw bytes across the wire. They are 64-bit big-endian unsigned
-//! integers. When messages are signed, they are monotonically increasing integers starting from a
-//! random value and wrapping around u64::MAX. When messages are unsigned, they are chosen at random.
-//! NOTE: These numbers are sequential in the current go implementation.
+//!   [`PeerId`](libp2p_identity::PeerId) and a nonce (sequence number) of the message. The sequence numbers in
+//!   this implementation are sent as raw bytes across the wire. They are 64-bit big-endian unsigned
+//!   integers. When messages are signed, they are monotonically increasing integers starting from a
+//!   random value and wrapping around u64::MAX. When messages are unsigned, they are chosen at random.
+//!   NOTE: These numbers are sequential in the current go implementation.
 //!
 //! # Peer Discovery
 //!

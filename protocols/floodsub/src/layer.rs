@@ -27,6 +27,7 @@ use crate::FloodsubConfig;
 use bytes::Bytes;
 use cuckoofilter::{CuckooError, CuckooFilter};
 use fnv::FnvHashSet;
+use libp2p_core::transport::PortUse;
 use libp2p_core::{Endpoint, Multiaddr};
 use libp2p_identity::PeerId;
 use libp2p_swarm::behaviour::{ConnectionClosed, ConnectionEstablished, FromSwarm};
@@ -346,6 +347,7 @@ impl NetworkBehaviour for Floodsub {
         _: PeerId,
         _: &Multiaddr,
         _: Endpoint,
+        _: PortUse,
     ) -> Result<THandler<Self>, ConnectionDenied> {
         Ok(Default::default())
     }

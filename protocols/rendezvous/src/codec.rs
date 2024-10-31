@@ -27,7 +27,6 @@ use libp2p_core::{peer_record, signed_envelope, PeerRecord, SignedEnvelope};
 use libp2p_swarm::StreamProtocol;
 use quick_protobuf_codec::Codec as ProtobufCodec;
 use rand::RngCore;
-use std::convert::{TryFrom, TryInto};
 use std::{fmt, io};
 
 pub type Ttl = u64;
@@ -642,7 +641,6 @@ mod proto {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::Namespace;
 
     #[test]
     fn cookie_wire_encoding_roundtrip() {

@@ -28,6 +28,7 @@ use futures::{
 };
 use futures_timer::Delay;
 use libp2p_identity::PeerId;
+use quinn::rustls::pki_types::CertificateDer;
 use std::{
     pin::Pin,
     task::{Context, Poll},
@@ -55,7 +56,7 @@ impl Connecting {
         let identity = connection
             .peer_identity()
             .expect("connection got identity because it passed TLS handshake; qed");
-        let certificates: Box<Vec<rustls::Certificate>> =
+        let certificates: Box<Vec<CertificateDer>> =
             identity.downcast().expect("we rely on rustls feature; qed");
         let end_entity = certificates
             .first()

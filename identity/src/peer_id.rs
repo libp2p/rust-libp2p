@@ -21,7 +21,7 @@
 #[cfg(feature = "rand")]
 use rand::Rng;
 use sha2::Digest as _;
-use std::{convert::TryFrom, fmt, str::FromStr};
+use std::{fmt, str::FromStr};
 use thiserror::Error;
 
 /// Local type-alias for multihash.
@@ -191,7 +191,7 @@ impl<'de> Deserialize<'de> for PeerId {
 
         struct PeerIdVisitor;
 
-        impl<'de> Visitor<'de> for PeerIdVisitor {
+        impl Visitor<'_> for PeerIdVisitor {
             type Value = PeerId;
 
             fn expecting(&self, f: &mut fmt::Formatter) -> fmt::Result {

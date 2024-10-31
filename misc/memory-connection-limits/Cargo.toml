@@ -3,7 +3,7 @@ name = "libp2p-memory-connection-limits"
 edition = "2021"
 rust-version = { workspace = true }
 description = "Memory usage based connection limits for libp2p."
-version = "0.2.0"
+version = "0.3.0"
 license = "MIT"
 repository = "https://github.com/libp2p/rust-libp2p"
 keywords = ["peer-to-peer", "libp2p", "networking"]
@@ -14,8 +14,8 @@ memory-stats = { version = "1", features = ["always_use_statm"] }
 libp2p-core = { workspace = true }
 libp2p-swarm = { workspace = true }
 libp2p-identity = { workspace = true, features = ["peerid"] }
-sysinfo = "0.29"
-tracing = "0.1.37"
+sysinfo = "0.30"
+tracing = { workspace = true }
 void = "1"
 
 [dev-dependencies]

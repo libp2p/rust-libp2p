@@ -355,12 +355,17 @@ impl Metrics {
         }
     }
 
-    /// Register how many peers do we known are subscribed to this topic.
-    pub(crate) fn set_topic_peers(&mut self, topic: &TopicHash, count: usize) {
+    /// Increase the number of peers that are subscribed to this topic.
+    pub(crate) fn inc_topic_peers(&mut self, topic: &TopicHash) {
         if self.register_topic(topic).is_ok() {
-            self.topic_peers_count
-                .get_or_create(topic)
-                .set(count as i64);
+            self.topic_peers_count.get_or_create(topic).inc();
+        }
+    }
+
+    /// Decrease the number of peers that are subscribed to this topic.
+    pub(crate) fn dec_topic_peers(&mut self, topic: &TopicHash) {
+        if self.register_topic(topic).is_ok() {
+            self.topic_peers_count.get_or_create(topic).dec();
         }
     }
 

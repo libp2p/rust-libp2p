@@ -19,8 +19,8 @@
 // DEALINGS IN THE SOFTWARE.
 
 use crate::{
-    connection::{ConnectedPoint, Endpoint},
-    transport::{ListenerId, Transport, TransportError, TransportEvent},
+    connection::ConnectedPoint,
+    transport::{DialOpts, ListenerId, Transport, TransportError, TransportEvent},
 };
 use either::Either;
 use futures::prelude::*;
@@ -68,32 +68,14 @@ where
         self.transport.remove_listener(id)
     }
 
-    fn dial(&mut self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
-        let dialed_fut = self
-            .transport
-            .dial(addr.clone())
-            .map_err(|err| err.map(Either::Left))?;
-        let future = AndThenFuture {
-            inner: Either::Left(Box::pin(dialed_fut)),
-            args: Some((
-                self.fun.clone(),
-                ConnectedPoint::Dialer {
-                    address: addr,
-                    role_override: Endpoint::Dialer,
-                },
-            )),
-            _marker: PhantomPinned,
-        };
-        Ok(future)
-    }
-
-    fn dial_as_listener(
+    fn dial(
         &mut self,
         addr: Multiaddr,
+        opts: DialOpts,
     ) -> Result<Self::Dial, TransportError<Self::Error>> {
         let dialed_fut = self
             .transport
-            .dial_as_listener(addr.clone())
+            .dial(addr.clone(), opts)
             .map_err(|err| err.map(Either::Left))?;
         let future = AndThenFuture {
             inner: Either::Left(Box::pin(dialed_fut)),
@@ -101,16 +83,13 @@ where
                 self.fun.clone(),
                 ConnectedPoint::Dialer {
                     address: addr,
-                    role_override: Endpoint::Listener,
+                    role_override: opts.role,
+                    port_use: opts.port_use,
                 },
             )),
             _marker: PhantomPinned,
         };
         Ok(future)
-    }
-
-    fn address_translation(&self, server: &Multiaddr, observed: &Multiaddr) -> Option<Multiaddr> {
-        self.transport.address_translation(server, observed)
     }
 
     fn poll(

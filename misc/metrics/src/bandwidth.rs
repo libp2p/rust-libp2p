@@ -7,7 +7,7 @@ use futures::{
 };
 use libp2p_core::{
     muxing::{StreamMuxer, StreamMuxerEvent},
-    transport::{ListenerId, TransportError, TransportEvent},
+    transport::{DialOpts, ListenerId, TransportError, TransportEvent},
     Multiaddr,
 };
 use libp2p_identity::PeerId;
@@ -84,31 +84,18 @@ where
         self.transport.remove_listener(id)
     }
 
-    fn dial(&mut self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
-        let metrics = ConnectionMetrics::from_family_and_addr(&self.metrics, &addr);
-        Ok(self
-            .transport
-            .dial(addr.clone())?
-            .map_ok(Box::new(|(peer_id, stream_muxer)| {
-                (peer_id, Muxer::new(stream_muxer, metrics))
-            })))
-    }
-
-    fn dial_as_listener(
+    fn dial(
         &mut self,
         addr: Multiaddr,
+        dial_opts: DialOpts,
     ) -> Result<Self::Dial, TransportError<Self::Error>> {
         let metrics = ConnectionMetrics::from_family_and_addr(&self.metrics, &addr);
         Ok(self
             .transport
-            .dial_as_listener(addr.clone())?
+            .dial(addr.clone(), dial_opts)?
             .map_ok(Box::new(|(peer_id, stream_muxer)| {
                 (peer_id, Muxer::new(stream_muxer, metrics))
             })))
-    }
-
-    fn address_translation(&self, server: &Multiaddr, observed: &Multiaddr) -> Option<Multiaddr> {
-        self.transport.address_translation(server, observed)
     }
 
     fn poll(
@@ -255,7 +242,7 @@ impl<SMInner: AsyncRead> AsyncRead for InstrumentedStream<SMInner> {
         let num_bytes = ready!(this.inner.poll_read(cx, buf))?;
         this.metrics
             .inbound
-            .inc_by(u64::try_from(num_bytes).unwrap_or(u64::max_value()));
+            .inc_by(u64::try_from(num_bytes).unwrap_or(u64::MAX));
         Poll::Ready(Ok(num_bytes))
     }
 
@@ -268,7 +255,7 @@ impl<SMInner: AsyncRead> AsyncRead for InstrumentedStream<SMInner> {
         let num_bytes = ready!(this.inner.poll_read_vectored(cx, bufs))?;
         this.metrics
             .inbound
-            .inc_by(u64::try_from(num_bytes).unwrap_or(u64::max_value()));
+            .inc_by(u64::try_from(num_bytes).unwrap_or(u64::MAX));
         Poll::Ready(Ok(num_bytes))
     }
 }
@@ -283,7 +270,7 @@ impl<SMInner: AsyncWrite> AsyncWrite for InstrumentedStream<SMInner> {
         let num_bytes = ready!(this.inner.poll_write(cx, buf))?;
         this.metrics
             .outbound
-            .inc_by(u64::try_from(num_bytes).unwrap_or(u64::max_value()));
+            .inc_by(u64::try_from(num_bytes).unwrap_or(u64::MAX));
         Poll::Ready(Ok(num_bytes))
     }
 
@@ -296,7 +283,7 @@ impl<SMInner: AsyncWrite> AsyncWrite for InstrumentedStream<SMInner> {
         let num_bytes = ready!(this.inner.poll_write_vectored(cx, bufs))?;
         this.metrics
             .outbound
-            .inc_by(u64::try_from(num_bytes).unwrap_or(u64::max_value()));
+            .inc_by(u64::try_from(num_bytes).unwrap_or(u64::MAX));
         Poll::Ready(Ok(num_bytes))
     }
 

@@ -19,8 +19,8 @@
 // DEALINGS IN THE SOFTWARE.
 
 use futures_timer::Delay;
-use instant::Instant;
 use std::time::Duration;
+use web_time::Instant;
 
 use futures::{
     future::{select, Either},

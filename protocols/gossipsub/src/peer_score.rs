@@ -24,11 +24,11 @@
 use crate::metrics::{Metrics, Penalty};
 use crate::time_cache::TimeCache;
 use crate::{MessageId, TopicHash};
-use instant::Instant;
 use libp2p_identity::PeerId;
 use std::collections::{hash_map, HashMap, HashSet};
 use std::net::IpAddr;
 use std::time::Duration;
+use web_time::Instant;
 
 mod params;
 use crate::ValidationError;
@@ -99,7 +99,7 @@ impl PeerStats {
         topic_hash: TopicHash,
         params: &PeerScoreParams,
     ) -> Option<&mut TopicStats> {
-        if params.topics.get(&topic_hash).is_some() {
+        if params.topics.contains_key(&topic_hash) {
             Some(self.topics.entry(topic_hash).or_default())
         } else {
             self.topics.get_mut(&topic_hash)
@@ -307,7 +307,7 @@ impl PeerScore {
 
         // P6: IP collocation factor
         for ip in peer_stats.known_ips.iter() {
-            if self.params.ip_colocation_factor_whitelist.get(ip).is_some() {
+            if self.params.ip_colocation_factor_whitelist.contains(ip) {
                 continue;
             }
 
@@ -680,7 +680,7 @@ impl PeerScore {
     ) {
         let record = self.deliveries.entry(msg_id.clone()).or_default();
 
-        if record.peers.get(from).is_some() {
+        if record.peers.contains(from) {
             // we have already seen this duplicate!
             return;
         }

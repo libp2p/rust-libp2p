@@ -20,8 +20,13 @@ pub enum Error {
     Connection(String),
 
     #[error("Authentication error")]
-    Authentication(#[from] libp2p_noise::Error),
+    Authentication(#[from] AuthenticationError),
 }
+
+/// New-type wrapper to hide `libp2p_noise` from the public API.
+#[derive(thiserror::Error, Debug)]
+#[error(transparent)]
+pub struct AuthenticationError(pub(crate) libp2p_webrtc_utils::noise::Error);
 
 impl Error {
     pub(crate) fn from_js_value(value: JsValue) -> Self {
@@ -38,7 +43,7 @@ impl Error {
     }
 }
 
-impl std::convert::From<wasm_bindgen::JsValue> for Error {
+impl From<JsValue> for Error {
     fn from(value: JsValue) -> Self {
         Error::from_js_value(value)
     }

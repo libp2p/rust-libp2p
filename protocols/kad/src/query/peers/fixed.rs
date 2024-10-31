@@ -21,12 +21,11 @@
 use super::*;
 
 use fnv::FnvHashMap;
-use libp2p_identity::PeerId;
 use std::{collections::hash_map::Entry, num::NonZeroUsize, vec};
 
 /// A peer iterator for a fixed set of peers.
 pub(crate) struct FixedPeersIter {
-    /// Ther permitted parallelism, i.e. number of pending results.
+    /// The permitted parallelism, i.e. number of pending results.
     parallelism: NonZeroUsize,
 
     /// The state of peers emitted by the iterator.

@@ -20,7 +20,6 @@
 
 use std::{
     io::Error,
-    marker::Unpin,
     net::{SocketAddr, UdpSocket},
     task::{Context, Poll},
 };

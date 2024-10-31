@@ -115,6 +115,8 @@ impl Handler {
                 self.attempts += 1;
             }
             // A connection listener denies all incoming substreams, thus none can ever be fully negotiated.
+            // TODO: remove when Rust 1.82 is MSRV
+            #[allow(unreachable_patterns)]
             future::Either::Right(output) => void::unreachable(output),
         }
     }
@@ -153,6 +155,8 @@ impl Handler {
             <Self as ConnectionHandler>::InboundProtocol,
         >,
     ) {
+        // TODO: remove when Rust 1.82 is MSRV
+        #[allow(unreachable_patterns)]
         void::unreachable(error.into_inner());
     }
 
@@ -164,6 +168,8 @@ impl Handler {
         >,
     ) {
         let error = match error {
+            // TODO: remove when Rust 1.82 is MSRV
+            #[allow(unreachable_patterns)]
             StreamUpgradeError::Apply(v) => void::unreachable(v),
             StreamUpgradeError::NegotiationFailed => outbound::Error::Unsupported,
             StreamUpgradeError::Io(e) => outbound::Error::Io(e),
@@ -298,6 +304,8 @@ impl ConnectionHandler for Handler {
             ConnectionEvent::FullyNegotiatedOutbound(fully_negotiated_outbound) => {
                 self.on_fully_negotiated_outbound(fully_negotiated_outbound)
             }
+            // TODO: remove when Rust 1.82 is MSRV
+            #[allow(unreachable_patterns)]
             ConnectionEvent::ListenUpgradeError(listen_upgrade_error) => {
                 self.on_listen_upgrade_error(listen_upgrade_error)
             }

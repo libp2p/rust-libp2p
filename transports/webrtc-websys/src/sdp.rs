@@ -8,8 +8,8 @@ pub(crate) fn answer(
     server_fingerprint: Fingerprint,
     client_ufrag: &str,
 ) -> RtcSessionDescriptionInit {
-    let mut answer_obj = RtcSessionDescriptionInit::new(RtcSdpType::Answer);
-    answer_obj.sdp(&libp2p_webrtc_utils::sdp::answer(
+    let answer_obj = RtcSessionDescriptionInit::new(RtcSdpType::Answer);
+    answer_obj.set_sdp(&libp2p_webrtc_utils::sdp::answer(
         addr,
         server_fingerprint,
         client_ufrag,
@@ -48,8 +48,8 @@ pub(crate) fn offer(offer: String, client_ufrag: &str) -> RtcSessionDescriptionI
 
     tracing::trace!(offer=%munged_sdp_offer, "Created SDP offer");
 
-    let mut offer_obj = RtcSessionDescriptionInit::new(RtcSdpType::Offer);
-    offer_obj.sdp(&munged_sdp_offer);
+    let offer_obj = RtcSessionDescriptionInit::new(RtcSdpType::Offer);
+    offer_obj.set_sdp(&munged_sdp_offer);
 
     offer_obj
 }

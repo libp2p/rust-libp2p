@@ -18,8 +18,9 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
+use crate::transport::DialOpts;
 use crate::{
-    connection::{ConnectedPoint, Endpoint},
+    connection::ConnectedPoint,
     transport::{Transport, TransportError, TransportEvent},
 };
 use futures::prelude::*;
@@ -73,35 +74,21 @@ where
         self.transport.remove_listener(id)
     }
 
-    fn dial(&mut self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
-        let future = self.transport.dial(addr.clone())?;
-        let p = ConnectedPoint::Dialer {
-            address: addr,
-            role_override: Endpoint::Dialer,
-        };
-        Ok(MapFuture {
-            inner: future,
-            args: Some((self.fun.clone(), p)),
-        })
-    }
-
-    fn dial_as_listener(
+    fn dial(
         &mut self,
         addr: Multiaddr,
+        opts: DialOpts,
     ) -> Result<Self::Dial, TransportError<Self::Error>> {
-        let future = self.transport.dial_as_listener(addr.clone())?;
+        let future = self.transport.dial(addr.clone(), opts)?;
         let p = ConnectedPoint::Dialer {
             address: addr,
-            role_override: Endpoint::Listener,
+            role_override: opts.role,
+            port_use: opts.port_use,
         };
         Ok(MapFuture {
             inner: future,
             args: Some((self.fun.clone(), p)),
         })
-    }
-
-    fn address_translation(&self, server: &Multiaddr, observed: &Multiaddr) -> Option<Multiaddr> {
-        self.transport.address_translation(server, observed)
     }
 
     fn poll(

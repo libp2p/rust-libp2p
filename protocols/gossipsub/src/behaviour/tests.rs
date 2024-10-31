@@ -22,17 +22,12 @@
 
 use super::*;
 use crate::subscription_filter::WhitelistSubscriptionFilter;
-use crate::transform::{DataTransform, IdentityTransform};
-use crate::ValidationError;
-use crate::{
-    config::Config, config::ConfigBuilder, types::Rpc, IdentTopic as Topic, TopicScoreParams,
-};
+use crate::{config::ConfigBuilder, types::Rpc, IdentTopic as Topic};
 use async_std::net::Ipv4Addr;
 use byteorder::{BigEndian, ByteOrder};
-use libp2p_core::{ConnectedPoint, Endpoint};
+use libp2p_core::ConnectedPoint;
 use rand::Rng;
 use std::thread::sleep;
-use std::time::Duration;
 
 #[derive(Default, Debug)]
 struct InjectNodes<D, F>
@@ -162,7 +157,7 @@ fn inject_nodes1() -> InjectNodes<IdentityTransform, AllowAllSubscriptionFilter>
 
 fn add_peer<D, F>(
     gs: &mut Behaviour<D, F>,
-    topic_hashes: &Vec<TopicHash>,
+    topic_hashes: &[TopicHash],
     outbound: bool,
     explicit: bool,
 ) -> PeerId
@@ -175,7 +170,7 @@ where
 
 fn add_peer_with_addr<D, F>(
     gs: &mut Behaviour<D, F>,
-    topic_hashes: &Vec<TopicHash>,
+    topic_hashes: &[TopicHash],
     outbound: bool,
     explicit: bool,
     address: Multiaddr,
@@ -196,7 +191,7 @@ where
 
 fn add_peer_with_addr_and_kind<D, F>(
     gs: &mut Behaviour<D, F>,
-    topic_hashes: &Vec<TopicHash>,
+    topic_hashes: &[TopicHash],
     outbound: bool,
     explicit: bool,
     address: Multiaddr,
@@ -211,6 +206,7 @@ where
         ConnectedPoint::Dialer {
             address,
             role_override: Endpoint::Dialer,
+            port_use: PortUse::Reuse,
         }
     } else {
         ConnectedPoint::Listener {
@@ -261,6 +257,7 @@ where
         let fake_endpoint = ConnectedPoint::Dialer {
             address: Multiaddr::empty(),
             role_override: Endpoint::Dialer,
+            port_use: PortUse::Reuse,
         }; // this is not relevant
            // peer_connections.connections should never be empty.
 
@@ -273,6 +270,7 @@ where
                 connection_id,
                 endpoint: &fake_endpoint,
                 remaining_established: active_connections,
+                cause: None,
             }));
         }
     }
@@ -396,7 +394,7 @@ fn test_subscribe() {
         .create_network();
 
     assert!(
-        gs.mesh.get(&topic_hashes[0]).is_some(),
+        gs.mesh.contains_key(&topic_hashes[0]),
         "Subscribe should add a new entry to the mesh[topic] hashmap"
     );
 
@@ -442,11 +440,13 @@ fn test_unsubscribe() {
 
     for topic_hash in &topic_hashes {
         assert!(
-            gs.topic_peers.get(topic_hash).is_some(),
+            gs.connected_peers
+                .values()
+                .any(|p| p.topics.contains(topic_hash)),
             "Topic_peers contain a topic entry"
         );
         assert!(
-            gs.mesh.get(topic_hash).is_some(),
+            gs.mesh.contains_key(topic_hash),
             "mesh should contain a topic entry"
         );
     }
@@ -479,7 +479,7 @@ fn test_unsubscribe() {
     // check we clean up internal structures
     for topic_hash in &topic_hashes {
         assert!(
-            gs.mesh.get(topic_hash).is_none(),
+            !gs.mesh.contains_key(topic_hash),
             "All topics should have been removed from the mesh"
         );
     }
@@ -566,6 +566,7 @@ fn test_join() {
             endpoint: &ConnectedPoint::Dialer {
                 address: "/ip4/127.0.0.1".parse::<Multiaddr>().unwrap(),
                 role_override: Endpoint::Dialer,
+                port_use: PortUse::Reuse,
             },
             failed_addresses: &[],
             other_established: 0,
@@ -624,14 +625,17 @@ fn test_publish_without_flood_publishing() {
         .create_network();
 
     assert!(
-        gs.mesh.get(&topic_hashes[0]).is_some(),
+        gs.mesh.contains_key(&topic_hashes[0]),
         "Subscribe should add a new entry to the mesh[topic] hashmap"
     );
 
     // all peers should be subscribed to the topic
     assert_eq!(
-        gs.topic_peers.get(&topic_hashes[0]).map(|p| p.len()),
-        Some(20),
+        gs.connected_peers
+            .values()
+            .filter(|p| p.topics.contains(&topic_hashes[0]))
+            .count(),
+        20,
         "Peers should be subscribed to the topic"
     );
 
@@ -670,8 +674,8 @@ fn test_publish_without_flood_publishing() {
     let config: Config = Config::default();
     assert_eq!(
         publishes.len(),
-        config.mesh_n_low(),
-        "Should send a publish message to all known peers"
+        config.mesh_n(),
+        "Should send a publish message to at least mesh_n peers"
     );
 
     assert!(
@@ -703,7 +707,7 @@ fn test_fanout() {
         .create_network();
 
     assert!(
-        gs.mesh.get(&topic_hashes[0]).is_some(),
+        gs.mesh.contains_key(&topic_hashes[0]),
         "Subscribe should add a new entry to the mesh[topic] hashmap"
     );
     // Unsubscribe from topic
@@ -810,9 +814,9 @@ fn test_inject_connected() {
 
     // should add the new peers to `peer_topics` with an empty vec as a gossipsub node
     for peer in peers {
-        let known_topics = gs.peer_topics.get(&peer).unwrap();
+        let peer = gs.connected_peers.get(&peer).unwrap();
         assert!(
-            known_topics == &topic_hashes.iter().cloned().collect(),
+            peer.topics == topic_hashes.iter().cloned().collect(),
             "The topics for each node should all topics"
         );
     }
@@ -861,24 +865,39 @@ fn test_handle_received_subscriptions() {
 
     // verify the result
 
-    let peer_topics = gs.peer_topics.get(&peers[0]).unwrap().clone();
+    let peer = gs.connected_peers.get(&peers[0]).unwrap();
     assert!(
-        peer_topics == topic_hashes.iter().take(3).cloned().collect(),
+        peer.topics
+            == topic_hashes
+                .iter()
+                .take(3)
+                .cloned()
+                .collect::<BTreeSet<_>>(),
         "First peer should be subscribed to three topics"
     );
-    let peer_topics = gs.peer_topics.get(&peers[1]).unwrap().clone();
+    let peer1 = gs.connected_peers.get(&peers[1]).unwrap();
     assert!(
-        peer_topics == topic_hashes.iter().take(3).cloned().collect(),
+        peer1.topics
+            == topic_hashes
+                .iter()
+                .take(3)
+                .cloned()
+                .collect::<BTreeSet<_>>(),
         "Second peer should be subscribed to three topics"
     );
 
     assert!(
-        gs.peer_topics.get(&unknown_peer).is_none(),
+        !gs.connected_peers.contains_key(&unknown_peer),
         "Unknown peer should not have been added"
     );
 
     for topic_hash in topic_hashes[..3].iter() {
-        let topic_peers = gs.topic_peers.get(topic_hash).unwrap().clone();
+        let topic_peers = gs
+            .connected_peers
+            .iter()
+            .filter(|(_, p)| p.topics.contains(topic_hash))
+            .map(|(peer_id, _)| *peer_id)
+            .collect::<BTreeSet<PeerId>>();
         assert!(
             topic_peers == peers[..2].iter().cloned().collect(),
             "Two peers should be added to the first three topics"
@@ -895,13 +914,21 @@ fn test_handle_received_subscriptions() {
         &peers[0],
     );
 
-    let peer_topics = gs.peer_topics.get(&peers[0]).unwrap().clone();
-    assert!(
-        peer_topics == topic_hashes[1..3].iter().cloned().collect(),
+    let peer = gs.connected_peers.get(&peers[0]).unwrap().clone();
+    assert_eq!(
+        peer.topics,
+        topic_hashes[1..3].iter().cloned().collect::<BTreeSet<_>>(),
         "Peer should be subscribed to two topics"
     );
 
-    let topic_peers = gs.topic_peers.get(&topic_hashes[0]).unwrap().clone(); // only gossipsub at the moment
+    // only gossipsub at the moment
+    let topic_peers = gs
+        .connected_peers
+        .iter()
+        .filter(|(_, p)| p.topics.contains(&topic_hashes[0]))
+        .map(|(peer_id, _)| *peer_id)
+        .collect::<BTreeSet<PeerId>>();
+
     assert!(
         topic_peers == peers[1..2].iter().cloned().collect(),
         "Only the second peers should be in the first topic"
@@ -925,9 +952,8 @@ fn test_get_random_peers() {
     for _ in 0..20 {
         peers.push(PeerId::random())
     }
-
-    gs.topic_peers
-        .insert(topic_hash.clone(), peers.iter().cloned().collect());
+    let mut topics = BTreeSet::new();
+    topics.insert(topic_hash.clone());
 
     gs.connected_peers = peers
         .iter()
@@ -937,52 +963,32 @@ fn test_get_random_peers() {
                 PeerConnections {
                     kind: PeerKind::Gossipsubv1_1,
                     connections: vec![ConnectionId::new_unchecked(0)],
+                    topics: topics.clone(),
                 },
             )
         })
         .collect();
 
-    let random_peers =
-        get_random_peers(&gs.topic_peers, &gs.connected_peers, &topic_hash, 5, |_| {
-            true
-        });
+    let random_peers = get_random_peers(&gs.connected_peers, &topic_hash, 5, |_| true);
     assert_eq!(random_peers.len(), 5, "Expected 5 peers to be returned");
-    let random_peers = get_random_peers(
-        &gs.topic_peers,
-        &gs.connected_peers,
-        &topic_hash,
-        30,
-        |_| true,
-    );
+    let random_peers = get_random_peers(&gs.connected_peers, &topic_hash, 30, |_| true);
     assert!(random_peers.len() == 20, "Expected 20 peers to be returned");
     assert!(
         random_peers == peers.iter().cloned().collect(),
         "Expected no shuffling"
     );
-    let random_peers = get_random_peers(
-        &gs.topic_peers,
-        &gs.connected_peers,
-        &topic_hash,
-        20,
-        |_| true,
-    );
+    let random_peers = get_random_peers(&gs.connected_peers, &topic_hash, 20, |_| true);
     assert!(random_peers.len() == 20, "Expected 20 peers to be returned");
     assert!(
         random_peers == peers.iter().cloned().collect(),
         "Expected no shuffling"
     );
-    let random_peers =
-        get_random_peers(&gs.topic_peers, &gs.connected_peers, &topic_hash, 0, |_| {
-            true
-        });
+    let random_peers = get_random_peers(&gs.connected_peers, &topic_hash, 0, |_| true);
     assert!(random_peers.is_empty(), "Expected 0 peers to be returned");
     // test the filter
-    let random_peers =
-        get_random_peers(&gs.topic_peers, &gs.connected_peers, &topic_hash, 5, |_| {
-            false
-        });
+    let random_peers = get_random_peers(&gs.connected_peers, &topic_hash, 5, |_| false);
     assert!(random_peers.is_empty(), "Expected 0 peers to be returned");
-    let random_peers = get_random_peers(&gs.topic_peers, &gs.connected_peers, &topic_hash, 10, {
+    let random_peers = get_random_peers(&gs.connected_peers, &topic_hash, 10, {
         |peer| peers.contains(peer)
     });
     assert!(random_peers.len() == 10, "Expected 10 peers to be returned");
@@ -1151,7 +1157,7 @@ fn test_handle_ihave_subscribed_and_msg_not_cached() {
 
     assert!(
         iwant_exists,
-        "Expected to send an IWANT control message for unkown message id"
+        "Expected to send an IWANT control message for unknown message id"
     );
 }
 
@@ -1272,7 +1278,7 @@ fn test_handle_graft_multiple_topics() {
     }
 
     assert!(
-        gs.mesh.get(&topic_hashes[2]).is_none(),
+        !gs.mesh.contains_key(&topic_hashes[2]),
         "Expected the second topic to not be in the mesh"
     );
 }
@@ -2397,7 +2403,7 @@ fn test_dont_graft_to_negative_scored_peers() {
 }
 
 ///Note that in this test also without a penalty the px would be ignored because of the
-/// acceptPXThreshold, but the spec still explicitely states the rule that px from negative
+/// acceptPXThreshold, but the spec still explicitly states the rule that px from negative
 /// peers should get ignored, therefore we test it here.
 #[test]
 fn test_ignore_px_from_negative_scored_peer() {
@@ -3165,7 +3171,7 @@ fn test_scoring_p1() {
     );
 }
 
-fn random_message(seq: &mut u64, topics: &Vec<TopicHash>) -> RawMessage {
+fn random_message(seq: &mut u64, topics: &[TopicHash]) -> RawMessage {
     let mut rng = rand::thread_rng();
     *seq += 1;
     RawMessage {
@@ -4027,20 +4033,20 @@ fn test_scoring_p6() {
     //create 5 peers with the same ip
     let addr = Multiaddr::from(Ipv4Addr::new(10, 1, 2, 3));
     let peers = vec![
-        add_peer_with_addr(&mut gs, &vec![], false, false, addr.clone()),
-        add_peer_with_addr(&mut gs, &vec![], false, false, addr.clone()),
-        add_peer_with_addr(&mut gs, &vec![], true, false, addr.clone()),
-        add_peer_with_addr(&mut gs, &vec![], true, false, addr.clone()),
-        add_peer_with_addr(&mut gs, &vec![], true, true, addr.clone()),
+        add_peer_with_addr(&mut gs, &[], false, false, addr.clone()),
+        add_peer_with_addr(&mut gs, &[], false, false, addr.clone()),
+        add_peer_with_addr(&mut gs, &[], true, false, addr.clone()),
+        add_peer_with_addr(&mut gs, &[], true, false, addr.clone()),
+        add_peer_with_addr(&mut gs, &[], true, true, addr.clone()),
     ];
 
     //create 4 other peers with other ip
     let addr2 = Multiaddr::from(Ipv4Addr::new(10, 1, 2, 4));
     let others = vec![
-        add_peer_with_addr(&mut gs, &vec![], false, false, addr2.clone()),
-        add_peer_with_addr(&mut gs, &vec![], false, false, addr2.clone()),
-        add_peer_with_addr(&mut gs, &vec![], true, false, addr2.clone()),
-        add_peer_with_addr(&mut gs, &vec![], true, false, addr2.clone()),
+        add_peer_with_addr(&mut gs, &[], false, false, addr2.clone()),
+        add_peer_with_addr(&mut gs, &[], false, false, addr2.clone()),
+        add_peer_with_addr(&mut gs, &[], true, false, addr2.clone()),
+        add_peer_with_addr(&mut gs, &[], true, false, addr2.clone()),
     ];
 
     //no penalties yet
@@ -4056,6 +4062,7 @@ fn test_scoring_p6() {
             endpoint: &ConnectedPoint::Dialer {
                 address: addr.clone(),
                 role_override: Endpoint::Dialer,
+                port_use: PortUse::Reuse,
             },
             failed_addresses: &[],
             other_established: 0,
@@ -4077,6 +4084,7 @@ fn test_scoring_p6() {
             endpoint: &ConnectedPoint::Dialer {
                 address: addr2.clone(),
                 role_override: Endpoint::Dialer,
+                port_use: PortUse::Reuse,
             },
             failed_addresses: &[],
             other_established: 1,
@@ -4107,6 +4115,7 @@ fn test_scoring_p6() {
         endpoint: &ConnectedPoint::Dialer {
             address: addr,
             role_override: Endpoint::Dialer,
+            port_use: PortUse::Reuse,
         },
         failed_addresses: &[],
         other_established: 2,
@@ -4551,7 +4560,7 @@ fn test_limit_number_of_message_ids_inside_ihave() {
     //emit gossip
     gs.emit_gossip();
 
-    // both peers should have gotten 100 random ihave messages, to asser the randomness, we
+    // both peers should have gotten 100 random ihave messages, to assert the randomness, we
     // assert that both have not gotten the same set of messages, but have an intersection
     // (which is the case with very high probability, the probabiltity of failure is < 10^-58).
 
@@ -5100,7 +5109,7 @@ fn test_graft_without_subscribe() {
         .create_network();
 
     assert!(
-        gs.mesh.get(&topic_hashes[0]).is_some(),
+        gs.mesh.contains_key(&topic_hashes[0]),
         "Subscribe should add a new entry to the mesh[topic] hashmap"
     );
 

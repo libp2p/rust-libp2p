@@ -25,7 +25,6 @@ use std::{
     io,
     pin::Pin,
     task::{Context, Poll},
-    u16,
 };
 
 const MAX_LEN_BYTES: u16 = 2;

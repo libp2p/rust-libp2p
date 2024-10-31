@@ -18,7 +18,8 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use std::time::{Duration, SystemTime};
+use std::time::Duration;
+use web_time::SystemTime;
 
 use asynchronous_codec::{Framed, FramedParts};
 use bytes::Bytes;
@@ -114,6 +115,8 @@ impl ReservationReq {
 pub struct CircuitReq {
     dst: PeerId,
     substream: Framed<Stream, quick_protobuf_codec::Codec<proto::HopMessage>>,
+    max_circuit_duration: Duration,
+    max_circuit_bytes: u64,
 }
 
 impl CircuitReq {
@@ -126,7 +129,15 @@ impl CircuitReq {
             type_pb: proto::HopMessageType::STATUS,
             peer: None,
             reservation: None,
-            limit: None,
+            limit: Some(proto::Limit {
+                duration: Some(
+                    self.max_circuit_duration
+                        .as_secs()
+                        .try_into()
+                        .expect("`max_circuit_duration` not to exceed `u32::MAX`."),
+                ),
+                data: Some(self.max_circuit_bytes),
+            }),
             status: Some(proto::Status::OK),
         };
 
@@ -203,7 +214,12 @@ pub(crate) async fn handle_inbound_request(
 
             let dst = peer_id_res.map_err(|_| Error::ParsePeerId)?;
 
-            Either::Right(CircuitReq { dst, substream })
+            Either::Right(CircuitReq {
+                dst,
+                substream,
+                max_circuit_duration,
+                max_circuit_bytes,
+            })
         }
         Type::STATUS => return Err(Error::UnexpectedTypeStatus),
     };

@@ -1,5 +1,6 @@
 use super::Error;
 use crate::connection::RtcPeerConnection;
+use crate::error::AuthenticationError;
 use crate::sdp;
 use crate::Connection;
 use libp2p_identity::{Keypair, PeerId};
@@ -48,7 +49,9 @@ async fn outbound_inner(
     tracing::trace!(?local_fingerprint);
     tracing::trace!(?remote_fingerprint);
 
-    let peer_id = noise::outbound(id_keys, channel, remote_fingerprint, local_fingerprint).await?;
+    let peer_id = noise::outbound(id_keys, channel, remote_fingerprint, local_fingerprint)
+        .await
+        .map_err(AuthenticationError)?;
 
     tracing::debug!(peer=%peer_id, "Remote peer identified");
 

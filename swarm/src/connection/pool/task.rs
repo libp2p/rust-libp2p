@@ -105,6 +105,8 @@ pub(crate) async fn new_for_pending_outgoing_connection(
                 })
                 .await;
         }
+        // TODO: remove when Rust 1.82 is MSRV
+        #[allow(unreachable_patterns)]
         Either::Left((Ok(v), _)) => void::unreachable(v),
         Either::Right((Ok((address, output, errors)), _)) => {
             let _ = events
@@ -143,6 +145,8 @@ pub(crate) async fn new_for_pending_incoming_connection<TFut>(
                 })
                 .await;
         }
+        // TODO: remove when Rust 1.82 is MSRV
+        #[allow(unreachable_patterns)]
         Either::Left((Ok(v), _)) => void::unreachable(v),
         Either::Right((Ok(output), _)) => {
             let _ = events

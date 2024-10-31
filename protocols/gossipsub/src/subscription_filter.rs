@@ -212,7 +212,6 @@ impl TopicSubscriptionFilter for RegexSubscriptionFilter {
 mod test {
     use super::*;
     use crate::types::SubscriptionAction::*;
-    use std::iter::FromIterator;
 
     #[test]
     fn test_filter_incoming_allow_all_with_duplicates() {
