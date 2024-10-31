@@ -149,7 +149,7 @@ struct Asn1RawOid<'a> {
     object: DerObject<'a>,
 }
 
-impl<'a> Asn1RawOid<'a> {
+impl Asn1RawOid<'_> {
     /// The underlying OID as byte literal.
     pub(crate) fn oid(&self) -> &[u8] {
         self.object.value()
@@ -169,7 +169,7 @@ impl<'a> DerTypeView<'a> for Asn1RawOid<'a> {
     }
 }
 
-impl<'a> DerEncodable for Asn1RawOid<'a> {
+impl DerEncodable for Asn1RawOid<'_> {
     fn encode<S: Sink>(&self, sink: &mut S) -> Result<(), Asn1DerError> {
         self.object.encode(sink)
     }

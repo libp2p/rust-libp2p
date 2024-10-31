@@ -69,7 +69,7 @@ pub use behaviour::{
 pub use kbucket::{
     Distance as KBucketDistance, EntryView, KBucketRef, Key as KBucketKey, NodeStatus,
 };
-pub use protocol::ConnectionType;
+pub use protocol::{ConnectionType, KadPeer};
 pub use query::QueryId;
 pub use record::{store, Key as RecordKey, ProviderRecord, Record};
 
