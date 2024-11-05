@@ -21,7 +21,7 @@
 use crate::proto;
 use asynchronous_codec::{FramedRead, FramedWrite};
 use futures::prelude::*;
-use libp2p_core::{multiaddr, Multiaddr, PeerRecord, SignedEnvelope};
+use libp2p_core::{multiaddr, Multiaddr, SignedEnvelope};
 use libp2p_identity as identity;
 use libp2p_identity::PublicKey;
 use libp2p_swarm::StreamProtocol;
@@ -51,7 +51,8 @@ pub struct Info {
     pub protocols: Vec<StreamProtocol>,
     /// Address observed by or for the remote.
     pub observed_addr: Multiaddr,
-    pub signed_peer_record: PeerRecord,
+    /// The signed peer record.
+    pub signed_peer_record: SignedEnvelope,
 }
 
 impl Info {
@@ -90,7 +91,7 @@ pub struct PushInfo {
     pub listen_addrs: Vec<Multiaddr>,
     pub protocols: Vec<StreamProtocol>,
     pub observed_addr: Option<Multiaddr>,
-    pub signed_peer_record: Option<PeerRecord>,
+    pub signed_peer_record: Option<SignedEnvelope>,
 }
 
 pub(crate) async fn send_identify<T>(io: T, info: Info) -> Result<Info, UpgradeError>
@@ -110,12 +111,7 @@ where
         listenAddrs: listen_addrs,
         observedAddr: Some(info.observed_addr.to_vec()),
         protocols: info.protocols.iter().map(|p| p.to_string()).collect(),
-        signedPeerRecord: Some(
-            info.signed_peer_record
-                .clone()
-                .into_signed_envelope()
-                .into_protobuf_encoding(),
-        ),
+        signedPeerRecord: Some(info.signed_peer_record.clone().into_protobuf_encoding()),
     };
 
     let mut framed_io = FramedWrite::new(
@@ -217,18 +213,16 @@ fn parse_observed_addr(observed_addr: Option<Vec<u8>>) -> Option<Multiaddr> {
     })
 }
 
-fn parse_signed_peer_record(signed_peer_record: Option<Vec<u8>>) -> Option<PeerRecord> {
-    signed_peer_record.and_then(|bytes| {
-        match PeerRecord::from_signed_envelope(
-            SignedEnvelope::from_protobuf_encoding(&bytes).unwrap(),
-        ) {
-            Ok(p) => Some(p),
+fn parse_signed_peer_record(signed_peer_record: Option<Vec<u8>>) -> Option<SignedEnvelope> {
+    signed_peer_record.and_then(
+        |bytes| match SignedEnvelope::from_protobuf_encoding(&bytes) {
+            Ok(s) => Some(s),
             Err(e) => {
                 tracing::debug!("Unable to parse signed peer record: {e:?}");
                 None
             }
-        }
-    })
+        },
+    )
 }
 
 impl TryFrom<proto::Identify> for Info {
