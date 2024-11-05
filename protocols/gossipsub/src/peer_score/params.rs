@@ -229,7 +229,7 @@ pub struct TopicScoreParams {
 
     ///  P1: time in the mesh
     ///  This is the time the peer has been grafted in the mesh.
-    ///  The value of of the parameter is the `time/time_in_mesh_quantum`, capped by `time_in_mesh_cap`
+    ///  The value of the parameter is the `time/time_in_mesh_quantum`, capped by `time_in_mesh_cap`
     ///  The weight of the parameter must be positive (or zero to disable).
     pub time_in_mesh_weight: f64,
     pub time_in_mesh_quantum: Duration,
