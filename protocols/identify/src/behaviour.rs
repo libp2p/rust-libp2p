@@ -42,6 +42,9 @@ use std::{
     time::Duration,
 };
 
+const STREAM_TIMEOUT: Duration = Duration::from_secs(60);
+const MAX_CONCURRENT_STREAMS_PER_CONNECTION: usize = 10;
+
 /// Whether an [`Multiaddr`] is a valid for the QUIC transport.
 fn is_quic_addr(addr: &Multiaddr, v1: bool) -> bool {
     use Protocol::*;
@@ -153,6 +156,17 @@ pub struct Config {
     ///
     /// Disabled by default.
     pub hide_listen_addrs: bool,
+
+    /// Maximum duration for which an identification request stream may remain
+    /// active before timing out.
+    ///
+    /// Defaults to 1 minute.
+    pub stream_timeout: Duration,
+
+    /// Maximum number of concurrent identification request streams per connection.
+    ///
+    /// Defaults to 10.
+    pub max_concurrent_streams_per_connection: usize,
 }
 
 impl Config {
@@ -167,6 +181,8 @@ impl Config {
             push_listen_addr_updates: false,
             cache_size: 100,
             hide_listen_addrs: false,
+            stream_timeout: STREAM_TIMEOUT,
+            max_concurrent_streams_per_connection: MAX_CONCURRENT_STREAMS_PER_CONNECTION,
         }
     }
 
@@ -200,6 +216,20 @@ impl Config {
     /// Configures whether we prevent sending out our listen addresses.
     pub fn with_hide_listen_addrs(mut self, b: bool) -> Self {
         self.hide_listen_addrs = b;
+        self
+    }
+
+    /// Configures the maximum allowed duration before an active identification
+    /// request stream times out.
+    pub fn with_stream_timeout(mut self, t: Duration) -> Self {
+        self.stream_timeout = t;
+        self
+    }
+
+    /// Configures the maximum number of concurrent identification request streams
+    /// allowed per connection.
+    pub fn with_max_concurrent_streams_per_connection(mut self, s: usize) -> Self {
+        self.max_concurrent_streams_per_connection = s;
         self
     }
 }
@@ -343,11 +373,8 @@ impl NetworkBehaviour for Behaviour {
         remote_addr: &Multiaddr,
     ) -> Result<THandler<Self>, ConnectionDenied> {
         Ok(Handler::new(
-            self.config.interval,
+            self.config.clone(),
             peer,
-            self.config.local_public_key.clone(),
-            self.config.protocol_version.clone(),
-            self.config.agent_version.clone(),
             remote_addr.clone(),
             self.all_addresses(),
         ))
@@ -375,11 +402,8 @@ impl NetworkBehaviour for Behaviour {
         }
 
         Ok(Handler::new(
-            self.config.interval,
+            self.config.clone(),
             peer,
-            self.config.local_public_key.clone(),
-            self.config.protocol_version.clone(),
-            self.config.agent_version.clone(),
             addr.clone(), // TODO: This is weird? That is the public address we dialed, shouldn't need to tell the other party?
             self.all_addresses(),
         ))

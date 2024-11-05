@@ -19,7 +19,7 @@
 // DEALINGS IN THE SOFTWARE.
 
 use crate::protocol::{Info, PushInfo, UpgradeError};
-use crate::{protocol, PROTOCOL_NAME, PUSH_PROTOCOL_NAME};
+use crate::{behaviour::Config, protocol, PROTOCOL_NAME, PUSH_PROTOCOL_NAME};
 use either::Either;
 use futures::prelude::*;
 use futures_bounded::Timeout;
@@ -40,9 +40,6 @@ use smallvec::SmallVec;
 use std::collections::HashSet;
 use std::{task::Context, task::Poll, time::Duration};
 use tracing::Level;
-
-const STREAM_TIMEOUT: Duration = Duration::from_secs(60);
-const MAX_CONCURRENT_STREAMS_PER_CONNECTION: usize = 10;
 
 /// Protocol handler for sending and receiving identification requests.
 ///
@@ -117,11 +114,8 @@ pub enum Event {
 impl Handler {
     /// Creates a new `Handler`.
     pub fn new(
-        interval: Duration,
+        config: Config,
         remote_peer_id: PeerId,
-        public_key: PublicKey,
-        protocol_version: String,
-        agent_version: String,
         observed_addr: Multiaddr,
         external_addresses: HashSet<Multiaddr>,
     ) -> Self {
@@ -129,15 +123,15 @@ impl Handler {
             remote_peer_id,
             events: SmallVec::new(),
             active_streams: futures_bounded::FuturesSet::new(
-                STREAM_TIMEOUT,
-                MAX_CONCURRENT_STREAMS_PER_CONNECTION,
+                config.stream_timeout,
+                config.max_concurrent_streams_per_connection,
             ),
             trigger_next_identify: Delay::new(Duration::ZERO),
             exchanged_one_periodic_identify: false,
-            interval,
-            public_key,
-            protocol_version,
-            agent_version,
+            interval: config.interval,
+            public_key: config.local_public_key.clone(),
+            protocol_version: config.protocol_version,
+            agent_version: config.agent_version,
             observed_addr,
             local_supported_protocols: SupportedProtocols::default(),
             remote_supported_protocols: HashSet::default(),
