@@ -204,18 +204,18 @@ impl Config {
     }
 
     /// Get the protocol version of the Config.
-    pub fn protocol_version(&self) -> String {
-        self.protocol_version.clone()
+    pub fn protocol_version(&self) -> &str {
+        &self.protocol_version
     }
 
     /// Get the local public key of the Config.
-    pub fn local_public_key(&self) -> PublicKey {
-        self.local_public_key.clone()
+    pub fn local_public_key(&self) -> &PublicKey {
+        &self.local_public_key
     }
 
     /// Get the agent version of the Config.
-    pub fn agent_version(&self) -> String {
-        self.agent_version.clone()
+    pub fn agent_version(&self) -> &str {
+        &self.agent_version
     }
 
     /// Get the interval of the Config.
