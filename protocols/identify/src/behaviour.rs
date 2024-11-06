@@ -117,20 +117,20 @@ pub struct Behaviour {
 pub struct Config {
     /// Application-specific version of the protocol family used by the peer,
     /// e.g. `ipfs/1.0.0` or `polkadot/1.0.0`.
-    pub protocol_version: String,
+    protocol_version: String,
     /// The public key of the local node. To report on the wire.
-    pub local_public_key: PublicKey,
+    local_public_key: PublicKey,
     /// Name and version of the local peer implementation, similar to the
     /// `User-Agent` header in the HTTP protocol.
     ///
     /// Defaults to `rust-libp2p/<libp2p-identify-version>`.
-    pub agent_version: String,
+    agent_version: String,
     /// The interval at which identification requests are sent to
     /// the remote on established connections after the first request,
     /// i.e. the delay between identification requests.
     ///
     /// Defaults to 5 minutes.
-    pub interval: Duration,
+    interval: Duration,
 
     /// Whether new or expired listen addresses of the local node should
     /// trigger an active push of an identify message to all connected peers.
@@ -140,19 +140,19 @@ pub struct Config {
     /// i.e. before the next periodic identify request with each peer.
     ///
     /// Disabled by default.
-    pub push_listen_addr_updates: bool,
+    push_listen_addr_updates: bool,
 
     /// How many entries of discovered peers to keep before we discard
     /// the least-recently used one.
     ///
     /// Disabled by default.
-    pub cache_size: usize,
+    cache_size: usize,
 
     /// Whether to include our listen addresses in our responses. If enabled,
     /// we will effectively only share our external addresses.
     ///
     /// Disabled by default.
-    pub hide_listen_addrs: bool,
+    hide_listen_addrs: bool,
 }
 
 impl Config {
@@ -201,6 +201,41 @@ impl Config {
     pub fn with_hide_listen_addrs(mut self, b: bool) -> Self {
         self.hide_listen_addrs = b;
         self
+    }
+
+    /// Get the protocol version of the Config.
+    pub fn protocol_version(&self) -> &str {
+        &self.protocol_version
+    }
+
+    /// Get the local public key of the Config.
+    pub fn local_public_key(&self) -> &PublicKey {
+        &self.local_public_key
+    }
+
+    /// Get the agent version of the Config.
+    pub fn agent_version(&self) -> &str {
+        &self.agent_version
+    }
+
+    /// Get the interval of the Config.
+    pub fn interval(&self) -> Duration {
+        self.interval
+    }
+
+    /// Get the push listen address updates boolean value of the Config.
+    pub fn push_listen_addr_updates(&self) -> bool {
+        self.push_listen_addr_updates
+    }
+
+    /// Get the cache size of the Config.
+    pub fn cache_size(&self) -> usize {
+        self.cache_size
+    }
+
+    /// Get the hide listen address boolean value of the Config.
+    pub fn hide_listen_addrs(&self) -> bool {
+        self.hide_listen_addrs
     }
 }
 
