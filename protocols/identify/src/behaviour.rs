@@ -360,7 +360,7 @@ impl Behaviour {
         }
 
         // outgoing connection dialed with port reuse
-        // incomming connection
+        // incoming connection
         self.events
             .push_back(ToSwarm::NewExternalAddrCandidate(observed.clone()));
     }
