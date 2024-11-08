@@ -10,7 +10,7 @@
 //!     server then the dial back puts on the client, thus making the protocol unatractive for an
 //!     attacker.
 //!
-//! The protocol is seperated into two parts:
+//! The protocol is separated into two parts:
 //! - The client part, which is implemented in the `client` module. (The client is the party that
 //!     wants to check if it is reachable from the outside.)
 //! - The server part, which is implemented in the `server` module. (The server is the party
