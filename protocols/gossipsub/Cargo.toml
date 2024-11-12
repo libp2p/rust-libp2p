@@ -21,7 +21,6 @@ bytes = "1.6"
 either = "1.11"
 fnv = "1.0.7"
 futures = { workspace = true }
-futures-ticker = "0.0.3"
 getrandom = "0.2.15"
 hex_fmt = "0.3.0"
 web-time = { workspace = true }
@@ -40,6 +39,7 @@ void = "1.0.2"
 
 # Metrics dependencies
 prometheus-client = { workspace = true }
+futures-timer = "3.0.3"
 
 [dev-dependencies]
 async-std = { version = "1.6.3", features = ["unstable"] }
