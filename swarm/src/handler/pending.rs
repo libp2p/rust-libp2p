@@ -24,8 +24,8 @@ use crate::handler::{
     FullyNegotiatedOutbound, SubstreamProtocol,
 };
 use libp2p_core::upgrade::PendingUpgrade;
+use std::convert::Infallible;
 use std::task::{Context, Poll};
-use void::Void;
 
 /// Implementation of [`ConnectionHandler`] that returns a pending upgrade.
 #[derive(Clone, Debug)]
@@ -40,11 +40,11 @@ impl PendingConnectionHandler {
 }
 
 impl ConnectionHandler for PendingConnectionHandler {
-    type FromBehaviour = Void;
-    type ToBehaviour = Void;
+    type FromBehaviour = Infallible;
+    type ToBehaviour = Infallible;
     type InboundProtocol = PendingUpgrade<String>;
     type OutboundProtocol = PendingUpgrade<String>;
-    type OutboundOpenInfo = Void;
+    type OutboundOpenInfo = Infallible;
     type InboundOpenInfo = ();
 
     fn listen_protocol(&self) -> SubstreamProtocol<Self::InboundProtocol, Self::InboundOpenInfo> {
@@ -54,7 +54,7 @@ impl ConnectionHandler for PendingConnectionHandler {
     fn on_behaviour_event(&mut self, v: Self::FromBehaviour) {
         // TODO: remove when Rust 1.82 is MSRV
         #[allow(unreachable_patterns)]
-        void::unreachable(v)
+        libp2p_core::util::unreachable(v)
     }
 
     fn poll(
@@ -80,17 +80,17 @@ impl ConnectionHandler for PendingConnectionHandler {
             #[allow(unreachable_patterns)]
             ConnectionEvent::FullyNegotiatedInbound(FullyNegotiatedInbound {
                 protocol, ..
-            }) => void::unreachable(protocol),
+            }) => libp2p_core::util::unreachable(protocol),
             // TODO: remove when Rust 1.82 is MSRV
             #[allow(unreachable_patterns)]
             ConnectionEvent::FullyNegotiatedOutbound(FullyNegotiatedOutbound {
                 protocol,
                 info: _info,
             }) => {
-                void::unreachable(protocol);
+                libp2p_core::util::unreachable(protocol);
                 #[allow(unreachable_code, clippy::used_underscore_binding)]
                 {
-                    void::unreachable(_info);
+                    libp2p_core::util::unreachable(_info);
                 }
             }
             // TODO: remove when Rust 1.82 is MSRV
