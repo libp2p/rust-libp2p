@@ -775,10 +775,10 @@ mod tests {
     use libp2p_core::upgrade::{DeniedUpgrade, InboundUpgrade, OutboundUpgrade, UpgradeInfo};
     use libp2p_core::StreamMuxer;
     use quickcheck::*;
+    use std::convert::Infallible;
     use std::sync::{Arc, Weak};
     use std::time::Instant;
     use tracing_subscriber::EnvFilter;
-    use void::Void;
 
     #[test]
     fn max_negotiating_inbound_streams() {
@@ -1016,7 +1016,7 @@ mod tests {
 
     impl StreamMuxer for DummyStreamMuxer {
         type Substream = PendingSubstream;
-        type Error = Void;
+        type Error = Infallible;
 
         fn poll_inbound(
             self: Pin<&mut Self>,
@@ -1051,7 +1051,7 @@ mod tests {
 
     impl StreamMuxer for PendingStreamMuxer {
         type Substream = PendingSubstream;
-        type Error = Void;
+        type Error = Infallible;
 
         fn poll_inbound(
             self: Pin<&mut Self>,
@@ -1113,7 +1113,7 @@ mod tests {
 
     struct MockConnectionHandler {
         outbound_requested: bool,
-        error: Option<StreamUpgradeError<Void>>,
+        error: Option<StreamUpgradeError<Infallible>>,
         upgrade_timeout: Duration,
     }
 
@@ -1133,7 +1133,7 @@ mod tests {
 
     #[derive(Default)]
     struct ConfigurableProtocolConnectionHandler {
-        events: Vec<ConnectionHandlerEvent<DeniedUpgrade, (), Void>>,
+        events: Vec<ConnectionHandlerEvent<DeniedUpgrade, (), Infallible>>,
         active_protocols: HashSet<StreamProtocol>,
         local_added: Vec<Vec<StreamProtocol>>,
         local_removed: Vec<Vec<StreamProtocol>>,
@@ -1166,8 +1166,8 @@ mod tests {
     }
 
     impl ConnectionHandler for MockConnectionHandler {
-        type FromBehaviour = Void;
-        type ToBehaviour = Void;
+        type FromBehaviour = Infallible;
+        type ToBehaviour = Infallible;
         type InboundProtocol = DeniedUpgrade;
         type OutboundProtocol = DeniedUpgrade;
         type InboundOpenInfo = ();
@@ -1194,13 +1194,13 @@ mod tests {
                 ConnectionEvent::FullyNegotiatedInbound(FullyNegotiatedInbound {
                     protocol,
                     ..
-                }) => void::unreachable(protocol),
+                }) => libp2p_core::util::unreachable(protocol),
                 // TODO: remove when Rust 1.82 is MSRV
                 #[allow(unreachable_patterns)]
                 ConnectionEvent::FullyNegotiatedOutbound(FullyNegotiatedOutbound {
                     protocol,
                     ..
-                }) => void::unreachable(protocol),
+                }) => libp2p_core::util::unreachable(protocol),
                 ConnectionEvent::DialUpgradeError(DialUpgradeError { error, .. }) => {
                     self.error = Some(error)
                 }
@@ -1216,7 +1216,7 @@ mod tests {
         fn on_behaviour_event(&mut self, event: Self::FromBehaviour) {
             // TODO: remove when Rust 1.82 is MSRV
             #[allow(unreachable_patterns)]
-            void::unreachable(event)
+            libp2p_core::util::unreachable(event)
         }
 
         fn connection_keep_alive(&self) -> bool {
@@ -1246,8 +1246,8 @@ mod tests {
     }
 
     impl ConnectionHandler for ConfigurableProtocolConnectionHandler {
-        type FromBehaviour = Void;
-        type ToBehaviour = Void;
+        type FromBehaviour = Infallible;
+        type ToBehaviour = Infallible;
         type InboundProtocol = ManyProtocolsUpgrade;
         type OutboundProtocol = DeniedUpgrade;
         type InboundOpenInfo = ();
@@ -1293,7 +1293,7 @@ mod tests {
         fn on_behaviour_event(&mut self, event: Self::FromBehaviour) {
             // TODO: remove when Rust 1.82 is MSRV
             #[allow(unreachable_patterns)]
-            void::unreachable(event)
+            libp2p_core::util::unreachable(event)
         }
 
         fn connection_keep_alive(&self) -> bool {
@@ -1333,7 +1333,7 @@ mod tests {
 
     impl<C> InboundUpgrade<C> for ManyProtocolsUpgrade {
         type Output = C;
-        type Error = Void;
+        type Error = Infallible;
         type Future = future::Ready<Result<Self::Output, Self::Error>>;
 
         fn upgrade_inbound(self, stream: C, _: Self::Info) -> Self::Future {
@@ -1343,7 +1343,7 @@ mod tests {
 
     impl<C> OutboundUpgrade<C> for ManyProtocolsUpgrade {
         type Output = C;
-        type Error = Void;
+        type Error = Infallible;
         type Future = future::Ready<Result<Self::Output, Self::Error>>;
 
         fn upgrade_outbound(self, stream: C, _: Self::Info) -> Self::Future {

@@ -117,7 +117,7 @@ impl Handler {
             // A connection listener denies all incoming substreams, thus none can ever be fully negotiated.
             // TODO: remove when Rust 1.82 is MSRV
             #[allow(unreachable_patterns)]
-            future::Either::Right(output) => void::unreachable(output),
+            future::Either::Right(output) => libp2p_core::util::unreachable(output),
         }
     }
 
@@ -157,7 +157,7 @@ impl Handler {
     ) {
         // TODO: remove when Rust 1.82 is MSRV
         #[allow(unreachable_patterns)]
-        void::unreachable(error.into_inner());
+        libp2p_core::util::unreachable(error.into_inner());
     }
 
     fn on_dial_upgrade_error(
@@ -170,7 +170,7 @@ impl Handler {
         let error = match error {
             // TODO: remove when Rust 1.82 is MSRV
             #[allow(unreachable_patterns)]
-            StreamUpgradeError::Apply(v) => void::unreachable(v),
+            StreamUpgradeError::Apply(v) => libp2p_core::util::unreachable(v),
             StreamUpgradeError::NegotiationFailed => outbound::Error::Unsupported,
             StreamUpgradeError::Io(e) => outbound::Error::Io(e),
             StreamUpgradeError::Timeout => outbound::Error::Io(io::ErrorKind::TimedOut.into()),

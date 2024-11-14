@@ -1,4 +1,7 @@
-use std::future::{ready, Ready};
+use std::{
+    convert::Infallible,
+    future::{ready, Ready},
+};
 
 use libp2p_core::{InboundUpgrade, OutboundUpgrade, UpgradeInfo};
 use libp2p_swarm::{Stream, StreamProtocol};
@@ -20,7 +23,7 @@ impl UpgradeInfo for Upgrade {
 impl InboundUpgrade<Stream> for Upgrade {
     type Output = (Stream, StreamProtocol);
 
-    type Error = void::Void;
+    type Error = Infallible;
 
     type Future = Ready<Result<Self::Output, Self::Error>>;
 
@@ -32,7 +35,7 @@ impl InboundUpgrade<Stream> for Upgrade {
 impl OutboundUpgrade<Stream> for Upgrade {
     type Output = (Stream, StreamProtocol);
 
-    type Error = void::Void;
+    type Error = Infallible;
 
     type Future = Ready<Result<Self::Output, Self::Error>>;
 
