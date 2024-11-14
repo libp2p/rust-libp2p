@@ -31,13 +31,13 @@ use libp2p_swarm::{
     SubstreamProtocol,
 };
 use std::collections::VecDeque;
+use std::convert::Infallible;
 use std::{
     error::Error,
     fmt, io,
     task::{Context, Poll},
     time::Duration,
 };
-use void::Void;
 
 /// The configuration for outbound pings.
 #[derive(Debug, Clone)]
@@ -212,7 +212,7 @@ impl Handler {
             },
             // TODO: remove when Rust 1.82 is MSRV
             #[allow(unreachable_patterns)]
-            StreamUpgradeError::Apply(e) => void::unreachable(e),
+            StreamUpgradeError::Apply(e) => libp2p_core::util::unreachable(e),
             StreamUpgradeError::Io(e) => Failure::Other { error: Box::new(e) },
         };
 
@@ -221,7 +221,7 @@ impl Handler {
 }
 
 impl ConnectionHandler for Handler {
-    type FromBehaviour = Void;
+    type FromBehaviour = Infallible;
     type ToBehaviour = Result<Duration, Failure>;
     type InboundProtocol = ReadyUpgrade<StreamProtocol>;
     type OutboundProtocol = ReadyUpgrade<StreamProtocol>;
@@ -232,7 +232,7 @@ impl ConnectionHandler for Handler {
         SubstreamProtocol::new(ReadyUpgrade::new(PROTOCOL_NAME), ())
     }
 
-    fn on_behaviour_event(&mut self, _: Void) {}
+    fn on_behaviour_event(&mut self, _: Infallible) {}
 
     #[tracing::instrument(level = "trace", name = "ConnectionHandler::poll", skip(self, cx))]
     fn poll(

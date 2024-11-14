@@ -27,7 +27,6 @@ rand = "0.8.4"
 static_assertions = "1"
 thiserror = "1.0"
 tracing = { workspace = true }
-void = "1"
 
 [dev-dependencies]
 libp2p-identity = { workspace = true, features = ["rand"] }
