@@ -24,4 +24,9 @@ message Identify {
   optional bytes observedAddr = 4;
 
   repeated string protocols = 3;
+
+  // signedPeerRecord contains a serialized SignedEnvelope containing a PeerRecord,
+  // signed by the sending node. It contains the same addresses as the listenAddrs field, but
+  // in a form that lets us share authenticated addrs with other peers.
+  optional bytes signedPeerRecord = 8;
 }
