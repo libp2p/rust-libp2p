@@ -386,7 +386,7 @@ fn with_generics_constrained() {
 
     impl<A: Mark + 'static> NetworkBehaviour for Bar<A> {
         type ConnectionHandler = dummy::ConnectionHandler;
-        type ToSwarm = void::Void;
+        type ToSwarm = std::convert::Infallible;
 
         fn handle_established_inbound_connection(
             &mut self,
@@ -548,7 +548,7 @@ fn custom_out_event_no_type_parameters() {
 
     impl<T> NetworkBehaviour for TemplatedBehaviour<T> {
         type ConnectionHandler = dummy::ConnectionHandler;
-        type ToSwarm = void::Void;
+        type ToSwarm = std::convert::Infallible;
 
         fn handle_established_inbound_connection(
             &mut self,
@@ -579,7 +579,7 @@ fn custom_out_event_no_type_parameters() {
         ) {
             // TODO: remove when Rust 1.82 is MSRV
             #[allow(unreachable_patterns)]
-            void::unreachable(message);
+            libp2p_core::util::unreachable(message);
         }
 
         fn poll(
@@ -603,8 +603,8 @@ fn custom_out_event_no_type_parameters() {
         None,
     }
 
-    impl From<void::Void> for OutEvent {
-        fn from(_e: void::Void) -> Self {
+    impl From<std::convert::Infallible> for OutEvent {
+        fn from(_e: std::convert::Infallible) -> Self {
             Self::None
         }
     }

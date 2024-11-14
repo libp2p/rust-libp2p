@@ -44,11 +44,11 @@ use libp2p_swarm::{
     NotifyHandler, Stream, THandler, THandlerInEvent, THandlerOutEvent, ToSwarm,
 };
 use std::collections::{hash_map, HashMap, VecDeque};
+use std::convert::Infallible;
 use std::io::{Error, ErrorKind, IoSlice};
 use std::pin::Pin;
 use std::task::{Context, Poll};
 use transport::Transport;
-use void::Void;
 
 /// The events produced by the client `Behaviour`.
 #[derive(Debug)]
@@ -93,7 +93,7 @@ pub struct Behaviour {
     reservation_addresses: HashMap<ConnectionId, (Multiaddr, ReservationStatus)>,
 
     /// Queue of actions to return when polled.
-    queued_actions: VecDeque<ToSwarm<Event, Either<handler::In, Void>>>,
+    queued_actions: VecDeque<ToSwarm<Event, Either<handler::In, Infallible>>>,
 
     pending_handler_commands: HashMap<ConnectionId, handler::In>,
 }
@@ -238,7 +238,7 @@ impl NetworkBehaviour for Behaviour {
             Either::Left(e) => e,
             // TODO: remove when Rust 1.82 is MSRV
             #[allow(unreachable_patterns)]
-            Either::Right(v) => void::unreachable(v),
+            Either::Right(v) => libp2p_core::util::unreachable(v),
         };
 
         let event = match handler_event {
