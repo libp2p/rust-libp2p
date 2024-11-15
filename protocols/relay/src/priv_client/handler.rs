@@ -37,10 +37,10 @@ use libp2p_swarm::{
     SubstreamProtocol,
 };
 use std::collections::VecDeque;
+use std::convert::Infallible;
 use std::task::{Context, Poll};
 use std::time::Duration;
 use std::{fmt, io};
-use void::Void;
 
 /// The maximum number of circuits being denied concurrently.
 ///
@@ -106,7 +106,7 @@ pub struct Handler {
         >,
     >,
 
-    pending_streams: VecDeque<oneshot::Sender<Result<Stream, StreamUpgradeError<Void>>>>,
+    pending_streams: VecDeque<oneshot::Sender<Result<Stream, StreamUpgradeError<Infallible>>>>,
 
     inflight_reserve_requests: futures_bounded::FuturesTupleSet<
         Result<outbound_hop::Reservation, outbound_hop::ReserveError>,
@@ -447,7 +447,7 @@ impl ConnectionHandler for Handler {
             }
             // TODO: remove when Rust 1.82 is MSRV
             #[allow(unreachable_patterns)]
-            ConnectionEvent::ListenUpgradeError(ev) => void::unreachable(ev.error),
+            ConnectionEvent::ListenUpgradeError(ev) => libp2p_core::util::unreachable(ev.error),
             ConnectionEvent::DialUpgradeError(ev) => {
                 if let Some(next) = self.pending_streams.pop_front() {
                     let _ = next.send(Err(ev.error));
@@ -580,27 +580,27 @@ impl Reservation {
     }
 }
 
-fn into_reserve_error(e: StreamUpgradeError<Void>) -> outbound_hop::ReserveError {
+fn into_reserve_error(e: StreamUpgradeError<Infallible>) -> outbound_hop::ReserveError {
     match e {
         StreamUpgradeError::Timeout => {
             outbound_hop::ReserveError::Io(io::ErrorKind::TimedOut.into())
         }
         // TODO: remove when Rust 1.82 is MSRV
         #[allow(unreachable_patterns)]
-        StreamUpgradeError::Apply(never) => void::unreachable(never),
+        StreamUpgradeError::Apply(never) => libp2p_core::util::unreachable(never),
         StreamUpgradeError::NegotiationFailed => outbound_hop::ReserveError::Unsupported,
         StreamUpgradeError::Io(e) => outbound_hop::ReserveError::Io(e),
     }
 }
 
-fn into_connect_error(e: StreamUpgradeError<Void>) -> outbound_hop::ConnectError {
+fn into_connect_error(e: StreamUpgradeError<Infallible>) -> outbound_hop::ConnectError {
     match e {
         StreamUpgradeError::Timeout => {
             outbound_hop::ConnectError::Io(io::ErrorKind::TimedOut.into())
         }
         // TODO: remove when Rust 1.82 is MSRV
         #[allow(unreachable_patterns)]
-        StreamUpgradeError::Apply(never) => void::unreachable(never),
+        StreamUpgradeError::Apply(never) => libp2p_core::util::unreachable(never),
         StreamUpgradeError::NegotiationFailed => outbound_hop::ConnectError::Unsupported,
         StreamUpgradeError::Io(e) => outbound_hop::ConnectError::Io(e),
     }

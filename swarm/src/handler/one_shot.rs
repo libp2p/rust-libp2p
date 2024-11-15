@@ -217,11 +217,11 @@ mod tests {
     use futures::executor::block_on;
     use futures::future::poll_fn;
     use libp2p_core::upgrade::DeniedUpgrade;
-    use void::Void;
+    use std::convert::Infallible;
 
     #[test]
     fn do_not_keep_idle_connection_alive() {
-        let mut handler: OneShotHandler<_, DeniedUpgrade, Void> = OneShotHandler::new(
+        let mut handler: OneShotHandler<_, DeniedUpgrade, Infallible> = OneShotHandler::new(
             SubstreamProtocol::new(DeniedUpgrade {}, ()),
             Default::default(),
         );

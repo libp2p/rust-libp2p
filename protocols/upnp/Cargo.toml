@@ -18,7 +18,6 @@ libp2p-core = { workspace = true }
 libp2p-swarm = { workspace = true }
 tokio = { workspace = true, default-features = false, features = ["rt"], optional = true }
 tracing = { workspace = true }
-void = "1.0.2"
 
 [features]
 tokio = ["igd-next/aio_tokio", "dep:tokio"]

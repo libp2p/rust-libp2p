@@ -1570,7 +1570,6 @@ dependencies = [
  "tokio",
  "tracing",
  "tracing-subscriber",
- "void",
 ]
 
 [[package]]
@@ -2586,7 +2585,6 @@ dependencies = [
  "libp2p-swarm",
  "libp2p-swarm-derive",
  "libp2p-swarm-test",
- "void",
 ]
 
 [[package]]
@@ -2614,7 +2612,6 @@ dependencies = [
  "tokio",
  "tracing",
  "tracing-subscriber",
- "void",
  "web-time 1.1.0",
 ]
 
@@ -2632,7 +2629,6 @@ dependencies = [
  "libp2p-swarm-test",
  "quickcheck-ext",
  "rand 0.8.5",
- "void",
 ]
 
 [[package]]
@@ -2662,7 +2658,6 @@ dependencies = [
  "thiserror",
  "tracing",
  "unsigned-varint 0.8.0",
- "void",
  "web-time 1.1.0",
 ]
 
@@ -2696,7 +2691,6 @@ dependencies = [
  "thiserror",
  "tracing",
  "tracing-subscriber",
- "void",
  "web-time 1.1.0",
 ]
 
@@ -2771,7 +2765,6 @@ dependencies = [
  "smallvec",
  "tracing",
  "tracing-subscriber",
- "void",
  "web-time 1.1.0",
 ]
 
@@ -2796,7 +2789,6 @@ dependencies = [
  "thiserror",
  "tracing",
  "tracing-subscriber",
- "void",
 ]
 
 [[package]]
@@ -2824,7 +2816,6 @@ dependencies = [
  "sha2 0.10.8",
  "thiserror",
  "tracing",
- "void",
  "zeroize",
 ]
 
@@ -2859,7 +2850,6 @@ dependencies = [
  "tracing",
  "tracing-subscriber",
  "uint",
- "void",
  "web-time 1.1.0",
 ]
 
@@ -2886,7 +2876,6 @@ dependencies = [
  "tokio",
  "tracing",
  "tracing-subscriber",
- "void",
 ]
 
 [[package]]
@@ -2904,7 +2893,6 @@ dependencies = [
  "rand 0.8.5",
  "sysinfo",
  "tracing",
- "void",
 ]
 
 [[package]]
@@ -3014,7 +3002,6 @@ dependencies = [
  "tokio",
  "tracing",
  "tracing-subscriber",
- "void",
  "web-time 1.1.0",
 ]
 
@@ -3034,7 +3021,6 @@ dependencies = [
  "tokio",
  "tracing",
  "tracing-subscriber",
- "void",
  "web-time 1.1.0",
 ]
 
@@ -3131,7 +3117,6 @@ dependencies = [
  "thiserror",
  "tracing",
  "tracing-subscriber",
- "void",
  "web-time 1.1.0",
 ]
 
@@ -3161,7 +3146,6 @@ dependencies = [
  "tokio",
  "tracing",
  "tracing-subscriber",
- "void",
  "web-time 1.1.0",
 ]
 
@@ -3190,7 +3174,6 @@ dependencies = [
  "smallvec",
  "tracing",
  "tracing-subscriber",
- "void",
  "web-time 1.1.0",
 ]
 
@@ -3227,7 +3210,6 @@ dependencies = [
  "tokio",
  "tracing",
  "tracing-subscriber",
- "void",
 ]
 
 [[package]]
@@ -3260,7 +3242,6 @@ dependencies = [
  "tracing",
  "tracing-subscriber",
  "trybuild",
- "void",
  "wasm-bindgen-futures",
  "web-time 1.1.0",
 ]
@@ -3355,7 +3336,6 @@ dependencies = [
  "libp2p-swarm",
  "tokio",
  "tracing",
- "void",
 ]
 
 [[package]]
@@ -6505,12 +6485,6 @@ name = "version_check"
 version = "0.9.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "49874b5167b65d7193b8aba1567f5c7d93d001cafc34600cee003eda787e483f"
-
-[[package]]
-name = "void"
-version = "1.0.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6a02e4885ed3bc0f2de90ea6dd45ebcbb66dacffe03547fadbb0eeae2770887d"
 
 [[package]]
 name = "waitgroup"

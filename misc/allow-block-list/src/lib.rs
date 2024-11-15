@@ -69,9 +69,9 @@ use libp2p_swarm::{
     THandlerInEvent, THandlerOutEvent, ToSwarm,
 };
 use std::collections::{HashSet, VecDeque};
+use std::convert::Infallible;
 use std::fmt;
 use std::task::{Context, Poll, Waker};
-use void::Void;
 
 /// A [`NetworkBehaviour`] that can act as an allow or block list.
 #[derive(Default, Debug)]
@@ -222,7 +222,7 @@ where
     S: Enforce,
 {
     type ConnectionHandler = dummy::ConnectionHandler;
-    type ToSwarm = Void;
+    type ToSwarm = Infallible;
 
     fn handle_established_inbound_connection(
         &mut self,
@@ -273,7 +273,7 @@ where
     ) {
         // TODO: remove when Rust 1.82 is MSRV
         #[allow(unreachable_patterns)]
-        void::unreachable(event)
+        libp2p_core::util::unreachable(event)
     }
 
     fn poll(

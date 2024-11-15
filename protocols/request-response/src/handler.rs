@@ -242,7 +242,7 @@ where
             }
             // TODO: remove when Rust 1.82 is MSRV
             #[allow(unreachable_patterns)]
-            StreamUpgradeError::Apply(e) => void::unreachable(e),
+            StreamUpgradeError::Apply(e) => libp2p_core::util::unreachable(e),
             StreamUpgradeError::Io(e) => {
                 self.pending_events.push_back(Event::OutboundStreamFailed {
                     request_id: message.request_id,
@@ -260,7 +260,7 @@ where
     ) {
         // TODO: remove when Rust 1.82 is MSRV
         #[allow(unreachable_patterns)]
-        void::unreachable(error)
+        libp2p_core::util::unreachable(error)
     }
 }
 
