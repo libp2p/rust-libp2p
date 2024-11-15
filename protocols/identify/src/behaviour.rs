@@ -34,7 +34,6 @@ use libp2p_swarm::{
 use libp2p_swarm::{ConnectionId, THandler, THandlerOutEvent};
 
 use std::collections::hash_map::Entry;
-use std::num::NonZeroUsize;
 use std::{
     collections::{HashMap, HashSet, VecDeque},
     task::Context,
@@ -142,11 +141,6 @@ pub struct Config {
     /// Disabled by default.
     push_listen_addr_updates: bool,
 
-    /// How many entries of discovered peers to keep before we discard
-    /// the least-recently used one.
-    #[deprecated(since = "0.45.1", note = "Use `Config::cache_config` instead.")]
-    cache_size: usize,
-
     /// Configuration for the LRU cache of discovered peers.
     cache_config: Option<PeerAddressesConfig>,
 
@@ -168,8 +162,7 @@ impl Config {
             local_public_key,
             interval: Duration::from_secs(5 * 60),
             push_listen_addr_updates: false,
-            cache_size: 100,
-            cache_config: None, // TODO: when removing `cache_size`, replace `None` with `Some(Default::default())`
+            cache_config: Some(Default::default()),
             hide_listen_addrs: false,
         }
     }
@@ -199,22 +192,7 @@ impl Config {
     ///
     /// If set to [`None`], caching is disabled.
     pub fn with_cache_config(mut self, cache_config: Option<PeerAddressesConfig>) -> Self {
-        #[allow(deprecated)]
-        {
-            // set cache_size to 0 to ensure if user call `with_cache_config(None)`, caching do get disabled.
-            self.cache_size = 0;
-        }
         self.cache_config = cache_config;
-        self
-    }
-
-    /// Configures the size of the LRU cache, caching addresses of discovered peers.
-    ///
-    /// If `cache_config` is set, then `cache_size` is ignored.
-    #[deprecated(since = "0.45.1", note = "Use `Config::with_cache_config` instead.")]
-    #[allow(deprecated)]
-    pub fn with_cache_size(mut self, cache_size: usize) -> Self {
-        self.cache_size = cache_size;
         self
     }
 
@@ -249,9 +227,9 @@ impl Config {
         self.push_listen_addr_updates
     }
 
-    /// Get the cache size of the Config.
-    pub fn cache_size(&self) -> usize {
-        self.cache_size
+    /// Get the config of the LRU cache responsible for caching addresses of discovered peers.
+    pub fn cache_config(&self) -> &Option<PeerAddressesConfig> {
+        &self.cache_config
     }
 
     /// Get the hide listen address boolean value of the Config.
@@ -262,14 +240,7 @@ impl Config {
 
 impl Behaviour {
     /// Creates a new identify [`Behaviour`].
-    pub fn new(mut config: Config) -> Self {
-        #[allow(deprecated)]
-        // If `cache_config` value is not set but `cache_size` is, we build `cache_config` from `cache_size`.
-        if config.cache_config.is_none() {
-            config.cache_config = NonZeroUsize::new(config.cache_size)
-                .map(|cache_size| PeerAddressesConfig::default().with_number_of_peers(cache_size));
-        }
-
+    pub fn new(config: Config) -> Self {
         let discovered_peers = PeerCache::new(config.cache_config.clone());
 
         Self {
