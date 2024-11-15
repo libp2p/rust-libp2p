@@ -25,7 +25,6 @@ socket2 = { version = "0.5.7", features = ["all"] }
 tokio = { workspace = true, default-features = false, features = ["net", "time"], optional = true}
 tracing = { workspace = true }
 hickory-proto = { version = "0.24.1", default-features = false, features = ["mdns"] }
-void = "1.0.2"
 
 [features]
 tokio = ["dep:tokio", "if-watch/tokio"]

@@ -26,7 +26,6 @@ quick-protobuf-codec = { workspace = true }
 rand = "0.8"
 thiserror = "1"
 tracing = { workspace = true }
-void = "1"
 
 [dev-dependencies]
 libp2p-swarm = { workspace = true, features = ["macros", "tokio"] }

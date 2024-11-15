@@ -1,3 +1,8 @@
+## 0.46.0
+
+- Make `identify::Config` fields private and add getter functions.
+  See [PR 5663](https://github.com/libp2p/rust-libp2p/pull/5663).
+
 ## 0.45.1
 
 - Add `hide_listen_addrs` option to prevent leaking (local) listen addresses.

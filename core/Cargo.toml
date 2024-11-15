@@ -31,7 +31,6 @@ smallvec = "1.13.2"
 thiserror = "1.0"
 tracing = { workspace = true }
 unsigned-varint = { workspace = true }
-void = "1"
 
 [dev-dependencies]
 async-std = { version = "1.6.2", features = ["attributes"] }

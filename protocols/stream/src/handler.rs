@@ -1,4 +1,5 @@
 use std::{
+    convert::Infallible,
     io,
     sync::{Arc, Mutex},
     task::{Context, Poll},
@@ -44,8 +45,8 @@ impl Handler {
 }
 
 impl ConnectionHandler for Handler {
-    type FromBehaviour = void::Void;
-    type ToBehaviour = void::Void;
+    type FromBehaviour = Infallible;
+    type ToBehaviour = Infallible;
     type InboundProtocol = Upgrade;
     type OutboundProtocol = Upgrade;
     type InboundOpenInfo = ();
@@ -98,7 +99,7 @@ impl ConnectionHandler for Handler {
     fn on_behaviour_event(&mut self, event: Self::FromBehaviour) {
         // TODO: remove when Rust 1.82 is MSRV
         #[allow(unreachable_patterns)]
-        void::unreachable(event)
+        libp2p_core::util::unreachable(event)
     }
 
     fn on_connection_event(
@@ -147,7 +148,7 @@ impl ConnectionHandler for Handler {
                     }
                     // TODO: remove when Rust 1.82 is MSRV
                     #[allow(unreachable_patterns)]
-                    swarm::StreamUpgradeError::Apply(v) => void::unreachable(v),
+                    swarm::StreamUpgradeError::Apply(v) => libp2p_core::util::unreachable(v),
                     swarm::StreamUpgradeError::NegotiationFailed => {
                         OpenStreamError::UnsupportedProtocol(p)
                     }

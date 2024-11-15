@@ -947,7 +947,7 @@ where
                     && !self.backoffs.is_backoff_with_slack(topic_hash, p)
             });
 
-            // Add up to mesh_n of them them to the mesh
+            // Add up to mesh_n of them to the mesh
             // NOTE: These aren't randomly added, currently FIFO
             let add_peers = std::cmp::min(peers.len(), self.config.mesh_n());
             tracing::debug!(
