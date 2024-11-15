@@ -155,7 +155,6 @@ impl Config {
     /// Creates a new configuration for the identify [`Behaviour`] that
     /// advertises the given protocol version and public key.
     pub fn new(protocol_version: String, local_public_key: PublicKey) -> Self {
-        #[allow(deprecated)]
         Self {
             protocol_version,
             agent_version: format!("rust-libp2p/{}", env!("CARGO_PKG_VERSION")),
