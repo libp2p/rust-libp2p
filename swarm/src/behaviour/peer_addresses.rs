@@ -26,7 +26,7 @@ impl PeerAddressesConfig {
     }
 
     /// Configure the maximum number of cached addresses per peer.
-    pub fn with_number_of_addresses_by_peer(
+    pub fn with_number_of_addresses_per_peer(
         mut self,
         number_of_addresses_per_peer: NonZeroUsize,
     ) -> Self {
