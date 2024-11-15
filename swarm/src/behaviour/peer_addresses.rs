@@ -54,7 +54,7 @@ pub struct PeerAddresses {
 impl PeerAddresses {
     /// Creates a [`PeerAddresses`] cache with capacity for the given number of peers.
     ///
-    /// For each peer, we will at most store `config.number_of_addresses_by_peer` addresses.
+    /// For each peer, we will at most store `config.number_of_addresses_per_peer` addresses.
     pub fn new(config: PeerAddressesConfig) -> Self {
         let inner = LruCache::new(config.number_of_peers);
         Self { config, inner }
