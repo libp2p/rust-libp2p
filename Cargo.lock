@@ -2591,7 +2591,6 @@ dependencies = [
 name = "libp2p-autonat"
 version = "0.13.1"
 dependencies = [
- "async-std",
  "async-trait",
  "asynchronous-codec",
  "bytes",
