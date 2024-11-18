@@ -498,12 +498,12 @@ impl Handler {
         >,
     ) {
         // If `self.allow_listening` is false, then we produced a `DeniedUpgrade` and `protocol`
-        // is a `Void`.
+        // is a `Infallible`.
         let protocol = match protocol {
             future::Either::Left(p) => p,
             // TODO: remove when Rust 1.82 is MSRV
             #[allow(unreachable_patterns)]
-            future::Either::Right(p) => void::unreachable(p),
+            future::Either::Right(p) => libp2p_core::util::unreachable(p),
         };
 
         if self.protocol_status.is_none() {

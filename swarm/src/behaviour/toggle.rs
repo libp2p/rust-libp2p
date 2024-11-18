@@ -212,7 +212,7 @@ where
             future::Either::Left(out) => out,
             // TODO: remove when Rust 1.82 is MSRV
             #[allow(unreachable_patterns)]
-            future::Either::Right(v) => void::unreachable(v),
+            future::Either::Right(v) => libp2p_core::util::unreachable(v),
         };
 
         if let Either::Left(info) = info {
@@ -255,7 +255,7 @@ where
             Either::Left(e) => e,
             // TODO: remove when Rust 1.82 is MSRV
             #[allow(unreachable_patterns)]
-            Either::Right(v) => void::unreachable(v),
+            Either::Right(v) => libp2p_core::util::unreachable(v),
         };
 
         inner.on_connection_event(ConnectionEvent::ListenUpgradeError(ListenUpgradeError {
