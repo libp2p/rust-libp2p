@@ -1,3 +1,8 @@
+## 0.18.1
+
+- Fix malformed reported relayed address when relay peer was dialer.
+  See [PR 5576](https://github.com/libp2p/rust-libp2p/pull/5576).
+
 ## 0.18.0
 
 <!-- Update to libp2p-swarm v0.45.0 -->
