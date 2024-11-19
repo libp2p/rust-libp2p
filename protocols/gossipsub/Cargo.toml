@@ -41,7 +41,6 @@ tracing = { workspace = true }
 prometheus-client = { workspace = true }
 
 [dev-dependencies]
-async-std = { version = "1.6.3", features = ["unstable"] }
 hex = "0.4.2"
 libp2p-core = { workspace = true }
 libp2p-yamux = { workspace = true }
@@ -49,6 +48,7 @@ libp2p-noise = { workspace = true }
 libp2p-swarm-test = { path = "../../swarm-test" }
 quickcheck = { workspace = true }
 tracing-subscriber = { workspace = true, features = ["env-filter"] }
+tokio = { workspace = true, features = ["rt", "rt-multi-thread", "time"] }
 
 # Passing arguments to the docsrs builder in order to properly document cfg's.
 # More information: https://docs.rs/about/builds#cross-compiling
