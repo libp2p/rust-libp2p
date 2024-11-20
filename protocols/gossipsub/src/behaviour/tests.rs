@@ -5675,13 +5675,16 @@ async fn test_timedout_messages_are_reported() {
 
     let mut gs: Behaviour = Behaviour::new(MessageAuthenticity::RandomAuthor, gs_config).unwrap();
 
-    let mut sender = RpcSender::new(2);
+    let sender = RpcSender::new(2);
     let topic_hash = Topic::new("Test").hash();
     let publish_data = vec![2; 59];
     let raw_message = gs.build_raw_message(topic_hash, publish_data).unwrap();
 
     sender
-        .publish(raw_message, Duration::from_nanos(1), None)
+        .send_message(RpcOut::Publish {
+            message: raw_message,
+            timeout: Delay::new(Duration::from_nanos(1)),
+        })
         .unwrap();
     let mut receiver = sender.new_receiver();
     let stale = future::poll_fn(|cx| receiver.poll_stale(cx)).await.unwrap();
@@ -5690,10 +5693,14 @@ async fn test_timedout_messages_are_reported() {
 
 #[test]
 fn test_priority_messages_are_always_sent() {
-    let mut sender = RpcSender::new(2);
+    let sender = RpcSender::new(2);
     let topic_hash = Topic::new("Test").hash();
     // Fill the buffer with the first message.
-    sender.subscribe(topic_hash.clone());
-    sender.subscribe(topic_hash.clone());
-    sender.unsubscribe(topic_hash.clone());
+    assert!(sender
+        .send_message(RpcOut::Subscribe(topic_hash.clone()))
+        .is_ok());
+    assert!(sender
+        .send_message(RpcOut::Subscribe(topic_hash.clone()))
+        .is_ok());
+    assert!(sender.send_message(RpcOut::Unsubscribe(topic_hash)).is_ok());
 }

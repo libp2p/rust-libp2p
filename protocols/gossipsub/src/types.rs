@@ -19,7 +19,6 @@
 // DEALINGS IN THE SOFTWARE.
 
 //! A collection of types using the Gossipsub system.
-use crate::metrics::Metrics;
 use crate::TopicHash;
 use async_channel::{Receiver, Sender};
 use futures::{stream::Peekable, Stream, StreamExt};
@@ -36,7 +35,6 @@ use std::sync::{
     Arc,
 };
 use std::task::{Context, Poll};
-use std::time::Duration;
 use std::{collections::BTreeSet, fmt};
 
 use crate::rpc_proto::proto;
@@ -113,7 +111,7 @@ impl std::fmt::Debug for MessageId {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub(crate) struct PeerConnections {
     /// The kind of protocol the peer supports.
     pub(crate) kind: PeerKind,
@@ -322,6 +320,24 @@ impl RpcOut {
     pub fn into_protobuf(self) -> proto::RPC {
         self.into()
     }
+
+    /// Returns an enum that just stores the type of this [`RpcOut`],
+    /// without any data.
+    ///
+    /// Can be used to avoid cloning of an [`RpcOut`] message when just
+    /// the type is needed.
+    pub(crate) fn kind(&self) -> RpcOutKind {
+        match self {
+            RpcOut::Publish { .. } => RpcOutKind::Publish,
+            RpcOut::Forward { .. } => RpcOutKind::Forward,
+            RpcOut::Subscribe(_) => RpcOutKind::Subscribe,
+            RpcOut::Unsubscribe(_) => RpcOutKind::Unsubscribe,
+            RpcOut::Graft(_) => RpcOutKind::Graft,
+            RpcOut::Prune(_) => RpcOutKind::Prune,
+            RpcOut::IHave(_) => RpcOutKind::IHave,
+            RpcOut::IWant(_) => RpcOutKind::IWant,
+        }
+    }
 }
 
 impl From<RpcOut> for proto::RPC {
@@ -429,6 +445,19 @@ impl From<RpcOut> for proto::RPC {
             }
         }
     }
+}
+
+/// Variant of [`RpcOut`] without any data.
+#[derive(Debug, Clone, Copy)]
+pub(crate) enum RpcOutKind {
+    Publish,
+    Forward,
+    Subscribe,
+    Unsubscribe,
+    Graft,
+    Prune,
+    IHave,
+    IWant,
 }
 
 /// An RPC received/sent.
@@ -588,7 +617,7 @@ impl fmt::Display for PeerKind {
 }
 
 /// `RpcOut` sender that is priority aware.
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub(crate) struct RpcSender {
     cap: usize,
     len: Arc<AtomicUsize>,
@@ -627,102 +656,26 @@ impl RpcSender {
         }
     }
 
-    /// Send a `RpcOut::Graft` message to the `RpcReceiver`
-    /// this is high priority.
-    pub(crate) fn graft(&mut self, graft: Graft) {
-        self.priority_sender
-            .try_send(RpcOut::Graft(graft))
-            .expect("Channel is unbounded and should always be open");
-    }
-
-    /// Send a `RpcOut::Prune` message to the `RpcReceiver`
-    /// this is high priority.
-    pub(crate) fn prune(&mut self, prune: Prune) {
-        self.priority_sender
-            .try_send(RpcOut::Prune(prune))
-            .expect("Channel is unbounded and should always be open");
-    }
-
-    /// Send a `RpcOut::IHave` message to the `RpcReceiver`
-    /// this is low priority, if the queue is full an Err is returned.
-    #[allow(clippy::result_large_err)]
-    pub(crate) fn ihave(&mut self, ihave: IHave) -> Result<(), RpcOut> {
-        self.non_priority_sender
-            .try_send(RpcOut::IHave(ihave))
-            .map_err(|err| err.into_inner())
-    }
-
-    /// Send a `RpcOut::IHave` message to the `RpcReceiver`
-    /// this is low priority, if the queue is full an Err is returned.
-    #[allow(clippy::result_large_err)]
-    pub(crate) fn iwant(&mut self, iwant: IWant) -> Result<(), RpcOut> {
-        self.non_priority_sender
-            .try_send(RpcOut::IWant(iwant))
-            .map_err(|err| err.into_inner())
-    }
-
-    /// Send a `RpcOut::Subscribe` message to the `RpcReceiver`
-    /// this is high priority.
-    pub(crate) fn subscribe(&mut self, topic: TopicHash) {
-        self.priority_sender
-            .try_send(RpcOut::Subscribe(topic))
-            .expect("Channel is unbounded and should always be open");
-    }
-
-    /// Send a `RpcOut::Unsubscribe` message to the `RpcReceiver`
-    /// this is high priority.
-    pub(crate) fn unsubscribe(&mut self, topic: TopicHash) {
-        self.priority_sender
-            .try_send(RpcOut::Unsubscribe(topic))
-            .expect("Channel is unbounded and should always be open");
-    }
-
-    /// Send a `RpcOut::Publish` message to the `RpcReceiver`
-    /// this is high priority. If message sending fails, an `Err` is returned.
-    pub(crate) fn publish(
-        &mut self,
-        message: RawMessage,
-        timeout: Duration,
-        metrics: Option<&mut Metrics>,
-    ) -> Result<(), ()> {
-        if self.len.load(Ordering::Relaxed) >= self.cap {
-            return Err(());
+    pub(crate) fn send_message(&self, rpc: RpcOut) -> Result<(), ()> {
+        if let RpcOut::Publish { .. } = rpc {
+            // Update number of publish message in queue.
+            self.len
+                .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |curr| {
+                    (curr < self.cap).then_some(curr + 1)
+                })
+                .map_err(|_| ())?;
         }
-        self.priority_sender
-            .try_send(RpcOut::Publish {
-                message: message.clone(),
-                timeout: Delay::new(timeout),
-            })
-            .expect("Channel is unbounded and should always be open");
-        self.len.fetch_add(1, Ordering::Relaxed);
-
-        if let Some(m) = metrics {
-            m.msg_sent(&message.topic, message.raw_protobuf_len());
-        }
-
-        Ok(())
-    }
-
-    /// Send a `RpcOut::Forward` message to the `RpcReceiver`
-    /// this is high priority. If the queue is full the message is discarded.
-    pub(crate) fn forward(
-        &mut self,
-        message: RawMessage,
-        timeout: Duration,
-        metrics: Option<&mut Metrics>,
-    ) -> Result<(), ()> {
-        self.non_priority_sender
-            .try_send(RpcOut::Forward {
-                message: message.clone(),
-                timeout: Delay::new(timeout),
-            })
-            .map_err(|_| ())?;
-
-        if let Some(m) = metrics {
-            m.msg_sent(&message.topic, message.raw_protobuf_len());
-        }
-
-        Ok(())
+        let sender = match rpc {
+            RpcOut::Publish { .. }
+            | RpcOut::Graft(_)
+            | RpcOut::Prune(_)
+            | RpcOut::Subscribe(_)
+            | RpcOut::Unsubscribe(_) => &self.priority_sender,
+            RpcOut::Forward { .. } | RpcOut::IHave(_) | RpcOut::IWant(_) => {
+                &self.non_priority_sender
+            }
+        };
+        sender.try_send(rpc).map_err(|_| ())
     }
 
     /// Returns the current size of the priority queue.
