@@ -1570,7 +1570,6 @@ dependencies = [
  "tokio",
  "tracing",
  "tracing-subscriber",
- "void",
 ]
 
 [[package]]
@@ -2526,7 +2525,7 @@ checksum = "97b3888a4aecf77e811145cadf6eef5901f4782c53886191b2f693f24761847c"
 
 [[package]]
 name = "libp2p"
-version = "0.54.1"
+version = "0.54.2"
 dependencies = [
  "async-std",
  "async-trait",
@@ -2578,7 +2577,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-allow-block-list"
-version = "0.4.1"
+version = "0.4.2"
 dependencies = [
  "async-std",
  "libp2p-core",
@@ -2586,14 +2585,12 @@ dependencies = [
  "libp2p-swarm",
  "libp2p-swarm-derive",
  "libp2p-swarm-test",
- "void",
 ]
 
 [[package]]
 name = "libp2p-autonat"
 version = "0.13.1"
 dependencies = [
- "async-std",
  "async-trait",
  "asynchronous-codec",
  "bytes",
@@ -2615,13 +2612,12 @@ dependencies = [
  "tokio",
  "tracing",
  "tracing-subscriber",
- "void",
  "web-time 1.1.0",
 ]
 
 [[package]]
 name = "libp2p-connection-limits"
-version = "0.4.0"
+version = "0.4.1"
 dependencies = [
  "async-std",
  "libp2p-core",
@@ -2633,12 +2629,11 @@ dependencies = [
  "libp2p-swarm-test",
  "quickcheck-ext",
  "rand 0.8.5",
- "void",
 ]
 
 [[package]]
 name = "libp2p-core"
-version = "0.42.0"
+version = "0.42.1"
 dependencies = [
  "async-std",
  "either",
@@ -2663,13 +2658,12 @@ dependencies = [
  "thiserror",
  "tracing",
  "unsigned-varint 0.8.0",
- "void",
  "web-time 1.1.0",
 ]
 
 [[package]]
 name = "libp2p-dcutr"
-version = "0.12.0"
+version = "0.12.1"
 dependencies = [
  "async-std",
  "asynchronous-codec",
@@ -2697,7 +2691,6 @@ dependencies = [
  "thiserror",
  "tracing",
  "tracing-subscriber",
- "void",
  "web-time 1.1.0",
 ]
 
@@ -2772,7 +2765,6 @@ dependencies = [
  "smallvec",
  "tracing",
  "tracing-subscriber",
- "void",
  "web-time 1.1.0",
 ]
 
@@ -2797,12 +2789,11 @@ dependencies = [
  "thiserror",
  "tracing",
  "tracing-subscriber",
- "void",
 ]
 
 [[package]]
 name = "libp2p-identity"
-version = "0.2.9"
+version = "0.2.10"
 dependencies = [
  "asn1_der",
  "base64 0.22.1",
@@ -2825,7 +2816,6 @@ dependencies = [
  "sha2 0.10.8",
  "thiserror",
  "tracing",
- "void",
  "zeroize",
 ]
 
@@ -2860,7 +2850,6 @@ dependencies = [
  "tracing",
  "tracing-subscriber",
  "uint",
- "void",
  "web-time 1.1.0",
 ]
 
@@ -2887,12 +2876,11 @@ dependencies = [
  "tokio",
  "tracing",
  "tracing-subscriber",
- "void",
 ]
 
 [[package]]
 name = "libp2p-memory-connection-limits"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
  "async-std",
  "libp2p-core",
@@ -2905,7 +2893,6 @@ dependencies = [
  "rand 0.8.5",
  "sysinfo",
  "tracing",
- "void",
 ]
 
 [[package]]
@@ -3015,13 +3002,12 @@ dependencies = [
  "tokio",
  "tracing",
  "tracing-subscriber",
- "void",
  "web-time 1.1.0",
 ]
 
 [[package]]
 name = "libp2p-ping"
-version = "0.45.0"
+version = "0.45.1"
 dependencies = [
  "either",
  "futures",
@@ -3035,7 +3021,6 @@ dependencies = [
  "tokio",
  "tracing",
  "tracing-subscriber",
- "void",
  "web-time 1.1.0",
 ]
 
@@ -3080,7 +3065,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-quic"
-version = "0.11.1"
+version = "0.11.2"
 dependencies = [
  "async-std",
  "bytes",
@@ -3109,7 +3094,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-relay"
-version = "0.18.0"
+version = "0.18.1"
 dependencies = [
  "asynchronous-codec",
  "bytes",
@@ -3132,7 +3117,6 @@ dependencies = [
  "thiserror",
  "tracing",
  "tracing-subscriber",
- "void",
  "web-time 1.1.0",
 ]
 
@@ -3162,13 +3146,12 @@ dependencies = [
  "tokio",
  "tracing",
  "tracing-subscriber",
- "void",
  "web-time 1.1.0",
 ]
 
 [[package]]
 name = "libp2p-request-response"
-version = "0.27.0"
+version = "0.27.1"
 dependencies = [
  "anyhow",
  "async-std",
@@ -3191,7 +3174,6 @@ dependencies = [
  "smallvec",
  "tracing",
  "tracing-subscriber",
- "void",
  "web-time 1.1.0",
 ]
 
@@ -3217,7 +3199,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-stream"
-version = "0.2.0-alpha"
+version = "0.2.0-alpha.1"
 dependencies = [
  "futures",
  "libp2p-core",
@@ -3228,7 +3210,6 @@ dependencies = [
  "tokio",
  "tracing",
  "tracing-subscriber",
- "void",
 ]
 
 [[package]]
@@ -3261,7 +3242,6 @@ dependencies = [
  "tracing",
  "tracing-subscriber",
  "trybuild",
- "void",
  "wasm-bindgen-futures",
  "web-time 1.1.0",
 ]
@@ -3356,7 +3336,6 @@ dependencies = [
  "libp2p-swarm",
  "tokio",
  "tracing",
- "void",
 ]
 
 [[package]]
@@ -6506,12 +6485,6 @@ name = "version_check"
 version = "0.9.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "49874b5167b65d7193b8aba1567f5c7d93d001cafc34600cee003eda787e483f"
-
-[[package]]
-name = "void"
-version = "1.0.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6a02e4885ed3bc0f2de90ea6dd45ebcbb66dacffe03547fadbb0eeae2770887d"
 
 [[package]]
 name = "waitgroup"

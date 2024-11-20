@@ -26,9 +26,9 @@ use libp2p_swarm::{
     THandlerInEvent, THandlerOutEvent, ToSwarm,
 };
 use std::collections::{HashMap, HashSet};
+use std::convert::Infallible;
 use std::fmt;
 use std::task::{Context, Poll};
-use void::Void;
 
 /// A [`NetworkBehaviour`] that enforces a set of [`ConnectionLimits`].
 ///
@@ -203,7 +203,7 @@ impl ConnectionLimits {
 
 impl NetworkBehaviour for Behaviour {
     type ConnectionHandler = dummy::ConnectionHandler;
-    type ToSwarm = Void;
+    type ToSwarm = Infallible;
 
     fn handle_pending_inbound_connection(
         &mut self,
@@ -357,7 +357,7 @@ impl NetworkBehaviour for Behaviour {
     ) {
         // TODO: remove when Rust 1.82 is MSRV
         #[allow(unreachable_patterns)]
-        void::unreachable(event)
+        libp2p_core::util::unreachable(event)
     }
 
     fn poll(&mut self, _: &mut Context<'_>) -> Poll<ToSwarm<Self::ToSwarm, THandlerInEvent<Self>>> {
@@ -551,7 +551,7 @@ mod tests {
 
     impl NetworkBehaviour for ConnectionDenier {
         type ConnectionHandler = dummy::ConnectionHandler;
-        type ToSwarm = Void;
+        type ToSwarm = Infallible;
 
         fn handle_established_inbound_connection(
             &mut self,
@@ -590,7 +590,7 @@ mod tests {
         ) {
             // TODO: remove when Rust 1.82 is MSRV
             #[allow(unreachable_patterns)]
-            void::unreachable(event)
+            libp2p_core::util::unreachable(event)
         }
 
         fn poll(

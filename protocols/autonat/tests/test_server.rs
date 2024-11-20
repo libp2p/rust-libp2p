@@ -28,12 +28,12 @@ use libp2p_swarm::{Swarm, SwarmEvent};
 use libp2p_swarm_test::SwarmExt as _;
 use std::{num::NonZeroU32, time::Duration};
 
-#[async_std::test]
+#[tokio::test]
 async fn test_dial_back() {
     let (mut server, server_id, server_addr) = new_server_swarm(None).await;
     let (mut client, client_id) = new_client_swarm(server_id, server_addr).await;
     let (_, client_addr) = client.listen().await;
-    async_std::task::spawn(client.loop_on_next());
+    tokio::spawn(client.loop_on_next());
 
     let client_port = client_addr
         .into_iter()
@@ -128,14 +128,14 @@ async fn test_dial_back() {
     }
 }
 
-#[async_std::test]
+#[tokio::test]
 async fn test_dial_error() {
     let (mut server, server_id, server_addr) = new_server_swarm(None).await;
     let (mut client, client_id) = new_client_swarm(server_id, server_addr).await;
     client
         .behaviour_mut()
         .probe_address("/ip4/127.0.0.1/tcp/12345".parse().unwrap());
-    async_std::task::spawn(client.loop_on_next());
+    tokio::spawn(client.loop_on_next());
 
     let request_probe_id = match server.next_behaviour_event().await {
         Event::InboundProbe(InboundProbeEvent::Request { peer, probe_id, .. }) => {
@@ -178,7 +178,7 @@ async fn test_dial_error() {
     }
 }
 
-#[async_std::test]
+#[tokio::test]
 async fn test_throttle_global_max() {
     let (mut server, server_id, server_addr) = new_server_swarm(Some(Config {
         throttle_clients_global_max: 1,
@@ -190,7 +190,7 @@ async fn test_throttle_global_max() {
     for _ in 0..2 {
         let (mut client, _) = new_client_swarm(server_id, server_addr.clone()).await;
         client.listen().await;
-        async_std::task::spawn(client.loop_on_next());
+        tokio::spawn(client.loop_on_next());
     }
 
     let (first_probe_id, first_peer_id) = match server.next_behaviour_event().await {
@@ -218,7 +218,7 @@ async fn test_throttle_global_max() {
     }
 }
 
-#[async_std::test]
+#[tokio::test]
 async fn test_throttle_peer_max() {
     let (mut server, server_id, server_addr) = new_server_swarm(Some(Config {
         throttle_clients_peer_max: 1,
@@ -230,7 +230,7 @@ async fn test_throttle_peer_max() {
 
     let (mut client, client_id) = new_client_swarm(server_id, server_addr.clone()).await;
     client.listen().await;
-    async_std::task::spawn(client.loop_on_next());
+    tokio::spawn(client.loop_on_next());
 
     let first_probe_id = match server.next_behaviour_event().await {
         Event::InboundProbe(InboundProbeEvent::Request { peer, probe_id, .. }) => {
@@ -265,7 +265,7 @@ async fn test_throttle_peer_max() {
     };
 }
 
-#[async_std::test]
+#[tokio::test]
 async fn test_dial_multiple_addr() {
     let (mut server, server_id, server_addr) = new_server_swarm(Some(Config {
         throttle_clients_peer_max: 1,
@@ -280,7 +280,7 @@ async fn test_dial_multiple_addr() {
     client
         .behaviour_mut()
         .probe_address("/ip4/127.0.0.1/tcp/12345".parse().unwrap());
-    async_std::task::spawn(client.loop_on_next());
+    tokio::spawn(client.loop_on_next());
 
     let dial_addresses = match server.next_behaviour_event().await {
         Event::InboundProbe(InboundProbeEvent::Request {
@@ -327,7 +327,7 @@ async fn test_dial_multiple_addr() {
     }
 }
 
-#[async_std::test]
+#[tokio::test]
 async fn test_global_ips_config() {
     let (mut server, server_id, server_addr) = new_server_swarm(Some(Config {
         // Enforce that only clients outside of the local network are qualified for dial-backs.
@@ -338,7 +338,7 @@ async fn test_global_ips_config() {
 
     let (mut client, _) = new_client_swarm(server_id, server_addr.clone()).await;
     client.listen().await;
-    async_std::task::spawn(client.loop_on_next());
+    tokio::spawn(client.loop_on_next());
 
     // Expect the probe to be refused as both peers run on the same machine and thus in the same local network.
     match server.next_behaviour_event().await {

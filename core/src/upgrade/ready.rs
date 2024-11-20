@@ -21,8 +21,8 @@
 
 use crate::upgrade::{InboundUpgrade, OutboundUpgrade, UpgradeInfo};
 use futures::future;
+use std::convert::Infallible;
 use std::iter;
-use void::Void;
 
 /// Implementation of [`UpgradeInfo`], [`InboundUpgrade`] and [`OutboundUpgrade`] that directly yields the substream.
 #[derive(Debug, Copy, Clone)]
@@ -53,7 +53,7 @@ where
     P: AsRef<str> + Clone,
 {
     type Output = C;
-    type Error = Void;
+    type Error = Infallible;
     type Future = future::Ready<Result<Self::Output, Self::Error>>;
 
     fn upgrade_inbound(self, stream: C, _: Self::Info) -> Self::Future {
@@ -66,7 +66,7 @@ where
     P: AsRef<str> + Clone,
 {
     type Output = C;
-    type Error = Void;
+    type Error = Infallible;
     type Future = future::Ready<Result<Self::Output, Self::Error>>;
 
     fn upgrade_outbound(self, stream: C, _: Self::Info) -> Self::Future {
