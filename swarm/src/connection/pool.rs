@@ -40,6 +40,7 @@ use futures::{
 use libp2p_core::connection::Endpoint;
 use libp2p_core::muxing::{StreamMuxerBox, StreamMuxerExt};
 use libp2p_core::transport::PortUse;
+use std::convert::Infallible;
 use std::task::Waker;
 use std::{
     collections::HashMap,
@@ -50,7 +51,6 @@ use std::{
     task::Poll,
 };
 use tracing::Instrument;
-use void::Void;
 use web_time::{Duration, Instant};
 
 mod concurrent_dial;
@@ -200,7 +200,7 @@ struct PendingConnection {
     peer_id: Option<PeerId>,
     endpoint: PendingPoint,
     /// When dropped, notifies the task which then knows to terminate.
-    abort_notifier: Option<oneshot::Sender<Void>>,
+    abort_notifier: Option<oneshot::Sender<Infallible>>,
     /// The moment we became aware of this possible connection, useful for timing metrics.
     accepted_at: Instant,
 }

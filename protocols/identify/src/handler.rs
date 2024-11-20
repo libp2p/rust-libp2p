@@ -398,7 +398,7 @@ impl ConnectionHandler for Handler {
             ConnectionEvent::DialUpgradeError(DialUpgradeError { error, .. }) => {
                 self.events.push(ConnectionHandlerEvent::NotifyBehaviour(
                     Event::IdentificationError(
-                        error.map_upgrade_err(|e| void::unreachable(e.into_inner())),
+                        error.map_upgrade_err(|e| libp2p_core::util::unreachable(e.into_inner())),
                     ),
                 ));
                 self.trigger_next_identify.reset(self.interval);

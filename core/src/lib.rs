@@ -66,3 +66,13 @@ pub use upgrade::{InboundUpgrade, OutboundUpgrade, UpgradeInfo};
 #[derive(Debug, thiserror::Error)]
 #[error(transparent)]
 pub struct DecodeError(quick_protobuf::Error);
+
+pub mod util {
+    use std::convert::Infallible;
+
+    /// A safe version of [`std::intrinsics::unreachable`].
+    #[inline(always)]
+    pub fn unreachable(x: Infallible) -> ! {
+        match x {}
+    }
+}

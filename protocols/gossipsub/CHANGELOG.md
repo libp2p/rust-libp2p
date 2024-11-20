@@ -3,6 +3,9 @@
 - Apply `max_transmit_size` to the inner message instead of the final payload.
   See [PR 5642](https://github.com/libp2p/rust-libp2p/pull/5642).
 
+- Deprecate `void` crate.
+  See [PR 5676](https://github.com/libp2p/rust-libp2p/pull/5676).
+
 ## 0.47.1
 
 - Attempt to publish to at least mesh_n peers when flood publish is disabled.

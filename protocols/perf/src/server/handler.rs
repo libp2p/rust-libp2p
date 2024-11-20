@@ -29,8 +29,8 @@ use libp2p_swarm::{
     },
     ConnectionHandler, ConnectionHandlerEvent, StreamProtocol, SubstreamProtocol,
 };
+use std::convert::Infallible;
 use tracing::error;
-use void::Void;
 
 use crate::Run;
 
@@ -61,11 +61,11 @@ impl Default for Handler {
 }
 
 impl ConnectionHandler for Handler {
-    type FromBehaviour = Void;
+    type FromBehaviour = Infallible;
     type ToBehaviour = Event;
     type InboundProtocol = ReadyUpgrade<StreamProtocol>;
     type OutboundProtocol = DeniedUpgrade;
-    type OutboundOpenInfo = Void;
+    type OutboundOpenInfo = Infallible;
     type InboundOpenInfo = ();
 
     fn listen_protocol(&self) -> SubstreamProtocol<Self::InboundProtocol, Self::InboundOpenInfo> {
@@ -75,7 +75,7 @@ impl ConnectionHandler for Handler {
     fn on_behaviour_event(&mut self, v: Self::FromBehaviour) {
         // TODO: remove when Rust 1.82 is MSRV
         #[allow(unreachable_patterns)]
-        void::unreachable(v)
+        libp2p_core::util::unreachable(v)
     }
 
     fn on_connection_event(
@@ -103,13 +103,13 @@ impl ConnectionHandler for Handler {
             // TODO: remove when Rust 1.82 is MSRV
             #[allow(unreachable_patterns)]
             ConnectionEvent::FullyNegotiatedOutbound(FullyNegotiatedOutbound { info, .. }) => {
-                void::unreachable(info)
+                libp2p_core::util::unreachable(info)
             }
 
             // TODO: remove when Rust 1.82 is MSRV
             #[allow(unreachable_patterns)]
             ConnectionEvent::DialUpgradeError(DialUpgradeError { info, .. }) => {
-                void::unreachable(info)
+                libp2p_core::util::unreachable(info)
             }
             ConnectionEvent::AddressChange(_)
             | ConnectionEvent::LocalProtocolsChange(_)
@@ -117,7 +117,7 @@ impl ConnectionHandler for Handler {
             // TODO: remove when Rust 1.82 is MSRV
             #[allow(unreachable_patterns)]
             ConnectionEvent::ListenUpgradeError(ListenUpgradeError { info: (), error }) => {
-                void::unreachable(error)
+                libp2p_core::util::unreachable(error)
             }
             _ => {}
         }

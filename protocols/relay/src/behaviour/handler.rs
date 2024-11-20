@@ -451,7 +451,7 @@ impl Handler {
             StreamUpgradeError::Io(e) => outbound_stop::Error::Io(e),
             // TODO: remove when Rust 1.82 is MSRV
             #[allow(unreachable_patterns)]
-            StreamUpgradeError::Apply(v) => void::unreachable(v),
+            StreamUpgradeError::Apply(v) => libp2p_core::util::unreachable(v),
         };
 
         let stop_command = self
