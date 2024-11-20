@@ -1,3 +1,8 @@
+## 0.42.1
+
+- Added `libp2p::core::util::unreachable` that is a drop-in replacement of `void::unreachable`.
+  See [PR 5676](https://github.com/libp2p/rust-libp2p/pull/5676).
+
 ## 0.42.0
 
 - Update `Transport::dial` function signature with a `DialOpts` param and remove `Transport::dial_as_listener`:
