@@ -9,8 +9,8 @@ use libp2p_swarm::{
     THandlerOutEvent, ToSwarm,
 };
 use libp2p_swarm_test::SwarmExt;
+use std::convert::Infallible;
 use std::task::{Context, Poll};
-use void::Void;
 
 #[async_std::test]
 async fn sends_remaining_events_to_behaviour_on_connection_close() {
@@ -96,7 +96,7 @@ impl NetworkBehaviour for Behaviour {
 }
 
 impl ConnectionHandler for HandlerWithState {
-    type FromBehaviour = Void;
+    type FromBehaviour = Infallible;
     type ToBehaviour = u64;
     type InboundProtocol = DeniedUpgrade;
     type OutboundProtocol = DeniedUpgrade;
@@ -132,7 +132,7 @@ impl ConnectionHandler for HandlerWithState {
     }
 
     fn on_behaviour_event(&mut self, event: Self::FromBehaviour) {
-        void::unreachable(event)
+        libp2p_core::util::unreachable(event)
     }
 
     fn on_connection_event(

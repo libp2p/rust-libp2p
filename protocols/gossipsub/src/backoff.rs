@@ -48,8 +48,7 @@ pub(crate) struct BackoffStorage {
 
 impl BackoffStorage {
     fn heartbeats(d: &Duration, heartbeat_interval: &Duration) -> usize {
-        ((d.as_nanos() + heartbeat_interval.as_nanos() - 1) / heartbeat_interval.as_nanos())
-            as usize
+        d.as_nanos().div_ceil(heartbeat_interval.as_nanos()) as usize
     }
 
     pub(crate) fn new(

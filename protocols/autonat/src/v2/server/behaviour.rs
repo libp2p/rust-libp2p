@@ -112,7 +112,9 @@ where
             Either::Left(Either::Left(Err(e))) => {
                 tracing::debug!("dial back error: {e:?}");
             }
-            Either::Left(Either::Right(v)) => void::unreachable(v),
+            // TODO: remove when Rust 1.82 is MSRV
+            #[allow(unreachable_patterns)]
+            Either::Left(Either::Right(v)) => libp2p_core::util::unreachable(v),
             Either::Right(Either::Left(cmd)) => {
                 let addr = cmd.addr.clone();
                 let opts = DialOpts::peer_id(peer_id)

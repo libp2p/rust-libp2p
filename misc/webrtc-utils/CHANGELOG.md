@@ -1,3 +1,7 @@
+## 0.3.0
+
+<!-- Update to libp2p-swarm v0.45.0 -->
+
 ## 0.2.1
 
 - Fix end of stream handling when buffer is empty or not present.

@@ -1,4 +1,5 @@
 use std::{
+    convert::Infallible,
     io,
     task::{Context, Poll},
     time::Duration,
@@ -73,7 +74,7 @@ impl<R> ConnectionHandler for Handler<R>
 where
     R: RngCore + Send + Clone + 'static,
 {
-    type FromBehaviour = void::Void;
+    type FromBehaviour = Infallible;
     type ToBehaviour = Either<DialBackCommand, Event>;
     type InboundProtocol = ReadyUpgrade<StreamProtocol>;
     type OutboundProtocol = DeniedUpgrade;
@@ -143,6 +144,8 @@ where
                     );
                 }
             }
+            // TODO: remove when Rust 1.82 is MSRV
+            #[allow(unreachable_patterns)]
             ConnectionEvent::ListenUpgradeError(ListenUpgradeError { error, .. }) => {
                 tracing::debug!("inbound request failed: {:?}", error);
             }

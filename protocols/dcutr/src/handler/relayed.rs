@@ -115,7 +115,9 @@ impl Handler {
                 self.attempts += 1;
             }
             // A connection listener denies all incoming substreams, thus none can ever be fully negotiated.
-            future::Either::Right(output) => void::unreachable(output),
+            // TODO: remove when Rust 1.82 is MSRV
+            #[allow(unreachable_patterns)]
+            future::Either::Right(output) => libp2p_core::util::unreachable(output),
         }
     }
 
@@ -153,7 +155,9 @@ impl Handler {
             <Self as ConnectionHandler>::InboundProtocol,
         >,
     ) {
-        void::unreachable(error.into_inner());
+        // TODO: remove when Rust 1.82 is MSRV
+        #[allow(unreachable_patterns)]
+        libp2p_core::util::unreachable(error.into_inner());
     }
 
     fn on_dial_upgrade_error(
@@ -164,7 +168,9 @@ impl Handler {
         >,
     ) {
         let error = match error {
-            StreamUpgradeError::Apply(v) => void::unreachable(v),
+            // TODO: remove when Rust 1.82 is MSRV
+            #[allow(unreachable_patterns)]
+            StreamUpgradeError::Apply(v) => libp2p_core::util::unreachable(v),
             StreamUpgradeError::NegotiationFailed => outbound::Error::Unsupported,
             StreamUpgradeError::Io(e) => outbound::Error::Io(e),
             StreamUpgradeError::Timeout => outbound::Error::Io(io::ErrorKind::TimedOut.into()),
@@ -298,6 +304,8 @@ impl ConnectionHandler for Handler {
             ConnectionEvent::FullyNegotiatedOutbound(fully_negotiated_outbound) => {
                 self.on_fully_negotiated_outbound(fully_negotiated_outbound)
             }
+            // TODO: remove when Rust 1.82 is MSRV
+            #[allow(unreachable_patterns)]
             ConnectionEvent::ListenUpgradeError(listen_upgrade_error) => {
                 self.on_listen_upgrade_error(listen_upgrade_error)
             }

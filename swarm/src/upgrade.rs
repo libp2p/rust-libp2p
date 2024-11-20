@@ -121,6 +121,7 @@ where
 }
 
 /// Wraps around a type that implements [`OutboundUpgradeSend`], [`InboundUpgradeSend`], or
+///
 /// both, and implements [`OutboundUpgrade`](upgrade::OutboundUpgrade) and/or
 /// [`InboundUpgrade`](upgrade::InboundUpgrade).
 ///

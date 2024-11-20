@@ -69,9 +69,9 @@ use libp2p_swarm::{
     THandlerInEvent, THandlerOutEvent, ToSwarm,
 };
 use std::collections::{HashSet, VecDeque};
+use std::convert::Infallible;
 use std::fmt;
 use std::task::{Context, Poll, Waker};
-use void::Void;
 
 /// A [`NetworkBehaviour`] that can act as an allow or block list.
 #[derive(Default, Debug)]
@@ -94,44 +94,74 @@ pub struct BlockedPeers {
 }
 
 impl Behaviour<AllowedPeers> {
+    /// Peers that are currently allowed.
+    pub fn allowed_peers(&self) -> &HashSet<PeerId> {
+        &self.state.peers
+    }
+
     /// Allow connections to the given peer.
-    pub fn allow_peer(&mut self, peer: PeerId) {
-        self.state.peers.insert(peer);
-        if let Some(waker) = self.waker.take() {
-            waker.wake()
+    ///
+    /// Returns whether the peer was newly inserted. Does nothing if the peer was already present in the set.
+    pub fn allow_peer(&mut self, peer: PeerId) -> bool {
+        let inserted = self.state.peers.insert(peer);
+        if inserted {
+            if let Some(waker) = self.waker.take() {
+                waker.wake()
+            }
         }
+        inserted
     }
 
     /// Disallow connections to the given peer.
     ///
     /// All active connections to this peer will be closed immediately.
-    pub fn disallow_peer(&mut self, peer: PeerId) {
-        self.state.peers.remove(&peer);
-        self.close_connections.push_back(peer);
-        if let Some(waker) = self.waker.take() {
-            waker.wake()
+    ///
+    /// Returns whether the peer was present in the set. Does nothing if the peer was not present in the set.
+    pub fn disallow_peer(&mut self, peer: PeerId) -> bool {
+        let removed = self.state.peers.remove(&peer);
+        if removed {
+            self.close_connections.push_back(peer);
+            if let Some(waker) = self.waker.take() {
+                waker.wake()
+            }
         }
+        removed
     }
 }
 
 impl Behaviour<BlockedPeers> {
+    /// Peers that are currently blocked.
+    pub fn blocked_peers(&self) -> &HashSet<PeerId> {
+        &self.state.peers
+    }
+
     /// Block connections to a given peer.
     ///
     /// All active connections to this peer will be closed immediately.
-    pub fn block_peer(&mut self, peer: PeerId) {
-        self.state.peers.insert(peer);
-        self.close_connections.push_back(peer);
-        if let Some(waker) = self.waker.take() {
-            waker.wake()
+    ///
+    /// Returns whether the peer was newly inserted. Does nothing if the peer was already present in the set.
+    pub fn block_peer(&mut self, peer: PeerId) -> bool {
+        let inserted = self.state.peers.insert(peer);
+        if inserted {
+            self.close_connections.push_back(peer);
+            if let Some(waker) = self.waker.take() {
+                waker.wake()
+            }
         }
+        inserted
     }
 
     /// Unblock connections to a given peer.
-    pub fn unblock_peer(&mut self, peer: PeerId) {
-        self.state.peers.remove(&peer);
-        if let Some(waker) = self.waker.take() {
-            waker.wake()
+    ///
+    /// Returns whether the peer was present in the set. Does nothing if the peer was not present in the set.
+    pub fn unblock_peer(&mut self, peer: PeerId) -> bool {
+        let removed = self.state.peers.remove(&peer);
+        if removed {
+            if let Some(waker) = self.waker.take() {
+                waker.wake()
+            }
         }
+        removed
     }
 }
 
@@ -192,7 +222,7 @@ where
     S: Enforce,
 {
     type ConnectionHandler = dummy::ConnectionHandler;
-    type ToSwarm = Void;
+    type ToSwarm = Infallible;
 
     fn handle_established_inbound_connection(
         &mut self,
@@ -241,7 +271,9 @@ where
         _: ConnectionId,
         event: THandlerOutEvent<Self>,
     ) {
-        void::unreachable(event)
+        // TODO: remove when Rust 1.82 is MSRV
+        #[allow(unreachable_patterns)]
+        libp2p_core::util::unreachable(event)
     }
 
     fn poll(

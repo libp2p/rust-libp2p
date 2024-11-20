@@ -36,10 +36,10 @@ use libp2p_swarm::{
 use libp2p_swarm::{NetworkBehaviour, NotifyHandler, THandlerInEvent, ToSwarm};
 use lru::LruCache;
 use std::collections::{HashMap, HashSet, VecDeque};
+use std::convert::Infallible;
 use std::num::NonZeroUsize;
 use std::task::{Context, Poll};
 use thiserror::Error;
-use void::Void;
 
 pub(crate) const MAX_NUMBER_OF_UPGRADE_ATTEMPTS: u8 = 3;
 
@@ -68,7 +68,7 @@ enum InnerError {
 
 pub struct Behaviour {
     /// Queue of actions to return when polled.
-    queued_events: VecDeque<ToSwarm<Event, Either<handler::relayed::Command, Void>>>,
+    queued_events: VecDeque<ToSwarm<Event, Either<handler::relayed::Command, Infallible>>>,
 
     /// All direct (non-relayed) connections.
     direct_connections: HashMap<PeerId, HashSet<ConnectionId>>,
@@ -314,7 +314,9 @@ impl NetworkBehaviour for Behaviour {
                     .or_default() += 1;
                 self.queued_events.push_back(ToSwarm::Dial { opts });
             }
-            Either::Right(never) => void::unreachable(never),
+            // TODO: remove when Rust 1.82 is MSRV
+            #[allow(unreachable_patterns)]
+            Either::Right(never) => libp2p_core::util::unreachable(never),
         };
     }
 

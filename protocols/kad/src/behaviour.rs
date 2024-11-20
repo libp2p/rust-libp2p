@@ -735,22 +735,66 @@ where
     where
         K: Into<kbucket::Key<K>> + Into<Vec<u8>> + Clone,
     {
+        self.get_closest_peers_inner(key, None)
+    }
+
+    /// Initiates an iterative query for the closest peers to the given key.
+    /// The expected responding peers is specified by `num_results`
+    /// Note that the result is capped after exceeds K_VALUE
+    ///
+    /// The result of the query is delivered in a
+    /// [`Event::OutboundQueryProgressed{QueryResult::GetClosestPeers}`].
+    pub fn get_n_closest_peers<K>(&mut self, key: K, num_results: NonZeroUsize) -> QueryId
+    where
+        K: Into<kbucket::Key<K>> + Into<Vec<u8>> + Clone,
+    {
+        // The inner code never expect higher than K_VALUE results to be returned.
+        // And removing such cap will be tricky,
+        // since it would involve forging a new key and additional requests.
+        // Hence bound to K_VALUE here to set clear expectation and prevent unexpected behaviour.
+        let capped_num_results = std::cmp::min(num_results, K_VALUE);
+        self.get_closest_peers_inner(key, Some(capped_num_results))
+    }
+
+    fn get_closest_peers_inner<K>(&mut self, key: K, num_results: Option<NonZeroUsize>) -> QueryId
+    where
+        K: Into<kbucket::Key<K>> + Into<Vec<u8>> + Clone,
+    {
         let target: kbucket::Key<K> = key.clone().into();
         let key: Vec<u8> = key.into();
         let info = QueryInfo::GetClosestPeers {
             key,
             step: ProgressStep::first(),
+            num_results,
         };
         let peer_keys: Vec<kbucket::Key<PeerId>> = self.kbuckets.closest_keys(&target).collect();
         self.queries.add_iter_closest(target, peer_keys, info)
     }
 
-    /// Returns closest peers to the given key; takes peers from local routing table only.
+    /// Returns all peers ordered by distance to the given key; takes peers from local routing table
+    /// only.
     pub fn get_closest_local_peers<'a, K: Clone>(
         &'a mut self,
         key: &'a kbucket::Key<K>,
     ) -> impl Iterator<Item = kbucket::Key<PeerId>> + 'a {
         self.kbuckets.closest_keys(key)
+    }
+
+    /// Finds the closest peers to a `key` in the context of a request by the `source` peer, such
+    /// that the `source` peer is never included in the result.
+    ///
+    /// Takes peers from local routing table only. Only returns number of peers equal to configured
+    /// replication factor.
+    pub fn find_closest_local_peers<'a, K: Clone>(
+        &'a mut self,
+        key: &'a kbucket::Key<K>,
+        source: &'a PeerId,
+    ) -> impl Iterator<Item = KadPeer> + 'a {
+        self.kbuckets
+            .closest(key)
+            .filter(move |e| e.node.key.preimage() != source)
+            .take(self.queries.config().replication_factor.get())
+            .map(KadPeer::from)
     }
 
     /// Performs a lookup for a record in the DHT.
@@ -1085,6 +1129,11 @@ where
         }
     }
 
+    /// Get the [`Mode`] in which the DHT is currently operating.
+    pub fn mode(&self) -> Mode {
+        self.mode
+    }
+
     fn reconfigure_mode(&mut self) {
         if self.connections.is_empty() {
             return;
@@ -1179,22 +1228,6 @@ where
             }
             query.on_success(source, others_iter.cloned().map(|kp| kp.node_id))
         }
-    }
-
-    /// Finds the closest peers to a `target` in the context of a request by
-    /// the `source` peer, such that the `source` peer is never included in the
-    /// result.
-    fn find_closest<T: Clone>(
-        &mut self,
-        target: &kbucket::Key<T>,
-        source: &PeerId,
-    ) -> Vec<KadPeer> {
-        self.kbuckets
-            .closest(target)
-            .filter(|e| e.node.key.preimage() != source)
-            .take(self.queries.config().replication_factor.get())
-            .map(KadPeer::from)
-            .collect()
     }
 
     /// Collects all peers who are known to be providers of the value for a given `Multihash`.
@@ -1485,7 +1518,7 @@ where
                 })
             }
 
-            QueryInfo::GetClosestPeers { key, mut step } => {
+            QueryInfo::GetClosestPeers { key, mut step, .. } => {
                 step.last = true;
 
                 Some(Event::OutboundQueryProgressed {
@@ -1702,7 +1735,7 @@ where
                 },
             }),
 
-            QueryInfo::GetClosestPeers { key, mut step } => {
+            QueryInfo::GetClosestPeers { key, mut step, .. } => {
                 step.last = true;
                 Some(Event::OutboundQueryProgressed {
                     id: query_id,
@@ -2269,7 +2302,9 @@ where
             }
 
             HandlerEvent::FindNodeReq { key, request_id } => {
-                let closer_peers = self.find_closest(&kbucket::Key::new(key), &source);
+                let closer_peers = self
+                    .find_closest_local_peers(&kbucket::Key::new(key), &source)
+                    .collect::<Vec<_>>();
 
                 self.queued_events
                     .push_back(ToSwarm::GenerateEvent(Event::InboundRequest {
@@ -2297,7 +2332,9 @@ where
 
             HandlerEvent::GetProvidersReq { key, request_id } => {
                 let provider_peers = self.provider_peers(&key, &source);
-                let closer_peers = self.find_closest(&kbucket::Key::new(key), &source);
+                let closer_peers = self
+                    .find_closest_local_peers(&kbucket::Key::new(key), &source)
+                    .collect::<Vec<_>>();
 
                 self.queued_events
                     .push_back(ToSwarm::GenerateEvent(Event::InboundRequest {
@@ -2391,7 +2428,9 @@ where
                     None => None,
                 };
 
-                let closer_peers = self.find_closest(&kbucket::Key::new(key), &source);
+                let closer_peers = self
+                    .find_closest_local_peers(&kbucket::Key::new(key), &source)
+                    .collect::<Vec<_>>();
 
                 self.queued_events
                     .push_back(ToSwarm::GenerateEvent(Event::InboundRequest {
@@ -2562,13 +2601,19 @@ where
             // Drain applied pending entries from the routing table.
             if let Some(entry) = self.kbuckets.take_applied_pending() {
                 let kbucket::Node { key, value } = entry.inserted;
+                let peer_id = key.into_preimage();
+                self.queued_events
+                    .push_back(ToSwarm::NewExternalAddrOfPeer {
+                        peer_id,
+                        address: value.first().clone(),
+                    });
                 let event = Event::RoutingUpdated {
                     bucket_range: self
                         .kbuckets
                         .bucket(&key)
                         .map(|b| b.range())
                         .expect("Self to never be applied from pending."),
-                    peer: key.into_preimage(),
+                    peer: peer_id,
                     is_new_peer: true,
                     addresses: value,
                     old_peer: entry.evicted.map(|n| n.key.into_preimage()),
@@ -3175,6 +3220,8 @@ pub enum QueryInfo {
         key: Vec<u8>,
         /// Current index of events.
         step: ProgressStep,
+        /// If required, `num_results` specifies expected responding peers
+        num_results: Option<NonZeroUsize>,
     },
 
     /// A (repeated) query initiated by [`Behaviour::get_providers`].
@@ -3314,7 +3361,7 @@ pub struct QueryMut<'a> {
     query: &'a mut Query,
 }
 
-impl<'a> QueryMut<'a> {
+impl QueryMut<'_> {
     pub fn id(&self) -> QueryId {
         self.query.id()
     }
@@ -3344,7 +3391,7 @@ pub struct QueryRef<'a> {
     query: &'a Query,
 }
 
-impl<'a> QueryRef<'a> {
+impl QueryRef<'_> {
     pub fn id(&self) -> QueryId {
         self.query.id()
     }

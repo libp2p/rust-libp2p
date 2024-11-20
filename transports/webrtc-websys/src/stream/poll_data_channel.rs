@@ -143,7 +143,8 @@ impl PollDataChannel {
             RtcDataChannelState::Closing | RtcDataChannelState::Closed => {
                 return Poll::Ready(Err(io::ErrorKind::BrokenPipe.into()))
             }
-            RtcDataChannelState::Open | RtcDataChannelState::__Nonexhaustive => {}
+            RtcDataChannelState::Open | RtcDataChannelState::__Invalid => {}
+            _ => {}
         }
 
         if self.overloaded.load(Ordering::SeqCst) {

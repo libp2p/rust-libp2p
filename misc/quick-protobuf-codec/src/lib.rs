@@ -12,6 +12,7 @@ mod generated;
 pub use generated::test as proto;
 
 /// [`Codec`] implements [`Encoder`] and [`Decoder`], uses [`unsigned_varint`]
+///
 /// to prefix messages with their length and uses [`quick_protobuf`] and a provided
 /// `struct` implementing [`MessageRead`] and [`MessageWrite`] to do the encoding.
 pub struct Codec<In, Out = In> {
@@ -119,7 +120,7 @@ impl<'a> BytesMutWriterBackend<'a> {
     }
 }
 
-impl<'a> WriterBackend for BytesMutWriterBackend<'a> {
+impl WriterBackend for BytesMutWriterBackend<'_> {
     fn pb_write_u8(&mut self, x: u8) -> quick_protobuf::Result<()> {
         self.dst.put_u8(x);
 

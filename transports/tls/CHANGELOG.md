@@ -1,3 +1,7 @@
+## 0.5.0
+
+<!-- Update to libp2p-swarm v0.45.0 -->
+
 ## 0.4.1
 
 - Fix a panic caused by `rustls` parsing the libp2p TLS extension.

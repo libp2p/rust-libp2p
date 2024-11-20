@@ -24,8 +24,8 @@ use libp2p_identity::PeerId;
 use libp2p_swarm::ConnectionId;
 use prometheus_client::encoding::EncodeLabelValue;
 use quick_protobuf::MessageWrite;
-use std::fmt;
 use std::fmt::Debug;
+use std::{collections::BTreeSet, fmt};
 
 use crate::rpc_proto::proto;
 #[cfg(feature = "serde")]
@@ -77,6 +77,8 @@ pub(crate) struct PeerConnections {
     pub(crate) kind: PeerKind,
     /// Its current connections.
     pub(crate) connections: Vec<ConnectionId>,
+    /// Subscribed topics.
+    pub(crate) topics: BTreeSet<TopicHash>,
 }
 
 /// Describes the types of peers that can exist in the gossipsub context.
