@@ -44,14 +44,15 @@ mod tests;
 const TIME_CACHE_DURATION: u64 = 120;
 
 pub(crate) struct PeerScore {
-    params: PeerScoreParams,
     /// The score parameters.
+    pub(crate) params: PeerScoreParams,
+    /// The stats per PeerId.
     peer_stats: HashMap<PeerId, PeerStats>,
     /// Tracking peers per IP.
     peer_ips: HashMap<IpAddr, HashSet<PeerId>>,
     /// Message delivery tracking. This is a time-cache of [`DeliveryRecord`]s.
     deliveries: TimeCache<MessageId, DeliveryRecord>,
-    /// callback for monitoring message delivery times
+    /// Callback for monitoring message delivery times.
     message_delivery_time_callback: Option<fn(&PeerId, &TopicHash, f64)>,
 }
 

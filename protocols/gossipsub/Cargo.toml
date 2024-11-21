@@ -11,7 +11,7 @@ keywords = ["peer-to-peer", "libp2p", "networking"]
 categories = ["network-programming", "asynchronous"]
 
 [features]
-wasm-bindgen = ["getrandom/js"]
+wasm-bindgen = ["getrandom/js", "futures-timer/wasm-bindgen"]
 
 [dependencies]
 asynchronous-codec = { workspace = true }
@@ -21,7 +21,6 @@ bytes = "1.6"
 either = "1.11"
 fnv = "1.0.7"
 futures = { workspace = true }
-futures-ticker = "0.0.3"
 getrandom = "0.2.15"
 hex_fmt = "0.3.0"
 web-time = { workspace = true }
@@ -39,6 +38,7 @@ tracing = { workspace = true }
 
 # Metrics dependencies
 prometheus-client = { workspace = true }
+futures-timer = "3.0.3"
 
 [dev-dependencies]
 hex = "0.4.2"
