@@ -625,6 +625,7 @@ impl RpcSender {
         }
     }
 
+    #[allow(clippy::result_large_err)]
     pub(crate) fn send_message(&self, rpc: RpcOut) -> Result<(), RpcOut> {
         if let RpcOut::Publish { .. } = rpc {
             // Update number of publish message in queue.
