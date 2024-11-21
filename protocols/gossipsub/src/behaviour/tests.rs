@@ -23,10 +23,10 @@
 use super::*;
 use crate::subscription_filter::WhitelistSubscriptionFilter;
 use crate::{config::ConfigBuilder, types::Rpc, IdentTopic as Topic};
-use async_std::net::Ipv4Addr;
 use byteorder::{BigEndian, ByteOrder};
 use libp2p_core::ConnectedPoint;
 use rand::Rng;
+use std::net::Ipv4Addr;
 use std::thread::sleep;
 
 #[derive(Default, Debug)]
