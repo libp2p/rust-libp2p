@@ -2665,7 +2665,6 @@ dependencies = [
 name = "libp2p-dcutr"
 version = "0.12.1"
 dependencies = [
- "async-std",
  "asynchronous-codec",
  "clap",
  "either",
@@ -2689,6 +2688,7 @@ dependencies = [
  "quick-protobuf-codec",
  "rand 0.8.5",
  "thiserror",
+ "tokio",
  "tracing",
  "tracing-subscriber",
  "web-time 1.1.0",
@@ -2736,7 +2736,6 @@ dependencies = [
 name = "libp2p-gossipsub"
 version = "0.48.0"
 dependencies = [
- "async-std",
  "asynchronous-codec",
  "base64 0.22.1",
  "byteorder",
@@ -2763,6 +2762,7 @@ dependencies = [
  "serde",
  "sha2 0.10.8",
  "smallvec",
+ "tokio",
  "tracing",
  "tracing-subscriber",
  "web-time 1.1.0",
