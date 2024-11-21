@@ -2514,7 +2514,7 @@ checksum = "97b3888a4aecf77e811145cadf6eef5901f4782c53886191b2f693f24761847c"
 
 [[package]]
 name = "libp2p"
-version = "0.54.1"
+version = "0.54.2"
 dependencies = [
  "async-std",
  "async-trait",
@@ -2566,7 +2566,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-allow-block-list"
-version = "0.4.1"
+version = "0.4.2"
 dependencies = [
  "async-std",
  "libp2p-core",
@@ -2606,7 +2606,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-connection-limits"
-version = "0.4.0"
+version = "0.4.1"
 dependencies = [
  "async-std",
  "libp2p-core",
@@ -2622,7 +2622,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-core"
-version = "0.42.0"
+version = "0.42.1"
 dependencies = [
  "async-std",
  "either",
@@ -2652,9 +2652,8 @@ dependencies = [
 
 [[package]]
 name = "libp2p-dcutr"
-version = "0.12.0"
+version = "0.12.1"
 dependencies = [
- "async-std",
  "asynchronous-codec",
  "clap",
  "either",
@@ -2678,6 +2677,7 @@ dependencies = [
  "quick-protobuf-codec",
  "rand 0.8.5",
  "thiserror",
+ "tokio",
  "tracing",
  "tracing-subscriber",
  "web-time 1.1.0",
@@ -2725,7 +2725,6 @@ dependencies = [
 name = "libp2p-gossipsub"
 version = "0.48.0"
 dependencies = [
- "async-std",
  "asynchronous-codec",
  "base64 0.22.1",
  "byteorder",
@@ -2752,6 +2751,7 @@ dependencies = [
  "serde",
  "sha2 0.10.8",
  "smallvec",
+ "tokio",
  "tracing",
  "tracing-subscriber",
  "web-time 1.1.0",
@@ -2782,7 +2782,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-identity"
-version = "0.2.9"
+version = "0.2.10"
 dependencies = [
  "asn1_der",
  "base64 0.22.1",
@@ -2869,7 +2869,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-memory-connection-limits"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
  "async-std",
  "libp2p-core",
@@ -2996,7 +2996,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-ping"
-version = "0.45.0"
+version = "0.45.1"
 dependencies = [
  "either",
  "futures",
@@ -3054,7 +3054,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-quic"
-version = "0.11.1"
+version = "0.11.2"
 dependencies = [
  "async-std",
  "bytes",
@@ -3083,7 +3083,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-relay"
-version = "0.18.0"
+version = "0.18.1"
 dependencies = [
  "asynchronous-codec",
  "bytes",
@@ -3140,7 +3140,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-request-response"
-version = "0.27.0"
+version = "0.27.1"
 dependencies = [
  "anyhow",
  "async-std",
@@ -3188,7 +3188,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-stream"
-version = "0.2.0-alpha"
+version = "0.2.0-alpha.1"
 dependencies = [
  "futures",
  "libp2p-core",
