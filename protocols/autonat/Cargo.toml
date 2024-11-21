@@ -4,7 +4,11 @@ edition = "2021"
 rust-version = { workspace = true }
 description = "NAT and firewall detection for libp2p"
 version = "0.13.1"
-authors = ["David Craven <david@craven.ch>", "Elena Frank <elena.frank@protonmail.com>", "Hannes Furmans <hannes@umgefahren.xyz>"]
+authors = [
+    "David Craven <david@craven.ch>",
+    "Elena Frank <elena.frank@protonmail.com>",
+    "Hannes Furmans <hannes@umgefahren.xyz>",
+]
 license = "MIT"
 repository = "https://github.com/libp2p/rust-libp2p"
 keywords = ["peer-to-peer", "libp2p", "networking"]
@@ -32,12 +36,11 @@ rand_core = { version = "0.6", optional = true }
 thiserror = { version = "1.0.52", optional = true }
 
 [dev-dependencies]
-tokio = { version = "1", features = ["macros", "rt", "sync"]}
-async-std = { version = "1.10", features = ["attributes"] }
+tokio = { workspace = true, features = ["macros", "rt", "sync"] }
 libp2p-swarm-test = { path = "../../swarm-test" }
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 libp2p-identify = { workspace = true }
-libp2p-swarm = { workspace = true, features = ["macros"]}
+libp2p-swarm = { workspace = true, features = ["macros"] }
 
 [features]
 default = ["v1", "v2"]
