@@ -320,24 +320,6 @@ impl RpcOut {
     pub fn into_protobuf(self) -> proto::RPC {
         self.into()
     }
-
-    /// Returns an enum that just stores the type of this [`RpcOut`],
-    /// without any data.
-    ///
-    /// Can be used to avoid cloning of an [`RpcOut`] message when just
-    /// the type is needed.
-    pub(crate) fn kind(&self) -> RpcOutKind {
-        match self {
-            RpcOut::Publish { .. } => RpcOutKind::Publish,
-            RpcOut::Forward { .. } => RpcOutKind::Forward,
-            RpcOut::Subscribe(_) => RpcOutKind::Subscribe,
-            RpcOut::Unsubscribe(_) => RpcOutKind::Unsubscribe,
-            RpcOut::Graft(_) => RpcOutKind::Graft,
-            RpcOut::Prune(_) => RpcOutKind::Prune,
-            RpcOut::IHave(_) => RpcOutKind::IHave,
-            RpcOut::IWant(_) => RpcOutKind::IWant,
-        }
-    }
 }
 
 impl From<RpcOut> for proto::RPC {
@@ -445,19 +427,6 @@ impl From<RpcOut> for proto::RPC {
             }
         }
     }
-}
-
-/// Variant of [`RpcOut`] without any data.
-#[derive(Debug, Clone, Copy)]
-pub(crate) enum RpcOutKind {
-    Publish,
-    Forward,
-    Subscribe,
-    Unsubscribe,
-    Graft,
-    Prune,
-    IHave,
-    IWant,
 }
 
 /// An RPC received/sent.
@@ -656,14 +625,14 @@ impl RpcSender {
         }
     }
 
-    pub(crate) fn send_message(&self, rpc: RpcOut) -> Result<(), ()> {
+    pub(crate) fn send_message(&self, rpc: RpcOut) -> Result<(), RpcOut> {
         if let RpcOut::Publish { .. } = rpc {
             // Update number of publish message in queue.
-            self.len
-                .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |curr| {
-                    (curr < self.cap).then_some(curr + 1)
-                })
-                .map_err(|_| ())?;
+            let len = self.len.load(Ordering::Relaxed);
+            if len >= self.cap {
+                return Err(rpc);
+            }
+            self.len.store(len + 1, Ordering::Relaxed);
         }
         let sender = match rpc {
             RpcOut::Publish { .. }
@@ -675,7 +644,7 @@ impl RpcSender {
                 &self.non_priority_sender
             }
         };
-        sender.try_send(rpc).map_err(|_| ())
+        sender.try_send(rpc).map_err(|err| err.into_inner())
     }
 
     /// Returns the current size of the priority queue.

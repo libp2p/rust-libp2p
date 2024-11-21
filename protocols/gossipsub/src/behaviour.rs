@@ -58,7 +58,7 @@ use crate::types::{
     ControlAction, Message, MessageAcceptance, MessageId, PeerInfo, RawMessage, Subscription,
     SubscriptionAction,
 };
-use crate::types::{PeerConnections, PeerKind, RpcOut, RpcOutKind};
+use crate::types::{PeerConnections, PeerKind, RpcOut};
 use crate::{backoff::BackoffStorage, FailedMessages};
 use crate::{
     config::{Config, ValidationMode},
@@ -2730,43 +2730,42 @@ where
             return false;
         };
 
-        let rpc_kind = rpc.kind();
-
         // Try sending the message to the connection handler.
-        if peer.sender.send_message(rpc).is_ok() {
-            true
-        } else {
-            // Sending failed because the channel is full.
-            tracing::warn!(peer=%peer_id, "Send Queue full. Could not send {:?}.", rpc_kind);
+        match peer.sender.send_message(rpc) {
+            Ok(()) => true,
+            Err(rpc) => {
+                // Sending failed because the channel is full.
+                tracing::warn!(peer=%peer_id, "Send Queue full. Could not send {:?}.", rpc);
 
-            // Update failed message counter.
-            let failed_messages = self.failed_messages.entry(peer_id).or_default();
-            match rpc_kind {
-                RpcOutKind::Publish => {
-                    failed_messages.priority += 1;
-                    failed_messages.publish += 1;
+                // Update failed message counter.
+                let failed_messages = self.failed_messages.entry(peer_id).or_default();
+                match rpc {
+                    RpcOut::Publish { .. } => {
+                        failed_messages.priority += 1;
+                        failed_messages.publish += 1;
+                    }
+                    RpcOut::Forward { .. } => {
+                        failed_messages.non_priority += 1;
+                        failed_messages.forward += 1;
+                    }
+                    RpcOut::IWant(_) | RpcOut::IHave(_) => {
+                        failed_messages.non_priority += 1;
+                    }
+                    RpcOut::Graft(_)
+                    | RpcOut::Prune(_)
+                    | RpcOut::Subscribe(_)
+                    | RpcOut::Unsubscribe(_) => {
+                        unreachable!("Channel for highpriority contorl messages is unbounded and should always be open.")
+                    }
                 }
-                RpcOutKind::Forward => {
-                    failed_messages.non_priority += 1;
-                    failed_messages.forward += 1;
+
+                // Update peer score.
+                if let Some((peer_score, ..)) = &mut self.peer_score {
+                    peer_score.failed_message_slow_peer(&peer_id);
                 }
-                RpcOutKind::IWant | RpcOutKind::IHave => {
-                    failed_messages.non_priority += 1;
-                }
-                RpcOutKind::Graft
-                | RpcOutKind::Prune
-                | RpcOutKind::Subscribe
-                | RpcOutKind::Unsubscribe => {
-                    unreachable!("Channel for highpriority contorl messages is unbounded and should always be open.")
-                }
+
+                false
             }
-
-            // Update peer score.
-            if let Some((peer_score, ..)) = &mut self.peer_score {
-                peer_score.failed_message_slow_peer(&peer_id);
-            }
-
-            false
         }
     }
 
