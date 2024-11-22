@@ -1030,6 +1030,10 @@ where
 
         for peer_id in added_peers {
             // Send a GRAFT control message
+            tracing::debug!(peer=%peer_id, "JOIN: Sending Graft message to peer");
+            if let Some((peer_score, ..)) = &mut self.peer_score {
+                peer_score.graft(&peer_id, topic_hash.clone());
+            }
             self.send_message(
                 peer_id,
                 RpcOut::Graft(Graft {
@@ -1127,7 +1131,11 @@ where
             }
             for peer_id in peers {
                 // Send a PRUNE control message
-                let prune = self.make_prune(topic_hash, &peer_id, self.config.do_px(), true);
+                tracing::debug!(%peer_id, "LEAVE: Sending PRUNE to peer");
+
+                let on_unsubscribe = true;
+                let prune =
+                    self.make_prune(topic_hash, &peer_id, self.config.do_px(), on_unsubscribe);
                 self.send_message(peer_id, RpcOut::Prune(prune));
 
                 // If the peer did not previously exist in any mesh, inform the handler
@@ -1283,6 +1291,12 @@ where
                     Instant::now() + self.config.iwant_followup_time(),
                 );
             }
+            tracing::trace!(
+                peer=%peer_id,
+                "IHAVE: Asking for the following messages from peer: {:?}",
+                iwant_ids_vec
+            );
+
             self.send_message(
                 *peer_id,
                 RpcOut::IWant(IWant {
