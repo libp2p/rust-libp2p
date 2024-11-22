@@ -19,22 +19,14 @@
 // DEALINGS IN THE SOFTWARE.
 
 //! A collection of types using the Gossipsub system.
+use crate::rpc::Sender;
 use crate::TopicHash;
-use async_channel::{Receiver, Sender};
-use futures::{stream::Peekable, Stream, StreamExt};
 use futures_timer::Delay;
 use libp2p_identity::PeerId;
 use libp2p_swarm::ConnectionId;
 use prometheus_client::encoding::EncodeLabelValue;
 use quick_protobuf::MessageWrite;
 use std::fmt::Debug;
-use std::future::Future;
-use std::pin::Pin;
-use std::sync::{
-    atomic::{AtomicUsize, Ordering},
-    Arc,
-};
-use std::task::{Context, Poll};
 use std::{collections::BTreeSet, fmt};
 
 use crate::rpc_proto::proto;
@@ -67,7 +59,7 @@ impl FailedMessages {
 
     /// The total failed messages in a heartbeat.
     pub fn total(&self) -> usize {
-        self.total_timeout() + self.total_queue_full()
+        self.priority + self.non_priority
     }
 }
 
@@ -120,7 +112,7 @@ pub(crate) struct PeerConnections {
     /// Subscribed topics.
     pub(crate) topics: BTreeSet<TopicHash>,
     /// The rpc sender to the connection handler(s).
-    pub(crate) sender: RpcSender,
+    pub(crate) sender: Sender,
 }
 
 /// Describes the types of peers that can exist in the gossipsub context.
@@ -296,10 +288,10 @@ pub struct Prune {
 /// A Gossipsub RPC message sent.
 #[derive(Debug)]
 pub enum RpcOut {
-    /// Publish a Gossipsub message on network.`timeout` limits the duration the message 
+    /// Publish a Gossipsub message on network.`timeout` limits the duration the message
     /// can wait to be sent before it is abandoned.
     Publish { message: RawMessage, timeout: Delay },
-    /// Forward a Gossipsub message on network. `timeout` limits the duration the message 
+    /// Forward a Gossipsub message on network. `timeout` limits the duration the message
     /// can wait to be sent before it is abandoned.
     Forward { message: RawMessage, timeout: Delay },
     /// Subscribe a topic.
@@ -584,165 +576,5 @@ impl AsRef<str> for PeerKind {
 impl fmt::Display for PeerKind {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str(self.as_ref())
-    }
-}
-
-/// `RpcOut` sender that is priority aware.
-#[derive(Debug)]
-pub(crate) struct RpcSender {
-    /// Capacity of the priority channel for `Publish` messages.
-    cap: usize,
-    len: Arc<AtomicUsize>,
-    pub(crate) priority_sender: Sender<RpcOut>,
-    pub(crate) non_priority_sender: Sender<RpcOut>,
-    priority_receiver: Receiver<RpcOut>,
-    non_priority_receiver: Receiver<RpcOut>,
-}
-
-impl RpcSender {
-    /// Create a RpcSender.
-    pub(crate) fn new(cap: usize) -> RpcSender {
-        // We intentionally do not bound the channel, as we still need to send control messages
-        // such as `GRAFT`, `PRUNE`, `SUBSCRIBE`, and `UNSUBSCRIBE`.
-        // That's also why we define `cap` and divide it by two,
-        // to ensure there is capacity for both priority and non_priority messages.
-        let (priority_sender, priority_receiver) = async_channel::unbounded();
-        let (non_priority_sender, non_priority_receiver) = async_channel::bounded(cap / 2);
-        let len = Arc::new(AtomicUsize::new(0));
-        RpcSender {
-            cap: cap / 2,
-            len,
-            priority_sender,
-            non_priority_sender,
-            priority_receiver,
-            non_priority_receiver,
-        }
-    }
-
-    /// Create a new Receiver to the sender.
-    pub(crate) fn new_receiver(&self) -> RpcReceiver {
-        RpcReceiver {
-            priority_queue_len: self.len.clone(),
-            priority: Box::pin(self.priority_receiver.clone().peekable()),
-            non_priority: Box::pin(self.non_priority_receiver.clone().peekable()),
-        }
-    }
-
-    #[allow(clippy::result_large_err)]
-    pub(crate) fn send_message(&self, rpc: RpcOut) -> Result<(), RpcOut> {
-        if let RpcOut::Publish { .. } = rpc {
-            // Update number of publish message in queue.
-            let len = self.len.load(Ordering::Relaxed);
-            if len >= self.cap {
-                return Err(rpc);
-            }
-            self.len.store(len + 1, Ordering::Relaxed);
-        }
-        let sender = match rpc {
-            RpcOut::Publish { .. }
-            | RpcOut::Graft(_)
-            | RpcOut::Prune(_)
-            | RpcOut::Subscribe(_)
-            | RpcOut::Unsubscribe(_) => &self.priority_sender,
-            RpcOut::Forward { .. } | RpcOut::IHave(_) | RpcOut::IWant(_) => {
-                &self.non_priority_sender
-            }
-        };
-        sender.try_send(rpc).map_err(|err| err.into_inner())
-    }
-
-    /// Returns the current size of the priority queue.
-    pub(crate) fn priority_queue_len(&self) -> usize {
-        self.len.load(Ordering::Relaxed)
-    }
-
-    /// Returns the current size of the non-priority queue.
-    pub(crate) fn non_priority_queue_len(&self) -> usize {
-        self.non_priority_sender.len()
-    }
-}
-
-/// `RpcOut` sender that is priority aware.
-#[derive(Debug)]
-pub struct RpcReceiver {
-    /// The maximum length of the priority queue.
-    pub(crate) priority_queue_len: Arc<AtomicUsize>,
-    /// The priority queue receiver.
-    pub(crate) priority: Pin<Box<Peekable<Receiver<RpcOut>>>>,
-    /// The non priority queue receiver.
-    pub(crate) non_priority: Pin<Box<Peekable<Receiver<RpcOut>>>>,
-}
-
-impl RpcReceiver {
-    // Peek the next message in the queues and return it if its timeout has elapsed.
-    // Returns `None` if there aren't any more messages on the stream or none is stale.
-    pub(crate) fn poll_stale(&mut self, cx: &mut Context<'_>) -> Poll<Option<RpcOut>> {
-        // Peek priority queue.
-        let priority = match self.priority.as_mut().poll_peek_mut(cx) {
-            Poll::Ready(Some(RpcOut::Publish {
-                message: _,
-                ref mut timeout,
-            })) => {
-                if Pin::new(timeout).poll(cx).is_ready() {
-                    // Return the message.
-                    let dropped = futures::ready!(self.priority.poll_next_unpin(cx))
-                        .expect("There should be a message");
-                    return Poll::Ready(Some(dropped));
-                }
-                Poll::Ready(None)
-            }
-            poll => poll,
-        };
-
-        let non_priority = match self.non_priority.as_mut().poll_peek_mut(cx) {
-            Poll::Ready(Some(RpcOut::Forward {
-                message: _,
-                ref mut timeout,
-            })) => {
-                if Pin::new(timeout).poll(cx).is_ready() {
-                    // Return the message.
-                    let dropped = futures::ready!(self.non_priority.poll_next_unpin(cx))
-                        .expect("There should be a message");
-                    return Poll::Ready(Some(dropped));
-                }
-                Poll::Ready(None)
-            }
-            poll => poll,
-        };
-
-        match (priority, non_priority) {
-            (Poll::Ready(None), Poll::Ready(None)) => Poll::Ready(None),
-            _ => Poll::Pending,
-        }
-    }
-
-    /// Poll queues and return true if both are empty.
-    pub(crate) fn poll_is_empty(&mut self, cx: &mut Context<'_>) -> bool {
-        matches!(
-            (
-                self.priority.as_mut().poll_peek(cx),
-                self.non_priority.as_mut().poll_peek(cx),
-            ),
-            (Poll::Ready(None), Poll::Ready(None))
-        )
-    }
-}
-
-impl Stream for RpcReceiver {
-    type Item = RpcOut;
-
-    fn poll_next(
-        mut self: std::pin::Pin<&mut Self>,
-        cx: &mut std::task::Context<'_>,
-    ) -> std::task::Poll<Option<Self::Item>> {
-        // The priority queue is first polled.
-        if let Poll::Ready(rpc) = Pin::new(&mut self.priority).poll_next(cx) {
-            if let Some(RpcOut::Publish { .. }) = rpc {
-                self.priority_queue_len.fetch_sub(1, Ordering::Relaxed);
-            }
-            return Poll::Ready(rpc);
-        }
-        // Then we poll the non priority.
-        Pin::new(&mut self.non_priority).poll_next(cx)
     }
 }

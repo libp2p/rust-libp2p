@@ -103,6 +103,7 @@ mod mcache;
 mod metrics;
 mod peer_score;
 mod protocol;
+mod rpc;
 mod rpc_proto;
 mod subscription_filter;
 mod time_cache;

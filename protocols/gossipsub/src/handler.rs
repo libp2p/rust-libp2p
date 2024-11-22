@@ -19,8 +19,9 @@
 // DEALINGS IN THE SOFTWARE.
 
 use crate::protocol::{GossipsubCodec, ProtocolConfig};
+use crate::rpc::Receiver;
 use crate::rpc_proto::proto;
-use crate::types::{PeerKind, RawMessage, Rpc, RpcOut, RpcReceiver};
+use crate::types::{PeerKind, RawMessage, Rpc, RpcOut};
 use crate::ValidationError;
 use asynchronous_codec::Framed;
 use futures::future::Either;
@@ -94,7 +95,7 @@ pub struct EnabledHandler {
     inbound_substream: Option<InboundSubstreamState>,
 
     /// Queue of values that we want to send to the remote
-    send_queue: RpcReceiver,
+    send_queue: Receiver,
 
     /// Flag indicating that an outbound substream is being established to prevent duplicate
     /// requests.
@@ -158,7 +159,7 @@ enum OutboundSubstreamState {
 
 impl Handler {
     /// Builds a new [`Handler`].
-    pub fn new(protocol_config: ProtocolConfig, message_queue: RpcReceiver) -> Self {
+    pub fn new(protocol_config: ProtocolConfig, message_queue: Receiver) -> Self {
         Handler::Enabled(EnabledHandler {
             listen_protocol: protocol_config,
             inbound_substream: None,

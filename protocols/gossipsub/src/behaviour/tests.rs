@@ -21,8 +21,8 @@
 // Collection of tests for the gossipsub network behaviour
 
 use super::*;
+use crate::rpc::Receiver;
 use crate::subscription_filter::WhitelistSubscriptionFilter;
-use crate::types::RpcReceiver;
 use crate::{config::ConfigBuilder, types::Rpc, IdentTopic as Topic};
 use async_std::net::Ipv4Addr;
 use byteorder::{BigEndian, ByteOrder};
@@ -61,7 +61,7 @@ where
     ) -> (
         Behaviour<D, F>,
         Vec<PeerId>,
-        HashMap<PeerId, RpcReceiver>,
+        HashMap<PeerId, Receiver>,
         Vec<TopicHash>,
     ) {
         let keypair = libp2p_identity::Keypair::generate_ed25519();
@@ -173,7 +173,7 @@ fn add_peer<D, F>(
     topic_hashes: &[TopicHash],
     outbound: bool,
     explicit: bool,
-) -> (PeerId, RpcReceiver)
+) -> (PeerId, Receiver)
 where
     D: DataTransform + Default + Clone + Send + 'static,
     F: TopicSubscriptionFilter + Clone + Default + Send + 'static,
@@ -187,7 +187,7 @@ fn add_peer_with_addr<D, F>(
     outbound: bool,
     explicit: bool,
     address: Multiaddr,
-) -> (PeerId, RpcReceiver)
+) -> (PeerId, Receiver)
 where
     D: DataTransform + Default + Clone + Send + 'static,
     F: TopicSubscriptionFilter + Clone + Default + Send + 'static,
@@ -209,7 +209,7 @@ fn add_peer_with_addr_and_kind<D, F>(
     explicit: bool,
     address: Multiaddr,
     kind: Option<PeerKind>,
-) -> (PeerId, RpcReceiver)
+) -> (PeerId, Receiver)
 where
     D: DataTransform + Default + Clone + Send + 'static,
     F: TopicSubscriptionFilter + Clone + Default + Send + 'static,
@@ -228,7 +228,7 @@ where
         }
     };
 
-    let sender = RpcSender::new(gs.config.connection_handler_queue_len());
+    let sender = Sender::new(gs.config.connection_handler_queue_len());
     let receiver = sender.new_receiver();
     let connection_id = ConnectionId::new_unchecked(0);
     gs.connected_peers.insert(
@@ -565,9 +565,7 @@ fn test_join() {
         "Should have added 6 nodes to the mesh"
     );
 
-    fn count_grafts(
-        receivers: HashMap<PeerId, RpcReceiver>,
-    ) -> (usize, HashMap<PeerId, RpcReceiver>) {
+    fn count_grafts(receivers: HashMap<PeerId, Receiver>) -> (usize, HashMap<PeerId, Receiver>) {
         let mut new_receivers = HashMap::new();
         let mut acc = 0;
 
@@ -580,7 +578,7 @@ fn test_join() {
             }
             new_receivers.insert(
                 peer_id,
-                RpcReceiver {
+                Receiver {
                     priority_queue_len: c.priority_queue_len,
                     priority: c.priority,
                     non_priority: c.non_priority,
@@ -615,7 +613,7 @@ fn test_join() {
             &address,
         )
         .unwrap();
-        let sender = RpcSender::new(gs.config.connection_handler_queue_len());
+        let sender = Sender::new(gs.config.connection_handler_queue_len());
         let receiver = sender.new_receiver();
         let connection_id = ConnectionId::new_unchecked(0);
         gs.connected_peers.insert(
@@ -1019,7 +1017,7 @@ fn test_get_random_peers() {
                 kind: PeerKind::Gossipsubv1_1,
                 connections: vec![ConnectionId::new_unchecked(0)],
                 topics: topics.clone(),
-                sender: RpcSender::new(gs.config.connection_handler_queue_len()),
+                sender: Sender::new(gs.config.connection_handler_queue_len()),
             },
         );
     }
@@ -1153,7 +1151,7 @@ fn test_handle_iwant_msg_cached_shifted() {
             }
             (
                 peer_id,
-                RpcReceiver {
+                Receiver {
                     priority_queue_len: c.priority_queue_len,
                     priority: c.priority,
                     non_priority: c.non_priority,
@@ -1383,9 +1381,9 @@ fn test_handle_prune_peer_in_mesh() {
 }
 
 fn count_control_msgs(
-    receivers: HashMap<PeerId, RpcReceiver>,
+    receivers: HashMap<PeerId, Receiver>,
     mut filter: impl FnMut(&PeerId, &RpcOut) -> bool,
-) -> (usize, HashMap<PeerId, RpcReceiver>) {
+) -> (usize, HashMap<PeerId, Receiver>) {
     let mut new_receivers = HashMap::new();
     let mut collected_messages = 0;
     for (peer_id, c) in receivers.into_iter() {
@@ -1405,7 +1403,7 @@ fn count_control_msgs(
         }
         new_receivers.insert(
             peer_id,
-            RpcReceiver {
+            Receiver {
                 priority_queue_len: c.priority_queue_len,
                 priority: c.priority,
                 non_priority: c.non_priority,
@@ -1417,8 +1415,8 @@ fn count_control_msgs(
 
 fn flush_events<D: DataTransform, F: TopicSubscriptionFilter>(
     gs: &mut Behaviour<D, F>,
-    receivers: HashMap<PeerId, RpcReceiver>,
-) -> HashMap<PeerId, RpcReceiver> {
+    receivers: HashMap<PeerId, Receiver>,
+) -> HashMap<PeerId, Receiver> {
     gs.events.clear();
     let mut new_receivers = HashMap::new();
     for (peer_id, c) in receivers.into_iter() {
@@ -1430,7 +1428,7 @@ fn flush_events<D: DataTransform, F: TopicSubscriptionFilter>(
         }
         new_receivers.insert(
             peer_id,
-            RpcReceiver {
+            Receiver {
                 priority_queue_len: c.priority_queue_len,
                 priority: c.priority,
                 non_priority: c.non_priority,
@@ -5171,8 +5169,8 @@ fn test_subscribe_and_graft_with_negative_score() {
                                   p1: PeerId,
                                   p2: PeerId,
                                   connection_id: ConnectionId,
-                                  receivers: HashMap<PeerId, RpcReceiver>|
-     -> HashMap<PeerId, RpcReceiver> {
+                                  receivers: HashMap<PeerId, Receiver>|
+     -> HashMap<PeerId, Receiver> {
         let new_receivers = HashMap::new();
         for (peer_id, receiver) in receivers.into_iter() {
             let non_priority = receiver.non_priority.get_ref();
@@ -5261,7 +5259,7 @@ fn test_all_queues_full() {
             kind: PeerKind::Gossipsubv1_1,
             connections: vec![ConnectionId::new_unchecked(0)],
             topics: topics.clone(),
-            sender: RpcSender::new(2),
+            sender: Sender::new(2),
         },
     );
 
@@ -5295,7 +5293,7 @@ fn test_slow_peer_returns_failed_publish() {
             kind: PeerKind::Gossipsubv1_1,
             connections: vec![ConnectionId::new_unchecked(0)],
             topics: topics.clone(),
-            sender: RpcSender::new(2),
+            sender: Sender::new(2),
         },
     );
     let peer_id = PeerId::random();
@@ -5306,7 +5304,7 @@ fn test_slow_peer_returns_failed_publish() {
             kind: PeerKind::Gossipsubv1_1,
             connections: vec![ConnectionId::new_unchecked(0)],
             topics: topics.clone(),
-            sender: RpcSender::new(gs.config.connection_handler_queue_len()),
+            sender: Sender::new(gs.config.connection_handler_queue_len()),
         },
     );
 
@@ -5365,7 +5363,7 @@ fn test_slow_peer_returns_failed_ihave_handling() {
             kind: PeerKind::Gossipsubv1_1,
             connections: vec![ConnectionId::new_unchecked(0)],
             topics: topics.clone(),
-            sender: RpcSender::new(2),
+            sender: Sender::new(2),
         },
     );
     peers.push(slow_peer_id);
@@ -5380,7 +5378,7 @@ fn test_slow_peer_returns_failed_ihave_handling() {
             kind: PeerKind::Gossipsubv1_1,
             connections: vec![ConnectionId::new_unchecked(0)],
             topics: topics.clone(),
-            sender: RpcSender::new(gs.config.connection_handler_queue_len()),
+            sender: Sender::new(gs.config.connection_handler_queue_len()),
         },
     );
 
@@ -5457,7 +5455,7 @@ fn test_slow_peer_returns_failed_iwant_handling() {
             kind: PeerKind::Gossipsubv1_1,
             connections: vec![ConnectionId::new_unchecked(0)],
             topics: topics.clone(),
-            sender: RpcSender::new(2),
+            sender: Sender::new(2),
         },
     );
     peers.push(slow_peer_id);
@@ -5472,7 +5470,7 @@ fn test_slow_peer_returns_failed_iwant_handling() {
             kind: PeerKind::Gossipsubv1_1,
             connections: vec![ConnectionId::new_unchecked(0)],
             topics: topics.clone(),
-            sender: RpcSender::new(gs.config.connection_handler_queue_len()),
+            sender: Sender::new(gs.config.connection_handler_queue_len()),
         },
     );
 
@@ -5546,7 +5544,7 @@ fn test_slow_peer_returns_failed_forward() {
             kind: PeerKind::Gossipsubv1_1,
             connections: vec![ConnectionId::new_unchecked(0)],
             topics: topics.clone(),
-            sender: RpcSender::new(2),
+            sender: Sender::new(2),
         },
     );
     peers.push(slow_peer_id);
@@ -5561,7 +5559,7 @@ fn test_slow_peer_returns_failed_forward() {
             kind: PeerKind::Gossipsubv1_1,
             connections: vec![ConnectionId::new_unchecked(0)],
             topics: topics.clone(),
-            sender: RpcSender::new(gs.config.connection_handler_queue_len()),
+            sender: Sender::new(gs.config.connection_handler_queue_len()),
         },
     );
 
@@ -5640,7 +5638,7 @@ fn test_slow_peer_is_downscored_on_publish() {
             kind: PeerKind::Gossipsubv1_1,
             connections: vec![ConnectionId::new_unchecked(0)],
             topics: topics.clone(),
-            sender: RpcSender::new(2),
+            sender: Sender::new(2),
         },
     );
     gs.peer_score.as_mut().unwrap().0.add_peer(slow_peer_id);
@@ -5652,7 +5650,7 @@ fn test_slow_peer_is_downscored_on_publish() {
             kind: PeerKind::Gossipsubv1_1,
             connections: vec![ConnectionId::new_unchecked(0)],
             topics: topics.clone(),
-            sender: RpcSender::new(gs.config.connection_handler_queue_len()),
+            sender: Sender::new(gs.config.connection_handler_queue_len()),
         },
     );
 
@@ -5675,7 +5673,7 @@ async fn test_timedout_messages_are_reported() {
 
     let mut gs: Behaviour = Behaviour::new(MessageAuthenticity::RandomAuthor, gs_config).unwrap();
 
-    let sender = RpcSender::new(2);
+    let sender = Sender::new(2);
     let topic_hash = Topic::new("Test").hash();
     let publish_data = vec![2; 59];
     let raw_message = gs.build_raw_message(topic_hash, publish_data).unwrap();
@@ -5693,7 +5691,7 @@ async fn test_timedout_messages_are_reported() {
 
 #[test]
 fn test_priority_messages_are_always_sent() {
-    let sender = RpcSender::new(2);
+    let sender = Sender::new(2);
     let topic_hash = Topic::new("Test").hash();
     // Fill the buffer with the first message.
     assert!(sender

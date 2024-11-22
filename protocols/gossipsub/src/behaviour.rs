@@ -72,7 +72,7 @@ use crate::{
 use crate::{mcache::MessageCache, types::IHave};
 use crate::{
     metrics::{Churn, Config as MetricsConfig, Inclusion, Metrics, Penalty},
-    types::RpcSender,
+    rpc::Sender,
 };
 use crate::{rpc_proto::proto, TopicScoreParams};
 use crate::{PublishError, SubscriptionError, ValidationError};
@@ -3000,7 +3000,7 @@ where
             .or_insert(PeerConnections {
                 kind: PeerKind::Floodsub,
                 connections: vec![],
-                sender: RpcSender::new(self.config.connection_handler_queue_len()),
+                sender: Sender::new(self.config.connection_handler_queue_len()),
                 topics: Default::default(),
             });
         // Add the new connection
@@ -3026,7 +3026,7 @@ where
             .or_insert(PeerConnections {
                 kind: PeerKind::Floodsub,
                 connections: vec![],
-                sender: RpcSender::new(self.config.connection_handler_queue_len()),
+                sender: Sender::new(self.config.connection_handler_queue_len()),
                 topics: Default::default(),
             });
         // Add the new connection
