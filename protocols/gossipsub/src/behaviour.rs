@@ -554,7 +554,7 @@ where
 
     /// Unsubscribes from a topic.
     ///
-    /// Returns [`Ok(true)`] if we were subscribed to this topic.
+    /// Returns `true` if we were subscribed to this topic.
     pub fn unsubscribe<H: Hasher>(&mut self, topic: &Topic<H>) -> bool {
         tracing::debug!(%topic, "Unsubscribing from topic");
         let topic_hash = topic.hash();
