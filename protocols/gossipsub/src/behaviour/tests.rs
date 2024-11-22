@@ -24,11 +24,11 @@ use super::*;
 use crate::rpc::Receiver;
 use crate::subscription_filter::WhitelistSubscriptionFilter;
 use crate::{config::ConfigBuilder, types::Rpc, IdentTopic as Topic};
-use async_std::net::Ipv4Addr;
 use byteorder::{BigEndian, ByteOrder};
 use libp2p_core::ConnectedPoint;
 use rand::Rng;
 use std::future;
+use std::net::Ipv4Addr;
 use std::thread::sleep;
 
 #[derive(Default, Debug)]
@@ -5664,7 +5664,7 @@ fn test_slow_peer_is_downscored_on_publish() {
     assert_eq!(slow_peer_score, slow_peer_params.slow_peer_weight);
 }
 
-#[async_std::test]
+#[tokio::test]
 async fn test_timedout_messages_are_reported() {
     let gs_config = ConfigBuilder::default()
         .validation_mode(ValidationMode::Permissive)

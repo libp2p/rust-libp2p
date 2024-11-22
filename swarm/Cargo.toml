@@ -26,7 +26,6 @@ once_cell = "1.19.0"
 rand = "0.8"
 smallvec = "1.13.2"
 tracing = { workspace = true }
-void = "1"
 wasm-bindgen-futures = { version = "0.4.42", optional = true }
 
 [target.'cfg(not(any(target_os = "emscripten", target_os = "wasi", target_os = "unknown")))'.dependencies]
@@ -53,7 +52,6 @@ libp2p-swarm-test = { path = "../swarm-test" }                      # Using `pat
 libp2p-yamux = { path = "../muxers/yamux" }                         # Using `path` here because this is a cyclic dev-dependency which otherwise breaks releasing.
 quickcheck = { workspace = true }
 criterion = { version = "0.5", features = ["async_tokio"] }
-void = "1"
 once_cell = "1.19.0"
 trybuild = "1.0.95"
 tokio = { workspace = true, features = ["time", "rt", "macros", "rt-multi-thread"] }

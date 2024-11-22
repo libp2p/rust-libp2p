@@ -1,5 +1,6 @@
 use std::{
     collections::{HashSet, VecDeque},
+    convert::Infallible,
     task::{Context, Poll},
 };
 
@@ -79,7 +80,7 @@ impl Behaviour {
 
 impl NetworkBehaviour for Behaviour {
     type ConnectionHandler = dummy::ConnectionHandler;
-    type ToSwarm = void::Void;
+    type ToSwarm = Infallible;
 
     fn handle_established_inbound_connection(
         &mut self,
