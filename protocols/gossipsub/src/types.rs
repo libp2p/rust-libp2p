@@ -296,9 +296,11 @@ pub struct Prune {
 /// A Gossipsub RPC message sent.
 #[derive(Debug)]
 pub enum RpcOut {
-    /// Publish a Gossipsub message on network. [`Delay`] tags the time we attempted to send it.
+    /// Publish a Gossipsub message on network.`timeout` limits the duration the message 
+    /// can wait to be sent before it is abandoned.
     Publish { message: RawMessage, timeout: Delay },
-    /// Forward a Gossipsub message on network. [`Delay`] tags the time we attempted to send it.
+    /// Forward a Gossipsub message on network. `timeout` limits the duration the message 
+    /// can wait to be sent before it is abandoned.
     Forward { message: RawMessage, timeout: Delay },
     /// Subscribe a topic.
     Subscribe(TopicHash),
