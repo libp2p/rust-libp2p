@@ -588,6 +588,7 @@ impl fmt::Display for PeerKind {
 /// `RpcOut` sender that is priority aware.
 #[derive(Debug)]
 pub(crate) struct RpcSender {
+    /// Capacity of the priority channel for `Publish` messages.
     cap: usize,
     len: Arc<AtomicUsize>,
     pub(crate) priority_sender: Sender<RpcOut>,
