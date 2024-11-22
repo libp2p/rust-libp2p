@@ -119,7 +119,7 @@ pub(crate) struct PeerConnections {
     pub(crate) connections: Vec<ConnectionId>,
     /// Subscribed topics.
     pub(crate) topics: BTreeSet<TopicHash>,
-    /// The rpc sender to the peer.
+    /// The rpc sender to the connection handler(s).
     pub(crate) sender: RpcSender,
 }
 

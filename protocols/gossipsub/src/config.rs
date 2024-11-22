@@ -440,7 +440,7 @@ impl Default for ConfigBuilder {
                 published_message_ids_cache_time: Duration::from_secs(10),
                 connection_handler_queue_len: 5000,
                 connection_handler_publish_duration: Duration::from_secs(5),
-                connection_handler_forward_duration: Duration::from_millis(1000),
+                connection_handler_forward_duration: Duration::from_secs(1),
             },
             invalid_protocol: false,
         }
