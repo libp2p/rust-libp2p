@@ -130,7 +130,7 @@ tracing-subscriber = "0.3"
 futures = "0.3.30"
 web-time = "1.1.0"
 ring = "0.17.8"
-rcgen = "0.11.3"
+rcgen = "0.12.1"
 
 [patch.crates-io]
 
