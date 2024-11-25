@@ -5330,6 +5330,7 @@ fn test_slow_peer_returns_failed_publish() {
         forward: 0,
         priority: 1,
         non_priority: 0,
+        timeout: 0,
     };
 
     assert_eq!(slow_peer_failed_messages.priority, failed_messages.priority);
@@ -5422,6 +5423,7 @@ fn test_slow_peer_returns_failed_ihave_handling() {
         forward: 0,
         priority: 0,
         non_priority: 1,
+        timeout: 0,
     };
 
     assert_eq!(slow_peer_failed_messages.priority, failed_messages.priority);
@@ -5511,6 +5513,7 @@ fn test_slow_peer_returns_failed_iwant_handling() {
         forward: 1,
         priority: 0,
         non_priority: 1,
+        timeout: 0,
     };
 
     assert_eq!(slow_peer_failed_messages.priority, failed_messages.priority);
@@ -5600,6 +5603,7 @@ fn test_slow_peer_returns_failed_forward() {
         forward: 1,
         priority: 0,
         non_priority: 1,
+        timeout: 0,
     };
 
     assert_eq!(slow_peer_failed_messages.priority, failed_messages.priority);

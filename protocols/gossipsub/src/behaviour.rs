@@ -3078,20 +3078,16 @@ where
                 }
 
                 // Keep track of expired messages for the application layer.
+                let failed_messages = self.failed_messages.entry(propagation_source).or_default();
+                failed_messages.timeout += 1;
                 match rpc {
                     RpcOut::Publish { .. } => {
-                        self.failed_messages
-                            .entry(propagation_source)
-                            .or_default()
-                            .publish += 1;
+                        failed_messages.publish += 1;
                     }
                     RpcOut::Forward { .. } => {
-                        self.failed_messages
-                            .entry(propagation_source)
-                            .or_default()
-                            .forward += 1;
+                        failed_messages.forward += 1;
                     }
-                    _ => {} //
+                    _ => {}
                 }
 
                 // Record metrics on the failure.
@@ -3099,9 +3095,11 @@ where
                     match rpc {
                         RpcOut::Publish { message, .. } => {
                             metrics.publish_msg_dropped(&message.topic);
+                            metrics.timeout_msg_dropped(&message.topic);
                         }
                         RpcOut::Forward { message, .. } => {
                             metrics.forward_msg_dropped(&message.topic);
+                            metrics.timeout_msg_dropped(&message.topic);
                         }
                         _ => {}
                     }

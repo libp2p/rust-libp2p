@@ -131,6 +131,8 @@ pub(crate) struct Metrics {
     publish_messages_dropped: Family<TopicHash, Counter>,
     /// The number of forward messages dropped by the sender.
     forward_messages_dropped: Family<TopicHash, Counter>,
+    /// The number of messages that timed out and could not be sent.
+    timedout_messages_dropped: Family<TopicHash, Counter>,
 
     /* Metrics regarding mesh state */
     /// Number of peers in our mesh. This metric should be updated with the count of peers for a
@@ -241,6 +243,11 @@ impl Metrics {
             "Number of forward messages dropped per topic"
         );
 
+        let timedout_messages_dropped = register_family!(
+            "timedout_messages_dropped_per_topic",
+            "Number of timedout messages dropped per topic"
+        );
+
         let mesh_peer_counts = register_family!(
             "mesh_peer_counts",
             "Number of peers in each topic in our mesh"
@@ -347,6 +354,7 @@ impl Metrics {
             rejected_messages,
             publish_messages_dropped,
             forward_messages_dropped,
+            timedout_messages_dropped,
             mesh_peer_counts,
             mesh_peer_inclusion_events,
             mesh_peer_churn_events,
@@ -505,6 +513,13 @@ impl Metrics {
     pub(crate) fn forward_msg_dropped(&mut self, topic: &TopicHash) {
         if self.register_topic(topic).is_ok() {
             self.forward_messages_dropped.get_or_create(topic).inc();
+        }
+    }
+
+    /// Register dropping a message that timedout over a topic.
+    pub(crate) fn timeout_msg_dropped(&mut self, topic: &TopicHash) {
+        if self.register_topic(topic).is_ok() {
+            self.timedout_messages_dropped.get_or_create(topic).inc();
         }
     }
 

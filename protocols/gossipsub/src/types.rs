@@ -33,7 +33,7 @@ use crate::rpc_proto::proto;
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 
-/// The type of messages that have expired while attempting to send to a peer.
+/// Messages that have expired while attempting to be sent to a peer.
 #[derive(Clone, Debug, Default)]
 pub struct FailedMessages {
     /// The number of publish messages that failed to be published in a heartbeat.
@@ -44,14 +44,11 @@ pub struct FailedMessages {
     pub priority: usize,
     /// The number of messages that were failed to be sent to the non-priority queue as it was full.
     pub non_priority: usize,
+    /// The number of messages that timed out and could not be sent.
+    pub timeout: usize,
 }
 
 impl FailedMessages {
-    /// The total number of messages that expired due a timeout.
-    pub fn total_timeout(&self) -> usize {
-        self.publish + self.forward
-    }
-
     /// The total number of messages that failed due to the queue being full.
     pub fn total_queue_full(&self) -> usize {
         self.priority + self.non_priority
