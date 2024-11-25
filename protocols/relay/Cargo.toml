@@ -25,7 +25,7 @@ quick-protobuf = "0.8"
 quick-protobuf-codec = { workspace = true }
 rand = "0.8.4"
 static_assertions = "1"
-thiserror = "1.0"
+thiserror = { workspace = true }
 tracing = { workspace = true }
 
 [dev-dependencies]
