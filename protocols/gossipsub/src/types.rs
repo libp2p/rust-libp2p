@@ -19,7 +19,9 @@
 // DEALINGS IN THE SOFTWARE.
 
 //! A collection of types using the Gossipsub system.
+use crate::rpc::Sender;
 use crate::TopicHash;
+use futures_timer::Delay;
 use libp2p_identity::PeerId;
 use libp2p_swarm::ConnectionId;
 use prometheus_client::encoding::EncodeLabelValue;
@@ -30,6 +32,33 @@ use std::{collections::BTreeSet, fmt};
 use crate::rpc_proto::proto;
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
+
+/// Messages that have expired while attempting to be sent to a peer.
+#[derive(Clone, Debug, Default)]
+pub struct FailedMessages {
+    /// The number of publish messages that failed to be published in a heartbeat.
+    pub publish: usize,
+    /// The number of forward messages that failed to be published in a heartbeat.
+    pub forward: usize,
+    /// The number of messages that were failed to be sent to the priority queue as it was full.
+    pub priority: usize,
+    /// The number of messages that were failed to be sent to the non-priority queue as it was full.
+    pub non_priority: usize,
+    /// The number of messages that timed out and could not be sent.
+    pub timeout: usize,
+}
+
+impl FailedMessages {
+    /// The total number of messages that failed due to the queue being full.
+    pub fn total_queue_full(&self) -> usize {
+        self.priority + self.non_priority
+    }
+
+    /// The total failed messages in a heartbeat.
+    pub fn total(&self) -> usize {
+        self.priority + self.non_priority
+    }
+}
 
 #[derive(Debug)]
 /// Validation kinds from the application for received messages.
@@ -71,7 +100,7 @@ impl std::fmt::Debug for MessageId {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug)]
 pub(crate) struct PeerConnections {
     /// The kind of protocol the peer supports.
     pub(crate) kind: PeerKind,
@@ -79,6 +108,8 @@ pub(crate) struct PeerConnections {
     pub(crate) connections: Vec<ConnectionId>,
     /// Subscribed topics.
     pub(crate) topics: BTreeSet<TopicHash>,
+    /// The rpc sender to the connection handler(s).
+    pub(crate) sender: Sender,
 }
 
 /// Describes the types of peers that can exist in the gossipsub context.
@@ -197,8 +228,8 @@ pub enum SubscriptionAction {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct PeerInfo {
-    pub peer_id: Option<PeerId>,
+pub(crate) struct PeerInfo {
+    pub(crate) peer_id: Option<PeerId>,
     //TODO add this when RFC: Signed Address Records got added to the spec (see pull request
     // https://github.com/libp2p/specs/pull/217)
     //pub signed_peer_record: ?,
@@ -208,46 +239,70 @@ pub struct PeerInfo {
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum ControlAction {
     /// Node broadcasts known messages per topic - IHave control message.
-    IHave {
-        /// The topic of the messages.
-        topic_hash: TopicHash,
-        /// A list of known message ids (peer_id + sequence _number) as a string.
-        message_ids: Vec<MessageId>,
-    },
+    IHave(IHave),
     /// The node requests specific message ids (peer_id + sequence _number) - IWant control message.
-    IWant {
-        /// A list of known message ids (peer_id + sequence _number) as a string.
-        message_ids: Vec<MessageId>,
-    },
+    IWant(IWant),
     /// The node has been added to the mesh - Graft control message.
-    Graft {
-        /// The mesh topic the peer should be added to.
-        topic_hash: TopicHash,
-    },
+    Graft(Graft),
     /// The node has been removed from the mesh - Prune control message.
-    Prune {
-        /// The mesh topic the peer should be removed from.
-        topic_hash: TopicHash,
-        /// A list of peers to be proposed to the removed peer as peer exchange
-        peers: Vec<PeerInfo>,
-        /// The backoff time in seconds before we allow to reconnect
-        backoff: Option<u64>,
-    },
+    Prune(Prune),
+}
+
+/// Node broadcasts known messages per topic - IHave control message.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct IHave {
+    /// The topic of the messages.
+    pub(crate) topic_hash: TopicHash,
+    /// A list of known message ids (peer_id + sequence _number) as a string.
+    pub(crate) message_ids: Vec<MessageId>,
+}
+
+/// The node requests specific message ids (peer_id + sequence _number) - IWant control message.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct IWant {
+    /// A list of known message ids (peer_id + sequence _number) as a string.
+    pub(crate) message_ids: Vec<MessageId>,
+}
+
+/// The node has been added to the mesh - Graft control message.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct Graft {
+    /// The mesh topic the peer should be added to.
+    pub(crate) topic_hash: TopicHash,
+}
+
+/// The node has been removed from the mesh - Prune control message.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct Prune {
+    /// The mesh topic the peer should be removed from.
+    pub(crate) topic_hash: TopicHash,
+    /// A list of peers to be proposed to the removed peer as peer exchange
+    pub(crate) peers: Vec<PeerInfo>,
+    /// The backoff time in seconds before we allow to reconnect
+    pub(crate) backoff: Option<u64>,
 }
 
 /// A Gossipsub RPC message sent.
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug)]
 pub enum RpcOut {
-    /// Publish a Gossipsub message on network.
-    Publish(RawMessage),
-    /// Forward a Gossipsub message to the network.
-    Forward(RawMessage),
+    /// Publish a Gossipsub message on network.`timeout` limits the duration the message
+    /// can wait to be sent before it is abandoned.
+    Publish { message: RawMessage, timeout: Delay },
+    /// Forward a Gossipsub message on network. `timeout` limits the duration the message
+    /// can wait to be sent before it is abandoned.
+    Forward { message: RawMessage, timeout: Delay },
     /// Subscribe a topic.
     Subscribe(TopicHash),
     /// Unsubscribe a topic.
     Unsubscribe(TopicHash),
-    /// List of Gossipsub control messages.
-    Control(ControlAction),
+    /// Send a GRAFT control message.
+    Graft(Graft),
+    /// Send a PRUNE control message.
+    Prune(Prune),
+    /// Send a IHave control message.
+    IHave(IHave),
+    /// Send a IWant control message.
+    IWant(IWant),
 }
 
 impl RpcOut {
@@ -262,12 +317,18 @@ impl From<RpcOut> for proto::RPC {
     /// Converts the RPC into protobuf format.
     fn from(rpc: RpcOut) -> Self {
         match rpc {
-            RpcOut::Publish(message) => proto::RPC {
+            RpcOut::Publish {
+                message,
+                timeout: _,
+            } => proto::RPC {
                 subscriptions: Vec::new(),
                 publish: vec![message.into()],
                 control: None,
             },
-            RpcOut::Forward(message) => proto::RPC {
+            RpcOut::Forward {
+                message,
+                timeout: _,
+            } => proto::RPC {
                 publish: vec![message.into()],
                 subscriptions: Vec::new(),
                 control: None,
@@ -288,7 +349,7 @@ impl From<RpcOut> for proto::RPC {
                 }],
                 control: None,
             },
-            RpcOut::Control(ControlAction::IHave {
+            RpcOut::IHave(IHave {
                 topic_hash,
                 message_ids,
             }) => proto::RPC {
@@ -304,7 +365,7 @@ impl From<RpcOut> for proto::RPC {
                     prune: vec![],
                 }),
             },
-            RpcOut::Control(ControlAction::IWant { message_ids }) => proto::RPC {
+            RpcOut::IWant(IWant { message_ids }) => proto::RPC {
                 publish: Vec::new(),
                 subscriptions: Vec::new(),
                 control: Some(proto::ControlMessage {
@@ -316,7 +377,7 @@ impl From<RpcOut> for proto::RPC {
                     prune: vec![],
                 }),
             },
-            RpcOut::Control(ControlAction::Graft { topic_hash }) => proto::RPC {
+            RpcOut::Graft(Graft { topic_hash }) => proto::RPC {
                 publish: Vec::new(),
                 subscriptions: vec![],
                 control: Some(proto::ControlMessage {
@@ -328,7 +389,7 @@ impl From<RpcOut> for proto::RPC {
                     prune: vec![],
                 }),
             },
-            RpcOut::Control(ControlAction::Prune {
+            RpcOut::Prune(Prune {
                 topic_hash,
                 peers,
                 backoff,
@@ -420,33 +481,33 @@ impl From<Rpc> for proto::RPC {
         for action in rpc.control_msgs {
             match action {
                 // collect all ihave messages
-                ControlAction::IHave {
+                ControlAction::IHave(IHave {
                     topic_hash,
                     message_ids,
-                } => {
+                }) => {
                     let rpc_ihave = proto::ControlIHave {
                         topic_id: Some(topic_hash.into_string()),
                         message_ids: message_ids.into_iter().map(|msg_id| msg_id.0).collect(),
                     };
                     control.ihave.push(rpc_ihave);
                 }
-                ControlAction::IWant { message_ids } => {
+                ControlAction::IWant(IWant { message_ids }) => {
                     let rpc_iwant = proto::ControlIWant {
                         message_ids: message_ids.into_iter().map(|msg_id| msg_id.0).collect(),
                     };
                     control.iwant.push(rpc_iwant);
                 }
-                ControlAction::Graft { topic_hash } => {
+                ControlAction::Graft(Graft { topic_hash }) => {
                     let rpc_graft = proto::ControlGraft {
                         topic_id: Some(topic_hash.into_string()),
                     };
                     control.graft.push(rpc_graft);
                 }
-                ControlAction::Prune {
+                ControlAction::Prune(Prune {
                     topic_hash,
                     peers,
                     backoff,
-                } => {
+                }) => {
                     let rpc_prune = proto::ControlPrune {
                         topic_id: Some(topic_hash.into_string()),
                         peers: peers
