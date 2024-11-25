@@ -35,7 +35,7 @@ use crate::types::RpcOut;
 #[derive(Debug)]
 pub(crate) struct Sender {
     /// Capacity of the priority channel for `Publish` messages.
-    cap: usize,
+    priority_cap: usize,
     len: Arc<AtomicUsize>,
     pub(crate) priority_sender: async_channel::Sender<RpcOut>,
     pub(crate) non_priority_sender: async_channel::Sender<RpcOut>,
@@ -54,7 +54,7 @@ impl Sender {
         let (non_priority_sender, non_priority_receiver) = async_channel::bounded(cap / 2);
         let len = Arc::new(AtomicUsize::new(0));
         Sender {
-            cap: cap / 2,
+            priority_cap: cap / 2,
             len,
             priority_sender,
             non_priority_sender,
@@ -77,7 +77,7 @@ impl Sender {
         if let RpcOut::Publish { .. } = rpc {
             // Update number of publish message in queue.
             let len = self.len.load(Ordering::Relaxed);
-            if len >= self.cap {
+            if len >= self.priority_cap {
                 return Err(rpc);
             }
             self.len.store(len + 1, Ordering::Relaxed);
