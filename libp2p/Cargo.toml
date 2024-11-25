@@ -122,7 +122,7 @@ libp2p-webtransport-websys = { workspace = true, optional = true }
 libp2p-yamux = { workspace = true, optional = true }
 multiaddr = { workspace = true }
 pin-project = "1.0.0"
-thiserror = "1.0"
+thiserror = { workspace = true }
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 libp2p-dns = { workspace = true, optional = true }
