@@ -103,6 +103,7 @@ mod mcache;
 mod metrics;
 mod peer_score;
 mod protocol;
+mod rpc;
 mod rpc_proto;
 mod subscription_filter;
 mod time_cache;
@@ -125,7 +126,7 @@ pub use self::subscription_filter::{
 };
 pub use self::topic::{Hasher, Topic, TopicHash};
 pub use self::transform::{DataTransform, IdentityTransform};
-pub use self::types::{Message, MessageAcceptance, MessageId, RawMessage};
+pub use self::types::{FailedMessages, Message, MessageAcceptance, MessageId, RawMessage};
 
 #[deprecated(note = "Will be removed from the public API.")]
 pub type Rpc = self::types::Rpc;
