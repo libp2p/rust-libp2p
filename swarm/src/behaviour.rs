@@ -26,7 +26,7 @@ pub mod toggle;
 
 pub use external_addresses::ExternalAddresses;
 pub use listen_addresses::ListenAddresses;
-pub use peer_addresses::PeerAddresses;
+pub use peer_addresses::{PeerAddresses, PeerAddressesConfig};
 
 use crate::connection::ConnectionId;
 use crate::dial_opts::DialOpts;

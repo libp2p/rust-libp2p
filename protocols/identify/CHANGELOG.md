@@ -2,6 +2,8 @@
 
 - Make `identify::Config` fields private and add getter functions.
   See [PR 5663](https://github.com/libp2p/rust-libp2p/pull/5663).
+- Replace `with_cache_size` by `with_cache_config` to fully configure the identify cache using `PeerAddressesConfig`.
+  See [PR 5574](https://github.com/libp2p/rust-libp2p/pull/5574).
 
 ## 0.45.1
 
