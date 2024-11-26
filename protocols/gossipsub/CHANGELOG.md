@@ -1,7 +1,7 @@
 ## 0.48.0
 
 - Correct state inconsistencies with the mesh and fanout when unsubscribing.
-  See [PR XXXX](https://github.com/libp2p/rust-libp2p/pull/XXXX)
+  See [PR 5690](https://github.com/libp2p/rust-libp2p/pull/5690)
 
 - Deprecate `futures-ticker` and use `futures-timer` instead.
   See [PR 5674](https://github.com/libp2p/rust-libp2p/pull/5674).
