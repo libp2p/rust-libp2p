@@ -154,11 +154,20 @@ impl HandleInnerEvent for AsClient<'_> {
                 error,
                 request_id,
             } => {
-                tracing::debug!(
-                    %peer,
-                    "Outbound Failure {} when on dial-back request to peer.",
-                    error,
-                );
+                if let Some(peer) = peer {
+                    tracing::debug!(
+                        %peer,
+                        %request_id,
+                        "Outbound Failure {} when on dial-back request to peer.",
+                        error,
+                    );
+                } else {
+                    tracing::debug!(
+                        %request_id,
+                        "Outbound Failure {} when on dial-back request to peer.",
+                        error,
+                    );
+                }
                 let probe_id = self
                     .ongoing_outbound
                     .remove(&request_id)
@@ -169,7 +178,7 @@ impl HandleInnerEvent for AsClient<'_> {
                 VecDeque::from([ToSwarm::GenerateEvent(Event::OutboundProbe(
                     OutboundProbeEvent::Error {
                         probe_id,
-                        peer: Some(peer),
+                        peer,
                         error: OutboundProbeError::OutboundRequest(error),
                     },
                 ))])

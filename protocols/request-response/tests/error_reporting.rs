@@ -51,7 +51,7 @@ async fn report_outbound_failure_on_read_response() {
             .send_request(&peer1_id, Action::FailOnReadResponse);
 
         let (peer, req_id_done, error) = wait_outbound_failure(&mut swarm2).await.unwrap();
-        assert_eq!(peer, peer1_id);
+        assert_eq!(peer, Some(peer1_id));
         assert_eq!(req_id_done, req_id);
 
         let error = match error {
@@ -94,7 +94,7 @@ async fn report_outbound_failure_on_write_request() {
             .send_request(&peer1_id, Action::FailOnWriteRequest);
 
         let (peer, req_id_done, error) = wait_outbound_failure(&mut swarm2).await.unwrap();
-        assert_eq!(peer, peer1_id);
+        assert_eq!(peer, Some(peer1_id));
         assert_eq!(req_id_done, req_id);
 
         let error = match error {
@@ -151,7 +151,7 @@ async fn report_outbound_timeout_on_read_response() {
             .send_request(&peer1_id, Action::TimeoutOnReadResponse);
 
         let (peer, req_id_done, error) = wait_outbound_failure(&mut swarm2).await.unwrap();
-        assert_eq!(peer, peer1_id);
+        assert_eq!(peer, Some(peer1_id));
         assert_eq!(req_id_done, req_id);
         assert!(matches!(error, OutboundFailure::Timeout));
     };
@@ -203,7 +203,7 @@ async fn report_outbound_failure_on_max_streams() {
             .send_request(&peer1_id, Action::FailOnMaxStreams);
 
         let (peer, req_id_done, error) = wait_outbound_failure(&mut swarm2).await.unwrap();
-        assert_eq!(peer, peer1_id);
+        assert_eq!(peer, Some(peer1_id));
         assert_eq!(req_id_done, outbound_req_id);
         assert!(matches!(error, OutboundFailure::Io(_)));
     };
@@ -236,7 +236,7 @@ async fn report_inbound_failure_on_read_request() {
             .send_request(&peer1_id, Action::FailOnReadRequest);
 
         let (peer, req_id_done, error) = wait_outbound_failure(&mut swarm2).await.unwrap();
-        assert_eq!(peer, peer1_id);
+        assert_eq!(peer, Some(peer1_id));
         assert_eq!(req_id_done, req_id);
 
         match error {
@@ -295,7 +295,7 @@ async fn report_inbound_failure_on_write_response() {
             .send_request(&peer1_id, Action::FailOnWriteResponse);
 
         let (peer, req_id_done, error) = wait_outbound_failure(&mut swarm2).await.unwrap();
-        assert_eq!(peer, peer1_id);
+        assert_eq!(peer, Some(peer1_id));
         assert_eq!(req_id_done, req_id);
 
         match error {
@@ -352,7 +352,7 @@ async fn report_inbound_timeout_on_write_response() {
             .send_request(&peer1_id, Action::TimeoutOnWriteResponse);
 
         let (peer, req_id_done, error) = wait_outbound_failure(&mut swarm2).await.unwrap();
-        assert_eq!(peer, peer1_id);
+        assert_eq!(peer, Some(peer1_id));
         assert_eq!(req_id_done, req_id);
 
         match error {
@@ -612,7 +612,7 @@ async fn wait_inbound_failure(
 
 async fn wait_outbound_failure(
     swarm: &mut Swarm<request_response::Behaviour<TestCodec>>,
-) -> Result<(PeerId, OutboundRequestId, OutboundFailure)> {
+) -> Result<(Option<PeerId>, OutboundRequestId, OutboundFailure)> {
     loop {
         match swarm.select_next_some().await.try_into_behaviour_event() {
             Ok(request_response::Event::OutboundFailure {

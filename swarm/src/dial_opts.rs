@@ -172,6 +172,12 @@ impl From<PeerId> for DialOpts {
     }
 }
 
+impl From<&PeerId> for DialOpts {
+    fn from(peer_id: &PeerId) -> Self {
+        DialOpts::peer_id(*peer_id).build()
+    }
+}
+
 #[derive(Debug)]
 pub struct WithPeerId {
     peer_id: PeerId,
