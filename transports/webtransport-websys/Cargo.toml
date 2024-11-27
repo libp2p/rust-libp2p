@@ -23,7 +23,7 @@ multiaddr = { workspace = true }
 multihash = { workspace = true }
 once_cell = "1.19.0"
 send_wrapper = { version = "0.6.0", features = ["futures"] }
-thiserror = "1.0.61"
+thiserror = { workspace = true }
 tracing = { workspace = true }
 wasm-bindgen = "0.2.93"
 wasm-bindgen-futures = "0.4.43"
