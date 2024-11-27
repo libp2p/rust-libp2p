@@ -18,9 +18,10 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
+use std::fmt;
+
 use libp2p_core::Multiaddr;
 use smallvec::SmallVec;
-use std::fmt;
 
 /// A non-empty list of (unique) addresses of a peer in the routing table.
 /// Every address must be a fully-qualified /p2p address.
@@ -60,9 +61,9 @@ impl Addresses {
 
     /// Removes the given address from the list.
     ///
-    /// Returns `Ok(())` if the address is either not in the list or was found and
-    /// removed. Returns `Err(())` if the address is the last remaining address,
-    /// which cannot be removed.
+    /// Returns `Ok(())` if the address is either not in the list or was found
+    /// and removed. Returns `Err(())` if the address is the last remaining
+    /// address, which cannot be removed.
     ///
     /// An address should only be removed if is determined to be invalid or
     /// otherwise unreachable.
@@ -175,7 +176,8 @@ mod tests {
         );
     }
 
-    /// Helper function to easily initialize Addresses struct with multiple addresses.
+    /// Helper function to easily initialize Addresses struct with multiple
+    /// addresses.
     fn make_addresses(addresses: impl IntoIterator<Item = Multiaddr>) -> Addresses {
         Addresses {
             addrs: SmallVec::from_iter(addresses),

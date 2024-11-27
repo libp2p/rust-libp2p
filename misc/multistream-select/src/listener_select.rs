@@ -21,16 +21,20 @@
 //! Protocol negotiation strategies for the peer acting as the listener
 //! in a multistream-select protocol negotiation.
 
-use crate::protocol::{HeaderLine, Message, MessageIO, Protocol, ProtocolError};
-use crate::{Negotiated, NegotiationError};
-
-use futures::prelude::*;
-use smallvec::SmallVec;
 use std::{
     convert::TryFrom as _,
     mem,
     pin::Pin,
     task::{Context, Poll},
+};
+
+use futures::prelude::*;
+use smallvec::SmallVec;
+
+use crate::{
+    protocol::{HeaderLine, Message, MessageIO, Protocol, ProtocolError},
+    Negotiated,
+    NegotiationError,
 };
 
 /// Returns a `Future` that negotiates a protocol on the given I/O stream
@@ -109,8 +113,10 @@ enum State<R, N> {
 
 impl<R, N> Future for ListenerSelectFuture<R, N>
 where
-    // The Unpin bound here is required because we produce a `Negotiated<R>` as the output.
-    // It also makes the implementation considerably easier to write.
+    // The Unpin bound here is required because we
+    // produce a `Negotiated<R>` as the output.
+    // It also makes the implementation considerably
+    // easier to write.
     R: AsyncRead + AsyncWrite + Unpin,
     N: AsRef<str> + Clone,
 {
@@ -186,16 +192,16 @@ where
                                 // reading the `N/A` response.
                                 if let ProtocolError::InvalidMessage = &err {
                                     tracing::trace!(
-                                        "Listener: Negotiation failed with invalid \
-                                        message after protocol rejection."
+                                        "Listener: Negotiation failed with invalid message after \
+                                         protocol rejection."
                                     );
                                     return Poll::Ready(Err(NegotiationError::Failed));
                                 }
                                 if let ProtocolError::IoError(e) = &err {
                                     if e.kind() == std::io::ErrorKind::UnexpectedEof {
                                         tracing::trace!(
-                                            "Listener: Negotiation failed with EOF \
-                                            after protocol rejection."
+                                            "Listener: Negotiation failed with EOF after protocol \
+                                             rejection."
                                         );
                                         return Poll::Ready(Err(NegotiationError::Failed));
                                     }

@@ -18,14 +18,21 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use futures_timer::Delay;
 use std::time::Duration;
-use web_time::Instant;
 
 use futures::{
     future::{select, Either},
-    AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, FutureExt, SinkExt, Stream, StreamExt,
+    AsyncRead,
+    AsyncReadExt,
+    AsyncWrite,
+    AsyncWriteExt,
+    FutureExt,
+    SinkExt,
+    Stream,
+    StreamExt,
 };
+use futures_timer::Delay;
+use web_time::Instant;
 
 use crate::{Final, Intermediate, Run, RunDuration, RunParams, RunUpdate};
 
@@ -36,8 +43,8 @@ pub(crate) fn send_receive<S: AsyncRead + AsyncWrite + Unpin + Send + 'static>(
     params: RunParams,
     stream: S,
 ) -> impl Stream<Item = Result<RunUpdate, std::io::Error>> {
-    // Use a channel to simulate a generator. `send_receive_inner` can `yield` events through the
-    // channel.
+    // Use a channel to simulate a generator. `send_receive_inner` can `yield`
+    // events through the channel.
     let (sender, receiver) = futures::channel::mpsc::channel(0);
     let receiver = receiver.fuse();
     let inner = send_receive_inner(params, stream, sender).fuse();

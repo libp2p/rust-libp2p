@@ -18,10 +18,10 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-pub(crate) use libp2p_webrtc_utils::sdp::random_ufrag;
-use libp2p_webrtc_utils::sdp::render_description;
-use libp2p_webrtc_utils::Fingerprint;
 use std::net::SocketAddr;
+
+pub(crate) use libp2p_webrtc_utils::sdp::random_ufrag;
+use libp2p_webrtc_utils::{sdp::render_description, Fingerprint};
 use webrtc::peer_connection::sdp::session_description::RTCSessionDescription;
 
 /// Creates the SDP answer used by the client.
@@ -40,7 +40,8 @@ pub(crate) fn answer(
 
 /// Creates the SDP offer used by the server.
 ///
-/// Certificate verification is disabled which is why we hardcode a dummy fingerprint here.
+/// Certificate verification is disabled which is why we hardcode a dummy
+/// fingerprint here.
 pub(crate) fn offer(addr: SocketAddr, client_ufrag: &str) -> RTCSessionDescription {
     let offer = render_description(
         CLIENT_SESSION_DESCRIPTION,
@@ -67,9 +68,9 @@ pub(crate) fn offer(addr: SocketAddr, client_ufrag: &str) -> RTCSessionDescripti
 // v=<protocol-version> -> always 0
 // o=<username> <sess-id> <sess-version> <nettype> <addrtype> <unicast-address>
 //
-//     <username> identifies the creator of the SDP document. We are allowed to use dummy values
-//     (`-` and `0.0.0.0` as <addrtype>) to remain anonymous, which we do. Note that "IN" means
-//     "Internet".
+//     <username> identifies the creator of the SDP document. We are allowed to
+// use dummy values     (`-` and `0.0.0.0` as <addrtype>) to remain anonymous,
+// which we do. Note that "IN" means     "Internet".
 //
 // s=<session name>
 //
@@ -82,15 +83,16 @@ pub(crate) fn offer(addr: SocketAddr, client_ufrag: &str) -> RTCSessionDescripti
 //
 // t=<start-time> <stop-time>
 //
-//     Start and end of the validity of the session. `0 0` means that the session never expires.
+//     Start and end of the validity of the session. `0 0` means that the
+// session never expires.
 //
 // m=<media> <port> <proto> <fmt> ...
 //
-//     A `m=` line describes a request to establish a certain protocol. The protocol in this line
-//     (i.e. `TCP/DTLS/SCTP` or `UDP/DTLS/SCTP`) must always be the same as the one in the offer.
-//     We know that this is true because we tweak the offer to match the protocol. The `<fmt>`
-//     component must always be `webrtc-datachannel` for WebRTC.
-//     RFCs: 8839, 8866, 8841
+//     A `m=` line describes a request to establish a certain protocol. The
+// protocol in this line     (i.e. `TCP/DTLS/SCTP` or `UDP/DTLS/SCTP`) must
+// always be the same as the one in the offer.     We know that this is true
+// because we tweak the offer to match the protocol. The `<fmt>`     component
+// must always be `webrtc-datachannel` for WebRTC.     RFCs: 8839, 8866, 8841
 //
 // a=mid:<MID>
 //
@@ -98,7 +100,8 @@ pub(crate) fn offer(addr: SocketAddr, client_ufrag: &str) -> RTCSessionDescripti
 //
 // a=ice-options:ice2
 //
-//     Indicates that we are complying with RFC8839 (as opposed to the legacy RFC5245).
+//     Indicates that we are complying with RFC8839 (as opposed to the legacy
+// RFC5245).
 //
 // a=ice-ufrag:<ICE user>
 // a=ice-pwd:<ICE password>
@@ -114,14 +117,15 @@ pub(crate) fn offer(addr: SocketAddr, client_ufrag: &str) -> RTCSessionDescripti
 //
 // a=setup:actpass
 //
-//     The endpoint that is the offerer MUST use the setup attribute value of setup:actpass and be
-//     prepared to receive a client_hello before it receives the answer.
+//     The endpoint that is the offerer MUST use the setup attribute value of
+// setup:actpass and be     prepared to receive a client_hello before it
+// receives the answer.
 //
 // a=sctp-port:<value>
 //
 //     The SCTP port (RFC8841)
-//     Note it's different from the "m=" line port value, which indicates the port of the
-//     underlying transport-layer protocol (UDP or TCP).
+//     Note it's different from the "m=" line port value, which indicates the
+// port of the     underlying transport-layer protocol (UDP or TCP).
 //
 // a=max-message-size:<value>
 //

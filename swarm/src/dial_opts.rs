@@ -19,13 +19,12 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::ConnectionId;
-use libp2p_core::connection::Endpoint;
-use libp2p_core::multiaddr::Protocol;
-use libp2p_core::transport::PortUse;
-use libp2p_core::Multiaddr;
-use libp2p_identity::PeerId;
 use std::num::NonZeroU8;
+
+use libp2p_core::{connection::Endpoint, multiaddr::Protocol, transport::PortUse, Multiaddr};
+use libp2p_identity::PeerId;
+
+use crate::ConnectionId;
 
 macro_rules! fn_override_role {
     () => {
@@ -45,8 +44,8 @@ macro_rules! fn_override_role {
 macro_rules! fn_allocate_new_port {
     () => {
         /// Enforce the allocation of a new port.
-        /// Default behaviour is best effort reuse of existing ports. If there is no existing
-        /// fitting listener, a new port is allocated.
+        /// Default behaviour is best effort reuse of existing ports. If there is no
+        /// existing fitting listener, a new port is allocated.
         pub fn allocate_new_port(mut self) -> Self {
             self.port_use = PortUse::New;
             self
@@ -110,8 +109,9 @@ impl DialOpts {
         WithoutPeerId {}
     }
 
-    /// Retrieves the [`PeerId`] from the [`DialOpts`] if specified or otherwise tries to extract it
-    /// from the multihash in the `/p2p` part of the address, if present.
+    /// Retrieves the [`PeerId`] from the [`DialOpts`] if specified or otherwise
+    /// tries to extract it from the multihash in the `/p2p` part of the
+    /// address, if present.
     pub fn get_peer_id(&self) -> Option<PeerId> {
         if let Some(peer_id) = self.peer_id {
             return Some(peer_id);
@@ -130,7 +130,8 @@ impl DialOpts {
     /// Get the [`ConnectionId`] of this dial attempt.
     ///
     /// All future events of this dial will be associated with this ID.
-    /// See [`DialFailure`](crate::DialFailure) and [`ConnectionEstablished`](crate::behaviour::ConnectionEstablished).
+    /// See [`DialFailure`](crate::DialFailure) and
+    /// [`ConnectionEstablished`](crate::behaviour::ConnectionEstablished).
     pub fn connection_id(&self) -> ConnectionId {
         self.connection_id
     }
@@ -189,7 +190,8 @@ impl WithPeerId {
     }
 
     /// Override
-    /// Number of addresses concurrently dialed for a single outbound connection attempt.
+    /// Number of addresses concurrently dialed for a single outbound connection
+    /// attempt.
     pub fn override_dial_concurrency_factor(mut self, factor: NonZeroU8) -> Self {
         self.dial_concurrency_factor_override = Some(factor);
         self
@@ -255,7 +257,8 @@ impl WithPeerIdWithAddresses {
     fn_allocate_new_port!();
 
     /// Override
-    /// Number of addresses concurrently dialed for a single outbound connection attempt.
+    /// Number of addresses concurrently dialed for a single outbound connection
+    /// attempt.
     pub fn override_dial_concurrency_factor(mut self, factor: NonZeroU8) -> Self {
         self.dial_concurrency_factor_override = Some(factor);
         self
@@ -324,8 +327,8 @@ impl WithoutPeerIdWithAddress {
 /// # use libp2p_identity::PeerId;
 /// #
 /// DialOpts::peer_id(PeerId::random())
-///    .condition(PeerCondition::Disconnected)
-///    .build();
+///     .condition(PeerCondition::Disconnected)
+///     .build();
 /// ```
 #[derive(Debug, Copy, Clone, Default)]
 pub enum PeerCondition {

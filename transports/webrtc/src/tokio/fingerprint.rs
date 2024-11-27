@@ -24,7 +24,8 @@ const SHA256: &str = "sha-256";
 
 type Multihash = multihash::Multihash<64>;
 
-/// A certificate fingerprint that is assumed to be created using the SHA256 hash algorithm.
+/// A certificate fingerprint that is assumed to be created using the SHA256
+/// hash algorithm.
 #[derive(Debug, Eq, PartialEq, Copy, Clone)]
 pub struct Fingerprint(libp2p_webrtc_utils::Fingerprint);
 

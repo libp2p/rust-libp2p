@@ -18,19 +18,22 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use asynchronous_codec::{Decoder, Encoder};
-use bytes::{BufMut, Bytes, BytesMut};
-use libp2p_core::Endpoint;
 use std::{
     fmt,
     hash::{Hash, Hasher},
-    io, mem,
+    io,
+    mem,
 };
+
+use asynchronous_codec::{Decoder, Encoder};
+use bytes::{BufMut, Bytes, BytesMut};
+use libp2p_core::Endpoint;
 use unsigned_varint::{codec, encode};
 
 // Maximum size for a packet: 1MB as per the spec.
-// Since data is entirely buffered before being dispatched, we need a limit or remotes could just
-// send a 4 TB-long packet full of zeroes that we kill our process with an OOM error.
+// Since data is entirely buffered before being dispatched, we need a limit or
+// remotes could just send a 4 TB-long packet full of zeroes that we kill our
+// process with an OOM error.
 pub(crate) const MAX_FRAME_SIZE: usize = 1024 * 1024;
 
 /// A unique identifier used by the local node for a substream.
@@ -41,13 +44,18 @@ pub(crate) const MAX_FRAME_SIZE: usize = 1024 * 1024;
 /// > **Note**: Streams are identified by a number and a role encoded as a flag
 /// > on each frame that is either odd (for receivers) or even (for initiators).
 /// > `Open` frames do not have a flag, but are sent unidirectionally. As a
-/// > consequence, we need to remember if a stream was initiated by us or remotely
+/// > consequence, we need to remember if a stream was initiated by us or
+/// > remotely
 /// > and we store the information from our point of view as a `LocalStreamId`,
-/// > i.e. receiving an `Open` frame results in a local ID with role `Endpoint::Listener`,
-/// > whilst sending an `Open` frame results in a local ID with role `Endpoint::Dialer`.
-/// > Receiving a frame with a flag identifying the remote as a "receiver" means that
+/// > i.e. receiving an `Open` frame results in a local ID with role
+/// > `Endpoint::Listener`,
+/// > whilst sending an `Open` frame results in a local ID with role
+/// > `Endpoint::Dialer`.
+/// > Receiving a frame with a flag identifying the remote as a "receiver" means
+/// > that
 /// > we initiated the stream, so the local ID has the role `Endpoint::Dialer`.
-/// > Conversely, when receiving a frame with a flag identifying the remote as a "sender",
+/// > Conversely, when receiving a frame with a flag identifying the remote as a
+/// > "sender",
 /// > the corresponding local ID has the role `Endpoint::Listener`.
 #[derive(Copy, Clone, Eq, Debug)]
 pub(crate) struct LocalStreamId {
@@ -66,11 +74,11 @@ impl fmt::Display for LocalStreamId {
 
 /// Manual implementation of [`PartialEq`].
 ///
-/// This is equivalent to the derived one but we purposely don't derive it because it triggers the
-/// `clippy::derive_hash_xor_eq` lint.
+/// This is equivalent to the derived one but we purposely don't derive it
+/// because it triggers the `clippy::derive_hash_xor_eq` lint.
 ///
-/// This [`PartialEq`] implementation satisfies the rule of v1 == v2 -> hash(v1) == hash(v2).
-/// The inverse is not true but does not have to be.
+/// This [`PartialEq`] implementation satisfies the rule of v1 == v2 -> hash(v1)
+/// == hash(v2). The inverse is not true but does not have to be.
 impl PartialEq for LocalStreamId {
     fn eq(&self, other: &Self) -> bool {
         self.num.eq(&other.num) && self.role.eq(&other.role)

@@ -21,17 +21,17 @@
 mod connecting;
 mod stream;
 
-pub use connecting::Connecting;
-pub use stream::Stream;
-
-use crate::{ConnectionError, Error};
-
-use futures::{future::BoxFuture, FutureExt};
-use libp2p_core::muxing::{StreamMuxer, StreamMuxerEvent};
 use std::{
     pin::Pin,
     task::{Context, Poll},
 };
+
+pub use connecting::Connecting;
+use futures::{future::BoxFuture, FutureExt};
+use libp2p_core::muxing::{StreamMuxer, StreamMuxerEvent};
+pub use stream::Stream;
+
+use crate::{ConnectionError, Error};
 
 /// State for a single opened QUIC connection.
 pub struct Connection {
@@ -52,8 +52,9 @@ pub struct Connection {
 impl Connection {
     /// Build a [`Connection`] from raw components.
     ///
-    /// This function assumes that the [`quinn::Connection`] is completely fresh and none of
-    /// its methods has ever been called. Failure to comply might lead to logic errors and panics.
+    /// This function assumes that the [`quinn::Connection`] is completely fresh
+    /// and none of its methods has ever been called. Failure to comply
+    /// might lead to logic errors and panics.
     fn new(connection: quinn::Connection) -> Self {
         Self {
             connection,

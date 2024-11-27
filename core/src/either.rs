@@ -18,17 +18,20 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::muxing::StreamMuxerEvent;
-use crate::transport::DialOpts;
-use crate::{
-    muxing::StreamMuxer,
-    transport::{ListenerId, Transport, TransportError, TransportEvent},
-    Multiaddr,
+use std::{
+    pin::Pin,
+    task::{Context, Poll},
 };
+
 use either::Either;
 use futures::prelude::*;
 use pin_project::pin_project;
-use std::{pin::Pin, task::Context, task::Poll};
+
+use crate::{
+    muxing::{StreamMuxer, StreamMuxerEvent},
+    transport::{DialOpts, ListenerId, Transport, TransportError, TransportEvent},
+    Multiaddr,
+};
 
 impl<A, B> StreamMuxer for future::Either<A, B>
 where
@@ -88,7 +91,8 @@ where
     }
 }
 
-/// Implements `Future` and dispatches all method calls to either `First` or `Second`.
+/// Implements `Future` and dispatches all method calls to either `First` or
+/// `Second`.
 #[pin_project(project = EitherFutureProj)]
 #[derive(Debug, Copy, Clone)]
 #[must_use = "futures do nothing unless polled"]

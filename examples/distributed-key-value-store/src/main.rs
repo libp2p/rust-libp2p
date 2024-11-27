@@ -20,17 +20,18 @@
 
 #![doc = include_str!("../README.md")]
 
+use std::{error::Error, time::Duration};
+
 use futures::stream::StreamExt;
-use libp2p::kad;
-use libp2p::kad::store::MemoryStore;
-use libp2p::kad::Mode;
 use libp2p::{
-    mdns, noise,
+    kad,
+    kad::{store::MemoryStore, Mode},
+    mdns,
+    noise,
     swarm::{NetworkBehaviour, SwarmEvent},
-    tcp, yamux,
+    tcp,
+    yamux,
 };
-use std::error::Error;
-use std::time::Duration;
 use tokio::{
     io::{self, AsyncBufReadExt},
     select,

@@ -18,18 +18,21 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
+use std::{
+    collections::{HashMap, HashSet},
+    net::IpAddr,
+    time::Duration,
+};
+
 use crate::TopicHash;
-use std::collections::{HashMap, HashSet};
-use std::net::IpAddr;
-use std::time::Duration;
 
 /// The default number of seconds for a decay interval.
 const DEFAULT_DECAY_INTERVAL: u64 = 1;
 /// The default rate to decay to 0.
 const DEFAULT_DECAY_TO_ZERO: f64 = 0.1;
 
-/// Computes the decay factor for a parameter, assuming the `decay_interval` is 1s
-/// and that the value decays to zero if it drops below 0.01.
+/// Computes the decay factor for a parameter, assuming the `decay_interval` is
+/// 1s and that the value decays to zero if it drops below 0.01.
 pub fn score_parameter_decay(decay: Duration) -> f64 {
     score_parameter_decay_with_base(
         decay,
@@ -38,7 +41,8 @@ pub fn score_parameter_decay(decay: Duration) -> f64 {
     )
 }
 
-/// Computes the decay factor for a parameter using base as the `decay_interval`.
+/// Computes the decay factor for a parameter using base as the
+/// `decay_interval`.
 pub fn score_parameter_decay_with_base(decay: Duration, base: Duration, decay_to_zero: f64) -> f64 {
     // the decay is linear, so after n ticks the value is factor^n
     // so factor^n = decay_to_zero => factor = decay_to_zero^(1/n)
@@ -53,16 +57,18 @@ pub struct PeerScoreThresholds {
     pub gossip_threshold: f64,
 
     /// The score threshold below which we shouldn't publish when using flood
-    /// publishing (also applies to fanout peers); should be negative and <= `gossip_threshold`.
+    /// publishing (also applies to fanout peers); should be negative and <=
+    /// `gossip_threshold`.
     pub publish_threshold: f64,
 
-    /// The score threshold below which message processing is suppressed altogether,
-    /// implementing an effective graylist according to peer score; should be negative and
-    /// <= `publish_threshold`.
+    /// The score threshold below which message processing is suppressed
+    /// altogether, implementing an effective graylist according to peer
+    /// score; should be negative and <= `publish_threshold`.
     pub graylist_threshold: f64,
 
-    /// The score threshold below which px will be ignored; this should be positive
-    /// and limited to scores attainable by bootstrappers and other trusted nodes.
+    /// The score threshold below which px will be ignored; this should be
+    /// positive and limited to scores attainable by bootstrappers and other
+    /// trusted nodes.
     pub accept_px_threshold: f64,
 
     /// The median mesh score threshold before triggering opportunistic
@@ -108,33 +114,38 @@ pub struct PeerScoreParams {
     /// Score parameters per topic.
     pub topics: HashMap<TopicHash, TopicScoreParams>,
 
-    /// Aggregate topic score cap; this limits the total contribution of topics towards a positive
-    /// score. It must be positive (or 0 for no cap).
+    /// Aggregate topic score cap; this limits the total contribution of topics
+    /// towards a positive score. It must be positive (or 0 for no cap).
     pub topic_score_cap: f64,
 
     /// P5: Application-specific peer scoring
     pub app_specific_weight: f64,
 
     ///  P6: IP-colocation factor.
-    ///  The parameter has an associated counter which counts the number of peers with the same IP.
-    ///  If the number of peers in the same IP exceeds `ip_colocation_factor_threshold, then the value
-    ///  is the square of the difference, ie `(peers_in_same_ip - ip_colocation_threshold)^2`.
-    ///  If the number of peers in the same IP is less than the threshold, then the value is 0.
-    ///  The weight of the parameter MUST be negative, unless you want to disable for testing.
-    ///  Note: In order to simulate many IPs in a manageable manner when testing, you can set the weight to 0
-    ///        thus disabling the IP colocation penalty.
+    ///  The parameter has an associated counter which counts the number of
+    /// peers with the same IP.  If the number of peers in the same IP
+    /// exceeds `ip_colocation_factor_threshold, then the value
+    ///  is the square of the difference, ie `(peers_in_same_ip -
+    /// ip_colocation_threshold)^2`.  If the number of peers in the same IP
+    /// is less than the threshold, then the value is 0.  The weight of the
+    /// parameter MUST be negative, unless you want to disable for testing.
+    ///  Note: In order to simulate many IPs in a manageable manner when
+    /// testing, you can set the weight to 0        thus disabling the IP
+    /// colocation penalty.
     pub ip_colocation_factor_weight: f64,
     pub ip_colocation_factor_threshold: f64,
     pub ip_colocation_factor_whitelist: HashSet<IpAddr>,
 
     ///  P7: behavioural pattern penalties.
-    ///  This parameter has an associated counter which tracks misbehaviour as detected by the
-    ///  router. The router currently applies penalties for the following behaviors:
+    ///  This parameter has an associated counter which tracks misbehaviour as
+    /// detected by the  router. The router currently applies penalties for
+    /// the following behaviors:
     ///  - attempting to re-graft before the prune backoff time has elapsed.
-    ///  - not following up in IWANT requests for messages advertised with IHAVE.
+    ///  - not following up in IWANT requests for messages advertised with
+    ///    IHAVE.
     ///
-    ///  The value of the parameter is the square of the counter over the threshold, which decays
-    ///  with BehaviourPenaltyDecay.
+    ///  The value of the parameter is the square of the counter over the
+    /// threshold, which decays  with BehaviourPenaltyDecay.
     ///  The weight of the parameter MUST be negative (or zero to disable).
     pub behaviour_penalty_weight: f64,
     pub behaviour_penalty_threshold: f64,
@@ -150,8 +161,9 @@ pub struct PeerScoreParams {
     pub retain_score: Duration,
 
     /// Slow peer penalty conditions,
-    /// by default `slow_peer_weight` is 50 times lower than `behaviour_penalty_weight`
-    /// i.e. 50 slow peer penalties match 1 behaviour penalty.
+    /// by default `slow_peer_weight` is 50 times lower than
+    /// `behaviour_penalty_weight` i.e. 50 slow peer penalties match 1
+    /// behaviour penalty.
     pub slow_peer_weight: f64,
     pub slow_peer_threshold: f64,
     pub slow_peer_decay: f64,
@@ -227,7 +239,8 @@ impl PeerScoreParams {
             return Err("Invalid decay_to_zero; must be between 0 and 1".into());
         }
 
-        // no need to check the score retention; a value of 0 means that we don't retain scores
+        // no need to check the score retention; a value of 0 means that we don't retain
+        // scores
         Ok(())
     }
 }
@@ -239,15 +252,17 @@ pub struct TopicScoreParams {
 
     ///  P1: time in the mesh
     ///  This is the time the peer has been grafted in the mesh.
-    ///  The value of the parameter is the `time/time_in_mesh_quantum`, capped by `time_in_mesh_cap`
-    ///  The weight of the parameter must be positive (or zero to disable).
+    ///  The value of the parameter is the `time/time_in_mesh_quantum`, capped
+    /// by `time_in_mesh_cap`  The weight of the parameter must be positive
+    /// (or zero to disable).
     pub time_in_mesh_weight: f64,
     pub time_in_mesh_quantum: Duration,
     pub time_in_mesh_cap: f64,
 
     ///  P2: first message deliveries
     ///  This is the number of message deliveries in the topic.
-    ///  The value of the parameter is a counter, decaying with `first_message_deliveries_decay`, and capped
+    ///  The value of the parameter is a counter, decaying with
+    /// `first_message_deliveries_decay`, and capped
     ///  by `first_message_deliveries_cap`.
     ///  The weight of the parameter MUST be positive (or zero to disable).
     pub first_message_deliveries_weight: f64,
@@ -256,18 +271,21 @@ pub struct TopicScoreParams {
 
     ///  P3: mesh message deliveries
     ///  This is the number of message deliveries in the mesh, within the
-    ///  `mesh_message_deliveries_window` of message validation; deliveries during validation also
-    ///  count and are retroactively applied when validation succeeds.
-    ///  This window accounts for the minimum time before a hostile mesh peer trying to game the
-    ///  score could replay back a valid message we just sent them.
-    ///  It effectively tracks first and near-first deliveries, ie a message seen from a mesh peer
+    ///  `mesh_message_deliveries_window` of message validation; deliveries
+    /// during validation also  count and are retroactively applied when
+    /// validation succeeds.  This window accounts for the minimum time
+    /// before a hostile mesh peer trying to game the  score could replay
+    /// back a valid message we just sent them.  It effectively tracks first
+    /// and near-first deliveries, ie a message seen from a mesh peer
     ///  before we have forwarded it to them.
-    ///  The parameter has an associated counter, decaying with `mesh_message_deliveries_decay`.
-    ///  If the counter exceeds the threshold, its value is 0.
-    ///  If the counter is below the `mesh_message_deliveries_threshold`, the value is the square of
-    ///  the deficit, ie (`message_deliveries_threshold - counter)^2`
-    ///  The penalty is only activated after `mesh_message_deliveries_activation` time in the mesh.
-    ///  The weight of the parameter MUST be negative (or zero to disable).
+    ///  The parameter has an associated counter, decaying with
+    /// `mesh_message_deliveries_decay`.  If the counter exceeds the
+    /// threshold, its value is 0.  If the counter is below the
+    /// `mesh_message_deliveries_threshold`, the value is the square of  the
+    /// deficit, ie (`message_deliveries_threshold - counter)^2`
+    ///  The penalty is only activated after
+    /// `mesh_message_deliveries_activation` time in the mesh.  The weight
+    /// of the parameter MUST be negative (or zero to disable).
     pub mesh_message_deliveries_weight: f64,
     pub mesh_message_deliveries_decay: f64,
     pub mesh_message_deliveries_cap: f64,
@@ -276,8 +294,8 @@ pub struct TopicScoreParams {
     pub mesh_message_deliveries_activation: Duration,
 
     ///  P3b: sticky mesh propagation failures
-    ///  This is a sticky penalty that applies when a peer gets pruned from the mesh with an active
-    ///  mesh message delivery penalty.
+    ///  This is a sticky penalty that applies when a peer gets pruned from the
+    /// mesh with an active  mesh message delivery penalty.
     ///  The weight of the parameter MUST be negative (or zero to disable)
     pub mesh_failure_penalty_weight: f64,
     pub mesh_failure_penalty_decay: f64,

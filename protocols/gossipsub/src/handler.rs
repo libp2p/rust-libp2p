@@ -18,44 +18,56 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::protocol::{GossipsubCodec, ProtocolConfig};
-use crate::rpc::Receiver;
-use crate::rpc_proto::proto;
-use crate::types::{PeerKind, RawMessage, Rpc, RpcOut};
-use crate::ValidationError;
-use asynchronous_codec::Framed;
-use futures::future::Either;
-use futures::prelude::*;
-use futures::StreamExt;
-use libp2p_core::upgrade::DeniedUpgrade;
-use libp2p_swarm::handler::{
-    ConnectionEvent, ConnectionHandler, ConnectionHandlerEvent, DialUpgradeError,
-    FullyNegotiatedInbound, FullyNegotiatedOutbound, StreamUpgradeError, SubstreamProtocol,
-};
-use libp2p_swarm::Stream;
 use std::{
     pin::Pin,
     task::{Context, Poll},
 };
+
+use asynchronous_codec::Framed;
+use futures::{future::Either, prelude::*, StreamExt};
+use libp2p_core::upgrade::DeniedUpgrade;
+use libp2p_swarm::{
+    handler::{
+        ConnectionEvent,
+        ConnectionHandler,
+        ConnectionHandlerEvent,
+        DialUpgradeError,
+        FullyNegotiatedInbound,
+        FullyNegotiatedOutbound,
+        StreamUpgradeError,
+        SubstreamProtocol,
+    },
+    Stream,
+};
 use web_time::Instant;
 
-/// The event emitted by the Handler. This informs the behaviour of various events created
-/// by the handler.
+use crate::{
+    protocol::{GossipsubCodec, ProtocolConfig},
+    rpc::Receiver,
+    rpc_proto::proto,
+    types::{PeerKind, RawMessage, Rpc, RpcOut},
+    ValidationError,
+};
+
+/// The event emitted by the Handler. This informs the behaviour of various
+/// events created by the handler.
 #[derive(Debug)]
 pub enum HandlerEvent {
-    /// A GossipsubRPC message has been received. This also contains a list of invalid messages (if
-    /// any) that were received.
+    /// A GossipsubRPC message has been received. This also contains a list of
+    /// invalid messages (if any) that were received.
     Message {
         /// The GossipsubRPC message excluding any invalid messages.
         rpc: Rpc,
-        /// Any invalid messages that were received in the RPC, along with the associated
-        /// validation error.
+        /// Any invalid messages that were received in the RPC, along with the
+        /// associated validation error.
         invalid_messages: Vec<(RawMessage, ValidationError)>,
     },
-    /// An inbound or outbound substream has been established with the peer and this informs over
-    /// which protocol. This message only occurs once per connection.
+    /// An inbound or outbound substream has been established with the peer and
+    /// this informs over which protocol. This message only occurs once per
+    /// connection.
     PeerKind(PeerKind),
-    /// A message to be published was dropped because it could not be sent in time.
+    /// A message to be published was dropped because it could not be sent in
+    /// time.
     MessageDropped(RpcOut),
 }
 
@@ -71,10 +83,10 @@ pub enum HandlerIn {
 
 /// The maximum number of inbound or outbound substreams attempts we allow.
 ///
-/// Gossipsub is supposed to have a single long-lived inbound and outbound substream. On failure we
-/// attempt to recreate these. This imposes an upper bound of new substreams before we consider the
-/// connection faulty and disable the handler. This also prevents against potential substream
-/// creation loops.
+/// Gossipsub is supposed to have a single long-lived inbound and outbound
+/// substream. On failure we attempt to recreate these. This imposes an upper
+/// bound of new substreams before we consider the connection faulty and disable
+/// the handler. This also prevents against potential substream creation loops.
 const MAX_SUBSTREAM_ATTEMPTS: usize = 5;
 
 #[allow(clippy::large_enum_variant)]
@@ -97,8 +109,8 @@ pub struct EnabledHandler {
     /// Queue of values that we want to send to the remote
     send_queue: Receiver,
 
-    /// Flag indicating that an outbound substream is being established to prevent duplicate
-    /// requests.
+    /// Flag indicating that an outbound substream is being established to
+    /// prevent duplicate requests.
     outbound_substream_establishing: bool,
 
     /// The number of outbound substreams we have requested.
@@ -111,33 +123,34 @@ pub struct EnabledHandler {
     peer_kind: Option<PeerKind>,
 
     /// Keeps track on whether we have sent the peer kind to the behaviour.
-    //
     // NOTE: Use this flag rather than checking the substream count each poll.
     peer_kind_sent: bool,
 
     last_io_activity: Instant,
 
-    /// Keeps track of whether this connection is for a peer in the mesh. This is used to make
-    /// decisions about the keep alive state for this connection.
+    /// Keeps track of whether this connection is for a peer in the mesh. This
+    /// is used to make decisions about the keep alive state for this
+    /// connection.
     in_mesh: bool,
 }
 
 pub enum DisabledHandler {
-    /// If the peer doesn't support the gossipsub protocol we do not immediately disconnect.
-    /// Rather, we disable the handler and prevent any incoming or outgoing substreams from being
-    /// established.
+    /// If the peer doesn't support the gossipsub protocol we do not immediately
+    /// disconnect. Rather, we disable the handler and prevent any incoming
+    /// or outgoing substreams from being established.
     ProtocolUnsupported {
         /// Keeps track on whether we have sent the peer kind to the behaviour.
         peer_kind_sent: bool,
     },
-    /// The maximum number of inbound or outbound substream attempts have happened and thereby the
-    /// handler has been disabled.
+    /// The maximum number of inbound or outbound substream attempts have
+    /// happened and thereby the handler has been disabled.
     MaxSubstreamAttempts,
 }
 
 /// State of the inbound substream, opened either by us or by the remote.
 enum InboundSubstreamState {
-    /// Waiting for a message from the remote. The idle state for an inbound substream.
+    /// Waiting for a message from the remote. The idle state for an inbound
+    /// substream.
     WaitingInput(Framed<Stream, GossipsubCodec>),
     /// The substream is being closed.
     Closing(Framed<Stream, GossipsubCodec>),
@@ -147,7 +160,8 @@ enum InboundSubstreamState {
 
 /// State of the outbound substream, opened either by us or by the remote.
 enum OutboundSubstreamState {
-    /// Waiting for the user to send a message. The idle state for an outbound substream.
+    /// Waiting for the user to send a message. The idle state for an outbound
+    /// substream.
     WaitingOutput(Framed<Stream, GossipsubCodec>),
     /// Waiting to send a message to the remote.
     PendingSend(Framed<Stream, GossipsubCodec>, proto::RPC),

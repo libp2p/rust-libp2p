@@ -31,29 +31,33 @@
 //! # #[cfg(feature = "async-std")]
 //! # fn main() -> std::io::Result<()> {
 //! #
+//! use libp2p_core::{transport::ListenerId, Multiaddr, Transport};
 //! use libp2p_quic as quic;
-//! use libp2p_core::{Multiaddr, Transport, transport::ListenerId};
 //!
 //! let keypair = libp2p_identity::Keypair::generate_ed25519();
 //! let quic_config = quic::Config::new(&keypair);
 //!
 //! let mut quic_transport = quic::async_std::Transport::new(quic_config);
 //!
-//! let addr = "/ip4/127.0.0.1/udp/12345/quic-v1".parse().expect("address should be valid");
-//! quic_transport.listen_on(ListenerId::next(), addr).expect("listen error.");
+//! let addr = "/ip4/127.0.0.1/udp/12345/quic-v1"
+//!     .parse()
+//!     .expect("address should be valid");
+//! quic_transport
+//!     .listen_on(ListenerId::next(), addr)
+//!     .expect("listen error.");
 //! #
 //! # Ok(())
 //! # }
 //! ```
 //!
-//! The [`GenTransport`] struct implements the [`libp2p_core::Transport`]. See the
-//! documentation of [`libp2p_core`] and of libp2p in general to learn how to use the
-//! [`Transport`][libp2p_core::Transport] trait.
+//! The [`GenTransport`] struct implements the [`libp2p_core::Transport`]. See
+//! the documentation of [`libp2p_core`] and of libp2p in general to learn how
+//! to use the [`Transport`][libp2p_core::Transport] trait.
 //!
-//! Note that QUIC provides transport, security, and multiplexing in a single protocol.  Therefore,
-//! QUIC connections do not need to be upgraded. You will get a compile-time error if you try.
-//! Instead, you must pass all needed configuration into the constructor.
-//!
+//! Note that QUIC provides transport, security, and multiplexing in a single
+//! protocol.  Therefore, QUIC connections do not need to be upgraded. You will
+//! get a compile-time error if you try. Instead, you must pass all needed
+//! configuration into the constructor.
 
 #![cfg_attr(docsrs, feature(doc_cfg, doc_auto_cfg))]
 
@@ -67,7 +71,6 @@ use std::net::SocketAddr;
 
 pub use config::Config;
 pub use connection::{Connecting, Connection, Stream};
-
 #[cfg(feature = "async-std")]
 pub use provider::async_std;
 #[cfg(feature = "tokio")]
@@ -94,7 +97,8 @@ pub enum Error {
     #[error("Handshake with the remote timed out.")]
     HandshakeTimedOut,
 
-    /// Error when `Transport::dial_as_listener` is called without an active listener.
+    /// Error when `Transport::dial_as_listener` is called without an active
+    /// listener.
     #[error("Tried to dial as listener without an active listener.")]
     NoActiveListenerForDialAsListener,
 

@@ -1,5 +1,6 @@
 use std::{
     collections::{HashMap, VecDeque},
+    fmt::{Debug, Display, Formatter},
     task::{Context, Poll},
     time::Duration,
 };
@@ -10,26 +11,33 @@ use futures_timer::Delay;
 use libp2p_core::{transport::PortUse, Endpoint, Multiaddr};
 use libp2p_identity::PeerId;
 use libp2p_swarm::{
-    behaviour::ConnectionEstablished, ConnectionClosed, ConnectionDenied, ConnectionHandler,
-    ConnectionId, FromSwarm, NetworkBehaviour, NewExternalAddrCandidate, NotifyHandler, ToSwarm,
+    behaviour::ConnectionEstablished,
+    ConnectionClosed,
+    ConnectionDenied,
+    ConnectionHandler,
+    ConnectionId,
+    FromSwarm,
+    NetworkBehaviour,
+    NewExternalAddrCandidate,
+    NotifyHandler,
+    ToSwarm,
 };
 use rand::prelude::*;
 use rand_core::OsRng;
-use std::fmt::{Debug, Display, Formatter};
-
-use crate::v2::{protocol::DialRequest, Nonce};
 
 use super::handler::{
     dial_back::{self, IncomingNonce},
     dial_request,
 };
+use crate::v2::{protocol::DialRequest, Nonce};
 
 #[derive(Debug, Clone, Copy)]
 pub struct Config {
     /// How many candidates we will test at most.
     pub(crate) max_candidates: usize,
 
-    /// The interval at which we will attempt to confirm candidates as external addresses.
+    /// The interval at which we will attempt to confirm candidates as external
+    /// addresses.
     pub(crate) probe_interval: Duration,
 }
 
@@ -281,10 +289,13 @@ where
         }
     }
 
-    /// Issues dial requests to random AutoNAT servers for the most frequently reported, untested candidates.
+    /// Issues dial requests to random AutoNAT servers for the most frequently
+    /// reported, untested candidates.
     ///
-    /// In the current implementation, we only send a single address to each AutoNAT server.
-    /// This spreads our candidates out across all servers we are connected to which should give us pretty fast feedback on all of them.
+    /// In the current implementation, we only send a single address to each
+    /// AutoNAT server. This spreads our candidates out across all servers
+    /// we are connected to which should give us pretty fast feedback on all of
+    /// them.
     fn issue_dial_requests_for_untested_candidates(&mut self) {
         for addr in self.untested_candidates() {
             let Some((conn_id, peer_id)) = self.random_autonat_server() else {
@@ -309,9 +320,11 @@ where
         }
     }
 
-    /// Returns all untested candidates, sorted by the frequency they were reported at.
+    /// Returns all untested candidates, sorted by the frequency they were
+    /// reported at.
     ///
-    /// More frequently reported candidates are considered to more likely be external addresses and thus tested first.
+    /// More frequently reported candidates are considered to more likely be
+    /// external addresses and thus tested first.
     fn untested_candidates(&self) -> impl Iterator<Item = Multiaddr> {
         let mut entries = self
             .address_candidates
@@ -333,7 +346,9 @@ where
             .map(|(addr, _)| addr)
     }
 
-    /// Chooses an active connection to one of our peers that reported support for the [`DIAL_REQUEST_PROTOCOL`](crate::v2::DIAL_REQUEST_PROTOCOL) protocol.
+    /// Chooses an active connection to one of our peers that reported support
+    /// for the [`DIAL_REQUEST_PROTOCOL`](crate::v2::DIAL_REQUEST_PROTOCOL)
+    /// protocol.
     fn random_autonat_server(&mut self) -> Option<(ConnectionId, PeerId)> {
         let (conn_id, info) = self
             .peer_info

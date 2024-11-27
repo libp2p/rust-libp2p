@@ -23,19 +23,28 @@
 //! This module handles a verification of a client/server certificate chain
 //! and signatures allegedly by the given certificates.
 
-use crate::certificate;
+use std::sync::Arc;
+
 use libp2p_identity::PeerId;
 use rustls::{
     client::danger::{HandshakeSignatureValid, ServerCertVerified, ServerCertVerifier},
     crypto::ring::cipher_suite::{
-        TLS13_AES_128_GCM_SHA256, TLS13_AES_256_GCM_SHA384, TLS13_CHACHA20_POLY1305_SHA256,
+        TLS13_AES_128_GCM_SHA256,
+        TLS13_AES_256_GCM_SHA384,
+        TLS13_CHACHA20_POLY1305_SHA256,
     },
     pki_types::CertificateDer,
     server::danger::{ClientCertVerified, ClientCertVerifier},
-    CertificateError, DigitallySignedStruct, DistinguishedName, OtherError, SignatureScheme,
-    SupportedCipherSuite, SupportedProtocolVersion,
+    CertificateError,
+    DigitallySignedStruct,
+    DistinguishedName,
+    OtherError,
+    SignatureScheme,
+    SupportedCipherSuite,
+    SupportedProtocolVersion,
 };
-use std::sync::Arc;
+
+use crate::certificate;
 
 /// The protocol versions supported by this verifier.
 ///
@@ -56,7 +65,8 @@ pub(crate) static CIPHERSUITES: &[SupportedCipherSuite] = &[
 
 /// Implementation of the `rustls` certificate verification traits for libp2p.
 ///
-/// Only TLS 1.3 is supported. TLS 1.2 should be disabled in the configuration of `rustls`.
+/// Only TLS 1.3 is supported. TLS 1.2 should be disabled in the configuration
+/// of `rustls`.
 #[derive(Debug)]
 pub(crate) struct Libp2pCertificateVerifier {
     /// The peer ID we intend to connect to
@@ -205,8 +215,8 @@ impl ClientCertVerifier for Libp2pCertificateVerifier {
 /// MUST check these conditions and abort the connection attempt if
 /// (a) the presented certificate is not yet valid, OR
 /// (b) if it is expired.
-/// Endpoints MUST abort the connection attempt if more than one certificate is received,
-/// or if the certificate’s self-signature is not valid.
+/// Endpoints MUST abort the connection attempt if more than one certificate is
+/// received, or if the certificate’s self-signature is not valid.
 fn verify_presented_certs(
     end_entity: &CertificateDer,
     intermediates: &[CertificateDer],

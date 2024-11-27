@@ -18,6 +18,13 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
+use std::{
+    io,
+    net::{IpAddr, SocketAddr},
+    pin::Pin,
+    task::{Context, Poll, Waker},
+};
+
 use futures::{future::BoxFuture, prelude::*, stream::SelectAll};
 use if_watch::{tokio::IfWatcher, IfEvent};
 use libp2p_core::{
@@ -27,14 +34,6 @@ use libp2p_core::{
 use libp2p_identity as identity;
 use libp2p_identity::PeerId;
 use webrtc::peer_connection::configuration::RTCConfiguration;
-
-use std::net::IpAddr;
-use std::{
-    io,
-    net::SocketAddr,
-    pin::Pin,
-    task::{Context, Poll, Waker},
-};
 
 use crate::tokio::{
     certificate::Certificate,
@@ -60,8 +59,8 @@ impl Transport {
     ///
     /// ```
     /// use libp2p_identity as identity;
+    /// use libp2p_webrtc::tokio::{Certificate, Transport};
     /// use rand::thread_rng;
-    /// use libp2p_webrtc::tokio::{Transport, Certificate};
     ///
     /// let id_keys = identity::Keypair::generate_ed25519();
     /// let transport = Transport::new(id_keys, Certificate::generate(&mut thread_rng()).unwrap());
@@ -124,8 +123,8 @@ impl libp2p_core::Transport for Transport {
         dial_opts: DialOpts,
     ) -> Result<Self::Dial, TransportError<Self::Error>> {
         if dial_opts.role.is_listener() {
-            // TODO: As the listener of a WebRTC hole punch, we need to send a random UDP packet to the
-            // `addr`. See DCUtR specification below.
+            // TODO: As the listener of a WebRTC hole punch, we need to send a random UDP
+            // packet to the `addr`. See DCUtR specification below.
             //
             // https://github.com/libp2p/specs/blob/master/relay/DCUtR.md#the-protocol
             tracing::warn!("WebRTC hole punch is not yet supported");
@@ -196,7 +195,8 @@ struct ListenStream {
     /// Pending event to reported.
     pending_event: Option<<Self as Stream>::Item>,
 
-    /// The stream must be awaken after it has been closed to deliver the last event.
+    /// The stream must be awaken after it has been closed to deliver the last
+    /// event.
     close_listener_waker: Option<Waker>,
 }
 
@@ -231,8 +231,8 @@ impl ListenStream {
         })
     }
 
-    /// Report the listener as closed in a [`TransportEvent::ListenerClosed`] and
-    /// terminate the stream.
+    /// Report the listener as closed in a [`TransportEvent::ListenerClosed`]
+    /// and terminate the stream.
     fn close(&mut self, reason: Result<(), Error>) {
         match self.report_closed {
             Some(_) => tracing::debug!("Listener was already closed"),
@@ -294,7 +294,8 @@ impl ListenStream {
         Poll::Pending
     }
 
-    /// Constructs a [`Multiaddr`] for the given IP address that represents our listen address.
+    /// Constructs a [`Multiaddr`] for the given IP address that represents our
+    /// listen address.
     fn listen_multiaddress(&self, ip: IpAddr) -> Multiaddr {
         let socket_addr = SocketAddr::new(ip, self.listen_addr.port());
 
@@ -360,7 +361,8 @@ impl Stream for ListenStream {
     }
 }
 
-/// A config which holds peer's keys and a x509Cert used to authenticate WebRTC communications.
+/// A config which holds peer's keys and a x509Cert used to authenticate WebRTC
+/// communications.
 #[derive(Clone)]
 struct Config {
     inner: RTCConfiguration,
@@ -422,15 +424,18 @@ fn parse_webrtc_listen_addr(addr: &Multiaddr) -> Option<SocketAddr> {
     Some(SocketAddr::new(ip, port))
 }
 
-// Tests //////////////////////////////////////////////////////////////////////////////////////////
+// Tests ///////////////////////////////////////////////////////////////////////
+// ///////////////////
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use std::net::Ipv6Addr;
+
     use futures::future::poll_fn;
     use libp2p_core::Transport as _;
     use rand::thread_rng;
-    use std::net::Ipv6Addr;
+
+    use super::*;
 
     #[test]
     fn missing_webrtc_protocol() {
@@ -443,7 +448,8 @@ mod tests {
 
     #[test]
     fn tcp_is_invalid_protocol() {
-        let addr = "/ip4/127.0.0.1/tcp/12345/webrtc-direct/certhash/uEiDikp5KVUgkLta1EjUN-IKbHk-dUBg8VzKgf5nXxLK46w"
+        let addr = "/ip4/127.0.0.1/tcp/12345/webrtc-direct/certhash/\
+                    uEiDikp5KVUgkLta1EjUN-IKbHk-dUBg8VzKgf5nXxLK46w"
             .parse()
             .unwrap();
 
@@ -454,7 +460,8 @@ mod tests {
 
     #[test]
     fn cannot_follow_other_protocols_after_certhash() {
-        let addr = "/ip4/127.0.0.1/udp/12345/webrtc-direct/certhash/uEiDikp5KVUgkLta1EjUN-IKbHk-dUBg8VzKgf5nXxLK46w/tcp/12345"
+        let addr = "/ip4/127.0.0.1/udp/12345/webrtc-direct/certhash/\
+                    uEiDikp5KVUgkLta1EjUN-IKbHk-dUBg8VzKgf5nXxLK46w/tcp/12345"
             .parse()
             .unwrap();
 
@@ -477,11 +484,12 @@ mod tests {
 
     #[test]
     fn fails_to_parse_if_certhash_present_but_wrong_hash_function() {
-        // We only support SHA2-256 for now but this certhash has been encoded with SHA3-256.
-        let addr =
-            "/ip6/::1/udp/12345/webrtc-direct/certhash/uFiCH_tkkzpAwkoIDbE4I7QtQksFMYs5nQ4MyYrkgCJYi4A"
-                .parse()
-                .unwrap();
+        // We only support SHA2-256 for now but this certhash has been encoded with
+        // SHA3-256.
+        let addr = "/ip6/::1/udp/12345/webrtc-direct/certhash/\
+                    uFiCH_tkkzpAwkoIDbE4I7QtQksFMYs5nQ4MyYrkgCJYi4A"
+            .parse()
+            .unwrap();
 
         let maybe_addr = parse_webrtc_listen_addr(&addr);
 
@@ -498,8 +506,8 @@ mod tests {
             .now_or_never()
             .is_none());
 
-        // Run test twice to check that there is no unexpected behaviour if `QuicTransport.listener`
-        // is temporarily empty.
+        // Run test twice to check that there is no unexpected behaviour if
+        // `QuicTransport.listener` is temporarily empty.
         for _ in 0..2 {
             let listener = ListenerId::next();
             transport
@@ -540,8 +548,8 @@ mod tests {
                 }
                 e => panic!("Unexpected event: {e:?}"),
             }
-            // Poll once again so that the listener has the chance to return `Poll::Ready(None)` and
-            // be removed from the list of listeners.
+            // Poll once again so that the listener has the chance to return
+            // `Poll::Ready(None)` and be removed from the list of listeners.
             assert!(poll_fn(|cx| Pin::new(&mut transport).as_mut().poll(cx))
                 .now_or_never()
                 .is_none());

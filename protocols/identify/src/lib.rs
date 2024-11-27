@@ -28,21 +28,24 @@
 //!
 //! # Important Discrepancies
 //!
-//! - **Using Identify with other protocols** Unlike some other libp2p implementations,
-//!   rust-libp2p does not treat Identify as a core protocol. This means that other protocols cannot
-//!   rely upon the existence of Identify, and need to be manually hooked up to Identify in order to
-//!   make use of its capabilities.
+//! - **Using Identify with other protocols** Unlike some other libp2p
+//!   implementations, rust-libp2p does not treat Identify as a core protocol.
+//!   This means that other protocols cannot rely upon the existence of
+//!   Identify, and need to be manually hooked up to Identify in order to make
+//!   use of its capabilities.
 //!
 //! # Usage
 //!
-//! The [`Behaviour`] struct implements a [`NetworkBehaviour`](libp2p_swarm::NetworkBehaviour)
-//! that negotiates and executes the protocol on every established connection, emitting
-//! [`Event`]s.
+//! The [`Behaviour`] struct implements a
+//! [`NetworkBehaviour`](libp2p_swarm::NetworkBehaviour) that negotiates and
+//! executes the protocol on every established connection, emitting [`Event`]s.
 
 #![cfg_attr(docsrs, feature(doc_cfg, doc_auto_cfg))]
 
-pub use self::behaviour::{Behaviour, Config, Event};
-pub use self::protocol::{Info, UpgradeError, PROTOCOL_NAME, PUSH_PROTOCOL_NAME};
+pub use self::{
+    behaviour::{Behaviour, Config, Event},
+    protocol::{Info, UpgradeError, PROTOCOL_NAME, PUSH_PROTOCOL_NAME},
+};
 
 mod behaviour;
 mod handler;

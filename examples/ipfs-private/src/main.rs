@@ -20,23 +20,29 @@
 
 #![doc = include_str!("../README.md")]
 
+use std::{env, error::Error, fs, path::Path, str::FromStr, time::Duration};
+
 use either::Either;
 use futures::prelude::*;
 use libp2p::{
     core::transport::upgrade::Version,
-    gossipsub, identify,
+    gossipsub,
+    identify,
     multiaddr::Protocol,
-    noise, ping,
+    noise,
+    ping,
     pnet::{PnetConfig, PreSharedKey},
     swarm::{NetworkBehaviour, SwarmEvent},
-    tcp, yamux, Multiaddr, Transport,
+    tcp,
+    yamux,
+    Multiaddr,
+    Transport,
 };
-use std::{env, error::Error, fs, path::Path, str::FromStr, time::Duration};
 use tokio::{io, io::AsyncBufReadExt, select};
 use tracing_subscriber::EnvFilter;
 
-/// Get the current ipfs repo path, either from the IPFS_PATH environment variable or
-/// from the default $HOME/.ipfs
+/// Get the current ipfs repo path, either from the IPFS_PATH environment
+/// variable or from the default $HOME/.ipfs
 fn get_ipfs_path() -> Box<Path> {
     env::var("IPFS_PATH")
         .map(|ipfs_path| Path::new(&ipfs_path).into())
@@ -58,8 +64,9 @@ fn get_psk(path: &Path) -> std::io::Result<Option<String>> {
     }
 }
 
-/// for a multiaddr that ends with a peer id, this strips this suffix. Rust-libp2p
-/// only supports dialing to an address without providing the peer id.
+/// for a multiaddr that ends with a peer id, this strips this suffix.
+/// Rust-libp2p only supports dialing to an address without providing the peer
+/// id.
 fn strip_peer_id(addr: &mut Multiaddr) {
     let last = addr.pop();
     match last {
@@ -105,7 +112,8 @@ async fn main() -> Result<(), Box<dyn Error>> {
     // Create a Gosspipsub topic
     let gossipsub_topic = gossipsub::IdentTopic::new("chat");
 
-    // We create a custom network behaviour that combines gossipsub, ping and identify.
+    // We create a custom network behaviour that combines gossipsub, ping and
+    // identify.
     #[derive(NetworkBehaviour)]
     struct MyBehaviour {
         gossipsub: gossipsub::Behaviour,

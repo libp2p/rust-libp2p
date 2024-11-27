@@ -1,4 +1,10 @@
-use crate::protocol_stack;
+use std::{
+    convert::TryFrom as _,
+    io,
+    pin::Pin,
+    task::{Context, Poll},
+};
+
 use futures::{
     future::{MapOk, TryFutureExt},
     io::{IoSlice, IoSliceMut},
@@ -16,12 +22,8 @@ use prometheus_client::{
     metrics::{counter::Counter, family::Family},
     registry::{Registry, Unit},
 };
-use std::{
-    convert::TryFrom as _,
-    io,
-    pin::Pin,
-    task::{Context, Poll},
-};
+
+use crate::protocol_stack;
 
 #[derive(Debug, Clone)]
 #[pin_project::pin_project]
@@ -160,8 +162,8 @@ impl ConnectionMetrics {
     }
 }
 
-/// Wraps around a [`StreamMuxer`] and counts the number of bytes that go through all the opened
-/// streams.
+/// Wraps around a [`StreamMuxer`] and counts the number of bytes that go
+/// through all the opened streams.
 #[derive(Clone)]
 #[pin_project::pin_project]
 pub struct Muxer<SMInner> {
@@ -224,7 +226,8 @@ where
     }
 }
 
-/// Wraps around an [`AsyncRead`] + [`AsyncWrite`] and logs the bandwidth that goes through it.
+/// Wraps around an [`AsyncRead`] + [`AsyncWrite`] and logs the bandwidth that
+/// goes through it.
 #[pin_project::pin_project]
 pub struct InstrumentedStream<SMInner> {
     #[pin]

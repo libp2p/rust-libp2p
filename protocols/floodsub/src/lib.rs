@@ -35,18 +35,21 @@ mod proto {
     pub(crate) use self::floodsub::pb::{mod_RPC::SubOpts, Message, RPC};
 }
 
-pub use self::layer::{Floodsub, FloodsubEvent};
-pub use self::protocol::{FloodsubMessage, FloodsubRpc};
-pub use self::topic::Topic;
+pub use self::{
+    layer::{Floodsub, FloodsubEvent},
+    protocol::{FloodsubMessage, FloodsubRpc},
+    topic::Topic,
+};
 
 /// Configuration options for the Floodsub protocol.
 #[derive(Debug, Clone)]
 pub struct FloodsubConfig {
-    /// Peer id of the local node. Used for the source of the messages that we publish.
+    /// Peer id of the local node. Used for the source of the messages that we
+    /// publish.
     pub local_peer_id: PeerId,
 
-    /// `true` if messages published by local node should be propagated as messages received from
-    /// the network, `false` by default.
+    /// `true` if messages published by local node should be propagated as
+    /// messages received from the network, `false` by default.
     pub subscribe_local_messages: bool,
 }
 

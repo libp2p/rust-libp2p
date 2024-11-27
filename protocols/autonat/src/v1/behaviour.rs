@@ -21,31 +21,44 @@
 mod as_client;
 mod as_server;
 
-use crate::protocol::{AutoNatCodec, DialRequest, DialResponse, ResponseError};
-use crate::DEFAULT_PROTOCOL_NAME;
-use as_client::AsClient;
-pub use as_client::{OutboundProbeError, OutboundProbeEvent};
-use as_server::AsServer;
-pub use as_server::{InboundProbeError, InboundProbeEvent};
-use futures_timer::Delay;
-use libp2p_core::transport::PortUse;
-use libp2p_core::{multiaddr::Protocol, ConnectedPoint, Endpoint, Multiaddr};
-use libp2p_identity::PeerId;
-use libp2p_request_response::{
-    self as request_response, InboundRequestId, OutboundRequestId, ProtocolSupport, ResponseChannel,
-};
-use libp2p_swarm::{
-    behaviour::{AddressChange, ConnectionClosed, ConnectionEstablished, DialFailure, FromSwarm},
-    ConnectionDenied, ConnectionId, ListenAddresses, NetworkBehaviour, THandler, THandlerInEvent,
-    THandlerOutEvent, ToSwarm,
-};
 use std::{
     collections::{HashMap, HashSet, VecDeque},
     iter,
     task::{Context, Poll},
     time::Duration,
 };
+
+use as_client::AsClient;
+pub use as_client::{OutboundProbeError, OutboundProbeEvent};
+use as_server::AsServer;
+pub use as_server::{InboundProbeError, InboundProbeEvent};
+use futures_timer::Delay;
+use libp2p_core::{multiaddr::Protocol, transport::PortUse, ConnectedPoint, Endpoint, Multiaddr};
+use libp2p_identity::PeerId;
+use libp2p_request_response::{
+    self as request_response,
+    InboundRequestId,
+    OutboundRequestId,
+    ProtocolSupport,
+    ResponseChannel,
+};
+use libp2p_swarm::{
+    behaviour::{AddressChange, ConnectionClosed, ConnectionEstablished, DialFailure, FromSwarm},
+    ConnectionDenied,
+    ConnectionId,
+    ListenAddresses,
+    NetworkBehaviour,
+    THandler,
+    THandlerInEvent,
+    THandlerOutEvent,
+    ToSwarm,
+};
 use web_time::Instant;
+
+use crate::{
+    protocol::{AutoNatCodec, DialRequest, DialResponse, ResponseError},
+    DEFAULT_PROTOCOL_NAME,
+};
 
 /// Config for the [`Behaviour`].
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -56,10 +69,11 @@ pub struct Config {
     // Client Config
     /// Delay on init before starting the fist probe.
     pub boot_delay: Duration,
-    /// Interval in which the NAT should be tested again if max confidence was reached in a status.
+    /// Interval in which the NAT should be tested again if max confidence was
+    /// reached in a status.
     pub refresh_interval: Duration,
-    /// Interval in which the NAT status should be re-tried if it is currently unknown
-    /// or max confidence was not reached yet.
+    /// Interval in which the NAT status should be re-tried if it is currently
+    /// unknown or max confidence was not reached yet.
     pub retry_interval: Duration,
     /// Throttle period for re-using a peer as server for a dial-request.
     pub throttle_server_period: Duration,
@@ -74,14 +88,15 @@ pub struct Config {
     pub max_peer_addresses: usize,
     /// Max total dial requests done in `[Config::throttle_clients_period`].
     pub throttle_clients_global_max: usize,
-    /// Max dial requests done in `[Config::throttle_clients_period`] for a peer.
+    /// Max dial requests done in `[Config::throttle_clients_period`] for a
+    /// peer.
     pub throttle_clients_peer_max: usize,
     /// Period for throttling clients requests.
     pub throttle_clients_period: Duration,
-    /// As a server reject probes for clients that are observed at a non-global ip address.
-    /// Correspondingly as a client only pick peers as server that are not observed at a
-    /// private ip address. Note that this does not apply for servers that are added via
-    /// [`Behaviour::add_server`].
+    /// As a server reject probes for clients that are observed at a non-global
+    /// ip address. Correspondingly as a client only pick peers as server
+    /// that are not observed at a private ip address. Note that this does
+    /// not apply for servers that are added via [`Behaviour::add_server`].
     pub only_global_ips: bool,
 }
 
@@ -148,17 +163,21 @@ pub enum Event {
 
 /// [`NetworkBehaviour`] for AutoNAT.
 ///
-/// The behaviour frequently runs probes to determine whether the local peer is behind NAT and/ or a firewall, or
-/// publicly reachable.
-/// In a probe, a dial-back request is sent to a peer that is randomly selected from the list of fixed servers and
-/// connected peers. Upon receiving a dial-back request, the remote tries to dial the included addresses. When a
-/// first address was successfully dialed, a status Ok will be send back together with the dialed address. If no address
-/// can be reached a dial-error is send back.
-/// Based on the received response, the sender assumes themselves to be public or private.
-/// The status is retried in a frequency of [`Config::retry_interval`] or [`Config::retry_interval`], depending on whether
-/// enough confidence in the assumed NAT status was reached or not.
-/// The confidence increases each time a probe confirms the assumed status, and decreases if a different status is reported.
-/// If the confidence is 0, the status is flipped and the Behaviour will report the new status in an `OutEvent`.
+/// The behaviour frequently runs probes to determine whether the local peer is
+/// behind NAT and/ or a firewall, or publicly reachable.
+/// In a probe, a dial-back request is sent to a peer that is randomly selected
+/// from the list of fixed servers and connected peers. Upon receiving a
+/// dial-back request, the remote tries to dial the included addresses. When a
+/// first address was successfully dialed, a status Ok will be send back
+/// together with the dialed address. If no address can be reached a dial-error
+/// is send back. Based on the received response, the sender assumes themselves
+/// to be public or private. The status is retried in a frequency of
+/// [`Config::retry_interval`] or [`Config::retry_interval`], depending on
+/// whether enough confidence in the assumed NAT status was reached or not.
+/// The confidence increases each time a probe confirms the assumed status, and
+/// decreases if a different status is reported. If the confidence is 0, the
+/// status is flipped and the Behaviour will report the new status in an
+/// `OutEvent`.
 pub struct Behaviour {
     // Local peer id
     local_peer_id: PeerId,
@@ -195,11 +214,12 @@ pub struct Behaviour {
     ongoing_outbound: HashMap<OutboundRequestId, ProbeId>,
 
     // Connected peers with the observed address of each connection.
-    // If the endpoint of a connection is relayed or not global (in case of Config::only_global_ips),
-    // the observed address is `None`.
+    // If the endpoint of a connection is relayed or not global (in case of
+    // Config::only_global_ips), the observed address is `None`.
     connected: HashMap<PeerId, HashMap<ConnectionId, Option<Multiaddr>>>,
 
-    // Used servers in recent outbound probes that are throttled through Config::throttle_server_period.
+    // Used servers in recent outbound probes that are throttled through
+    // Config::throttle_server_period.
     throttled_servers: Vec<(PeerId, Instant)>,
 
     // Recent probes done for clients
@@ -245,7 +265,8 @@ impl Behaviour {
     }
 
     /// Assumed public address of the local peer.
-    /// Returns `None` in case of status [`NatStatus::Private`] or [`NatStatus::Unknown`].
+    /// Returns `None` in case of status [`NatStatus::Private`] or
+    /// [`NatStatus::Unknown`].
     pub fn public_address(&self) -> Option<&Multiaddr> {
         match &self.nat_status {
             NatStatus::Public(address) => Some(address),
@@ -264,8 +285,9 @@ impl Behaviour {
     }
 
     /// Add a peer to the list over servers that may be used for probes.
-    /// These peers are used for dial-request even if they are currently not connection, in which case a connection will be
-    /// establish before sending the dial-request.
+    /// These peers are used for dial-request even if they are currently not
+    /// connection, in which case a connection will be establish before
+    /// sending the dial-request.
     pub fn add_server(&mut self, peer: PeerId, address: Option<Multiaddr>) {
         self.servers.insert(peer);
         if let Some(addr) = address {
@@ -351,9 +373,11 @@ impl Behaviour {
                 role_override: Endpoint::Listener,
                 port_use: _,
             } => {
-                // Outgoing connection was dialed as a listener. In other words outgoing connection
-                // was dialed as part of a hole punch. `libp2p-autonat` never attempts to hole
-                // punch, thus this connection has not been requested by this [`NetworkBehaviour`].
+                // Outgoing connection was dialed as a listener. In other words
+                // outgoing connection was dialed as part of a
+                // hole punch. `libp2p-autonat` never attempts to hole
+                // punch, thus this connection has not been requested by this
+                // [`NetworkBehaviour`].
             }
             ConnectedPoint::Listener { .. } => self.as_client().on_inbound_connection(),
         }
@@ -564,7 +588,8 @@ impl NetworkBehaviour for Behaviour {
 
 type Action = ToSwarm<<Behaviour as NetworkBehaviour>::ToSwarm, THandlerInEvent<Behaviour>>;
 
-// Trait implemented for `AsClient` and `AsServer` to handle events from the inner [`request_response::Behaviour`] Protocol.
+// Trait implemented for `AsClient` and `AsServer` to handle events from the
+// inner [`request_response::Behaviour`] Protocol.
 trait HandleInnerEvent {
     fn handle_event(
         &mut self,
@@ -587,12 +612,12 @@ impl GlobalIp for Multiaddr {
 }
 
 impl GlobalIp for std::net::Ipv4Addr {
-    // NOTE: The below logic is copied from `std::net::Ipv4Addr::is_global`, which is at the time of
-    // writing behind the unstable `ip` feature.
+    // NOTE: The below logic is copied from `std::net::Ipv4Addr::is_global`, which
+    // is at the time of writing behind the unstable `ip` feature.
     // See https://github.com/rust-lang/rust/issues/27709 for more info.
     fn is_global_ip(&self) -> bool {
-        // Check if this address is 192.0.0.9 or 192.0.0.10. These addresses are the only two
-        // globally routable addresses in the 192.0.0.0/24 range.
+        // Check if this address is 192.0.0.9 or 192.0.0.10. These addresses are the
+        // only two globally routable addresses in the 192.0.0.0/24 range.
         if u32::from_be_bytes(self.octets()) == 0xc0000009
             || u32::from_be_bytes(self.octets()) == 0xc000000a
         {
@@ -635,12 +660,12 @@ impl GlobalIp for std::net::Ipv4Addr {
 }
 
 impl GlobalIp for std::net::Ipv6Addr {
-    // NOTE: The below logic is copied from `std::net::Ipv6Addr::is_global`, which is at the time of
-    // writing behind the unstable `ip` feature.
+    // NOTE: The below logic is copied from `std::net::Ipv6Addr::is_global`, which
+    // is at the time of writing behind the unstable `ip` feature.
     // See https://github.com/rust-lang/rust/issues/27709 for more info.
     //
-    // Note that contrary to `Ipv4Addr::is_global_ip` this currently checks for global scope
-    // rather than global reachability.
+    // Note that contrary to `Ipv4Addr::is_global_ip` this currently checks for
+    // global scope rather than global reachability.
     fn is_global_ip(&self) -> bool {
         // Copied from the unstable method `std::net::Ipv6Addr::is_unicast`.
         fn is_unicast(addr: &std::net::Ipv6Addr) -> bool {
@@ -669,9 +694,11 @@ impl GlobalIp for std::net::Ipv6Addr {
                 && !is_documentation(addr)
         }
 
-        // Variation of unstable method [`std::net::Ipv6Addr::multicast_scope`] that instead of the
-        // `Ipv6MulticastScope` just returns if the scope is global or not.
-        // Equivalent to `Ipv6Addr::multicast_scope(..).map(|scope| matches!(scope, Ipv6MulticastScope::Global))`.
+        // Variation of unstable method [`std::net::Ipv6Addr::multicast_scope`] that
+        // instead of the `Ipv6MulticastScope` just returns if the scope is
+        // global or not. Equivalent to
+        // `Ipv6Addr::multicast_scope(..).map(|scope| matches!(scope,
+        // Ipv6MulticastScope::Global))`.
         fn is_multicast_scope_global(addr: &std::net::Ipv6Addr) -> Option<bool> {
             match addr.segments()[0] & 0x000f {
                 14 => Some(true),         // Global multicast scope.

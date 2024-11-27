@@ -18,14 +18,22 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::transport::{DialOpts, ListenerId, Transport, TransportError, TransportEvent};
-use crate::Multiaddr;
-use futures::{prelude::*, task::Context, task::Poll};
 use std::{fmt, io, marker::PhantomData, pin::Pin};
+
+use futures::{
+    prelude::*,
+    task::{Context, Poll},
+};
+
+use crate::{
+    transport::{DialOpts, ListenerId, Transport, TransportError, TransportEvent},
+    Multiaddr,
+};
 
 /// Implementation of `Transport` that doesn't support any multiaddr.
 ///
-/// Useful for testing purposes, or as a fallback implementation when no protocol is available.
+/// Useful for testing purposes, or as a fallback implementation when no
+/// protocol is available.
 pub struct DummyTransport<TOut = DummyStream>(PhantomData<TOut>);
 
 impl<TOut> DummyTransport<TOut> {
@@ -87,7 +95,8 @@ impl<TOut> Transport for DummyTransport<TOut> {
     }
 }
 
-/// Implementation of `AsyncRead` and `AsyncWrite`. Not meant to be instantiated.
+/// Implementation of `AsyncRead` and `AsyncWrite`. Not meant to be
+/// instantiated.
 pub struct DummyStream(());
 
 impl fmt::Debug for DummyStream {

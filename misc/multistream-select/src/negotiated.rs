@@ -18,7 +18,14 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::protocol::{HeaderLine, Message, MessageReader, Protocol, ProtocolError};
+use std::{
+    error::Error,
+    fmt,
+    io,
+    mem,
+    pin::Pin,
+    task::{Context, Poll},
+};
 
 use futures::{
     io::{IoSlice, IoSliceMut},
@@ -26,21 +33,17 @@ use futures::{
     ready,
 };
 use pin_project::pin_project;
-use std::{
-    error::Error,
-    fmt, io, mem,
-    pin::Pin,
-    task::{Context, Poll},
-};
+
+use crate::protocol::{HeaderLine, Message, MessageReader, Protocol, ProtocolError};
 
 /// An I/O stream that has settled on an (application-layer) protocol to use.
 ///
 /// A `Negotiated` represents an I/O stream that has _settled_ on a protocol
-/// to use. In particular, it is not implied that all of the protocol negotiation
-/// frames have yet been sent and / or received, just that the selected protocol
-/// is fully determined. This is to allow the last protocol negotiation frames
-/// sent by a peer to be combined in a single write, possibly piggy-backing
-/// data from the negotiated protocol on top.
+/// to use. In particular, it is not implied that all of the protocol
+/// negotiation frames have yet been sent and / or received, just that the
+/// selected protocol is fully determined. This is to allow the last protocol
+/// negotiation frames sent by a peer to be combined in a single write, possibly
+/// piggy-backing data from the negotiated protocol on top.
 ///
 /// Reading from a `Negotiated` I/O stream that still has pending negotiation
 /// protocol data to send implicitly triggers flushing of all yet unsent data.
@@ -59,8 +62,10 @@ pub struct NegotiatedComplete<TInner> {
 
 impl<TInner> Future for NegotiatedComplete<TInner>
 where
-    // `Unpin` is required not because of implementation details but because we produce the
-    // `Negotiated` as the output of the future.
+    // `Unpin` is required not because of
+    // implementation details but because we produce
+    // the `Negotiated` as the output of the
+    // future.
     TInner: AsyncRead + AsyncWrite + Unpin,
 {
     type Output = Result<Negotiated<TInner>, NegotiationError>;
@@ -205,8 +210,8 @@ enum State<R> {
         /// The underlying I/O stream.
         #[pin]
         io: MessageReader<R>,
-        /// The expected negotiation header/preamble (i.e. multistream-select version),
-        /// if one is still expected to be received.
+        /// The expected negotiation header/preamble (i.e. multistream-select
+        /// version), if one is still expected to be received.
         header: Option<HeaderLine>,
         /// The expected application protocol (i.e. name and version).
         protocol: Protocol,
@@ -250,13 +255,13 @@ where
     }
 
     // TODO: implement once method is stabilized in the futures crate
-    /*unsafe fn initializer(&self) -> Initializer {
-        match &self.state {
-            State::Completed { io, .. } => io.initializer(),
-            State::Expecting { io, .. } => io.inner_ref().initializer(),
-            State::Invalid => panic!("Negotiated: Invalid state"),
-        }
-    }*/
+    // unsafe fn initializer(&self) -> Initializer {
+    // match &self.state {
+    // State::Completed { io, .. } => io.initializer(),
+    // State::Expecting { io, .. } => io.inner_ref().initializer(),
+    // State::Invalid => panic!("Negotiated: Invalid state"),
+    // }
+    // }
 
     fn poll_read_vectored(
         mut self: Pin<&mut Self>,
@@ -305,7 +310,8 @@ where
     }
 
     fn poll_close(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), io::Error>> {
-        // Ensure all data has been flushed, including optimistic multistream-select messages.
+        // Ensure all data has been flushed, including optimistic multistream-select
+        // messages.
         ready!(self
             .as_mut()
             .poll_flush(cx)
@@ -317,7 +323,10 @@ where
             StateProj::Expecting { io, .. } => {
                 let close_poll = io.poll_close(cx);
                 if let Poll::Ready(Ok(())) = close_poll {
-                    tracing::debug!("Stream closed. Confirmation from remote for optimstic protocol negotiation still pending")
+                    tracing::debug!(
+                        "Stream closed. Confirmation from remote for optimstic protocol \
+                         negotiation still pending"
+                    )
                 }
                 close_poll
             }

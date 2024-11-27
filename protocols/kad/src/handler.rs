@@ -18,35 +18,52 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::behaviour::Mode;
-use crate::protocol::{
-    KadInStreamSink, KadOutStreamSink, KadPeer, KadRequestMsg, KadResponseMsg, ProtocolConfig,
+use std::{
+    collections::VecDeque,
+    error,
+    fmt,
+    io,
+    marker::PhantomData,
+    pin::Pin,
+    task::{Context, Poll, Waker},
+    time::Duration,
 };
-use crate::record::{self, Record};
-use crate::QueryId;
+
 use either::Either;
-use futures::channel::oneshot;
-use futures::prelude::*;
-use futures::stream::SelectAll;
+use futures::{channel::oneshot, prelude::*, stream::SelectAll};
 use libp2p_core::{upgrade, ConnectedPoint};
 use libp2p_identity::PeerId;
-use libp2p_swarm::handler::{ConnectionEvent, FullyNegotiatedInbound, FullyNegotiatedOutbound};
 use libp2p_swarm::{
-    ConnectionHandler, ConnectionHandlerEvent, Stream, StreamUpgradeError, SubstreamProtocol,
+    handler::{ConnectionEvent, FullyNegotiatedInbound, FullyNegotiatedOutbound},
+    ConnectionHandler,
+    ConnectionHandlerEvent,
+    Stream,
+    StreamUpgradeError,
+    SubstreamProtocol,
     SupportedProtocols,
 };
-use std::collections::VecDeque;
-use std::task::Waker;
-use std::time::Duration;
-use std::{error, fmt, io, marker::PhantomData, pin::Pin, task::Context, task::Poll};
+
+use crate::{
+    behaviour::Mode,
+    protocol::{
+        KadInStreamSink,
+        KadOutStreamSink,
+        KadPeer,
+        KadRequestMsg,
+        KadResponseMsg,
+        ProtocolConfig,
+    },
+    record::{self, Record},
+    QueryId,
+};
 
 const MAX_NUM_STREAMS: usize = 32;
 
 /// Protocol handler that manages substreams for the Kademlia protocol
 /// on a single connection with a peer.
 ///
-/// The handler will automatically open a Kademlia substream with the remote for each request we
-/// make.
+/// The handler will automatically open a Kademlia substream with the remote for
+/// each request we make.
 ///
 /// It also handles requests made by the remote.
 pub struct Handler {
@@ -63,12 +80,14 @@ pub struct Handler {
     outbound_substreams:
         futures_bounded::FuturesTupleSet<io::Result<Option<KadResponseMsg>>, QueryId>,
 
-    /// Contains one [`oneshot::Sender`] per outbound stream that we have requested.
+    /// Contains one [`oneshot::Sender`] per outbound stream that we have
+    /// requested.
     pending_streams:
         VecDeque<oneshot::Sender<Result<KadOutStreamSink<Stream>, StreamUpgradeError<io::Error>>>>,
 
     /// List of outbound substreams that are waiting to become active next.
-    /// Contains the request we want to send, and the user data if we expect an answer.
+    /// Contains the request we want to send, and the user data if we expect an
+    /// answer.
     pending_messages: VecDeque<(KadRequestMsg, QueryId)>,
 
     /// List of active inbound substreams with the state they are in.
@@ -106,7 +125,8 @@ enum InboundSubstreamState {
         connection_id: UniqueConnecId,
         substream: KadInStreamSink<Stream>,
     },
-    /// Waiting for the behaviour to send a [`HandlerIn`] event containing the response.
+    /// Waiting for the behaviour to send a [`HandlerIn`] event containing the
+    /// response.
     WaitingBehaviour(UniqueConnecId, KadInStreamSink<Stream>, Option<Waker>),
     /// Waiting to send an answer back to the remote.
     PendingSend(UniqueConnecId, KadInStreamSink<Stream>, KadResponseMsg),
@@ -179,14 +199,16 @@ impl InboundSubstreamState {
 #[derive(Debug)]
 pub enum HandlerEvent {
     /// The configured protocol name has been confirmed by the peer through
-    /// a successfully negotiated substream or by learning the supported protocols of the remote.
+    /// a successfully negotiated substream or by learning the supported
+    /// protocols of the remote.
     ProtocolConfirmed { endpoint: ConnectedPoint },
-    /// The configured protocol name(s) are not or no longer supported by the peer on the provided
-    /// connection and it should be removed from the routing table.
+    /// The configured protocol name(s) are not or no longer supported by the
+    /// peer on the provided connection and it should be removed from the
+    /// routing table.
     ProtocolNotSupported { endpoint: ConnectedPoint },
 
-    /// Request for the list of nodes whose IDs are the closest to `key`. The number of nodes
-    /// returned is not specified, but should be around 20.
+    /// Request for the list of nodes whose IDs are the closest to `key`. The
+    /// number of nodes returned is not specified, but should be around 20.
     FindNodeReq {
         /// The key for which to locate the closest nodes.
         key: Vec<u8>,
@@ -202,8 +224,8 @@ pub enum HandlerEvent {
         query_id: QueryId,
     },
 
-    /// Same as `FindNodeReq`, but should also return the entries of the local providers list for
-    /// this key.
+    /// Same as `FindNodeReq`, but should also return the entries of the local
+    /// providers list for this key.
     GetProvidersReq {
         /// The key for which providers are requested.
         key: record::Key,
@@ -322,8 +344,8 @@ pub enum HandlerIn {
     /// Change the connection to the specified mode.
     ReconfigureMode { new_mode: Mode },
 
-    /// Request for the list of nodes whose IDs are the closest to `key`. The number of nodes
-    /// returned is not specified, but should be around 20.
+    /// Request for the list of nodes whose IDs are the closest to `key`. The
+    /// number of nodes returned is not specified, but should be around 20.
     FindNodeReq {
         /// Identifier of the node.
         key: Vec<u8>,
@@ -341,8 +363,8 @@ pub enum HandlerIn {
         request_id: RequestId,
     },
 
-    /// Same as `FindNodeReq`, but should also return the entries of the local providers list for
-    /// this key.
+    /// Same as `FindNodeReq`, but should also return the entries of the local
+    /// providers list for this key.
     GetProvidersReq {
         /// Identifier being searched.
         key: record::Key,
@@ -364,8 +386,8 @@ pub enum HandlerIn {
 
     /// Indicates that this provider is known for this key.
     ///
-    /// The API of the handler doesn't expose any event that allows you to know whether this
-    /// succeeded.
+    /// The API of the handler doesn't expose any event that allows you to know
+    /// whether this succeeded.
     AddProvider {
         /// Key for which we should add providers.
         key: record::Key,
@@ -411,8 +433,8 @@ pub enum HandlerIn {
     },
 }
 
-/// Unique identifier for a request. Must be passed back in order to answer a request from
-/// the remote.
+/// Unique identifier for a request. Must be passed back in order to answer a
+/// request from the remote.
 #[derive(Debug, PartialEq, Eq, Copy, Clone)]
 pub struct RequestId {
     /// Unique identifier for an incoming connection.
@@ -497,8 +519,8 @@ impl Handler {
             <Self as ConnectionHandler>::InboundOpenInfo,
         >,
     ) {
-        // If `self.allow_listening` is false, then we produced a `DeniedUpgrade` and `protocol`
-        // is a `Infallible`.
+        // If `self.allow_listening` is false, then we produced a `DeniedUpgrade` and
+        // `protocol` is a `Infallible`.
         let protocol = match protocol {
             future::Either::Left(p) => p,
             // TODO: remove when Rust 1.82 is MSRV
@@ -550,7 +572,8 @@ impl Handler {
             });
     }
 
-    /// Takes the given [`KadRequestMsg`] and composes it into an outbound request-response protocol handshake using a [`oneshot::channel`].
+    /// Takes the given [`KadRequestMsg`] and composes it into an outbound
+    /// request-response protocol handshake using a [`oneshot::channel`].
     fn queue_new_stream(&mut self, id: QueryId, msg: KadRequestMsg) {
         let (sender, receiver) = oneshot::channel();
 
@@ -1019,7 +1042,8 @@ impl futures::Stream for InboundSubstreamState {
     }
 }
 
-/// Process a Kademlia message that's supposed to be a response to one of our requests.
+/// Process a Kademlia message that's supposed to be a response to one of our
+/// requests.
 fn process_kad_response(event: KadResponseMsg, query_id: QueryId) -> HandlerEvent {
     // TODO: must check that the response corresponds to the request
     match event {
@@ -1060,9 +1084,10 @@ fn process_kad_response(event: KadResponseMsg, query_id: QueryId) -> HandlerEven
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use quickcheck::{Arbitrary, Gen};
     use tracing_subscriber::EnvFilter;
+
+    use super::*;
 
     impl Arbitrary for ProtocolStatus {
         fn arbitrary(g: &mut Gen) -> Self {

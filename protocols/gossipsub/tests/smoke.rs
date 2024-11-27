@@ -18,15 +18,18 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use futures::stream::{FuturesUnordered, SelectAll};
-use futures::StreamExt;
+use std::{task::Poll, time::Duration};
+
+use futures::{
+    stream::{FuturesUnordered, SelectAll},
+    StreamExt,
+};
 use libp2p_gossipsub as gossipsub;
 use libp2p_gossipsub::{MessageAuthenticity, ValidationMode};
 use libp2p_swarm::Swarm;
 use libp2p_swarm_test::SwarmExt as _;
 use quickcheck::{QuickCheck, TestResult};
 use rand::{seq::SliceRandom, SeedableRng};
-use std::{task::Poll, time::Duration};
 use tokio::{runtime::Runtime, time};
 use tracing_subscriber::EnvFilter;
 
@@ -65,8 +68,8 @@ impl Graph {
         }
     }
 
-    /// Polls the graph and passes each event into the provided FnMut until the closure returns
-    /// `true`.
+    /// Polls the graph and passes each event into the provided FnMut until the
+    /// closure returns `true`.
     ///
     /// Returns [`true`] on success and [`false`] on timeout.
     async fn wait_for<F: FnMut(&gossipsub::Event) -> bool>(&mut self, mut f: F) -> bool {
@@ -91,7 +94,8 @@ impl Graph {
         }
     }
 
-    /// Polls the graph until Poll::Pending is obtained, completing the underlying polls.
+    /// Polls the graph until Poll::Pending is obtained, completing the
+    /// underlying polls.
     async fn drain_events(&mut self) {
         let fut = futures::future::poll_fn(|cx| loop {
             match self.nodes.poll_next_unpin(cx) {
@@ -104,10 +108,10 @@ impl Graph {
 }
 
 async fn build_node() -> Swarm<gossipsub::Behaviour> {
-    // NOTE: The graph of created nodes can be disconnected from the mesh point of view as nodes
-    // can reach their d_lo value and not add other nodes to their mesh. To speed up this test, we
-    // reduce the default values of the heartbeat, so that all nodes will receive gossip in a
-    // timely fashion.
+    // NOTE: The graph of created nodes can be disconnected from the mesh point of
+    // view as nodes can reach their d_lo value and not add other nodes to their
+    // mesh. To speed up this test, we reduce the default values of the
+    // heartbeat, so that all nodes will receive gossip in a timely fashion.
 
     let mut swarm = Swarm::new_ephemeral(|identity| {
         let peer_id = identity.public().to_peer_id();
@@ -170,12 +174,14 @@ fn multi_hop_propagation() {
 
             if !all_subscribed {
                 return TestResult::error(format!(
-                    "Timed out waiting for all nodes to subscribe but only have {subscribed:?}/{num_nodes:?}.",
+                    "Timed out waiting for all nodes to subscribe but only have \
+                     {subscribed:?}/{num_nodes:?}.",
                 ));
             }
 
-            // It can happen that the publish occurs before all grafts have completed causing this test
-            // to fail. We drain all the poll messages before publishing.
+            // It can happen that the publish occurs before all grafts have completed
+            // causing this test to fail. We drain all the poll messages before
+            // publishing.
             graph.drain_events().await;
 
             // Publish a single message.
@@ -205,7 +211,8 @@ fn multi_hop_propagation() {
 
             if !all_received {
                 return TestResult::error(format!(
-                    "Timed out waiting for all nodes to receive the msg but only have {received_msgs:?}/{num_nodes:?}.",
+                    "Timed out waiting for all nodes to receive the msg but only have \
+                     {received_msgs:?}/{num_nodes:?}.",
                 ));
             }
 

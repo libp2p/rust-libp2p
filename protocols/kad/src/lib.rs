@@ -50,44 +50,81 @@ mod proto {
     include!("generated/mod.rs");
     pub use self::dht::pb::{
         mod_Message::{ConnectionType, MessageType, Peer},
-        Message, Record,
+        Message,
+        Record,
     };
 }
 
+use std::num::NonZeroUsize;
+
 pub use addresses::Addresses;
 pub use behaviour::{
-    AddProviderContext, AddProviderError, AddProviderOk, AddProviderPhase, AddProviderResult,
-    BootstrapError, BootstrapOk, BootstrapResult, GetClosestPeersError, GetClosestPeersOk,
-    GetClosestPeersResult, GetProvidersError, GetProvidersOk, GetProvidersResult, GetRecordError,
-    GetRecordOk, GetRecordResult, InboundRequest, Mode, NoKnownPeers, PeerInfo, PeerRecord,
-    PutRecordContext, PutRecordError, PutRecordOk, PutRecordPhase, PutRecordResult, QueryInfo,
-    QueryMut, QueryRef, QueryResult, QueryStats, RoutingUpdate,
-};
-pub use behaviour::{
-    Behaviour, BucketInserts, Caching, Config, Event, ProgressStep, Quorum, StoreInserts,
+    AddProviderContext,
+    AddProviderError,
+    AddProviderOk,
+    AddProviderPhase,
+    AddProviderResult,
+    Behaviour,
+    BootstrapError,
+    BootstrapOk,
+    BootstrapResult,
+    BucketInserts,
+    Caching,
+    Config,
+    Event,
+    GetClosestPeersError,
+    GetClosestPeersOk,
+    GetClosestPeersResult,
+    GetProvidersError,
+    GetProvidersOk,
+    GetProvidersResult,
+    GetRecordError,
+    GetRecordOk,
+    GetRecordResult,
+    InboundRequest,
+    Mode,
+    NoKnownPeers,
+    PeerInfo,
+    PeerRecord,
+    ProgressStep,
+    PutRecordContext,
+    PutRecordError,
+    PutRecordOk,
+    PutRecordPhase,
+    PutRecordResult,
+    QueryInfo,
+    QueryMut,
+    QueryRef,
+    QueryResult,
+    QueryStats,
+    Quorum,
+    RoutingUpdate,
+    StoreInserts,
 };
 pub use kbucket::{
-    Distance as KBucketDistance, EntryView, KBucketRef, Key as KBucketKey, NodeStatus,
+    Distance as KBucketDistance,
+    EntryView,
+    KBucketRef,
+    Key as KBucketKey,
+    NodeStatus,
 };
+use libp2p_swarm::StreamProtocol;
 pub use protocol::{ConnectionType, KadPeer};
 pub use query::QueryId;
 pub use record::{store, Key as RecordKey, ProviderRecord, Record};
-
-use libp2p_swarm::StreamProtocol;
-use std::num::NonZeroUsize;
 
 /// The `k` parameter of the Kademlia specification.
 ///
 /// This parameter determines:
 ///
 ///   1) The (fixed) maximum number of nodes in a bucket.
-///   2) The (default) replication factor, which in turn determines:
-///       a) The number of closer peers returned in response to a request.
-///       b) The number of closest peers to a key to search for in an iterative query.
+///   2) The (default) replication factor, which in turn determines: a) The
+///      number of closer peers returned in response to a request. b) The number
+///      of closest peers to a key to search for in an iterative query.
 ///
-/// The choice of (1) is fixed to this constant. The replication factor is configurable
-/// but should generally be no greater than `K_VALUE`. All nodes in a Kademlia
-/// DHT should agree on the choices made for (1) and (2).
+/// The choice of (1) is fixed to this constant. The replication factor is
+/// configurable but should generally be no greater than `K_VALUE`. All nodes in
+/// a Kademlia DHT should agree on the choices made for (1) and (2).
 ///
 /// The current value is `20`.
 pub const K_VALUE: NonZeroUsize = unsafe { NonZeroUsize::new_unchecked(20) };
@@ -104,6 +141,7 @@ pub const ALPHA_VALUE: NonZeroUsize = unsafe { NonZeroUsize::new_unchecked(3) };
 
 pub const PROTOCOL_NAME: StreamProtocol = protocol::DEFAULT_PROTO_NAME;
 
-/// Constant shared across tests for the [`Multihash`](libp2p_core::multihash::Multihash) type.
+/// Constant shared across tests for the
+/// [`Multihash`](libp2p_core::multihash::Multihash) type.
 #[cfg(test)]
 const SHA_256_MH: u64 = 0x12;

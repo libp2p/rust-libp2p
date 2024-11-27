@@ -20,14 +20,23 @@
 
 //! RSA keys.
 
-use super::error::*;
-use asn1_der::typed::{DerDecodable, DerEncodable, DerTypeView, Sequence};
-use asn1_der::{Asn1DerError, Asn1DerErrorVariant, DerObject, Sink, VecBacking};
-use ring::rand::SystemRandom;
-use ring::signature::KeyPair;
-use ring::signature::{self, RsaKeyPair, RSA_PKCS1_2048_8192_SHA256, RSA_PKCS1_SHA256};
 use std::{fmt, sync::Arc};
+
+use asn1_der::{
+    typed::{DerDecodable, DerEncodable, DerTypeView, Sequence},
+    Asn1DerError,
+    Asn1DerErrorVariant,
+    DerObject,
+    Sink,
+    VecBacking,
+};
+use ring::{
+    rand::SystemRandom,
+    signature::{self, KeyPair, RsaKeyPair, RSA_PKCS1_2048_8192_SHA256, RSA_PKCS1_SHA256},
+};
 use zeroize::Zeroize;
+
+use super::error::*;
 
 /// An RSA keypair.
 #[derive(Clone)]
@@ -42,8 +51,8 @@ impl std::fmt::Debug for Keypair {
 }
 
 impl Keypair {
-    /// Decode an RSA keypair from a DER-encoded private key in PKCS#1 RSAPrivateKey
-    /// format (i.e. unencrypted) as defined in [RFC3447].
+    /// Decode an RSA keypair from a DER-encoded private key in PKCS#1
+    /// RSAPrivateKey format (i.e. unencrypted) as defined in [RFC3447].
     ///
     /// [RFC3447]: https://tools.ietf.org/html/rfc3447#appendix-A.1.2
     pub fn try_decode_pkcs1(der: &mut [u8]) -> Result<Keypair, DecodingError> {
@@ -53,8 +62,8 @@ impl Keypair {
         Ok(Keypair(Arc::new(kp)))
     }
 
-    /// Decode an RSA keypair from a DER-encoded private key in PKCS#8 PrivateKeyInfo
-    /// format (i.e. unencrypted) as defined in [RFC5208].
+    /// Decode an RSA keypair from a DER-encoded private key in PKCS#8
+    /// PrivateKeyInfo format (i.e. unencrypted) as defined in [RFC5208].
     ///
     /// [RFC5208]: https://tools.ietf.org/html/rfc5208#section-5
     pub fn try_decode_pkcs8(der: &mut [u8]) -> Result<Keypair, DecodingError> {
@@ -100,8 +109,8 @@ impl PublicKey {
         self.0.clone()
     }
 
-    /// Encode the RSA public key in DER as a X.509 SubjectPublicKeyInfo structure,
-    /// as defined in [RFC5280].
+    /// Encode the RSA public key in DER as a X.509 SubjectPublicKeyInfo
+    /// structure, as defined in [RFC5280].
     ///
     /// [RFC5280]: https://tools.ietf.org/html/rfc5280#section-4.1
     pub fn encode_x509(&self) -> Vec<u8> {
@@ -315,8 +324,9 @@ impl DerDecodable<'_> for Asn1SubjectPublicKeyInfo {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use quickcheck::*;
+
+    use super::*;
 
     const KEY1: &[u8] = include_bytes!("test/rsa-2048.pk8");
     const KEY2: &[u8] = include_bytes!("test/rsa-3072.pk8");

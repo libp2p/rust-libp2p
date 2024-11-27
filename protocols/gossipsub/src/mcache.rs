@@ -18,14 +18,17 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::topic::TopicHash;
-use crate::types::{MessageId, RawMessage};
-use libp2p_identity::PeerId;
-use std::collections::hash_map::Entry;
-use std::fmt::Debug;
 use std::{
-    collections::{HashMap, HashSet},
+    collections::{hash_map::Entry, HashMap, HashSet},
     fmt,
+    fmt::Debug,
+};
+
+use libp2p_identity::PeerId;
+
+use crate::{
+    topic::TopicHash,
+    types::{MessageId, RawMessage},
 };
 
 /// CacheEntry stored in the history.
@@ -39,12 +42,13 @@ pub(crate) struct CacheEntry {
 #[derive(Clone)]
 pub(crate) struct MessageCache {
     msgs: HashMap<MessageId, (RawMessage, HashSet<PeerId>)>,
-    /// For every message and peer the number of times this peer asked for the message
+    /// For every message and peer the number of times this peer asked for the
+    /// message
     iwant_counts: HashMap<MessageId, HashMap<PeerId, u32>>,
     history: Vec<Vec<CacheEntry>>,
-    /// The number of indices in the cache history used for gossiping. That means that a message
-    /// won't get gossiped anymore when shift got called `gossip` many times after inserting the
-    /// message in the cache.
+    /// The number of indices in the cache history used for gossiping. That
+    /// means that a message won't get gossiped anymore when shift got
+    /// called `gossip` many times after inserting the message in the cache.
     gossip: usize,
 }
 
@@ -92,11 +96,12 @@ impl MessageCache {
         }
     }
 
-    /// Keeps track of peers we know have received the message to prevent forwarding to said peers.
+    /// Keeps track of peers we know have received the message to prevent
+    /// forwarding to said peers.
     pub(crate) fn observe_duplicate(&mut self, message_id: &MessageId, source: &PeerId) {
         if let Some((message, originating_peers)) = self.msgs.get_mut(message_id) {
-            // if the message is already validated, we don't need to store extra peers sending us
-            // duplicates as the message has already been forwarded
+            // if the message is already validated, we don't need to store extra peers
+            // sending us duplicates as the message has already been forwarded
             if message.validated {
                 return;
             }
@@ -111,8 +116,8 @@ impl MessageCache {
         self.msgs.get(message_id).map(|(message, _)| message)
     }
 
-    /// Increases the iwant count for the given message by one and returns the message together
-    /// with the iwant if the message exists.
+    /// Increases the iwant count for the given message by one and returns the
+    /// message together with the iwant if the message exists.
     pub(crate) fn get_with_iwant_counts(
         &mut self,
         message_id: &MessageId,
@@ -137,16 +142,17 @@ impl MessageCache {
     }
 
     /// Gets a message with [`MessageId`] and tags it as validated.
-    /// This function also returns the known peers that have sent us this message. This is used to
-    /// prevent us sending redundant messages to peers who have already propagated it.
+    /// This function also returns the known peers that have sent us this
+    /// message. This is used to prevent us sending redundant messages to
+    /// peers who have already propagated it.
     pub(crate) fn validate(
         &mut self,
         message_id: &MessageId,
     ) -> Option<(&RawMessage, HashSet<PeerId>)> {
         self.msgs.get_mut(message_id).map(|(message, known_peers)| {
             message.validated = true;
-            // Clear the known peers list (after a message is validated, it is forwarded and we no
-            // longer need to store the originating peers).
+            // Clear the known peers list (after a message is validated, it is forwarded and
+            // we no longer need to store the originating peers).
             let originating_peers = std::mem::take(known_peers);
             (&*message, originating_peers)
         })
@@ -210,8 +216,9 @@ impl MessageCache {
         &mut self,
         message_id: &MessageId,
     ) -> Option<(RawMessage, HashSet<PeerId>)> {
-        //We only remove the message from msgs and iwant_count and keep the message_id in the
-        // history vector. Zhe id in the history vector will simply be ignored on popping.
+        // We only remove the message from msgs and iwant_count and keep the message_id
+        // in the history vector. Zhe id in the history vector will simply be
+        // ignored on popping.
 
         self.iwant_counts.remove(message_id);
         self.msgs.remove(message_id)

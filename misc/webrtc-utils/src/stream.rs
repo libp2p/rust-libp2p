@@ -19,20 +19,22 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use bytes::Bytes;
-use futures::{channel::oneshot, prelude::*, ready};
-
 use std::{
     io,
     pin::Pin,
     task::{Context, Poll},
 };
 
-use crate::proto::{Flag, Message};
+use bytes::Bytes;
+use futures::{channel::oneshot, prelude::*, ready};
+
 use crate::{
-    stream::drop_listener::GracefullyClosed,
-    stream::framed_dc::FramedDc,
-    stream::state::{Closing, State},
+    proto::{Flag, Message},
+    stream::{
+        drop_listener::GracefullyClosed,
+        framed_dc::FramedDc,
+        state::{Closing, State},
+    },
 };
 
 mod drop_listener;
@@ -41,8 +43,8 @@ mod state;
 
 /// Maximum length of a message.
 ///
-/// "As long as message interleaving is not supported, the sender SHOULD limit the maximum message
-/// size to 16 KB to avoid monopolization."
+/// "As long as message interleaving is not supported, the sender SHOULD limit
+/// the maximum message size to 16 KB to avoid monopolization."
 /// Source: <https://www.rfc-editor.org/rfc/rfc8831#name-transferring-user-data-on-a>
 pub const MAX_MSG_LEN: usize = 16 * 1024;
 /// Length of varint, in bytes.
@@ -55,13 +57,15 @@ const MAX_DATA_LEN: usize = MAX_MSG_LEN - VARINT_LEN - PROTO_OVERHEAD;
 pub use drop_listener::DropListener;
 /// A stream backed by a WebRTC data channel.
 ///
-/// To be a proper libp2p stream, we need to implement [`AsyncRead`] and [`AsyncWrite`] as well
-/// as support a half-closed state which we do by framing messages in a protobuf envelope.
+/// To be a proper libp2p stream, we need to implement [`AsyncRead`] and
+/// [`AsyncWrite`] as well as support a half-closed state which we do by framing
+/// messages in a protobuf envelope.
 pub struct Stream<T> {
     io: FramedDc<T>,
     state: State,
     read_buffer: Bytes,
-    /// Dropping this will close the oneshot and notify the receiver by emitting `Canceled`.
+    /// Dropping this will close the oneshot and notify the receiver by emitting
+    /// `Canceled`.
     drop_notifier: Option<oneshot::Sender<GracefullyClosed>>,
 }
 
@@ -69,7 +73,8 @@ impl<T> Stream<T>
 where
     T: AsyncRead + AsyncWrite + Unpin + Clone,
 {
-    /// Returns a new [`Stream`] and a [`DropListener`], which will notify the receiver when/if the stream is dropped.
+    /// Returns a new [`Stream`] and a [`DropListener`], which will notify the
+    /// receiver when/if the stream is dropped.
     pub fn new(data_channel: T) -> (Self, DropListener<T>) {
         let (sender, receiver) = oneshot::channel();
 
@@ -175,8 +180,9 @@ where
         buf: &[u8],
     ) -> Poll<io::Result<usize>> {
         while self.state.read_flags_in_async_write() {
-            // TODO: In case AsyncRead::poll_read encountered an error or returned None earlier, we will poll the
-            // underlying I/O resource once more. Is that allowed? How about introducing a state IoReadClosed?
+            // TODO: In case AsyncRead::poll_read encountered an error or returned None
+            // earlier, we will poll the underlying I/O resource once more. Is
+            // that allowed? How about introducing a state IoReadClosed?
 
             let Self {
                 read_buffer,
@@ -265,10 +271,11 @@ where
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use crate::stream::framed_dc::codec;
     use asynchronous_codec::Encoder;
     use bytes::BytesMut;
+
+    use super::*;
+    use crate::stream::framed_dc::codec;
 
     #[test]
     fn max_data_len() {
@@ -285,8 +292,8 @@ mod tests {
         let mut dst = BytesMut::new();
         codec.encode(protobuf, &mut dst).unwrap();
 
-        // Ensure the varint prefixed and protobuf encoded largest message is no longer than the
-        // maximum limit specified in the libp2p WebRTC specification.
+        // Ensure the varint prefixed and protobuf encoded largest message is no longer
+        // than the maximum limit specified in the libp2p WebRTC specification.
         assert_eq!(dst.len(), MAX_MSG_LEN);
     }
 }

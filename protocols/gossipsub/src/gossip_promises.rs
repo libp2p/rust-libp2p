@@ -18,20 +18,21 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::peer_score::RejectReason;
-use crate::MessageId;
-use crate::ValidationError;
-use libp2p_identity::PeerId;
 use std::collections::HashMap;
+
+use libp2p_identity::PeerId;
 use web_time::Instant;
+
+use crate::{peer_score::RejectReason, MessageId, ValidationError};
 
 /// Tracks recently sent `IWANT` messages and checks if peers respond to them.
 #[derive(Default)]
 pub(crate) struct GossipPromises {
-    /// Stores for each tracked message id and peer the instant when this promise expires.
+    /// Stores for each tracked message id and peer the instant when this
+    /// promise expires.
     ///
-    /// If the peer didn't respond until then we consider the promise as broken and penalize the
-    /// peer.
+    /// If the peer didn't respond until then we consider the promise as broken
+    /// and penalize the peer.
     promises: HashMap<MessageId, HashMap<PeerId, Instant>>,
 }
 
@@ -41,10 +42,12 @@ impl GossipPromises {
         self.promises.contains_key(message)
     }
 
-    /// Track a promise to deliver a message from a list of [`MessageId`]s we are requesting.
+    /// Track a promise to deliver a message from a list of [`MessageId`]s we
+    /// are requesting.
     pub(crate) fn add_promise(&mut self, peer: PeerId, messages: &[MessageId], expires: Instant) {
         for message_id in messages {
-            // If a promise for this message id and peer already exists we don't update the expiry!
+            // If a promise for this message id and peer already exists we don't update the
+            // expiry!
             self.promises
                 .entry(message_id.clone())
                 .or_default()
@@ -59,10 +62,10 @@ impl GossipPromises {
     }
 
     pub(crate) fn reject_message(&mut self, message_id: &MessageId, reason: &RejectReason) {
-        // A message got rejected, so we can stop tracking promises and let the score penalty apply
-        // from invalid message delivery.
-        // We do take exception and apply promise penalty regardless in the following cases, where
-        // the peer delivered an obviously invalid message.
+        // A message got rejected, so we can stop tracking promises and let the score
+        // penalty apply from invalid message delivery.
+        // We do take exception and apply promise penalty regardless in the following
+        // cases, where the peer delivered an obviously invalid message.
         match reason {
             RejectReason::ValidationError(ValidationError::InvalidSignature) => (),
             RejectReason::SelfOrigin => (),
@@ -72,10 +75,10 @@ impl GossipPromises {
         };
     }
 
-    /// Returns the number of broken promises for each peer who didn't follow up on an IWANT
-    /// request.
-    /// This should be called not too often relative to the expire times, since it iterates over
-    /// the whole stored data.
+    /// Returns the number of broken promises for each peer who didn't follow up
+    /// on an IWANT request.
+    /// This should be called not too often relative to the expire times, since
+    /// it iterates over the whole stored data.
     pub(crate) fn get_broken_promises(&mut self) -> HashMap<PeerId, usize> {
         let now = Instant::now();
         let mut result = HashMap::new();

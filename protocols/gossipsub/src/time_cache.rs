@@ -18,15 +18,21 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-//! This implements a time-based LRU cache for checking gossipsub message duplicates.
+//! This implements a time-based LRU cache for checking gossipsub message
+//! duplicates.
+
+use std::{
+    collections::{
+        hash_map::{
+            self,
+            Entry::{Occupied, Vacant},
+        },
+        VecDeque,
+    },
+    time::Duration,
+};
 
 use fnv::FnvHashMap;
-use std::collections::hash_map::{
-    self,
-    Entry::{Occupied, Vacant},
-};
-use std::collections::VecDeque;
-use std::time::Duration;
 use web_time::Instant;
 
 struct ExpiringElement<Element> {
@@ -37,8 +43,8 @@ struct ExpiringElement<Element> {
 }
 
 pub(crate) struct TimeCache<Key, Value> {
-    /// Mapping a key to its value together with its latest expire time (can be updated through
-    /// reinserts).
+    /// Mapping a key to its value together with its latest expire time (can be
+    /// updated through reinserts).
     map: FnvHashMap<Key, ExpiringElement<Value>>,
     /// An ordered list of keys by expires time.
     list: VecDeque<ExpiringElement<Key>>,
@@ -167,8 +173,8 @@ where
 
     // Inserts new elements and removes any expired elements.
     //
-    // If the key was not present this returns `true`. If the value was already present this
-    // returns `false`.
+    // If the key was not present this returns `true`. If the value was already
+    // present this returns `false`.
     pub(crate) fn insert(&mut self, key: Key) -> bool {
         if let Entry::Vacant(entry) = self.0.entry(key) {
             entry.insert(());
@@ -206,7 +212,7 @@ mod test {
         cache.insert("t");
         assert!(!cache.insert("t"));
         cache.insert("e");
-        //assert!(!cache.insert("t"));
+        // assert!(!cache.insert("t"));
         assert!(!cache.insert("e"));
         // sleep until cache expiry
         std::thread::sleep(Duration::from_millis(101));

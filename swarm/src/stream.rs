@@ -1,12 +1,12 @@
-use futures::{AsyncRead, AsyncWrite};
-use libp2p_core::muxing::SubstreamBox;
-use libp2p_core::Negotiated;
 use std::{
     io::{IoSlice, IoSliceMut},
     pin::Pin,
     sync::Arc,
     task::{Context, Poll},
 };
+
+use futures::{AsyncRead, AsyncWrite};
+use libp2p_core::{muxing::SubstreamBox, Negotiated};
 
 /// Counter for the number of active streams on a connection.
 #[derive(Debug, Clone)]
@@ -40,14 +40,16 @@ impl Stream {
         }
     }
 
-    /// Ignore this stream in the [Swarm](crate::Swarm)'s connection-keep-alive algorithm.
+    /// Ignore this stream in the [Swarm](crate::Swarm)'s connection-keep-alive
+    /// algorithm.
     ///
-    /// By default, any active stream keeps a connection alive. For most protocols,
-    /// this is a good default as it ensures that the protocol is completed before
-    /// a connection is shut down.
+    /// By default, any active stream keeps a connection alive. For most
+    /// protocols, this is a good default as it ensures that the protocol is
+    /// completed before a connection is shut down.
     /// Some protocols like libp2p's [ping](https://github.com/libp2p/specs/blob/master/ping/ping.md)
     /// for example never complete and are of an auxiliary nature.
-    /// These protocols should opt-out of the keep alive algorithm using this method.
+    /// These protocols should opt-out of the keep alive algorithm using this
+    /// method.
     pub fn ignore_for_keep_alive(&mut self) {
         self.counter.take();
     }

@@ -1,5 +1,6 @@
-use libp2p_webrtc_utils::Fingerprint;
 use std::net::SocketAddr;
+
+use libp2p_webrtc_utils::Fingerprint;
 use web_sys::{RtcSdpType, RtcSessionDescriptionInit};
 
 /// Creates the SDP answer used by the client.
@@ -19,7 +20,8 @@ pub(crate) fn answer(
 
 /// Creates the munged SDP offer from the Browser's given SDP offer
 ///
-/// Certificate verification is disabled which is why we hardcode a dummy fingerprint here.
+/// Certificate verification is disabled which is why we hardcode a dummy
+/// fingerprint here.
 pub(crate) fn offer(offer: String, client_ufrag: &str) -> RtcSessionDescriptionInit {
     // find line and replace a=ice-ufrag: with "\r\na=ice-ufrag:{client_ufrag}\r\n"
     // find line and replace a=ice-pwd: with "\r\na=ice-ufrag:{client_ufrag}\r\n"

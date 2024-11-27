@@ -77,8 +77,8 @@ pub struct Final {
 
 /// Parameters for a single run, i.e. one stream, sending and receiving data.
 ///
-/// Property names are from the perspective of the actor. E.g. `to_send` is the amount of data to
-/// send, both as the client and the server.
+/// Property names are from the perspective of the actor. E.g. `to_send` is the
+/// amount of data to send, both as the client and the server.
 #[derive(Debug, Clone, Copy)]
 pub struct RunParams {
     pub to_send: usize,

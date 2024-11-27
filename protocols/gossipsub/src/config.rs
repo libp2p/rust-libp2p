@@ -18,37 +18,42 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use std::borrow::Cow;
-use std::sync::Arc;
-use std::time::Duration;
-
-use crate::error::ConfigBuilderError;
-use crate::protocol::{ProtocolConfig, ProtocolId, FLOODSUB_PROTOCOL};
-use crate::types::{Message, MessageId, PeerKind};
+use std::{borrow::Cow, sync::Arc, time::Duration};
 
 use libp2p_identity::PeerId;
 use libp2p_swarm::StreamProtocol;
 
+use crate::{
+    error::ConfigBuilderError,
+    protocol::{ProtocolConfig, ProtocolId, FLOODSUB_PROTOCOL},
+    types::{Message, MessageId, PeerKind},
+};
+
 /// The types of message validation that can be employed by gossipsub.
 #[derive(Debug, Clone)]
 pub enum ValidationMode {
-    /// This is the default setting. This requires the message author to be a valid [`PeerId`] and to
-    /// be present as well as the sequence number. All messages must have valid signatures.
+    /// This is the default setting. This requires the message author to be a
+    /// valid [`PeerId`] and to be present as well as the sequence number.
+    /// All messages must have valid signatures.
     ///
     /// NOTE: This setting will reject messages from nodes using
-    /// [`crate::behaviour::MessageAuthenticity::Anonymous`] and all messages that do not have
-    /// signatures.
+    /// [`crate::behaviour::MessageAuthenticity::Anonymous`] and all messages
+    /// that do not have signatures.
     Strict,
-    /// This setting permits messages that have no author, sequence number or signature. If any of
-    /// these fields exist in the message these are validated.
+    /// This setting permits messages that have no author, sequence number or
+    /// signature. If any of these fields exist in the message these are
+    /// validated.
     Permissive,
-    /// This setting requires the author, sequence number and signature fields of a message to be
-    /// empty. Any message that contains these fields is considered invalid.
+    /// This setting requires the author, sequence number and signature fields
+    /// of a message to be empty. Any message that contains these fields is
+    /// considered invalid.
     Anonymous,
-    /// This setting does not check the author, sequence number or signature fields of incoming
-    /// messages. If these fields contain data, they are simply ignored.
+    /// This setting does not check the author, sequence number or signature
+    /// fields of incoming messages. If these fields contain data, they are
+    /// simply ignored.
     ///
-    /// NOTE: This setting will consider messages with invalid signatures as valid messages.
+    /// NOTE: This setting will consider messages with invalid signatures as
+    /// valid messages.
     None,
 }
 
@@ -59,7 +64,8 @@ pub enum Version {
     V1_1,
 }
 
-/// Configuration parameters that define the performance of the gossipsub network.
+/// Configuration parameters that define the performance of the gossipsub
+/// network.
 #[derive(Clone)]
 pub struct Config {
     protocol: ProtocolConfig,
@@ -116,40 +122,45 @@ impl Config {
         self.history_gossip
     }
 
-    /// Target number of peers for the mesh network (D in the spec, default is 6).
+    /// Target number of peers for the mesh network (D in the spec, default is
+    /// 6).
     pub fn mesh_n(&self) -> usize {
         self.mesh_n
     }
 
-    /// Minimum number of peers in mesh network before adding more (D_lo in the spec, default is 5).
+    /// Minimum number of peers in mesh network before adding more (D_lo in the
+    /// spec, default is 5).
     pub fn mesh_n_low(&self) -> usize {
         self.mesh_n_low
     }
 
-    /// Maximum number of peers in mesh network before removing some (D_high in the spec, default
-    /// is 12).
+    /// Maximum number of peers in mesh network before removing some (D_high in
+    /// the spec, default is 12).
     pub fn mesh_n_high(&self) -> usize {
         self.mesh_n_high
     }
 
-    /// Affects how peers are selected when pruning a mesh due to over subscription.
+    /// Affects how peers are selected when pruning a mesh due to over
+    /// subscription.
     ///
-    ///  At least `retain_scores` of the retained peers will be high-scoring, while the remainder are
-    ///  chosen randomly (D_score in the spec, default is 4).
+    ///  At least `retain_scores` of the retained peers will be high-scoring,
+    /// while the remainder are  chosen randomly (D_score in the spec,
+    /// default is 4).
     pub fn retain_scores(&self) -> usize {
         self.retain_scores
     }
 
-    /// Minimum number of peers to emit gossip to during a heartbeat (D_lazy in the spec,
-    /// default is 6).
+    /// Minimum number of peers to emit gossip to during a heartbeat (D_lazy in
+    /// the spec, default is 6).
     pub fn gossip_lazy(&self) -> usize {
         self.gossip_lazy
     }
 
     /// Affects how many peers we will emit gossip to at each heartbeat.
     ///
-    /// We will send gossip to `gossip_factor * (total number of non-mesh peers)`, or
-    /// `gossip_lazy`, whichever is greater. The default is 0.25.
+    /// We will send gossip to `gossip_factor * (total number of non-mesh
+    /// peers)`, or `gossip_lazy`, whichever is greater. The default is
+    /// 0.25.
     pub fn gossip_factor(&self) -> f64 {
         self.gossip_factor
     }
@@ -169,67 +180,74 @@ impl Config {
         self.fanout_ttl
     }
 
-    /// The number of heartbeat ticks until we recheck the connection to explicit peers and
-    /// reconnecting if necessary (default 300).
+    /// The number of heartbeat ticks until we recheck the connection to
+    /// explicit peers and reconnecting if necessary (default 300).
     pub fn check_explicit_peers_ticks(&self) -> u64 {
         self.check_explicit_peers_ticks
     }
 
     /// The maximum byte size for each gossipsub RPC (default is 65536 bytes).
     ///
-    /// This represents the maximum size of the published message. It is additionally wrapped
-    /// in a protobuf struct, so the actual wire size may be a bit larger. It must be at least
-    /// large enough to support basic control messages. If Peer eXchange is enabled, this
-    /// must be large enough to transmit the desired peer information on pruning. It must be at
-    /// least 100 bytes. Default is 65536 bytes.
+    /// This represents the maximum size of the published message. It is
+    /// additionally wrapped in a protobuf struct, so the actual wire size
+    /// may be a bit larger. It must be at least large enough to support
+    /// basic control messages. If Peer eXchange is enabled, this
+    /// must be large enough to transmit the desired peer information on
+    /// pruning. It must be at least 100 bytes. Default is 65536 bytes.
     pub fn max_transmit_size(&self) -> usize {
         self.protocol.max_transmit_size
     }
 
-    /// Duplicates are prevented by storing message id's of known messages in an LRU time cache.
-    /// This settings sets the time period that messages are stored in the cache. Duplicates can be
-    /// received if duplicate messages are sent at a time greater than this setting apart. The
+    /// Duplicates are prevented by storing message id's of known messages in an
+    /// LRU time cache. This settings sets the time period that messages are
+    /// stored in the cache. Duplicates can be received if duplicate
+    /// messages are sent at a time greater than this setting apart. The
     /// default is 1 minute.
     pub fn duplicate_cache_time(&self) -> Duration {
         self.duplicate_cache_time
     }
 
-    /// When set to `true`, prevents automatic forwarding of all received messages. This setting
-    /// allows a user to validate the messages before propagating them to their peers. If set to
-    /// true, the user must manually call [`crate::Behaviour::report_message_validation_result()`]
+    /// When set to `true`, prevents automatic forwarding of all received
+    /// messages. This setting allows a user to validate the messages before
+    /// propagating them to their peers. If set to true, the user must
+    /// manually call [`crate::Behaviour::report_message_validation_result()`]
     /// on the behaviour to forward message once validated (default is `false`).
     /// The default is `false`.
     pub fn validate_messages(&self) -> bool {
         self.validate_messages
     }
 
-    /// Determines the level of validation used when receiving messages. See [`ValidationMode`]
-    /// for the available types. The default is ValidationMode::Strict.
+    /// Determines the level of validation used when receiving messages. See
+    /// [`ValidationMode`] for the available types. The default is
+    /// ValidationMode::Strict.
     pub fn validation_mode(&self) -> &ValidationMode {
         &self.protocol.validation_mode
     }
 
-    /// A user-defined function allowing the user to specify the message id of a gossipsub message.
-    /// The default value is to concatenate the source peer id with a sequence number. Setting this
-    /// parameter allows the user to address packets arbitrarily. One example is content based
-    /// addressing, where this function may be set to `hash(message)`. This would prevent messages
-    /// of the same content from being duplicated.
+    /// A user-defined function allowing the user to specify the message id of a
+    /// gossipsub message. The default value is to concatenate the source
+    /// peer id with a sequence number. Setting this parameter allows the
+    /// user to address packets arbitrarily. One example is content based
+    /// addressing, where this function may be set to `hash(message)`. This
+    /// would prevent messages of the same content from being duplicated.
     ///
-    /// The function takes a [`Message`] as input and outputs a String to be interpreted as
-    /// the message id.
+    /// The function takes a [`Message`] as input and outputs a String to be
+    /// interpreted as the message id.
     pub fn message_id(&self, message: &Message) -> MessageId {
         (self.message_id_fn)(message)
     }
 
-    /// By default, gossipsub will reject messages that are sent to us that have the same message
-    /// source as we have specified locally. Enabling this, allows these messages and prevents
-    /// penalizing the peer that sent us the message. Default is false.
+    /// By default, gossipsub will reject messages that are sent to us that have
+    /// the same message source as we have specified locally. Enabling this,
+    /// allows these messages and prevents penalizing the peer that sent us
+    /// the message. Default is false.
     pub fn allow_self_origin(&self) -> bool {
         self.allow_self_origin
     }
 
-    /// Whether Peer eXchange is enabled; this should be enabled in bootstrappers and other well
-    /// connected/trusted nodes. The default is false.
+    /// Whether Peer eXchange is enabled; this should be enabled in
+    /// bootstrappers and other well connected/trusted nodes. The default is
+    /// false.
     ///
     /// Note: Peer exchange is not implemented today, see
     /// <https://github.com/libp2p/rust-libp2p/issues/2398>.
@@ -238,20 +256,22 @@ impl Config {
     }
 
     /// Controls the number of peers to include in prune Peer eXchange.
-    /// When we prune a peer that's eligible for PX (has a good score, etc), we will try to
-    /// send them signed peer records for up to `prune_peers` other peers that we
-    /// know of. It is recommended that this value is larger than `mesh_n_high` so that the pruned
-    /// peer can reliably form a full mesh. The default is typically 16 however until signed
+    /// When we prune a peer that's eligible for PX (has a good score, etc), we
+    /// will try to send them signed peer records for up to `prune_peers`
+    /// other peers that we know of. It is recommended that this value is
+    /// larger than `mesh_n_high` so that the pruned peer can reliably form
+    /// a full mesh. The default is typically 16 however until signed
     /// records are spec'd this is disabled and set to 0.
     pub fn prune_peers(&self) -> usize {
         self.prune_peers
     }
 
     /// Controls the backoff time for pruned peers. This is how long
-    /// a peer must wait before attempting to graft into our mesh again after being pruned.
-    /// When pruning a peer, we send them our value of `prune_backoff` so they know
-    /// the minimum time to wait. Peers running older versions may not send a backoff time,
-    /// so if we receive a prune message without one, we will wait at least `prune_backoff`
+    /// a peer must wait before attempting to graft into our mesh again after
+    /// being pruned. When pruning a peer, we send them our value of
+    /// `prune_backoff` so they know the minimum time to wait. Peers running
+    /// older versions may not send a backoff time, so if we receive a prune
+    /// message without one, we will wait at least `prune_backoff`
     /// before attempting to re-graft. The default is one minute.
     pub fn prune_backoff(&self) -> Duration {
         self.prune_backoff
@@ -259,88 +279,96 @@ impl Config {
 
     /// Controls the backoff time when unsubscribing from a topic.
     ///
-    /// This is how long to wait before resubscribing to the topic. A short backoff period in case
-    /// of an unsubscribe event allows reaching a healthy mesh in a more timely manner. The default
-    /// is 10 seconds.
+    /// This is how long to wait before resubscribing to the topic. A short
+    /// backoff period in case of an unsubscribe event allows reaching a
+    /// healthy mesh in a more timely manner. The default is 10 seconds.
     pub fn unsubscribe_backoff(&self) -> Duration {
         self.unsubscribe_backoff
     }
 
-    /// Number of heartbeat slots considered as slack for backoffs. This guarantees that we wait
-    /// at least backoff_slack heartbeats after a backoff is over before we try to graft. This
-    /// solves problems occurring through high latencies. In particular if
-    /// `backoff_slack * heartbeat_interval` is longer than any latencies between processing
-    /// prunes on our side and processing prunes on the receiving side this guarantees that we
-    /// get not punished for too early grafting. The default is 1.
+    /// Number of heartbeat slots considered as slack for backoffs. This
+    /// guarantees that we wait at least backoff_slack heartbeats after a
+    /// backoff is over before we try to graft. This solves problems
+    /// occurring through high latencies. In particular if `backoff_slack *
+    /// heartbeat_interval` is longer than any latencies between processing
+    /// prunes on our side and processing prunes on the receiving side this
+    /// guarantees that we get not punished for too early grafting. The
+    /// default is 1.
     pub fn backoff_slack(&self) -> u32 {
         self.backoff_slack
     }
 
-    /// Whether to do flood publishing or not. If enabled newly created messages will always be
-    /// sent to all peers that are subscribed to the topic and have a good enough score.
-    /// The default is true.
+    /// Whether to do flood publishing or not. If enabled newly created messages
+    /// will always be sent to all peers that are subscribed to the topic
+    /// and have a good enough score. The default is true.
     pub fn flood_publish(&self) -> bool {
         self.flood_publish
     }
 
-    /// If a GRAFT comes before `graft_flood_threshold` has elapsed since the last PRUNE,
-    /// then there is an extra score penalty applied to the peer through P7.
+    /// If a GRAFT comes before `graft_flood_threshold` has elapsed since the
+    /// last PRUNE, then there is an extra score penalty applied to the peer
+    /// through P7.
     pub fn graft_flood_threshold(&self) -> Duration {
         self.graft_flood_threshold
     }
 
-    /// Minimum number of outbound peers in the mesh network before adding more (D_out in the spec).
-    /// This value must be smaller or equal than `mesh_n / 2` and smaller than `mesh_n_low`.
-    /// The default is 2.
+    /// Minimum number of outbound peers in the mesh network before adding more
+    /// (D_out in the spec). This value must be smaller or equal than
+    /// `mesh_n / 2` and smaller than `mesh_n_low`. The default is 2.
     pub fn mesh_outbound_min(&self) -> usize {
         self.mesh_outbound_min
     }
 
-    /// Number of heartbeat ticks that specify the interval in which opportunistic grafting is
-    /// applied. Every `opportunistic_graft_ticks` we will attempt to select some high-scoring mesh
-    /// peers to replace lower-scoring ones, if the median score of our mesh peers falls below a
-    /// threshold (see <https://godoc.org/github.com/libp2p/go-libp2p-pubsub#PeerScoreThresholds>).
+    /// Number of heartbeat ticks that specify the interval in which
+    /// opportunistic grafting is applied. Every `opportunistic_graft_ticks`
+    /// we will attempt to select some high-scoring mesh peers to replace
+    /// lower-scoring ones, if the median score of our mesh peers falls below a threshold (see <https://godoc.org/github.com/libp2p/go-libp2p-pubsub#PeerScoreThresholds>).
     /// The default is 60.
     pub fn opportunistic_graft_ticks(&self) -> u64 {
         self.opportunistic_graft_ticks
     }
 
-    /// Controls how many times we will allow a peer to request the same message id through IWANT
-    /// gossip before we start ignoring them. This is designed to prevent peers from spamming us
-    /// with requests and wasting our resources. The default is 3.
+    /// Controls how many times we will allow a peer to request the same message
+    /// id through IWANT gossip before we start ignoring them. This is
+    /// designed to prevent peers from spamming us with requests and wasting
+    /// our resources. The default is 3.
     pub fn gossip_retransimission(&self) -> u32 {
         self.gossip_retransimission
     }
 
-    /// The maximum number of new peers to graft to during opportunistic grafting. The default is 2.
+    /// The maximum number of new peers to graft to during opportunistic
+    /// grafting. The default is 2.
     pub fn opportunistic_graft_peers(&self) -> usize {
         self.opportunistic_graft_peers
     }
 
-    /// The maximum number of messages we will process in a given RPC. If this is unset, there is
-    /// no limit. The default is None.
+    /// The maximum number of messages we will process in a given RPC. If this
+    /// is unset, there is no limit. The default is None.
     pub fn max_messages_per_rpc(&self) -> Option<usize> {
         self.max_messages_per_rpc
     }
 
     /// The maximum number of messages to include in an IHAVE message.
-    /// Also controls the maximum number of IHAVE ids we will accept and request with IWANT from a
-    /// peer within a heartbeat, to protect from IHAVE floods. You should adjust this value from the
-    /// default if your system is pushing more than 5000 messages in GossipSubHistoryGossip
-    /// heartbeats; with the defaults this is 1666 messages/s. The default is 5000.
+    /// Also controls the maximum number of IHAVE ids we will accept and request
+    /// with IWANT from a peer within a heartbeat, to protect from IHAVE
+    /// floods. You should adjust this value from the default if your system
+    /// is pushing more than 5000 messages in GossipSubHistoryGossip
+    /// heartbeats; with the defaults this is 1666 messages/s. The default is
+    /// 5000.
     pub fn max_ihave_length(&self) -> usize {
         self.max_ihave_length
     }
 
-    /// GossipSubMaxIHaveMessages is the maximum number of IHAVE messages to accept from a peer
-    /// within a heartbeat.
+    /// GossipSubMaxIHaveMessages is the maximum number of IHAVE messages to
+    /// accept from a peer within a heartbeat.
     pub fn max_ihave_messages(&self) -> usize {
         self.max_ihave_messages
     }
 
-    /// Time to wait for a message requested through IWANT following an IHAVE advertisement.
-    /// If the message is not received within this window, a broken promise is declared and
-    /// the router may apply behavioural penalties. The default is 3 seconds.
+    /// Time to wait for a message requested through IWANT following an IHAVE
+    /// advertisement. If the message is not received within this window, a
+    /// broken promise is declared and the router may apply behavioural
+    /// penalties. The default is 3 seconds.
     pub fn iwant_followup_time(&self) -> Duration {
         self.iwant_followup_time
     }
@@ -355,19 +383,20 @@ impl Config {
         self.published_message_ids_cache_time
     }
 
-    /// The max number of messages a `ConnectionHandler` can buffer. The default is 5000.
+    /// The max number of messages a `ConnectionHandler` can buffer. The default
+    /// is 5000.
     pub fn connection_handler_queue_len(&self) -> usize {
         self.connection_handler_queue_len
     }
 
-    /// The duration a message to be published can wait to be sent before it is abandoned. The
-    /// default is 5 seconds.
+    /// The duration a message to be published can wait to be sent before it is
+    /// abandoned. The default is 5 seconds.
     pub fn publish_queue_duration(&self) -> Duration {
         self.connection_handler_publish_duration
     }
 
-    /// The duration a message to be forwarded can wait to be sent before it is abandoned. The
-    /// default is 1s.
+    /// The duration a message to be forwarded can wait to be sent before it is
+    /// abandoned. The default is 1s.
     pub fn forward_queue_duration(&self) -> Duration {
         self.connection_handler_forward_duration
     }
@@ -423,7 +452,8 @@ impl Default for ConfigBuilder {
                 }),
                 allow_self_origin: false,
                 do_px: false,
-                prune_peers: 0, // NOTE: Increasing this currently has little effect until Signed records are implemented.
+                prune_peers: 0, /* NOTE: Increasing this currently has little effect until Signed
+                                 * records are implemented. */
                 prune_backoff: Duration::from_secs(60),
                 unsubscribe_backoff: Duration::from_secs(10),
                 backoff_slack: 1,
@@ -457,7 +487,8 @@ impl From<Config> for ConfigBuilder {
 }
 
 impl ConfigBuilder {
-    /// The protocol id prefix to negotiate this protocol (default is `/meshsub/1.1.0` and `/meshsub/1.0.0`).
+    /// The protocol id prefix to negotiate this protocol (default is
+    /// `/meshsub/1.1.0` and `/meshsub/1.0.0`).
     pub fn protocol_id_prefix(
         &mut self,
         protocol_id_prefix: impl Into<Cow<'static, str>>,
@@ -488,7 +519,8 @@ impl ConfigBuilder {
         self
     }
 
-    /// The full protocol id to negotiate this protocol (does not append `/1.0.0` or `/1.1.0`).
+    /// The full protocol id to negotiate this protocol (does not append
+    /// `/1.0.0` or `/1.1.0`).
     pub fn protocol_id(
         &mut self,
         protocol_id: impl Into<Cow<'static, str>>,
@@ -526,36 +558,40 @@ impl ConfigBuilder {
         self
     }
 
-    /// Target number of peers for the mesh network (D in the spec, default is 6).
+    /// Target number of peers for the mesh network (D in the spec, default is
+    /// 6).
     pub fn mesh_n(&mut self, mesh_n: usize) -> &mut Self {
         self.config.mesh_n = mesh_n;
         self
     }
 
-    /// Minimum number of peers in mesh network before adding more (D_lo in the spec, default is 4).
+    /// Minimum number of peers in mesh network before adding more (D_lo in the
+    /// spec, default is 4).
     pub fn mesh_n_low(&mut self, mesh_n_low: usize) -> &mut Self {
         self.config.mesh_n_low = mesh_n_low;
         self
     }
 
-    /// Maximum number of peers in mesh network before removing some (D_high in the spec, default
-    /// is 12).
+    /// Maximum number of peers in mesh network before removing some (D_high in
+    /// the spec, default is 12).
     pub fn mesh_n_high(&mut self, mesh_n_high: usize) -> &mut Self {
         self.config.mesh_n_high = mesh_n_high;
         self
     }
 
-    /// Affects how peers are selected when pruning a mesh due to over subscription.
+    /// Affects how peers are selected when pruning a mesh due to over
+    /// subscription.
     ///
-    /// At least [`Self::retain_scores`] of the retained peers will be high-scoring, while the remainder are
-    /// chosen randomly (D_score in the spec, default is 4).
+    /// At least [`Self::retain_scores`] of the retained peers will be
+    /// high-scoring, while the remainder are chosen randomly (D_score in
+    /// the spec, default is 4).
     pub fn retain_scores(&mut self, retain_scores: usize) -> &mut Self {
         self.config.retain_scores = retain_scores;
         self
     }
 
-    /// Minimum number of peers to emit gossip to during a heartbeat (D_lazy in the spec,
-    /// default is 6).
+    /// Minimum number of peers to emit gossip to during a heartbeat (D_lazy in
+    /// the spec, default is 6).
     pub fn gossip_lazy(&mut self, gossip_lazy: usize) -> &mut Self {
         self.config.gossip_lazy = gossip_lazy;
         self
@@ -563,8 +599,9 @@ impl ConfigBuilder {
 
     /// Affects how many peers we will emit gossip to at each heartbeat.
     ///
-    /// We will send gossip to `gossip_factor * (total number of non-mesh peers)`, or
-    /// `gossip_lazy`, whichever is greater. The default is 0.25.
+    /// We will send gossip to `gossip_factor * (total number of non-mesh
+    /// peers)`, or `gossip_lazy`, whichever is greater. The default is
+    /// 0.25.
     pub fn gossip_factor(&mut self, gossip_factor: f64) -> &mut Self {
         self.config.gossip_factor = gossip_factor;
         self
@@ -582,8 +619,8 @@ impl ConfigBuilder {
         self
     }
 
-    /// The number of heartbeat ticks until we recheck the connection to explicit peers and
-    /// reconnecting if necessary (default 300).
+    /// The number of heartbeat ticks until we recheck the connection to
+    /// explicit peers and reconnecting if necessary (default 300).
     pub fn check_explicit_peers_ticks(&mut self, check_explicit_peers_ticks: u64) -> &mut Self {
         self.config.check_explicit_peers_ticks = check_explicit_peers_ticks;
         self
@@ -601,36 +638,40 @@ impl ConfigBuilder {
         self
     }
 
-    /// Duplicates are prevented by storing message id's of known messages in an LRU time cache.
-    /// This settings sets the time period that messages are stored in the cache. Duplicates can be
-    /// received if duplicate messages are sent at a time greater than this setting apart. The
+    /// Duplicates are prevented by storing message id's of known messages in an
+    /// LRU time cache. This settings sets the time period that messages are
+    /// stored in the cache. Duplicates can be received if duplicate
+    /// messages are sent at a time greater than this setting apart. The
     /// default is 1 minute.
     pub fn duplicate_cache_time(&mut self, cache_size: Duration) -> &mut Self {
         self.config.duplicate_cache_time = cache_size;
         self
     }
 
-    /// When set, prevents automatic forwarding of all received messages. This setting
-    /// allows a user to validate the messages before propagating them to their peers. If set,
-    /// the user must manually call [`crate::Behaviour::report_message_validation_result()`] on the
+    /// When set, prevents automatic forwarding of all received messages. This
+    /// setting allows a user to validate the messages before propagating
+    /// them to their peers. If set, the user must manually call
+    /// [`crate::Behaviour::report_message_validation_result()`] on the
     /// behaviour to forward a message once validated.
     pub fn validate_messages(&mut self) -> &mut Self {
         self.config.validate_messages = true;
         self
     }
 
-    /// Determines the level of validation used when receiving messages. See [`ValidationMode`]
-    /// for the available types. The default is ValidationMode::Strict.
+    /// Determines the level of validation used when receiving messages. See
+    /// [`ValidationMode`] for the available types. The default is
+    /// ValidationMode::Strict.
     pub fn validation_mode(&mut self, validation_mode: ValidationMode) -> &mut Self {
         self.config.protocol.validation_mode = validation_mode;
         self
     }
 
-    /// A user-defined function allowing the user to specify the message id of a gossipsub message.
-    /// The default value is to concatenate the source peer id with a sequence number. Setting this
-    /// parameter allows the user to address packets arbitrarily. One example is content based
-    /// addressing, where this function may be set to `hash(message)`. This would prevent messages
-    /// of the same content from being duplicated.
+    /// A user-defined function allowing the user to specify the message id of a
+    /// gossipsub message. The default value is to concatenate the source
+    /// peer id with a sequence number. Setting this parameter allows the
+    /// user to address packets arbitrarily. One example is content based
+    /// addressing, where this function may be set to `hash(message)`. This
+    /// would prevent messages of the same content from being duplicated.
     ///
     /// The function takes a [`Message`] as input and outputs a String to be
     /// interpreted as the message id.
@@ -642,8 +683,8 @@ impl ConfigBuilder {
         self
     }
 
-    /// Enables Peer eXchange. This should be enabled in bootstrappers and other well
-    /// connected/trusted nodes. The default is false.
+    /// Enables Peer eXchange. This should be enabled in bootstrappers and other
+    /// well connected/trusted nodes. The default is false.
     ///
     /// Note: Peer exchange is not implemented today, see
     /// <https://github.com/libp2p/rust-libp2p/issues/2398>.
@@ -654,9 +695,10 @@ impl ConfigBuilder {
 
     /// Controls the number of peers to include in prune Peer eXchange.
     ///
-    /// When we prune a peer that's eligible for PX (has a good score, etc), we will try to
-    /// send them signed peer records for up to [`Self::prune_peers] other peers that we
-    /// know of. It is recommended that this value is larger than [`Self::mesh_n_high`] so that the
+    /// When we prune a peer that's eligible for PX (has a good score, etc), we
+    /// will try to send them signed peer records for up to
+    /// [`Self::prune_peers] other peers that we know of. It is recommended
+    /// that this value is larger than [`Self::mesh_n_high`] so that the
     /// pruned peer can reliably form a full mesh. The default is 16.
     pub fn prune_peers(&mut self, prune_peers: usize) -> &mut Self {
         self.config.prune_peers = prune_peers;
@@ -664,11 +706,13 @@ impl ConfigBuilder {
     }
 
     /// Controls the backoff time for pruned peers. This is how long
-    /// a peer must wait before attempting to graft into our mesh again after being pruned.
-    /// When pruning a peer, we send them our value of [`Self::prune_backoff`] so they know
-    /// the minimum time to wait. Peers running older versions may not send a backoff time,
-    /// so if we receive a prune message without one, we will wait at least [`Self::prune_backoff`]
-    /// before attempting to re-graft. The default is one minute.
+    /// a peer must wait before attempting to graft into our mesh again after
+    /// being pruned. When pruning a peer, we send them our value of
+    /// [`Self::prune_backoff`] so they know the minimum time to wait. Peers
+    /// running older versions may not send a backoff time, so if we receive
+    /// a prune message without one, we will wait at least
+    /// [`Self::prune_backoff`] before attempting to re-graft. The default
+    /// is one minute.
     pub fn prune_backoff(&mut self, prune_backoff: Duration) -> &mut Self {
         self.config.prune_backoff = prune_backoff;
         self
@@ -676,107 +720,116 @@ impl ConfigBuilder {
 
     /// Controls the backoff time when unsubscribing from a topic.
     ///
-    /// This is how long to wait before resubscribing to the topic. A short backoff period in case
-    /// of an unsubscribe event allows reaching a healthy mesh in a more timely manner. The default
-    /// is 10 seconds.
+    /// This is how long to wait before resubscribing to the topic. A short
+    /// backoff period in case of an unsubscribe event allows reaching a
+    /// healthy mesh in a more timely manner. The default is 10 seconds.
     pub fn unsubscribe_backoff(&mut self, unsubscribe_backoff: u64) -> &mut Self {
         self.config.unsubscribe_backoff = Duration::from_secs(unsubscribe_backoff);
         self
     }
 
-    /// Number of heartbeat slots considered as slack for backoffs. This guarantees that we wait
-    /// at least backoff_slack heartbeats after a backoff is over before we try to graft. This
-    /// solves problems occurring through high latencies. In particular if
-    /// `backoff_slack * heartbeat_interval` is longer than any latencies between processing
-    /// prunes on our side and processing prunes on the receiving side this guarantees that we
-    /// get not punished for too early grafting. The default is 1.
+    /// Number of heartbeat slots considered as slack for backoffs. This
+    /// guarantees that we wait at least backoff_slack heartbeats after a
+    /// backoff is over before we try to graft. This solves problems
+    /// occurring through high latencies. In particular if `backoff_slack *
+    /// heartbeat_interval` is longer than any latencies between processing
+    /// prunes on our side and processing prunes on the receiving side this
+    /// guarantees that we get not punished for too early grafting. The
+    /// default is 1.
     pub fn backoff_slack(&mut self, backoff_slack: u32) -> &mut Self {
         self.config.backoff_slack = backoff_slack;
         self
     }
 
-    /// Whether to do flood publishing or not. If enabled newly created messages will always be
-    /// sent to all peers that are subscribed to the topic and have a good enough score.
-    /// The default is true.
+    /// Whether to do flood publishing or not. If enabled newly created messages
+    /// will always be sent to all peers that are subscribed to the topic
+    /// and have a good enough score. The default is true.
     pub fn flood_publish(&mut self, flood_publish: bool) -> &mut Self {
         self.config.flood_publish = flood_publish;
         self
     }
 
-    /// If a GRAFT comes before `graft_flood_threshold` has elapsed since the last PRUNE,
-    /// then there is an extra score penalty applied to the peer through P7.
+    /// If a GRAFT comes before `graft_flood_threshold` has elapsed since the
+    /// last PRUNE, then there is an extra score penalty applied to the peer
+    /// through P7.
     pub fn graft_flood_threshold(&mut self, graft_flood_threshold: Duration) -> &mut Self {
         self.config.graft_flood_threshold = graft_flood_threshold;
         self
     }
 
-    /// Minimum number of outbound peers in the mesh network before adding more (D_out in the spec).
-    /// This value must be smaller or equal than `mesh_n / 2` and smaller than `mesh_n_low`.
-    /// The default is 2.
+    /// Minimum number of outbound peers in the mesh network before adding more
+    /// (D_out in the spec). This value must be smaller or equal than
+    /// `mesh_n / 2` and smaller than `mesh_n_low`. The default is 2.
     pub fn mesh_outbound_min(&mut self, mesh_outbound_min: usize) -> &mut Self {
         self.config.mesh_outbound_min = mesh_outbound_min;
         self
     }
 
-    /// Number of heartbeat ticks that specify the interval in which opportunistic grafting is
-    /// applied. Every `opportunistic_graft_ticks` we will attempt to select some high-scoring mesh
-    /// peers to replace lower-scoring ones, if the median score of our mesh peers falls below a
-    /// threshold (see <https://godoc.org/github.com/libp2p/go-libp2p-pubsub#PeerScoreThresholds>).
+    /// Number of heartbeat ticks that specify the interval in which
+    /// opportunistic grafting is applied. Every `opportunistic_graft_ticks`
+    /// we will attempt to select some high-scoring mesh peers to replace
+    /// lower-scoring ones, if the median score of our mesh peers falls below a threshold (see <https://godoc.org/github.com/libp2p/go-libp2p-pubsub#PeerScoreThresholds>).
     /// The default is 60.
     pub fn opportunistic_graft_ticks(&mut self, opportunistic_graft_ticks: u64) -> &mut Self {
         self.config.opportunistic_graft_ticks = opportunistic_graft_ticks;
         self
     }
 
-    /// Controls how many times we will allow a peer to request the same message id through IWANT
-    /// gossip before we start ignoring them. This is designed to prevent peers from spamming us
-    /// with requests and wasting our resources.
+    /// Controls how many times we will allow a peer to request the same message
+    /// id through IWANT gossip before we start ignoring them. This is
+    /// designed to prevent peers from spamming us with requests and wasting
+    /// our resources.
     pub fn gossip_retransimission(&mut self, gossip_retransimission: u32) -> &mut Self {
         self.config.gossip_retransimission = gossip_retransimission;
         self
     }
 
-    /// The maximum number of new peers to graft to during opportunistic grafting. The default is 2.
+    /// The maximum number of new peers to graft to during opportunistic
+    /// grafting. The default is 2.
     pub fn opportunistic_graft_peers(&mut self, opportunistic_graft_peers: usize) -> &mut Self {
         self.config.opportunistic_graft_peers = opportunistic_graft_peers;
         self
     }
 
-    /// The maximum number of messages we will process in a given RPC. If this is unset, there is
-    /// no limit. The default is None.
+    /// The maximum number of messages we will process in a given RPC. If this
+    /// is unset, there is no limit. The default is None.
     pub fn max_messages_per_rpc(&mut self, max: Option<usize>) -> &mut Self {
         self.config.max_messages_per_rpc = max;
         self
     }
 
     /// The maximum number of messages to include in an IHAVE message.
-    /// Also controls the maximum number of IHAVE ids we will accept and request with IWANT from a
-    /// peer within a heartbeat, to protect from IHAVE floods. You should adjust this value from the
-    /// default if your system is pushing more than 5000 messages in GossipSubHistoryGossip
-    /// heartbeats; with the defaults this is 1666 messages/s. The default is 5000.
+    /// Also controls the maximum number of IHAVE ids we will accept and request
+    /// with IWANT from a peer within a heartbeat, to protect from IHAVE
+    /// floods. You should adjust this value from the default if your system
+    /// is pushing more than 5000 messages in GossipSubHistoryGossip
+    /// heartbeats; with the defaults this is 1666 messages/s. The default is
+    /// 5000.
     pub fn max_ihave_length(&mut self, max_ihave_length: usize) -> &mut Self {
         self.config.max_ihave_length = max_ihave_length;
         self
     }
 
-    /// GossipSubMaxIHaveMessages is the maximum number of IHAVE messages to accept from a peer
-    /// within a heartbeat.
+    /// GossipSubMaxIHaveMessages is the maximum number of IHAVE messages to
+    /// accept from a peer within a heartbeat.
     pub fn max_ihave_messages(&mut self, max_ihave_messages: usize) -> &mut Self {
         self.config.max_ihave_messages = max_ihave_messages;
         self
     }
 
-    /// By default, gossipsub will reject messages that are sent to us that has the same message
-    /// source as we have specified locally. Enabling this, allows these messages and prevents
-    /// penalizing the peer that sent us the message. Default is false.
+    /// By default, gossipsub will reject messages that are sent to us that has
+    /// the same message source as we have specified locally. Enabling this,
+    /// allows these messages and prevents penalizing the peer that sent us
+    /// the message. Default is false.
     pub fn allow_self_origin(&mut self, allow_self_origin: bool) -> &mut Self {
         self.config.allow_self_origin = allow_self_origin;
         self
     }
 
-    /// Time to wait for a message requested through IWANT following an IHAVE advertisement.
-    /// If the message is not received within this window, a broken promise is declared and
-    /// the router may apply behavioural penalties. The default is 3 seconds.
+    /// Time to wait for a message requested through IWANT following an IHAVE
+    /// advertisement. If the message is not received within this window, a
+    /// broken promise is declared and the router may apply behavioural
+    /// penalties. The default is 3 seconds.
     pub fn iwant_followup_time(&mut self, iwant_followup_time: Duration) -> &mut Self {
         self.config.iwant_followup_time = iwant_followup_time;
         self
@@ -806,27 +859,29 @@ impl ConfigBuilder {
         self
     }
 
-    /// The max number of messages a `ConnectionHandler` can buffer. The default is 5000.
+    /// The max number of messages a `ConnectionHandler` can buffer. The default
+    /// is 5000.
     pub fn connection_handler_queue_len(&mut self, len: usize) -> &mut Self {
         self.config.connection_handler_queue_len = len;
         self
     }
 
-    /// The duration a message to be published can wait to be sent before it is abandoned. The
-    /// default is 5 seconds.
+    /// The duration a message to be published can wait to be sent before it is
+    /// abandoned. The default is 5 seconds.
     pub fn publish_queue_duration(&mut self, duration: Duration) -> &mut Self {
         self.config.connection_handler_publish_duration = duration;
         self
     }
 
-    /// The duration a message to be forwarded can wait to be sent before it is abandoned. The
-    /// default is 1s.
+    /// The duration a message to be forwarded can wait to be sent before it is
+    /// abandoned. The default is 1s.
     pub fn forward_queue_duration(&mut self, duration: Duration) -> &mut Self {
         self.config.connection_handler_forward_duration = duration;
         self
     }
 
-    /// Constructs a [`Config`] from the given configuration and validates the settings.
+    /// Constructs a [`Config`] from the given configuration and validates the
+    /// settings.
     pub fn build(&self) -> Result<Config, ConfigBuilderError> {
         // check all constraints on config
 
@@ -902,12 +957,15 @@ impl std::fmt::Debug for Config {
 
 #[cfg(test)]
 mod test {
-    use super::*;
-    use crate::topic::IdentityHash;
-    use crate::Topic;
+    use std::{
+        collections::hash_map::DefaultHasher,
+        hash::{Hash, Hasher},
+    };
+
     use libp2p_core::UpgradeInfo;
-    use std::collections::hash_map::DefaultHasher;
-    use std::hash::{Hash, Hasher};
+
+    use super::*;
+    use crate::{topic::IdentityHash, Topic};
 
     #[test]
     fn create_config_with_message_id_as_plain_function() {

@@ -83,12 +83,14 @@ pub enum ConnectedPoint {
         ///   connection as a dialer and one peer dial the other and upgrade the
         ///   connection _as a listener_ overriding its role.
         role_override: Endpoint,
-        /// Whether the port for the outgoing connection was reused from a listener
-        /// or a new port was allocated. This is useful for address translation.
+        /// Whether the port for the outgoing connection was reused from a
+        /// listener or a new port was allocated. This is useful for
+        /// address translation.
         ///
-        /// The port use is implemented on a best-effort basis. It is not guaranteed
-        /// that [`PortUse::Reuse`] actually reused a port. A good example is the case
-        /// where there is no listener available to reuse a port from.
+        /// The port use is implemented on a best-effort basis. It is not
+        /// guaranteed that [`PortUse::Reuse`] actually reused a port. A
+        /// good example is the case where there is no listener
+        /// available to reuse a port from.
         port_use: PortUse,
     },
     /// We received the node.
@@ -153,10 +155,11 @@ impl ConnectedPoint {
 
     /// Returns the address of the remote stored in this struct.
     ///
-    /// For `Dialer`, this returns `address`. For `Listener`, this returns `send_back_addr`.
+    /// For `Dialer`, this returns `address`. For `Listener`, this returns
+    /// `send_back_addr`.
     ///
-    /// Note that the remote node might not be listening on this address and hence the address might
-    /// not be usable to establish new connections.
+    /// Note that the remote node might not be listening on this address and
+    /// hence the address might not be usable to establish new connections.
     pub fn get_remote_address(&self) -> &Multiaddr {
         match self {
             ConnectedPoint::Dialer { address, .. } => address,
@@ -166,7 +169,8 @@ impl ConnectedPoint {
 
     /// Modifies the address of the remote stored in this struct.
     ///
-    /// For `Dialer`, this modifies `address`. For `Listener`, this modifies `send_back_addr`.
+    /// For `Dialer`, this modifies `address`. For `Listener`, this modifies
+    /// `send_back_addr`.
     pub fn set_remote_address(&mut self, new_address: Multiaddr) {
         match self {
             ConnectedPoint::Dialer { address, .. } => *address = new_address,

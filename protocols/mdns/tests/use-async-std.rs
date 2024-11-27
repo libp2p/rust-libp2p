@@ -18,12 +18,12 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.use futures::StreamExt;
 
+use std::time::Duration;
+
 use futures::future::Either;
-use libp2p_mdns::Event;
-use libp2p_mdns::{async_io::Behaviour, Config};
+use libp2p_mdns::{async_io::Behaviour, Config, Event};
 use libp2p_swarm::{Swarm, SwarmEvent};
 use libp2p_swarm_test::SwarmExt as _;
-use std::time::Duration;
 use tracing_subscriber::EnvFilter;
 
 #[async_std::test]
@@ -158,7 +158,8 @@ async fn create_swarm(config: Config) -> Swarm<Behaviour> {
     let mut swarm =
         Swarm::new_ephemeral(|key| Behaviour::new(config, key.public().to_peer_id()).unwrap());
 
-    // Manually listen on all interfaces because mDNS only works for non-loopback addresses.
+    // Manually listen on all interfaces because mDNS only works for non-loopback
+    // addresses.
     let expected_listener_id = swarm
         .listen_on("/ip4/0.0.0.0/tcp/0".parse().unwrap())
         .unwrap();

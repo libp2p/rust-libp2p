@@ -20,26 +20,10 @@
 
 pub(crate) mod protocol;
 
-pub use protocol::ProtocolSupport;
-
-use crate::codec::Codec;
-use crate::handler::protocol::Protocol;
-use crate::{InboundRequestId, OutboundRequestId, EMPTY_QUEUE_SHRINK_THRESHOLD};
-
-use futures::channel::mpsc;
-use futures::{channel::oneshot, prelude::*};
-use libp2p_swarm::handler::{
-    ConnectionEvent, DialUpgradeError, FullyNegotiatedInbound, FullyNegotiatedOutbound,
-    ListenUpgradeError,
-};
-use libp2p_swarm::{
-    handler::{ConnectionHandler, ConnectionHandlerEvent, StreamUpgradeError},
-    SubstreamProtocol,
-};
-use smallvec::SmallVec;
 use std::{
     collections::VecDeque,
-    fmt, io,
+    fmt,
+    io,
     sync::{
         atomic::{AtomicU64, Ordering},
         Arc,
@@ -48,7 +32,36 @@ use std::{
     time::Duration,
 };
 
-/// A connection handler for a request response [`Behaviour`](super::Behaviour) protocol.
+use futures::{
+    channel::{mpsc, oneshot},
+    prelude::*,
+};
+use libp2p_swarm::{
+    handler::{
+        ConnectionEvent,
+        ConnectionHandler,
+        ConnectionHandlerEvent,
+        DialUpgradeError,
+        FullyNegotiatedInbound,
+        FullyNegotiatedOutbound,
+        ListenUpgradeError,
+        StreamUpgradeError,
+    },
+    SubstreamProtocol,
+};
+pub use protocol::ProtocolSupport;
+use smallvec::SmallVec;
+
+use crate::{
+    codec::Codec,
+    handler::protocol::Protocol,
+    InboundRequestId,
+    OutboundRequestId,
+    EMPTY_QUEUE_SHRINK_THRESHOLD,
+};
+
+/// A connection handler for a request response [`Behaviour`](super::Behaviour)
+/// protocol.
 pub struct Handler<TCodec>
 where
     TCodec: Codec,
@@ -59,7 +72,8 @@ where
     codec: TCodec,
     /// Queue of events to emit in `poll()`.
     pending_events: VecDeque<Event<TCodec>>,
-    /// Outbound upgrades waiting to be emitted as an `OutboundSubstreamRequest`.
+    /// Outbound upgrades waiting to be emitted as an
+    /// `OutboundSubstreamRequest`.
     pending_outbound: VecDeque<OutboundMessage<TCodec>>,
 
     requested_outbound: VecDeque<OutboundMessage<TCodec>>,
@@ -69,7 +83,8 @@ where
         TCodec::Request,
         oneshot::Sender<TCodec::Response>,
     )>,
-    /// The [`mpsc::Sender`] for the above receiver. Cloned for each inbound request.
+    /// The [`mpsc::Sender`] for the above receiver. Cloned for each inbound
+    /// request.
     inbound_sender: mpsc::Sender<(
         InboundRequestId,
         TCodec::Request,
@@ -159,9 +174,10 @@ where
             }
         };
 
-        // Inbound connections are reported to the upper layer from within the above task,
-        // so by failing to schedule it, it means the upper layer will never know about the
-        // inbound request. Because of that we do not report any inbound failure.
+        // Inbound connections are reported to the upper layer from within the above
+        // task, so by failing to schedule it, it means the upper layer will
+        // never know about the inbound request. Because of that we do not
+        // report any inbound failure.
         if self
             .worker_streams
             .try_push(RequestId::Inbound(request_id), recv.boxed())

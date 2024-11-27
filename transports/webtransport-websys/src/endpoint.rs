@@ -1,11 +1,14 @@
+use std::collections::HashSet;
+
 use js_sys::{Array, Uint8Array};
 use libp2p_identity::PeerId;
 use multiaddr::{Multiaddr, Protocol};
 use multihash::Multihash;
-use std::collections::HashSet;
 
-use crate::bindings::{WebTransportHash, WebTransportOptions};
-use crate::Error;
+use crate::{
+    bindings::{WebTransportHash, WebTransportOptions},
+    Error,
+};
 
 pub(crate) struct Endpoint {
     pub(crate) host: String,
@@ -149,8 +152,9 @@ impl Endpoint {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use std::str::FromStr;
+
+    use super::*;
 
     fn multihash_from_str(s: &str) -> Multihash<64> {
         let (_base, bytes) = multibase::decode(s).unwrap();
@@ -159,7 +163,13 @@ mod tests {
 
     #[test]
     fn valid_webtransport_multiaddr() {
-        let addr = Multiaddr::from_str("/ip4/127.0.0.1/udp/44874/quic-v1/webtransport/certhash/uEiCaDd1Ca1A8IVJ3hsIxIyi11cwxaDKqzVrBkGJbKZU5ng/certhash/uEiDv-VGW8oXxui_G_Kqp-87YjvET-Hr2qYAMYPePJDcsjQ/p2p/12D3KooWR7EfNv5SLtgjMRjUwR8AvNu3hP4fLrtSa9fmHHXKYWNG").unwrap();
+        let addr = Multiaddr::from_str(
+            "/ip4/127.0.0.1/udp/44874/quic-v1/webtransport/certhash/\
+             uEiCaDd1Ca1A8IVJ3hsIxIyi11cwxaDKqzVrBkGJbKZU5ng/certhash/\
+             uEiDv-VGW8oXxui_G_Kqp-87YjvET-Hr2qYAMYPePJDcsjQ/p2p/\
+             12D3KooWR7EfNv5SLtgjMRjUwR8AvNu3hP4fLrtSa9fmHHXKYWNG",
+        )
+        .unwrap();
         let endpoint = Endpoint::from_multiaddr(&addr).unwrap();
 
         assert_eq!(endpoint.host, "127.0.0.1");
@@ -187,7 +197,11 @@ mod tests {
 
     #[test]
     fn valid_webtransport_multiaddr_without_certhashes() {
-        let addr = Multiaddr::from_str("/ip4/127.0.0.1/udp/44874/quic-v1/webtransport/p2p/12D3KooWR7EfNv5SLtgjMRjUwR8AvNu3hP4fLrtSa9fmHHXKYWNG").unwrap();
+        let addr = Multiaddr::from_str(
+            "/ip4/127.0.0.1/udp/44874/quic-v1/webtransport/p2p/\
+             12D3KooWR7EfNv5SLtgjMRjUwR8AvNu3hP4fLrtSa9fmHHXKYWNG",
+        )
+        .unwrap();
         let endpoint = Endpoint::from_multiaddr(&addr).unwrap();
 
         assert_eq!(endpoint.host, "127.0.0.1");
@@ -201,7 +215,13 @@ mod tests {
 
     #[test]
     fn ipv6_webtransport() {
-        let addr = Multiaddr::from_str("/ip6/::1/udp/44874/quic-v1/webtransport/certhash/uEiCaDd1Ca1A8IVJ3hsIxIyi11cwxaDKqzVrBkGJbKZU5ng/certhash/uEiDv-VGW8oXxui_G_Kqp-87YjvET-Hr2qYAMYPePJDcsjQ/p2p/12D3KooWR7EfNv5SLtgjMRjUwR8AvNu3hP4fLrtSa9fmHHXKYWNG").unwrap();
+        let addr = Multiaddr::from_str(
+            "/ip6/::1/udp/44874/quic-v1/webtransport/certhash/\
+             uEiCaDd1Ca1A8IVJ3hsIxIyi11cwxaDKqzVrBkGJbKZU5ng/certhash/\
+             uEiDv-VGW8oXxui_G_Kqp-87YjvET-Hr2qYAMYPePJDcsjQ/p2p/\
+             12D3KooWR7EfNv5SLtgjMRjUwR8AvNu3hP4fLrtSa9fmHHXKYWNG",
+        )
+        .unwrap();
         let endpoint = Endpoint::from_multiaddr(&addr).unwrap();
 
         assert_eq!(endpoint.host, "::1");
@@ -214,7 +234,13 @@ mod tests {
 
     #[test]
     fn dns_webtransport() {
-        let addr = Multiaddr::from_str("/dns/libp2p.io/udp/44874/quic-v1/webtransport/certhash/uEiCaDd1Ca1A8IVJ3hsIxIyi11cwxaDKqzVrBkGJbKZU5ng/certhash/uEiDv-VGW8oXxui_G_Kqp-87YjvET-Hr2qYAMYPePJDcsjQ/p2p/12D3KooWR7EfNv5SLtgjMRjUwR8AvNu3hP4fLrtSa9fmHHXKYWNG").unwrap();
+        let addr = Multiaddr::from_str(
+            "/dns/libp2p.io/udp/44874/quic-v1/webtransport/certhash/\
+             uEiCaDd1Ca1A8IVJ3hsIxIyi11cwxaDKqzVrBkGJbKZU5ng/certhash/\
+             uEiDv-VGW8oXxui_G_Kqp-87YjvET-Hr2qYAMYPePJDcsjQ/p2p/\
+             12D3KooWR7EfNv5SLtgjMRjUwR8AvNu3hP4fLrtSa9fmHHXKYWNG",
+        )
+        .unwrap();
         let endpoint = Endpoint::from_multiaddr(&addr).unwrap();
 
         assert_eq!(endpoint.host, "libp2p.io");

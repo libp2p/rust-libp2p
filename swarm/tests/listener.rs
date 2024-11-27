@@ -7,15 +7,28 @@ use std::{
 use libp2p_core::{
     multiaddr::Protocol,
     transport::{ListenerId, PortUse},
-    Endpoint, Multiaddr,
+    Endpoint,
+    Multiaddr,
 };
 use libp2p_identity::PeerId;
 use libp2p_swarm::{
-    derive_prelude::NewListener, dummy, ConnectionDenied, ConnectionId, FromSwarm, ListenOpts,
-    ListenerClosed, ListenerError, NetworkBehaviour, NewListenAddr, Swarm, SwarmEvent, THandler,
-    THandlerInEvent, THandlerOutEvent, ToSwarm,
+    derive_prelude::NewListener,
+    dummy,
+    ConnectionDenied,
+    ConnectionId,
+    FromSwarm,
+    ListenOpts,
+    ListenerClosed,
+    ListenerError,
+    NetworkBehaviour,
+    NewListenAddr,
+    Swarm,
+    SwarmEvent,
+    THandler,
+    THandlerInEvent,
+    THandlerOutEvent,
+    ToSwarm,
 };
-
 use libp2p_swarm_test::SwarmExt;
 
 #[async_std::test]

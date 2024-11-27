@@ -1,12 +1,14 @@
-use crate::behaviour::{ExternalAddrConfirmed, ExternalAddrExpired, FromSwarm};
 use libp2p_core::Multiaddr;
+
+use crate::behaviour::{ExternalAddrConfirmed, ExternalAddrExpired, FromSwarm};
 
 /// The maximum number of local external addresses. When reached any
 /// further externally reported addresses are ignored. The behaviour always
 /// tracks all its listen addresses.
 const MAX_LOCAL_EXTERNAL_ADDRS: usize = 20;
 
-/// Utility struct for tracking the external addresses of a [`Swarm`](crate::Swarm).
+/// Utility struct for tracking the external addresses of a
+/// [`Swarm`](crate::Swarm).
 #[derive(Debug, Clone, Default)]
 pub struct ExternalAddresses {
     addresses: Vec<Multiaddr>,
@@ -78,16 +80,19 @@ impl ExternalAddresses {
     }
 
     fn push_front(&mut self, addr: &Multiaddr) {
-        self.addresses.insert(0, addr.clone()); // We have at most `MAX_LOCAL_EXTERNAL_ADDRS` so this isn't very expensive.
+        self.addresses.insert(0, addr.clone()); // We have at most
+                                                // `MAX_LOCAL_EXTERNAL_ADDRS` so
+                                                // this isn't very expensive.
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use libp2p_core::multiaddr::Protocol;
     use once_cell::sync::Lazy;
     use rand::Rng;
+
+    use super::*;
 
     #[test]
     fn new_external_addr_returns_correct_changed_value() {

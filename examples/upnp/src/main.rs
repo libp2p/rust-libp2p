@@ -20,9 +20,10 @@
 
 #![doc = include_str!("../README.md")]
 
+use std::error::Error;
+
 use futures::prelude::*;
 use libp2p::{noise, swarm::SwarmEvent, upnp, yamux, Multiaddr};
-use std::error::Error;
 use tracing_subscriber::EnvFilter;
 
 #[tokio::main]
@@ -64,7 +65,10 @@ async fn main() -> Result<(), Box<dyn Error>> {
                 break;
             }
             SwarmEvent::Behaviour(upnp::Event::NonRoutableGateway) => {
-                println!("Gateway is not exposed directly to the public Internet, i.e. it itself has a private IP address.");
+                println!(
+                    "Gateway is not exposed directly to the public Internet, i.e. it itself has a \
+                     private IP address."
+                );
                 break;
             }
             _ => {}

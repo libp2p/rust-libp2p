@@ -1,16 +1,43 @@
 #![cfg(any(feature = "async-std", feature = "tokio"))]
 
-use futures::channel::{mpsc, oneshot};
-use futures::future::BoxFuture;
-use futures::future::{poll_fn, Either};
-use futures::stream::StreamExt;
-use futures::{future, AsyncReadExt, AsyncWriteExt, FutureExt, SinkExt};
+use std::{
+    future::Future,
+    io,
+    num::NonZeroU8,
+    pin::Pin,
+    sync::{Arc, Mutex},
+    task::Poll,
+    time::Duration,
+};
+
+use futures::{
+    channel::{mpsc, oneshot},
+    future,
+    future::{poll_fn, BoxFuture, Either},
+    stream::StreamExt,
+    AsyncReadExt,
+    AsyncWriteExt,
+    FutureExt,
+    SinkExt,
+};
 use futures_timer::Delay;
-use libp2p_core::muxing::{StreamMuxerBox, StreamMuxerExt, SubstreamBox};
-use libp2p_core::transport::{Boxed, DialOpts, OrTransport, PortUse, TransportEvent};
-use libp2p_core::transport::{ListenerId, TransportError};
-use libp2p_core::Endpoint;
-use libp2p_core::{multiaddr::Protocol, upgrade, Multiaddr, Transport};
+use libp2p_core::{
+    multiaddr::Protocol,
+    muxing::{StreamMuxerBox, StreamMuxerExt, SubstreamBox},
+    transport::{
+        Boxed,
+        DialOpts,
+        ListenerId,
+        OrTransport,
+        PortUse,
+        TransportError,
+        TransportEvent,
+    },
+    upgrade,
+    Endpoint,
+    Multiaddr,
+    Transport,
+};
 use libp2p_identity::PeerId;
 use libp2p_noise as noise;
 use libp2p_quic as quic;
@@ -18,15 +45,6 @@ use libp2p_tcp as tcp;
 use libp2p_yamux as yamux;
 use quic::Provider;
 use rand::RngCore;
-use std::future::Future;
-use std::io;
-use std::num::NonZeroU8;
-use std::task::Poll;
-use std::time::Duration;
-use std::{
-    pin::Pin,
-    sync::{Arc, Mutex},
-};
 use tracing_subscriber::EnvFilter;
 
 #[cfg(feature = "tokio")]
@@ -85,7 +103,8 @@ async fn ipv4_dial_ipv6() {
     assert_eq!(b_connected, a_peer_id);
 }
 
-/// Tests that a [`Transport::dial`] wakes up the task previously polling [`Transport::poll`].
+/// Tests that a [`Transport::dial`] wakes up the task previously polling
+/// [`Transport::poll`].
 ///
 /// See https://github.com/libp2p/rust-libp2p/pull/3306 for context.
 #[cfg(feature = "async-std")]
@@ -117,8 +136,9 @@ async fn wrapped_with_delay() {
             self.0.lock().unwrap().remove_listener(id)
         }
 
-        /// Delayed dial, i.e. calling [`Transport::dial`] on the inner [`Transport`] not within the
-        /// synchronous [`Transport::dial`] method, but within the [`Future`] returned by the outer
+        /// Delayed dial, i.e. calling [`Transport::dial`] on the inner
+        /// [`Transport`] not within the synchronous [`Transport::dial`]
+        /// method, but within the [`Future`] returned by the outer
         /// [`Transport::dial`].
         fn dial(
             &mut self,
@@ -128,8 +148,8 @@ async fn wrapped_with_delay() {
             let t = self.0.clone();
             Ok(async move {
                 // Simulate DNS lookup. Giving the `Transport::poll` the chance to return
-                // `Poll::Pending` and thus suspending its task, waiting for a wakeup from the dial
-                // on the inner transport below.
+                // `Poll::Pending` and thus suspending its task, waiting for a wakeup from the
+                // dial on the inner transport below.
                 Delay::new(Duration::from_millis(100)).await;
 
                 let dial = t
@@ -176,8 +196,9 @@ async fn wrapped_with_delay() {
 
     // Spawn B
     //
-    // Note that the dial is spawned on a different task than the transport allowing the transport
-    // task to poll the transport once and then suspend, waiting for the wakeup from the dial.
+    // Note that the dial is spawned on a different task than the transport allowing
+    // the transport task to poll the transport once and then suspend, waiting
+    // for the wakeup from the dial.
     let dial = async_std::task::spawn({
         let dial = b_transport
             .dial(
@@ -200,7 +221,8 @@ async fn wrapped_with_delay() {
 
 #[cfg(feature = "async-std")]
 #[async_std::test]
-#[ignore] // Transport currently does not validate PeerId. Enable once we make use of PeerId validation in rustls.
+#[ignore] // Transport currently does not validate PeerId. Enable once we make use of
+          // PeerId validation in rustls.
 async fn wrong_peerid() {
     use libp2p_identity::PeerId;
 
@@ -305,7 +327,8 @@ async fn draft_29_support() {
     let (_, mut b_transport) =
         create_transport::<quic::tokio::Provider>(|cfg| cfg.support_draft_29 = true);
 
-    // If a server supports draft-29 all its QUIC addresses can be dialed on draft-29 or version-1
+    // If a server supports draft-29 all its QUIC addresses can be dialed on
+    // draft-29 or version-1
     let a_quic_addr = start_listening(&mut a_transport, "/ip4/127.0.0.1/udp/0/quic").await;
     let a_quic_mapped_addr = swap_protocol!(a_quic_addr, Quic => QuicV1);
     let a_quic_v1_addr = start_listening(&mut a_transport, "/ip4/127.0.0.1/udp/0/quic-v1").await;
@@ -462,8 +485,8 @@ async fn test_local_listener_reuse() {
             }
         }
     };
-    // If we do not poll until the end, `NewAddress` events may be `Ready` and `connect` function
-    // below will panic due to an unexpected event.
+    // If we do not poll until the end, `NewAddress` events may be `Ready` and
+    // `connect` function below will panic due to an unexpected event.
     poll_fn(|cx| {
         let mut pinned = Pin::new(&mut a_transport);
         while pinned.as_mut().poll(cx).is_ready() {}
@@ -755,7 +778,8 @@ async fn open_outbound_streams<P: Provider + Spawn, const BUFFER_SIZE: usize>(
     {}
 }
 
-/// Helper function for driving two transports until they established a connection.
+/// Helper function for driving two transports until they established a
+/// connection.
 #[allow(unknown_lints, clippy::needless_pass_by_ref_mut)] // False positive.
 async fn connect(
     listener: &mut Boxed<(PeerId, StreamMuxerBox)>,

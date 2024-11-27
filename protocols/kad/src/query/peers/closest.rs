@@ -18,17 +18,24 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use super::*;
+use std::{
+    collections::btree_map::{BTreeMap, Entry},
+    num::NonZeroUsize,
+    time::Duration,
+};
 
-use crate::kbucket::{Distance, Key, KeyBytes};
-use crate::{ALPHA_VALUE, K_VALUE};
-use std::collections::btree_map::{BTreeMap, Entry};
-use std::{num::NonZeroUsize, time::Duration};
 use web_time::Instant;
 
+use super::*;
+use crate::{
+    kbucket::{Distance, Key, KeyBytes},
+    ALPHA_VALUE,
+    K_VALUE,
+};
+
 pub(crate) mod disjoint;
-/// A peer iterator for a dynamically changing list of peers, sorted by increasing
-/// distance to a chosen target.
+/// A peer iterator for a dynamically changing list of peers, sorted by
+/// increasing distance to a chosen target.
 #[derive(Debug, Clone)]
 pub struct ClosestPeersIter {
     config: ClosestPeersIterConfig,
@@ -43,7 +50,8 @@ pub struct ClosestPeersIter {
     /// The closest peers to the target, ordered by increasing distance.
     closest_peers: BTreeMap<Distance, Peer>,
 
-    /// The number of peers for which the iterator is currently waiting for results.
+    /// The number of peers for which the iterator is currently waiting for
+    /// results.
     num_waiting: usize,
 }
 
@@ -52,23 +60,24 @@ pub struct ClosestPeersIter {
 pub struct ClosestPeersIterConfig {
     /// Allowed level of parallelism.
     ///
-    /// The `α` parameter in the Kademlia paper. The maximum number of peers that
-    /// the iterator is allowed to wait for in parallel while iterating towards the closest
-    /// nodes to a target. Defaults to `ALPHA_VALUE`.
+    /// The `α` parameter in the Kademlia paper. The maximum number of peers
+    /// that the iterator is allowed to wait for in parallel while iterating
+    /// towards the closest nodes to a target. Defaults to `ALPHA_VALUE`.
     pub parallelism: NonZeroUsize,
 
     /// Number of results (closest peers) to search for.
     ///
-    /// The number of closest peers for which the iterator must obtain successful results
-    /// in order to finish successfully. Defaults to `K_VALUE`.
+    /// The number of closest peers for which the iterator must obtain
+    /// successful results in order to finish successfully. Defaults to
+    /// `K_VALUE`.
     pub num_results: NonZeroUsize,
 
     /// The timeout for a single peer.
     ///
     /// If a successful result is not reported for a peer within this timeout
-    /// window, the iterator considers the peer unresponsive and will not wait for
-    /// the peer when evaluating the termination conditions, until and unless a
-    /// result is delivered. Defaults to `10` seconds.
+    /// window, the iterator considers the peer unresponsive and will not wait
+    /// for the peer when evaluating the termination conditions, until and
+    /// unless a result is delivered. Defaults to `10` seconds.
     pub peer_timeout: Duration,
 }
 
@@ -133,11 +142,12 @@ impl ClosestPeersIter {
 
     /// Callback for delivering the result of a successful request to a peer.
     ///
-    /// Delivering results of requests back to the iterator allows the iterator to make
-    /// progress. The iterator is said to make progress either when the given
-    /// `closer_peers` contain a peer closer to the target than any peer seen so far,
-    /// or when the iterator did not yet accumulate `num_results` closest peers and
-    /// `closer_peers` contains a new peer, regardless of its distance to the target.
+    /// Delivering results of requests back to the iterator allows the iterator
+    /// to make progress. The iterator is said to make progress either when
+    /// the given `closer_peers` contain a peer closer to the target than
+    /// any peer seen so far, or when the iterator did not yet accumulate
+    /// `num_results` closest peers and `closer_peers` contains a new peer,
+    /// regardless of its distance to the target.
     ///
     /// If the iterator is currently waiting for a result from `peer`,
     /// the iterator state is updated and `true` is returned. In that
@@ -289,12 +299,14 @@ impl ClosestPeersIter {
         self.num_waiting
     }
 
-    /// Returns true if the iterator is waiting for a response from the given peer.
+    /// Returns true if the iterator is waiting for a response from the given
+    /// peer.
     pub fn is_waiting(&self, peer: &PeerId) -> bool {
         self.waiting().any(|p| peer == p)
     }
 
-    /// Advances the state of the iterator, potentially getting a new peer to contact.
+    /// Advances the state of the iterator, potentially getting a new peer to
+    /// contact.
     pub fn next(&mut self, now: Instant) -> PeersIterState<'_> {
         if let State::Finished = self.state {
             return PeersIterState::Finished;
@@ -423,9 +435,9 @@ impl ClosestPeersIter {
 /// Internal state of the iterator.
 #[derive(Debug, PartialEq, Eq, Copy, Clone)]
 enum State {
-    /// The iterator is making progress by iterating towards `num_results` closest
-    /// peers to the target with a maximum of `parallelism` peers for which the
-    /// iterator is waiting for results at a time.
+    /// The iterator is making progress by iterating towards `num_results`
+    /// closest peers to the target with a maximum of `parallelism` peers
+    /// for which the iterator is waiting for results at a time.
     ///
     /// > **Note**: When the iterator switches back to `Iterating` after being
     /// > `Stalled`, it may temporarily be waiting for more than `parallelism`
@@ -442,18 +454,19 @@ enum State {
     /// A iterator is stalled when it did not make progress after `parallelism`
     /// consecutive successful results (see `on_success`).
     ///
-    /// While the iterator is stalled, the maximum allowed parallelism for pending
-    /// results is increased to `num_results` in an attempt to finish the iterator.
-    /// If the iterator can make progress again upon receiving the remaining
-    /// results, it switches back to `Iterating`. Otherwise it will be finished.
+    /// While the iterator is stalled, the maximum allowed parallelism for
+    /// pending results is increased to `num_results` in an attempt to
+    /// finish the iterator. If the iterator can make progress again upon
+    /// receiving the remaining results, it switches back to `Iterating`.
+    /// Otherwise it will be finished.
     Stalled,
 
     /// The iterator is finished.
     ///
     /// A iterator finishes either when it has collected `num_results` results
-    /// from the closest peers (not counting those that failed or are unresponsive)
-    /// or because the iterator ran out of peers that have not yet delivered
-    /// results (or failed).
+    /// from the closest peers (not counting those that failed or are
+    /// unresponsive) or because the iterator ran out of peers that have not
+    /// yet delivered results (or failed).
     Finished,
 }
 
@@ -494,12 +507,14 @@ enum PeerState {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use crate::SHA_256_MH;
+    use std::iter;
+
     use libp2p_core::multihash::Multihash;
     use quickcheck::*;
     use rand::{rngs::StdRng, Rng, SeedableRng};
-    use std::iter;
+
+    use super::*;
+    use crate::SHA_256_MH;
 
     fn random_peers<R: Rng>(n: usize, g: &mut R) -> Vec<PeerId> {
         (0..n)
@@ -816,8 +831,8 @@ mod tests {
                 iter.num_waiting = i;
                 assert!(
                     !iter.at_capacity(),
-                    "Iterator should not be at capacity if less than \
-                     `max(parallelism, num_results)` requests are waiting.",
+                    "Iterator should not be at capacity if less than `max(parallelism, \
+                     num_results)` requests are waiting.",
                 )
             }
 

@@ -1,12 +1,16 @@
+use std::{
+    fmt,
+    hash::{Hash, Hasher},
+    sync::Arc,
+};
+
 use either::Either;
-use std::fmt;
-use std::hash::{Hash, Hasher};
-use std::sync::Arc;
 
 /// Identifies a protocol for a stream.
 ///
-/// libp2p nodes use stream protocols to negotiate what to do with a newly opened stream.
-/// Stream protocols are string-based and must start with a forward slash: `/`.
+/// libp2p nodes use stream protocols to negotiate what to do with a newly
+/// opened stream. Stream protocols are string-based and must start with a
+/// forward slash: `/`.
 #[derive(Clone, Eq)]
 pub struct StreamProtocol {
     inner: Either<&'static str, Arc<str>>,
@@ -17,7 +21,8 @@ impl StreamProtocol {
     ///
     /// # Panics
     ///
-    /// This function panics if the protocol does not start with a forward slash: `/`.
+    /// This function panics if the protocol does not start with a forward
+    /// slash: `/`.
     pub const fn new(s: &'static str) -> Self {
         match s.as_bytes() {
             [b'/', ..] => {}
@@ -31,15 +36,17 @@ impl StreamProtocol {
 
     /// Attempt to construct a protocol from an owned string.
     ///
-    /// This function will fail if the protocol does not start with a forward slash: `/`.
-    /// Where possible, you should use [`StreamProtocol::new`] instead to avoid allocations.
+    /// This function will fail if the protocol does not start with a forward
+    /// slash: `/`. Where possible, you should use [`StreamProtocol::new`]
+    /// instead to avoid allocations.
     pub fn try_from_owned(protocol: String) -> Result<Self, InvalidProtocol> {
         if !protocol.starts_with('/') {
             return Err(InvalidProtocol::missing_forward_slash());
         }
 
         Ok(StreamProtocol {
-            inner: Either::Right(Arc::from(protocol)), // FIXME: Can we somehow reuse the allocation from the owned string?
+            inner: Either::Right(Arc::from(protocol)), /* FIXME: Can we somehow reuse the
+                                                        * allocation from the owned string? */
         })
     }
 }

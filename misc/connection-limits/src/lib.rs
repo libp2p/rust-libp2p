@@ -18,29 +18,45 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
+use std::{
+    collections::{HashMap, HashSet},
+    convert::Infallible,
+    fmt,
+    task::{Context, Poll},
+};
+
 use libp2p_core::{transport::PortUse, ConnectedPoint, Endpoint, Multiaddr};
 use libp2p_identity::PeerId;
 use libp2p_swarm::{
     behaviour::{ConnectionEstablished, DialFailure, ListenFailure},
-    dummy, ConnectionClosed, ConnectionDenied, ConnectionId, FromSwarm, NetworkBehaviour, THandler,
-    THandlerInEvent, THandlerOutEvent, ToSwarm,
+    dummy,
+    ConnectionClosed,
+    ConnectionDenied,
+    ConnectionId,
+    FromSwarm,
+    NetworkBehaviour,
+    THandler,
+    THandlerInEvent,
+    THandlerOutEvent,
+    ToSwarm,
 };
-use std::collections::{HashMap, HashSet};
-use std::convert::Infallible;
-use std::fmt;
-use std::task::{Context, Poll};
 
 /// A [`NetworkBehaviour`] that enforces a set of [`ConnectionLimits`].
 ///
-/// For these limits to take effect, this needs to be composed into the behaviour tree of your application.
+/// For these limits to take effect, this needs to be composed into the
+/// behaviour tree of your application.
 ///
-/// If a connection is denied due to a limit, either a [`SwarmEvent::IncomingConnectionError`](libp2p_swarm::SwarmEvent::IncomingConnectionError)
+/// If a connection is denied due to a limit, either a
+/// [`SwarmEvent::IncomingConnectionError`](libp2p_swarm::SwarmEvent::IncomingConnectionError)
 /// or [`SwarmEvent::OutgoingConnectionError`](libp2p_swarm::SwarmEvent::OutgoingConnectionError) will be emitted.
-/// The [`ListenError::Denied`](libp2p_swarm::ListenError::Denied) and respectively the [`DialError::Denied`](libp2p_swarm::DialError::Denied) variant
-/// contain a [`ConnectionDenied`] type that can be downcast to [`Exceeded`] error if (and only if) **this**
-/// behaviour denied the connection.
+/// The [`ListenError::Denied`](libp2p_swarm::ListenError::Denied) and
+/// respectively the [`DialError::Denied`](libp2p_swarm::DialError::Denied)
+/// variant contain a [`ConnectionDenied`] type that can be downcast to
+/// [`Exceeded`] error if (and only if) **this** behaviour denied the
+/// connection.
 ///
-/// If you employ multiple [`NetworkBehaviour`]s that manage connections, it may also be a different error.
+/// If you employ multiple [`NetworkBehaviour`]s that manage connections, it may
+/// also be a different error.
 ///
 /// # Example
 ///
@@ -53,9 +69,9 @@ use std::task::{Context, Poll};
 /// #[derive(NetworkBehaviour)]
 /// # #[behaviour(prelude = "libp2p_swarm::derive_prelude")]
 /// struct MyBehaviour {
-///   identify: identify::Behaviour,
-///   ping: ping::Behaviour,
-///   limits: connection_limits::Behaviour
+///     identify: identify::Behaviour,
+///     ping: ping::Behaviour,
+///     limits: connection_limits::Behaviour,
 /// }
 /// ```
 pub struct Behaviour {
@@ -81,7 +97,8 @@ impl Behaviour {
     }
 
     /// Returns a mutable reference to [`ConnectionLimits`].
-    /// > **Note**: A new limit will not be enforced against existing connections.
+    /// > **Note**: A new limit will not be enforced against existing
+    /// > connections.
     pub fn limits_mut(&mut self) -> &mut ConnectionLimits {
         &mut self.limits
     }
@@ -158,32 +175,36 @@ pub struct ConnectionLimits {
 }
 
 impl ConnectionLimits {
-    /// Configures the maximum number of concurrently incoming connections being established.
+    /// Configures the maximum number of concurrently incoming connections being
+    /// established.
     pub fn with_max_pending_incoming(mut self, limit: Option<u32>) -> Self {
         self.max_pending_incoming = limit;
         self
     }
 
-    /// Configures the maximum number of concurrently outgoing connections being established.
+    /// Configures the maximum number of concurrently outgoing connections being
+    /// established.
     pub fn with_max_pending_outgoing(mut self, limit: Option<u32>) -> Self {
         self.max_pending_outgoing = limit;
         self
     }
 
-    /// Configures the maximum number of concurrent established inbound connections.
+    /// Configures the maximum number of concurrent established inbound
+    /// connections.
     pub fn with_max_established_incoming(mut self, limit: Option<u32>) -> Self {
         self.max_established_incoming = limit;
         self
     }
 
-    /// Configures the maximum number of concurrent established outbound connections.
+    /// Configures the maximum number of concurrent established outbound
+    /// connections.
     pub fn with_max_established_outgoing(mut self, limit: Option<u32>) -> Self {
         self.max_established_outgoing = limit;
         self
     }
 
-    /// Configures the maximum number of concurrent established connections (both
-    /// inbound and outbound).
+    /// Configures the maximum number of concurrent established connections
+    /// (both inbound and outbound).
     ///
     /// Note: This should be used in conjunction with
     /// [`ConnectionLimits::with_max_established_incoming`] to prevent possible
@@ -193,8 +214,8 @@ impl ConnectionLimits {
         self
     }
 
-    /// Configures the maximum number of concurrent established connections per peer,
-    /// regardless of direction (incoming or outgoing).
+    /// Configures the maximum number of concurrent established connections per
+    /// peer, regardless of direction (incoming or outgoing).
     pub fn with_max_established_per_peer(mut self, limit: Option<u32>) -> Self {
         self.max_established_per_peer = limit;
         self
@@ -367,13 +388,18 @@ impl NetworkBehaviour for Behaviour {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use libp2p_swarm::{
-        behaviour::toggle::Toggle, dial_opts::DialOpts, dial_opts::PeerCondition, DialError,
-        ListenError, Swarm, SwarmEvent,
+        behaviour::toggle::Toggle,
+        dial_opts::{DialOpts, PeerCondition},
+        DialError,
+        ListenError,
+        Swarm,
+        SwarmEvent,
     };
     use libp2p_swarm_test::SwarmExt;
     use quickcheck::*;
+
+    use super::*;
 
     #[test]
     fn max_outgoing() {
@@ -480,13 +506,17 @@ mod tests {
         quickcheck(prop as fn(_));
     }
 
-    /// Another sibling [`NetworkBehaviour`] implementation might deny established connections in
-    /// [`handle_established_outbound_connection`] or [`handle_established_inbound_connection`].
-    /// [`Behaviour`] must not increase the established counters in
-    /// [`handle_established_outbound_connection`] or [`handle_established_inbound_connection`], but
-    /// in [`SwarmEvent::ConnectionEstablished`] as the connection might still be denied by a
-    /// sibling [`NetworkBehaviour`] in the former case. Only in the latter case
-    /// ([`SwarmEvent::ConnectionEstablished`]) can the connection be seen as established.
+    /// Another sibling [`NetworkBehaviour`] implementation might deny
+    /// established connections in
+    /// [`handle_established_outbound_connection`] or
+    /// [`handle_established_inbound_connection`]. [`Behaviour`] must not
+    /// increase the established counters in
+    /// [`handle_established_outbound_connection`] or
+    /// [`handle_established_inbound_connection`], but
+    /// in [`SwarmEvent::ConnectionEstablished`] as the connection might still
+    /// be denied by a sibling [`NetworkBehaviour`] in the former case. Only
+    /// in the latter case ([`SwarmEvent::ConnectionEstablished`]) can the
+    /// connection be seen as established.
     #[test]
     fn support_other_behaviour_denying_connection() {
         let mut swarm1 = Swarm::new_ephemeral(|_| {
@@ -520,7 +550,8 @@ mod tests {
                     .limits
                     .established_inbound_connections
                     .len(),
-                "swarm1 connection limit behaviour to not count denied established connection as established connection"
+                "swarm1 connection limit behaviour to not count denied established connection as \
+                 established connection"
             )
         });
     }

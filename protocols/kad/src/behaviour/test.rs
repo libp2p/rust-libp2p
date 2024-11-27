@@ -20,17 +20,14 @@
 
 #![cfg(test)]
 
-use super::*;
-
-use crate::record::{store::MemoryStore, Key};
-use crate::{K_VALUE, PROTOCOL_NAME, SHA_256_MH};
 use futures::{executor::block_on, future::poll_fn, prelude::*};
 use futures_timer::Delay;
 use libp2p_core::{
     multiaddr::{multiaddr, Protocol},
     multihash::Multihash,
     transport::MemoryTransport,
-    upgrade, Transport,
+    upgrade,
+    Transport,
 };
 use libp2p_identity as identity;
 use libp2p_noise as noise;
@@ -38,6 +35,14 @@ use libp2p_swarm::{self as swarm, Swarm, SwarmEvent};
 use libp2p_yamux as yamux;
 use quickcheck::*;
 use rand::{random, rngs::StdRng, thread_rng, Rng, SeedableRng};
+
+use super::*;
+use crate::{
+    record::{store::MemoryStore, Key},
+    K_VALUE,
+    PROTOCOL_NAME,
+    SHA_256_MH,
+};
 
 type TestSwarm = Swarm<Behaviour<MemoryStore>>;
 
@@ -73,12 +78,14 @@ fn build_node_with_config(cfg: Config) -> (Multiaddr, TestSwarm) {
     (address, swarm)
 }
 
-/// Builds swarms, each listening on a port. Does *not* connect the nodes together.
+/// Builds swarms, each listening on a port. Does *not* connect the nodes
+/// together.
 fn build_nodes(num: usize) -> Vec<(Multiaddr, TestSwarm)> {
     build_nodes_with_config(num, Default::default())
 }
 
-/// Builds swarms, each listening on a port. Does *not* connect the nodes together.
+/// Builds swarms, each listening on a port. Does *not* connect the nodes
+/// together.
 fn build_nodes_with_config(num: usize, cfg: Config) -> Vec<(Multiaddr, TestSwarm)> {
     (0..num)
         .map(|_| build_node_with_config(cfg.clone()))
@@ -164,7 +171,8 @@ fn bootstrap() {
         let num_group = rng.gen_range(1..(num_total % K_VALUE.get()) + 2);
 
         let mut cfg = Config::new(PROTOCOL_NAME);
-        // Disabling periodic bootstrap and automatic bootstrap to prevent the bootstrap from triggering automatically.
+        // Disabling periodic bootstrap and automatic bootstrap to prevent the bootstrap
+        // from triggering automatically.
         cfg.set_periodic_bootstrap_interval(None);
         cfg.set_automatic_bootstrap_throttle(None);
         if rng.gen() {
@@ -246,7 +254,8 @@ fn query_iter() {
     fn run(rng: &mut impl Rng) {
         let num_total = rng.gen_range(2..20);
         let mut config = Config::new(PROTOCOL_NAME);
-        // Disabling periodic bootstrap and automatic bootstrap to prevent the bootstrap from triggering automatically.
+        // Disabling periodic bootstrap and automatic bootstrap to prevent the bootstrap
+        // from triggering automatically.
         config.set_periodic_bootstrap_interval(None);
         config.set_automatic_bootstrap_throttle(None);
         let mut swarms = build_connected_nodes_with_config(num_total, 1, config)
@@ -323,8 +332,8 @@ fn unresponsive_not_returned_direct() {
     let _ = tracing_subscriber::fmt()
         .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
         .try_init();
-    // Build one node. It contains fake addresses to non-existing nodes. We ask it to find a
-    // random peer. We make sure that no fake address is returned.
+    // Build one node. It contains fake addresses to non-existing nodes. We ask it
+    // to find a random peer. We make sure that no fake address is returned.
 
     let mut swarms = build_nodes(1)
         .into_iter()
@@ -368,9 +377,9 @@ fn unresponsive_not_returned_direct() {
 
 #[test]
 fn unresponsive_not_returned_indirect() {
-    // Build two nodes. Node #2 knows about node #1. Node #1 contains fake addresses to
-    // non-existing nodes. We ask node #2 to find a random peer. We make sure that no fake address
-    // is returned.
+    // Build two nodes. Node #2 knows about node #1. Node #1 contains fake addresses
+    // to non-existing nodes. We ask node #2 to find a random peer. We make sure
+    // that no fake address is returned.
 
     let mut swarms = build_nodes(2);
 
@@ -468,9 +477,19 @@ fn get_closest_with_different_num_results_inner(num_results: usize, replication_
                     }))) => {
                         assert_eq!(&ok.key[..], search_target.to_bytes().as_slice());
                         if num_results > k_value {
-                            assert_eq!(ok.peers.len(), k_value, "Failed with replication_factor: {replication_factor}, num_results: {num_results}");
+                            assert_eq!(
+                                ok.peers.len(),
+                                k_value,
+                                "Failed with replication_factor: {replication_factor}, \
+                                 num_results: {num_results}"
+                            );
                         } else {
-                            assert_eq!(ok.peers.len(), num_results, "Failed with replication_factor: {replication_factor}, num_results: {num_results}");
+                            assert_eq!(
+                                ok.peers.len(),
+                                num_results,
+                                "Failed with replication_factor: {replication_factor}, \
+                                 num_results: {num_results}"
+                            );
                         }
 
                         return Poll::Ready(());
@@ -561,7 +580,8 @@ fn put_record() {
 
         let mut config = Config::new(PROTOCOL_NAME);
         config.set_replication_factor(replication_factor);
-        // Disabling periodic bootstrap and automatic bootstrap to prevent the bootstrap from triggering automatically.
+        // Disabling periodic bootstrap and automatic bootstrap to prevent the bootstrap
+        // from triggering automatically.
         config.set_periodic_bootstrap_interval(None);
         config.set_automatic_bootstrap_throttle(None);
         if rng.gen() {
@@ -933,7 +953,8 @@ fn add_provider() {
 
         let mut config = Config::new(PROTOCOL_NAME);
         config.set_replication_factor(replication_factor);
-        // Disabling periodic bootstrap and automatic bootstrap to prevent the bootstrap from triggering automatically.
+        // Disabling periodic bootstrap and automatic bootstrap to prevent the bootstrap
+        // from triggering automatically.
         config.set_periodic_bootstrap_interval(None);
         config.set_automatic_bootstrap_throttle(None);
         if rng.gen() {
@@ -1161,7 +1182,8 @@ fn disjoint_query_does_not_finish_before_all_paths_did() {
     config.disjoint_query_paths(true);
     // I.e. setting the amount disjoint paths to be explored to 2.
     config.set_parallelism(NonZeroUsize::new(2).unwrap());
-    // Disabling periodic bootstrap and automatic bootstrap to prevent the bootstrap from triggering automatically.
+    // Disabling periodic bootstrap and automatic bootstrap to prevent the bootstrap
+    // from triggering automatically.
     config.set_periodic_bootstrap_interval(None);
     config.set_automatic_bootstrap_throttle(None);
 
@@ -1218,8 +1240,8 @@ fn disjoint_query_does_not_finish_before_all_paths_did() {
                         }
                         if step.last {
                             panic!(
-                                "Expected query not to finish until all \
-                                 disjoint paths have been explored.",
+                                "Expected query not to finish until all disjoint paths have been \
+                                 explored.",
                             );
                         }
                         match result {

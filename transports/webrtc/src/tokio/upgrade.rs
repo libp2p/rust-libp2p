@@ -18,27 +18,23 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use libp2p_webrtc_utils::{noise, Fingerprint};
+use std::{net::SocketAddr, sync::Arc, time::Duration};
 
-use futures::channel::oneshot;
-use futures::future::Either;
+use futures::{channel::oneshot, future::Either};
 use futures_timer::Delay;
 use libp2p_identity as identity;
 use libp2p_identity::PeerId;
-use std::{net::SocketAddr, sync::Arc, time::Duration};
-use webrtc::api::setting_engine::SettingEngine;
-use webrtc::api::APIBuilder;
-use webrtc::data::data_channel::DataChannel;
-use webrtc::data_channel::data_channel_init::RTCDataChannelInit;
-use webrtc::dtls_transport::dtls_role::DTLSRole;
-use webrtc::ice::network_type::NetworkType;
-use webrtc::ice::udp_mux::UDPMux;
-use webrtc::ice::udp_network::UDPNetwork;
-use webrtc::peer_connection::configuration::RTCConfiguration;
-use webrtc::peer_connection::RTCPeerConnection;
+use libp2p_webrtc_utils::{noise, Fingerprint};
+use webrtc::{
+    api::{setting_engine::SettingEngine, APIBuilder},
+    data::data_channel::DataChannel,
+    data_channel::data_channel_init::RTCDataChannelInit,
+    dtls_transport::dtls_role::DTLSRole,
+    ice::{network_type::NetworkType, udp_mux::UDPMux, udp_network::UDPNetwork},
+    peer_connection::{configuration::RTCConfiguration, RTCPeerConnection},
+};
 
-use crate::tokio::sdp::random_ufrag;
-use crate::tokio::{error::Error, sdp, stream::Stream, Connection};
+use crate::tokio::{error::Error, sdp, sdp::random_ufrag, stream::Stream, Connection};
 
 /// Creates a new outbound WebRTC connection.
 pub(crate) async fn outbound(
@@ -136,8 +132,8 @@ async fn new_inbound_connection(
         se.disable_certificate_fingerprint_verification(true);
         // Act as a DTLS server (one which waits for a connection).
         //
-        // NOTE: removing this seems to break DTLS setup (both sides send `ClientHello` messages,
-        // but none end up responding).
+        // NOTE: removing this seems to break DTLS setup (both sides send `ClientHello`
+        // messages, but none end up responding).
         se.set_answering_dtls_role(DTLSRole::Server)?;
     }
 
@@ -157,8 +153,8 @@ fn setting_engine(
 ) -> SettingEngine {
     let mut se = SettingEngine::default();
 
-    // Set both ICE user and password to our fingerprint because that's what the client is
-    // expecting..
+    // Set both ICE user and password to our fingerprint because that's what the
+    // client is expecting..
     se.set_ice_credentials(ufrag.to_owned(), ufrag.to_owned());
 
     se.set_udp_network(UDPNetwork::Muxed(udp_mux.clone()));
@@ -168,8 +164,8 @@ fn setting_engine(
 
     // Set the desired network type.
     //
-    // NOTE: if not set, a [`webrtc_ice::agent::Agent`] might pick a wrong local candidate
-    // (e.g. IPv6 `[::1]` while dialing an IPv4 `10.11.12.13`).
+    // NOTE: if not set, a [`webrtc_ice::agent::Agent`] might pick a wrong local
+    // candidate (e.g. IPv6 `[::1]` while dialing an IPv4 `10.11.12.13`).
     let network_type = match addr {
         SocketAddr::V4(_) => NetworkType::Udp4,
         SocketAddr::V6(_) => NetworkType::Udp6,
@@ -187,7 +183,8 @@ async fn get_remote_fingerprint(conn: &RTCPeerConnection) -> Fingerprint {
 }
 
 async fn create_substream_for_noise_handshake(conn: &RTCPeerConnection) -> Result<Stream, Error> {
-    // NOTE: the data channel w/ `negotiated` flag set to `true` MUST be created on both ends.
+    // NOTE: the data channel w/ `negotiated` flag set to `true` MUST be created on
+    // both ends.
     let data_channel = conn
         .create_data_channel(
             "",

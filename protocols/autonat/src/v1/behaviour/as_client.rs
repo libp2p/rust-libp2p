@@ -18,12 +18,12 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::ResponseError;
-
-use super::{
-    Action, AutoNatCodec, Config, DialRequest, DialResponse, Event, HandleInnerEvent, NatStatus,
-    ProbeId,
+use std::{
+    collections::{HashMap, HashSet, VecDeque},
+    task::{Context, Poll},
+    time::Duration,
 };
+
 use futures::FutureExt;
 use futures_timer::Delay;
 use libp2p_core::Multiaddr;
@@ -31,12 +31,20 @@ use libp2p_identity::PeerId;
 use libp2p_request_response::{self as request_response, OutboundFailure, OutboundRequestId};
 use libp2p_swarm::{ConnectionId, ListenAddresses, ToSwarm};
 use rand::{seq::SliceRandom, thread_rng};
-use std::{
-    collections::{HashMap, HashSet, VecDeque},
-    task::{Context, Poll},
-    time::Duration,
-};
 use web_time::Instant;
+
+use super::{
+    Action,
+    AutoNatCodec,
+    Config,
+    DialRequest,
+    DialResponse,
+    Event,
+    HandleInnerEvent,
+    NatStatus,
+    ProbeId,
+};
+use crate::ResponseError;
 
 /// Outbound probe failed or was aborted.
 #[derive(Debug)]
@@ -74,7 +82,8 @@ pub enum OutboundProbeEvent {
     Error {
         probe_id: ProbeId,
         /// Id of the peer used for the probe.
-        /// `None` if the probe was aborted due to no addresses or no qualified server.
+        /// `None` if the probe was aborted due to no addresses or no qualified
+        /// server.
         peer: Option<PeerId>,
         error: OutboundProbeError,
     },
@@ -210,7 +219,8 @@ impl AsClient<'_> {
         }
     }
 
-    // An inbound connection can indicate that we are public; adjust the delay to the next probe.
+    // An inbound connection can indicate that we are public; adjust the delay to
+    // the next probe.
     pub(crate) fn on_inbound_connection(&mut self) {
         if *self.confidence == self.config.confidence_max {
             if self.nat_status.is_public() {
@@ -305,8 +315,8 @@ impl AsClient<'_> {
             .reset(schedule_next.saturating_duration_since(Instant::now()));
     }
 
-    // Adapt current confidence and NAT status to the status reported by the latest probe.
-    // Return the old status if it flipped.
+    // Adapt current confidence and NAT status to the status reported by the latest
+    // probe. Return the old status if it flipped.
     fn handle_reported_status(&mut self, reported_status: NatStatus) -> Option<NatStatus> {
         self.schedule_next_probe(self.config.retry_interval);
 

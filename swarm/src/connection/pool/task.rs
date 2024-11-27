@@ -19,25 +19,33 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-//! Async functions driving pending and established connections in the form of a task.
+//! Async functions driving pending and established connections in the form of a
+//! task.
+
+use std::{convert::Infallible, pin::Pin};
+
+use futures::{
+    channel::{mpsc, oneshot},
+    future::{poll_fn, Either, Future},
+    SinkExt,
+    StreamExt,
+};
+use libp2p_core::muxing::StreamMuxerBox;
 
 use super::concurrent_dial::ConcurrentDial;
 use crate::{
     connection::{
-        self, ConnectionError, ConnectionId, PendingInboundConnectionError,
+        self,
+        ConnectionError,
+        ConnectionId,
+        PendingInboundConnectionError,
         PendingOutboundConnectionError,
     },
     transport::TransportError,
-    ConnectionHandler, Multiaddr, PeerId,
+    ConnectionHandler,
+    Multiaddr,
+    PeerId,
 };
-use futures::{
-    channel::{mpsc, oneshot},
-    future::{poll_fn, Either, Future},
-    SinkExt, StreamExt,
-};
-use libp2p_core::muxing::StreamMuxerBox;
-use std::convert::Infallible;
-use std::pin::Pin;
 
 /// Commands that can be sent to a task driving an established connection.
 #[derive(Debug)]

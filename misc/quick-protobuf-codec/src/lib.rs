@@ -1,10 +1,10 @@
 #![cfg_attr(docsrs, feature(doc_cfg, doc_auto_cfg))]
 
+use std::{io, marker::PhantomData};
+
 use asynchronous_codec::{Decoder, Encoder};
 use bytes::{Buf, BufMut, BytesMut};
 use quick_protobuf::{BytesReader, MessageRead, MessageWrite, Writer, WriterBackend};
-use std::io;
-use std::marker::PhantomData;
 
 mod generated;
 
@@ -13,8 +13,9 @@ pub use generated::test as proto;
 
 /// [`Codec`] implements [`Encoder`] and [`Decoder`], uses [`unsigned_varint`]
 ///
-/// to prefix messages with their length and uses [`quick_protobuf`] and a provided
-/// `struct` implementing [`MessageRead`] and [`MessageWrite`] to do the encoding.
+/// to prefix messages with their length and uses [`quick_protobuf`] and a
+/// provided `struct` implementing [`MessageRead`] and [`MessageWrite`] to do
+/// the encoding.
 pub struct Codec<In, Out = In> {
     max_message_len_bytes: usize,
     phantom: PhantomData<(In, Out)>,
@@ -46,7 +47,8 @@ impl<In: MessageWrite, Out> Encoder for Codec<In, Out> {
     }
 }
 
-/// Write the message's length (i.e. `size`) to `dst` as a variable-length integer.
+/// Write the message's length (i.e. `size`) to `dst` as a variable-length
+/// integer.
 fn write_length(message: &impl MessageWrite, dst: &mut BytesMut) {
     let message_length = message.get_size();
 
@@ -182,12 +184,13 @@ impl From<Error> for io::Error {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use asynchronous_codec::FramedRead;
-    use futures::io::Cursor;
-    use futures::{FutureExt, StreamExt};
-    use quickcheck::{Arbitrary, Gen, QuickCheck};
     use std::error::Error;
+
+    use asynchronous_codec::FramedRead;
+    use futures::{io::Cursor, FutureExt, StreamExt};
+    use quickcheck::{Arbitrary, Gen, QuickCheck};
+
+    use super::*;
 
     #[test]
     fn honors_max_message_length() {
@@ -244,7 +247,8 @@ mod tests {
         QuickCheck::new().quickcheck(prop as fn(_, _) -> _)
     }
 
-    /// Constructs a [`BytesMut`] of the provided length where the message is all zeros.
+    /// Constructs a [`BytesMut`] of the provided length where the message is
+    /// all zeros.
     fn varint_zeroes(length: usize) -> BytesMut {
         let mut buf = unsigned_varint::encode::usize_buffer();
         let encoded_length = unsigned_varint::encode::usize(length, &mut buf);

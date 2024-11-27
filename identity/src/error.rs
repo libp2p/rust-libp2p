@@ -20,8 +20,7 @@
 
 //! Errors during identity key operations.
 
-use std::error::Error;
-use std::fmt;
+use std::{error::Error, fmt};
 
 use crate::KeyType;
 
@@ -136,7 +135,8 @@ impl Error for SigningError {
     }
 }
 
-/// Error produced when failing to convert [`Keypair`](crate::Keypair) to a more concrete keypair.
+/// Error produced when failing to convert [`Keypair`](crate::Keypair) to a more
+/// concrete keypair.
 #[derive(Debug)]
 pub struct OtherVariantError {
     actual: KeyType,

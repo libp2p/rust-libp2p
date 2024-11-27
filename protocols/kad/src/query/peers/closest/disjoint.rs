@@ -18,12 +18,13 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use super::*;
 use std::{
     collections::HashMap,
     iter::{Cycle, Map, Peekable},
     ops::{Index, IndexMut, Range},
 };
+
+use super::*;
 
 /// Wraps around a set of [`ClosestPeersIter`], enforcing a disjoint discovery
 /// path per configured parallelism according to the S/Kademlia paper.
@@ -373,7 +374,6 @@ enum ResponseState {
 
 /// Iterator combining the result of multiple [`ClosestPeersIter`] into a single
 /// deduplicated ordered iterator.
-//
 // Note: This operates under the assumption that `I` is ordered.
 #[derive(Clone, Debug)]
 struct ResultIter<I>
@@ -433,13 +433,13 @@ impl<I: Iterator<Item = Key<PeerId>>> Iterator for ResultIter<I> {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use std::{collections::HashSet, iter};
 
-    use crate::SHA_256_MH;
     use libp2p_core::multihash::Multihash;
     use quickcheck::*;
-    use std::collections::HashSet;
-    use std::iter;
+
+    use super::*;
+    use crate::SHA_256_MH;
 
     impl Arbitrary for ResultIter<std::vec::IntoIter<Key<PeerId>>> {
         fn arbitrary(g: &mut Gen) -> Self {
@@ -834,7 +834,8 @@ mod tests {
         }
     }
 
-    /// Ensure [`ClosestPeersIter`] and [`ClosestDisjointPeersIter`] yield same closest peers.
+    /// Ensure [`ClosestPeersIter`] and [`ClosestDisjointPeersIter`] yield same
+    /// closest peers.
     #[test]
     fn closest_and_disjoint_closest_yield_same_result() {
         fn prop(
@@ -895,21 +896,19 @@ mod tests {
 
             assert!(
                 closest.len() == num_results.0.get(),
-                "Expected `ClosestPeersIter` to find `num_results` closest \
-                 peers."
+                "Expected `ClosestPeersIter` to find `num_results` closest peers."
             );
             assert!(
                 disjoint.len() >= num_results.0.get(),
-                "Expected `ClosestDisjointPeersIter` to find at least \
-                 `num_results` closest peers."
+                "Expected `ClosestDisjointPeersIter` to find at least `num_results` closest peers."
             );
 
             if closest.len() > disjoint.len() {
                 let closest_only = closest.difference(&disjoint).collect::<Vec<_>>();
 
                 panic!(
-                    "Expected `ClosestDisjointPeersIter` to find all peers \
-                     found by `ClosestPeersIter`, but it did not find {closest_only:?}.",
+                    "Expected `ClosestDisjointPeersIter` to find all peers found by \
+                     `ClosestPeersIter`, but it did not find {closest_only:?}.",
                 );
             };
 

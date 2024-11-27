@@ -27,10 +27,11 @@
 //!
 //! When the bucket associated with the `Key` of an inserted entry is full
 //! but contains disconnected nodes, it accepts a [`PendingEntry`].
-//! Pending entries are inserted lazily when their timeout is found to be expired
-//! upon querying the `KBucketsTable`. When that happens, the `KBucketsTable` records
-//! an [`AppliedPending`] result which must be consumed by calling [`take_applied_pending`]
-//! regularly and / or after performing lookup operations like [`entry`] and [`closest`].
+//! Pending entries are inserted lazily when their timeout is found to be
+//! expired upon querying the `KBucketsTable`. When that happens, the
+//! `KBucketsTable` records an [`AppliedPending`] result which must be consumed
+//! by calling [`take_applied_pending`] regularly and / or after performing
+//! lookup operations like [`entry`] and [`closest`].
 //!
 //! [`entry`]: KBucketsTable::entry
 //! [`closest`]: KBucketsTable::closest
@@ -45,24 +46,24 @@
 // The routing table is currently implemented as a fixed-size "array" of
 // buckets, ordered by increasing distance relative to a local key
 // that identifies the local peer. This is an often-used, simplified
-// implementation that approximates the properties of the b-tree (or prefix tree)
-// implementation described in the full paper [0], whereby buckets are split on-demand.
-// This should be treated as an implementation detail, however, so that the
-// implementation may change in the future without breaking the API.
+// implementation that approximates the properties of the b-tree (or prefix
+// tree) implementation described in the full paper [0], whereby buckets are
+// split on-demand. This should be treated as an implementation detail, however,
+// so that the implementation may change in the future without breaking the API.
 //
 // 2. Replacement Cache
 //
 // In this implementation, the "replacement cache" for unresponsive peers
 // consists of a single entry per bucket. Furthermore, this implementation is
 // currently tailored to connection-oriented transports, meaning that the
-// "LRU"-based ordering of entries in a bucket is actually based on the last reported
-// connection status of the corresponding peers, from least-recently (dis)connected to
-// most-recently (dis)connected, and controlled through the `Entry` API. As a result,
-// the nodes in the buckets are not reordered as a result of RPC activity, but only as a
-// result of nodes being marked as connected or disconnected. In particular,
-// if a bucket is full and contains only entries for peers that are considered
-// connected, no pending entry is accepted. See the `bucket` submodule for
-// further details.
+// "LRU"-based ordering of entries in a bucket is actually based on the last
+// reported connection status of the corresponding peers, from least-recently
+// (dis)connected to most-recently (dis)connected, and controlled through the
+// `Entry` API. As a result, the nodes in the buckets are not reordered as a
+// result of RPC activity, but only as a result of nodes being marked as
+// connected or disconnected. In particular, if a bucket is full and contains
+// only entries for peers that are considered connected, no pending entry is
+// accepted. See the `bucket` submodule for further details.
 //
 // [0]: https://pdos.csail.mit.edu/~petar/papers/maymounkov-kademlia-lncs.pdf
 
@@ -72,13 +73,11 @@ mod entry;
 #[allow(clippy::assign_op_pattern)]
 mod key;
 
-pub use bucket::NodeStatus;
-pub use entry::*;
+use std::{collections::VecDeque, num::NonZeroUsize, time::Duration};
 
 use bucket::KBucket;
-use std::collections::VecDeque;
-use std::num::NonZeroUsize;
-use std::time::Duration;
+pub use bucket::NodeStatus;
+pub use entry::*;
 use web_time::Instant;
 
 /// Maximum number of k-buckets.
@@ -132,8 +131,8 @@ pub(crate) struct KBucketsTable<TKey, TVal> {
     applied_pending: VecDeque<AppliedPending<TKey, TVal>>,
 }
 
-/// A (type-safe) index into a `KBucketsTable`, i.e. a non-negative integer in the
-/// interval `[0, NUM_BUCKETS)`.
+/// A (type-safe) index into a `KBucketsTable`, i.e. a non-negative integer in
+/// the interval `[0, NUM_BUCKETS)`.
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 struct BucketIndex(usize);
 
@@ -202,8 +201,8 @@ where
         &self.local_key
     }
 
-    /// Returns an `Entry` for the given key, representing the state of the entry
-    /// in the routing table.
+    /// Returns an `Entry` for the given key, representing the state of the
+    /// entry in the routing table.
     ///
     /// Returns `None` in case the key points to the local node.
     pub(crate) fn entry<'a>(&'a mut self, key: &'a TKey) -> Option<Entry<'a, TKey, TVal>> {
@@ -254,15 +253,17 @@ where
 
     /// Consumes the next applied pending entry, if any.
     ///
-    /// When an entry is attempted to be inserted and the respective bucket is full,
-    /// it may be recorded as pending insertion after a timeout, see [`InsertResult::Pending`].
+    /// When an entry is attempted to be inserted and the respective bucket is
+    /// full, it may be recorded as pending insertion after a timeout, see
+    /// [`InsertResult::Pending`].
     ///
-    /// If the oldest currently disconnected entry in the respective bucket does not change
-    /// its status until the timeout of pending entry expires, it is evicted and
-    /// the pending entry inserted instead. These insertions of pending entries
-    /// happens lazily, whenever the `KBucketsTable` is accessed, and the corresponding
-    /// buckets are updated accordingly. The fact that a pending entry was applied is
-    /// recorded in the `KBucketsTable` in the form of `AppliedPending` results, which must be
+    /// If the oldest currently disconnected entry in the respective bucket does
+    /// not change its status until the timeout of pending entry expires, it
+    /// is evicted and the pending entry inserted instead. These insertions
+    /// of pending entries happens lazily, whenever the `KBucketsTable` is
+    /// accessed, and the corresponding buckets are updated accordingly. The
+    /// fact that a pending entry was applied is recorded in the
+    /// `KBucketsTable` in the form of `AppliedPending` results, which must be
     /// consumed by calling this function.
     pub(crate) fn take_applied_pending(&mut self) -> Option<AppliedPending<TKey, TVal>> {
         self.applied_pending.pop_front()
@@ -292,8 +293,8 @@ where
         }
     }
 
-    /// Returns an iterator over the nodes closest to the `target` key, ordered by
-    /// increasing distance.
+    /// Returns an iterator over the nodes closest to the `target` key, ordered
+    /// by increasing distance.
     pub(crate) fn closest<'a, T>(
         &'a mut self,
         target: &'a T,
@@ -366,9 +367,10 @@ struct ClosestIter<'a, TTarget, TKey, TVal, TMap, TOut> {
     fmap: TMap,
 }
 
-/// An iterator over the bucket indices, in the order determined by the `Distance` of
-/// a target from the `local_key`, such that the entries in the buckets are incrementally
-/// further away from the target, starting with the bucket covering the target.
+/// An iterator over the bucket indices, in the order determined by the
+/// `Distance` of a target from the `local_key`, such that the entries in the
+/// buckets are incrementally further away from the target, starting with the
+/// bucket covering the target.
 struct ClosestBucketsIter {
     /// The distance to the `local_key`.
     distance: Distance,
@@ -382,10 +384,10 @@ enum ClosestBucketsIterState {
     /// then transitions to `ZoomIn`.
     Start(BucketIndex),
     /// The iterator "zooms in" to yield the next bucket containing nodes that
-    /// are incrementally closer to the local node but further from the `target`.
-    /// These buckets are identified by a `1` in the corresponding bit position
-    /// of the distance bit string. When bucket `0` is reached, the iterator
-    /// transitions to `ZoomOut`.
+    /// are incrementally closer to the local node but further from the
+    /// `target`. These buckets are identified by a `1` in the corresponding
+    /// bit position of the distance bit string. When bucket `0` is reached,
+    /// the iterator transitions to `ZoomOut`.
     ZoomIn(BucketIndex),
     /// Once bucket `0` has been reached, the iterator starts "zooming out"
     /// to buckets containing nodes that are incrementally further away from
@@ -539,10 +541,11 @@ where
 
     /// Generates a random distance that falls into this bucket.
     ///
-    /// Together with a known key `a` (e.g. the local key), a random distance `d` for
-    /// this bucket w.r.t `k` gives rise to the corresponding (random) key `b` s.t.
-    /// the XOR distance between `a` and `b` is `d`. In other words, it gives
-    /// rise to a random key falling into this bucket. See [`key::Key::for_distance`].
+    /// Together with a known key `a` (e.g. the local key), a random distance
+    /// `d` for this bucket w.r.t `k` gives rise to the corresponding
+    /// (random) key `b` s.t. the XOR distance between `a` and `b` is `d`.
+    /// In other words, it gives rise to a random key falling into this
+    /// bucket. See [`key::Key::for_distance`].
     pub fn rand_distance(&self, rng: &mut impl rand::Rng) -> Distance {
         self.index.rand_distance(rng)
     }
@@ -561,9 +564,10 @@ where
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use libp2p_identity::PeerId;
     use quickcheck::*;
+
+    use super::*;
 
     type TestTable = KBucketsTable<KeyBytes, ()>;
 

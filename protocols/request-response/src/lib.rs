@@ -41,8 +41,8 @@
 //!
 //! ## Predefined codecs
 //!
-//! In case your message types implement [`serde::Serialize`] and [`serde::Deserialize`],
-//! you can use two predefined behaviours:
+//! In case your message types implement [`serde::Serialize`] and
+//! [`serde::Deserialize`], you can use two predefined behaviours:
 //!
 //! - [`cbor::Behaviour`] for CBOR-encoded messages
 //! - [`json::Behaviour`] for JSON-encoded messages
@@ -73,28 +73,38 @@ mod handler;
 #[cfg(feature = "json")]
 pub mod json;
 
-pub use codec::Codec;
-pub use handler::ProtocolSupport;
+use std::{
+    collections::{HashMap, HashSet, VecDeque},
+    fmt,
+    io,
+    sync::{atomic::AtomicU64, Arc},
+    task::{Context, Poll},
+    time::Duration,
+};
 
-use crate::handler::OutboundMessage;
+pub use codec::Codec;
 use futures::channel::oneshot;
 use handler::Handler;
+pub use handler::ProtocolSupport;
 use libp2p_core::{transport::PortUse, ConnectedPoint, Endpoint, Multiaddr};
 use libp2p_identity::PeerId;
 use libp2p_swarm::{
     behaviour::{AddressChange, ConnectionClosed, DialFailure, FromSwarm},
     dial_opts::DialOpts,
-    ConnectionDenied, ConnectionHandler, ConnectionId, NetworkBehaviour, NotifyHandler,
-    PeerAddresses, THandler, THandlerInEvent, THandlerOutEvent, ToSwarm,
+    ConnectionDenied,
+    ConnectionHandler,
+    ConnectionId,
+    NetworkBehaviour,
+    NotifyHandler,
+    PeerAddresses,
+    THandler,
+    THandlerInEvent,
+    THandlerOutEvent,
+    ToSwarm,
 };
 use smallvec::SmallVec;
-use std::{
-    collections::{HashMap, HashSet, VecDeque},
-    fmt, io,
-    sync::{atomic::AtomicU64, Arc},
-    task::{Context, Poll},
-    time::Duration,
-};
+
+use crate::handler::OutboundMessage;
 
 /// An inbound request or response.
 #[derive(Debug)]
@@ -326,7 +336,8 @@ impl Config {
         self
     }
 
-    /// Sets the upper bound for the number of concurrent inbound + outbound streams.
+    /// Sets the upper bound for the number of concurrent inbound + outbound
+    /// streams.
     pub fn with_max_concurrent_streams(mut self, num_streams: usize) -> Self {
         self.max_concurrent_streams = num_streams;
         self
@@ -353,8 +364,8 @@ where
     /// Pending events to return from `poll`.
     pending_events:
         VecDeque<ToSwarm<Event<TCodec::Request, TCodec::Response>, OutboundMessage<TCodec>>>,
-    /// The currently connected peers, their pending outbound and inbound responses and their known,
-    /// reachable addresses, if any.
+    /// The currently connected peers, their pending outbound and inbound
+    /// responses and their known, reachable addresses, if any.
     connected: HashMap<PeerId, SmallVec<[Connection; 2]>>,
     /// Externally managed addresses via `add_address` and `remove_address`.
     addresses: PeerAddresses,
@@ -367,7 +378,8 @@ impl<TCodec> Behaviour<TCodec>
 where
     TCodec: Codec + Default + Clone + Send + 'static,
 {
-    /// Creates a new `Behaviour` for the given protocols and configuration, using [`Default`] to construct the codec.
+    /// Creates a new `Behaviour` for the given protocols and configuration,
+    /// using [`Default`] to construct the codec.
     pub fn new<I>(protocols: I, cfg: Config) -> Self
     where
         I: IntoIterator<Item = (TCodec::Protocol, ProtocolSupport)>,
@@ -475,7 +487,8 @@ where
         self.addresses.add(*peer, address)
     }
 
-    /// Removes an address of a peer previously added via [`Behaviour::add_address`].
+    /// Removes an address of a peer previously added via
+    /// [`Behaviour::add_address`].
     #[deprecated(note = "Will be removed with the next breaking release and won't be replaced.")]
     pub fn remove_address(&mut self, peer: &PeerId, address: &Multiaddr) {
         self.addresses.remove(peer, address);
@@ -562,8 +575,8 @@ where
     /// Remove pending outbound response for the given peer and connection.
     ///
     /// Returns `true` if the provided connection to the given peer is still
-    /// alive and the [`OutboundRequestId`] was previously present and is now removed.
-    /// Returns `false` otherwise.
+    /// alive and the [`OutboundRequestId`] was previously present and is now
+    /// removed. Returns `false` otherwise.
     fn remove_pending_outbound_response(
         &mut self,
         peer: &PeerId,
@@ -578,8 +591,8 @@ where
     /// Remove pending inbound response for the given peer and connection.
     ///
     /// Returns `true` if the provided connection to the given peer is still
-    /// alive and the [`InboundRequestId`] was previously present and is now removed.
-    /// Returns `false` otherwise.
+    /// alive and the [`InboundRequestId`] was previously present and is now
+    /// removed. Returns `false` otherwise.
     fn remove_pending_inbound_response(
         &mut self,
         peer: &PeerId,
@@ -693,7 +706,8 @@ where
         }
     }
 
-    /// Preloads a new [`Handler`] with requests that are waiting to be sent to the newly connected peer.
+    /// Preloads a new [`Handler`] with requests that are waiting to be sent to
+    /// the newly connected peer.
     fn preload_new_handler(
         &mut self,
         handler: &mut Handler<TCodec>,
@@ -848,7 +862,10 @@ where
                         .push_back(ToSwarm::GenerateEvent(Event::Message { peer, message }));
                 }
                 None => {
-                    tracing::debug!("Connection ({connection}) closed after `Event::Request` ({request_id}) has been emitted.");
+                    tracing::debug!(
+                        "Connection ({connection}) closed after `Event::Request` ({request_id}) \
+                         has been emitted."
+                    );
                 }
             },
             handler::Event::ResponseSent(request_id) => {
@@ -946,7 +963,10 @@ where
                         }));
                 } else {
                     // This happens when `read_request` fails.
-                    tracing::debug!("Inbound failure is reported for an unknown request_id ({request_id}): {error}");
+                    tracing::debug!(
+                        "Inbound failure is reported for an unknown request_id ({request_id}): \
+                         {error}"
+                    );
                 }
             }
         }

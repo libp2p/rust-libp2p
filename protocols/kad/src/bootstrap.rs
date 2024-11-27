@@ -1,7 +1,9 @@
-use futures::FutureExt;
-use std::task::{Context, Poll, Waker};
-use std::time::Duration;
+use std::{
+    task::{Context, Poll, Waker},
+    time::Duration,
+};
 
+use futures::FutureExt;
 use futures_timer::Delay;
 
 /// Default value chosen at `<https://github.com/libp2p/rust-libp2p/pull/4838#discussion_r1490184754>`.
@@ -9,22 +11,26 @@ pub(crate) const DEFAULT_AUTOMATIC_THROTTLE: Duration = Duration::from_millis(50
 
 #[derive(Debug)]
 pub(crate) struct Status {
-    /// If the user did not disable periodic bootstrap (by providing `None` for `periodic_interval`)
-    /// this is the periodic interval and the delay of the current period. When `Delay` finishes,
-    /// a bootstrap will be triggered and the `Delay` will be reset.
+    /// If the user did not disable periodic bootstrap (by providing `None` for
+    /// `periodic_interval`) this is the periodic interval and the delay of
+    /// the current period. When `Delay` finishes, a bootstrap will be
+    /// triggered and the `Delay` will be reset.
     interval_and_delay: Option<(Duration, Delay)>,
 
-    /// Configured duration to wait before triggering a bootstrap when a new peer
-    /// is inserted in the routing table. `None` if automatic bootstrap is disabled.
+    /// Configured duration to wait before triggering a bootstrap when a new
+    /// peer is inserted in the routing table. `None` if automatic bootstrap
+    /// is disabled.
     automatic_throttle: Option<Duration>,
-    /// Timer that will be set (if automatic bootstrap is not disabled) when a new peer is inserted
-    /// in the routing table. When it finishes, it will trigger a bootstrap and will be set to `None`
-    /// again. If an other new peer is inserted in the routing table before this timer finishes,
+    /// Timer that will be set (if automatic bootstrap is not disabled) when a
+    /// new peer is inserted in the routing table. When it finishes, it will
+    /// trigger a bootstrap and will be set to `None` again. If an other new
+    /// peer is inserted in the routing table before this timer finishes,
     /// the timer is reset.
     throttle_timer: Option<ThrottleTimer>,
 
-    /// Number of bootstrap requests currently in progress. We ensure neither periodic bootstrap
-    /// or automatic bootstrap trigger new requests when there is still some running.
+    /// Number of bootstrap requests currently in progress. We ensure neither
+    /// periodic bootstrap or automatic bootstrap trigger new requests when
+    /// there is still some running.
     current_bootstrap_requests: usize,
     /// Waker to wake up the `poll` method if progress is ready to be made.
     waker: Option<Waker>,
@@ -44,7 +50,8 @@ impl Status {
         }
     }
 
-    /// Trigger a bootstrap now or after the configured `automatic_throttle` if configured.
+    /// Trigger a bootstrap now or after the configured `automatic_throttle` if
+    /// configured.
     pub(crate) fn trigger(&mut self) {
         // Registering `self.throttle_timer` means scheduling a bootstrap.
         // A bootstrap will be triggered when `self.throttle_timer` finishes.
@@ -77,7 +84,8 @@ impl Status {
         // trigger a bootstrap.
         self.current_bootstrap_requests += 1;
 
-        // Resetting the Status timers since a bootstrap request is being triggered right now.
+        // Resetting the Status timers since a bootstrap request is being triggered
+        // right now.
         self.reset_timers();
     }
 
@@ -106,18 +114,21 @@ impl Status {
 
         if let Some(throttle_delay) = &mut self.throttle_timer {
             // A `throttle_timer` has been registered. It means one or more peers have been
-            // inserted into the routing table and that a bootstrap request should be triggered.
-            // However, to not risk cascading bootstrap requests, we wait a little time to ensure
-            // the user will not add more peers in the routing table in the next "throttle_timer" remaining.
+            // inserted into the routing table and that a bootstrap request should be
+            // triggered. However, to not risk cascading bootstrap requests, we
+            // wait a little time to ensure the user will not add more peers in
+            // the routing table in the next "throttle_timer" remaining.
             if throttle_delay.poll_unpin(cx).is_ready() {
                 // The `throttle_timer` is finished, triggering bootstrap right now.
                 // The call to `on_started` will reset `throttle_delay`.
                 return Poll::Ready(());
             }
 
-            // The `throttle_timer` is not finished but the periodic interval for triggering bootstrap might be reached.
+            // The `throttle_timer` is not finished but the periodic interval
+            // for triggering bootstrap might be reached.
         } else {
-            // No new peer has recently been inserted into the routing table or automatic bootstrap is disabled.
+            // No new peer has recently been inserted into the routing table or
+            // automatic bootstrap is disabled.
         }
 
         // Checking if the user has enabled the periodic bootstrap feature.
@@ -131,7 +142,8 @@ impl Status {
             // The user disabled periodic bootstrap.
         }
 
-        // Registering the `waker` so that we can wake up when calling `on_new_peer_in_routing_table`.
+        // Registering the `waker` so that we can wake up when calling
+        // `on_new_peer_in_routing_table`.
         self.waker = Some(cx.waker().clone());
         Poll::Pending
     }
@@ -175,8 +187,9 @@ impl futures::Future for ThrottleTimer {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use web_time::Instant;
+
+    use super::*;
 
     const MS_5: Duration = Duration::from_millis(5);
     const MS_100: Duration = Duration::from_millis(100);
@@ -212,7 +225,8 @@ mod tests {
             async_std::future::timeout(Duration::from_millis(500), status.next())
                 .await
                 .is_ok(),
-            "bootstrap to be triggered in less then the configured delay because we connected to a new peer"
+            "bootstrap to be triggered in less then the configured delay because we connected to \
+             a new peer"
         );
     }
 
@@ -237,7 +251,8 @@ mod tests {
             async_std::future::timeout(MS_5 * 2, status.next())
                 .await
                 .is_ok(),
-            "bootstrap to be triggered in less then the configured periodic delay because we connected to a new peer"
+            "bootstrap to be triggered in less then the configured periodic delay because we \
+             connected to a new peer"
         );
     }
 
@@ -318,10 +333,11 @@ mod tests {
         Delay::new(MS_100 - MS_5).await;
 
         assert!(
-            async_std::future::timeout(MS_5*2, status.next())
+            async_std::future::timeout(MS_5 * 2, status.next())
                 .await
                 .is_ok(),
-            "bootstrap to be triggered in the configured throttle delay because we connected to a new peer"
+            "bootstrap to be triggered in the configured throttle delay because we connected to a \
+             new peer"
         );
     }
 

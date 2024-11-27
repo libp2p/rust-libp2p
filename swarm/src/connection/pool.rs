@@ -18,40 +18,51 @@
 // LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
-use crate::connection::{Connection, ConnectionId, PendingPoint};
-use crate::{
-    connection::{
-        Connected, ConnectionError, IncomingInfo, PendingConnectionError,
-        PendingInboundConnectionError, PendingOutboundConnectionError,
-    },
-    transport::TransportError,
-    ConnectedPoint, ConnectionHandler, Executor, Multiaddr, PeerId,
-};
-use concurrent_dial::ConcurrentDial;
-use fnv::FnvHashMap;
-use futures::prelude::*;
-use futures::stream::SelectAll;
-use futures::{
-    channel::{mpsc, oneshot},
-    future::{poll_fn, BoxFuture, Either},
-    ready,
-    stream::FuturesUnordered,
-};
-use libp2p_core::connection::Endpoint;
-use libp2p_core::muxing::{StreamMuxerBox, StreamMuxerExt};
-use libp2p_core::transport::PortUse;
-use std::convert::Infallible;
-use std::task::Waker;
 use std::{
     collections::HashMap,
+    convert::Infallible,
     fmt,
     num::{NonZeroU8, NonZeroUsize},
     pin::Pin,
-    task::Context,
-    task::Poll,
+    task::{Context, Poll, Waker},
+};
+
+use concurrent_dial::ConcurrentDial;
+use fnv::FnvHashMap;
+use futures::{
+    channel::{mpsc, oneshot},
+    future::{poll_fn, BoxFuture, Either},
+    prelude::*,
+    ready,
+    stream::{FuturesUnordered, SelectAll},
+};
+use libp2p_core::{
+    connection::Endpoint,
+    muxing::{StreamMuxerBox, StreamMuxerExt},
+    transport::PortUse,
 };
 use tracing::Instrument;
 use web_time::{Duration, Instant};
+
+use crate::{
+    connection::{
+        Connected,
+        Connection,
+        ConnectionError,
+        ConnectionId,
+        IncomingInfo,
+        PendingConnectionError,
+        PendingInboundConnectionError,
+        PendingOutboundConnectionError,
+        PendingPoint,
+    },
+    transport::TransportError,
+    ConnectedPoint,
+    ConnectionHandler,
+    Executor,
+    Multiaddr,
+    PeerId,
+};
 
 mod concurrent_dial;
 mod task;
@@ -92,7 +103,8 @@ where
     /// The connection counter(s).
     counters: ConnectionCounters,
 
-    /// The managed connections of each peer that are currently considered established.
+    /// The managed connections of each peer that are currently considered
+    /// established.
     established: FnvHashMap<
         PeerId,
         FnvHashMap<ConnectionId, EstablishedConnection<THandler::FromBehaviour>>,
@@ -104,22 +116,25 @@ where
     /// Size of the task command buffer (per task).
     task_command_buffer_size: usize,
 
-    /// Number of addresses concurrently dialed for a single outbound connection attempt.
+    /// Number of addresses concurrently dialed for a single outbound connection
+    /// attempt.
     dial_concurrency_factor: NonZeroU8,
 
     /// The configured override for substream protocol upgrades, if any.
     substream_upgrade_protocol_override: Option<libp2p_core::upgrade::Version>,
 
-    /// The maximum number of inbound streams concurrently negotiating on a connection.
+    /// The maximum number of inbound streams concurrently negotiating on a
+    /// connection.
     ///
     /// See [`Connection::max_negotiating_inbound_streams`].
     max_negotiating_inbound_streams: usize,
 
-    /// How many [`task::EstablishedConnectionEvent`]s can be buffered before the connection is back-pressured.
+    /// How many [`task::EstablishedConnectionEvent`]s can be buffered before
+    /// the connection is back-pressured.
     per_connection_event_buffer_size: usize,
 
-    /// The executor to use for running connection tasks. Can either be a global executor
-    /// or a local queue.
+    /// The executor to use for running connection tasks. Can either be a global
+    /// executor or a local queue.
     executor: ExecSwitch,
 
     /// Sender distributed to pending tasks for reporting events back
@@ -171,7 +186,8 @@ impl<TInEvent> EstablishedConnection<TInEvent> {
 
     /// Checks if `notify_handler` is ready to accept an event.
     ///
-    /// Returns `Ok(())` if the handler is ready to receive an event via `notify_handler`.
+    /// Returns `Ok(())` if the handler is ready to receive an event via
+    /// `notify_handler`.
     ///
     /// Returns `Err(())` if the background task associated with the connection
     /// is terminating and the connection is about to close.
@@ -201,7 +217,8 @@ struct PendingConnection {
     endpoint: PendingPoint,
     /// When dropped, notifies the task which then knows to terminate.
     abort_notifier: Option<oneshot::Sender<Infallible>>,
-    /// The moment we became aware of this possible connection, useful for timing metrics.
+    /// The moment we became aware of this possible connection, useful for
+    /// timing metrics.
     accepted_at: Instant,
 }
 
@@ -247,13 +264,12 @@ pub(crate) enum PoolEvent<ToBehaviour> {
     ///
     /// A connection may close if
     ///
-    ///   * it encounters an error, which includes the connection being
-    ///     closed by the remote. In this case `error` is `Some`.
+    ///   * it encounters an error, which includes the connection being closed
+    ///     by the remote. In this case `error` is `Some`.
     ///   * it was actively closed by [`EstablishedConnection::start_close`],
     ///     i.e. a successful, orderly close.
-    ///   * it was actively closed by [`Pool::disconnect`], i.e.
-    ///     dropped without an orderly close.
-    ///
+    ///   * it was actively closed by [`Pool::disconnect`], i.e. dropped without
+    ///     an orderly close.
     ConnectionClosed {
         id: ConnectionId,
         /// Information about the connection that errored.
@@ -354,7 +370,8 @@ where
 
     /// Returns true if we are connected to the given peer.
     ///
-    /// This will return true only after a `NodeReached` event has been produced by `poll()`.
+    /// This will return true only after a `NodeReached` event has been produced
+    /// by `poll()`.
     pub(crate) fn is_connected(&self, id: PeerId) -> bool {
         self.established.contains_key(&id)
     }
@@ -811,10 +828,12 @@ where
 
 /// Opaque type for a new connection.
 ///
-/// This connection has just been established but isn't part of the [`Pool`] yet.
-/// It either needs to be spawned via [`Pool::spawn_connection`] or dropped if undesired.
+/// This connection has just been established but isn't part of the [`Pool`]
+/// yet. It either needs to be spawned via [`Pool::spawn_connection`] or dropped
+/// if undesired.
 ///
-/// On drop, this type send the connection back to the [`Pool`] where it will be gracefully closed.
+/// On drop, this type send the connection back to the [`Pool`] where it will be
+/// gracefully closed.
 #[derive(Debug)]
 pub(crate) struct NewConnection {
     connection: Option<StreamMuxerBox>,
@@ -967,17 +986,19 @@ pub(crate) struct PoolConfig {
     pub(crate) executor: Option<Box<dyn Executor + Send>>,
     /// Size of the task command buffer (per task).
     pub(crate) task_command_buffer_size: usize,
-    /// Size of the pending connection task event buffer and the established connection task event
-    /// buffer.
+    /// Size of the pending connection task event buffer and the established
+    /// connection task event buffer.
     pub(crate) per_connection_event_buffer_size: usize,
-    /// Number of addresses concurrently dialed for a single outbound connection attempt.
+    /// Number of addresses concurrently dialed for a single outbound connection
+    /// attempt.
     pub(crate) dial_concurrency_factor: NonZeroU8,
     /// How long a connection should be kept alive once it is idling.
     pub(crate) idle_connection_timeout: Duration,
     /// The configured override for substream protocol upgrades, if any.
     substream_upgrade_protocol_override: Option<libp2p_core::upgrade::Version>,
 
-    /// The maximum number of inbound streams concurrently negotiating on a connection.
+    /// The maximum number of inbound streams concurrently negotiating on a
+    /// connection.
     ///
     /// See [`Connection::max_negotiating_inbound_streams`].
     max_negotiating_inbound_streams: usize,
@@ -997,29 +1018,31 @@ impl PoolConfig {
     }
 
     /// Sets the maximum number of events sent to a connection's background task
-    /// that may be buffered, if the task cannot keep up with their consumption and
-    /// delivery to the connection handler.
+    /// that may be buffered, if the task cannot keep up with their consumption
+    /// and delivery to the connection handler.
     ///
-    /// When the buffer for a particular connection is full, `notify_handler` will no
-    /// longer be able to deliver events to the associated [`Connection`],
-    /// thus exerting back-pressure on the connection and peer API.
+    /// When the buffer for a particular connection is full, `notify_handler`
+    /// will no longer be able to deliver events to the associated
+    /// [`Connection`], thus exerting back-pressure on the connection and
+    /// peer API.
     pub(crate) fn with_notify_handler_buffer_size(mut self, n: NonZeroUsize) -> Self {
         self.task_command_buffer_size = n.get() - 1;
         self
     }
 
-    /// Sets the maximum number of buffered connection events (beyond a guaranteed
-    /// buffer of 1 event per connection).
+    /// Sets the maximum number of buffered connection events (beyond a
+    /// guaranteed buffer of 1 event per connection).
     ///
-    /// When the buffer is full, the background tasks of all connections will stall.
-    /// In this way, the consumers of network events exert back-pressure on
-    /// the network connection I/O.
+    /// When the buffer is full, the background tasks of all connections will
+    /// stall. In this way, the consumers of network events exert
+    /// back-pressure on the network connection I/O.
     pub(crate) fn with_per_connection_event_buffer_size(mut self, n: usize) -> Self {
         self.per_connection_event_buffer_size = n;
         self
     }
 
-    /// Number of addresses concurrently dialed for a single outbound connection attempt.
+    /// Number of addresses concurrently dialed for a single outbound connection
+    /// attempt.
     pub(crate) fn with_dial_concurrency_factor(mut self, factor: NonZeroU8) -> Self {
         self.dial_concurrency_factor = factor;
         self
@@ -1034,7 +1057,8 @@ impl PoolConfig {
         self
     }
 
-    /// The maximum number of inbound streams concurrently negotiating on a connection.
+    /// The maximum number of inbound streams concurrently negotiating on a
+    /// connection.
     ///
     /// See [`Connection::max_negotiating_inbound_streams`].
     pub(crate) fn with_max_negotiating_inbound_streams(mut self, v: usize) -> Self {

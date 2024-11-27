@@ -28,14 +28,19 @@ use std::{
 use libp2p_core::{transport::PortUse, Multiaddr};
 use libp2p_identity::PeerId;
 use libp2p_swarm::{
-    derive_prelude::ConnectionEstablished, ConnectionClosed, ConnectionId, FromSwarm,
-    NetworkBehaviour, NotifyHandler, THandlerInEvent, THandlerOutEvent, ToSwarm,
+    derive_prelude::ConnectionEstablished,
+    ConnectionClosed,
+    ConnectionId,
+    FromSwarm,
+    NetworkBehaviour,
+    NotifyHandler,
+    THandlerInEvent,
+    THandlerOutEvent,
+    ToSwarm,
 };
 
-use crate::RunParams;
-use crate::{client::handler::Handler, RunUpdate};
-
 use super::{RunError, RunId};
+use crate::{client::handler::Handler, RunParams, RunUpdate};
 
 #[derive(Debug)]
 pub struct Event {

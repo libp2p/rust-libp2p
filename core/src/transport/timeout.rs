@@ -24,17 +24,26 @@
 //! underlying `Transport`.
 // TODO: add example
 
-use crate::transport::DialOpts;
-use crate::{
-    transport::{ListenerId, TransportError, TransportEvent},
-    Multiaddr, Transport,
+use std::{
+    error,
+    fmt,
+    io,
+    pin::Pin,
+    task::{Context, Poll},
+    time::Duration,
 };
+
 use futures::prelude::*;
 use futures_timer::Delay;
-use std::{error, fmt, io, pin::Pin, task::Context, task::Poll, time::Duration};
 
-/// A `TransportTimeout` is a `Transport` that wraps another `Transport` and adds
-/// timeouts to all inbound and outbound connection attempts.
+use crate::{
+    transport::{DialOpts, ListenerId, TransportError, TransportEvent},
+    Multiaddr,
+    Transport,
+};
+
+/// A `TransportTimeout` is a `Transport` that wraps another `Transport` and
+/// adds timeouts to all inbound and outbound connection attempts.
 ///
 /// **Note**: `listen_on` is never subject to a timeout, only the setup of each
 /// individual accepted connection.
@@ -48,7 +57,8 @@ pub struct TransportTimeout<InnerTrans> {
 }
 
 impl<InnerTrans> TransportTimeout<InnerTrans> {
-    /// Wraps around a `Transport` to add timeouts to all the sockets created by it.
+    /// Wraps around a `Transport` to add timeouts to all the sockets created by
+    /// it.
     pub fn new(trans: InnerTrans, timeout: Duration) -> Self {
         TransportTimeout {
             inner: trans,
@@ -151,10 +161,11 @@ where
     type Output = Result<InnerFut::Ok, TransportTimeoutError<InnerFut::Error>>;
 
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        // It is debatable whether we should poll the inner future first or the timer first.
-        // For example, if you start dialing with a timeout of 10 seconds, then after 15 seconds
-        // the dialing succeeds on the wire, then after 20 seconds you poll, then depending on
-        // which gets polled first, the outcome will be success or failure.
+        // It is debatable whether we should poll the inner future first or the timer
+        // first. For example, if you start dialing with a timeout of 10
+        // seconds, then after 15 seconds the dialing succeeds on the wire, then
+        // after 20 seconds you poll, then depending on which gets polled first,
+        // the outcome will be success or failure.
 
         let mut this = self.project();
 

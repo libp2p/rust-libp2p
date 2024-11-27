@@ -21,17 +21,24 @@
 
 #![doc = include_str!("../README.md")]
 
+use std::{
+    error::Error,
+    net::{Ipv4Addr, Ipv6Addr},
+};
+
 use clap::Parser;
 use futures::StreamExt;
 use libp2p::{
-    core::multiaddr::Protocol,
-    core::Multiaddr,
-    identify, identity, noise, ping, relay,
+    core::{multiaddr::Protocol, Multiaddr},
+    identify,
+    identity,
+    noise,
+    ping,
+    relay,
     swarm::{NetworkBehaviour, SwarmEvent},
-    tcp, yamux,
+    tcp,
+    yamux,
 };
-use std::error::Error;
-use std::net::{Ipv4Addr, Ipv6Addr};
 use tracing_subscriber::EnvFilter;
 
 #[tokio::main]
@@ -119,7 +126,8 @@ fn generate_ed25519(secret_key_seed: u8) -> identity::Keypair {
 #[derive(Debug, Parser)]
 #[clap(name = "libp2p relay")]
 struct Opt {
-    /// Determine if the relay listen on ipv6 or ipv4 loopback address. the default is ipv4
+    /// Determine if the relay listen on ipv6 or ipv4 loopback address. the
+    /// default is ipv4
     #[clap(long)]
     use_ipv6: Option<bool>,
 

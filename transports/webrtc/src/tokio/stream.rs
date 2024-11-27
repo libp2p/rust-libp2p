@@ -31,8 +31,9 @@ use webrtc::data::data_channel::{DataChannel, PollDataChannel};
 
 /// A substream on top of a WebRTC data channel.
 ///
-/// To be a proper libp2p substream, we need to implement [`AsyncRead`] and [`AsyncWrite`] as well
-/// as support a half-closed state which we do by framing messages in a protobuf envelope.
+/// To be a proper libp2p substream, we need to implement [`AsyncRead`] and
+/// [`AsyncWrite`] as well as support a half-closed state which we do by framing
+/// messages in a protobuf envelope.
 pub struct Stream {
     inner: libp2p_webrtc_utils::Stream<Compat<PollDataChannel>>,
 }
@@ -40,8 +41,8 @@ pub struct Stream {
 pub(crate) type DropListener = libp2p_webrtc_utils::DropListener<Compat<PollDataChannel>>;
 
 impl Stream {
-    /// Returns a new `Substream` and a listener, which will notify the receiver when/if the substream
-    /// is dropped.
+    /// Returns a new `Substream` and a listener, which will notify the receiver
+    /// when/if the substream is dropped.
     pub(crate) fn new(data_channel: Arc<DataChannel>) -> (Self, DropListener) {
         let mut data_channel = PollDataChannel::new(data_channel).compat();
         data_channel.get_mut().set_read_buf_capacity(MAX_MSG_LEN);

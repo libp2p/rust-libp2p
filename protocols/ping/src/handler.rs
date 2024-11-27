@@ -18,26 +18,33 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::{protocol, PROTOCOL_NAME};
-use futures::future::{BoxFuture, Either};
-use futures::prelude::*;
-use futures_timer::Delay;
-use libp2p_core::upgrade::ReadyUpgrade;
-use libp2p_swarm::handler::{
-    ConnectionEvent, DialUpgradeError, FullyNegotiatedInbound, FullyNegotiatedOutbound,
-};
-use libp2p_swarm::{
-    ConnectionHandler, ConnectionHandlerEvent, Stream, StreamProtocol, StreamUpgradeError,
-    SubstreamProtocol,
-};
-use std::collections::VecDeque;
-use std::convert::Infallible;
 use std::{
+    collections::VecDeque,
+    convert::Infallible,
     error::Error,
-    fmt, io,
+    fmt,
+    io,
     task::{Context, Poll},
     time::Duration,
 };
+
+use futures::{
+    future::{BoxFuture, Either},
+    prelude::*,
+};
+use futures_timer::Delay;
+use libp2p_core::upgrade::ReadyUpgrade;
+use libp2p_swarm::{
+    handler::{ConnectionEvent, DialUpgradeError, FullyNegotiatedInbound, FullyNegotiatedOutbound},
+    ConnectionHandler,
+    ConnectionHandlerEvent,
+    Stream,
+    StreamProtocol,
+    StreamUpgradeError,
+    SubstreamProtocol,
+};
+
+use crate::{protocol, PROTOCOL_NAME};
 
 /// The configuration for outbound pings.
 #[derive(Debug, Clone)]
@@ -154,7 +161,8 @@ enum State {
     Inactive {
         /// Whether or not we've reported the missing support yet.
         ///
-        /// This is used to avoid repeated events being emitted for a specific connection.
+        /// This is used to avoid repeated events being emitted for a specific
+        /// connection.
         reported: bool,
     },
     /// We are actively pinging the other peer.
@@ -185,7 +193,8 @@ impl Handler {
         self.outbound = None; // Request a new substream on the next `poll`.
 
         // Timer is already polled and expired before substream request is initiated
-        // and will be polled again later on in our `poll` because we reset `self.outbound`.
+        // and will be polled again later on in our `poll` because we reset
+        // `self.outbound`.
         //
         // `futures-timer` allows an expired timer to be polled again and returns
         // immediately `Poll::Ready`. However in its WASM implementation there is

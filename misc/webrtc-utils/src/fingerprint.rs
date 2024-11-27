@@ -19,16 +19,18 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
+use std::fmt;
+
 use libp2p_core::multihash;
 use sha2::Digest as _;
-use std::fmt;
 
 pub const SHA256: &str = "sha-256";
 const MULTIHASH_SHA256_CODE: u64 = 0x12;
 
 type Multihash = multihash::Multihash<64>;
 
-/// A certificate fingerprint that is assumed to be created using the SHA256 hash algorithm.
+/// A certificate fingerprint that is assumed to be created using the SHA256
+/// hash algorithm.
 #[derive(Eq, PartialEq, Copy, Clone)]
 pub struct Fingerprint([u8; 32]);
 
@@ -39,7 +41,8 @@ impl Fingerprint {
         Fingerprint(digest)
     }
 
-    /// Creates a new [Fingerprint] from a raw certificate by hashing the given bytes with SHA256.
+    /// Creates a new [Fingerprint] from a raw certificate by hashing the given
+    /// bytes with SHA256.
     pub fn from_certificate(bytes: &[u8]) -> Self {
         Fingerprint(sha2::Sha256::digest(bytes).into())
     }
@@ -85,7 +88,8 @@ impl fmt::Debug for Fingerprint {
 mod tests {
     use super::*;
 
-    const SDP_FORMAT: &str = "7D:E3:D8:3F:81:A6:80:59:2A:47:1E:6B:6A:BB:07:47:AB:D3:53:85:A8:09:3F:DF:E1:12:C1:EE:BB:6C:C6:AC";
+    const SDP_FORMAT: &str = "7D:E3:D8:3F:81:A6:80:59:2A:47:1E:6B:6A:BB:07:47:AB:D3:53:85:A8:09:\
+                              3F:DF:E1:12:C1:EE:BB:6C:C6:AC";
     const REGULAR_FORMAT: [u8; 32] =
         hex_literal::hex!("7DE3D83F81A680592A471E6B6ABB0747ABD35385A8093FDFE112C1EEBB6CC6AC");
 

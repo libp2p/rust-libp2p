@@ -20,12 +20,13 @@
 
 //! (M)DNS encoding and decoding on top of the `dns_parser` library.
 
-use crate::{META_QUERY_SERVICE, SERVICE_NAME};
+use std::{borrow::Cow, cmp, error, fmt, str, time::Duration};
+
 use libp2p_core::Multiaddr;
 use libp2p_identity::PeerId;
-use rand::distributions::Alphanumeric;
-use rand::{thread_rng, Rng};
-use std::{borrow::Cow, cmp, error, fmt, str, time::Duration};
+use rand::{distributions::Alphanumeric, thread_rng, Rng};
+
+use crate::{META_QUERY_SERVICE, SERVICE_NAME};
 
 /// DNS TXT records can have up to 255 characters as a single string value.
 ///
@@ -48,7 +49,8 @@ const MAX_RECORDS_PER_PACKET: usize = (MAX_PACKET_SIZE - 100) / MAX_TXT_RECORD_S
 
 /// An encoded MDNS packet.
 pub(crate) type MdnsPacket = Vec<u8>;
-/// Decodes a `<character-string>` (as defined by RFC1035) into a `Vec` of ASCII characters.
+/// Decodes a `<character-string>` (as defined by RFC1035) into a `Vec` of ASCII
+/// characters.
 // TODO: better error type?
 pub(crate) fn decode_character_string(mut from: &[u8]) -> Result<Cow<'_, [u8]>, ()> {
     if from.is_empty() {
@@ -290,10 +292,9 @@ fn generate_peer_name() -> Vec<u8> {
 ///
 /// # Panic
 ///
-/// Panics if `name` has a zero-length component or a component that is too long.
-/// This is fine considering that this function is not public and is only called in a controlled
-/// environment.
-///
+/// Panics if `name` has a zero-length component or a component that is too
+/// long. This is fine considering that this function is not public and is only
+/// called in a controlled environment.
 fn append_qname(out: &mut Vec<u8>, name: &[u8]) {
     debug_assert!(name.is_ascii());
 
@@ -394,9 +395,10 @@ impl error::Error for MdnsResponseError {}
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use hickory_proto::op::Message;
     use libp2p_identity as identity;
+
+    use super::*;
 
     #[test]
     fn build_query_correct() {

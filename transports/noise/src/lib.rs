@@ -20,33 +20,39 @@
 
 //! [Noise protocol framework][noise] support for libp2p.
 //!
-//! > **Note**: This crate is still experimental and subject to major breaking changes
-//! >           both on the API and the wire protocol.
+//! > **Note**: This crate is still experimental and subject to major breaking
+//! > changes
+//! > both on the API and the wire protocol.
 //!
-//! This crate provides `libp2p_core::InboundUpgrade` and `libp2p_core::OutboundUpgrade`
-//! implementations for various noise handshake patterns (currently `IK`, `IX`, and `XX`)
-//! over a particular choice of Diffie–Hellman key agreement (currently only X25519).
+//! This crate provides `libp2p_core::InboundUpgrade` and
+//! `libp2p_core::OutboundUpgrade` implementations for various noise handshake
+//! patterns (currently `IK`, `IX`, and `XX`) over a particular choice of
+//! Diffie–Hellman key agreement (currently only X25519).
 //!
-//! > **Note**: Only the `XX` handshake pattern is currently guaranteed to provide
-//! >           interoperability with other libp2p implementations.
+//! > **Note**: Only the `XX` handshake pattern is currently guaranteed to
+//! > provide
+//! > interoperability with other libp2p implementations.
 //!
-//! All upgrades produce as output a pair, consisting of the remote's static public key
-//! and a `NoiseOutput` which represents the established cryptographic session with the
-//! remote, implementing `futures::io::AsyncRead` and `futures::io::AsyncWrite`.
+//! All upgrades produce as output a pair, consisting of the remote's static
+//! public key and a `NoiseOutput` which represents the established
+//! cryptographic session with the remote, implementing `futures::io::AsyncRead`
+//! and `futures::io::AsyncWrite`.
 //!
 //! # Usage
 //!
 //! Example:
 //!
 //! ```
-//! use libp2p_core::{Transport, upgrade, transport::MemoryTransport};
-//! use libp2p_noise as noise;
+//! use libp2p_core::{transport::MemoryTransport, upgrade, Transport};
 //! use libp2p_identity as identity;
+//! use libp2p_noise as noise;
 //!
 //! # fn main() {
 //! let id_keys = identity::Keypair::generate_ed25519();
 //! let noise = noise::Config::new(&id_keys).unwrap();
-//! let builder = MemoryTransport::default().upgrade(upgrade::Version::V1).authenticate(noise);
+//! let builder = MemoryTransport::default()
+//!     .upgrade(upgrade::Version::V1)
+//!     .authenticate(noise);
 //! // let transport = builder.multiplex(...);
 //! # }
 //! ```
@@ -58,22 +64,25 @@
 mod io;
 mod protocol;
 
-pub use io::Output;
+use std::{collections::HashSet, fmt::Write, pin::Pin};
 
-use crate::handshake::State;
-use crate::io::handshake;
-use crate::protocol::{noise_params_into_builder, AuthenticKeypair, Keypair, PARAMS_XX};
 use futures::prelude::*;
-use libp2p_core::upgrade::{InboundConnectionUpgrade, OutboundConnectionUpgrade};
-use libp2p_core::UpgradeInfo;
+pub use io::Output;
+use libp2p_core::{
+    upgrade::{InboundConnectionUpgrade, OutboundConnectionUpgrade},
+    UpgradeInfo,
+};
 use libp2p_identity as identity;
 use libp2p_identity::PeerId;
 use multiaddr::Protocol;
 use multihash::Multihash;
 use snow::params::NoiseParams;
-use std::collections::HashSet;
-use std::fmt::Write;
-use std::pin::Pin;
+
+use crate::{
+    handshake::State,
+    io::handshake,
+    protocol::{noise_params_into_builder, AuthenticKeypair, Keypair, PARAMS_XX},
+};
 
 /// The configuration for the noise handshake.
 #[derive(Clone)]
@@ -84,15 +93,17 @@ pub struct Config {
 
     /// Prologue to use in the noise handshake.
     ///
-    /// The prologue can contain arbitrary data that will be hashed into the noise handshake.
-    /// For the handshake to succeed, both parties must set the same prologue.
+    /// The prologue can contain arbitrary data that will be hashed into the
+    /// noise handshake. For the handshake to succeed, both parties must set
+    /// the same prologue.
     ///
     /// For further information, see <https://noiseprotocol.org/noise.html#prologue>.
     prologue: Vec<u8>,
 }
 
 impl Config {
-    /// Construct a new configuration for the noise handshake using the XX handshake pattern.
+    /// Construct a new configuration for the noise handshake using the XX
+    /// handshake pattern.
     pub fn new(identity: &identity::Keypair) -> Result<Self, Error> {
         let noise_keys = Keypair::new().into_authentic(identity)?;
 
@@ -112,8 +123,8 @@ impl Config {
 
     /// Set WebTransport certhashes extension.
     ///
-    /// In case of initiator, these certhashes will be used to validate the ones reported by
-    /// responder.
+    /// In case of initiator, these certhashes will be used to validate the ones
+    /// reported by responder.
     ///
     /// In case of responder, these certhashes will be reported to initiator.
     pub fn with_webtransport_certhashes(mut self, certhashes: HashSet<Multihash<64>>) -> Self {

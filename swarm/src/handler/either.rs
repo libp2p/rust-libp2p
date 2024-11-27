@@ -18,14 +18,23 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::handler::{
-    ConnectionEvent, ConnectionHandler, ConnectionHandlerEvent, FullyNegotiatedInbound,
-    InboundUpgradeSend, ListenUpgradeError, SubstreamProtocol,
-};
-use crate::upgrade::SendWrapper;
+use std::task::{Context, Poll};
+
 use either::Either;
 use futures::future;
-use std::task::{Context, Poll};
+
+use crate::{
+    handler::{
+        ConnectionEvent,
+        ConnectionHandler,
+        ConnectionHandlerEvent,
+        FullyNegotiatedInbound,
+        InboundUpgradeSend,
+        ListenUpgradeError,
+        SubstreamProtocol,
+    },
+    upgrade::SendWrapper,
+};
 
 impl<LIP, RIP, LIOI, RIOI>
     FullyNegotiatedInbound<Either<SendWrapper<LIP>, SendWrapper<RIP>>, Either<LIOI, RIOI>>
@@ -71,8 +80,8 @@ where
     }
 }
 
-/// Implementation of a [`ConnectionHandler`] that represents either of two [`ConnectionHandler`]
-/// implementations.
+/// Implementation of a [`ConnectionHandler`] that represents either of two
+/// [`ConnectionHandler`] implementations.
 impl<L, R> ConnectionHandler for Either<L, R>
 where
     L: ConnectionHandler,

@@ -18,11 +18,15 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use prometheus_client::encoding::{EncodeLabelSet, EncodeLabelValue};
-use prometheus_client::metrics::counter::Counter;
-use prometheus_client::metrics::family::Family;
-use prometheus_client::metrics::histogram::{exponential_buckets, Histogram};
-use prometheus_client::registry::{Registry, Unit};
+use prometheus_client::{
+    encoding::{EncodeLabelSet, EncodeLabelValue},
+    metrics::{
+        counter::Counter,
+        family::Family,
+        histogram::{exponential_buckets, Histogram},
+    },
+    registry::{Registry, Unit},
+};
 
 pub(crate) struct Metrics {
     query_result_get_record_ok: Counter,
@@ -126,7 +130,8 @@ impl Metrics {
         let routing_updated = Family::default();
         sub_registry.register(
             "routing_updated",
-            "Number of peers added, updated or evicted to, in or from a specific kbucket in the routing table",
+            "Number of peers added, updated or evicted to, in or from a specific kbucket in the \
+             routing table",
             routing_updated.clone(),
         );
 

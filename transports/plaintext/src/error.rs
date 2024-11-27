@@ -18,9 +18,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use std::error;
-use std::fmt;
-use std::io::Error as IoError;
+use std::{error, fmt, io::Error as IoError};
 
 #[derive(Debug)]
 pub enum Error {
@@ -33,7 +31,8 @@ pub enum Error {
     /// Failed to parse public key from bytes in protobuf message.
     InvalidPublicKey(libp2p_identity::DecodingError),
 
-    /// Failed to parse the [`PeerId`](libp2p_identity::PeerId) from bytes in the protobuf message.
+    /// Failed to parse the [`PeerId`](libp2p_identity::PeerId) from bytes in
+    /// the protobuf message.
     InvalidPeerId(libp2p_identity::ParseError),
 
     /// The peer id of the exchange isn't consistent with the remote public key.

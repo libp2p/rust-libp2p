@@ -18,8 +18,9 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use futures_rustls::{rustls, TlsAcceptor, TlsConnector};
 use std::{fmt, io, sync::Arc};
+
+use futures_rustls::{rustls, TlsAcceptor, TlsConnector};
 
 /// TLS configuration.
 #[derive(Clone)]
@@ -38,7 +39,8 @@ impl fmt::Debug for Config {
 pub struct PrivateKey(rustls::pki_types::PrivateKeyDer<'static>);
 
 impl PrivateKey {
-    /// Assert the given bytes are DER-encoded ASN.1 in either PKCS#8 or PKCS#1 format.
+    /// Assert the given bytes are DER-encoded ASN.1 in either PKCS#8 or PKCS#1
+    /// format.
     pub fn new(bytes: Vec<u8>) -> Self {
         PrivateKey(
             rustls::pki_types::PrivateKeyDer::try_from(bytes)
@@ -65,7 +67,8 @@ impl Certificate {
 }
 
 impl Config {
-    /// Create a new TLS configuration with the given server key and certificate chain.
+    /// Create a new TLS configuration with the given server key and certificate
+    /// chain.
     pub fn new<I>(key: PrivateKey, certs: I) -> Result<Self, Error>
     where
         I: IntoIterator<Item = Certificate>,
@@ -164,7 +167,8 @@ pub(crate) fn dns_name_ref(name: &str) -> Result<rustls::pki_types::ServerName<'
         .map_err(|_| Error::InvalidDnsName(name.into()))
 }
 
-// Error //////////////////////////////////////////////////////////////////////////////////////////
+// Error ///////////////////////////////////////////////////////////////////////
+// ///////////////////
 
 /// TLS related errors.
 #[derive(Debug)]

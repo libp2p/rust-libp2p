@@ -8,11 +8,22 @@ use futures::{channel::mpsc, StreamExt};
 use libp2p_core::{transport::PortUse, Endpoint, Multiaddr};
 use libp2p_identity::PeerId;
 use libp2p_swarm::{
-    self as swarm, dial_opts::DialOpts, ConnectionDenied, ConnectionId, FromSwarm,
-    NetworkBehaviour, THandler, THandlerInEvent, THandlerOutEvent, ToSwarm,
+    self as swarm,
+    dial_opts::DialOpts,
+    ConnectionDenied,
+    ConnectionId,
+    FromSwarm,
+    NetworkBehaviour,
+    THandler,
+    THandlerInEvent,
+    THandlerOutEvent,
+    ToSwarm,
 };
 use swarm::{
-    behaviour::ConnectionEstablished, dial_opts::PeerCondition, ConnectionClosed, DialError,
+    behaviour::ConnectionEstablished,
+    dial_opts::PeerCondition,
+    ConnectionClosed,
+    DialError,
     DialFailure,
 };
 

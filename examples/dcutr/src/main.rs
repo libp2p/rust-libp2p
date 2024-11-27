@@ -20,16 +20,23 @@
 
 #![doc = include_str!("../README.md")]
 
+use std::{error::Error, str::FromStr, time::Duration};
+
 use clap::Parser;
 use futures::{executor::block_on, future::FutureExt, stream::StreamExt};
 use libp2p::{
     core::multiaddr::{Multiaddr, Protocol},
-    dcutr, identify, identity, noise, ping, relay,
+    dcutr,
+    identify,
+    identity,
+    noise,
+    ping,
+    relay,
     swarm::{NetworkBehaviour, SwarmEvent},
-    tcp, yamux, PeerId,
+    tcp,
+    yamux,
+    PeerId,
 };
-use std::str::FromStr;
-use std::{error::Error, time::Duration};
 use tracing_subscriber::EnvFilter;
 
 #[derive(Debug, Parser)]
@@ -136,8 +143,9 @@ async fn main() -> Result<(), Box<dyn Error>> {
         }
     });
 
-    // Connect to the relay server. Not for the reservation or relayed connection, but to (a) learn
-    // our local public address and (b) enable a freshly started relay to learn its public address.
+    // Connect to the relay server. Not for the reservation or relayed connection,
+    // but to (a) learn our local public address and (b) enable a freshly
+    // started relay to learn its public address.
     swarm.dial(opts.relay_address.clone()).unwrap();
     block_on(async {
         let mut learned_observed_addr = false;

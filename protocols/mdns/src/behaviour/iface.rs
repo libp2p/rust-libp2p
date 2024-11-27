@@ -21,25 +21,30 @@
 mod dns;
 mod query;
 
-use self::dns::{build_query, build_query_response, build_service_discovery_response};
-use self::query::MdnsPacket;
-use crate::behaviour::{socket::AsyncSocket, timer::Builder};
-use crate::Config;
-use futures::channel::mpsc;
-use futures::{SinkExt, StreamExt};
+use std::{
+    collections::VecDeque,
+    future::Future,
+    io,
+    net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr, UdpSocket},
+    pin::Pin,
+    sync::{Arc, RwLock},
+    task::{Context, Poll},
+    time::{Duration, Instant},
+};
+
+use futures::{channel::mpsc, SinkExt, StreamExt};
 use libp2p_core::Multiaddr;
 use libp2p_identity::PeerId;
 use libp2p_swarm::ListenAddresses;
 use socket2::{Domain, Socket, Type};
-use std::future::Future;
-use std::sync::{Arc, RwLock};
-use std::{
-    collections::VecDeque,
-    io,
-    net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr, UdpSocket},
-    pin::Pin,
-    task::{Context, Poll},
-    time::{Duration, Instant},
+
+use self::{
+    dns::{build_query, build_query_response, build_service_discovery_response},
+    query::MdnsPacket,
+};
+use crate::{
+    behaviour::{socket::AsyncSocket, timer::Builder},
+    Config,
 };
 
 /// Initial interval for starting probe
@@ -66,8 +71,9 @@ impl ProbeState {
     }
 }
 
-/// An mDNS instance for a networking interface. To discover all peers when having multiple
-/// interfaces an [`InterfaceState`] is required for each interface.
+/// An mDNS instance for a networking interface. To discover all peers when
+/// having multiple interfaces an [`InterfaceState`] is required for each
+/// interface.
 #[derive(Debug)]
 pub(crate) struct InterfaceState<U, T> {
     /// Address this instance is bound to.
@@ -82,11 +88,12 @@ pub(crate) struct InterfaceState<U, T> {
     query_response_sender: mpsc::Sender<(PeerId, Multiaddr, Instant)>,
 
     /// Buffer used for receiving data from the main socket.
-    /// RFC6762 discourages packets larger than the interface MTU, but allows sizes of up to 9000
-    /// bytes, if it can be ensured that all participating devices can handle such large packets.
-    /// For computers with several interfaces and IP addresses responses can easily reach sizes in
-    /// the range of 3000 bytes, so 4096 seems sensible for now. For more information see
-    /// [rfc6762](https://tools.ietf.org/html/rfc6762#page-46).
+    /// RFC6762 discourages packets larger than the interface MTU, but allows
+    /// sizes of up to 9000 bytes, if it can be ensured that all
+    /// participating devices can handle such large packets. For computers
+    /// with several interfaces and IP addresses responses can easily reach
+    /// sizes in the range of 3000 bytes, so 4096 seems sensible for now.
+    /// For more information see [rfc6762](https://tools.ietf.org/html/rfc6762#page-46).
     recv_buffer: [u8; 4096],
     /// Buffers pending to send on the main socket.
     send_buffer: VecDeque<Vec<u8>>,

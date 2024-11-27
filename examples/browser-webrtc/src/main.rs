@@ -1,23 +1,27 @@
 #![allow(non_upper_case_globals)]
 
+use std::{
+    net::{Ipv4Addr, SocketAddr},
+    time::Duration,
+};
+
 use anyhow::Result;
-use axum::extract::{Path, State};
-use axum::http::header::CONTENT_TYPE;
-use axum::http::StatusCode;
-use axum::response::{Html, IntoResponse};
-use axum::{http::Method, routing::get, Router};
+use axum::{
+    extract::{Path, State},
+    http::{header::CONTENT_TYPE, Method, StatusCode},
+    response::{Html, IntoResponse},
+    routing::get,
+    Router,
+};
 use futures::StreamExt;
 use libp2p::{
-    core::muxing::StreamMuxerBox,
-    core::Transport,
+    core::{muxing::StreamMuxerBox, Transport},
     multiaddr::{Multiaddr, Protocol},
     ping,
     swarm::SwarmEvent,
 };
 use libp2p_webrtc as webrtc;
 use rand::thread_rng;
-use std::net::{Ipv4Addr, SocketAddr};
-use std::time::Duration;
 use tokio::net::TcpListener;
 use tower_http::cors::{Any, CorsLayer};
 
@@ -127,7 +131,8 @@ struct Libp2pEndpoint(Multiaddr);
 /// Serves the index.html file for our client.
 ///
 /// Our server listens on a random UDP port for the WebRTC transport.
-/// To allow the client to connect, we replace the `__LIBP2P_ENDPOINT__` placeholder with the actual address.
+/// To allow the client to connect, we replace the `__LIBP2P_ENDPOINT__`
+/// placeholder with the actual address.
 async fn get_index(
     State(Libp2pEndpoint(libp2p_endpoint)): State<Libp2pEndpoint>,
 ) -> Result<Html<String>, StatusCode> {

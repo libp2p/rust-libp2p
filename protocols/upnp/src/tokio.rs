@@ -20,16 +20,17 @@
 
 use std::{error::Error, net::IpAddr};
 
-use crate::behaviour::{GatewayEvent, GatewayRequest};
 use futures::{
     channel::{mpsc, oneshot},
-    SinkExt, StreamExt,
+    SinkExt,
+    StreamExt,
 };
 use igd_next::SearchOptions;
 
 pub use crate::behaviour::Behaviour;
+use crate::behaviour::{GatewayEvent, GatewayRequest};
 
-//TODO: remove when `IpAddr::is_global` stabilizes.
+// TODO: remove when `IpAddr::is_global` stabilizes.
 pub(crate) fn is_addr_global(addr: IpAddr) -> bool {
     match addr {
         IpAddr::V4(ip) => {

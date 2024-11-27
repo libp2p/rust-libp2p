@@ -20,25 +20,31 @@
 
 mod peers;
 
-use libp2p_core::Multiaddr;
-use peers::closest::{
-    disjoint::ClosestDisjointPeersIter, ClosestPeersIter, ClosestPeersIterConfig,
-};
-use peers::fixed::FixedPeersIter;
-use peers::PeersIterState;
-use smallvec::SmallVec;
+use std::{num::NonZeroUsize, time::Duration};
 
-use crate::behaviour::PeerInfo;
-use crate::handler::HandlerIn;
-use crate::kbucket::{Key, KeyBytes};
-use crate::{QueryInfo, ALPHA_VALUE, K_VALUE};
 use either::Either;
 use fnv::FnvHashMap;
+use libp2p_core::Multiaddr;
 use libp2p_identity::PeerId;
-use std::{num::NonZeroUsize, time::Duration};
+use peers::{
+    closest::{disjoint::ClosestDisjointPeersIter, ClosestPeersIter, ClosestPeersIterConfig},
+    fixed::FixedPeersIter,
+    PeersIterState,
+};
+use smallvec::SmallVec;
 use web_time::Instant;
 
-/// A `QueryPool` provides an aggregate state machine for driving `Query`s to completion.
+use crate::{
+    behaviour::PeerInfo,
+    handler::HandlerIn,
+    kbucket::{Key, KeyBytes},
+    QueryInfo,
+    ALPHA_VALUE,
+    K_VALUE,
+};
+
+/// A `QueryPool` provides an aggregate state machine for driving `Query`s to
+/// completion.
 ///
 /// Internally, a `Query` is in turn driven by an underlying `QueryPeerIter`
 /// that determines the peer selection strategy, i.e. the order in which the
@@ -116,7 +122,8 @@ impl QueryPool {
         self.queries.insert(id, query);
     }
 
-    /// Adds a query to the pool that iterates towards the closest peers to the target.
+    /// Adds a query to the pool that iterates towards the closest peers to the
+    /// target.
     pub(crate) fn add_iter_closest<T, I>(&mut self, target: T, peers: I, info: QueryInfo) -> QueryId
     where
         T: Into<KeyBytes> + Clone,
@@ -127,7 +134,8 @@ impl QueryPool {
         id
     }
 
-    /// Adds a query to the pool that iterates towards the closest peers to the target.
+    /// Adds a query to the pool that iterates towards the closest peers to the
+    /// target.
     pub(crate) fn continue_iter_closest<T, I>(
         &mut self,
         id: QueryId,
@@ -175,7 +183,8 @@ impl QueryPool {
         self.queries.get(id)
     }
 
-    /// Returns a mutablereference to a query with the given ID, if it is in the pool.
+    /// Returns a mutablereference to a query with the given ID, if it is in the
+    /// pool.
     pub(crate) fn get_mut(&mut self, id: &QueryId) -> Option<&mut Query> {
         self.queries.get_mut(id)
     }
@@ -288,7 +297,8 @@ pub(crate) struct Query {
     /// A map of pending requests to peers.
     ///
     /// A request is pending if the targeted peer is not currently connected
-    /// and these requests are sent as soon as a connection to the peer is established.
+    /// and these requests are sent as soon as a connection to the peer is
+    /// established.
     pub(crate) pending_rpcs: SmallVec<[(PeerId, HandlerIn); K_VALUE.get()]>,
 }
 
@@ -301,7 +311,8 @@ pub(crate) struct QueryPeers {
 }
 
 impl QueryPeers {
-    /// Consumes the peers iterator, producing a final `Iterator` over the discovered `PeerId`s.
+    /// Consumes the peers iterator, producing a final `Iterator` over the
+    /// discovered `PeerId`s.
     pub(crate) fn into_peerids_iter(self) -> impl Iterator<Item = PeerId> {
         match self.peer_iter {
             QueryPeerIter::Closest(iter) => Either::Left(Either::Left(iter.into_result())),
@@ -310,8 +321,8 @@ impl QueryPeers {
         }
     }
 
-    /// Consumes the peers iterator, producing a final `Iterator` over the discovered `PeerId`s
-    /// with their matching `Multiaddr`s.
+    /// Consumes the peers iterator, producing a final `Iterator` over the
+    /// discovered `PeerId`s with their matching `Multiaddr`s.
     pub(crate) fn into_peerinfos_iter(mut self) -> impl Iterator<Item = PeerInfo> {
         match self.peer_iter {
             QueryPeerIter::Closest(iter) => Either::Left(Either::Left(iter.into_result())),
@@ -437,8 +448,9 @@ impl Query {
 
     /// Finishes the query prematurely.
     ///
-    /// A finished query immediately stops yielding new peers to contact and will be
-    /// reported by [`QueryPool::poll`] via [`QueryPoolState::Finished`].
+    /// A finished query immediately stops yielding new peers to contact and
+    /// will be reported by [`QueryPool::poll`] via
+    /// [`QueryPoolState::Finished`].
     pub(crate) fn finish(&mut self) {
         match &mut self.peers.peer_iter {
             QueryPeerIter::Closest(iter) => iter.finish(),

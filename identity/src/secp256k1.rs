@@ -20,14 +20,14 @@
 
 //! Secp256k1 keys.
 
-use super::error::DecodingError;
+use core::{cmp, fmt, hash};
+
 use asn1_der::typed::{DerDecodable, Sequence};
-use core::cmp;
-use core::fmt;
-use core::hash;
 use libsecp256k1::{Message, Signature};
 use sha2::{Digest as ShaDigestTrait, Sha256};
 use zeroize::Zeroize;
+
+use super::error::DecodingError;
 
 /// A Secp256k1 keypair.
 #[derive(Clone)]
@@ -133,7 +133,8 @@ impl SecretKey {
     pub fn sign(&self, msg: &[u8]) -> Vec<u8> {
         let generic_array = Sha256::digest(msg);
 
-        // FIXME: Once `generic-array` hits 1.0, we should be able to just use `Into` here.
+        // FIXME: Once `generic-array` hits 1.0, we should be able to just use `Into`
+        // here.
         let mut array = [0u8; 32];
         array.copy_from_slice(generic_array.as_slice());
 
@@ -196,15 +197,16 @@ impl PublicKey {
         self.verify_hash(Sha256::digest(msg).as_ref(), sig)
     }
 
-    /// Verify the Secp256k1 DER-encoded signature on a raw 256-bit message using the public key.
+    /// Verify the Secp256k1 DER-encoded signature on a raw 256-bit message
+    /// using the public key.
     pub fn verify_hash(&self, msg: &[u8], sig: &[u8]) -> bool {
         Message::parse_slice(msg)
             .and_then(|m| Signature::parse_der(sig).map(|s| libsecp256k1::verify(&m, &s, &self.0)))
             .unwrap_or(false)
     }
 
-    /// Convert the public key to a byte buffer in compressed form, i.e. with one coordinate
-    /// represented by a single bit.
+    /// Convert the public key to a byte buffer in compressed form, i.e. with
+    /// one coordinate represented by a single bit.
     pub fn to_bytes(&self) -> [u8; 33] {
         self.0.serialize_compressed()
     }

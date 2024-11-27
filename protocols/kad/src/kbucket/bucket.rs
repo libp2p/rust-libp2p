@@ -36,7 +36,8 @@ pub(crate) struct PendingNode<TKey, TVal> {
     /// The status of the pending node.
     status: NodeStatus,
 
-    /// The instant at which the pending node is eligible for insertion into a bucket.
+    /// The instant at which the pending node is eligible for insertion into a
+    /// bucket.
     replace: Instant,
 }
 
@@ -102,12 +103,12 @@ pub(crate) struct KBucket<TKey, TVal> {
 
     /// The position (index) in `nodes` that marks the first connected node.
     ///
-    /// Since the entries in `nodes` are ordered from least-recently connected to
-    /// most-recently connected, all entries above this index are also considered
-    /// connected, i.e. the range `[0, first_connected_pos)` marks the sub-list of entries
-    /// that are considered disconnected and the range
-    /// `[first_connected_pos, capacity)` marks sub-list of entries that are
-    /// considered connected.
+    /// Since the entries in `nodes` are ordered from least-recently connected
+    /// to most-recently connected, all entries above this index are also
+    /// considered connected, i.e. the range `[0, first_connected_pos)`
+    /// marks the sub-list of entries that are considered disconnected and
+    /// the range `[first_connected_pos, capacity)` marks sub-list of
+    /// entries that are considered connected.
     ///
     /// `None` indicates that there are no connected entries in the bucket, i.e.
     /// the bucket is either empty, or contains only entries for peers that are
@@ -131,14 +132,15 @@ pub(crate) struct KBucket<TKey, TVal> {
 pub(crate) enum InsertResult<TKey> {
     /// The entry has been successfully inserted.
     Inserted,
-    /// The entry is pending insertion because the relevant bucket is currently full.
-    /// The entry is inserted after a timeout elapsed, if the status of the
-    /// least-recently connected (and currently disconnected) node in the bucket
-    /// is not updated before the timeout expires.
+    /// The entry is pending insertion because the relevant bucket is currently
+    /// full. The entry is inserted after a timeout elapsed, if the status
+    /// of the least-recently connected (and currently disconnected) node in
+    /// the bucket is not updated before the timeout expires.
     Pending {
-        /// The key of the least-recently connected entry that is currently considered
-        /// disconnected and whose corresponding peer should be checked for connectivity
-        /// in order to prevent it from being evicted. If connectivity to the peer is
+        /// The key of the least-recently connected entry that is currently
+        /// considered disconnected and whose corresponding peer should
+        /// be checked for connectivity in order to prevent it from
+        /// being evicted. If connectivity to the peer is
         /// re-established, the corresponding entry should be updated with
         /// [`NodeStatus::Connected`].
         disconnected: TKey,
@@ -191,7 +193,8 @@ where
         self.pending.as_ref()
     }
 
-    /// Returns a mutable reference to the pending node of the bucket, if there is any.
+    /// Returns a mutable reference to the pending node of the bucket, if there
+    /// is any.
     pub(crate) fn pending_mut(&mut self) -> Option<&mut PendingNode<TKey, TVal>> {
         self.pending.as_mut()
     }
@@ -203,7 +206,8 @@ where
             .filter(|p| p.node.key.as_ref() == key.as_ref())
     }
 
-    /// Returns an iterator over the nodes in the bucket, together with their status.
+    /// Returns an iterator over the nodes in the bucket, together with their
+    /// status.
     pub(crate) fn iter(&self) -> impl Iterator<Item = (&Node<TKey, TVal>, NodeStatus)> {
         self.nodes
             .iter()
@@ -311,19 +315,20 @@ where
     ///
     /// The status of the node to insert determines the result as follows:
     ///
-    ///   * `NodeStatus::Connected`: If the bucket is full and either all nodes are connected
-    ///     or there is already a pending node, insertion fails with `InsertResult::Full`.
-    ///     If the bucket is full but at least one node is disconnected and there is no pending
-    ///     node, the new node is inserted as pending, yielding `InsertResult::Pending`.
-    ///     Otherwise the bucket has free slots and the new node is added to the end of the
+    ///   * `NodeStatus::Connected`: If the bucket is full and either all nodes
+    ///     are connected or there is already a pending node, insertion fails
+    ///     with `InsertResult::Full`. If the bucket is full but at least one
+    ///     node is disconnected and there is no pending node, the new node is
+    ///     inserted as pending, yielding `InsertResult::Pending`. Otherwise the
+    ///     bucket has free slots and the new node is added to the end of the
     ///     bucket as the most-recently connected node.
     ///
-    ///   * `NodeStatus::Disconnected`: If the bucket is full, insertion fails with
-    ///     `InsertResult::Full`. Otherwise the bucket has free slots and the new node
-    ///     is inserted at the position preceding the first connected node,
-    ///     i.e. as the most-recently disconnected node. If there are no connected nodes,
-    ///     the new node is added as the last element of the bucket.
-    ///
+    ///   * `NodeStatus::Disconnected`: If the bucket is full, insertion fails
+    ///     with `InsertResult::Full`. Otherwise the bucket has free slots and
+    ///     the new node is inserted at the position preceding the first
+    ///     connected node, i.e. as the most-recently disconnected node. If
+    ///     there are no connected nodes, the new node is added as the last
+    ///     element of the bucket.
     pub(crate) fn insert(
         &mut self,
         node: Node<TKey, TVal>,
@@ -416,7 +421,8 @@ where
         self.first_connected_pos.map_or(0, |i| self.nodes.len() - i)
     }
 
-    /// Gets the number of entries in the bucket that are considered disconnected.
+    /// Gets the number of entries in the bucket that are considered
+    /// disconnected.
     #[cfg(test)]
     pub(crate) fn num_disconnected(&self) -> usize {
         self.nodes.len() - self.num_connected()
@@ -443,9 +449,10 @@ where
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use libp2p_identity::PeerId;
     use quickcheck::*;
+
+    use super::*;
 
     impl Arbitrary for KBucket<Key<PeerId>, ()> {
         fn arbitrary(g: &mut Gen) -> KBucket<Key<PeerId>, ()> {
@@ -552,7 +559,8 @@ mod tests {
             x => panic!("{x:?}"),
         }
 
-        // One-by-one fill the bucket with connected nodes, replacing the disconnected ones.
+        // One-by-one fill the bucket with connected nodes, replacing the disconnected
+        // ones.
         for i in 0..bucket.capacity {
             let (first, first_status) = bucket.iter().next().unwrap();
             let first_disconnected = first.clone();

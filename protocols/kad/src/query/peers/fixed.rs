@@ -18,10 +18,11 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use super::*;
+use std::{collections::hash_map::Entry, num::NonZeroUsize, vec};
 
 use fnv::FnvHashMap;
-use std::{collections::hash_map::Entry, num::NonZeroUsize, vec};
+
+use super::*;
 
 /// A peer iterator for a fixed set of peers.
 pub(crate) struct FixedPeersIter {
@@ -49,7 +50,8 @@ enum PeerState {
     /// The iterator is waiting for a result to be reported back for the peer.
     Waiting,
 
-    /// The iterator has been informed that the attempt to contact the peer failed.
+    /// The iterator has been informed that the attempt to contact the peer
+    /// failed.
     Failed,
 
     /// The iterator has been informed of a successful result from the peer.
@@ -189,9 +191,8 @@ mod test {
         match iter.next() {
             PeersIterState::Waiting(Some(_)) => {}
             PeersIterState::WaitingAtCapacity => panic!(
-                "Expected iterator to return another peer given that the \
-                 previous `on_failure` call should have allowed another peer \
-                 to be queried.",
+                "Expected iterator to return another peer given that the previous `on_failure` \
+                 call should have allowed another peer to be queried.",
             ),
             _ => panic!("Expected iterator to yield peer."),
         }

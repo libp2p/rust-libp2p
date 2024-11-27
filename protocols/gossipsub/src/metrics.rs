@@ -18,36 +18,44 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-//! A set of metrics used to help track and diagnose the network behaviour of the gossipsub
-//! protocol.
+//! A set of metrics used to help track and diagnose the network behaviour of
+//! the gossipsub protocol.
 
 use std::collections::HashMap;
 
-use prometheus_client::encoding::{EncodeLabelSet, EncodeLabelValue};
-use prometheus_client::metrics::counter::Counter;
-use prometheus_client::metrics::family::{Family, MetricConstructor};
-use prometheus_client::metrics::gauge::Gauge;
-use prometheus_client::metrics::histogram::{linear_buckets, Histogram};
-use prometheus_client::registry::Registry;
+use prometheus_client::{
+    encoding::{EncodeLabelSet, EncodeLabelValue},
+    metrics::{
+        counter::Counter,
+        family::{Family, MetricConstructor},
+        gauge::Gauge,
+        histogram::{linear_buckets, Histogram},
+    },
+    registry::Registry,
+};
 
-use crate::topic::TopicHash;
-use crate::types::{MessageAcceptance, PeerKind};
+use crate::{
+    topic::TopicHash,
+    types::{MessageAcceptance, PeerKind},
+};
 
 // Default value that limits for how many topics do we store metrics.
 const DEFAULT_MAX_TOPICS: usize = 300;
 
-// Default value that limits how many topics for which there has never been a subscription do we
-// store metrics.
+// Default value that limits how many topics for which there has never been a
+// subscription do we store metrics.
 const DEFAULT_MAX_NEVER_SUBSCRIBED_TOPICS: usize = 50;
 
 #[derive(Debug, Clone)]
 pub struct Config {
-    /// This provides an upper bound to the number of mesh topics we create metrics for. It
-    /// prevents unbounded labels being created in the metrics.
+    /// This provides an upper bound to the number of mesh topics we create
+    /// metrics for. It prevents unbounded labels being created in the
+    /// metrics.
     pub max_topics: usize,
-    /// Mesh topics are controlled by the user via subscriptions whereas non-mesh topics are
-    /// determined by users on the network.  This limit permits a fixed amount of topics to allow,
-    /// in-addition to the mesh topics.
+    /// Mesh topics are controlled by the user via subscriptions whereas
+    /// non-mesh topics are determined by users on the network.  This limit
+    /// permits a fixed amount of topics to allow, in-addition to the mesh
+    /// topics.
     pub max_never_subscribed_topics: usize,
     /// Buckets used for the score histograms.
     pub score_buckets: Vec<f64>,
@@ -100,24 +108,26 @@ type EverSubscribed = bool;
 
 /// A collection of metrics used throughout the Gossipsub behaviour.
 pub(crate) struct Metrics {
-    /* Configuration parameters */
-    /// Maximum number of topics for which we store metrics. This helps keep the metrics bounded.
+    // Configuration parameters
+    /// Maximum number of topics for which we store metrics. This helps keep the
+    /// metrics bounded.
     max_topics: usize,
-    /// Maximum number of topics for which we store metrics, where the topic in not one to which we
-    /// have subscribed at some point. This helps keep the metrics bounded, since these topics come
-    /// from received messages and not explicit application subscriptions.
+    /// Maximum number of topics for which we store metrics, where the topic in
+    /// not one to which we have subscribed at some point. This helps keep
+    /// the metrics bounded, since these topics come from received messages
+    /// and not explicit application subscriptions.
     max_never_subscribed_topics: usize,
 
-    /* Auxiliary variables */
+    // Auxiliary variables
     /// Information needed to decide if a topic is allowed or not.
     topic_info: HashMap<TopicHash, EverSubscribed>,
 
-    /* Metrics per known topic */
-    /// Status of our subscription to this topic. This metric allows analyzing other topic metrics
-    /// filtered by our current subscription status.
+    // Metrics per known topic
+    /// Status of our subscription to this topic. This metric allows analyzing
+    /// other topic metrics filtered by our current subscription status.
     topic_subscription_status: Family<TopicHash, Gauge>,
-    /// Number of peers subscribed to each topic. This allows us to analyze a topic's behaviour
-    /// regardless of our subscription status.
+    /// Number of peers subscribed to each topic. This allows us to analyze a
+    /// topic's behaviour regardless of our subscription status.
     topic_peers_count: Family<TopicHash, Gauge>,
     /// The number of invalid messages received for a given topic.
     invalid_messages: Family<TopicHash, Counter>,
@@ -134,16 +144,17 @@ pub(crate) struct Metrics {
     /// The number of messages that timed out and could not be sent.
     timedout_messages_dropped: Family<TopicHash, Counter>,
 
-    /* Metrics regarding mesh state */
-    /// Number of peers in our mesh. This metric should be updated with the count of peers for a
-    /// topic in the mesh regardless of inclusion and churn events.
+    // Metrics regarding mesh state
+    /// Number of peers in our mesh. This metric should be updated with the
+    /// count of peers for a topic in the mesh regardless of inclusion and
+    /// churn events.
     mesh_peer_counts: Family<TopicHash, Gauge>,
     /// Number of times we include peers in a topic mesh for different reasons.
     mesh_peer_inclusion_events: Family<InclusionLabel, Counter>,
     /// Number of times we remove peers in a topic mesh for different reasons.
     mesh_peer_churn_events: Family<ChurnLabel, Counter>,
 
-    /* Metrics regarding messages sent/received */
+    // Metrics regarding messages sent/received
     /// Number of gossip messages sent to each topic.
     topic_msg_sent_counts: Family<TopicHash, Counter>,
     /// Bytes from gossip messages sent to each topic.
@@ -151,34 +162,38 @@ pub(crate) struct Metrics {
     /// Number of gossipsub messages published to each topic.
     topic_msg_published: Family<TopicHash, Counter>,
 
-    /// Number of gossipsub messages received on each topic (without filtering duplicates).
+    /// Number of gossipsub messages received on each topic (without filtering
+    /// duplicates).
     topic_msg_recv_counts_unfiltered: Family<TopicHash, Counter>,
-    /// Number of gossipsub messages received on each topic (after filtering duplicates).
+    /// Number of gossipsub messages received on each topic (after filtering
+    /// duplicates).
     topic_msg_recv_counts: Family<TopicHash, Counter>,
     /// Bytes received from gossip messages for each topic.
     topic_msg_recv_bytes: Family<TopicHash, Counter>,
 
-    /* Metrics related to scoring */
+    // Metrics related to scoring
     /// Histogram of the scores for each mesh topic.
     score_per_mesh: Family<TopicHash, Histogram, HistBuilder>,
     /// A counter of the kind of penalties being applied to peers.
     scoring_penalties: Family<PenaltyLabel, Counter>,
 
-    /* General Metrics */
-    /// Gossipsub supports floodsub, gossipsub v1.0 and gossipsub v1.1. Peers are classified based
-    /// on which protocol they support. This metric keeps track of the number of peers that are
-    /// connected of each type.
+    // General Metrics
+    /// Gossipsub supports floodsub, gossipsub v1.0 and gossipsub v1.1. Peers
+    /// are classified based on which protocol they support. This metric
+    /// keeps track of the number of peers that are connected of each type.
     peers_per_protocol: Family<ProtocolLabel, Gauge>,
     /// The time it takes to complete one iteration of the heartbeat.
     heartbeat_duration: Histogram,
 
-    /* Performance metrics */
-    /// When the user validates a message, it tries to re propagate it to its mesh peers. If the
-    /// message expires from the memcache before it can be validated, we count this a cache miss
-    /// and it is an indicator that the memcache size should be increased.
+    // Performance metrics
+    /// When the user validates a message, it tries to re propagate it to its
+    /// mesh peers. If the message expires from the memcache before it can
+    /// be validated, we count this a cache miss and it is an indicator that
+    /// the memcache size should be increased.
     memcache_misses: Counter,
-    /// The number of times we have decided that an IWANT control message is required for this
-    /// topic. A very high metric might indicate an underperforming network.
+    /// The number of times we have decided that an IWANT control message is
+    /// required for this topic. A very high metric might indicate an
+    /// underperforming network.
     topic_iwant_msgs: Family<TopicHash, Counter>,
 
     /// The size of the priority queue.
@@ -280,7 +295,8 @@ impl Metrics {
 
         let topic_msg_recv_counts = register_family!(
             "topic_msg_recv_counts",
-            "Number of gossip messages received on each topic (after duplicates have been filtered)"
+            "Number of gossip messages received on each topic (after duplicates have been \
+             filtered)"
         );
         let topic_msg_recv_bytes = register_family!(
             "topic_msg_recv_bytes",
@@ -389,8 +405,8 @@ impl Metrics {
         } else if self.topic_info.len() < self.max_topics
             && self.non_subscription_topics_count() < self.max_never_subscribed_topics
         {
-            // This is a topic without an explicit subscription and we register it if we are within
-            // the configured bounds.
+            // This is a topic without an explicit subscription and we register it if we are
+            // within the configured bounds.
             self.topic_info.entry(topic.clone()).or_insert(false);
             self.topic_subscription_status.get_or_create(topic).set(0);
             Ok(())
@@ -414,7 +430,7 @@ impl Metrics {
         }
     }
 
-    /* Mesh related methods */
+    // Mesh related methods
 
     /// Registers the subscription to a topic if the configured limits allow it.
     /// Sets the registered number of peers in the mesh to 0.
@@ -427,8 +443,8 @@ impl Metrics {
         }
     }
 
-    /// Registers the unsubscription to a topic if the topic was previously allowed.
-    /// Sets the registered number of peers in the mesh to 0.
+    /// Registers the unsubscription to a topic if the topic was previously
+    /// allowed. Sets the registered number of peers in the mesh to 0.
     pub(crate) fn left(&mut self, topic: &TopicHash) {
         if self.topic_info.contains_key(topic) {
             // Depending on the configured topic bounds we could miss a mesh topic.
@@ -597,7 +613,8 @@ impl Metrics {
             .inc();
     }
 
-    /// Removes a peer from the counter based on its protocol when it disconnects.
+    /// Removes a peer from the counter based on its protocol when it
+    /// disconnects.
     pub(crate) fn peer_protocol_disconnected(&mut self, kind: PeerKind) {
         let metric = self
             .peers_per_protocol

@@ -18,10 +18,9 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::transport::TransportError;
-use crate::Multiaddr;
-use crate::{ConnectedPoint, PeerId};
 use std::{fmt, io};
+
+use crate::{transport::TransportError, ConnectedPoint, Multiaddr, PeerId};
 
 /// Errors that can occur in the context of an established `Connection`.
 #[derive(Debug)]
@@ -62,9 +61,9 @@ impl From<io::Error> for ConnectionError {
 
 /// Errors that can occur in the context of a pending outgoing `Connection`.
 ///
-/// Note: Addresses for an outbound connection are dialed in parallel. Thus, compared to
-/// [`PendingInboundConnectionError`], one or more [`TransportError`]s can occur for a single
-/// connection.
+/// Note: Addresses for an outbound connection are dialed in parallel. Thus,
+/// compared to [`PendingInboundConnectionError`], one or more
+/// [`TransportError`]s can occur for a single connection.
 pub(crate) type PendingOutboundConnectionError =
     PendingConnectionError<Vec<(Multiaddr, TransportError<io::Error>)>>;
 
@@ -74,7 +73,8 @@ pub(crate) type PendingInboundConnectionError = PendingConnectionError<Transport
 /// Errors that can occur in the context of a pending `Connection`.
 #[derive(Debug)]
 pub enum PendingConnectionError<TTransErr> {
-    /// An error occurred while negotiating the transport protocol(s) on a connection.
+    /// An error occurred while negotiating the transport protocol(s) on a
+    /// connection.
     Transport(TTransErr),
 
     /// Pending connection attempt has been aborted.

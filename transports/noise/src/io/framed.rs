@@ -18,18 +18,21 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-//! Provides a [`Codec`] type implementing the [`Encoder`] and [`Decoder`] traits.
+//! Provides a [`Codec`] type implementing the [`Encoder`] and [`Decoder`]
+//! traits.
 //!
-//! Alongside a [`asynchronous_codec::Framed`] this provides a [Sink](futures::Sink)
-//! and [Stream](futures::Stream) for length-delimited Noise protocol messages.
+//! Alongside a [`asynchronous_codec::Framed`] this provides a
+//! [Sink](futures::Sink) and [Stream](futures::Stream) for length-delimited
+//! Noise protocol messages.
 
-use super::handshake::proto;
-use crate::{protocol::PublicKey, Error};
+use std::{io, mem::size_of};
+
 use asynchronous_codec::{Decoder, Encoder};
 use bytes::{Buf, Bytes, BytesMut};
 use quick_protobuf::{BytesReader, MessageRead, MessageWrite, Writer};
-use std::io;
-use std::mem::size_of;
+
+use super::handshake::proto;
+use crate::{protocol::PublicKey, Error};
 
 /// Max. size of a noise message.
 const MAX_NOISE_MSG_LEN: usize = 65535;
@@ -73,16 +76,18 @@ impl Codec<snow::HandshakeState> {
         !self.session.is_initiator()
     }
 
-    /// Converts the underlying Noise session from the [`snow::HandshakeState`] to a
-    /// [`snow::TransportState`] once the handshake is complete, including the static
-    /// DH [`PublicKey`] of the remote if received.
+    /// Converts the underlying Noise session from the [`snow::HandshakeState`]
+    /// to a [`snow::TransportState`] once the handshake is complete,
+    /// including the static DH [`PublicKey`] of the remote if received.
     ///
     /// If the Noise protocol session state does not permit transitioning to
-    /// transport mode because the handshake is incomplete, an error is returned.
+    /// transport mode because the handshake is incomplete, an error is
+    /// returned.
     ///
-    /// An error is also returned if the remote's static DH key is not present or
-    /// cannot be parsed, as that indicates a fatal handshake error for the noise
-    /// `XX` pattern, which is the only handshake protocol libp2p currently supports.
+    /// An error is also returned if the remote's static DH key is not present
+    /// or cannot be parsed, as that indicates a fatal handshake error for
+    /// the noise `XX` pattern, which is the only handshake protocol libp2p
+    /// currently supports.
     pub(crate) fn into_transport(self) -> Result<(PublicKey, Codec<snow::TransportState>), Error> {
         let dh_remote_pubkey = self.session.get_remote_static().ok_or_else(|| {
             Error::Io(io::Error::new(
@@ -170,7 +175,8 @@ impl Decoder for Codec<snow::TransportState> {
 
 /// Encrypts the given cleartext to `dst`.
 ///
-/// This is a standalone function to allow us reusing the `encrypt_buffer` and to use to across different session states of the noise protocol.
+/// This is a standalone function to allow us reusing the `encrypt_buffer` and
+/// to use to across different session states of the noise protocol.
 fn encrypt(
     cleartext: &[u8],
     dst: &mut BytesMut,
@@ -191,8 +197,9 @@ fn encrypt(
 
 /// Encrypts the given ciphertext.
 ///
-/// This is a standalone function so we can use it across different session states of the noise protocol.
-/// In case `ciphertext` does not contain enough bytes to decrypt the entire frame, `Ok(None)` is returned.
+/// This is a standalone function so we can use it across different session
+/// states of the noise protocol. In case `ciphertext` does not contain enough
+/// bytes to decrypt the entire frame, `Ok(None)` is returned.
 fn decrypt(
     ciphertext: &mut BytesMut,
     decrypt_fn: impl FnOnce(&[u8], &mut [u8]) -> Result<usize, snow::Error>,
