@@ -10,9 +10,8 @@ use libp2p_core::{InboundUpgrade, Negotiated, OutboundUpgrade, StreamMuxer, Upgr
 #[cfg(feature = "relay")]
 use libp2p_identity::PeerId;
 
-use crate::SwarmBuilder;
-
 use super::*;
+use crate::SwarmBuilder;
 
 pub struct RelayPhase<T> {
     pub(crate) transport: T,
@@ -22,9 +21,10 @@ pub struct RelayPhase<T> {
 impl<Provider, T: AuthenticatedMultiplexedTransport> SwarmBuilder<Provider, RelayPhase<T>> {
     /// Adds a relay client transport.
     ///
-    /// Note that both `security_upgrade` and `multiplexer_upgrade` take function pointers,
-    /// i.e. they take the function themselves (without the invocation via `()`), not the
-    /// result of the function invocation. See example below.
+    /// Note that both `security_upgrade` and `multiplexer_upgrade` take
+    /// function pointers, i.e. they take the function themselves (without
+    /// the invocation via `()`), not the result of the function invocation.
+    /// See example below.
     ///
     /// ``` rust
     /// # use libp2p::SwarmBuilder;

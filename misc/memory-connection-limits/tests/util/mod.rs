@@ -18,15 +18,24 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use std::task::{Context, Poll};
+use std::{
+    convert::Infallible,
+    task::{Context, Poll},
+};
 
 use libp2p_core::{transport::PortUse, Endpoint, Multiaddr};
 use libp2p_identity::PeerId;
 use libp2p_swarm::{
-    dummy, ConnectionDenied, ConnectionId, FromSwarm, NetworkBehaviour, THandler, THandlerInEvent,
-    THandlerOutEvent, ToSwarm,
+    dummy,
+    ConnectionDenied,
+    ConnectionId,
+    FromSwarm,
+    NetworkBehaviour,
+    THandler,
+    THandlerInEvent,
+    THandlerOutEvent,
+    ToSwarm,
 };
-use std::convert::Infallible;
 
 #[derive(libp2p_swarm_derive::NetworkBehaviour)]
 #[behaviour(prelude = "libp2p_swarm::derive_prelude")]

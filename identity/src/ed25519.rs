@@ -20,12 +20,12 @@
 
 //! Ed25519 keys.
 
-use super::error::DecodingError;
-use core::cmp;
-use core::fmt;
-use core::hash;
+use core::{cmp, fmt, hash};
+
 use ed25519_dalek::{self as ed25519, Signer as _, Verifier as _};
 use zeroize::Zeroize;
+
+use super::error::DecodingError;
 
 /// An Ed25519 keypair.
 #[derive(Clone)]
@@ -48,7 +48,8 @@ impl Keypair {
     /// Try to parse a keypair from the [binary format](https://datatracker.ietf.org/doc/html/rfc8032#section-5.1.5)
     /// produced by [`Keypair::to_bytes`], zeroing the input on success.
     ///
-    /// Note that this binary format is the same as `ed25519_dalek`'s and `ed25519_zebra`'s.
+    /// Note that this binary format is the same as `ed25519_dalek`'s and
+    /// `ed25519_zebra`'s.
     pub fn try_from_bytes(kp: &mut [u8]) -> Result<Keypair, DecodingError> {
         let bytes = <[u8; 64]>::try_from(&*kp)
             .map_err(|e| DecodingError::failed_to_parse("Ed25519 keypair", e))?;
@@ -152,7 +153,8 @@ impl PublicKey {
         self.0.to_bytes()
     }
 
-    /// Try to parse a public key from a byte array containing the actual key as produced by `to_bytes`.
+    /// Try to parse a public key from a byte array containing the actual key as
+    /// produced by `to_bytes`.
     pub fn try_from_bytes(k: &[u8]) -> Result<PublicKey, DecodingError> {
         let k = <[u8; 32]>::try_from(k)
             .map_err(|e| DecodingError::failed_to_parse("Ed25519 public key", e))?;
@@ -206,8 +208,9 @@ impl SecretKey {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use quickcheck::*;
+
+    use super::*;
 
     fn eq_keypairs(kp1: &Keypair, kp2: &Keypair) -> bool {
         kp1.public() == kp2.public() && kp1.0.to_bytes() == kp2.0.to_bytes()

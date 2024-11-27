@@ -31,7 +31,8 @@
 //! Instead, loading fixed keys must use the standard, thus more portable
 //! binary representation of the specific key type
 //! (e.g. [ed25519 binary format](https://datatracker.ietf.org/doc/html/rfc8032#section-5.1.5)).
-//! All key types have functions to enable conversion to/from their binary representations.
+//! All key types have functions to enable conversion to/from their binary
+//! representations.
 
 #![cfg_attr(docsrs, feature(doc_cfg, doc_auto_cfg))]
 #![allow(unreachable_pub)]

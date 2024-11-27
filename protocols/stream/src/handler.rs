@@ -13,7 +13,9 @@ use libp2p_identity::PeerId;
 use libp2p_swarm::{
     self as swarm,
     handler::{ConnectionEvent, DialUpgradeError, FullyNegotiatedInbound, FullyNegotiatedOutbound},
-    ConnectionHandler, Stream, StreamProtocol,
+    ConnectionHandler,
+    Stream,
+    StreamProtocol,
 };
 
 use crate::{shared::Shared, upgrade::Upgrade, OpenStreamError};
@@ -162,7 +164,8 @@ impl ConnectionHandler for Handler {
     }
 }
 
-/// Message from a [`Control`](crate::Control) to a [`ConnectionHandler`] to negotiate a new outbound stream.
+/// Message from a [`Control`](crate::Control) to a [`ConnectionHandler`] to
+/// negotiate a new outbound stream.
 #[derive(Debug)]
 pub(crate) struct NewStream {
     pub(crate) protocol: StreamProtocol,

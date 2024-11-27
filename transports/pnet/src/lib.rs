@@ -19,23 +19,13 @@
 // DEALINGS IN THE SOFTWARE.
 
 //! Implementation of the [pnet](https://github.com/libp2p/specs/blob/master/pnet/Private-Networks-PSK-V1.md) protocol.
-//!
 //| The `pnet` protocol implements *Pre-shared Key Based Private Networks in libp2p*.
-//! Libp2p nodes configured with a pre-shared key can only communicate with other nodes with
-//! the same key.
+//! Libp2p nodes configured with a pre-shared key can only communicate with
+//! other nodes with the same key.
 
 #![cfg_attr(docsrs, feature(doc_cfg, doc_auto_cfg))]
 
 mod crypt_writer;
-use crypt_writer::CryptWriter;
-use futures::prelude::*;
-use pin_project::pin_project;
-use rand::RngCore;
-use salsa20::{
-    cipher::{KeyIvInit, StreamCipher},
-    Salsa20, XSalsa20,
-};
-use sha3::{digest::ExtendableOutput, Shake128};
 use std::{
     error,
     fmt::{self, Write},
@@ -46,6 +36,17 @@ use std::{
     str::FromStr,
     task::{Context, Poll},
 };
+
+use crypt_writer::CryptWriter;
+use futures::prelude::*;
+use pin_project::pin_project;
+use rand::RngCore;
+use salsa20::{
+    cipher::{KeyIvInit, StreamCipher},
+    Salsa20,
+    XSalsa20,
+};
+use sha3::{digest::ExtendableOutput, Shake128};
 
 const KEY_SIZE: usize = 32;
 const NONCE_SIZE: usize = 24;
@@ -168,7 +169,8 @@ pub enum KeyParseError {
     InvalidKeyEncoding,
     /// Key is of the wrong length
     InvalidKeyLength,
-    /// key string contains a char that is not consistent with the specified encoding
+    /// key string contains a char that is not consistent with the specified
+    /// encoding
     InvalidKeyChar(ParseIntError),
 }
 
@@ -200,8 +202,8 @@ impl PnetConfig {
 
     /// upgrade a connection to use pre shared key encryption.
     ///
-    /// the upgrade works by both sides exchanging 24 byte nonces and then encrypting
-    /// subsequent traffic with XSalsa20
+    /// the upgrade works by both sides exchanging 24 byte nonces and then
+    /// encrypting subsequent traffic with XSalsa20
     pub async fn handshake<TSocket>(
         self,
         mut socket: TSocket,
@@ -229,8 +231,8 @@ impl PnetConfig {
     }
 }
 
-/// The result of a handshake. This implements AsyncRead and AsyncWrite and can therefore
-/// be used as base for additional upgrades.
+/// The result of a handshake. This implements AsyncRead and AsyncWrite and can
+/// therefore be used as base for additional upgrades.
 #[pin_project]
 pub struct PnetOutput<S> {
     #[pin]
@@ -319,8 +321,9 @@ impl fmt::Display for PnetError {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use quickcheck::*;
+
+    use super::*;
 
     impl Arbitrary for PreSharedKey {
         fn arbitrary(g: &mut Gen) -> PreSharedKey {
@@ -367,7 +370,10 @@ mod tests {
     #[test]
     fn fingerprint() {
         // checked against go-ipfs output
-        let key = "/key/swarm/psk/1.0.0/\n/base16/\n6189c5cf0b87fb800c1a9feeda73c6ab5e998db48fb9e6a978575c770ceef683".parse::<PreSharedKey>().unwrap();
+        let key = "/key/swarm/psk/1.0.0/\n/base16/\\
+                   n6189c5cf0b87fb800c1a9feeda73c6ab5e998db48fb9e6a978575c770ceef683"
+            .parse::<PreSharedKey>()
+            .unwrap();
         let expected = "45fc986bbc9388a11d939df26f730f0c";
         let actual = key.fingerprint().to_string();
         assert_eq!(expected, actual);

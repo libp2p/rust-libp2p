@@ -22,11 +22,11 @@
 //!
 //! This module handles generation, signing, and verification of certificates.
 
+use std::sync::Arc;
+
 use libp2p_identity as identity;
 use libp2p_identity::PeerId;
 use x509_parser::{prelude::*, signature_algorithm::SignatureAlgorithm};
-
-use std::sync::Arc;
 
 /// The libp2p Public Key Extension is a X.509 extension
 /// with the Object Identifier 1.3.6.1.4.1.53594.1.1,
@@ -37,11 +37,13 @@ const P2P_EXT_OID: [u64; 9] = [1, 3, 6, 1, 4, 1, 53594, 1, 1];
 /// and the public key that it used to generate the certificate carrying
 /// the libp2p Public Key Extension, using its private host key.
 /// This signature provides cryptographic proof that the peer was
-/// in possession of the private host key at the time the certificate was signed.
+/// in possession of the private host key at the time the certificate was
+/// signed.
 const P2P_SIGNING_PREFIX: [u8; 21] = *b"libp2p-tls-handshake:";
 
 // Certificates MUST use the NamedCurve encoding for elliptic curve parameters.
-// Similarly, hash functions with an output length less than 256 bits MUST NOT be used.
+// Similarly, hash functions with an output length less than 256 bits MUST NOT
+// be used.
 static P2P_SIGNATURE_ALGORITHM: &rcgen::SignatureAlgorithm = &rcgen::PKCS_ECDSA_P256_SHA256;
 
 #[derive(Debug)]
@@ -123,8 +125,8 @@ pub fn generate(
 
 /// Attempts to parse the provided bytes as a [`P2pCertificate`].
 ///
-/// For this to succeed, the certificate must contain the specified extension and the signature must
-/// match the embedded public key.
+/// For this to succeed, the certificate must contain the specified extension
+/// and the signature must match the embedded public key.
 pub fn parse<'a>(
     certificate: &'a rustls::pki_types::CertificateDer<'a>,
 ) -> Result<P2pCertificate<'a>, ParseError> {
@@ -146,13 +148,14 @@ pub struct P2pCertificate<'a> {
     extension: P2pExtension,
 }
 
-/// The contents of the specific libp2p extension, containing the public host key
-/// and a signature performed using the private host key.
+/// The contents of the specific libp2p extension, containing the public host
+/// key and a signature performed using the private host key.
 #[derive(Debug)]
 pub struct P2pExtension {
     public_key: identity::PublicKey,
     /// This signature provides cryptographic proof that the peer was
-    /// in possession of the private host key at the time the certificate was signed.
+    /// in possession of the private host key at the time the certificate was
+    /// signed.
     signature: Vec<u8>,
 }
 
@@ -226,7 +229,8 @@ fn parse_unverified(der_input: &[u8]) -> Result<P2pCertificate, webpki::Error> {
             return Err(webpki::Error::UnsupportedCriticalExtension);
         }
 
-        // Implementations MUST ignore non-critical extensions with unknown OIDs.
+        // Implementations MUST ignore non-critical extensions with unknown
+        // OIDs.
     }
 
     // The certificate MUST contain the libp2p Public Key Extension.
@@ -283,8 +287,8 @@ impl P2pCertificate<'_> {
         self.extension.public_key.to_peer_id()
     }
 
-    /// Verify the `signature` of the `message` signed by the private key corresponding to the public key stored
-    /// in the certificate.
+    /// Verify the `signature` of the `message` signed by the private key
+    /// corresponding to the public key stored in the certificate.
     pub fn verify_signature(
         &self,
         signature_scheme: rustls::SignatureScheme,
@@ -298,9 +302,10 @@ impl P2pCertificate<'_> {
         Ok(())
     }
 
-    /// Get a [`ring::signature::UnparsedPublicKey`] for this `signature_scheme`.
-    /// Return `Error` if the `signature_scheme` does not match the public key signature
-    /// and hashing algorithm or if the `signature_scheme` is not supported.
+    /// Get a [`ring::signature::UnparsedPublicKey`] for this
+    /// `signature_scheme`. Return `Error` if the `signature_scheme` does
+    /// not match the public key signature and hashing algorithm or if the
+    /// `signature_scheme` is not supported.
     fn public_key(
         &self,
         signature_scheme: rustls::SignatureScheme,
@@ -492,8 +497,9 @@ impl P2pCertificate<'_> {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use hex_literal::hex;
+
+    use super::*;
 
     #[test]
     fn sanity_check() {

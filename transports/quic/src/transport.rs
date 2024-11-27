@@ -18,51 +18,60 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::config::{Config, QuinnConfig};
-use crate::hole_punching::hole_puncher;
-use crate::provider::Provider;
-use crate::{ConnectError, Connecting, Connection, Error};
+use std::{
+    collections::{
+        hash_map::{DefaultHasher, Entry},
+        HashMap,
+        HashSet,
+    },
+    fmt,
+    hash::{Hash, Hasher},
+    io,
+    net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr, UdpSocket},
+    pin::Pin,
+    task::{Context, Poll, Waker},
+    time::Duration,
+};
 
-use futures::channel::oneshot;
-use futures::future::{BoxFuture, Either};
-use futures::ready;
-use futures::stream::StreamExt;
-use futures::{prelude::*, stream::SelectAll};
-
+use futures::{
+    channel::oneshot,
+    future::{BoxFuture, Either},
+    prelude::*,
+    ready,
+    stream::{SelectAll, StreamExt},
+};
 use if_watch::IfEvent;
-
-use libp2p_core::transport::{DialOpts, PortUse};
-use libp2p_core::Endpoint;
 use libp2p_core::{
     multiaddr::{Multiaddr, Protocol},
-    transport::{ListenerId, TransportError, TransportEvent},
+    transport::{DialOpts, ListenerId, PortUse, TransportError, TransportEvent},
+    Endpoint,
     Transport,
 };
 use libp2p_identity::PeerId;
 use socket2::{Domain, Socket, Type};
-use std::collections::hash_map::{DefaultHasher, Entry};
-use std::collections::{HashMap, HashSet};
-use std::hash::{Hash, Hasher};
-use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, UdpSocket};
-use std::time::Duration;
-use std::{fmt, io};
-use std::{
-    net::SocketAddr,
-    pin::Pin,
-    task::{Context, Poll, Waker},
+
+use crate::{
+    config::{Config, QuinnConfig},
+    hole_punching::hole_puncher,
+    provider::Provider,
+    ConnectError,
+    Connecting,
+    Connection,
+    Error,
 };
 
 /// Implementation of the [`Transport`] trait for QUIC.
 ///
-/// By default only QUIC Version 1 (RFC 9000) is supported. In the [`Multiaddr`] this maps to
-/// [`libp2p_core::multiaddr::Protocol::QuicV1`].
-/// The [`libp2p_core::multiaddr::Protocol::Quic`] codepoint is interpreted as QUIC version
-/// draft-29 and only supported if [`Config::support_draft_29`] is set to `true`.
-/// Note that in that case servers support both version an all QUIC listening addresses.
+/// By default only QUIC Version 1 (RFC 9000) is supported. In the [`Multiaddr`]
+/// this maps to [`libp2p_core::multiaddr::Protocol::QuicV1`].
+/// The [`libp2p_core::multiaddr::Protocol::Quic`] codepoint is interpreted as
+/// QUIC version draft-29 and only supported if [`Config::support_draft_29`] is
+/// set to `true`. Note that in that case servers support both version an all
+/// QUIC listening addresses.
 ///
-/// Version draft-29 should only be used to connect to nodes from other libp2p implementations
-/// that do not support `QuicV1` yet. Support for it will be removed long-term.
-/// See <https://github.com/multiformats/multiaddr/issues/145>.
+/// Version draft-29 should only be used to connect to nodes from other libp2p
+/// implementations that do not support `QuicV1` yet. Support for it will be
+/// removed long-term. See <https://github.com/multiformats/multiaddr/issues/145>.
 #[derive(Debug)]
 pub struct GenTransport<P: Provider> {
     /// Config for the inner [`quinn`] structs.
@@ -75,7 +84,8 @@ pub struct GenTransport<P: Provider> {
     listeners: SelectAll<Listener<P>>,
     /// Dialer for each socket family if no matching listener exists.
     dialer: HashMap<SocketFamily, quinn::Endpoint>,
-    /// Waker to poll the transport again when a new dialer or listener is added.
+    /// Waker to poll the transport again when a new dialer or listener is
+    /// added.
     waker: Option<Waker>,
     /// Holepunching attempts
     hole_punch_attempts: HashMap<SocketAddr, oneshot::Sender<Connecting>>,
@@ -448,7 +458,8 @@ struct Listener<P: Provider> {
     /// Pending event to reported.
     pending_event: Option<<Self as Stream>::Item>,
 
-    /// The stream must be awaken after it has been closed to deliver the last event.
+    /// The stream must be awaken after it has been closed to deliver the last
+    /// event.
     close_listener_waker: Option<Waker>,
 
     listening_addresses: HashSet<IpAddr>,
@@ -497,8 +508,8 @@ impl<P: Provider> Listener<P> {
         })
     }
 
-    /// Report the listener as closed in a [`TransportEvent::ListenerClosed`] and
-    /// terminate the stream.
+    /// Report the listener as closed in a [`TransportEvent::ListenerClosed`]
+    /// and terminate the stream.
     fn close(&mut self, reason: Result<(), Error>) {
         if self.is_closed {
             return;
@@ -693,8 +704,8 @@ fn ip_to_listenaddr(
     Some(socketaddr_to_multiaddr(&socket_addr, version))
 }
 
-/// Tries to turn a QUIC multiaddress into a UDP [`SocketAddr`]. Returns None if the format
-/// of the multiaddr is wrong.
+/// Tries to turn a QUIC multiaddress into a UDP [`SocketAddr`]. Returns None if
+/// the format of the multiaddr is wrong.
 fn multiaddr_to_socketaddr(
     addr: &Multiaddr,
     support_draft_29: bool,
@@ -745,8 +756,9 @@ fn socketaddr_to_multiaddr(socket_addr: &SocketAddr, version: ProtocolVersion) -
 #[cfg(test)]
 #[cfg(any(feature = "async-std", feature = "tokio"))]
 mod tests {
-    use super::*;
     use futures::future::poll_fn;
+
+    use super::*;
 
     #[test]
     fn multiaddr_to_udp_conversion() {
@@ -784,14 +796,21 @@ mod tests {
         );
         assert_eq!(
             multiaddr_to_socketaddr(
-                &"/ip4/127.0.0.1/udp/55148/quic-v1/p2p/12D3KooW9xk7Zp1gejwfwNpfm6L9zH5NL4Bx5rm94LRYJJHJuARZ"
+                &"/ip4/127.0.0.1/udp/55148/quic-v1/p2p/\
+                  12D3KooW9xk7Zp1gejwfwNpfm6L9zH5NL4Bx5rm94LRYJJHJuARZ"
                     .parse::<Multiaddr>()
-                    .unwrap(), false
+                    .unwrap(),
+                false
             ),
-            Some((SocketAddr::new(
-                IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)),
-                55148,
-            ), ProtocolVersion::V1, Some("12D3KooW9xk7Zp1gejwfwNpfm6L9zH5NL4Bx5rm94LRYJJHJuARZ".parse().unwrap())))
+            Some((
+                SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 55148,),
+                ProtocolVersion::V1,
+                Some(
+                    "12D3KooW9xk7Zp1gejwfwNpfm6L9zH5NL4Bx5rm94LRYJJHJuARZ"
+                        .parse()
+                        .unwrap()
+                )
+            ))
         );
         assert_eq!(
             multiaddr_to_socketaddr(
@@ -851,8 +870,8 @@ mod tests {
             .now_or_never()
             .is_none());
 
-        // Run test twice to check that there is no unexpected behaviour if `Transport.listener`
-        // is temporarily empty.
+        // Run test twice to check that there is no unexpected behaviour if
+        // `Transport.listener` is temporarily empty.
         for _ in 0..2 {
             let id = ListenerId::next();
             transport
@@ -885,8 +904,8 @@ mod tests {
                 }
                 e => panic!("Unexpected event: {e:?}"),
             }
-            // Poll once again so that the listener has the chance to return `Poll::Ready(None)` and
-            // be removed from the list of listeners.
+            // Poll once again so that the listener has the chance to return
+            // `Poll::Ready(None)` and be removed from the list of listeners.
             assert!(poll_fn(|cx| Pin::new(&mut transport).as_mut().poll(cx))
                 .now_or_never()
                 .is_none());

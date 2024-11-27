@@ -1,15 +1,18 @@
-use super::upgrade;
-use super::Connection;
-use super::Error;
+use std::{
+    future::Future,
+    pin::Pin,
+    task::{Context, Poll},
+};
+
 use futures::future::FutureExt;
-use libp2p_core::multiaddr::Multiaddr;
-use libp2p_core::muxing::StreamMuxerBox;
-use libp2p_core::transport::DialOpts;
-use libp2p_core::transport::{Boxed, ListenerId, Transport as _, TransportError, TransportEvent};
+use libp2p_core::{
+    multiaddr::Multiaddr,
+    muxing::StreamMuxerBox,
+    transport::{Boxed, DialOpts, ListenerId, Transport as _, TransportError, TransportEvent},
+};
 use libp2p_identity::{Keypair, PeerId};
-use std::future::Future;
-use std::pin::Pin;
-use std::task::{Context, Poll};
+
+use super::{upgrade, Connection, Error};
 
 /// Config for the [`Transport`].
 #[derive(Clone)]
@@ -17,7 +20,8 @@ pub struct Config {
     keypair: Keypair,
 }
 
-/// A WebTransport [`Transport`](libp2p_core::Transport) that works with `web-sys`.
+/// A WebTransport [`Transport`](libp2p_core::Transport) that works with
+/// `web-sys`.
 pub struct Transport {
     config: Config,
 }

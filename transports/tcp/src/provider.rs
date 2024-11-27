@@ -26,13 +26,19 @@ pub mod async_io;
 #[cfg(feature = "tokio")]
 pub mod tokio;
 
-use futures::future::BoxFuture;
-use futures::io::{AsyncRead, AsyncWrite};
-use futures::Stream;
+use std::{
+    fmt,
+    io,
+    net::{SocketAddr, TcpListener, TcpStream},
+    task::{Context, Poll},
+};
+
+use futures::{
+    future::BoxFuture,
+    io::{AsyncRead, AsyncWrite},
+    Stream,
+};
 use if_watch::{IfEvent, IpNet};
-use std::net::{SocketAddr, TcpListener, TcpStream};
-use std::task::{Context, Poll};
-use std::{fmt, io};
 
 /// An incoming connection returned from [`Provider::poll_accept()`].
 pub struct Incoming<S> {
@@ -67,8 +73,8 @@ pub trait Provider: Clone + Send + 'static {
     /// setup to complete, i.e. for the stream to be writable.
     fn new_stream(_: TcpStream) -> BoxFuture<'static, io::Result<Self::Stream>>;
 
-    /// Polls a [`Self::Listener`] for an incoming connection, ensuring a task wakeup,
-    /// if necessary.
+    /// Polls a [`Self::Listener`] for an incoming connection, ensuring a task
+    /// wakeup, if necessary.
     fn poll_accept(
         _: &mut Self::Listener,
         _: &mut Context<'_>,

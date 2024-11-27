@@ -18,9 +18,14 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-//! Future that drives a QUIC connection until is has performed its TLS handshake.
+//! Future that drives a QUIC connection until is has performed its TLS
+//! handshake.
 
-use crate::{Connection, ConnectionError, Error};
+use std::{
+    pin::Pin,
+    task::{Context, Poll},
+    time::Duration,
+};
 
 use futures::{
     future::{select, Either, FutureExt, Select},
@@ -29,11 +34,8 @@ use futures::{
 use futures_timer::Delay;
 use libp2p_identity::PeerId;
 use quinn::rustls::pki_types::CertificateDer;
-use std::{
-    pin::Pin,
-    task::{Context, Poll},
-    time::Duration,
-};
+
+use crate::{Connection, ConnectionError, Error};
 
 /// A QUIC connection currently being negotiated.
 #[derive(Debug)]

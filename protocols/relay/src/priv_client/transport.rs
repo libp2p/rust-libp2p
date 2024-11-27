@@ -19,29 +19,40 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::multiaddr_ext::MultiaddrExt;
-use crate::priv_client::Connection;
-use crate::protocol::outbound_hop;
-use crate::protocol::outbound_hop::{ConnectError, ReserveError};
-use crate::RequestId;
-use futures::channel::mpsc;
-use futures::channel::oneshot;
-use futures::future::{ready, BoxFuture, FutureExt, Ready};
-use futures::sink::SinkExt;
-use futures::stream::SelectAll;
-use futures::stream::{Stream, StreamExt};
-use libp2p_core::multiaddr::{Multiaddr, Protocol};
-use libp2p_core::transport::{DialOpts, ListenerId, TransportError, TransportEvent};
+use std::{
+    collections::VecDeque,
+    pin::Pin,
+    task::{Context, Poll, Waker},
+};
+
+use futures::{
+    channel::{mpsc, oneshot},
+    future::{ready, BoxFuture, FutureExt, Ready},
+    sink::SinkExt,
+    stream::{SelectAll, Stream, StreamExt},
+};
+use libp2p_core::{
+    multiaddr::{Multiaddr, Protocol},
+    transport::{DialOpts, ListenerId, TransportError, TransportEvent},
+};
 use libp2p_identity::PeerId;
-use std::collections::VecDeque;
-use std::pin::Pin;
-use std::task::{Context, Poll, Waker};
 use thiserror::Error;
+
+use crate::{
+    multiaddr_ext::MultiaddrExt,
+    priv_client::Connection,
+    protocol::{
+        outbound_hop,
+        outbound_hop::{ConnectError, ReserveError},
+    },
+    RequestId,
+};
 
 /// A [`Transport`] enabling client relay capabilities.
 ///
-/// Note: The transport only handles listening and dialing on relayed [`Multiaddr`], and depends on
-/// an other transport to do the actual transmission of data. They should be combined through the
+/// Note: The transport only handles listening and dialing on relayed
+/// [`Multiaddr`], and depends on an other transport to do the actual
+/// transmission of data. They should be combined through the
 /// [`OrTransport`](libp2p_core::transport::choice::OrTransport).
 ///
 /// Allows the local node to:
@@ -49,7 +60,8 @@ use thiserror::Error;
 /// 1. Establish relayed connections by dialing `/p2p-circuit` addresses.
 ///
 ///    ```
-///    # use libp2p_core::{Multiaddr, multiaddr::{Protocol}, Transport, transport::{DialOpts, PortUse}, connection::Endpoint};
+///    # use libp2p_core::{Multiaddr, multiaddr::{Protocol}, Transport,
+/// transport::{DialOpts, PortUse}, connection::Endpoint};
 ///    # use libp2p_core::transport::memory::MemoryTransport;
 ///    # use libp2p_core::transport::choice::OrTransport;
 ///    # use libp2p_relay as relay;
@@ -64,9 +76,9 @@ use thiserror::Error;
 ///    let dst_addr_via_relay = Multiaddr::empty()
 ///        .with(Protocol::Memory(40)) // Relay address.
 ///        .with(Protocol::P2p(relay_id.into())) // Relay peer id.
-///        .with(Protocol::P2pCircuit) // Signal to connect via relay and not directly.
-///        .with(Protocol::P2p(destination_id.into())); // Destination peer id.
-///    transport.dial(dst_addr_via_relay, DialOpts {
+///        .with(Protocol::P2pCircuit) // Signal to connect via relay and not
+/// directly.        .with(Protocol::P2p(destination_id.into())); // Destination
+/// peer id.    transport.dial(dst_addr_via_relay, DialOpts {
 ///         port_use: PortUse::Reuse,
 ///         role: Endpoint::Dialer,
 ///    }).unwrap();
@@ -75,7 +87,8 @@ use thiserror::Error;
 /// 3. Listen for incoming relayed connections via specific relay.
 ///
 ///    ```
-///    # use libp2p_core::{Multiaddr, multiaddr::{Protocol}, transport::ListenerId, Transport};
+///    # use libp2p_core::{Multiaddr, multiaddr::{Protocol},
+/// transport::ListenerId, Transport};
 ///    # use libp2p_core::transport::memory::MemoryTransport;
 ///    # use libp2p_core::transport::choice::OrTransport;
 ///    # use libp2p_relay as relay;
@@ -90,8 +103,8 @@ use thiserror::Error;
 ///    let relay_addr = Multiaddr::empty()
 ///        .with(Protocol::Memory(40)) // Relay address.
 ///        .with(Protocol::P2p(relay_id.into())) // Relay peer id.
-///        .with(Protocol::P2pCircuit); // Signal to listen via remote relay node.
-///    transport.listen_on(ListenerId::next(), relay_addr).unwrap();
+///        .with(Protocol::P2pCircuit); // Signal to listen via remote relay
+/// node.    transport.listen_on(ListenerId::next(), relay_addr).unwrap();
 ///    ```
 pub struct Transport {
     to_behaviour: mpsc::Sender<TransportToBehaviourMsg>,
@@ -188,7 +201,8 @@ impl libp2p_core::Transport for Transport {
             dst_addr,
         } = parse_relayed_multiaddr(addr)?;
 
-        // TODO: In the future we might want to support dialing a relay by its address only.
+        // TODO: In the future we might want to support dialing a relay by its address
+        // only.
         let relay_peer_id = relay_peer_id.ok_or(Error::MissingRelayPeerId)?;
         let relay_addr = relay_addr.ok_or(Error::MissingRelayAddr)?;
         let dst_peer_id = dst_peer_id.ok_or(Error::MissingDstPeerId)?;
@@ -305,9 +319,11 @@ pub(crate) struct Listener {
     listener_id: ListenerId,
     /// Queue of events to report when polled.
     queued_events: VecDeque<<Self as Stream>::Item>,
-    /// Channel for messages from the behaviour [`Handler`][super::handler::Handler].
+    /// Channel for messages from the behaviour
+    /// [`Handler`][super::handler::Handler].
     from_behaviour: mpsc::Receiver<ToListenerMsg>,
-    /// The listener can be closed either manually with [`Transport::remove_listener`](libp2p_core::Transport) or if
+    /// The listener can be closed either manually with
+    /// [`Transport::remove_listener`](libp2p_core::Transport) or if
     /// the sender side of the `from_behaviour` channel is dropped.
     is_closed: bool,
     waker: Option<Waker>,
@@ -344,7 +360,8 @@ impl Stream for Listener {
             }
 
             if self.is_closed {
-                // Terminate the stream if the listener closed and all remaining events have been reported.
+                // Terminate the stream if the listener closed and all remaining events have
+                // been reported.
                 self.waker = None;
                 return Poll::Ready(None);
             }

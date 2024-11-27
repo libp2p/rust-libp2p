@@ -19,30 +19,32 @@
 // DEALINGS IN THE SOFTWARE.
 
 //! A collection of types using the Gossipsub system.
-use crate::rpc::Sender;
-use crate::TopicHash;
+use std::{collections::BTreeSet, fmt, fmt::Debug};
+
 use futures_timer::Delay;
 use libp2p_identity::PeerId;
 use libp2p_swarm::ConnectionId;
 use prometheus_client::encoding::EncodeLabelValue;
 use quick_protobuf::MessageWrite;
-use std::fmt::Debug;
-use std::{collections::BTreeSet, fmt};
-
-use crate::rpc_proto::proto;
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
+
+use crate::{rpc::Sender, rpc_proto::proto, TopicHash};
 
 /// Messages that have expired while attempting to be sent to a peer.
 #[derive(Clone, Debug, Default)]
 pub struct FailedMessages {
-    /// The number of publish messages that failed to be published in a heartbeat.
+    /// The number of publish messages that failed to be published in a
+    /// heartbeat.
     pub publish: usize,
-    /// The number of forward messages that failed to be published in a heartbeat.
+    /// The number of forward messages that failed to be published in a
+    /// heartbeat.
     pub forward: usize,
-    /// The number of messages that were failed to be sent to the priority queue as it was full.
+    /// The number of messages that were failed to be sent to the priority queue
+    /// as it was full.
     pub priority: usize,
-    /// The number of messages that were failed to be sent to the non-priority queue as it was full.
+    /// The number of messages that were failed to be sent to the non-priority
+    /// queue as it was full.
     pub non_priority: usize,
     /// The number of messages that timed out and could not be sent.
     pub timeout: usize,
@@ -63,12 +65,14 @@ impl FailedMessages {
 #[derive(Debug)]
 /// Validation kinds from the application for received messages.
 pub enum MessageAcceptance {
-    /// The message is considered valid, and it should be delivered and forwarded to the network.
+    /// The message is considered valid, and it should be delivered and
+    /// forwarded to the network.
     Accept,
-    /// The message is considered invalid, and it should be rejected and trigger the P₄ penalty.
+    /// The message is considered invalid, and it should be rejected and trigger
+    /// the P₄ penalty.
     Reject,
-    /// The message is neither delivered nor forwarded to the network, but the router does not
-    /// trigger the P₄ penalty.
+    /// The message is neither delivered nor forwarded to the network, but the
+    /// router does not trigger the P₄ penalty.
     Ignore,
 }
 
@@ -143,15 +147,18 @@ pub struct RawMessage {
     /// The signature of the message if it's signed.
     pub signature: Option<Vec<u8>>,
 
-    /// The public key of the message if it is signed and the source [`PeerId`] cannot be inlined.
+    /// The public key of the message if it is signed and the source [`PeerId`]
+    /// cannot be inlined.
     pub key: Option<Vec<u8>>,
 
-    /// Flag indicating if this message has been validated by the application or not.
+    /// Flag indicating if this message has been validated by the application or
+    /// not.
     pub validated: bool,
 }
 
 impl RawMessage {
-    /// Calculates the encoded length of this message (used for calculating metrics).
+    /// Calculates the encoded length of this message (used for calculating
+    /// metrics).
     pub fn raw_protobuf_len(&self) -> usize {
         let message = proto::Message {
             from: self.source.map(|m| m.to_bytes()),
@@ -178,8 +185,8 @@ impl From<RawMessage> for proto::Message {
     }
 }
 
-/// The message sent to the user after a [`RawMessage`] has been transformed by a
-/// [`crate::DataTransform`].
+/// The message sent to the user after a [`RawMessage`] has been transformed by
+/// a [`crate::DataTransform`].
 #[derive(Clone, PartialEq, Eq, Hash)]
 pub struct Message {
     /// Id of the peer that published this message.
@@ -230,9 +237,9 @@ pub enum SubscriptionAction {
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub(crate) struct PeerInfo {
     pub(crate) peer_id: Option<PeerId>,
-    //TODO add this when RFC: Signed Address Records got added to the spec (see pull request
+    // TODO add this when RFC: Signed Address Records got added to the spec (see pull request
     // https://github.com/libp2p/specs/pull/217)
-    //pub signed_peer_record: ?,
+    // pub signed_peer_record: ?,
 }
 
 /// A Control message received by the gossipsub system.
@@ -240,7 +247,8 @@ pub(crate) struct PeerInfo {
 pub enum ControlAction {
     /// Node broadcasts known messages per topic - IHave control message.
     IHave(IHave),
-    /// The node requests specific message ids (peer_id + sequence _number) - IWant control message.
+    /// The node requests specific message ids (peer_id + sequence _number) -
+    /// IWant control message.
     IWant(IWant),
     /// The node has been added to the mesh - Graft control message.
     Graft(Graft),
@@ -257,7 +265,8 @@ pub struct IHave {
     pub(crate) message_ids: Vec<MessageId>,
 }
 
-/// The node requests specific message ids (peer_id + sequence _number) - IWant control message.
+/// The node requests specific message ids (peer_id + sequence _number) - IWant
+/// control message.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct IWant {
     /// A list of known message ids (peer_id + sequence _number) as a string.
@@ -285,11 +294,11 @@ pub struct Prune {
 /// A Gossipsub RPC message sent.
 #[derive(Debug)]
 pub enum RpcOut {
-    /// Publish a Gossipsub message on network.`timeout` limits the duration the message
-    /// can wait to be sent before it is abandoned.
+    /// Publish a Gossipsub message on network.`timeout` limits the duration the
+    /// message can wait to be sent before it is abandoned.
     Publish { message: RawMessage, timeout: Delay },
-    /// Forward a Gossipsub message on network. `timeout` limits the duration the message
-    /// can wait to be sent before it is abandoned.
+    /// Forward a Gossipsub message on network. `timeout` limits the duration
+    /// the message can wait to be sent before it is abandoned.
     Forward { message: RawMessage, timeout: Delay },
     /// Subscribe a topic.
     Subscribe(TopicHash),

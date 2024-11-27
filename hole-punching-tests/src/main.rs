@@ -18,24 +18,34 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
+use std::{
+    collections::HashMap,
+    fmt,
+    io,
+    net::{IpAddr, Ipv4Addr},
+    str::FromStr,
+    time::Duration,
+};
+
 use anyhow::{Context, Result};
 use either::Either;
 use futures::stream::StreamExt;
-use libp2p::core::transport::ListenerId;
-use libp2p::swarm::dial_opts::DialOpts;
-use libp2p::swarm::ConnectionId;
 use libp2p::{
-    core::multiaddr::{Multiaddr, Protocol},
-    dcutr, identify, noise, ping, relay,
-    swarm::{NetworkBehaviour, SwarmEvent},
-    tcp, yamux, Swarm,
+    core::{
+        multiaddr::{Multiaddr, Protocol},
+        transport::ListenerId,
+    },
+    dcutr,
+    identify,
+    noise,
+    ping,
+    relay,
+    swarm::{dial_opts::DialOpts, ConnectionId, NetworkBehaviour, SwarmEvent},
+    tcp,
+    yamux,
+    Swarm,
 };
 use redis::AsyncCommands;
-use std::collections::HashMap;
-use std::net::{IpAddr, Ipv4Addr};
-use std::str::FromStr;
-use std::time::Duration;
-use std::{fmt, io};
 
 /// The redis key we push the relay's TCP listen address to.
 const RELAY_TCP_ADDRESS: &str = "RELAY_TCP_ADDRESS";
@@ -47,7 +57,10 @@ const LISTEN_CLIENT_PEER_ID: &str = "LISTEN_CLIENT_PEER_ID";
 #[tokio::main]
 async fn main() -> Result<()> {
     env_logger::builder()
-        .parse_filters("debug,netlink_proto=warn,rustls=warn,multistream_select=warn,libp2p_core::transport::choice=off,libp2p_swarm::connection=warn,libp2p_quic=trace")
+        .parse_filters(
+            "debug,netlink_proto=warn,rustls=warn,multistream_select=warn,\
+             libp2p_core::transport::choice=off,libp2p_swarm::connection=warn,libp2p_quic=trace",
+        )
         .parse_default_env()
         .init();
 
@@ -214,7 +227,8 @@ async fn client_listen_on_transport(
 
     let mut listen_addresses = 0;
 
-    // We should have at least two listen addresses, one for localhost and the actual interface.
+    // We should have at least two listen addresses, one for localhost and the
+    // actual interface.
     while listen_addresses < 2 {
         if let SwarmEvent::NewListenAddr {
             listener_id,

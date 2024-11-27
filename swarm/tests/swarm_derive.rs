@@ -18,27 +18,34 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
+use std::fmt::Debug;
+
 use futures::StreamExt;
 use libp2p_core::{transport::PortUse, Endpoint, Multiaddr};
 use libp2p_identify as identify;
 use libp2p_ping as ping;
 use libp2p_swarm::{
-    behaviour::FromSwarm, dummy, ConnectionDenied, NetworkBehaviour, SwarmEvent, THandler,
-    THandlerInEvent, THandlerOutEvent,
+    behaviour::FromSwarm,
+    dummy,
+    ConnectionDenied,
+    NetworkBehaviour,
+    SwarmEvent,
+    THandler,
+    THandlerInEvent,
+    THandlerOutEvent,
 };
-use std::fmt::Debug;
 
 /// Small utility to check that a type implements `NetworkBehaviour`.
 #[allow(dead_code)]
 fn require_net_behaviour<T: libp2p_swarm::NetworkBehaviour>() {}
 
 // TODO: doesn't compile
-/*#[test]
-fn empty() {
-    #[allow(dead_code)]
-    #[derive(NetworkBehaviour)]
-    struct Foo {}
-}*/
+// #[test]
+// fn empty() {
+// #[allow(dead_code)]
+// #[derive(NetworkBehaviour)]
+// struct Foo {}
+// }
 
 #[test]
 fn one_field() {
@@ -378,7 +385,8 @@ fn with_generics_constrained() {
     struct Marked;
     impl Mark for Marked {}
 
-    /// A struct with a generic constraint, for which we manually implement `NetworkBehaviour`.
+    /// A struct with a generic constraint, for which we manually implement
+    /// `NetworkBehaviour`.
     #[allow(dead_code)]
     struct Bar<A: Mark> {
         a: A,
@@ -537,10 +545,10 @@ fn multiple_behaviour_attributes() {
 
 #[test]
 fn custom_out_event_no_type_parameters() {
+    use std::task::{Context, Poll};
+
     use libp2p_identity::PeerId;
     use libp2p_swarm::{ConnectionId, ToSwarm};
-    use std::task::Context;
-    use std::task::Poll;
 
     pub(crate) struct TemplatedBehaviour<T: 'static> {
         _data: T,

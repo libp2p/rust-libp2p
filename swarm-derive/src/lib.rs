@@ -23,15 +23,15 @@
 
 mod syn_ext;
 
-use crate::syn_ext::RequireStrLit;
 use heck::ToUpperCamelCase;
 use proc_macro::TokenStream;
 use quote::quote;
-use syn::punctuated::Punctuated;
-use syn::{parse_macro_input, Data, DataStruct, DeriveInput, Meta, Token};
+use syn::{parse_macro_input, punctuated::Punctuated, Data, DataStruct, DeriveInput, Meta, Token};
 
-/// Generates a delegating `NetworkBehaviour` implementation for the struct this is used for. See
-/// the trait documentation for better description.
+use crate::syn_ext::RequireStrLit;
+
+/// Generates a delegating `NetworkBehaviour` implementation for the struct this
+/// is used for. See the trait documentation for better description.
 #[proc_macro_derive(NetworkBehaviour, attributes(behaviour))]
 pub fn hello_macro_derive(input: TokenStream) -> TokenStream {
     let ast = parse_macro_input!(input as DeriveInput);
@@ -225,10 +225,12 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> syn::Result<Toke
             })
     };
 
-    // Build the list of variants to put in the body of `on_connection_handler_event()`.
+    // Build the list of variants to put in the body of
+    // `on_connection_handler_event()`.
     //
-    // The event type is a construction of nested `#either_ident`s of the events of the children.
-    // We call `on_connection_handler_event` on the corresponding child.
+    // The event type is a construction of nested `#either_ident`s of the events of
+    // the children. We call `on_connection_handler_event` on the corresponding
+    // child.
     let on_node_event_stmts =
         data_struct
             .fields
@@ -496,7 +498,8 @@ struct BehaviourAttributes {
     user_specified_out_event: Option<syn::Type>,
 }
 
-/// Parses the `value` of a key=value pair in the `#[behaviour]` attribute into the requested type.
+/// Parses the `value` of a key=value pair in the `#[behaviour]` attribute into
+/// the requested type.
 fn parse_attributes(ast: &DeriveInput) -> syn::Result<BehaviourAttributes> {
     let mut attributes = BehaviourAttributes {
         prelude_path: syn::parse_quote! { ::libp2p::swarm::derive_prelude },

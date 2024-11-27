@@ -18,13 +18,13 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::Stream;
-
 use futures::prelude::*;
 use libp2p_core::upgrade;
 
-/// Implemented automatically on all types that implement [`UpgradeInfo`](upgrade::UpgradeInfo)
-/// and `Send + 'static`.
+use crate::Stream;
+
+/// Implemented automatically on all types that implement
+/// [`UpgradeInfo`](upgrade::UpgradeInfo) and `Send + 'static`.
 ///
 /// Do not implement this trait yourself. Instead, please implement
 /// [`UpgradeInfo`](upgrade::UpgradeInfo).
@@ -34,7 +34,8 @@ pub trait UpgradeInfoSend: Send + 'static {
     /// Equivalent to [`UpgradeInfo::InfoIter`](upgrade::UpgradeInfo::InfoIter).
     type InfoIter: Iterator<Item = Self::Info> + Send + 'static;
 
-    /// Equivalent to [`UpgradeInfo::protocol_info`](upgrade::UpgradeInfo::protocol_info).
+    /// Equivalent to
+    /// [`UpgradeInfo::protocol_info`](upgrade::UpgradeInfo::protocol_info).
     fn protocol_info(&self) -> Self::InfoIter;
 }
 
@@ -58,14 +59,18 @@ where
 /// Do not implement this trait yourself. Instead, please implement
 /// [`OutboundUpgrade`](upgrade::OutboundUpgrade).
 pub trait OutboundUpgradeSend: UpgradeInfoSend {
-    /// Equivalent to [`OutboundUpgrade::Output`](upgrade::OutboundUpgrade::Output).
+    /// Equivalent to
+    /// [`OutboundUpgrade::Output`](upgrade::OutboundUpgrade::Output).
     type Output: Send + 'static;
-    /// Equivalent to [`OutboundUpgrade::Error`](upgrade::OutboundUpgrade::Error).
+    /// Equivalent to
+    /// [`OutboundUpgrade::Error`](upgrade::OutboundUpgrade::Error).
     type Error: Send + 'static;
-    /// Equivalent to [`OutboundUpgrade::Future`](upgrade::OutboundUpgrade::Future).
+    /// Equivalent to
+    /// [`OutboundUpgrade::Future`](upgrade::OutboundUpgrade::Future).
     type Future: Future<Output = Result<Self::Output, Self::Error>> + Send + 'static;
 
-    /// Equivalent to [`OutboundUpgrade::upgrade_outbound`](upgrade::OutboundUpgrade::upgrade_outbound).
+    /// Equivalent to
+    /// [`OutboundUpgrade::upgrade_outbound`](upgrade::OutboundUpgrade::upgrade_outbound).
     fn upgrade_outbound(self, socket: Stream, info: Self::Info) -> Self::Future;
 }
 
@@ -92,14 +97,17 @@ where
 /// Do not implement this trait yourself. Instead, please implement
 /// [`InboundUpgrade`](upgrade::InboundUpgrade).
 pub trait InboundUpgradeSend: UpgradeInfoSend {
-    /// Equivalent to [`InboundUpgrade::Output`](upgrade::InboundUpgrade::Output).
+    /// Equivalent to
+    /// [`InboundUpgrade::Output`](upgrade::InboundUpgrade::Output).
     type Output: Send + 'static;
     /// Equivalent to [`InboundUpgrade::Error`](upgrade::InboundUpgrade::Error).
     type Error: Send + 'static;
-    /// Equivalent to [`InboundUpgrade::Future`](upgrade::InboundUpgrade::Future).
+    /// Equivalent to
+    /// [`InboundUpgrade::Future`](upgrade::InboundUpgrade::Future).
     type Future: Future<Output = Result<Self::Output, Self::Error>> + Send + 'static;
 
-    /// Equivalent to [`InboundUpgrade::upgrade_inbound`](upgrade::InboundUpgrade::upgrade_inbound).
+    /// Equivalent to
+    /// [`InboundUpgrade::upgrade_inbound`](upgrade::InboundUpgrade::upgrade_inbound).
     fn upgrade_inbound(self, socket: Stream, info: Self::Info) -> Self::Future;
 }
 
@@ -120,13 +128,15 @@ where
     }
 }
 
-/// Wraps around a type that implements [`OutboundUpgradeSend`], [`InboundUpgradeSend`], or
+/// Wraps around a type that implements [`OutboundUpgradeSend`],
+/// [`InboundUpgradeSend`], or
 ///
 /// both, and implements [`OutboundUpgrade`](upgrade::OutboundUpgrade) and/or
 /// [`InboundUpgrade`](upgrade::InboundUpgrade).
 ///
-/// > **Note**: This struct is mostly an implementation detail of the library and normally
-/// >           doesn't need to be used directly.
+/// > **Note**: This struct is mostly an implementation detail of the library
+/// > and normally
+/// > doesn't need to be used directly.
 pub struct SendWrapper<T>(pub T);
 
 impl<T: UpgradeInfoSend> upgrade::UpgradeInfo for SendWrapper<T> {

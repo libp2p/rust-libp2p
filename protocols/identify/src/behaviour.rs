@@ -18,28 +18,43 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::handler::{self, Handler, InEvent};
-use crate::protocol::{Info, UpgradeError};
-use libp2p_core::multiaddr::Protocol;
-use libp2p_core::transport::PortUse;
-use libp2p_core::{multiaddr, ConnectedPoint, Endpoint, Multiaddr};
-use libp2p_identity::PeerId;
-use libp2p_identity::PublicKey;
-use libp2p_swarm::behaviour::{ConnectionClosed, ConnectionEstablished, DialFailure, FromSwarm};
+use std::{
+    collections::{hash_map::Entry, HashMap, HashSet, VecDeque},
+    num::NonZeroUsize,
+    task::{Context, Poll},
+    time::Duration,
+};
+
+use libp2p_core::{
+    multiaddr,
+    multiaddr::Protocol,
+    transport::PortUse,
+    ConnectedPoint,
+    Endpoint,
+    Multiaddr,
+};
+use libp2p_identity::{PeerId, PublicKey};
 use libp2p_swarm::{
-    ConnectionDenied, DialError, ExternalAddresses, ListenAddresses, NetworkBehaviour,
-    NotifyHandler, PeerAddresses, StreamUpgradeError, THandlerInEvent, ToSwarm,
+    behaviour::{ConnectionClosed, ConnectionEstablished, DialFailure, FromSwarm},
+    ConnectionDenied,
+    ConnectionId,
+    DialError,
+    ExternalAddresses,
+    ListenAddresses,
+    NetworkBehaviour,
+    NotifyHandler,
+    PeerAddresses,
+    StreamUpgradeError,
+    THandler,
+    THandlerInEvent,
+    THandlerOutEvent,
+    ToSwarm,
     _address_translation,
 };
-use libp2p_swarm::{ConnectionId, THandler, THandlerOutEvent};
 
-use std::collections::hash_map::Entry;
-use std::num::NonZeroUsize;
-use std::{
-    collections::{HashMap, HashSet, VecDeque},
-    task::Context,
-    task::Poll,
-    time::Duration,
+use crate::{
+    handler::{self, Handler, InEvent},
+    protocol::{Info, UpgradeError},
 };
 
 /// Whether an [`Multiaddr`] is a valid for the QUIC transport.
@@ -86,20 +101,22 @@ fn is_tcp_addr(addr: &Multiaddr) -> bool {
     matches!(first, Ip4(_) | Ip6(_) | Dns(_) | Dns4(_) | Dns6(_)) && matches!(second, Tcp(_))
 }
 
-/// Network behaviour that automatically identifies nodes periodically, returns information
-/// about them, and answers identify queries from other nodes.
+/// Network behaviour that automatically identifies nodes periodically, returns
+/// information about them, and answers identify queries from other nodes.
 ///
 /// All external addresses of the local node supposedly observed by remotes
 /// are reported via [`ToSwarm::NewExternalAddrCandidate`].
 pub struct Behaviour {
     config: Config,
-    /// For each peer we're connected to, the observed address to send back to it.
+    /// For each peer we're connected to, the observed address to send back to
+    /// it.
     connected: HashMap<PeerId, HashMap<ConnectionId, Multiaddr>>,
 
     /// The address a remote observed for us.
     our_observed_addresses: HashMap<ConnectionId, Multiaddr>,
 
-    /// The outbound connections established without port reuse (require translation)
+    /// The outbound connections established without port reuse (require
+    /// translation)
     outbound_connections_with_ephemeral_port: HashSet<ConnectionId>,
 
     /// Pending events to be emitted when polled.
@@ -191,7 +208,8 @@ impl Config {
         self
     }
 
-    /// Configures the size of the LRU cache, caching addresses of discovered peers.
+    /// Configures the size of the LRU cache, caching addresses of discovered
+    /// peers.
     pub fn with_cache_size(mut self, cache_size: usize) -> Self {
         self.cache_size = cache_size;
         self
@@ -259,7 +277,8 @@ impl Behaviour {
         }
     }
 
-    /// Initiates an active push of the local peer information to the given peers.
+    /// Initiates an active push of the local peer information to the given
+    /// peers.
     pub fn push<I>(&mut self, peers: I)
     where
         I: IntoIterator<Item = PeerId>,
@@ -323,7 +342,8 @@ impl Behaviour {
             .contains(&connection_id)
         {
             // Apply address translation to the candidate address.
-            // For TCP without port-reuse, the observed address contains an ephemeral port which needs to be replaced by the port of a listen address.
+            // For TCP without port-reuse, the observed address contains an ephemeral port
+            // which needs to be replaced by the port of a listen address.
             let translated_addresses = {
                 let mut addrs: Vec<_> = self
                     .listen_addresses
@@ -346,7 +366,8 @@ impl Behaviour {
                 addrs
             };
 
-            // If address translation yielded nothing, broadcast the original candidate address.
+            // If address translation yielded nothing, broadcast the original candidate
+            // address.
             if translated_addresses.is_empty() {
                 self.events
                     .push_back(ToSwarm::NewExternalAddrCandidate(observed.clone()));
@@ -398,7 +419,8 @@ impl NetworkBehaviour for Behaviour {
     ) -> Result<THandler<Self>, ConnectionDenied> {
         // Contrary to inbound events, outbound events are full-p2p qualified
         // so we remove /p2p/ in order to be homogeneous
-        // this will avoid Autonatv2 to probe twice the same address (fully-p2p-qualified + not fully-p2p-qualified)
+        // this will avoid Autonatv2 to probe twice the same address
+        // (fully-p2p-qualified + not fully-p2p-qualified)
         let mut addr = addr.clone();
         if matches!(addr.iter().last(), Some(multiaddr::Protocol::P2p(_))) {
             addr.pop();
@@ -415,7 +437,8 @@ impl NetworkBehaviour for Behaviour {
             self.config.local_public_key.clone(),
             self.config.protocol_version.clone(),
             self.config.agent_version.clone(),
-            addr.clone(), // TODO: This is weird? That is the public address we dialed, shouldn't need to tell the other party?
+            addr.clone(), /* TODO: This is weird? That is the public address we dialed,
+                           * shouldn't need to tell the other party? */
             self.all_addresses(),
         ))
     }
@@ -638,7 +661,8 @@ impl Event {
 }
 
 /// If there is a given peer_id in the multiaddr, make sure it is the same as
-/// the given peer_id. If there is no peer_id for the peer in the mutiaddr, this returns true.
+/// the given peer_id. If there is no peer_id for the peer in the mutiaddr, this
+/// returns true.
 fn multiaddr_matches_peer_id(addr: &Multiaddr, peer_id: &PeerId) -> bool {
     let last_component = addr.iter().last();
     if let Some(multiaddr::Protocol::P2p(multi_addr_peer_id)) = last_component {

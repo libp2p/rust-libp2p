@@ -18,15 +18,8 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::config::ValidationMode;
-use crate::handler::HandlerEvent;
-use crate::rpc_proto::proto;
-use crate::topic::TopicHash;
-use crate::types::{
-    ControlAction, Graft, IHave, IWant, MessageId, PeerInfo, PeerKind, Prune, RawMessage, Rpc,
-    Subscription, SubscriptionAction,
-};
-use crate::ValidationError;
+use std::{convert::Infallible, pin::Pin};
+
 use asynchronous_codec::{Decoder, Encoder, Framed};
 use byteorder::{BigEndian, ByteOrder};
 use bytes::BytesMut;
@@ -35,8 +28,28 @@ use libp2p_core::{InboundUpgrade, OutboundUpgrade, UpgradeInfo};
 use libp2p_identity::{PeerId, PublicKey};
 use libp2p_swarm::StreamProtocol;
 use quick_protobuf::Writer;
-use std::convert::Infallible;
-use std::pin::Pin;
+
+use crate::{
+    config::ValidationMode,
+    handler::HandlerEvent,
+    rpc_proto::proto,
+    topic::TopicHash,
+    types::{
+        ControlAction,
+        Graft,
+        IHave,
+        IWant,
+        MessageId,
+        PeerInfo,
+        PeerKind,
+        Prune,
+        RawMessage,
+        Rpc,
+        Subscription,
+        SubscriptionAction,
+    },
+    ValidationError,
+};
 
 pub(crate) const SIGNING_PREFIX: &[u8] = b"libp2p-pubsub:";
 
@@ -53,7 +66,8 @@ pub(crate) const FLOODSUB_PROTOCOL: ProtocolId = ProtocolId {
     kind: PeerKind::Floodsub,
 };
 
-/// Implementation of [`InboundUpgrade`] and [`OutboundUpgrade`] for the Gossipsub protocol.
+/// Implementation of [`InboundUpgrade`] and [`OutboundUpgrade`] for the
+/// Gossipsub protocol.
 #[derive(Debug, Clone)]
 pub struct ProtocolConfig {
     /// The Gossipsub protocol id to listen on.
@@ -136,7 +150,7 @@ where
     }
 }
 
-/* Gossip codec for the framing */
+// Gossip codec for the framing
 
 pub struct GossipsubCodec {
     /// Determines the level of validation performed on incoming messages.
@@ -154,9 +168,10 @@ impl GossipsubCodec {
         }
     }
 
-    /// Verifies a gossipsub message. This returns either a success or failure. All errors
-    /// are logged, which prevents error handling in the codec and handler. We simply drop invalid
-    /// messages and log warnings, rather than propagating errors through the codec.
+    /// Verifies a gossipsub message. This returns either a success or failure.
+    /// All errors are logged, which prevents error handling in the codec
+    /// and handler. We simply drop invalid messages and log warnings,
+    /// rather than propagating errors through the codec.
     fn verify_signature(message: &proto::Message) -> bool {
         use quick_protobuf::MessageWrite;
 
@@ -175,8 +190,8 @@ impl GossipsubCodec {
             return false;
         };
 
-        // If there is a key value in the protobuf, use that key otherwise the key must be
-        // obtained from the inlined source peer_id.
+        // If there is a key value in the protobuf, use that key otherwise the key must
+        // be obtained from the inlined source peer_id.
         let public_key = match message.key.as_deref().map(PublicKey::try_decode_protobuf) {
             Some(Ok(key)) => key,
             _ => match PublicKey::try_decode_protobuf(&source.to_bytes()[2..]) {
@@ -271,15 +286,18 @@ impl Decoder for GossipsubCodec {
                         );
                         invalid_kind = Some(ValidationError::SequenceNumberPresent);
                     } else if message.from.is_some() {
-                        tracing::warn!("Message dropped. Message source was non-empty and anonymous validation mode is set");
+                        tracing::warn!(
+                            "Message dropped. Message source was non-empty and anonymous \
+                             validation mode is set"
+                        );
                         invalid_kind = Some(ValidationError::MessageSourcePresent);
                     }
                 }
                 ValidationMode::None => {}
             }
 
-            // If the initial validation logic failed, add the message to invalid messages and
-            // continue processing the others.
+            // If the initial validation logic failed, add the message to invalid messages
+            // and continue processing the others.
             if let Some(validation_error) = invalid_kind.take() {
                 let message = RawMessage {
                     source: None, // don't bother inform the application
@@ -506,12 +524,18 @@ impl Decoder for GossipsubCodec {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use crate::config::Config;
-    use crate::{Behaviour, ConfigBuilder, MessageAuthenticity};
-    use crate::{IdentTopic as Topic, Version};
     use libp2p_identity::Keypair;
     use quickcheck::*;
+
+    use super::*;
+    use crate::{
+        config::Config,
+        Behaviour,
+        ConfigBuilder,
+        IdentTopic as Topic,
+        MessageAuthenticity,
+        Version,
+    };
 
     #[derive(Clone, Debug)]
     struct Message(RawMessage);
@@ -520,7 +544,8 @@ mod tests {
         fn arbitrary(g: &mut Gen) -> Self {
             let keypair = TestKeypair::arbitrary(g);
 
-            // generate an arbitrary GossipsubMessage using the behaviour signing functionality
+            // generate an arbitrary GossipsubMessage using the behaviour signing
+            // functionality
             let config = Config::default();
             let mut gs: Behaviour =
                 Behaviour::new(MessageAuthenticity::Signed(keypair.0), config).unwrap();

@@ -1,11 +1,17 @@
+use std::{convert::Infallible, sync::atomic::AtomicUsize};
+
 use async_std::stream::StreamExt;
 use criterion::{criterion_group, criterion_main, Criterion};
 use libp2p_core::{
-    transport::MemoryTransport, InboundUpgrade, Multiaddr, OutboundUpgrade, Transport, UpgradeInfo,
+    transport::MemoryTransport,
+    InboundUpgrade,
+    Multiaddr,
+    OutboundUpgrade,
+    Transport,
+    UpgradeInfo,
 };
 use libp2p_identity::PeerId;
 use libp2p_swarm::{ConnectionHandler, NetworkBehaviour, StreamProtocol};
-use std::{convert::Infallible, sync::atomic::AtomicUsize};
 use web_time::Duration;
 
 macro_rules! gen_behaviour {
@@ -82,7 +88,7 @@ benchmarks! {
         SpinningBehaviour20::bench().name(m).poll_count(500).protocols_per_behaviour(100),
     ];
 }
-//fn main() {}
+// fn main() {}
 
 trait BigBehaviour: Sized {
     fn behaviours(&mut self) -> &mut [SpinningBehaviour];

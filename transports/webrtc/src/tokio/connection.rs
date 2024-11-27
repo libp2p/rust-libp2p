@@ -18,26 +18,28 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use futures::stream::FuturesUnordered;
+use std::{
+    pin::Pin,
+    sync::Arc,
+    task::{Context, Poll, Waker},
+};
+
 use futures::{
     channel::{
         mpsc,
         oneshot::{self, Sender},
     },
+    future::BoxFuture,
     lock::Mutex as FutMutex,
+    ready,
+    stream::FuturesUnordered,
     StreamExt,
-    {future::BoxFuture, ready},
 };
 use libp2p_core::muxing::{StreamMuxer, StreamMuxerEvent};
-use webrtc::data::data_channel::DataChannel as DetachedDataChannel;
-use webrtc::data_channel::RTCDataChannel;
-use webrtc::peer_connection::RTCPeerConnection;
-
-use std::task::Waker;
-use std::{
-    pin::Pin,
-    sync::Arc,
-    task::{Context, Poll},
+use webrtc::{
+    data::data_channel::DataChannel as DetachedDataChannel,
+    data_channel::RTCDataChannel,
+    peer_connection::RTCPeerConnection,
 };
 
 use crate::tokio::{error::Error, stream, stream::Stream};
@@ -46,11 +48,13 @@ use crate::tokio::{error::Error, stream, stream::Stream};
 /// See [`Connection::poll_inbound`].
 const MAX_DATA_CHANNELS_IN_FLIGHT: usize = 10;
 
-/// A WebRTC connection, wrapping [`RTCPeerConnection`] and implementing [`StreamMuxer`] trait.
+/// A WebRTC connection, wrapping [`RTCPeerConnection`] and implementing
+/// [`StreamMuxer`] trait.
 pub struct Connection {
     /// [`RTCPeerConnection`] to the remote peer.
     ///
-    /// Uses futures mutex because used in async code (see poll_outbound and poll_close).
+    /// Uses futures mutex because used in async code (see poll_outbound and
+    /// poll_close).
     peer_conn: Arc<FutMutex<RTCPeerConnection>>,
 
     /// Channel onto which incoming data channels are put.
@@ -59,10 +63,12 @@ pub struct Connection {
     /// Future, which, once polled, will result in an outbound stream.
     outbound_fut: Option<BoxFuture<'static, Result<Arc<DetachedDataChannel>, Error>>>,
 
-    /// Future, which, once polled, will result in closing the entire connection.
+    /// Future, which, once polled, will result in closing the entire
+    /// connection.
     close_fut: Option<BoxFuture<'static, Result<(), Error>>>,
 
-    /// A list of futures, which, once completed, signal that a [`Stream`] has been dropped.
+    /// A list of futures, which, once completed, signal that a [`Stream`] has
+    /// been dropped.
     drop_listeners: FuturesUnordered<stream::DropListener>,
     no_drop_listeners_waker: Option<Waker>,
 }
@@ -92,10 +98,10 @@ impl Connection {
 
     /// Registers a handler for incoming data channels.
     ///
-    /// NOTE: `mpsc::Sender` is wrapped in `Arc` because cloning a raw sender would make the channel
-    /// unbounded. "The channel’s capacity is equal to buffer + num-senders. In other words, each
-    /// sender gets a guaranteed slot in the channel capacity..."
-    /// See <https://docs.rs/futures/latest/futures/channel/mpsc/fn.channel.html>
+    /// NOTE: `mpsc::Sender` is wrapped in `Arc` because cloning a raw sender
+    /// would make the channel unbounded. "The channel’s capacity is equal
+    /// to buffer + num-senders. In other words, each sender gets a
+    /// guaranteed slot in the channel capacity..." See <https://docs.rs/futures/latest/futures/channel/mpsc/fn.channel.html>
     async fn register_incoming_data_channels_handler(
         rtc_conn: &RTCPeerConnection,
         tx: Arc<FutMutex<mpsc::Sender<Arc<DetachedDataChannel>>>>,
@@ -172,7 +178,9 @@ impl StreamMuxer for Connection {
                     "Sender-end of channel should be owned by `RTCPeerConnection`"
                 );
 
-                Poll::Pending // Return `Pending` without registering a waker: If the channel is closed, we don't need to be called anymore.
+                Poll::Pending // Return `Pending` without registering a waker:
+                              // If the channel is closed, we don't need to be
+                              // called anymore.
             }
         }
     }

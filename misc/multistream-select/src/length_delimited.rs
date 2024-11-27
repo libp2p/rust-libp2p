@@ -18,14 +18,15 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use bytes::{Buf as _, BufMut as _, Bytes, BytesMut};
-use futures::{io::IoSlice, prelude::*};
 use std::{
     convert::TryFrom as _,
     io,
     pin::Pin,
     task::{Context, Poll},
 };
+
+use bytes::{Buf as _, BufMut as _, Bytes, BytesMut};
+use futures::{io::IoSlice, prelude::*};
 
 const MAX_LEN_BYTES: u16 = 2;
 const MAX_FRAME_SIZE: u16 = (1 << (MAX_LEN_BYTES * 8 - MAX_LEN_BYTES)) - 1;
@@ -35,15 +36,16 @@ const DEFAULT_BUFFER_SIZE: usize = 64;
 /// wrapping an underlying `AsyncRead + AsyncWrite` I/O resource.
 ///
 /// We purposely only support a frame sizes up to 16KiB (2 bytes unsigned varint
-/// frame length). Frames mostly consist in a short protocol name, which is highly
-/// unlikely to be more than 16KiB long.
+/// frame length). Frames mostly consist in a short protocol name, which is
+/// highly unlikely to be more than 16KiB long.
 #[pin_project::pin_project]
 #[derive(Debug)]
 pub(crate) struct LengthDelimited<R> {
     /// The inner I/O resource.
     #[pin]
     inner: R,
-    /// Read buffer for a single incoming unsigned-varint length-delimited frame.
+    /// Read buffer for a single incoming unsigned-varint length-delimited
+    /// frame.
     read_buffer: BytesMut,
     /// Write buffer for outgoing unsigned-varint length-delimited frames.
     write_buffer: BytesMut,
@@ -84,7 +86,8 @@ impl<R> LengthDelimited<R> {
         }
     }
 
-    /// Drops the [`LengthDelimited`] resource, yielding the underlying I/O stream.
+    /// Drops the [`LengthDelimited`] resource, yielding the underlying I/O
+    /// stream.
     ///
     /// # Panic
     ///
@@ -98,9 +101,9 @@ impl<R> LengthDelimited<R> {
         self.inner
     }
 
-    /// Converts the [`LengthDelimited`] into a [`LengthDelimitedReader`], dropping the
-    /// uvi-framed `Sink` in favour of direct `AsyncWrite` access to the underlying
-    /// I/O stream.
+    /// Converts the [`LengthDelimited`] into a [`LengthDelimitedReader`],
+    /// dropping the uvi-framed `Sink` in favour of direct `AsyncWrite`
+    /// access to the underlying I/O stream.
     ///
     /// This is typically done if further uvi-framed messages are expected to be
     /// received but no more such messages are written, allowing the writing of
@@ -293,7 +296,8 @@ where
 }
 
 /// A `LengthDelimitedReader` implements a `Stream` of uvi-length-delimited
-/// frames on an underlying I/O resource combined with direct `AsyncWrite` access.
+/// frames on an underlying I/O resource combined with direct `AsyncWrite`
+/// access.
 #[pin_project::pin_project]
 #[derive(Debug)]
 pub(crate) struct LengthDelimitedReader<R> {
@@ -302,7 +306,8 @@ pub(crate) struct LengthDelimitedReader<R> {
 }
 
 impl<R> LengthDelimitedReader<R> {
-    /// Destroys the `LengthDelimitedReader` and returns the underlying I/O stream.
+    /// Destroys the `LengthDelimitedReader` and returns the underlying I/O
+    /// stream.
     ///
     /// This method is guaranteed not to drop any data read from or not yet
     /// submitted to the underlying I/O stream.
@@ -311,9 +316,10 @@ impl<R> LengthDelimitedReader<R> {
     ///
     /// Will panic if called while there is data in the read or write buffer.
     /// The read buffer is guaranteed to be empty whenever [`Stream::poll_next`]
-    /// yield a new `Message`. The write buffer is guaranteed to be empty whenever
-    /// [`LengthDelimited::poll_write_buffer`] yields [`Poll::Ready`] or after
-    /// the [`Sink`] has been completely flushed via [`Sink::poll_flush`].
+    /// yield a new `Message`. The write buffer is guaranteed to be empty
+    /// whenever [`LengthDelimited::poll_write_buffer`] yields
+    /// [`Poll::Ready`] or after the [`Sink`] has been completely flushed
+    /// via [`Sink::poll_flush`].
     pub(crate) fn into_inner(self) -> R {
         self.inner.into_inner()
     }
@@ -383,10 +389,12 @@ where
 
 #[cfg(test)]
 mod tests {
-    use crate::length_delimited::LengthDelimited;
+    use std::io::ErrorKind;
+
     use futures::{io::Cursor, prelude::*};
     use quickcheck::*;
-    use std::io::ErrorKind;
+
+    use crate::length_delimited::LengthDelimited;
 
     #[test]
     fn basic_read() {

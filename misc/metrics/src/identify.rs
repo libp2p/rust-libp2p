@@ -18,17 +18,21 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::protocol_stack;
+use std::{
+    collections::HashMap,
+    sync::{Arc, Mutex},
+};
+
 use libp2p_identity::PeerId;
 use libp2p_swarm::StreamProtocol;
-use prometheus_client::collector::Collector;
-use prometheus_client::encoding::{DescriptorEncoder, EncodeMetric};
-use prometheus_client::metrics::counter::Counter;
-use prometheus_client::metrics::gauge::ConstGauge;
-use prometheus_client::metrics::MetricType;
-use prometheus_client::registry::Registry;
-use std::collections::HashMap;
-use std::sync::{Arc, Mutex};
+use prometheus_client::{
+    collector::Collector,
+    encoding::{DescriptorEncoder, EncodeMetric},
+    metrics::{counter::Counter, gauge::ConstGauge, MetricType},
+    registry::Registry,
+};
+
+use crate::protocol_stack;
 
 const ALLOWED_PROTOCOLS: &[StreamProtocol] = &[
     #[cfg(feature = "dcutr")]
@@ -72,24 +76,23 @@ impl Metrics {
         let pushed = Counter::default();
         sub_registry.register(
             "pushed",
-            "Number of times identification information of the local node has \
-             been actively pushed to a peer.",
+            "Number of times identification information of the local node has been actively \
+             pushed to a peer.",
             pushed.clone(),
         );
 
         let received = Counter::default();
         sub_registry.register(
             "received",
-            "Number of times identification information has been received from \
-             a peer",
+            "Number of times identification information has been received from a peer",
             received.clone(),
         );
 
         let sent = Counter::default();
         sub_registry.register(
             "sent",
-            "Number of times identification information of the local node has \
-             been sent to a peer in response to an identification request",
+            "Number of times identification information of the local node has been sent to a peer \
+             in response to an identification request",
             sent.clone(),
         );
 
@@ -205,7 +208,8 @@ impl Collector for Peers {
         {
             let mut family_encoder = encoder.encode_descriptor(
                 "remote_protocols",
-                "Number of connected nodes supporting a specific protocol, with \"unrecognized\" for each peer supporting one or more unrecognized protocols",
+                "Number of connected nodes supporting a specific protocol, with \"unrecognized\" \
+                 for each peer supporting one or more unrecognized protocols",
                 None,
                 MetricType::Gauge,
             )?;

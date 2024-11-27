@@ -23,32 +23,48 @@
 pub(crate) mod handler;
 pub(crate) mod transport;
 
-use crate::multiaddr_ext::MultiaddrExt;
-use crate::priv_client::handler::Handler;
-use crate::protocol::{self, inbound_stop};
+use std::{
+    collections::{hash_map, HashMap, VecDeque},
+    convert::Infallible,
+    io::{Error, ErrorKind, IoSlice},
+    pin::Pin,
+    task::{Context, Poll},
+};
+
 use bytes::Bytes;
 use either::Either;
-use futures::channel::mpsc::Receiver;
-use futures::future::{BoxFuture, FutureExt};
-use futures::io::{AsyncRead, AsyncWrite};
-use futures::ready;
-use futures::stream::StreamExt;
-use libp2p_core::multiaddr::Protocol;
-use libp2p_core::transport::PortUse;
-use libp2p_core::{Endpoint, Multiaddr};
-use libp2p_identity::PeerId;
-use libp2p_swarm::behaviour::{ConnectionClosed, ConnectionEstablished, FromSwarm};
-use libp2p_swarm::dial_opts::DialOpts;
-use libp2p_swarm::{
-    dummy, ConnectionDenied, ConnectionHandler, ConnectionId, DialFailure, NetworkBehaviour,
-    NotifyHandler, Stream, THandler, THandlerInEvent, THandlerOutEvent, ToSwarm,
+use futures::{
+    channel::mpsc::Receiver,
+    future::{BoxFuture, FutureExt},
+    io::{AsyncRead, AsyncWrite},
+    ready,
+    stream::StreamExt,
 };
-use std::collections::{hash_map, HashMap, VecDeque};
-use std::convert::Infallible;
-use std::io::{Error, ErrorKind, IoSlice};
-use std::pin::Pin;
-use std::task::{Context, Poll};
+use libp2p_core::{multiaddr::Protocol, transport::PortUse, Endpoint, Multiaddr};
+use libp2p_identity::PeerId;
+use libp2p_swarm::{
+    behaviour::{ConnectionClosed, ConnectionEstablished, FromSwarm},
+    dial_opts::DialOpts,
+    dummy,
+    ConnectionDenied,
+    ConnectionHandler,
+    ConnectionId,
+    DialFailure,
+    NetworkBehaviour,
+    NotifyHandler,
+    Stream,
+    THandler,
+    THandlerInEvent,
+    THandlerOutEvent,
+    ToSwarm,
+};
 use transport::Transport;
+
+use crate::{
+    multiaddr_ext::MultiaddrExt,
+    priv_client::handler::Handler,
+    protocol::{self, inbound_stop},
+};
 
 /// The events produced by the client `Behaviour`.
 #[derive(Debug)]
@@ -89,7 +105,8 @@ pub struct Behaviour {
 
     /// Stores the address of a pending or confirmed reservation.
     ///
-    /// This is indexed by the [`ConnectionId`] to a relay server and the address is the `/p2p-circuit` address we reserved on it.
+    /// This is indexed by the [`ConnectionId`] to a relay server and the
+    /// address is the `/p2p-circuit` address we reserved on it.
     reservation_addresses: HashMap<ConnectionId, (Multiaddr, ReservationStatus)>,
 
     /// Queue of actions to return when polled.
@@ -98,7 +115,8 @@ pub struct Behaviour {
     pending_handler_commands: HashMap<ConnectionId, handler::In>,
 }
 
-/// Create a new client relay [`Behaviour`] with it's corresponding [`Transport`].
+/// Create a new client relay [`Behaviour`] with it's corresponding
+/// [`Transport`].
 pub fn new(local_peer_id: PeerId) -> (Transport, Behaviour) {
     let (transport, from_transport) = Transport::new();
     let behaviour = Behaviour {
@@ -376,10 +394,9 @@ impl NetworkBehaviour for Behaviour {
                 }
             }
             None => unreachable!(
-                "`relay::Behaviour` polled after channel from \
-                     `Transport` has been closed. Unreachable under \
-                     the assumption that the `client::Behaviour` is never polled after \
-                     `client::Transport` is dropped.",
+                "`relay::Behaviour` polled after channel from `Transport` has been closed. \
+                 Unreachable under the assumption that the `client::Behaviour` is never polled \
+                 after `client::Transport` is dropped.",
             ),
         };
 

@@ -18,16 +18,21 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::transport::{DialOpts, ListenerId, Transport, TransportError, TransportEvent};
+use std::{
+    pin::Pin,
+    task::{Context, Poll},
+};
+
 use multiaddr::Multiaddr;
-use std::{pin::Pin, task::Context, task::Poll};
+
+use crate::transport::{DialOpts, ListenerId, Transport, TransportError, TransportEvent};
 
 /// Transport that is possibly disabled.
 ///
-/// An `OptionalTransport<T>` is a wrapper around an `Option<T>`. If it is disabled (read: contains
-/// `None`), then any attempt to dial or listen will return `MultiaddrNotSupported`. If it is
-/// enabled (read: contains `Some`), then dialing and listening will be handled by the inner
-/// transport.
+/// An `OptionalTransport<T>` is a wrapper around an `Option<T>`. If it is
+/// disabled (read: contains `None`), then any attempt to dial or listen will
+/// return `MultiaddrNotSupported`. If it is enabled (read: contains `Some`),
+/// then dialing and listening will be handled by the inner transport.
 #[derive(Debug, Copy, Clone)]
 #[pin_project::pin_project]
 pub struct OptionalTransport<T>(#[pin] Option<T>);

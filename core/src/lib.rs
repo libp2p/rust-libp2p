@@ -28,8 +28,8 @@
 //!   to a remote and can subdivide this connection into multiple substreams.
 //!   See the [`muxing`] module.
 //! - The [`UpgradeInfo`], [`InboundUpgrade`] and [`OutboundUpgrade`] traits
-//!   define how to upgrade each individual substream to use a protocol.
-//!   See the `upgrade` module.
+//!   define how to upgrade each individual substream to use a protocol. See the
+//!   `upgrade` module.
 
 #![cfg_attr(docsrs, feature(doc_cfg, doc_auto_cfg))]
 
@@ -37,7 +37,8 @@ mod proto {
     #![allow(unreachable_pub)]
     include!("generated/mod.rs");
     pub use self::{
-        envelope_proto::*, peer_record_proto::mod_PeerRecord::*, peer_record_proto::PeerRecord,
+        envelope_proto::*,
+        peer_record_proto::{mod_PeerRecord::*, PeerRecord},
     };
 }
 

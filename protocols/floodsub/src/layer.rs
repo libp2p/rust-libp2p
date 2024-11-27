@@ -18,27 +18,47 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::protocol::{
-    FloodsubMessage, FloodsubProtocol, FloodsubRpc, FloodsubSubscription,
-    FloodsubSubscriptionAction,
+use std::{
+    collections::{
+        hash_map::{DefaultHasher, HashMap},
+        VecDeque,
+    },
+    iter,
+    task::{Context, Poll},
 };
-use crate::topic::Topic;
-use crate::FloodsubConfig;
+
 use bytes::Bytes;
 use cuckoofilter::{CuckooError, CuckooFilter};
 use fnv::FnvHashSet;
-use libp2p_core::transport::PortUse;
-use libp2p_core::{Endpoint, Multiaddr};
+use libp2p_core::{transport::PortUse, Endpoint, Multiaddr};
 use libp2p_identity::PeerId;
-use libp2p_swarm::behaviour::{ConnectionClosed, ConnectionEstablished, FromSwarm};
 use libp2p_swarm::{
-    dial_opts::DialOpts, CloseConnection, ConnectionDenied, ConnectionId, NetworkBehaviour,
-    NotifyHandler, OneShotHandler, THandler, THandlerInEvent, THandlerOutEvent, ToSwarm,
+    behaviour::{ConnectionClosed, ConnectionEstablished, FromSwarm},
+    dial_opts::DialOpts,
+    CloseConnection,
+    ConnectionDenied,
+    ConnectionId,
+    NetworkBehaviour,
+    NotifyHandler,
+    OneShotHandler,
+    THandler,
+    THandlerInEvent,
+    THandlerOutEvent,
+    ToSwarm,
 };
 use smallvec::SmallVec;
-use std::collections::hash_map::{DefaultHasher, HashMap};
-use std::task::{Context, Poll};
-use std::{collections::VecDeque, iter};
+
+use crate::{
+    protocol::{
+        FloodsubMessage,
+        FloodsubProtocol,
+        FloodsubRpc,
+        FloodsubSubscription,
+        FloodsubSubscriptionAction,
+    },
+    topic::Topic,
+    FloodsubConfig,
+};
 
 /// Network behaviour that handles the floodsub protocol.
 pub struct Floodsub {
@@ -50,7 +70,8 @@ pub struct Floodsub {
     /// List of peers to send messages to.
     target_peers: FnvHashSet<PeerId>,
 
-    /// List of peers the network is connected to, and the topics that they're subscribed to.
+    /// List of peers the network is connected to, and the topics that they're
+    /// subscribed to.
     // TODO: filter out peers that don't support floodsub, so that we avoid hammering them with
     //       opened substreams
     connected_peers: HashMap<PeerId, SmallVec<[Topic; 8]>>,
@@ -117,7 +138,8 @@ impl Floodsub {
 
     /// Subscribes to a topic.
     ///
-    /// Returns true if the subscription worked. Returns false if we were already subscribed.
+    /// Returns true if the subscription worked. Returns false if we were
+    /// already subscribed.
     pub fn subscribe(&mut self, topic: Topic) -> bool {
         if self.subscribed_topics.iter().any(|t| t.id() == topic.id()) {
             return false;
@@ -170,12 +192,14 @@ impl Floodsub {
         true
     }
 
-    /// Publishes a message to the network, if we're subscribed to the topic only.
+    /// Publishes a message to the network, if we're subscribed to the topic
+    /// only.
     pub fn publish(&mut self, topic: impl Into<Topic>, data: impl Into<Bytes>) {
         self.publish_many(iter::once(topic), data)
     }
 
-    /// Publishes a message to the network, even if we're not subscribed to the topic.
+    /// Publishes a message to the network, even if we're not subscribed to the
+    /// topic.
     pub fn publish_any(&mut self, topic: impl Into<Topic>, data: impl Into<Bytes>) {
         self.publish_many_any(iter::once(topic), data)
     }
@@ -183,7 +207,8 @@ impl Floodsub {
     /// Publishes a message with multiple topics to the network.
     ///
     ///
-    /// > **Note**: Doesn't do anything if we're not subscribed to any of the topics.
+    /// > **Note**: Doesn't do anything if we're not subscribed to any of the
+    /// > topics.
     pub fn publish_many(
         &mut self,
         topic: impl IntoIterator<Item = impl Into<Topic>>,
@@ -192,7 +217,8 @@ impl Floodsub {
         self.publish_many_inner(topic, data, true)
     }
 
-    /// Publishes a message with multiple topics to the network, even if we're not subscribed to any of the topics.
+    /// Publishes a message with multiple topics to the network, even if we're
+    /// not subscribed to any of the topics.
     pub fn publish_many_any(
         &mut self,
         topic: impl IntoIterator<Item = impl Into<Topic>>,
@@ -224,8 +250,8 @@ impl Floodsub {
         if self_subscribed {
             if let Err(e @ CuckooError::NotEnoughSpace) = self.received.add(&message) {
                 tracing::warn!(
-                    "Message was added to 'received' Cuckoofilter but some \
-                     other message was removed as a consequence: {}",
+                    "Message was added to 'received' Cuckoofilter but some other message was \
+                     removed as a consequence: {}",
                     e,
                 );
             }
@@ -317,8 +343,8 @@ impl Floodsub {
         let was_in = self.connected_peers.remove(&peer_id);
         debug_assert!(was_in.is_some());
 
-        // We can be disconnected by the remote in case of inactivity for example, so we always
-        // try to reconnect.
+        // We can be disconnected by the remote in case of inactivity for example, so we
+        // always try to reconnect.
         if self.target_peers.contains(&peer_id) {
             self.events.push_back(ToSwarm::Dial {
                 opts: DialOpts::peer_id(peer_id).build(),
@@ -374,9 +400,10 @@ impl NetworkBehaviour for Floodsub {
 
         // Update connected peers topics
         for subscription in event.subscriptions {
-            let remote_peer_topics = self.connected_peers
-                .get_mut(&propagation_source)
-                .expect("connected_peers is kept in sync with the peers we are connected to; we are guaranteed to only receive events from connected peers; QED");
+            let remote_peer_topics = self.connected_peers.get_mut(&propagation_source).expect(
+                "connected_peers is kept in sync with the peers we are connected to; we are \
+                 guaranteed to only receive events from connected peers; QED",
+            );
             match subscription.action {
                 FloodsubSubscriptionAction::Subscribe => {
                     if !remote_peer_topics.contains(&subscription.topic) {
@@ -408,16 +435,16 @@ impl NetworkBehaviour for Floodsub {
         let mut rpcs_to_dispatch: Vec<(PeerId, FloodsubRpc)> = Vec::new();
 
         for message in event.messages {
-            // Use `self.received` to skip the messages that we have already received in the past.
-            // Note that this can result in false positives.
+            // Use `self.received` to skip the messages that we have already received in the
+            // past. Note that this can result in false positives.
             match self.received.test_and_add(&message) {
                 Ok(true) => {}         // Message  was added.
                 Ok(false) => continue, // Message already existed.
                 Err(e @ CuckooError::NotEnoughSpace) => {
                     // Message added, but some other removed.
                     tracing::warn!(
-                        "Message was added to 'received' Cuckoofilter but some \
-                         other message was removed as a consequence: {}",
+                        "Message was added to 'received' Cuckoofilter but some other message was \
+                         removed as a consequence: {}",
                         e,
                     );
                 }
@@ -433,7 +460,8 @@ impl NetworkBehaviour for Floodsub {
                 self.events.push_back(ToSwarm::GenerateEvent(event));
             }
 
-            // Propagate the message to everyone else who is subscribed to any of the topics.
+            // Propagate the message to everyone else who is subscribed to any of the
+            // topics.
             for (peer_id, subscr_topics) in self.connected_peers.iter() {
                 if peer_id == &propagation_source {
                     continue;

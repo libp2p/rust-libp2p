@@ -23,42 +23,61 @@ mod error;
 pub(crate) mod pool;
 mod supported_protocols;
 
+use std::{
+    collections::{HashMap, HashSet},
+    fmt,
+    fmt::{Display, Formatter},
+    future::Future,
+    io,
+    mem,
+    pin::Pin,
+    sync::atomic::{AtomicUsize, Ordering},
+    task::{Context, Poll, Waker},
+    time::Duration,
+};
+
 pub use error::ConnectionError;
 pub(crate) use error::{
-    PendingConnectionError, PendingInboundConnectionError, PendingOutboundConnectionError,
+    PendingConnectionError,
+    PendingInboundConnectionError,
+    PendingOutboundConnectionError,
 };
-use libp2p_core::transport::PortUse;
-pub use supported_protocols::SupportedProtocols;
-
-use crate::handler::{
-    AddressChange, ConnectionEvent, ConnectionHandler, DialUpgradeError, FullyNegotiatedInbound,
-    FullyNegotiatedOutbound, ListenUpgradeError, ProtocolSupport, ProtocolsChange, UpgradeInfoSend,
-};
-use crate::stream::ActiveStreamCounter;
-use crate::upgrade::{InboundUpgradeSend, OutboundUpgradeSend};
-use crate::{
-    ConnectionHandlerEvent, Stream, StreamProtocol, StreamUpgradeError, SubstreamProtocol,
-};
-use futures::future::BoxFuture;
-use futures::stream::FuturesUnordered;
-use futures::StreamExt;
-use futures::{stream, FutureExt};
+use futures::{future::BoxFuture, stream, stream::FuturesUnordered, FutureExt, StreamExt};
 use futures_timer::Delay;
-use libp2p_core::connection::ConnectedPoint;
-use libp2p_core::multiaddr::Multiaddr;
-use libp2p_core::muxing::{StreamMuxerBox, StreamMuxerEvent, StreamMuxerExt, SubstreamBox};
-use libp2p_core::upgrade;
-use libp2p_core::upgrade::{NegotiationError, ProtocolError};
-use libp2p_core::Endpoint;
+use libp2p_core::{
+    connection::ConnectedPoint,
+    multiaddr::Multiaddr,
+    muxing::{StreamMuxerBox, StreamMuxerEvent, StreamMuxerExt, SubstreamBox},
+    transport::PortUse,
+    upgrade,
+    upgrade::{NegotiationError, ProtocolError},
+    Endpoint,
+};
 use libp2p_identity::PeerId;
-use std::collections::{HashMap, HashSet};
-use std::fmt::{Display, Formatter};
-use std::future::Future;
-use std::sync::atomic::{AtomicUsize, Ordering};
-use std::task::Waker;
-use std::time::Duration;
-use std::{fmt, io, mem, pin::Pin, task::Context, task::Poll};
+pub use supported_protocols::SupportedProtocols;
 use web_time::Instant;
+
+use crate::{
+    handler::{
+        AddressChange,
+        ConnectionEvent,
+        ConnectionHandler,
+        DialUpgradeError,
+        FullyNegotiatedInbound,
+        FullyNegotiatedOutbound,
+        ListenUpgradeError,
+        ProtocolSupport,
+        ProtocolsChange,
+        UpgradeInfoSend,
+    },
+    stream::ActiveStreamCounter,
+    upgrade::{InboundUpgradeSend, OutboundUpgradeSend},
+    ConnectionHandlerEvent,
+    Stream,
+    StreamProtocol,
+    StreamUpgradeError,
+    SubstreamProtocol,
+};
 
 static NEXT_CONNECTION_ID: AtomicUsize = AtomicUsize::new(1);
 
@@ -69,10 +88,11 @@ pub struct ConnectionId(usize);
 impl ConnectionId {
     /// Creates an _unchecked_ [`ConnectionId`].
     ///
-    /// [`Swarm`](crate::Swarm) enforces that [`ConnectionId`]s are unique and not reused.
-    /// This constructor does not, hence the _unchecked_.
+    /// [`Swarm`](crate::Swarm) enforces that [`ConnectionId`]s are unique and
+    /// not reused. This constructor does not, hence the _unchecked_.
     ///
-    /// It is primarily meant for allowing manual tests of [`NetworkBehaviour`](crate::NetworkBehaviour)s.
+    /// It is primarily meant for allowing manual tests of
+    /// [`NetworkBehaviour`](crate::NetworkBehaviour)s.
     pub fn new_unchecked(id: usize) -> Self {
         Self(id)
     }
@@ -143,12 +163,13 @@ where
     /// Note: This only enforces a limit on the number of concurrently
     /// negotiating inbound streams. The total number of inbound streams on a
     /// connection is the sum of negotiating and negotiated streams. A limit on
-    /// the total number of streams can be enforced at the [`StreamMuxerBox`] level.
+    /// the total number of streams can be enforced at the [`StreamMuxerBox`]
+    /// level.
     max_negotiating_inbound_streams: usize,
     /// Contains all upgrades that are waiting for a new outbound substream.
     ///
-    /// The upgrade timeout is already ticking here so this may fail in case the remote is not quick
-    /// enough in providing us with a new stream.
+    /// The upgrade timeout is already ticking here so this may fail in case the
+    /// remote is not quick enough in providing us with a new stream.
     requested_substreams: FuturesUnordered<
         SubstreamRequested<THandler::OutboundOpenInfo, THandler::OutboundProtocol>,
     >,
@@ -223,7 +244,9 @@ where
         self.handler.on_behaviour_event(event);
     }
 
-    /// Begins an orderly shutdown of the connection, returning a stream of final events and a `Future` that resolves when connection shutdown is complete.
+    /// Begins an orderly shutdown of the connection, returning a stream of
+    /// final events and a `Future` that resolves when connection shutdown is
+    /// complete.
     pub(crate) fn close(
         self,
     ) -> (
@@ -242,8 +265,8 @@ where
         )
     }
 
-    /// Polls the handler and the substream, forwarding events from the former to the latter and
-    /// vice versa.
+    /// Polls the handler and the substream, forwarding events from the former
+    /// to the latter and vice versa.
     #[tracing::instrument(level = "debug", name = "Connection::poll", skip(self, cx))]
     pub(crate) fn poll(
         self: Pin<&mut Self>,
@@ -320,7 +343,8 @@ where
                 }
             }
 
-            // In case the [`ConnectionHandler`] can not make any more progress, poll the negotiating outbound streams.
+            // In case the [`ConnectionHandler`] can not make any more progress, poll the
+            // negotiating outbound streams.
             match negotiating_out.poll_next_unpin(cx) {
                 Poll::Pending | Poll::Ready(None) => {}
                 Poll::Ready(Some((info, Ok(protocol)))) => {
@@ -337,8 +361,9 @@ where
                 }
             }
 
-            // In case both the [`ConnectionHandler`] and the negotiating outbound streams can not
-            // make any more progress, poll the negotiating inbound streams.
+            // In case both the [`ConnectionHandler`] and the negotiating outbound streams
+            // can not make any more progress, poll the negotiating inbound
+            // streams.
             match negotiating_in.poll_next_unpin(cx) {
                 Poll::Pending | Poll::Ready(None) => {}
                 Poll::Ready(Some((info, Ok(protocol)))) => {
@@ -368,7 +393,8 @@ where
             }
 
             // Check if the connection (and handler) should be shut down.
-            // As long as we're still negotiating substreams or have any active streams shutdown is always postponed.
+            // As long as we're still negotiating substreams or have any active streams
+            // shutdown is always postponed.
             if negotiating_in.is_empty()
                 && negotiating_out.is_empty()
                 && requested_substreams.is_empty()
@@ -419,7 +445,8 @@ where
                             stream_counter.clone(),
                         ));
 
-                        continue; // Go back to the top, handler can potentially make progress again.
+                        continue; // Go back to the top, handler can potentially
+                                  // make progress again.
                     }
                 }
             }
@@ -436,7 +463,8 @@ where
                             stream_counter.clone(),
                         ));
 
-                        continue; // Go back to the top, handler can potentially make progress again.
+                        continue; // Go back to the top, handler can potentially
+                                  // make progress again.
                     }
                 }
             }
@@ -451,10 +479,12 @@ where
                 for change in changes {
                     handler.on_connection_event(ConnectionEvent::LocalProtocolsChange(change));
                 }
-                continue; // Go back to the top, handler can potentially make progress again.
+                continue; // Go back to the top, handler can potentially make
+                          // progress again.
             }
 
-            return Poll::Pending; // Nothing can make progress, return `Pending`.
+            return Poll::Pending; // Nothing can make progress, return
+                                  // `Pending`.
         }
     }
 
@@ -482,7 +512,8 @@ fn compute_new_shutdown(
 ) -> Option<Shutdown> {
     match (current_shutdown, handler_keep_alive) {
         (_, false) if idle_timeout == Duration::ZERO => Some(Shutdown::Asap),
-        (Shutdown::Later(_), false) => None, // Do nothing, i.e. let the shutdown timer continue to tick.
+        (Shutdown::Later(_), false) => None, // Do nothing, i.e. let the shutdown timer continue
+        // to tick.
         (_, false) => {
             let now = Instant::now();
             let safe_keep_alive = checked_add_fraction(now, idle_timeout);
@@ -493,10 +524,13 @@ fn compute_new_shutdown(
     }
 }
 
-/// Repeatedly halves and adds the [`Duration`] to the [`Instant`] until [`Instant::checked_add`] succeeds.
+/// Repeatedly halves and adds the [`Duration`] to the [`Instant`] until
+/// [`Instant::checked_add`] succeeds.
 ///
-/// [`Instant`] depends on the underlying platform and has a limit of which points in time it can represent.
-/// The [`Duration`] computed by the this function may not be the longest possible that we can add to `now` but it will work.
+/// [`Instant`] depends on the underlying platform and has a limit of which
+/// points in time it can represent. The [`Duration`] computed by the this
+/// function may not be the longest possible that we can add to `now` but it
+/// will work.
 fn checked_add_fraction(start: Instant, mut duration: Duration) -> Duration {
     while start.checked_add(duration).is_none() {
         tracing::debug!(start=?start, duration=?duration, "start + duration cannot be presented, halving duration");
@@ -507,7 +541,8 @@ fn checked_add_fraction(start: Instant, mut duration: Duration) -> Duration {
     duration
 }
 
-/// Borrowed information about an incoming connection currently being negotiated.
+/// Borrowed information about an incoming connection currently being
+/// negotiated.
 #[derive(Debug, Copy, Clone)]
 pub(crate) struct IncomingInfo<'a> {
     /// Local connection address.
@@ -658,10 +693,12 @@ enum SubstreamRequested<UserData, Upgrade> {
         user_data: UserData,
         timeout: Delay,
         upgrade: Upgrade,
-        /// A waker to notify our [`FuturesUnordered`] that we have extracted the data.
+        /// A waker to notify our [`FuturesUnordered`] that we have extracted
+        /// the data.
         ///
-        /// This will ensure that we will get polled again in the next iteration which allows us to
-        /// resolve with `Ok(())` and be removed from the [`FuturesUnordered`].
+        /// This will ensure that we will get polled again in the next iteration
+        /// which allows us to resolve with `Ok(())` and be removed from
+        /// the [`FuturesUnordered`].
         extracted_waker: Option<Waker>,
     },
     Done,
@@ -746,8 +783,8 @@ enum Shutdown {
     Later(Delay),
 }
 
-// Structure used to avoid allocations when storing the protocols in the `HashMap.
-// Instead of allocating a new `String` for the key,
+// Structure used to avoid allocations when storing the protocols in the
+// `HashMap. Instead of allocating a new `String` for the key,
 // we use `T::as_ref()` in `Hash`, `Eq` and `PartialEq` requirements.
 pub(crate) struct AsStrHashEq<T>(pub(crate) T);
 
@@ -767,18 +804,22 @@ impl<T: AsRef<str>> std::hash::Hash for AsStrHashEq<T> {
 
 #[cfg(test)]
 mod tests {
+    use std::{
+        convert::Infallible,
+        sync::{Arc, Weak},
+        time::Instant,
+    };
+
+    use futures::{future, AsyncRead, AsyncWrite};
+    use libp2p_core::{
+        upgrade::{DeniedUpgrade, InboundUpgrade, OutboundUpgrade, UpgradeInfo},
+        StreamMuxer,
+    };
+    use quickcheck::*;
+    use tracing_subscriber::EnvFilter;
+
     use super::*;
     use crate::dummy;
-    use futures::future;
-    use futures::AsyncRead;
-    use futures::AsyncWrite;
-    use libp2p_core::upgrade::{DeniedUpgrade, InboundUpgrade, OutboundUpgrade, UpgradeInfo};
-    use libp2p_core::StreamMuxer;
-    use quickcheck::*;
-    use std::convert::Infallible;
-    use std::sync::{Arc, Weak};
-    use std::time::Instant;
-    use tracing_subscriber::EnvFilter;
 
     #[test]
     fn max_negotiating_inbound_streams() {
@@ -906,7 +947,8 @@ mod tests {
         );
         assert!(connection.handler.remote_removed.is_empty());
 
-        // Third, stop listening on a protocol it never advertised (we can't control what handlers do so this needs to be handled gracefully).
+        // Third, stop listening on a protocol it never advertised (we can't control
+        // what handlers do so this needs to be handled gracefully).
         connection.handler.remote_removes_support_for(&["/baz"]);
         let _ = connection.poll_noop_waker();
 

@@ -1,9 +1,12 @@
+use std::{
+    error::Error,
+    path::PathBuf,
+    str::{self, FromStr},
+    sync::mpsc,
+    thread,
+};
+
 use base64::prelude::*;
-use std::error::Error;
-use std::path::PathBuf;
-use std::str::{self, FromStr};
-use std::sync::mpsc;
-use std::thread;
 
 mod config;
 
@@ -39,8 +42,8 @@ enum Command {
     },
 }
 
-// Due to the fact that a peer id uses a SHA-256 multihash, it always starts with the
-// bytes 0x1220, meaning that only some characters are valid.
+// Due to the fact that a peer id uses a SHA-256 multihash, it always starts
+// with the bytes 0x1220, meaning that only some characters are valid.
 const ALLOWED_FIRST_BYTE: &[u8] = b"NPQRSTUVWXYZ";
 
 // The base58 alphabet is not necessarily obvious.
@@ -60,10 +63,11 @@ fn main() -> Result<(), Box<dyn Error>> {
 
             let peer_id = keypair.public().into();
             assert_eq!(
-                    PeerId::from_str(&config.identity.peer_id)?,
-                    peer_id,
-                    "Expect peer id derived from private key and peer id retrieved from config to match."
-                );
+                PeerId::from_str(&config.identity.peer_id)?,
+                peer_id,
+                "Expect peer id derived from private key and peer id retrieved from config to \
+                 match."
+            );
 
             (peer_id, keypair)
         }

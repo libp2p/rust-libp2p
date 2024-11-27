@@ -18,6 +18,15 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
+use std::{
+    collections::{HashMap, HashSet},
+    io,
+    io::ErrorKind,
+    net::SocketAddr,
+    sync::Arc,
+    task::{Context, Poll},
+};
+
 use async_trait::async_trait;
 use futures::{
     channel::oneshot,
@@ -31,23 +40,17 @@ use stun::{
 };
 use thiserror::Error;
 use tokio::{io::ReadBuf, net::UdpSocket};
-use webrtc::ice::udp_mux::{UDPMux, UDPMuxConn, UDPMuxConnParams, UDPMuxWriter};
-use webrtc::util::{Conn, Error};
-
-use std::{
-    collections::{HashMap, HashSet},
-    io,
-    io::ErrorKind,
-    net::SocketAddr,
-    sync::Arc,
-    task::{Context, Poll},
+use webrtc::{
+    ice::udp_mux::{UDPMux, UDPMuxConn, UDPMuxConnParams, UDPMuxWriter},
+    util::{Conn, Error},
 };
 
 use crate::tokio::req_res_chan;
 
 const RECEIVE_MTU: usize = 8192;
 
-/// A previously unseen address of a remote which has sent us an ICE binding request.
+/// A previously unseen address of a remote which has sent us an ICE binding
+/// request.
 #[derive(Debug)]
 pub(crate) struct NewAddr {
     pub(crate) addr: SocketAddr,
@@ -78,7 +81,8 @@ pub(crate) struct UDPMuxNewAddr {
     /// Maps from socket address to the underlying connection.
     address_map: HashMap<SocketAddr, UDPMuxConn>,
 
-    /// Set of the new addresses to avoid sending the same address multiple times.
+    /// Set of the new addresses to avoid sending the same address multiple
+    /// times.
     new_addrs: HashSet<SocketAddr>,
 
     /// `true` when UDP mux is closed.
@@ -154,8 +158,8 @@ impl UDPMuxNewAddr {
         Ok(UDPMuxConn::new(params))
     }
 
-    /// Returns a muxed connection if the `ufrag` from the given STUN message matches an existing
-    /// connection.
+    /// Returns a muxed connection if the `ufrag` from the given STUN message
+    /// matches an existing connection.
     fn conn_from_stun_message(
         &self,
         buffer: &[u8],
@@ -181,8 +185,8 @@ impl UDPMuxNewAddr {
         }
     }
 
-    /// Reads from the underlying UDP socket and either reports a new address or proxies data to the
-    /// muxed connection.
+    /// Reads from the underlying UDP socket and either reports a new address or
+    /// proxies data to the muxed connection.
     pub(crate) fn poll(&mut self, cx: &mut Context) -> Poll<UDPMuxEvent> {
         let mut recv_buf = [0u8; RECEIVE_MTU];
 
@@ -303,8 +307,9 @@ impl UDPMuxNewAddr {
             if let Poll::Ready(Some((ufrag, response))) =
                 self.remove_conn_command.poll_next_unpin(cx)
             {
-                // Pion's ice implementation has both `RemoveConnByFrag` and `RemoveConn`, but since `conns`
-                // is keyed on `ufrag` their implementation is equivalent.
+                // Pion's ice implementation has both `RemoveConnByFrag` and `RemoveConn`, but
+                // since `conns` is keyed on `ufrag` their implementation is
+                // equivalent.
 
                 if let Some(removed_conn) = self.conns.remove(&ufrag) {
                     for address in removed_conn.get_addresses() {
@@ -336,8 +341,9 @@ impl UDPMuxNewAddr {
                             let conn = self.address_map.get(&addr);
 
                             let conn = match conn {
-                                // If we couldn't find the connection based on source address, see if
-                                // this is a STUN message and if so if we can find the connection based on ufrag.
+                                // If we couldn't find the connection based on source address, see
+                                // if this is a STUN message and if
+                                // so if we can find the connection based on ufrag.
                                 None if is_stun_message(read.filled()) => {
                                     match self.conn_from_stun_message(read.filled(), &addr) {
                                         Some(Ok(s)) => Some(s),
@@ -417,8 +423,8 @@ impl UDPMuxNewAddr {
     }
 }
 
-/// Handle which utilizes [`req_res_chan`] to transmit commands (e.g. remove connection) from the
-/// WebRTC ICE agent to [`UDPMuxNewAddr::poll`].
+/// Handle which utilizes [`req_res_chan`] to transmit commands (e.g. remove
+/// connection) from the WebRTC ICE agent to [`UDPMuxNewAddr::poll`].
 pub(crate) struct UdpMuxHandle {
     close_sender: req_res_chan::Sender<(), Result<(), Error>>,
     get_conn_sender: req_res_chan::Sender<String, Result<Arc<dyn Conn + Send + Sync>, Error>>,
@@ -426,7 +432,8 @@ pub(crate) struct UdpMuxHandle {
 }
 
 impl UdpMuxHandle {
-    /// Returns a new `UdpMuxHandle` and `close`, `get_conn` and `remove` receivers.
+    /// Returns a new `UdpMuxHandle` and `close`, `get_conn` and `remove`
+    /// receivers.
     pub(crate) fn new() -> (
         Self,
         req_res_chan::Receiver<(), Result<(), Error>>,
@@ -475,8 +482,8 @@ impl UDPMux for UdpMuxHandle {
     }
 }
 
-/// Handle which utilizes [`req_res_chan`] to transmit commands from [`UDPMuxConn`] connections to
-/// [`UDPMuxNewAddr::poll`].
+/// Handle which utilizes [`req_res_chan`] to transmit commands from
+/// [`UDPMuxConn`] connections to [`UDPMuxNewAddr::poll`].
 pub(crate) struct UdpMuxWriterHandle {
     registration_channel: req_res_chan::Sender<(UDPMuxConn, SocketAddr), ()>,
     send_channel: req_res_chan::Sender<(Vec<u8>, SocketAddr), Result<usize, Error>>,
@@ -530,8 +537,8 @@ impl UDPMuxWriter for UdpMuxWriterHandle {
     }
 }
 
-/// Gets the ufrag from the given STUN message or returns an error, if failed to decode or the
-/// username attribute is not present.
+/// Gets the ufrag from the given STUN message or returns an error, if failed to
+/// decode or the username attribute is not present.
 fn ufrag_from_stun_message(buffer: &[u8], local_ufrag: bool) -> Result<String, Error> {
     let (result, message) = {
         let mut m = STUNMessage::new();

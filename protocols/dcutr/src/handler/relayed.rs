@@ -18,28 +18,40 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-//! [`ConnectionHandler`] handling relayed connection potentially upgraded to a direct connection.
+//! [`ConnectionHandler`] handling relayed connection potentially upgraded to a
+//! direct connection.
 
-use crate::behaviour::MAX_NUMBER_OF_UPGRADE_ATTEMPTS;
-use crate::{protocol, PROTOCOL_NAME};
+use std::{
+    collections::VecDeque,
+    io,
+    task::{Context, Poll},
+    time::Duration,
+};
+
 use either::Either;
 use futures::future;
-use libp2p_core::multiaddr::Multiaddr;
-use libp2p_core::upgrade::{DeniedUpgrade, ReadyUpgrade};
-use libp2p_core::ConnectedPoint;
-use libp2p_swarm::handler::{
-    ConnectionEvent, DialUpgradeError, FullyNegotiatedInbound, FullyNegotiatedOutbound,
-    ListenUpgradeError,
+use libp2p_core::{
+    multiaddr::Multiaddr,
+    upgrade::{DeniedUpgrade, ReadyUpgrade},
+    ConnectedPoint,
 };
 use libp2p_swarm::{
-    ConnectionHandler, ConnectionHandlerEvent, StreamProtocol, StreamUpgradeError,
+    handler::{
+        ConnectionEvent,
+        DialUpgradeError,
+        FullyNegotiatedInbound,
+        FullyNegotiatedOutbound,
+        ListenUpgradeError,
+    },
+    ConnectionHandler,
+    ConnectionHandlerEvent,
+    StreamProtocol,
+    StreamUpgradeError,
     SubstreamProtocol,
 };
 use protocol::{inbound, outbound};
-use std::collections::VecDeque;
-use std::io;
-use std::task::{Context, Poll};
-use std::time::Duration;
+
+use crate::{behaviour::MAX_NUMBER_OF_UPGRADE_ATTEMPTS, protocol, PROTOCOL_NAME};
 
 #[derive(Debug)]
 pub enum Command {
@@ -71,7 +83,8 @@ pub struct Handler {
     // Outbound DCUtR handshake.
     outbound_stream: futures_bounded::FuturesSet<Result<Vec<Multiaddr>, outbound::Error>>,
 
-    /// The addresses we will send to the other party for hole-punching attempts.
+    /// The addresses we will send to the other party for hole-punching
+    /// attempts.
     holepunch_candidates: Vec<Multiaddr>,
 
     attempts: u8,
@@ -109,13 +122,14 @@ impl Handler {
                     .is_err()
                 {
                     tracing::warn!(
-                        "New inbound connect stream while still upgrading previous one. Replacing previous with new.",
+                        "New inbound connect stream while still upgrading previous one. Replacing \
+                         previous with new.",
                     );
                 }
                 self.attempts += 1;
             }
-            // A connection listener denies all incoming substreams, thus none can ever be fully negotiated.
-            // TODO: remove when Rust 1.82 is MSRV
+            // A connection listener denies all incoming substreams, thus none can ever be fully
+            // negotiated. TODO: remove when Rust 1.82 is MSRV
             #[allow(unreachable_patterns)]
             future::Either::Right(output) => libp2p_core::util::unreachable(output),
         }
@@ -143,7 +157,8 @@ impl Handler {
             .is_err()
         {
             tracing::warn!(
-                "New outbound connect stream while still upgrading previous one. Replacing previous with new.",
+                "New outbound connect stream while still upgrading previous one. Replacing \
+                 previous with new.",
             );
         }
     }
@@ -198,10 +213,11 @@ impl ConnectionHandler for Handler {
             }
             ConnectedPoint::Listener { .. } => {
                 // By the protocol specification the listening side of a relayed connection
-                // initiates the _direct connection upgrade_. In other words the listening side of
-                // the relayed connection opens a substream to the dialing side. (Connection roles
-                // and substream roles are reversed.) The listening side on a relayed connection
-                // never expects incoming substreams, hence the denied upgrade below.
+                // initiates the _direct connection upgrade_. In other words the listening side
+                // of the relayed connection opens a substream to the dialing
+                // side. (Connection roles and substream roles are reversed.)
+                // The listening side on a relayed connection never expects
+                // incoming substreams, hence the denied upgrade below.
                 SubstreamProtocol::new(Either::Right(DeniedUpgrade), ())
             }
         }

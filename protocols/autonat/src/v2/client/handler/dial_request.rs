@@ -1,18 +1,3 @@
-use futures::{channel::oneshot, AsyncWrite};
-use futures_bounded::FuturesMap;
-use libp2p_core::{
-    upgrade::{DeniedUpgrade, ReadyUpgrade},
-    Multiaddr,
-};
-
-use libp2p_swarm::{
-    handler::{
-        ConnectionEvent, DialUpgradeError, FullyNegotiatedOutbound, OutboundUpgradeSend,
-        ProtocolsChange,
-    },
-    ConnectionHandler, ConnectionHandlerEvent, Stream, StreamProtocol, StreamUpgradeError,
-    SubstreamProtocol,
-};
 use std::{
     collections::VecDeque,
     convert::Infallible,
@@ -22,13 +7,42 @@ use std::{
     time::Duration,
 };
 
+use futures::{channel::oneshot, AsyncWrite};
+use futures_bounded::FuturesMap;
+use libp2p_core::{
+    upgrade::{DeniedUpgrade, ReadyUpgrade},
+    Multiaddr,
+};
+use libp2p_swarm::{
+    handler::{
+        ConnectionEvent,
+        DialUpgradeError,
+        FullyNegotiatedOutbound,
+        OutboundUpgradeSend,
+        ProtocolsChange,
+    },
+    ConnectionHandler,
+    ConnectionHandlerEvent,
+    Stream,
+    StreamProtocol,
+    StreamUpgradeError,
+    SubstreamProtocol,
+};
+
 use crate::v2::{
     generated::structs::{mod_DialResponse::ResponseStatus, DialStatus},
     protocol::{
-        Coder, DialDataRequest, DialDataResponse, DialRequest, Response,
-        DATA_FIELD_LEN_UPPER_BOUND, DATA_LEN_LOWER_BOUND, DATA_LEN_UPPER_BOUND,
+        Coder,
+        DialDataRequest,
+        DialDataResponse,
+        DialRequest,
+        Response,
+        DATA_FIELD_LEN_UPPER_BOUND,
+        DATA_LEN_LOWER_BOUND,
+        DATA_LEN_UPPER_BOUND,
     },
-    Nonce, DIAL_REQUEST_PROTOCOL,
+    Nonce,
+    DIAL_REQUEST_PROTOCOL,
 };
 
 #[derive(Debug)]
@@ -261,8 +275,10 @@ async fn start_stream_handle(
         Ok(_) => {}
         Err(err) => {
             if err.kind() == io::ErrorKind::ConnectionReset {
-                // The AutoNAT server may have already closed the stream (this is normal because the probe is finished), in this case we have this error:
-                // Err(Custom { kind: ConnectionReset, error: Stopped(0) })
+                // The AutoNAT server may have already closed the stream (this
+                // is normal because the probe is finished), in this case we
+                // have this error: Err(Custom { kind:
+                // ConnectionReset, error: Stopped(0) })
                 // so we silently ignore this error
             } else {
                 return Err(err.into());

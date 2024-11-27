@@ -25,18 +25,22 @@
 //! `Stream` and `Sink` implementations of `MessageIO` and
 //! `MessageReader`.
 
-use crate::length_delimited::{LengthDelimited, LengthDelimitedReader};
-use crate::Version;
-
-use bytes::{BufMut, Bytes, BytesMut};
-use futures::{io::IoSlice, prelude::*, ready};
 use std::{
     error::Error,
-    fmt, io,
+    fmt,
+    io,
     pin::Pin,
     task::{Context, Poll},
 };
+
+use bytes::{BufMut, Bytes, BytesMut};
+use futures::{io::IoSlice, prelude::*, ready};
 use unsigned_varint as uvi;
+
+use crate::{
+    length_delimited::{LengthDelimited, LengthDelimitedReader},
+    Version,
+};
 
 /// The maximum number of supported protocols that can be processed.
 const MAX_PROTOCOLS: usize = 1000;
@@ -248,9 +252,9 @@ impl<R> MessageIO<R> {
     /// [`Message`]-oriented `Sink` in favour of direct `AsyncWrite` access
     /// to the underlying I/O stream.
     ///
-    /// This is typically done if further negotiation messages are expected to be
-    /// received but no more messages are written, allowing the writing of
-    /// follow-up protocol data to commence.
+    /// This is typically done if further negotiation messages are expected to
+    /// be received but no more messages are written, allowing the writing
+    /// of follow-up protocol data to commence.
     pub(crate) fn into_reader(self) -> MessageReader<R> {
         MessageReader {
             inner: self.inner.into_reader(),
@@ -261,11 +265,12 @@ impl<R> MessageIO<R> {
     ///
     /// # Panics
     ///
-    /// Panics if the read buffer or write buffer is not empty, meaning that an incoming
-    /// protocol negotiation frame has been partially read or an outgoing frame
-    /// has not yet been flushed. The read buffer is guaranteed to be empty whenever
-    /// `MessageIO::poll` returned a message. The write buffer is guaranteed to be empty
-    /// when the sink has been flushed.
+    /// Panics if the read buffer or write buffer is not empty, meaning that an
+    /// incoming protocol negotiation frame has been partially read or an
+    /// outgoing frame has not yet been flushed. The read buffer is
+    /// guaranteed to be empty whenever `MessageIO::poll` returned a
+    /// message. The write buffer is guaranteed to be empty when the sink
+    /// has been flushed.
     pub(crate) fn into_inner(self) -> R {
         self.inner.into_inner()
     }
@@ -331,11 +336,12 @@ impl<R> MessageReader<R> {
     ///
     /// # Panics
     ///
-    /// Panics if the read buffer or write buffer is not empty, meaning that either
-    /// an incoming protocol negotiation frame has been partially read, or an
-    /// outgoing frame has not yet been flushed. The read buffer is guaranteed to
-    /// be empty whenever `MessageReader::poll` returned a message. The write
-    /// buffer is guaranteed to be empty whenever the sink has been flushed.
+    /// Panics if the read buffer or write buffer is not empty, meaning that
+    /// either an incoming protocol negotiation frame has been partially
+    /// read, or an outgoing frame has not yet been flushed. The read buffer
+    /// is guaranteed to be empty whenever `MessageReader::poll` returned a
+    /// message. The write buffer is guaranteed to be empty whenever the
+    /// sink has been flushed.
     pub(crate) fn into_inner(self) -> R {
         self.inner.into_inner()
     }
@@ -461,9 +467,11 @@ impl fmt::Display for ProtocolError {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use quickcheck::*;
     use std::iter;
+
+    use quickcheck::*;
+
+    use super::*;
 
     impl Arbitrary for Protocol {
         fn arbitrary(g: &mut Gen) -> Protocol {

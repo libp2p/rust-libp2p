@@ -18,25 +18,34 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::codec::{Cookie, ErrorCode, Message, Namespace, NewRegistration, Registration, Ttl};
-use crate::{MAX_TTL, MIN_TTL};
+use std::{
+    collections::{HashMap, HashSet},
+    iter,
+    task::{ready, Context, Poll},
+    time::Duration,
+};
+
 use bimap::BiMap;
-use futures::future::BoxFuture;
-use futures::stream::FuturesUnordered;
-use futures::{FutureExt, StreamExt};
-use libp2p_core::transport::PortUse;
-use libp2p_core::{Endpoint, Multiaddr};
+use futures::{future::BoxFuture, stream::FuturesUnordered, FutureExt, StreamExt};
+use libp2p_core::{transport::PortUse, Endpoint, Multiaddr};
 use libp2p_identity::PeerId;
 use libp2p_request_response::ProtocolSupport;
-use libp2p_swarm::behaviour::FromSwarm;
 use libp2p_swarm::{
-    ConnectionDenied, ConnectionId, NetworkBehaviour, THandler, THandlerInEvent, THandlerOutEvent,
+    behaviour::FromSwarm,
+    ConnectionDenied,
+    ConnectionId,
+    NetworkBehaviour,
+    THandler,
+    THandlerInEvent,
+    THandlerOutEvent,
     ToSwarm,
 };
-use std::collections::{HashMap, HashSet};
-use std::iter;
-use std::task::{ready, Context, Poll};
-use std::time::Duration;
+
+use crate::{
+    codec::{Cookie, ErrorCode, Message, Namespace, NewRegistration, Registration, Ttl},
+    MAX_TTL,
+    MIN_TTL,
+};
 
 pub struct Behaviour {
     inner: libp2p_request_response::Behaviour<crate::codec::Codec>,
@@ -534,10 +543,9 @@ pub struct CookieNamespaceMismatch;
 
 #[cfg(test)]
 mod tests {
-    use web_time::SystemTime;
-
     use libp2p_core::PeerRecord;
     use libp2p_identity as identity;
+    use web_time::SystemTime;
 
     use super::*;
 
@@ -690,9 +698,10 @@ mod tests {
         registrations.no_event_for(3).await
     }
 
-    /// FuturesUnordered stop polling for ready futures when poll_next() is called until a None
-    /// value is returned. To prevent the next_expiry future from going to "sleep", next_expiry
-    /// is initialised with a future that always returns pending. This test ensures that
+    /// FuturesUnordered stop polling for ready futures when poll_next() is
+    /// called until a None value is returned. To prevent the next_expiry
+    /// future from going to "sleep", next_expiry is initialised with a
+    /// future that always returns pending. This test ensures that
     /// FuturesUnordered does not stop polling for ready futures.
     #[tokio::test]
     async fn given_all_registrations_expired_then_successfully_handle_new_registration_and_expiry()
@@ -785,14 +794,16 @@ mod tests {
             futures::future::poll_fn(|cx| self.poll(cx)).await
         }
 
-        /// Polls [`Registrations`] for `seconds` and panics if it returns a event during this time.
+        /// Polls [`Registrations`] for `seconds` and panics if it returns a
+        /// event during this time.
         async fn no_event_for(&mut self, seconds: u64) {
             tokio::time::timeout(Duration::from_secs(seconds), self.next_event())
                 .await
                 .unwrap_err();
         }
 
-        /// Polls [`Registrations`] for at most `seconds` and panics if doesn't return an event within that time.
+        /// Polls [`Registrations`] for at most `seconds` and panics if doesn't
+        /// return an event within that time.
         async fn next_event_in_at_most(&mut self, seconds: u64) -> ExpiredRegistration {
             tokio::time::timeout(Duration::from_secs(seconds), self.next_event())
                 .await

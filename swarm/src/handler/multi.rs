@@ -18,17 +18,9 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-//! A [`ConnectionHandler`] implementation that combines multiple other [`ConnectionHandler`]s
-//! indexed by some key.
+//! A [`ConnectionHandler`] implementation that combines multiple other
+//! [`ConnectionHandler`]s indexed by some key.
 
-use crate::handler::{
-    AddressChange, ConnectionEvent, ConnectionHandler, ConnectionHandlerEvent, DialUpgradeError,
-    FullyNegotiatedInbound, FullyNegotiatedOutbound, ListenUpgradeError, SubstreamProtocol,
-};
-use crate::upgrade::{InboundUpgradeSend, OutboundUpgradeSend, UpgradeInfoSend};
-use crate::Stream;
-use futures::{future::BoxFuture, prelude::*, ready};
-use rand::Rng;
 use std::{
     cmp,
     collections::{HashMap, HashSet},
@@ -40,7 +32,27 @@ use std::{
     time::Duration,
 };
 
-/// A [`ConnectionHandler`] for multiple [`ConnectionHandler`]s of the same type.
+use futures::{future::BoxFuture, prelude::*, ready};
+use rand::Rng;
+
+use crate::{
+    handler::{
+        AddressChange,
+        ConnectionEvent,
+        ConnectionHandler,
+        ConnectionHandlerEvent,
+        DialUpgradeError,
+        FullyNegotiatedInbound,
+        FullyNegotiatedOutbound,
+        ListenUpgradeError,
+        SubstreamProtocol,
+    },
+    upgrade::{InboundUpgradeSend, OutboundUpgradeSend, UpgradeInfoSend},
+    Stream,
+};
+
+/// A [`ConnectionHandler`] for multiple [`ConnectionHandler`]s of the same
+/// type.
 #[derive(Clone)]
 pub struct MultiHandler<K, H> {
     handlers: HashMap<K, H>,
@@ -65,7 +77,8 @@ where
 {
     /// Create and populate a `MultiHandler` from the given handler iterator.
     ///
-    /// It is an error for any two protocols handlers to share the same protocol name.
+    /// It is an error for any two protocols handlers to share the same protocol
+    /// name.
     pub fn try_from_iter<I>(iter: I) -> Result<Self, DuplicateProtonameError>
     where
         I: IntoIterator<Item = (K, H)>,
@@ -242,13 +255,14 @@ where
     ) -> Poll<
         ConnectionHandlerEvent<Self::OutboundProtocol, Self::OutboundOpenInfo, Self::ToBehaviour>,
     > {
-        // Calling `gen_range(0, 0)` (see below) would panic, so we have return early to avoid
-        // that situation.
+        // Calling `gen_range(0, 0)` (see below) would panic, so we have return early to
+        // avoid that situation.
         if self.handlers.is_empty() {
             return Poll::Pending;
         }
 
-        // Not always polling handlers in the same order should give anyone the chance to make progress.
+        // Not always polling handlers in the same order should give anyone the chance
+        // to make progress.
         let pos = rand::thread_rng().gen_range(0..self.handlers.len());
 
         for (k, h) in self.handlers.iter_mut().skip(pos) {

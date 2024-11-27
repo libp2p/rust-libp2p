@@ -22,17 +22,20 @@
 
 #![cfg_attr(docsrs, feature(doc_cfg, doc_auto_cfg))]
 
+use std::{
+    collections::VecDeque,
+    io,
+    io::{IoSlice, IoSliceMut},
+    iter,
+    pin::Pin,
+    task::{Context, Poll, Waker},
+};
+
 use either::Either;
 use futures::{prelude::*, ready};
-use libp2p_core::muxing::{StreamMuxer, StreamMuxerEvent};
-use libp2p_core::upgrade::{InboundConnectionUpgrade, OutboundConnectionUpgrade, UpgradeInfo};
-use std::collections::VecDeque;
-use std::io::{IoSlice, IoSliceMut};
-use std::task::Waker;
-use std::{
-    io, iter,
-    pin::Pin,
-    task::{Context, Poll},
+use libp2p_core::{
+    muxing::{StreamMuxer, StreamMuxerEvent},
+    upgrade::{InboundConnectionUpgrade, OutboundConnectionUpgrade, UpgradeInfo},
 };
 use thiserror::Error;
 
@@ -40,15 +43,20 @@ use thiserror::Error;
 #[derive(Debug)]
 pub struct Muxer<C> {
     connection: Either<yamux012::Connection<C>, yamux013::Connection<C>>,
-    /// Temporarily buffers inbound streams in case our node is performing backpressure on the remote.
+    /// Temporarily buffers inbound streams in case our node is performing
+    /// backpressure on the remote.
     ///
-    /// The only way how yamux can make progress is by calling [`yamux013::Connection::poll_next_inbound`]. However, the
-    /// [`StreamMuxer`] interface is designed to allow a caller to selectively make progress via
-    /// [`StreamMuxer::poll_inbound`] and [`StreamMuxer::poll_outbound`] whilst the more general
-    /// [`StreamMuxer::poll`] is designed to make progress on existing streams etc.
+    /// The only way how yamux can make progress is by calling
+    /// [`yamux013::Connection::poll_next_inbound`]. However, the
+    /// [`StreamMuxer`] interface is designed to allow a caller to selectively
+    /// make progress via [`StreamMuxer::poll_inbound`] and
+    /// [`StreamMuxer::poll_outbound`] whilst the more general
+    /// [`StreamMuxer::poll`] is designed to make progress on existing streams
+    /// etc.
     ///
-    /// This buffer stores inbound streams that are created whilst [`StreamMuxer::poll`] is called.
-    /// Once the buffer is full, new inbound streams are dropped.
+    /// This buffer stores inbound streams that are created whilst
+    /// [`StreamMuxer::poll`] is called. Once the buffer is full, new
+    /// inbound streams are dropped.
     inbound_stream_buffer: VecDeque<Stream>,
     /// Waker to be called when new inbound streams are available.
     inbound_stream_waker: Option<Waker>,
@@ -57,7 +65,9 @@ pub struct Muxer<C> {
 /// How many streams to buffer before we start resetting them.
 ///
 /// This is equal to the ACK BACKLOG in `rust-yamux`.
-/// Thus, for peers running on a recent version of `rust-libp2p`, we should never need to reset streams because they'll voluntarily stop opening them once they hit the ACK backlog.
+/// Thus, for peers running on a recent version of `rust-libp2p`, we should
+/// never need to reset streams because they'll voluntarily stop opening them
+/// once they hit the ACK backlog.
 const MAX_BUFFERED_INBOUND_STREAMS: usize = 256;
 
 impl<C> Muxer<C>
@@ -310,7 +320,8 @@ impl Config {
 
     /// Sets the size (in bytes) of the receive window per substream.
     #[deprecated(
-        note = "Will be replaced in the next breaking release with a connection receive window size limit."
+        note = "Will be replaced in the next breaking release with a connection receive window \
+                size limit."
     )]
     pub fn set_receive_window_size(&mut self, num_bytes: u32) -> &mut Self {
         self.set(|cfg| cfg.set_receive_window(num_bytes))
@@ -330,7 +341,10 @@ impl Config {
     /// Sets the window update mode that determines when the remote
     /// is given new credit for sending more data.
     #[deprecated(
-        note = "`WindowUpdate::OnRead` is the default. `WindowUpdate::OnReceive` breaks backpressure, is thus not recommended, and will be removed in the next breaking release. Thus this method becomes obsolete and will be removed with the next breaking release."
+        note = "`WindowUpdate::OnRead` is the default. `WindowUpdate::OnReceive` breaks \
+                backpressure, is thus not recommended, and will be removed in the next breaking \
+                release. Thus this method becomes obsolete and will be removed with the next \
+                breaking release."
     )]
     pub fn set_window_update_mode(&mut self, mode: WindowUpdateMode) -> &mut Self {
         self.set(|cfg| cfg.set_window_update_mode(mode.0))
@@ -446,8 +460,9 @@ mod test {
     use super::*;
     #[test]
     fn config_set_switches_to_v012() {
-        // By default we use yamux v0.13. Thus we provide the benefits of yamux v0.13 to all users
-        // that do not depend on any of the behaviors (i.e. configuration options) of v0.12.
+        // By default we use yamux v0.13. Thus we provide the benefits of yamux v0.13 to
+        // all users that do not depend on any of the behaviors (i.e.
+        // configuration options) of v0.12.
         let mut cfg = Config::default();
         assert!(matches!(
             cfg,

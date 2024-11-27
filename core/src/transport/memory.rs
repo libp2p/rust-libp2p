@@ -18,19 +18,28 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::transport::{DialOpts, ListenerId, Transport, TransportError, TransportEvent};
+use std::{
+    collections::{hash_map::Entry, VecDeque},
+    error,
+    fmt,
+    io,
+    num::NonZeroU64,
+    pin::Pin,
+};
+
 use fnv::FnvHashMap;
-use futures::{channel::mpsc, future::Ready, prelude::*, task::Context, task::Poll};
+use futures::{
+    channel::mpsc,
+    future::Ready,
+    prelude::*,
+    task::{Context, Poll},
+};
 use multiaddr::{Multiaddr, Protocol};
 use once_cell::sync::Lazy;
 use parking_lot::Mutex;
 use rw_stream_sink::RwStreamSink;
-use std::{
-    collections::{hash_map::Entry, VecDeque},
-    error, fmt, io,
-    num::NonZeroU64,
-    pin::Pin,
-};
+
+use crate::transport::{DialOpts, ListenerId, Transport, TransportError, TransportEvent};
 
 static HUB: Lazy<Hub> = Lazy::new(|| Hub(Mutex::new(FnvHashMap::default())));
 
@@ -306,7 +315,8 @@ pub struct Listener {
     addr: Multiaddr,
     /// Receives incoming connections.
     receiver: ChannelReceiver,
-    /// Generate [`TransportEvent::NewAddress`] to inform about our listen address.
+    /// Generate [`TransportEvent::NewAddress`] to inform about our listen
+    /// address.
     tell_listen_addr: bool,
 }
 
@@ -322,12 +332,14 @@ fn parse_memory_addr(a: &Multiaddr) -> Result<u64, ()> {
     }
 }
 
-/// A channel represents an established, in-memory, logical connection between two endpoints.
+/// A channel represents an established, in-memory, logical connection between
+/// two endpoints.
 ///
 /// Implements `AsyncRead` and `AsyncWrite`.
 pub type Channel<T> = RwStreamSink<Chan<T>>;
 
-/// A channel represents an established, in-memory, logical connection between two endpoints.
+/// A channel represents an established, in-memory, logical connection between
+/// two endpoints.
 ///
 /// Implements `Sink` and `Stream`.
 pub struct Chan<T = Vec<u8>> {
@@ -398,9 +410,8 @@ impl<T> Drop for Chan<T> {
 
 #[cfg(test)]
 mod tests {
-    use crate::{transport::PortUse, Endpoint};
-
     use super::*;
+    use crate::{transport::PortUse, Endpoint};
 
     #[test]
     fn parse_memory_addr_works() {
@@ -429,7 +440,8 @@ mod tests {
         );
         assert_eq!(
             parse_memory_addr(
-                &"/memory/5/p2p/12D3KooWETLZBFBfkzvH3BQEtA1TJZPmjb4a18ss5TpwNU7DHDX6/p2p-circuit/p2p/12D3KooWLiQ7i8sY6LkPvHmEymncicEgzrdpXegbxEr3xgN8oxMU"
+                &"/memory/5/p2p/12D3KooWETLZBFBfkzvH3BQEtA1TJZPmjb4a18ss5TpwNU7DHDX6/p2p-circuit/\
+                  p2p/12D3KooWLiQ7i8sY6LkPvHmEymncicEgzrdpXegbxEr3xgN8oxMU"
                     .parse()
                     .unwrap()
             ),

@@ -24,6 +24,16 @@
     feature = "ed25519",
     feature = "rsa"
 ))]
+use quick_protobuf::{BytesReader, Writer};
+
+#[cfg(feature = "ecdsa")]
+use crate::ecdsa;
+#[cfg(any(
+    feature = "ecdsa",
+    feature = "secp256k1",
+    feature = "ed25519",
+    feature = "rsa"
+))]
 #[cfg(feature = "ed25519")]
 use crate::ed25519;
 #[cfg(any(
@@ -33,7 +43,6 @@ use crate::ed25519;
     feature = "rsa"
 ))]
 use crate::error::OtherVariantError;
-use crate::error::{DecodingError, SigningError};
 #[cfg(any(
     feature = "ecdsa",
     feature = "secp256k1",
@@ -41,23 +50,14 @@ use crate::error::{DecodingError, SigningError};
     feature = "rsa"
 ))]
 use crate::proto;
-#[cfg(any(
-    feature = "ecdsa",
-    feature = "secp256k1",
-    feature = "ed25519",
-    feature = "rsa"
-))]
-use quick_protobuf::{BytesReader, Writer};
-
 #[cfg(all(feature = "rsa", not(target_arch = "wasm32")))]
 use crate::rsa;
-
 #[cfg(feature = "secp256k1")]
 use crate::secp256k1;
-
-#[cfg(feature = "ecdsa")]
-use crate::ecdsa;
-use crate::KeyType;
+use crate::{
+    error::{DecodingError, SigningError},
+    KeyType,
+};
 
 /// Identity keypair of a node.
 ///
@@ -75,7 +75,6 @@ use crate::KeyType;
 /// let mut bytes = std::fs::read("private.pk8").unwrap();
 /// let keypair = Keypair::rsa_from_pkcs8(&mut bytes);
 /// ```
-///
 #[derive(Debug, Clone)]
 pub struct Keypair {
     keypair: KeyPairInner,
@@ -154,8 +153,8 @@ impl Keypair {
         })
     }
 
-    /// Decode a keypair from a DER-encoded Secp256k1 secret key in an ECPrivateKey
-    /// structure as defined in [RFC5915].
+    /// Decode a keypair from a DER-encoded Secp256k1 secret key in an
+    /// ECPrivateKey structure as defined in [RFC5915].
     ///
     /// [RFC5915]: https://tools.ietf.org/html/rfc5915
     #[cfg(feature = "secp256k1")]
@@ -258,7 +257,8 @@ impl Keypair {
         unreachable!()
     }
 
-    /// Decode a private key from a protobuf structure and parse it as a [`Keypair`].
+    /// Decode a private key from a protobuf structure and parse it as a
+    /// [`Keypair`].
     #[allow(unused_variables)]
     pub fn from_protobuf_encoding(bytes: &[u8]) -> Result<Keypair, DecodingError> {
         #[cfg(any(
@@ -341,7 +341,8 @@ impl Keypair {
         }
     }
 
-    /// Deterministically derive a new secret from this [`Keypair`], taking into account the provided domain.
+    /// Deterministically derive a new secret from this [`Keypair`], taking into
+    /// account the provided domain.
     ///
     /// This works for all key types except RSA where it returns `None`.
     ///
@@ -352,10 +353,11 @@ impl Keypair {
     /// # use libp2p_identity as identity;
     /// let key = identity::Keypair::generate_ed25519();
     ///
-    /// let new_key = key.derive_secret(b"my encryption key").expect("can derive secret for ed25519");
+    /// let new_key = key
+    ///     .derive_secret(b"my encryption key")
+    ///     .expect("can derive secret for ed25519");
     /// # }
     /// ```
-    ///
     #[cfg(any(
         feature = "ecdsa",
         feature = "secp256k1",
@@ -904,8 +906,9 @@ mod tests {
 
     #[test]
     fn public_key_implements_hash() {
-        use crate::PublicKey;
         use std::hash::Hash;
+
+        use crate::PublicKey;
 
         fn assert_implements_hash<T: Hash>() {}
 
@@ -914,8 +917,9 @@ mod tests {
 
     #[test]
     fn public_key_implements_ord() {
-        use crate::PublicKey;
         use std::cmp::Ord;
+
+        use crate::PublicKey;
 
         fn assert_implements_ord<T: Ord>() {}
 

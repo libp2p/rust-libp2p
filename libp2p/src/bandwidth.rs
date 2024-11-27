@@ -20,13 +20,6 @@
 
 #![allow(deprecated)]
 
-use crate::core::muxing::{StreamMuxer, StreamMuxerEvent};
-
-use futures::{
-    io::{IoSlice, IoSliceMut},
-    prelude::*,
-    ready,
-};
 use std::{
     convert::TryFrom as _,
     io,
@@ -38,8 +31,16 @@ use std::{
     task::{Context, Poll},
 };
 
-/// Wraps around a [`StreamMuxer`] and counts the number of bytes that go through all the opened
-/// streams.
+use futures::{
+    io::{IoSlice, IoSliceMut},
+    prelude::*,
+    ready,
+};
+
+use crate::core::muxing::{StreamMuxer, StreamMuxerEvent};
+
+/// Wraps around a [`StreamMuxer`] and counts the number of bytes that go
+/// through all the opened streams.
 #[derive(Clone)]
 #[pin_project::pin_project]
 pub(crate) struct BandwidthLogging<SMInner> {
@@ -103,9 +104,8 @@ where
 }
 
 /// Allows obtaining the average bandwidth of the streams.
-#[deprecated(
-    note = "Use `libp2p::SwarmBuilder::with_bandwidth_metrics` or `libp2p_metrics::BandwidthTransport` instead."
-)]
+#[deprecated(note = "Use `libp2p::SwarmBuilder::with_bandwidth_metrics` or \
+                     `libp2p_metrics::BandwidthTransport` instead.")]
 pub struct BandwidthSinks {
     inbound: AtomicU64,
     outbound: AtomicU64,
@@ -120,24 +120,29 @@ impl BandwidthSinks {
         })
     }
 
-    /// Returns the total number of bytes that have been downloaded on all the streams.
+    /// Returns the total number of bytes that have been downloaded on all the
+    /// streams.
     ///
-    /// > **Note**: This method is by design subject to race conditions. The returned value should
-    /// >           only ever be used for statistics purposes.
+    /// > **Note**: This method is by design subject to race conditions. The
+    /// > returned value should
+    /// > only ever be used for statistics purposes.
     pub fn total_inbound(&self) -> u64 {
         self.inbound.load(Ordering::Relaxed)
     }
 
-    /// Returns the total number of bytes that have been uploaded on all the streams.
+    /// Returns the total number of bytes that have been uploaded on all the
+    /// streams.
     ///
-    /// > **Note**: This method is by design subject to race conditions. The returned value should
-    /// >           only ever be used for statistics purposes.
+    /// > **Note**: This method is by design subject to race conditions. The
+    /// > returned value should
+    /// > only ever be used for statistics purposes.
     pub fn total_outbound(&self) -> u64 {
         self.outbound.load(Ordering::Relaxed)
     }
 }
 
-/// Wraps around an [`AsyncRead`] + [`AsyncWrite`] and logs the bandwidth that goes through it.
+/// Wraps around an [`AsyncRead`] + [`AsyncWrite`] and logs the bandwidth that
+/// goes through it.
 #[pin_project::pin_project]
 pub(crate) struct InstrumentedStream<SMInner> {
     #[pin]

@@ -30,14 +30,23 @@ use futures::{
 use libp2p_core::upgrade::{DeniedUpgrade, ReadyUpgrade};
 use libp2p_swarm::{
     handler::{
-        ConnectionEvent, DialUpgradeError, FullyNegotiatedInbound, FullyNegotiatedOutbound,
+        ConnectionEvent,
+        DialUpgradeError,
+        FullyNegotiatedInbound,
+        FullyNegotiatedOutbound,
         ListenUpgradeError,
     },
-    ConnectionHandler, ConnectionHandlerEvent, StreamProtocol, SubstreamProtocol,
+    ConnectionHandler,
+    ConnectionHandlerEvent,
+    StreamProtocol,
+    SubstreamProtocol,
 };
 
-use crate::client::{RunError, RunId};
-use crate::{RunParams, RunUpdate};
+use crate::{
+    client::{RunError, RunId},
+    RunParams,
+    RunUpdate,
+};
 
 #[derive(Debug)]
 pub struct Command {

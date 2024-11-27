@@ -20,14 +20,18 @@
 
 #![doc = include_str!("../README.md")]
 
+use std::{error::Error, time::Duration};
+
 use futures::StreamExt;
 use libp2p::{
-    identify, noise, ping, rendezvous,
+    identify,
+    noise,
+    ping,
+    rendezvous,
     swarm::{NetworkBehaviour, SwarmEvent},
-    tcp, yamux,
+    tcp,
+    yamux,
 };
-use std::error::Error;
-use std::time::Duration;
 use tracing_subscriber::EnvFilter;
 
 #[tokio::main]
@@ -36,8 +40,8 @@ async fn main() -> Result<(), Box<dyn Error>> {
         .with_env_filter(EnvFilter::from_default_env())
         .try_init();
 
-    // Results in PeerID 12D3KooWDpJ7As7BWAwRMfu1VU2WCqNjvq387JEYKDBj4kx6nXTN which is
-    // used as the rendezvous point by the other peer examples.
+    // Results in PeerID 12D3KooWDpJ7As7BWAwRMfu1VU2WCqNjvq387JEYKDBj4kx6nXTN which
+    // is used as the rendezvous point by the other peer examples.
     let keypair = libp2p::identity::Keypair::ed25519_from_bytes([0; 32]).unwrap();
 
     let mut swarm = libp2p::SwarmBuilder::with_existing_identity(keypair)

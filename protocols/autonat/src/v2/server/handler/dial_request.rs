@@ -8,7 +8,10 @@ use std::{
 use either::Either;
 use futures::{
     channel::{mpsc, oneshot},
-    AsyncRead, AsyncWrite, SinkExt, StreamExt,
+    AsyncRead,
+    AsyncWrite,
+    SinkExt,
+    StreamExt,
 };
 use futures_bounded::FuturesSet;
 use libp2p_core::{
@@ -18,7 +21,10 @@ use libp2p_core::{
 use libp2p_identity::PeerId;
 use libp2p_swarm::{
     handler::{ConnectionEvent, FullyNegotiatedInbound, ListenUpgradeError},
-    ConnectionHandler, ConnectionHandlerEvent, StreamProtocol, SubstreamProtocol,
+    ConnectionHandler,
+    ConnectionHandlerEvent,
+    StreamProtocol,
+    SubstreamProtocol,
 };
 use rand_core::RngCore;
 
@@ -26,7 +32,8 @@ use crate::v2::{
     generated::structs::{mod_DialResponse::ResponseStatus, DialStatus},
     protocol::{Coder, DialDataRequest, DialRequest, DialResponse, Request, Response},
     server::behaviour::Event,
-    Nonce, DIAL_REQUEST_PROTOCOL,
+    Nonce,
+    DIAL_REQUEST_PROTOCOL,
 };
 
 #[derive(Debug, PartialEq)]
@@ -225,7 +232,8 @@ async fn handle_request(
             data_amount,
             result: Err(io::Error::new(
                 io::ErrorKind::Other,
-                "client is not conformint to protocol. the tested address is not the observed address",
+                "client is not conformint to protocol. the tested address is not the observed \
+                 address",
             )),
         };
     };

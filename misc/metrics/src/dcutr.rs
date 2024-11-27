@@ -18,10 +18,11 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use prometheus_client::encoding::{EncodeLabelSet, EncodeLabelValue};
-use prometheus_client::metrics::counter::Counter;
-use prometheus_client::metrics::family::Family;
-use prometheus_client::registry::Registry;
+use prometheus_client::{
+    encoding::{EncodeLabelSet, EncodeLabelValue},
+    metrics::{counter::Counter, family::Family},
+    registry::Registry,
+};
 
 pub(crate) struct Metrics {
     events: Family<EventLabels, Counter>,

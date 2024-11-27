@@ -32,24 +32,34 @@ use std::{
     time::Duration,
 };
 
-use crate::tokio::{is_addr_global, Gateway};
 use futures::{channel::oneshot, Future, StreamExt};
 use futures_timer::Delay;
 use igd_next::PortMappingProtocol;
 use libp2p_core::{
     multiaddr,
     transport::{ListenerId, PortUse},
-    Endpoint, Multiaddr,
+    Endpoint,
+    Multiaddr,
 };
 use libp2p_swarm::{
-    derive_prelude::PeerId, dummy, ConnectionDenied, ConnectionId, ExpiredListenAddr, FromSwarm,
-    NetworkBehaviour, NewListenAddr, ToSwarm,
+    derive_prelude::PeerId,
+    dummy,
+    ConnectionDenied,
+    ConnectionId,
+    ExpiredListenAddr,
+    FromSwarm,
+    NetworkBehaviour,
+    NewListenAddr,
+    ToSwarm,
 };
+
+use crate::tokio::{is_addr_global, Gateway};
 
 /// The duration in seconds of a port mapping on the gateway.
 const MAPPING_DURATION: u32 = 3600;
 
-/// Renew the Mapping every half of `MAPPING_DURATION` to avoid the port being unmapped.
+/// Renew the Mapping every half of `MAPPING_DURATION` to avoid the port being
+/// unmapped.
 const MAPPING_TIMEOUT: u64 = MAPPING_DURATION as u64 / 2;
 
 /// A [`Gateway`] Request.
@@ -118,7 +128,8 @@ impl Borrow<ListenerId> for Mapping {
 /// Current state of a [`Mapping`].
 #[derive(Debug)]
 enum MappingState {
-    /// Port mapping is inactive, will be requested or re-requested on the next iteration.
+    /// Port mapping is inactive, will be requested or re-requested on the next
+    /// iteration.
     Inactive,
     /// Port mapping/removal has been requested on the gateway.
     Pending,
@@ -168,8 +179,8 @@ impl DerefMut for MappingList {
 }
 
 impl MappingList {
-    /// Queue for renewal the current mapped ports on the `Gateway` that are expiring,
-    /// and try to activate the inactive.
+    /// Queue for renewal the current mapped ports on the `Gateway` that are
+    /// expiring, and try to activate the inactive.
     fn renew(&mut self, gateway: &mut Gateway, cx: &mut Context<'_>) {
         for (mapping, state) in self.iter_mut() {
             match state {
@@ -208,8 +219,9 @@ impl MappingList {
     }
 }
 
-/// A [`NetworkBehaviour`] for UPnP port mapping. Automatically tries to map the external port
-/// to an internal address on the gateway on a [`FromSwarm::NewListenAddr`].
+/// A [`NetworkBehaviour`] for UPnP port mapping. Automatically tries to map the
+/// external port to an internal address on the gateway on a
+/// [`FromSwarm::NewListenAddr`].
 pub struct Behaviour {
     /// UPnP interface state.
     state: GatewayState,
@@ -286,8 +298,9 @@ impl NetworkBehaviour for Behaviour {
 
                 match &mut self.state {
                     GatewayState::Searching(_) => {
-                        // As the gateway is not yet available we add the mapping with `MappingState::Inactive`
-                        // so that when and if it becomes available we map it.
+                        // As the gateway is not yet available we add the mapping with
+                        // `MappingState::Inactive` so that when and if it
+                        // becomes available we map it.
                         self.mappings.insert(
                             Mapping {
                                 listener_id,
@@ -379,8 +392,8 @@ impl NetworkBehaviour for Behaviour {
             return Poll::Ready(ToSwarm::GenerateEvent(event));
         }
 
-        // Loop through the gateway state so that if it changes from `Searching` to `Available`
-        // we poll the pending mapping requests.
+        // Loop through the gateway state so that if it changes from `Searching` to
+        // `Available` we poll the pending mapping requests.
         loop {
             match self.state {
                 GatewayState::Searching(ref mut fut) => match Pin::new(fut).poll(cx) {
@@ -521,7 +534,8 @@ impl NetworkBehaviour for Behaviour {
     }
 }
 
-/// Extracts a [`SocketAddrV4`] and [`PortMappingProtocol`] from a given [`Multiaddr`].
+/// Extracts a [`SocketAddrV4`] and [`PortMappingProtocol`] from a given
+/// [`Multiaddr`].
 ///
 /// Fails if the given [`Multiaddr`] does not begin with an IP
 /// protocol encapsulating a TCP or UDP port.

@@ -20,31 +20,43 @@
 
 //! Configuration of transport protocol upgrades.
 
-pub use crate::upgrade::Version;
-
-use crate::transport::DialOpts;
-use crate::{
-    connection::ConnectedPoint,
-    muxing::{StreamMuxer, StreamMuxerBox},
-    transport::{
-        and_then::AndThen, boxed::boxed, timeout::TransportTimeout, ListenerId, Transport,
-        TransportError, TransportEvent,
-    },
-    upgrade::{
-        self, apply_inbound, apply_outbound, InboundConnectionUpgrade, InboundUpgradeApply,
-        OutboundConnectionUpgrade, OutboundUpgradeApply, UpgradeError,
-    },
-    Negotiated,
-};
-use futures::{prelude::*, ready};
-use libp2p_identity::PeerId;
-use multiaddr::Multiaddr;
 use std::{
     error::Error,
     fmt,
     pin::Pin,
     task::{Context, Poll},
     time::Duration,
+};
+
+use futures::{prelude::*, ready};
+use libp2p_identity::PeerId;
+use multiaddr::Multiaddr;
+
+pub use crate::upgrade::Version;
+use crate::{
+    connection::ConnectedPoint,
+    muxing::{StreamMuxer, StreamMuxerBox},
+    transport::{
+        and_then::AndThen,
+        boxed::boxed,
+        timeout::TransportTimeout,
+        DialOpts,
+        ListenerId,
+        Transport,
+        TransportError,
+        TransportEvent,
+    },
+    upgrade::{
+        self,
+        apply_inbound,
+        apply_outbound,
+        InboundConnectionUpgrade,
+        InboundUpgradeApply,
+        OutboundConnectionUpgrade,
+        OutboundUpgradeApply,
+        UpgradeError,
+    },
+    Negotiated,
 };
 
 /// A `Builder` facilitates upgrading of a [`Transport`] for use with
@@ -59,8 +71,8 @@ use std::{
 /// It thus enforces the following invariants on every transport
 /// obtained from [`multiplex`](Authenticated::multiplex):
 ///
-///   1. The transport must be [authenticated](Builder::authenticate)
-///      and [multiplexed](Authenticated::multiplex).
+///   1. The transport must be [authenticated](Builder::authenticate) and
+///      [multiplexed](Authenticated::multiplex).
 ///   2. Authentication must precede the negotiation of a multiplexer.
 ///   3. Applying a multiplexer is the last step in the upgrade process.
 ///   4. The [`Transport::Output`] conforms to the requirements of a `Swarm`,
@@ -185,7 +197,8 @@ where
     }
 }
 
-/// An transport with peer authentication, obtained from [`Builder::authenticate`].
+/// An transport with peer authentication, obtained from
+/// [`Builder::authenticate`].
 #[derive(Clone)]
 pub struct Authenticated<T>(Builder<T>);
 
@@ -222,8 +235,8 @@ where
     /// Upgrades the transport with a (sub)stream multiplexer.
     ///
     /// The supplied upgrade receives the I/O resource `C` and must
-    /// produce a [`StreamMuxer`] `M`. The transport must already be authenticated.
-    /// This ends the (regular) transport upgrade process.
+    /// produce a [`StreamMuxer`] `M`. The transport must already be
+    /// authenticated. This ends the (regular) transport upgrade process.
     ///
     /// ## Transitions
     ///
@@ -251,12 +264,13 @@ where
         }))
     }
 
-    /// Like [`Authenticated::multiplex`] but accepts a function which returns the upgrade.
+    /// Like [`Authenticated::multiplex`] but accepts a function which returns
+    /// the upgrade.
     ///
     /// The supplied function is applied to [`PeerId`] and [`ConnectedPoint`]
     /// and returns an upgrade which receives the I/O resource `C` and must
-    /// produce a [`StreamMuxer`] `M`. The transport must already be authenticated.
-    /// This ends the (regular) transport upgrade process.
+    /// produce a [`StreamMuxer`] `M`. The transport must already be
+    /// authenticated. This ends the (regular) transport upgrade process.
     ///
     /// ## Transitions
     ///
@@ -499,8 +513,8 @@ where
     type Output = Result<(PeerId, D), TransportUpgradeError<F::Error, U::Error>>;
 
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        // We use a `this` variable because the compiler can't mutably borrow multiple times
-        // across a `Deref`.
+        // We use a `this` variable because the compiler can't mutably borrow multiple
+        // times across a `Deref`.
         let this = &mut *self;
 
         loop {
@@ -558,8 +572,8 @@ where
     type Output = Result<(PeerId, D), TransportUpgradeError<F::Error, U::Error>>;
 
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        // We use a `this` variable because the compiler can't mutably borrow multiple times
-        // across a `Deref`.
+        // We use a `this` variable because the compiler can't mutably borrow multiple
+        // times across a `Deref`.
         let this = &mut *self;
 
         loop {

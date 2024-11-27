@@ -22,17 +22,18 @@ use libp2p_core::{multiaddr::Protocol, Multiaddr};
 
 /// Perform IP address translation.
 ///
-/// Given an `original` [`Multiaddr`] and some `observed` [`Multiaddr`], replace the first protocol
-/// of the `original` with the first protocol of the `observed` [`Multiaddr`] and return this
-/// translated [`Multiaddr`].
+/// Given an `original` [`Multiaddr`] and some `observed` [`Multiaddr`], replace
+/// the first protocol of the `original` with the first protocol of the
+/// `observed` [`Multiaddr`] and return this translated [`Multiaddr`].
 ///
-/// This function can for example be useful when handling tcp connections. Tcp does not listen and
-/// dial on the same port by default. Thus when receiving an observed address on a connection that
-/// we initiated, it will contain our dialing port, not our listening port. We need to take the ip
-/// address or dns address from the observed address and the port from the original address.
+/// This function can for example be useful when handling tcp connections. Tcp
+/// does not listen and dial on the same port by default. Thus when receiving an
+/// observed address on a connection that we initiated, it will contain our
+/// dialing port, not our listening port. We need to take the ip address or dns
+/// address from the observed address and the port from the original address.
 ///
-/// This is a mixed-mode translation, i.e. an IPv4 / DNS4 address may be replaced by an IPv6 / DNS6
-/// address and vice versa.
+/// This is a mixed-mode translation, i.e. an IPv4 / DNS4 address may be
+/// replaced by an IPv6 / DNS6 address and vice versa.
 ///
 /// If the first [`Protocol`]s are not IP addresses, `None` is returned instead.
 #[doc(hidden)]

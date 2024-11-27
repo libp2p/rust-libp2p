@@ -19,15 +19,16 @@
 // DEALINGS IN THE SOFTWARE.
 
 use futures::{AsyncRead, AsyncWrite, AsyncWriteExt};
-use libp2p_core::upgrade::{InboundConnectionUpgrade, OutboundConnectionUpgrade};
-use libp2p_core::UpgradeInfo;
+use libp2p_core::{
+    upgrade::{InboundConnectionUpgrade, OutboundConnectionUpgrade},
+    UpgradeInfo,
+};
 use libp2p_identity as identity;
 use libp2p_identity::PeerId;
 use libp2p_noise as noise;
+pub use noise::Error;
 
 use crate::fingerprint::Fingerprint;
-
-pub use noise::Error;
 
 pub async fn inbound<T>(
     id_keys: identity::Keypair,
@@ -42,8 +43,8 @@ where
         .unwrap()
         .with_prologue(noise_prologue(client_fingerprint, server_fingerprint));
     let info = noise.protocol_info().next().unwrap();
-    // Note the roles are reversed because it allows the server (webrtc connection responder) to
-    // send application data 0.5 RTT earlier.
+    // Note the roles are reversed because it allows the server (webrtc connection
+    // responder) to send application data 0.5 RTT earlier.
     let (peer_id, mut channel) = noise.upgrade_outbound(stream, info).await?;
 
     channel.close().await?;
@@ -64,8 +65,8 @@ where
         .unwrap()
         .with_prologue(noise_prologue(client_fingerprint, server_fingerprint));
     let info = noise.protocol_info().next().unwrap();
-    // Note the roles are reversed because it allows the server (webrtc connection responder) to
-    // send application data 0.5 RTT earlier.
+    // Note the roles are reversed because it allows the server (webrtc connection
+    // responder) to send application data 0.5 RTT earlier.
     let (peer_id, mut channel) = noise.upgrade_inbound(stream, info).await?;
 
     channel.close().await?;
@@ -89,8 +90,9 @@ pub(crate) fn noise_prologue(
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use hex_literal::hex;
+
+    use super::*;
 
     #[test]
     fn noise_prologue_tests() {

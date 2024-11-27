@@ -50,8 +50,8 @@ impl Certificate {
     ///
     /// # Panics
     ///
-    /// This function will panic if there's no fingerprint with the SHA-256 algorithm (see
-    /// [`RTCCertificate::get_fingerprints`]).
+    /// This function will panic if there's no fingerprint with the SHA-256
+    /// algorithm (see [`RTCCertificate::get_fingerprints`]).
     pub fn fingerprint(&self) -> Fingerprint {
         let fingerprints = self.inner.get_fingerprints();
         let sha256_fingerprint = fingerprints
@@ -72,7 +72,8 @@ impl Certificate {
         })
     }
 
-    /// Serializes the certificate (including the private key) in PKCS#8 format in PEM.
+    /// Serializes the certificate (including the private key) in PKCS#8 format
+    /// in PEM.
     ///
     /// See [`RTCCertificate::serialize_pem`]
     #[cfg(feature = "pem")]
@@ -82,7 +83,8 @@ impl Certificate {
 
     /// Extract the [`RTCCertificate`] from this wrapper.
     ///
-    /// This function is `pub(crate)` to avoid leaking the `webrtc` dependency to our users.
+    /// This function is `pub(crate)` to avoid leaking the `webrtc` dependency
+    /// to our users.
     pub(crate) fn to_rtc_certificate(&self) -> RTCCertificate {
         self.inner.clone()
     }
@@ -100,8 +102,9 @@ enum Kind {
 
 #[cfg(all(test, feature = "pem"))]
 mod test {
-    use super::*;
     use rand::thread_rng;
+
+    use super::*;
 
     #[test]
     fn test_certificate_serialize_pem_and_from_pem() {

@@ -1,11 +1,14 @@
-use std::str::FromStr;
-use std::time::Duration;
+use std::{str::FromStr, time::Duration};
 
 use anyhow::{bail, Context, Result};
 use futures::{FutureExt, StreamExt};
-use libp2p::identity::Keypair;
-use libp2p::swarm::SwarmEvent;
-use libp2p::{identify, ping, swarm::NetworkBehaviour, Multiaddr};
+use libp2p::{
+    identify,
+    identity::Keypair,
+    ping,
+    swarm::{NetworkBehaviour, SwarmEvent},
+    Multiaddr,
+};
 #[cfg(target_arch = "wasm32")]
 use wasm_bindgen::prelude::*;
 
@@ -60,8 +63,8 @@ pub async fn run_test(
     let maybe_id = None;
 
     // Run a ping interop test. Based on `is_dialer`, either dial the address
-    // retrieved via `listenAddr` key over the redis connection. Or wait to be pinged and have
-    // `dialerDone` key ready on the redis connection.
+    // retrieved via `listenAddr` key over the redis connection. Or wait to be
+    // pinged and have `dialerDone` key ready on the redis connection.
     match is_dialer {
         true => {
             let result: Vec<String> = redis_client

@@ -18,13 +18,13 @@
 // LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
-use crate::fingerprint::Fingerprint;
-use serde::Serialize;
 use std::net::{IpAddr, SocketAddr};
+
+use rand::{distributions::Alphanumeric, thread_rng, Rng};
+use serde::Serialize;
 use tinytemplate::TinyTemplate;
 
-use rand::distributions::Alphanumeric;
-use rand::{thread_rng, Rng};
+use crate::fingerprint::Fingerprint;
 
 pub fn answer(addr: SocketAddr, server_fingerprint: Fingerprint, client_ufrag: &str) -> String {
     let answer = render_description(
@@ -43,37 +43,41 @@ pub fn answer(addr: SocketAddr, server_fingerprint: Fingerprint, client_ufrag: &
 //
 // a=ice-lite
 //
-//     A lite implementation is only appropriate for devices that will *always* be connected to
-//     the public Internet and have a public IP address at which it can receive packets from any
-//     correspondent. ICE will not function when a lite implementation is placed behind a NAT
-//     (RFC8445).
+//     A lite implementation is only appropriate for devices that will *always*
+// be connected to     the public Internet and have a public IP address at which
+// it can receive packets from any     correspondent. ICE will not function when
+// a lite implementation is placed behind a NAT     (RFC8445).
 //
 // a=tls-id:<id>
 //
 //     "TLS ID" uniquely identifies a TLS association.
-//     The ICE protocol uses a "TLS ID" system to indicate whether a fresh DTLS connection
-//     must be reopened in case of ICE renegotiation. Considering that ICE renegotiations
-//     never happen in our use case, we can simply put a random value and not care about
-//     it. Note however that the TLS ID in the answer must be present if and only if the
-//     offer contains one. (RFC8842)
-//     TODO: is it true that renegotiations never happen? what about a connection closing?
-//     "tls-id" attribute MUST be present in the initial offer and respective answer (RFC8839).
-//     XXX: but right now browsers don't send it.
+//     The ICE protocol uses a "TLS ID" system to indicate whether a fresh DTLS
+// connection     must be reopened in case of ICE renegotiation. Considering
+// that ICE renegotiations     never happen in our use case, we can simply put a
+// random value and not care about     it. Note however that the TLS ID in the
+// answer must be present if and only if the     offer contains one. (RFC8842)
+//     TODO: is it true that renegotiations never happen? what about a
+// connection closing?     "tls-id" attribute MUST be present in the initial
+// offer and respective answer (RFC8839).     XXX: but right now browsers don't
+// send it.
 //
 // a=setup:passive
 //
-//     "passive" indicates that the remote DTLS server will only listen for incoming
-//     connections. (RFC5763)
+//     "passive" indicates that the remote DTLS server will only listen for
+// incoming     connections. (RFC5763)
 //     The answerer (server) MUST not be located behind a NAT (RFC6135).
 //
-//     The answerer MUST use either a setup attribute value of setup:active or setup:passive.
-//     Note that if the answerer uses setup:passive, then the DTLS handshake will not begin until
-//     the answerer is received, which adds additional latency. setup:active allows the answer and
-//     the DTLS handshake to occur in parallel. Thus, setup:active is RECOMMENDED.
+//     The answerer MUST use either a setup attribute value of setup:active or
+// setup:passive.     Note that if the answerer uses setup:passive, then the
+// DTLS handshake will not begin until     the answerer is received, which adds
+// additional latency. setup:active allows the answer and     the DTLS handshake
+// to occur in parallel. Thus, setup:active is RECOMMENDED.
 //
-// a=candidate:<foundation> <component-id> <transport> <priority> <connection-address> <port> <cand-type>
+// a=candidate:<foundation> <component-id> <transport> <priority>
+// <connection-address> <port> <cand-type>
 //
-//     A transport address for a candidate that can be used for connectivity checks (RFC8839).
+//     A transport address for a candidate that can be used for connectivity
+// checks (RFC8839).
 //
 // a=end-of-candidates
 const SERVER_SESSION_DESCRIPTION: &str = "v=0
@@ -102,8 +106,8 @@ enum IpVersion {
     IP6,
 }
 
-/// Context passed to the templating engine, which replaces the above placeholders (e.g.
-/// `{IP_VERSION}`) with real values.
+/// Context passed to the templating engine, which replaces the above
+/// placeholders (e.g. `{IP_VERSION}`) with real values.
 #[derive(Serialize)]
 struct DescriptionContext {
     pub(crate) ip_version: IpVersion,

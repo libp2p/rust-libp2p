@@ -18,7 +18,8 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-//! Peer selection strategies for queries in the form of iterator-like state machines.
+//! Peer selection strategies for queries in the form of iterator-like state
+//! machines.
 //!
 //! Using a peer iterator in a query involves performing the following steps
 //! repeatedly and in an alternating fashion:
@@ -28,8 +29,8 @@
 //!      waiting for responses.
 //!
 //!   2. When responses are received or requests fail, providing input to the
-//!      iterator via the `on_success` and `on_failure` callbacks,
-//!      respectively, followed by repeating step (1).
+//!      iterator via the `on_success` and `on_failure` callbacks, respectively,
+//!      followed by repeating step (1).
 //!
 //! When a call to `next` returns [`Finished`], no more peers can be obtained
 //! from the iterator and the results can be obtained from `into_result`.
@@ -40,8 +41,9 @@
 
 pub(crate) mod closest;
 pub(crate) mod fixed;
-use libp2p_identity::PeerId;
 use std::borrow::Cow;
+
+use libp2p_identity::PeerId;
 
 /// The state of a peer iterator.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -52,9 +54,9 @@ pub enum PeersIterState<'a> {
     /// from `peer`, in addition to any other peers for which it is already
     /// waiting for results.
     ///
-    /// `None` indicates that the iterator is waiting for results and there is no
-    /// new peer to contact, despite the iterator not being at capacity w.r.t.
-    /// the permitted parallelism.
+    /// `None` indicates that the iterator is waiting for results and there is
+    /// no new peer to contact, despite the iterator not being at capacity
+    /// w.r.t. the permitted parallelism.
     Waiting(Option<Cow<'a, PeerId>>),
 
     /// The iterator is waiting for results and is at capacity w.r.t. the

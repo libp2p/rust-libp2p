@@ -19,11 +19,10 @@
 // DEALINGS IN THE SOFTWARE.
 
 use std::{
-    cmp::{max, Ordering},
-    collections::HashSet,
-    collections::VecDeque,
-    collections::{BTreeSet, HashMap},
+    cmp::{max, Ordering, Ordering::Equal},
+    collections::{BTreeSet, HashMap, HashSet, VecDeque},
     fmt,
+    fmt::Debug,
     net::IpAddr,
     task::{Context, Poll},
     time::Duration,
@@ -31,52 +30,68 @@ use std::{
 
 use futures::FutureExt;
 use futures_timer::Delay;
-use prometheus_client::registry::Registry;
-use rand::{seq::SliceRandom, thread_rng};
-
 use libp2p_core::{
-    multiaddr::Protocol::Ip4, multiaddr::Protocol::Ip6, transport::PortUse, Endpoint, Multiaddr,
+    multiaddr::Protocol::{Ip4, Ip6},
+    transport::PortUse,
+    Endpoint,
+    Multiaddr,
 };
-use libp2p_identity::Keypair;
-use libp2p_identity::PeerId;
+use libp2p_identity::{Keypair, PeerId};
 use libp2p_swarm::{
     behaviour::{AddressChange, ConnectionClosed, ConnectionEstablished, FromSwarm},
     dial_opts::DialOpts,
-    ConnectionDenied, ConnectionId, NetworkBehaviour, NotifyHandler, THandler, THandlerInEvent,
-    THandlerOutEvent, ToSwarm,
+    ConnectionDenied,
+    ConnectionId,
+    NetworkBehaviour,
+    NotifyHandler,
+    THandler,
+    THandlerInEvent,
+    THandlerOutEvent,
+    ToSwarm,
 };
+use prometheus_client::registry::Registry;
+use quick_protobuf::{MessageWrite, Writer};
+use rand::{seq::SliceRandom, thread_rng};
 use web_time::{Instant, SystemTime};
 
-use crate::peer_score::{PeerScore, PeerScoreParams, PeerScoreThresholds, RejectReason};
-use crate::protocol::SIGNING_PREFIX;
-use crate::subscription_filter::{AllowAllSubscriptionFilter, TopicSubscriptionFilter};
-use crate::time_cache::DuplicateCache;
-use crate::topic::{Hasher, Topic, TopicHash};
-use crate::transform::{DataTransform, IdentityTransform};
-use crate::types::{
-    ControlAction, Message, MessageAcceptance, MessageId, PeerInfo, RawMessage, Subscription,
-    SubscriptionAction,
-};
-use crate::types::{PeerConnections, PeerKind, RpcOut};
-use crate::{backoff::BackoffStorage, FailedMessages};
 use crate::{
+    backoff::BackoffStorage,
     config::{Config, ValidationMode},
-    types::Graft,
-};
-use crate::{gossip_promises::GossipPromises, types::Prune};
-use crate::{
+    gossip_promises::GossipPromises,
     handler::{Handler, HandlerEvent, HandlerIn},
-    types::IWant,
-};
-use crate::{mcache::MessageCache, types::IHave};
-use crate::{
+    mcache::MessageCache,
     metrics::{Churn, Config as MetricsConfig, Inclusion, Metrics, Penalty},
+    peer_score::{PeerScore, PeerScoreParams, PeerScoreThresholds, RejectReason},
+    protocol::SIGNING_PREFIX,
     rpc::Sender,
+    rpc_proto::proto,
+    subscription_filter::{AllowAllSubscriptionFilter, TopicSubscriptionFilter},
+    time_cache::DuplicateCache,
+    topic::{Hasher, Topic, TopicHash},
+    transform::{DataTransform, IdentityTransform},
+    types::{
+        ControlAction,
+        Graft,
+        IHave,
+        IWant,
+        Message,
+        MessageAcceptance,
+        MessageId,
+        PeerConnections,
+        PeerInfo,
+        PeerKind,
+        Prune,
+        RawMessage,
+        RpcOut,
+        Subscription,
+        SubscriptionAction,
+    },
+    FailedMessages,
+    PublishError,
+    SubscriptionError,
+    TopicScoreParams,
+    ValidationError,
 };
-use crate::{rpc_proto::proto, TopicScoreParams};
-use crate::{PublishError, SubscriptionError, ValidationError};
-use quick_protobuf::{MessageWrite, Writer};
-use std::{cmp::Ordering::Equal, fmt::Debug};
 
 #[cfg(test)]
 mod tests;
@@ -85,32 +100,34 @@ mod tests;
 ///
 /// Without signing, a number of privacy preserving modes can be selected.
 ///
-/// NOTE: The default validation settings are to require signatures. The [`ValidationMode`]
-/// should be updated in the [`Config`] to allow for unsigned messages.
+/// NOTE: The default validation settings are to require signatures. The
+/// [`ValidationMode`] should be updated in the [`Config`] to allow for unsigned
+/// messages.
 #[derive(Clone)]
 pub enum MessageAuthenticity {
-    /// Message signing is enabled. The author will be the owner of the key and the sequence number
-    /// will be linearly increasing.
+    /// Message signing is enabled. The author will be the owner of the key and
+    /// the sequence number will be linearly increasing.
     Signed(Keypair),
     /// Message signing is disabled.
     ///
-    /// The specified [`PeerId`] will be used as the author of all published messages. The sequence
-    /// number will be randomized.
+    /// The specified [`PeerId`] will be used as the author of all published
+    /// messages. The sequence number will be randomized.
     Author(PeerId),
     /// Message signing is disabled.
     ///
-    /// A random [`PeerId`] will be used when publishing each message. The sequence number will be
-    /// randomized.
+    /// A random [`PeerId`] will be used when publishing each message. The
+    /// sequence number will be randomized.
     RandomAuthor,
     /// Message signing is disabled.
     ///
-    /// The author of the message and the sequence numbers are excluded from the message.
+    /// The author of the message and the sequence numbers are excluded from the
+    /// message.
     ///
-    /// NOTE: Excluding these fields may make these messages invalid by other nodes who
-    /// enforce validation of these fields. See [`ValidationMode`] in the [`Config`]
-    /// for how to customise this for rust-libp2p gossipsub.  A custom `message_id`
-    /// function will need to be set to prevent all messages from a peer being filtered
-    /// as duplicates.
+    /// NOTE: Excluding these fields may make these messages invalid by other
+    /// nodes who enforce validation of these fields. See [`ValidationMode`]
+    /// in the [`Config`] for how to customise this for rust-libp2p
+    /// gossipsub.  A custom `message_id` function will need to be set to
+    /// prevent all messages from a peer being filtered as duplicates.
     Anonymous,
 }
 
@@ -132,8 +149,8 @@ pub enum Event {
     Message {
         /// The peer that forwarded us this message.
         propagation_source: PeerId,
-        /// The [`MessageId`] of the message. This should be referenced by the application when
-        /// validating a message (if required).
+        /// The [`MessageId`] of the message. This should be referenced by the
+        /// application when validating a message (if required).
         message_id: MessageId,
         /// The decompressed message itself.
         message: Message,
@@ -158,13 +175,14 @@ pub enum Event {
     SlowPeer {
         /// The peer_id
         peer_id: PeerId,
-        /// The types and amounts of failed messages that are occurring for this peer.
+        /// The types and amounts of failed messages that are occurring for this
+        /// peer.
         failed_messages: FailedMessages,
     },
 }
 
-/// A data structure for storing configuration for publishing messages. See [`MessageAuthenticity`]
-/// for further details.
+/// A data structure for storing configuration for publishing messages. See
+/// [`MessageAuthenticity`] for further details.
 #[allow(clippy::large_enum_variant)]
 enum PublishConfig {
     Signing {
@@ -221,8 +239,9 @@ impl From<MessageAuthenticity> for PublishConfig {
                 let public_key = keypair.public();
                 let key_enc = public_key.encode_protobuf();
                 let key = if key_enc.len() <= 42 {
-                    // The public key can be inlined in [`rpc_proto::proto::::Message::from`], so we don't include it
-                    // specifically in the [`rpc_proto::proto::Message::key`] field.
+                    // The public key can be inlined in [`rpc_proto::proto::::Message::from`], so we
+                    // don't include it specifically in the
+                    // [`rpc_proto::proto::Message::key`] field.
                     None
                 } else {
                     // Include the protobuf encoding of the public key in the message.
@@ -245,15 +264,18 @@ impl From<MessageAuthenticity> for PublishConfig {
 
 /// Network behaviour that handles the gossipsub protocol.
 ///
-/// NOTE: Initialisation requires a [`MessageAuthenticity`] and [`Config`] instance. If
-/// message signing is disabled, the [`ValidationMode`] in the config should be adjusted to an
-/// appropriate level to accept unsigned messages.
+/// NOTE: Initialisation requires a [`MessageAuthenticity`] and [`Config`]
+/// instance. If message signing is disabled, the [`ValidationMode`] in the
+/// config should be adjusted to an appropriate level to accept unsigned
+/// messages.
 ///
-/// The DataTransform trait allows applications to optionally add extra encoding/decoding
-/// functionality to the underlying messages. This is intended for custom compression algorithms.
+/// The DataTransform trait allows applications to optionally add extra
+/// encoding/decoding functionality to the underlying messages. This is intended
+/// for custom compression algorithms.
 ///
-/// The TopicSubscriptionFilter allows applications to implement specific filters on topics to
-/// prevent unwanted messages being propagated and evaluated.
+/// The TopicSubscriptionFilter allows applications to implement specific
+/// filters on topics to prevent unwanted messages being propagated and
+/// evaluated.
 pub struct Behaviour<D = IdentityTransform, F = AllowAllSubscriptionFilter> {
     /// Configuration providing gossipsub performance parameters.
     config: Config,
@@ -264,32 +286,36 @@ pub struct Behaviour<D = IdentityTransform, F = AllowAllSubscriptionFilter> {
     /// Information used for publishing messages.
     publish_config: PublishConfig,
 
-    /// An LRU Time cache for storing seen messages (based on their ID). This cache prevents
-    /// duplicates from being propagated to the application and on the network.
+    /// An LRU Time cache for storing seen messages (based on their ID). This
+    /// cache prevents duplicates from being propagated to the application
+    /// and on the network.
     duplicate_cache: DuplicateCache<MessageId>,
 
-    /// A set of connected peers, indexed by their [`PeerId`] tracking both the [`PeerKind`] and
-    /// the set of [`ConnectionId`]s.
+    /// A set of connected peers, indexed by their [`PeerId`] tracking both the
+    /// [`PeerKind`] and the set of [`ConnectionId`]s.
     connected_peers: HashMap<PeerId, PeerConnections>,
 
-    /// A set of all explicit peers. These are peers that remain connected and we unconditionally
-    /// forward messages to, outside of the scoring system.
+    /// A set of all explicit peers. These are peers that remain connected and
+    /// we unconditionally forward messages to, outside of the scoring
+    /// system.
     explicit_peers: HashSet<PeerId>,
 
     /// A list of peers that have been blacklisted by the user.
     /// Messages are not sent to and are rejected from these peers.
     blacklisted_peers: HashSet<PeerId>,
 
-    /// Overlay network of connected peers - Maps topics to connected gossipsub peers.
+    /// Overlay network of connected peers - Maps topics to connected gossipsub
+    /// peers.
     mesh: HashMap<TopicHash, BTreeSet<PeerId>>,
 
-    /// Map of topics to list of peers that we publish to, but don't subscribe to.
+    /// Map of topics to list of peers that we publish to, but don't subscribe
+    /// to.
     fanout: HashMap<TopicHash, BTreeSet<PeerId>>,
 
     /// The last publish time for fanout topics.
     fanout_last_pub: HashMap<TopicHash, Instant>,
 
-    ///Storage for backoffs
+    /// Storage for backoffs
     backoffs: BackoffStorage,
 
     /// Message cache for the last few heartbeats.
@@ -298,40 +324,45 @@ pub struct Behaviour<D = IdentityTransform, F = AllowAllSubscriptionFilter> {
     /// Heartbeat interval stream.
     heartbeat: Delay,
 
-    /// Number of heartbeats since the beginning of time; this allows us to amortize some resource
-    /// clean up -- eg backoff clean up.
+    /// Number of heartbeats since the beginning of time; this allows us to
+    /// amortize some resource clean up -- eg backoff clean up.
     heartbeat_ticks: u64,
 
-    /// We remember all peers we found through peer exchange, since those peers are not considered
-    /// as safe as randomly discovered outbound peers. This behaviour diverges from the go
-    /// implementation to avoid possible love bombing attacks in PX. When disconnecting peers will
-    /// be removed from this list which may result in a true outbound rediscovery.
+    /// We remember all peers we found through peer exchange, since those peers
+    /// are not considered as safe as randomly discovered outbound peers.
+    /// This behaviour diverges from the go implementation to avoid possible
+    /// love bombing attacks in PX. When disconnecting peers will be removed
+    /// from this list which may result in a true outbound rediscovery.
     px_peers: HashSet<PeerId>,
 
-    /// Set of connected outbound peers (we only consider true outbound peers found through
-    /// discovery and not by PX).
+    /// Set of connected outbound peers (we only consider true outbound peers
+    /// found through discovery and not by PX).
     outbound_peers: HashSet<PeerId>,
 
-    /// Stores optional peer score data together with thresholds, decay interval and gossip
-    /// promises.
+    /// Stores optional peer score data together with thresholds, decay interval
+    /// and gossip promises.
     peer_score: Option<(PeerScore, PeerScoreThresholds, Delay, GossipPromises)>,
 
-    /// Counts the number of `IHAVE` received from each peer since the last heartbeat.
+    /// Counts the number of `IHAVE` received from each peer since the last
+    /// heartbeat.
     count_received_ihave: HashMap<PeerId, usize>,
 
-    /// Counts the number of `IWANT` that we sent the each peer since the last heartbeat.
+    /// Counts the number of `IWANT` that we sent the each peer since the last
+    /// heartbeat.
     count_sent_iwant: HashMap<PeerId, usize>,
 
-    /// Short term cache for published message ids. This is used for penalizing peers sending
-    /// our own messages back if the messages are anonymous or use a random author.
+    /// Short term cache for published message ids. This is used for penalizing
+    /// peers sending our own messages back if the messages are anonymous or
+    /// use a random author.
     published_message_ids: DuplicateCache<MessageId>,
 
     /// The filter used to handle message subscriptions.
     subscription_filter: F,
 
-    /// A general transformation function that can be applied to data received from the wire before
-    /// calculating the message-id and sending to the application. This is designed to allow the
-    /// user to implement arbitrary topic-based compression algorithms.
+    /// A general transformation function that can be applied to data received
+    /// from the wire before calculating the message-id and sending to the
+    /// application. This is designed to allow the user to implement
+    /// arbitrary topic-based compression algorithms.
     data_transform: D,
 
     /// Keep track of a set of internal metrics relating to gossipsub.
@@ -346,8 +377,9 @@ where
     D: DataTransform + Default,
     F: TopicSubscriptionFilter + Default,
 {
-    /// Creates a Gossipsub [`Behaviour`] struct given a set of parameters specified via a
-    /// [`Config`]. This has no subscription filter and uses no compression.
+    /// Creates a Gossipsub [`Behaviour`] struct given a set of parameters
+    /// specified via a [`Config`]. This has no subscription filter and uses
+    /// no compression.
     pub fn new(privacy: MessageAuthenticity, config: Config) -> Result<Self, &'static str> {
         Self::new_with_subscription_filter_and_transform(
             privacy,
@@ -358,9 +390,10 @@ where
         )
     }
 
-    /// Creates a Gossipsub [`Behaviour`] struct given a set of parameters specified via a
-    /// [`Config`]. This has no subscription filter and uses no compression.
-    /// Metrics can be evaluated by passing a reference to a [`Registry`].
+    /// Creates a Gossipsub [`Behaviour`] struct given a set of parameters
+    /// specified via a [`Config`]. This has no subscription filter and uses
+    /// no compression. Metrics can be evaluated by passing a reference to a
+    /// [`Registry`].
     pub fn new_with_metrics(
         privacy: MessageAuthenticity,
         config: Config,
@@ -382,8 +415,8 @@ where
     D: DataTransform + Default,
     F: TopicSubscriptionFilter,
 {
-    /// Creates a Gossipsub [`Behaviour`] struct given a set of parameters specified via a
-    /// [`Config`] and a custom subscription filter.
+    /// Creates a Gossipsub [`Behaviour`] struct given a set of parameters
+    /// specified via a [`Config`] and a custom subscription filter.
     pub fn new_with_subscription_filter(
         privacy: MessageAuthenticity,
         config: Config,
@@ -405,8 +438,8 @@ where
     D: DataTransform,
     F: TopicSubscriptionFilter + Default,
 {
-    /// Creates a Gossipsub [`Behaviour`] struct given a set of parameters specified via a
-    /// [`Config`] and a custom data transform.
+    /// Creates a Gossipsub [`Behaviour`] struct given a set of parameters
+    /// specified via a [`Config`] and a custom data transform.
     pub fn new_with_transform(
         privacy: MessageAuthenticity,
         config: Config,
@@ -428,8 +461,9 @@ where
     D: DataTransform,
     F: TopicSubscriptionFilter,
 {
-    /// Creates a Gossipsub [`Behaviour`] struct given a set of parameters specified via a
-    /// [`Config`] and a custom subscription filter and data transform.
+    /// Creates a Gossipsub [`Behaviour`] struct given a set of parameters
+    /// specified via a [`Config`] and a custom subscription filter and data
+    /// transform.
     pub fn new_with_subscription_filter_and_transform(
         privacy: MessageAuthenticity,
         config: Config,
@@ -439,8 +473,8 @@ where
     ) -> Result<Self, &'static str> {
         // Set up the router given the configuration settings.
 
-        // We do not allow configurations where a published message would also be rejected if it
-        // were received locally.
+        // We do not allow configurations where a published message would also be
+        // rejected if it were received locally.
         validate_config(&privacy, config.validation_mode())?;
 
         Ok(Behaviour {
@@ -520,8 +554,8 @@ where
 
     /// Subscribe to a topic.
     ///
-    /// Returns [`Ok(true)`] if the subscription worked. Returns [`Ok(false)`] if we were already
-    /// subscribed.
+    /// Returns [`Ok(true)`] if the subscription worked. Returns [`Ok(false)`]
+    /// if we were already subscribed.
     pub fn subscribe<H: Hasher>(&mut self, topic: &Topic<H>) -> Result<bool, SubscriptionError> {
         tracing::debug!(%topic, "Subscribing to topic");
         let topic_hash = topic.hash();
@@ -607,8 +641,8 @@ where
 
         // Check the if the message has been published before
         if self.duplicate_cache.contains(&msg_id) {
-            // This message has already been seen. We don't re-publish messages that have already
-            // been published on the network.
+            // This message has already been seen. We don't re-publish messages that have
+            // already been published on the network.
             tracing::warn!(
                 message=%msg_id,
                 "Not publishing a message that has already been published"
@@ -717,13 +751,13 @@ where
             }
         }
 
-        // If the message isn't a duplicate and we have sent it to some peers add it to the
-        // duplicate cache and memcache.
+        // If the message isn't a duplicate and we have sent it to some peers add it to
+        // the duplicate cache and memcache.
         self.duplicate_cache.insert(msg_id.clone());
         self.mcache.put(&msg_id, raw_message.clone());
 
-        // If the message is anonymous or has a random author add it to the published message ids
-        // cache.
+        // If the message is anonymous or has a random author add it to the published
+        // message ids cache.
         if let PublishConfig::RandomAuthor | PublishConfig::Anonymous = self.publish_config {
             if !self.config.allow_self_origin() {
                 self.published_message_ids.insert(msg_id.clone());
@@ -762,23 +796,27 @@ where
         Ok(msg_id)
     }
 
-    /// This function should be called when [`Config::validate_messages()`] is `true` after
-    /// the message got validated by the caller. Messages are stored in the ['Memcache'] and
-    /// validation is expected to be fast enough that the messages should still exist in the cache.
-    /// There are three possible validation outcomes and the outcome is given in acceptance.
+    /// This function should be called when [`Config::validate_messages()`] is
+    /// `true` after the message got validated by the caller. Messages are
+    /// stored in the ['Memcache'] and validation is expected to be fast
+    /// enough that the messages should still exist in the cache.
+    /// There are three possible validation outcomes and the outcome is given in
+    /// acceptance.
     ///
-    /// If acceptance = [`MessageAcceptance::Accept`] the message will get propagated to the
-    /// network. The `propagation_source` parameter indicates who the message was received by and
-    /// will not be forwarded back to that peer.
+    /// If acceptance = [`MessageAcceptance::Accept`] the message will get
+    /// propagated to the network. The `propagation_source` parameter
+    /// indicates who the message was received by and will not be forwarded
+    /// back to that peer.
     ///
-    /// If acceptance = [`MessageAcceptance::Reject`] the message will be deleted from the memcache
-    /// and the P₄ penalty will be applied to the `propagation_source`.
+    /// If acceptance = [`MessageAcceptance::Reject`] the message will be
+    /// deleted from the memcache and the P₄ penalty will be applied to the
+    /// `propagation_source`.
     //
-    /// If acceptance = [`MessageAcceptance::Ignore`] the message will be deleted from the memcache
-    /// but no P₄ penalty will be applied.
+    /// If acceptance = [`MessageAcceptance::Ignore`] the message will be
+    /// deleted from the memcache but no P₄ penalty will be applied.
     ///
-    /// This function will return true if the message was found in the cache and false if was not
-    /// in the cache anymore.
+    /// This function will return true if the message was found in the cache and
+    /// false if was not in the cache anymore.
     ///
     /// This should only be called once per message.
     pub fn report_message_validation_result(
@@ -855,15 +893,15 @@ where
         self.check_explicit_peer_connection(peer_id);
     }
 
-    /// This removes the peer from explicitly connected peers, note that this does not disconnect
-    /// the peer.
+    /// This removes the peer from explicitly connected peers, note that this
+    /// does not disconnect the peer.
     pub fn remove_explicit_peer(&mut self, peer_id: &PeerId) {
         tracing::debug!(peer=%peer_id, "Removing explicit peer");
         self.explicit_peers.remove(peer_id);
     }
 
-    /// Blacklists a peer. All messages from this peer will be rejected and any message that was
-    /// created by this peer will be rejected.
+    /// Blacklists a peer. All messages from this peer will be rejected and any
+    /// message that was created by this peer will be rejected.
     pub fn blacklist_peer(&mut self, peer_id: &PeerId) {
         if self.blacklisted_peers.insert(*peer_id) {
             tracing::debug!(peer=%peer_id, "Peer has been blacklisted");
@@ -877,9 +915,10 @@ where
         }
     }
 
-    /// Activates the peer scoring system with the given parameters. This will reset all scores
-    /// if there was already another peer scoring system activated. Returns an error if the
-    /// params are not valid or if they got already set.
+    /// Activates the peer scoring system with the given parameters. This will
+    /// reset all scores if there was already another peer scoring system
+    /// activated. Returns an error if the params are not valid or if they
+    /// got already set.
     pub fn with_peer_score(
         &mut self,
         params: PeerScoreParams,
@@ -888,8 +927,9 @@ where
         self.with_peer_score_and_message_delivery_time_callback(params, threshold, None)
     }
 
-    /// Activates the peer scoring system with the given parameters and a message delivery time
-    /// callback. Returns an error if the parameters got already set.
+    /// Activates the peer scoring system with the given parameters and a
+    /// message delivery time callback. Returns an error if the parameters
+    /// got already set.
     pub fn with_peer_score_and_message_delivery_time_callback(
         &mut self,
         params: PeerScoreParams,
@@ -911,7 +951,8 @@ where
 
     /// Sets scoring parameters for a topic.
     ///
-    /// The [`Self::with_peer_score()`] must first be called to initialise peer scoring.
+    /// The [`Self::with_peer_score()`] must first be called to initialise peer
+    /// scoring.
     pub fn set_topic_params<H: Hasher>(
         &mut self,
         topic: Topic<H>,
@@ -930,8 +971,9 @@ where
         self.peer_score.as_ref()?.0.get_topic_params(&topic.hash())
     }
 
-    /// Sets the application specific score for a peer. Returns true if scoring is active and
-    /// the peer is connected or if the score of the peer is not yet expired, false otherwise.
+    /// Sets the application specific score for a peer. Returns true if scoring
+    /// is active and the peer is connected or if the score of the peer is
+    /// not yet expired, false otherwise.
     pub fn set_application_score(&mut self, peer_id: &PeerId, new_score: f64) -> bool {
         if let Some((peer_score, ..)) = &mut self.peer_score {
             peer_score.set_application_score(peer_id, new_score)
@@ -940,7 +982,8 @@ where
         }
     }
 
-    /// Gossipsub JOIN(topic) - adds topic peers to mesh and sends them GRAFT messages.
+    /// Gossipsub JOIN(topic) - adds topic peers to mesh and sends them GRAFT
+    /// messages.
     fn join(&mut self, topic_hash: &TopicHash) {
         tracing::debug!(topic=%topic_hash, "Running JOIN for topic");
 
@@ -956,8 +999,8 @@ where
             m.joined(topic_hash)
         }
 
-        // check if we have mesh_n peers in fanout[topic] and add them to the mesh if we do,
-        // removing the fanout entry.
+        // check if we have mesh_n peers in fanout[topic] and add them to the mesh if we
+        // do, removing the fanout entry.
         if let Some((_, mut peers)) = self.fanout.remove_entry(topic_hash) {
             tracing::debug!(
                 topic=%topic_hash,
@@ -1116,11 +1159,13 @@ where
         }
     }
 
-    /// Gossipsub LEAVE(topic) - Notifies mesh\[topic\] peers with PRUNE messages.
+    /// Gossipsub LEAVE(topic) - Notifies mesh\[topic\] peers with PRUNE
+    /// messages.
     fn leave(&mut self, topic_hash: &TopicHash) {
         tracing::debug!(topic=%topic_hash, "Running LEAVE for topic");
 
-        // If our mesh contains the topic, send prune to peers and delete it from the mesh
+        // If our mesh contains the topic, send prune to peers and delete it from the
+        // mesh
         if let Some((_, peers)) = self.mesh.remove_entry(topic_hash) {
             if let Some(m) = self.metrics.as_mut() {
                 m.left(topic_hash)
@@ -1147,7 +1192,8 @@ where
         tracing::debug!(topic=%topic_hash, "Completed LEAVE for topic");
     }
 
-    /// Checks if the given peer is still connected and if not dials the peer again.
+    /// Checks if the given peer is still connected and if not dials the peer
+    /// again.
     fn check_explicit_peer_connection(&mut self, peer_id: &PeerId) {
         if !self.connected_peers.contains_key(peer_id) {
             // Connect to peer
@@ -1158,8 +1204,8 @@ where
         }
     }
 
-    /// Determines if a peer's score is below a given `PeerScoreThreshold` chosen via the
-    /// `threshold` parameter.
+    /// Determines if a peer's score is below a given `PeerScoreThreshold`
+    /// chosen via the `threshold` parameter.
     fn score_below_threshold(
         &self,
         peer_id: &PeerId,
@@ -1184,10 +1230,11 @@ where
         }
     }
 
-    /// Handles an IHAVE control message. Checks our cache of messages. If the message is unknown,
-    /// requests it with an IWANT control message.
+    /// Handles an IHAVE control message. Checks our cache of messages. If the
+    /// message is unknown, requests it with an IWANT control message.
     fn handle_ihave(&mut self, peer_id: &PeerId, ihave_msgs: Vec<(TopicHash, Vec<MessageId>)>) {
-        // We ignore IHAVE gossip from any peer whose score is below the gossip threshold
+        // We ignore IHAVE gossip from any peer whose score is below the gossip
+        // threshold
         if let (true, score) = self.score_below_threshold(peer_id, |pst| pst.gossip_threshold) {
             tracing::debug!(
                 peer=%peer_id,
@@ -1303,10 +1350,11 @@ where
         tracing::trace!(peer=%peer_id, "Completed IHAVE handling for peer");
     }
 
-    /// Handles an IWANT control message. Checks our cache of messages. If the message exists it is
-    /// forwarded to the requesting peer.
+    /// Handles an IWANT control message. Checks our cache of messages. If the
+    /// message exists it is forwarded to the requesting peer.
     fn handle_iwant(&mut self, peer_id: &PeerId, iwant_msgs: Vec<MessageId>) {
-        // We ignore IWANT gossip from any peer whose score is below the gossip threshold
+        // We ignore IWANT gossip from any peer whose score is below the gossip
+        // threshold
         if let (true, score) = self.score_below_threshold(peer_id, |pst| pst.gossip_threshold) {
             tracing::debug!(
                 peer=%peer_id,
@@ -1347,8 +1395,8 @@ where
         tracing::debug!(peer=%peer_id, "Completed IWANT handling for peer");
     }
 
-    /// Handles GRAFT control messages. If subscribed to the topic, adds the peer to mesh, if not,
-    /// responds with PRUNE messages.
+    /// Handles GRAFT control messages. If subscribed to the topic, adds the
+    /// peer to mesh, if not, responds with PRUNE messages.
     fn handle_graft(&mut self, peer_id: &PeerId, topics: Vec<TopicHash>) {
         tracing::debug!(peer=%peer_id, "Handling GRAFT message for peer");
 
@@ -1361,8 +1409,9 @@ where
             return;
         };
 
-        // For each topic, if a peer has grafted us, then we necessarily must be in their mesh
-        // and they must be subscribed to the topic. Ensure we have recorded the mapping.
+        // For each topic, if a peer has grafted us, then we necessarily must be in
+        // their mesh and they must be subscribed to the topic. Ensure we have
+        // recorded the mapping.
         for topic in &topics {
             if connected_peer.topics.insert(topic.clone()) {
                 if let Some(m) = self.metrics.as_mut() {
@@ -1374,7 +1423,8 @@ where
         // we don't GRAFT to/from explicit peers; complain loudly if this happens
         if self.explicit_peers.contains(peer_id) {
             tracing::warn!(peer=%peer_id, "GRAFT: ignoring request from direct peer");
-            // this is possibly a bug from non-reciprocal configuration; send a PRUNE for all topics
+            // this is possibly a bug from non-reciprocal configuration; send a PRUNE for
+            // all topics
             to_prune_topics = topics.into_iter().collect();
             // but don't PX
             do_px = false
@@ -1415,7 +1465,7 @@ where
                                     + self.config.graft_flood_threshold())
                                     - self.config.prune_backoff();
                                 if flood_cutoff > now {
-                                    //extra penalty
+                                    // extra penalty
                                     peer_score.add_penalty(peer_id, 1);
                                 }
                             }
@@ -1436,15 +1486,16 @@ where
                             topic=%topic_hash,
                             "GRAFT: ignoring peer with negative score"
                         );
-                        // we do send them PRUNE however, because it's a matter of protocol correctness
+                        // we do send them PRUNE however, because it's a matter of protocol
+                        // correctness
                         to_prune_topics.insert(topic_hash.clone());
                         // but we won't PX to them
                         do_px = false;
                         continue;
                     }
 
-                    // check mesh upper bound and only allow graft if the upper bound is not reached or
-                    // if it is an outbound peer
+                    // check mesh upper bound and only allow graft if the upper bound is not reached
+                    // or if it is an outbound peer
                     if peers.len() >= self.config.mesh_n_high()
                         && !self.outbound_peers.contains(peer_id)
                     {
@@ -1572,7 +1623,7 @@ where
             self.remove_peer_from_mesh(peer_id, &topic_hash, backoff, true, Churn::Prune);
 
             if self.mesh.contains_key(&topic_hash) {
-                //connect to px peers
+                // connect to px peers
                 if !px.is_empty() {
                     // we ignore PX from peers with insufficient score
                     if below_threshold {
@@ -1604,8 +1655,8 @@ where
         let n = self.config.prune_peers();
         // Ignore peerInfo with no ID
         //
-        //TODO: Once signed records are spec'd: Can we use peerInfo without any IDs if they have a
-        // signed peer record?
+        // TODO: Once signed records are spec'd: Can we use peerInfo without any IDs if
+        // they have a signed peer record?
         px.retain(|p| p.peer_id.is_some());
         if px.len() > n {
             // only use at most prune_peers many random peers
@@ -1615,8 +1666,8 @@ where
         }
 
         for p in px {
-            // TODO: Once signed records are spec'd: extract signed peer record if given and handle
-            // it, see https://github.com/libp2p/specs/pull/217
+            // TODO: Once signed records are spec'd: extract signed peer record if given and
+            // handle it, see https://github.com/libp2p/specs/pull/217
             if let Some(peer_id) = p.peer_id {
                 // mark as px peer
                 self.px_peers.insert(peer_id);
@@ -1629,8 +1680,8 @@ where
         }
     }
 
-    /// Applies some basic checks to whether this message is valid. Does not apply user validation
-    /// checks.
+    /// Applies some basic checks to whether this message is valid. Does not
+    /// apply user validation checks.
     fn message_is_valid(
         &mut self,
         msg_id: &MessageId,
@@ -1720,7 +1771,8 @@ where
             metrics.msg_recvd_unfiltered(&raw_message.topic, raw_message.raw_protobuf_len());
         }
 
-        // Try and perform the data transform to the message. If it fails, consider it invalid.
+        // Try and perform the data transform to the message. If it fails, consider it
+        // invalid.
         let message = match self.data_transform.inbound_transform(raw_message.clone()) {
             Ok(message) => message,
             Err(e) => {
@@ -1739,8 +1791,9 @@ where
         let msg_id = self.config.message_id(&message);
 
         // Check the validity of the message
-        // Peers get penalized if this message is invalid. We don't add it to the duplicate cache
-        // and instead continually penalize peers that repeatedly send this message.
+        // Peers get penalized if this message is invalid. We don't add it to the
+        // duplicate cache and instead continually penalize peers that
+        // repeatedly send this message.
         if !self.message_is_valid(&msg_id, &mut raw_message, propagation_source) {
             return;
         }
@@ -1826,9 +1879,10 @@ where
 
                 gossip_promises.reject_message(&message_id, &reject_reason);
             } else {
-                // The message is invalid, we reject it ignoring any gossip promises. If a peer is
-                // advertising this message via an IHAVE and it's invalid it will be double
-                // penalized, one for sending us an invalid and again for breaking a promise.
+                // The message is invalid, we reject it ignoring any gossip promises. If a peer
+                // is advertising this message via an IHAVE and it's invalid it
+                // will be double penalized, one for sending us an invalid and
+                // again for breaking a promise.
                 peer_score.reject_invalid_message(propagation_source, &raw_message.topic);
             }
         }
@@ -1878,7 +1932,8 @@ where
         };
 
         for subscription in filtered_topics {
-            // get the peers from the mapping, or insert empty lists if the topic doesn't exist
+            // get the peers from the mapping, or insert empty lists if the topic doesn't
+            // exist
             let topic_hash = &subscription.topic_hash;
 
             match subscription.action {
@@ -1967,7 +2022,8 @@ where
             self.remove_peer_from_mesh(&peer_id, &topic_hash, None, false, Churn::Unsub);
         }
 
-        // Potentially inform the handler if we have added this peer to a mesh for the first time.
+        // Potentially inform the handler if we have added this peer to a mesh for the
+        // first time.
         let topics_joined = topics_to_graft.iter().collect::<Vec<_>>();
         if !topics_joined.is_empty() {
             peer_added_to_mesh(
@@ -1979,8 +2035,8 @@ where
             );
         }
 
-        // If we need to send grafts to peer, do so immediately, rather than waiting for the
-        // heartbeat.
+        // If we need to send grafts to peer, do so immediately, rather than waiting for
+        // the heartbeat.
         for topic_hash in topics_to_graft.into_iter() {
             self.send_message(*propagation_source, RpcOut::Graft(Graft { topic_hash }));
         }
@@ -2013,9 +2069,9 @@ where
         tracing::debug!("Starting heartbeat");
         let start = Instant::now();
 
-        // Every heartbeat we sample the send queues to add to our metrics. We do this intentionally
-        // before we add all the gossip from this heartbeat in order to gain a true measure of
-        // steady-state size of the queues.
+        // Every heartbeat we sample the send queues to add to our metrics. We do this
+        // intentionally before we add all the gossip from this heartbeat in
+        // order to gain a true measure of steady-state size of the queues.
         if let Some(m) = &mut self.metrics {
             for sender_queue in self.connected_peers.values().map(|v| &v.sender) {
                 m.observe_priority_queue_size(sender_queue.priority_queue_len());
@@ -2046,7 +2102,8 @@ where
             }
         }
 
-        // Cache the scores of all connected peers, and record metrics for current penalties.
+        // Cache the scores of all connected peers, and record metrics for current
+        // penalties.
         let mut scores = HashMap::with_capacity(self.connected_peers.len());
         if let Some((peer_score, ..)) = &self.peer_score {
             for peer_id in self.connected_peers.keys() {
@@ -2063,8 +2120,8 @@ where
             let outbound_peers = &self.outbound_peers;
 
             // drop all peers with negative score, without PX
-            // if there is at some point a stable retain method for BTreeSet the following can be
-            // written more efficiently with retain.
+            // if there is at some point a stable retain method for BTreeSet the following
+            // can be written more efficiently with retain.
             let mut to_remove_peers = Vec::new();
             for peer_id in peers.iter() {
                 let peer_score = *scores.get(peer_id).unwrap_or(&0.0);
@@ -2158,8 +2215,8 @@ where
                         .count()
                 };
 
-                // remove the first excess_peer_no allowed (by outbound restrictions) peers adding
-                // them to to_prune
+                // remove the first excess_peer_no allowed (by outbound restrictions) peers
+                // adding them to to_prune
                 let mut removed = 0;
                 for peer in shuffled {
                     if removed == excess_peer_no {
@@ -2413,8 +2470,8 @@ where
         }
     }
 
-    /// Emits gossip - Send IHAVE messages to a random set of gossip peers. This is applied to mesh
-    /// and fanout peers
+    /// Emits gossip - Send IHAVE messages to a random set of gossip peers. This
+    /// is applied to mesh and fanout peers
     fn emit_gossip(&mut self) {
         let mut rng = thread_rng();
         let mut messages = Vec::new();
@@ -2424,7 +2481,8 @@ where
                 continue;
             }
 
-            // if we are emitting more than GossipSubMaxIHaveLength message_ids, truncate the list
+            // if we are emitting more than GossipSubMaxIHaveLength message_ids, truncate
+            // the list
             if message_ids.len() > self.config.max_ihave_length() {
                 // we do the truncation (with shuffling) per peer below
                 tracing::debug!(
@@ -2436,7 +2494,8 @@ where
                 message_ids.shuffle(&mut rng);
             }
 
-            // dynamic number of peers to gossip based on `gossip_factor` with minimum `gossip_lazy`
+            // dynamic number of peers to gossip based on `gossip_factor` with minimum
+            // `gossip_lazy`
             let n_map = |m| {
                 max(
                     self.config.gossip_lazy(),
@@ -2479,8 +2538,8 @@ where
         }
     }
 
-    /// Handles multiple GRAFT/PRUNE messages and coalesces them into chunked gossip control
-    /// messages.
+    /// Handles multiple GRAFT/PRUNE messages and coalesces them into chunked
+    /// gossip control messages.
     fn send_graft_prune(
         &mut self,
         to_graft: HashMap<PeerId, Vec<TopicHash>>,
@@ -2512,9 +2571,9 @@ where
             });
 
             // If there are prunes associated with the same peer add them.
-            // NOTE: In this case a peer has been added to a topic mesh, and removed from another.
-            // It therefore must be in at least one mesh and we do not need to inform the handler
-            // of its removal from another.
+            // NOTE: In this case a peer has been added to a topic mesh, and removed from
+            // another. It therefore must be in at least one mesh and we do not
+            // need to inform the handler of its removal from another.
 
             // The following prunes are not due to unsubscribing.
             let prune_msgs = to_prune
@@ -2724,8 +2783,8 @@ where
     ///
     /// Returns `true` if sending was successful, `false` otherwise.
     /// The method will update the peer score and failed message counter if
-    /// sending the message failed due to the channel to the connection handler being
-    /// full (which indicates a slow peer).
+    /// sending the message failed due to the channel to the connection handler
+    /// being full (which indicates a slow peer).
     fn send_message(&mut self, peer_id: PeerId, rpc: RpcOut) -> bool {
         if let Some(m) = self.metrics.as_mut() {
             if let RpcOut::Publish { ref message, .. } | RpcOut::Forward { ref message, .. } = rpc {
@@ -2765,7 +2824,10 @@ where
                     | RpcOut::Prune(_)
                     | RpcOut::Subscribe(_)
                     | RpcOut::Unsubscribe(_) => {
-                        unreachable!("Channel for highpriority contorl messages is unbounded and should always be open.")
+                        unreachable!(
+                            "Channel for highpriority contorl messages is unbounded and should \
+                             always be open."
+                        )
                     }
                 }
 
@@ -2788,12 +2850,12 @@ where
             ..
         }: ConnectionEstablished,
     ) {
-        // Diverging from the go implementation we only want to consider a peer as outbound peer
-        // if its first connection is outbound.
+        // Diverging from the go implementation we only want to consider a peer as
+        // outbound peer if its first connection is outbound.
 
         if endpoint.is_dialer() && other_established == 0 && !self.px_peers.contains(&peer_id) {
-            // The first connection is outbound and it is not a peer from peer exchange => mark
-            // it as outbound peer
+            // The first connection is outbound and it is not a peer from peer exchange =>
+            // mark it as outbound peer
             self.outbound_peers.insert(peer_id);
         }
 
@@ -2811,7 +2873,8 @@ where
         }
 
         if other_established > 0 {
-            return; // Not our first connection to this peer, hence nothing to do.
+            return; // Not our first connection to this peer, hence nothing to
+                    // do.
         }
 
         if let Some((peer_score, ..)) = &mut self.peer_score {
@@ -2864,8 +2927,8 @@ where
                     .expect("Previously established connection to peer must be present");
                 peer.connections.remove(index);
 
-                // If there are more connections and this peer is in a mesh, inform the first connection
-                // handler.
+                // If there are more connections and this peer is in a mesh, inform the first
+                // connection handler.
                 if !peer.connections.is_empty() {
                     for topic in &peer.topics {
                         if let Some(mesh_peers) = self.mesh.get(topic) {
@@ -2916,7 +2979,8 @@ where
             self.px_peers.remove(&peer_id);
             self.outbound_peers.remove(&peer_id);
 
-            // If metrics are enabled, register the disconnection of a peer based on its protocol.
+            // If metrics are enabled, register the disconnection of a peer based on its
+            // protocol.
             if let Some(metrics) = self.metrics.as_mut() {
                 metrics.peer_protocol_disconnected(connected_peer.kind.clone());
             }
@@ -2987,9 +3051,9 @@ where
     ) -> Result<THandler<Self>, ConnectionDenied> {
         // By default we assume a peer is only a floodsub peer.
         //
-        // The protocol negotiation occurs once a message is sent/received. Once this happens we
-        // update the type of peer that this is in order to determine which kind of routing should
-        // occur.
+        // The protocol negotiation occurs once a message is sent/received. Once this
+        // happens we update the type of peer that this is in order to determine
+        // which kind of routing should occur.
         let connected_peer = self
             .connected_peers
             .entry(peer_id)
@@ -3152,14 +3216,19 @@ where
                     if self.config.max_messages_per_rpc().is_some()
                         && Some(count) >= self.config.max_messages_per_rpc()
                     {
-                        tracing::warn!("Received more messages than permitted. Ignoring further messages. Processed: {}", count);
+                        tracing::warn!(
+                            "Received more messages than permitted. Ignoring further messages. \
+                             Processed: {}",
+                            count
+                        );
                         break;
                     }
                     self.handle_received_message(raw_message, &propagation_source);
                 }
 
                 // Handle control messages
-                // group some control messages, this minimises SendEvents (code is simplified to handle each event at a time however)
+                // group some control messages, this minimises SendEvents (code is simplified to
+                // handle each event at a time however)
                 let mut ihave_msgs = vec![];
                 let mut graft_msgs = vec![];
                 let mut prune_msgs = vec![];
@@ -3234,9 +3303,10 @@ where
     }
 }
 
-/// This is called when peers are added to any mesh. It checks if the peer existed
-/// in any other mesh. If this is the first mesh they have joined, it queues a message to notify
-/// the appropriate connection handler to maintain a connection.
+/// This is called when peers are added to any mesh. It checks if the peer
+/// existed in any other mesh. If this is the first mesh they have joined, it
+/// queues a message to notify the appropriate connection handler to maintain a
+/// connection.
 fn peer_added_to_mesh(
     peer_id: PeerId,
     new_topics: Vec<&TopicHash>,
@@ -3276,9 +3346,10 @@ fn peer_added_to_mesh(
     });
 }
 
-/// This is called when peers are removed from a mesh. It checks if the peer exists
-/// in any other mesh. If this is the last mesh they have joined, we return true, in order to
-/// notify the handler to no longer maintain a connection.
+/// This is called when peers are removed from a mesh. It checks if the peer
+/// exists in any other mesh. If this is the last mesh they have joined, we
+/// return true, in order to notify the handler to no longer maintain a
+/// connection.
 fn peer_removed_from_mesh(
     peer_id: PeerId,
     old_topic: &TopicHash,
@@ -3319,8 +3390,8 @@ fn peer_removed_from_mesh(
 }
 
 /// Helper function to get a subset of random gossipsub peers for a `topic_hash`
-/// filtered by the function `f`. The number of peers to get equals the output of `n_map`
-/// that gets as input the number of filtered peers.
+/// filtered by the function `f`. The number of peers to get equals the output
+/// of `n_map` that gets as input the number of filtered peers.
 fn get_random_peers_dynamic(
     connected_peers: &HashMap<PeerId, PeerConnections>,
     topic_hash: &TopicHash,
@@ -3352,8 +3423,8 @@ fn get_random_peers_dynamic(
     gossip_peers.into_iter().take(n).collect()
 }
 
-/// Helper function to get a set of `n` random gossipsub peers for a `topic_hash`
-/// filtered by the function `f`.
+/// Helper function to get a set of `n` random gossipsub peers for a
+/// `topic_hash` filtered by the function `f`.
 fn get_random_peers(
     connected_peers: &HashMap<PeerId, PeerConnections>,
     topic_hash: &TopicHash,
@@ -3363,8 +3434,8 @@ fn get_random_peers(
     get_random_peers_dynamic(connected_peers, topic_hash, |_| n, f)
 }
 
-/// Validates the combination of signing, privacy and message validation to ensure the
-/// configuration will not reject published messages.
+/// Validates the combination of signing, privacy and message validation to
+/// ensure the configuration will not reject published messages.
 fn validate_config(
     authenticity: &MessageAuthenticity,
     validation_mode: &ValidationMode,
@@ -3372,20 +3443,26 @@ fn validate_config(
     match validation_mode {
         ValidationMode::Anonymous => {
             if authenticity.is_signing() {
-                return Err("Cannot enable message signing with an Anonymous validation mode. Consider changing either the ValidationMode or MessageAuthenticity");
+                return Err(
+                    "Cannot enable message signing with an Anonymous validation mode. Consider \
+                     changing either the ValidationMode or MessageAuthenticity",
+                );
             }
 
             if !authenticity.is_anonymous() {
-                return Err("Published messages contain an author but incoming messages with an author will be rejected. Consider adjusting the validation or privacy settings in the config");
+                return Err(
+                    "Published messages contain an author but incoming messages with an author \
+                     will be rejected. Consider adjusting the validation or privacy settings in \
+                     the config",
+                );
             }
         }
         ValidationMode::Strict => {
             if !authenticity.is_signing() {
-                return Err(
-                    "Messages will be
-                published unsigned and incoming unsigned messages will be rejected. Consider adjusting
-                the validation or privacy settings in the config"
-                );
+                return Err("Messages will be
+                published unsigned and incoming unsigned messages will be rejected. Consider \
+                            adjusting
+                the validation or privacy settings in the config");
             }
         }
         _ => {}

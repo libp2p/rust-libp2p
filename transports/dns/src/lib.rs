@@ -21,15 +21,16 @@
 //! # [DNS name resolution](https://github.com/libp2p/specs/blob/master/addressing/README.md#ip-and-name-resolution)
 //! [`Transport`] for libp2p.
 //!
-//! This crate provides the type [`async_std::Transport`] and [`tokio::Transport`]
-//! for use with `async-std` and `tokio`,
+//! This crate provides the type [`async_std::Transport`] and
+//! [`tokio::Transport`] for use with `async-std` and `tokio`,
 //! respectively.
 //!
-//! A [`Transport`] is an address-rewriting [`libp2p_core::Transport`] wrapper around
-//! an inner `Transport`. The composed transport behaves like the inner
-//! transport, except that [`libp2p_core::Transport::dial`] resolves `/dns/...`, `/dns4/...`,
-//! `/dns6/...` and `/dnsaddr/...` components of the given `Multiaddr` through
-//! a DNS, replacing them with the resolved protocols (typically TCP/IP).
+//! A [`Transport`] is an address-rewriting [`libp2p_core::Transport`] wrapper
+//! around an inner `Transport`. The composed transport behaves like the inner
+//! transport, except that [`libp2p_core::Transport::dial`] resolves `/dns/...`,
+//! `/dns4/...`, `/dns6/...` and `/dnsaddr/...` components of the given
+//! `Multiaddr` through a DNS, replacing them with the resolved protocols
+//! (typically TCP/IP).
 //!
 //! The `async-std` feature and hence the [`async_std::Transport`] are
 //! enabled by default. Tokio users can furthermore opt-in
@@ -54,12 +55,14 @@
 //! platform specific APIs to extract the host's DNS configuration (if possible)
 //! and provide a custom [`ResolverConfig`].
 //!
-//![trust-dns-resolver]: https://docs.rs/trust-dns-resolver/latest/trust_dns_resolver/#dns-over-tls-and-dns-over-https
+//! [trust-dns-resolver]: https://docs.rs/trust-dns-resolver/latest/trust_dns_resolver/#dns-over-tls-and-dns-over-https
 
 #![cfg_attr(docsrs, feature(doc_cfg, doc_auto_cfg))]
 
 #[cfg(feature = "async-std")]
 pub mod async_std {
+    use std::{io, sync::Arc};
+
     use async_std_resolver::AsyncStdResolver;
     use futures::FutureExt;
     use hickory_resolver::{
@@ -67,20 +70,21 @@ pub mod async_std {
         system_conf,
     };
     use parking_lot::Mutex;
-    use std::{io, sync::Arc};
 
-    /// A `Transport` wrapper for performing DNS lookups when dialing `Multiaddr`esses
-    /// using `async-std` for all async I/O.
+    /// A `Transport` wrapper for performing DNS lookups when dialing
+    /// `Multiaddr`esses using `async-std` for all async I/O.
     pub type Transport<T> = crate::Transport<T, AsyncStdResolver>;
 
     impl<T> Transport<T> {
-        /// Creates a new [`Transport`] from the OS's DNS configuration and defaults.
+        /// Creates a new [`Transport`] from the OS's DNS configuration and
+        /// defaults.
         pub async fn system(inner: T) -> Result<Transport<T>, io::Error> {
             let (cfg, opts) = system_conf::read_system_conf()?;
             Ok(Self::custom(inner, cfg, opts).await)
         }
 
-        /// Creates a [`Transport`] with a custom resolver configuration and options.
+        /// Creates a [`Transport`] with a custom resolver configuration and
+        /// options.
         pub async fn custom(inner: T, cfg: ResolverConfig, opts: ResolverOpts) -> Transport<T> {
             Transport {
                 inner: Arc::new(Mutex::new(inner)),
@@ -116,16 +120,18 @@ pub mod async_std {
 
 #[cfg(feature = "tokio")]
 pub mod tokio {
-    use hickory_resolver::{system_conf, TokioAsyncResolver};
-    use parking_lot::Mutex;
     use std::sync::Arc;
 
-    /// A `Transport` wrapper for performing DNS lookups when dialing `Multiaddr`esses
-    /// using `tokio` for all async I/O.
+    use hickory_resolver::{system_conf, TokioAsyncResolver};
+    use parking_lot::Mutex;
+
+    /// A `Transport` wrapper for performing DNS lookups when dialing
+    /// `Multiaddr`esses using `tokio` for all async I/O.
     pub type Transport<T> = crate::Transport<T, TokioAsyncResolver>;
 
     impl<T> Transport<T> {
-        /// Creates a new [`Transport`] from the OS's DNS configuration and defaults.
+        /// Creates a new [`Transport`] from the OS's DNS configuration and
+        /// defaults.
         pub fn system(inner: T) -> Result<Transport<T>, std::io::Error> {
             let (cfg, opts) = system_conf::read_system_conf()?;
             Ok(Self::custom(inner, cfg, opts))
@@ -146,18 +152,12 @@ pub mod tokio {
     }
 }
 
-use async_trait::async_trait;
-use futures::{future::BoxFuture, prelude::*};
-use libp2p_core::{
-    multiaddr::{Multiaddr, Protocol},
-    transport::{DialOpts, ListenerId, TransportError, TransportEvent},
-};
-use parking_lot::Mutex;
-use smallvec::SmallVec;
-use std::io;
-use std::net::{Ipv4Addr, Ipv6Addr};
 use std::{
-    error, fmt, iter,
+    error,
+    fmt,
+    io,
+    iter,
+    net::{Ipv4Addr, Ipv6Addr},
     ops::DerefMut,
     pin::Pin,
     str,
@@ -165,12 +165,24 @@ use std::{
     task::{Context, Poll},
 };
 
-pub use hickory_resolver::config::{ResolverConfig, ResolverOpts};
-pub use hickory_resolver::error::{ResolveError, ResolveErrorKind};
-use hickory_resolver::lookup::{Ipv4Lookup, Ipv6Lookup, TxtLookup};
-use hickory_resolver::lookup_ip::LookupIp;
-use hickory_resolver::name_server::ConnectionProvider;
-use hickory_resolver::AsyncResolver;
+use async_trait::async_trait;
+use futures::{future::BoxFuture, prelude::*};
+pub use hickory_resolver::{
+    config::{ResolverConfig, ResolverOpts},
+    error::{ResolveError, ResolveErrorKind},
+};
+use hickory_resolver::{
+    lookup::{Ipv4Lookup, Ipv6Lookup, TxtLookup},
+    lookup_ip::LookupIp,
+    name_server::ConnectionProvider,
+    AsyncResolver,
+};
+use libp2p_core::{
+    multiaddr::{Multiaddr, Protocol},
+    transport::{DialOpts, ListenerId, TransportError, TransportEvent},
+};
+use parking_lot::Mutex;
+use smallvec::SmallVec;
 
 /// The prefix for `dnsaddr` protocol TXT record lookups.
 const DNSADDR_PREFIX: &str = "_dnsaddr.";
@@ -191,7 +203,8 @@ const MAX_DNS_LOOKUPS: usize = 32;
 const MAX_TXT_RECORDS: usize = 16;
 
 /// A [`Transport`] for performing DNS lookups when dialing `Multiaddr`esses.
-/// You shouldn't need to use this type directly. Use [`tokio::Transport`] or [`async_std::Transport`] instead.
+/// You shouldn't need to use this type directly. Use [`tokio::Transport`] or
+/// [`async_std::Transport`] instead.
 #[derive(Debug)]
 pub struct Transport<T, R> {
     /// The underlying transport.
@@ -404,7 +417,8 @@ pub enum Error<TErr> {
     /// DNS resolution failed.
     #[allow(clippy::enum_variant_names)]
     ResolveError(ResolveError),
-    /// DNS resolution was successful, but the underlying transport refused the resolved address.
+    /// DNS resolution was successful, but the underlying transport refused the
+    /// resolved address.
     MultiaddrNotSupported(Multiaddr),
     /// DNS resolution involved too many lookups.
     ///
@@ -458,9 +472,9 @@ enum Resolved<'a> {
     Addrs(Vec<Multiaddr>),
 }
 
-/// Asynchronously resolves the domain name of a `Dns`, `Dns4`, `Dns6` or `Dnsaddr` protocol
-/// component. If the given protocol is of a different type, it is returned unchanged as a
-/// [`Resolved::One`].
+/// Asynchronously resolves the domain name of a `Dns`, `Dns4`, `Dns6` or
+/// `Dnsaddr` protocol component. If the given protocol is of a different type,
+/// it is returned unchanged as a [`Resolved::One`].
 fn resolve<'a, E: 'a + Send, R: Resolver>(
     proto: &Protocol<'a>,
     resolver: &'a R,
@@ -613,14 +627,16 @@ where
 
 #[cfg(all(test, any(feature = "tokio", feature = "async-std")))]
 mod tests {
-    use super::*;
     use futures::future::BoxFuture;
     use libp2p_core::{
         multiaddr::{Multiaddr, Protocol},
         transport::{PortUse, TransportError, TransportEvent},
-        Endpoint, Transport,
+        Endpoint,
+        Transport,
     };
     use libp2p_identity::PeerId;
+
+    use super::*;
 
     #[test]
     fn basic_resolve() {
@@ -713,7 +729,13 @@ mod tests {
             // an entry with suffix `/p2p/QmNnooDu7bfjPFoTZYxMNLWUQJyrVwtbZg5gBMjTezGAJN`,
             // i.e. a bootnode with such a peer ID.
             let _ = transport
-                .dial("/dnsaddr/bootstrap.libp2p.io/p2p/QmNnooDu7bfjPFoTZYxMNLWUQJyrVwtbZg5gBMjTezGAJN".parse().unwrap(), dial_opts)
+                .dial(
+                    "/dnsaddr/bootstrap.libp2p.io/p2p/\
+                     QmNnooDu7bfjPFoTZYxMNLWUQJyrVwtbZg5gBMjTezGAJN"
+                        .parse()
+                        .unwrap(),
+                    dial_opts,
+                )
                 .unwrap()
                 .await
                 .unwrap();

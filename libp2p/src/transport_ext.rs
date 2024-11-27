@@ -20,45 +20,43 @@
 
 //! Provides the `TransportExt` trait.
 
-#[allow(deprecated)]
-use crate::bandwidth::{BandwidthLogging, BandwidthSinks};
-use crate::core::{
-    muxing::{StreamMuxer, StreamMuxerBox},
-    transport::Boxed,
-};
-use crate::Transport;
-use libp2p_identity::PeerId;
 use std::sync::Arc;
 
-/// Trait automatically implemented on all objects that implement `Transport`. Provides some
-/// additional utilities.
+use libp2p_identity::PeerId;
+
+#[allow(deprecated)]
+use crate::bandwidth::{BandwidthLogging, BandwidthSinks};
+use crate::{
+    core::{
+        muxing::{StreamMuxer, StreamMuxerBox},
+        transport::Boxed,
+    },
+    Transport,
+};
+
+/// Trait automatically implemented on all objects that implement `Transport`.
+/// Provides some additional utilities.
 pub trait TransportExt: Transport {
-    /// Adds a layer on the `Transport` that logs all traffic that passes through the streams
-    /// created by it.
+    /// Adds a layer on the `Transport` that logs all traffic that passes
+    /// through the streams created by it.
     ///
-    /// This method returns an `Arc<BandwidthSinks>` that can be used to retrieve the total number
-    /// of bytes transferred through the streams.
+    /// This method returns an `Arc<BandwidthSinks>` that can be used to
+    /// retrieve the total number of bytes transferred through the streams.
     ///
     /// # Example
     ///
     /// ```
-    /// use libp2p_yamux as yamux;
+    /// use libp2p::{core::upgrade, identity, Transport, TransportExt};
     /// use libp2p_noise as noise;
     /// use libp2p_tcp as tcp;
-    /// use libp2p::{
-    ///     core::upgrade,
-    ///     identity,
-    ///     TransportExt,
-    ///     Transport,
-    /// };
+    /// use libp2p_yamux as yamux;
     ///
     /// let id_keys = identity::Keypair::generate_ed25519();
     ///
     /// let transport = tcp::tokio::Transport::new(tcp::Config::default().nodelay(true))
     ///     .upgrade(upgrade::Version::V1)
     ///     .authenticate(
-    ///         noise::Config::new(&id_keys)
-    ///             .expect("Signing libp2p-noise static DH keypair failed."),
+    ///         noise::Config::new(&id_keys).expect("Signing libp2p-noise static DH keypair failed."),
     ///     )
     ///     .multiplex(yamux::Config::default())
     ///     .boxed();
@@ -66,9 +64,8 @@ pub trait TransportExt: Transport {
     /// let (transport, sinks) = transport.with_bandwidth_logging();
     /// ```
     #[allow(deprecated)]
-    #[deprecated(
-        note = "Use `libp2p::SwarmBuilder::with_bandwidth_metrics` or `libp2p_metrics::BandwidthTransport` instead."
-    )]
+    #[deprecated(note = "Use `libp2p::SwarmBuilder::with_bandwidth_metrics` or \
+                         `libp2p_metrics::BandwidthTransport` instead.")]
     fn with_bandwidth_logging<S>(self) -> (Boxed<(PeerId, StreamMuxerBox)>, Arc<BandwidthSinks>)
     where
         Self: Sized + Send + Unpin + 'static,

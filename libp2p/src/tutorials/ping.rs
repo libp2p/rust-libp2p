@@ -55,8 +55,8 @@
 //!        edition = "2021"
 //!
 //!    [dependencies]
-//!        libp2p = { version = "0.54", features = ["noise", "ping", "tcp", "tokio", "yamux"] }
-//!        futures = "0.3.30"
+//!        libp2p = { version = "0.54", features = ["noise", "ping", "tcp",
+//! "tokio", "yamux"] }        futures = "0.3.30"
 //!        tokio = { version = "1.37.0", features = ["full"] }
 //!        tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 //!    ```
@@ -72,6 +72,7 @@
 //!
 //! ```rust
 //! use std::error::Error;
+//!
 //! use tracing_subscriber::EnvFilter;
 //!
 //! #[tokio::main]
@@ -86,20 +87,23 @@
 //! }
 //! ```
 //!
-//! Go ahead and build and run the above code with: `cargo run`. Nothing happening thus far.
+//! Go ahead and build and run the above code with: `cargo run`. Nothing
+//! happening thus far.
 //!
 //! ## Transport
 //!
-//! Next up we need to construct a transport. Each transport in libp2p provides encrypted streams.
-//! E.g. combining TCP to establish connections, NOISE to encrypt these connections and Yamux to run
-//! one or more streams on a connection. Another libp2p transport is QUIC, providing encrypted
-//! streams out-of-the-box. We will stick to TCP for now. Each of these implement the [`Transport`]
-//! trait.
+//! Next up we need to construct a transport. Each transport in libp2p provides
+//! encrypted streams. E.g. combining TCP to establish connections, NOISE to
+//! encrypt these connections and Yamux to run one or more streams on a
+//! connection. Another libp2p transport is QUIC, providing encrypted
+//! streams out-of-the-box. We will stick to TCP for now. Each of these
+//! implement the [`Transport`] trait.
 //!
 //! ```rust
 //! use std::error::Error;
-//! use tracing_subscriber::EnvFilter;
+//!
 //! use libp2p::{noise, tcp, yamux};
+//! use tracing_subscriber::EnvFilter;
 //!
 //! #[tokio::main]
 //! async fn main() -> Result<(), Box<dyn Error>> {
@@ -127,24 +131,28 @@
 //! _what_ bytes and to _whom_ to send on the network.
 //!
 //! To make this more concrete, let's take a look at a simple implementation of
-//! the [`NetworkBehaviour`] trait: the [`ping::Behaviour`](crate::ping::Behaviour).
-//! As you might have guessed, similar to the good old ICMP `ping` network tool,
-//! libp2p [`ping::Behaviour`](crate::ping::Behaviour) sends a ping to a peer and expects
-//! to receive a pong in turn. The [`ping::Behaviour`](crate::ping::Behaviour) does not care _how_
-//! the ping and pong messages are sent on the network, whether they are sent via
+//! the [`NetworkBehaviour`] trait: the
+//! [`ping::Behaviour`](crate::ping::Behaviour). As you might have guessed,
+//! similar to the good old ICMP `ping` network tool,
+//! libp2p [`ping::Behaviour`](crate::ping::Behaviour) sends a ping to a peer
+//! and expects to receive a pong in turn. The
+//! [`ping::Behaviour`](crate::ping::Behaviour) does not care _how_ the ping and
+//! pong messages are sent on the network, whether they are sent via
 //! TCP, whether they are encrypted via [noise](crate::noise) or just in
-//! [plaintext](crate::plaintext). It only cares about _what_ messages and to _whom_ to sent on the
-//! network.
+//! [plaintext](crate::plaintext). It only cares about _what_ messages and to
+//! _whom_ to sent on the network.
 //!
 //! The two traits [`Transport`] and [`NetworkBehaviour`] allow us to cleanly
 //! separate _how_ to send bytes from _what_ bytes and to _whom_ to send.
 //!
-//! With the above in mind, let's extend our example, creating a [`ping::Behaviour`](crate::ping::Behaviour) at the end:
+//! With the above in mind, let's extend our example, creating a
+//! [`ping::Behaviour`](crate::ping::Behaviour) at the end:
 //!
 //! ```rust
 //! use std::error::Error;
-//! use tracing_subscriber::EnvFilter;
+//!
 //! use libp2p::{noise, ping, tcp, yamux};
+//! use tracing_subscriber::EnvFilter;
 //!
 //! #[tokio::main]
 //! async fn main() -> Result<(), Box<dyn Error>> {
@@ -167,15 +175,17 @@
 //!
 //! ## Swarm
 //!
-//! Now that we have a [`Transport`] and a [`NetworkBehaviour`], we can build the [`Swarm`]
-//! which connects the two, allowing both to make progress. Put simply, a [`Swarm`] drives both a
-//! [`Transport`] and a [`NetworkBehaviour`] forward, passing commands from the [`NetworkBehaviour`]
-//! to the [`Transport`] as well as events from the [`Transport`] to the [`NetworkBehaviour`].
+//! Now that we have a [`Transport`] and a [`NetworkBehaviour`], we can build
+//! the [`Swarm`] which connects the two, allowing both to make progress. Put
+//! simply, a [`Swarm`] drives both a [`Transport`] and a [`NetworkBehaviour`]
+//! forward, passing commands from the [`NetworkBehaviour`] to the [`Transport`]
+//! as well as events from the [`Transport`] to the [`NetworkBehaviour`].
 //!
 //! ```rust
 //! use std::error::Error;
-//! use tracing_subscriber::EnvFilter;
+//!
 //! use libp2p::{noise, ping, tcp, yamux};
+//! use tracing_subscriber::EnvFilter;
 //!
 //! #[tokio::main]
 //! async fn main() -> Result<(), Box<dyn Error>> {
@@ -199,18 +209,20 @@
 //!
 //! ## Idle connection timeout
 //!
-//! Now, for this example in particular, we need set the idle connection timeout.
-//! Otherwise, the connection will be closed immediately.
+//! Now, for this example in particular, we need set the idle connection
+//! timeout. Otherwise, the connection will be closed immediately.
 //!
-//! Whether you need to set this in your application too depends on your usecase.
-//! Typically, connections are kept alive if they are "in use" by a certain protocol.
-//! The ping protocol however is only an "auxiliary" kind of protocol.
-//! Thus, without any other behaviour in place, we would not be able to observe the pings.
+//! Whether you need to set this in your application too depends on your
+//! usecase. Typically, connections are kept alive if they are "in use" by a
+//! certain protocol. The ping protocol however is only an "auxiliary" kind of
+//! protocol. Thus, without any other behaviour in place, we would not be able
+//! to observe the pings.
 //!
 //! ```rust
 //! use std::{error::Error, time::Duration};
-//! use tracing_subscriber::EnvFilter;
+//!
 //! use libp2p::{noise, ping, tcp, yamux};
+//! use tracing_subscriber::EnvFilter;
 //!
 //! #[tokio::main]
 //! async fn main() -> Result<(), Box<dyn Error>> {
@@ -226,7 +238,9 @@
 //!             yamux::Config::default,
 //!         )?
 //!         .with_behaviour(|_| ping::Behaviour::default())?
-//!         .with_swarm_config(|cfg| cfg.with_idle_connection_timeout(Duration::from_secs(u64::MAX)))
+//!         .with_swarm_config(|cfg| {
+//!             cfg.with_idle_connection_timeout(Duration::from_secs(u64::MAX))
+//!         })
 //!         .build();
 //!
 //!     Ok(())
@@ -249,20 +263,21 @@
 //! [github.com/multiformats/multiaddr](https://github.com/multiformats/multiaddr/).
 //!
 //! Let's make our local node listen on a new socket.
-//! This socket is listening on multiple network interfaces at the same time. For
-//! each network interface, a new listening address is created. These may change
-//! over time as interfaces become available or unavailable.
-//! For example, in case of our TCP transport it may (among others) listen on the
-//! loopback interface (localhost) `/ip4/127.0.0.1/tcp/24915` as well as the local
-//! network `/ip4/192.168.178.25/tcp/24915`.
+//! This socket is listening on multiple network interfaces at the same time.
+//! For each network interface, a new listening address is created. These may
+//! change over time as interfaces become available or unavailable.
+//! For example, in case of our TCP transport it may (among others) listen on
+//! the loopback interface (localhost) `/ip4/127.0.0.1/tcp/24915` as well as the
+//! local network `/ip4/192.168.178.25/tcp/24915`.
 //!
 //! In addition, if provided on the CLI, let's instruct our local node to dial a
 //! remote peer.
 //!
 //! ```rust
 //! use std::{error::Error, time::Duration};
-//! use tracing_subscriber::EnvFilter;
+//!
 //! use libp2p::{noise, ping, tcp, yamux, Multiaddr};
+//! use tracing_subscriber::EnvFilter;
 //!
 //! #[tokio::main]
 //! async fn main() -> Result<(), Box<dyn Error>> {
@@ -278,7 +293,9 @@
 //!             yamux::Config::default,
 //!         )?
 //!         .with_behaviour(|_| ping::Behaviour::default())?
-//!         .with_swarm_config(|cfg| cfg.with_idle_connection_timeout(Duration::from_secs(u64::MAX)))
+//!         .with_swarm_config(|cfg| {
+//!             cfg.with_idle_connection_timeout(Duration::from_secs(u64::MAX))
+//!         })
 //!         .build();
 //!
 //!     // Tell the swarm to listen on all interfaces and a random, OS-assigned
@@ -305,9 +322,10 @@
 //!
 //! ```no_run
 //! use std::{error::Error, time::Duration};
-//! use tracing_subscriber::EnvFilter;
-//! use libp2p::{noise, ping, tcp, yamux, Multiaddr, swarm::SwarmEvent};
+//!
 //! use futures::prelude::*;
+//! use libp2p::{noise, ping, swarm::SwarmEvent, tcp, yamux, Multiaddr};
+//! use tracing_subscriber::EnvFilter;
 //!
 //! #[tokio::main]
 //! async fn main() -> Result<(), Box<dyn Error>> {
@@ -323,7 +341,9 @@
 //!             yamux::Config::default,
 //!         )?
 //!         .with_behaviour(|_| ping::Behaviour::default())?
-//!         .with_swarm_config(|cfg| cfg.with_idle_connection_timeout(Duration::from_secs(u64::MAX)))
+//!         .with_swarm_config(|cfg| {
+//!             cfg.with_idle_connection_timeout(Duration::from_secs(u64::MAX))
+//!         })
 //!         .build();
 //!
 //!     // Tell the swarm to listen on all interfaces and a random, OS-assigned
@@ -378,9 +398,9 @@
 //!
 //! Note: The [`Multiaddr`] at the end being one of the [`Multiaddr`] printed
 //! earlier in terminal window one.
-//! Both peers have to be in the same network with which the address is associated.
-//! In our case any printed addresses can be used, as both peers run on the same
-//! device.
+//! Both peers have to be in the same network with which the address is
+//! associated. In our case any printed addresses can be used, as both peers run
+//! on the same device.
 //!
 //! The two nodes will establish a connection and send each other ping and pong
 //! messages every 15 seconds.

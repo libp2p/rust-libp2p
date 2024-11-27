@@ -18,24 +18,35 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-//!
-//! Manages and stores the Scoring logic of a particular peer on the gossipsub behaviour.
+//! Manages and stores the Scoring logic of a particular peer on the gossipsub
+//! behaviour.
 
-use crate::metrics::{Metrics, Penalty};
-use crate::time_cache::TimeCache;
-use crate::{MessageId, TopicHash};
+use std::{
+    collections::{hash_map, HashMap, HashSet},
+    net::IpAddr,
+    time::Duration,
+};
+
 use libp2p_identity::PeerId;
-use std::collections::{hash_map, HashMap, HashSet};
-use std::net::IpAddr;
-use std::time::Duration;
 use web_time::Instant;
 
+use crate::{
+    metrics::{Metrics, Penalty},
+    time_cache::TimeCache,
+    MessageId,
+    TopicHash,
+};
+
 mod params;
-use crate::ValidationError;
 pub use params::{
-    score_parameter_decay, score_parameter_decay_with_base, PeerScoreParams, PeerScoreThresholds,
+    score_parameter_decay,
+    score_parameter_decay_with_base,
+    PeerScoreParams,
+    PeerScoreThresholds,
     TopicScoreParams,
 };
+
+use crate::ValidationError;
 
 #[cfg(test)]
 mod tests;
@@ -64,11 +75,14 @@ struct PeerStats {
     topics: HashMap<TopicHash, TopicStats>,
     /// IP tracking for individual peers.
     known_ips: HashSet<IpAddr>,
-    /// Behaviour penalty that is applied to the peer, assigned by the behaviour.
+    /// Behaviour penalty that is applied to the peer, assigned by the
+    /// behaviour.
     behaviour_penalty: f64,
-    /// Application specific score. Can be manipulated by calling PeerScore::set_application_score
+    /// Application specific score. Can be manipulated by calling
+    /// PeerScore::set_application_score
     application_score: f64,
-    /// Scoring based on how whether this peer consumes messages fast enough or not.
+    /// Scoring based on how whether this peer consumes messages fast enough or
+    /// not.
     slow_peer_penalty: f64,
 }
 
@@ -96,8 +110,9 @@ impl Default for PeerStats {
 }
 
 impl PeerStats {
-    /// Returns a mutable reference to topic stats if they exist, otherwise if the supplied parameters score the
-    /// topic, inserts the default stats and returns a reference to those. If neither apply, returns None.
+    /// Returns a mutable reference to topic stats if they exist, otherwise if
+    /// the supplied parameters score the topic, inserts the default stats
+    /// and returns a reference to those. If neither apply, returns None.
     pub(crate) fn stats_or_default_mut(
         &mut self,
         topic_hash: TopicHash,
@@ -116,7 +131,8 @@ struct TopicStats {
     mesh_status: MeshStatus,
     /// Number of first message deliveries.
     first_message_deliveries: f64,
-    /// True if the peer has been in the mesh for enough time to activate mesh message deliveries.
+    /// True if the peer has been in the mesh for enough time to activate mesh
+    /// message deliveries.
     mesh_message_deliveries_active: bool,
     /// Number of message deliveries from the mesh.
     mesh_message_deliveries: f64,
@@ -197,7 +213,8 @@ impl Default for DeliveryRecord {
 }
 
 impl PeerScore {
-    /// Creates a new [`PeerScore`] using a given set of peer scoring parameters.
+    /// Creates a new [`PeerScore`] using a given set of peer scoring
+    /// parameters.
     #[allow(dead_code)]
     pub(crate) fn new(params: PeerScoreParams) -> Self {
         Self::new_with_message_delivery_time_callback(params, None)
@@ -221,8 +238,8 @@ impl PeerScore {
         self.metric_score(peer_id, None)
     }
 
-    /// Returns the score for a peer, logging metrics. This is called from the heartbeat and
-    /// increments the metric counts for penalties.
+    /// Returns the score for a peer, logging metrics. This is called from the
+    /// heartbeat and increments the metric counts for penalties.
     pub(crate) fn metric_score(&self, peer_id: &PeerId, mut metrics: Option<&mut Metrics>) -> f64 {
         let Some(peer_stats) = self.peer_stats.get(peer_id) else {
             return 0.0;
@@ -285,12 +302,14 @@ impl PeerScore {
                 }
 
                 // P3b:
-                // NOTE: the weight of P3b is negative (validated in TopicScoreParams.validate), so this detracts.
+                // NOTE: the weight of P3b is negative (validated in TopicScoreParams.validate),
+                // so this detracts.
                 let p3b = topic_stats.mesh_failure_penalty;
                 topic_score += p3b * topic_params.mesh_failure_penalty_weight;
 
                 // P4: invalid messages
-                // NOTE: the weight of P4 is negative (validated in TopicScoreParams.validate), so this detracts.
+                // NOTE: the weight of P4 is negative (validated in TopicScoreParams.validate),
+                // so this detracts.
                 let p4 =
                     topic_stats.invalid_message_deliveries * topic_stats.invalid_message_deliveries;
                 topic_score += p4 * topic_params.invalid_message_deliveries_weight;
@@ -391,9 +410,10 @@ impl PeerScore {
                 }
 
                 // we don't decay retained scores, as the peer is not active.
-                // this way the peer cannot reset a negative score by simply disconnecting and reconnecting,
-                // unless the retention period has elapsed.
-                // similarly, a well behaved peer does not lose its score by getting disconnected.
+                // this way the peer cannot reset a negative score by simply disconnecting and
+                // reconnecting, unless the retention period has elapsed.
+                // similarly, a well behaved peer does not lose its score by getting
+                // disconnected.
                 return true;
             }
 
@@ -450,8 +470,8 @@ impl PeerScore {
         });
     }
 
-    /// Adds a connected peer to [`PeerScore`], initialising with empty ips (ips get added later
-    /// through add_ip.
+    /// Adds a connected peer to [`PeerScore`], initialising with empty ips (ips
+    /// get added later through add_ip.
     pub(crate) fn add_peer(&mut self, peer_id: PeerId) {
         let peer_stats = self.peer_stats.entry(peer_id).or_default();
 
@@ -459,13 +479,14 @@ impl PeerScore {
         peer_stats.status = ConnectionStatus::Connected;
     }
 
-    /// Adds a new ip to a peer, if the peer is not yet known creates a new peer_stats entry for it
+    /// Adds a new ip to a peer, if the peer is not yet known creates a new
+    /// peer_stats entry for it
     pub(crate) fn add_ip(&mut self, peer_id: &PeerId, ip: IpAddr) {
         tracing::trace!(peer=%peer_id, %ip, "Add ip for peer");
         let peer_stats = self.peer_stats.entry(*peer_id).or_default();
 
-        // Mark the peer as connected (currently the default is connected, but we don't want to
-        // rely on the default).
+        // Mark the peer as connected (currently the default is connected, but we don't
+        // want to rely on the default).
         peer_stats.status = ConnectionStatus::Connected;
 
         // Insert the ip
@@ -504,8 +525,8 @@ impl PeerScore {
         }
     }
 
-    /// Removes a peer from the score table. This retains peer statistics if their score is
-    /// non-positive.
+    /// Removes a peer from the score table. This retains peer statistics if
+    /// their score is non-positive.
     pub(crate) fn remove_peer(&mut self, peer_id: &PeerId) {
         // we only retain non-positive scores of peers
         if self.score(peer_id) > 0f64 {
@@ -516,8 +537,8 @@ impl PeerScore {
             return;
         }
 
-        // if the peer is retained (including it's score) the `first_message_delivery` counters
-        // are reset to 0 and mesh delivery penalties applied.
+        // if the peer is retained (including it's score) the `first_message_delivery`
+        // counters are reset to 0 and mesh delivery penalties applied.
         if let Some(peer_stats) = self.peer_stats.get_mut(peer_id) {
             for (topic, topic_stats) in peer_stats.topics.iter_mut() {
                 topic_stats.first_message_deliveries = 0f64;
@@ -627,18 +648,20 @@ impl PeerScore {
             return;
         }
 
-        // mark the message as valid and reward mesh peers that have already forwarded it to us
+        // mark the message as valid and reward mesh peers that have already forwarded
+        // it to us
         record.status = DeliveryStatus::Valid(Instant::now());
         for peer in record.peers.iter().cloned().collect::<Vec<_>>() {
-            // this check is to make sure a peer can't send us a message twice and get a double
-            // count if it is a first delivery
+            // this check is to make sure a peer can't send us a message twice and get a
+            // double count if it is a first delivery
             if &peer != from {
                 self.mark_duplicate_message_delivery(&peer, topic_hash, None);
             }
         }
     }
 
-    /// Similar to `reject_message` except does not require the message id or reason for an invalid message.
+    /// Similar to `reject_message` except does not require the message id or
+    /// reason for an invalid message.
     pub(crate) fn reject_invalid_message(&mut self, from: &PeerId, topic_hash: &TopicHash) {
         tracing::debug!(
             peer=%from,
@@ -672,21 +695,22 @@ impl PeerScore {
         let peers: Vec<_> = {
             let record = self.deliveries.entry(msg_id.clone()).or_default();
 
-            // Multiple peers can now reject the same message as we track which peers send us the
-            // message. If we have already updated the status, return.
+            // Multiple peers can now reject the same message as we track which peers send
+            // us the message. If we have already updated the status, return.
             if record.status != DeliveryStatus::Unknown {
                 return;
             }
 
             if let RejectReason::ValidationIgnored = reason {
-                // we were explicitly instructed by the validator to ignore the message but not penalize
-                // the peer
+                // we were explicitly instructed by the validator to ignore the message but not
+                // penalize the peer
                 record.status = DeliveryStatus::Ignored;
                 record.peers.clear();
                 return;
             }
 
-            // mark the message as invalid and penalize peers that have already forwarded it.
+            // mark the message as invalid and penalize peers that have already forwarded
+            // it.
             record.status = DeliveryStatus::Invalid;
             // release the delivery time tracking map to free some memory early
             record.peers.drain().collect()
@@ -744,13 +768,15 @@ impl PeerScore {
                 self.mark_invalid_message_delivery(from, topic_hash);
             }
             DeliveryStatus::Ignored => {
-                // the message was ignored; do nothing (we don't know if it was valid)
+                // the message was ignored; do nothing (we don't know if it was
+                // valid)
             }
         }
     }
 
-    /// Sets the application specific score for a peer. Returns true if the peer is the peer is
-    /// connected or if the score of the peer is not yet expired and false otherwise.
+    /// Sets the application specific score for a peer. Returns true if the peer
+    /// is the peer is connected or if the score of the peer is not yet
+    /// expired and false otherwise.
     pub(crate) fn set_application_score(&mut self, peer_id: &PeerId, new_score: f64) -> bool {
         if let Some(peer_stats) = self.peer_stats.get_mut(peer_id) {
             peer_stats.application_score = new_score;
@@ -800,8 +826,8 @@ impl PeerScore {
         self.params.topics.get(topic_hash)
     }
 
-    /// Increments the "invalid message deliveries" counter for all scored topics the message
-    /// is published in.
+    /// Increments the "invalid message deliveries" counter for all scored
+    /// topics the message is published in.
     fn mark_invalid_message_delivery(&mut self, peer_id: &PeerId, topic_hash: &TopicHash) {
         if let Some(peer_stats) = self.peer_stats.get_mut(peer_id) {
             if let Some(topic_stats) =
@@ -818,9 +844,9 @@ impl PeerScore {
         }
     }
 
-    /// Increments the "first message deliveries" counter for all scored topics the message is
-    /// published in, as well as the "mesh message deliveries" counter, if the peer is in the
-    /// mesh for the topic.
+    /// Increments the "first message deliveries" counter for all scored topics
+    /// the message is published in, as well as the "mesh message
+    /// deliveries" counter, if the peer is in the mesh for the topic.
     fn mark_first_message_delivery(&mut self, peer_id: &PeerId, topic_hash: &TopicHash) {
         if let Some(peer_stats) = self.peer_stats.get_mut(peer_id) {
             if let Some(topic_stats) =
@@ -858,8 +884,8 @@ impl PeerScore {
         }
     }
 
-    /// Increments the "mesh message deliveries" counter for messages we've seen before, as long the
-    /// message was received within the P3 window.
+    /// Increments the "mesh message deliveries" counter for messages we've seen
+    /// before, as long the message was received within the P3 window.
     fn mark_duplicate_message_delivery(
         &mut self,
         peer_id: &PeerId,
@@ -882,13 +908,14 @@ impl PeerScore {
                         .get(topic_hash)
                         .expect("Topic must exist if there are known topic_stats");
 
-                    // check against the mesh delivery window -- if the validated time is passed as 0, then
-                    // the message was received before we finished validation and thus falls within the mesh
+                    // check against the mesh delivery window -- if the validated time is passed as
+                    // 0, then the message was received before we finished
+                    // validation and thus falls within the mesh
                     // delivery window.
                     let mut falls_in_mesh_deliver_window = true;
                     if let Some(validated_time) = validated_time {
                         if let Some(now) = &now {
-                            //should always be true
+                            // should always be true
                             let window_time = validated_time
                                 .checked_add(topic_params.mesh_message_deliveries_window)
                                 .unwrap_or(*now);

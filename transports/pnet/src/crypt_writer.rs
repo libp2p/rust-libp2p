@@ -18,6 +18,8 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
+use std::{fmt, pin::Pin};
+
 use futures::{
     io::{self, AsyncWrite},
     ready,
@@ -25,7 +27,6 @@ use futures::{
 };
 use pin_project::pin_project;
 use salsa20::{cipher::StreamCipher, XSalsa20};
-use std::{fmt, pin::Pin};
 
 /// A writer that encrypts and forwards to an inner writer
 #[pin_project]
@@ -56,9 +57,11 @@ impl<W: AsyncWrite> CryptWriter<W> {
 
 /// Write the contents of a [`Vec<u8>`] into an [`AsyncWrite`].
 ///
-/// The handling 0 byte progress and the Interrupted error was taken from BufWriter in async_std.
+/// The handling 0 byte progress and the Interrupted error was taken from
+/// BufWriter in async_std.
 ///
-/// If this fn returns Ready(Ok(())), the buffer has been completely flushed and is empty.
+/// If this fn returns Ready(Ok(())), the buffer has been completely flushed and
+/// is empty.
 fn poll_flush_buf<W: AsyncWrite>(
     inner: &mut Pin<&mut W>,
     buf: &mut Vec<u8>,
@@ -74,7 +77,8 @@ fn poll_flush_buf<W: AsyncWrite>(
                     // we made progress, so try again
                     written += n;
                 } else {
-                    // we got Ok but got no progress whatsoever, so bail out so we don't spin writing 0 bytes.
+                    // we got Ok but got no progress whatsoever, so bail out so we don't spin
+                    // writing 0 bytes.
                     ret = Poll::Ready(Err(io::Error::new(
                         io::ErrorKind::WriteZero,
                         "Failed to write buffered data",
@@ -83,7 +87,8 @@ fn poll_flush_buf<W: AsyncWrite>(
                 }
             }
             Poll::Ready(Err(e)) => {
-                // Interrupted is the only error that we consider to be recoverable by trying again
+                // Interrupted is the only error that we consider to be recoverable by trying
+                // again
                 if e.kind() != io::ErrorKind::Interrupted {
                     // for any other error, don't try again
                     ret = Poll::Ready(Err(e));

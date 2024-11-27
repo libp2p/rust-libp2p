@@ -1,3 +1,5 @@
+use std::{io, iter, pin::pin, time::Duration};
+
 use anyhow::{bail, Result};
 use async_std::task::sleep;
 use async_trait::async_trait;
@@ -8,11 +10,13 @@ use libp2p_request_response::ProtocolSupport;
 use libp2p_swarm::{StreamProtocol, Swarm};
 use libp2p_swarm_test::SwarmExt;
 use request_response::{
-    Codec, InboundFailure, InboundRequestId, OutboundFailure, OutboundRequestId, ResponseChannel,
+    Codec,
+    InboundFailure,
+    InboundRequestId,
+    OutboundFailure,
+    OutboundRequestId,
+    ResponseChannel,
 };
-use std::pin::pin;
-use std::time::Duration;
-use std::{io, iter};
 use tracing_subscriber::EnvFilter;
 
 #[async_std::test]
@@ -40,7 +44,8 @@ async fn report_outbound_failure_on_read_response() {
         assert_eq!(peer, peer2_id);
         assert_eq!(req_id_done, req_id);
 
-        // Keep the connection alive, otherwise swarm2 may receive `ConnectionClosed` instead
+        // Keep the connection alive, otherwise swarm2 may receive `ConnectionClosed`
+        // instead
         wait_no_events(&mut swarm1).await;
     };
 
@@ -84,7 +89,8 @@ async fn report_outbound_failure_on_write_request() {
     swarm2.connect(&mut swarm1).await;
 
     // Expects no events because `Event::Request` is produced after `read_request`.
-    // Keep the connection alive, otherwise swarm2 may receive `ConnectionClosed` instead.
+    // Keep the connection alive, otherwise swarm2 may receive `ConnectionClosed`
+    // instead.
     let server_task = wait_no_events(&mut swarm1);
 
     // Expects OutboundFailure::Io failure with `FailOnWriteRequest` error.
@@ -140,7 +146,8 @@ async fn report_outbound_timeout_on_read_response() {
         assert_eq!(peer, peer2_id);
         assert_eq!(req_id_done, req_id);
 
-        // Keep the connection alive, otherwise swarm2 may receive `ConnectionClosed` instead
+        // Keep the connection alive, otherwise swarm2 may receive `ConnectionClosed`
+        // instead
         wait_no_events(&mut swarm1).await;
     };
 
@@ -183,7 +190,8 @@ async fn report_outbound_failure_on_max_streams() {
             .behaviour_mut()
             .send_request(&peer2_id, Action::FailOnMaxStreams);
 
-        // Keep the connection alive, otherwise swarm2 may receive `ConnectionClosed` instead.
+        // Keep the connection alive, otherwise swarm2 may receive `ConnectionClosed`
+        // instead.
         wait_no_events(&mut swarm1).await;
     };
 
@@ -226,7 +234,8 @@ async fn report_inbound_failure_on_read_request() {
     swarm2.connect(&mut swarm1).await;
 
     // Expects no events because `Event::Request` is produced after `read_request`.
-    // Keep the connection alive, otherwise swarm2 may receive `ConnectionClosed` instead.
+    // Keep the connection alive, otherwise swarm2 may receive `ConnectionClosed`
+    // instead.
     let server_task = wait_no_events(&mut swarm1);
 
     // Expects io::ErrorKind::UnexpectedEof
@@ -300,8 +309,8 @@ async fn report_inbound_failure_on_write_response() {
 
         match error {
             OutboundFailure::ConnectionClosed => {
-                // ConnectionClosed is allowed here because we mainly test the behavior
-                // of `server_task`.
+                // ConnectionClosed is allowed here because we mainly test the
+                // behavior of `server_task`.
             }
             OutboundFailure::Io(e) if e.kind() == io::ErrorKind::UnexpectedEof => {}
             e => panic!("Unexpected error: {e:?}"),
@@ -357,8 +366,8 @@ async fn report_inbound_timeout_on_write_response() {
 
         match error {
             OutboundFailure::ConnectionClosed => {
-                // ConnectionClosed is allowed here because we mainly test the behavior
-                // of `server_task`.
+                // ConnectionClosed is allowed here because we mainly test the
+                // behavior of `server_task`.
             }
             OutboundFailure::Io(e) if e.kind() == io::ErrorKind::UnexpectedEof => {}
             e => panic!("Unexpected error: {e:?}"),

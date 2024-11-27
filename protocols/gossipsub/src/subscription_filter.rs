@@ -18,9 +18,9 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::types::Subscription;
-use crate::TopicHash;
 use std::collections::{BTreeSet, HashMap, HashSet};
+
+use crate::{types::Subscription, TopicHash};
 
 pub trait TopicSubscriptionFilter {
     /// Returns true iff the topic is of interest and we can subscribe to it.
@@ -55,7 +55,8 @@ pub trait TopicSubscriptionFilter {
     }
 
     /// Filters a set of deduplicated subscriptions
-    /// By default this filters the elements based on [`Self::allow_incoming_subscription`].
+    /// By default this filters the elements based on
+    /// [`Self::allow_incoming_subscription`].
     fn filter_incoming_subscription_set<'a>(
         &mut self,
         mut subscriptions: HashSet<&'a Subscription>,
@@ -73,16 +74,16 @@ pub trait TopicSubscriptionFilter {
     }
 
     /// Returns true iff we allow an incoming subscription.
-    /// This is used by the default implementation of filter_incoming_subscription_set to decide
-    /// whether to filter out a subscription or not.
-    /// By default this uses can_subscribe to decide the same for incoming subscriptions as for
-    /// outgoing ones.
+    /// This is used by the default implementation of
+    /// filter_incoming_subscription_set to decide whether to filter out a
+    /// subscription or not. By default this uses can_subscribe to decide
+    /// the same for incoming subscriptions as for outgoing ones.
     fn allow_incoming_subscription(&mut self, subscription: &Subscription) -> bool {
         self.can_subscribe(&subscription.topic_hash)
     }
 }
 
-//some useful implementers
+// some useful implementers
 
 /// Allows all subscriptions
 #[derive(Default, Clone)]
@@ -199,7 +200,7 @@ where
     }
 }
 
-///A subscription filter that filters topics based on a regular expression.
+/// A subscription filter that filters topics based on a regular expression.
 pub struct RegexSubscriptionFilter(pub regex::Regex);
 
 impl TopicSubscriptionFilter for RegexSubscriptionFilter {

@@ -22,25 +22,42 @@ mod iface;
 mod socket;
 mod timer;
 
-use self::iface::InterfaceState;
-use crate::behaviour::{socket::AsyncSocket, timer::Builder};
-use crate::Config;
-use futures::channel::mpsc;
-use futures::{Stream, StreamExt};
+use std::{
+    cmp,
+    collections::hash_map::{Entry, HashMap},
+    fmt,
+    future::Future,
+    io,
+    net::IpAddr,
+    pin::Pin,
+    sync::{Arc, RwLock},
+    task::{Context, Poll},
+    time::Instant,
+};
+
+use futures::{channel::mpsc, Stream, StreamExt};
 use if_watch::IfEvent;
-use libp2p_core::transport::PortUse;
-use libp2p_core::{Endpoint, Multiaddr};
+use libp2p_core::{transport::PortUse, Endpoint, Multiaddr};
 use libp2p_identity::PeerId;
-use libp2p_swarm::behaviour::FromSwarm;
 use libp2p_swarm::{
-    dummy, ConnectionDenied, ConnectionId, ListenAddresses, NetworkBehaviour, THandler,
-    THandlerInEvent, THandlerOutEvent, ToSwarm,
+    behaviour::FromSwarm,
+    dummy,
+    ConnectionDenied,
+    ConnectionId,
+    ListenAddresses,
+    NetworkBehaviour,
+    THandler,
+    THandlerInEvent,
+    THandlerOutEvent,
+    ToSwarm,
 };
 use smallvec::SmallVec;
-use std::collections::hash_map::{Entry, HashMap};
-use std::future::Future;
-use std::sync::{Arc, RwLock};
-use std::{cmp, fmt, io, net::IpAddr, pin::Pin, task::Context, task::Poll, time::Instant};
+
+use self::iface::InterfaceState;
+use crate::{
+    behaviour::{socket::AsyncSocket, timer::Builder},
+    Config,
+};
 
 /// An abstraction to allow for compatibility with various async runtimes.
 pub trait Provider: 'static {
@@ -68,11 +85,13 @@ pub trait Abort {
 /// The type of a [`Behaviour`] using the `async-io` implementation.
 #[cfg(feature = "async-io")]
 pub mod async_io {
-    use super::Provider;
-    use crate::behaviour::{socket::asio::AsyncUdpSocket, timer::asio::AsyncTimer, Abort};
+    use std::future::Future;
+
     use async_std::task::JoinHandle;
     use if_watch::smol::IfWatcher;
-    use std::future::Future;
+
+    use super::Provider;
+    use crate::behaviour::{socket::asio::AsyncUdpSocket, timer::asio::AsyncTimer, Abort};
 
     #[doc(hidden)]
     pub enum AsyncIo {}
@@ -104,11 +123,13 @@ pub mod async_io {
 /// The type of a [`Behaviour`] using the `tokio` implementation.
 #[cfg(feature = "tokio")]
 pub mod tokio {
+    use std::future::Future;
+
+    use if_watch::tokio::IfWatcher;
+    use tokio::task::JoinHandle;
+
     use super::Provider;
     use crate::behaviour::{socket::tokio::TokioUdpSocket, timer::tokio::TokioTimer, Abort};
-    use if_watch::tokio::IfWatcher;
-    use std::future::Future;
-    use tokio::task::JoinHandle;
 
     #[doc(hidden)]
     pub enum Tokio {}
@@ -137,8 +158,8 @@ pub mod tokio {
     pub type Behaviour = super::Behaviour<Tokio>;
 }
 
-/// A `NetworkBehaviour` for mDNS. Automatically discovers peers on the local network and adds
-/// them to the topology.
+/// A `NetworkBehaviour` for mDNS. Automatically discovers peers on the local
+/// network and adds them to the topology.
 #[derive(Debug)]
 pub struct Behaviour<P>
 where
@@ -156,13 +177,15 @@ where
     query_response_receiver: mpsc::Receiver<(PeerId, Multiaddr, Instant)>,
     query_response_sender: mpsc::Sender<(PeerId, Multiaddr, Instant)>,
 
-    /// List of nodes that we have discovered, the address, and when their TTL expires.
+    /// List of nodes that we have discovered, the address, and when their TTL
+    /// expires.
     ///
-    /// Each combination of `PeerId` and `Multiaddr` can only appear once, but the same `PeerId`
-    /// can appear multiple times.
+    /// Each combination of `PeerId` and `Multiaddr` can only appear once, but
+    /// the same `PeerId` can appear multiple times.
     discovered_nodes: SmallVec<[(PeerId, Multiaddr, Instant); 8]>,
 
-    /// Future that fires when the TTL of at least one node in `discovered_nodes` expires.
+    /// Future that fires when the TTL of at least one node in
+    /// `discovered_nodes` expires.
     ///
     /// `None` if `discovered_nodes` is empty.
     closest_expiration: Option<P::Timer>,
@@ -170,7 +193,8 @@ where
     /// The current set of listen addresses.
     ///
     /// This is shared across all interface tasks using an [`RwLock`].
-    /// The [`Behaviour`] updates this upon new [`FromSwarm`] events where as [`InterfaceState`]s read from it to answer inbound mDNS queries.
+    /// The [`Behaviour`] updates this upon new [`FromSwarm`] events where as
+    /// [`InterfaceState`]s read from it to answer inbound mDNS queries.
     listen_addresses: Arc<RwLock<ListenAddresses>>,
 
     local_peer_id: PeerId,
@@ -197,13 +221,15 @@ where
         })
     }
 
-    /// Returns true if the given `PeerId` is in the list of nodes discovered through mDNS.
+    /// Returns true if the given `PeerId` is in the list of nodes discovered
+    /// through mDNS.
     #[deprecated(note = "Use `discovered_nodes` iterator instead.")]
     pub fn has_node(&self, peer_id: &PeerId) -> bool {
         self.discovered_nodes().any(|p| p == peer_id)
     }
 
-    /// Returns the list of nodes that we have discovered through mDNS and that are not expired.
+    /// Returns the list of nodes that we have discovered through mDNS and that
+    /// are not expired.
     pub fn discovered_nodes(&self) -> impl ExactSizeIterator<Item = &PeerId> {
         self.discovered_nodes.iter().map(|(p, _, _)| p)
     }
@@ -388,7 +414,8 @@ pub enum Event {
 
     /// The given combinations of `PeerId` and `Multiaddr` have expired.
     ///
-    /// Each discovered record has a time-to-live. When this TTL expires and the address hasn't
-    /// been refreshed, we remove it from the list and emit it as an `Expired` event.
+    /// Each discovered record has a time-to-live. When this TTL expires and the
+    /// address hasn't been refreshed, we remove it from the list and emit
+    /// it as an `Expired` event.
     Expired(Vec<(PeerId, Multiaddr)>),
 }

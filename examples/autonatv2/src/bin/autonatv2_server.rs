@@ -5,11 +5,15 @@ use clap::Parser;
 use libp2p::{
     autonat,
     futures::StreamExt,
-    identify, identity,
+    identify,
+    identity,
     multiaddr::Protocol,
     noise,
     swarm::{NetworkBehaviour, SwarmEvent},
-    tcp, yamux, Multiaddr, SwarmBuilder,
+    tcp,
+    yamux,
+    Multiaddr,
+    SwarmBuilder,
 };
 use rand::rngs::OsRng;
 

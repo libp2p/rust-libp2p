@@ -23,17 +23,19 @@
 //! [`AsyncRead`] and [`AsyncWrite`].
 //!
 //! Each call to [`AsyncWrite::poll_write`] will send one packet to the sink.
-//! Calls to [`AsyncRead::poll_read`] will read from the stream's incoming packets.
+//! Calls to [`AsyncRead::poll_read`] will read from the stream's incoming
+//! packets.
 
 #![cfg_attr(docsrs, feature(doc_cfg, doc_auto_cfg))]
 
-use futures::{prelude::*, ready};
 use std::{
     io::{self, Read},
     mem,
     pin::Pin,
     task::{Context, Poll},
 };
+
+use futures::{prelude::*, ready};
 
 static_assertions::const_assert!(mem::size_of::<usize>() <= mem::size_of::<u64>());
 
@@ -115,13 +117,15 @@ where
 
 #[cfg(test)]
 mod tests {
-    use super::RwStreamSink;
-    use async_std::task;
-    use futures::{channel::mpsc, prelude::*};
     use std::{
         pin::Pin,
         task::{Context, Poll},
     };
+
+    use async_std::task;
+    use futures::{channel::mpsc, prelude::*};
+
+    use super::RwStreamSink;
 
     // This struct merges a stream and a sink and is quite useful for tests.
     struct Wrapper<St, Si>(St, Si);

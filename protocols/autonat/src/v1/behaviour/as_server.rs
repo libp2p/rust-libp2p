@@ -17,24 +17,38 @@
 // LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
-use super::{
-    Action, AutoNatCodec, Config, DialRequest, DialResponse, Event, HandleInnerEvent, ProbeId,
-    ResponseError,
-};
-use libp2p_core::{multiaddr::Protocol, Multiaddr};
-use libp2p_identity::PeerId;
-use libp2p_request_response::{
-    self as request_response, InboundFailure, InboundRequestId, ResponseChannel,
-};
-use libp2p_swarm::{
-    dial_opts::{DialOpts, PeerCondition},
-    ConnectionId, DialError, ToSwarm,
-};
 use std::{
     collections::{HashMap, HashSet, VecDeque},
     num::NonZeroU8,
 };
+
+use libp2p_core::{multiaddr::Protocol, Multiaddr};
+use libp2p_identity::PeerId;
+use libp2p_request_response::{
+    self as request_response,
+    InboundFailure,
+    InboundRequestId,
+    ResponseChannel,
+};
+use libp2p_swarm::{
+    dial_opts::{DialOpts, PeerCondition},
+    ConnectionId,
+    DialError,
+    ToSwarm,
+};
 use web_time::Instant;
+
+use super::{
+    Action,
+    AutoNatCodec,
+    Config,
+    DialRequest,
+    DialResponse,
+    Event,
+    HandleInnerEvent,
+    ProbeId,
+    ResponseError,
+};
 
 /// Inbound probe failed.
 #[derive(Debug)]
@@ -379,9 +393,9 @@ impl AsServer<'_> {
 
 #[cfg(test)]
 mod test {
-    use super::*;
-
     use std::net::Ipv4Addr;
+
+    use super::*;
 
     fn random_ip<'a>() -> Protocol<'a> {
         Protocol::Ip4(Ipv4Addr::new(

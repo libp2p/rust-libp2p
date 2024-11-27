@@ -18,7 +18,6 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use futures::{stream::Peekable, Stream, StreamExt};
 use std::{
     future::Future,
     pin::Pin,
@@ -28,6 +27,8 @@ use std::{
     },
     task::{Context, Poll},
 };
+
+use futures::{stream::Peekable, Stream, StreamExt};
 
 use crate::types::RpcOut;
 
@@ -46,8 +47,8 @@ pub(crate) struct Sender {
 impl Sender {
     /// Create a RpcSender.
     pub(crate) fn new(cap: usize) -> Sender {
-        // We intentionally do not bound the channel, as we still need to send control messages
-        // such as `GRAFT`, `PRUNE`, `SUBSCRIBE`, and `UNSUBSCRIBE`.
+        // We intentionally do not bound the channel, as we still need to send control
+        // messages such as `GRAFT`, `PRUNE`, `SUBSCRIBE`, and `UNSUBSCRIBE`.
         // That's also why we define `cap` and divide it by two,
         // to ensure there is capacity for both priority and non_priority messages.
         let (priority_sender, priority_receiver) = async_channel::unbounded();
@@ -119,7 +120,8 @@ pub struct Receiver {
 
 impl Receiver {
     // Peek the next message in the queues and return it if its timeout has elapsed.
-    // Returns `None` if there aren't any more messages on the stream or none is stale.
+    // Returns `None` if there aren't any more messages on the stream or none is
+    // stale.
     pub(crate) fn poll_stale(&mut self, cx: &mut Context<'_>) -> Poll<Option<RpcOut>> {
         // Peek priority queue.
         let priority = match self.priority.as_mut().poll_peek_mut(cx) {

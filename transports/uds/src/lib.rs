@@ -26,10 +26,12 @@
 //!
 //! # Usage
 //!
-//! The `UdsConfig` transport supports multiaddresses of the form `/unix//tmp/foo`.
+//! The `UdsConfig` transport supports multiaddresses of the form
+//! `/unix//tmp/foo`.
 //!
-//! The `UdsConfig` structs implements the `Transport` trait of the `core` library. See the
-//! documentation of `core` and of libp2p in general to learn how to use the `Transport` trait.
+//! The `UdsConfig` structs implements the `Transport` trait of the `core`
+//! library. See the documentation of `core` and of libp2p in general to learn
+//! how to use the `Transport` trait.
 
 #![cfg(all(
     unix,
@@ -38,21 +40,24 @@
 ))]
 #![cfg_attr(docsrs, feature(doc_cfg, doc_auto_cfg))]
 
-use futures::stream::BoxStream;
+use std::{
+    collections::VecDeque,
+    io,
+    path::PathBuf,
+    pin::Pin,
+    task::{Context, Poll},
+};
+
 use futures::{
     future::{BoxFuture, Ready},
     prelude::*,
+    stream::BoxStream,
 };
-use libp2p_core::transport::ListenerId;
 use libp2p_core::{
     multiaddr::{Multiaddr, Protocol},
-    transport::{DialOpts, TransportError, TransportEvent},
+    transport::{DialOpts, ListenerId, TransportError, TransportEvent},
     Transport,
 };
-use std::collections::VecDeque;
-use std::pin::Pin;
-use std::task::{Context, Poll};
-use std::{io, path::PathBuf};
 
 pub type Listener<T> = BoxStream<
     'static,
@@ -219,8 +224,8 @@ codegen!(
 
 /// Turns a `Multiaddr` containing a single `Unix` component into a path.
 ///
-/// Also returns an error if the path is not absolute, as we don't want to dial/listen on relative
-/// paths.
+/// Also returns an error if the path is not absolute, as we don't want to
+/// dial/listen on relative paths.
 // This type of logic should probably be moved into the multiaddr package
 fn multiaddr_to_path(addr: &Multiaddr) -> Result<PathBuf, ()> {
     let mut protocols = addr.iter();
@@ -241,14 +246,17 @@ fn multiaddr_to_path(addr: &Multiaddr) -> Result<PathBuf, ()> {
 
 #[cfg(all(test, feature = "async-std"))]
 mod tests {
-    use super::{multiaddr_to_path, UdsConfig};
+    use std::{borrow::Cow, path::Path};
+
     use futures::{channel::oneshot, prelude::*};
     use libp2p_core::{
         multiaddr::{Multiaddr, Protocol},
         transport::{DialOpts, ListenerId, PortUse},
-        Endpoint, Transport,
+        Endpoint,
+        Transport,
     };
-    use std::{borrow::Cow, path::Path};
+
+    use super::{multiaddr_to_path, UdsConfig};
 
     #[test]
     fn multiaddr_to_path_conversion() {

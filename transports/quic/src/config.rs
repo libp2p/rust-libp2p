@@ -18,19 +18,23 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
+use std::{sync::Arc, time::Duration};
+
 use quinn::{
     crypto::rustls::{QuicClientConfig, QuicServerConfig},
-    MtuDiscoveryConfig, VarInt,
+    MtuDiscoveryConfig,
+    VarInt,
 };
-use std::{sync::Arc, time::Duration};
 
 /// Config for the transport.
 #[derive(Clone)]
 pub struct Config {
     /// Timeout for the initial handshake when establishing a connection.
-    /// The actual timeout is the minimum of this and the [`Config::max_idle_timeout`].
+    /// The actual timeout is the minimum of this and the
+    /// [`Config::max_idle_timeout`].
     pub handshake_timeout: Duration,
-    /// Maximum duration of inactivity in ms to accept before timing out the connection.
+    /// Maximum duration of inactivity in ms to accept before timing out the
+    /// connection.
     pub max_idle_timeout: u32,
     /// Period of inactivity before sending a keep-alive packet.
     /// Must be set lower than the idle_timeout of both
@@ -46,17 +50,17 @@ pub struct Config {
     /// Max unacknowledged data in bytes that may be sent on a single stream.
     pub max_stream_data: u32,
 
-    /// Max unacknowledged data in bytes that may be sent in total on all streams
-    /// of a connection.
+    /// Max unacknowledged data in bytes that may be sent in total on all
+    /// streams of a connection.
     pub max_connection_data: u32,
 
     /// Support QUIC version draft-29 for dialing and listening.
     ///
-    /// Per default only QUIC Version 1 / [`libp2p_core::multiaddr::Protocol::QuicV1`]
-    /// is supported.
+    /// Per default only QUIC Version 1 /
+    /// [`libp2p_core::multiaddr::Protocol::QuicV1`] is supported.
     ///
-    /// If support for draft-29 is enabled servers support draft-29 and version 1 on all
-    /// QUIC listening addresses.
+    /// If support for draft-29 is enabled servers support draft-29 and version
+    /// 1 on all QUIC listening addresses.
     /// As client the version is chosen based on the remote's address.
     pub support_draft_29: bool,
 
@@ -67,7 +71,8 @@ pub struct Config {
     /// Libp2p identity of the node.
     keypair: libp2p_identity::Keypair,
 
-    /// Parameters governing MTU discovery. See [`MtuDiscoveryConfig`] for details.
+    /// Parameters governing MTU discovery. See [`MtuDiscoveryConfig`] for
+    /// details.
     mtu_discovery_config: Option<MtuDiscoveryConfig>,
 }
 
@@ -98,7 +103,8 @@ impl Config {
         }
     }
 
-    /// Set the upper bound to the max UDP payload size that MTU discovery will search for.
+    /// Set the upper bound to the max UDP payload size that MTU discovery will
+    /// search for.
     pub fn mtu_upper_bound(mut self, value: u16) -> Self {
         self.mtu_discovery_config
             .get_or_insert_with(Default::default)
@@ -153,8 +159,8 @@ impl From<Config> for QuinnConfig {
         let mut server_config = quinn::ServerConfig::with_crypto(server_tls_config);
         server_config.transport = Arc::clone(&transport);
         // Disables connection migration.
-        // Long-term this should be enabled, however we then need to handle address change
-        // on connections in the `Connection`.
+        // Long-term this should be enabled, however we then need to handle address
+        // change on connections in the `Connection`.
         server_config.migration(false);
 
         let mut client_config = quinn::ClientConfig::new(client_tls_config);

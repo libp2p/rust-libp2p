@@ -21,22 +21,30 @@
 //! Implementation of the [AutoNAT](https://github.com/libp2p/specs/blob/master/autonat/README.md) protocol.
 //!
 //! ## Eventual Deprecation
-//! This version of the protocol will eventually be deprecated in favor of [v2](crate::v2).
-//! We recommend using v2 for new projects.
+//! This version of the protocol will eventually be deprecated in favor of
+//! [v2](crate::v2). We recommend using v2 for new projects.
 
 #![cfg_attr(docsrs, feature(doc_cfg, doc_auto_cfg))]
 
 pub(crate) mod behaviour;
 pub(crate) mod protocol;
 
+pub use libp2p_request_response::{InboundFailure, OutboundFailure};
+
 pub use self::{
     behaviour::{
-        Behaviour, Config, Event, InboundProbeError, InboundProbeEvent, NatStatus,
-        OutboundProbeError, OutboundProbeEvent, ProbeId,
+        Behaviour,
+        Config,
+        Event,
+        InboundProbeError,
+        InboundProbeEvent,
+        NatStatus,
+        OutboundProbeError,
+        OutboundProbeEvent,
+        ProbeId,
     },
     protocol::{ResponseError, DEFAULT_PROTOCOL_NAME},
 };
-pub use libp2p_request_response::{InboundFailure, OutboundFailure};
 
 pub(crate) mod proto {
     #![allow(unreachable_pub)]

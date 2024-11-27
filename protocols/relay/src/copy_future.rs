@@ -19,21 +19,24 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-//! Helper to interconnect two substreams, connecting the receiver side of A with the sender side of
-//! B and vice versa.
+//! Helper to interconnect two substreams, connecting the receiver side of A
+//! with the sender side of B and vice versa.
 //!
 //! Inspired by [`futures::io::Copy`].
 
-use futures::future::Future;
-use futures::future::FutureExt;
-use futures::io::{AsyncBufRead, BufReader};
-use futures::io::{AsyncRead, AsyncWrite};
-use futures::ready;
+use std::{
+    io,
+    pin::Pin,
+    task::{Context, Poll},
+    time::Duration,
+};
+
+use futures::{
+    future::{Future, FutureExt},
+    io::{AsyncBufRead, AsyncRead, AsyncWrite, BufReader},
+    ready,
+};
 use futures_timer::Delay;
-use std::io;
-use std::pin::Pin;
-use std::task::{Context, Poll};
-use std::time::Duration;
 
 pub(crate) struct CopyFuture<S, D> {
     src: BufReader<S>,
@@ -129,8 +132,8 @@ where
 
 /// Forwards data from `source` to `destination`.
 ///
-/// Returns `0` when done, i.e. `source` having reached EOF, returns number of bytes sent otherwise,
-/// thus indicating progress.
+/// Returns `0` when done, i.e. `source` having reached EOF, returns number of
+/// bytes sent otherwise, thus indicating progress.
 fn forward_data<S: AsyncBufRead + Unpin, D: AsyncWrite + Unpin>(
     mut src: &mut S,
     mut dst: &mut D,
@@ -161,11 +164,12 @@ fn forward_data<S: AsyncBufRead + Unpin, D: AsyncWrite + Unpin>(
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use futures::executor::block_on;
-    use futures::io::BufWriter;
-    use quickcheck::QuickCheck;
     use std::io::ErrorKind;
+
+    use futures::{executor::block_on, io::BufWriter};
+    use quickcheck::QuickCheck;
+
+    use super::*;
 
     #[test]
     fn quickcheck() {
@@ -356,12 +360,14 @@ mod tests {
             }
         }
 
-        // The source has two reads available, handing them out on `AsyncRead::poll_read` one by one.
+        // The source has two reads available, handing them out on
+        // `AsyncRead::poll_read` one by one.
         let mut source = BufReader::new(NeverEndingSource { read: vec![1, 2] });
 
-        // The destination is wrapped by a `BufWriter` with a capacity of `3`, i.e. one larger than
-        // the available reads of the source. Without an explicit `AsyncWrite::poll_flush` the two
-        // reads would thus never make it to the destination, but instead be stuck in the buffer of
+        // The destination is wrapped by a `BufWriter` with a capacity of `3`, i.e. one
+        // larger than the available reads of the source. Without an explicit
+        // `AsyncWrite::poll_flush` the two reads would thus never make it to
+        // the destination, but instead be stuck in the buffer of
         // the `BufWrite`.
         let mut destination = BufWriter::with_capacity(
             3,
@@ -380,10 +386,11 @@ mod tests {
             "Expect `forward_data` to forward one read from the source to the wrapped destination."
         );
         assert_eq!(
-            destination.get_ref().method_calls.as_slice(), &[],
-            "Given that destination is wrapped with a `BufWrite`, the write doesn't (yet) make it to \
-            the destination. The source might have more data available, thus `forward_data` has not \
-            yet flushed.",
+            destination.get_ref().method_calls.as_slice(),
+            &[],
+            "Given that destination is wrapped with a `BufWrite`, the write doesn't (yet) make it \
+             to the destination. The source might have more data available, thus `forward_data` \
+             has not yet flushed.",
         );
 
         assert!(
@@ -394,10 +401,11 @@ mod tests {
             "Expect `forward_data` to forward one read from the source to the wrapped destination."
         );
         assert_eq!(
-            destination.get_ref().method_calls.as_slice(), &[],
-            "Given that destination is wrapped with a `BufWrite`, the write doesn't (yet) make it to \
-            the destination. The source might have more data available, thus `forward_data` has not \
-            yet flushed.",
+            destination.get_ref().method_calls.as_slice(),
+            &[],
+            "Given that destination is wrapped with a `BufWrite`, the write doesn't (yet) make it \
+             to the destination. The source might have more data available, thus `forward_data` \
+             has not yet flushed.",
         );
 
         assert!(
@@ -406,14 +414,14 @@ mod tests {
                 Poll::Pending,
             ),
             "The source has no more reads available, but does not close i.e. does not return \
-            `Poll::Ready(Ok(1))` but instead `Poll::Pending`. Thus `forward_data` returns \
-            `Poll::Pending` as well."
+             `Poll::Ready(Ok(1))` but instead `Poll::Pending`. Thus `forward_data` returns \
+             `Poll::Pending` as well."
         );
         assert_eq!(
             destination.get_ref().method_calls.as_slice(),
             &[Method::Write(vec![2, 1]), Method::Flush],
-            "Given that source had no more reads, `forward_data` calls flush, thus instructing the \
-            `BufWriter` to flush the two buffered writes down to the destination."
+            "Given that source had no more reads, `forward_data` calls flush, thus instructing \
+             the `BufWriter` to flush the two buffered writes down to the destination."
         );
     }
 }

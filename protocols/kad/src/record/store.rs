@@ -20,12 +20,13 @@
 
 mod memory;
 
+use std::borrow::Cow;
+
 pub use memory::{MemoryStore, MemoryStoreConfig};
 use thiserror::Error;
 
 use super::*;
 use crate::K_VALUE;
-use std::borrow::Cow;
 
 /// The result of an operation on a `RecordStore`.
 pub type Result<T> = std::result::Result<T, Error>;
@@ -37,7 +38,8 @@ pub enum Error {
     #[error("the store cannot contain any more records")]
     MaxRecords,
 
-    /// The store is at capacity w.r.t. the total number of stored provider records.
+    /// The store is at capacity w.r.t. the total number of stored provider
+    /// records.
     #[error("the store cannot contain any more provider records")]
     MaxProvidedKeys,
 
@@ -51,19 +53,18 @@ pub enum Error {
 /// There are two types of records managed by a `RecordStore`:
 ///
 ///   1. Regular (value-)records. These records store an arbitrary value
-///      associated with a key which is distributed to the closest nodes
-///      to the key in the Kademlia DHT as per the standard Kademlia "push-model".
-///      These records are subject to re-replication and re-publication as
-///      per the standard Kademlia protocol.
+///      associated with a key which is distributed to the closest nodes to the
+///      key in the Kademlia DHT as per the standard Kademlia "push-model".
+///      These records are subject to re-replication and re-publication as per
+///      the standard Kademlia protocol.
 ///
 ///   2. Provider records. These records associate the ID of a peer with a key
-///      who can supposedly provide the associated value. These records are
-///      mere "pointers" to the data which may be followed by contacting these
-///      providers to obtain the value. These records are specific to the
-///      libp2p Kademlia specification and realise a "pull-model" for distributed
+///      who can supposedly provide the associated value. These records are mere
+///      "pointers" to the data which may be followed by contacting these
+///      providers to obtain the value. These records are specific to the libp2p
+///      Kademlia specification and realise a "pull-model" for distributed
 ///      content. Just like a regular record, a provider record is distributed
 ///      to the closest nodes to the key.
-///
 pub trait RecordStore {
     type RecordsIter<'a>: Iterator<Item = Cow<'a, Record>>
     where

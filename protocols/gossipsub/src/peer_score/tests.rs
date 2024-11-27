@@ -20,9 +20,7 @@
 
 /// A collection of unit tests mostly ported from the go implementation.
 use super::*;
-
-use crate::types::RawMessage;
-use crate::{IdentTopic as Topic, Message};
+use crate::{types::RawMessage, IdentTopic as Topic, Message};
 
 // estimates a value within variance
 fn within_variance(value: f64, expected: f64, variance: f64) -> bool {
@@ -325,8 +323,8 @@ fn test_score_mesh_message_deliveries() {
     // peer A always delivers the message first.
     // peer B delivers next (within the delivery window).
     // peer C delivers outside the delivery window.
-    // we expect peers A and B to have a score of zero, since all other parameter weights are zero.
-    // Peer C should have a negative score.
+    // we expect peers A and B to have a score of zero, since all other parameter
+    // weights are zero. Peer C should have a negative score.
     let peer_id_a = PeerId::random();
     let peer_id_b = PeerId::random();
     let peer_id_c = PeerId::random();
@@ -338,7 +336,8 @@ fn test_score_mesh_message_deliveries() {
         peer_score.graft(peer_id, topic.clone());
     }
 
-    // assert that nobody has been penalized yet for not delivering messages before activation time
+    // assert that nobody has been penalized yet for not delivering messages before
+    // activation time
     peer_score.refresh_scores();
     for peer_id in &peers {
         let score = peer_score.score(peer_id);
@@ -351,8 +350,8 @@ fn test_score_mesh_message_deliveries() {
     // wait for the activation time to kick in
     std::thread::sleep(topic_params.mesh_message_deliveries_activation);
 
-    // deliver a bunch of messages from peer A, with duplicates within the window from peer B,
-    // and duplicates outside the window from peer C.
+    // deliver a bunch of messages from peer A, with duplicates within the window
+    // from peer B, and duplicates outside the window from peer C.
     let messages = 100;
     let mut messages_to_send = Vec::new();
     for seq in 0..messages {
@@ -384,8 +383,9 @@ fn test_score_mesh_message_deliveries() {
         "expected non-negative score for Peer B, got score {score_b}"
     );
 
-    // the penalty is the difference between the threshold and the actual mesh deliveries, squared.
-    // since we didn't deliver anything, this is just the value of the threshold
+    // the penalty is the difference between the threshold and the actual mesh
+    // deliveries, squared. since we didn't deliver anything, this is just the
+    // value of the threshold
     let penalty = topic_params.mesh_message_deliveries_threshold
         * topic_params.mesh_message_deliveries_threshold;
     let expected =
@@ -431,7 +431,8 @@ fn test_score_mesh_message_deliveries_decay() {
         peer_score.deliver_message(&peer_id_a, &id, &msg.topic);
     }
 
-    // we should have a positive score, since we delivered more messages than the threshold
+    // we should have a positive score, since we delivered more messages than the
+    // threshold
     peer_score.refresh_scores();
 
     let score_a = peer_score.score(&peer_id_a);
@@ -447,7 +448,8 @@ fn test_score_mesh_message_deliveries_decay() {
     }
 
     let score_a = peer_score.score(&peer_id_a);
-    // the penalty is the difference between the threshold and the (decayed) mesh deliveries, squared.
+    // the penalty is the difference between the threshold and the (decayed) mesh
+    // deliveries, squared.
     let deficit = topic_params.mesh_message_deliveries_threshold - decayed_delivery_count;
     let penalty = deficit * deficit;
     let expected =
@@ -506,7 +508,8 @@ fn test_score_mesh_failure_penalty() {
         peer_score.deliver_message(&peer_id_a, &id, &msg.topic);
     }
 
-    // peers A and B should both have zero scores, since the failure penalty hasn't been applied yet
+    // peers A and B should both have zero scores, since the failure penalty hasn't
+    // been applied yet
     peer_score.refresh_scores();
     let score_a = peer_score.score(&peer_id_a);
     let score_b = peer_score.score(&peer_id_b);
@@ -526,8 +529,8 @@ fn test_score_mesh_failure_penalty() {
 
     assert_eq!(score_a, 0.0, "expected Peer A to have a 0");
 
-    // penalty calculation is the same as for mesh_message_deliveries, but multiplied by
-    // mesh_failure_penalty_weigh
+    // penalty calculation is the same as for mesh_message_deliveries, but
+    // multiplied by mesh_failure_penalty_weigh
     // instead of mesh_message_deliveries_weight
     let penalty = topic_params.mesh_message_deliveries_threshold
         * topic_params.mesh_message_deliveries_threshold;
@@ -693,8 +696,8 @@ fn test_score_reject_message_deliveries() {
     // insert a record in the message deliveries
     peer_score.validate_message(&peer_id_a, &id, &msg.topic);
 
-    // this should have no effect in the score, and subsequent duplicate messages should have no
-    // effect either
+    // this should have no effect in the score, and subsequent duplicate messages
+    // should have no effect either
     peer_score.reject_message(&peer_id_a, &id, &msg.topic, RejectReason::ValidationIgnored);
     peer_score.duplicated_message(&peer_id_b, &id, &msg.topic);
 
@@ -711,8 +714,8 @@ fn test_score_reject_message_deliveries() {
     // insert a record in the message deliveries
     peer_score.validate_message(&peer_id_a, &id, &msg.topic);
 
-    // this should have no effect in the score, and subsequent duplicate messages should have no
-    // effect either
+    // this should have no effect in the score, and subsequent duplicate messages
+    // should have no effect either
     peer_score.reject_message(&peer_id_a, &id, &msg.topic, RejectReason::ValidationIgnored);
     peer_score.duplicated_message(&peer_id_b, &id, &msg.topic);
 
@@ -837,7 +840,8 @@ fn test_score_ip_colocation() {
         peer_score.graft(peer_id, topic.clone());
     }
 
-    // peerA should have no penalty, but B, C, and D should be penalized for sharing an IP
+    // peerA should have no penalty, but B, C, and D should be penalized for sharing
+    // an IP
     peer_score.add_ip(&peer_id_a, "1.2.3.4".parse().unwrap());
     peer_score.add_ip(&peer_id_b, "2.3.4.5".parse().unwrap());
     peer_score.add_ip(&peer_id_c, "2.3.4.5".parse().unwrap());

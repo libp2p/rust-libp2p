@@ -18,16 +18,23 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::behaviour::{self, NetworkBehaviour, ToSwarm};
-use crate::connection::ConnectionId;
-use crate::{ConnectionDenied, THandler, THandlerInEvent, THandlerOutEvent};
-use either::Either;
-use libp2p_core::transport::PortUse;
-use libp2p_core::{Endpoint, Multiaddr};
-use libp2p_identity::PeerId;
-use std::{task::Context, task::Poll};
+use std::task::{Context, Poll};
 
-/// Implementation of [`NetworkBehaviour`] that can be either of two implementations.
+use either::Either;
+use libp2p_core::{transport::PortUse, Endpoint, Multiaddr};
+use libp2p_identity::PeerId;
+
+use crate::{
+    behaviour::{self, NetworkBehaviour, ToSwarm},
+    connection::ConnectionId,
+    ConnectionDenied,
+    THandler,
+    THandlerInEvent,
+    THandlerOutEvent,
+};
+
+/// Implementation of [`NetworkBehaviour`] that can be either of two
+/// implementations.
 impl<L, R> NetworkBehaviour for Either<L, R>
 where
     L: NetworkBehaviour,

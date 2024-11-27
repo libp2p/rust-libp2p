@@ -31,13 +31,13 @@ pub enum PublishError {
     SigningError(SigningError),
     /// There were no peers to send this message to.
     InsufficientPeers,
-    /// The overall message was too large. This could be due to excessive topics or an excessive
-    /// message size.
+    /// The overall message was too large. This could be due to excessive topics
+    /// or an excessive message size.
     MessageTooLarge,
     /// The compression algorithm failed.
     TransformFailed(std::io::Error),
-    /// Messages could not be sent because the queues for all peers were full. The usize represents the
-    /// number of peers that were attempted.
+    /// Messages could not be sent because the queues for all peers were full.
+    /// The usize represents the number of peers that were attempted.
     AllQueuesFull(usize),
 }
 
@@ -131,7 +131,8 @@ pub enum ConfigBuilderError {
     MaxTransmissionSizeTooSmall,
     /// History length less than history gossip length.
     HistoryLengthTooSmall,
-    /// The ineauality doesn't hold mesh_outbound_min <= mesh_n_low <= mesh_n <= mesh_n_high
+    /// The ineauality doesn't hold mesh_outbound_min <= mesh_n_low <= mesh_n <=
+    /// mesh_n_high
     MeshParametersInvalid,
     /// The inequality doesn't hold mesh_outbound_min <= self.config.mesh_n / 2
     MeshOutboundInvalid,
@@ -149,9 +150,18 @@ impl std::fmt::Display for ConfigBuilderError {
             Self::MaxTransmissionSizeTooSmall => {
                 write!(f, "Maximum transmission size is too small")
             }
-            Self::HistoryLengthTooSmall => write!(f, "History length less than history gossip length"),
-            Self::MeshParametersInvalid => write!(f, "The ineauality doesn't hold mesh_outbound_min <= mesh_n_low <= mesh_n <= mesh_n_high"),
-            Self::MeshOutboundInvalid => write!(f, "The inequality doesn't hold mesh_outbound_min <= self.config.mesh_n / 2"),
+            Self::HistoryLengthTooSmall => {
+                write!(f, "History length less than history gossip length")
+            }
+            Self::MeshParametersInvalid => write!(
+                f,
+                "The ineauality doesn't hold mesh_outbound_min <= mesh_n_low <= mesh_n <= \
+                 mesh_n_high"
+            ),
+            Self::MeshOutboundInvalid => write!(
+                f,
+                "The inequality doesn't hold mesh_outbound_min <= self.config.mesh_n / 2"
+            ),
             Self::UnsubscribeBackoffIsZero => write!(f, "unsubscribe_backoff is zero"),
             Self::InvalidProtocol => write!(f, "Invalid protocol"),
         }

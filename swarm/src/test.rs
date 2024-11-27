@@ -18,19 +18,42 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::behaviour::{
-    ConnectionClosed, ConnectionEstablished, DialFailure, ExpiredListenAddr, ExternalAddrExpired,
-    FromSwarm, ListenerClosed, ListenerError, NewExternalAddrCandidate, NewListenAddr, NewListener,
+use std::{
+    collections::HashMap,
+    task::{Context, Poll},
 };
-use crate::{
-    ConnectionDenied, ConnectionHandler, ConnectionId, NetworkBehaviour, THandler, THandlerInEvent,
-    THandlerOutEvent, ToSwarm,
+
+use libp2p_core::{
+    multiaddr::Multiaddr,
+    transport::{ListenerId, PortUse},
+    ConnectedPoint,
+    Endpoint,
 };
-use libp2p_core::transport::PortUse;
-use libp2p_core::{multiaddr::Multiaddr, transport::ListenerId, ConnectedPoint, Endpoint};
 use libp2p_identity::PeerId;
-use std::collections::HashMap;
-use std::task::{Context, Poll};
+
+use crate::{
+    behaviour::{
+        ConnectionClosed,
+        ConnectionEstablished,
+        DialFailure,
+        ExpiredListenAddr,
+        ExternalAddrExpired,
+        FromSwarm,
+        ListenerClosed,
+        ListenerError,
+        NewExternalAddrCandidate,
+        NewListenAddr,
+        NewListener,
+    },
+    ConnectionDenied,
+    ConnectionHandler,
+    ConnectionId,
+    NetworkBehaviour,
+    THandler,
+    THandlerInEvent,
+    THandlerOutEvent,
+    ToSwarm,
+};
 
 /// A `MockBehaviour` is a `NetworkBehaviour` that allows for
 /// the instrumentation of return values, without keeping
@@ -42,9 +65,12 @@ where
     TOutEvent: Send + 'static,
 {
     /// The prototype protocols handler that is cloned for every
-    /// invocation of [`NetworkBehaviour::handle_established_inbound_connection`] and [`NetworkBehaviour::handle_established_outbound_connection`]
+    /// invocation of
+    /// [`NetworkBehaviour::handle_established_inbound_connection`] and
+    /// [`NetworkBehaviour::handle_established_outbound_connection`]
     pub(crate) handler_proto: THandler,
-    /// The addresses to return from [`NetworkBehaviour::handle_established_outbound_connection`].
+    /// The addresses to return from
+    /// [`NetworkBehaviour::handle_established_outbound_connection`].
     pub(crate) addresses: HashMap<PeerId, Vec<Multiaddr>>,
     /// The next action to return from `poll`.
     ///
@@ -218,8 +244,9 @@ where
                 .count()
     }
 
-    /// Checks that when the expected number of established connection notifications are received,
-    /// a given number of expected connections have been received as well.
+    /// Checks that when the expected number of established connection
+    /// notifications are received, a given number of expected connections
+    /// have been received as well.
     ///
     /// Returns if the first condition is met.
     pub(crate) fn assert_connected(
@@ -266,8 +293,9 @@ where
             })
             .take(other_established);
 
-        // We are informed that there are `other_established` additional connections. Ensure that the
-        // number of previous connections is consistent with this
+        // We are informed that there are `other_established` additional connections.
+        // Ensure that the number of previous connections is consistent with
+        // this
         if let Some(&prev) = other_peer_connections.next() {
             if prev < other_established {
                 assert_eq!(
@@ -319,8 +347,9 @@ where
             })
             .take(remaining_established);
 
-        // We are informed that there are `other_established` additional connections. Ensure that the
-        // number of previous connections is consistent with this
+        // We are informed that there are `other_established` additional connections.
+        // Ensure that the number of previous connections is consistent with
+        // this
         if let Some(&prev) = other_closed_connections.next() {
             if prev < remaining_established {
                 assert_eq!(
@@ -338,8 +367,8 @@ where
                 .iter()
                 .any(|(peer, conn_id, endpoint, _)| (peer, conn_id, endpoint)
                     == (&peer_id, &connection_id, endpoint)),
-            "`on_swarm_event` with `FromSwarm::ConnectionClosed is called only for connections for\
-             which `on_swarm_event` with `FromSwarm::ConnectionEstablished` was called first."
+            "`on_swarm_event` with `FromSwarm::ConnectionClosed is called only for connections \
+             forwhich `on_swarm_event` with `FromSwarm::ConnectionEstablished` was called first."
         );
         self.on_connection_closed.push((
             peer_id,

@@ -18,14 +18,22 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::handler::{
-    ConnectionEvent, ConnectionHandler, ConnectionHandlerEvent, SubstreamProtocol,
+use std::{
+    fmt::Debug,
+    task::{Context, Poll},
 };
-use futures::ready;
-use std::fmt::Debug;
-use std::task::{Context, Poll};
 
-/// Wrapper around a protocol handler that turns the output event into something else.
+use futures::ready;
+
+use crate::handler::{
+    ConnectionEvent,
+    ConnectionHandler,
+    ConnectionHandlerEvent,
+    SubstreamProtocol,
+};
+
+/// Wrapper around a protocol handler that turns the output event into something
+/// else.
 #[derive(Debug)]
 pub struct MapOutEvent<TConnectionHandler, TMap> {
     inner: TConnectionHandler,

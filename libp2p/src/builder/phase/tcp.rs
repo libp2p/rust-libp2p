@@ -1,5 +1,5 @@
-use super::*;
-use crate::SwarmBuilder;
+use std::marker::PhantomData;
+
 #[cfg(all(
     not(target_arch = "wasm32"),
     any(feature = "tcp", feature = "websocket")
@@ -12,9 +12,14 @@ use libp2p_core::Transport;
     any(feature = "tcp", feature = "websocket")
 ))]
 use libp2p_core::{
-    upgrade::InboundConnectionUpgrade, upgrade::OutboundConnectionUpgrade, Negotiated, UpgradeInfo,
+    upgrade::InboundConnectionUpgrade,
+    upgrade::OutboundConnectionUpgrade,
+    Negotiated,
+    UpgradeInfo,
 };
-use std::marker::PhantomData;
+
+use super::*;
+use crate::SwarmBuilder;
 
 pub struct TcpPhase {}
 

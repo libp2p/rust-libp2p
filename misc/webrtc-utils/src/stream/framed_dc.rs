@@ -21,8 +21,10 @@
 use asynchronous_codec::Framed;
 use futures::{AsyncRead, AsyncWrite};
 
-use crate::proto::Message;
-use crate::stream::{MAX_DATA_LEN, MAX_MSG_LEN, VARINT_LEN};
+use crate::{
+    proto::Message,
+    stream::{MAX_DATA_LEN, MAX_MSG_LEN, VARINT_LEN},
+};
 
 pub(crate) type FramedDc<T> = Framed<T, quick_protobuf_codec::Codec<Message>>;
 pub(crate) fn new<T>(inner: T) -> FramedDc<T>
@@ -30,8 +32,8 @@ where
     T: AsyncRead + AsyncWrite,
 {
     let mut framed = Framed::new(inner, codec());
-    // If not set, `Framed` buffers up to 131kB of data before sending, which leads to "outbound
-    // packet larger than maximum message size" error in webrtc-rs.
+    // If not set, `Framed` buffers up to 131kB of data before sending, which leads
+    // to "outbound packet larger than maximum message size" error in webrtc-rs.
     framed.set_send_high_water_mark(MAX_DATA_LEN);
     framed
 }
