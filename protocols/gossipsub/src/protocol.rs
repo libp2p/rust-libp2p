@@ -22,10 +22,7 @@ use crate::config::ValidationMode;
 use crate::handler::HandlerEvent;
 use crate::rpc_proto::proto;
 use crate::topic::TopicHash;
-use crate::types::{
-    ControlAction, Graft, IHave, IWant, MessageId, PeerInfo, PeerKind, Prune, RawMessage, Rpc,
-    Subscription, SubscriptionAction,
-};
+use crate::types::{ControlAction, Graft, IDontWant, IHave, IWant, MessageId, PeerInfo, PeerKind, Prune, RawMessage, Rpc, Subscription, SubscriptionAction};
 use crate::ValidationError;
 use asynchronous_codec::{Decoder, Encoder, Framed};
 use byteorder::{BigEndian, ByteOrder};
@@ -39,6 +36,11 @@ use std::convert::Infallible;
 use std::pin::Pin;
 
 pub(crate) const SIGNING_PREFIX: &[u8] = b"libp2p-pubsub:";
+
+pub(crate) const GOSSIPSUB_1_2_0_BETA_PROTOCOL: ProtocolId = ProtocolId {
+    protocol: StreamProtocol::new("/meshsub/1.2.0"),
+    kind: PeerKind::Gossipsubv1_2_beta,
+};
 
 pub(crate) const GOSSIPSUB_1_1_0_PROTOCOL: ProtocolId = ProtocolId {
     protocol: StreamProtocol::new("/meshsub/1.1.0"),
@@ -476,10 +478,25 @@ impl Decoder for GossipsubCodec {
                 }));
             }
 
+            let idontwant_msgs: Vec<ControlAction> = rpc_control
+                .idontwant
+                .into_iter()
+                .map(|idontwant| {
+                    ControlAction::IDontWant(IDontWant {
+                        message_ids: idontwant
+                            .message_ids
+                            .into_iter()
+                            .map(MessageId::from)
+                            .collect::<Vec<_>>(),
+                    })
+                })
+                .collect();
+
             control_msgs.extend(ihave_msgs);
             control_msgs.extend(iwant_msgs);
             control_msgs.extend(graft_msgs);
             control_msgs.extend(prune_msgs);
+            control_msgs.extend(idontwant_msgs);
         }
 
         Ok(Some(HandlerEvent::Message {

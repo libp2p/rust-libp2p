@@ -32,13 +32,7 @@ use std::net::Ipv4Addr;
 use std::thread::sleep;
 
 #[derive(Default, Debug)]
-struct InjectNodes<D, F>
-// TODO: remove trait bound Default when this issue is fixed:
-//  https://github.com/colin-kiegel/rust-derive-builder/issues/93
-where
-    D: DataTransform + Default + Clone + Send + 'static,
-    F: TopicSubscriptionFilter + Clone + Default + Send + 'static,
-{
+struct InjectNodes<D, F> {
     peer_no: usize,
     topics: Vec<String>,
     to_subscribe: bool,
@@ -48,6 +42,7 @@ where
     scoring: Option<(PeerScoreParams, PeerScoreThresholds)>,
     data_transform: D,
     subscription_filter: F,
+    peer_kind: Option<PeerKind>,
 }
 
 impl<D, F> InjectNodes<D, F>
@@ -95,7 +90,7 @@ where
 
         let empty = vec![];
         for i in 0..self.peer_no {
-            let (peer, receiver) = add_peer(
+            let (peer, receiver) = add_peer_with_addr_and_kind(
                 &mut gs,
                 if self.to_subscribe {
                     &topic_hashes
@@ -104,6 +99,8 @@ where
                 },
                 i < self.outbound,
                 i < self.explicit,
+                Multiaddr::empty(),
+                self.peer_kind.clone().or(Some(PeerKind::Gossipsubv1_1)),
             );
             peers.push(peer);
             receivers.insert(peer, receiver);
@@ -150,6 +147,11 @@ where
 
     fn subscription_filter(mut self, subscription_filter: F) -> Self {
         self.subscription_filter = subscription_filter;
+        self
+    }
+
+    fn peer_kind(mut self, peer_kind: PeerKind) -> Self {
+        self.peer_kind = Some(peer_kind);
         self
     }
 }
@@ -238,6 +240,7 @@ where
             connections: vec![connection_id],
             topics: Default::default(),
             sender,
+            dont_send: LinkedHashMap::new(),
         },
     );
 
@@ -623,6 +626,7 @@ fn test_join() {
                 connections: vec![connection_id],
                 topics: Default::default(),
                 sender,
+                dont_send: LinkedHashMap::new(),
             },
         );
         receivers.insert(random_peer, receiver);
@@ -1018,6 +1022,7 @@ fn test_get_random_peers() {
                 connections: vec![ConnectionId::new_unchecked(0)],
                 topics: topics.clone(),
                 sender: Sender::new(gs.config.connection_handler_queue_len()),
+                dont_send: LinkedHashMap::new(),
             },
         );
     }
@@ -4580,9 +4585,9 @@ fn test_ignore_too_many_messages_in_ihave() {
     let (peer, receiver) = add_peer(&mut gs, &topics, false, false);
     receivers.insert(peer, receiver);
 
-    //peer has 20 messages
+    //peer has 30 messages
     let mut seq = 0;
-    let message_ids: Vec<_> = (0..20)
+    let message_ids: Vec<_> = (0..30)
         .map(|_| random_message(&mut seq, &topics))
         .map(|msg| gs.data_transform.inbound_transform(msg).unwrap())
         .map(|msg| config.message_id(&msg))
@@ -4624,7 +4629,7 @@ fn test_ignore_too_many_messages_in_ihave() {
     gs.heartbeat();
     gs.handle_ihave(
         &peer,
-        vec![(topics[0].clone(), message_ids[10..20].to_vec())],
+        vec![(topics[0].clone(), message_ids[20..30].to_vec())],
     );
 
     //we sent 10 iwant messages ids via a IWANT rpc.
@@ -5237,6 +5242,194 @@ fn test_graft_without_subscribe() {
     let _ = gs.unsubscribe(&Topic::new(topic));
 }
 
+/// Test that a node sends IDONTWANT messages to the mesh peers
+/// that run Gossipsub v1.2.
+#[test]
+fn sends_idontwant() {
+    let (mut gs, peers, receivers, topic_hashes) = inject_nodes1()
+        .peer_no(5)
+        .topics(vec![String::from("topic1")])
+        .to_subscribe(true)
+        .gs_config(Config::default())
+        .explicit(1)
+        .peer_kind(PeerKind::Gossipsubv1_2_beta)
+        .create_network();
+
+    let local_id = PeerId::random();
+
+    let message = RawMessage {
+        source: Some(peers[1]),
+        data: vec![12],
+        sequence_number: Some(0),
+        topic: topic_hashes[0].clone(),
+        signature: None,
+        key: None,
+        validated: true,
+    };
+    gs.handle_received_message(message.clone(), &local_id);
+    assert_eq!(
+        receivers
+            .into_iter()
+            .fold(0, |mut idontwants, (peer_id, c)| {
+                let non_priority = c.non_priority.get_ref();
+                while !non_priority.is_empty() {
+                    if let Ok(RpcOut::IDontWant(_)) = non_priority.try_recv() {
+                        assert_ne!(peer_id, peers[1]);
+                        idontwants += 1;
+                    }
+                }
+                idontwants
+            }),
+        3,
+        "IDONTWANT was not sent"
+    );
+}
+
+/// Test that a node doesn't send IDONTWANT messages to the mesh peers
+/// that don't run Gossipsub v1.2.
+#[test]
+fn doesnt_send_idontwant() {
+    let (mut gs, peers, receivers, topic_hashes) = inject_nodes1()
+        .peer_no(5)
+        .topics(vec![String::from("topic1")])
+        .to_subscribe(true)
+        .gs_config(Config::default())
+        .explicit(1)
+        .peer_kind(PeerKind::Gossipsubv1_1)
+        .create_network();
+
+    let local_id = PeerId::random();
+
+    let message = RawMessage {
+        source: Some(peers[1]),
+        data: vec![12],
+        sequence_number: Some(0),
+        topic: topic_hashes[0].clone(),
+        signature: None,
+        key: None,
+        validated: true,
+    };
+    gs.handle_received_message(message.clone(), &local_id);
+    assert_eq!(
+        receivers
+            .into_iter()
+            .fold(0, |mut idontwants, (peer_id, c)| {
+                let non_priority = c.non_priority.get_ref();
+                while !non_priority.is_empty() {
+                    if matches!(non_priority.try_recv(), Ok(RpcOut::IDontWant(_)) if peer_id != peers[1]) {
+                        idontwants += 1;
+                    }
+                }
+                idontwants
+            }),
+        0,
+        "IDONTWANT were sent"
+    );
+}
+
+/// Test that a node doesn't forward a messages to the mesh peers
+/// that sent IDONTWANT.
+#[test]
+fn doesnt_forward_idontwant() {
+    let (mut gs, peers, receivers, topic_hashes) = inject_nodes1()
+        .peer_no(4)
+        .topics(vec![String::from("topic1")])
+        .to_subscribe(true)
+        .gs_config(Config::default())
+        .explicit(1)
+        .peer_kind(PeerKind::Gossipsubv1_2_beta)
+        .create_network();
+
+    let local_id = PeerId::random();
+
+    let raw_message = RawMessage {
+        source: Some(peers[1]),
+        data: vec![12],
+        sequence_number: Some(0),
+        topic: topic_hashes[0].clone(),
+        signature: None,
+        key: None,
+        validated: true,
+    };
+    let message = gs
+        .data_transform
+        .inbound_transform(raw_message.clone())
+        .unwrap();
+    let message_id = gs.config.message_id(&message);
+    let peer = gs.connected_peers.get_mut(&peers[2]).unwrap();
+    peer.dont_send.insert(message_id, Instant::now());
+
+    gs.handle_received_message(raw_message.clone(), &local_id);
+    assert_eq!(
+        receivers.into_iter().fold(0, |mut fwds, (peer_id, c)| {
+            let non_priority = c.non_priority.get_ref();
+            while !non_priority.is_empty() {
+                if let Ok(RpcOut::Forward { .. }) = non_priority.try_recv() {
+                    assert_ne!(peer_id, peers[2]);
+                    fwds += 1;
+                }
+            }
+            fwds
+        }),
+        2,
+        "IDONTWANT was not sent"
+    );
+}
+
+/// Test that a node parses an
+/// IDONTWANT message to the respective peer.
+#[test]
+fn parses_idontwant() {
+    let (mut gs, peers, _receivers, _topic_hashes) = inject_nodes1()
+        .peer_no(2)
+        .topics(vec![String::from("topic1")])
+        .to_subscribe(true)
+        .gs_config(Config::default())
+        .explicit(1)
+        .peer_kind(PeerKind::Gossipsubv1_2_beta)
+        .create_network();
+
+    let message_id = MessageId::new(&[0, 1, 2, 3]);
+    let rpc = Rpc {
+        messages: vec![],
+        subscriptions: vec![],
+        control_msgs: vec![ControlAction::IDontWant(IDontWant {
+            message_ids: vec![message_id.clone()],
+        })],
+    };
+    gs.on_connection_handler_event(
+        peers[1],
+        ConnectionId::new_unchecked(0),
+        HandlerEvent::Message {
+            rpc,
+            invalid_messages: vec![],
+        },
+    );
+    let peer = gs.connected_peers.get_mut(&peers[1]).unwrap();
+    assert!(peer.dont_send.get(&message_id).is_some());
+}
+
+/// Test that a node clears stale IDONTWANT messages.
+#[test]
+fn clear_stale_idontwant() {
+    let (mut gs, peers, _receivers, _topic_hashes) = inject_nodes1()
+        .peer_no(4)
+        .topics(vec![String::from("topic1")])
+        .to_subscribe(true)
+        .gs_config(Config::default())
+        .explicit(1)
+        .peer_kind(PeerKind::Gossipsubv1_2_beta)
+        .create_network();
+
+    let peer = gs.connected_peers.get_mut(&peers[2]).unwrap();
+    peer.dont_send
+        .insert(MessageId::new(&[1, 2, 3, 4]), Instant::now());
+    std::thread::sleep(Duration::from_secs(3));
+    gs.heartbeat();
+    let peer = gs.connected_peers.get_mut(&peers[2]).unwrap();
+    assert!(peer.dont_send.is_empty());
+}
+
 #[test]
 fn test_all_queues_full() {
     let gs_config = ConfigBuilder::default()
@@ -5260,6 +5453,7 @@ fn test_all_queues_full() {
             connections: vec![ConnectionId::new_unchecked(0)],
             topics: topics.clone(),
             sender: Sender::new(2),
+            dont_send: LinkedHashMap::new(),
         },
     );
 
@@ -5294,6 +5488,7 @@ fn test_slow_peer_returns_failed_publish() {
             connections: vec![ConnectionId::new_unchecked(0)],
             topics: topics.clone(),
             sender: Sender::new(2),
+            dont_send: LinkedHashMap::new(),
         },
     );
     let peer_id = PeerId::random();
@@ -5305,6 +5500,7 @@ fn test_slow_peer_returns_failed_publish() {
             connections: vec![ConnectionId::new_unchecked(0)],
             topics: topics.clone(),
             sender: Sender::new(gs.config.connection_handler_queue_len()),
+            dont_send: LinkedHashMap::new(),
         },
     );
 
@@ -5365,6 +5561,7 @@ fn test_slow_peer_returns_failed_ihave_handling() {
             connections: vec![ConnectionId::new_unchecked(0)],
             topics: topics.clone(),
             sender: Sender::new(2),
+            dont_send: LinkedHashMap::new(),
         },
     );
     peers.push(slow_peer_id);
@@ -5380,6 +5577,7 @@ fn test_slow_peer_returns_failed_ihave_handling() {
             connections: vec![ConnectionId::new_unchecked(0)],
             topics: topics.clone(),
             sender: Sender::new(gs.config.connection_handler_queue_len()),
+            dont_send: LinkedHashMap::new(),
         },
     );
 
@@ -5458,6 +5656,7 @@ fn test_slow_peer_returns_failed_iwant_handling() {
             connections: vec![ConnectionId::new_unchecked(0)],
             topics: topics.clone(),
             sender: Sender::new(2),
+            dont_send: LinkedHashMap::new(),
         },
     );
     peers.push(slow_peer_id);
@@ -5473,6 +5672,7 @@ fn test_slow_peer_returns_failed_iwant_handling() {
             connections: vec![ConnectionId::new_unchecked(0)],
             topics: topics.clone(),
             sender: Sender::new(gs.config.connection_handler_queue_len()),
+            dont_send: LinkedHashMap::new(),
         },
     );
 
@@ -5548,6 +5748,7 @@ fn test_slow_peer_returns_failed_forward() {
             connections: vec![ConnectionId::new_unchecked(0)],
             topics: topics.clone(),
             sender: Sender::new(2),
+            dont_send: LinkedHashMap::new(),
         },
     );
     peers.push(slow_peer_id);
@@ -5563,6 +5764,7 @@ fn test_slow_peer_returns_failed_forward() {
             connections: vec![ConnectionId::new_unchecked(0)],
             topics: topics.clone(),
             sender: Sender::new(gs.config.connection_handler_queue_len()),
+            dont_send: LinkedHashMap::new(),
         },
     );
 
@@ -5643,6 +5845,7 @@ fn test_slow_peer_is_downscored_on_publish() {
             connections: vec![ConnectionId::new_unchecked(0)],
             topics: topics.clone(),
             sender: Sender::new(2),
+            dont_send: LinkedHashMap::new(),
         },
     );
     gs.peer_score.as_mut().unwrap().0.add_peer(slow_peer_id);
@@ -5655,6 +5858,7 @@ fn test_slow_peer_is_downscored_on_publish() {
             connections: vec![ConnectionId::new_unchecked(0)],
             topics: topics.clone(),
             sender: Sender::new(gs.config.connection_handler_queue_len()),
+            dont_send: LinkedHashMap::new(),
         },
     );
 

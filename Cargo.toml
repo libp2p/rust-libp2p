@@ -75,6 +75,7 @@ rust-version = "1.75.0"
 asynchronous-codec = { version = "0.7.0" }
 futures-bounded = { version = "0.2.4" }
 futures-rustls = { version = "0.26.0", default-features = false }
+hashlink = "0.9.0"
 libp2p = { version = "0.54.2", path = "libp2p" }
 libp2p-allow-block-list = { version = "0.4.2", path = "misc/allow-block-list" }
 libp2p-autonat = { version = "0.13.1", path = "protocols/autonat" }
@@ -131,6 +132,7 @@ futures = "0.3.30"
 web-time = "1.1.0"
 ring = "0.17.8"
 rcgen = "0.11.3"
+
 
 [patch.crates-io]
 
