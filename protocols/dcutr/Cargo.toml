@@ -21,7 +21,7 @@ libp2p-swarm = { workspace = true }
 libp2p-identity = { workspace = true }
 quick-protobuf = "0.8"
 quick-protobuf-codec = { workspace = true }
-thiserror = "1.0"
+thiserror = { workspace = true }
 tracing = { workspace = true }
 lru = "0.12.3"
 futures-bounded = { workspace = true }
