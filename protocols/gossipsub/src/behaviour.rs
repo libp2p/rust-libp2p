@@ -1962,8 +1962,11 @@ where
             }
         }
 
-        // remove unsubscribed peers from the mesh if it exists
+        // remove unsubscribed peers from the mesh and fanout if they exist there.
         for (peer_id, topic_hash) in unsubscribed_peers {
+            self.fanout
+                .get_mut(&topic_hash)
+                .map(|peers| peers.remove(&peer_id));
             self.remove_peer_from_mesh(&peer_id, &topic_hash, None, false, Churn::Unsub);
         }
 
