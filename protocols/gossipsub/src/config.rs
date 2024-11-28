@@ -18,22 +18,22 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use std::borrow::Cow;
-use std::sync::Arc;
-use std::time::Duration;
-
-use crate::error::ConfigBuilderError;
-use crate::protocol::{ProtocolConfig, ProtocolId, FLOODSUB_PROTOCOL};
-use crate::types::{Message, MessageId, PeerKind};
+use std::{borrow::Cow, sync::Arc, time::Duration};
 
 use libp2p_identity::PeerId;
 use libp2p_swarm::StreamProtocol;
 
+use crate::{
+    error::ConfigBuilderError,
+    protocol::{ProtocolConfig, ProtocolId, FLOODSUB_PROTOCOL},
+    types::{Message, MessageId, PeerKind},
+};
+
 /// The types of message validation that can be employed by gossipsub.
 #[derive(Debug, Clone)]
 pub enum ValidationMode {
-    /// This is the default setting. This requires the message author to be a valid [`PeerId`] and to
-    /// be present as well as the sequence number. All messages must have valid signatures.
+    /// This is the default setting. This requires the message author to be a valid [`PeerId`] and
+    /// to be present as well as the sequence number. All messages must have valid signatures.
     ///
     /// NOTE: This setting will reject messages from nodes using
     /// [`crate::behaviour::MessageAuthenticity::Anonymous`] and all messages that do not have
@@ -134,8 +134,8 @@ impl Config {
 
     /// Affects how peers are selected when pruning a mesh due to over subscription.
     ///
-    ///  At least `retain_scores` of the retained peers will be high-scoring, while the remainder are
-    ///  chosen randomly (D_score in the spec, default is 4).
+    ///  At least `retain_scores` of the retained peers will be high-scoring, while the remainder
+    /// are  chosen randomly (D_score in the spec, default is 4).
     pub fn retain_scores(&self) -> usize {
         self.retain_scores
     }
@@ -423,7 +423,9 @@ impl Default for ConfigBuilder {
                 }),
                 allow_self_origin: false,
                 do_px: false,
-                prune_peers: 0, // NOTE: Increasing this currently has little effect until Signed records are implemented.
+                // NOTE: Increasing this currently has little effect until Signed
+                // records are implemented.
+                prune_peers: 0,
                 prune_backoff: Duration::from_secs(60),
                 unsubscribe_backoff: Duration::from_secs(10),
                 backoff_slack: 1,
@@ -457,7 +459,8 @@ impl From<Config> for ConfigBuilder {
 }
 
 impl ConfigBuilder {
-    /// The protocol id prefix to negotiate this protocol (default is `/meshsub/1.1.0` and `/meshsub/1.0.0`).
+    /// The protocol id prefix to negotiate this protocol (default is `/meshsub/1.1.0` and
+    /// `/meshsub/1.0.0`).
     pub fn protocol_id_prefix(
         &mut self,
         protocol_id_prefix: impl Into<Cow<'static, str>>,
@@ -547,8 +550,8 @@ impl ConfigBuilder {
 
     /// Affects how peers are selected when pruning a mesh due to over subscription.
     ///
-    /// At least [`Self::retain_scores`] of the retained peers will be high-scoring, while the remainder are
-    /// chosen randomly (D_score in the spec, default is 4).
+    /// At least [`Self::retain_scores`] of the retained peers will be high-scoring, while the
+    /// remainder are chosen randomly (D_score in the spec, default is 4).
     pub fn retain_scores(&mut self, retain_scores: usize) -> &mut Self {
         self.config.retain_scores = retain_scores;
         self
@@ -902,12 +905,15 @@ impl std::fmt::Debug for Config {
 
 #[cfg(test)]
 mod test {
-    use super::*;
-    use crate::topic::IdentityHash;
-    use crate::Topic;
+    use std::{
+        collections::hash_map::DefaultHasher,
+        hash::{Hash, Hasher},
+    };
+
     use libp2p_core::UpgradeInfo;
-    use std::collections::hash_map::DefaultHasher;
-    use std::hash::{Hash, Hasher};
+
+    use super::*;
+    use crate::{topic::IdentityHash, Topic};
 
     #[test]
     fn create_config_with_message_id_as_plain_function() {

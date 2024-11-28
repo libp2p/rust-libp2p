@@ -311,19 +311,18 @@ where
     ///
     /// The status of the node to insert determines the result as follows:
     ///
-    ///   * `NodeStatus::Connected`: If the bucket is full and either all nodes are connected
-    ///     or there is already a pending node, insertion fails with `InsertResult::Full`.
-    ///     If the bucket is full but at least one node is disconnected and there is no pending
-    ///     node, the new node is inserted as pending, yielding `InsertResult::Pending`.
-    ///     Otherwise the bucket has free slots and the new node is added to the end of the
-    ///     bucket as the most-recently connected node.
+    ///   * `NodeStatus::Connected`: If the bucket is full and either all nodes are connected or
+    ///     there is already a pending node, insertion fails with `InsertResult::Full`. If the
+    ///     bucket is full but at least one node is disconnected and there is no pending node, the
+    ///     new node is inserted as pending, yielding `InsertResult::Pending`. Otherwise the bucket
+    ///     has free slots and the new node is added to the end of the bucket as the most-recently
+    ///     connected node.
     ///
     ///   * `NodeStatus::Disconnected`: If the bucket is full, insertion fails with
-    ///     `InsertResult::Full`. Otherwise the bucket has free slots and the new node
-    ///     is inserted at the position preceding the first connected node,
-    ///     i.e. as the most-recently disconnected node. If there are no connected nodes,
-    ///     the new node is added as the last element of the bucket.
-    ///
+    ///     `InsertResult::Full`. Otherwise the bucket has free slots and the new node is inserted
+    ///     at the position preceding the first connected node, i.e. as the most-recently
+    ///     disconnected node. If there are no connected nodes, the new node is added as the last
+    ///     element of the bucket.
     pub(crate) fn insert(
         &mut self,
         node: Node<TKey, TVal>,
@@ -443,9 +442,10 @@ where
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use libp2p_identity::PeerId;
     use quickcheck::*;
+
+    use super::*;
 
     impl Arbitrary for KBucket<Key<PeerId>, ()> {
         fn arbitrary(g: &mut Gen) -> KBucket<Key<PeerId>, ()> {

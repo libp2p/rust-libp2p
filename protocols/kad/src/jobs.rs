@@ -25,12 +25,11 @@
 //! To ensure persistence of records in the DHT, a Kademlia node
 //! must periodically (re-)publish and (re-)replicate its records:
 //!
-//!   1. (Re-)publishing: The original publisher or provider of a record
-//!      must regularly re-publish in order to prolong the expiration.
+//!   1. (Re-)publishing: The original publisher or provider of a record must regularly re-publish
+//!      in order to prolong the expiration.
 //!
-//!   2. (Re-)replication: Every node storing a replica of a record must
-//!      regularly re-replicate it to the closest nodes to the key in
-//!      order to ensure the record is present at these nodes.
+//!   2. (Re-)replication: Every node storing a replica of a record must regularly re-replicate it
+//!      to the closest nodes to the key in order to ensure the record is present at these nodes.
 //!
 //! Re-publishing primarily ensures persistence of the record beyond its
 //! initial TTL, for as long as the publisher stores (or provides) the record,
@@ -41,11 +40,10 @@
 //!
 //! This module implements two periodic jobs:
 //!
-//!   * [`PutRecordJob`]: For (re-)publication and (re-)replication of
-//!     regular (value-)records.
+//!   * [`PutRecordJob`]: For (re-)publication and (re-)replication of regular (value-)records.
 //!
-//!   * [`AddProviderJob`]: For (re-)publication of provider records.
-//!     Provider records currently have no separate replication mechanism.
+//!   * [`AddProviderJob`]: For (re-)publication of provider records. Provider records currently
+//!     have no separate replication mechanism.
 //!
 //! A periodic job is driven like a `Future` or `Stream` by `poll`ing it.
 //! Once a job starts running it emits records to send to the `k` closest
@@ -61,16 +59,20 @@
 //! > to the size of all stored records. As a job runs, the records are moved
 //! > out of the job to the consumer, where they can be dropped after being sent.
 
-use crate::record::{self, store::RecordStore, ProviderRecord, Record};
+use std::{
+    collections::HashSet,
+    pin::Pin,
+    task::{Context, Poll},
+    time::Duration,
+    vec,
+};
+
 use futures::prelude::*;
 use futures_timer::Delay;
 use libp2p_identity::PeerId;
-use std::collections::HashSet;
-use std::pin::Pin;
-use std::task::{Context, Poll};
-use std::time::Duration;
-use std::vec;
 use web_time::Instant;
+
+use crate::record::{self, store::RecordStore, ProviderRecord, Record};
 
 /// The maximum number of queries towards which background jobs
 /// are allowed to start new queries on an invocation of
@@ -335,11 +337,12 @@ impl AddProviderJob {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use crate::record::store::MemoryStore;
     use futures::{executor::block_on, future::poll_fn};
     use quickcheck::*;
     use rand::Rng;
+
+    use super::*;
+    use crate::record::store::MemoryStore;
 
     fn rand_put_record_job() -> PutRecordJob {
         let mut rng = rand::thread_rng();

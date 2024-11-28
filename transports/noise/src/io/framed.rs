@@ -23,13 +23,14 @@
 //! Alongside a [`asynchronous_codec::Framed`] this provides a [Sink](futures::Sink)
 //! and [Stream](futures::Stream) for length-delimited Noise protocol messages.
 
-use super::handshake::proto;
-use crate::{protocol::PublicKey, Error};
+use std::{io, mem::size_of};
+
 use asynchronous_codec::{Decoder, Encoder};
 use bytes::{Buf, Bytes, BytesMut};
 use quick_protobuf::{BytesReader, MessageRead, MessageWrite, Writer};
-use std::io;
-use std::mem::size_of;
+
+use super::handshake::proto;
+use crate::{protocol::PublicKey, Error};
 
 /// Max. size of a noise message.
 const MAX_NOISE_MSG_LEN: usize = 65535;
@@ -170,7 +171,8 @@ impl Decoder for Codec<snow::TransportState> {
 
 /// Encrypts the given cleartext to `dst`.
 ///
-/// This is a standalone function to allow us reusing the `encrypt_buffer` and to use to across different session states of the noise protocol.
+/// This is a standalone function to allow us reusing the `encrypt_buffer` and to use to across
+/// different session states of the noise protocol.
 fn encrypt(
     cleartext: &[u8],
     dst: &mut BytesMut,
@@ -191,8 +193,9 @@ fn encrypt(
 
 /// Encrypts the given ciphertext.
 ///
-/// This is a standalone function so we can use it across different session states of the noise protocol.
-/// In case `ciphertext` does not contain enough bytes to decrypt the entire frame, `Ok(None)` is returned.
+/// This is a standalone function so we can use it across different session states of the noise
+/// protocol. In case `ciphertext` does not contain enough bytes to decrypt the entire frame,
+/// `Ok(None)` is returned.
 fn decrypt(
     ciphertext: &mut BytesMut,
     decrypt_fn: impl FnOnce(&[u8], &mut [u8]) -> Result<usize, snow::Error>,

@@ -18,9 +18,11 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::tls;
-use libp2p_core::Multiaddr;
 use std::{error, fmt};
+
+use libp2p_core::Multiaddr;
+
+use crate::tls;
 
 /// Error in WebSockets.
 #[derive(Debug)]

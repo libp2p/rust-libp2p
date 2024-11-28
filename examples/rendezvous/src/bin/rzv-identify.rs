@@ -18,13 +18,14 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
+use std::time::Duration;
+
 use futures::StreamExt;
 use libp2p::{
     identify, noise, ping, rendezvous,
     swarm::{NetworkBehaviour, SwarmEvent},
     tcp, yamux, Multiaddr,
 };
-use std::time::Duration;
 use tracing_subscriber::EnvFilter;
 
 #[tokio::main]

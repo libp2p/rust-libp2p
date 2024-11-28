@@ -1,7 +1,8 @@
+use std::io;
+
 use js_sys::{Promise, Reflect};
 use once_cell::sync::Lazy;
 use send_wrapper::SendWrapper;
-use std::io;
 use wasm_bindgen::{JsCast, JsValue};
 
 use crate::Error;
@@ -17,7 +18,6 @@ static DO_NOTHING: Lazy<SendWrapper<Closure>> = Lazy::new(|| {
 /// A promise always runs in the background, however if you don't await it,
 /// or specify a `catch` handler before you drop it, it might cause some side
 /// effects. This function avoids any side effects.
-//
 // Ref: https://github.com/typescript-eslint/typescript-eslint/blob/391a6702c0a9b5b3874a7a27047f2a721f090fb6/packages/eslint-plugin/docs/rules/no-floating-promises.md
 pub(crate) fn detach_promise(promise: Promise) {
     // Avoid having "floating" promise and ignore any errors.
@@ -50,7 +50,6 @@ where
 }
 
 /// Parse response from `ReadableStreamDefaultReader::read`.
-//
 // Ref: https://streams.spec.whatwg.org/#default-reader-prototype
 pub(crate) fn parse_reader_response(resp: &JsValue) -> Result<Option<JsValue>, JsValue> {
     let value = Reflect::get(resp, &JsValue::from_str("value"))?;

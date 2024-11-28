@@ -22,21 +22,22 @@
 
 #![cfg_attr(docsrs, feature(doc_cfg, doc_auto_cfg))]
 
-use crate::error::Error;
-
-use bytes::Bytes;
-use futures::future::BoxFuture;
-use futures::prelude::*;
-use libp2p_core::upgrade::{InboundConnectionUpgrade, OutboundConnectionUpgrade};
-use libp2p_core::UpgradeInfo;
-use libp2p_identity as identity;
-use libp2p_identity::PeerId;
-use libp2p_identity::PublicKey;
 use std::{
     io, iter,
     pin::Pin,
     task::{Context, Poll},
 };
+
+use bytes::Bytes;
+use futures::{future::BoxFuture, prelude::*};
+use libp2p_core::{
+    upgrade::{InboundConnectionUpgrade, OutboundConnectionUpgrade},
+    UpgradeInfo,
+};
+use libp2p_identity as identity;
+use libp2p_identity::{PeerId, PublicKey};
+
+use crate::error::Error;
 
 mod error;
 mod handshake;

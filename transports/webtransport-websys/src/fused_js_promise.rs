@@ -1,8 +1,11 @@
+use std::{
+    future::Future,
+    pin::Pin,
+    task::{ready, Context, Poll},
+};
+
 use futures::FutureExt;
 use js_sys::Promise;
-use std::future::Future;
-use std::pin::Pin;
-use std::task::{ready, Context, Poll};
 use wasm_bindgen::JsValue;
 use wasm_bindgen_futures::JsFuture;
 

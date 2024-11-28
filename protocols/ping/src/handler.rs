@@ -18,26 +18,28 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::{protocol, PROTOCOL_NAME};
-use futures::future::{BoxFuture, Either};
-use futures::prelude::*;
-use futures_timer::Delay;
-use libp2p_core::upgrade::ReadyUpgrade;
-use libp2p_swarm::handler::{
-    ConnectionEvent, DialUpgradeError, FullyNegotiatedInbound, FullyNegotiatedOutbound,
-};
-use libp2p_swarm::{
-    ConnectionHandler, ConnectionHandlerEvent, Stream, StreamProtocol, StreamUpgradeError,
-    SubstreamProtocol,
-};
-use std::collections::VecDeque;
-use std::convert::Infallible;
 use std::{
+    collections::VecDeque,
+    convert::Infallible,
     error::Error,
     fmt, io,
     task::{Context, Poll},
     time::Duration,
 };
+
+use futures::{
+    future::{BoxFuture, Either},
+    prelude::*,
+};
+use futures_timer::Delay;
+use libp2p_core::upgrade::ReadyUpgrade;
+use libp2p_swarm::{
+    handler::{ConnectionEvent, DialUpgradeError, FullyNegotiatedInbound, FullyNegotiatedOutbound},
+    ConnectionHandler, ConnectionHandlerEvent, Stream, StreamProtocol, StreamUpgradeError,
+    SubstreamProtocol,
+};
+
+use crate::{protocol, PROTOCOL_NAME};
 
 /// The configuration for outbound pings.
 #[derive(Debug, Clone)]
@@ -57,8 +59,7 @@ impl Config {
     /// These settings have the following effect:
     ///
     ///   * A ping is sent every 15 seconds on a healthy connection.
-    ///   * Every ping sent must yield a response within 20 seconds in order to
-    ///     be successful.
+    ///   * Every ping sent must yield a response within 20 seconds in order to be successful.
     pub fn new() -> Self {
         Self {
             timeout: Duration::from_secs(20),

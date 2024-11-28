@@ -73,12 +73,18 @@ mod handler;
 #[cfg(feature = "json")]
 pub mod json;
 
-pub use codec::Codec;
-pub use handler::ProtocolSupport;
+use std::{
+    collections::{HashMap, HashSet, VecDeque},
+    fmt, io,
+    sync::{atomic::AtomicU64, Arc},
+    task::{Context, Poll},
+    time::Duration,
+};
 
-use crate::handler::OutboundMessage;
+pub use codec::Codec;
 use futures::channel::oneshot;
 use handler::Handler;
+pub use handler::ProtocolSupport;
 use libp2p_core::{transport::PortUse, ConnectedPoint, Endpoint, Multiaddr};
 use libp2p_identity::PeerId;
 use libp2p_swarm::{
@@ -88,13 +94,8 @@ use libp2p_swarm::{
     PeerAddresses, THandler, THandlerInEvent, THandlerOutEvent, ToSwarm,
 };
 use smallvec::SmallVec;
-use std::{
-    collections::{HashMap, HashSet, VecDeque},
-    fmt, io,
-    sync::{atomic::AtomicU64, Arc},
-    task::{Context, Poll},
-    time::Duration,
-};
+
+use crate::handler::OutboundMessage;
 
 /// An inbound request or response.
 #[derive(Debug)]
@@ -353,8 +354,8 @@ where
     /// Pending events to return from `poll`.
     pending_events:
         VecDeque<ToSwarm<Event<TCodec::Request, TCodec::Response>, OutboundMessage<TCodec>>>,
-    /// The currently connected peers, their pending outbound and inbound responses and their known,
-    /// reachable addresses, if any.
+    /// The currently connected peers, their pending outbound and inbound responses and their
+    /// known, reachable addresses, if any.
     connected: HashMap<PeerId, SmallVec<[Connection; 2]>>,
     /// Externally managed addresses via `add_address` and `remove_address`.
     addresses: PeerAddresses,
@@ -367,7 +368,8 @@ impl<TCodec> Behaviour<TCodec>
 where
     TCodec: Codec + Default + Clone + Send + 'static,
 {
-    /// Creates a new `Behaviour` for the given protocols and configuration, using [`Default`] to construct the codec.
+    /// Creates a new `Behaviour` for the given protocols and configuration, using [`Default`] to
+    /// construct the codec.
     pub fn new<I>(protocols: I, cfg: Config) -> Self
     where
         I: IntoIterator<Item = (TCodec::Protocol, ProtocolSupport)>,
@@ -693,7 +695,8 @@ where
         }
     }
 
-    /// Preloads a new [`Handler`] with requests that are waiting to be sent to the newly connected peer.
+    /// Preloads a new [`Handler`] with requests that are
+    /// waiting to be sent to the newly connected peer.
     fn preload_new_handler(
         &mut self,
         handler: &mut Handler<TCodec>,

@@ -19,10 +19,11 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::upgrade::{InboundUpgrade, OutboundUpgrade, UpgradeInfo};
+use std::{convert::Infallible, iter};
+
 use futures::future;
-use std::convert::Infallible;
-use std::iter;
+
+use crate::upgrade::{InboundUpgrade, OutboundUpgrade, UpgradeInfo};
 
 /// Implementation of [`UpgradeInfo`], [`InboundUpgrade`] and [`OutboundUpgrade`] that always
 /// returns a pending upgrade.

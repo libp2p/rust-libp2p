@@ -18,10 +18,11 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
+use std::{io, time::Duration};
+
 use futures::prelude::*;
 use libp2p_swarm::StreamProtocol;
 use rand::{distributions, prelude::*};
-use std::{io, time::Duration};
 use web_time::Instant;
 
 pub const PROTOCOL_NAME: StreamProtocol = StreamProtocol::new("/ipfs/ping/1.0.0");
@@ -40,10 +41,10 @@ pub const PROTOCOL_NAME: StreamProtocol = StreamProtocol::new("/ipfs/ping/1.0.0"
 /// Successful pings report the round-trip time.
 ///
 /// > **Note**: The round-trip time of a ping may be subject to delays induced
-/// >           by the underlying transport, e.g. in the case of TCP there is
-/// >           Nagle's algorithm, delayed acks and similar configuration options
-/// >           which can affect latencies especially on otherwise low-volume
-/// >           connections.
+/// > by the underlying transport, e.g. in the case of TCP there is
+/// > Nagle's algorithm, delayed acks and similar configuration options
+/// > which can affect latencies especially on otherwise low-volume
+/// > connections.
 const PING_SIZE: usize = 32;
 
 /// Sends a ping and waits for the pong.
@@ -81,13 +82,14 @@ where
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use futures::StreamExt;
     use libp2p_core::{
         multiaddr::multiaddr,
         transport::{memory::MemoryTransport, DialOpts, ListenerId, PortUse, Transport},
         Endpoint,
     };
+
+    use super::*;
 
     #[tokio::test]
     async fn ping_pong() {

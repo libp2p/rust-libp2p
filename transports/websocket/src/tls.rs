@@ -18,8 +18,9 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use futures_rustls::{rustls, TlsAcceptor, TlsConnector};
 use std::{fmt, io, sync::Arc};
+
+use futures_rustls::{rustls, TlsAcceptor, TlsConnector};
 
 /// TLS configuration.
 #[derive(Clone)]

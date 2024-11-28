@@ -1,7 +1,6 @@
 // Native re-exports
 #[cfg(not(target_arch = "wasm32"))]
 pub(crate) use native::{build_swarm, init_logger, sleep, Instant, RedisClient};
-
 // Wasm re-exports
 #[cfg(target_arch = "wasm32")]
 pub(crate) use wasm::{build_swarm, init_logger, sleep, Instant, RedisClient};
@@ -11,11 +10,13 @@ pub(crate) mod native {
     use std::time::Duration;
 
     use anyhow::{bail, Context, Result};
-    use futures::future::BoxFuture;
-    use futures::FutureExt;
-    use libp2p::identity::Keypair;
-    use libp2p::swarm::{NetworkBehaviour, Swarm};
-    use libp2p::{noise, tcp, tls, yamux};
+    use futures::{future::BoxFuture, FutureExt};
+    use libp2p::{
+        identity::Keypair,
+        noise,
+        swarm::{NetworkBehaviour, Swarm},
+        tcp, tls, yamux,
+    };
     use libp2p_mplex as mplex;
     use libp2p_webrtc as webrtc;
     use redis::AsyncCommands;
@@ -186,15 +187,19 @@ pub(crate) mod native {
 
 #[cfg(target_arch = "wasm32")]
 pub(crate) mod wasm {
+    use std::time::Duration;
+
     use anyhow::{bail, Context, Result};
     use futures::future::{BoxFuture, FutureExt};
-    use libp2p::core::upgrade::Version;
-    use libp2p::identity::Keypair;
-    use libp2p::swarm::{NetworkBehaviour, Swarm};
-    use libp2p::{noise, websocket_websys, webtransport_websys, yamux, Transport as _};
+    use libp2p::{
+        core::upgrade::Version,
+        identity::Keypair,
+        noise,
+        swarm::{NetworkBehaviour, Swarm},
+        websocket_websys, webtransport_websys, yamux, Transport as _,
+    };
     use libp2p_mplex as mplex;
     use libp2p_webrtc_websys as webrtc_websys;
-    use std::time::Duration;
 
     use crate::{BlpopRequest, Muxer, SecProtocol, Transport};
 
