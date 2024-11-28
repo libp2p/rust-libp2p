@@ -1,5 +1,7 @@
 //! Libp2p WebTransport built on [web-sys](https://rustwasm.github.io/wasm-bindgen/web-sys/index.html)
 
+#![allow(unexpected_cfgs)]
+
 mod bindings;
 mod connection;
 mod endpoint;
