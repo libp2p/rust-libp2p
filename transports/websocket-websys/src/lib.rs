@@ -24,21 +24,25 @@
 
 mod web_context;
 
+use std::{
+    cmp::min,
+    pin::Pin,
+    rc::Rc,
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        Mutex,
+    },
+    task::{Context, Poll},
+};
+
 use bytes::BytesMut;
-use futures::task::AtomicWaker;
-use futures::{future::Ready, io, prelude::*};
+use futures::{future::Ready, io, prelude::*, task::AtomicWaker};
 use js_sys::Array;
-use libp2p_core::transport::DialOpts;
 use libp2p_core::{
     multiaddr::{Multiaddr, Protocol},
-    transport::{ListenerId, TransportError, TransportEvent},
+    transport::{DialOpts, ListenerId, TransportError, TransportEvent},
 };
 use send_wrapper::SendWrapper;
-use std::cmp::min;
-use std::rc::Rc;
-use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::Mutex;
-use std::{pin::Pin, task::Context, task::Poll};
 use wasm_bindgen::prelude::*;
 use web_sys::{CloseEvent, Event, MessageEvent, WebSocket};
 
@@ -62,7 +66,6 @@ use crate::web_context::WebContext;
 ///     .multiplex(yamux::Config::default())
 ///     .boxed();
 /// ```
-///
 #[derive(Default)]
 pub struct Transport {
     _private: (),
@@ -176,7 +179,8 @@ struct Inner {
     /// Waker for when we are waiting for the WebSocket to be opened.
     open_waker: Rc<AtomicWaker>,
 
-    /// Waker for when we are waiting to write (again) to the WebSocket because we previously exceeded the [`MAX_BUFFER`] threshold.
+    /// Waker for when we are waiting to write (again) to the WebSocket because we previously
+    /// exceeded the [`MAX_BUFFER`] threshold.
     write_waker: Rc<AtomicWaker>,
 
     /// Waker for when we are waiting for the WebSocket to be closed.
@@ -308,7 +312,9 @@ impl Connection {
             .expect("to have a window or worker context")
             .set_interval_with_callback_and_timeout_and_arguments(
                 on_buffered_amount_low_closure.as_ref().unchecked_ref(),
-                100, // Chosen arbitrarily and likely worth tuning. Due to low impact of the /ws transport, no further effort was invested at the time.
+                // Chosen arbitrarily and likely worth tuning. Due to low impact of the /ws
+                // transport, no further effort was invested at the time.
+                100,
                 &Array::new(),
             )
             .expect("to be able to set an interval");
@@ -434,7 +440,8 @@ impl AsyncWrite for Connection {
 
 impl Drop for Connection {
     fn drop(&mut self) {
-        // Unset event listeners, as otherwise they will be called by JS after the handlers have already been dropped.
+        // Unset event listeners, as otherwise they will be called by JS after the handlers have
+        // already been dropped.
         self.inner.socket.set_onclose(None);
         self.inner.socket.set_onerror(None);
         self.inner.socket.set_onopen(None);
@@ -458,8 +465,9 @@ impl Drop for Connection {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use libp2p_identity::PeerId;
+
+    use super::*;
 
     #[test]
     fn extract_url() {

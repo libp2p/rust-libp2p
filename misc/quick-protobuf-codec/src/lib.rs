@@ -1,10 +1,10 @@
 #![cfg_attr(docsrs, feature(doc_cfg, doc_auto_cfg))]
 
+use std::{io, marker::PhantomData};
+
 use asynchronous_codec::{Decoder, Encoder};
 use bytes::{Buf, BufMut, BytesMut};
 use quick_protobuf::{BytesReader, MessageRead, MessageWrite, Writer, WriterBackend};
-use std::io;
-use std::marker::PhantomData;
 
 mod generated;
 
@@ -182,12 +182,13 @@ impl From<Error> for io::Error {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use asynchronous_codec::FramedRead;
-    use futures::io::Cursor;
-    use futures::{FutureExt, StreamExt};
-    use quickcheck::{Arbitrary, Gen, QuickCheck};
     use std::error::Error;
+
+    use asynchronous_codec::FramedRead;
+    use futures::{io::Cursor, FutureExt, StreamExt};
+    use quickcheck::{Arbitrary, Gen, QuickCheck};
+
+    use super::*;
 
     #[test]
     fn honors_max_message_length() {

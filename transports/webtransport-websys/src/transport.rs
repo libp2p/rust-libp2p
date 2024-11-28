@@ -1,17 +1,18 @@
+use std::{
+    future::Future,
+    pin::Pin,
+    task::{Context, Poll},
+};
+
 use futures::future::FutureExt;
-use libp2p_core::muxing::StreamMuxerBox;
-use libp2p_core::transport::{
-    Boxed, DialOpts, ListenerId, Transport as _, TransportError, TransportEvent,
+use libp2p_core::{
+    muxing::StreamMuxerBox,
+    transport::{Boxed, DialOpts, ListenerId, Transport as _, TransportError, TransportEvent},
 };
 use libp2p_identity::{Keypair, PeerId};
 use multiaddr::Multiaddr;
-use std::future::Future;
-use std::pin::Pin;
-use std::task::{Context, Poll};
 
-use crate::endpoint::Endpoint;
-use crate::Connection;
-use crate::Error;
+use crate::{endpoint::Endpoint, Connection, Error};
 
 /// Config for the [`Transport`].
 pub struct Config {

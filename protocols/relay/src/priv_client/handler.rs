@@ -18,29 +18,35 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::client::Connection;
-use crate::priv_client::transport;
-use crate::priv_client::transport::ToListenerMsg;
-use crate::protocol::{self, inbound_stop, outbound_hop};
-use crate::{priv_client, proto, HOP_PROTOCOL_NAME, STOP_PROTOCOL_NAME};
-use futures::channel::mpsc::Sender;
-use futures::channel::{mpsc, oneshot};
-use futures::future::FutureExt;
+use std::{
+    collections::VecDeque,
+    convert::Infallible,
+    fmt, io,
+    task::{Context, Poll},
+    time::Duration,
+};
+
+use futures::{
+    channel::{mpsc, mpsc::Sender, oneshot},
+    future::FutureExt,
+};
 use futures_timer::Delay;
-use libp2p_core::multiaddr::Protocol;
-use libp2p_core::upgrade::ReadyUpgrade;
-use libp2p_core::Multiaddr;
+use libp2p_core::{multiaddr::Protocol, upgrade::ReadyUpgrade, Multiaddr};
 use libp2p_identity::PeerId;
-use libp2p_swarm::handler::{ConnectionEvent, FullyNegotiatedInbound};
 use libp2p_swarm::{
+    handler::{ConnectionEvent, FullyNegotiatedInbound},
     ConnectionHandler, ConnectionHandlerEvent, Stream, StreamProtocol, StreamUpgradeError,
     SubstreamProtocol,
 };
-use std::collections::VecDeque;
-use std::convert::Infallible;
-use std::task::{Context, Poll};
-use std::time::Duration;
-use std::{fmt, io};
+
+use crate::{
+    client::Connection,
+    priv_client,
+    priv_client::{transport, transport::ToListenerMsg},
+    proto,
+    protocol::{self, inbound_stop, outbound_hop},
+    HOP_PROTOCOL_NAME, STOP_PROTOCOL_NAME,
+};
 
 /// The maximum number of circuits being denied concurrently.
 ///

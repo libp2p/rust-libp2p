@@ -18,6 +18,13 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
+use std::{
+    collections::{HashMap, HashSet},
+    convert::Infallible,
+    fmt,
+    task::{Context, Poll},
+};
+
 use libp2p_core::{transport::PortUse, ConnectedPoint, Endpoint, Multiaddr};
 use libp2p_identity::PeerId;
 use libp2p_swarm::{
@@ -25,22 +32,22 @@ use libp2p_swarm::{
     dummy, ConnectionClosed, ConnectionDenied, ConnectionId, FromSwarm, NetworkBehaviour, THandler,
     THandlerInEvent, THandlerOutEvent, ToSwarm,
 };
-use std::collections::{HashMap, HashSet};
-use std::convert::Infallible;
-use std::fmt;
-use std::task::{Context, Poll};
 
 /// A [`NetworkBehaviour`] that enforces a set of [`ConnectionLimits`].
 ///
-/// For these limits to take effect, this needs to be composed into the behaviour tree of your application.
+/// For these limits to take effect, this needs to be composed
+/// into the behaviour tree of your application.
 ///
-/// If a connection is denied due to a limit, either a [`SwarmEvent::IncomingConnectionError`](libp2p_swarm::SwarmEvent::IncomingConnectionError)
-/// or [`SwarmEvent::OutgoingConnectionError`](libp2p_swarm::SwarmEvent::OutgoingConnectionError) will be emitted.
-/// The [`ListenError::Denied`](libp2p_swarm::ListenError::Denied) and respectively the [`DialError::Denied`](libp2p_swarm::DialError::Denied) variant
-/// contain a [`ConnectionDenied`] type that can be downcast to [`Exceeded`] error if (and only if) **this**
-/// behaviour denied the connection.
+/// If a connection is denied due to a limit, either a
+/// [`SwarmEvent::IncomingConnectionError`](libp2p_swarm::SwarmEvent::IncomingConnectionError)
+/// or [`SwarmEvent::OutgoingConnectionError`](libp2p_swarm::SwarmEvent::OutgoingConnectionError)
+/// will be emitted. The [`ListenError::Denied`](libp2p_swarm::ListenError::Denied) and respectively
+/// the [`DialError::Denied`](libp2p_swarm::DialError::Denied) variant
+/// contain a [`ConnectionDenied`] type that can be downcast to [`Exceeded`] error if (and only if)
+/// **this** behaviour denied the connection.
 ///
-/// If you employ multiple [`NetworkBehaviour`]s that manage connections, it may also be a different error.
+/// If you employ multiple [`NetworkBehaviour`]s that manage connections,
+/// it may also be a different error.
 ///
 /// # Example
 ///
@@ -53,9 +60,9 @@ use std::task::{Context, Poll};
 /// #[derive(NetworkBehaviour)]
 /// # #[behaviour(prelude = "libp2p_swarm::derive_prelude")]
 /// struct MyBehaviour {
-///   identify: identify::Behaviour,
-///   ping: ping::Behaviour,
-///   limits: connection_limits::Behaviour
+///     identify: identify::Behaviour,
+///     ping: ping::Behaviour,
+///     limits: connection_limits::Behaviour,
 /// }
 /// ```
 pub struct Behaviour {
@@ -367,13 +374,15 @@ impl NetworkBehaviour for Behaviour {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use libp2p_swarm::{
-        behaviour::toggle::Toggle, dial_opts::DialOpts, dial_opts::PeerCondition, DialError,
-        ListenError, Swarm, SwarmEvent,
+        behaviour::toggle::Toggle,
+        dial_opts::{DialOpts, PeerCondition},
+        DialError, ListenError, Swarm, SwarmEvent,
     };
     use libp2p_swarm_test::SwarmExt;
     use quickcheck::*;
+
+    use super::*;
 
     #[test]
     fn max_outgoing() {

@@ -1,17 +1,17 @@
 #![allow(unexpected_cfgs)]
+use std::{future::poll_fn, pin::Pin};
 
-use futures::channel::oneshot;
-use futures::{AsyncReadExt, AsyncWriteExt};
+use futures::{channel::oneshot, AsyncReadExt, AsyncWriteExt};
 use getrandom::getrandom;
-use libp2p_core::transport::{DialOpts, PortUse};
-use libp2p_core::{Endpoint, StreamMuxer, Transport as _};
+use libp2p_core::{
+    transport::{DialOpts, PortUse},
+    Endpoint, StreamMuxer, Transport as _,
+};
 use libp2p_identity::{Keypair, PeerId};
 use libp2p_noise as noise;
 use libp2p_webtransport_websys::{Config, Connection, Error, Stream, Transport};
 use multiaddr::{Multiaddr, Protocol};
 use multihash::Multihash;
-use std::future::poll_fn;
-use std::pin::Pin;
 use wasm_bindgen::JsCast;
 use wasm_bindgen_futures::{spawn_local, JsFuture};
 use wasm_bindgen_test::{wasm_bindgen_test, wasm_bindgen_test_configure};

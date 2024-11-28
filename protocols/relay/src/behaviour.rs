@@ -22,26 +22,30 @@
 
 pub(crate) mod handler;
 pub(crate) mod rate_limiter;
-use crate::behaviour::handler::Handler;
-use crate::multiaddr_ext::MultiaddrExt;
-use crate::proto;
-use crate::protocol::{inbound_hop, outbound_stop};
+use std::{
+    collections::{hash_map, HashMap, HashSet, VecDeque},
+    num::NonZeroU32,
+    ops::Add,
+    task::{Context, Poll},
+    time::Duration,
+};
+
 use either::Either;
-use libp2p_core::multiaddr::Protocol;
-use libp2p_core::transport::PortUse;
-use libp2p_core::{ConnectedPoint, Endpoint, Multiaddr};
+use libp2p_core::{multiaddr::Protocol, transport::PortUse, ConnectedPoint, Endpoint, Multiaddr};
 use libp2p_identity::PeerId;
-use libp2p_swarm::behaviour::{ConnectionClosed, FromSwarm};
 use libp2p_swarm::{
+    behaviour::{ConnectionClosed, FromSwarm},
     dummy, ConnectionDenied, ConnectionId, ExternalAddresses, NetworkBehaviour, NotifyHandler,
     THandler, THandlerInEvent, THandlerOutEvent, ToSwarm,
 };
-use std::collections::{hash_map, HashMap, HashSet, VecDeque};
-use std::num::NonZeroU32;
-use std::ops::Add;
-use std::task::{Context, Poll};
-use std::time::Duration;
 use web_time::Instant;
+
+use crate::{
+    behaviour::handler::Handler,
+    multiaddr_ext::MultiaddrExt,
+    proto,
+    protocol::{inbound_hop, outbound_stop},
+};
 
 /// Configuration for the relay [`Behaviour`].
 ///
@@ -120,12 +124,14 @@ impl std::fmt::Debug for Config {
 impl Default for Config {
     fn default() -> Self {
         let reservation_rate_limiters = vec![
-            // For each peer ID one reservation every 2 minutes with up to 30 reservations per hour.
+            // For each peer ID one reservation every 2 minutes with up
+            // to 30 reservations per hour.
             rate_limiter::new_per_peer(rate_limiter::GenericRateLimiterConfig {
                 limit: NonZeroU32::new(30).expect("30 > 0"),
                 interval: Duration::from_secs(60 * 2),
             }),
-            // For each IP address one reservation every minute with up to 60 reservations per hour.
+            // For each IP address one reservation every minute with up
+            // to 60 reservations per hour.
             rate_limiter::new_per_ip(rate_limiter::GenericRateLimiterConfig {
                 limit: NonZeroU32::new(60).expect("60 > 0"),
                 interval: Duration::from_secs(60),
@@ -386,7 +392,8 @@ impl NetworkBehaviour for Behaviour {
                 );
 
                 let action = if
-                // Deny if it is a new reservation and exceeds `max_reservations_per_peer`.
+                // Deny if it is a new reservation and exceeds
+                // `max_reservations_per_peer`.
                 (!renewed
                     && self
                         .reservations

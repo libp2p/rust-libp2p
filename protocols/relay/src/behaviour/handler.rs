@@ -18,31 +18,37 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::behaviour::CircuitId;
-use crate::copy_future::CopyFuture;
-use crate::protocol::{inbound_hop, outbound_stop};
-use crate::{proto, HOP_PROTOCOL_NAME, STOP_PROTOCOL_NAME};
+use std::{
+    collections::{HashMap, VecDeque},
+    fmt, io,
+    task::{Context, Poll},
+    time::Duration,
+};
+
 use bytes::Bytes;
 use either::Either;
-use futures::future::{BoxFuture, FutureExt, TryFutureExt};
-use futures::io::AsyncWriteExt;
-use futures::stream::{FuturesUnordered, StreamExt};
-use futures_timer::Delay;
-use libp2p_core::upgrade::ReadyUpgrade;
-use libp2p_core::{ConnectedPoint, Multiaddr};
-use libp2p_identity::PeerId;
-use libp2p_swarm::handler::{
-    ConnectionEvent, DialUpgradeError, FullyNegotiatedInbound, FullyNegotiatedOutbound,
+use futures::{
+    future::{BoxFuture, FutureExt, TryFutureExt},
+    io::AsyncWriteExt,
+    stream::{FuturesUnordered, StreamExt},
 };
+use futures_timer::Delay;
+use libp2p_core::{upgrade::ReadyUpgrade, ConnectedPoint, Multiaddr};
+use libp2p_identity::PeerId;
 use libp2p_swarm::{
+    handler::{ConnectionEvent, DialUpgradeError, FullyNegotiatedInbound, FullyNegotiatedOutbound},
     ConnectionHandler, ConnectionHandlerEvent, ConnectionId, Stream, StreamProtocol,
     StreamUpgradeError, SubstreamProtocol,
 };
-use std::collections::{HashMap, VecDeque};
-use std::task::{Context, Poll};
-use std::time::Duration;
-use std::{fmt, io};
 use web_time::Instant;
+
+use crate::{
+    behaviour::CircuitId,
+    copy_future::CopyFuture,
+    proto,
+    protocol::{inbound_hop, outbound_stop},
+    HOP_PROTOCOL_NAME, STOP_PROTOCOL_NAME,
+};
 
 const MAX_CONCURRENT_STREAMS_PER_CONNECTION: usize = 10;
 const STREAM_TIMEOUT: Duration = Duration::from_secs(60);

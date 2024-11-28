@@ -18,35 +18,40 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
+use std::{
+    convert::Infallible,
+    fmt,
+    task::{Context, Poll},
+    time::{Duration, Instant},
+};
+
 use libp2p_core::{transport::PortUse, Endpoint, Multiaddr};
 use libp2p_identity::PeerId;
 use libp2p_swarm::{
     dummy, ConnectionDenied, ConnectionId, FromSwarm, NetworkBehaviour, THandler, THandlerInEvent,
     THandlerOutEvent, ToSwarm,
 };
-use std::convert::Infallible;
-
-use std::{
-    fmt,
-    task::{Context, Poll},
-    time::{Duration, Instant},
-};
 use sysinfo::MemoryRefreshKind;
 
 /// A [`NetworkBehaviour`] that enforces a set of memory usage based limits.
 ///
-/// For these limits to take effect, this needs to be composed into the behaviour tree of your application.
+/// For these limits to take effect, this needs to be composed
+/// into the behaviour tree of your application.
 ///
-/// If a connection is denied due to a limit, either a [`SwarmEvent::IncomingConnectionError`](libp2p_swarm::SwarmEvent::IncomingConnectionError)
-/// or [`SwarmEvent::OutgoingConnectionError`](libp2p_swarm::SwarmEvent::OutgoingConnectionError) will be emitted.
-/// The [`ListenError::Denied`](libp2p_swarm::ListenError::Denied) and respectively the [`DialError::Denied`](libp2p_swarm::DialError::Denied) variant
-/// contain a [`ConnectionDenied`] type that can be downcast to [`MemoryUsageLimitExceeded`] error if (and only if) **this**
-/// behaviour denied the connection.
+/// If a connection is denied due to a limit, either a
+/// [`SwarmEvent::IncomingConnectionError`](libp2p_swarm::SwarmEvent::IncomingConnectionError)
+/// or [`SwarmEvent::OutgoingConnectionError`](libp2p_swarm::SwarmEvent::OutgoingConnectionError)
+/// will be emitted. The [`ListenError::Denied`](libp2p_swarm::ListenError::Denied) and respectively
+/// the [`DialError::Denied`](libp2p_swarm::DialError::Denied) variant
+/// contain a [`ConnectionDenied`] type that can be downcast to [`MemoryUsageLimitExceeded`] error
+/// if (and only if) **this** behaviour denied the connection.
 ///
-/// If you employ multiple [`NetworkBehaviour`]s that manage connections, it may also be a different error.
+/// If you employ multiple [`NetworkBehaviour`]s that manage connections,
+/// it may also be a different error.
 ///
 /// [Behaviour::with_max_bytes] and [Behaviour::with_max_percentage] are mutually exclusive.
-/// If you need to employ both of them, compose two instances of [Behaviour] into your custom behaviour.
+/// If you need to employ both of them,
+/// compose two instances of [Behaviour] into your custom behaviour.
 ///
 /// # Example
 ///
@@ -58,8 +63,8 @@ use sysinfo::MemoryRefreshKind;
 /// #[derive(NetworkBehaviour)]
 /// # #[behaviour(prelude = "libp2p_swarm::derive_prelude")]
 /// struct MyBehaviour {
-///   identify: identify::Behaviour,
-///   limits: memory_connection_limits::Behaviour
+///     identify: identify::Behaviour,
+///     limits: memory_connection_limits::Behaviour,
 /// }
 /// ```
 pub struct Behaviour {
@@ -68,7 +73,8 @@ pub struct Behaviour {
     last_refreshed: Instant,
 }
 
-/// The maximum duration for which the retrieved memory-stats of the process are allowed to be stale.
+/// The maximum duration for which the retrieved memory-stats
+/// of the process are allowed to be stale.
 ///
 /// Once exceeded, we will retrieve new stats.
 const MAX_STALE_DURATION: Duration = Duration::from_millis(100);

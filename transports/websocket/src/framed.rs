@@ -18,11 +18,20 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::{error::Error, quicksink, tls};
+use std::{
+    borrow::Cow,
+    collections::HashMap,
+    fmt, io, mem,
+    net::IpAddr,
+    ops::DerefMut,
+    pin::Pin,
+    sync::Arc,
+    task::{Context, Poll},
+};
+
 use either::Either;
 use futures::{future::BoxFuture, prelude::*, ready, stream::BoxStream};
-use futures_rustls::rustls::pki_types::ServerName;
-use futures_rustls::{client, server};
+use futures_rustls::{client, rustls::pki_types::ServerName, server};
 use libp2p_core::{
     multiaddr::{Multiaddr, Protocol},
     transport::{DialOpts, ListenerId, TransportError, TransportEvent},
@@ -33,11 +42,9 @@ use soketto::{
     connection::{self, CloseReason},
     handshake,
 };
-use std::borrow::Cow;
-use std::net::IpAddr;
-use std::{collections::HashMap, ops::DerefMut, sync::Arc};
-use std::{fmt, io, mem, pin::Pin, task::Context, task::Poll};
 use url::Url;
+
+use crate::{error::Error, quicksink, tls};
 
 /// Max. number of payload bytes of a single frame.
 const MAX_DATA_SIZE: usize = 256 * 1024 * 1024;
@@ -809,9 +816,11 @@ where
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use libp2p_identity::PeerId;
     use std::io;
+
+    use libp2p_identity::PeerId;
+
+    use super::*;
 
     #[test]
     fn listen_addr() {

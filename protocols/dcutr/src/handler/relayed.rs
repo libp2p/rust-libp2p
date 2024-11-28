@@ -20,26 +20,31 @@
 
 //! [`ConnectionHandler`] handling relayed connection potentially upgraded to a direct connection.
 
-use crate::behaviour::MAX_NUMBER_OF_UPGRADE_ATTEMPTS;
-use crate::{protocol, PROTOCOL_NAME};
+use std::{
+    collections::VecDeque,
+    io,
+    task::{Context, Poll},
+    time::Duration,
+};
+
 use either::Either;
 use futures::future;
-use libp2p_core::multiaddr::Multiaddr;
-use libp2p_core::upgrade::{DeniedUpgrade, ReadyUpgrade};
-use libp2p_core::ConnectedPoint;
-use libp2p_swarm::handler::{
-    ConnectionEvent, DialUpgradeError, FullyNegotiatedInbound, FullyNegotiatedOutbound,
-    ListenUpgradeError,
+use libp2p_core::{
+    multiaddr::Multiaddr,
+    upgrade::{DeniedUpgrade, ReadyUpgrade},
+    ConnectedPoint,
 };
 use libp2p_swarm::{
+    handler::{
+        ConnectionEvent, DialUpgradeError, FullyNegotiatedInbound, FullyNegotiatedOutbound,
+        ListenUpgradeError,
+    },
     ConnectionHandler, ConnectionHandlerEvent, StreamProtocol, StreamUpgradeError,
     SubstreamProtocol,
 };
 use protocol::{inbound, outbound};
-use std::collections::VecDeque;
-use std::io;
-use std::task::{Context, Poll};
-use std::time::Duration;
+
+use crate::{behaviour::MAX_NUMBER_OF_UPGRADE_ATTEMPTS, protocol, PROTOCOL_NAME};
 
 #[derive(Debug)]
 pub enum Command {
@@ -114,8 +119,8 @@ impl Handler {
                 }
                 self.attempts += 1;
             }
-            // A connection listener denies all incoming substreams, thus none can ever be fully negotiated.
-            // TODO: remove when Rust 1.82 is MSRV
+            // A connection listener denies all incoming substreams, thus none can ever be fully
+            // negotiated. TODO: remove when Rust 1.82 is MSRV
             #[allow(unreachable_patterns)]
             future::Either::Right(output) => libp2p_core::util::unreachable(output),
         }

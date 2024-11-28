@@ -72,6 +72,7 @@
 //!
 //! ```rust
 //! use std::error::Error;
+//!
 //! use tracing_subscriber::EnvFilter;
 //!
 //! #[tokio::main]
@@ -98,8 +99,9 @@
 //!
 //! ```rust
 //! use std::error::Error;
-//! use tracing_subscriber::EnvFilter;
+//!
 //! use libp2p::{noise, tcp, yamux};
+//! use tracing_subscriber::EnvFilter;
 //!
 //! #[tokio::main]
 //! async fn main() -> Result<(), Box<dyn Error>> {
@@ -139,12 +141,14 @@
 //! The two traits [`Transport`] and [`NetworkBehaviour`] allow us to cleanly
 //! separate _how_ to send bytes from _what_ bytes and to _whom_ to send.
 //!
-//! With the above in mind, let's extend our example, creating a [`ping::Behaviour`](crate::ping::Behaviour) at the end:
+//! With the above in mind, let's extend our example, creating a
+//! [`ping::Behaviour`](crate::ping::Behaviour) at the end:
 //!
 //! ```rust
 //! use std::error::Error;
-//! use tracing_subscriber::EnvFilter;
+//!
 //! use libp2p::{noise, ping, tcp, yamux};
+//! use tracing_subscriber::EnvFilter;
 //!
 //! #[tokio::main]
 //! async fn main() -> Result<(), Box<dyn Error>> {
@@ -174,8 +178,9 @@
 //!
 //! ```rust
 //! use std::error::Error;
-//! use tracing_subscriber::EnvFilter;
+//!
 //! use libp2p::{noise, ping, tcp, yamux};
+//! use tracing_subscriber::EnvFilter;
 //!
 //! #[tokio::main]
 //! async fn main() -> Result<(), Box<dyn Error>> {
@@ -209,8 +214,9 @@
 //!
 //! ```rust
 //! use std::{error::Error, time::Duration};
-//! use tracing_subscriber::EnvFilter;
+//!
 //! use libp2p::{noise, ping, tcp, yamux};
+//! use tracing_subscriber::EnvFilter;
 //!
 //! #[tokio::main]
 //! async fn main() -> Result<(), Box<dyn Error>> {
@@ -226,7 +232,9 @@
 //!             yamux::Config::default,
 //!         )?
 //!         .with_behaviour(|_| ping::Behaviour::default())?
-//!         .with_swarm_config(|cfg| cfg.with_idle_connection_timeout(Duration::from_secs(u64::MAX)))
+//!         .with_swarm_config(|cfg| {
+//!             cfg.with_idle_connection_timeout(Duration::from_secs(u64::MAX))
+//!         })
 //!         .build();
 //!
 //!     Ok(())
@@ -261,8 +269,9 @@
 //!
 //! ```rust
 //! use std::{error::Error, time::Duration};
-//! use tracing_subscriber::EnvFilter;
+//!
 //! use libp2p::{noise, ping, tcp, yamux, Multiaddr};
+//! use tracing_subscriber::EnvFilter;
 //!
 //! #[tokio::main]
 //! async fn main() -> Result<(), Box<dyn Error>> {
@@ -278,7 +287,9 @@
 //!             yamux::Config::default,
 //!         )?
 //!         .with_behaviour(|_| ping::Behaviour::default())?
-//!         .with_swarm_config(|cfg| cfg.with_idle_connection_timeout(Duration::from_secs(u64::MAX)))
+//!         .with_swarm_config(|cfg| {
+//!             cfg.with_idle_connection_timeout(Duration::from_secs(u64::MAX))
+//!         })
 //!         .build();
 //!
 //!     // Tell the swarm to listen on all interfaces and a random, OS-assigned
@@ -305,9 +316,10 @@
 //!
 //! ```no_run
 //! use std::{error::Error, time::Duration};
-//! use tracing_subscriber::EnvFilter;
-//! use libp2p::{noise, ping, tcp, yamux, Multiaddr, swarm::SwarmEvent};
+//!
 //! use futures::prelude::*;
+//! use libp2p::{noise, ping, swarm::SwarmEvent, tcp, yamux, Multiaddr};
+//! use tracing_subscriber::EnvFilter;
 //!
 //! #[tokio::main]
 //! async fn main() -> Result<(), Box<dyn Error>> {
@@ -323,7 +335,9 @@
 //!             yamux::Config::default,
 //!         )?
 //!         .with_behaviour(|_| ping::Behaviour::default())?
-//!         .with_swarm_config(|cfg| cfg.with_idle_connection_timeout(Duration::from_secs(u64::MAX)))
+//!         .with_swarm_config(|cfg| {
+//!             cfg.with_idle_connection_timeout(Duration::from_secs(u64::MAX))
+//!         })
 //!         .build();
 //!
 //!     // Tell the swarm to listen on all interfaces and a random, OS-assigned

@@ -22,25 +22,34 @@ mod iface;
 mod socket;
 mod timer;
 
-use self::iface::InterfaceState;
-use crate::behaviour::{socket::AsyncSocket, timer::Builder};
-use crate::Config;
-use futures::channel::mpsc;
-use futures::{Stream, StreamExt};
+use std::{
+    cmp,
+    collections::hash_map::{Entry, HashMap},
+    fmt,
+    future::Future,
+    io,
+    net::IpAddr,
+    pin::Pin,
+    sync::{Arc, RwLock},
+    task::{Context, Poll},
+    time::Instant,
+};
+
+use futures::{channel::mpsc, Stream, StreamExt};
 use if_watch::IfEvent;
-use libp2p_core::transport::PortUse;
-use libp2p_core::{Endpoint, Multiaddr};
+use libp2p_core::{transport::PortUse, Endpoint, Multiaddr};
 use libp2p_identity::PeerId;
-use libp2p_swarm::behaviour::FromSwarm;
 use libp2p_swarm::{
-    dummy, ConnectionDenied, ConnectionId, ListenAddresses, NetworkBehaviour, THandler,
-    THandlerInEvent, THandlerOutEvent, ToSwarm,
+    behaviour::FromSwarm, dummy, ConnectionDenied, ConnectionId, ListenAddresses, NetworkBehaviour,
+    THandler, THandlerInEvent, THandlerOutEvent, ToSwarm,
 };
 use smallvec::SmallVec;
-use std::collections::hash_map::{Entry, HashMap};
-use std::future::Future;
-use std::sync::{Arc, RwLock};
-use std::{cmp, fmt, io, net::IpAddr, pin::Pin, task::Context, task::Poll, time::Instant};
+
+use self::iface::InterfaceState;
+use crate::{
+    behaviour::{socket::AsyncSocket, timer::Builder},
+    Config,
+};
 
 /// An abstraction to allow for compatibility with various async runtimes.
 pub trait Provider: 'static {
@@ -68,11 +77,13 @@ pub trait Abort {
 /// The type of a [`Behaviour`] using the `async-io` implementation.
 #[cfg(feature = "async-io")]
 pub mod async_io {
-    use super::Provider;
-    use crate::behaviour::{socket::asio::AsyncUdpSocket, timer::asio::AsyncTimer, Abort};
+    use std::future::Future;
+
     use async_std::task::JoinHandle;
     use if_watch::smol::IfWatcher;
-    use std::future::Future;
+
+    use super::Provider;
+    use crate::behaviour::{socket::asio::AsyncUdpSocket, timer::asio::AsyncTimer, Abort};
 
     #[doc(hidden)]
     pub enum AsyncIo {}
@@ -104,11 +115,13 @@ pub mod async_io {
 /// The type of a [`Behaviour`] using the `tokio` implementation.
 #[cfg(feature = "tokio")]
 pub mod tokio {
+    use std::future::Future;
+
+    use if_watch::tokio::IfWatcher;
+    use tokio::task::JoinHandle;
+
     use super::Provider;
     use crate::behaviour::{socket::tokio::TokioUdpSocket, timer::tokio::TokioTimer, Abort};
-    use if_watch::tokio::IfWatcher;
-    use std::future::Future;
-    use tokio::task::JoinHandle;
 
     #[doc(hidden)]
     pub enum Tokio {}
@@ -170,7 +183,8 @@ where
     /// The current set of listen addresses.
     ///
     /// This is shared across all interface tasks using an [`RwLock`].
-    /// The [`Behaviour`] updates this upon new [`FromSwarm`] events where as [`InterfaceState`]s read from it to answer inbound mDNS queries.
+    /// The [`Behaviour`] updates this upon new [`FromSwarm`]
+    /// events where as [`InterfaceState`]s read from it to answer inbound mDNS queries.
     listen_addresses: Arc<RwLock<ListenAddresses>>,
 
     local_peer_id: PeerId,

@@ -1,10 +1,13 @@
+use std::{
+    collections::HashSet,
+    iter,
+    time::{Duration, Instant},
+};
+
 use futures::StreamExt;
 use libp2p_identify as identify;
 use libp2p_swarm::{Swarm, SwarmEvent};
 use libp2p_swarm_test::SwarmExt;
-use std::collections::HashSet;
-use std::iter;
-use std::time::{Duration, Instant};
 use tracing_subscriber::EnvFilter;
 
 #[async_std::test]
@@ -34,8 +37,7 @@ async fn periodic_identify() {
     let (swarm2_memory_listen, swarm2_tcp_listen_addr) = swarm2.listen().await;
     swarm2.connect(&mut swarm1).await;
 
-    use identify::Event::Received;
-    use identify::Event::Sent;
+    use identify::Event::{Received, Sent};
 
     match libp2p_swarm_test::drive(&mut swarm1, &mut swarm2).await {
         (
@@ -67,7 +69,8 @@ async fn periodic_identify() {
             assert_eq!(s2_info.agent_version, "b");
             assert!(!s2_info.protocols.is_empty());
 
-            // Cannot assert observed address of dialer because memory transport uses ephemeral, outgoing ports.
+            // Cannot assert observed address of dialer because memory transport uses ephemeral,
+            // outgoing ports.
             // assert_eq!(
             //     s2_info.observed_addr,
             //     swarm2_memory_listen.with(Protocol::P2p(swarm2_peer_id.into()))

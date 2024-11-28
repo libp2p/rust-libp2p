@@ -18,19 +18,16 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use std::io;
-use std::time::Duration;
+use std::{io, time::Duration};
 
 use asynchronous_codec::{Framed, FramedParts};
 use bytes::Bytes;
 use futures::prelude::*;
-use thiserror::Error;
-
 use libp2p_identity::PeerId;
 use libp2p_swarm::Stream;
+use thiserror::Error;
 
-use crate::protocol::MAX_MESSAGE_SIZE;
-use crate::{proto, STOP_PROTOCOL_NAME};
+use crate::{proto, protocol::MAX_MESSAGE_SIZE, STOP_PROTOCOL_NAME};
 
 #[derive(Debug, Error)]
 pub enum Error {
