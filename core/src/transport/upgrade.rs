@@ -31,10 +31,11 @@ use crate::{
         TransportError, TransportEvent,
     },
     upgrade::{
-        self, apply_inbound, apply_outbound, InboundConnectionUpgrade, InboundUpgradeApply,
-        OutboundConnectionUpgrade, OutboundUpgradeApply, UpgradeError,
+        self, apply_inbound, apply_outbound, EitherSecurityFuture, InboundConnectionUpgrade,
+        InboundSecurityUpgrade, InboundUpgradeApply, OutboundConnectionUpgrade,
+        OutboundSecurityUpgrade, OutboundUpgradeApply, UpgradeError,
     },
-    Negotiated,
+    Negotiated, UpgradeInfo,
 };
 use futures::{prelude::*, ready};
 use libp2p_identity::PeerId;
@@ -114,6 +115,53 @@ where
             version,
         ))
     }
+
+    /// Upgrades the transport to perform authentication of the remote.
+    ///
+    /// The supplied upgrade receives the I/O resource `C` and must
+    /// produce a pair `(PeerId, D)`, where `D` is a new I/O resource.
+    /// The upgrade must thus at a minimum identify the remote, which typically
+    /// involves the use of a cryptographic authentication protocol in the
+    /// context of establishing a secure channel.
+    ///
+    /// ## Transitions
+    ///
+    ///   * I/O upgrade: `C -> (PeerId, D)`.
+    ///   * Transport output: `C -> (PeerId, D)`
+    ///
+    /// ## Alternative state
+    ///
+    /// This function is an alternative code path to [`Builder::authenticate`]
+    /// given the supplied upgrade implements [`InboundSecurityUpgrade`]/[`OutboundSecurityUpgrade`]
+    /// instead of [`InboundConnectionUpgrade`]/[`OutboundConnectionUpgrade`].
+    #[doc(hidden)]
+    pub fn authenticate2<C, D, U, E>(
+        self,
+        upgrade: U,
+    ) -> Authenticated<AndThen<T, impl FnOnce(C, ConnectedPoint) -> Authenticate2<C, U> + Clone>>
+    where
+        T: Transport<Output = C>,
+        C: AsyncRead + AsyncWrite + Unpin + Send + 'static,
+        D: AsyncRead + AsyncWrite + Unpin,
+        U: InboundSecurityUpgrade<Negotiated<C>, Output = (PeerId, D), Error = E> + Send + 'static,
+        U: OutboundSecurityUpgrade<Negotiated<C>, Output = (PeerId, D), Error = E>
+            + Clone
+            + Send
+            + 'static,
+        E: Error + 'static,
+        <U as UpgradeInfo>::Info: Send,
+        <U as InboundSecurityUpgrade<Negotiated<C>>>::Future: Send,
+        <U as OutboundSecurityUpgrade<Negotiated<C>>>::Future: Send,
+        <<U as UpgradeInfo>::InfoIter as std::iter::IntoIterator>::IntoIter: Send,
+    {
+        let version = self.version;
+        Authenticated(Builder::new(
+            self.inner.and_then(move |conn, endpoint| Authenticate2 {
+                inner: upgrade::secure(conn, upgrade, endpoint, version),
+            }),
+            version,
+        ))
+    }
 }
 
 /// An upgrade that authenticates the remote peer, typically
@@ -141,6 +189,39 @@ where
         >,
 {
     type Output = <EitherUpgrade<C, U> as Future>::Output;
+
+    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        let this = self.project();
+        Future::poll(this.inner, cx)
+    }
+}
+
+/// An upgrade that authenticates the remote peer, typically
+/// in the context of negotiating a secure channel.
+///
+/// Configured through [`Builder::authenticate2`].
+#[doc(hidden)]
+#[pin_project::pin_project]
+pub struct Authenticate2<C, U>
+where
+    C: AsyncRead + AsyncWrite + Unpin,
+    U: InboundSecurityUpgrade<Negotiated<C>> + OutboundSecurityUpgrade<Negotiated<C>>,
+{
+    #[pin]
+    inner: EitherSecurityFuture<C, U>,
+}
+
+impl<C, U> Future for Authenticate2<C, U>
+where
+    C: AsyncRead + AsyncWrite + Unpin,
+    U: InboundSecurityUpgrade<Negotiated<C>>
+        + OutboundSecurityUpgrade<
+            Negotiated<C>,
+            Output = <U as InboundSecurityUpgrade<Negotiated<C>>>::Output,
+            Error = <U as InboundSecurityUpgrade<Negotiated<C>>>::Error,
+        >,
+{
+    type Output = <EitherSecurityFuture<C, U> as Future>::Output;
 
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         let this = self.project();

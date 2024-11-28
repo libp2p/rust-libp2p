@@ -63,13 +63,17 @@ mod either;
 mod error;
 mod pending;
 mod ready;
+mod secure;
 mod select;
 
 pub(crate) use apply::{
     apply, apply_inbound, apply_outbound, InboundUpgradeApply, OutboundUpgradeApply,
 };
 pub(crate) use error::UpgradeError;
+pub(crate) use secure::{secure, EitherSecurityFuture};
+
 use futures::future::Future;
+use libp2p_identity::PeerId;
 
 pub use self::{
     denied::DeniedUpgrade, pending::PendingUpgrade, ready::ReadyUpgrade, select::SelectUpgrade,
@@ -151,4 +155,43 @@ pub trait OutboundConnectionUpgrade<T>: UpgradeInfo {
     ///
     /// The `info` is the identifier of the protocol, as produced by `protocol_info`.
     fn upgrade_outbound(self, socket: T, info: Self::Info) -> Self::Future;
+}
+
+/// Possible security upgrade on an inbound connection
+pub trait InboundSecurityUpgrade<T>: UpgradeInfo {
+    /// Output after the upgrade has been successfully negotiated and the handshake performed.
+    type Output;
+    /// Possible error during the handshake.
+    type Error;
+    /// Future that performs the handshake with the remote.
+    type Future: Future<Output = Result<(PeerId, Self::Output), Self::Error>>;
+
+    /// After we have determined that the remote supports one of the protocols we support, this
+    /// method is called to start the handshake.
+    ///
+    /// The `info` is the identifier of the protocol, as produced by `protocol_info`.
+    fn secure_inbound(self, socket: T, info: Self::Info) -> Self::Future;
+}
+
+/// Possible security upgrade on an outbound connection
+pub trait OutboundSecurityUpgrade<T>: UpgradeInfo {
+    /// Output after the upgrade has been successfully negotiated and the handshake performed.
+    type Output;
+    /// Possible error during the handshake.
+    type Error;
+    /// Future that performs the handshake with the remote.
+    type Future: Future<Output = Result<(PeerId, Self::Output), Self::Error>>;
+
+    /// After we have determined that the remote supports one of the protocols we support, this
+    /// method is called to start the handshake.
+    ///
+    /// The `info` is the identifier of the protocol, as produced by `protocol_info`. Security
+    /// transports use the optional `expected_peer_id` parameter on outgoing upgrades to validate
+    /// the expected `PeerId`.
+    fn secure_outbound(
+        self,
+        socket: T,
+        info: Self::Info,
+        expected_peer_id: Option<PeerId>,
+    ) -> Self::Future;
 }
