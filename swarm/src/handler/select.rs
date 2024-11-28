@@ -18,16 +18,23 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::handler::{
-    AddressChange, ConnectionEvent, ConnectionHandler, ConnectionHandlerEvent, DialUpgradeError,
-    FullyNegotiatedInbound, FullyNegotiatedOutbound, InboundUpgradeSend, ListenUpgradeError,
-    OutboundUpgradeSend, StreamUpgradeError, SubstreamProtocol,
+use std::{
+    cmp,
+    task::{Context, Poll},
 };
-use crate::upgrade::SendWrapper;
+
 use either::Either;
 use futures::{future, ready};
 use libp2p_core::upgrade::SelectUpgrade;
-use std::{cmp, task::Context, task::Poll};
+
+use crate::{
+    handler::{
+        AddressChange, ConnectionEvent, ConnectionHandler, ConnectionHandlerEvent,
+        DialUpgradeError, FullyNegotiatedInbound, FullyNegotiatedOutbound, InboundUpgradeSend,
+        ListenUpgradeError, OutboundUpgradeSend, StreamUpgradeError, SubstreamProtocol,
+    },
+    upgrade::SendWrapper,
+};
 
 /// Implementation of [`ConnectionHandler`] that combines two protocols into one.
 #[derive(Debug, Clone)]

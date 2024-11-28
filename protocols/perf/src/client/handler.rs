@@ -36,8 +36,10 @@ use libp2p_swarm::{
     ConnectionHandler, ConnectionHandlerEvent, StreamProtocol, SubstreamProtocol,
 };
 
-use crate::client::{RunError, RunId};
-use crate::{RunParams, RunUpdate};
+use crate::{
+    client::{RunError, RunId},
+    RunParams, RunUpdate,
+};
 
 #[derive(Debug)]
 pub struct Command {

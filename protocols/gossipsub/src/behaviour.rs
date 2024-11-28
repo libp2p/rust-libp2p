@@ -19,11 +19,10 @@
 // DEALINGS IN THE SOFTWARE.
 
 use std::{
-    cmp::{max, Ordering},
-    collections::HashSet,
-    collections::VecDeque,
-    collections::{BTreeSet, HashMap},
+    cmp::{max, Ordering, Ordering::Equal},
+    collections::{BTreeSet, HashMap, HashSet, VecDeque},
     fmt,
+    fmt::Debug,
     net::IpAddr,
     task::{Context, Poll},
     time::Duration,
@@ -31,52 +30,44 @@ use std::{
 
 use futures::FutureExt;
 use futures_timer::Delay;
-use prometheus_client::registry::Registry;
-use rand::{seq::SliceRandom, thread_rng};
-
 use libp2p_core::{
-    multiaddr::Protocol::Ip4, multiaddr::Protocol::Ip6, transport::PortUse, Endpoint, Multiaddr,
+    multiaddr::Protocol::{Ip4, Ip6},
+    transport::PortUse,
+    Endpoint, Multiaddr,
 };
-use libp2p_identity::Keypair;
-use libp2p_identity::PeerId;
+use libp2p_identity::{Keypair, PeerId};
 use libp2p_swarm::{
     behaviour::{AddressChange, ConnectionClosed, ConnectionEstablished, FromSwarm},
     dial_opts::DialOpts,
     ConnectionDenied, ConnectionId, NetworkBehaviour, NotifyHandler, THandler, THandlerInEvent,
     THandlerOutEvent, ToSwarm,
 };
+use prometheus_client::registry::Registry;
+use quick_protobuf::{MessageWrite, Writer};
+use rand::{seq::SliceRandom, thread_rng};
 use web_time::{Instant, SystemTime};
 
-use crate::peer_score::{PeerScore, PeerScoreParams, PeerScoreThresholds, RejectReason};
-use crate::protocol::SIGNING_PREFIX;
-use crate::subscription_filter::{AllowAllSubscriptionFilter, TopicSubscriptionFilter};
-use crate::time_cache::DuplicateCache;
-use crate::topic::{Hasher, Topic, TopicHash};
-use crate::transform::{DataTransform, IdentityTransform};
-use crate::types::{
-    ControlAction, Message, MessageAcceptance, MessageId, PeerInfo, RawMessage, Subscription,
-    SubscriptionAction,
-};
-use crate::types::{PeerConnections, PeerKind, RpcOut};
-use crate::{backoff::BackoffStorage, FailedMessages};
 use crate::{
+    backoff::BackoffStorage,
     config::{Config, ValidationMode},
-    types::Graft,
-};
-use crate::{gossip_promises::GossipPromises, types::Prune};
-use crate::{
+    gossip_promises::GossipPromises,
     handler::{Handler, HandlerEvent, HandlerIn},
-    types::IWant,
-};
-use crate::{mcache::MessageCache, types::IHave};
-use crate::{
+    mcache::MessageCache,
     metrics::{Churn, Config as MetricsConfig, Inclusion, Metrics, Penalty},
+    peer_score::{PeerScore, PeerScoreParams, PeerScoreThresholds, RejectReason},
+    protocol::SIGNING_PREFIX,
     rpc::Sender,
+    rpc_proto::proto,
+    subscription_filter::{AllowAllSubscriptionFilter, TopicSubscriptionFilter},
+    time_cache::DuplicateCache,
+    topic::{Hasher, Topic, TopicHash},
+    transform::{DataTransform, IdentityTransform},
+    types::{
+        ControlAction, Graft, IHave, IWant, Message, MessageAcceptance, MessageId, PeerConnections,
+        PeerInfo, PeerKind, Prune, RawMessage, RpcOut, Subscription, SubscriptionAction,
+    },
+    FailedMessages, PublishError, SubscriptionError, TopicScoreParams, ValidationError,
 };
-use crate::{rpc_proto::proto, TopicScoreParams};
-use crate::{PublishError, SubscriptionError, ValidationError};
-use quick_protobuf::{MessageWrite, Writer};
-use std::{cmp::Ordering::Equal, fmt::Debug};
 
 #[cfg(test)]
 mod tests;
@@ -221,8 +212,9 @@ impl From<MessageAuthenticity> for PublishConfig {
                 let public_key = keypair.public();
                 let key_enc = public_key.encode_protobuf();
                 let key = if key_enc.len() <= 42 {
-                    // The public key can be inlined in [`rpc_proto::proto::::Message::from`], so we don't include it
-                    // specifically in the [`rpc_proto::proto::Message::key`] field.
+                    // The public key can be inlined in [`rpc_proto::proto::::Message::from`], so we
+                    // don't include it specifically in the
+                    // [`rpc_proto::proto::Message::key`] field.
                     None
                 } else {
                     // Include the protobuf encoding of the public key in the message.
@@ -289,7 +281,7 @@ pub struct Behaviour<D = IdentityTransform, F = AllowAllSubscriptionFilter> {
     /// The last publish time for fanout topics.
     fanout_last_pub: HashMap<TopicHash, Instant>,
 
-    ///Storage for backoffs
+    /// Storage for backoffs
     backoffs: BackoffStorage,
 
     /// Message cache for the last few heartbeats.
@@ -1415,7 +1407,7 @@ where
                                     + self.config.graft_flood_threshold())
                                     - self.config.prune_backoff();
                                 if flood_cutoff > now {
-                                    //extra penalty
+                                    // extra penalty
                                     peer_score.add_penalty(peer_id, 1);
                                 }
                             }
@@ -1436,15 +1428,16 @@ where
                             topic=%topic_hash,
                             "GRAFT: ignoring peer with negative score"
                         );
-                        // we do send them PRUNE however, because it's a matter of protocol correctness
+                        // we do send them PRUNE however, because it's a matter of protocol
+                        // correctness
                         to_prune_topics.insert(topic_hash.clone());
                         // but we won't PX to them
                         do_px = false;
                         continue;
                     }
 
-                    // check mesh upper bound and only allow graft if the upper bound is not reached or
-                    // if it is an outbound peer
+                    // check mesh upper bound and only allow graft if the upper bound is not reached
+                    // or if it is an outbound peer
                     if peers.len() >= self.config.mesh_n_high()
                         && !self.outbound_peers.contains(peer_id)
                     {
@@ -1572,7 +1565,7 @@ where
             self.remove_peer_from_mesh(peer_id, &topic_hash, backoff, true, Churn::Prune);
 
             if self.mesh.contains_key(&topic_hash) {
-                //connect to px peers
+                // connect to px peers
                 if !px.is_empty() {
                     // we ignore PX from peers with insufficient score
                     if below_threshold {
@@ -1604,7 +1597,7 @@ where
         let n = self.config.prune_peers();
         // Ignore peerInfo with no ID
         //
-        //TODO: Once signed records are spec'd: Can we use peerInfo without any IDs if they have a
+        // TODO: Once signed records are spec'd: Can we use peerInfo without any IDs if they have a
         // signed peer record?
         px.retain(|p| p.peer_id.is_some());
         if px.len() > n {
@@ -2867,8 +2860,8 @@ where
                     .expect("Previously established connection to peer must be present");
                 peer.connections.remove(index);
 
-                // If there are more connections and this peer is in a mesh, inform the first connection
-                // handler.
+                // If there are more connections and this peer is in a mesh, inform the first
+                // connection handler.
                 if !peer.connections.is_empty() {
                     for topic in &peer.topics {
                         if let Some(mesh_peers) = self.mesh.get(topic) {
@@ -3162,7 +3155,8 @@ where
                 }
 
                 // Handle control messages
-                // group some control messages, this minimises SendEvents (code is simplified to handle each event at a time however)
+                // group some control messages, this minimises SendEvents (code is simplified to
+                // handle each event at a time however)
                 let mut ihave_msgs = vec![];
                 let mut graft_msgs = vec![];
                 let mut prune_msgs = vec![];

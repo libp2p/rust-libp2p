@@ -1,16 +1,16 @@
-use libp2p_core::transport::PortUse;
-use libp2p_core::upgrade::DeniedUpgrade;
-use libp2p_core::{Endpoint, Multiaddr};
+use std::{
+    convert::Infallible,
+    task::{Context, Poll},
+};
+
+use libp2p_core::{transport::PortUse, upgrade::DeniedUpgrade, Endpoint, Multiaddr};
 use libp2p_identity::PeerId;
-use libp2p_swarm::handler::ConnectionEvent;
 use libp2p_swarm::{
-    ConnectionDenied, ConnectionHandler, ConnectionHandlerEvent, ConnectionId, FromSwarm,
-    NetworkBehaviour, SubstreamProtocol, Swarm, SwarmEvent, THandler, THandlerInEvent,
-    THandlerOutEvent, ToSwarm,
+    handler::ConnectionEvent, ConnectionDenied, ConnectionHandler, ConnectionHandlerEvent,
+    ConnectionId, FromSwarm, NetworkBehaviour, SubstreamProtocol, Swarm, SwarmEvent, THandler,
+    THandlerInEvent, THandlerOutEvent, ToSwarm,
 };
 use libp2p_swarm_test::SwarmExt;
-use std::convert::Infallible;
-use std::task::{Context, Poll};
 
 #[async_std::test]
 async fn sends_remaining_events_to_behaviour_on_connection_close() {

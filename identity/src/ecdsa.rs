@@ -20,10 +20,9 @@
 
 //! ECDSA keys with secp256r1 curve support.
 
-use super::error::DecodingError;
-use core::cmp;
-use core::fmt;
-use core::hash;
+use core::{cmp, fmt, hash};
+use std::convert::Infallible;
+
 use p256::{
     ecdsa::{
         signature::{Signer, Verifier},
@@ -32,8 +31,9 @@ use p256::{
     EncodedPoint,
 };
 use sec1::{DecodeEcPrivateKey, EncodeEcPrivateKey};
-use std::convert::Infallible;
 use zeroize::Zeroize;
+
+use super::error::DecodingError;
 
 /// An ECDSA keypair generated using `secp256r1` curve.
 #[derive(Clone)]
@@ -158,7 +158,8 @@ impl PublicKey {
         self.0.verify(msg, &sig).is_ok()
     }
 
-    /// Try to parse a public key from a byte buffer containing raw components of a key with or without compression.
+    /// Try to parse a public key from a byte buffer containing raw
+    /// components of a key with or without compression.
     pub fn try_from_bytes(k: &[u8]) -> Result<PublicKey, DecodingError> {
         let enc_pt = EncodedPoint::from_bytes(k)
             .map_err(|e| DecodingError::failed_to_parse("ecdsa p256 encoded point", e))?;
@@ -168,7 +169,8 @@ impl PublicKey {
             .map(PublicKey)
     }
 
-    /// Convert a public key into a byte buffer containing raw components of the key without compression.
+    /// Convert a public key into a byte buffer containing
+    /// raw components of the key without compression.
     pub fn to_bytes(&self) -> Vec<u8> {
         self.0.to_encoded_point(false).as_bytes().to_owned()
     }

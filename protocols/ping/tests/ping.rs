@@ -20,12 +20,12 @@
 
 //! Integration tests for the `Ping` network behaviour.
 
+use std::{num::NonZeroU8, time::Duration};
+
 use libp2p_ping as ping;
-use libp2p_swarm::dummy;
-use libp2p_swarm::{Swarm, SwarmEvent};
+use libp2p_swarm::{dummy, Swarm, SwarmEvent};
 use libp2p_swarm_test::SwarmExt;
 use quickcheck::*;
-use std::{num::NonZeroU8, time::Duration};
 
 #[tokio::test]
 async fn ping_pong() {

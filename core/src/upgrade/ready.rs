@@ -19,12 +19,14 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::upgrade::{InboundUpgrade, OutboundUpgrade, UpgradeInfo};
-use futures::future;
-use std::convert::Infallible;
-use std::iter;
+use std::{convert::Infallible, iter};
 
-/// Implementation of [`UpgradeInfo`], [`InboundUpgrade`] and [`OutboundUpgrade`] that directly yields the substream.
+use futures::future;
+
+use crate::upgrade::{InboundUpgrade, OutboundUpgrade, UpgradeInfo};
+
+/// Implementation of [`UpgradeInfo`], [`InboundUpgrade`] and [`OutboundUpgrade`]
+/// that directly yields the substream.
 #[derive(Debug, Copy, Clone)]
 pub struct ReadyUpgrade<P> {
     protocol_name: P,

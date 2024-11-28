@@ -18,15 +18,18 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use futures::stream::{FuturesUnordered, SelectAll};
-use futures::StreamExt;
+use std::{task::Poll, time::Duration};
+
+use futures::{
+    stream::{FuturesUnordered, SelectAll},
+    StreamExt,
+};
 use libp2p_gossipsub as gossipsub;
 use libp2p_gossipsub::{MessageAuthenticity, ValidationMode};
 use libp2p_swarm::Swarm;
 use libp2p_swarm_test::SwarmExt as _;
 use quickcheck::{QuickCheck, TestResult};
 use rand::{seq::SliceRandom, SeedableRng};
-use std::{task::Poll, time::Duration};
 use tokio::{runtime::Runtime, time};
 use tracing_subscriber::EnvFilter;
 

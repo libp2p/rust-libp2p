@@ -27,9 +27,11 @@
 //! # Usage
 //!
 //! The [`Behaviour`] struct implements the [`NetworkBehaviour`] trait.
-//! It will respond to inbound ping requests and periodically send outbound ping requests on every established connection.
+//! It will respond to inbound ping requests and periodically send outbound ping requests on every
+//! established connection.
 //!
-//! It is up to the user to implement a health-check / connection management policy based on the ping protocol.
+//! It is up to the user to implement a health-check / connection management policy based on the
+//! ping protocol.
 //!
 //! For example:
 //!
@@ -39,8 +41,10 @@
 //!
 //! Users should inspect emitted [`Event`]s and call APIs on [`Swarm`]:
 //!
-//! - [`Swarm::close_connection`](libp2p_swarm::Swarm::close_connection) to close a specific connection
-//! - [`Swarm::disconnect_peer_id`](libp2p_swarm::Swarm::disconnect_peer_id) to close all connections to a peer
+//! - [`Swarm::close_connection`](libp2p_swarm::Swarm::close_connection) to close a specific
+//!   connection
+//! - [`Swarm::disconnect_peer_id`](libp2p_swarm::Swarm::disconnect_peer_id) to close all
+//!   connections to a peer
 //!
 //! [`Swarm`]: libp2p_swarm::Swarm
 //! [`Transport`]: libp2p_core::Transport
@@ -50,22 +54,22 @@
 mod handler;
 mod protocol;
 
+use std::{
+    collections::VecDeque,
+    task::{Context, Poll},
+    time::Duration,
+};
+
 use handler::Handler;
-use libp2p_core::transport::PortUse;
-use libp2p_core::{Endpoint, Multiaddr};
+pub use handler::{Config, Failure};
+use libp2p_core::{transport::PortUse, Endpoint, Multiaddr};
 use libp2p_identity::PeerId;
 use libp2p_swarm::{
     behaviour::FromSwarm, ConnectionDenied, ConnectionId, NetworkBehaviour, THandler,
     THandlerInEvent, THandlerOutEvent, ToSwarm,
 };
-use std::time::Duration;
-use std::{
-    collections::VecDeque,
-    task::{Context, Poll},
-};
 
 pub use self::protocol::PROTOCOL_NAME;
-pub use handler::{Config, Failure};
 
 /// A [`NetworkBehaviour`] that responds to inbound pings and
 /// periodically sends outbound pings on every established connection.

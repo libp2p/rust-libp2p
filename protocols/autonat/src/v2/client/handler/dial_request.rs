@@ -1,18 +1,3 @@
-use futures::{channel::oneshot, AsyncWrite};
-use futures_bounded::FuturesMap;
-use libp2p_core::{
-    upgrade::{DeniedUpgrade, ReadyUpgrade},
-    Multiaddr,
-};
-
-use libp2p_swarm::{
-    handler::{
-        ConnectionEvent, DialUpgradeError, FullyNegotiatedOutbound, OutboundUpgradeSend,
-        ProtocolsChange,
-    },
-    ConnectionHandler, ConnectionHandlerEvent, Stream, StreamProtocol, StreamUpgradeError,
-    SubstreamProtocol,
-};
 use std::{
     collections::VecDeque,
     convert::Infallible,
@@ -20,6 +5,21 @@ use std::{
     iter::{once, repeat},
     task::{Context, Poll},
     time::Duration,
+};
+
+use futures::{channel::oneshot, AsyncWrite};
+use futures_bounded::FuturesMap;
+use libp2p_core::{
+    upgrade::{DeniedUpgrade, ReadyUpgrade},
+    Multiaddr,
+};
+use libp2p_swarm::{
+    handler::{
+        ConnectionEvent, DialUpgradeError, FullyNegotiatedOutbound, OutboundUpgradeSend,
+        ProtocolsChange,
+    },
+    ConnectionHandler, ConnectionHandlerEvent, Stream, StreamProtocol, StreamUpgradeError,
+    SubstreamProtocol,
 };
 
 use crate::v2::{
@@ -261,7 +261,9 @@ async fn start_stream_handle(
         Ok(_) => {}
         Err(err) => {
             if err.kind() == io::ErrorKind::ConnectionReset {
-                // The AutoNAT server may have already closed the stream (this is normal because the probe is finished), in this case we have this error:
+                // The AutoNAT server may have already closed the stream
+                // (this is normal because the probe is finished),
+                // in this case we have this error:
                 // Err(Custom { kind: ConnectionReset, error: Stopped(0) })
                 // so we silently ignore this error
             } else {

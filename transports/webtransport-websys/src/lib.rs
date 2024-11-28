@@ -11,7 +11,9 @@ mod stream;
 mod transport;
 mod utils;
 
-pub use self::connection::Connection;
-pub use self::error::Error;
-pub use self::stream::Stream;
-pub use self::transport::{Config, Transport};
+pub use self::{
+    connection::Connection,
+    error::Error,
+    stream::Stream,
+    transport::{Config, Transport},
+};

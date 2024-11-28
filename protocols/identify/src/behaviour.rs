@@ -18,28 +18,27 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::handler::{self, Handler, InEvent};
-use crate::protocol::{Info, UpgradeError};
-use libp2p_core::multiaddr::Protocol;
-use libp2p_core::transport::PortUse;
-use libp2p_core::{multiaddr, ConnectedPoint, Endpoint, Multiaddr};
-use libp2p_identity::PeerId;
-use libp2p_identity::PublicKey;
-use libp2p_swarm::behaviour::{ConnectionClosed, ConnectionEstablished, DialFailure, FromSwarm};
-use libp2p_swarm::{
-    ConnectionDenied, DialError, ExternalAddresses, ListenAddresses, NetworkBehaviour,
-    NotifyHandler, PeerAddresses, StreamUpgradeError, THandlerInEvent, ToSwarm,
-    _address_translation,
-};
-use libp2p_swarm::{ConnectionId, THandler, THandlerOutEvent};
-
-use std::collections::hash_map::Entry;
-use std::num::NonZeroUsize;
 use std::{
-    collections::{HashMap, HashSet, VecDeque},
-    task::Context,
-    task::Poll,
+    collections::{hash_map::Entry, HashMap, HashSet, VecDeque},
+    num::NonZeroUsize,
+    task::{Context, Poll},
     time::Duration,
+};
+
+use libp2p_core::{
+    multiaddr, multiaddr::Protocol, transport::PortUse, ConnectedPoint, Endpoint, Multiaddr,
+};
+use libp2p_identity::{PeerId, PublicKey};
+use libp2p_swarm::{
+    behaviour::{ConnectionClosed, ConnectionEstablished, DialFailure, FromSwarm},
+    ConnectionDenied, ConnectionId, DialError, ExternalAddresses, ListenAddresses,
+    NetworkBehaviour, NotifyHandler, PeerAddresses, StreamUpgradeError, THandler, THandlerInEvent,
+    THandlerOutEvent, ToSwarm, _address_translation,
+};
+
+use crate::{
+    handler::{self, Handler, InEvent},
+    protocol::{Info, UpgradeError},
 };
 
 /// Whether an [`Multiaddr`] is a valid for the QUIC transport.
@@ -323,7 +322,8 @@ impl Behaviour {
             .contains(&connection_id)
         {
             // Apply address translation to the candidate address.
-            // For TCP without port-reuse, the observed address contains an ephemeral port which needs to be replaced by the port of a listen address.
+            // For TCP without port-reuse, the observed address contains an ephemeral port which
+            // needs to be replaced by the port of a listen address.
             let translated_addresses = {
                 let mut addrs: Vec<_> = self
                     .listen_addresses
@@ -398,7 +398,8 @@ impl NetworkBehaviour for Behaviour {
     ) -> Result<THandler<Self>, ConnectionDenied> {
         // Contrary to inbound events, outbound events are full-p2p qualified
         // so we remove /p2p/ in order to be homogeneous
-        // this will avoid Autonatv2 to probe twice the same address (fully-p2p-qualified + not fully-p2p-qualified)
+        // this will avoid Autonatv2 to probe twice the same address (fully-p2p-qualified + not
+        // fully-p2p-qualified)
         let mut addr = addr.clone();
         if matches!(addr.iter().last(), Some(multiaddr::Protocol::P2p(_))) {
             addr.pop();
@@ -415,7 +416,9 @@ impl NetworkBehaviour for Behaviour {
             self.config.local_public_key.clone(),
             self.config.protocol_version.clone(),
             self.config.agent_version.clone(),
-            addr.clone(), // TODO: This is weird? That is the public address we dialed, shouldn't need to tell the other party?
+            // TODO: This is weird? That is the public address we dialed,
+            // shouldn't need to tell the other party?
+            addr.clone(),
             self.all_addresses(),
         ))
     }

@@ -1,11 +1,13 @@
-use crate::{proto, DecodeError};
-use libp2p_identity::SigningError;
-use libp2p_identity::{Keypair, PublicKey};
-use quick_protobuf::{BytesReader, Writer};
 use std::fmt;
+
+use libp2p_identity::{Keypair, PublicKey, SigningError};
+use quick_protobuf::{BytesReader, Writer};
 use unsigned_varint::encode::usize_buffer;
 
-/// A signed envelope contains an arbitrary byte string payload, a signature of the payload, and the public key that can be used to verify the signature.
+use crate::{proto, DecodeError};
+
+/// A signed envelope contains an arbitrary byte string payload, a signature of the payload, and the
+/// public key that can be used to verify the signature.
 ///
 /// For more details see libp2p RFC0002: <https://github.com/libp2p/specs/blob/master/RFC/0002-signed-envelopes.md>
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -46,8 +48,9 @@ impl SignedEnvelope {
 
     /// Extract the payload and signing key of this [`SignedEnvelope`].
     ///
-    /// You must provide the correct domain-separation string and expected payload type in order to get the payload.
-    /// This guards against accidental mis-use of the payload where the signature was created for a different purpose or payload type.
+    /// You must provide the correct domain-separation string and expected payload type in order to
+    /// get the payload. This guards against accidental mis-use of the payload where the
+    /// signature was created for a different purpose or payload type.
     ///
     /// It is the caller's responsibility to check that the signing key is what
     /// is expected. For example, checking that the signing key is from a
@@ -156,7 +159,8 @@ pub enum DecodingError {
 /// Errors that occur whilst extracting the payload of a [`SignedEnvelope`].
 #[derive(Debug)]
 pub enum ReadPayloadError {
-    /// The signature on the signed envelope does not verify with the provided domain separation string.
+    /// The signature on the signed envelope does not verify
+    /// with the provided domain separation string.
     InvalidSignature,
     /// The payload contained in the envelope is not of the expected type.
     UnexpectedPayloadType { expected: Vec<u8>, got: Vec<u8> },

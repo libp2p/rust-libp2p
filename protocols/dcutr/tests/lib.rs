@@ -18,9 +18,12 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use libp2p_core::multiaddr::{Multiaddr, Protocol};
-use libp2p_core::transport::upgrade::Version;
-use libp2p_core::transport::{MemoryTransport, Transport};
+use std::time::Duration;
+
+use libp2p_core::{
+    multiaddr::{Multiaddr, Protocol},
+    transport::{upgrade::Version, MemoryTransport, Transport},
+};
 use libp2p_dcutr as dcutr;
 use libp2p_identify as identify;
 use libp2p_identity as identity;
@@ -29,7 +32,6 @@ use libp2p_plaintext as plaintext;
 use libp2p_relay as relay;
 use libp2p_swarm::{Config, NetworkBehaviour, Swarm, SwarmEvent};
 use libp2p_swarm_test::SwarmExt as _;
-use std::time::Duration;
 use tracing_subscriber::EnvFilter;
 
 #[tokio::test]

@@ -18,27 +18,33 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::behaviour::Mode;
-use crate::protocol::{
-    KadInStreamSink, KadOutStreamSink, KadPeer, KadRequestMsg, KadResponseMsg, ProtocolConfig,
+use std::{
+    collections::VecDeque,
+    error, fmt, io,
+    marker::PhantomData,
+    pin::Pin,
+    task::{Context, Poll, Waker},
+    time::Duration,
 };
-use crate::record::{self, Record};
-use crate::QueryId;
+
 use either::Either;
-use futures::channel::oneshot;
-use futures::prelude::*;
-use futures::stream::SelectAll;
+use futures::{channel::oneshot, prelude::*, stream::SelectAll};
 use libp2p_core::{upgrade, ConnectedPoint};
 use libp2p_identity::PeerId;
-use libp2p_swarm::handler::{ConnectionEvent, FullyNegotiatedInbound, FullyNegotiatedOutbound};
 use libp2p_swarm::{
+    handler::{ConnectionEvent, FullyNegotiatedInbound, FullyNegotiatedOutbound},
     ConnectionHandler, ConnectionHandlerEvent, Stream, StreamUpgradeError, SubstreamProtocol,
     SupportedProtocols,
 };
-use std::collections::VecDeque;
-use std::task::Waker;
-use std::time::Duration;
-use std::{error, fmt, io, marker::PhantomData, pin::Pin, task::Context, task::Poll};
+
+use crate::{
+    behaviour::Mode,
+    protocol::{
+        KadInStreamSink, KadOutStreamSink, KadPeer, KadRequestMsg, KadResponseMsg, ProtocolConfig,
+    },
+    record::{self, Record},
+    QueryId,
+};
 
 const MAX_NUM_STREAMS: usize = 32;
 
@@ -550,7 +556,8 @@ impl Handler {
             });
     }
 
-    /// Takes the given [`KadRequestMsg`] and composes it into an outbound request-response protocol handshake using a [`oneshot::channel`].
+    /// Takes the given [`KadRequestMsg`] and composes it into an outbound request-response protocol
+    /// handshake using a [`oneshot::channel`].
     fn queue_new_stream(&mut self, id: QueryId, msg: KadRequestMsg) {
         let (sender, receiver) = oneshot::channel();
 
@@ -1060,9 +1067,10 @@ fn process_kad_response(event: KadResponseMsg, query_id: QueryId) -> HandlerEven
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use quickcheck::{Arbitrary, Gen};
     use tracing_subscriber::EnvFilter;
+
+    use super::*;
 
     impl Arbitrary for ProtocolStatus {
         fn arbitrary(g: &mut Gen) -> Self {

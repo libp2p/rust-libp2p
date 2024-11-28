@@ -18,19 +18,26 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::transport::{DialOpts, ListenerId, Transport, TransportError, TransportEvent};
-use fnv::FnvHashMap;
-use futures::{channel::mpsc, future::Ready, prelude::*, task::Context, task::Poll};
-use multiaddr::{Multiaddr, Protocol};
-use once_cell::sync::Lazy;
-use parking_lot::Mutex;
-use rw_stream_sink::RwStreamSink;
 use std::{
     collections::{hash_map::Entry, VecDeque},
     error, fmt, io,
     num::NonZeroU64,
     pin::Pin,
 };
+
+use fnv::FnvHashMap;
+use futures::{
+    channel::mpsc,
+    future::Ready,
+    prelude::*,
+    task::{Context, Poll},
+};
+use multiaddr::{Multiaddr, Protocol};
+use once_cell::sync::Lazy;
+use parking_lot::Mutex;
+use rw_stream_sink::RwStreamSink;
+
+use crate::transport::{DialOpts, ListenerId, Transport, TransportError, TransportEvent};
 
 static HUB: Lazy<Hub> = Lazy::new(|| Hub(Mutex::new(FnvHashMap::default())));
 
@@ -398,9 +405,8 @@ impl<T> Drop for Chan<T> {
 
 #[cfg(test)]
 mod tests {
-    use crate::{transport::PortUse, Endpoint};
-
     use super::*;
+    use crate::{transport::PortUse, Endpoint};
 
     #[test]
     fn parse_memory_addr_works() {

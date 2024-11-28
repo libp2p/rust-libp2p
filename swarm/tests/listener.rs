@@ -15,7 +15,6 @@ use libp2p_swarm::{
     ListenerClosed, ListenerError, NetworkBehaviour, NewListenAddr, Swarm, SwarmEvent, THandler,
     THandlerInEvent, THandlerOutEvent, ToSwarm,
 };
-
 use libp2p_swarm_test::SwarmExt;
 
 #[async_std::test]

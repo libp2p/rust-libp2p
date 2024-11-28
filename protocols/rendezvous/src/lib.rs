@@ -22,8 +22,9 @@
 
 #![cfg_attr(docsrs, feature(doc_cfg, doc_auto_cfg))]
 
-pub use self::codec::{Cookie, ErrorCode, Namespace, NamespaceTooLong, Registration, Ttl};
 use libp2p_swarm::StreamProtocol;
+
+pub use self::codec::{Cookie, ErrorCode, Namespace, NamespaceTooLong, Registration, Ttl};
 
 mod codec;
 
