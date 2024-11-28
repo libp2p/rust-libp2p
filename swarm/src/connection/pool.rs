@@ -207,7 +207,7 @@ struct PendingConnection {
 
 impl PendingConnection {
     fn is_for_same_remote_as(&self, other: PeerId) -> bool {
-        self.peer_id.map_or(false, |peer| peer == other)
+        self.peer_id == Some(other)
     }
 
     /// Aborts the connection attempt, closing the connection.
