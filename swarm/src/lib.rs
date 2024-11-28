@@ -63,6 +63,7 @@ mod stream_protocol;
 mod test;
 mod upgrade;
 
+pub mod async_behavior;
 pub mod behaviour;
 pub mod dial_opts;
 pub mod dummy;

@@ -32,11 +32,12 @@ use crate::record::{
     store::{self, RecordStore},
     ProviderRecord, Record,
 };
-use crate::{bootstrap, K_VALUE};
+use crate::{bootstrap, RecordKey, K_VALUE};
 use crate::{jobs::*, protocol};
 use fnv::FnvHashSet;
 use libp2p_core::{transport::PortUse, ConnectedPoint, Endpoint, Multiaddr};
 use libp2p_identity::PeerId;
+use libp2p_swarm::async_behavior::{QueryMapper, Step};
 use libp2p_swarm::behaviour::{
     AddressChange, ConnectionClosed, ConnectionEstablished, DialFailure, FromSwarm,
 };
@@ -3466,4 +3467,60 @@ where
         .map(|addr| addr.to_string())
         .collect::<Vec<_>>()
         .join(", ")
+}
+
+pub enum Command {
+    Bootstrap,
+    GetClosestPeers { key: Vec<u8> },
+    GetProviders { key: RecordKey },
+    StartProviding { key: RecordKey },
+    GetRecord { key: RecordKey },
+    PutRecord { record: Record, quorum: Quorum },
+}
+
+pub enum Error {
+    NoKnownPeers,
+    Store(store::Error),
+}
+
+impl<TStore: RecordStore + Send + 'static> QueryMapper for Behaviour<TStore> {
+    type Command = Command;
+    type QueryId = QueryId;
+    type Result = Result<QueryResult, Error>;
+
+    fn handle_command(&mut self, command: Self::Command) -> Result<Self::QueryId, Self::Result> {
+        match command {
+            Command::Bootstrap => self.bootstrap().map_err(|_| Err(Error::NoKnownPeers)),
+            Command::GetClosestPeers { key } => Ok(self.get_closest_peers(key)),
+            Command::GetProviders { key } => Ok(self.get_providers(key)),
+            Command::StartProviding { key } => {
+                self.start_providing(key).map_err(|e| Err(Error::Store(e)))
+            }
+            Command::GetRecord { key } => Ok(self.get_record(key)),
+            Command::PutRecord { record, quorum } => self
+                .put_record(record, quorum)
+                .map_err(|e| Err(Error::Store(e))),
+        }
+    }
+
+    fn extract_id(event: &Self::ToSwarm) -> Option<(QueryId, Step)> {
+        if let Event::OutboundQueryProgressed { id, step, .. } = event {
+            let step = if step.last {
+                Step::Last
+            } else {
+                Step::Intermediate
+            };
+            Some((*id, step))
+        } else {
+            None
+        }
+    }
+
+    fn map_event(event: Self::ToSwarm) -> Result<Self::Result, Self::ToSwarm> {
+        if let Event::OutboundQueryProgressed { result, .. } = event {
+            Ok(Ok(result))
+        } else {
+            Err(event)
+        }
+    }
 }
