@@ -407,7 +407,13 @@ impl P2pCertificate<'_> {
     fn signature_scheme(&self) -> Result<rustls::SignatureScheme, webpki::Error> {
         // Certificates MUST use the NamedCurve encoding for elliptic curve parameters.
         // Endpoints MUST abort the connection attempt if it is not used.
-        use oid_registry::{OID_EC_P256, OID_KEY_TYPE_EC_PUBLIC_KEY, OID_NIST_EC_P384, OID_NIST_EC_P521, OID_NIST_HASH_SHA256, OID_NIST_HASH_SHA384, OID_NIST_HASH_SHA512, OID_PKCS1_RSAENCRYPTION, OID_PKCS1_RSASSAPSS, OID_PKCS1_SHA256WITHRSA, OID_PKCS1_SHA384WITHRSA, OID_PKCS1_SHA512WITHRSA, OID_SIG_ECDSA_WITH_SHA256, OID_SIG_ECDSA_WITH_SHA384, OID_SIG_ECDSA_WITH_SHA512, OID_SIG_ED25519, OID_SIG_ED448};
+        use oid_registry::{
+            OID_EC_P256, OID_KEY_TYPE_EC_PUBLIC_KEY, OID_NIST_EC_P384, OID_NIST_EC_P521,
+            OID_NIST_HASH_SHA256, OID_NIST_HASH_SHA384, OID_NIST_HASH_SHA512,
+            OID_PKCS1_RSAENCRYPTION, OID_PKCS1_RSASSAPSS, OID_PKCS1_SHA256WITHRSA,
+            OID_PKCS1_SHA384WITHRSA, OID_PKCS1_SHA512WITHRSA, OID_SIG_ECDSA_WITH_SHA256,
+            OID_SIG_ECDSA_WITH_SHA384, OID_SIG_ECDSA_WITH_SHA512, OID_SIG_ED25519, OID_SIG_ED448,
+        };
         use rustls::SignatureScheme::*;
 
         let signature_algorithm = &self.certificate.signature_algorithm;

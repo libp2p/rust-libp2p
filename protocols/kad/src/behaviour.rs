@@ -50,7 +50,7 @@ use crate::{
     addresses::Addresses,
     bootstrap,
     handler::{Handler, HandlerEvent, HandlerIn, RequestId},
-    jobs::{AddProviderJob, JOBS_MAX_NEW_QUERIES, JOBS_MAX_QUERIES, PutRecordJob},
+    jobs::{AddProviderJob, PutRecordJob, JOBS_MAX_NEW_QUERIES, JOBS_MAX_QUERIES},
     kbucket::{self, Distance, KBucketConfig, KBucketsTable, NodeStatus},
     protocol,
     protocol::{ConnectionType, KadPeer, ProtocolConfig},
