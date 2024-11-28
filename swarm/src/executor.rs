@@ -1,14 +1,15 @@
 //! Provides executors for spawning background tasks.
-use futures::executor::ThreadPool;
 use std::{future::Future, pin::Pin};
+
+use futures::executor::ThreadPool;
 
 /// Implemented on objects that can run a `Future` in the background.
 ///
 /// > **Note**: While it may be tempting to implement this trait on types such as
-/// >           [`futures::stream::FuturesUnordered`], please note that passing an `Executor` is
-/// >           optional, and that `FuturesUnordered` (or a similar struct) will automatically
-/// >           be used as fallback by libp2p. The `Executor` trait should therefore only be
-/// >           about running `Future`s on a separate task.
+/// > [`futures::stream::FuturesUnordered`], please note that passing an `Executor` is
+/// > optional, and that `FuturesUnordered` (or a similar struct) will automatically
+/// > be used as fallback by libp2p. The `Executor` trait should therefore only be
+/// > about running `Future`s on a separate task.
 pub trait Executor {
     /// Run the given future in the background until it ends.
     #[track_caller]

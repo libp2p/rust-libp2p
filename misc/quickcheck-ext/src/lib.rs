@@ -1,9 +1,9 @@
 #![cfg_attr(docsrs, feature(doc_cfg, doc_auto_cfg))]
 
-pub use quickcheck::*;
-
 use core::ops::Range;
+
 use num_traits::sign::Unsigned;
+pub use quickcheck::*;
 
 pub trait GenRange {
     fn gen_range<T: Unsigned + Arbitrary + Copy>(&mut self, _range: Range<T>) -> T;

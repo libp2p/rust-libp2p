@@ -72,13 +72,11 @@ mod entry;
 #[allow(clippy::assign_op_pattern)]
 mod key;
 
-pub use bucket::NodeStatus;
-pub use entry::*;
+use std::{collections::VecDeque, num::NonZeroUsize, time::Duration};
 
 use bucket::KBucket;
-use std::collections::VecDeque;
-use std::num::NonZeroUsize;
-use std::time::Duration;
+pub use bucket::NodeStatus;
+pub use entry::*;
 use web_time::Instant;
 
 /// Maximum number of k-buckets.
@@ -529,12 +527,12 @@ where
 
     /// Returns true if the bucket has a pending node.
     pub fn has_pending(&self) -> bool {
-        self.bucket.pending().map_or(false, |n| !n.is_ready())
+        self.bucket.pending().is_some_and(|n| !n.is_ready())
     }
 
     /// Tests whether the given distance falls into this bucket.
     pub fn contains(&self, d: &Distance) -> bool {
-        BucketIndex::new(d).map_or(false, |i| i == self.index)
+        BucketIndex::new(d).is_some_and(|i| i == self.index)
     }
 
     /// Generates a random distance that falls into this bucket.
@@ -561,9 +559,10 @@ where
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use libp2p_identity::PeerId;
     use quickcheck::*;
+
+    use super::*;
 
     type TestTable = KBucketsTable<KeyBytes, ()>;
 

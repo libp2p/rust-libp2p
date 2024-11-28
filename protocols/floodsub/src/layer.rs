@@ -18,27 +18,36 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::protocol::{
-    FloodsubMessage, FloodsubProtocol, FloodsubRpc, FloodsubSubscription,
-    FloodsubSubscriptionAction,
+use std::{
+    collections::{
+        hash_map::{DefaultHasher, HashMap},
+        VecDeque,
+    },
+    iter,
+    task::{Context, Poll},
 };
-use crate::topic::Topic;
-use crate::FloodsubConfig;
+
 use bytes::Bytes;
 use cuckoofilter::{CuckooError, CuckooFilter};
 use fnv::FnvHashSet;
-use libp2p_core::transport::PortUse;
-use libp2p_core::{Endpoint, Multiaddr};
+use libp2p_core::{transport::PortUse, Endpoint, Multiaddr};
 use libp2p_identity::PeerId;
-use libp2p_swarm::behaviour::{ConnectionClosed, ConnectionEstablished, FromSwarm};
 use libp2p_swarm::{
-    dial_opts::DialOpts, CloseConnection, ConnectionDenied, ConnectionId, NetworkBehaviour,
-    NotifyHandler, OneShotHandler, THandler, THandlerInEvent, THandlerOutEvent, ToSwarm,
+    behaviour::{ConnectionClosed, ConnectionEstablished, FromSwarm},
+    dial_opts::DialOpts,
+    CloseConnection, ConnectionDenied, ConnectionId, NetworkBehaviour, NotifyHandler,
+    OneShotHandler, THandler, THandlerInEvent, THandlerOutEvent, ToSwarm,
 };
 use smallvec::SmallVec;
-use std::collections::hash_map::{DefaultHasher, HashMap};
-use std::task::{Context, Poll};
-use std::{collections::VecDeque, iter};
+
+use crate::{
+    protocol::{
+        FloodsubMessage, FloodsubProtocol, FloodsubRpc, FloodsubSubscription,
+        FloodsubSubscriptionAction,
+    },
+    topic::Topic,
+    FloodsubConfig,
+};
 
 /// Network behaviour that handles the floodsub protocol.
 pub struct Floodsub {
@@ -192,7 +201,8 @@ impl Floodsub {
         self.publish_many_inner(topic, data, true)
     }
 
-    /// Publishes a message with multiple topics to the network, even if we're not subscribed to any of the topics.
+    /// Publishes a message with multiple topics to the network, even if we're not subscribed to any
+    /// of the topics.
     pub fn publish_many_any(
         &mut self,
         topic: impl IntoIterator<Item = impl Into<Topic>>,

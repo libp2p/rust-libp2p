@@ -32,7 +32,6 @@ use std::{
     time::Duration,
 };
 
-use crate::tokio::{is_addr_global, Gateway};
 use futures::{channel::oneshot, Future, StreamExt};
 use futures_timer::Delay;
 use igd_next::PortMappingProtocol;
@@ -45,6 +44,8 @@ use libp2p_swarm::{
     derive_prelude::PeerId, dummy, ConnectionDenied, ConnectionId, ExpiredListenAddr, FromSwarm,
     NetworkBehaviour, NewListenAddr, ToSwarm,
 };
+
+use crate::tokio::{is_addr_global, Gateway};
 
 /// The duration in seconds of a port mapping on the gateway.
 const MAPPING_DURATION: u32 = 3600;
@@ -286,8 +287,9 @@ impl NetworkBehaviour for Behaviour {
 
                 match &mut self.state {
                     GatewayState::Searching(_) => {
-                        // As the gateway is not yet available we add the mapping with `MappingState::Inactive`
-                        // so that when and if it becomes available we map it.
+                        // As the gateway is not yet available we add the mapping with
+                        // `MappingState::Inactive` so that when and if it
+                        // becomes available we map it.
                         self.mappings.insert(
                             Mapping {
                                 listener_id,

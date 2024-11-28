@@ -18,15 +18,15 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
+use std::{num::NonZeroU32, time::Duration};
+
 use libp2p_autonat::{
     Behaviour, Config, Event, InboundProbeError, InboundProbeEvent, ResponseError,
 };
 use libp2p_core::{multiaddr::Protocol, ConnectedPoint, Endpoint, Multiaddr};
 use libp2p_identity::PeerId;
-use libp2p_swarm::DialError;
-use libp2p_swarm::{Swarm, SwarmEvent};
+use libp2p_swarm::{DialError, Swarm, SwarmEvent};
 use libp2p_swarm_test::SwarmExt as _;
-use std::{num::NonZeroU32, time::Duration};
 
 #[tokio::test]
 async fn test_dial_back() {
@@ -340,7 +340,8 @@ async fn test_global_ips_config() {
     client.listen().await;
     tokio::spawn(client.loop_on_next());
 
-    // Expect the probe to be refused as both peers run on the same machine and thus in the same local network.
+    // Expect the probe to be refused as both peers run
+    // on the same machine and thus in the same local network.
     match server.next_behaviour_event().await {
         Event::InboundProbe(InboundProbeEvent::Error { error, .. }) => assert!(matches!(
             error,

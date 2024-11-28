@@ -18,12 +18,19 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::either::EitherFuture;
-use crate::transport::{DialOpts, ListenerId, Transport, TransportError, TransportEvent};
+use std::{
+    pin::Pin,
+    task::{Context, Poll},
+};
+
 use either::Either;
 use futures::future;
 use multiaddr::Multiaddr;
-use std::{pin::Pin, task::Context, task::Poll};
+
+use crate::{
+    either::EitherFuture,
+    transport::{DialOpts, ListenerId, Transport, TransportError, TransportEvent},
+};
 
 /// Struct returned by `or_transport()`.
 #[derive(Debug, Copy, Clone)]

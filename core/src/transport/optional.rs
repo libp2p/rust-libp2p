@@ -18,9 +18,14 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::transport::{DialOpts, ListenerId, Transport, TransportError, TransportEvent};
+use std::{
+    pin::Pin,
+    task::{Context, Poll},
+};
+
 use multiaddr::Multiaddr;
-use std::{pin::Pin, task::Context, task::Poll};
+
+use crate::transport::{DialOpts, ListenerId, Transport, TransportError, TransportEvent};
 
 /// Transport that is possibly disabled.
 ///

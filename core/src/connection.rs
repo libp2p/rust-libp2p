@@ -70,18 +70,16 @@ pub enum ConnectedPoint {
         ///
         /// - [`Endpoint::Dialer`] represents the default non-overriding option.
         ///
-        /// - [`Endpoint::Listener`] represents the overriding option.
-        ///   Realization depends on the transport protocol. E.g. in the case of
-        ///   TCP, both endpoints dial each other, resulting in a _simultaneous
-        ///   open_ TCP connection. On this new connection both endpoints assume
-        ///   to be the dialer of the connection. This is problematic during the
-        ///   connection upgrade process where an upgrade assumes one side to be
-        ///   the listener. With the help of this option, both peers can
-        ///   negotiate the roles (dialer and listener) for the new connection
-        ///   ahead of time, through some external channel, e.g. the DCUtR
-        ///   protocol, and thus have one peer dial the other and upgrade the
-        ///   connection as a dialer and one peer dial the other and upgrade the
-        ///   connection _as a listener_ overriding its role.
+        /// - [`Endpoint::Listener`] represents the overriding option. Realization depends on the
+        ///   transport protocol. E.g. in the case of TCP, both endpoints dial each other,
+        ///   resulting in a _simultaneous open_ TCP connection. On this new connection both
+        ///   endpoints assume to be the dialer of the connection. This is problematic during the
+        ///   connection upgrade process where an upgrade assumes one side to be the listener. With
+        ///   the help of this option, both peers can negotiate the roles (dialer and listener) for
+        ///   the new connection ahead of time, through some external channel, e.g. the DCUtR
+        ///   protocol, and thus have one peer dial the other and upgrade the connection as a
+        ///   dialer and one peer dial the other and upgrade the connection _as a listener_
+        ///   overriding its role.
         role_override: Endpoint,
         /// Whether the port for the outgoing connection was reused from a listener
         /// or a new port was allocated. This is useful for address translation.

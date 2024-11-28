@@ -35,11 +35,6 @@
 pub use bytes;
 pub use futures;
 #[doc(inline)]
-pub use libp2p_core::multihash;
-#[doc(inline)]
-pub use multiaddr;
-
-#[doc(inline)]
 pub use libp2p_allow_block_list as allow_block_list;
 #[cfg(feature = "autonat")]
 #[doc(inline)]
@@ -48,6 +43,8 @@ pub use libp2p_autonat as autonat;
 pub use libp2p_connection_limits as connection_limits;
 #[doc(inline)]
 pub use libp2p_core as core;
+#[doc(inline)]
+pub use libp2p_core::multihash;
 #[cfg(feature = "dcutr")]
 #[doc(inline)]
 pub use libp2p_dcutr as dcutr;
@@ -140,6 +137,8 @@ pub use libp2p_webtransport_websys as webtransport_websys;
 #[cfg(feature = "yamux")]
 #[doc(inline)]
 pub use libp2p_yamux as yamux;
+#[doc(inline)]
+pub use multiaddr;
 
 mod builder;
 mod transport_ext;
@@ -149,15 +148,18 @@ pub mod bandwidth;
 #[cfg(doc)]
 pub mod tutorials;
 
-pub use self::builder::SwarmBuilder;
-pub use self::core::{
-    transport::TransportError,
-    upgrade::{InboundUpgrade, OutboundUpgrade},
-    Transport,
-};
-pub use self::multiaddr::{multiaddr as build_multiaddr, Multiaddr};
-pub use self::swarm::Swarm;
-pub use self::transport_ext::TransportExt;
 pub use libp2p_identity as identity;
 pub use libp2p_identity::PeerId;
 pub use libp2p_swarm::{Stream, StreamProtocol};
+
+pub use self::{
+    builder::SwarmBuilder,
+    core::{
+        transport::TransportError,
+        upgrade::{InboundUpgrade, OutboundUpgrade},
+        Transport,
+    },
+    multiaddr::{multiaddr as build_multiaddr, Multiaddr},
+    swarm::Swarm,
+    transport_ext::TransportExt,
+};

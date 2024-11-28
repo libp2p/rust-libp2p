@@ -20,16 +20,17 @@
 
 // Collection of tests for the gossipsub network behaviour
 
-use super::*;
-use crate::rpc::Receiver;
-use crate::subscription_filter::WhitelistSubscriptionFilter;
-use crate::{config::ConfigBuilder, types::Rpc, IdentTopic as Topic};
+use std::{future, net::Ipv4Addr, thread::sleep};
+
 use byteorder::{BigEndian, ByteOrder};
 use libp2p_core::ConnectedPoint;
 use rand::Rng;
-use std::future;
-use std::net::Ipv4Addr;
-use std::thread::sleep;
+
+use super::*;
+use crate::{
+    config::ConfigBuilder, rpc::Receiver, subscription_filter::WhitelistSubscriptionFilter,
+    types::Rpc, IdentTopic as Topic,
+};
 
 #[derive(Default, Debug)]
 struct InjectNodes<D, F> {
@@ -314,7 +315,8 @@ fn proto_to_message(rpc: &proto::RPC) -> Rpc {
         messages.push(RawMessage {
             source: message.from.map(|x| PeerId::from_bytes(&x).unwrap()),
             data: message.data.unwrap_or_default(),
-            sequence_number: message.seqno.map(|x| BigEndian::read_u64(&x)), // don't inform the application
+            sequence_number: message.seqno.map(|x| BigEndian::read_u64(&x)), /* don't inform the
+                                                                              * application */
             topic: TopicHash::from_raw(message.topic),
             signature: message.signature, // don't inform the application
             key: None,
@@ -681,7 +683,7 @@ fn test_publish_without_flood_publishing() {
     // - Send publish message to all peers
     // - Insert message into gs.mcache and gs.received
 
-    //turn off flood publish to test old behaviour
+    // turn off flood publish to test old behaviour
     let config = ConfigBuilder::default()
         .flood_publish(false)
         .build()
@@ -761,7 +763,7 @@ fn test_fanout() {
     // - Send publish message to fanout peers
     // - Insert message into gs.mcache and gs.received
 
-    //turn off flood publish to test fanout behaviour
+    // turn off flood publish to test fanout behaviour
     let config = ConfigBuilder::default()
         .flood_publish(false)
         .build()
@@ -1452,10 +1454,10 @@ fn test_explicit_peer_gets_connected() {
         .to_subscribe(true)
         .create_network();
 
-    //create new peer
+    // create new peer
     let peer = PeerId::random();
 
-    //add peer as explicit peer
+    // add peer as explicit peer
     gs.add_explicit_peer(&peer);
 
     let num_events = gs
@@ -1488,17 +1490,17 @@ fn test_explicit_peer_reconnects() {
 
     let peer = others.first().unwrap();
 
-    //add peer as explicit peer
+    // add peer as explicit peer
     gs.add_explicit_peer(peer);
 
     flush_events(&mut gs, receivers);
 
-    //disconnect peer
+    // disconnect peer
     disconnect_peer(&mut gs, peer);
 
     gs.heartbeat();
 
-    //check that no reconnect after first heartbeat since `explicit_peer_ticks == 2`
+    // check that no reconnect after first heartbeat since `explicit_peer_ticks == 2`
     assert_eq!(
         gs.events
             .iter()
@@ -1513,7 +1515,7 @@ fn test_explicit_peer_reconnects() {
 
     gs.heartbeat();
 
-    //check that there is a reconnect after second heartbeat
+    // check that there is a reconnect after second heartbeat
     assert!(
         gs.events
             .iter()
@@ -1541,11 +1543,11 @@ fn test_handle_graft_explicit_peer() {
 
     gs.handle_graft(peer, topic_hashes.clone());
 
-    //peer got not added to mesh
+    // peer got not added to mesh
     assert!(gs.mesh[&topic_hashes[0]].is_empty());
     assert!(gs.mesh[&topic_hashes[1]].is_empty());
 
-    //check prunes
+    // check prunes
     let (control_msgs, _) = count_control_msgs(receivers, |peer_id, m| {
         peer_id == peer
             && match m {
@@ -1571,13 +1573,13 @@ fn explicit_peers_not_added_to_mesh_on_receiving_subscription() {
         .explicit(1)
         .create_network();
 
-    //only peer 1 is in the mesh not peer 0 (which is an explicit peer)
+    // only peer 1 is in the mesh not peer 0 (which is an explicit peer)
     assert_eq!(
         gs.mesh[&topic_hashes[0]],
         vec![peers[1]].into_iter().collect()
     );
 
-    //assert that graft gets created to non-explicit peer
+    // assert that graft gets created to non-explicit peer
     let (control_msgs, receivers) = count_control_msgs(receivers, |peer_id, m| {
         peer_id == &peers[1] && matches!(m, RpcOut::Graft { .. })
     });
@@ -1586,7 +1588,7 @@ fn explicit_peers_not_added_to_mesh_on_receiving_subscription() {
         "No graft message got created to non-explicit peer"
     );
 
-    //assert that no graft gets created to explicit peer
+    // assert that no graft gets created to explicit peer
     let (control_msgs, _) = count_control_msgs(receivers, |peer_id, m| {
         peer_id == &peers[0] && matches!(m, RpcOut::Graft { .. })
     });
@@ -1608,10 +1610,10 @@ fn do_not_graft_explicit_peer() {
 
     gs.heartbeat();
 
-    //mesh stays empty
+    // mesh stays empty
     assert_eq!(gs.mesh[&topic_hashes[0]], BTreeSet::new());
 
-    //assert that no graft gets created to explicit peer
+    // assert that no graft gets created to explicit peer
     let (control_msgs, _) = count_control_msgs(receivers, |peer_id, m| {
         peer_id == &others[0] && matches!(m, RpcOut::Graft { .. })
     });
@@ -1668,7 +1670,7 @@ fn explicit_peers_not_added_to_mesh_on_subscribe() {
         .explicit(1)
         .create_network();
 
-    //create new topic, both peers subscribing to it but we do not subscribe to it
+    // create new topic, both peers subscribing to it but we do not subscribe to it
     let topic = Topic::new(String::from("t"));
     let topic_hash = topic.hash();
     for peer in peers.iter().take(2) {
@@ -1681,13 +1683,13 @@ fn explicit_peers_not_added_to_mesh_on_subscribe() {
         );
     }
 
-    //subscribe now to topic
+    // subscribe now to topic
     gs.subscribe(&topic).unwrap();
 
-    //only peer 1 is in the mesh not peer 0 (which is an explicit peer)
+    // only peer 1 is in the mesh not peer 0 (which is an explicit peer)
     assert_eq!(gs.mesh[&topic_hash], vec![peers[1]].into_iter().collect());
 
-    //assert that graft gets created to non-explicit peer
+    // assert that graft gets created to non-explicit peer
     let (control_msgs, receivers) = count_control_msgs(receivers, |peer_id, m| {
         peer_id == &peers[1] && matches!(m, RpcOut::Graft { .. })
     });
@@ -1696,7 +1698,7 @@ fn explicit_peers_not_added_to_mesh_on_subscribe() {
         "No graft message got created to non-explicit peer"
     );
 
-    //assert that no graft gets created to explicit peer
+    // assert that no graft gets created to explicit peer
     let (control_msgs, _) = count_control_msgs(receivers, |peer_id, m| {
         peer_id == &peers[0] && matches!(m, RpcOut::Graft { .. })
     });
@@ -1716,7 +1718,7 @@ fn explicit_peers_not_added_to_mesh_from_fanout_on_subscribe() {
         .explicit(1)
         .create_network();
 
-    //create new topic, both peers subscribing to it but we do not subscribe to it
+    // create new topic, both peers subscribing to it but we do not subscribe to it
     let topic = Topic::new(String::from("t"));
     let topic_hash = topic.hash();
     for peer in peers.iter().take(2) {
@@ -1729,16 +1731,16 @@ fn explicit_peers_not_added_to_mesh_from_fanout_on_subscribe() {
         );
     }
 
-    //we send a message for this topic => this will initialize the fanout
+    // we send a message for this topic => this will initialize the fanout
     gs.publish(topic.clone(), vec![1, 2, 3]).unwrap();
 
-    //subscribe now to topic
+    // subscribe now to topic
     gs.subscribe(&topic).unwrap();
 
-    //only peer 1 is in the mesh not peer 0 (which is an explicit peer)
+    // only peer 1 is in the mesh not peer 0 (which is an explicit peer)
     assert_eq!(gs.mesh[&topic_hash], vec![peers[1]].into_iter().collect());
 
-    //assert that graft gets created to non-explicit peer
+    // assert that graft gets created to non-explicit peer
     let (control_msgs, receivers) = count_control_msgs(receivers, |peer_id, m| {
         peer_id == &peers[1] && matches!(m, RpcOut::Graft { .. })
     });
@@ -1747,7 +1749,7 @@ fn explicit_peers_not_added_to_mesh_from_fanout_on_subscribe() {
         "No graft message got created to non-explicit peer"
     );
 
-    //assert that no graft gets created to explicit peer
+    // assert that no graft gets created to explicit peer
     let (control_msgs, _) = count_control_msgs(receivers, |peer_id, m| {
         peer_id == &peers[0] && matches!(m, RpcOut::Graft { .. })
     });
@@ -1779,15 +1781,15 @@ fn no_gossip_gets_sent_to_explicit_peers() {
         validated: true,
     };
 
-    //forward the message
+    // forward the message
     gs.handle_received_message(message, &local_id);
 
-    //simulate multiple gossip calls (for randomness)
+    // simulate multiple gossip calls (for randomness)
     for _ in 0..3 {
         gs.emit_gossip();
     }
 
-    //assert that no gossip gets sent to explicit peer
+    // assert that no gossip gets sent to explicit peer
     let receiver = receivers.remove(&peers[0]).unwrap();
     let mut gossips = 0;
     let non_priority = receiver.non_priority.get_ref();
@@ -1840,7 +1842,7 @@ fn test_mesh_subtraction() {
 
     // Adds mesh_low peers and PRUNE 2 giving us a deficit.
     let n = config.mesh_n_high() + 10;
-    //make all outbound connections so that we allow grafting to all
+    // make all outbound connections so that we allow grafting to all
     let (mut gs, peers, _receivers, topics) = inject_nodes1()
         .peer_no(n)
         .topics(vec!["test".into()])
@@ -1871,10 +1873,10 @@ fn test_connect_to_px_peers_on_handle_prune() {
         .to_subscribe(true)
         .create_network();
 
-    //handle prune from single peer with px peers
+    // handle prune from single peer with px peers
 
     let mut px = Vec::new();
-    //propose more px peers than config.prune_peers()
+    // propose more px peers than config.prune_peers()
     for _ in 0..config.prune_peers() + 5 {
         px.push(PeerInfo {
             peer_id: Some(PeerId::random()),
@@ -1890,7 +1892,7 @@ fn test_connect_to_px_peers_on_handle_prune() {
         )],
     );
 
-    //Check DialPeer events for px peers
+    // Check DialPeer events for px peers
     let dials: Vec<_> = gs
         .events
         .iter()
@@ -1908,7 +1910,7 @@ fn test_connect_to_px_peers_on_handle_prune() {
     // No duplicates
     assert_eq!(dials_set.len(), config.prune_peers());
 
-    //all dial peers must be in px
+    // all dial peers must be in px
     assert!(dials_set.is_subset(
         &px.iter()
             .map(|i| *i.peer_id.as_ref().unwrap())
@@ -1920,14 +1922,14 @@ fn test_connect_to_px_peers_on_handle_prune() {
 fn test_send_px_and_backoff_in_prune() {
     let config: Config = Config::default();
 
-    //build mesh with enough peers for px
+    // build mesh with enough peers for px
     let (mut gs, peers, receivers, topics) = inject_nodes1()
         .peer_no(config.prune_peers() + 1)
         .topics(vec!["test".into()])
         .to_subscribe(true)
         .create_network();
 
-    //send prune to peer
+    // send prune to peer
     gs.send_graft_prune(
         HashMap::new(),
         vec![(peers[0], vec![topics[0].clone()])]
@@ -1936,7 +1938,7 @@ fn test_send_px_and_backoff_in_prune() {
         HashSet::new(),
     );
 
-    //check prune message
+    // check prune message
     let (control_msgs, _) = count_control_msgs(receivers, |peer_id, m| {
         peer_id == &peers[0]
             && match m {
@@ -1962,14 +1964,14 @@ fn test_send_px_and_backoff_in_prune() {
 fn test_prune_backoffed_peer_on_graft() {
     let config: Config = Config::default();
 
-    //build mesh with enough peers for px
+    // build mesh with enough peers for px
     let (mut gs, peers, receivers, topics) = inject_nodes1()
         .peer_no(config.prune_peers() + 1)
         .topics(vec!["test".into()])
         .to_subscribe(true)
         .create_network();
 
-    //remove peer from mesh and send prune to peer => this adds a backoff for this peer
+    // remove peer from mesh and send prune to peer => this adds a backoff for this peer
     gs.mesh.get_mut(&topics[0]).unwrap().remove(&peers[0]);
     gs.send_graft_prune(
         HashMap::new(),
@@ -1979,13 +1981,13 @@ fn test_prune_backoffed_peer_on_graft() {
         HashSet::new(),
     );
 
-    //ignore all messages until now
+    // ignore all messages until now
     let receivers = flush_events(&mut gs, receivers);
 
-    //handle graft
+    // handle graft
     gs.handle_graft(&peers[0], vec![topics[0].clone()]);
 
-    //check prune message
+    // check prune message
     let (control_msgs, _) = count_control_msgs(receivers, |peer_id, m| {
         peer_id == &peers[0]
             && match m {
@@ -2012,7 +2014,7 @@ fn test_do_not_graft_within_backoff_period() {
         .heartbeat_interval(Duration::from_millis(100))
         .build()
         .unwrap();
-    //only one peer => mesh too small and will try to regraft as early as possible
+    // only one peer => mesh too small and will try to regraft as early as possible
     let (mut gs, peers, receivers, topics) = inject_nodes1()
         .peer_no(1)
         .topics(vec!["test".into()])
@@ -2020,22 +2022,22 @@ fn test_do_not_graft_within_backoff_period() {
         .gs_config(config)
         .create_network();
 
-    //handle prune from peer with backoff of one second
+    // handle prune from peer with backoff of one second
     gs.handle_prune(&peers[0], vec![(topics[0].clone(), Vec::new(), Some(1))]);
 
-    //forget all events until now
+    // forget all events until now
     let receivers = flush_events(&mut gs, receivers);
 
-    //call heartbeat
+    // call heartbeat
     gs.heartbeat();
 
-    //Sleep for one second and apply 10 regular heartbeats (interval = 100ms).
+    // Sleep for one second and apply 10 regular heartbeats (interval = 100ms).
     for _ in 0..10 {
         sleep(Duration::from_millis(100));
         gs.heartbeat();
     }
 
-    //Check that no graft got created (we have backoff_slack = 1 therefore one more heartbeat
+    // Check that no graft got created (we have backoff_slack = 1 therefore one more heartbeat
     // is needed).
     let (control_msgs, receivers) =
         count_control_msgs(receivers, |_, m| matches!(m, RpcOut::Graft { .. }));
@@ -2044,11 +2046,11 @@ fn test_do_not_graft_within_backoff_period() {
         "Graft message created too early within backoff period"
     );
 
-    //Heartbeat one more time this should graft now
+    // Heartbeat one more time this should graft now
     sleep(Duration::from_millis(100));
     gs.heartbeat();
 
-    //check that graft got created
+    // check that graft got created
     let (control_msgs, _) = count_control_msgs(receivers, |_, m| matches!(m, RpcOut::Graft { .. }));
     assert!(
         control_msgs > 0,
@@ -2058,14 +2060,14 @@ fn test_do_not_graft_within_backoff_period() {
 
 #[test]
 fn test_do_not_graft_within_default_backoff_period_after_receiving_prune_without_backoff() {
-    //set default backoff period to 1 second
+    // set default backoff period to 1 second
     let config = ConfigBuilder::default()
         .prune_backoff(Duration::from_millis(90))
         .backoff_slack(1)
         .heartbeat_interval(Duration::from_millis(100))
         .build()
         .unwrap();
-    //only one peer => mesh too small and will try to regraft as early as possible
+    // only one peer => mesh too small and will try to regraft as early as possible
     let (mut gs, peers, receivers, topics) = inject_nodes1()
         .peer_no(1)
         .topics(vec!["test".into()])
@@ -2073,20 +2075,20 @@ fn test_do_not_graft_within_default_backoff_period_after_receiving_prune_without
         .gs_config(config)
         .create_network();
 
-    //handle prune from peer without a specified backoff
+    // handle prune from peer without a specified backoff
     gs.handle_prune(&peers[0], vec![(topics[0].clone(), Vec::new(), None)]);
 
-    //forget all events until now
+    // forget all events until now
     let receivers = flush_events(&mut gs, receivers);
 
-    //call heartbeat
+    // call heartbeat
     gs.heartbeat();
 
-    //Apply one more heartbeat
+    // Apply one more heartbeat
     sleep(Duration::from_millis(100));
     gs.heartbeat();
 
-    //Check that no graft got created (we have backoff_slack = 1 therefore one more heartbeat
+    // Check that no graft got created (we have backoff_slack = 1 therefore one more heartbeat
     // is needed).
     let (control_msgs, receivers) =
         count_control_msgs(receivers, |_, m| matches!(m, RpcOut::Graft { .. }));
@@ -2095,11 +2097,11 @@ fn test_do_not_graft_within_default_backoff_period_after_receiving_prune_without
         "Graft message created too early within backoff period"
     );
 
-    //Heartbeat one more time this should graft now
+    // Heartbeat one more time this should graft now
     sleep(Duration::from_millis(100));
     gs.heartbeat();
 
-    //check that graft got created
+    // check that graft got created
     let (control_msgs, _) = count_control_msgs(receivers, |_, m| matches!(m, RpcOut::Graft { .. }));
     assert!(
         control_msgs > 0,
@@ -2186,7 +2188,7 @@ fn test_flood_publish() {
         .to_subscribe(true)
         .create_network();
 
-    //publish message
+    // publish message
     let publish_data = vec![0; 42];
     gs.publish(Topic::new(topic), publish_data).unwrap();
 
@@ -2233,15 +2235,15 @@ fn test_flood_publish() {
 fn test_gossip_to_at_least_gossip_lazy_peers() {
     let config: Config = Config::default();
 
-    //add more peers than in mesh to test gossipping
-    //by default only mesh_n_low peers will get added to mesh
+    // add more peers than in mesh to test gossipping
+    // by default only mesh_n_low peers will get added to mesh
     let (mut gs, _, receivers, topic_hashes) = inject_nodes1()
         .peer_no(config.mesh_n_low() + config.gossip_lazy() + 1)
         .topics(vec!["topic".into()])
         .to_subscribe(true)
         .create_network();
 
-    //receive message
+    // receive message
     let raw_message = RawMessage {
         source: Some(PeerId::random()),
         data: vec![],
@@ -2253,7 +2255,7 @@ fn test_gossip_to_at_least_gossip_lazy_peers() {
     };
     gs.handle_received_message(raw_message.clone(), &PeerId::random());
 
-    //emit gossip
+    // emit gossip
     gs.emit_gossip();
 
     // Transform the inbound message
@@ -2261,7 +2263,7 @@ fn test_gossip_to_at_least_gossip_lazy_peers() {
 
     let msg_id = gs.config.message_id(message);
 
-    //check that exactly config.gossip_lazy() many gossip messages were sent.
+    // check that exactly config.gossip_lazy() many gossip messages were sent.
     let (control_msgs, _) = count_control_msgs(receivers, |_, action| match action {
         RpcOut::IHave(IHave {
             topic_hash,
@@ -2276,7 +2278,7 @@ fn test_gossip_to_at_least_gossip_lazy_peers() {
 fn test_gossip_to_at_most_gossip_factor_peers() {
     let config: Config = Config::default();
 
-    //add a lot of peers
+    // add a lot of peers
     let m = config.mesh_n_low() + config.gossip_lazy() * (2.0 / config.gossip_factor()) as usize;
     let (mut gs, _, receivers, topic_hashes) = inject_nodes1()
         .peer_no(m)
@@ -2284,7 +2286,7 @@ fn test_gossip_to_at_most_gossip_factor_peers() {
         .to_subscribe(true)
         .create_network();
 
-    //receive message
+    // receive message
     let raw_message = RawMessage {
         source: Some(PeerId::random()),
         data: vec![],
@@ -2296,14 +2298,14 @@ fn test_gossip_to_at_most_gossip_factor_peers() {
     };
     gs.handle_received_message(raw_message.clone(), &PeerId::random());
 
-    //emit gossip
+    // emit gossip
     gs.emit_gossip();
 
     // Transform the inbound message
     let message = &gs.data_transform.inbound_transform(raw_message).unwrap();
 
     let msg_id = gs.config.message_id(message);
-    //check that exactly config.gossip_lazy() many gossip messages were sent.
+    // check that exactly config.gossip_lazy() many gossip messages were sent.
     let (control_msgs, _) = count_control_msgs(receivers, |_, action| match action {
         RpcOut::IHave(IHave {
             topic_hash,
@@ -2321,7 +2323,7 @@ fn test_gossip_to_at_most_gossip_factor_peers() {
 fn test_accept_only_outbound_peer_grafts_when_mesh_full() {
     let config: Config = Config::default();
 
-    //enough peers to fill the mesh
+    // enough peers to fill the mesh
     let (mut gs, peers, _, topics) = inject_nodes1()
         .peer_no(config.mesh_n_high())
         .topics(vec!["test".into()])
@@ -2333,30 +2335,30 @@ fn test_accept_only_outbound_peer_grafts_when_mesh_full() {
         gs.handle_graft(&peer, topics.clone());
     }
 
-    //assert current mesh size
+    // assert current mesh size
     assert_eq!(gs.mesh[&topics[0]].len(), config.mesh_n_high());
 
-    //create an outbound and an inbound peer
+    // create an outbound and an inbound peer
     let (inbound, _in_reciver) = add_peer(&mut gs, &topics, false, false);
     let (outbound, _out_receiver) = add_peer(&mut gs, &topics, true, false);
 
-    //send grafts
+    // send grafts
     gs.handle_graft(&inbound, vec![topics[0].clone()]);
     gs.handle_graft(&outbound, vec![topics[0].clone()]);
 
-    //assert mesh size
+    // assert mesh size
     assert_eq!(gs.mesh[&topics[0]].len(), config.mesh_n_high() + 1);
 
-    //inbound is not in mesh
+    // inbound is not in mesh
     assert!(!gs.mesh[&topics[0]].contains(&inbound));
 
-    //outbound is in mesh
+    // outbound is in mesh
     assert!(gs.mesh[&topics[0]].contains(&outbound));
 }
 
 #[test]
 fn test_do_not_remove_too_many_outbound_peers() {
-    //use an extreme case to catch errors with high probability
+    // use an extreme case to catch errors with high probability
     let m = 50;
     let n = 2 * m;
     let config = ConfigBuilder::default()
@@ -2367,7 +2369,7 @@ fn test_do_not_remove_too_many_outbound_peers() {
         .build()
         .unwrap();
 
-    //fill the mesh with inbound connections
+    // fill the mesh with inbound connections
     let (mut gs, peers, _receivers, topics) = inject_nodes1()
         .peer_no(n)
         .topics(vec!["test".into()])
@@ -2380,7 +2382,7 @@ fn test_do_not_remove_too_many_outbound_peers() {
         gs.handle_graft(&peer, topics.clone());
     }
 
-    //create m outbound connections and graft (we will accept the graft)
+    // create m outbound connections and graft (we will accept the graft)
     let mut outbound = HashSet::new();
     for _ in 0..m {
         let (peer, _) = add_peer(&mut gs, &topics, true, false);
@@ -2388,7 +2390,7 @@ fn test_do_not_remove_too_many_outbound_peers() {
         gs.handle_graft(&peer, topics.clone());
     }
 
-    //mesh is overly full
+    // mesh is overly full
     assert_eq!(gs.mesh.get(&topics[0]).unwrap().len(), n + m);
 
     // run a heartbeat
@@ -2397,7 +2399,7 @@ fn test_do_not_remove_too_many_outbound_peers() {
     // Peers should be removed to reach n
     assert_eq!(gs.mesh.get(&topics[0]).unwrap().len(), n);
 
-    //all outbound peers are still in the mesh
+    // all outbound peers are still in the mesh
     assert!(outbound.iter().all(|p| gs.mesh[&topics[0]].contains(p)));
 }
 
@@ -2417,7 +2419,7 @@ fn test_add_outbound_peers_if_min_is_not_satisfied() {
         gs.handle_graft(&peer, topics.clone());
     }
 
-    //create config.mesh_outbound_min() many outbound connections without grafting
+    // create config.mesh_outbound_min() many outbound connections without grafting
     let mut peers = vec![];
     for _ in 0..config.mesh_outbound_min() {
         peers.push(add_peer(&mut gs, &topics, true, false));
@@ -2440,7 +2442,7 @@ fn test_add_outbound_peers_if_min_is_not_satisfied() {
 fn test_prune_negative_scored_peers() {
     let config = Config::default();
 
-    //build mesh with one peer
+    // build mesh with one peer
     let (mut gs, peers, receivers, topics) = inject_nodes1()
         .peer_no(1)
         .topics(vec!["test".into()])
@@ -2454,16 +2456,16 @@ fn test_prune_negative_scored_peers() {
         )))
         .create_network();
 
-    //add penalty to peer
+    // add penalty to peer
     gs.peer_score.as_mut().unwrap().0.add_penalty(&peers[0], 1);
 
-    //execute heartbeat
+    // execute heartbeat
     gs.heartbeat();
 
-    //peer should not be in mesh anymore
+    // peer should not be in mesh anymore
     assert!(gs.mesh[&topics[0]].is_empty());
 
-    //check prune message
+    // check prune message
     let (control_msgs, _) = count_control_msgs(receivers, |peer_id, m| {
         peer_id == &peers[0]
             && match m {
@@ -2486,7 +2488,7 @@ fn test_prune_negative_scored_peers() {
 #[test]
 fn test_dont_graft_to_negative_scored_peers() {
     let config = Config::default();
-    //init full mesh
+    // init full mesh
     let (mut gs, peers, _, topics) = inject_nodes1()
         .peer_no(config.mesh_n_high())
         .topics(vec!["test".into()])
@@ -2498,34 +2500,34 @@ fn test_dont_graft_to_negative_scored_peers() {
         )))
         .create_network();
 
-    //add two additional peers that will not be part of the mesh
+    // add two additional peers that will not be part of the mesh
     let (p1, _receiver1) = add_peer(&mut gs, &topics, false, false);
     let (p2, _receiver2) = add_peer(&mut gs, &topics, false, false);
 
-    //reduce score of p1 to negative
+    // reduce score of p1 to negative
     gs.peer_score.as_mut().unwrap().0.add_penalty(&p1, 1);
 
-    //handle prunes of all other peers
+    // handle prunes of all other peers
     for p in peers {
         gs.handle_prune(&p, vec![(topics[0].clone(), Vec::new(), None)]);
     }
 
-    //heartbeat
+    // heartbeat
     gs.heartbeat();
 
-    //assert that mesh only contains p2
+    // assert that mesh only contains p2
     assert_eq!(gs.mesh.get(&topics[0]).unwrap().len(), 1);
     assert!(gs.mesh.get(&topics[0]).unwrap().contains(&p2));
 }
 
-///Note that in this test also without a penalty the px would be ignored because of the
+/// Note that in this test also without a penalty the px would be ignored because of the
 /// acceptPXThreshold, but the spec still explicitly states the rule that px from negative
 /// peers should get ignored, therefore we test it here.
 #[test]
 fn test_ignore_px_from_negative_scored_peer() {
     let config = Config::default();
 
-    //build mesh with one peer
+    // build mesh with one peer
     let (mut gs, peers, _, topics) = inject_nodes1()
         .peer_no(1)
         .topics(vec!["test".into()])
@@ -2537,10 +2539,10 @@ fn test_ignore_px_from_negative_scored_peer() {
         )))
         .create_network();
 
-    //penalize peer
+    // penalize peer
     gs.peer_score.as_mut().unwrap().0.add_penalty(&peers[0], 1);
 
-    //handle prune from single peer with px peers
+    // handle prune from single peer with px peers
     let px = vec![PeerInfo {
         peer_id: Some(PeerId::random()),
     }];
@@ -2554,7 +2556,7 @@ fn test_ignore_px_from_negative_scored_peer() {
         )],
     );
 
-    //assert no dials
+    // assert no dials
     assert_eq!(
         gs.events
             .iter()
@@ -2765,7 +2767,7 @@ fn test_iwant_msg_from_peer_below_gossip_threshold_gets_ignored() {
                 collected_messages
             });
 
-    //the message got sent to p2
+    // the message got sent to p2
     assert!(sent_messages
         .iter()
         .map(|(peer_id, msg)| (
@@ -2773,7 +2775,7 @@ fn test_iwant_msg_from_peer_below_gossip_threshold_gets_ignored() {
             gs.data_transform.inbound_transform(msg.clone()).unwrap()
         ))
         .any(|(peer_id, msg)| peer_id == &p2 && gs.config.message_id(&msg) == msg_id));
-    //the message got not sent to p1
+    // the message got not sent to p1
     assert!(sent_messages
         .iter()
         .map(|(peer_id, msg)| (
@@ -2791,7 +2793,7 @@ fn test_ihave_msg_from_peer_below_gossip_threshold_gets_ignored() {
         gossip_threshold: 3.0 * peer_score_params.behaviour_penalty_weight,
         ..PeerScoreThresholds::default()
     };
-    //build full mesh
+    // build full mesh
     let (mut gs, peers, mut receivers, topics) = inject_nodes1()
         .peer_no(config.mesh_n_high())
         .topics(vec!["test".into()])
@@ -2807,21 +2809,21 @@ fn test_ihave_msg_from_peer_below_gossip_threshold_gets_ignored() {
         gs.handle_graft(&peer, topics.clone());
     }
 
-    //add two additional peers that will not be part of the mesh
+    // add two additional peers that will not be part of the mesh
     let (p1, receiver1) = add_peer(&mut gs, &topics, false, false);
     receivers.insert(p1, receiver1);
     let (p2, receiver2) = add_peer(&mut gs, &topics, false, false);
     receivers.insert(p2, receiver2);
 
-    //reduce score of p1 below peer_score_thresholds.gossip_threshold
-    //note that penalties get squared so two penalties means a score of
+    // reduce score of p1 below peer_score_thresholds.gossip_threshold
+    // note that penalties get squared so two penalties means a score of
     // 4 * peer_score_params.behaviour_penalty_weight.
     gs.peer_score.as_mut().unwrap().0.add_penalty(&p1, 2);
 
-    //reduce score of p2 below 0 but not below peer_score_thresholds.gossip_threshold
+    // reduce score of p2 below 0 but not below peer_score_thresholds.gossip_threshold
     gs.peer_score.as_mut().unwrap().0.add_penalty(&p2, 1);
 
-    //message that other peers have
+    // message that other peers have
     let raw_message = RawMessage {
         source: Some(PeerId::random()),
         data: vec![],
@@ -2868,31 +2870,31 @@ fn test_do_not_publish_to_peer_below_publish_threshold() {
         ..PeerScoreThresholds::default()
     };
 
-    //build mesh with no peers and no subscribed topics
+    // build mesh with no peers and no subscribed topics
     let (mut gs, _, mut receivers, _) = inject_nodes1()
         .gs_config(config)
         .scoring(Some((peer_score_params, peer_score_thresholds)))
         .create_network();
 
-    //create a new topic for which we are not subscribed
+    // create a new topic for which we are not subscribed
     let topic = Topic::new("test");
     let topics = vec![topic.hash()];
 
-    //add two additional peers that will be added to the mesh
+    // add two additional peers that will be added to the mesh
     let (p1, receiver1) = add_peer(&mut gs, &topics, false, false);
     receivers.insert(p1, receiver1);
     let (p2, receiver2) = add_peer(&mut gs, &topics, false, false);
     receivers.insert(p2, receiver2);
 
-    //reduce score of p1 below peer_score_thresholds.publish_threshold
-    //note that penalties get squared so two penalties means a score of
+    // reduce score of p1 below peer_score_thresholds.publish_threshold
+    // note that penalties get squared so two penalties means a score of
     // 4 * peer_score_params.behaviour_penalty_weight.
     gs.peer_score.as_mut().unwrap().0.add_penalty(&p1, 2);
 
-    //reduce score of p2 below 0 but not below peer_score_thresholds.publish_threshold
+    // reduce score of p2 below 0 but not below peer_score_thresholds.publish_threshold
     gs.peer_score.as_mut().unwrap().0.add_penalty(&p2, 1);
 
-    //a heartbeat will remove the peers from the mesh
+    // a heartbeat will remove the peers from the mesh
     gs.heartbeat();
 
     // publish on topic
@@ -2912,7 +2914,7 @@ fn test_do_not_publish_to_peer_below_publish_threshold() {
             collected_publish
         });
 
-    //assert only published to p2
+    // assert only published to p2
     assert_eq!(publishes.len(), 1);
     assert_eq!(publishes[0].0, p2);
 }
@@ -2926,28 +2928,28 @@ fn test_do_not_flood_publish_to_peer_below_publish_threshold() {
         publish_threshold: 3.0 * peer_score_params.behaviour_penalty_weight,
         ..PeerScoreThresholds::default()
     };
-    //build mesh with no peers
+    // build mesh with no peers
     let (mut gs, _, mut receivers, topics) = inject_nodes1()
         .topics(vec!["test".into()])
         .gs_config(config)
         .scoring(Some((peer_score_params, peer_score_thresholds)))
         .create_network();
 
-    //add two additional peers that will be added to the mesh
+    // add two additional peers that will be added to the mesh
     let (p1, receiver1) = add_peer(&mut gs, &topics, false, false);
     receivers.insert(p1, receiver1);
     let (p2, receiver2) = add_peer(&mut gs, &topics, false, false);
     receivers.insert(p2, receiver2);
 
-    //reduce score of p1 below peer_score_thresholds.publish_threshold
-    //note that penalties get squared so two penalties means a score of
+    // reduce score of p1 below peer_score_thresholds.publish_threshold
+    // note that penalties get squared so two penalties means a score of
     // 4 * peer_score_params.behaviour_penalty_weight.
     gs.peer_score.as_mut().unwrap().0.add_penalty(&p1, 2);
 
-    //reduce score of p2 below 0 but not below peer_score_thresholds.publish_threshold
+    // reduce score of p2 below 0 but not below peer_score_thresholds.publish_threshold
     gs.peer_score.as_mut().unwrap().0.add_penalty(&p2, 1);
 
-    //a heartbeat will remove the peers from the mesh
+    // a heartbeat will remove the peers from the mesh
     gs.heartbeat();
 
     // publish on topic
@@ -2967,7 +2969,7 @@ fn test_do_not_flood_publish_to_peer_below_publish_threshold() {
             collected_publish
         });
 
-    //assert only published to p2
+    // assert only published to p2
     assert_eq!(publishes.len(), 1);
     assert!(publishes[0].0 == p2);
 }
@@ -2983,23 +2985,23 @@ fn test_ignore_rpc_from_peers_below_graylist_threshold() {
         ..PeerScoreThresholds::default()
     };
 
-    //build mesh with no peers
+    // build mesh with no peers
     let (mut gs, _, _, topics) = inject_nodes1()
         .topics(vec!["test".into()])
         .gs_config(config.clone())
         .scoring(Some((peer_score_params, peer_score_thresholds)))
         .create_network();
 
-    //add two additional peers that will be added to the mesh
+    // add two additional peers that will be added to the mesh
     let (p1, _receiver1) = add_peer(&mut gs, &topics, false, false);
     let (p2, _receiver2) = add_peer(&mut gs, &topics, false, false);
 
-    //reduce score of p1 below peer_score_thresholds.graylist_threshold
-    //note that penalties get squared so two penalties means a score of
+    // reduce score of p1 below peer_score_thresholds.graylist_threshold
+    // note that penalties get squared so two penalties means a score of
     // 4 * peer_score_params.behaviour_penalty_weight.
     gs.peer_score.as_mut().unwrap().0.add_penalty(&p1, 2);
 
-    //reduce score of p2 below publish_threshold but not below graylist_threshold
+    // reduce score of p2 below publish_threshold but not below graylist_threshold
     gs.peer_score.as_mut().unwrap().0.add_penalty(&p2, 1);
 
     let raw_message1 = RawMessage {
@@ -3058,10 +3060,10 @@ fn test_ignore_rpc_from_peers_below_graylist_threshold() {
         message_ids: vec![config.message_id(message2)],
     });
 
-    //clear events
+    // clear events
     gs.events.clear();
 
-    //receive from p1
+    // receive from p1
     gs.on_connection_handler_event(
         p1,
         ConnectionId::new_unchecked(0),
@@ -3075,7 +3077,7 @@ fn test_ignore_rpc_from_peers_below_graylist_threshold() {
         },
     );
 
-    //only the subscription event gets processed, the rest is dropped
+    // only the subscription event gets processed, the rest is dropped
     assert_eq!(gs.events.len(), 1);
     assert!(matches!(
         gs.events[0],
@@ -3087,7 +3089,7 @@ fn test_ignore_rpc_from_peers_below_graylist_threshold() {
         message_ids: vec![config.message_id(message4)],
     });
 
-    //receive from p2
+    // receive from p2
     gs.on_connection_handler_event(
         p2,
         ConnectionId::new_unchecked(0),
@@ -3101,7 +3103,7 @@ fn test_ignore_rpc_from_peers_below_graylist_threshold() {
         },
     );
 
-    //events got processed
+    // events got processed
     assert!(gs.events.len() > 1);
 }
 
@@ -3150,7 +3152,7 @@ fn test_ignore_px_from_peers_below_accept_px_threshold() {
         0
     );
 
-    //handle prune from peer peers[1] with px peers
+    // handle prune from peer peers[1] with px peers
     let px = vec![PeerInfo {
         peer_id: Some(PeerId::random()),
     }];
@@ -3163,7 +3165,7 @@ fn test_ignore_px_from_peers_below_accept_px_threshold() {
         )],
     );
 
-    //assert there are dials now
+    // assert there are dials now
     assert!(
         gs.events
             .iter()
@@ -3183,7 +3185,7 @@ fn test_keep_best_scoring_peers_on_oversubscription() {
         .build()
         .unwrap();
 
-    //build mesh with more peers than mesh can hold
+    // build mesh with more peers than mesh can hold
     let n = config.mesh_n_high() + 1;
     let (mut gs, peers, _receivers, topics) = inject_nodes1()
         .peer_no(n)
@@ -3203,21 +3205,21 @@ fn test_keep_best_scoring_peers_on_oversubscription() {
         gs.handle_graft(peer, topics.clone());
     }
 
-    //assign scores to peers equalling their index
+    // assign scores to peers equalling their index
 
-    //set random positive scores
+    // set random positive scores
     for (index, peer) in peers.iter().enumerate() {
         gs.set_application_score(peer, index as f64);
     }
 
     assert_eq!(gs.mesh[&topics[0]].len(), n);
 
-    //heartbeat to prune some peers
+    // heartbeat to prune some peers
     gs.heartbeat();
 
     assert_eq!(gs.mesh[&topics[0]].len(), config.mesh_n());
 
-    //mesh contains retain_scores best peers
+    // mesh contains retain_scores best peers
     assert!(gs.mesh[&topics[0]].is_superset(
         &peers[(n - config.retain_scores())..]
             .iter()
@@ -3244,7 +3246,7 @@ fn test_scoring_p1() {
         .insert(topic_hash, topic_params.clone());
     let peer_score_thresholds = PeerScoreThresholds::default();
 
-    //build mesh with one peer
+    // build mesh with one peer
     let (mut gs, peers, _, _) = inject_nodes1()
         .peer_no(1)
         .topics(vec!["test".into()])
@@ -3255,9 +3257,9 @@ fn test_scoring_p1() {
         .scoring(Some((peer_score_params, peer_score_thresholds)))
         .create_network();
 
-    //sleep for 2 times the mesh_quantum
+    // sleep for 2 times the mesh_quantum
     sleep(topic_params.time_in_mesh_quantum * 2);
-    //refresh scores
+    // refresh scores
     gs.peer_score.as_mut().unwrap().0.refresh_scores();
     assert!(
         gs.peer_score.as_ref().unwrap().0.score(&peers[0])
@@ -3270,9 +3272,9 @@ fn test_scoring_p1() {
         "score should be less than 3 * time_in_mesh_weight * topic_weight"
     );
 
-    //sleep again for 2 times the mesh_quantum
+    // sleep again for 2 times the mesh_quantum
     sleep(topic_params.time_in_mesh_quantum * 2);
-    //refresh scores
+    // refresh scores
     gs.peer_score.as_mut().unwrap().0.refresh_scores();
     assert!(
         gs.peer_score.as_ref().unwrap().0.score(&peers[0])
@@ -3280,9 +3282,9 @@ fn test_scoring_p1() {
         "score should be at least 4 * time_in_mesh_weight * topic_weight"
     );
 
-    //sleep for enough periods to reach maximum
+    // sleep for enough periods to reach maximum
     sleep(topic_params.time_in_mesh_quantum * (topic_params.time_in_mesh_cap - 3.0) as u32);
-    //refresh scores
+    // refresh scores
     gs.peer_score.as_mut().unwrap().0.refresh_scores();
     assert_eq!(
         gs.peer_score.as_ref().unwrap().0.score(&peers[0]),
@@ -3314,7 +3316,7 @@ fn test_scoring_p2() {
     let topic = Topic::new("test");
     let topic_hash = topic.hash();
     let topic_params = TopicScoreParams {
-        time_in_mesh_weight: 0.0, //deactivate time in mesh
+        time_in_mesh_weight: 0.0, // deactivate time in mesh
         first_message_deliveries_weight: 2.0,
         first_message_deliveries_cap: 10.0,
         first_message_deliveries_decay: 0.9,
@@ -3326,7 +3328,7 @@ fn test_scoring_p2() {
         .insert(topic_hash, topic_params.clone());
     let peer_score_thresholds = PeerScoreThresholds::default();
 
-    //build mesh with one peer
+    // build mesh with one peer
     let (mut gs, peers, _, topics) = inject_nodes1()
         .peer_no(2)
         .topics(vec!["test".into()])
@@ -3343,9 +3345,9 @@ fn test_scoring_p2() {
     };
 
     let m1 = random_message(&mut seq, &topics);
-    //peer 0 delivers message first
+    // peer 0 delivers message first
     deliver_message(&mut gs, 0, m1.clone());
-    //peer 1 delivers message second
+    // peer 1 delivers message second
     deliver_message(&mut gs, 1, m1);
 
     assert_eq!(
@@ -3360,7 +3362,7 @@ fn test_scoring_p2() {
         "there should be no score for second message deliveries * topic_weight"
     );
 
-    //peer 2 delivers two new messages
+    // peer 2 delivers two new messages
     deliver_message(&mut gs, 1, random_message(&mut seq, &topics));
     deliver_message(&mut gs, 1, random_message(&mut seq, &topics));
     assert_eq!(
@@ -3369,7 +3371,7 @@ fn test_scoring_p2() {
         "score should be exactly 2 * first_message_deliveries_weight * topic_weight"
     );
 
-    //test decaying
+    // test decaying
     gs.peer_score.as_mut().unwrap().0.refresh_scores();
 
     assert_eq!(
@@ -3390,7 +3392,7 @@ fn test_scoring_p2() {
                first_message_deliveries_weight * topic_weight"
     );
 
-    //test cap
+    // test cap
     for _ in 0..topic_params.first_message_deliveries_cap as u64 {
         deliver_message(&mut gs, 1, random_message(&mut seq, &topics));
     }
@@ -3412,8 +3414,8 @@ fn test_scoring_p3() {
     let topic = Topic::new("test");
     let topic_hash = topic.hash();
     let topic_params = TopicScoreParams {
-        time_in_mesh_weight: 0.0,             //deactivate time in mesh
-        first_message_deliveries_weight: 0.0, //deactivate first time deliveries
+        time_in_mesh_weight: 0.0,             // deactivate time in mesh
+        first_message_deliveries_weight: 0.0, // deactivate first time deliveries
         mesh_message_deliveries_weight: -2.0,
         mesh_message_deliveries_decay: 0.9,
         mesh_message_deliveries_cap: 10.0,
@@ -3426,7 +3428,7 @@ fn test_scoring_p3() {
     peer_score_params.topics.insert(topic_hash, topic_params);
     let peer_score_thresholds = PeerScoreThresholds::default();
 
-    //build mesh with two peers
+    // build mesh with two peers
     let (mut gs, peers, _, topics) = inject_nodes1()
         .peer_no(2)
         .topics(vec!["test".into()])
@@ -3444,35 +3446,35 @@ fn test_scoring_p3() {
 
     let mut expected_message_deliveries = 0.0;
 
-    //messages used to test window
+    // messages used to test window
     let m1 = random_message(&mut seq, &topics);
     let m2 = random_message(&mut seq, &topics);
 
-    //peer 1 delivers m1
+    // peer 1 delivers m1
     deliver_message(&mut gs, 1, m1.clone());
 
-    //peer 0 delivers two message
+    // peer 0 delivers two message
     deliver_message(&mut gs, 0, random_message(&mut seq, &topics));
     deliver_message(&mut gs, 0, random_message(&mut seq, &topics));
     expected_message_deliveries += 2.0;
 
     sleep(Duration::from_millis(60));
 
-    //peer 1 delivers m2
+    // peer 1 delivers m2
     deliver_message(&mut gs, 1, m2.clone());
 
     sleep(Duration::from_millis(70));
-    //peer 0 delivers m1 and m2 only m2 gets counted
+    // peer 0 delivers m1 and m2 only m2 gets counted
     deliver_message(&mut gs, 0, m1);
     deliver_message(&mut gs, 0, m2);
     expected_message_deliveries += 1.0;
 
     sleep(Duration::from_millis(900));
 
-    //message deliveries penalties get activated, peer 0 has only delivered 3 messages and
+    // message deliveries penalties get activated, peer 0 has only delivered 3 messages and
     // therefore gets a penalty
     gs.peer_score.as_mut().unwrap().0.refresh_scores();
-    expected_message_deliveries *= 0.9; //decay
+    expected_message_deliveries *= 0.9; // decay
 
     assert_eq!(
         gs.peer_score.as_ref().unwrap().0.score(&peers[0]),
@@ -3488,10 +3490,10 @@ fn test_scoring_p3() {
 
     assert_eq!(gs.peer_score.as_ref().unwrap().0.score(&peers[0]), 0.0);
 
-    //apply 10 decays
+    // apply 10 decays
     for _ in 0..10 {
         gs.peer_score.as_mut().unwrap().0.refresh_scores();
-        expected_message_deliveries *= 0.9; //decay
+        expected_message_deliveries *= 0.9; // decay
     }
 
     assert_eq!(
@@ -3510,8 +3512,8 @@ fn test_scoring_p3b() {
     let topic = Topic::new("test");
     let topic_hash = topic.hash();
     let topic_params = TopicScoreParams {
-        time_in_mesh_weight: 0.0,             //deactivate time in mesh
-        first_message_deliveries_weight: 0.0, //deactivate first time deliveries
+        time_in_mesh_weight: 0.0,             // deactivate time in mesh
+        first_message_deliveries_weight: 0.0, // deactivate first time deliveries
         mesh_message_deliveries_weight: -2.0,
         mesh_message_deliveries_decay: 0.9,
         mesh_message_deliveries_cap: 10.0,
@@ -3527,7 +3529,7 @@ fn test_scoring_p3b() {
     peer_score_params.app_specific_weight = 1.0;
     let peer_score_thresholds = PeerScoreThresholds::default();
 
-    //build mesh with one peer
+    // build mesh with one peer
     let (mut gs, peers, _, topics) = inject_nodes1()
         .peer_no(1)
         .topics(vec!["test".into()])
@@ -3545,49 +3547,49 @@ fn test_scoring_p3b() {
 
     let mut expected_message_deliveries = 0.0;
 
-    //add some positive score
+    // add some positive score
     gs.peer_score
         .as_mut()
         .unwrap()
         .0
         .set_application_score(&peers[0], 100.0);
 
-    //peer 0 delivers two message
+    // peer 0 delivers two message
     deliver_message(&mut gs, 0, random_message(&mut seq, &topics));
     deliver_message(&mut gs, 0, random_message(&mut seq, &topics));
     expected_message_deliveries += 2.0;
 
     sleep(Duration::from_millis(1050));
 
-    //activation kicks in
+    // activation kicks in
     gs.peer_score.as_mut().unwrap().0.refresh_scores();
-    expected_message_deliveries *= 0.9; //decay
+    expected_message_deliveries *= 0.9; // decay
 
-    //prune peer
+    // prune peer
     gs.handle_prune(&peers[0], vec![(topics[0].clone(), vec![], None)]);
 
-    //wait backoff
+    // wait backoff
     sleep(Duration::from_millis(130));
 
-    //regraft peer
+    // regraft peer
     gs.handle_graft(&peers[0], topics.clone());
 
-    //the score should now consider p3b
+    // the score should now consider p3b
     let mut expected_b3 = (5f64 - expected_message_deliveries).powi(2);
     assert_eq!(
         gs.peer_score.as_ref().unwrap().0.score(&peers[0]),
         100.0 + expected_b3 * -3.0 * 0.7
     );
 
-    //we can also add a new p3 to the score
+    // we can also add a new p3 to the score
 
-    //peer 0 delivers one message
+    // peer 0 delivers one message
     deliver_message(&mut gs, 0, random_message(&mut seq, &topics));
     expected_message_deliveries += 1.0;
 
     sleep(Duration::from_millis(1050));
     gs.peer_score.as_mut().unwrap().0.refresh_scores();
-    expected_message_deliveries *= 0.9; //decay
+    expected_message_deliveries *= 0.9; // decay
     expected_b3 *= 0.95;
 
     assert_eq!(
@@ -3606,10 +3608,14 @@ fn test_scoring_p4_valid_message() {
     let topic = Topic::new("test");
     let topic_hash = topic.hash();
     let topic_params = TopicScoreParams {
-        time_in_mesh_weight: 0.0,             //deactivate time in mesh
-        first_message_deliveries_weight: 0.0, //deactivate first time deliveries
-        mesh_message_deliveries_weight: 0.0,  //deactivate message deliveries
-        mesh_failure_penalty_weight: 0.0,     //deactivate mesh failure penalties
+        // deactivate time in mesh
+        time_in_mesh_weight: 0.0,
+        // deactivate first time deliveries
+        first_message_deliveries_weight: 0.0,
+        // deactivate message deliveries
+        mesh_message_deliveries_weight: 0.0,
+        // deactivate mesh failure penalties
+        mesh_failure_penalty_weight: 0.0,
         invalid_message_deliveries_weight: -2.0,
         invalid_message_deliveries_decay: 0.9,
         topic_weight: 0.7,
@@ -3619,7 +3625,7 @@ fn test_scoring_p4_valid_message() {
     peer_score_params.app_specific_weight = 1.0;
     let peer_score_thresholds = PeerScoreThresholds::default();
 
-    //build mesh with two peers
+    // build mesh with two peers
     let (mut gs, peers, _, topics) = inject_nodes1()
         .peer_no(1)
         .topics(vec!["test".into()])
@@ -3635,7 +3641,7 @@ fn test_scoring_p4_valid_message() {
         gs.handle_received_message(msg, &peers[index]);
     };
 
-    //peer 0 delivers valid message
+    // peer 0 delivers valid message
     let m1 = random_message(&mut seq, &topics);
     deliver_message(&mut gs, 0, m1.clone());
 
@@ -3644,7 +3650,7 @@ fn test_scoring_p4_valid_message() {
 
     assert_eq!(gs.peer_score.as_ref().unwrap().0.score(&peers[0]), 0.0);
 
-    //message m1 gets validated
+    // message m1 gets validated
     gs.report_message_validation_result(
         &config.message_id(message1),
         &peers[0],
@@ -3664,10 +3670,14 @@ fn test_scoring_p4_invalid_signature() {
     let topic = Topic::new("test");
     let topic_hash = topic.hash();
     let topic_params = TopicScoreParams {
-        time_in_mesh_weight: 0.0,             //deactivate time in mesh
-        first_message_deliveries_weight: 0.0, //deactivate first time deliveries
-        mesh_message_deliveries_weight: 0.0,  //deactivate message deliveries
-        mesh_failure_penalty_weight: 0.0,     //deactivate mesh failure penalties
+        // deactivate time in mesh
+        time_in_mesh_weight: 0.0,
+        // deactivate first time deliveries
+        first_message_deliveries_weight: 0.0,
+        // deactivate message deliveries
+        mesh_message_deliveries_weight: 0.0,
+        // deactivate mesh failure penalties
+        mesh_failure_penalty_weight: 0.0,
         invalid_message_deliveries_weight: -2.0,
         invalid_message_deliveries_decay: 0.9,
         topic_weight: 0.7,
@@ -3677,7 +3687,7 @@ fn test_scoring_p4_invalid_signature() {
     peer_score_params.app_specific_weight = 1.0;
     let peer_score_thresholds = PeerScoreThresholds::default();
 
-    //build mesh with one peer
+    // build mesh with one peer
     let (mut gs, peers, _, topics) = inject_nodes1()
         .peer_no(1)
         .topics(vec!["test".into()])
@@ -3690,7 +3700,7 @@ fn test_scoring_p4_invalid_signature() {
 
     let mut seq = 0;
 
-    //peer 0 delivers message with invalid signature
+    // peer 0 delivers message with invalid signature
     let m = random_message(&mut seq, &topics);
 
     gs.on_connection_handler_event(
@@ -3722,10 +3732,14 @@ fn test_scoring_p4_message_from_self() {
     let topic = Topic::new("test");
     let topic_hash = topic.hash();
     let topic_params = TopicScoreParams {
-        time_in_mesh_weight: 0.0,             //deactivate time in mesh
-        first_message_deliveries_weight: 0.0, //deactivate first time deliveries
-        mesh_message_deliveries_weight: 0.0,  //deactivate message deliveries
-        mesh_failure_penalty_weight: 0.0,     //deactivate mesh failure penalties
+        // deactivate time in mesh
+        time_in_mesh_weight: 0.0,
+        // deactivate first time deliveries
+        first_message_deliveries_weight: 0.0,
+        // deactivate message deliveries
+        mesh_message_deliveries_weight: 0.0,
+        // deactivate mesh failure penalties
+        mesh_failure_penalty_weight: 0.0,
         invalid_message_deliveries_weight: -2.0,
         invalid_message_deliveries_decay: 0.9,
         topic_weight: 0.7,
@@ -3735,7 +3749,7 @@ fn test_scoring_p4_message_from_self() {
     peer_score_params.app_specific_weight = 1.0;
     let peer_score_thresholds = PeerScoreThresholds::default();
 
-    //build mesh with two peers
+    // build mesh with two peers
     let (mut gs, peers, _, topics) = inject_nodes1()
         .peer_no(1)
         .topics(vec!["test".into()])
@@ -3751,7 +3765,7 @@ fn test_scoring_p4_message_from_self() {
         gs.handle_received_message(msg, &peers[index]);
     };
 
-    //peer 0 delivers invalid message from self
+    // peer 0 delivers invalid message from self
     let mut m = random_message(&mut seq, &topics);
     m.source = Some(*gs.publish_config.get_own_id().unwrap());
 
@@ -3772,10 +3786,14 @@ fn test_scoring_p4_ignored_message() {
     let topic = Topic::new("test");
     let topic_hash = topic.hash();
     let topic_params = TopicScoreParams {
-        time_in_mesh_weight: 0.0,             //deactivate time in mesh
-        first_message_deliveries_weight: 0.0, //deactivate first time deliveries
-        mesh_message_deliveries_weight: 0.0,  //deactivate message deliveries
-        mesh_failure_penalty_weight: 0.0,     //deactivate mesh failure penalties
+        // deactivate time in mesh
+        time_in_mesh_weight: 0.0,
+        // deactivate first time deliveries
+        first_message_deliveries_weight: 0.0,
+        // deactivate message deliveries
+        mesh_message_deliveries_weight: 0.0,
+        // deactivate mesh failure penalties
+        mesh_failure_penalty_weight: 0.0,
         invalid_message_deliveries_weight: -2.0,
         invalid_message_deliveries_decay: 0.9,
         topic_weight: 0.7,
@@ -3785,7 +3803,7 @@ fn test_scoring_p4_ignored_message() {
     peer_score_params.app_specific_weight = 1.0;
     let peer_score_thresholds = PeerScoreThresholds::default();
 
-    //build mesh with two peers
+    // build mesh with two peers
     let (mut gs, peers, _, topics) = inject_nodes1()
         .peer_no(1)
         .topics(vec!["test".into()])
@@ -3801,7 +3819,7 @@ fn test_scoring_p4_ignored_message() {
         gs.handle_received_message(msg, &peers[index]);
     };
 
-    //peer 0 delivers ignored message
+    // peer 0 delivers ignored message
     let m1 = random_message(&mut seq, &topics);
     deliver_message(&mut gs, 0, m1.clone());
 
@@ -3810,7 +3828,7 @@ fn test_scoring_p4_ignored_message() {
     // Transform the inbound message
     let message1 = &gs.data_transform.inbound_transform(m1).unwrap();
 
-    //message m1 gets ignored
+    // message m1 gets ignored
     gs.report_message_validation_result(
         &config.message_id(message1),
         &peers[0],
@@ -3830,10 +3848,14 @@ fn test_scoring_p4_application_invalidated_message() {
     let topic = Topic::new("test");
     let topic_hash = topic.hash();
     let topic_params = TopicScoreParams {
-        time_in_mesh_weight: 0.0,             //deactivate time in mesh
-        first_message_deliveries_weight: 0.0, //deactivate first time deliveries
-        mesh_message_deliveries_weight: 0.0,  //deactivate message deliveries
-        mesh_failure_penalty_weight: 0.0,     //deactivate mesh failure penalties
+        // deactivate time in mesh
+        time_in_mesh_weight: 0.0,
+        // deactivate first time deliveries
+        first_message_deliveries_weight: 0.0,
+        // deactivate message deliveries
+        mesh_message_deliveries_weight: 0.0,
+        // deactivate mesh failure penalties
+        mesh_failure_penalty_weight: 0.0,
         invalid_message_deliveries_weight: -2.0,
         invalid_message_deliveries_decay: 0.9,
         topic_weight: 0.7,
@@ -3843,7 +3865,7 @@ fn test_scoring_p4_application_invalidated_message() {
     peer_score_params.app_specific_weight = 1.0;
     let peer_score_thresholds = PeerScoreThresholds::default();
 
-    //build mesh with two peers
+    // build mesh with two peers
     let (mut gs, peers, _, topics) = inject_nodes1()
         .peer_no(1)
         .topics(vec!["test".into()])
@@ -3859,7 +3881,7 @@ fn test_scoring_p4_application_invalidated_message() {
         gs.handle_received_message(msg, &peers[index]);
     };
 
-    //peer 0 delivers invalid message
+    // peer 0 delivers invalid message
     let m1 = random_message(&mut seq, &topics);
     deliver_message(&mut gs, 0, m1.clone());
 
@@ -3868,7 +3890,7 @@ fn test_scoring_p4_application_invalidated_message() {
     // Transform the inbound message
     let message1 = &gs.data_transform.inbound_transform(m1).unwrap();
 
-    //message m1 gets rejected
+    // message m1 gets rejected
     gs.report_message_validation_result(
         &config.message_id(message1),
         &peers[0],
@@ -3891,10 +3913,14 @@ fn test_scoring_p4_application_invalid_message_from_two_peers() {
     let topic = Topic::new("test");
     let topic_hash = topic.hash();
     let topic_params = TopicScoreParams {
-        time_in_mesh_weight: 0.0,             //deactivate time in mesh
-        first_message_deliveries_weight: 0.0, //deactivate first time deliveries
-        mesh_message_deliveries_weight: 0.0,  //deactivate message deliveries
-        mesh_failure_penalty_weight: 0.0,     //deactivate mesh failure penalties
+        // deactivate time in mesh
+        time_in_mesh_weight: 0.0,
+        // deactivate first time deliveries
+        first_message_deliveries_weight: 0.0,
+        // deactivate message deliveries
+        mesh_message_deliveries_weight: 0.0,
+        // deactivate mesh failure penalties
+        mesh_failure_penalty_weight: 0.0,
         invalid_message_deliveries_weight: -2.0,
         invalid_message_deliveries_decay: 0.9,
         topic_weight: 0.7,
@@ -3904,7 +3930,7 @@ fn test_scoring_p4_application_invalid_message_from_two_peers() {
     peer_score_params.app_specific_weight = 1.0;
     let peer_score_thresholds = PeerScoreThresholds::default();
 
-    //build mesh with two peers
+    // build mesh with two peers
     let (mut gs, peers, _, topics) = inject_nodes1()
         .peer_no(2)
         .topics(vec!["test".into()])
@@ -3920,20 +3946,20 @@ fn test_scoring_p4_application_invalid_message_from_two_peers() {
         gs.handle_received_message(msg, &peers[index]);
     };
 
-    //peer 0 delivers invalid message
+    // peer 0 delivers invalid message
     let m1 = random_message(&mut seq, &topics);
     deliver_message(&mut gs, 0, m1.clone());
 
     // Transform the inbound message
     let message1 = &gs.data_transform.inbound_transform(m1.clone()).unwrap();
 
-    //peer 1 delivers same message
+    // peer 1 delivers same message
     deliver_message(&mut gs, 1, m1);
 
     assert_eq!(gs.peer_score.as_ref().unwrap().0.score(&peers[0]), 0.0);
     assert_eq!(gs.peer_score.as_ref().unwrap().0.score(&peers[1]), 0.0);
 
-    //message m1 gets rejected
+    // message m1 gets rejected
     gs.report_message_validation_result(
         &config.message_id(message1),
         &peers[0],
@@ -3960,10 +3986,14 @@ fn test_scoring_p4_three_application_invalid_messages() {
     let topic = Topic::new("test");
     let topic_hash = topic.hash();
     let topic_params = TopicScoreParams {
-        time_in_mesh_weight: 0.0,             //deactivate time in mesh
-        first_message_deliveries_weight: 0.0, //deactivate first time deliveries
-        mesh_message_deliveries_weight: 0.0,  //deactivate message deliveries
-        mesh_failure_penalty_weight: 0.0,     //deactivate mesh failure penalties
+        // deactivate time in mesh
+        time_in_mesh_weight: 0.0,
+        // deactivate first time deliveries
+        first_message_deliveries_weight: 0.0,
+        // deactivate message deliveries
+        mesh_message_deliveries_weight: 0.0,
+        // deactivate mesh failure penalties
+        mesh_failure_penalty_weight: 0.0,
         invalid_message_deliveries_weight: -2.0,
         invalid_message_deliveries_decay: 0.9,
         topic_weight: 0.7,
@@ -3973,7 +4003,7 @@ fn test_scoring_p4_three_application_invalid_messages() {
     peer_score_params.app_specific_weight = 1.0;
     let peer_score_thresholds = PeerScoreThresholds::default();
 
-    //build mesh with one peer
+    // build mesh with one peer
     let (mut gs, peers, _, topics) = inject_nodes1()
         .peer_no(1)
         .topics(vec!["test".into()])
@@ -3989,7 +4019,7 @@ fn test_scoring_p4_three_application_invalid_messages() {
         gs.handle_received_message(msg, &peers[index]);
     };
 
-    //peer 0 delivers two invalid message
+    // peer 0 delivers two invalid message
     let m1 = random_message(&mut seq, &topics);
     let m2 = random_message(&mut seq, &topics);
     let m3 = random_message(&mut seq, &topics);
@@ -4007,7 +4037,7 @@ fn test_scoring_p4_three_application_invalid_messages() {
 
     assert_eq!(gs.peer_score.as_ref().unwrap().0.score(&peers[0]), 0.0);
 
-    //messages gets rejected
+    // messages gets rejected
     gs.report_message_validation_result(
         &config.message_id(message1),
         &peers[0],
@@ -4026,7 +4056,7 @@ fn test_scoring_p4_three_application_invalid_messages() {
         MessageAcceptance::Reject,
     );
 
-    //number of invalid messages gets squared
+    // number of invalid messages gets squared
     assert_eq!(
         gs.peer_score.as_ref().unwrap().0.score(&peers[0]),
         9.0 * -2.0 * 0.7
@@ -4043,10 +4073,14 @@ fn test_scoring_p4_decay() {
     let topic = Topic::new("test");
     let topic_hash = topic.hash();
     let topic_params = TopicScoreParams {
-        time_in_mesh_weight: 0.0,             //deactivate time in mesh
-        first_message_deliveries_weight: 0.0, //deactivate first time deliveries
-        mesh_message_deliveries_weight: 0.0,  //deactivate message deliveries
-        mesh_failure_penalty_weight: 0.0,     //deactivate mesh failure penalties
+        // deactivate time in mesh
+        time_in_mesh_weight: 0.0,
+        // deactivate first time deliveries
+        first_message_deliveries_weight: 0.0,
+        // deactivate message deliveries
+        mesh_message_deliveries_weight: 0.0,
+        // deactivate mesh failure penalties
+        mesh_failure_penalty_weight: 0.0,
         invalid_message_deliveries_weight: -2.0,
         invalid_message_deliveries_decay: 0.9,
         topic_weight: 0.7,
@@ -4056,7 +4090,7 @@ fn test_scoring_p4_decay() {
     peer_score_params.app_specific_weight = 1.0;
     let peer_score_thresholds = PeerScoreThresholds::default();
 
-    //build mesh with one peer
+    // build mesh with one peer
     let (mut gs, peers, _, topics) = inject_nodes1()
         .peer_no(1)
         .topics(vec!["test".into()])
@@ -4072,7 +4106,7 @@ fn test_scoring_p4_decay() {
         gs.handle_received_message(msg, &peers[index]);
     };
 
-    //peer 0 delivers invalid message
+    // peer 0 delivers invalid message
     let m1 = random_message(&mut seq, &topics);
     deliver_message(&mut gs, 0, m1.clone());
 
@@ -4080,7 +4114,7 @@ fn test_scoring_p4_decay() {
     let message1 = &gs.data_transform.inbound_transform(m1).unwrap();
     assert_eq!(gs.peer_score.as_ref().unwrap().0.score(&peers[0]), 0.0);
 
-    //message m1 gets rejected
+    // message m1 gets rejected
     gs.report_message_validation_result(
         &config.message_id(message1),
         &peers[0],
@@ -4092,7 +4126,7 @@ fn test_scoring_p4_decay() {
         -2.0 * 0.7
     );
 
-    //we decay
+    // we decay
     gs.peer_score.as_mut().unwrap().0.refresh_scores();
 
     // the number of invalids gets decayed to 0.9 and then squared in the score
@@ -4109,7 +4143,7 @@ fn test_scoring_p5() {
         ..PeerScoreParams::default()
     };
 
-    //build mesh with one peer
+    // build mesh with one peer
     let (mut gs, peers, _, _) = inject_nodes1()
         .peer_no(1)
         .topics(vec!["test".into()])
@@ -4146,7 +4180,7 @@ fn test_scoring_p6() {
         .scoring(Some((peer_score_params, PeerScoreThresholds::default())))
         .create_network();
 
-    //create 5 peers with the same ip
+    // create 5 peers with the same ip
     let addr = Multiaddr::from(Ipv4Addr::new(10, 1, 2, 3));
     let peers = vec![
         add_peer_with_addr(&mut gs, &[], false, false, addr.clone()).0,
@@ -4156,7 +4190,7 @@ fn test_scoring_p6() {
         add_peer_with_addr(&mut gs, &[], true, true, addr.clone()).0,
     ];
 
-    //create 4 other peers with other ip
+    // create 4 other peers with other ip
     let addr2 = Multiaddr::from(Ipv4Addr::new(10, 1, 2, 4));
     let others = vec![
         add_peer_with_addr(&mut gs, &[], false, false, addr2.clone()).0,
@@ -4165,12 +4199,12 @@ fn test_scoring_p6() {
         add_peer_with_addr(&mut gs, &[], true, false, addr2.clone()).0,
     ];
 
-    //no penalties yet
+    // no penalties yet
     for peer in peers.iter().chain(others.iter()) {
         assert_eq!(gs.peer_score.as_ref().unwrap().0.score(peer), 0.0);
     }
 
-    //add additional connection for 3 others with addr
+    // add additional connection for 3 others with addr
     for id in others.iter().take(3) {
         gs.on_swarm_event(FromSwarm::ConnectionEstablished(ConnectionEstablished {
             peer_id: *id,
@@ -4185,14 +4219,14 @@ fn test_scoring_p6() {
         }));
     }
 
-    //penalties apply squared
+    // penalties apply squared
     for peer in peers.iter().chain(others.iter().take(3)) {
         assert_eq!(gs.peer_score.as_ref().unwrap().0.score(peer), 9.0 * -2.0);
     }
-    //fourth other peer still no penalty
+    // fourth other peer still no penalty
     assert_eq!(gs.peer_score.as_ref().unwrap().0.score(&others[3]), 0.0);
 
-    //add additional connection for 3 of the peers to addr2
+    // add additional connection for 3 of the peers to addr2
     for peer in peers.iter().take(3) {
         gs.on_swarm_event(FromSwarm::ConnectionEstablished(ConnectionEstablished {
             peer_id: *peer,
@@ -4207,7 +4241,7 @@ fn test_scoring_p6() {
         }));
     }
 
-    //double penalties for the first three of each
+    // double penalties for the first three of each
     for peer in peers.iter().take(3).chain(others.iter().take(3)) {
         assert_eq!(
             gs.peer_score.as_ref().unwrap().0.score(peer),
@@ -4215,7 +4249,7 @@ fn test_scoring_p6() {
         );
     }
 
-    //single penalties for the rest
+    // single penalties for the rest
     for peer in peers.iter().skip(3) {
         assert_eq!(gs.peer_score.as_ref().unwrap().0.score(peer), 9.0 * -2.0);
     }
@@ -4224,7 +4258,7 @@ fn test_scoring_p6() {
         4.0 * -2.0
     );
 
-    //two times same ip doesn't count twice
+    // two times same ip doesn't count twice
     gs.on_swarm_event(FromSwarm::ConnectionEstablished(ConnectionEstablished {
         peer_id: peers[0],
         connection_id: ConnectionId::new_unchecked(0),
@@ -4237,8 +4271,8 @@ fn test_scoring_p6() {
         other_established: 2,
     }));
 
-    //nothing changed
-    //double penalties for the first three of each
+    // nothing changed
+    // double penalties for the first three of each
     for peer in peers.iter().take(3).chain(others.iter().take(3)) {
         assert_eq!(
             gs.peer_score.as_ref().unwrap().0.score(peer),
@@ -4246,7 +4280,7 @@ fn test_scoring_p6() {
         );
     }
 
-    //single penalties for the rest
+    // single penalties for the rest
     for peer in peers.iter().skip(3) {
         assert_eq!(gs.peer_score.as_ref().unwrap().0.score(peer), 9.0 * -2.0);
     }
@@ -4279,7 +4313,7 @@ fn test_scoring_p7_grafts_before_backoff() {
         .scoring(Some((peer_score_params, PeerScoreThresholds::default())))
         .create_network();
 
-    //remove peers from mesh and send prune to them => this adds a backoff for the peers
+    // remove peers from mesh and send prune to them => this adds a backoff for the peers
     for peer in peers.iter().take(2) {
         gs.mesh.get_mut(&topics[0]).unwrap().remove(peer);
         gs.send_graft_prune(
@@ -4289,31 +4323,31 @@ fn test_scoring_p7_grafts_before_backoff() {
         );
     }
 
-    //wait 50 millisecs
+    // wait 50 millisecs
     sleep(Duration::from_millis(50));
 
-    //first peer tries to graft
+    // first peer tries to graft
     gs.handle_graft(&peers[0], vec![topics[0].clone()]);
 
-    //double behaviour penalty for first peer (squared)
+    // double behaviour penalty for first peer (squared)
     assert_eq!(
         gs.peer_score.as_ref().unwrap().0.score(&peers[0]),
         4.0 * -2.0
     );
 
-    //wait 100 millisecs
+    // wait 100 millisecs
     sleep(Duration::from_millis(100));
 
-    //second peer tries to graft
+    // second peer tries to graft
     gs.handle_graft(&peers[1], vec![topics[0].clone()]);
 
-    //single behaviour penalty for second peer
+    // single behaviour penalty for second peer
     assert_eq!(
         gs.peer_score.as_ref().unwrap().0.score(&peers[1]),
         1.0 * -2.0
     );
 
-    //test decay
+    // test decay
     gs.peer_score.as_mut().unwrap().0.refresh_scores();
 
     assert_eq!(
@@ -4332,7 +4366,7 @@ fn test_opportunistic_grafting() {
         .mesh_n_low(3)
         .mesh_n(5)
         .mesh_n_high(7)
-        .mesh_outbound_min(0) //deactivate outbound handling
+        .mesh_outbound_min(0) // deactivate outbound handling
         .opportunistic_graft_ticks(2)
         .opportunistic_graft_peers(2)
         .build()
@@ -4356,30 +4390,30 @@ fn test_opportunistic_grafting() {
         .scoring(Some((peer_score_params, thresholds)))
         .create_network();
 
-    //fill mesh with 5 peers
+    // fill mesh with 5 peers
     for peer in &peers {
         gs.handle_graft(peer, topics.clone());
     }
 
-    //add additional 5 peers
+    // add additional 5 peers
     let others: Vec<_> = (0..5)
         .map(|_| add_peer(&mut gs, &topics, false, false))
         .collect();
 
-    //currently mesh equals peers
+    // currently mesh equals peers
     assert_eq!(gs.mesh[&topics[0]], peers.iter().cloned().collect());
 
-    //give others high scores (but the first two have not high enough scores)
+    // give others high scores (but the first two have not high enough scores)
     for (i, peer) in peers.iter().enumerate().take(5) {
         gs.set_application_score(peer, 0.0 + i as f64);
     }
 
-    //set scores for peers in the mesh
+    // set scores for peers in the mesh
     for (i, (peer, _receiver)) in others.iter().enumerate().take(5) {
         gs.set_application_score(peer, 0.0 + i as f64);
     }
 
-    //this gives a median of exactly 2.0 => should not apply opportunistic grafting
+    // this gives a median of exactly 2.0 => should not apply opportunistic grafting
     gs.heartbeat();
     gs.heartbeat();
 
@@ -4389,10 +4423,10 @@ fn test_opportunistic_grafting() {
         "should not apply opportunistic grafting"
     );
 
-    //reduce middle score to 1.0 giving a median of 1.0
+    // reduce middle score to 1.0 giving a median of 1.0
     gs.set_application_score(&peers[2], 1.0);
 
-    //opportunistic grafting after two heartbeats
+    // opportunistic grafting after two heartbeats
 
     gs.heartbeat();
     assert_eq!(
@@ -4422,17 +4456,17 @@ fn test_opportunistic_grafting() {
 
 #[test]
 fn test_ignore_graft_from_unknown_topic() {
-    //build gossipsub without subscribing to any topics
+    // build gossipsub without subscribing to any topics
     let (mut gs, peers, receivers, _) = inject_nodes1()
         .peer_no(1)
         .topics(vec![])
         .to_subscribe(false)
         .create_network();
 
-    //handle an incoming graft for some topic
+    // handle an incoming graft for some topic
     gs.handle_graft(&peers[0], vec![Topic::new("test").hash()]);
 
-    //assert that no prune got created
+    // assert that no prune got created
     let (control_msgs, _) = count_control_msgs(receivers, |_, a| matches!(a, RpcOut::Prune { .. }));
     assert_eq!(
         control_msgs, 0,
@@ -4443,18 +4477,18 @@ fn test_ignore_graft_from_unknown_topic() {
 #[test]
 fn test_ignore_too_many_iwants_from_same_peer_for_same_message() {
     let config = Config::default();
-    //build gossipsub with full mesh
+    // build gossipsub with full mesh
     let (mut gs, _, mut receivers, topics) = inject_nodes1()
         .peer_no(config.mesh_n_high())
         .topics(vec!["test".into()])
         .to_subscribe(false)
         .create_network();
 
-    //add another peer not in the mesh
+    // add another peer not in the mesh
     let (peer, receiver) = add_peer(&mut gs, &topics, false, false);
     receivers.insert(peer, receiver);
 
-    //receive a message
+    // receive a message
     let mut seq = 0;
     let m1 = random_message(&mut seq, &topics);
 
@@ -4465,10 +4499,10 @@ fn test_ignore_too_many_iwants_from_same_peer_for_same_message() {
 
     gs.handle_received_message(m1, &PeerId::random());
 
-    //clear events
+    // clear events
     let receivers = flush_events(&mut gs, receivers);
 
-    //the first gossip_retransimission many iwants return the valid message, all others are
+    // the first gossip_retransimission many iwants return the valid message, all others are
     // ignored.
     for _ in 0..(2 * config.gossip_retransimission() + 10) {
         gs.handle_iwant(&peer, vec![id.clone()]);
@@ -4495,7 +4529,7 @@ fn test_ignore_too_many_ihaves() {
         .max_ihave_messages(10)
         .build()
         .unwrap();
-    //build gossipsub with full mesh
+    // build gossipsub with full mesh
     let (mut gs, _, mut receivers, topics) = inject_nodes1()
         .peer_no(config.mesh_n_high())
         .topics(vec!["test".into()])
@@ -4503,15 +4537,15 @@ fn test_ignore_too_many_ihaves() {
         .gs_config(config.clone())
         .create_network();
 
-    //add another peer not in the mesh
+    // add another peer not in the mesh
     let (peer, receiver) = add_peer(&mut gs, &topics, false, false);
     receivers.insert(peer, receiver);
 
-    //peer has 20 messages
+    // peer has 20 messages
     let mut seq = 0;
     let messages: Vec<_> = (0..20).map(|_| random_message(&mut seq, &topics)).collect();
 
-    //peer sends us one ihave for each message in order
+    // peer sends us one ihave for each message in order
     for raw_message in &messages {
         // Transform the inbound message
         let message = &gs
@@ -4532,7 +4566,7 @@ fn test_ignore_too_many_ihaves() {
         .map(|m| config.message_id(&m))
         .collect();
 
-    //we send iwant only for the first 10 messages
+    // we send iwant only for the first 10 messages
     let (control_msgs, receivers) = count_control_msgs(receivers, |p, action| {
         p == &peer
             && matches!(action, RpcOut::IWant(IWant { message_ids }) if message_ids.len() == 1 && first_ten.contains(&message_ids[0]))
@@ -4542,7 +4576,7 @@ fn test_ignore_too_many_ihaves() {
         "exactly the first ten ihaves should be processed and one iwant for each created"
     );
 
-    //after a heartbeat everything is forgotten
+    // after a heartbeat everything is forgotten
     gs.heartbeat();
 
     for raw_message in messages[10..].iter() {
@@ -4558,7 +4592,7 @@ fn test_ignore_too_many_ihaves() {
         );
     }
 
-    //we sent iwant for all 10 messages
+    // we sent iwant for all 10 messages
     let (control_msgs, _) = count_control_msgs(receivers, |p, action| {
         p == &peer
             && matches!(action, RpcOut::IWant(IWant { message_ids }) if message_ids.len() == 1)
@@ -4573,7 +4607,7 @@ fn test_ignore_too_many_messages_in_ihave() {
         .max_ihave_length(10)
         .build()
         .unwrap();
-    //build gossipsub with full mesh
+    // build gossipsub with full mesh
     let (mut gs, _, mut receivers, topics) = inject_nodes1()
         .peer_no(config.mesh_n_high())
         .topics(vec!["test".into()])
@@ -4581,7 +4615,7 @@ fn test_ignore_too_many_messages_in_ihave() {
         .gs_config(config.clone())
         .create_network();
 
-    //add another peer not in the mesh
+    // add another peer not in the mesh
     let (peer, receiver) = add_peer(&mut gs, &topics, false, false);
     receivers.insert(peer, receiver);
 
@@ -4593,7 +4627,7 @@ fn test_ignore_too_many_messages_in_ihave() {
         .map(|msg| config.message_id(&msg))
         .collect();
 
-    //peer sends us three ihaves
+    // peer sends us three ihaves
     gs.handle_ihave(&peer, vec![(topics[0].clone(), message_ids[0..8].to_vec())]);
     gs.handle_ihave(
         &peer,
@@ -4606,7 +4640,7 @@ fn test_ignore_too_many_messages_in_ihave() {
 
     let first_twelve: HashSet<_> = message_ids.iter().take(12).collect();
 
-    //we send iwant only for the first 10 messages
+    // we send iwant only for the first 10 messages
     let mut sum = 0;
     let (control_msgs, receivers) = count_control_msgs(receivers, |p, rpc| match rpc {
         RpcOut::IWant(IWant { message_ids }) => {
@@ -4625,14 +4659,14 @@ fn test_ignore_too_many_messages_in_ihave() {
 
     assert_eq!(sum, 10, "exactly the first ten ihaves should be processed");
 
-    //after a heartbeat everything is forgotten
+    // after a heartbeat everything is forgotten
     gs.heartbeat();
     gs.handle_ihave(
         &peer,
         vec![(topics[0].clone(), message_ids[20..30].to_vec())],
     );
 
-    //we sent 10 iwant messages ids via a IWANT rpc.
+    // we sent 10 iwant messages ids via a IWANT rpc.
     let mut sum = 0;
     let (control_msgs, _) = count_control_msgs(receivers, |p, rpc| match rpc {
         RpcOut::IWant(IWant { message_ids }) => {
@@ -4654,7 +4688,7 @@ fn test_limit_number_of_message_ids_inside_ihave() {
         .max_ihave_length(100)
         .build()
         .unwrap();
-    //build gossipsub with full mesh
+    // build gossipsub with full mesh
     let (mut gs, peers, mut receivers, topics) = inject_nodes1()
         .peer_no(config.mesh_n_high())
         .topics(vec!["test".into()])
@@ -4662,24 +4696,24 @@ fn test_limit_number_of_message_ids_inside_ihave() {
         .gs_config(config)
         .create_network();
 
-    //graft to all peers to really fill the mesh with all the peers
+    // graft to all peers to really fill the mesh with all the peers
     for peer in peers {
         gs.handle_graft(&peer, topics.clone());
     }
 
-    //add two other peers not in the mesh
+    // add two other peers not in the mesh
     let (p1, receiver1) = add_peer(&mut gs, &topics, false, false);
     receivers.insert(p1, receiver1);
     let (p2, receiver2) = add_peer(&mut gs, &topics, false, false);
     receivers.insert(p2, receiver2);
 
-    //receive 200 messages from another peer
+    // receive 200 messages from another peer
     let mut seq = 0;
     for _ in 0..200 {
         gs.handle_received_message(random_message(&mut seq, &topics), &PeerId::random());
     }
 
-    //emit gossip
+    // emit gossip
     gs.emit_gossip();
 
     // both peers should have gotten 100 random ihave messages, to assert the randomness, we
@@ -4732,12 +4766,10 @@ fn test_limit_number_of_message_ids_inside_ihave() {
 
 #[test]
 fn test_iwant_penalties() {
-    /*
-    use tracing_subscriber::EnvFilter;
-    let _ = tracing_subscriber::fmt()
-        .with_env_filter(EnvFilter::from_default_env())
-        .try_init();
-    */
+    // use tracing_subscriber::EnvFilter;
+    // let _ = tracing_subscriber::fmt()
+    // .with_env_filter(EnvFilter::from_default_env())
+    // .try_init();
     let config = ConfigBuilder::default()
         .iwant_followup_time(Duration::from_secs(4))
         .build()
@@ -4867,7 +4899,7 @@ fn test_publish_to_floodsub_peers_without_flood_publish() {
         .gs_config(config)
         .create_network();
 
-    //add two floodsub peer, one explicit, one implicit
+    // add two floodsub peer, one explicit, one implicit
     let (p1, receiver1) = add_peer_with_addr_and_kind(
         &mut gs,
         &topics,
@@ -4882,10 +4914,10 @@ fn test_publish_to_floodsub_peers_without_flood_publish() {
         add_peer_with_addr_and_kind(&mut gs, &topics, false, false, Multiaddr::empty(), None);
     receivers.insert(p2, receiver2);
 
-    //p1 and p2 are not in the mesh
+    // p1 and p2 are not in the mesh
     assert!(!gs.mesh[&topics[0]].contains(&p1) && !gs.mesh[&topics[0]].contains(&p2));
 
-    //publish a message
+    // publish a message
     let publish_data = vec![0; 42];
     gs.publish(Topic::new("test"), publish_data).unwrap();
 
@@ -4926,7 +4958,7 @@ fn test_do_not_use_floodsub_in_fanout() {
     let topic = Topic::new("test");
     let topics = vec![topic.hash()];
 
-    //add two floodsub peer, one explicit, one implicit
+    // add two floodsub peer, one explicit, one implicit
     let (p1, receiver1) = add_peer_with_addr_and_kind(
         &mut gs,
         &topics,
@@ -4941,7 +4973,7 @@ fn test_do_not_use_floodsub_in_fanout() {
         add_peer_with_addr_and_kind(&mut gs, &topics, false, false, Multiaddr::empty(), None);
 
     receivers.insert(p2, receiver2);
-    //publish a message
+    // publish a message
     let publish_data = vec![0; 42];
     gs.publish(Topic::new("test"), publish_data).unwrap();
 
@@ -4982,7 +5014,7 @@ fn test_dont_add_floodsub_peers_to_mesh_on_join() {
     let topic = Topic::new("test");
     let topics = vec![topic.hash()];
 
-    //add two floodsub peer, one explicit, one implicit
+    // add two floodsub peer, one explicit, one implicit
     let _p1 = add_peer_with_addr_and_kind(
         &mut gs,
         &topics,
@@ -5009,7 +5041,7 @@ fn test_dont_send_px_to_old_gossipsub_peers() {
         .to_subscribe(false)
         .create_network();
 
-    //add an old gossipsub peer
+    // add an old gossipsub peer
     let (p1, _receiver1) = add_peer_with_addr_and_kind(
         &mut gs,
         &topics,
@@ -5019,14 +5051,14 @@ fn test_dont_send_px_to_old_gossipsub_peers() {
         Some(PeerKind::Gossipsub),
     );
 
-    //prune the peer
+    // prune the peer
     gs.send_graft_prune(
         HashMap::new(),
         vec![(p1, topics.clone())].into_iter().collect(),
         HashSet::new(),
     );
 
-    //check that prune does not contain px
+    // check that prune does not contain px
     let (control_msgs, _) = count_control_msgs(receivers, |_, m| match m {
         RpcOut::Prune(Prune { peers: px, .. }) => !px.is_empty(),
         _ => false,
@@ -5036,14 +5068,14 @@ fn test_dont_send_px_to_old_gossipsub_peers() {
 
 #[test]
 fn test_dont_send_floodsub_peers_in_px() {
-    //build mesh with one peer
+    // build mesh with one peer
     let (mut gs, peers, receivers, topics) = inject_nodes1()
         .peer_no(1)
         .topics(vec!["test".into()])
         .to_subscribe(true)
         .create_network();
 
-    //add two floodsub peers
+    // add two floodsub peers
     let _p1 = add_peer_with_addr_and_kind(
         &mut gs,
         &topics,
@@ -5054,14 +5086,14 @@ fn test_dont_send_floodsub_peers_in_px() {
     );
     let _p2 = add_peer_with_addr_and_kind(&mut gs, &topics, false, false, Multiaddr::empty(), None);
 
-    //prune only mesh node
+    // prune only mesh node
     gs.send_graft_prune(
         HashMap::new(),
         vec![(peers[0], topics.clone())].into_iter().collect(),
         HashSet::new(),
     );
 
-    //check that px in prune message is empty
+    // check that px in prune message is empty
     let (control_msgs, _) = count_control_msgs(receivers, |_, m| match m {
         RpcOut::Prune(Prune { peers: px, .. }) => !px.is_empty(),
         _ => false,
@@ -5077,7 +5109,7 @@ fn test_dont_add_floodsub_peers_to_mesh_in_heartbeat() {
         .to_subscribe(false)
         .create_network();
 
-    //add two floodsub peer, one explicit, one implicit
+    // add two floodsub peer, one explicit, one implicit
     let _p1 = add_peer_with_addr_and_kind(
         &mut gs,
         &topics,
@@ -5144,7 +5176,7 @@ fn test_subscribe_to_invalid_topic() {
 
 #[test]
 fn test_subscribe_and_graft_with_negative_score() {
-    //simulate a communication between two gossipsub instances
+    // simulate a communication between two gossipsub instances
     let (mut gs1, _, _, topic_hashes) = inject_nodes1()
         .topics(vec!["test".into()])
         .scoring(Some((
@@ -5162,12 +5194,12 @@ fn test_subscribe_and_graft_with_negative_score() {
     let (p2, _receiver1) = add_peer(&mut gs1, &Vec::new(), true, false);
     let (p1, _receiver2) = add_peer(&mut gs2, &topic_hashes, false, false);
 
-    //add penalty to peer p2
+    // add penalty to peer p2
     gs1.peer_score.as_mut().unwrap().0.add_penalty(&p2, 1);
 
     let original_score = gs1.peer_score.as_ref().unwrap().0.score(&p2);
 
-    //subscribe to topic in gs2
+    // subscribe to topic in gs2
     gs2.subscribe(&topic).unwrap();
 
     let forward_messages_to_p1 = |gs1: &mut Behaviour<_, _>,
@@ -5196,17 +5228,17 @@ fn test_subscribe_and_graft_with_negative_score() {
         new_receivers
     };
 
-    //forward the subscribe message
+    // forward the subscribe message
     let receivers = forward_messages_to_p1(&mut gs1, p1, p2, connection_id, receivers);
 
-    //heartbeats on both
+    // heartbeats on both
     gs1.heartbeat();
     gs2.heartbeat();
 
-    //forward messages again
+    // forward messages again
     forward_messages_to_p1(&mut gs1, p1, p2, connection_id, receivers);
 
-    //nobody got penalized
+    // nobody got penalized
     assert!(gs1.peer_score.as_ref().unwrap().0.score(&p2) >= original_score);
 }
 
