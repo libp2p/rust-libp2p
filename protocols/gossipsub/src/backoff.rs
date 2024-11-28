@@ -124,7 +124,7 @@ impl BackoffStorage {
     pub(crate) fn is_backoff_with_slack(&self, topic: &TopicHash, peer: &PeerId) -> bool {
         self.backoffs
             .get(topic)
-            .map_or(false, |m| m.contains_key(peer))
+            .is_some_and(|m| m.contains_key(peer))
     }
 
     pub(crate) fn get_backoff_time(&self, topic: &TopicHash, peer: &PeerId) -> Option<Instant> {

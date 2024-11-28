@@ -203,7 +203,7 @@ impl PutRecordJob {
         T: RecordStore,
     {
         if self.inner.check_ready(cx, now) {
-            let publish = self.next_publish.map_or(false, |t_pub| now >= t_pub);
+            let publish = self.next_publish.is_some_and(|t_pub| now >= t_pub);
             let records = store
                 .records()
                 .filter_map(|r| {

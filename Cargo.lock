@@ -2974,7 +2974,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-noise"
-version = "0.45.0"
+version = "0.45.1"
 dependencies = [
  "asynchronous-codec",
  "bytes",
@@ -3476,7 +3476,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-webtransport-websys"
-version = "0.4.0"
+version = "0.4.1"
 dependencies = [
  "futures",
  "js-sys",

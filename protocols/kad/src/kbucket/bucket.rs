@@ -377,7 +377,7 @@ where
             // Adjust `first_connected_pos` accordingly.
             match status {
                 NodeStatus::Connected => {
-                    if self.first_connected_pos.map_or(false, |p| p == pos.0)
+                    if self.first_connected_pos.is_some_and(|p| p == pos.0)
                         && pos.0 == self.nodes.len()
                     {
                         // It was the last connected node.
@@ -398,7 +398,7 @@ where
 
     /// Returns the status of the node at the given position.
     pub(crate) fn status(&self, pos: Position) -> NodeStatus {
-        if self.first_connected_pos.map_or(false, |i| pos.0 >= i) {
+        if self.first_connected_pos.is_some_and(|i| pos.0 >= i) {
             NodeStatus::Connected
         } else {
             NodeStatus::Disconnected
