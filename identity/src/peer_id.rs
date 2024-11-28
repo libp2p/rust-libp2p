@@ -189,7 +189,7 @@ impl<'de> Deserialize<'de> for PeerId {
     where
         D: serde::Deserializer<'de>,
     {
-        use serde::de::*;
+        use serde::de::{Error, Unexpected, Visitor};
 
         struct PeerIdVisitor;
 

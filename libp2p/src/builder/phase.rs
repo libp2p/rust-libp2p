@@ -14,20 +14,20 @@ mod swarm;
 mod tcp;
 mod websocket;
 
-use bandwidth_logging::*;
-use bandwidth_metrics::*;
-use behaviour::*;
-use build::*;
-use dns::*;
+use bandwidth_logging::BandwidthLoggingPhase;
+use bandwidth_metrics::BandwidthMetricsPhase;
+use behaviour::{BehaviourPhase, TryIntoBehaviour};
+use build::BuildPhase;
+use dns::DnsPhase;
 use libp2p_core::{muxing::StreamMuxerBox, Transport};
 use libp2p_identity::Keypair;
-use other_transport::*;
-use provider::*;
-use quic::*;
-use relay::*;
-use swarm::*;
-use tcp::*;
-use websocket::*;
+use other_transport::{OtherTransportPhase, TryIntoTransport};
+use provider::{AsyncStd, NoProviderSpecified, ProviderPhase};
+use quic::QuicPhase;
+use relay::{NoRelayBehaviour, RelayPhase};
+use swarm::SwarmPhase;
+use tcp::TcpPhase;
+use websocket::{WebsocketError, WebsocketPhase};
 
 use super::{
     select_muxer::SelectMuxerUpgrade, select_security::SelectSecurityUpgrade, SwarmBuilder,

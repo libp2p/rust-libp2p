@@ -2,3 +2,4 @@ disallowed-methods = [
   { path = "futures::channel::mpsc::unbounded", reason = "does not enforce backpressure" },
 ]
 avoid-breaking-exported-api = false
+allowed-wildcard-imports = ["super"]

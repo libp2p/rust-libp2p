@@ -10,7 +10,7 @@
 
 
 use quick_protobuf::{MessageInfo, MessageRead, MessageWrite, BytesReader, Writer, WriterBackend, Result};
-use quick_protobuf::sizeofs::*;
+use quick_protobuf::sizeofs::sizeof_len;
 use super::*;
 
 #[allow(clippy::derive_partial_eq_without_eq)]

@@ -152,6 +152,7 @@ clippy.type_complexity = "allow"
 clippy.unnecessary_wraps = "warn"
 clippy.manual_let_else = "warn"
 clippy.dbg_macro = "warn"
+clippy.wildcard_imports = "warn"
 
 [workspace.metadata.release]
 pre-release-hook = [

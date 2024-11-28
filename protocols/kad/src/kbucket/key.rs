@@ -29,7 +29,7 @@ use sha2::{
     digest::generic_array::{typenum::U32, GenericArray},
     Digest, Sha256,
 };
-use uint::*;
+use uint::{construct_uint, unroll};
 
 use crate::record;
 
