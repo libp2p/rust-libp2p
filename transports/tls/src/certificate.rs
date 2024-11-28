@@ -27,6 +27,7 @@ use libp2p_identity::PeerId;
 use x509_parser::{prelude::*, signature_algorithm::SignatureAlgorithm};
 
 use std::sync::Arc;
+use ::time::OffsetDateTime;
 
 /// The libp2p Public Key Extension is a X.509 extension
 /// with the Object Identifier 1.3.6.1.4.1.53594.1.1,
@@ -121,6 +122,47 @@ pub fn generate(
     Ok((rustls_certificate, rustls_key))
 }
 
+pub fn generate_with_validity_period(
+    identity_keypair: &identity::Keypair,
+    not_before: OffsetDateTime,
+    not_after: OffsetDateTime,
+) -> Result<
+    (
+        rustls::pki_types::CertificateDer<'static>,
+        rustls::pki_types::PrivateKeyDer<'static>,
+    ),
+    GenError,
+> {
+    // Keypair used to sign the certificate.
+    // SHOULD NOT be related to the host's key.
+    // Endpoints MAY generate a new key and certificate
+    // for every connection attempt, or they MAY reuse the same key
+    // and certificate for multiple connections.
+    let certificate_keypair = rcgen::KeyPair::generate(P2P_SIGNATURE_ALGORITHM)?;
+    let rustls_key = rustls::pki_types::PrivateKeyDer::from(
+        rustls::pki_types::PrivatePkcs8KeyDer::from(certificate_keypair.serialize_der()),
+    );
+
+    let certificate = {
+        let mut params = rcgen::CertificateParams::new(vec![]);
+        params.distinguished_name = rcgen::DistinguishedName::new();
+        params.custom_extensions.push(make_libp2p_extension(
+            identity_keypair,
+            &certificate_keypair,
+        )?);
+        params.alg = P2P_SIGNATURE_ALGORITHM;
+        params.key_pair = Some(certificate_keypair);
+        params.not_before = not_before;
+        params.not_after = not_after;
+        rcgen::Certificate::from_params(params)?
+    };
+
+    let rustls_certificate = rustls::pki_types::CertificateDer::from(certificate.serialize_der()?);
+
+    Ok((rustls_certificate, rustls_key))
+}
+
+
 /// Attempts to parse the provided bytes as a [`P2pCertificate`].
 ///
 /// For this to succeed, the certificate must contain the specified extension and the signature must
@@ -128,7 +170,17 @@ pub fn generate(
 pub fn parse<'a>(
     certificate: &'a rustls::pki_types::CertificateDer<'a>,
 ) -> Result<P2pCertificate<'a>, ParseError> {
-    let certificate = parse_unverified(certificate.as_ref())?;
+    parse_binary(certificate.as_ref())
+}
+
+/// Attempts to parse the provided bytes as a [`P2pCertificate`].
+///
+/// For this to succeed, the certificate must contain the specified extension and the signature must
+/// match the embedded public key.
+pub fn parse_binary(
+    der_input: &[u8],
+) -> Result<P2pCertificate, ParseError> {
+    let certificate = parse_unverified(der_input)?;
 
     certificate.verify()?;
 
