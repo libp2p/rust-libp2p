@@ -1,3 +1,4 @@
+#![allow(unexpected_cfgs)]
 use std::{future::poll_fn, pin::Pin};
 
 use futures::{channel::oneshot, AsyncReadExt, AsyncWriteExt};

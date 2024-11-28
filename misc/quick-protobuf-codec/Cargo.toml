@@ -13,7 +13,7 @@ categories = ["asynchronous"]
 [dependencies]
 asynchronous-codec = { workspace = true }
 bytes = { version = "1" }
-thiserror = "1.0"
+thiserror = { workspace = true }
 unsigned-varint = { workspace = true, features = ["std"] }
 quick-protobuf = "0.8"
 
