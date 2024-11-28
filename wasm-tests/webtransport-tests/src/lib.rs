@@ -1,3 +1,5 @@
+#![allow(unexpected_cfgs)]
+
 use futures::channel::oneshot;
 use futures::{AsyncReadExt, AsyncWriteExt};
 use getrandom::getrandom;

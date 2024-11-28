@@ -106,7 +106,7 @@ where
             .id_remote_pubkey
             .ok_or_else(|| Error::AuthenticationFailed)?;
 
-        let is_valid_signature = self.dh_remote_pubkey_sig.as_ref().map_or(false, |s| {
+        let is_valid_signature = self.dh_remote_pubkey_sig.as_ref().is_some_and(|s| {
             id_pk.verify(&[STATIC_KEY_DOMAIN.as_bytes(), pubkey.as_ref()].concat(), s)
         });
 
