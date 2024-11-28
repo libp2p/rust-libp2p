@@ -101,7 +101,7 @@ impl Record {
 
     /// Checks whether the record is expired w.r.t. the given `Instant`.
     pub fn is_expired(&self, now: Instant) -> bool {
-        self.expires.map_or(false, |t| now >= t)
+        self.expires.is_some_and(|t| now >= t)
     }
 }
 
@@ -154,7 +154,7 @@ impl ProviderRecord {
 
     /// Checks whether the provider record is expired w.r.t. the given `Instant`.
     pub fn is_expired(&self, now: Instant) -> bool {
-        self.expires.map_or(false, |t| now >= t)
+        self.expires.is_some_and(|t| now >= t)
     }
 }
 

@@ -3,6 +3,9 @@
 - fix: Return `None` when extracting a `/dnsaddr` address
   See [PR 5613](https://github.com/libp2p/rust-libp2p/pull/5613)
 
+- Fix `cargo clippy` warnings in `rustc 1.84.0-beta.1`.
+  See [PR 5700](https://github.com/libp2p/rust-libp2p/pull/5700).
+
 ## 0.4.0
 
 - Implement refactored `Transport`.

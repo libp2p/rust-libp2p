@@ -529,12 +529,12 @@ where
 
     /// Returns true if the bucket has a pending node.
     pub fn has_pending(&self) -> bool {
-        self.bucket.pending().map_or(false, |n| !n.is_ready())
+        self.bucket.pending().is_some_and(|n| !n.is_ready())
     }
 
     /// Tests whether the given distance falls into this bucket.
     pub fn contains(&self, d: &Distance) -> bool {
-        BucketIndex::new(d).map_or(false, |i| i == self.index)
+        BucketIndex::new(d).is_some_and(|i| i == self.index)
     }
 
     /// Generates a random distance that falls into this bucket.

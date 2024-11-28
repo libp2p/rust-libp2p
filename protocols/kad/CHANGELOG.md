@@ -6,6 +6,8 @@
   See [PR 5573](https://github.com/libp2p/rust-libp2p/pull/5573).
 - Add `Behavior::find_closest_local_peers()`.
   See [PR 5645](https://github.com/libp2p/rust-libp2p/pull/5645).
+- Fix `cargo clippy` warnings in `rustc 1.84.0-beta.1`.
+  See [PR 5700](https://github.com/libp2p/rust-libp2p/pull/5700).
 
 ## 0.46.2
 
