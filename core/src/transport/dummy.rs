@@ -18,10 +18,17 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::transport::{DialOpts, ListenerId, Transport, TransportError, TransportEvent};
-use crate::Multiaddr;
-use futures::{prelude::*, task::Context, task::Poll};
 use std::{fmt, io, marker::PhantomData, pin::Pin};
+
+use futures::{
+    prelude::*,
+    task::{Context, Poll},
+};
+
+use crate::{
+    transport::{DialOpts, ListenerId, Transport, TransportError, TransportEvent},
+    Multiaddr,
+};
 
 /// Implementation of `Transport` that doesn't support any multiaddr.
 ///

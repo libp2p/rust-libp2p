@@ -20,15 +20,19 @@
 
 //! Provides the `TransportExt` trait.
 
+use std::sync::Arc;
+
+use libp2p_identity::PeerId;
+
 #[allow(deprecated)]
 use crate::bandwidth::{BandwidthLogging, BandwidthSinks};
-use crate::core::{
-    muxing::{StreamMuxer, StreamMuxerBox},
-    transport::Boxed,
+use crate::{
+    core::{
+        muxing::{StreamMuxer, StreamMuxerBox},
+        transport::Boxed,
+    },
+    Transport,
 };
-use crate::Transport;
-use libp2p_identity::PeerId;
-use std::sync::Arc;
 
 /// Trait automatically implemented on all objects that implement `Transport`. Provides some
 /// additional utilities.
@@ -42,23 +46,17 @@ pub trait TransportExt: Transport {
     /// # Example
     ///
     /// ```
-    /// use libp2p_yamux as yamux;
+    /// use libp2p::{core::upgrade, identity, Transport, TransportExt};
     /// use libp2p_noise as noise;
     /// use libp2p_tcp as tcp;
-    /// use libp2p::{
-    ///     core::upgrade,
-    ///     identity,
-    ///     TransportExt,
-    ///     Transport,
-    /// };
+    /// use libp2p_yamux as yamux;
     ///
     /// let id_keys = identity::Keypair::generate_ed25519();
     ///
     /// let transport = tcp::tokio::Transport::new(tcp::Config::default().nodelay(true))
     ///     .upgrade(upgrade::Version::V1)
     ///     .authenticate(
-    ///         noise::Config::new(&id_keys)
-    ///             .expect("Signing libp2p-noise static DH keypair failed."),
+    ///         noise::Config::new(&id_keys).expect("Signing libp2p-noise static DH keypair failed."),
     ///     )
     ///     .multiplex(yamux::Config::default())
     ///     .boxed();

@@ -35,9 +35,11 @@ mod proto {
     pub(crate) use self::floodsub::pb::{mod_RPC::SubOpts, Message, RPC};
 }
 
-pub use self::layer::{Floodsub, FloodsubEvent};
-pub use self::protocol::{FloodsubMessage, FloodsubRpc};
-pub use self::topic::Topic;
+pub use self::{
+    layer::{Floodsub, FloodsubEvent},
+    protocol::{FloodsubMessage, FloodsubRpc},
+    topic::Topic,
+};
 
 /// Configuration options for the Floodsub protocol.
 #[derive(Debug, Clone)]

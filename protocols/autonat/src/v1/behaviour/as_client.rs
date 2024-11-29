@@ -18,12 +18,12 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::ResponseError;
-
-use super::{
-    Action, AutoNatCodec, Config, DialRequest, DialResponse, Event, HandleInnerEvent, NatStatus,
-    ProbeId,
+use std::{
+    collections::{HashMap, HashSet, VecDeque},
+    task::{Context, Poll},
+    time::Duration,
 };
+
 use futures::FutureExt;
 use futures_timer::Delay;
 use libp2p_core::Multiaddr;
@@ -31,12 +31,13 @@ use libp2p_identity::PeerId;
 use libp2p_request_response::{self as request_response, OutboundFailure, OutboundRequestId};
 use libp2p_swarm::{ConnectionId, ListenAddresses, ToSwarm};
 use rand::{seq::SliceRandom, thread_rng};
-use std::{
-    collections::{HashMap, HashSet, VecDeque},
-    task::{Context, Poll},
-    time::Duration,
-};
 use web_time::Instant;
+
+use super::{
+    Action, AutoNatCodec, Config, DialRequest, DialResponse, Event, HandleInnerEvent, NatStatus,
+    ProbeId,
+};
+use crate::ResponseError;
 
 /// Outbound probe failed or was aborted.
 #[derive(Debug)]

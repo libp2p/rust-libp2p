@@ -18,6 +18,8 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
+use std::{error::Error, time::Duration};
+
 use futures::StreamExt;
 use libp2p::{
     multiaddr::Protocol,
@@ -25,8 +27,6 @@ use libp2p::{
     swarm::{NetworkBehaviour, SwarmEvent},
     tcp, yamux, Multiaddr,
 };
-use std::error::Error;
-use std::time::Duration;
 use tracing_subscriber::EnvFilter;
 
 const NAMESPACE: &str = "rendezvous";

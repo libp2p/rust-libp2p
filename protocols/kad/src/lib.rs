@@ -54,36 +54,34 @@ mod proto {
     };
 }
 
+use std::num::NonZeroUsize;
+
 pub use addresses::Addresses;
 pub use behaviour::{
     AddProviderContext, AddProviderError, AddProviderOk, AddProviderPhase, AddProviderResult,
-    BootstrapError, BootstrapOk, BootstrapResult, GetClosestPeersError, GetClosestPeersOk,
-    GetClosestPeersResult, GetProvidersError, GetProvidersOk, GetProvidersResult, GetRecordError,
-    GetRecordOk, GetRecordResult, InboundRequest, Mode, NoKnownPeers, PeerInfo, PeerRecord,
-    PutRecordContext, PutRecordError, PutRecordOk, PutRecordPhase, PutRecordResult, QueryInfo,
-    QueryMut, QueryRef, QueryResult, QueryStats, RoutingUpdate,
-};
-pub use behaviour::{
-    Behaviour, BucketInserts, Caching, Config, Event, ProgressStep, Quorum, StoreInserts,
+    Behaviour, BootstrapError, BootstrapOk, BootstrapResult, BucketInserts, Caching, Config, Event,
+    GetClosestPeersError, GetClosestPeersOk, GetClosestPeersResult, GetProvidersError,
+    GetProvidersOk, GetProvidersResult, GetRecordError, GetRecordOk, GetRecordResult,
+    InboundRequest, Mode, NoKnownPeers, PeerInfo, PeerRecord, ProgressStep, PutRecordContext,
+    PutRecordError, PutRecordOk, PutRecordPhase, PutRecordResult, QueryInfo, QueryMut, QueryRef,
+    QueryResult, QueryStats, Quorum, RoutingUpdate, StoreInserts,
 };
 pub use kbucket::{
     Distance as KBucketDistance, EntryView, KBucketRef, Key as KBucketKey, NodeStatus,
 };
+use libp2p_swarm::StreamProtocol;
 pub use protocol::{ConnectionType, KadPeer};
 pub use query::QueryId;
 pub use record::{store, Key as RecordKey, ProviderRecord, Record};
-
-use libp2p_swarm::StreamProtocol;
-use std::num::NonZeroUsize;
 
 /// The `k` parameter of the Kademlia specification.
 ///
 /// This parameter determines:
 ///
 ///   1) The (fixed) maximum number of nodes in a bucket.
-///   2) The (default) replication factor, which in turn determines:
-///       a) The number of closer peers returned in response to a request.
-///       b) The number of closest peers to a key to search for in an iterative query.
+///   2) The (default) replication factor, which in turn determines: a) The number of closer peers
+///      returned in response to a request. b) The number of closest peers to a key to search for in
+///      an iterative query.
 ///
 /// The choice of (1) is fixed to this constant. The replication factor is configurable
 /// but should generally be no greater than `K_VALUE`. All nodes in a Kademlia

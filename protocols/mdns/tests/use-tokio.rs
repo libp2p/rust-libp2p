@@ -17,11 +17,12 @@
 // LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.use futures::StreamExt;
+use std::time::Duration;
+
 use futures::future::Either;
 use libp2p_mdns::{tokio::Behaviour, Config, Event};
 use libp2p_swarm::{Swarm, SwarmEvent};
 use libp2p_swarm_test::SwarmExt as _;
-use std::time::Duration;
 use tracing_subscriber::EnvFilter;
 
 #[tokio::test]

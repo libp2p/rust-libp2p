@@ -20,15 +20,21 @@
 
 #![doc = include_str!("../README.md")]
 
-use std::num::NonZeroUsize;
-use std::ops::Add;
-use std::time::{Duration, Instant};
+use std::{
+    num::NonZeroUsize,
+    ops::Add,
+    time::{Duration, Instant},
+};
 
 use anyhow::{bail, Result};
 use clap::Parser;
 use futures::StreamExt;
-use libp2p::swarm::{StreamProtocol, SwarmEvent};
-use libp2p::{bytes::BufMut, identity, kad, noise, tcp, yamux, PeerId};
+use libp2p::{
+    bytes::BufMut,
+    identity, kad, noise,
+    swarm::{StreamProtocol, SwarmEvent},
+    tcp, yamux, PeerId,
+};
 use tracing_subscriber::EnvFilter;
 
 const BOOTNODES: [&str; 4] = [

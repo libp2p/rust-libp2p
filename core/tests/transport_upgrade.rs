@@ -18,18 +18,19 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
+use std::{io, pin::Pin};
+
 use futures::prelude::*;
-use libp2p_core::transport::{DialOpts, ListenerId, MemoryTransport, PortUse, Transport};
-use libp2p_core::upgrade::{
-    self, InboundConnectionUpgrade, OutboundConnectionUpgrade, UpgradeInfo,
+use libp2p_core::{
+    transport::{DialOpts, ListenerId, MemoryTransport, PortUse, Transport},
+    upgrade::{self, InboundConnectionUpgrade, OutboundConnectionUpgrade, UpgradeInfo},
+    Endpoint,
 };
-use libp2p_core::Endpoint;
 use libp2p_identity as identity;
 use libp2p_mplex::MplexConfig;
 use libp2p_noise as noise;
 use multiaddr::{Multiaddr, Protocol};
 use rand::random;
-use std::{io, pin::Pin};
 
 #[derive(Clone)]
 struct HelloUpgrade {}

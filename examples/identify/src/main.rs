@@ -20,9 +20,10 @@
 
 #![doc = include_str!("../README.md")]
 
+use std::{error::Error, time::Duration};
+
 use futures::StreamExt;
 use libp2p::{core::multiaddr::Multiaddr, identify, noise, swarm::SwarmEvent, tcp, yamux};
-use std::{error::Error, time::Duration};
 use tracing_subscriber::EnvFilter;
 
 #[tokio::main]

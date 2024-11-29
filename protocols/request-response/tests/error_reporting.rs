@@ -1,3 +1,5 @@
+use std::{io, iter, pin::pin, time::Duration};
+
 use anyhow::{bail, Result};
 use async_std::task::sleep;
 use async_trait::async_trait;
@@ -10,9 +12,6 @@ use libp2p_swarm_test::SwarmExt;
 use request_response::{
     Codec, InboundFailure, InboundRequestId, OutboundFailure, OutboundRequestId, ResponseChannel,
 };
-use std::pin::pin;
-use std::time::Duration;
-use std::{io, iter};
 use tracing_subscriber::EnvFilter;
 
 #[async_std::test]

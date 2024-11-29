@@ -18,6 +18,13 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
+use std::{
+    collections::{HashMap, HashSet},
+    convert::Infallible,
+    fmt,
+    task::{Context, Poll},
+};
+
 use libp2p_core::{transport::PortUse, ConnectedPoint, Endpoint, Multiaddr};
 use libp2p_identity::PeerId;
 use libp2p_swarm::{
@@ -25,22 +32,22 @@ use libp2p_swarm::{
     dummy, ConnectionClosed, ConnectionDenied, ConnectionId, FromSwarm, NetworkBehaviour, THandler,
     THandlerInEvent, THandlerOutEvent, ToSwarm,
 };
-use std::collections::{HashMap, HashSet};
-use std::fmt;
-use std::task::{Context, Poll};
-use void::Void;
 
 /// A [`NetworkBehaviour`] that enforces a set of [`ConnectionLimits`].
 ///
-/// For these limits to take effect, this needs to be composed into the behaviour tree of your application.
+/// For these limits to take effect, this needs to be composed
+/// into the behaviour tree of your application.
 ///
-/// If a connection is denied due to a limit, either a [`SwarmEvent::IncomingConnectionError`](libp2p_swarm::SwarmEvent::IncomingConnectionError)
-/// or [`SwarmEvent::OutgoingConnectionError`](libp2p_swarm::SwarmEvent::OutgoingConnectionError) will be emitted.
-/// The [`ListenError::Denied`](libp2p_swarm::ListenError::Denied) and respectively the [`DialError::Denied`](libp2p_swarm::DialError::Denied) variant
-/// contain a [`ConnectionDenied`] type that can be downcast to [`Exceeded`] error if (and only if) **this**
-/// behaviour denied the connection.
+/// If a connection is denied due to a limit, either a
+/// [`SwarmEvent::IncomingConnectionError`](libp2p_swarm::SwarmEvent::IncomingConnectionError)
+/// or [`SwarmEvent::OutgoingConnectionError`](libp2p_swarm::SwarmEvent::OutgoingConnectionError)
+/// will be emitted. The [`ListenError::Denied`](libp2p_swarm::ListenError::Denied) and respectively
+/// the [`DialError::Denied`](libp2p_swarm::DialError::Denied) variant
+/// contain a [`ConnectionDenied`] type that can be downcast to [`Exceeded`] error if (and only if)
+/// **this** behaviour denied the connection.
 ///
-/// If you employ multiple [`NetworkBehaviour`]s that manage connections, it may also be a different error.
+/// If you employ multiple [`NetworkBehaviour`]s that manage connections,
+/// it may also be a different error.
 ///
 /// # Example
 ///
@@ -53,9 +60,9 @@ use void::Void;
 /// #[derive(NetworkBehaviour)]
 /// # #[behaviour(prelude = "libp2p_swarm::derive_prelude")]
 /// struct MyBehaviour {
-///   identify: identify::Behaviour,
-///   ping: ping::Behaviour,
-///   limits: connection_limits::Behaviour
+///     identify: identify::Behaviour,
+///     ping: ping::Behaviour,
+///     limits: connection_limits::Behaviour,
 /// }
 /// ```
 pub struct Behaviour {
@@ -203,7 +210,7 @@ impl ConnectionLimits {
 
 impl NetworkBehaviour for Behaviour {
     type ConnectionHandler = dummy::ConnectionHandler;
-    type ToSwarm = Void;
+    type ToSwarm = Infallible;
 
     fn handle_pending_inbound_connection(
         &mut self,
@@ -357,7 +364,7 @@ impl NetworkBehaviour for Behaviour {
     ) {
         // TODO: remove when Rust 1.82 is MSRV
         #[allow(unreachable_patterns)]
-        void::unreachable(event)
+        libp2p_core::util::unreachable(event)
     }
 
     fn poll(&mut self, _: &mut Context<'_>) -> Poll<ToSwarm<Self::ToSwarm, THandlerInEvent<Self>>> {
@@ -367,13 +374,15 @@ impl NetworkBehaviour for Behaviour {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use libp2p_swarm::{
-        behaviour::toggle::Toggle, dial_opts::DialOpts, dial_opts::PeerCondition, DialError,
-        ListenError, Swarm, SwarmEvent,
+        behaviour::toggle::Toggle,
+        dial_opts::{DialOpts, PeerCondition},
+        DialError, ListenError, Swarm, SwarmEvent,
     };
     use libp2p_swarm_test::SwarmExt;
     use quickcheck::*;
+
+    use super::*;
 
     #[test]
     fn max_outgoing() {
@@ -551,7 +560,7 @@ mod tests {
 
     impl NetworkBehaviour for ConnectionDenier {
         type ConnectionHandler = dummy::ConnectionHandler;
-        type ToSwarm = Void;
+        type ToSwarm = Infallible;
 
         fn handle_established_inbound_connection(
             &mut self,
@@ -590,7 +599,7 @@ mod tests {
         ) {
             // TODO: remove when Rust 1.82 is MSRV
             #[allow(unreachable_patterns)]
-            void::unreachable(event)
+            libp2p_core::util::unreachable(event)
         }
 
         fn poll(

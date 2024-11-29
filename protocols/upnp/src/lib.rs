@@ -24,7 +24,6 @@
 //! implements the [`libp2p_swarm::NetworkBehaviour`] trait.
 //! This struct will automatically try to map the ports externally to internal
 //! addresses on the gateway.
-//!
 
 #![cfg_attr(docsrs, feature(doc_cfg, doc_auto_cfg))]
 
