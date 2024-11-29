@@ -20,7 +20,7 @@
 
 #![doc = include_str!("../../README.md")]
 
-use std::{error::Error, net::Ipv4Addr, time::Duration};
+use std::{error::Error, net::Ipv4Addr};
 
 use clap::Parser;
 use futures::StreamExt;

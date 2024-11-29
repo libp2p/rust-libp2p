@@ -20,7 +20,7 @@
 
 #![doc = include_str!("../README.md")]
 
-use std::{error::Error, str::FromStr, time::Duration};
+use std::{error::Error, str::FromStr};
 
 use clap::Parser;
 use futures::{executor::block_on, future::FutureExt, stream::StreamExt};

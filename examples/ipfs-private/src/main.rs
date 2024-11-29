@@ -20,7 +20,7 @@
 
 #![doc = include_str!("../README.md")]
 
-use std::{env, error::Error, fs, path::Path, str::FromStr, time::Duration};
+use std::{env, error::Error, fs, path::Path, str::FromStr};
 
 use either::Either;
 use futures::prelude::*;

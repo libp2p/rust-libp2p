@@ -1,9 +1,6 @@
 #![allow(non_upper_case_globals)]
 
-use std::{
-    net::{Ipv4Addr, SocketAddr},
-    time::Duration,
-};
+use std::net::{Ipv4Addr, SocketAddr};
 
 use anyhow::Result;
 use axum::{

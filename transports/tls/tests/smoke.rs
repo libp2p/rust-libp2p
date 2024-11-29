@@ -1,5 +1,3 @@
-use std::time::Duration;
-
 use futures::{future, StreamExt};
 use libp2p_core::{multiaddr::Protocol, transport::MemoryTransport, upgrade::Version, Transport};
 use libp2p_swarm::{dummy, Config, Swarm, SwarmEvent};

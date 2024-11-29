@@ -20,7 +20,7 @@
 
 #![doc = include_str!("../README.md")]
 
-use std::{error::Error, time::Duration};
+use std::error::Error;
 
 use futures::stream::StreamExt;
 use libp2p::{
