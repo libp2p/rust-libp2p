@@ -2,6 +2,8 @@
 
 - Deprecate `void` crate.
   See [PR 5676](https://github.com/libp2p/rust-libp2p/pull/5676).
+- Update default for idle-connection-timeout to 10s.
+  See [PR 4967](https://github.com/libp2p/rust-libp2p/pull/4967).
 
 ## 0.54.1
 
@@ -45,8 +47,6 @@
   See [PR 4821](https://github.com/libp2p/rust-libp2p/pull/4821).
 - Introduce `SwarmBuilder::with_dns_config`.
   See [PR 4808](https://github.com/libp2p/rust-libp2p/pull/4808).
-- Update default for idle-connection-timeout to 10s.
-  See [PR 4967](https://github.com/libp2p/rust-libp2p/pull/4967).
 
 ## 0.53.0
 
