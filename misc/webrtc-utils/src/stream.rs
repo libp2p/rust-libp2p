@@ -26,6 +26,7 @@ use std::{
     io,
     pin::Pin,
     task::{Context, Poll},
+    time::Duration,
 };
 
 use crate::proto::{Flag, Message};
@@ -51,6 +52,8 @@ const VARINT_LEN: usize = 2;
 const PROTO_OVERHEAD: usize = 5;
 /// Maximum length of data, in bytes.
 const MAX_DATA_LEN: usize = MAX_MSG_LEN - VARINT_LEN - PROTO_OVERHEAD;
+/// FIN_ACK timeout
+const FIN_ACK_TIMEOUT: Duration = Duration::from_secs(10);
 
 pub use drop_listener::DropListener;
 /// A stream backed by a WebRTC data channel.
