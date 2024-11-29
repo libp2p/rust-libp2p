@@ -28,8 +28,10 @@ use std::{
     time::Duration,
 };
 
+#[allow(unused_imports)]
 use futures::{FutureExt, StreamExt};
 use futures_timer::Delay;
+use hashlink::LinkedHashMap;
 use libp2p_core::{
     multiaddr::Protocol::{Ip4, Ip6},
     transport::PortUse,
@@ -46,7 +48,6 @@ use prometheus_client::registry::Registry;
 use quick_protobuf::{MessageWrite, Writer};
 use rand::{seq::SliceRandom, thread_rng};
 use web_time::{Instant, SystemTime};
-use hashlink::LinkedHashMap;
 
 use crate::{
     backoff::BackoffStorage,
@@ -64,12 +65,12 @@ use crate::{
     topic::{Hasher, Topic, TopicHash},
     transform::{DataTransform, IdentityTransform},
     types::{
-        ControlAction, Graft, IHave, IWant, IDontWant, Message, MessageAcceptance, MessageId, PeerConnections,
-        PeerInfo, PeerKind, Prune, RawMessage, RpcOut, Subscription, SubscriptionAction,
+        ControlAction, Graft, IDontWant, IHave, IWant, Message, MessageAcceptance, MessageId,
+        PeerConnections, PeerInfo, PeerKind, Prune, RawMessage, RpcOut, Subscription,
+        SubscriptionAction,
     },
     FailedMessages, PublishError, SubscriptionError, TopicScoreParams, ValidationError,
 };
-
 
 #[cfg(test)]
 mod tests;
@@ -2583,7 +2584,6 @@ where
         }
     }
 
-
     /// Helper function which sends an IDONTWANT message to mesh\[topic\] peers.
     fn send_idontwant(
         &mut self,
@@ -2705,7 +2705,7 @@ where
                         .sender
                         .send_message(RpcOut::Forward {
                             message: message.clone(),
-                            timeout: Delay::new(self.config.forward_queue_duration())
+                            timeout: Delay::new(self.config.forward_queue_duration()),
                         })
                         .is_err()
                     {
@@ -3330,7 +3330,7 @@ where
 
         // update scores
         if let Some((peer_score, _, delay)) = &mut self.peer_score {
-            if delay.poll_unpin(cx).is_ready(){
+            if delay.poll_unpin(cx).is_ready() {
                 peer_score.refresh_scores();
             }
         }

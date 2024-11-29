@@ -22,6 +22,7 @@
 use std::{collections::BTreeSet, fmt, fmt::Debug};
 
 use futures_timer::Delay;
+use hashlink::LinkedHashMap;
 use libp2p_identity::PeerId;
 use libp2p_swarm::ConnectionId;
 use prometheus_client::encoding::EncodeLabelValue;
@@ -29,7 +30,6 @@ use quick_protobuf::MessageWrite;
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 use std::time::Instant;
-use hashlink::LinkedHashMap;
 
 use crate::{rpc::Sender, rpc_proto::proto, TopicHash};
 
@@ -391,7 +391,7 @@ impl From<RpcOut> for proto::RPC {
                     iwant: vec![],
                     graft: vec![],
                     prune: vec![],
-                    idontwant:vec![]
+                    idontwant: vec![],
                 }),
             },
             RpcOut::IWant(IWant { message_ids }) => proto::RPC {
@@ -404,7 +404,7 @@ impl From<RpcOut> for proto::RPC {
                     }],
                     graft: vec![],
                     prune: vec![],
-                    idontwant:vec![]
+                    idontwant: vec![],
                 }),
             },
             RpcOut::Graft(Graft { topic_hash }) => proto::RPC {
@@ -417,7 +417,7 @@ impl From<RpcOut> for proto::RPC {
                         topic_id: Some(topic_hash.into_string()),
                     }],
                     prune: vec![],
-                    idontwant:vec![]
+                    idontwant: vec![],
                 }),
             },
             RpcOut::Prune(Prune {
@@ -444,7 +444,7 @@ impl From<RpcOut> for proto::RPC {
                                 .collect(),
                             backoff,
                         }],
-                        idontwant:vec![]
+                        idontwant: vec![],
                     }),
                 }
             }
@@ -520,7 +520,6 @@ impl From<Rpc> for proto::RPC {
             graft: Vec::new(),
             prune: Vec::new(),
             idontwant: Vec::new(),
-
         };
 
         let empty_control_msg = rpc.control_msgs.is_empty();
