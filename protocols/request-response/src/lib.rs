@@ -708,18 +708,11 @@ where
         }
     }
 
-    fn on_dial_failure(
-        &mut self,
-        DialFailure {
-            peer_id,
-            connection_id,
-            ..
-        }: DialFailure,
-    ) {
-        let key = if let Some(peer_id) = peer_id {
+    fn on_dial_failure(&mut self, failure: DialFailure) {
+        let key = if let Some(peer_id) = failure.peer_id {
             peer_id.into()
         } else {
-            connection_id.into()
+            failure.connection_id.into()
         };
 
         // If there are pending outgoing requests when a dial failure occurs,
@@ -732,7 +725,7 @@ where
             for request in pending {
                 self.pending_events
                     .push_back(ToSwarm::GenerateEvent(Event::OutboundFailure {
-                        peer: peer_id,
+                        peer: failure.peer_id,
                         request_id: request.request_id,
                         error: OutboundFailure::DialFailure,
                     }));
