@@ -22,6 +22,7 @@
 
 use std::{future, net::Ipv4Addr, thread::sleep};
 
+use futures::StreamExt;
 use byteorder::{BigEndian, ByteOrder};
 use libp2p_core::ConnectedPoint;
 use rand::Rng;

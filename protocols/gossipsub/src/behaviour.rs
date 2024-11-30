@@ -28,8 +28,7 @@ use std::{
     time::Duration,
 };
 
-#[allow(unused_imports)]
-use futures::{FutureExt, StreamExt};
+use futures::FutureExt;
 use futures_timer::Delay;
 use hashlink::LinkedHashMap;
 use libp2p_core::{
