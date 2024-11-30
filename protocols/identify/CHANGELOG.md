@@ -1,6 +1,6 @@
 ## 0.46.1
 - Discard `Info`s received from remote peers that contain a public key that doesn't match their peer ID.
-  See [PR TODO](https://github.com/libp2p/rust-libp2p/pull/TODO).
+  See [PR 5707](https://github.com/libp2p/rust-libp2p/pull/5707).
 
 ## 0.46.0
 
