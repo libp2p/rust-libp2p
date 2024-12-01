@@ -2595,7 +2595,7 @@ where
 
         let iwant_peers = self.gossip_promises.peers_for_message(msg_id);
 
-        let recipient_peers: Vec<PeerId>= mesh_peers
+        let recipient_peers: Vec<PeerId> = mesh_peers
             .iter()
             .chain(iwant_peers.iter())
             .filter(|peer_id| {
@@ -2616,9 +2616,12 @@ where
                 continue;
             }
 
-            self.send_message(peer_id, RpcOut::IDontWant(IDontWant{
-                message_ids: vec![msg_id.clone()],
-            }));
+            self.send_message(
+                peer_id,
+                RpcOut::IDontWant(IDontWant {
+                    message_ids: vec![msg_id.clone()],
+                }),
+            );
         }
     }
 
@@ -2686,10 +2689,13 @@ where
 
                 tracing::debug!(%peer_id, message=%msg_id, "Sending message to peer");
 
-                self.send_message(*peer_id,RpcOut::Forward {
-                    message: message.clone(),
-                    timeout: Delay::new(self.config.forward_queue_duration()),
-                });
+                self.send_message(
+                    *peer_id,
+                    RpcOut::Forward {
+                        message: message.clone(),
+                        timeout: Delay::new(self.config.forward_queue_duration()),
+                    },
+                );
             } else {
                 tracing::error!(peer = %peer_id,
                     "Could not FORWARD, peer doesn't exist in connected peer list");

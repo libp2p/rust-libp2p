@@ -35,12 +35,11 @@ use crate::{
     rpc_proto::proto,
     topic::TopicHash,
     types::{
-        ControlAction, Graft, IDontWant, IHave, IWant, MessageId, PeerInfo, PeerKind, Prune, RawMessage, Rpc,
-        Subscription, SubscriptionAction,
+        ControlAction, Graft, IDontWant, IHave, IWant, MessageId, PeerInfo, PeerKind, Prune,
+        RawMessage, Rpc, Subscription, SubscriptionAction,
     },
     ValidationError,
 };
-
 
 pub(crate) const SIGNING_PREFIX: &[u8] = b"libp2p-pubsub:";
 
@@ -78,7 +77,11 @@ impl Default for ProtocolConfig {
         Self {
             max_transmit_size: 65536,
             validation_mode: ValidationMode::Strict,
-            protocol_ids: vec![GOSSIPSUB_1_2_0_PROTOCOL, GOSSIPSUB_1_1_0_PROTOCOL, GOSSIPSUB_1_0_0_PROTOCOL],
+            protocol_ids: vec![
+                GOSSIPSUB_1_2_0_PROTOCOL,
+                GOSSIPSUB_1_1_0_PROTOCOL,
+                GOSSIPSUB_1_0_0_PROTOCOL,
+            ],
         }
     }
 }
