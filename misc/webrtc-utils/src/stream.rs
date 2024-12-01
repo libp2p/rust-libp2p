@@ -26,7 +26,7 @@ use std::{
     io,
     pin::Pin,
     task::{Context, Poll},
-    time::Duration,
+    time::{Duration, Instant},
 };
 
 use crate::proto::{Flag, Message};
@@ -66,6 +66,7 @@ pub struct Stream<T> {
     read_buffer: Bytes,
     /// Dropping this will close the oneshot and notify the receiver by emitting `Canceled`.
     drop_notifier: Option<oneshot::Sender<GracefullyClosed>>,
+    fin_ack_deadline: Option<Instant>,
 }
 
 impl<T> Stream<T>
@@ -81,6 +82,7 @@ where
             state: State::Open,
             read_buffer: Bytes::default(),
             drop_notifier: Some(sender),
+            fin_ack_deadline: None,
         };
         let listener = DropListener::new(framed_dc::new(data_channel), receiver);
 
@@ -146,6 +148,16 @@ where
                 Some((flag, message)) => {
                     if let Some(flag) = flag {
                         state.handle_inbound_flag(flag, read_buffer);
+
+                        // Send FIN_ACK in response to FIN
+                        if flag == Flag::FIN && state.should_send_fin_ack() {
+                            ready!(io.poll_ready_unpin(cx))?;
+                            io.start_send_unpin(Message {
+                                flag: Some(Flag::FIN_ACK),
+                                message: None,
+                            })?;
+                            ready!(io.poll_flush_unpin(cx))?;
+                        }
                     }
 
                     debug_assert!(read_buffer.is_empty());
