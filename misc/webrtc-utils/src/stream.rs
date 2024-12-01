@@ -242,19 +242,33 @@ where
                     })?;
                     self.state.close_write_message_sent();
 
+                    // Set deadline when sending FIN
+                    self.fin_ack_deadline = Some(Instant::now() + FIN_ACK_TIMEOUT);
+
                     continue;
                 }
                 Some(Closing::MessageSent) => {
                     ready!(self.io.poll_flush_unpin(cx))?;
 
-                    self.state.write_closed();
-                    let _ = self
-                        .drop_notifier
-                        .take()
-                        .expect("to not close twice")
-                        .send(GracefullyClosed {});
+                    // Check if we've received FIN_ACK or deadline has passed
+                    if self.state.fin_ack_received()
+                        || self
+                            .fin_ack_deadline
+                            .map_or(false, |deadline| Instant::now() >= deadline)
+                    {
+                        if !self.state.fin_ack_received() {
+                            tracing::warn!("FIN_ACK timeout, forcing close");
+                        }
+                        self.state.write_closed();
+                        let _ = self
+                            .drop_notifier
+                            .take()
+                            .expect("to not close twice")
+                            .send(GracefullyClosed {});
+                        return Poll::Ready(Ok(()));
+                    }
 
-                    return Poll::Ready(Ok(()));
+                    return Poll::Pending;
                 }
                 None => return Poll::Ready(Ok(())),
             }
