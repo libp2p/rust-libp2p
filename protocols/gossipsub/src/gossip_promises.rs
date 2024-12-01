@@ -41,7 +41,7 @@ impl GossipPromises {
         self.promises.contains_key(message)
     }
 
-    ///Get the peers we sent IWANT the input message id.
+    /// Get the peers we sent IWANT the input message id.
     pub(crate) fn peers_for_message(&self, message_id: &MessageId) -> Vec<PeerId> {
         self.promises
             .get(message_id)

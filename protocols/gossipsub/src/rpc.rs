@@ -45,7 +45,7 @@ pub(crate) struct Sender {
 }
 
 impl Sender {
-    /// Create a RpcSende
+    /// Create a RpcSender.
     pub(crate) fn new(cap: usize) -> Sender {
         // We intentionally do not bound the channel, as we still need to send control messages
         // such as `GRAFT`, `PRUNE`, `SUBSCRIBE`, and `UNSUBSCRIBE`.

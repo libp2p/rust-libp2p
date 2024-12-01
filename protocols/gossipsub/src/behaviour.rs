@@ -1658,7 +1658,6 @@ where
                     &raw_message.topic,
                     RejectReason::BlackListedPeer,
                 );
-                // gossip_promises.reject_message(msg_id, &RejectReason::BlackListedPeer);
             }
             return false;
         }
@@ -2596,43 +2595,30 @@ where
 
         let iwant_peers = self.gossip_promises.peers_for_message(msg_id);
 
-        let recipient_peers = mesh_peers
+        let recipient_peers: Vec<PeerId>= mesh_peers
             .iter()
             .chain(iwant_peers.iter())
             .filter(|peer_id| {
                 *peer_id != propagation_source && Some(*peer_id) != message.source.as_ref()
-            });
+            })
+            .cloned()
+            .collect();
 
         for peer_id in recipient_peers {
-            let Some(peer) = self.connected_peers.get_mut(peer_id) else {
+            let Some(peer) = self.connected_peers.get_mut(&peer_id) else {
                 tracing::error!(peer = %peer_id,
                     "Could not IDONTWANT, peer doesn't exist in connected peer list");
                 continue;
             };
 
             // Only gossipsub 1.2 peers support IDONTWANT.
-            if peer.kind != PeerKind::Gossipsubv1_2_beta {
+            if peer.kind != PeerKind::Gossipsubv1_2 {
                 continue;
             }
 
-            if peer
-                .sender
-                .send_message(RpcOut::IDontWant(IDontWant {
-                    message_ids: vec![msg_id.clone()],
-                }))
-                .is_err()
-            {
-                tracing::warn!(peer=%peer_id, "Send Queue full. Could not send IDONTWANT");
-
-                if let Some((peer_score, ..)) = &mut self.peer_score {
-                    peer_score.failed_message_slow_peer(peer_id);
-                }
-                // Increment failed message count
-                self.failed_messages
-                    .entry(*peer_id)
-                    .or_default()
-                    .non_priority += 1;
-            }
+            self.send_message(peer_id, RpcOut::IDontWant(IDontWant{
+                message_ids: vec![msg_id.clone()],
+            }));
         }
     }
 
@@ -2691,43 +2677,26 @@ where
         }
 
         // forward the message to peers
-        if !recipient_peers.is_empty() {
-            for peer_id in recipient_peers.iter() {
-                if let Some(peer) = self.connected_peers.get_mut(peer_id) {
-                    if peer.dont_send.get(msg_id).is_some() {
-                        tracing::debug!(%peer_id, message=%msg_id, "Peer doesn't want message");
-                        continue;
-                    }
-
-                    tracing::debug!(%peer_id, message=%msg_id, "Sending message to peer");
-                    if peer
-                        .sender
-                        .send_message(RpcOut::Forward {
-                            message: message.clone(),
-                            timeout: Delay::new(self.config.forward_queue_duration()),
-                        })
-                        .is_err()
-                    {
-                        // Downscore the peer
-                        if let Some((peer_score, ..)) = &mut self.peer_score {
-                            peer_score.failed_message_slow_peer(peer_id);
-                        }
-                        // Increment the failed message count
-                        self.failed_messages
-                            .entry(*peer_id)
-                            .or_default()
-                            .non_priority += 1;
-                    }
-                } else {
-                    tracing::error!(peer = %peer_id,
-                        "Could not FORWARD, peer doesn't exist in connected peer list");
+        for peer_id in recipient_peers.iter() {
+            if let Some(peer) = self.connected_peers.get_mut(peer_id) {
+                if peer.dont_send.get(msg_id).is_some() {
+                    tracing::debug!(%peer_id, message=%msg_id, "Peer doesn't want message");
+                    continue;
                 }
+
+                tracing::debug!(%peer_id, message=%msg_id, "Sending message to peer");
+
+                self.send_message(*peer_id,RpcOut::Forward {
+                    message: message.clone(),
+                    timeout: Delay::new(self.config.forward_queue_duration()),
+                });
+            } else {
+                tracing::error!(peer = %peer_id,
+                    "Could not FORWARD, peer doesn't exist in connected peer list");
             }
-            tracing::debug!("Completed forwarding message");
-            true
-        } else {
-            false
         }
+        tracing::debug!("Completed forwarding message");
+        true
     }
 
     /// Constructs a [`RawMessage`] performing message signing if required.

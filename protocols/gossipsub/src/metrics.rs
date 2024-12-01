@@ -345,7 +345,7 @@ impl Metrics {
             let metric = Counter::default();
             registry.register(
                 "idontwant_msgs_ids",
-                "The number of msg_id's we have received in every IDONTWANT control message.",
+                "The number of msg_id's we have received in every total of all IDONTWANT control message.",
                 metric.clone(),
             );
             metric
