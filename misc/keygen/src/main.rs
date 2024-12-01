@@ -1,9 +1,12 @@
+use std::{
+    error::Error,
+    path::PathBuf,
+    str::{self, FromStr},
+    sync::mpsc,
+    thread,
+};
+
 use base64::prelude::*;
-use std::error::Error;
-use std::path::PathBuf;
-use std::str::{self, FromStr};
-use std::sync::mpsc;
-use std::thread;
 
 mod config;
 

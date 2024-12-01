@@ -19,15 +19,16 @@
 // DEALINGS IN THE SOFTWARE.
 
 use futures::{AsyncRead, AsyncWrite, AsyncWriteExt};
-use libp2p_core::upgrade::{InboundConnectionUpgrade, OutboundConnectionUpgrade};
-use libp2p_core::UpgradeInfo;
+use libp2p_core::{
+    upgrade::{InboundConnectionUpgrade, OutboundConnectionUpgrade},
+    UpgradeInfo,
+};
 use libp2p_identity as identity;
 use libp2p_identity::PeerId;
 use libp2p_noise as noise;
+pub use noise::Error;
 
 use crate::fingerprint::Fingerprint;
-
-pub use noise::Error;
 
 pub async fn inbound<T>(
     id_keys: identity::Keypair,
@@ -89,8 +90,9 @@ pub(crate) fn noise_prologue(
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use hex_literal::hex;
+
+    use super::*;
 
     #[test]
     fn noise_prologue_tests() {

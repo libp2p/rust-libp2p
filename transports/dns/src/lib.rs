@@ -40,26 +40,26 @@
 //! On Unix systems, if no custom configuration is given, [trust-dns-resolver]
 //! will try to parse the `/etc/resolv.conf` file. This approach comes with a
 //! few caveats to be aware of:
-//!   1) This fails (panics even!) if `/etc/resolv.conf` does not exist. This is
-//!      the case on all versions of Android.
-//!   2) DNS configuration is only evaluated during startup. Runtime changes are
-//!      thus ignored.
-//!   3) DNS resolution is obviously done in process and consequently not using
-//!      any system APIs (like libc's `gethostbyname`). Again this is
-//!      problematic on platforms like Android, where there's a lot of
-//!      complexity hidden behind the system APIs.
+//!   1) This fails (panics even!) if `/etc/resolv.conf` does not exist. This is the case on all
+//!      versions of Android.
+//!   2) DNS configuration is only evaluated during startup. Runtime changes are thus ignored.
+//!   3) DNS resolution is obviously done in process and consequently not using any system APIs
+//!      (like libc's `gethostbyname`). Again this is problematic on platforms like Android, where
+//!      there's a lot of complexity hidden behind the system APIs.
 //!
 //! If the implementation requires different characteristics, one should
 //! consider providing their own implementation of [`Transport`] or use
 //! platform specific APIs to extract the host's DNS configuration (if possible)
 //! and provide a custom [`ResolverConfig`].
 //!
-//![trust-dns-resolver]: https://docs.rs/trust-dns-resolver/latest/trust_dns_resolver/#dns-over-tls-and-dns-over-https
+//! [trust-dns-resolver]: https://docs.rs/trust-dns-resolver/latest/trust_dns_resolver/#dns-over-tls-and-dns-over-https
 
 #![cfg_attr(docsrs, feature(doc_cfg, doc_auto_cfg))]
 
 #[cfg(feature = "async-std")]
 pub mod async_std {
+    use std::{io, sync::Arc};
+
     use async_std_resolver::AsyncStdResolver;
     use futures::FutureExt;
     use hickory_resolver::{
@@ -67,7 +67,6 @@ pub mod async_std {
         system_conf,
     };
     use parking_lot::Mutex;
-    use std::{io, sync::Arc};
 
     /// A `Transport` wrapper for performing DNS lookups when dialing `Multiaddr`esses
     /// using `async-std` for all async I/O.
@@ -116,9 +115,10 @@ pub mod async_std {
 
 #[cfg(feature = "tokio")]
 pub mod tokio {
+    use std::sync::Arc;
+
     use hickory_resolver::{system_conf, TokioAsyncResolver};
     use parking_lot::Mutex;
-    use std::sync::Arc;
 
     /// A `Transport` wrapper for performing DNS lookups when dialing `Multiaddr`esses
     /// using `tokio` for all async I/O.
@@ -146,18 +146,9 @@ pub mod tokio {
     }
 }
 
-use async_trait::async_trait;
-use futures::{future::BoxFuture, prelude::*};
-use libp2p_core::{
-    multiaddr::{Multiaddr, Protocol},
-    transport::{DialOpts, ListenerId, TransportError, TransportEvent},
-};
-use parking_lot::Mutex;
-use smallvec::SmallVec;
-use std::io;
-use std::net::{Ipv4Addr, Ipv6Addr};
 use std::{
-    error, fmt, iter,
+    error, fmt, io, iter,
+    net::{Ipv4Addr, Ipv6Addr},
     ops::DerefMut,
     pin::Pin,
     str,
@@ -165,12 +156,24 @@ use std::{
     task::{Context, Poll},
 };
 
-pub use hickory_resolver::config::{ResolverConfig, ResolverOpts};
-pub use hickory_resolver::error::{ResolveError, ResolveErrorKind};
-use hickory_resolver::lookup::{Ipv4Lookup, Ipv6Lookup, TxtLookup};
-use hickory_resolver::lookup_ip::LookupIp;
-use hickory_resolver::name_server::ConnectionProvider;
-use hickory_resolver::AsyncResolver;
+use async_trait::async_trait;
+use futures::{future::BoxFuture, prelude::*};
+pub use hickory_resolver::{
+    config::{ResolverConfig, ResolverOpts},
+    error::{ResolveError, ResolveErrorKind},
+};
+use hickory_resolver::{
+    lookup::{Ipv4Lookup, Ipv6Lookup, TxtLookup},
+    lookup_ip::LookupIp,
+    name_server::ConnectionProvider,
+    AsyncResolver,
+};
+use libp2p_core::{
+    multiaddr::{Multiaddr, Protocol},
+    transport::{DialOpts, ListenerId, TransportError, TransportEvent},
+};
+use parking_lot::Mutex;
+use smallvec::SmallVec;
 
 /// The prefix for `dnsaddr` protocol TXT record lookups.
 const DNSADDR_PREFIX: &str = "_dnsaddr.";
@@ -191,7 +194,8 @@ const MAX_DNS_LOOKUPS: usize = 32;
 const MAX_TXT_RECORDS: usize = 16;
 
 /// A [`Transport`] for performing DNS lookups when dialing `Multiaddr`esses.
-/// You shouldn't need to use this type directly. Use [`tokio::Transport`] or [`async_std::Transport`] instead.
+/// You shouldn't need to use this type directly. Use [`tokio::Transport`] or
+/// [`async_std::Transport`] instead.
 #[derive(Debug)]
 pub struct Transport<T, R> {
     /// The underlying transport.
@@ -613,7 +617,6 @@ where
 
 #[cfg(all(test, any(feature = "tokio", feature = "async-std")))]
 mod tests {
-    use super::*;
     use futures::future::BoxFuture;
     use libp2p_core::{
         multiaddr::{Multiaddr, Protocol},
@@ -621,6 +624,8 @@ mod tests {
         Endpoint, Transport,
     };
     use libp2p_identity::PeerId;
+
+    use super::*;
 
     #[test]
     fn basic_resolve() {

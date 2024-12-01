@@ -1,11 +1,14 @@
+use std::collections::HashSet;
+
 use js_sys::{Array, Uint8Array};
 use libp2p_identity::PeerId;
 use multiaddr::{Multiaddr, Protocol};
 use multihash::Multihash;
-use std::collections::HashSet;
 
-use crate::bindings::{WebTransportHash, WebTransportOptions};
-use crate::Error;
+use crate::{
+    bindings::{WebTransportHash, WebTransportOptions},
+    Error,
+};
 
 pub(crate) struct Endpoint {
     pub(crate) host: String,
@@ -149,8 +152,9 @@ impl Endpoint {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use std::str::FromStr;
+
+    use super::*;
 
     fn multihash_from_str(s: &str) -> Multihash<64> {
         let (_base, bytes) = multibase::decode(s).unwrap();

@@ -10,9 +10,8 @@ use libp2p_core::{InboundUpgrade, Negotiated, OutboundUpgrade, StreamMuxer, Upgr
 #[cfg(feature = "relay")]
 use libp2p_identity::PeerId;
 
-use crate::SwarmBuilder;
-
 use super::*;
+use crate::SwarmBuilder;
 
 pub struct RelayPhase<T> {
     pub(crate) transport: T,

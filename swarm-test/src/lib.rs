@@ -18,27 +18,32 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
+use std::{fmt::Debug, future::IntoFuture, time::Duration};
+
 use async_trait::async_trait;
-use futures::future::{BoxFuture, Either};
-use futures::{FutureExt, StreamExt};
+use futures::{
+    future::{BoxFuture, Either},
+    FutureExt, StreamExt,
+};
 use libp2p_core::{multiaddr::Protocol, Multiaddr};
 use libp2p_identity::PeerId;
-use libp2p_swarm::dial_opts::PeerCondition;
-use libp2p_swarm::{dial_opts::DialOpts, NetworkBehaviour, Swarm, SwarmEvent};
-use std::fmt::Debug;
-use std::future::IntoFuture;
-use std::time::Duration;
+use libp2p_swarm::{
+    dial_opts::{DialOpts, PeerCondition},
+    NetworkBehaviour, Swarm, SwarmEvent,
+};
 
-/// An extension trait for [`Swarm`] that makes it easier to set up a network of [`Swarm`]s for tests.
+/// An extension trait for [`Swarm`] that makes it
+/// easier to set up a network of [`Swarm`]s for tests.
 #[async_trait]
 pub trait SwarmExt {
     type NB: NetworkBehaviour;
 
     /// Create a new [`Swarm`] with an ephemeral identity and the `async-std` runtime.
     ///
-    /// The swarm will use a [`libp2p_core::transport::MemoryTransport`] together with a [`libp2p_plaintext::Config`] authentication layer and
-    /// [`libp2p_yamux::Config`] as the multiplexer. However, these details should not be relied upon by the test
-    /// and may change at any time.
+    /// The swarm will use a [`libp2p_core::transport::MemoryTransport`] together with a
+    /// [`libp2p_plaintext::Config`] authentication layer and [`libp2p_yamux::Config`] as the
+    /// multiplexer. However, these details should not be relied
+    /// upon by the test and may change at any time.
     #[cfg(feature = "async-std")]
     fn new_ephemeral(behaviour_fn: impl FnOnce(libp2p_identity::Keypair) -> Self::NB) -> Self
     where
@@ -46,19 +51,22 @@ pub trait SwarmExt {
 
     /// Create a new [`Swarm`] with an ephemeral identity and the `tokio` runtime.
     ///
-    /// The swarm will use a [`libp2p_core::transport::MemoryTransport`] together with a [`libp2p_plaintext::Config`] authentication layer and
-    /// [`libp2p_yamux::Config`] as the multiplexer. However, these details should not be relied upon by the test
-    /// and may change at any time.
+    /// The swarm will use a [`libp2p_core::transport::MemoryTransport`] together with a
+    /// [`libp2p_plaintext::Config`] authentication layer and [`libp2p_yamux::Config`] as the
+    /// multiplexer. However, these details should not be relied
+    /// upon by the test and may change at any time.
     #[cfg(feature = "tokio")]
     fn new_ephemeral_tokio(behaviour_fn: impl FnOnce(libp2p_identity::Keypair) -> Self::NB) -> Self
     where
         Self: Sized;
 
-    /// Establishes a connection to the given [`Swarm`], polling both of them until the connection is established.
+    /// Establishes a connection to the given [`Swarm`], polling both of them until the connection
+    /// is established.
     ///
     /// This will take addresses from the `other` [`Swarm`] via [`Swarm::external_addresses`].
     /// By default, this iterator will not yield any addresses.
-    /// To add listen addresses as external addresses, use [`ListenFuture::with_memory_addr_external`] or [`ListenFuture::with_tcp_addr_external`].
+    /// To add listen addresses as external addresses, use
+    /// [`ListenFuture::with_memory_addr_external`] or [`ListenFuture::with_tcp_addr_external`].
     async fn connect<T>(&mut self, other: &mut Swarm<T>)
     where
         T: NetworkBehaviour + Send,
@@ -66,10 +74,12 @@ pub trait SwarmExt {
 
     /// Dial the provided address and wait until a connection has been established.
     ///
-    /// In a normal test scenario, you should prefer [`SwarmExt::connect`] but that is not always possible.
-    /// This function only abstracts away the "dial and wait for `ConnectionEstablished` event" part.
+    /// In a normal test scenario, you should prefer [`SwarmExt::connect`] but that is not always
+    /// possible. This function only abstracts away the "dial and wait for
+    /// `ConnectionEstablished` event" part.
     ///
-    /// Because we don't have access to the other [`Swarm`], we can't guarantee that it makes progress.
+    /// Because we don't have access to the other [`Swarm`],
+    /// we can't guarantee that it makes progress.
     async fn dial_and_wait(&mut self, addr: Multiaddr) -> PeerId;
 
     /// Wait for specified condition to return `Some`.
@@ -78,7 +88,8 @@ pub trait SwarmExt {
         P: Fn(SwarmEvent<<Self::NB as NetworkBehaviour>::ToSwarm>) -> Option<E>,
         P: Send;
 
-    /// Listens for incoming connections, polling the [`Swarm`] until the transport is ready to accept connections.
+    /// Listens for incoming connections, polling the [`Swarm`] until the
+    /// transport is ready to accept connections.
     ///
     /// The first address is for the memory transport, the second one for the TCP transport.
     fn listen(&mut self) -> ListenFuture<&mut Self>;
@@ -102,17 +113,19 @@ pub trait SwarmExt {
 ///
 /// ## Number of events
 ///
-/// The number of events is configured via const generics based on the array size of the return type.
-/// This allows the compiler to infer how many events you are expecting based on how you use this function.
-/// For example, if you expect the first [`Swarm`] to emit 2 events, you should assign the first variable of the returned tuple value to an array of size 2.
-/// This works especially well if you directly pattern-match on the return value.
+/// The number of events is configured via const generics based on the array size of the return
+/// type. This allows the compiler to infer how many events you are expecting based on how you use
+/// this function. For example, if you expect the first [`Swarm`] to emit 2 events, you should
+/// assign the first variable of the returned tuple value to an array of size 2. This works
+/// especially well if you directly pattern-match on the return value.
 ///
 /// ## Type of event
 ///
 /// This function utilizes the [`TryIntoOutput`] trait.
 /// Similar as to the number of expected events, the type of event is inferred based on your usage.
 /// If you match against a [`SwarmEvent`], the first [`SwarmEvent`] will be returned.
-/// If you match against your [`NetworkBehaviour::ToSwarm`] type, [`SwarmEvent`]s which are not [`SwarmEvent::Behaviour`] will be skipped until the [`Swarm`] returns a behaviour event.
+/// If you match against your [`NetworkBehaviour::ToSwarm`] type, [`SwarmEvent`]s which are not
+/// [`SwarmEvent::Behaviour`] will be skipped until the [`Swarm`] returns a behaviour event.
 ///
 /// You can implement the [`TryIntoOutput`] for any other type to further customize this behaviour.
 ///
@@ -120,13 +133,16 @@ pub trait SwarmExt {
 ///
 /// This function is similar to joining two futures with two crucial differences:
 /// 1. As described above, it allows you to obtain more than a single event.
-/// 2. More importantly, it will continue to poll the [`Swarm`]s **even if they already has emitted all expected events**.
+/// 2. More importantly, it will continue to poll the [`Swarm`]s **even if they already has emitted
+///    all expected events**.
 ///
 /// Especially (2) is crucial for our usage of this function.
 /// If a [`Swarm`] is not polled, nothing within it makes progress.
-/// This can "starve" the other swarm which for example may wait for another message to be sent on a connection.
+/// This can "starve" the other swarm which for example may wait for another message to be sent on a
+/// connection.
 ///
-/// Using [`drive`] instead of [`futures::future::join`] ensures that a [`Swarm`] continues to be polled, even after it emitted its events.
+/// Using [`drive`] instead of [`futures::future::join`] ensures that a [`Swarm`] continues to be
+/// polled, even after it emitted its events.
 pub async fn drive<
     TBehaviour1,
     const NUM_EVENTS_SWARM_1: usize,
@@ -231,7 +247,12 @@ where
             behaviour_fn(identity),
             peer_id,
             libp2p_swarm::Config::with_async_std_executor()
-                .with_idle_connection_timeout(Duration::from_secs(5)), // Some tests need connections to be kept alive beyond what the individual behaviour configures.,
+                // Some tests need
+                // connections to be kept
+                // alive beyond what the
+                // individual behaviour
+                // configures.,
+                .with_idle_connection_timeout(Duration::from_secs(5)),
         )
     }
 
@@ -259,7 +280,11 @@ where
             behaviour_fn(identity),
             peer_id,
             libp2p_swarm::Config::with_tokio_executor()
-                .with_idle_connection_timeout(Duration::from_secs(5)), // Some tests need connections to be kept alive beyond what the individual behaviour configures.,
+                .with_idle_connection_timeout(Duration::from_secs(5)), /* Some tests need
+                                                                        * connections to be kept
+                                                                        * alive beyond what the
+                                                                        * individual behaviour
+                                                                        * configures., */
         )
     }
 
@@ -385,20 +410,24 @@ pub struct ListenFuture<S> {
 }
 
 impl<S> ListenFuture<S> {
-    /// Adds the memory address we are starting to listen on as an external address using [`Swarm::add_external_address`].
+    /// Adds the memory address we are starting to listen on as an external address using
+    /// [`Swarm::add_external_address`].
     ///
-    /// This is typically "safe" for tests because within a process, memory addresses are "globally" reachable.
-    /// However, some tests depend on which addresses are external and need this to be configurable so it is not a good default.
+    /// This is typically "safe" for tests because within a process, memory addresses are "globally"
+    /// reachable. However, some tests depend on which addresses are external and need this to
+    /// be configurable so it is not a good default.
     pub fn with_memory_addr_external(mut self) -> Self {
         self.add_memory_external = true;
 
         self
     }
 
-    /// Adds the TCP address we are starting to listen on as an external address using [`Swarm::add_external_address`].
+    /// Adds the TCP address we are starting to listen on as an external address using
+    /// [`Swarm::add_external_address`].
     ///
-    /// This is typically "safe" for tests because on the same machine, 127.0.0.1 is reachable for other [`Swarm`]s.
-    /// However, some tests depend on which addresses are external and need this to be configurable so it is not a good default.
+    /// This is typically "safe" for tests because on the same machine, 127.0.0.1 is reachable for
+    /// other [`Swarm`]s. However, some tests depend on which addresses are external and need
+    /// this to be configurable so it is not a good default.
     pub fn with_tcp_addr_external(mut self) -> Self {
         self.add_tcp_external = true;
 

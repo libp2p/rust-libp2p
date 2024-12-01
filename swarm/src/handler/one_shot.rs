@@ -18,14 +18,23 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::handler::{
-    ConnectionEvent, ConnectionHandler, ConnectionHandlerEvent, DialUpgradeError,
-    FullyNegotiatedInbound, FullyNegotiatedOutbound, SubstreamProtocol,
+use std::{
+    error,
+    fmt::Debug,
+    task::{Context, Poll},
+    time::Duration,
 };
-use crate::upgrade::{InboundUpgradeSend, OutboundUpgradeSend};
-use crate::StreamUpgradeError;
+
 use smallvec::SmallVec;
-use std::{error, fmt::Debug, task::Context, task::Poll, time::Duration};
+
+use crate::{
+    handler::{
+        ConnectionEvent, ConnectionHandler, ConnectionHandlerEvent, DialUpgradeError,
+        FullyNegotiatedInbound, FullyNegotiatedOutbound, SubstreamProtocol,
+    },
+    upgrade::{InboundUpgradeSend, OutboundUpgradeSend},
+    StreamUpgradeError,
+};
 
 /// A [`ConnectionHandler`] that opens a new substream for each request.
 // TODO: Debug
@@ -71,7 +80,7 @@ where
     /// Returns a reference to the listen protocol configuration.
     ///
     /// > **Note**: If you modify the protocol, modifications will only applies to future inbound
-    /// >           substreams, not the ones already being negotiated.
+    /// > substreams, not the ones already being negotiated.
     pub fn listen_protocol_ref(&self) -> &SubstreamProtocol<TInbound, ()> {
         &self.listen_protocol
     }
@@ -79,7 +88,7 @@ where
     /// Returns a mutable reference to the listen protocol configuration.
     ///
     /// > **Note**: If you modify the protocol, modifications will only applies to future inbound
-    /// >           substreams, not the ones already being negotiated.
+    /// > substreams, not the ones already being negotiated.
     pub fn listen_protocol_mut(&mut self) -> &mut SubstreamProtocol<TInbound, ()> {
         &mut self.listen_protocol
     }
@@ -212,12 +221,12 @@ impl Default for OneShotHandlerConfig {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-
-    use futures::executor::block_on;
-    use futures::future::poll_fn;
-    use libp2p_core::upgrade::DeniedUpgrade;
     use std::convert::Infallible;
+
+    use futures::{executor::block_on, future::poll_fn};
+    use libp2p_core::upgrade::DeniedUpgrade;
+
+    use super::*;
 
     #[test]
     fn do_not_keep_idle_connection_alive() {

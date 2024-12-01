@@ -26,7 +26,7 @@ rand = "0.8"
 rcgen = { workspace = true }
 serde = { version = "1.0", features = ["derive"] }
 stun = "0.6"
-thiserror = "1"
+thiserror = { workspace = true }
 tinytemplate = "1.2"
 tokio = { workspace = true, features = ["net"], optional = true }
 tokio-util = { version = "0.7", features = ["compat"], optional = true }

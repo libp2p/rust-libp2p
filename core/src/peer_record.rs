@@ -1,18 +1,16 @@
-use crate::signed_envelope::SignedEnvelope;
-use crate::{proto, signed_envelope, DecodeError, Multiaddr};
-use libp2p_identity::Keypair;
-use libp2p_identity::PeerId;
-use libp2p_identity::SigningError;
+use libp2p_identity::{Keypair, PeerId, SigningError};
 use quick_protobuf::{BytesReader, Writer};
 use web_time::SystemTime;
+
+use crate::{proto, signed_envelope, signed_envelope::SignedEnvelope, DecodeError, Multiaddr};
 
 const PAYLOAD_TYPE: &str = "/libp2p/routing-state-record";
 const DOMAIN_SEP: &str = "libp2p-routing-state";
 
 /// Represents a peer routing record.
 ///
-/// Peer records are designed to be distributable and carry a signature by being wrapped in a signed envelope.
-/// For more information see RFC0003 of the libp2p specifications: <https://github.com/libp2p/specs/blob/master/RFC/0003-routing-records.md>
+/// Peer records are designed to be distributable and carry a signature by being wrapped in a signed
+/// envelope. For more information see RFC0003 of the libp2p specifications: <https://github.com/libp2p/specs/blob/master/RFC/0003-routing-records.md>
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub struct PeerRecord {
     peer_id: PeerId,
@@ -21,14 +19,16 @@ pub struct PeerRecord {
 
     /// A signed envelope representing this [`PeerRecord`].
     ///
-    /// If this [`PeerRecord`] was constructed from a [`SignedEnvelope`], this is the original instance.
+    /// If this [`PeerRecord`] was constructed from a [`SignedEnvelope`], this is the original
+    /// instance.
     envelope: SignedEnvelope,
 }
 
 impl PeerRecord {
     /// Attempt to re-construct a [`PeerRecord`] from a [`SignedEnvelope`].
     ///
-    /// If this function succeeds, the [`SignedEnvelope`] contained a peer record with a valid signature and can hence be considered authenticated.
+    /// If this function succeeds, the [`SignedEnvelope`] contained a peer record with a valid
+    /// signature and can hence be considered authenticated.
     pub fn from_signed_envelope(envelope: SignedEnvelope) -> Result<Self, FromEnvelopeError> {
         use quick_protobuf::MessageRead;
 
@@ -60,7 +60,8 @@ impl PeerRecord {
 
     /// Construct a new [`PeerRecord`] by authenticating the provided addresses with the given key.
     ///
-    /// This is the same key that is used for authenticating every libp2p connection of your application, i.e. what you use when setting up your [`crate::transport::Transport`].
+    /// This is the same key that is used for authenticating every libp2p connection of your
+    /// application, i.e. what you use when setting up your [`crate::transport::Transport`].
     pub fn new(key: &Keypair, addresses: Vec<Multiaddr>) -> Result<Self, SigningError> {
         use quick_protobuf::MessageWrite;
 

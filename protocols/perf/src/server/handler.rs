@@ -18,7 +18,10 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use std::task::{Context, Poll};
+use std::{
+    convert::Infallible,
+    task::{Context, Poll},
+};
 
 use futures::FutureExt;
 use libp2p_core::upgrade::{DeniedUpgrade, ReadyUpgrade};
@@ -29,7 +32,6 @@ use libp2p_swarm::{
     },
     ConnectionHandler, ConnectionHandlerEvent, StreamProtocol, SubstreamProtocol,
 };
-use std::convert::Infallible;
 use tracing::error;
 
 use crate::Run;

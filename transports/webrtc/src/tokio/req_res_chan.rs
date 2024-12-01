@@ -18,14 +18,14 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use futures::{
-    channel::{mpsc, oneshot},
-    SinkExt, StreamExt,
-};
-
 use std::{
     io,
     task::{Context, Poll},
+};
+
+use futures::{
+    channel::{mpsc, oneshot},
+    SinkExt, StreamExt,
 };
 
 pub(crate) fn new<Req, Res>(capacity: usize) -> (Sender<Req, Res>, Receiver<Req, Res>) {

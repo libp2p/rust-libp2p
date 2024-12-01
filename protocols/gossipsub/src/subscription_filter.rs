@@ -18,9 +18,9 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::types::Subscription;
-use crate::TopicHash;
 use std::collections::{BTreeSet, HashMap, HashSet};
+
+use crate::{types::Subscription, TopicHash};
 
 pub trait TopicSubscriptionFilter {
     /// Returns true iff the topic is of interest and we can subscribe to it.
@@ -82,7 +82,7 @@ pub trait TopicSubscriptionFilter {
     }
 }
 
-//some useful implementers
+// some useful implementers
 
 /// Allows all subscriptions
 #[derive(Default, Clone)]
@@ -199,7 +199,7 @@ where
     }
 }
 
-///A subscription filter that filters topics based on a regular expression.
+/// A subscription filter that filters topics based on a regular expression.
 pub struct RegexSubscriptionFilter(pub regex::Regex);
 
 impl TopicSubscriptionFilter for RegexSubscriptionFilter {
