@@ -547,4 +547,130 @@ mod tests {
 
         assert!(buffer.is_empty());
     }
+
+    #[test]
+    fn should_send_fin_ack_when_read_closed() {
+        let mut state = State::Open;
+        state.handle_inbound_flag(Flag::FIN, &mut Bytes::default());
+        assert!(state.should_send_fin_ack());
+    }
+
+    #[test]
+    fn should_send_fin_ack_when_closing_read() {
+        let mut state = State::Open;
+        state.close_read_barrier().unwrap();
+        assert!(state.should_send_fin_ack());
+    }
+
+    #[test]
+    fn should_not_send_fin_ack_when_write_closed() {
+        let mut state = State::Open;
+        state.close_write_barrier().unwrap();
+        state.close_write_message_sent();
+        state.write_closed();
+        assert!(!state.should_send_fin_ack());
+    }
+
+    #[test]
+    fn fin_ack_received_transitions_to_write_closed() {
+        let mut state = State::Open;
+
+        // Start closing write side
+        state.close_write_barrier().unwrap();
+        state.close_write_message_sent();
+
+        // Receive FIN_ACK
+        state.handle_inbound_flag(Flag::FIN_ACK, &mut Bytes::default());
+        assert!(state.fin_ack_received());
+
+        // Call write_closed to complete transition
+        state.write_closed();
+
+        // Should transition to WriteClosed
+        match state {
+            State::WriteClosed => {}
+            _ => panic!("Expected WriteClosed state, got {:?}", state),
+        }
+    }
+
+    #[test]
+    fn fin_ack_received_transitions_to_both_closed() {
+        let mut state = State::Open;
+
+        // Close read side first
+        state.handle_inbound_flag(Flag::FIN, &mut Bytes::default());
+        assert!(matches!(state, State::ReadClosed));
+
+        // Start closing write side
+        state.close_write_barrier().unwrap();
+        state.close_write_message_sent();
+
+        // Receive FIN_ACK
+        state.handle_inbound_flag(Flag::FIN_ACK, &mut Bytes::default());
+        assert!(state.fin_ack_received());
+
+        // Call write_closed to complete transition
+        state.write_closed();
+
+        // Should transition to BothClosed
+        match state {
+            State::BothClosed { reset: false } => {}
+            _ => panic!("Expected BothClosed state, got {:?}", state),
+        }
+    }
+
+    #[test]
+    fn fin_ack_received_flag_is_set() {
+        let mut state = State::Open;
+
+        // Start closing write side
+        state.close_write_barrier().unwrap();
+        assert!(matches!(
+            state,
+            State::ClosingWrite {
+                fin_ack_received: false,
+                inner: Closing::Requested,
+                ..
+            }
+        ));
+
+        state.close_write_message_sent();
+        assert!(matches!(
+            state,
+            State::ClosingWrite {
+                fin_ack_received: false,
+                inner: Closing::MessageSent,
+                ..
+            }
+        ));
+
+        assert!(!state.fin_ack_received());
+
+        // Receive FIN_ACK
+        state.handle_inbound_flag(Flag::FIN_ACK, &mut Bytes::default());
+
+        assert!(state.fin_ack_received());
+        assert!(matches!(
+            state,
+            State::ClosingWrite {
+                fin_ack_received: true,
+                inner: Closing::MessageSent,
+                ..
+            }
+        ));
+    }
+
+    #[test]
+    fn ignore_fin_ack_in_wrong_state() {
+        let mut state = State::Open;
+
+        // Should ignore FIN_ACK in Open state
+        state.handle_inbound_flag(Flag::FIN_ACK, &mut Bytes::default());
+        assert!(matches!(state, State::Open));
+
+        // Should ignore FIN_ACK in ReadClosed state
+        state.handle_inbound_flag(Flag::FIN, &mut Bytes::default());
+        state.handle_inbound_flag(Flag::FIN_ACK, &mut Bytes::default());
+        assert!(matches!(state, State::ReadClosed));
+    }
 }
