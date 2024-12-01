@@ -19,19 +19,17 @@
 // DEALINGS IN THE SOFTWARE.
 
 //! A collection of types using the Gossipsub system.
-use crate::rpc::Sender;
-use crate::TopicHash;
+use std::{collections::BTreeSet, fmt, fmt::Debug};
+
 use futures_timer::Delay;
 use libp2p_identity::PeerId;
 use libp2p_swarm::ConnectionId;
 use prometheus_client::encoding::EncodeLabelValue;
 use quick_protobuf::MessageWrite;
-use std::fmt::Debug;
-use std::{collections::BTreeSet, fmt};
-
-use crate::rpc_proto::proto;
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
+
+use crate::{rpc::Sender, rpc_proto::proto, TopicHash};
 
 /// Messages that have expired while attempting to be sent to a peer.
 #[derive(Clone, Debug, Default)]
@@ -42,7 +40,8 @@ pub struct FailedMessages {
     pub forward: usize,
     /// The number of messages that were failed to be sent to the priority queue as it was full.
     pub priority: usize,
-    /// The number of messages that were failed to be sent to the non-priority queue as it was full.
+    /// The number of messages that were failed to be sent to the non-priority queue as it was
+    /// full.
     pub non_priority: usize,
     /// The number of messages that timed out and could not be sent.
     pub timeout: usize,
@@ -230,9 +229,9 @@ pub enum SubscriptionAction {
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub(crate) struct PeerInfo {
     pub(crate) peer_id: Option<PeerId>,
-    //TODO add this when RFC: Signed Address Records got added to the spec (see pull request
+    // TODO add this when RFC: Signed Address Records got added to the spec (see pull request
     // https://github.com/libp2p/specs/pull/217)
-    //pub signed_peer_record: ?,
+    // pub signed_peer_record: ?,
 }
 
 /// A Control message received by the gossipsub system.
@@ -240,7 +239,8 @@ pub(crate) struct PeerInfo {
 pub enum ControlAction {
     /// Node broadcasts known messages per topic - IHave control message.
     IHave(IHave),
-    /// The node requests specific message ids (peer_id + sequence _number) - IWant control message.
+    /// The node requests specific message ids (peer_id + sequence _number) - IWant control
+    /// message.
     IWant(IWant),
     /// The node has been added to the mesh - Graft control message.
     Graft(Graft),

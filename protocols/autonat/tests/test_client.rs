@@ -18,6 +18,8 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
+use std::time::Duration;
+
 use libp2p_autonat::{
     Behaviour, Config, Event, NatStatus, OutboundProbeError, OutboundProbeEvent, ResponseError,
 };
@@ -25,7 +27,6 @@ use libp2p_core::Multiaddr;
 use libp2p_identity::PeerId;
 use libp2p_swarm::{Swarm, SwarmEvent};
 use libp2p_swarm_test::SwarmExt as _;
-use std::time::Duration;
 use tokio::task::JoinHandle;
 
 const MAX_CONFIDENCE: usize = 3;
@@ -116,7 +117,8 @@ async fn test_auto_probe() {
 
     // It can happen that the server observed the established connection and
     // returned a response before the inbound established connection was reported at the client.
-    // In this (rare) case the `ConnectionEstablished` event occurs after the `OutboundProbeEvent::Response`.
+    // In this (rare) case the `ConnectionEstablished` event
+    // occurs after the `OutboundProbeEvent::Response`.
     if !had_connection_event {
         match client.next_swarm_event().await {
             SwarmEvent::ConnectionEstablished {

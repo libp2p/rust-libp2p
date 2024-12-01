@@ -1,13 +1,11 @@
-use super::Error;
-use crate::connection::RtcPeerConnection;
-use crate::error::AuthenticationError;
-use crate::sdp;
-use crate::Connection;
-use libp2p_identity::{Keypair, PeerId};
-use libp2p_webrtc_utils::noise;
-use libp2p_webrtc_utils::Fingerprint;
-use send_wrapper::SendWrapper;
 use std::net::SocketAddr;
+
+use libp2p_identity::{Keypair, PeerId};
+use libp2p_webrtc_utils::{noise, Fingerprint};
+use send_wrapper::SendWrapper;
+
+use super::Error;
+use crate::{connection::RtcPeerConnection, error::AuthenticationError, sdp, Connection};
 
 /// Upgrades an outbound WebRTC connection by creating the data channel
 /// and conducting a Noise handshake

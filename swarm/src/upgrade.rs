@@ -18,10 +18,10 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::Stream;
-
 use futures::prelude::*;
 use libp2p_core::upgrade;
+
+use crate::Stream;
 
 /// Implemented automatically on all types that implement [`UpgradeInfo`](upgrade::UpgradeInfo)
 /// and `Send + 'static`.
@@ -65,7 +65,8 @@ pub trait OutboundUpgradeSend: UpgradeInfoSend {
     /// Equivalent to [`OutboundUpgrade::Future`](upgrade::OutboundUpgrade::Future).
     type Future: Future<Output = Result<Self::Output, Self::Error>> + Send + 'static;
 
-    /// Equivalent to [`OutboundUpgrade::upgrade_outbound`](upgrade::OutboundUpgrade::upgrade_outbound).
+    /// Equivalent to
+    /// [`OutboundUpgrade::upgrade_outbound`](upgrade::OutboundUpgrade::upgrade_outbound).
     fn upgrade_outbound(self, socket: Stream, info: Self::Info) -> Self::Future;
 }
 
@@ -126,7 +127,7 @@ where
 /// [`InboundUpgrade`](upgrade::InboundUpgrade).
 ///
 /// > **Note**: This struct is mostly an implementation detail of the library and normally
-/// >           doesn't need to be used directly.
+/// > doesn't need to be used directly.
 pub struct SendWrapper<T>(pub T);
 
 impl<T: UpgradeInfoSend> upgrade::UpgradeInfo for SendWrapper<T> {

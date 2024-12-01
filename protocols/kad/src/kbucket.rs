@@ -72,13 +72,11 @@ mod entry;
 #[allow(clippy::assign_op_pattern)]
 mod key;
 
-pub use bucket::NodeStatus;
-pub use entry::*;
+use std::{collections::VecDeque, num::NonZeroUsize, time::Duration};
 
 use bucket::KBucket;
-use std::collections::VecDeque;
-use std::num::NonZeroUsize;
-use std::time::Duration;
+pub use bucket::NodeStatus;
+pub use entry::*;
 use web_time::Instant;
 
 /// Maximum number of k-buckets.
@@ -561,9 +559,10 @@ where
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use libp2p_identity::PeerId;
     use quickcheck::*;
+
+    use super::*;
 
     type TestTable = KBucketsTable<KeyBytes, ()>;
 

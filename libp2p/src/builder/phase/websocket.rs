@@ -1,5 +1,5 @@
-use super::*;
-use crate::SwarmBuilder;
+use std::marker::PhantomData;
+
 #[cfg(all(not(target_arch = "wasm32"), feature = "websocket"))]
 use libp2p_core::muxing::{StreamMuxer, StreamMuxerBox};
 use libp2p_core::upgrade::{InboundConnectionUpgrade, OutboundConnectionUpgrade};
@@ -15,7 +15,9 @@ use libp2p_core::{InboundUpgrade, Negotiated, OutboundUpgrade, UpgradeInfo};
     feature = "relay"
 ))]
 use libp2p_identity::PeerId;
-use std::marker::PhantomData;
+
+use super::*;
+use crate::SwarmBuilder;
 
 pub struct WebsocketPhase<T> {
     pub(crate) transport: T,
@@ -126,8 +128,8 @@ impl_websocket_builder!(
 impl_websocket_builder!(
     "tokio",
     super::provider::Tokio,
-    // Note this is an unnecessary await for Tokio Websocket (i.e. tokio dns) in order to be consistent
-    // with above AsyncStd construction.
+    // Note this is an unnecessary await for Tokio Websocket (i.e. tokio dns) in order to be
+    // consistent with above AsyncStd construction.
     futures::future::ready(libp2p_dns::tokio::Transport::system(
         libp2p_tcp::tokio::Transport::new(libp2p_tcp::Config::default())
     )),

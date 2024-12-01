@@ -36,8 +36,8 @@ pub enum PublishError {
     MessageTooLarge,
     /// The compression algorithm failed.
     TransformFailed(std::io::Error),
-    /// Messages could not be sent because the queues for all peers were full. The usize represents the
-    /// number of peers that were attempted.
+    /// Messages could not be sent because the queues for all peers were full. The usize represents
+    /// the number of peers that were attempted.
     AllQueuesFull(usize),
 }
 

@@ -21,17 +21,19 @@
 
 #![doc = include_str!("../README.md")]
 
+use std::{
+    error::Error,
+    net::{Ipv4Addr, Ipv6Addr},
+};
+
 use clap::Parser;
 use futures::StreamExt;
 use libp2p::{
-    core::multiaddr::Protocol,
-    core::Multiaddr,
+    core::{multiaddr::Protocol, Multiaddr},
     identify, identity, noise, ping, relay,
     swarm::{NetworkBehaviour, SwarmEvent},
     tcp, yamux,
 };
-use std::error::Error;
-use std::net::{Ipv4Addr, Ipv6Addr};
 use tracing_subscriber::EnvFilter;
 
 #[tokio::main]

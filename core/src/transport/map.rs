@@ -18,16 +18,19 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::transport::DialOpts;
-use crate::{
-    connection::ConnectedPoint,
-    transport::{Transport, TransportError, TransportEvent},
+use std::{
+    pin::Pin,
+    task::{Context, Poll},
 };
+
 use futures::prelude::*;
 use multiaddr::Multiaddr;
-use std::{pin::Pin, task::Context, task::Poll};
 
 use super::ListenerId;
+use crate::{
+    connection::ConnectedPoint,
+    transport::{DialOpts, Transport, TransportError, TransportEvent},
+};
 
 /// See `Transport::map`.
 #[derive(Debug, Copy, Clone)]

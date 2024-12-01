@@ -44,12 +44,14 @@ async fn main() -> Result<()> {
     // Deal with incoming streams.
     // Spawning a dedicated task is just one way of doing this.
     // libp2p doesn't care how you handle incoming streams but you _must_ handle them somehow.
-    // To mitigate DoS attacks, libp2p will internally drop incoming streams if your application cannot keep up processing them.
+    // To mitigate DoS attacks, libp2p will internally drop incoming streams if your application
+    // cannot keep up processing them.
     tokio::spawn(async move {
         // This loop handles incoming streams _sequentially_ but that doesn't have to be the case.
         // You can also spawn a dedicated task per stream if you want to.
-        // Be aware that this breaks backpressure though as spawning new tasks is equivalent to an unbounded buffer.
-        // Each task needs memory meaning an aggressive remote peer may force you OOM this way.
+        // Be aware that this breaks backpressure though as spawning new tasks is equivalent to an
+        // unbounded buffer. Each task needs memory meaning an aggressive remote peer may
+        // force you OOM this way.
 
         while let Some((peer, stream)) = incoming_streams.next().await {
             match echo(stream).await {
@@ -102,7 +104,8 @@ async fn connection_handler(peer: PeerId, mut control: stream::Control) {
             }
             Err(error) => {
                 // Other errors may be temporary.
-                // In production, something like an exponential backoff / circuit-breaker may be more appropriate.
+                // In production, something like an exponential backoff / circuit-breaker may be
+                // more appropriate.
                 tracing::debug!(%peer, %error);
                 continue;
             }

@@ -20,23 +20,6 @@
 
 pub(crate) mod protocol;
 
-pub use protocol::ProtocolSupport;
-
-use crate::codec::Codec;
-use crate::handler::protocol::Protocol;
-use crate::{InboundRequestId, OutboundRequestId, EMPTY_QUEUE_SHRINK_THRESHOLD};
-
-use futures::channel::mpsc;
-use futures::{channel::oneshot, prelude::*};
-use libp2p_swarm::handler::{
-    ConnectionEvent, DialUpgradeError, FullyNegotiatedInbound, FullyNegotiatedOutbound,
-    ListenUpgradeError,
-};
-use libp2p_swarm::{
-    handler::{ConnectionHandler, ConnectionHandlerEvent, StreamUpgradeError},
-    SubstreamProtocol,
-};
-use smallvec::SmallVec;
 use std::{
     collections::VecDeque,
     fmt, io,
@@ -46,6 +29,25 @@ use std::{
     },
     task::{Context, Poll},
     time::Duration,
+};
+
+use futures::{
+    channel::{mpsc, oneshot},
+    prelude::*,
+};
+use libp2p_swarm::{
+    handler::{
+        ConnectionEvent, ConnectionHandler, ConnectionHandlerEvent, DialUpgradeError,
+        FullyNegotiatedInbound, FullyNegotiatedOutbound, ListenUpgradeError, StreamUpgradeError,
+    },
+    SubstreamProtocol,
+};
+pub use protocol::ProtocolSupport;
+use smallvec::SmallVec;
+
+use crate::{
+    codec::Codec, handler::protocol::Protocol, InboundRequestId, OutboundRequestId,
+    EMPTY_QUEUE_SHRINK_THRESHOLD,
 };
 
 /// A connection handler for a request response [`Behaviour`](super::Behaviour) protocol.
