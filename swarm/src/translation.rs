@@ -18,7 +18,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use multiaddr::{Multiaddr, Protocol};
+use libp2p_core::{multiaddr::Protocol, Multiaddr};
 
 /// Perform IP address translation.
 ///
@@ -35,7 +35,8 @@ use multiaddr::{Multiaddr, Protocol};
 /// address and vice versa.
 ///
 /// If the first [`Protocol`]s are not IP addresses, `None` is returned instead.
-pub fn address_translation(original: &Multiaddr, observed: &Multiaddr) -> Option<Multiaddr> {
+#[doc(hidden)]
+pub fn _address_translation(original: &Multiaddr, observed: &Multiaddr) -> Option<Multiaddr> {
     original.replace(0, move |proto| match proto {
         Protocol::Ip4(_)
         | Protocol::Ip6(_)
@@ -65,7 +66,7 @@ mod tests {
             expected: Multiaddr,
         }
 
-        let tests = vec![
+        let tests = [
             // Basic ipv4.
             Test {
                 original: "/ip4/192.0.2.1/tcp/1".parse().unwrap(),
@@ -106,7 +107,7 @@ mod tests {
 
         for test in tests.iter() {
             assert_eq!(
-                address_translation(&test.original, &test.observed),
+                _address_translation(&test.original, &test.observed),
                 Some(test.expected.clone())
             );
         }

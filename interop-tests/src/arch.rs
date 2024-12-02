@@ -1,7 +1,6 @@
 // Native re-exports
 #[cfg(not(target_arch = "wasm32"))]
 pub(crate) use native::{build_swarm, init_logger, sleep, Instant, RedisClient};
-
 // Wasm re-exports
 #[cfg(target_arch = "wasm32")]
 pub(crate) use wasm::{build_swarm, init_logger, sleep, Instant, RedisClient};
@@ -11,11 +10,13 @@ pub(crate) mod native {
     use std::time::Duration;
 
     use anyhow::{bail, Context, Result};
-    use futures::future::BoxFuture;
-    use futures::FutureExt;
-    use libp2p::identity::Keypair;
-    use libp2p::swarm::{NetworkBehaviour, Swarm};
-    use libp2p::{noise, tcp, tls, yamux};
+    use futures::{future::BoxFuture, FutureExt};
+    use libp2p::{
+        identity::Keypair,
+        noise,
+        swarm::{NetworkBehaviour, Swarm},
+        tcp, tls, yamux,
+    };
     use libp2p_mplex as mplex;
     use libp2p_webrtc as webrtc;
     use redis::AsyncCommands;
@@ -174,32 +175,35 @@ pub(crate) mod native {
 
         pub(crate) async fn blpop(&self, key: &str, timeout: u64) -> Result<Vec<String>> {
             let mut conn = self.0.get_async_connection().await?;
-            Ok(conn.blpop(key, timeout as usize).await?)
+            Ok(conn.blpop(key, timeout as f64).await?)
         }
 
         pub(crate) async fn rpush(&self, key: &str, value: String) -> Result<()> {
             let mut conn = self.0.get_async_connection().await?;
-            conn.rpush(key, value).await?;
-            Ok(())
+            conn.rpush(key, value).await.map_err(Into::into)
         }
     }
 }
 
 #[cfg(target_arch = "wasm32")]
 pub(crate) mod wasm {
+    use std::time::Duration;
+
     use anyhow::{bail, Context, Result};
     use futures::future::{BoxFuture, FutureExt};
-    use libp2p::core::upgrade::Version;
-    use libp2p::identity::Keypair;
-    use libp2p::swarm::{NetworkBehaviour, Swarm};
-    use libp2p::{noise, websocket_websys, webtransport_websys, yamux, Transport as _};
+    use libp2p::{
+        core::upgrade::Version,
+        identity::Keypair,
+        noise,
+        swarm::{NetworkBehaviour, Swarm},
+        websocket_websys, webtransport_websys, yamux, Transport as _,
+    };
     use libp2p_mplex as mplex;
     use libp2p_webrtc_websys as webrtc_websys;
-    use std::time::Duration;
 
     use crate::{BlpopRequest, Muxer, SecProtocol, Transport};
 
-    pub(crate) type Instant = instant::Instant;
+    pub(crate) type Instant = web_time::Instant;
 
     pub(crate) fn init_logger() {
         console_error_panic_hook::set_once();
@@ -246,7 +250,7 @@ pub(crate) mod wasm {
                     .with_behaviour(behaviour_constructor)?
                     .with_swarm_config(|c| c.with_idle_connection_timeout(Duration::from_secs(5)))
                     .build(),
-                format!("/ip4/{ip}/tcp/0/wss"),
+                format!("/ip4/{ip}/tcp/0/tls/ws"),
             ),
             (Transport::Ws, Some(SecProtocol::Noise), Some(Muxer::Yamux)) => (
                 libp2p::SwarmBuilder::with_new_identity()
@@ -263,7 +267,7 @@ pub(crate) mod wasm {
                     .with_behaviour(behaviour_constructor)?
                     .with_swarm_config(|c| c.with_idle_connection_timeout(Duration::from_secs(5)))
                     .build(),
-                format!("/ip4/{ip}/tcp/0/wss"),
+                format!("/ip4/{ip}/tcp/0/tls/ws"),
             ),
             (Transport::WebRtcDirect, None, None) => (
                 libp2p::SwarmBuilder::with_new_identity()

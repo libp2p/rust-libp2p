@@ -38,21 +38,24 @@
 ))]
 #![cfg_attr(docsrs, feature(doc_cfg, doc_auto_cfg))]
 
-use futures::stream::BoxStream;
+use std::{
+    collections::VecDeque,
+    io,
+    path::PathBuf,
+    pin::Pin,
+    task::{Context, Poll},
+};
+
 use futures::{
     future::{BoxFuture, Ready},
     prelude::*,
+    stream::BoxStream,
 };
-use libp2p_core::transport::ListenerId;
 use libp2p_core::{
     multiaddr::{Multiaddr, Protocol},
-    transport::{TransportError, TransportEvent},
+    transport::{DialOpts, ListenerId, TransportError, TransportEvent},
     Transport,
 };
-use std::collections::VecDeque;
-use std::pin::Pin;
-use std::task::{Context, Poll};
-use std::{io, path::PathBuf};
 
 pub type Listener<T> = BoxStream<
     'static,
@@ -159,7 +162,7 @@ macro_rules! codegen {
                 }
             }
 
-            fn dial(&mut self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
+            fn dial(&mut self, addr: Multiaddr, _dial_opts: DialOpts) -> Result<Self::Dial, TransportError<Self::Error>> {
                 // TODO: Should we dial at all?
                 if let Ok(path) = multiaddr_to_path(&addr) {
                     tracing::debug!(address=%addr, "Dialing address");
@@ -167,21 +170,6 @@ macro_rules! codegen {
                 } else {
                     Err(TransportError::MultiaddrNotSupported(addr))
                 }
-            }
-
-            fn dial_as_listener(
-                &mut self,
-                addr: Multiaddr,
-            ) -> Result<Self::Dial, TransportError<Self::Error>> {
-                self.dial(addr)
-            }
-
-            fn address_translation(
-                &self,
-                _server: &Multiaddr,
-                _observed: &Multiaddr,
-            ) -> Option<Multiaddr> {
-                None
             }
 
             fn poll(
@@ -256,14 +244,16 @@ fn multiaddr_to_path(addr: &Multiaddr) -> Result<PathBuf, ()> {
 
 #[cfg(all(test, feature = "async-std"))]
 mod tests {
-    use super::{multiaddr_to_path, UdsConfig};
+    use std::{borrow::Cow, path::Path};
+
     use futures::{channel::oneshot, prelude::*};
     use libp2p_core::{
         multiaddr::{Multiaddr, Protocol},
-        transport::ListenerId,
-        Transport,
+        transport::{DialOpts, ListenerId, PortUse},
+        Endpoint, Transport,
     };
-    use std::{self, borrow::Cow, path::Path};
+
+    use super::{multiaddr_to_path, UdsConfig};
 
     #[test]
     fn multiaddr_to_path_conversion() {
@@ -318,7 +308,17 @@ mod tests {
         async_std::task::block_on(async move {
             let mut uds = UdsConfig::new();
             let addr = rx.await.unwrap();
-            let mut socket = uds.dial(addr).unwrap().await.unwrap();
+            let mut socket = uds
+                .dial(
+                    addr,
+                    DialOpts {
+                        role: Endpoint::Dialer,
+                        port_use: PortUse::Reuse,
+                    },
+                )
+                .unwrap()
+                .await
+                .unwrap();
             let _ = socket.write(&[1, 2, 3]).await.unwrap();
         });
     }

@@ -18,12 +18,11 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-//! The `Entry` API for quering and modifying the entries of a `KBucketsTable`
+//! The `Entry` API for querying and modifying the entries of a `KBucketsTable`
 //! representing the nodes participating in the Kademlia DHT.
 
-pub(crate) use super::bucket::{AppliedPending, InsertResult, Node, NodeStatus, K_VALUE};
+pub(crate) use super::bucket::{AppliedPending, InsertResult, Node, K_VALUE};
 pub use super::key::*;
-
 use super::*;
 
 /// An immutable by-reference view of a bucket entry.

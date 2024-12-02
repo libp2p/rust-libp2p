@@ -20,33 +20,25 @@
 
 #![cfg(test)]
 
-use super::*;
-
-use crate::kbucket::Distance;
-use crate::record::{store::MemoryStore, Key};
-use crate::{K_VALUE, PROTOCOL_NAME, SHA_256_MH};
 use futures::{executor::block_on, future::poll_fn, prelude::*};
 use futures_timer::Delay;
 use libp2p_core::{
-    connection::ConnectedPoint,
-    multiaddr::{multiaddr, Multiaddr, Protocol},
+    multiaddr::{multiaddr, Protocol},
     multihash::Multihash,
     transport::MemoryTransport,
-    upgrade, Endpoint, Transport,
+    upgrade, Transport,
 };
 use libp2p_identity as identity;
-use libp2p_identity::PeerId;
 use libp2p_noise as noise;
-use libp2p_swarm::behaviour::ConnectionEstablished;
-use libp2p_swarm::{self as swarm, ConnectionId, Swarm, SwarmEvent};
+use libp2p_swarm::{self as swarm, Swarm, SwarmEvent};
 use libp2p_yamux as yamux;
 use quickcheck::*;
 use rand::{random, rngs::StdRng, thread_rng, Rng, SeedableRng};
-use std::{
-    collections::{HashMap, HashSet},
-    num::NonZeroUsize,
-    time::Duration,
-    u64,
+
+use super::*;
+use crate::{
+    record::{store::MemoryStore, Key},
+    K_VALUE, PROTOCOL_NAME, SHA_256_MH,
 };
 
 type TestSwarm = Swarm<Behaviour<MemoryStore>>;
@@ -174,7 +166,8 @@ fn bootstrap() {
         let num_group = rng.gen_range(1..(num_total % K_VALUE.get()) + 2);
 
         let mut cfg = Config::new(PROTOCOL_NAME);
-        // Disabling periodic bootstrap and automatic bootstrap to prevent the bootstrap from triggering automatically.
+        // Disabling periodic bootstrap and automatic bootstrap to prevent the bootstrap from
+        // triggering automatically.
         cfg.set_periodic_bootstrap_interval(None);
         cfg.set_automatic_bootstrap_throttle(None);
         if rng.gen() {
@@ -256,7 +249,8 @@ fn query_iter() {
     fn run(rng: &mut impl Rng) {
         let num_total = rng.gen_range(2..20);
         let mut config = Config::new(PROTOCOL_NAME);
-        // Disabling periodic bootstrap and automatic bootstrap to prevent the bootstrap from triggering automatically.
+        // Disabling periodic bootstrap and automatic bootstrap to prevent the bootstrap from
+        // triggering automatically.
         config.set_periodic_bootstrap_interval(None);
         config.set_automatic_bootstrap_throttle(None);
         let mut swarms = build_connected_nodes_with_config(num_total, 1, config)
@@ -273,7 +267,7 @@ fn query_iter() {
 
         match swarms[0].behaviour_mut().query(&qid) {
             Some(q) => match q.info() {
-                QueryInfo::GetClosestPeers { key, step } => {
+                QueryInfo::GetClosestPeers { key, step, .. } => {
                     assert_eq!(&key[..], search_target.to_bytes().as_slice());
                     assert_eq!(usize::from(step.count), 1);
                 }
@@ -304,9 +298,11 @@ fn query_iter() {
                             assert_eq!(&ok.key[..], search_target.to_bytes().as_slice());
                             assert_eq!(swarm_ids[i], expected_swarm_id);
                             assert_eq!(swarm.behaviour_mut().queries.size(), 0);
-                            assert!(expected_peer_ids.iter().all(|p| ok.peers.contains(p)));
+                            let peer_ids =
+                                ok.peers.into_iter().map(|p| p.peer_id).collect::<Vec<_>>();
+                            assert!(expected_peer_ids.iter().all(|p| peer_ids.contains(p)));
                             let key = kbucket::Key::new(ok.key);
-                            assert_eq!(expected_distances, distances(&key, ok.peers));
+                            assert_eq!(expected_distances, distances(&key, peer_ids));
                             return Poll::Ready(());
                         }
                         // Ignore any other event.
@@ -418,7 +414,69 @@ fn unresponsive_not_returned_indirect() {
                     }))) => {
                         assert_eq!(&ok.key[..], search_target.to_bytes().as_slice());
                         assert_eq!(ok.peers.len(), 1);
-                        assert_eq!(ok.peers[0], first_peer_id);
+                        assert_eq!(ok.peers[0].peer_id, first_peer_id);
+                        return Poll::Ready(());
+                    }
+                    // Ignore any other event.
+                    Poll::Ready(Some(_)) => (),
+                    e @ Poll::Ready(_) => panic!("Unexpected return value: {e:?}"),
+                    Poll::Pending => break,
+                }
+            }
+        }
+
+        Poll::Pending
+    }))
+}
+
+// Test the result of get_closest_peers with different num_results
+// Note that the result is capped after exceeds K_VALUE
+#[test]
+fn get_closest_with_different_num_results() {
+    let k_value = K_VALUE.get();
+    for replication_factor in [5, k_value / 2, k_value] {
+        for num_results in k_value / 2..k_value * 2 {
+            get_closest_with_different_num_results_inner(num_results, replication_factor)
+        }
+    }
+}
+
+fn get_closest_with_different_num_results_inner(num_results: usize, replication_factor: usize) {
+    let k_value = K_VALUE.get();
+    let num_of_nodes = 3 * k_value;
+    let mut cfg = Config::new(PROTOCOL_NAME);
+    cfg.set_replication_factor(NonZeroUsize::new(replication_factor).unwrap());
+    let swarms = build_connected_nodes_with_config(num_of_nodes, replication_factor - 1, cfg);
+
+    let mut swarms = swarms
+        .into_iter()
+        .map(|(_addr, swarm)| swarm)
+        .collect::<Vec<_>>();
+
+    // Ask first to search a random value.
+    let search_target = PeerId::random();
+    let Some(num_results_nonzero) = std::num::NonZeroUsize::new(num_results) else {
+        panic!("Unexpected NonZeroUsize val of {num_results}");
+    };
+    swarms[0]
+        .behaviour_mut()
+        .get_n_closest_peers(search_target, num_results_nonzero);
+
+    block_on(poll_fn(move |ctx| {
+        for swarm in &mut swarms {
+            loop {
+                match swarm.poll_next_unpin(ctx) {
+                    Poll::Ready(Some(SwarmEvent::Behaviour(Event::OutboundQueryProgressed {
+                        result: QueryResult::GetClosestPeers(Ok(ok)),
+                        ..
+                    }))) => {
+                        assert_eq!(&ok.key[..], search_target.to_bytes().as_slice());
+                        if num_results > k_value {
+                            assert_eq!(ok.peers.len(), k_value, "Failed with replication_factor: {replication_factor}, num_results: {num_results}");
+                        } else {
+                            assert_eq!(ok.peers.len(), num_results, "Failed with replication_factor: {replication_factor}, num_results: {num_results}");
+                        }
+
                         return Poll::Ready(());
                     }
                     // Ignore any other event.
@@ -507,7 +565,8 @@ fn put_record() {
 
         let mut config = Config::new(PROTOCOL_NAME);
         config.set_replication_factor(replication_factor);
-        // Disabling periodic bootstrap and automatic bootstrap to prevent the bootstrap from triggering automatically.
+        // Disabling periodic bootstrap and automatic bootstrap to prevent the bootstrap from
+        // triggering automatically.
         config.set_periodic_bootstrap_interval(None);
         config.set_automatic_bootstrap_throttle(None);
         if rng.gen() {
@@ -879,7 +938,8 @@ fn add_provider() {
 
         let mut config = Config::new(PROTOCOL_NAME);
         config.set_replication_factor(replication_factor);
-        // Disabling periodic bootstrap and automatic bootstrap to prevent the bootstrap from triggering automatically.
+        // Disabling periodic bootstrap and automatic bootstrap to prevent the bootstrap from
+        // triggering automatically.
         config.set_periodic_bootstrap_interval(None);
         config.set_automatic_bootstrap_throttle(None);
         if rng.gen() {
@@ -1107,7 +1167,8 @@ fn disjoint_query_does_not_finish_before_all_paths_did() {
     config.disjoint_query_paths(true);
     // I.e. setting the amount disjoint paths to be explored to 2.
     config.set_parallelism(NonZeroUsize::new(2).unwrap());
-    // Disabling periodic bootstrap and automatic bootstrap to prevent the bootstrap from triggering automatically.
+    // Disabling periodic bootstrap and automatic bootstrap to prevent the bootstrap from triggering
+    // automatically.
     config.set_periodic_bootstrap_interval(None);
     config.set_automatic_bootstrap_throttle(None);
 
@@ -1195,7 +1256,7 @@ fn disjoint_query_does_not_finish_before_all_paths_did() {
         .behaviour()
         .queries
         .iter()
-        .for_each(|q| match &q.inner.info {
+        .for_each(|q| match &q.info {
             QueryInfo::GetRecord { step, .. } => {
                 assert_eq!(usize::from(step.count), 2);
             }
@@ -1318,6 +1379,7 @@ fn network_behaviour_on_address_change() {
     let endpoint = ConnectedPoint::Dialer {
         address: old_address.clone(),
         role_override: Endpoint::Dialer,
+        port_use: PortUse::Reuse,
     };
 
     // Mimick a connection being established.
@@ -1368,10 +1430,12 @@ fn network_behaviour_on_address_change() {
         old: &ConnectedPoint::Dialer {
             address: old_address,
             role_override: Endpoint::Dialer,
+            port_use: PortUse::Reuse,
         },
         new: &ConnectedPoint::Dialer {
             address: new_address.clone(),
             role_override: Endpoint::Dialer,
+            port_use: PortUse::Reuse,
         },
     }));
 

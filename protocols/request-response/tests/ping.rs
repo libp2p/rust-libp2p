@@ -20,15 +20,16 @@
 
 //! Integration tests for the `Behaviour`.
 
+use std::{io, iter};
+
 use futures::prelude::*;
 use libp2p_identity::PeerId;
 use libp2p_request_response as request_response;
 use libp2p_request_response::ProtocolSupport;
 use libp2p_swarm::{StreamProtocol, Swarm, SwarmEvent};
 use libp2p_swarm_test::SwarmExt;
-use rand::{self, Rng};
+use rand::Rng;
 use serde::{Deserialize, Serialize};
-use std::{io, iter};
 use tracing_subscriber::EnvFilter;
 
 #[async_std::test]

@@ -1,18 +1,18 @@
+use std::{error::Error, path::PathBuf, str::FromStr};
+
 use base64::Engine;
 use clap::Parser;
 use futures::stream::StreamExt;
-use libp2p::identity;
-use libp2p::identity::PeerId;
-use libp2p::kad;
-use libp2p::metrics::{Metrics, Recorder};
-use libp2p::swarm::SwarmEvent;
-use libp2p::tcp;
-use libp2p::{identify, noise, yamux};
-use prometheus_client::metrics::info::Info;
-use prometheus_client::registry::Registry;
-use std::error::Error;
-use std::path::PathBuf;
-use std::str::FromStr;
+use libp2p::{
+    identify, identity,
+    identity::PeerId,
+    kad,
+    metrics::{Metrics, Recorder},
+    noise,
+    swarm::SwarmEvent,
+    tcp, yamux,
+};
+use prometheus_client::{metrics::info::Info, registry::Registry};
 use tracing_subscriber::EnvFilter;
 use zeroize::Zeroizing;
 
@@ -71,7 +71,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let mut swarm = libp2p::SwarmBuilder::with_existing_identity(local_keypair)
         .with_tokio()
         .with_tcp(
-            tcp::Config::default().port_reuse(true).nodelay(true),
+            tcp::Config::default().nodelay(true),
             noise::Config::new,
             yamux::Config::default,
         )?
@@ -138,6 +138,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
                             protocols,
                             ..
                         },
+                    ..
                 } = e
                 {
                     if protocols.iter().any(|p| *p == kad::PROTOCOL_NAME) {

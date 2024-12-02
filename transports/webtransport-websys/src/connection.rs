@@ -1,22 +1,29 @@
+use std::{
+    collections::HashSet,
+    future::poll_fn,
+    pin::Pin,
+    task::{ready, Context, Poll},
+};
+
 use futures::FutureExt;
-use libp2p_core::muxing::{StreamMuxer, StreamMuxerEvent};
-use libp2p_core::upgrade::OutboundConnectionUpgrade;
-use libp2p_core::UpgradeInfo;
+use libp2p_core::{
+    muxing::{StreamMuxer, StreamMuxerEvent},
+    upgrade::OutboundConnectionUpgrade,
+    UpgradeInfo,
+};
 use libp2p_identity::{Keypair, PeerId};
 use multihash::Multihash;
 use send_wrapper::SendWrapper;
-use std::collections::HashSet;
-use std::future::poll_fn;
-use std::pin::Pin;
-use std::task::{ready, Context, Poll};
 use wasm_bindgen_futures::JsFuture;
 use web_sys::ReadableStreamDefaultReader;
 
-use crate::bindings::{WebTransport, WebTransportBidirectionalStream};
-use crate::endpoint::Endpoint;
-use crate::fused_js_promise::FusedJsPromise;
-use crate::utils::{detach_promise, parse_reader_response, to_js_type};
-use crate::{Error, Stream};
+use crate::{
+    bindings::{WebTransport, WebTransportBidirectionalStream},
+    endpoint::Endpoint,
+    fused_js_promise::FusedJsPromise,
+    utils::{detach_promise, parse_reader_response, to_js_type},
+    Error, Stream,
+};
 
 /// An opened WebTransport connection.
 #[derive(Debug)]
@@ -47,6 +54,12 @@ impl Connection {
             let opts = endpoint.webtransport_opts();
             WebTransport::new_with_options(&url, &opts).map_err(Error::from_js_value)?
         };
+        // Create a promise that will resolve once session is closed.
+        // It will catch the errors that can eventually happen when
+        // `.close()` is called. Without it, there is no way of catching
+        // those from the `.close()` itself, resulting in `Uncaught in promise...`
+        // logs popping up.
+        detach_promise(session.closed());
 
         let incoming_streams = session.incoming_bidirectional_streams();
         let incoming_streams_reader =

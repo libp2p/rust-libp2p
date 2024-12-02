@@ -18,21 +18,19 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use std::time::{Duration, SystemTime};
+use std::time::Duration;
 
 use asynchronous_codec::{Framed, FramedParts};
 use bytes::Bytes;
 use either::Either;
 use futures::prelude::*;
-use thiserror::Error;
-
 use libp2p_core::Multiaddr;
 use libp2p_identity::PeerId;
 use libp2p_swarm::Stream;
+use thiserror::Error;
+use web_time::SystemTime;
 
-use crate::proto;
-use crate::proto::message_v2::pb::mod_HopMessage::Type;
-use crate::protocol::MAX_MESSAGE_SIZE;
+use crate::{proto, proto::message_v2::pb::mod_HopMessage::Type, protocol::MAX_MESSAGE_SIZE};
 
 #[derive(Debug, Error)]
 pub enum Error {
@@ -114,6 +112,8 @@ impl ReservationReq {
 pub struct CircuitReq {
     dst: PeerId,
     substream: Framed<Stream, quick_protobuf_codec::Codec<proto::HopMessage>>,
+    max_circuit_duration: Duration,
+    max_circuit_bytes: u64,
 }
 
 impl CircuitReq {
@@ -126,7 +126,15 @@ impl CircuitReq {
             type_pb: proto::HopMessageType::STATUS,
             peer: None,
             reservation: None,
-            limit: None,
+            limit: Some(proto::Limit {
+                duration: Some(
+                    self.max_circuit_duration
+                        .as_secs()
+                        .try_into()
+                        .expect("`max_circuit_duration` not to exceed `u32::MAX`."),
+                ),
+                data: Some(self.max_circuit_bytes),
+            }),
             status: Some(proto::Status::OK),
         };
 
@@ -203,7 +211,12 @@ pub(crate) async fn handle_inbound_request(
 
             let dst = peer_id_res.map_err(|_| Error::ParsePeerId)?;
 
-            Either::Right(CircuitReq { dst, substream })
+            Either::Right(CircuitReq {
+                dst,
+                substream,
+                max_circuit_duration,
+                max_circuit_bytes,
+            })
         }
         Type::STATUS => return Err(Error::UnexpectedTypeStatus),
     };

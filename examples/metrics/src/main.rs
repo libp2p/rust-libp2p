@@ -20,19 +20,20 @@
 
 #![doc = include_str!("../README.md")]
 
+use std::{error::Error, time::Duration};
+
 use futures::StreamExt;
-use libp2p::core::Multiaddr;
-use libp2p::metrics::{Metrics, Recorder};
-use libp2p::swarm::{NetworkBehaviour, SwarmEvent};
-use libp2p::{identify, identity, noise, ping, tcp, yamux};
-use opentelemetry::sdk;
-use opentelemetry_api::KeyValue;
+use libp2p::{
+    core::Multiaddr,
+    identify, identity,
+    metrics::{Metrics, Recorder},
+    noise, ping,
+    swarm::{NetworkBehaviour, SwarmEvent},
+    tcp, yamux,
+};
+use opentelemetry::{trace::TracerProvider, KeyValue};
 use prometheus_client::registry::Registry;
-use std::error::Error;
-use std::time::Duration;
-use tracing_subscriber::layer::SubscriberExt;
-use tracing_subscriber::util::SubscriberInitExt;
-use tracing_subscriber::{EnvFilter, Layer};
+use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, EnvFilter, Layer};
 
 mod http_service;
 
@@ -67,6 +68,13 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     loop {
         match swarm.select_next_some().await {
+            SwarmEvent::NewListenAddr { address, .. } => {
+                tracing::info!(
+                    "Local node is listening on\n {}/p2p/{}",
+                    address,
+                    swarm.local_peer_id()
+                );
+            }
             SwarmEvent::Behaviour(BehaviourEvent::Ping(ping_event)) => {
                 tracing::info!(?ping_event);
                 metrics.record(&ping_event);
@@ -84,25 +92,22 @@ async fn main() -> Result<(), Box<dyn Error>> {
 }
 
 fn setup_tracing() -> Result<(), Box<dyn Error>> {
-    let tracer = opentelemetry_otlp::new_pipeline()
+    let provider = opentelemetry_otlp::new_pipeline()
         .tracing()
         .with_exporter(opentelemetry_otlp::new_exporter().tonic())
-        .with_trace_config(
-            sdk::trace::Config::default().with_resource(sdk::Resource::new(vec![KeyValue::new(
-                "service.name",
-                "libp2p",
-            )])),
-        )
-        .install_batch(opentelemetry::runtime::Tokio)?;
+        .with_trace_config(opentelemetry_sdk::trace::Config::default().with_resource(
+            opentelemetry_sdk::Resource::new(vec![KeyValue::new("service.name", "libp2p")]),
+        ))
+        .install_batch(opentelemetry_sdk::runtime::Tokio)?;
 
     tracing_subscriber::registry()
         .with(tracing_subscriber::fmt::layer().with_filter(EnvFilter::from_default_env()))
         .with(
             tracing_opentelemetry::layer()
-                .with_tracer(tracer)
+                .with_tracer(provider.tracer("libp2p-subscriber"))
                 .with_filter(EnvFilter::from_default_env()),
         )
-        .try_init()?;
+        .init();
 
     Ok(())
 }

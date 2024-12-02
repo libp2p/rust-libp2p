@@ -18,21 +18,30 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use futures::channel::mpsc;
-use futures::future::{BoxFuture, Either};
-use futures::stream::StreamExt;
-use futures::{future, ready, AsyncReadExt, AsyncWriteExt, FutureExt, SinkExt};
-use libp2p_core::muxing::{StreamMuxerBox, StreamMuxerExt};
-use libp2p_core::transport::{Boxed, ListenerId, TransportEvent};
-use libp2p_core::{Multiaddr, Transport};
+use std::{
+    future::Future,
+    num::NonZeroU8,
+    pin::Pin,
+    task::{Context, Poll},
+    time::Duration,
+};
+
+use futures::{
+    channel::mpsc,
+    future,
+    future::{BoxFuture, Either},
+    ready,
+    stream::StreamExt,
+    AsyncReadExt, AsyncWriteExt, FutureExt, SinkExt,
+};
+use libp2p_core::{
+    muxing::{StreamMuxerBox, StreamMuxerExt},
+    transport::{Boxed, DialOpts, ListenerId, PortUse, TransportEvent},
+    Endpoint, Multiaddr, Transport,
+};
 use libp2p_identity::PeerId;
 use libp2p_webrtc as webrtc;
 use rand::{thread_rng, RngCore};
-use std::future::Future;
-use std::num::NonZeroU8;
-use std::pin::Pin;
-use std::task::{Context, Poll};
-use std::time::Duration;
 use tracing_subscriber::EnvFilter;
 
 #[tokio::test]
@@ -322,7 +331,17 @@ struct Dial<'a> {
 impl<'a> Dial<'a> {
     fn new(dialer: &'a mut Boxed<(PeerId, StreamMuxerBox)>, addr: Multiaddr) -> Self {
         Self {
-            dial_task: dialer.dial(addr).unwrap().map(|r| r.unwrap()).boxed(),
+            dial_task: dialer
+                .dial(
+                    addr,
+                    DialOpts {
+                        role: Endpoint::Dialer,
+                        port_use: PortUse::Reuse,
+                    },
+                )
+                .unwrap()
+                .map(|r| r.unwrap())
+                .boxed(),
             dialer,
         }
     }

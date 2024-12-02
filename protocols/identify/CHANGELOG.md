@@ -1,3 +1,23 @@
+## 0.46.0
+
+- Make `identify::Config` fields private and add getter functions.
+  See [PR 5663](https://github.com/libp2p/rust-libp2p/pull/5663).
+
+## 0.45.1
+
+- Add `hide_listen_addrs` option to prevent leaking (local) listen addresses.
+  See [PR 5507](https://github.com/libp2p/rust-libp2p/pull/5507).
+
+## 0.45.0
+
+- Address translation is moved here from `libp2p-core`.
+  See [PR 4568](https://github.com/libp2p/rust-libp2p/pull/4568)
+
+<!-- Update to libp2p-swarm v0.45.0 -->
+
+- Add `ConnectionId` in `Event`.
+  See [PR 4981](https://github.com/libp2p/rust-libp2p/pull/4981).
+
 ## 0.44.2
 
 - Emit `ToSwarm::NewExternalAddrOfPeer` for all external addresses of remote peers.

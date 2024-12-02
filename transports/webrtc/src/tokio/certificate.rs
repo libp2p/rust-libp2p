@@ -32,6 +32,7 @@ impl Certificate {
     /// Generate new certificate.
     ///
     /// `_rng` argument is ignored for now. See <https://github.com/melekes/rust-libp2p/pull/12>.
+    #[allow(clippy::unnecessary_wraps)]
     pub fn generate<R>(_rng: &mut R) -> Result<Self, Error>
     where
         R: CryptoRng + Rng,
@@ -99,8 +100,9 @@ enum Kind {
 
 #[cfg(all(test, feature = "pem"))]
 mod test {
-    use super::*;
     use rand::thread_rng;
+
+    use super::*;
 
     #[test]
     fn test_certificate_serialize_pem_and_from_pem() {

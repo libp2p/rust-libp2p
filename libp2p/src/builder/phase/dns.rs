@@ -1,6 +1,7 @@
+use std::marker::PhantomData;
+
 use super::*;
 use crate::SwarmBuilder;
-use std::marker::PhantomData;
 
 pub struct DnsPhase<T> {
     pub(crate) transport: T,
@@ -8,8 +9,7 @@ pub struct DnsPhase<T> {
 
 #[cfg(all(not(target_arch = "wasm32"), feature = "async-std", feature = "dns"))]
 impl<T: AuthenticatedMultiplexedTransport> SwarmBuilder<super::provider::AsyncStd, DnsPhase<T>> {
-    // TODO: Remove `async`
-    pub async fn with_dns(
+    pub fn with_dns(
         self,
     ) -> Result<
         SwarmBuilder<

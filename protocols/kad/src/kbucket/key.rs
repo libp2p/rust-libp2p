@@ -18,14 +18,20 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::record;
+use std::{
+    borrow::Borrow,
+    hash::{Hash, Hasher},
+};
+
 use libp2p_core::multihash::Multihash;
 use libp2p_identity::PeerId;
-use sha2::digest::generic_array::{typenum::U32, GenericArray};
-use sha2::{Digest, Sha256};
-use std::borrow::Borrow;
-use std::hash::{Hash, Hasher};
+use sha2::{
+    digest::generic_array::{typenum::U32, GenericArray},
+    Digest, Sha256,
+};
 use uint::*;
+
+use crate::record;
 
 construct_uint! {
     /// 256-bit unsigned integer.
@@ -39,7 +45,7 @@ construct_uint! {
 ///
 /// `Key`s have an XOR metric as defined in the Kademlia paper, i.e. the bitwise XOR of
 /// the hash digests, interpreted as an integer. See [`Key::distance`].
-#[derive(Clone, Debug)]
+#[derive(Clone, Copy, Debug)]
 pub struct Key<T> {
     preimage: T,
     bytes: KeyBytes,
@@ -145,7 +151,7 @@ impl<T> Hash for Key<T> {
 }
 
 /// The raw bytes of a key in the DHT keyspace.
-#[derive(PartialEq, Eq, Clone, Debug)]
+#[derive(PartialEq, Eq, Clone, Copy, Debug)]
 pub struct KeyBytes(GenericArray<u8, U32>);
 
 impl KeyBytes {
@@ -200,9 +206,10 @@ impl Distance {
 
 #[cfg(test)]
 mod tests {
+    use quickcheck::*;
+
     use super::*;
     use crate::SHA_256_MH;
-    use quickcheck::*;
 
     impl Arbitrary for Key<PeerId> {
         fn arbitrary(_: &mut Gen) -> Key<PeerId> {

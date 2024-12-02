@@ -1,11 +1,13 @@
+use std::{
+    collections::HashSet,
+    iter,
+    time::{Duration, Instant},
+};
+
 use futures::StreamExt;
-use libp2p_core::multiaddr::Protocol;
 use libp2p_identify as identify;
 use libp2p_swarm::{Swarm, SwarmEvent};
 use libp2p_swarm_test::SwarmExt;
-use std::collections::HashSet;
-use std::iter;
-use std::time::{Duration, Instant};
 use tracing_subscriber::EnvFilter;
 
 #[async_std::test]
@@ -35,8 +37,7 @@ async fn periodic_identify() {
     let (swarm2_memory_listen, swarm2_tcp_listen_addr) = swarm2.listen().await;
     swarm2.connect(&mut swarm1).await;
 
-    use identify::Event::Received;
-    use identify::Event::Sent;
+    use identify::Event::{Received, Sent};
 
     match libp2p_swarm_test::drive(&mut swarm1, &mut swarm2).await {
         (
@@ -59,12 +60,7 @@ async fn periodic_identify() {
             assert_eq!(s1_info.protocol_version, "c");
             assert_eq!(s1_info.agent_version, "d");
             assert!(!s1_info.protocols.is_empty());
-            assert_eq!(
-                s1_info.observed_addr,
-                swarm1_memory_listen
-                    .clone()
-                    .with(Protocol::P2p(swarm1_peer_id))
-            );
+            assert_eq!(s1_info.observed_addr, swarm1_memory_listen);
             assert!(s1_info.listen_addrs.contains(&swarm2_tcp_listen_addr));
             assert!(s1_info.listen_addrs.contains(&swarm2_memory_listen));
 
@@ -73,7 +69,8 @@ async fn periodic_identify() {
             assert_eq!(s2_info.agent_version, "b");
             assert!(!s2_info.protocols.is_empty());
 
-            // Cannot assert observed address of dialer because memory transport uses ephemeral, outgoing ports.
+            // Cannot assert observed address of dialer because memory transport uses ephemeral,
+            // outgoing ports.
             // assert_eq!(
             //     s2_info.observed_addr,
             //     swarm2_memory_listen.with(Protocol::P2p(swarm2_peer_id.into()))
@@ -225,6 +222,77 @@ async fn emits_unique_listen_addresses() {
 
     assert_eq!(reported_addrs.len(), 2, "To have two addresses of remote");
     assert!(reported_addrs.contains(&(swarm2_peer_id, swarm2_mem_listen_addr)));
+    assert!(reported_addrs.contains(&(swarm2_peer_id, swarm2_tcp_listen_addr)));
+}
+
+#[async_std::test]
+async fn hides_listen_addresses() {
+    let _ = tracing_subscriber::fmt()
+        .with_env_filter(EnvFilter::from_default_env())
+        .try_init();
+
+    let mut swarm1 = Swarm::new_ephemeral(|identity| {
+        identify::Behaviour::new(
+            identify::Config::new("a".to_string(), identity.public())
+                .with_agent_version("b".to_string())
+                .with_interval(Duration::from_secs(1))
+                .with_cache_size(10),
+        )
+    });
+    let mut swarm2 = Swarm::new_ephemeral(|identity| {
+        identify::Behaviour::new(
+            identify::Config::new("c".to_string(), identity.public())
+                .with_agent_version("d".to_string())
+                .with_hide_listen_addrs(true),
+        )
+    });
+
+    let (_swarm2_mem_listen_addr, swarm2_tcp_listen_addr) =
+        swarm2.listen().with_tcp_addr_external().await;
+    let swarm2_peer_id = *swarm2.local_peer_id();
+    swarm1.connect(&mut swarm2).await;
+
+    async_std::task::spawn(swarm2.loop_on_next());
+
+    let swarm_events = futures::stream::poll_fn(|cx| swarm1.poll_next_unpin(cx))
+        .take(8)
+        .collect::<Vec<_>>()
+        .await;
+
+    let infos = swarm_events
+        .iter()
+        .filter_map(|e| match e {
+            SwarmEvent::Behaviour(identify::Event::Received { info, .. }) => Some(info.clone()),
+            _ => None,
+        })
+        .collect::<Vec<_>>();
+
+    assert!(
+        infos.len() > 1,
+        "should exchange identify payload more than once"
+    );
+
+    let listen_addrs = infos
+        .iter()
+        .map(|i| i.listen_addrs.clone())
+        .collect::<Vec<_>>();
+
+    for addrs in listen_addrs {
+        assert_eq!(addrs.len(), 1);
+        assert!(addrs.contains(&swarm2_tcp_listen_addr));
+    }
+
+    let reported_addrs = swarm_events
+        .iter()
+        .filter_map(|e| match e {
+            SwarmEvent::NewExternalAddrOfPeer { peer_id, address } => {
+                Some((*peer_id, address.clone()))
+            }
+            _ => None,
+        })
+        .collect::<Vec<_>>();
+
+    assert_eq!(reported_addrs.len(), 1, "To have one TCP address of remote");
     assert!(reported_addrs.contains(&(swarm2_peer_id, swarm2_tcp_listen_addr)));
 }
 

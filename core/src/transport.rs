@@ -25,8 +25,6 @@
 //! any desired protocols. The rest of the module defines combinators for
 //! modifying a transport through composition with other transports or protocol upgrades.
 
-use futures::prelude::*;
-use multiaddr::Multiaddr;
 use std::{
     error::Error,
     fmt,
@@ -34,6 +32,9 @@ use std::{
     sync::atomic::{AtomicUsize, Ordering},
     task::{Context, Poll},
 };
+
+use futures::prelude::*;
+use multiaddr::Multiaddr;
 
 pub mod and_then;
 pub mod choice;
@@ -48,15 +49,38 @@ pub mod upgrade;
 mod boxed;
 mod optional;
 
-use crate::ConnectedPoint;
-
-pub use self::boxed::Boxed;
-pub use self::choice::OrTransport;
-pub use self::memory::MemoryTransport;
-pub use self::optional::OptionalTransport;
-pub use self::upgrade::Upgrade;
+pub use self::{
+    boxed::Boxed, choice::OrTransport, memory::MemoryTransport, optional::OptionalTransport,
+    upgrade::Upgrade,
+};
+use crate::{ConnectedPoint, Endpoint};
 
 static NEXT_LISTENER_ID: AtomicUsize = AtomicUsize::new(1);
+
+/// The port use policy for a new connection.
+#[derive(Debug, Copy, Clone, Default, PartialEq, Eq, Hash)]
+pub enum PortUse {
+    /// Always allocate a new port for the dial.
+    New,
+    /// Best effor reusing of an existing port.
+    ///
+    /// If there is no listener present that can be used to dial, a new port is allocated.
+    #[default]
+    Reuse,
+}
+
+/// Options to customize the behaviour during dialing.
+#[derive(Debug, Copy, Clone)]
+pub struct DialOpts {
+    /// The endpoint establishing a new connection.
+    ///
+    /// When attempting a hole-punch, both parties simultaneously "dial" each other but one party
+    /// has to be the "listener" on the final connection. This option specifies the role of
+    /// this node in the final connection.
+    pub role: Endpoint,
+    /// The port use policy for a new connection.
+    pub port_use: PortUse,
+}
 
 /// A transport provides connection-oriented communication between two peers
 /// through ordered streams of data (i.e. connections).
@@ -129,24 +153,18 @@ pub trait Transport {
     ///
     /// If [`TransportError::MultiaddrNotSupported`] is returned, it may be desirable to
     /// try an alternative [`Transport`], if available.
-    fn dial(&mut self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>>;
-
-    /// As [`Transport::dial`] but has the local node act as a listener on the outgoing connection.
-    ///
-    /// This option is needed for NAT and firewall hole punching.
-    ///
-    /// See [`ConnectedPoint::Dialer`] for related option.
-    fn dial_as_listener(
+    fn dial(
         &mut self,
         addr: Multiaddr,
+        opts: DialOpts,
     ) -> Result<Self::Dial, TransportError<Self::Error>>;
 
     /// Poll for [`TransportEvent`]s.
     ///
-    /// A [`TransportEvent::Incoming`] should be produced whenever a connection is received at the lowest
-    /// level of the transport stack. The item must be a [`ListenerUpgrade`](Transport::ListenerUpgrade)
-    /// future that resolves to an [`Output`](Transport::Output) value once all protocol upgrades have
-    /// been applied.
+    /// A [`TransportEvent::Incoming`] should be produced whenever a connection is received at the
+    /// lowest level of the transport stack. The item must be a
+    /// [`ListenerUpgrade`](Transport::ListenerUpgrade) future that resolves to an
+    /// [`Output`](Transport::Output) value once all protocol upgrades have been applied.
     ///
     /// Transports are expected to produce [`TransportEvent::Incoming`] events only for
     /// listen addresses which have previously been announced via
@@ -156,24 +174,6 @@ pub trait Transport {
         self: Pin<&mut Self>,
         cx: &mut Context<'_>,
     ) -> Poll<TransportEvent<Self::ListenerUpgrade, Self::Error>>;
-
-    /// Performs a transport-specific mapping of an address `observed` by a remote onto a
-    /// local `listen` address to yield an address for the local node that may be reachable
-    /// for other peers.
-    ///
-    /// This is relevant for transports where Network Address Translation (NAT) can occur
-    /// so that e.g. the peer is observed at a different IP than the IP of the local
-    /// listening address. See also [`address_translation`][crate::address_translation].
-    ///
-    /// Within [`libp2p::Swarm`](<https://docs.rs/libp2p/latest/libp2p/struct.Swarm.html>) this is
-    /// used when extending the listening addresses of the local peer with external addresses
-    /// observed by remote peers.
-    /// On transports where this is not relevant (i.e. no NATs are present) `None` should be
-    /// returned for the sake of de-duplication.
-    ///
-    /// Note: if the listen or observed address is not a valid address of this transport,
-    /// `None` should be returned as well.
-    fn address_translation(&self, listen: &Multiaddr, observed: &Multiaddr) -> Option<Multiaddr>;
 
     /// Boxes the transport, including custom transport errors.
     fn boxed(self) -> boxed::Boxed<Self::Output>
@@ -256,7 +256,7 @@ impl ListenerId {
     }
 }
 
-impl std::fmt::Display for ListenerId {
+impl fmt::Display for ListenerId {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}", self.0)
     }
@@ -311,7 +311,7 @@ pub enum TransportEvent<TUpgr, TErr> {
 
 impl<TUpgr, TErr> TransportEvent<TUpgr, TErr> {
     /// In case this [`TransportEvent`] is an upgrade, apply the given function
-    /// to the upgrade and produce another transport event based the the function's result.
+    /// to the upgrade and produce another transport event based the function's result.
     pub fn map_upgrade<U>(self, map: impl FnOnce(TUpgr) -> U) -> TransportEvent<U, TErr> {
         match self {
             TransportEvent::Incoming {
@@ -530,7 +530,7 @@ pub enum TransportError<TErr> {
 }
 
 impl<TErr> TransportError<TErr> {
-    /// Applies a function to the the error in [`TransportError::Other`].
+    /// Applies a function to the error in [`TransportError::Other`].
     pub fn map<TNewErr>(self, map: impl FnOnce(TErr) -> TNewErr) -> TransportError<TNewErr> {
         match self {
             TransportError::MultiaddrNotSupported(addr) => {

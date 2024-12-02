@@ -18,13 +18,14 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
+use std::time::Duration;
+
 use futures::StreamExt;
 use libp2p::{
     identify, noise, ping, rendezvous,
     swarm::{NetworkBehaviour, SwarmEvent},
     tcp, yamux, Multiaddr,
 };
-use std::time::Duration;
 use tracing_subscriber::EnvFilter;
 
 #[tokio::main]
@@ -76,8 +77,12 @@ async fn main() {
             }
             // once `/identify` did its job, we know our external address and can register
             SwarmEvent::Behaviour(MyBehaviourEvent::Identify(identify::Event::Received {
+                info,
                 ..
             })) => {
+                // Register our external address. Needs to be done explicitly
+                // for this case, as it's a local address.
+                swarm.add_external_address(info.observed_addr);
                 if let Err(error) = swarm.behaviour_mut().rendezvous.register(
                     rendezvous::Namespace::from_static("rendezvous"),
                     rendezvous_point,

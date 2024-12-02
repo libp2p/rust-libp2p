@@ -1,15 +1,15 @@
 #![cfg_attr(docsrs, feature(doc_cfg, doc_auto_cfg))]
 
-pub use quickcheck::*;
-
 use core::ops::Range;
+
 use num_traits::sign::Unsigned;
+pub use quickcheck::*;
 
 pub trait GenRange {
     fn gen_range<T: Unsigned + Arbitrary + Copy>(&mut self, _range: Range<T>) -> T;
 
     fn gen_index(&mut self, ubound: usize) -> usize {
-        if ubound <= (core::u32::MAX as usize) {
+        if ubound <= (u32::MAX as usize) {
             self.gen_range(0..ubound as u32) as usize
         } else {
             self.gen_range(0..ubound)

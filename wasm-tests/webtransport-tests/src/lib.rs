@@ -1,14 +1,17 @@
-use futures::channel::oneshot;
-use futures::{AsyncReadExt, AsyncWriteExt};
+#![allow(unexpected_cfgs)]
+use std::{future::poll_fn, pin::Pin};
+
+use futures::{channel::oneshot, AsyncReadExt, AsyncWriteExt};
 use getrandom::getrandom;
-use libp2p_core::{StreamMuxer, Transport as _};
+use libp2p_core::{
+    transport::{DialOpts, PortUse},
+    Endpoint, StreamMuxer, Transport as _,
+};
 use libp2p_identity::{Keypair, PeerId};
 use libp2p_noise as noise;
 use libp2p_webtransport_websys::{Config, Connection, Error, Stream, Transport};
 use multiaddr::{Multiaddr, Protocol};
 use multihash::Multihash;
-use std::future::poll_fn;
-use std::pin::Pin;
 use wasm_bindgen::JsCast;
 use wasm_bindgen_futures::{spawn_local, JsFuture};
 use wasm_bindgen_test::{wasm_bindgen_test, wasm_bindgen_test_configure};
@@ -263,7 +266,17 @@ async fn connect_without_peer_id() {
     addr.pop();
 
     let mut transport = Transport::new(Config::new(&keypair));
-    transport.dial(addr).unwrap().await.unwrap();
+    transport
+        .dial(
+            addr,
+            DialOpts {
+                role: Endpoint::Dialer,
+                port_use: PortUse::Reuse,
+            },
+        )
+        .unwrap()
+        .await
+        .unwrap();
 }
 
 #[wasm_bindgen_test]
@@ -278,7 +291,17 @@ async fn error_on_unknown_peer_id() {
     addr.push(Protocol::P2p(PeerId::random()));
 
     let mut transport = Transport::new(Config::new(&keypair));
-    let e = transport.dial(addr.clone()).unwrap().await.unwrap_err();
+    let e = transport
+        .dial(
+            addr.clone(),
+            DialOpts {
+                role: Endpoint::Dialer,
+                port_use: PortUse::Reuse,
+            },
+        )
+        .unwrap()
+        .await
+        .unwrap_err();
     assert!(matches!(e, Error::UnknownRemotePeerId));
 }
 
@@ -297,7 +320,17 @@ async fn error_on_unknown_certhash() {
     addr.push(peer_id);
 
     let mut transport = Transport::new(Config::new(&keypair));
-    let e = transport.dial(addr.clone()).unwrap().await.unwrap_err();
+    let e = transport
+        .dial(
+            addr.clone(),
+            DialOpts {
+                role: Endpoint::Dialer,
+                port_use: PortUse::Reuse,
+            },
+        )
+        .unwrap()
+        .await
+        .unwrap_err();
     assert!(matches!(
         e,
         Error::Noise(noise::Error::UnknownWebTransportCerthashes(..))
@@ -310,7 +343,17 @@ async fn new_connection_to_echo_server() -> Connection {
 
     let mut transport = Transport::new(Config::new(&keypair));
 
-    let (_peer_id, conn) = transport.dial(addr).unwrap().await.unwrap();
+    let (_peer_id, conn) = transport
+        .dial(
+            addr,
+            DialOpts {
+                role: Endpoint::Dialer,
+                port_use: PortUse::Reuse,
+            },
+        )
+        .unwrap()
+        .await
+        .unwrap();
 
     conn
 }

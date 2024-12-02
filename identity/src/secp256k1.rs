@@ -20,14 +20,14 @@
 
 //! Secp256k1 keys.
 
-use super::error::DecodingError;
+use core::{cmp, fmt, hash};
+
 use asn1_der::typed::{DerDecodable, Sequence};
-use core::cmp;
-use core::fmt;
-use core::hash;
 use libsecp256k1::{Message, Signature};
 use sha2::{Digest as ShaDigestTrait, Sha256};
 use zeroize::Zeroize;
+
+use super::error::DecodingError;
 
 /// A Secp256k1 keypair.
 #[derive(Clone)]
@@ -214,7 +214,7 @@ impl PublicKey {
         self.0.serialize()
     }
 
-    /// Decode a public key from a byte slice in the the format produced
+    /// Decode a public key from a byte slice in the format produced
     /// by `encode`.
     pub fn try_from_bytes(k: &[u8]) -> Result<PublicKey, DecodingError> {
         libsecp256k1::PublicKey::parse_slice(k, Some(libsecp256k1::PublicKeyFormat::Compressed))

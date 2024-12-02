@@ -20,6 +20,8 @@
 
 #![doc = include_str!("../README.md")]
 
+use std::{env, error::Error, fs, path::Path, str::FromStr, time::Duration};
+
 use either::Either;
 use futures::prelude::*;
 use libp2p::{
@@ -31,7 +33,6 @@ use libp2p::{
     swarm::{NetworkBehaviour, SwarmEvent},
     tcp, yamux, Multiaddr, Transport,
 };
-use std::{env, error::Error, fs, path::Path, str::FromStr, time::Duration};
 use tokio::{io, io::AsyncBufReadExt, select};
 use tracing_subscriber::EnvFilter;
 

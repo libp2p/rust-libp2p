@@ -72,16 +72,49 @@ mod entry;
 #[allow(clippy::assign_op_pattern)]
 mod key;
 
+use std::{collections::VecDeque, num::NonZeroUsize, time::Duration};
+
+use bucket::KBucket;
 pub use bucket::NodeStatus;
 pub use entry::*;
-
-use arrayvec::{self, ArrayVec};
-use bucket::KBucket;
-use std::collections::VecDeque;
-use std::time::{Duration, Instant};
+use web_time::Instant;
 
 /// Maximum number of k-buckets.
 const NUM_BUCKETS: usize = 256;
+
+/// The configuration for `KBucketsTable`.
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct KBucketConfig {
+    /// Maximal number of nodes that a bucket can contain.
+    bucket_size: usize,
+    /// Specifies the duration after creation of a [`PendingEntry`] after which
+    /// it becomes eligible for insertion into a full bucket, replacing the
+    /// least-recently (dis)connected node.
+    pending_timeout: Duration,
+}
+
+impl Default for KBucketConfig {
+    fn default() -> Self {
+        KBucketConfig {
+            bucket_size: K_VALUE.get(),
+            pending_timeout: Duration::from_secs(60),
+        }
+    }
+}
+
+impl KBucketConfig {
+    /// Modifies the maximal number of nodes that a bucket can contain.
+    pub(crate) fn set_bucket_size(&mut self, bucket_size: NonZeroUsize) {
+        self.bucket_size = bucket_size.get();
+    }
+
+    /// Modifies the duration after creation of a [`PendingEntry`] after which
+    /// it becomes eligible for insertion into a full bucket, replacing the
+    /// least-recently (dis)connected node.
+    pub(crate) fn set_pending_timeout(&mut self, pending_timeout: Duration) {
+        self.pending_timeout = pending_timeout;
+    }
+}
 
 /// A `KBucketsTable` represents a Kademlia routing table.
 #[derive(Debug, Clone)]
@@ -90,6 +123,8 @@ pub(crate) struct KBucketsTable<TKey, TVal> {
     local_key: TKey,
     /// The buckets comprising the routing table.
     buckets: Vec<KBucket<TKey, TVal>>,
+    /// The maximal number of nodes that a bucket can contain.
+    bucket_size: usize,
     /// The list of evicted entries that have been replaced with pending
     /// entries since the last call to [`KBucketsTable::take_applied_pending`].
     applied_pending: VecDeque<AppliedPending<TKey, TVal>>,
@@ -150,17 +185,12 @@ where
     TVal: Clone,
 {
     /// Creates a new, empty Kademlia routing table with entries partitioned
-    /// into buckets as per the Kademlia protocol.
-    ///
-    /// The given `pending_timeout` specifies the duration after creation of
-    /// a [`PendingEntry`] after which it becomes eligible for insertion into
-    /// a full bucket, replacing the least-recently (dis)connected node.
-    pub(crate) fn new(local_key: TKey, pending_timeout: Duration) -> Self {
+    /// into buckets as per the Kademlia protocol using the provided config.
+    pub(crate) fn new(local_key: TKey, config: KBucketConfig) -> Self {
         KBucketsTable {
             local_key,
-            buckets: (0..NUM_BUCKETS)
-                .map(|_| KBucket::new(pending_timeout))
-                .collect(),
+            buckets: (0..NUM_BUCKETS).map(|_| KBucket::new(config)).collect(),
+            bucket_size: config.bucket_size,
             applied_pending: VecDeque::new(),
         }
     }
@@ -246,13 +276,16 @@ where
         T: AsRef<KeyBytes>,
     {
         let distance = self.local_key.as_ref().distance(target);
+        let bucket_size = self.bucket_size;
         ClosestIter {
             target,
             iter: None,
             table: self,
             buckets_iter: ClosestBucketsIter::new(distance),
-            fmap: |b: &KBucket<TKey, _>| -> ArrayVec<_, { K_VALUE.get() }> {
-                b.iter().map(|(n, _)| n.key.clone()).collect()
+            fmap: move |b: &KBucket<TKey, _>| -> Vec<_> {
+                let mut vec = Vec::with_capacity(bucket_size);
+                vec.extend(b.iter().map(|(n, _)| n.key.clone()));
+                vec
             },
         }
     }
@@ -268,13 +301,15 @@ where
         TVal: Clone,
     {
         let distance = self.local_key.as_ref().distance(target);
+        let bucket_size = self.bucket_size;
         ClosestIter {
             target,
             iter: None,
             table: self,
             buckets_iter: ClosestBucketsIter::new(distance),
-            fmap: |b: &KBucket<_, TVal>| -> ArrayVec<_, { K_VALUE.get() }> {
+            fmap: move |b: &KBucket<_, TVal>| -> Vec<_> {
                 b.iter()
+                    .take(bucket_size)
                     .map(|(n, status)| EntryView {
                         node: n.clone(),
                         status,
@@ -323,7 +358,7 @@ struct ClosestIter<'a, TTarget, TKey, TVal, TMap, TOut> {
     /// distance of the local key to the target.
     buckets_iter: ClosestBucketsIter,
     /// The iterator over the entries in the currently traversed bucket.
-    iter: Option<arrayvec::IntoIter<TOut, { K_VALUE.get() }>>,
+    iter: Option<std::vec::IntoIter<TOut>>,
     /// The projection function / mapping applied on each bucket as
     /// it is encountered, producing the next `iter`ator.
     fmap: TMap,
@@ -344,7 +379,7 @@ enum ClosestBucketsIterState {
     /// The starting state of the iterator yields the first bucket index and
     /// then transitions to `ZoomIn`.
     Start(BucketIndex),
-    /// The iterator "zooms in" to to yield the next bucket cotaining nodes that
+    /// The iterator "zooms in" to yield the next bucket containing nodes that
     /// are incrementally closer to the local node but further from the `target`.
     /// These buckets are identified by a `1` in the corresponding bit position
     /// of the distance bit string. When bucket `0` is reached, the iterator
@@ -428,7 +463,7 @@ where
     TTarget: AsRef<KeyBytes>,
     TKey: Clone + AsRef<KeyBytes>,
     TVal: Clone,
-    TMap: Fn(&KBucket<TKey, TVal>) -> ArrayVec<TOut, { K_VALUE.get() }>,
+    TMap: Fn(&KBucket<TKey, TVal>) -> Vec<TOut>,
     TOut: AsRef<KeyBytes>,
 {
     type Item = TOut;
@@ -492,12 +527,12 @@ where
 
     /// Returns true if the bucket has a pending node.
     pub fn has_pending(&self) -> bool {
-        self.bucket.pending().map_or(false, |n| !n.is_ready())
+        self.bucket.pending().is_some_and(|n| !n.is_ready())
     }
 
     /// Tests whether the given distance falls into this bucket.
     pub fn contains(&self, d: &Distance) -> bool {
-        BucketIndex::new(d).map_or(false, |i| i == self.index)
+        BucketIndex::new(d).is_some_and(|i| i == self.index)
     }
 
     /// Generates a random distance that falls into this bucket.
@@ -524,9 +559,10 @@ where
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use libp2p_identity::PeerId;
     use quickcheck::*;
+
+    use super::*;
 
     type TestTable = KBucketsTable<KeyBytes, ()>;
 
@@ -534,19 +570,19 @@ mod tests {
         fn arbitrary(g: &mut Gen) -> TestTable {
             let local_key = Key::from(PeerId::random());
             let timeout = Duration::from_secs(g.gen_range(1..360));
-            let mut table = TestTable::new(local_key.clone().into(), timeout);
+            let mut config = KBucketConfig::default();
+            config.set_pending_timeout(timeout);
+            let bucket_size = config.bucket_size;
+            let mut table = TestTable::new(local_key.into(), config);
             let mut num_total = g.gen_range(0..100);
             for (i, b) in &mut table.buckets.iter_mut().enumerate().rev() {
                 let ix = BucketIndex(i);
-                let num = g.gen_range(0..usize::min(K_VALUE.get(), num_total) + 1);
+                let num = g.gen_range(0..usize::min(bucket_size, num_total) + 1);
                 num_total -= num;
                 for _ in 0..num {
                     let distance = ix.rand_distance(&mut rand::thread_rng());
                     let key = local_key.for_distance(distance);
-                    let node = Node {
-                        key: key.clone(),
-                        value: (),
-                    };
+                    let node = Node { key, value: () };
                     let status = NodeStatus::arbitrary(g);
                     match b.insert(node, status) {
                         InsertResult::Inserted => {}
@@ -562,7 +598,9 @@ mod tests {
     fn buckets_are_non_overlapping_and_exhaustive() {
         let local_key = Key::from(PeerId::random());
         let timeout = Duration::from_secs(0);
-        let mut table = KBucketsTable::<KeyBytes, ()>::new(local_key.into(), timeout);
+        let mut config = KBucketConfig::default();
+        config.set_pending_timeout(timeout);
+        let mut table = KBucketsTable::<KeyBytes, ()>::new(local_key.into(), config);
 
         let mut prev_max = U256::from(0);
 
@@ -579,7 +617,9 @@ mod tests {
     fn bucket_contains_range() {
         fn prop(ix: u8) {
             let index = BucketIndex(ix as usize);
-            let mut bucket = KBucket::<Key<PeerId>, ()>::new(Duration::from_secs(0));
+            let mut config = KBucketConfig::default();
+            config.set_pending_timeout(Duration::from_secs(0));
+            let mut bucket = KBucket::<Key<PeerId>, ()>::new(config);
             let bucket_ref = KBucketRef {
                 index,
                 bucket: &mut bucket,
@@ -597,7 +637,7 @@ mod tests {
                 assert!(!bucket_ref.contains(&Distance(min.0 - 1)));
             }
 
-            if max != Distance(U256::max_value()) {
+            if max != Distance(U256::MAX) {
                 // ^ avoid overflow
                 assert!(!bucket_ref.contains(&Distance(max.0 + 1)));
             }
@@ -625,7 +665,7 @@ mod tests {
         let local_key = Key::from(PeerId::random());
         let other_id = Key::from(PeerId::random());
 
-        let mut table = KBucketsTable::<_, ()>::new(local_key, Duration::from_secs(5));
+        let mut table = KBucketsTable::<_, ()>::new(local_key, KBucketConfig::default());
         if let Some(Entry::Absent(entry)) = table.entry(&other_id) {
             match entry.insert((), NodeStatus::Connected) {
                 InsertResult::Inserted => (),
@@ -643,7 +683,7 @@ mod tests {
     #[test]
     fn entry_self() {
         let local_key = Key::from(PeerId::random());
-        let mut table = KBucketsTable::<_, ()>::new(local_key.clone(), Duration::from_secs(5));
+        let mut table = KBucketsTable::<_, ()>::new(local_key, KBucketConfig::default());
 
         assert!(table.entry(&local_key).is_none())
     }
@@ -651,7 +691,7 @@ mod tests {
     #[test]
     fn closest() {
         let local_key = Key::from(PeerId::random());
-        let mut table = KBucketsTable::<_, ()>::new(local_key, Duration::from_secs(5));
+        let mut table = KBucketsTable::<_, ()>::new(local_key, KBucketConfig::default());
         let mut count = 0;
         loop {
             if count == 100 {
@@ -671,7 +711,7 @@ mod tests {
         let mut expected_keys: Vec<_> = table
             .buckets
             .iter()
-            .flat_map(|t| t.iter().map(|(n, _)| n.key.clone()))
+            .flat_map(|t| t.iter().map(|(n, _)| n.key))
             .collect();
 
         for _ in 0..10 {
@@ -686,7 +726,9 @@ mod tests {
     #[test]
     fn applied_pending() {
         let local_key = Key::from(PeerId::random());
-        let mut table = KBucketsTable::<_, ()>::new(local_key.clone(), Duration::from_millis(1));
+        let mut config = KBucketConfig::default();
+        config.set_pending_timeout(Duration::from_millis(1));
+        let mut table = KBucketsTable::<_, ()>::new(local_key, config);
         let expected_applied;
         let full_bucket_index;
         loop {
@@ -698,10 +740,7 @@ mod tests {
                             match e.insert((), NodeStatus::Connected) {
                                 InsertResult::Pending { disconnected } => {
                                     expected_applied = AppliedPending {
-                                        inserted: Node {
-                                            key: key.clone(),
-                                            value: (),
-                                        },
+                                        inserted: Node { key, value: () },
                                         evicted: Some(Node {
                                             key: disconnected,
                                             value: (),
