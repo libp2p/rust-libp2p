@@ -27,7 +27,6 @@ impl Handler {
     }
 }
 
-#[allow(deprecated)] // TODO: Remove when {In,Out}boundOpenInfo is fully deprecated.
 impl ConnectionHandler for Handler {
     type FromBehaviour = Infallible;
     type ToBehaviour = IncomingNonce;
@@ -36,7 +35,7 @@ impl ConnectionHandler for Handler {
     type InboundOpenInfo = ();
     type OutboundOpenInfo = ();
 
-    fn listen_protocol(&self) -> SubstreamProtocol<Self::InboundProtocol, Self::InboundOpenInfo> {
+    fn listen_protocol(&self) -> SubstreamProtocol<Self::InboundProtocol, ()> {
         SubstreamProtocol::new(ReadyUpgrade::new(DIAL_BACK_PROTOCOL), ())
     }
 
@@ -44,7 +43,7 @@ impl ConnectionHandler for Handler {
         &mut self,
         cx: &mut Context<'_>,
     ) -> Poll<
-        ConnectionHandlerEvent<Self::OutboundProtocol, Self::OutboundOpenInfo, Self::ToBehaviour>,
+        ConnectionHandlerEvent<Self::OutboundProtocol, (), Self::ToBehaviour>,
     > {
         loop {
             match self.inbound.poll_next_unpin(cx) {
@@ -72,8 +71,8 @@ impl ConnectionHandler for Handler {
         event: ConnectionEvent<
             Self::InboundProtocol,
             Self::OutboundProtocol,
-            Self::InboundOpenInfo,
-            Self::OutboundOpenInfo,
+            (),
+            (),
         >,
     ) {
         match event {

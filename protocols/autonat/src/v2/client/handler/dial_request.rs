@@ -69,11 +69,10 @@ pub enum DialBackError {
 }
 
 pub struct Handler {
-    #[allow(deprecated)] // TODO: Remove when {In,Out}boundOpenInfo is fully deprecated.
     queued_events: VecDeque<
         ConnectionHandlerEvent<
             <Self as ConnectionHandler>::OutboundProtocol,
-            <Self as ConnectionHandler>::OutboundOpenInfo,
+            (),
             <Self as ConnectionHandler>::ToBehaviour,
         >,
     >,
@@ -114,7 +113,6 @@ impl Handler {
     }
 }
 
-#[allow(deprecated)] // TODO: Remove when {In,Out}boundOpenInfo is fully deprecated.
 impl ConnectionHandler for Handler {
     type FromBehaviour = DialRequest;
     type ToBehaviour = ToBehaviour;
@@ -123,7 +121,7 @@ impl ConnectionHandler for Handler {
     type InboundOpenInfo = ();
     type OutboundOpenInfo = ();
 
-    fn listen_protocol(&self) -> SubstreamProtocol<Self::InboundProtocol, Self::InboundOpenInfo> {
+    fn listen_protocol(&self) -> SubstreamProtocol<Self::InboundProtocol, ()> {
         SubstreamProtocol::new(DeniedUpgrade, ())
     }
 
@@ -131,7 +129,7 @@ impl ConnectionHandler for Handler {
         &mut self,
         cx: &mut Context<'_>,
     ) -> Poll<
-        ConnectionHandlerEvent<Self::OutboundProtocol, Self::OutboundOpenInfo, Self::ToBehaviour>,
+        ConnectionHandlerEvent<Self::OutboundProtocol, (), Self::ToBehaviour>,
     > {
         if let Some(event) = self.queued_events.pop_front() {
             return Poll::Ready(event);
@@ -166,8 +164,8 @@ impl ConnectionHandler for Handler {
         event: ConnectionEvent<
             Self::InboundProtocol,
             Self::OutboundProtocol,
-            Self::InboundOpenInfo,
-            Self::OutboundOpenInfo,
+            (),
+            (),
         >,
     ) {
         match event {
