@@ -86,7 +86,7 @@ impl ConnectionHandler for Handler {
             Self::InboundProtocol,
             Self::OutboundProtocol,
             (),
-            Void,
+            Infallible,
         >,
     ) {
         match event {
@@ -130,7 +130,7 @@ impl ConnectionHandler for Handler {
         &mut self,
         cx: &mut Context<'_>,
     ) -> Poll<
-        ConnectionHandlerEvent<Self::OutboundProtocol, Void, Self::ToBehaviour>,
+        ConnectionHandlerEvent<Self::OutboundProtocol, Infallible, Self::ToBehaviour>,
     > {
         loop {
             match self.inbound.poll_unpin(cx) {

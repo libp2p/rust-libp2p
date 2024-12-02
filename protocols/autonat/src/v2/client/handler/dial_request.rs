@@ -69,6 +69,7 @@ pub enum DialBackError {
 }
 
 pub struct Handler {
+    #[allow(deprecated)] // TODO: Remove when {In,Out}boundOpenInfo is fully deprecated.
     queued_events: VecDeque<
         ConnectionHandlerEvent<
             <Self as ConnectionHandler>::OutboundProtocol,
@@ -113,6 +114,7 @@ impl Handler {
     }
 }
 
+#[allow(deprecated)] // TODO: Remove when {In,Out}boundOpenInfo is fully deprecated.
 impl ConnectionHandler for Handler {
     type FromBehaviour = DialRequest;
     type ToBehaviour = ToBehaviour;

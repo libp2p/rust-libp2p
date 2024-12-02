@@ -65,7 +65,7 @@ impl ConnectionHandler for PendingConnectionHandler {
         &mut self,
         _: &mut Context<'_>,
     ) -> Poll<
-        ConnectionHandlerEvent<Self::OutboundProtocol, Void, Self::ToBehaviour>,
+        ConnectionHandlerEvent<Self::OutboundProtocol, Infallible, Self::ToBehaviour>,
     > {
         Poll::Pending
     }
@@ -76,7 +76,7 @@ impl ConnectionHandler for PendingConnectionHandler {
             Self::InboundProtocol,
             Self::OutboundProtocol,
             (),
-            Void,
+            Infallible,
         >,
     ) {
         match event {

@@ -268,6 +268,8 @@ struct SpinningHandler {
     protocols: &'static [StreamProtocol],
 }
 
+// TODO: Remove when {In,Out}boundOpenInfo is fully deprecated.
+#[allow(deprecated)]
 impl ConnectionHandler for SpinningHandler {
     type FromBehaviour = Infallible;
 

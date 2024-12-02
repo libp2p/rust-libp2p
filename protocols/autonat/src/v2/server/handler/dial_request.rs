@@ -70,6 +70,7 @@ where
     }
 }
 
+#[allow(deprecated)] // TODO: Remove when {In,Out}boundOpenInfo is fully deprecated.
 impl<R> ConnectionHandler for Handler<R>
 where
     R: RngCore + Send + Clone + 'static,

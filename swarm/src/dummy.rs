@@ -71,7 +71,7 @@ impl crate::handler::ConnectionHandler for ConnectionHandler {
     type InboundProtocol = DeniedUpgrade;
     type OutboundProtocol = DeniedUpgrade;
     type InboundOpenInfo = ();
-    type OutboundOpenInfo = Infallible;
+    type OutboundOpenInfo = ();
 
     fn listen_protocol(&self) -> SubstreamProtocol<Self::InboundProtocol, ()> {
         SubstreamProtocol::new(DeniedUpgrade, ())
@@ -87,7 +87,7 @@ impl crate::handler::ConnectionHandler for ConnectionHandler {
         &mut self,
         _: &mut Context<'_>,
     ) -> Poll<
-        ConnectionHandlerEvent<Self::OutboundProtocol, Void, Self::ToBehaviour>,
+        ConnectionHandlerEvent<Self::OutboundProtocol, (), Self::ToBehaviour>,
     > {
         Poll::Pending
     }
@@ -98,7 +98,7 @@ impl crate::handler::ConnectionHandler for ConnectionHandler {
             Self::InboundProtocol,
             Self::OutboundProtocol,
             (),
-            Void,
+            (),
         >,
     ) {
         match event {

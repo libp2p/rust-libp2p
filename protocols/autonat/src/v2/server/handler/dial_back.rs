@@ -38,6 +38,7 @@ impl Handler {
     }
 }
 
+#[allow(deprecated)] // TODO: Remove when {In,Out}boundOpenInfo is fully deprecated.
 impl ConnectionHandler for Handler {
     type FromBehaviour = ();
     type ToBehaviour = ToBehaviour;
