@@ -258,7 +258,7 @@ where
                     if self.state.fin_ack_received()
                         || self
                             .fin_ack_deadline
-                            .map_or(false, |deadline| Instant::now() >= deadline)
+                            .is_some_and(|deadline| Instant::now() >= deadline)
                     {
                         if !self.state.fin_ack_received() {
                             tracing::warn!("FIN_ACK timeout, forcing close");
