@@ -67,7 +67,7 @@ pub use behaviour::{
     QueryResult, QueryStats, Quorum, RoutingUpdate, StoreInserts,
 };
 pub use kbucket::{
-    Distance as KBucketDistance, EntryView, KBucketRef, Key as KBucketKey, NodeStatus,
+    Distance as KBucketDistance, EntryView, KBucketRef, Key as KBucketKey, NodeStatus, U256,
 };
 use libp2p_swarm::StreamProtocol;
 pub use protocol::{ConnectionType, KadPeer};
