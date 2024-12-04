@@ -113,6 +113,9 @@ mod topic;
 mod transform;
 mod types;
 
+#[cfg(feature = "metrics")]
+pub use metrics::Config as MetricsConfig;
+
 pub use self::{
     behaviour::{Behaviour, Event, MessageAuthenticity},
     config::{Config, ConfigBuilder, ValidationMode, Version},
@@ -130,8 +133,6 @@ pub use self::{
     transform::{DataTransform, IdentityTransform},
     types::{FailedMessages, Message, MessageAcceptance, MessageId, RawMessage},
 };
-#[cfg(feature = "metrics")]
-pub use metrics::Config as MetricsConfig;
 
 #[deprecated(note = "Will be removed from the public API.")]
 pub type Rpc = self::types::Rpc;

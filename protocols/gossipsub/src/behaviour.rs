@@ -48,6 +48,8 @@ use quick_protobuf::{MessageWrite, Writer};
 use rand::{seq::SliceRandom, thread_rng};
 use web_time::{Instant, SystemTime};
 
+#[cfg(feature = "metrics")]
+use crate::metrics::{Churn, Config as MetricsConfig, Inclusion, Metrics, Penalty};
 use crate::{
     backoff::BackoffStorage,
     config::{Config, ValidationMode},
@@ -68,8 +70,6 @@ use crate::{
     },
     FailedMessages, PublishError, SubscriptionError, TopicScoreParams, ValidationError,
 };
-#[cfg(feature = "metrics")]
-use crate::metrics::{Churn, Config as MetricsConfig, Inclusion, Metrics, Penalty};
 
 #[cfg(test)]
 mod tests;
@@ -1130,7 +1130,7 @@ where
                 &self.connected_peers,
             );
         }
-        
+
         #[cfg(feature = "metrics")]
         let mesh_peers = self.mesh_peers(topic_hash).count();
         #[cfg(feature = "metrics")]
