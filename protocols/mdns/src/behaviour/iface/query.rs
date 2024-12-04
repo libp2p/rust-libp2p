@@ -18,18 +18,23 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use super::dns;
-use crate::{META_QUERY_SERVICE_FQDN, SERVICE_NAME_FQDN};
+use std::{
+    fmt,
+    net::SocketAddr,
+    str,
+    time::{Duration, Instant},
+};
+
 use hickory_proto::{
     op::Message,
     rr::{Name, RData},
 };
 use libp2p_core::multiaddr::{Multiaddr, Protocol};
+use libp2p_identity::PeerId;
 use libp2p_swarm::_address_translation;
 
-use libp2p_identity::PeerId;
-use std::time::Instant;
-use std::{fmt, net::SocketAddr, str, time::Duration};
+use super::dns;
+use crate::{META_QUERY_SERVICE_FQDN, SERVICE_NAME_FQDN};
 
 /// A valid mDNS packet received by the service.
 #[derive(Debug)]
@@ -69,7 +74,8 @@ impl MdnsPacket {
             .iter()
             .any(|q| q.name().to_utf8() == META_QUERY_SERVICE_FQDN)
         {
-            // TODO: what if multiple questions, one with SERVICE_NAME and one with META_QUERY_SERVICE?
+            // TODO: what if multiple questions,
+            // one with SERVICE_NAME and one with META_QUERY_SERVICE?
             return Ok(Some(MdnsPacket::ServiceDiscovery(MdnsServiceDiscovery {
                 from,
                 query_id: packet.header().id(),
@@ -307,8 +313,7 @@ impl fmt::Debug for MdnsPeer {
 
 #[cfg(test)]
 mod tests {
-    use super::super::dns::build_query_response;
-    use super::*;
+    use super::{super::dns::build_query_response, *};
 
     #[test]
     fn test_create_mdns_peer() {

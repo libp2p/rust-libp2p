@@ -1,12 +1,15 @@
-use crate::muxing::{StreamMuxer, StreamMuxerEvent};
+use std::{
+    error::Error,
+    fmt, io,
+    io::{IoSlice, IoSliceMut},
+    pin::Pin,
+    task::{Context, Poll},
+};
+
 use futures::{AsyncRead, AsyncWrite};
 use pin_project::pin_project;
-use std::error::Error;
-use std::fmt;
-use std::io;
-use std::io::{IoSlice, IoSliceMut};
-use std::pin::Pin;
-use std::task::{Context, Poll};
+
+use crate::muxing::{StreamMuxer, StreamMuxerEvent};
 
 /// Abstract `StreamMuxer`.
 pub struct StreamMuxerBox {
@@ -139,7 +142,8 @@ impl StreamMuxer for StreamMuxerBox {
 }
 
 impl SubstreamBox {
-    /// Construct a new [`SubstreamBox`] from something that implements [`AsyncRead`] and [`AsyncWrite`].
+    /// Construct a new [`SubstreamBox`] from something
+    /// that implements [`AsyncRead`] and [`AsyncWrite`].
     pub fn new<S: AsyncRead + AsyncWrite + Send + 'static>(stream: S) -> Self {
         Self(Box::pin(stream))
     }

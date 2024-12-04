@@ -18,10 +18,9 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::transport::TransportError;
-use crate::Multiaddr;
-use crate::{ConnectedPoint, PeerId};
 use std::{fmt, io};
+
+use crate::{transport::TransportError, ConnectedPoint, Multiaddr, PeerId};
 
 /// Errors that can occur in the context of an established `Connection`.
 #[derive(Debug)]

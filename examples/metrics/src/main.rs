@@ -20,18 +20,20 @@
 
 #![doc = include_str!("../README.md")]
 
+use std::{error::Error, time::Duration};
+
 use futures::StreamExt;
-use libp2p::core::Multiaddr;
-use libp2p::metrics::{Metrics, Recorder};
-use libp2p::swarm::{NetworkBehaviour, SwarmEvent};
-use libp2p::{identify, identity, noise, ping, tcp, yamux};
+use libp2p::{
+    core::Multiaddr,
+    identify, identity,
+    metrics::{Metrics, Recorder},
+    noise, ping,
+    swarm::{NetworkBehaviour, SwarmEvent},
+    tcp, yamux,
+};
 use opentelemetry::{trace::TracerProvider, KeyValue};
 use prometheus_client::registry::Registry;
-use std::error::Error;
-use std::time::Duration;
-use tracing_subscriber::layer::SubscriberExt;
-use tracing_subscriber::util::SubscriberInitExt;
-use tracing_subscriber::{EnvFilter, Layer};
+use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, EnvFilter, Layer};
 
 mod http_service;
 
