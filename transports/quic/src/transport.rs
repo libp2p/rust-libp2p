@@ -26,7 +26,7 @@ use std::{
     fmt,
     hash::{Hash, Hasher},
     io,
-    net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr, UdpSocket},
+    net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr, SocketAddrV6, UdpSocket},
     pin::Pin,
     task::{Context, Poll, Waker},
     time::Duration,
