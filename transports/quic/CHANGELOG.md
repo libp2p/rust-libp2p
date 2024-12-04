@@ -2,6 +2,8 @@
 
 - Add support for the `ip6zone` Multiaddr protocol.
   See [PR 5609](https://github.com/libp2p/rust-libp2p/pull/5609).
+- Deprecate `void` crate.
+  See [PR 5676](https://github.com/libp2p/rust-libp2p/pull/5676).
 
 ## 0.11.1
 

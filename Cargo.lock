@@ -175,7 +175,7 @@ dependencies = [
  "nom",
  "num-traits",
  "rusticata-macros",
- "thiserror",
+ "thiserror 1.0.63",
  "time",
 ]
 
@@ -191,7 +191,7 @@ dependencies = [
  "nom",
  "num-traits",
  "rusticata-macros",
- "thiserror",
+ "thiserror 1.0.63",
  "time",
 ]
 
@@ -215,7 +215,7 @@ checksum = "7378575ff571966e99a744addeff0bff98b8ada0dedf1956d59e634db95eaac1"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 2.0.66",
+ "syn 2.0.89",
  "synstructure 0.13.1",
 ]
 
@@ -238,7 +238,7 @@ checksum = "7b18050c2cd6fe86c3a76584ef5e0baf286d038cda203eb6223df2cc413565f7"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 2.0.66",
+ "syn 2.0.89",
 ]
 
 [[package]]
@@ -266,6 +266,18 @@ dependencies = [
  "concurrent-queue",
  "event-listener 2.5.3",
  "futures-core",
+]
+
+[[package]]
+name = "async-channel"
+version = "2.3.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "89b47800b0be77592da0afd425cc03468052844aff33b84e33cc696f64e77b6a"
+dependencies = [
+ "concurrent-queue",
+ "event-listener-strategy 0.5.2",
+ "futures-core",
+ "pin-project-lite",
 ]
 
 [[package]]
@@ -300,7 +312,7 @@ version = "2.3.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f1b6f5d7df27bd294849f8eec66ecfc63d11814df7a4f5d74168a2394467b776"
 dependencies = [
- "async-channel",
+ "async-channel 1.9.0",
  "async-executor",
  "async-io 1.13.0",
  "async-lock 2.7.0",
@@ -364,7 +376,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "deb2ab2aa8a746e221ab826c73f48bc6ba41be6763f0855cb249eb6d154cf1d7"
 dependencies = [
  "event-listener 3.1.0",
- "event-listener-strategy",
+ "event-listener-strategy 0.3.0",
  "pin-project-lite",
 ]
 
@@ -405,7 +417,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "62565bb4402e926b29953c785397c6dc0391b7b446e45008b0049eb43cec6f5d"
 dependencies = [
  "async-attributes",
- "async-channel",
+ "async-channel 1.9.0",
  "async-global-executor",
  "async-io 1.13.0",
  "async-lock 2.7.0",
@@ -460,7 +472,7 @@ checksum = "16e62a023e7c117e27523144c5d2459f4397fcc3cab0085af8e2224f643a0193"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 2.0.66",
+ "syn 2.0.89",
 ]
 
 [[package]]
@@ -477,7 +489,7 @@ checksum = "c6fa2087f2753a7da8cc1c0dbfcf89579dd57458e36769de5ac750b4671737ca"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 2.0.66",
+ "syn 2.0.89",
 ]
 
 [[package]]
@@ -720,7 +732,7 @@ version = "1.3.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "77231a1c8f801696fc0123ec6150ce92cffb8e164a02afb9c8ddee0e9b65ad65"
 dependencies = [
- "async-channel",
+ "async-channel 1.9.0",
  "async-lock 2.7.0",
  "async-task",
  "atomic-waker",
@@ -951,7 +963,7 @@ dependencies = [
  "heck 0.5.0",
  "proc-macro2",
  "quote",
- "syn 2.0.66",
+ "syn 2.0.89",
 ]
 
 [[package]]
@@ -982,9 +994,9 @@ dependencies = [
 
 [[package]]
 name = "concurrent-queue"
-version = "2.2.0"
+version = "2.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "62ec6771ecfa0762d24683ee5a32ad78487a3d3afdc0fb8cae19d2c5deb50b7c"
+checksum = "4ca0197aee26d1ae37445ee532fefce43251d24cc7c166799f4d46817f1d3973"
 dependencies = [
  "crossbeam-utils",
 ]
@@ -1214,7 +1226,7 @@ checksum = "83fdaf97f4804dcebfa5862639bc9ce4121e82140bec2a987ac5140294865b5b"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 2.0.66",
+ "syn 2.0.89",
 ]
 
 [[package]]
@@ -1354,17 +1366,17 @@ checksum = "487585f4d0c6655fe74905e2504d8ad6908e4db67f744eb140876906c2f3175d"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 2.0.66",
+ "syn 2.0.89",
 ]
 
 [[package]]
 name = "distributed-key-value-store-example"
 version = "0.1.0"
 dependencies = [
- "async-std",
  "async-trait",
  "futures",
  "libp2p",
+ "tokio",
  "tracing",
  "tracing-subscriber",
 ]
@@ -1459,7 +1471,7 @@ dependencies = [
  "heck 0.4.1",
  "proc-macro2",
  "quote",
- "syn 2.0.66",
+ "syn 2.0.89",
 ]
 
 [[package]]
@@ -1519,12 +1531,33 @@ dependencies = [
 ]
 
 [[package]]
+name = "event-listener"
+version = "5.3.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6032be9bd27023a771701cc49f9f053c751055f71efb2e0ae5c15809093675ba"
+dependencies = [
+ "concurrent-queue",
+ "parking",
+ "pin-project-lite",
+]
+
+[[package]]
 name = "event-listener-strategy"
 version = "0.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d96b852f1345da36d551b9473fa1e2b1eb5c5195585c6c018118bc92a8d91160"
 dependencies = [
  "event-listener 3.1.0",
+ "pin-project-lite",
+]
+
+[[package]]
+name = "event-listener-strategy"
+version = "0.5.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0f214dc438f977e6d4e3500aaa277f5ad94ca83fbbd9b1a15713ce2344ccc5a1"
+dependencies = [
+ "event-listener 5.3.1",
  "pin-project-lite",
 ]
 
@@ -1570,7 +1603,6 @@ dependencies = [
  "tokio",
  "tracing",
  "tracing-subscriber",
- "void",
 ]
 
 [[package]]
@@ -1695,7 +1727,7 @@ checksum = "87750cf4b7a4c0625b1529e4c543c2182106e4dedc60a2a6455e00d212c489ac"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 2.0.66",
+ "syn 2.0.89",
 ]
 
 [[package]]
@@ -1720,17 +1752,6 @@ name = "futures-task"
 version = "0.3.30"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "38d84fa142264698cdce1a9f9172cf383a0c82de1bddcf3092901442c4097004"
-
-[[package]]
-name = "futures-ticker"
-version = "0.0.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9763058047f713632a52e916cc7f6a4b3fc6e9fc1ff8c5b1dc49e5a89041682e"
-dependencies = [
- "futures",
- "futures-timer",
- "instant",
-]
 
 [[package]]
 name = "futures-timer"
@@ -1960,7 +1981,7 @@ dependencies = [
  "once_cell",
  "rand 0.8.5",
  "socket2 0.5.7",
- "thiserror",
+ "thiserror 1.0.63",
  "tinyvec",
  "tokio",
  "tracing",
@@ -1983,7 +2004,7 @@ dependencies = [
  "rand 0.8.5",
  "resolv-conf",
  "smallvec",
- "thiserror",
+ "thiserror 1.0.63",
  "tokio",
  "tracing",
 ]
@@ -2348,7 +2369,7 @@ dependencies = [
  "rand 0.8.5",
  "rtcp",
  "rtp",
- "thiserror",
+ "thiserror 1.0.63",
  "tokio",
  "waitgroup",
  "webrtc-srtp",
@@ -2526,7 +2547,7 @@ checksum = "97b3888a4aecf77e811145cadf6eef5901f4782c53886191b2f693f24761847c"
 
 [[package]]
 name = "libp2p"
-version = "0.54.1"
+version = "0.54.2"
 dependencies = [
  "async-std",
  "async-trait",
@@ -2571,14 +2592,14 @@ dependencies = [
  "multiaddr",
  "pin-project",
  "rw-stream-sink",
- "thiserror",
+ "thiserror 2.0.3",
  "tokio",
  "tracing-subscriber",
 ]
 
 [[package]]
 name = "libp2p-allow-block-list"
-version = "0.4.1"
+version = "0.4.2"
 dependencies = [
  "async-std",
  "libp2p-core",
@@ -2586,14 +2607,12 @@ dependencies = [
  "libp2p-swarm",
  "libp2p-swarm-derive",
  "libp2p-swarm-test",
- "void",
 ]
 
 [[package]]
 name = "libp2p-autonat"
 version = "0.13.1"
 dependencies = [
- "async-std",
  "async-trait",
  "asynchronous-codec",
  "bytes",
@@ -2611,17 +2630,16 @@ dependencies = [
  "quick-protobuf-codec",
  "rand 0.8.5",
  "rand_core 0.6.4",
- "thiserror",
+ "thiserror 2.0.3",
  "tokio",
  "tracing",
  "tracing-subscriber",
- "void",
  "web-time 1.1.0",
 ]
 
 [[package]]
 name = "libp2p-connection-limits"
-version = "0.4.0"
+version = "0.4.1"
 dependencies = [
  "async-std",
  "libp2p-core",
@@ -2633,12 +2651,11 @@ dependencies = [
  "libp2p-swarm-test",
  "quickcheck-ext",
  "rand 0.8.5",
- "void",
 ]
 
 [[package]]
 name = "libp2p-core"
-version = "0.42.0"
+version = "0.42.1"
 dependencies = [
  "async-std",
  "either",
@@ -2660,18 +2677,16 @@ dependencies = [
  "rw-stream-sink",
  "serde",
  "smallvec",
- "thiserror",
+ "thiserror 2.0.3",
  "tracing",
  "unsigned-varint 0.8.0",
- "void",
  "web-time 1.1.0",
 ]
 
 [[package]]
 name = "libp2p-dcutr"
-version = "0.12.0"
+version = "0.12.1"
 dependencies = [
- "async-std",
  "asynchronous-codec",
  "clap",
  "either",
@@ -2694,10 +2709,10 @@ dependencies = [
  "quick-protobuf",
  "quick-protobuf-codec",
  "rand 0.8.5",
- "thiserror",
+ "thiserror 2.0.3",
+ "tokio",
  "tracing",
  "tracing-subscriber",
- "void",
  "web-time 1.1.0",
 ]
 
@@ -2735,15 +2750,15 @@ dependencies = [
  "quick-protobuf-codec",
  "rand 0.8.5",
  "smallvec",
- "thiserror",
+ "thiserror 2.0.3",
  "tracing",
 ]
 
 [[package]]
 name = "libp2p-gossipsub"
-version = "0.47.1"
+version = "0.48.0"
 dependencies = [
- "async-std",
+ "async-channel 2.3.1",
  "asynchronous-codec",
  "base64 0.22.1",
  "byteorder",
@@ -2751,7 +2766,7 @@ dependencies = [
  "either",
  "fnv",
  "futures",
- "futures-ticker",
+ "futures-timer",
  "getrandom 0.2.15",
  "hex",
  "hex_fmt",
@@ -2770,15 +2785,15 @@ dependencies = [
  "serde",
  "sha2 0.10.8",
  "smallvec",
+ "tokio",
  "tracing",
  "tracing-subscriber",
- "void",
  "web-time 1.1.0",
 ]
 
 [[package]]
 name = "libp2p-identify"
-version = "0.45.1"
+version = "0.46.0"
 dependencies = [
  "async-std",
  "asynchronous-codec",
@@ -2794,15 +2809,14 @@ dependencies = [
  "quick-protobuf",
  "quick-protobuf-codec",
  "smallvec",
- "thiserror",
+ "thiserror 2.0.3",
  "tracing",
  "tracing-subscriber",
- "void",
 ]
 
 [[package]]
 name = "libp2p-identity"
-version = "0.2.9"
+version = "0.2.10"
 dependencies = [
  "asn1_der",
  "base64 0.22.1",
@@ -2823,15 +2837,14 @@ dependencies = [
  "serde",
  "serde_json",
  "sha2 0.10.8",
- "thiserror",
+ "thiserror 2.0.3",
  "tracing",
- "void",
  "zeroize",
 ]
 
 [[package]]
 name = "libp2p-kad"
-version = "0.47.0"
+version = "0.47.1"
 dependencies = [
  "arrayvec",
  "async-std",
@@ -2856,11 +2869,10 @@ dependencies = [
  "serde",
  "sha2 0.10.8",
  "smallvec",
- "thiserror",
+ "thiserror 2.0.3",
  "tracing",
  "tracing-subscriber",
  "uint",
- "void",
  "web-time 1.1.0",
 ]
 
@@ -2887,12 +2899,11 @@ dependencies = [
  "tokio",
  "tracing",
  "tracing-subscriber",
- "void",
 ]
 
 [[package]]
 name = "libp2p-memory-connection-limits"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
  "async-std",
  "libp2p-core",
@@ -2905,7 +2916,6 @@ dependencies = [
  "rand 0.8.5",
  "sysinfo",
  "tracing",
- "void",
 ]
 
 [[package]]
@@ -2964,7 +2974,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-noise"
-version = "0.45.0"
+version = "0.45.1"
 dependencies = [
  "asynchronous-codec",
  "bytes",
@@ -2982,7 +2992,7 @@ dependencies = [
  "sha2 0.10.8",
  "snow",
  "static_assertions",
- "thiserror",
+ "thiserror 2.0.3",
  "tracing",
  "tracing-subscriber",
  "x25519-dalek",
@@ -3011,19 +3021,17 @@ dependencies = [
  "rand 0.8.5",
  "serde",
  "serde_json",
- "thiserror",
+ "thiserror 2.0.3",
  "tokio",
  "tracing",
  "tracing-subscriber",
- "void",
  "web-time 1.1.0",
 ]
 
 [[package]]
 name = "libp2p-ping"
-version = "0.45.0"
+version = "0.45.1"
 dependencies = [
- "async-std",
  "either",
  "futures",
  "futures-timer",
@@ -3033,9 +3041,9 @@ dependencies = [
  "libp2p-swarm-test",
  "quickcheck-ext",
  "rand 0.8.5",
+ "tokio",
  "tracing",
  "tracing-subscriber",
- "void",
  "web-time 1.1.0",
 ]
 
@@ -3102,7 +3110,7 @@ dependencies = [
  "ring 0.17.8",
  "rustls 0.23.11",
  "socket2 0.5.7",
- "thiserror",
+ "thiserror 2.0.3",
  "tokio",
  "tracing",
  "tracing-subscriber",
@@ -3110,7 +3118,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-relay"
-version = "0.18.0"
+version = "0.18.1"
 dependencies = [
  "asynchronous-codec",
  "bytes",
@@ -3130,10 +3138,9 @@ dependencies = [
  "quickcheck-ext",
  "rand 0.8.5",
  "static_assertions",
- "thiserror",
+ "thiserror 2.0.3",
  "tracing",
  "tracing-subscriber",
- "void",
  "web-time 1.1.0",
 ]
 
@@ -3159,17 +3166,16 @@ dependencies = [
  "quick-protobuf",
  "quick-protobuf-codec",
  "rand 0.8.5",
- "thiserror",
+ "thiserror 2.0.3",
  "tokio",
  "tracing",
  "tracing-subscriber",
- "void",
  "web-time 1.1.0",
 ]
 
 [[package]]
 name = "libp2p-request-response"
-version = "0.27.0"
+version = "0.27.1"
 dependencies = [
  "anyhow",
  "async-std",
@@ -3192,7 +3198,6 @@ dependencies = [
  "smallvec",
  "tracing",
  "tracing-subscriber",
- "void",
  "web-time 1.1.0",
 ]
 
@@ -3218,7 +3223,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-stream"
-version = "0.2.0-alpha"
+version = "0.2.0-alpha.1"
 dependencies = [
  "futures",
  "libp2p-core",
@@ -3229,7 +3234,6 @@ dependencies = [
  "tokio",
  "tracing",
  "tracing-subscriber",
- "void",
 ]
 
 [[package]]
@@ -3262,7 +3266,6 @@ dependencies = [
  "tracing",
  "tracing-subscriber",
  "trybuild",
- "void",
  "wasm-bindgen-futures",
  "web-time 1.1.0",
 ]
@@ -3274,7 +3277,7 @@ dependencies = [
  "heck 0.5.0",
  "proc-macro2",
  "quote",
- "syn 2.0.66",
+ "syn 2.0.89",
 ]
 
 [[package]]
@@ -3328,7 +3331,7 @@ dependencies = [
  "ring 0.17.8",
  "rustls 0.23.11",
  "rustls-webpki 0.101.7",
- "thiserror",
+ "thiserror 2.0.3",
  "tokio",
  "x509-parser 0.16.0",
  "yasna",
@@ -3357,7 +3360,6 @@ dependencies = [
  "libp2p-swarm",
  "tokio",
  "tracing",
- "void",
 ]
 
 [[package]]
@@ -3380,7 +3382,7 @@ dependencies = [
  "rcgen",
  "serde",
  "stun 0.6.0",
- "thiserror",
+ "thiserror 2.0.3",
  "tinytemplate",
  "tokio",
  "tokio-util",
@@ -3406,7 +3408,7 @@ dependencies = [
  "rand 0.8.5",
  "serde",
  "sha2 0.10.8",
- "thiserror",
+ "thiserror 2.0.3",
  "tinytemplate",
  "tracing",
 ]
@@ -3424,7 +3426,7 @@ dependencies = [
  "libp2p-identity",
  "libp2p-webrtc-utils",
  "send_wrapper 0.6.0",
- "thiserror",
+ "thiserror 2.0.3",
  "tracing",
  "wasm-bindgen",
  "wasm-bindgen-futures",
@@ -3433,7 +3435,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-websocket"
-version = "0.44.0"
+version = "0.44.1"
 dependencies = [
  "async-std",
  "either",
@@ -3448,7 +3450,7 @@ dependencies = [
  "rcgen",
  "rw-stream-sink",
  "soketto",
- "thiserror",
+ "thiserror 2.0.3",
  "tracing",
  "url",
  "webpki-roots 0.25.2",
@@ -3456,7 +3458,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-websocket-websys"
-version = "0.4.0"
+version = "0.4.1"
 dependencies = [
  "bytes",
  "futures",
@@ -3467,7 +3469,7 @@ dependencies = [
  "libp2p-yamux",
  "parking_lot",
  "send_wrapper 0.6.0",
- "thiserror",
+ "thiserror 2.0.3",
  "tracing",
  "wasm-bindgen",
  "web-sys",
@@ -3475,7 +3477,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-webtransport-websys"
-version = "0.4.0"
+version = "0.4.1"
 dependencies = [
  "futures",
  "js-sys",
@@ -3485,8 +3487,9 @@ dependencies = [
  "multiaddr",
  "multibase",
  "multihash",
+ "once_cell",
  "send_wrapper 0.6.0",
- "thiserror",
+ "thiserror 2.0.3",
  "tracing",
  "wasm-bindgen",
  "wasm-bindgen-futures",
@@ -3502,7 +3505,7 @@ dependencies = [
  "futures",
  "libp2p-core",
  "libp2p-muxer-test-harness",
- "thiserror",
+ "thiserror 2.0.3",
  "tracing",
  "yamux 0.12.1",
  "yamux 0.13.3",
@@ -3859,7 +3862,7 @@ dependencies = [
  "anyhow",
  "byteorder",
  "paste",
- "thiserror",
+ "thiserror 1.0.63",
 ]
 
 [[package]]
@@ -3873,7 +3876,7 @@ dependencies = [
  "log",
  "netlink-packet-core",
  "netlink-sys",
- "thiserror",
+ "thiserror 1.0.63",
  "tokio",
 ]
 
@@ -4064,7 +4067,7 @@ checksum = "a948666b637a0f465e8564c73e89d4dde00d72d4d473cc972f390fc3dcee7d9c"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 2.0.66",
+ "syn 2.0.89",
 ]
 
 [[package]]
@@ -4097,7 +4100,7 @@ dependencies = [
  "js-sys",
  "once_cell",
  "pin-project-lite",
- "thiserror",
+ "thiserror 1.0.63",
  "urlencoding",
 ]
 
@@ -4112,7 +4115,7 @@ dependencies = [
  "js-sys",
  "once_cell",
  "pin-project-lite",
- "thiserror",
+ "thiserror 1.0.63",
 ]
 
 [[package]]
@@ -4144,7 +4147,7 @@ dependencies = [
  "opentelemetry-proto",
  "opentelemetry_sdk 0.25.0",
  "prost",
- "thiserror",
+ "thiserror 1.0.63",
  "tokio",
  "tonic",
 ]
@@ -4187,7 +4190,7 @@ dependencies = [
  "ordered-float 4.2.0",
  "percent-encoding",
  "rand 0.8.5",
- "thiserror",
+ "thiserror 1.0.63",
  "tokio",
  "tokio-stream",
 ]
@@ -4208,7 +4211,7 @@ dependencies = [
  "percent-encoding",
  "rand 0.8.5",
  "serde_json",
- "thiserror",
+ "thiserror 1.0.63",
  "tokio",
  "tokio-stream",
 ]
@@ -4338,7 +4341,7 @@ checksum = "2f38a4412a78282e09a2cf38d195ea5420d15ba0602cb375210efbc877243965"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 2.0.66",
+ "syn 2.0.89",
 ]
 
 [[package]]
@@ -4490,9 +4493,9 @@ dependencies = [
 
 [[package]]
 name = "proc-macro2"
-version = "1.0.85"
+version = "1.0.92"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "22244ce15aa966053a896d1accb3a6e68469b97c7f33f284b99f0d576879fc23"
+checksum = "37d3544b3f2748c54e147655edb5025752e2303145b5aefb3c3ea2c78b973bb0"
 dependencies = [
  "unicode-ident",
 ]
@@ -4517,7 +4520,7 @@ checksum = "440f724eba9f6996b75d63681b0a92b06947f1457076d503a4d2e2c8f56442b8"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 2.0.66",
+ "syn 2.0.89",
 ]
 
 [[package]]
@@ -4540,7 +4543,7 @@ dependencies = [
  "itertools",
  "proc-macro2",
  "quote",
- "syn 2.0.66",
+ "syn 2.0.89",
 ]
 
 [[package]]
@@ -4568,7 +4571,7 @@ dependencies = [
  "futures",
  "quick-protobuf",
  "quickcheck-ext",
- "thiserror",
+ "thiserror 2.0.3",
  "unsigned-varint 0.8.0",
 ]
 
@@ -4606,7 +4609,7 @@ dependencies = [
  "quinn-udp",
  "rustc-hash 1.1.0",
  "rustls 0.23.11",
- "thiserror",
+ "thiserror 1.0.63",
  "tokio",
  "tracing",
 ]
@@ -4623,7 +4626,7 @@ dependencies = [
  "rustc-hash 2.0.0",
  "rustls 0.23.11",
  "slab",
- "thiserror",
+ "thiserror 1.0.63",
  "tinyvec",
  "tracing",
 ]
@@ -4799,7 +4802,7 @@ checksum = "b033d837a7cf162d7993aded9304e30a83213c648b6e389db233191f891e5c2b"
 dependencies = [
  "getrandom 0.2.15",
  "redox_syscall 0.2.16",
- "thiserror",
+ "thiserror 1.0.63",
 ]
 
 [[package]]
@@ -5004,7 +5007,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3677908cadfbecb4cc1da9a56a32524fae4ebdfa7c2ea93886e1b1e846488cb9"
 dependencies = [
  "bytes",
- "thiserror",
+ "thiserror 1.0.63",
  "webrtc-util 0.8.1",
 ]
 
@@ -5020,7 +5023,7 @@ dependencies = [
  "netlink-packet-route",
  "netlink-proto",
  "nix 0.24.3",
- "thiserror",
+ "thiserror 1.0.63",
  "tokio",
 ]
 
@@ -5033,7 +5036,7 @@ dependencies = [
  "bytes",
  "rand 0.8.5",
  "serde",
- "thiserror",
+ "thiserror 1.0.63",
  "webrtc-util 0.8.1",
 ]
 
@@ -5058,7 +5061,7 @@ dependencies = [
  "quote",
  "rust-embed-utils",
  "shellexpand",
- "syn 2.0.66",
+ "syn 2.0.89",
  "walkdir",
 ]
 
@@ -5292,7 +5295,7 @@ checksum = "4653054c30ebce63658762eb0d64e27673868a95564474811ae6c220cf767640"
 dependencies = [
  "rand 0.8.5",
  "substring",
- "thiserror",
+ "thiserror 1.0.63",
  "url",
 ]
 
@@ -5371,7 +5374,7 @@ checksum = "243902eda00fad750862fc144cea25caca5e20d615af0a81bee94ca738f1df1f"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 2.0.66",
+ "syn 2.0.89",
 ]
 
 [[package]]
@@ -5404,7 +5407,7 @@ checksum = "6c64451ba24fc7a6a2d60fc75dd9c83c90903b19028d4eff35e88fc1e86564e9"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 2.0.66",
+ "syn 2.0.89",
 ]
 
 [[package]]
@@ -5541,7 +5544,7 @@ version = "1.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "13f2b548cd8447f8de0fdf1c592929f70f4fc7039a05e47404b0d096ec6987a1"
 dependencies = [
- "async-channel",
+ "async-channel 1.9.0",
  "async-executor",
  "async-fs",
  "async-io 1.13.0",
@@ -5689,7 +5692,7 @@ dependencies = [
  "proc-macro2",
  "quote",
  "rustversion",
- "syn 2.0.66",
+ "syn 2.0.89",
 ]
 
 [[package]]
@@ -5705,7 +5708,7 @@ dependencies = [
  "rand 0.8.5",
  "ring 0.17.8",
  "subtle",
- "thiserror",
+ "thiserror 1.0.63",
  "tokio",
  "url",
  "webrtc-util 0.8.1",
@@ -5724,7 +5727,7 @@ dependencies = [
  "rand 0.8.5",
  "ring 0.17.8",
  "subtle",
- "thiserror",
+ "thiserror 1.0.63",
  "tokio",
  "url",
  "webrtc-util 0.9.0",
@@ -5758,9 +5761,9 @@ dependencies = [
 
 [[package]]
 name = "syn"
-version = "2.0.66"
+version = "2.0.89"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c42f3f41a2de00b01c0aaad383c5a45241efc8b2d1eda5661812fda5f3cdcff5"
+checksum = "44d46482f1c1c87acd84dea20c1bf5ebff4c757009ed6bf19cfd36fb10e92c4e"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -5799,7 +5802,7 @@ checksum = "c8af7666ab7b6390ab78131fb5b0fce11d6b7a6951602017c35fa82800708971"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 2.0.66",
+ "syn 2.0.89",
 ]
 
 [[package]]
@@ -5879,7 +5882,7 @@ dependencies = [
  "stringmatch",
  "strum",
  "thirtyfour-macros",
- "thiserror",
+ "thiserror 1.0.63",
  "tokio",
  "tracing",
  "url",
@@ -5893,7 +5896,7 @@ checksum = "b72d056365e368fc57a56d0cec9e41b02fb4a3474a61c8735262b1cfebe67425"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 2.0.66",
+ "syn 2.0.89",
 ]
 
 [[package]]
@@ -5902,7 +5905,16 @@ version = "1.0.63"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c0342370b38b6a11b6cc11d6a805569958d54cfa061a29969c3b5ce2ea405724"
 dependencies = [
- "thiserror-impl",
+ "thiserror-impl 1.0.63",
+]
+
+[[package]]
+name = "thiserror"
+version = "2.0.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c006c85c7651b3cf2ada4584faa36773bd07bac24acfb39f3c431b36d7e667aa"
+dependencies = [
+ "thiserror-impl 2.0.3",
 ]
 
 [[package]]
@@ -5913,7 +5925,18 @@ checksum = "a4558b58466b9ad7ca0f102865eccc95938dca1a74a856f2b57b6629050da261"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 2.0.66",
+ "syn 2.0.89",
+]
+
+[[package]]
+name = "thiserror-impl"
+version = "2.0.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f077553d607adc1caf65430528a576c757a71ed73944b66ebb58ef2bbd243568"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 2.0.89",
 ]
 
 [[package]]
@@ -6031,7 +6054,7 @@ checksum = "5f5ae998a069d4b5aba8ee9dad856af7d520c3699e6159b185c2acd48155d39a"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 2.0.66",
+ "syn 2.0.89",
 ]
 
 [[package]]
@@ -6221,7 +6244,7 @@ checksum = "34704c8d6ebcbc939824180af020566b01a7c01f80641264eba0999f6c2b6be7"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 2.0.66",
+ "syn 2.0.89",
 ]
 
 [[package]]
@@ -6344,7 +6367,7 @@ dependencies = [
  "rand 0.8.5",
  "ring 0.16.20",
  "stun 0.5.1",
- "thiserror",
+ "thiserror 1.0.63",
  "tokio",
  "webrtc-util 0.8.1",
 ]
@@ -6508,12 +6531,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "49874b5167b65d7193b8aba1567f5c7d93d001cafc34600cee003eda787e483f"
 
 [[package]]
-name = "void"
-version = "1.0.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6a02e4885ed3bc0f2de90ea6dd45ebcbb66dacffe03547fadbb0eeae2770887d"
-
-[[package]]
 name = "waitgroup"
 version = "0.1.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6581,7 +6598,7 @@ dependencies = [
  "once_cell",
  "proc-macro2",
  "quote",
- "syn 2.0.66",
+ "syn 2.0.89",
  "wasm-bindgen-shared",
 ]
 
@@ -6615,7 +6632,7 @@ checksum = "afc340c74d9005395cf9dd098506f7f44e38f2b4a21c6aaacf9a105ea5e1e836"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 2.0.66",
+ "syn 2.0.89",
  "wasm-bindgen-backend",
  "wasm-bindgen-shared",
 ]
@@ -6649,7 +6666,7 @@ checksum = "4b8220be1fa9e4c889b30fd207d4906657e7e90b12e0e6b0c8b8d8709f5de021"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 2.0.66",
+ "syn 2.0.89",
 ]
 
 [[package]]
@@ -6736,7 +6753,7 @@ dependencies = [
  "sha2 0.10.8",
  "smol_str",
  "stun 0.5.1",
- "thiserror",
+ "thiserror 1.0.63",
  "time",
  "tokio",
  "turn",
@@ -6760,7 +6777,7 @@ checksum = "a45d2461d0e0bf93f181e30eb0b40df32b8bf3efb89c53cebb1990e603e2067d"
 dependencies = [
  "bytes",
  "log",
- "thiserror",
+ "thiserror 1.0.63",
  "tokio",
  "webrtc-sctp",
  "webrtc-util 0.8.1",
@@ -6796,7 +6813,7 @@ dependencies = [
  "sha1",
  "sha2 0.10.8",
  "subtle",
- "thiserror",
+ "thiserror 1.0.63",
  "tokio",
  "webrtc-util 0.8.1",
  "x25519-dalek",
@@ -6817,7 +6834,7 @@ dependencies = [
  "serde",
  "serde_json",
  "stun 0.5.1",
- "thiserror",
+ "thiserror 1.0.63",
  "tokio",
  "turn",
  "url",
@@ -6835,7 +6852,7 @@ checksum = "62bebbd40e7f8b630a0f1a74783dbfff1edfc0ccaae891c4689891156a8c4d8c"
 dependencies = [
  "log",
  "socket2 0.5.7",
- "thiserror",
+ "thiserror 1.0.63",
  "tokio",
  "webrtc-util 0.8.1",
 ]
@@ -6850,7 +6867,7 @@ dependencies = [
  "bytes",
  "rand 0.8.5",
  "rtp",
- "thiserror",
+ "thiserror 1.0.63",
 ]
 
 [[package]]
@@ -6865,7 +6882,7 @@ dependencies = [
  "crc",
  "log",
  "rand 0.8.5",
- "thiserror",
+ "thiserror 1.0.63",
  "tokio",
  "webrtc-util 0.8.1",
 ]
@@ -6888,7 +6905,7 @@ dependencies = [
  "rtp",
  "sha1",
  "subtle",
- "thiserror",
+ "thiserror 1.0.63",
  "tokio",
  "webrtc-util 0.8.1",
 ]
@@ -6908,7 +6925,7 @@ dependencies = [
  "log",
  "nix 0.26.4",
  "rand 0.8.5",
- "thiserror",
+ "thiserror 1.0.63",
  "tokio",
  "winapi",
 ]
@@ -6929,7 +6946,7 @@ dependencies = [
  "nix 0.26.4",
  "portable-atomic",
  "rand 0.8.5",
- "thiserror",
+ "thiserror 1.0.63",
  "tokio",
  "winapi",
 ]
@@ -7214,7 +7231,7 @@ dependencies = [
  "oid-registry 0.6.1",
  "ring 0.16.20",
  "rusticata-macros",
- "thiserror",
+ "thiserror 1.0.63",
  "time",
 ]
 
@@ -7231,7 +7248,7 @@ dependencies = [
  "nom",
  "oid-registry 0.7.0",
  "rusticata-macros",
- "thiserror",
+ "thiserror 1.0.63",
  "time",
 ]
 
@@ -7307,7 +7324,7 @@ checksum = "9ce1b18ccd8e73a9321186f97e46f9f04b778851177567b1975109d26a08d2a6"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 2.0.66",
+ "syn 2.0.89",
 ]
 
 [[package]]
@@ -7327,5 +7344,5 @@ checksum = "ce36e65b0d2999d2aafac989fb249189a141aee1f53c612c1f37d72631959f69"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 2.0.66",
+ "syn 2.0.89",
 ]

@@ -18,26 +18,27 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use futures::stream::FuturesUnordered;
+use std::{
+    pin::Pin,
+    sync::Arc,
+    task::{Context, Poll, Waker},
+};
+
 use futures::{
     channel::{
         mpsc,
         oneshot::{self, Sender},
     },
+    future::BoxFuture,
     lock::Mutex as FutMutex,
+    ready,
+    stream::FuturesUnordered,
     StreamExt,
-    {future::BoxFuture, ready},
 };
 use libp2p_core::muxing::{StreamMuxer, StreamMuxerEvent};
-use webrtc::data::data_channel::DataChannel as DetachedDataChannel;
-use webrtc::data_channel::RTCDataChannel;
-use webrtc::peer_connection::RTCPeerConnection;
-
-use std::task::Waker;
-use std::{
-    pin::Pin,
-    sync::Arc,
-    task::{Context, Poll},
+use webrtc::{
+    data::data_channel::DataChannel as DetachedDataChannel, data_channel::RTCDataChannel,
+    peer_connection::RTCPeerConnection,
 };
 
 use crate::tokio::{error::Error, stream, stream::Stream};
@@ -172,7 +173,9 @@ impl StreamMuxer for Connection {
                     "Sender-end of channel should be owned by `RTCPeerConnection`"
                 );
 
-                Poll::Pending // Return `Pending` without registering a waker: If the channel is closed, we don't need to be called anymore.
+                // Return `Pending` without registering a waker: If the channel is
+                // closed, we don't need to be called anymore.
+                Poll::Pending
             }
         }
     }

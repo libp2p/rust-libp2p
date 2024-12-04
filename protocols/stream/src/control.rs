@@ -6,15 +6,14 @@ use std::{
     task::{Context, Poll},
 };
 
-use crate::AlreadyRegistered;
-use crate::{handler::NewStream, shared::Shared};
-
 use futures::{
     channel::{mpsc, oneshot},
     SinkExt as _, StreamExt as _,
 };
 use libp2p_identity::PeerId;
 use libp2p_swarm::{Stream, StreamProtocol};
+
+use crate::{handler::NewStream, shared::Shared, AlreadyRegistered};
 
 /// A (remote) control for opening new streams and registration of inbound protocols.
 ///
@@ -31,13 +30,15 @@ impl Control {
 
     /// Attempt to open a new stream for the given protocol and peer.
     ///
-    /// In case we are currently not connected to the peer, we will attempt to make a new connection.
+    /// In case we are currently not connected to the peer,
+    /// we will attempt to make a new connection.
     ///
     /// ## Backpressure
     ///
     /// [`Control`]s support backpressure similarly to bounded channels:
     /// Each [`Control`] has a guaranteed slot for internal messages.
-    /// A single control will always open one stream at a time which is enforced by requiring `&mut self`.
+    /// A single control will always open one stream at a
+    /// time which is enforced by requiring `&mut self`.
     ///
     /// This backpressure mechanism breaks if you clone [`Control`]s excessively.
     pub async fn open_stream(

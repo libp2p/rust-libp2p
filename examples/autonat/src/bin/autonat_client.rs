@@ -20,15 +20,17 @@
 
 #![doc = include_str!("../../README.md")]
 
+use std::{error::Error, net::Ipv4Addr, time::Duration};
+
 use clap::Parser;
 use futures::StreamExt;
-use libp2p::core::multiaddr::Protocol;
-use libp2p::core::Multiaddr;
-use libp2p::swarm::{NetworkBehaviour, SwarmEvent};
-use libp2p::{autonat, identify, identity, noise, tcp, yamux, PeerId};
-use std::error::Error;
-use std::net::Ipv4Addr;
-use std::time::Duration;
+use libp2p::{
+    autonat,
+    core::{multiaddr::Protocol, Multiaddr},
+    identify, identity, noise,
+    swarm::{NetworkBehaviour, SwarmEvent},
+    tcp, yamux, PeerId,
+};
 use tracing_subscriber::EnvFilter;
 
 #[derive(Debug, Parser)]

@@ -3,7 +3,7 @@ name = "libp2p-core"
 edition = "2021"
 rust-version = { workspace = true }
 description = "Core traits and structs of libp2p"
-version = "0.42.0"
+version = "0.42.1"
 authors = ["Parity Technologies <admin@parity.io>"]
 license = "MIT"
 repository = "https://github.com/libp2p/rust-libp2p"
@@ -28,10 +28,9 @@ rand = "0.8"
 rw-stream-sink = { workspace = true }
 serde = { version = "1", optional = true, features = ["derive"] }
 smallvec = "1.13.2"
-thiserror = "1.0"
+thiserror = { workspace = true }
 tracing = { workspace = true }
 unsigned-varint = { workspace = true }
-void = "1"
 
 [dev-dependencies]
 async-std = { version = "1.6.2", features = ["attributes"] }

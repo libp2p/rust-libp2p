@@ -1,7 +1,6 @@
 use libp2p_identify as identify;
 use libp2p_identity as identity;
-use libp2p_kad::store::MemoryStore;
-use libp2p_kad::{Behaviour, Config, Event, Mode};
+use libp2p_kad::{store::MemoryStore, Behaviour, Config, Event, Mode};
 use libp2p_swarm::{Swarm, SwarmEvent};
 use libp2p_swarm_test::SwarmExt;
 use tracing_subscriber::EnvFilter;
@@ -104,7 +103,9 @@ async fn adding_an_external_addresses_activates_server_mode_on_existing_connecti
     // Server learns its external address (this could be through AutoNAT or some other mechanism).
     server.add_external_address(memory_addr);
 
-    // The server reconfigured its connection to the client to be in server mode, pushes that information to client which as a result updates its routing table and triggers a mode change to Mode::Server.
+    // The server reconfigured its connection to the client to be in server mode,
+    // pushes that information to client which as a result updates its routing
+    // table and triggers a mode change to Mode::Server.
     match libp2p_swarm_test::drive(&mut client, &mut server).await {
         (
             [Identify(identify::Event::Received { .. }), Kad(RoutingUpdated { peer: peer1, .. })],

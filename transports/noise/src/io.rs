@@ -22,17 +22,17 @@
 
 mod framed;
 pub(crate) mod handshake;
-use asynchronous_codec::Framed;
-use bytes::Bytes;
-use framed::{Codec, MAX_FRAME_LEN};
-use futures::prelude::*;
-use futures::ready;
 use std::{
     cmp::min,
     fmt, io,
     pin::Pin,
     task::{Context, Poll},
 };
+
+use asynchronous_codec::Framed;
+use bytes::Bytes;
+use framed::{Codec, MAX_FRAME_LEN};
+use futures::{prelude::*, ready};
 
 /// A noise session to a remote.
 ///

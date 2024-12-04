@@ -21,25 +21,30 @@
 mod dns;
 mod query;
 
-use self::dns::{build_query, build_query_response, build_service_discovery_response};
-use self::query::MdnsPacket;
-use crate::behaviour::{socket::AsyncSocket, timer::Builder};
-use crate::Config;
-use futures::channel::mpsc;
-use futures::{SinkExt, StreamExt};
+use std::{
+    collections::VecDeque,
+    future::Future,
+    io,
+    net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr, UdpSocket},
+    pin::Pin,
+    sync::{Arc, RwLock},
+    task::{Context, Poll},
+    time::{Duration, Instant},
+};
+
+use futures::{channel::mpsc, SinkExt, StreamExt};
 use libp2p_core::Multiaddr;
 use libp2p_identity::PeerId;
 use libp2p_swarm::ListenAddresses;
 use socket2::{Domain, Socket, Type};
-use std::future::Future;
-use std::sync::{Arc, RwLock};
-use std::{
-    collections::VecDeque,
-    io,
-    net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr, UdpSocket},
-    pin::Pin,
-    task::{Context, Poll},
-    time::{Duration, Instant},
+
+use self::{
+    dns::{build_query, build_query_response, build_service_discovery_response},
+    query::MdnsPacket,
+};
+use crate::{
+    behaviour::{socket::AsyncSocket, timer::Builder},
+    Config,
 };
 
 /// Initial interval for starting probe

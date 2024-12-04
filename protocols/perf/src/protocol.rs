@@ -18,14 +18,14 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use futures_timer::Delay;
 use std::time::Duration;
-use web_time::Instant;
 
 use futures::{
     future::{select, Either},
     AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, FutureExt, SinkExt, Stream, StreamExt,
 };
+use futures_timer::Delay;
+use web_time::Instant;
 
 use crate::{Final, Intermediate, Run, RunDuration, RunParams, RunUpdate};
 

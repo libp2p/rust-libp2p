@@ -19,24 +19,34 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::multiaddr_ext::MultiaddrExt;
-use crate::priv_client::Connection;
-use crate::protocol::outbound_hop;
-use crate::protocol::outbound_hop::{ConnectError, ReserveError};
-use crate::RequestId;
-use futures::channel::mpsc;
-use futures::channel::oneshot;
-use futures::future::{ready, BoxFuture, FutureExt, Ready};
-use futures::sink::SinkExt;
-use futures::stream::SelectAll;
-use futures::stream::{Stream, StreamExt};
-use libp2p_core::multiaddr::{Multiaddr, Protocol};
-use libp2p_core::transport::{DialOpts, ListenerId, TransportError, TransportEvent};
+use std::{
+    collections::VecDeque,
+    pin::Pin,
+    task::{Context, Poll, Waker},
+};
+
+use futures::{
+    channel::{mpsc, oneshot},
+    future::{ready, BoxFuture, FutureExt, Ready},
+    sink::SinkExt,
+    stream::{SelectAll, Stream, StreamExt},
+};
+use libp2p_core::{
+    multiaddr::{Multiaddr, Protocol},
+    transport::{DialOpts, ListenerId, TransportError, TransportEvent},
+};
 use libp2p_identity::PeerId;
-use std::collections::VecDeque;
-use std::pin::Pin;
-use std::task::{Context, Poll, Waker};
 use thiserror::Error;
+
+use crate::{
+    multiaddr_ext::MultiaddrExt,
+    priv_client::Connection,
+    protocol::{
+        outbound_hop,
+        outbound_hop::{ConnectError, ReserveError},
+    },
+    RequestId,
+};
 
 /// A [`Transport`] enabling client relay capabilities.
 ///
@@ -49,7 +59,8 @@ use thiserror::Error;
 /// 1. Establish relayed connections by dialing `/p2p-circuit` addresses.
 ///
 ///    ```
-///    # use libp2p_core::{Multiaddr, multiaddr::{Protocol}, Transport, transport::{DialOpts, PortUse}, connection::Endpoint};
+///    # use libp2p_core::{Multiaddr, multiaddr::{Protocol}, Transport,
+///    # transport::{DialOpts, PortUse}, connection::Endpoint};
 ///    # use libp2p_core::transport::memory::MemoryTransport;
 ///    # use libp2p_core::transport::choice::OrTransport;
 ///    # use libp2p_relay as relay;
@@ -307,8 +318,9 @@ pub(crate) struct Listener {
     queued_events: VecDeque<<Self as Stream>::Item>,
     /// Channel for messages from the behaviour [`Handler`][super::handler::Handler].
     from_behaviour: mpsc::Receiver<ToListenerMsg>,
-    /// The listener can be closed either manually with [`Transport::remove_listener`](libp2p_core::Transport) or if
-    /// the sender side of the `from_behaviour` channel is dropped.
+    /// The listener can be closed either manually with
+    /// [`Transport::remove_listener`](libp2p_core::Transport) or if the sender side of the
+    /// `from_behaviour` channel is dropped.
     is_closed: bool,
     waker: Option<Waker>,
 }
@@ -344,7 +356,8 @@ impl Stream for Listener {
             }
 
             if self.is_closed {
-                // Terminate the stream if the listener closed and all remaining events have been reported.
+                // Terminate the stream if the listener closed and
+                // all remaining events have been reported.
                 self.waker = None;
                 return Poll::Ready(None);
             }

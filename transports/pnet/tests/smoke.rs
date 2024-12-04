@@ -1,10 +1,9 @@
 use std::time::Duration;
 
 use futures::{future, AsyncRead, AsyncWrite, StreamExt};
-use libp2p_core::transport::MemoryTransport;
-use libp2p_core::upgrade::Version;
-use libp2p_core::Transport;
-use libp2p_core::{multiaddr::Protocol, Multiaddr};
+use libp2p_core::{
+    multiaddr::Protocol, transport::MemoryTransport, upgrade::Version, Multiaddr, Transport,
+};
 use libp2p_pnet::{PnetConfig, PreSharedKey};
 use libp2p_swarm::{dummy, Config, NetworkBehaviour, Swarm, SwarmEvent};
 
