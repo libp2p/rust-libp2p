@@ -1071,7 +1071,6 @@ where
             // remove the last published time
             self.fanout_last_pub.remove(topic_hash);
         }
-        
         #[cfg(feature = "metrics")]
         let fanaout_added = added_peers.len();
         #[cfg(feature = "metrics")]
