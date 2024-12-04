@@ -1326,7 +1326,6 @@ where
 
             for id in ids.into_iter().filter(want_message) {
                 // have not seen this message and are not currently requesting it
-
                 if iwant_ids.insert(id) {
                     // Register the IWANT metric
                     #[cfg(feature = "metrics")]
