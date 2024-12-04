@@ -59,7 +59,6 @@ where
         let mut gs: Behaviour<D, F> = Behaviour::new_with_subscription_filter_and_transform(
             MessageAuthenticity::Signed(keypair),
             self.gs_config,
-            None,
             self.subscription_filter,
             self.data_transform,
         )

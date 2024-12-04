@@ -12,6 +12,7 @@ categories = ["network-programming", "asynchronous"]
 
 [features]
 wasm-bindgen = ["getrandom/js"]
+metrics = ["prometheus-client"]
 
 [dependencies]
 asynchronous-codec = { workspace = true }
@@ -39,7 +40,7 @@ tracing = { workspace = true }
 void = "1.0.2"
 
 # Metrics dependencies
-prometheus-client = { workspace = true }
+prometheus-client = { workspace = true, optional = true }
 
 [dev-dependencies]
 async-std = { version = "1.6.3", features = ["unstable"] }

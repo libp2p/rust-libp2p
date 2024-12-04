@@ -100,6 +100,7 @@ mod error;
 mod gossip_promises;
 mod handler;
 mod mcache;
+#[cfg(feature = "metrics")]
 mod metrics;
 mod peer_score;
 mod protocol;
@@ -113,6 +114,7 @@ mod types;
 pub use self::behaviour::{Behaviour, Event, MessageAuthenticity};
 pub use self::config::{Config, ConfigBuilder, ValidationMode, Version};
 pub use self::error::{ConfigBuilderError, PublishError, SubscriptionError, ValidationError};
+#[cfg(feature = "metrics")]
 pub use self::metrics::Config as MetricsConfig;
 pub use self::peer_score::{
     score_parameter_decay, score_parameter_decay_with_base, PeerScoreParams, PeerScoreThresholds,

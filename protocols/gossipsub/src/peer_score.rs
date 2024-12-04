@@ -21,6 +21,7 @@
 //!
 //! Manages and stores the Scoring logic of a particular peer on the gossipsub behaviour.
 
+#[cfg(feature = "metrics")]
 use crate::metrics::{Metrics, Penalty};
 use crate::time_cache::TimeCache;
 use crate::{MessageId, TopicHash};
@@ -214,11 +215,125 @@ impl PeerScore {
 
     /// Returns the score for a peer
     pub(crate) fn score(&self, peer_id: &PeerId) -> f64 {
-        self.metric_score(peer_id, None)
+        let Some(peer_stats) = self.peer_stats.get(peer_id) else {
+            return 0.0;
+        };
+        let mut score = 0.0;
+
+        // topic scores
+        for (topic, topic_stats) in peer_stats.topics.iter() {
+            // topic parameters
+            if let Some(topic_params) = self.params.topics.get(topic) {
+                // we are tracking the topic
+
+                // the topic score
+                let mut topic_score = 0.0;
+
+                // P1: time in mesh
+                if let MeshStatus::Active { mesh_time, .. } = topic_stats.mesh_status {
+                    let p1 = {
+                        let v = mesh_time.as_secs_f64()
+                            / topic_params.time_in_mesh_quantum.as_secs_f64();
+                        if v < topic_params.time_in_mesh_cap {
+                            v
+                        } else {
+                            topic_params.time_in_mesh_cap
+                        }
+                    };
+                    topic_score += p1 * topic_params.time_in_mesh_weight;
+                }
+
+                // P2: first message deliveries
+                let p2 = {
+                    let v = topic_stats.first_message_deliveries;
+                    if v < topic_params.first_message_deliveries_cap {
+                        v
+                    } else {
+                        topic_params.first_message_deliveries_cap
+                    }
+                };
+                topic_score += p2 * topic_params.first_message_deliveries_weight;
+
+                // P3: mesh message deliveries
+                if topic_stats.mesh_message_deliveries_active
+                    && topic_stats.mesh_message_deliveries
+                        < topic_params.mesh_message_deliveries_threshold
+                {
+                    let deficit = topic_params.mesh_message_deliveries_threshold
+                        - topic_stats.mesh_message_deliveries;
+                    let p3 = deficit * deficit;
+                    topic_score += p3 * topic_params.mesh_message_deliveries_weight;
+                    tracing::debug!(
+                        peer=%peer_id,
+                        %topic,
+                        %deficit,
+                        penalty=%topic_score,
+                        "[Penalty] The peer has a mesh deliveries deficit and will be penalized"
+                    );
+                }
+
+                // P3b:
+                // NOTE: the weight of P3b is negative (validated in TopicScoreParams.validate), so this detracts.
+                let p3b = topic_stats.mesh_failure_penalty;
+                topic_score += p3b * topic_params.mesh_failure_penalty_weight;
+
+                // P4: invalid messages
+                // NOTE: the weight of P4 is negative (validated in TopicScoreParams.validate), so this detracts.
+                let p4 =
+                    topic_stats.invalid_message_deliveries * topic_stats.invalid_message_deliveries;
+                topic_score += p4 * topic_params.invalid_message_deliveries_weight;
+
+                // update score, mixing with topic weight
+                score += topic_score * topic_params.topic_weight;
+            }
+        }
+
+        // apply the topic score cap, if any
+        if self.params.topic_score_cap > 0f64 && score > self.params.topic_score_cap {
+            score = self.params.topic_score_cap;
+        }
+
+        // P5: application-specific score
+        let p5 = peer_stats.application_score;
+        score += p5 * self.params.app_specific_weight;
+
+        // P6: IP collocation factor
+        for ip in peer_stats.known_ips.iter() {
+            if self.params.ip_colocation_factor_whitelist.contains(ip) {
+                continue;
+            }
+
+            // P6 has a cliff (ip_colocation_factor_threshold); it's only applied iff
+            // at least that many peers are connected to us from that source IP
+            // addr. It is quadratic, and the weight is negative (validated by
+            // peer_score_params.validate()).
+            if let Some(peers_in_ip) = self.peer_ips.get(ip).map(|peers| peers.len()) {
+                if (peers_in_ip as f64) > self.params.ip_colocation_factor_threshold {
+                    let surplus = (peers_in_ip as f64) - self.params.ip_colocation_factor_threshold;
+                    let p6 = surplus * surplus;
+                    tracing::debug!(
+                        peer=%peer_id,
+                        surplus_ip=%ip,
+                        surplus=%surplus,
+                        "[Penalty] The peer gets penalized because of too many peers with the same ip"
+                    );
+                    score += p6 * self.params.ip_colocation_factor_weight;
+                }
+            }
+        }
+
+        // P7: behavioural pattern penalty
+        if peer_stats.behaviour_penalty > self.params.behaviour_penalty_threshold {
+            let excess = peer_stats.behaviour_penalty - self.params.behaviour_penalty_threshold;
+            let p7 = excess * excess;
+            score += p7 * self.params.behaviour_penalty_weight;
+        }
+        score
     }
 
     /// Returns the score for a peer, logging metrics. This is called from the heartbeat and
     /// increments the metric counts for penalties.
+    #[cfg(feature = "metrics")]
     pub(crate) fn metric_score(&self, peer_id: &PeerId, mut metrics: Option<&mut Metrics>) -> f64 {
         let Some(peer_stats) = self.peer_stats.get(peer_id) else {
             return 0.0;
