@@ -1130,10 +1130,11 @@ where
                 &self.connected_peers,
             );
         }
-
+        
+        #[cfg(feature = "metrics")]
+        let mesh_peers = self.mesh_peers(topic_hash).count();
         #[cfg(feature = "metrics")]
         if let Some(m) = self.metrics.as_mut() {
-            let mesh_peers = self.mesh_peers(topic_hash).count();
             m.set_mesh_peers(topic_hash, mesh_peers)
         }
 
