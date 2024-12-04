@@ -352,46 +352,47 @@ impl ConnectionHandler for Handler {
             return Poll::Ready(event);
         }
 
-        match self.active_streams.poll_unpin(cx) {
-            Poll::Ready(Ok(Ok(Success::ReceivedIdentify(remote_info)))) => {
-                if self.handle_incoming_info(&remote_info) {
+        while let Poll::Ready(ready) = self.active_streams.poll_unpin(cx) {
+            match ready {
+                Ok(Ok(Success::ReceivedIdentify(remote_info))) => {
+                    if self.handle_incoming_info(&remote_info) {
+                        return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(
+                            Event::Identified(remote_info),
+                        ));
+                    }
+                }
+                Ok(Ok(Success::SentIdentifyPush(info))) => {
                     return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(
-                        Event::Identified(remote_info),
+                        Event::IdentificationPushed(info),
+                    ));
+                }
+                Ok(Ok(Success::SentIdentify)) => {
+                    return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(
+                        Event::Identification,
+                    ));
+                }
+                Ok(Ok(Success::ReceivedIdentifyPush(remote_push_info))) => {
+                    if let Some(mut info) = self.remote_info.clone() {
+                        info.merge(remote_push_info);
+
+                        if self.handle_incoming_info(&info) {
+                            return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(
+                                Event::Identified(info),
+                            ));
+                        }
+                    };
+                }
+                Ok(Err(e)) => {
+                    return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(
+                        Event::IdentificationError(StreamUpgradeError::Apply(e)),
+                    ));
+                }
+                Err(Timeout { .. }) => {
+                    return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(
+                        Event::IdentificationError(StreamUpgradeError::Timeout),
                     ));
                 }
             }
-            Poll::Ready(Ok(Ok(Success::SentIdentifyPush(info)))) => {
-                return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(
-                    Event::IdentificationPushed(info),
-                ));
-            }
-            Poll::Ready(Ok(Ok(Success::SentIdentify))) => {
-                return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(
-                    Event::Identification,
-                ));
-            }
-            Poll::Ready(Ok(Ok(Success::ReceivedIdentifyPush(remote_push_info)))) => {
-                if let Some(mut info) = self.remote_info.clone() {
-                    info.merge(remote_push_info);
-
-                    if self.handle_incoming_info(&info) {
-                        return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(
-                            Event::Identified(info),
-                        ));
-                    }
-                };
-            }
-            Poll::Ready(Ok(Err(e))) => {
-                return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(
-                    Event::IdentificationError(StreamUpgradeError::Apply(e)),
-                ));
-            }
-            Poll::Ready(Err(Timeout { .. })) => {
-                return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(
-                    Event::IdentificationError(StreamUpgradeError::Timeout),
-                ));
-            }
-            Poll::Pending => {}
         }
 
         Poll::Pending
