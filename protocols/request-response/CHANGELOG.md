@@ -1,3 +1,8 @@
+## 0.28.0
+
+- Add connection id to the events emitted by a request-response `Behaviour`.
+  See [PR 5676](TODO).
+
 ## 0.27.1
 
 - Deprecate `void` crate.
