@@ -332,12 +332,19 @@ impl PeerScore {
             }
         }
 
-        // P7: behavioural pattern penalty
+        // P7: behavioural pattern penalty.
         if peer_stats.behaviour_penalty > self.params.behaviour_penalty_threshold {
             let excess = peer_stats.behaviour_penalty - self.params.behaviour_penalty_threshold;
             let p7 = excess * excess;
             score += p7 * self.params.behaviour_penalty_weight;
         }
+
+        // Slow peer weighting.
+        if peer_stats.slow_peer_penalty > self.params.slow_peer_threshold {
+            let excess = peer_stats.slow_peer_penalty - self.params.slow_peer_threshold;
+            score += excess * self.params.slow_peer_weight;
+        }
+
         score
     }
 
