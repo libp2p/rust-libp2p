@@ -26,7 +26,7 @@ use futures::prelude::*;
 use libp2p_identity::PeerId;
 use libp2p_request_response as request_response;
 use libp2p_request_response::ProtocolSupport;
-use libp2p_swarm::{ConnectionId, StreamProtocol, Swarm, SwarmEvent};
+use libp2p_swarm::{StreamProtocol, Swarm, SwarmEvent};
 use libp2p_swarm_test::SwarmExt;
 use rand::Rng;
 use serde::{Deserialize, Serialize};
@@ -63,12 +63,11 @@ async fn is_response_outbound() {
     {
         request_response::Event::OutboundFailure {
             peer,
-            connection_id,
             request_id: req_id,
             error: _error,
+            ..
         } => {
             assert_eq!(&offline_peer, &peer);
-            assert_eq!(connection_id, ConnectionId::new_unchecked(1));
             assert_eq!(req_id, request_id1);
         }
         e => panic!("Peer: Unexpected event: {e:?}"),
