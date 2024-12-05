@@ -67,16 +67,6 @@ where
     ) {
         let keypair = libp2p_identity::Keypair::generate_ed25519();
         // create a gossipsub struct
-        #[cfg(feature = "metrics")]
-        let mut gs: Behaviour<D, F> = Behaviour::new_with_subscription_filter_and_transform(
-            MessageAuthenticity::Signed(keypair),
-            self.gs_config,
-            None,
-            self.subscription_filter,
-            self.data_transform,
-        )
-        .unwrap();
-        #[cfg(not(feature = "metrics"))]
         let mut gs: Behaviour<D, F> = Behaviour::new_with_subscription_filter_and_transform(
             MessageAuthenticity::Signed(keypair),
             self.gs_config,

@@ -342,18 +342,8 @@ where
     F: TopicSubscriptionFilter + Default,
 {
     /// Creates a Gossipsub [`Behaviour`] struct given a set of parameters specified via a
-    /// [`Config`]. This has no subscription filter and uses no compression.
-    #[cfg(feature = "metrics")]
-    pub fn new(privacy: MessageAuthenticity, config: Config) -> Result<Self, &'static str> {
-        Self::new_with_subscription_filter_and_transform(
-            privacy,
-            config,
-            None,
-            F::default(),
-            D::default(),
-        )
-    }
-    #[cfg(not(feature = "metrics"))]
+    /// [`Config`]. This has no subscription filter and uses no compression.  
+    /// Metrics are disabled by default.
     pub fn new(privacy: MessageAuthenticity, config: Config) -> Result<Self, &'static str> {
         Self::new_with_subscription_filter_and_transform(
             privacy,
@@ -363,23 +353,16 @@ where
         )
     }
 
-    #[cfg(feature = "metrics")]
-    /// Creates a Gossipsub [`Behaviour`] struct given a set of parameters specified via a
-    /// [`Config`]. This has no subscription filter and uses no compression.
+    /// Allow the behaviour to also provide metric data.
     /// Metrics can be evaluated by passing a reference to a [`Registry`].
-    pub fn new_with_metrics(
-        privacy: MessageAuthenticity,
-        config: Config,
+    #[cfg(feature = "metrics")]
+    pub fn with_metrics(
+        mut self,
         metrics_registry: &mut Registry,
         metrics_config: MetricsConfig,
-    ) -> Result<Self, &'static str> {
-        Self::new_with_subscription_filter_and_transform(
-            privacy,
-            config,
-            Some((metrics_registry, metrics_config)),
-            F::default(),
-            D::default(),
-        )
+    ) -> Self {
+        self.metrics = Some(Metrics::new(metrics_registry, metrics_config));
+        self
     }
 }
 
@@ -389,23 +372,8 @@ where
     F: TopicSubscriptionFilter,
 {
     /// Creates a Gossipsub [`Behaviour`] struct given a set of parameters specified via a
-    /// [`Config`] and a custom subscription filter.
-    #[cfg(feature = "metrics")]
-    pub fn new_with_subscription_filter(
-        privacy: MessageAuthenticity,
-        config: Config,
-        metrics: Option<(&mut Registry, MetricsConfig)>,
-        subscription_filter: F,
-    ) -> Result<Self, &'static str> {
-        Self::new_with_subscription_filter_and_transform(
-            privacy,
-            config,
-            metrics,
-            subscription_filter,
-            D::default(),
-        )
-    }
-    #[cfg(not(feature = "metrics"))]
+    /// [`Config`] and a custom subscription filter.  
+    /// Metrics are disabled by default.
     pub fn new_with_subscription_filter(
         privacy: MessageAuthenticity,
         config: Config,
@@ -426,23 +394,8 @@ where
     F: TopicSubscriptionFilter + Default,
 {
     /// Creates a Gossipsub [`Behaviour`] struct given a set of parameters specified via a
-    /// [`Config`] and a custom data transform.
-    #[cfg(feature = "metrics")]
-    pub fn new_with_transform(
-        privacy: MessageAuthenticity,
-        config: Config,
-        metrics: Option<(&mut Registry, MetricsConfig)>,
-        data_transform: D,
-    ) -> Result<Self, &'static str> {
-        Self::new_with_subscription_filter_and_transform(
-            privacy,
-            config,
-            metrics,
-            F::default(),
-            data_transform,
-        )
-    }
-    #[cfg(not(feature = "metrics"))]
+    /// [`Config`] and a custom data transform.  
+    /// Metrics are disabled by default.
     pub fn new_with_transform(
         privacy: MessageAuthenticity,
         config: Config,
@@ -464,52 +417,7 @@ where
 {
     /// Creates a Gossipsub [`Behaviour`] struct given a set of parameters specified via a
     /// [`Config`] and a custom subscription filter and data transform.
-    #[cfg(feature = "metrics")]
-    pub fn new_with_subscription_filter_and_transform(
-        privacy: MessageAuthenticity,
-        config: Config,
-        metrics: Option<(&mut Registry, MetricsConfig)>,
-        subscription_filter: F,
-        data_transform: D,
-    ) -> Result<Self, &'static str> {
-        // Set up the router given the configuration settings.
-
-        // We do not allow configurations where a published message would also be rejected if it
-        // were received locally.
-        validate_config(&privacy, config.validation_mode())?;
-
-        Ok(Behaviour {
-            metrics: metrics.map(|(registry, cfg)| Metrics::new(registry, cfg)),
-            events: VecDeque::new(),
-            publish_config: privacy.into(),
-            duplicate_cache: DuplicateCache::new(config.duplicate_cache_time()),
-            explicit_peers: HashSet::new(),
-            blacklisted_peers: HashSet::new(),
-            mesh: HashMap::new(),
-            fanout: HashMap::new(),
-            fanout_last_pub: HashMap::new(),
-            backoffs: BackoffStorage::new(
-                &config.prune_backoff(),
-                config.heartbeat_interval(),
-                config.backoff_slack(),
-            ),
-            mcache: MessageCache::new(config.history_gossip(), config.history_length()),
-            heartbeat: Delay::new(config.heartbeat_interval() + config.heartbeat_initial_delay()),
-            heartbeat_ticks: 0,
-            px_peers: HashSet::new(),
-            outbound_peers: HashSet::new(),
-            peer_score: None,
-            count_received_ihave: HashMap::new(),
-            count_sent_iwant: HashMap::new(),
-            connected_peers: HashMap::new(),
-            published_message_ids: DuplicateCache::new(config.published_message_ids_cache_time()),
-            config,
-            subscription_filter,
-            data_transform,
-            failed_messages: Default::default(),
-        })
-    }
-    #[cfg(not(feature = "metrics"))]
+    /// Metrics are disabled by default.
     pub fn new_with_subscription_filter_and_transform(
         privacy: MessageAuthenticity,
         config: Config,
@@ -523,6 +431,8 @@ where
         validate_config(&privacy, config.validation_mode())?;
 
         Ok(Behaviour {
+            #[cfg(feature = "metrics")]
+            metrics: None,
             events: VecDeque::new(),
             publish_config: privacy.into(),
             duplicate_cache: DuplicateCache::new(config.duplicate_cache_time()),
