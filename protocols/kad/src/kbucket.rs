@@ -280,6 +280,7 @@ where
         let bucket_size = self.bucket_size;
         ClosestIter {
             target,
+            iter: None,
             table: self,
             buckets_iter: ClosestBucketsIter::new(distance),
             fmap: |(n, _status): (&Node<TKey, TVal>, NodeStatus)| n.key.clone(),
@@ -301,6 +302,7 @@ where
         let bucket_size = self.bucket_size;
         ClosestIter {
             target,
+            iter: None,
             table: self,
             buckets_iter: ClosestBucketsIter::new(distance),
             fmap: |(n, status): (&Node<TKey, TVal>, NodeStatus)| EntryView {
@@ -338,7 +340,7 @@ where
 
 /// An iterator over (some projection of) the closest entries in a
 /// `KBucketsTable` w.r.t. some target `Key`.
-struct ClosestIter<'a, TTarget, TKey, TVal, TMap> {
+struct ClosestIter<'a, TTarget, TKey, TVal, TMap, TOut> {
     /// A reference to the target key whose distance to the local key determines
     /// the order in which the buckets are traversed. The resulting
     /// array from projecting the entries of each bucket using `fmap` is
@@ -349,6 +351,8 @@ struct ClosestIter<'a, TTarget, TKey, TVal, TMap> {
     /// The iterator over the bucket indices in the order determined by the
     /// distance of the local key to the target.
     buckets_iter: ClosestBucketsIter,
+    /// The iterator over the entries in the currently traversed bucket.
+    iter: Option<ClosestIterBuffer<TOut>>,
     /// The projection function / mapping applied on each bucket as
     /// it is encountered, producing the next `iter`ator.
     fmap: TMap,
@@ -450,7 +454,7 @@ impl Iterator for ClosestBucketsIter {
     }
 }
 
-impl<TTarget, TKey, TVal, TMap, TOut> Iterator for ClosestIter<'_, TTarget, TKey, TVal, TMap>
+impl<TTarget, TKey, TVal, TMap, TOut> Iterator for ClosestIter<'_, TTarget, TKey, TVal, TMap, TOut>
 where
     TTarget: AsRef<KeyBytes>,
     TKey: Clone + AsRef<KeyBytes>,
@@ -461,33 +465,24 @@ where
     type Item = TOut;
 
     fn next(&mut self) -> Option<Self::Item> {
-        let mut main_buffer: Option<SmallVec<[TOut; K_VALUE.get()]>> = None;
-
         loop {
-            let (mut buffer, bucket_index) = if let Some(mut buffer) = main_buffer {
-                if !buffer.is_empty() {
-                    return Some(buffer.remove(0));
+            let (mut buffer, bucket_index) = if let Some(mut iter) = self.iter.take() {
+                if let Some(next) = iter.next() {
+                    self.iter = Some(iter);
+                    return Some(next);
                 }
 
-                let Some(bucket_index) = self.buckets_iter.next() else {
-                    return None;
-                };
+                let bucket_index = self.buckets_iter.next()?;
 
                 // Reusing the same buffer so if there were any allocation, it only happen once over a `ClosestIter` life.
-                buffer.clear();
+                iter.buffer.clear();
 
-                (buffer, bucket_index)
+                (iter.buffer, bucket_index)
             } else {
-                let Some(bucket_index) = self.buckets_iter.next() else {
-                    // The routing table is completely empty, `main_buffer` was never initialized so no possible allocation
-                    // were performed.
-                    return None;
-                };
+                let bucket_index = self.buckets_iter.next()?;
 
                 // Allocation only occurs if `kbucket_size` is greater than `K_VALUE`.
-                let buffer = SmallVec::with_capacity(self.bucket_size);
-
-                (buffer, bucket_index)
+                (SmallVec::with_capacity(self.bucket_size), bucket_index)
             };
 
             let bucket = &mut self.table.buckets[bucket_index.get()];
@@ -495,16 +490,45 @@ where
                 self.table.applied_pending.push_back(applied)
             }
 
-            buffer.extend(bucket.iter().take(self.bucket_size).map(|e| (self.fmap)(e)));
+            buffer.extend(
+                bucket
+                    .iter()
+                    .take(self.bucket_size)
+                    .map(|e| (self.fmap)(e))
+                    .map(Some),
+            );
             buffer.sort_by(|a, b| {
+                let a = a.as_ref().expect("just initialized");
+                let b = b.as_ref().expect("just initialized");
                 self.target
                     .as_ref()
                     .distance(a.as_ref())
                     .cmp(&self.target.as_ref().distance(b.as_ref()))
             });
 
-            main_buffer = Some(buffer);
+            self.iter = Some(ClosestIterBuffer::new(buffer));
         }
+    }
+}
+
+struct ClosestIterBuffer<TOut> {
+    buffer: SmallVec<[Option<TOut>; K_VALUE.get()]>,
+    index: usize,
+}
+
+impl<TOut> ClosestIterBuffer<TOut> {
+    fn new(buffer: SmallVec<[Option<TOut>; K_VALUE.get()]>) -> Self {
+        Self { buffer, index: 0 }
+    }
+}
+
+impl<TOut> Iterator for ClosestIterBuffer<TOut> {
+    type Item = TOut;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let entry = self.buffer.get_mut(self.index)?;
+        self.index += 1;
+        entry.take()
     }
 }
 
