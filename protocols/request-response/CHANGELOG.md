@@ -1,7 +1,7 @@
 ## 0.28.0
 
 - Add connection id to the events emitted by a request-response `Behaviour`.
-  See [PR 5676](https://github.com/libp2p/rust-libp2p/pull/5719).
+  See [PR 5719](https://github.com/libp2p/rust-libp2p/pull/5719).
 
 ## 0.27.1
 
