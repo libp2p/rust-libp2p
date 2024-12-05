@@ -2,6 +2,8 @@
 
 - Expose Distance private field U256 to public.
   See [PR 5705](https://github.com/libp2p/rust-libp2p/pull/5705).
+- Fix systematic memory allocation when iterating over `KBuckets`.
+  See [PR XXXX](https://github.com/libp2p/rust-libp2p/pull/XXXX).
 
 ## 0.47.0
 
