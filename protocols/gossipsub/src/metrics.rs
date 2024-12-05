@@ -485,10 +485,10 @@ impl Metrics {
     }
 
     /// Register a score penalty.
-    pub(crate) fn register_score_penalty(&mut self, penalty: Penalty) {
+    pub(crate) fn register_score_penalty(&mut self, penalty: Penalty, inc: u64) {
         self.scoring_penalties
             .get_or_create(&PenaltyLabel { penalty })
-            .inc();
+            .inc_by(inc);
     }
 
     /// Registers that a message was published on a specific topic.

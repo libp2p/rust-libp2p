@@ -1380,6 +1380,8 @@ where
         } else {
             let (below_zero, score) = self.score_below_threshold(peer_id, |_| 0.0);
             let now = Instant::now();
+            #[cfg(feature = "metrics")]
+            let mut num_graft_backoff_penalties = 0;
             for topic_hash in topics {
                 if let Some(peers) = self.mesh.get_mut(&topic_hash) {
                     // if the peer is already in the mesh ignore the graft
@@ -1403,8 +1405,8 @@ where
                             // add behavioural penalty
                             if let Some((peer_score, ..)) = &mut self.peer_score {
                                 #[cfg(feature = "metrics")]
-                                if let Some(metrics) = self.metrics.as_mut() {
-                                    metrics.register_score_penalty(Penalty::GraftBackoff);
+                                {
+                                    num_graft_backoff_penalties += 1;
                                 }
                                 peer_score.add_penalty(peer_id, 1);
 
@@ -1490,6 +1492,10 @@ where
                     // spam hardening: ignore GRAFTs for unknown topics
                     continue;
                 }
+            }
+            #[cfg(feature = "metrics")]
+            if let Some(metrics) = self.metrics.as_mut() {
+                metrics.register_score_penalty(Penalty::GraftBackoff, num_graft_backoff_penalties);
             }
         }
 
@@ -2062,12 +2068,14 @@ where
     /// Applies penalties to peers that did not respond to our IWANT requests.
     fn apply_iwant_penalties(&mut self) {
         if let Some((peer_score, .., gossip_promises)) = &mut self.peer_score {
-            for (peer, count) in gossip_promises.get_broken_promises() {
+            let broken_promises = gossip_promises.get_broken_promises();
+            #[cfg(feature = "metrics")]
+            if let Some(metrics) = self.metrics.as_mut() {
+                metrics
+                    .register_score_penalty(Penalty::BrokenPromise, broken_promises.len() as u64);
+            }
+            for (peer, count) in broken_promises {
                 peer_score.add_penalty(&peer, count);
-                #[cfg(feature = "metrics")]
-                if let Some(metrics) = self.metrics.as_mut() {
-                    metrics.register_score_penalty(Penalty::BrokenPromise);
-                }
             }
         }
     }
