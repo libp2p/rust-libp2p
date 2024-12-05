@@ -18,10 +18,13 @@ jobs:
       matrix:
         flavour: [chromium, native]
     steps:
+      - name: Free Disk Space (Ubuntu)
+        if: github.repository != 'libp2p/rust-libp2p'
+        uses: jlumbroso/free-disk-space@54081f138730dfa15788a46383842cd2f914a1be # v1.3.1
+        with:
+          tool-cache: true
       - uses: actions/checkout@v4
-
       - uses: docker/setup-buildx-action@v3
-
       - name: Build ${{ matrix.flavour }} image
         run: ./scripts/build-interop-image.sh
         env:
@@ -46,6 +49,11 @@ jobs:
     if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ${{ fromJSON(github.repository == 'libp2p/rust-libp2p' && '["self-hosted", "linux", "x64", "4xlarge"]' || '"ubuntu-latest"') }}
     steps:
+      - name: Free Disk Space (Ubuntu)
+        if: github.repository != 'libp2p/rust-libp2p'
+        uses: jlumbroso/free-disk-space@54081f138730dfa15788a46383842cd2f914a1be # v1.3.1
+        with:
+          tool-cache: true
       - uses: actions/checkout@v4
       - uses: docker/setup-buildx-action@v3
       - name: Build image
