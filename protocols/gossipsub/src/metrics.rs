@@ -187,6 +187,12 @@ pub(crate) struct Metrics {
     /// topic. A very high metric might indicate an underperforming network.
     topic_iwant_msgs: Family<TopicHash, Counter>,
 
+    /// The number of times we have received an IDONTWANT control message.
+    idontwant_msgs: Counter,
+
+    /// The number of msg_id's we have received in every IDONTWANT control message.
+    idontwant_msgs_ids: Counter,
+
     /// The size of the priority queue.
     priority_queue_size: Histogram,
     /// The size of the non-priority queue.
@@ -324,6 +330,27 @@ impl Metrics {
             "topic_iwant_msgs",
             "Number of times we have decided an IWANT is required for this topic"
         );
+
+        let idontwant_msgs = {
+            let metric = Counter::default();
+            registry.register(
+                "idontwant_msgs",
+                "The number of times we have received an IDONTWANT control message",
+                metric.clone(),
+            );
+            metric
+        };
+
+        let idontwant_msgs_ids = {
+            let metric = Counter::default();
+            registry.register(
+                "idontwant_msgs_ids",
+                "The number of msg_id's we have received in every total of all IDONTWANT control message.",
+                metric.clone(),
+            );
+            metric
+        };
+
         let memcache_misses = {
             let metric = Counter::default();
             registry.register(
@@ -376,6 +403,8 @@ impl Metrics {
             heartbeat_duration,
             memcache_misses,
             topic_iwant_msgs,
+            idontwant_msgs,
+            idontwant_msgs_ids,
             priority_queue_size,
             non_priority_queue_size,
         }
@@ -572,6 +601,12 @@ impl Metrics {
         if self.register_topic(topic).is_ok() {
             self.topic_iwant_msgs.get_or_create(topic).inc();
         }
+    }
+
+    /// Register receiving an IDONTWANT msg for this topic.
+    pub(crate) fn register_idontwant(&mut self, msgs: usize) {
+        self.idontwant_msgs.inc();
+        self.idontwant_msgs_ids.inc_by(msgs as u64);
     }
 
     /// Observes a heartbeat duration.

@@ -41,6 +41,14 @@ impl GossipPromises {
         self.promises.contains_key(message)
     }
 
+    /// Get the peers we sent IWANT the input message id.
+    pub(crate) fn peers_for_message(&self, message_id: &MessageId) -> Vec<PeerId> {
+        self.promises
+            .get(message_id)
+            .map(|peers| peers.keys().copied().collect())
+            .unwrap_or_default()
+    }
+
     /// Track a promise to deliver a message from a list of [`MessageId`]s we are requesting.
     pub(crate) fn add_promise(&mut self, peer: PeerId, messages: &[MessageId], expires: Instant) {
         for message_id in messages {
