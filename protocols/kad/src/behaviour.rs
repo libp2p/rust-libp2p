@@ -434,6 +434,8 @@ impl Config {
     /// Sets the configuration for the k-buckets.
     ///
     /// * Default to K_VALUE.
+    ///
+    /// **WARNING**: setting a `size` higher that `K_VALUE` may imply additional memory allocations.
     pub fn set_kbucket_size(&mut self, size: NonZeroUsize) -> &mut Self {
         self.kbucket_config.set_bucket_size(size);
         self
