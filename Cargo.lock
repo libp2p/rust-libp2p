@@ -3373,6 +3373,7 @@ dependencies = [
  "if-watch",
  "libp2p-core",
  "libp2p-identity",
+ "libp2p-muxer-test-harness",
  "libp2p-noise",
  "libp2p-webrtc-utils",
  "multihash",

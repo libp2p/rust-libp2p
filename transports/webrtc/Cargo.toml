@@ -39,6 +39,7 @@ pem = ["webrtc?/pem"]
 
 [dev-dependencies]
 libp2p-identity = { workspace = true, features = ["rand"] }
+libp2p-muxer-test-harness = { path = "../../muxers/test-harness" }
 tokio = { workspace = true, features = ["full"] }
 quickcheck = "1.0.3"
 tracing-subscriber = { workspace = true, features = ["env-filter"] }
