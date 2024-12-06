@@ -169,8 +169,8 @@ impl KeyBytes {
     where
         U: AsRef<KeyBytes>,
     {
-        let a = U256::from(self.0.as_slice());
-        let b = U256::from(other.as_ref().0.as_slice());
+        let a = U256::from_big_endian(self.0.as_slice());
+        let b = U256::from_big_endian(other.as_ref().0.as_slice());
         Distance(a ^ b)
     }
 
@@ -180,8 +180,8 @@ impl KeyBytes {
     ///
     /// `self xor other = distance <==> other = self xor distance`
     pub fn for_distance(&self, d: Distance) -> KeyBytes {
-        let key_int = U256::from(self.0.as_slice()) ^ d.0;
-        KeyBytes(GenericArray::from(<[u8; 32]>::from(key_int)))
+        let key_int = U256::from_big_endian(self.0.as_slice()) ^ d.0;
+        KeyBytes(GenericArray::from(key_int.to_big_endian()))
     }
 }
 
