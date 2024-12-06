@@ -131,7 +131,7 @@ pub enum Event<TRequest, TResponse, TChannelResponse = TResponse> {
     Message {
         /// The peer who sent the message.
         peer: PeerId,
-        /// The connection used
+        /// The connection used.
         connection_id: ConnectionId,
         /// The incoming message.
         message: Message<TRequest, TResponse, TChannelResponse>,
@@ -140,7 +140,7 @@ pub enum Event<TRequest, TResponse, TChannelResponse = TResponse> {
     OutboundFailure {
         /// The peer to whom the request was sent.
         peer: PeerId,
-        /// The connection used
+        /// The connection used.
         connection_id: ConnectionId,
         /// The (local) ID of the failed request.
         request_id: OutboundRequestId,
@@ -151,7 +151,7 @@ pub enum Event<TRequest, TResponse, TChannelResponse = TResponse> {
     InboundFailure {
         /// The peer from whom the request was received.
         peer: PeerId,
-        /// The connection used
+        /// The connection used.
         connection_id: ConnectionId,
         /// The ID of the failed inbound request.
         request_id: InboundRequestId,
@@ -165,7 +165,7 @@ pub enum Event<TRequest, TResponse, TChannelResponse = TResponse> {
     ResponseSent {
         /// The peer to whom the response was sent.
         peer: PeerId,
-        /// The connection used
+        /// The connection used.
         connection_id: ConnectionId,
         /// The ID of the inbound request whose response was sent.
         request_id: InboundRequestId,
