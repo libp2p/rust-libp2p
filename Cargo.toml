@@ -119,7 +119,7 @@ asynchronous-codec = { version = "0.7.0" }
 futures = "0.3.30"
 futures-bounded = { version = "0.2.4" }
 futures-rustls = { version = "0.26.0", default-features = false }
-multiaddr = "0.18.1"
+multiaddr = "0.18.2"
 multihash = "0.19.1"
 multistream-select = { version = "0.13.0", path = "misc/multistream-select" }
 prometheus-client = "0.22.2"
