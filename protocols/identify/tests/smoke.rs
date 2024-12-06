@@ -6,6 +6,7 @@ use std::{
 
 use futures::StreamExt;
 use libp2p_identify as identify;
+use libp2p_identity::Keypair;
 use libp2p_swarm::{Swarm, SwarmEvent};
 use libp2p_swarm_test::SwarmExt;
 use tracing_subscriber::EnvFilter;
@@ -439,4 +440,46 @@ async fn configured_interval_starts_after_first_identify() {
     let time_to_first_identify = Instant::now().duration_since(start);
 
     assert!(time_to_first_identify < identify_interval)
+}
+
+#[async_std::test]
+async fn reject_mismatched_public_key() {
+    let _ = tracing_subscriber::fmt()
+        .with_env_filter(EnvFilter::from_default_env())
+        .try_init();
+
+    let mut honest_swarm = Swarm::new_ephemeral(|identity| {
+        identify::Behaviour::new(
+            identify::Config::new("a".to_string(), identity.public())
+                .with_interval(Duration::from_secs(1)),
+        )
+    });
+    let mut spoofing_swarm = Swarm::new_ephemeral(|_unused_identity| {
+        let arbitrary_public_key = Keypair::generate_ed25519().public();
+        identify::Behaviour::new(
+            identify::Config::new("a".to_string(), arbitrary_public_key)
+                .with_interval(Duration::from_secs(1)),
+        )
+    });
+
+    honest_swarm.listen().with_memory_addr_external().await;
+    spoofing_swarm.connect(&mut honest_swarm).await;
+
+    spoofing_swarm
+        .wait(|event| {
+            matches!(event, SwarmEvent::Behaviour(identify::Event::Sent { .. })).then_some(())
+        })
+        .await;
+
+    let honest_swarm_events = futures::stream::poll_fn(|cx| honest_swarm.poll_next_unpin(cx))
+        .take(4)
+        .collect::<Vec<_>>()
+        .await;
+
+    assert!(
+        !honest_swarm_events
+            .iter()
+            .any(|e| matches!(e, SwarmEvent::Behaviour(identify::Event::Received { .. }))),
+        "should emit no received events as received public key won't match remote peer",
+    );
 }

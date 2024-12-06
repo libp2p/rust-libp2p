@@ -39,7 +39,7 @@ pub const PUSH_PROTOCOL_NAME: StreamProtocol = StreamProtocol::new("/ipfs/id/pus
 /// Identify information of a peer sent in protocol messages.
 #[derive(Debug, Clone)]
 pub struct Info {
-    /// The public key of the local peer.
+    /// The public key of the peer.
     pub public_key: PublicKey,
     /// Application-specific version of the protocol family used by the peer,
     /// e.g. `ipfs/1.0.0` or `polkadot/1.0.0`.
