@@ -9,6 +9,9 @@
 - Fix `cargo clippy` warnings in `rustc 1.84.0-beta.1`.
   See [PR 5700](https://github.com/libp2p/rust-libp2p/pull/5700).
 
+- Add `impl From<&PeerId> for DialOpts`.
+  See [PR 5692](https://github.com/libp2p/rust-libp2p/pull/5692).
+
 ## 0.45.1
 
 - Update `libp2p-swarm-derive` to version `0.35.0`, see [PR 5545]

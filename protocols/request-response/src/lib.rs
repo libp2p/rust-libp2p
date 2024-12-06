@@ -137,7 +137,7 @@ pub enum Event<TRequest, TResponse, TChannelResponse = TResponse> {
     /// An outbound request failed.
     OutboundFailure {
         /// The peer to whom the request was sent.
-        peer: PeerId,
+        peer: Option<PeerId>,
         /// The (local) ID of the failed request.
         request_id: OutboundRequestId,
         /// The error that occurred.
@@ -334,6 +334,24 @@ impl Config {
     }
 }
 
+#[derive(Debug, Eq, PartialEq, Hash)]
+enum PendingOutgoingRequest {
+    PeerId(PeerId),
+    ConnectionId(ConnectionId),
+}
+
+impl From<PeerId> for PendingOutgoingRequest {
+    fn from(peer_id: PeerId) -> Self {
+        Self::PeerId(peer_id)
+    }
+}
+
+impl From<ConnectionId> for PendingOutgoingRequest {
+    fn from(connection_id: ConnectionId) -> Self {
+        Self::ConnectionId(connection_id)
+    }
+}
+
 /// A request/response protocol for some message codec.
 pub struct Behaviour<TCodec>
 where
@@ -361,7 +379,8 @@ where
     addresses: PeerAddresses,
     /// Requests that have not yet been sent and are waiting for a connection
     /// to be established.
-    pending_outbound_requests: HashMap<PeerId, SmallVec<[OutboundMessage<TCodec>; 10]>>,
+    pending_outbound_requests:
+        HashMap<PendingOutgoingRequest, SmallVec<[OutboundMessage<TCodec>; 10]>>,
 }
 
 impl<TCodec> Behaviour<TCodec>
@@ -419,12 +438,16 @@ where
     /// connection is established.
     ///
     /// > **Note**: In order for such a dialing attempt to succeed,
-    /// > the `RequestResonse` protocol must either be embedded
-    /// > in another `NetworkBehaviour` that provides peer and
-    /// > address discovery, or known addresses of peers must be
-    /// > managed via [`Behaviour::add_address`] and
+    /// > the `peer` must be [`DialOpts`] with multiaddresses or
+    /// > in case of simple [`PeerId`] `RequestResponse` protocol
+    /// > must either be embedded in another `NetworkBehaviour`
+    /// > that provides peer and address discovery, or known addresses of
+    /// > peers must be managed via [`Behaviour::add_address`] and
     /// > [`Behaviour::remove_address`].
-    pub fn send_request(&mut self, peer: &PeerId, request: TCodec::Request) -> OutboundRequestId {
+    pub fn send_request<Peer>(&mut self, peer: Peer, request: TCodec::Request) -> OutboundRequestId
+    where
+        DialOpts: From<Peer>,
+    {
         let request_id = self.next_outbound_request_id();
         let request = OutboundMessage {
             request_id,
@@ -432,15 +455,28 @@ where
             protocols: self.outbound_protocols.clone(),
         };
 
-        if let Some(request) = self.try_send_request(peer, request) {
-            self.pending_events.push_back(ToSwarm::Dial {
-                opts: DialOpts::peer_id(*peer).build(),
-            });
-            self.pending_outbound_requests
-                .entry(*peer)
-                .or_default()
-                .push(request);
-        }
+        let opts = DialOpts::from(peer);
+        let maybe_peer_id = opts.get_peer_id();
+        let request = if let Some(peer_id) = &maybe_peer_id {
+            if let Some(request) = self.try_send_request(peer_id, request) {
+                request
+            } else {
+                // Sent successfully
+                return request_id;
+            }
+        } else {
+            request
+        };
+
+        self.pending_outbound_requests
+            .entry(if let Some(peer_id) = maybe_peer_id {
+                peer_id.into()
+            } else {
+                opts.connection_id().into()
+            })
+            .or_default()
+            .push(request);
+        self.pending_events.push_back(ToSwarm::Dial { opts });
 
         request_id
     }
@@ -508,7 +544,7 @@ where
         // Check if request is still pending to be sent.
         let pen_conn = self
             .pending_outbound_requests
-            .get(peer)
+            .get(&PendingOutgoingRequest::from(*peer))
             .map(|rps| rps.iter().any(|rp| rp.request_id == *request_id))
             .unwrap_or(false);
 
@@ -667,30 +703,34 @@ where
         for request_id in connection.pending_outbound_responses {
             self.pending_events
                 .push_back(ToSwarm::GenerateEvent(Event::OutboundFailure {
-                    peer: peer_id,
+                    peer: Some(peer_id),
                     request_id,
                     error: OutboundFailure::ConnectionClosed,
                 }));
         }
     }
 
-    fn on_dial_failure(&mut self, DialFailure { peer_id, .. }: DialFailure) {
-        if let Some(peer) = peer_id {
-            // If there are pending outgoing requests when a dial failure occurs,
-            // it is implied that we are not connected to the peer, since pending
-            // outgoing requests are drained when a connection is established and
-            // only created when a peer is not connected when a request is made.
-            // Thus these requests must be considered failed, even if there is
-            // another, concurrent dialing attempt ongoing.
-            if let Some(pending) = self.pending_outbound_requests.remove(&peer) {
-                for request in pending {
-                    self.pending_events
-                        .push_back(ToSwarm::GenerateEvent(Event::OutboundFailure {
-                            peer,
-                            request_id: request.request_id,
-                            error: OutboundFailure::DialFailure,
-                        }));
-                }
+    fn on_dial_failure(&mut self, failure: DialFailure) {
+        let key = if let Some(peer_id) = failure.peer_id {
+            peer_id.into()
+        } else {
+            failure.connection_id.into()
+        };
+
+        // If there are pending outgoing requests when a dial failure occurs,
+        // it is implied that we are not connected to the peer, since pending
+        // outgoing requests are drained when a connection is established and
+        // only created when a peer is not connected when a request is made.
+        // Thus, these requests must be considered failed, even if there is
+        // another, concurrent dialing attempt ongoing.
+        if let Some(pending) = self.pending_outbound_requests.remove(&key) {
+            for request in pending {
+                self.pending_events
+                    .push_back(ToSwarm::GenerateEvent(Event::OutboundFailure {
+                        peer: failure.peer_id,
+                        request_id: request.request_id,
+                        error: OutboundFailure::DialFailure,
+                    }));
             }
         }
     }
@@ -706,7 +746,7 @@ where
     ) {
         let mut connection = Connection::new(connection_id, remote_address);
 
-        if let Some(pending_requests) = self.pending_outbound_requests.remove(&peer) {
+        if let Some(pending_requests) = self.pending_outbound_requests.remove(&peer.into()) {
             for request in pending_requests {
                 connection
                     .pending_outbound_responses
@@ -890,7 +930,7 @@ where
 
                 self.pending_events
                     .push_back(ToSwarm::GenerateEvent(Event::OutboundFailure {
-                        peer,
+                        peer: Some(peer),
                         request_id,
                         error: OutboundFailure::Timeout,
                     }));
@@ -904,7 +944,7 @@ where
 
                 self.pending_events
                     .push_back(ToSwarm::GenerateEvent(Event::OutboundFailure {
-                        peer,
+                        peer: Some(peer),
                         request_id,
                         error: OutboundFailure::UnsupportedProtocols,
                     }));
@@ -915,7 +955,7 @@ where
 
                 self.pending_events
                     .push_back(ToSwarm::GenerateEvent(Event::OutboundFailure {
-                        peer,
+                        peer: Some(peer),
                         request_id,
                         error: OutboundFailure::Io(error),
                     }))

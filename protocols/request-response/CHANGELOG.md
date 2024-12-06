@@ -1,3 +1,8 @@
+## 0.28.0
+
+- `send_request` Add support for custom dial options when making request to disconnected peer.
+  See [PR 5692](https://github.com/libp2p/rust-libp2p/pull/5692).
+
 ## 0.27.1
 
 - Deprecate `void` crate.
