@@ -107,7 +107,7 @@ pub struct Handler {
     queued_events: VecDeque<
         ConnectionHandlerEvent<
             <Handler as ConnectionHandler>::OutboundProtocol,
-            <Handler as ConnectionHandler>::OutboundOpenInfo,
+            (),
             <Handler as ConnectionHandler>::ToBehaviour,
         >,
     >,
@@ -241,7 +241,7 @@ impl ConnectionHandler for Handler {
     type OutboundProtocol = ReadyUpgrade<StreamProtocol>;
     type OutboundOpenInfo = ();
 
-    fn listen_protocol(&self) -> SubstreamProtocol<Self::InboundProtocol, Self::InboundOpenInfo> {
+    fn listen_protocol(&self) -> SubstreamProtocol<Self::InboundProtocol, ()> {
         SubstreamProtocol::new(ReadyUpgrade::new(STOP_PROTOCOL_NAME), ())
     }
 
@@ -268,7 +268,7 @@ impl ConnectionHandler for Handler {
         &mut self,
         cx: &mut Context<'_>,
     ) -> Poll<
-        ConnectionHandlerEvent<Self::OutboundProtocol, Self::OutboundOpenInfo, Self::ToBehaviour>,
+        ConnectionHandlerEvent<Self::OutboundProtocol, (), Self::ToBehaviour>,
     > {
         loop {
             // Reservations
@@ -429,8 +429,8 @@ impl ConnectionHandler for Handler {
         event: ConnectionEvent<
             Self::InboundProtocol,
             Self::OutboundProtocol,
-            Self::InboundOpenInfo,
-            Self::OutboundOpenInfo,
+            (),
+            (),
         >,
     ) {
         match event {

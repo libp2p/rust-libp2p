@@ -81,7 +81,7 @@ where
     type InboundOpenInfo = ();
     type OutboundOpenInfo = ();
 
-    fn listen_protocol(&self) -> SubstreamProtocol<Self::InboundProtocol, Self::InboundOpenInfo> {
+    fn listen_protocol(&self) -> SubstreamProtocol<Self::InboundProtocol, ()> {
         SubstreamProtocol::new(ReadyUpgrade::new(DIAL_REQUEST_PROTOCOL), ())
     }
 
@@ -89,7 +89,7 @@ where
         &mut self,
         cx: &mut Context<'_>,
     ) -> Poll<
-        ConnectionHandlerEvent<Self::OutboundProtocol, Self::OutboundOpenInfo, Self::ToBehaviour>,
+        ConnectionHandlerEvent<Self::OutboundProtocol, (), Self::ToBehaviour>,
     > {
         loop {
             match self.inbound.poll_unpin(cx) {
@@ -120,8 +120,8 @@ where
         event: ConnectionEvent<
             Self::InboundProtocol,
             Self::OutboundProtocol,
-            Self::InboundOpenInfo,
-            Self::OutboundOpenInfo,
+            (),
+            (),
         >,
     ) {
         match event {

@@ -268,6 +268,7 @@ struct SpinningHandler {
     protocols: &'static [StreamProtocol],
 }
 
+#[allow(deprecated)]
 impl ConnectionHandler for SpinningHandler {
     type FromBehaviour = Infallible;
 
@@ -283,7 +284,7 @@ impl ConnectionHandler for SpinningHandler {
 
     fn listen_protocol(
         &self,
-    ) -> libp2p_swarm::SubstreamProtocol<Self::InboundProtocol, Self::InboundOpenInfo> {
+    ) -> libp2p_swarm::SubstreamProtocol<Self::InboundProtocol, ()> {
         libp2p_swarm::SubstreamProtocol::new(Upgrade(self.protocols), ())
     }
 
@@ -293,7 +294,7 @@ impl ConnectionHandler for SpinningHandler {
     ) -> std::task::Poll<
         libp2p_swarm::ConnectionHandlerEvent<
             Self::OutboundProtocol,
-            Self::OutboundOpenInfo,
+            (),
             Self::ToBehaviour,
         >,
     > {
@@ -322,8 +323,8 @@ impl ConnectionHandler for SpinningHandler {
         _event: libp2p_swarm::handler::ConnectionEvent<
             Self::InboundProtocol,
             Self::OutboundProtocol,
-            Self::InboundOpenInfo,
-            Self::OutboundOpenInfo,
+            (),
+            (),
         >,
     ) {
     }

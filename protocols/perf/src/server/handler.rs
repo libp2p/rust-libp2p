@@ -70,7 +70,7 @@ impl ConnectionHandler for Handler {
     type OutboundOpenInfo = Infallible;
     type InboundOpenInfo = ();
 
-    fn listen_protocol(&self) -> SubstreamProtocol<Self::InboundProtocol, Self::InboundOpenInfo> {
+    fn listen_protocol(&self) -> SubstreamProtocol<Self::InboundProtocol, ()> {
         SubstreamProtocol::new(ReadyUpgrade::new(crate::PROTOCOL_NAME), ())
     }
 
@@ -85,8 +85,8 @@ impl ConnectionHandler for Handler {
         event: ConnectionEvent<
             Self::InboundProtocol,
             Self::OutboundProtocol,
-            Self::InboundOpenInfo,
-            Self::OutboundOpenInfo,
+            (),
+            Infallible,
         >,
     ) {
         match event {
@@ -130,7 +130,7 @@ impl ConnectionHandler for Handler {
         &mut self,
         cx: &mut Context<'_>,
     ) -> Poll<
-        ConnectionHandlerEvent<Self::OutboundProtocol, Self::OutboundOpenInfo, Self::ToBehaviour>,
+        ConnectionHandlerEvent<Self::OutboundProtocol, Infallible, Self::ToBehaviour>,
     > {
         loop {
             match self.inbound.poll_unpin(cx) {

@@ -123,6 +123,7 @@ where
     /// The underlying handler.
     handler: THandler,
     /// Futures that upgrade incoming substreams.
+    #[allow(deprecated)] // TODO: Remove when {In, Out}boundOpenInfo is fully removed.
     negotiating_in: FuturesUnordered<
         StreamUpgrade<
             THandler::InboundOpenInfo,
@@ -131,6 +132,7 @@ where
         >,
     >,
     /// Futures that upgrade outgoing substreams.
+    #[allow(deprecated)] // TODO: Remove when {In, Out}boundOpenInfo is fully removed.
     negotiating_out: FuturesUnordered<
         StreamUpgrade<
             THandler::OutboundOpenInfo,
@@ -153,8 +155,9 @@ where
     max_negotiating_inbound_streams: usize,
     /// Contains all upgrades that are waiting for a new outbound substream.
     ///
-    /// The upgrade timeout is already ticking here so this may fail in case the remote is not
+    /// The upgrade timeout is already ticking here so this may fail in case the remote is not quick
     /// quick enough in providing us with a new stream.
+    #[allow(deprecated)]
     requested_substreams: FuturesUnordered<
         SubstreamRequested<THandler::OutboundOpenInfo, THandler::OutboundProtocol>,
     >,
@@ -168,6 +171,7 @@ where
     stream_counter: ActiveStreamCounter,
 }
 
+#[allow(deprecated)] // TODO: Remove when {In, Out}boundOpenInfo is fully removed.
 impl<THandler> fmt::Debug for Connection<THandler>
 where
     THandler: ConnectionHandler + fmt::Debug,
@@ -1198,7 +1202,7 @@ mod tests {
 
         fn listen_protocol(
             &self,
-        ) -> SubstreamProtocol<Self::InboundProtocol, Self::InboundOpenInfo> {
+        ) -> SubstreamProtocol<Self::InboundProtocol, ()> {
             SubstreamProtocol::new(DeniedUpgrade, ()).with_timeout(self.upgrade_timeout)
         }
 
@@ -1207,8 +1211,8 @@ mod tests {
             event: ConnectionEvent<
                 Self::InboundProtocol,
                 Self::OutboundProtocol,
-                Self::InboundOpenInfo,
-                Self::OutboundOpenInfo,
+                (),
+                ()
             >,
         ) {
             match event {
@@ -1252,7 +1256,7 @@ mod tests {
         ) -> Poll<
             ConnectionHandlerEvent<
                 Self::OutboundProtocol,
-                Self::OutboundOpenInfo,
+                (),
                 Self::ToBehaviour,
             >,
         > {
@@ -1278,7 +1282,7 @@ mod tests {
 
         fn listen_protocol(
             &self,
-        ) -> SubstreamProtocol<Self::InboundProtocol, Self::InboundOpenInfo> {
+        ) -> SubstreamProtocol<Self::InboundProtocol, ()> {
             SubstreamProtocol::new(
                 ManyProtocolsUpgrade {
                     protocols: Vec::from_iter(self.active_protocols.clone()),
@@ -1292,8 +1296,8 @@ mod tests {
             event: ConnectionEvent<
                 Self::InboundProtocol,
                 Self::OutboundProtocol,
-                Self::InboundOpenInfo,
-                Self::OutboundOpenInfo,
+                (),
+                (),
             >,
         ) {
             match event {
@@ -1329,7 +1333,7 @@ mod tests {
         ) -> Poll<
             ConnectionHandlerEvent<
                 Self::OutboundProtocol,
-                Self::OutboundOpenInfo,
+                (),
                 Self::ToBehaviour,
             >,
         > {

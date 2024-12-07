@@ -65,7 +65,7 @@ pub struct Handler {
     queued_events: VecDeque<
         ConnectionHandlerEvent<
             <Self as ConnectionHandler>::OutboundProtocol,
-            <Self as ConnectionHandler>::OutboundOpenInfo,
+            (),
             <Self as ConnectionHandler>::ToBehaviour,
         >,
     >,
@@ -100,7 +100,7 @@ impl Handler {
             protocol: output, ..
         }: FullyNegotiatedInbound<
             <Self as ConnectionHandler>::InboundProtocol,
-            <Self as ConnectionHandler>::InboundOpenInfo,
+            (),
         >,
     ) {
         match output {
@@ -132,7 +132,7 @@ impl Handler {
             protocol: stream, ..
         }: FullyNegotiatedOutbound<
             <Self as ConnectionHandler>::OutboundProtocol,
-            <Self as ConnectionHandler>::OutboundOpenInfo,
+            (),
         >,
     ) {
         assert!(
@@ -156,7 +156,7 @@ impl Handler {
     fn on_listen_upgrade_error(
         &mut self,
         ListenUpgradeError { error, .. }: ListenUpgradeError<
-            <Self as ConnectionHandler>::InboundOpenInfo,
+            (),
             <Self as ConnectionHandler>::InboundProtocol,
         >,
     ) {
@@ -168,7 +168,7 @@ impl Handler {
     fn on_dial_upgrade_error(
         &mut self,
         DialUpgradeError { error, .. }: DialUpgradeError<
-            <Self as ConnectionHandler>::OutboundOpenInfo,
+            (),
             <Self as ConnectionHandler>::OutboundProtocol,
         >,
     ) {
@@ -196,7 +196,7 @@ impl ConnectionHandler for Handler {
     type OutboundOpenInfo = ();
     type InboundOpenInfo = ();
 
-    fn listen_protocol(&self) -> SubstreamProtocol<Self::InboundProtocol, Self::InboundOpenInfo> {
+    fn listen_protocol(&self) -> SubstreamProtocol<Self::InboundProtocol, ()> {
         match self.endpoint {
             ConnectedPoint::Dialer { .. } => {
                 SubstreamProtocol::new(Either::Left(ReadyUpgrade::new(PROTOCOL_NAME)), ())
@@ -237,7 +237,7 @@ impl ConnectionHandler for Handler {
         &mut self,
         cx: &mut Context<'_>,
     ) -> Poll<
-        ConnectionHandlerEvent<Self::OutboundProtocol, Self::OutboundOpenInfo, Self::ToBehaviour>,
+        ConnectionHandlerEvent<Self::OutboundProtocol, (), Self::ToBehaviour>,
     > {
         // Return queued events.
         if let Some(event) = self.queued_events.pop_front() {
@@ -298,8 +298,8 @@ impl ConnectionHandler for Handler {
         event: ConnectionEvent<
             Self::InboundProtocol,
             Self::OutboundProtocol,
-            Self::InboundOpenInfo,
-            Self::OutboundOpenInfo,
+            (),
+            (),
         >,
     ) {
         match event {
