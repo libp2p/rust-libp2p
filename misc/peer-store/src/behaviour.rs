@@ -5,12 +5,14 @@ use libp2p_swarm::{dummy, FromSwarm, NetworkBehaviour};
 
 use crate::store::Store;
 
+/// Events of this behaviour that will be emmitted to the swarm.
 pub enum Event {
     RecordUpdated { peer: PeerId },
 }
 
 pub struct Behaviour<S> {
     store: S,
+    /// Events that will be emitted.
     pending_events: VecDeque<Event>,
 }
 

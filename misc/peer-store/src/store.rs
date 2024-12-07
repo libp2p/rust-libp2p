@@ -5,8 +5,13 @@ use std::{
 
 use libp2p_core::{Multiaddr, PeerId};
 
+/// A store that
+/// - keep track of currently connected peers;
+/// - contains all observed addresses of peers;
 pub trait Store {
+    /// Called when a peer connects.
     fn on_peer_connect(&mut self, peer: &PeerId);
+    /// Called when a peer disconnects.
     fn on_peer_disconnect(&mut self, peer: &PeerId);
     /// Update an address record.  
     /// Return `true` when the address is new.  
@@ -47,7 +52,7 @@ impl PeerAddressRecord {
 }
 
 pub(crate) struct AddressRecord {
-    /// The time when the address is last seen, in seconds.
+    /// The time when the address is last seen.
     last_seen: SystemTime,
 }
 impl AddressRecord {
@@ -61,8 +66,11 @@ impl AddressRecord {
     }
 }
 
+/// A in-memory store.
 pub struct MemoryStore {
+    /// Peers that are currently connected.
     connected_peers: HashSet<PeerId>,
+    /// An address book of peers regardless of their status(connected or not).
     address_book: HashMap<PeerId, PeerAddressRecord>,
 }
 
