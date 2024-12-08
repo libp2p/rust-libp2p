@@ -27,12 +27,15 @@ where
         }
     }
     /// List peers that are currently connected to this peer.
-    pub fn list_connected(&self) -> Box<[&PeerId]> {
+    pub fn list_connected(&self) -> impl Iterator<Item = &PeerId> {
         self.store.list_connected()
     }
     /// Try to get all observed address of the given peer.  
     /// Returns `None` when the peer is not in the store.
-    pub fn address_of_peer(&self, peer: &PeerId) -> Option<Box<[super::AddressRecord]>> {
+    pub fn address_of_peer<'a, 'b>(
+        &'a self,
+        peer: &'b PeerId,
+    ) -> Option<impl Iterator<Item = super::AddressRecord<'a>> + use<'a, 'b, S>> {
         self.store.addresses_of_peer(peer)
     }
     /// Manually update a record.  
@@ -106,7 +109,7 @@ where
         _connection_id: libp2p_swarm::ConnectionId,
         _event: libp2p_swarm::THandlerOutEvent<Self>,
     ) {
-        todo!()
+        unreachable!("No event will be produced by a dummy handler.")
     }
 
     fn poll(

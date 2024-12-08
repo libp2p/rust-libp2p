@@ -16,22 +16,21 @@ pub trait Store {
     /// Update an address record.  
     /// Return `true` when the address is new.  
     fn on_address_update(&mut self, peer: &PeerId, address: &Multiaddr) -> bool;
-    fn list_connected(&self) -> Box<[&PeerId]>;
-    fn addresses_of_peer(&self, peer: &PeerId) -> Option<Box<[super::AddressRecord]>>;
+    fn list_connected(&self) -> impl Iterator<Item = &PeerId>;
+    fn addresses_of_peer(&self, peer: &PeerId) -> Option<impl Iterator<Item = super::AddressRecord>>;
 }
 
 pub(crate) struct PeerAddressRecord {
     addresses: HashMap<Multiaddr, AddressRecord>,
 }
 impl PeerAddressRecord {
-    pub(crate) fn records(&self) -> Box<[super::AddressRecord]> {
+    pub(crate) fn records(&self) -> impl Iterator<Item = super::AddressRecord> {
         self.addresses
             .iter()
             .map(|(address, record)| super::AddressRecord {
                 address,
                 last_seen: &record.last_seen,
             })
-            .collect()
     }
     pub(crate) fn new(address: &Multiaddr) -> Self {
         let mut address_book = HashMap::new();
@@ -90,10 +89,10 @@ impl Store for MemoryStore {
             true
         }
     }
-    fn list_connected(&self) -> Box<[&PeerId]> {
-        self.connected_peers.iter().collect()
+    fn list_connected(&self) -> impl Iterator<Item = &PeerId> {
+        self.connected_peers.iter()
     }
-    fn addresses_of_peer(&self, peer: &PeerId) -> Option<Box<[crate::AddressRecord]>> {
+    fn addresses_of_peer(&self, peer: &PeerId) -> Option<impl Iterator<Item = super::AddressRecord>> {
         self.address_book.get(peer).map(|record| record.records())
     }
 }
