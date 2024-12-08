@@ -39,7 +39,7 @@ libp2p-swarm-test = { path = "../../swarm-test" }
 libp2p-tcp = { workspace = true, features = ["async-io"] }
 libp2p-yamux = { workspace = true }
 rand = "0.8"
-tracing-subscriber = { workspace = true, features = ["env-filter"] }
+libp2p-logging = { workspace = true }
 tokio = { workspace = true, features = ["rt", "macros"] }
 
 # Passing arguments to the docsrs builder in order to properly document cfg's.

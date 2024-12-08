@@ -21,6 +21,7 @@ rand = "0.8"
 libp2p-swarm-test = { workspace = true }
 tokio = { workspace = true, features = ["full"] }
 tracing-subscriber = { workspace = true, features = ["env-filter"] }
+libp2p-logging = { workspace = true }
 
 [lints]
 workspace = true
