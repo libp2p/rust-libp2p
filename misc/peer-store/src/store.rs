@@ -1,7 +1,4 @@
-use std::{
-    collections::{HashMap, HashSet},
-    time::SystemTime,
-};
+use std::{collections::HashMap, time::SystemTime};
 
 use libp2p_core::{Multiaddr, PeerId};
 
@@ -9,15 +6,13 @@ use libp2p_core::{Multiaddr, PeerId};
 /// - keep track of currently connected peers;
 /// - contains all observed addresses of peers;
 pub trait Store {
-    /// Called when a peer connects.
-    fn on_peer_connect(&mut self, peer: &PeerId);
-    /// Called when a peer disconnects.
-    fn on_peer_disconnect(&mut self, peer: &PeerId);
     /// Update an address record.  
     /// Return `true` when the address is new.  
     fn on_address_update(&mut self, peer: &PeerId, address: &Multiaddr) -> bool;
-    fn list_connected(&self) -> impl Iterator<Item = &PeerId>;
-    fn addresses_of_peer(&self, peer: &PeerId) -> Option<impl Iterator<Item = super::AddressRecord>>;
+    fn addresses_of_peer(
+        &self,
+        peer: &PeerId,
+    ) -> Option<impl Iterator<Item = super::AddressRecord>>;
 }
 
 pub(crate) struct PeerAddressRecord {
@@ -67,19 +62,11 @@ impl AddressRecord {
 
 /// A in-memory store.
 pub struct MemoryStore {
-    /// Peers that are currently connected.
-    connected_peers: HashSet<PeerId>,
     /// An address book of peers regardless of their status(connected or not).
     address_book: HashMap<PeerId, PeerAddressRecord>,
 }
 
 impl Store for MemoryStore {
-    fn on_peer_connect(&mut self, peer: &PeerId) {
-        self.connected_peers.insert(*peer);
-    }
-    fn on_peer_disconnect(&mut self, peer: &PeerId) {
-        self.connected_peers.remove(peer);
-    }
     fn on_address_update(&mut self, peer: &PeerId, address: &Multiaddr) -> bool {
         if let Some(record) = self.address_book.get_mut(peer) {
             record.on_address_update(address)
@@ -89,10 +76,10 @@ impl Store for MemoryStore {
             true
         }
     }
-    fn list_connected(&self) -> impl Iterator<Item = &PeerId> {
-        self.connected_peers.iter()
-    }
-    fn addresses_of_peer(&self, peer: &PeerId) -> Option<impl Iterator<Item = super::AddressRecord>> {
+    fn addresses_of_peer(
+        &self,
+        peer: &PeerId,
+    ) -> Option<impl Iterator<Item = super::AddressRecord>> {
         self.address_book.get(peer).map(|record| record.records())
     }
 }

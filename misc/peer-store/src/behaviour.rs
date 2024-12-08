@@ -1,4 +1,7 @@
-use std::{collections::VecDeque, task::Poll};
+use std::{
+    collections::{HashSet, VecDeque},
+    task::Poll,
+};
 
 use libp2p_core::{Multiaddr, PeerId};
 use libp2p_swarm::{dummy, FromSwarm, NetworkBehaviour};
@@ -12,6 +15,8 @@ pub enum Event {
 
 pub struct Behaviour<S> {
     store: S,
+    /// Peers that are currently connected.
+    connected_peers: HashSet<PeerId>,
     /// Events that will be emitted.
     pending_events: VecDeque<Event>,
 }
@@ -23,12 +28,13 @@ where
     pub fn new(store: S) -> Self {
         Self {
             store,
+            connected_peers: HashSet::new(),
             pending_events: VecDeque::new(),
         }
     }
     /// List peers that are currently connected to this peer.
     pub fn list_connected(&self) -> impl Iterator<Item = &PeerId> {
-        self.store.list_connected()
+        self.connected_peers.iter()
     }
     /// Try to get all observed address of the given peer.  
     /// Returns `None` when the peer is not in the store.
@@ -44,6 +50,12 @@ where
         self.store.on_address_update(peer, address);
         self.pending_events
             .push_back(Event::RecordUpdated { peer: *peer });
+    }
+    fn on_peer_connect(&mut self, peer: &PeerId) {
+        self.connected_peers.insert(*peer);
+    }
+    fn on_peer_disconnect(&mut self, peer: &PeerId) {
+        self.connected_peers.remove(peer);
     }
 }
 
@@ -62,7 +74,6 @@ where
         _local_addr: &libp2p_core::Multiaddr,
         remote_addr: &libp2p_core::Multiaddr,
     ) -> Result<libp2p_swarm::THandler<Self>, libp2p_swarm::ConnectionDenied> {
-        self.store.on_peer_connect(&peer);
         if self.store.on_address_update(&peer, remote_addr) {
             self.pending_events.push_back(Event::RecordUpdated { peer });
         }
@@ -72,12 +83,11 @@ where
     fn handle_established_outbound_connection(
         &mut self,
         _connection_id: libp2p_swarm::ConnectionId,
-        peer: libp2p_core::PeerId,
+        _peer: libp2p_core::PeerId,
         _addr: &libp2p_core::Multiaddr,
         _role_override: libp2p_core::Endpoint,
         _port_use: libp2p_core::transport::PortUse,
     ) -> Result<libp2p_swarm::THandler<Self>, libp2p_swarm::ConnectionDenied> {
-        self.store.on_peer_connect(&peer);
         Ok(dummy::ConnectionHandler)
     }
 
@@ -85,12 +95,12 @@ where
         match event {
             FromSwarm::ConnectionClosed(info) => {
                 if info.remaining_established < 1 {
-                    self.store.on_peer_disconnect(&info.peer_id);
+                    self.on_peer_disconnect(&info.peer_id);
                 }
             }
             FromSwarm::ConnectionEstablished(info) => {
                 if info.other_established == 0 {
-                    self.store.on_peer_connect(&info.peer_id);
+                    self.on_peer_connect(&info.peer_id);
                 }
             }
             FromSwarm::NewExternalAddrOfPeer(info) => {
