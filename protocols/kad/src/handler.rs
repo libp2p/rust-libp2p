@@ -1068,6 +1068,7 @@ fn process_kad_response(event: KadResponseMsg, query_id: QueryId) -> HandlerEven
 #[cfg(test)]
 mod tests {
     use quickcheck::{Arbitrary, Gen};
+
     use super::*;
 
     impl Arbitrary for ProtocolStatus {
