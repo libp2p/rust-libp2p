@@ -57,6 +57,12 @@ where
     fn on_peer_disconnect(&mut self, peer: &PeerId) {
         self.connected_peers.remove(peer);
     }
+    fn on_address_update(&mut self, peer: &PeerId, address: &Multiaddr) {
+        if self.store.on_address_update(peer, address) {
+            self.pending_events
+                .push_back(Event::RecordUpdated { peer: *peer });
+        }
+    }
 }
 
 impl<S> NetworkBehaviour for Behaviour<S>
@@ -74,20 +80,19 @@ where
         _local_addr: &libp2p_core::Multiaddr,
         remote_addr: &libp2p_core::Multiaddr,
     ) -> Result<libp2p_swarm::THandler<Self>, libp2p_swarm::ConnectionDenied> {
-        if self.store.on_address_update(&peer, remote_addr) {
-            self.pending_events.push_back(Event::RecordUpdated { peer });
-        }
+        self.on_address_update(&peer, remote_addr);
         Ok(dummy::ConnectionHandler)
     }
 
     fn handle_established_outbound_connection(
         &mut self,
         _connection_id: libp2p_swarm::ConnectionId,
-        _peer: libp2p_core::PeerId,
-        _addr: &libp2p_core::Multiaddr,
+        peer: libp2p_core::PeerId,
+        addr: &libp2p_core::Multiaddr,
         _role_override: libp2p_core::Endpoint,
         _port_use: libp2p_core::transport::PortUse,
     ) -> Result<libp2p_swarm::THandler<Self>, libp2p_swarm::ConnectionDenied> {
+        self.on_address_update(&peer, addr);
         Ok(dummy::ConnectionHandler)
     }
 
@@ -104,10 +109,7 @@ where
                 }
             }
             FromSwarm::NewExternalAddrOfPeer(info) => {
-                if self.store.on_address_update(&info.peer_id, info.addr) {
-                    self.pending_events
-                        .push_back(Event::RecordUpdated { peer: info.peer_id });
-                }
+                self.on_address_update(&info.peer_id, info.addr);
             }
             _ => {}
         }
