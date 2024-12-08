@@ -7,6 +7,7 @@ rust-version.workspace = true
 [dependencies]
 libp2p-core = { workspace = true }
 libp2p-swarm = { workspace = true }
+lru = "*"
 
 [lints]
 workspace = true

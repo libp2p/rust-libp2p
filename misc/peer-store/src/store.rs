@@ -1,6 +1,7 @@
-use std::{collections::HashMap, time::SystemTime};
+use std::{collections::HashMap, num::NonZeroUsize, time::SystemTime};
 
 use libp2p_core::{Multiaddr, PeerId};
+use lru::LruCache;
 
 /// A store that
 /// - keep track of currently connected peers;
@@ -16,7 +17,7 @@ pub trait Store {
 }
 
 pub(crate) struct PeerAddressRecord {
-    addresses: HashMap<Multiaddr, AddressRecord>,
+    addresses: LruCache<Multiaddr, AddressRecord>,
 }
 impl PeerAddressRecord {
     pub(crate) fn records(&self) -> impl Iterator<Item = super::AddressRecord> {
@@ -28,8 +29,8 @@ impl PeerAddressRecord {
             })
     }
     pub(crate) fn new(address: &Multiaddr) -> Self {
-        let mut address_book = HashMap::new();
-        address_book.insert(address.clone(), AddressRecord::new());
+        let mut address_book = LruCache::new(NonZeroUsize::new(8).expect("8 is greater than 0"));
+        address_book.get_or_insert(address.clone(), AddressRecord::new);
         Self {
             addresses: address_book,
         }
@@ -39,7 +40,7 @@ impl PeerAddressRecord {
             record.update_last_seen();
             false
         } else {
-            self.addresses.insert(address.clone(), AddressRecord::new());
+            self.addresses.get_or_insert(address.clone(), AddressRecord::new);
             true
         }
     }

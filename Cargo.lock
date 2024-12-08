@@ -3005,6 +3005,7 @@ version = "0.1.0"
 dependencies = [
  "libp2p-core",
  "libp2p-swarm",
+ "lru",
 ]
 
 [[package]]
