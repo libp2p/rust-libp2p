@@ -38,7 +38,7 @@ libp2p-tcp = { workspace = true, features = ["tokio", "async-io"] }
 libp2p-yamux = { workspace = true }
 tokio = { workspace = true, features = ["macros", "rt", "rt-multi-thread", "time"] }
 libp2p-swarm-test = { path = "../../swarm-test" }
-tracing-subscriber = { workspace = true, features = ["env-filter"] }
+libp2p-logging = { workspace = true }
 
 [[test]]
 name = "use-async-std"

@@ -8,13 +8,10 @@ use futures::StreamExt;
 use libp2p_identify as identify;
 use libp2p_swarm::{Swarm, SwarmEvent};
 use libp2p_swarm_test::SwarmExt;
-use tracing_subscriber::EnvFilter;
 
 #[async_std::test]
 async fn periodic_identify() {
-    let _ = tracing_subscriber::fmt()
-        .with_env_filter(EnvFilter::from_default_env())
-        .try_init();
+    libp2p_logging::init_tracing_subscriber_with_default_env_filter();
 
     let mut swarm1 = Swarm::new_ephemeral(|identity| {
         identify::Behaviour::new(
@@ -83,9 +80,7 @@ async fn periodic_identify() {
 }
 #[async_std::test]
 async fn only_emits_address_candidate_once_per_connection() {
-    let _ = tracing_subscriber::fmt()
-        .with_env_filter(EnvFilter::from_default_env())
-        .try_init();
+    libp2p_logging::init_tracing_subscriber_with_default_env_filter();
 
     let mut swarm1 = Swarm::new_ephemeral(|identity| {
         identify::Behaviour::new(
@@ -155,9 +150,7 @@ async fn only_emits_address_candidate_once_per_connection() {
 
 #[async_std::test]
 async fn emits_unique_listen_addresses() {
-    let _ = tracing_subscriber::fmt()
-        .with_env_filter(EnvFilter::from_default_env())
-        .try_init();
+    libp2p_logging::init_tracing_subscriber_with_default_env_filter();
 
     let mut swarm1 = Swarm::new_ephemeral(|identity| {
         identify::Behaviour::new(
@@ -227,9 +220,7 @@ async fn emits_unique_listen_addresses() {
 
 #[async_std::test]
 async fn hides_listen_addresses() {
-    let _ = tracing_subscriber::fmt()
-        .with_env_filter(EnvFilter::from_default_env())
-        .try_init();
+    libp2p_logging::init_tracing_subscriber_with_default_env_filter();
 
     let mut swarm1 = Swarm::new_ephemeral(|identity| {
         identify::Behaviour::new(
@@ -298,9 +289,7 @@ async fn hides_listen_addresses() {
 
 #[async_std::test]
 async fn identify_push() {
-    let _ = tracing_subscriber::fmt()
-        .with_env_filter(EnvFilter::from_default_env())
-        .try_init();
+    libp2p_logging::init_tracing_subscriber_with_default_env_filter();
 
     let mut swarm1 = Swarm::new_ephemeral(|identity| {
         identify::Behaviour::new(identify::Config::new("a".to_string(), identity.public()))
@@ -350,9 +339,7 @@ async fn identify_push() {
 
 #[async_std::test]
 async fn discover_peer_after_disconnect() {
-    let _ = tracing_subscriber::fmt()
-        .with_env_filter(EnvFilter::from_default_env())
-        .try_init();
+    libp2p_logging::init_tracing_subscriber_with_default_env_filter();
 
     let mut swarm1 = Swarm::new_ephemeral(|identity| {
         identify::Behaviour::new(identify::Config::new("a".to_string(), identity.public()))
@@ -403,9 +390,7 @@ async fn discover_peer_after_disconnect() {
 
 #[async_std::test]
 async fn configured_interval_starts_after_first_identify() {
-    let _ = tracing_subscriber::fmt()
-        .with_env_filter(EnvFilter::from_default_env())
-        .try_init();
+    libp2p_logging::init_tracing_subscriber_with_default_env_filter();
 
     let identify_interval = Duration::from_secs(5);
 

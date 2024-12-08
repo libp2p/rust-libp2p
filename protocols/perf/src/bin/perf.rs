@@ -31,7 +31,6 @@ use libp2p::{
 };
 use libp2p_perf::{client, server, Final, Intermediate, Run, RunParams, RunUpdate};
 use serde::{Deserialize, Serialize};
-use tracing_subscriber::EnvFilter;
 use web_time::{Duration, Instant};
 
 #[derive(Debug, Parser)]
@@ -72,9 +71,7 @@ impl FromStr for Transport {
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    let _ = tracing_subscriber::fmt()
-        .with_env_filter(EnvFilter::from_default_env())
-        .try_init();
+    libp2p_logging::init_tracing_subscriber_with_default_env_filter();
 
     let opts = Opts::parse();
     match opts {

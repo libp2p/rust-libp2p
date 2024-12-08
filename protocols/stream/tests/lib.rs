@@ -13,15 +13,12 @@ const PROTOCOL: StreamProtocol = StreamProtocol::new("/test");
 
 #[tokio::test]
 async fn dropping_incoming_streams_deregisters() {
-    let _ = tracing_subscriber::fmt()
-        .with_env_filter(
-            EnvFilter::builder()
-                .with_default_directive(LevelFilter::DEBUG.into())
-                .from_env()
-                .unwrap(),
-        )
-        .with_test_writer()
-        .try_init();
+    libp2p_logging::init_tracing_subscriber_with_env_filter(
+        EnvFilter::builder()
+            .with_default_directive(LevelFilter::DEBUG.into())
+            .from_env()
+            .unwrap(),
+    );
 
     let mut swarm1 = Swarm::new_ephemeral(|_| stream::Behaviour::new());
     let mut swarm2 = Swarm::new_ephemeral(|_| stream::Behaviour::new());

@@ -25,7 +25,7 @@ libp2p-identity = { workspace = true, features = ["ed25519", "rand"] }
 quickcheck = { workspace = true }
 rand = "0.8"
 futures_ringbuf = "0.4.0"
-tracing-subscriber = { workspace = true, features = ["env-filter"] }
+libp2p-logging = { workspace = true }
 
 # Passing arguments to the docsrs builder in order to properly document cfg's.
 # More information: https://docs.rs/about/builds#cross-compiling
