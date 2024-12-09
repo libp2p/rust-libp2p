@@ -1520,7 +1520,7 @@ where
     }
 
     #[cfg(feature = "metrics")]
-    fn remove_peer_from_mesh(
+    fn remove_peer_from_mesh_with_metric(
         &mut self,
         peer_id: &PeerId,
         topic_hash: &TopicHash,
@@ -1528,55 +1528,25 @@ where
         always_update_backoff: bool,
         reason: Churn,
     ) {
-        let mut update_backoff = always_update_backoff;
-        if let Some(peers) = self.mesh.get_mut(topic_hash) {
-            // remove the peer if it exists in the mesh
-            if peers.remove(peer_id) {
-                tracing::debug!(
-                    peer=%peer_id,
-                    topic=%topic_hash,
-                    "PRUNE: Removing peer from the mesh for topic"
-                );
-                if let Some(m) = self.metrics.as_mut() {
-                    m.peers_removed(topic_hash, reason, 1)
-                }
-
-                if let Some((peer_score, ..)) = &mut self.peer_score {
-                    peer_score.prune(peer_id, topic_hash.clone());
-                }
-
-                update_backoff = true;
-
-                // inform the handler
-                peer_removed_from_mesh(
-                    *peer_id,
-                    topic_hash,
-                    &self.mesh,
-                    &mut self.events,
-                    &self.connected_peers,
-                );
-            }
+        let is_peer_removed =
+            self.remove_peer_from_mesh(peer_id, topic_hash, backoff, always_update_backoff);
+        if !is_peer_removed {
+            return;
         }
-        if update_backoff {
-            let time = if let Some(backoff) = backoff {
-                Duration::from_secs(backoff)
-            } else {
-                self.config.prune_backoff()
-            };
-            // is there a backoff specified by the peer? if so obey it.
-            self.backoffs.update_backoff(topic_hash, peer_id, time);
+        if let Some(m) = self.metrics.as_mut() {
+            m.peers_removed(topic_hash, reason, 1)
         }
     }
 
-    #[cfg(not(feature = "metrics"))]
     fn remove_peer_from_mesh(
         &mut self,
         peer_id: &PeerId,
         topic_hash: &TopicHash,
         backoff: Option<u64>,
         always_update_backoff: bool,
-    ) {
+    ) -> bool {
         let mut update_backoff = always_update_backoff;
+        let mut is_peer_removed = false;
         if let Some(peers) = self.mesh.get_mut(topic_hash) {
             // remove the peer if it exists in the mesh
             if peers.remove(peer_id) {
@@ -1585,6 +1555,7 @@ where
                     topic=%topic_hash,
                     "PRUNE: Removing peer from the mesh for topic"
                 );
+                is_peer_removed = true;
 
                 if let Some((peer_score, ..)) = &mut self.peer_score {
                     peer_score.prune(peer_id, topic_hash.clone());
@@ -1611,6 +1582,7 @@ where
             // is there a backoff specified by the peer? if so obey it.
             self.backoffs.update_backoff(topic_hash, peer_id, time);
         }
+        is_peer_removed
     }
 
     /// Handles PRUNE control messages. Removes peer from the mesh.
@@ -1624,7 +1596,13 @@ where
             self.score_below_threshold(peer_id, |pst| pst.accept_px_threshold);
         for (topic_hash, px, backoff) in prune_data {
             #[cfg(feature = "metrics")]
-            self.remove_peer_from_mesh(peer_id, &topic_hash, backoff, true, Churn::Prune);
+            self.remove_peer_from_mesh_with_metric(
+                peer_id,
+                &topic_hash,
+                backoff,
+                true,
+                Churn::Prune,
+            );
             #[cfg(not(feature = "metrics"))]
             self.remove_peer_from_mesh(peer_id, &topic_hash, backoff, true);
 
@@ -2031,7 +2009,13 @@ where
                 .get_mut(&topic_hash)
                 .map(|peers| peers.remove(&peer_id));
             #[cfg(feature = "metrics")]
-            self.remove_peer_from_mesh(&peer_id, &topic_hash, None, false, Churn::Unsub);
+            self.remove_peer_from_mesh_with_metric(
+                &peer_id,
+                &topic_hash,
+                None,
+                false,
+                Churn::Unsub,
+            );
             #[cfg(not(feature = "metrics"))]
             self.remove_peer_from_mesh(&peer_id, &topic_hash, None, false);
         }
