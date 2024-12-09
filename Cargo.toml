@@ -114,7 +114,7 @@ libp2p-websocket = { version = "0.44.1", path = "transports/websocket" }
 libp2p-websocket-websys = { version = "0.4.1", path = "transports/websocket-websys" }
 libp2p-webtransport-websys = { version = "0.4.1", path = "transports/webtransport-websys" }
 libp2p-yamux = { version = "0.46.0", path = "muxers/yamux" }
-libp2p-logging = {version = "0.1.0", path = "misc/logging" }
+libp2p-logging = { version = "0.1.0", path = "misc/logging" }
 
 # External dependencies
 asynchronous-codec = { version = "0.7.0" }
