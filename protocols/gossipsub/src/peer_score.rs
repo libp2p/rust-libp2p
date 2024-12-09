@@ -244,9 +244,9 @@ impl PeerScore {
             return (0.0, 0, 0);
         };
         let mut score = 0.0;
-        #[cfg(feature = "metrics")]
+        #[cfg_attr(not(feature = "metrics"), allow(unused_mut))]
         let mut num_message_deficit_penalties = 0;
-        #[cfg(feature = "metrics")]
+        #[cfg_attr(not(feature = "metrics"), allow(unused_mut))]
         let mut num_ip_colocation_penalties = 0;
 
         // topic scores
@@ -374,14 +374,12 @@ impl PeerScore {
             let excess = peer_stats.slow_peer_penalty - self.params.slow_peer_threshold;
             score += excess * self.params.slow_peer_weight;
         }
-        #[cfg(feature = "metrics")]
+
         return (
             score,
             num_message_deficit_penalties,
             num_ip_colocation_penalties,
         );
-        #[cfg(not(feature = "metrics"))]
-        return (score, 0, 0);
     }
 
     pub(crate) fn add_penalty(&mut self, peer_id: &PeerId, count: usize) {
