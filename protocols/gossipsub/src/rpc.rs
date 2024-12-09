@@ -96,14 +96,14 @@ impl Sender {
         sender.try_send(rpc).map_err(|err| err.into_inner())
     }
 
-    #[cfg(feature = "metrics")]
     /// Returns the current size of the priority queue.
+    #[cfg(feature = "metrics")]
     pub(crate) fn priority_queue_len(&self) -> usize {
         self.len.load(Ordering::Relaxed)
     }
 
-    #[cfg(feature = "metrics")]
     /// Returns the current size of the non-priority queue.
+    #[cfg(feature = "metrics")]
     pub(crate) fn non_priority_queue_len(&self) -> usize {
         self.non_priority_sender.len()
     }
