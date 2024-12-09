@@ -980,12 +980,14 @@ where
 
             // remove the last published time
             self.fanout_last_pub.remove(topic_hash);
-        }
-        #[cfg(feature = "metrics")]
-        let fanaout_added = added_peers.len();
-        #[cfg(feature = "metrics")]
-        if let Some(m) = self.metrics.as_mut() {
-            m.peers_included(topic_hash, Inclusion::Fanout, fanaout_added)
+
+            // Record how many peers we've added through fanout
+            #[cfg(feature = "metrics")]
+            if let Some(m) = self.metrics.as_mut() {
+                // The number can be lower than `add_peers` depending on the length of `peers`
+                let fanaout_added = added_peers.len();
+                m.peers_included(topic_hash, Inclusion::Fanout, fanaout_added)
+            }
         }
 
         // check if we need to get more peers, which we randomly select
@@ -1008,14 +1010,13 @@ where
                 "JOIN: Inserting {:?} random peers into the mesh",
                 new_peers.len()
             );
+            // Record how many random peers we've added when we need more peers.
+            #[cfg(feature = "metrics")]
+            if let Some(m) = self.metrics.as_mut() {
+                m.peers_included(topic_hash, Inclusion::Random, new_peers.len())
+            }
             let mesh_peers = self.mesh.entry(topic_hash.clone()).or_default();
             mesh_peers.extend(new_peers);
-        }
-
-        #[cfg(feature = "metrics")]
-        if let Some(m) = self.metrics.as_mut() {
-            let random_added = added_peers.len() - fanaout_added;
-            m.peers_included(topic_hash, Inclusion::Random, random_added)
         }
 
         for peer_id in added_peers {
@@ -1042,10 +1043,11 @@ where
         }
 
         #[cfg(feature = "metrics")]
-        let mesh_peers = self.mesh_peers(topic_hash).count();
-        #[cfg(feature = "metrics")]
-        if let Some(m) = self.metrics.as_mut() {
-            m.set_mesh_peers(topic_hash, mesh_peers)
+        {
+            let mesh_peers = self.mesh_peers(topic_hash).count();
+            if let Some(m) = self.metrics.as_mut() {
+                m.set_mesh_peers(topic_hash, mesh_peers)
+            }
         }
 
         tracing::debug!(topic=%topic_hash, "Completed JOIN for topic");
@@ -2476,6 +2478,7 @@ where
         self.failed_messages.shrink_to_fit();
 
         tracing::debug!("Completed Heartbeat");
+        // Record how long we take to finish the heartbeat
         #[cfg(feature = "metrics")]
         if let Some(metrics) = self.metrics.as_mut() {
             let duration = u64::try_from(start.elapsed().as_millis()).unwrap_or(u64::MAX);
