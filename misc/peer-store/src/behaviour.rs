@@ -84,6 +84,25 @@ where
         Ok(dummy::ConnectionHandler)
     }
 
+    fn handle_pending_outbound_connection(
+        &mut self,
+        _connection_id: libp2p_swarm::ConnectionId,
+        maybe_peer: Option<PeerId>,
+        _addresses: &[Multiaddr],
+        _effective_role: libp2p_core::Endpoint,
+    ) -> Result<Vec<Multiaddr>, libp2p_swarm::ConnectionDenied> {
+        if maybe_peer.is_none() {
+            return Ok(Vec::with_capacity(0));
+        }
+        if let Some(i) = self
+            .store
+            .addresses_of_peer(&maybe_peer.expect("already handled"))
+        {
+            return Ok(i.map(|r| r.address).cloned().collect());
+        }
+        Ok(Vec::with_capacity(0))
+    }
+
     fn handle_established_outbound_connection(
         &mut self,
         _connection_id: libp2p_swarm::ConnectionId,
