@@ -16,17 +16,20 @@ mod websocket;
 
 use bandwidth_logging::*;
 use bandwidth_metrics::*;
+pub use behaviour::BehaviourError;
 use behaviour::*;
 use build::*;
 use dns::*;
 use libp2p_core::{muxing::StreamMuxerBox, Transport};
 use libp2p_identity::Keypair;
+pub use other_transport::TransportError;
 use other_transport::*;
 use provider::*;
 use quic::*;
 use relay::*;
 use swarm::*;
 use tcp::*;
+pub use websocket::WebsocketError;
 use websocket::*;
 
 use super::{

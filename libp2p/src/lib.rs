@@ -153,7 +153,10 @@ pub use libp2p_identity::PeerId;
 pub use libp2p_swarm::{Stream, StreamProtocol};
 
 pub use self::{
-    builder::SwarmBuilder,
+    builder::{
+        BehaviourError as BehaviourBuilderError, SwarmBuilder,
+        TransportError as TransportBuilderError, WebsocketError as WebsocketBuilderError,
+    },
     core::{
         transport::TransportError,
         upgrade::{InboundUpgrade, OutboundUpgrade},

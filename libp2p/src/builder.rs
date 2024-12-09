@@ -4,6 +4,8 @@ mod phase;
 mod select_muxer;
 mod select_security;
 
+pub use phase::{BehaviourError, TransportError, WebsocketError};
+
 /// Build a [`Swarm`](libp2p_swarm::Swarm) by combining an identity, a set of
 /// [`Transport`](libp2p_core::Transport)s and a
 /// [`NetworkBehaviour`](libp2p_swarm::NetworkBehaviour).
