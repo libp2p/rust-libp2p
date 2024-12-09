@@ -38,10 +38,11 @@ impl Connection {
     /// Returns the address of the node we're connected to.
     /// Panics if the connection is still handshaking.
     fn remote_peer_id(&self) -> PeerId {
-        let cert = self.connection
+        let cert_chain = self.connection
             .peer_identity()
-            .expect("connection got identity because it passed TLS handshake; qed")
-            .as_slice().first().expect("there should be exactly one certificate; qed");
+            .expect("connection got identity because it passed TLS handshake; qed");
+        let cert = cert_chain.as_slice()
+            .first().expect("there should be exactly one certificate; qed");
 
         let p2p_cert = libp2p_tls::certificate::parse_binary(cert.der())
             .expect("the certificate was validated during TLS handshake; qed");

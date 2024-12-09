@@ -3,9 +3,10 @@ use std::pin::Pin;
 use std::task::{Context, Poll};
 use futures::{AsyncRead, AsyncWrite};
 use wtransport::{SendStream, RecvStream};
+use tokio;
 
 /// A single stream on a connection
-pub(crate) struct Stream {
+pub struct Stream {
     /// A send part of the stream
     send: SendStream,
     /// A reception part of the stream
@@ -26,7 +27,7 @@ impl Stream {
 
 impl AsyncRead for Stream {
     fn poll_read(
-        self: Pin<&mut Self>,
+        mut self: Pin<&mut Self>,
         cx: &mut Context<'_>,
         buf: &mut [u8],
     ) -> Poll<io::Result<usize>> {
@@ -52,15 +53,15 @@ impl AsyncRead for Stream {
 }
 
 impl AsyncWrite for Stream {
-    fn poll_write(self: Pin<&mut Self>, cx: &mut Context<'_>, buf: &[u8]) -> Poll<io::Result<usize>> {
+    fn poll_write(mut self: Pin<&mut Self>, cx: &mut Context<'_>, buf: &[u8]) -> Poll<io::Result<usize>> {
         tokio::io::AsyncWrite::poll_write(Pin::new(&mut self.send), cx, buf)
     }
 
-    fn poll_flush(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
+    fn poll_flush(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
         tokio::io::AsyncWrite::poll_flush(Pin::new(&mut self.send), cx)
     }
 
-    fn poll_close(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
+    fn poll_close(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
         if let Some(close_result) = self.close_result {
             // For some reason poll_close needs to be 'fuse'able
             return Poll::Ready(close_result.map_err(Into::into));

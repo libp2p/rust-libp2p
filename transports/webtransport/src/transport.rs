@@ -9,6 +9,7 @@ use std::time::Duration;
 use futures::{prelude::*, stream::SelectAll};
 use futures::future::BoxFuture;
 use if_watch::IfEvent;
+use if_watch::tokio::IfWatcher;
 use wtransport::config::TlsServerConfig;
 use wtransport::endpoint::{endpoint_side, IncomingSession};
 use wtransport::error::ConnectionError;
@@ -21,13 +22,13 @@ use libp2p_core::muxing::StreamMuxerBox;
 use libp2p_core::transport::{DialOpts, ListenerId, TransportError, TransportEvent};
 use libp2p_identity::{Keypair, PeerId};
 
-use crate::{Connecting, Provider};
+use crate::Connecting;
 use crate::certificate::CertHash;
 use crate::config::Config;
 use crate::connection::Connection;
 use crate::Error;
 
-pub struct GenTransport<P: Provider> {
+pub struct GenTransport {
     server_tls_config: TlsServerConfig,
     keypair: Keypair,
     cert_hashes: Vec<CertHash>,
@@ -35,12 +36,12 @@ pub struct GenTransport<P: Provider> {
     /// Timeout for the [`Connecting`] future.
     handshake_timeout: Duration,
 
-    listeners: SelectAll<Listener<P>>,
+    listeners: SelectAll<Listener>,
     /// Waker to poll the transport again when a new listener is added.
     waker: Option<Waker>,
 }
 
-impl<P: Provider> GenTransport<P> {
+impl GenTransport {
     pub fn new(config: Config) -> Self {
         let handshake_timeout = config.handshake_timeout;
         let keypair = config.keypair.clone();
@@ -76,7 +77,7 @@ impl<P: Provider> GenTransport<P> {
     }
 }
 
-impl<P: Provider> Transport for GenTransport<P> {
+impl Transport for GenTransport {
     type Output = (PeerId, Connection);
     type Error = Error;
     type ListenerUpgrade = Connecting;
@@ -121,7 +122,7 @@ impl<P: Provider> Transport for GenTransport<P> {
 }
 
 /// Listener for incoming connections.
-struct Listener<P: Provider> {
+struct Listener {
     /// Id of the listener.
     listener_id: ListenerId,
     /// Endpoint
@@ -133,7 +134,7 @@ struct Listener<P: Provider> {
     /// Watcher for network interface changes.
     ///
     /// None if we are only listening on a single interface.
-    if_watcher: Option<P::IfWatcher>,
+    if_watcher: Option<IfWatcher>,
     /// Whether the listener was closed and the stream should terminate.
     is_closed: bool,
     /// Pending event to reported.
@@ -147,7 +148,7 @@ struct Listener<P: Provider> {
     cert_hashes: Vec<CertHash>,
 }
 
-impl<P: Provider> Listener<P> {
+impl Listener {
     fn new(
         listener_id: ListenerId,
         socket_addr: SocketAddr,
@@ -159,7 +160,7 @@ impl<P: Provider> Listener<P> {
         let pending_event;
         let mut listening_addresses = HashSet::new();
         if socket_addr.ip().is_unspecified() {
-            if_watcher = Some(P::new_if_watcher()?);
+            if_watcher = Some(if_watch::tokio::IfWatcher::new()?);
             pending_event = None;
         } else {
             if_watcher = None;
@@ -258,8 +259,8 @@ impl<P: Provider> Listener<P> {
     }*/
 }
 
-impl<P: Provider> Stream for Listener<P> {
-    type Item = TransportEvent<<GenTransport<P> as Transport>::ListenerUpgrade, Error>;
+impl Stream for Listener {
+    type Item = TransportEvent<<GenTransport as Transport>::ListenerUpgrade, Error>;
 
     fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
         loop {

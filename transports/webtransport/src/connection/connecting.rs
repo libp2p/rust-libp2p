@@ -69,7 +69,7 @@ impl Connecting {
 impl Future for Connecting {
     type Output = Result<(PeerId, Connection), Error>;
 
-    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+    fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         let (peer_id, connection) = match futures::ready!(self.connecting.poll_unpin(cx)) {
             Either::Right(_) => return Poll::Ready(Err(Error::HandshakeTimedOut)),
             Either::Left((res, _)) => res?,

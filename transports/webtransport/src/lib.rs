@@ -1,4 +1,3 @@
-mod provider;
 mod transport;
 mod connection;
 mod config;
@@ -6,7 +5,6 @@ mod certificate;
 
 use wtransport::error::ConnectionError;
 
-pub use provider::Provider;
 pub use transport::GenTransport;
 pub use connection::{Connecting, Connection};
 pub use certificate::CertHash;
