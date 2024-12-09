@@ -375,11 +375,11 @@ impl PeerScore {
             score += excess * self.params.slow_peer_weight;
         }
 
-        return (
+        (
             score,
             num_message_deficit_penalties,
             num_ip_colocation_penalties,
-        );
+        )
     }
 
     pub(crate) fn add_penalty(&mut self, peer_id: &PeerId, count: usize) {
