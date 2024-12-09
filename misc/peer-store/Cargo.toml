@@ -1,0 +1,13 @@
+[package]
+name = "libp2p-peer-store"
+version = "0.1.0"
+edition = "2021"
+rust-version.workspace = true
+
+[dependencies]
+libp2p-core = { workspace = true }
+libp2p-swarm = { workspace = true }
+lru = "*"
+
+[lints]
+workspace = true

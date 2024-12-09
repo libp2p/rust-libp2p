@@ -3000,6 +3000,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "libp2p-peer-store"
+version = "0.1.0"
+dependencies = [
+ "libp2p-core",
+ "libp2p-swarm",
+ "lru",
+]
+
+[[package]]
 name = "libp2p-perf"
 version = "0.4.0"
 dependencies = [
