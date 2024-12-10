@@ -166,7 +166,6 @@ use hickory_resolver::{
     lookup::{Ipv4Lookup, Ipv6Lookup, TxtLookup},
     lookup_ip::LookupIp,
     name_server::ConnectionProvider,
-    Resolver as AsyncResolver,
 };
 use libp2p_core::{
     multiaddr::{Multiaddr, Protocol},
@@ -594,7 +593,7 @@ pub trait Resolver {
 }
 
 #[async_trait]
-impl<C> Resolver for AsyncResolver<C>
+impl<C> Resolver for hickory_resolver::Resolver<C>
 where
     C: ConnectionProvider,
 {
