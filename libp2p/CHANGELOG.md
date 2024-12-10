@@ -1,3 +1,8 @@
+## unreleased
+
+- Expose swarm builder phase errors.
+  See [PR 5726](https://github.com/libp2p/rust-libp2p/pull/5726)
+
 ## 0.54.2
 
 - Deprecate `void` crate.
