@@ -227,7 +227,7 @@ pub trait ConnectionHandler: Send + 'static {
 /// Enumeration with the list of the possible stream events
 /// to pass to [`on_connection_event`](ConnectionHandler::on_connection_event).
 #[non_exhaustive]
-pub enum ConnectionEvent<'a, IP: InboundUpgradeSend, OP: OutboundUpgradeSend, IOI, OOI> {
+pub enum ConnectionEvent<'a, IP: InboundUpgradeSend, OP: OutboundUpgradeSend, IOI = (), OOI = ()> {
     /// Informs the handler about the output of a successful upgrade on a new inbound substream.
     FullyNegotiatedInbound(FullyNegotiatedInbound<IP, IOI>),
     /// Informs the handler about the output of a successful upgrade on a new outbound stream.
@@ -321,7 +321,7 @@ impl<IP: InboundUpgradeSend, OP: OutboundUpgradeSend, IOI, OOI>
 /// [`ConnectionHandler`] implementation to stop a malicious remote node to open and keep alive
 /// an excessive amount of inbound substreams.
 #[derive(Debug)]
-pub struct FullyNegotiatedInbound<IP: InboundUpgradeSend, IOI> {
+pub struct FullyNegotiatedInbound<IP: InboundUpgradeSend, IOI = ()> {
     pub protocol: IP::Output,
     pub info: IOI,
 }
@@ -332,7 +332,7 @@ pub struct FullyNegotiatedInbound<IP: InboundUpgradeSend, IOI> {
 /// The `protocol` field is the information that was previously passed to
 /// [`ConnectionHandlerEvent::OutboundSubstreamRequest`].
 #[derive(Debug)]
-pub struct FullyNegotiatedOutbound<OP: OutboundUpgradeSend, OOI> {
+pub struct FullyNegotiatedOutbound<OP: OutboundUpgradeSend, OOI = ()> {
     pub protocol: OP::Output,
     pub info: OOI,
 }
@@ -527,7 +527,7 @@ pub struct ListenUpgradeError<IOI, IP: InboundUpgradeSend> {
 /// The inbound substream protocol(s) are defined by [`ConnectionHandler::listen_protocol`]
 /// and the outbound substream protocol(s) by [`ConnectionHandlerEvent::OutboundSubstreamRequest`].
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
-pub struct SubstreamProtocol<TUpgrade, TInfo> {
+pub struct SubstreamProtocol<TUpgrade, TInfo = ()> {
     upgrade: TUpgrade,
     info: TInfo,
     timeout: Duration,

@@ -98,10 +98,7 @@ impl Handler {
         &mut self,
         FullyNegotiatedInbound {
             protocol: output, ..
-        }: FullyNegotiatedInbound<
-            <Self as ConnectionHandler>::InboundProtocol,
-            (),
-        >,
+        }: FullyNegotiatedInbound<<Self as ConnectionHandler>::InboundProtocol>,
     ) {
         match output {
             future::Either::Left(stream) => {
@@ -130,10 +127,7 @@ impl Handler {
         &mut self,
         FullyNegotiatedOutbound {
             protocol: stream, ..
-        }: FullyNegotiatedOutbound<
-            <Self as ConnectionHandler>::OutboundProtocol,
-            (),
-        >,
+        }: FullyNegotiatedOutbound<<Self as ConnectionHandler>::OutboundProtocol>,
     ) {
         assert!(
             self.endpoint.is_listener(),
@@ -196,7 +190,7 @@ impl ConnectionHandler for Handler {
     type OutboundOpenInfo = ();
     type InboundOpenInfo = ();
 
-    fn listen_protocol(&self) -> SubstreamProtocol<Self::InboundProtocol, ()> {
+    fn listen_protocol(&self) -> SubstreamProtocol<Self::InboundProtocol> {
         match self.endpoint {
             ConnectedPoint::Dialer { .. } => {
                 SubstreamProtocol::new(Either::Left(ReadyUpgrade::new(PROTOCOL_NAME)), ())
@@ -236,9 +230,7 @@ impl ConnectionHandler for Handler {
     fn poll(
         &mut self,
         cx: &mut Context<'_>,
-    ) -> Poll<
-        ConnectionHandlerEvent<Self::OutboundProtocol, (), Self::ToBehaviour>,
-    > {
+    ) -> Poll<ConnectionHandlerEvent<Self::OutboundProtocol, (), Self::ToBehaviour>> {
         // Return queued events.
         if let Some(event) = self.queued_events.pop_front() {
             return Poll::Ready(event);
@@ -295,12 +287,7 @@ impl ConnectionHandler for Handler {
 
     fn on_connection_event(
         &mut self,
-        event: ConnectionEvent<
-            Self::InboundProtocol,
-            Self::OutboundProtocol,
-            (),
-            (),
-        >,
+        event: ConnectionEvent<Self::InboundProtocol, Self::OutboundProtocol>,
     ) {
         match event {
             ConnectionEvent::FullyNegotiatedInbound(fully_negotiated_inbound) => {

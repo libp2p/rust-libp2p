@@ -127,10 +127,7 @@ where
         FullyNegotiatedInbound {
             protocol: (mut stream, protocol),
             info: (),
-        }: FullyNegotiatedInbound<
-            <Self as ConnectionHandler>::InboundProtocol,
-            (),
-        >,
+        }: FullyNegotiatedInbound<<Self as ConnectionHandler>::InboundProtocol>,
     ) {
         let mut codec = self.codec.clone();
         let request_id = self.next_inbound_request_id();
@@ -178,10 +175,7 @@ where
         FullyNegotiatedOutbound {
             protocol: (mut stream, protocol),
             info: (),
-        }: FullyNegotiatedOutbound<
-            <Self as ConnectionHandler>::OutboundProtocol,
-            (),
-        >,
+        }: FullyNegotiatedOutbound<<Self as ConnectionHandler>::OutboundProtocol>,
     ) {
         let message = self
             .requested_outbound
@@ -383,7 +377,7 @@ where
     type OutboundOpenInfo = ();
     type InboundOpenInfo = ();
 
-    fn listen_protocol(&self) -> SubstreamProtocol<Self::InboundProtocol, ()> {
+    fn listen_protocol(&self) -> SubstreamProtocol<Self::InboundProtocol> {
         SubstreamProtocol::new(
             Protocol {
                 protocols: self.inbound_protocols.clone(),
@@ -473,12 +467,7 @@ where
 
     fn on_connection_event(
         &mut self,
-        event: ConnectionEvent<
-            Self::InboundProtocol,
-            Self::OutboundProtocol,
-            (),
-            (),
-        >,
+        event: ConnectionEvent<Self::InboundProtocol, Self::OutboundProtocol>,
     ) {
         match event {
             ConnectionEvent::FullyNegotiatedInbound(fully_negotiated_inbound) => {

@@ -159,10 +159,7 @@ impl Handler {
         &mut self,
         FullyNegotiatedInbound {
             protocol: output, ..
-        }: FullyNegotiatedInbound<
-            <Self as ConnectionHandler>::InboundProtocol,
-            (),
-        >,
+        }: FullyNegotiatedInbound<<Self as ConnectionHandler>::InboundProtocol>,
     ) {
         match output {
             future::Either::Left(stream) => {
@@ -198,10 +195,7 @@ impl Handler {
         &mut self,
         FullyNegotiatedOutbound {
             protocol: output, ..
-        }: FullyNegotiatedOutbound<
-            <Self as ConnectionHandler>::OutboundProtocol,
-            (),
-        >,
+        }: FullyNegotiatedOutbound<<Self as ConnectionHandler>::OutboundProtocol>,
     ) {
         match output {
             future::Either::Left(stream) => {
@@ -296,7 +290,7 @@ impl ConnectionHandler for Handler {
     type OutboundOpenInfo = ();
     type InboundOpenInfo = ();
 
-    fn listen_protocol(&self) -> SubstreamProtocol<Self::InboundProtocol, ()> {
+    fn listen_protocol(&self) -> SubstreamProtocol<Self::InboundProtocol> {
         SubstreamProtocol::new(
             SelectUpgrade::new(
                 ReadyUpgrade::new(PROTOCOL_NAME),
@@ -390,12 +384,7 @@ impl ConnectionHandler for Handler {
 
     fn on_connection_event(
         &mut self,
-        event: ConnectionEvent<
-            Self::InboundProtocol,
-            Self::OutboundProtocol,
-            (),
-            (),
-        >,
+        event: ConnectionEvent<Self::InboundProtocol, Self::OutboundProtocol>,
     ) {
         match event {
             ConnectionEvent::FullyNegotiatedInbound(fully_negotiated_inbound) => {

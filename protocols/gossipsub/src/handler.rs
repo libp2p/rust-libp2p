@@ -198,7 +198,6 @@ impl EnabledHandler {
         &mut self,
         FullyNegotiatedOutbound { protocol, .. }: FullyNegotiatedOutbound<
             <Handler as ConnectionHandler>::OutboundProtocol,
-            (),
         >,
     ) {
         let (substream, peer_kind) = protocol;
@@ -427,7 +426,7 @@ impl ConnectionHandler for Handler {
     type OutboundOpenInfo = ();
     type OutboundProtocol = ProtocolConfig;
 
-    fn listen_protocol(&self) -> SubstreamProtocol<Self::InboundProtocol, ()> {
+    fn listen_protocol(&self) -> SubstreamProtocol<Self::InboundProtocol> {
         match self {
             Handler::Enabled(handler) => {
                 SubstreamProtocol::new(either::Either::Left(handler.listen_protocol.clone()), ())
@@ -462,9 +461,7 @@ impl ConnectionHandler for Handler {
     fn poll(
         &mut self,
         cx: &mut Context<'_>,
-    ) -> Poll<
-        ConnectionHandlerEvent<Self::OutboundProtocol, (), Self::ToBehaviour>,
-    > {
+    ) -> Poll<ConnectionHandlerEvent<Self::OutboundProtocol, (), Self::ToBehaviour>> {
         match self {
             Handler::Enabled(handler) => handler.poll(cx),
             Handler::Disabled(DisabledHandler::ProtocolUnsupported { peer_kind_sent }) => {
@@ -483,12 +480,7 @@ impl ConnectionHandler for Handler {
 
     fn on_connection_event(
         &mut self,
-        event: ConnectionEvent<
-            Self::InboundProtocol,
-            Self::OutboundProtocol,
-            (),
-            (),
-        >,
+        event: ConnectionEvent<Self::InboundProtocol, Self::OutboundProtocol>,
     ) {
         match self {
             Handler::Enabled(handler) => {
