@@ -28,7 +28,7 @@ impl SignedEnvelope {
     ) -> Result<Self, SigningError> {
         let buffer = signature_payload(domain_separation, &payload_type, &payload);
 
-        let signature = key.sign(&buffer)?;
+        let signature = key.sign(&buffer).unwrap();
 
         Ok(Self {
             key: key.public(),
