@@ -246,7 +246,6 @@ impl Handler {
     fn handle_incoming_info(&mut self, info: &Info) -> bool {
         let derived_peer_id = info.public_key.to_peer_id();
         if self.remote_peer_id != derived_peer_id {
-            tracing::warn!(%self.remote_peer_id, ?info.public_key, %derived_peer_id, "Discarding received identify message as public key does not match remote peer ID");
             return false;
         }
 
@@ -359,6 +358,13 @@ impl ConnectionHandler for Handler {
                         return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(
                             Event::Identified(remote_info),
                         ));
+                    } else {
+                        tracing::warn!(
+                            %self.remote_peer_id,
+                            ?remote_info.public_key,
+                            derived_peer_id=%remote_info.public_key.to_peer_id(),
+                            "Discarding received identify message as public key does not match remote peer ID",
+                        );
                     }
                 }
                 Ok(Ok(Success::SentIdentifyPush(info))) => {
@@ -379,8 +385,15 @@ impl ConnectionHandler for Handler {
                             return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(
                                 Event::Identified(info),
                             ));
+                        } else {
+                            tracing::warn!(
+                                %self.remote_peer_id,
+                                ?info.public_key,
+                                derived_peer_id=%info.public_key.to_peer_id(),
+                                "Discarding received identify message as public key does not match remote peer ID",
+                            );
                         }
-                    };
+                    }
                 }
                 Ok(Err(e)) => {
                     return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(
