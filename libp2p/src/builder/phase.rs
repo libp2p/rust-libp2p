@@ -29,6 +29,7 @@ use quic::*;
 use relay::*;
 use swarm::*;
 use tcp::*;
+#[cfg(all(not(target_arch = "wasm32"), feature = "websocket"))]
 pub use websocket::WebsocketError;
 use websocket::*;
 
