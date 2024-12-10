@@ -4,6 +4,10 @@ mod phase;
 mod select_muxer;
 mod select_security;
 
+#[cfg(all(not(target_arch = "wasm32"), feature = "websocket"))]
+pub use phase::WebsocketError;
+pub use phase::{BehaviourError, TransportError};
+
 /// Build a [`Swarm`](libp2p_swarm::Swarm) by combining an identity, a set of
 /// [`Transport`](libp2p_core::Transport)s and a
 /// [`NetworkBehaviour`](libp2p_swarm::NetworkBehaviour).
