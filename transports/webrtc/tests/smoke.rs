@@ -400,3 +400,27 @@ impl Future for ListenUpgrade<'_> {
         }
     }
 }
+
+#[tokio::test]
+async fn close_implies_flush() {
+    let (alice, bob) = connected_peers().await;
+
+    libp2p_muxer_test_harness::close_implies_flush(alice, bob).await;
+}
+
+#[tokio::test]
+async fn read_after_close() {
+    let (alice, bob) = connected_peers().await;
+
+    libp2p_muxer_test_harness::read_after_close(alice, bob).await;
+}
+
+async fn connected_peers() -> (StreamMuxerBox, StreamMuxerBox) {
+    let (_, mut a_transport) = create_transport();
+    let (_, mut b_transport) = create_transport();
+
+    let addr = start_listening(&mut a_transport, "/ip4/127.0.0.1/udp/0/webrtc-direct").await;
+    let ((_, _, alice), (_, bob)) = connect(&mut a_transport, &mut b_transport, addr).await;
+
+    (alice, bob)
+}
