@@ -51,7 +51,7 @@ impl MdnsPacket {
     pub(crate) fn new_from_bytes(
         buf: &[u8],
         from: SocketAddr,
-    ) -> Result<Option<MdnsPacket>, hickory_proto::error::ProtoError> {
+    ) -> Result<Option<MdnsPacket>, hickory_proto::ProtoError> {
         let packet = Message::from_vec(buf)?;
 
         if packet.query().is_none() {
@@ -161,7 +161,7 @@ impl MdnsResponse {
                     return None;
                 }
 
-                let RData::PTR(record_value) = record.data()? else {
+                let RData::PTR(record_value) = record.data() else {
                     return None;
                 };
 
@@ -243,7 +243,7 @@ impl MdnsPeer {
                     return None;
                 }
 
-                if let Some(RData::TXT(ref txt)) = add_record.data() {
+                if let RData::TXT(ref txt) = add_record.data() {
                     Some(txt)
                 } else {
                     None
@@ -341,7 +341,7 @@ mod tests {
                     if record.name().to_utf8() != SERVICE_NAME_FQDN {
                         return None;
                     }
-                    let Some(RData::PTR(record_value)) = record.data() else {
+                    let RData::PTR(record_value) = record.data() else {
                         return None;
                     };
                     Some(record_value)
