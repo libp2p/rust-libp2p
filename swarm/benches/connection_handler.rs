@@ -268,7 +268,6 @@ struct SpinningHandler {
     protocols: &'static [StreamProtocol],
 }
 
-#[allow(deprecated)]
 impl ConnectionHandler for SpinningHandler {
     type FromBehaviour = Infallible;
 

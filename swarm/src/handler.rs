@@ -113,10 +113,10 @@ pub trait ConnectionHandler: Send + 'static {
     /// The outbound upgrade for the protocol(s) used by the handler.
     type OutboundProtocol: OutboundUpgradeSend;
     /// The type of additional information returned from `listen_protocol`.
-    #[deprecated]
+    #[deprecated = "Track data in ConnectionHandler instead."]
     type InboundOpenInfo: Send + 'static;
     /// The type of additional information passed to an `OutboundSubstreamRequest`.
-    #[deprecated]
+    #[deprecated = "Track data in ConnectionHandler instead."]
     type OutboundOpenInfo: Send + 'static;
 
     /// The [`InboundUpgrade`](libp2p_core::upgrade::InboundUpgrade) to apply on inbound

@@ -155,9 +155,9 @@ where
     max_negotiating_inbound_streams: usize,
     /// Contains all upgrades that are waiting for a new outbound substream.
     ///
-    /// The upgrade timeout is already ticking here so this may fail in case the remote is not quick
+    /// The upgrade timeout is already ticking here so this may fail in case the remote is not
     /// quick enough in providing us with a new stream.
-    #[allow(deprecated)]
+    #[allow(deprecated)] // TODO: Remove when {In, Out}boundOpenInfo is fully removed.
     requested_substreams: FuturesUnordered<
         SubstreamRequested<THandler::OutboundOpenInfo, THandler::OutboundProtocol>,
     >,
