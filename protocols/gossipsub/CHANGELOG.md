@@ -1,7 +1,4 @@
-## 0.50.0
-
-- Remove `Rpc` from the public API.
-  See [PR 6091](https://github.com/libp2p/rust-libp2p/pull/6091)
+## 0.49.1
 
 - Fix applying P3 and P6 Score penalties when their weight is zero
   See [PR 6097](https://github.com/libp2p/rust-libp2p/pull/6097)
