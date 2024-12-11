@@ -2611,7 +2611,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-autonat"
-version = "0.13.1"
+version = "0.13.2"
 dependencies = [
  "async-trait",
  "asynchronous-codec",
@@ -3145,7 +3145,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-rendezvous"
-version = "0.15.0"
+version = "0.15.1"
 dependencies = [
  "async-trait",
  "asynchronous-codec",
@@ -3174,7 +3174,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-request-response"
-version = "0.27.1"
+version = "0.28.0"
 dependencies = [
  "anyhow",
  "async-std",
