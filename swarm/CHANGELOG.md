@@ -5,9 +5,12 @@
 
 - Deprecate `void` crate.
   See [PR 5676](https://github.com/libp2p/rust-libp2p/pull/5676).
-  
+
 - Fix `cargo clippy` warnings in `rustc 1.84.0-beta.1`.
   See [PR 5700](https://github.com/libp2p/rust-libp2p/pull/5700).
+
+- Update default for idle-connection-timeout to 10s.
+  See [PR 4967](https://github.com/libp2p/rust-libp2p/pull/4967).
 
 ## 0.45.1
 

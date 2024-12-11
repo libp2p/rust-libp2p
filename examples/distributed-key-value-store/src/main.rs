@@ -20,7 +20,7 @@
 
 #![doc = include_str!("../README.md")]
 
-use std::{error::Error, time::Duration};
+use std::error::Error;
 
 use futures::stream::StreamExt;
 use libp2p::{
@@ -68,7 +68,6 @@ async fn main() -> Result<(), Box<dyn Error>> {
                 )?,
             })
         })?
-        .with_swarm_config(|c| c.with_idle_connection_timeout(Duration::from_secs(60)))
         .build();
 
     swarm.behaviour_mut().kademlia.set_mode(Some(Mode::Server));

@@ -246,13 +246,7 @@ where
             transport,
             behaviour_fn(identity),
             peer_id,
-            libp2p_swarm::Config::with_async_std_executor()
-                // Some tests need
-                // connections to be kept
-                // alive beyond what the
-                // individual behaviour
-                // configures.,
-                .with_idle_connection_timeout(Duration::from_secs(5)),
+            libp2p_swarm::Config::with_async_std_executor(),
         )
     }
 
@@ -279,12 +273,7 @@ where
             transport,
             behaviour_fn(identity),
             peer_id,
-            libp2p_swarm::Config::with_tokio_executor()
-                .with_idle_connection_timeout(Duration::from_secs(5)), /* Some tests need
-                                                                        * connections to be kept
-                                                                        * alive beyond what the
-                                                                        * individual behaviour
-                                                                        * configures., */
+            libp2p_swarm::Config::with_tokio_executor(),
         )
     }
 

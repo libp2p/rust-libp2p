@@ -1,9 +1,6 @@
 #![allow(non_upper_case_globals)]
 
-use std::{
-    net::{Ipv4Addr, SocketAddr},
-    time::Duration,
-};
+use std::net::{Ipv4Addr, SocketAddr};
 
 use anyhow::Result;
 use axum::{
@@ -41,11 +38,6 @@ async fn main() -> anyhow::Result<()> {
             .map(|(peer_id, conn), _| (peer_id, StreamMuxerBox::new(conn))))
         })?
         .with_behaviour(|_| ping::Behaviour::default())?
-        .with_swarm_config(|cfg| {
-            cfg.with_idle_connection_timeout(
-                Duration::from_secs(u64::MAX), // Allows us to observe the pings.
-            )
-        })
         .build();
 
     let address_webrtc = Multiaddr::from(Ipv4Addr::UNSPECIFIED)
