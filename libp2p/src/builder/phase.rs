@@ -29,6 +29,11 @@ use swarm::*;
 use tcp::*;
 use websocket::*;
 
+pub use behaviour::BehaviourError;
+pub use other_transport::TransportError;
+#[cfg(all(not(target_arch = "wasm32"), feature = "websocket"))]
+pub use websocket::WebsocketError;
+
 use super::{
     select_muxer::SelectMuxerUpgrade, select_security::SelectSecurityUpgrade, SwarmBuilder,
 };

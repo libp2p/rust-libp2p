@@ -148,12 +148,17 @@ pub mod bandwidth;
 #[cfg(doc)]
 pub mod tutorials;
 
+#[cfg(all(not(target_arch = "wasm32"), feature = "websocket"))]
+pub use builder::WebsocketError as WebsocketBuilderError;
 pub use libp2p_identity as identity;
 pub use libp2p_identity::PeerId;
 pub use libp2p_swarm::{Stream, StreamProtocol};
 
 pub use self::{
-    builder::SwarmBuilder,
+    builder::{
+        BehaviourError as BehaviourBuilderError, SwarmBuilder,
+        TransportError as TransportBuilderError,
+    },
     core::{
         transport::TransportError,
         upgrade::{InboundUpgrade, OutboundUpgrade},
