@@ -103,7 +103,7 @@ impl ConnectionHandler for HandlerWithState {
     type InboundOpenInfo = ();
     type OutboundOpenInfo = ();
 
-    fn listen_protocol(&self) -> SubstreamProtocol<Self::InboundProtocol, Self::InboundOpenInfo> {
+    fn listen_protocol(&self) -> SubstreamProtocol<Self::InboundProtocol> {
         SubstreamProtocol::new(DeniedUpgrade, ())
     }
 
@@ -114,9 +114,7 @@ impl ConnectionHandler for HandlerWithState {
     fn poll(
         &mut self,
         _: &mut Context<'_>,
-    ) -> Poll<
-        ConnectionHandlerEvent<Self::OutboundProtocol, Self::OutboundOpenInfo, Self::ToBehaviour>,
-    > {
+    ) -> Poll<ConnectionHandlerEvent<Self::OutboundProtocol, (), Self::ToBehaviour>> {
         Poll::Pending
     }
 
@@ -137,12 +135,7 @@ impl ConnectionHandler for HandlerWithState {
 
     fn on_connection_event(
         &mut self,
-        _: ConnectionEvent<
-            Self::InboundProtocol,
-            Self::OutboundProtocol,
-            Self::InboundOpenInfo,
-            Self::OutboundOpenInfo,
-        >,
+        _: ConnectionEvent<Self::InboundProtocol, Self::OutboundProtocol>,
     ) {
     }
 }
