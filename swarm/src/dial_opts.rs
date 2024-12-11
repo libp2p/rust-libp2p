@@ -338,7 +338,7 @@ pub enum PeerCondition {
     NotDialing,
     /// A combination of [`Disconnected`](PeerCondition::Disconnected) and
     /// [`NotDialing`](PeerCondition::NotDialing). A new dialing attempt is
-    /// iniated _only if_ the peer is both considered disconnected and there
+    /// initiated _only if_ the peer is both considered disconnected and there
     /// is currently no ongoing dialing attempt.
     #[default]
     DisconnectedAndNotDialing,

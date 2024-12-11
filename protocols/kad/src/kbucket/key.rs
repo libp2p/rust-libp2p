@@ -35,7 +35,7 @@ use crate::record;
 
 construct_uint! {
     /// 256-bit unsigned integer.
-    pub(super) struct U256(4);
+    pub struct U256(4);
 }
 
 /// A `Key` in the DHT keyspace with preserved preimage.
@@ -193,7 +193,7 @@ impl AsRef<KeyBytes> for KeyBytes {
 
 /// A distance between two keys in the DHT keyspace.
 #[derive(Copy, Clone, PartialEq, Eq, Default, PartialOrd, Ord, Debug)]
-pub struct Distance(pub(super) U256);
+pub struct Distance(pub U256);
 
 impl Distance {
     /// Returns the integer part of the base 2 logarithm of the [`Distance`].

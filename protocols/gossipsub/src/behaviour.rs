@@ -2761,7 +2761,7 @@ where
                     | RpcOut::Prune(_)
                     | RpcOut::Subscribe(_)
                     | RpcOut::Unsubscribe(_) => {
-                        unreachable!("Channel for highpriority contorl messages is unbounded and should always be open.")
+                        unreachable!("Channel for highpriority control messages is unbounded and should always be open.")
                     }
                 }
 
