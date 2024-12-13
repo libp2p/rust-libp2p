@@ -1,11 +1,13 @@
 mod behaviour;
+mod memory_store;
 mod store;
 
 use std::time::SystemTime;
 
 pub use behaviour::{Behaviour, Event};
 use libp2p_core::Multiaddr;
-pub use store::{MemoryStore, Store};
+pub use store::Store;
+pub use memory_store::MemoryStore;
 
 pub struct AddressRecord<'a> {
     address: &'a Multiaddr,

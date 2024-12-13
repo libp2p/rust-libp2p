@@ -1,86 +1,25 @@
-use std::{collections::HashMap, num::NonZeroUsize, time::SystemTime};
-
 use libp2p_core::{Multiaddr, PeerId};
-use lru::LruCache;
+use libp2p_swarm::FromSwarm;
 
 /// A store that
 /// - keep track of currently connected peers;
 /// - contains all observed addresses of peers;
 pub trait Store {
     /// Update an address record.  
-    /// Return `true` when the address is new.  
-    fn on_address_update(&mut self, peer: &PeerId, address: &Multiaddr) -> bool;
+    /// Returns `true` when the address is new.  
+    fn update_address(&mut self, peer: &PeerId, address: &Multiaddr) -> bool;
+    /// Remove an address record.
+    /// Returns `true` when the address is removed.
+    fn remove_address(&mut self, peer: &PeerId, address: &Multiaddr) -> bool;
+    /// How this store handles events from the swarm.
+    fn on_swarm_event(&mut self, event: &FromSwarm) -> Option<Event>;
+    /// Get all stored addresses of the peer.
     fn addresses_of_peer(
         &self,
         peer: &PeerId,
     ) -> Option<impl Iterator<Item = super::AddressRecord>>;
 }
 
-pub(crate) struct PeerAddressRecord {
-    addresses: LruCache<Multiaddr, AddressRecord>,
-}
-impl PeerAddressRecord {
-    pub(crate) fn records(&self) -> impl Iterator<Item = super::AddressRecord> {
-        self.addresses
-            .iter()
-            .map(|(address, record)| super::AddressRecord {
-                address,
-                last_seen: &record.last_seen,
-            })
-    }
-    pub(crate) fn new(address: &Multiaddr) -> Self {
-        let mut address_book = LruCache::new(NonZeroUsize::new(8).expect("8 is greater than 0"));
-        address_book.get_or_insert(address.clone(), AddressRecord::new);
-        Self {
-            addresses: address_book,
-        }
-    }
-    pub(crate) fn on_address_update(&mut self, address: &Multiaddr) -> bool {
-        if let Some(record) = self.addresses.get_mut(address) {
-            record.update_last_seen();
-            false
-        } else {
-            self.addresses.get_or_insert(address.clone(), AddressRecord::new);
-            true
-        }
-    }
-}
-
-pub(crate) struct AddressRecord {
-    /// The time when the address is last seen.
-    last_seen: SystemTime,
-}
-impl AddressRecord {
-    pub(crate) fn new() -> Self {
-        Self {
-            last_seen: SystemTime::now(),
-        }
-    }
-    pub(crate) fn update_last_seen(&mut self) {
-        self.last_seen = SystemTime::now();
-    }
-}
-
-/// A in-memory store.
-pub struct MemoryStore {
-    /// An address book of peers regardless of their status(connected or not).
-    address_book: HashMap<PeerId, PeerAddressRecord>,
-}
-
-impl Store for MemoryStore {
-    fn on_address_update(&mut self, peer: &PeerId, address: &Multiaddr) -> bool {
-        if let Some(record) = self.address_book.get_mut(peer) {
-            record.on_address_update(address)
-        } else {
-            self.address_book
-                .insert(*peer, PeerAddressRecord::new(address));
-            true
-        }
-    }
-    fn addresses_of_peer(
-        &self,
-        peer: &PeerId,
-    ) -> Option<impl Iterator<Item = super::AddressRecord>> {
-        self.address_book.get(peer).map(|record| record.records())
-    }
+pub enum Event {
+    RecordUpdated(PeerId),
 }
