@@ -20,7 +20,7 @@
 
 #![doc = include_str!("../README.md")]
 
-use std::{env, error::Error, fs, path::Path, str::FromStr, time::Duration};
+use std::{env, error::Error, fs, path::Path, str::FromStr};
 
 use either::Either;
 use futures::prelude::*;
@@ -152,7 +152,6 @@ async fn main() -> Result<(), Box<dyn Error>> {
                 ping: ping::Behaviour::new(ping::Config::new()),
             })
         })?
-        .with_swarm_config(|c| c.with_idle_connection_timeout(Duration::from_secs(60)))
         .build();
 
     println!("Subscribing to {gossipsub_topic:?}");

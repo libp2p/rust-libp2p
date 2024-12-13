@@ -20,7 +20,7 @@
 
 #![doc = include_str!("../README.md")]
 
-use std::{error::Error, str::FromStr, time::Duration};
+use std::{error::Error, str::FromStr};
 
 use clap::Parser;
 use futures::{executor::block_on, future::FutureExt, stream::StreamExt};
@@ -105,7 +105,6 @@ async fn main() -> Result<(), Box<dyn Error>> {
                 )),
                 dcutr: dcutr::Behaviour::new(keypair.public().to_peer_id()),
             })?
-            .with_swarm_config(|c| c.with_idle_connection_timeout(Duration::from_secs(60)))
             .build();
 
     swarm
