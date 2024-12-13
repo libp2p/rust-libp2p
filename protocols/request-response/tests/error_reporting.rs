@@ -550,6 +550,7 @@ async fn wait_request(
                         request,
                         channel,
                     },
+                ..
             }) => {
                 return Ok((peer, request_id, request, channel));
             }
@@ -584,6 +585,7 @@ async fn wait_inbound_failure(
                 peer,
                 request_id,
                 error,
+                ..
             }) => {
                 return Ok((peer, request_id, error));
             }
@@ -602,6 +604,7 @@ async fn wait_outbound_failure(
                 peer,
                 request_id,
                 error,
+                ..
             }) => {
                 return Ok((peer, request_id, error));
             }
