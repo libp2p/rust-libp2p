@@ -117,12 +117,12 @@ pub mod async_std {
 pub mod tokio {
     use std::sync::Arc;
 
-    use hickory_resolver::{system_conf, TokioAsyncResolver};
+    use hickory_resolver::{system_conf, TokioResolver};
     use parking_lot::Mutex;
 
     /// A `Transport` wrapper for performing DNS lookups when dialing `Multiaddr`esses
     /// using `tokio` for all async I/O.
-    pub type Transport<T> = crate::Transport<T, TokioAsyncResolver>;
+    pub type Transport<T> = crate::Transport<T, TokioResolver>;
 
     impl<T> Transport<T> {
         /// Creates a new [`Transport`] from the OS's DNS configuration and defaults.
@@ -140,7 +140,7 @@ pub mod tokio {
         ) -> Transport<T> {
             Transport {
                 inner: Arc::new(Mutex::new(inner)),
-                resolver: TokioAsyncResolver::tokio(cfg, opts),
+                resolver: TokioResolver::tokio(cfg, opts),
             }
         }
     }
@@ -160,13 +160,12 @@ use async_trait::async_trait;
 use futures::{future::BoxFuture, prelude::*};
 pub use hickory_resolver::{
     config::{ResolverConfig, ResolverOpts},
-    error::{ResolveError, ResolveErrorKind},
+    {ResolveError, ResolveErrorKind},
 };
 use hickory_resolver::{
     lookup::{Ipv4Lookup, Ipv6Lookup, TxtLookup},
     lookup_ip::LookupIp,
     name_server::ConnectionProvider,
-    AsyncResolver,
 };
 use libp2p_core::{
     multiaddr::{Multiaddr, Protocol},
@@ -594,7 +593,7 @@ pub trait Resolver {
 }
 
 #[async_trait]
-impl<C> Resolver for AsyncResolver<C>
+impl<C> Resolver for hickory_resolver::Resolver<C>
 where
     C: ConnectionProvider,
 {
@@ -618,6 +617,7 @@ where
 #[cfg(all(test, any(feature = "tokio", feature = "async-std")))]
 mod tests {
     use futures::future::BoxFuture;
+    use hickory_resolver::proto::{ProtoError, ProtoErrorKind};
     use libp2p_core::{
         multiaddr::{Multiaddr, Protocol},
         transport::{PortUse, TransportError, TransportEvent},
@@ -750,7 +750,8 @@ mod tests {
                 .await
             {
                 Err(Error::ResolveError(e)) => match e.kind() {
-                    ResolveErrorKind::NoRecordsFound { .. } => {}
+                    ResolveErrorKind::Proto(ProtoError { kind, .. })
+                        if matches!(kind.as_ref(), ProtoErrorKind::NoRecordsFound { .. }) => {}
                     _ => panic!("Unexpected DNS error: {e:?}"),
                 },
                 Err(e) => panic!("Unexpected error: {e:?}"),

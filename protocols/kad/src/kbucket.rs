@@ -175,7 +175,7 @@ impl BucketIndex {
         let lower = usize::pow(2, rem);
         let upper = usize::pow(2, rem + 1);
         bytes[31 - quot] = rng.gen_range(lower..upper) as u8;
-        Distance(U256::from(bytes))
+        Distance(U256::from_big_endian(bytes.as_slice()))
     }
 }
 
@@ -650,7 +650,7 @@ mod tests {
     fn rand_distance() {
         fn prop(ix: u8) -> bool {
             let d = BucketIndex(ix as usize).rand_distance(&mut rand::thread_rng());
-            let n = U256::from(<[u8; 32]>::from(d.0));
+            let n = d.0;
             let b = U256::from(2);
             let e = U256::from(ix);
             let lower = b.pow(e);
