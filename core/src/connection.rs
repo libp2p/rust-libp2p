@@ -138,11 +138,7 @@ impl ConnectedPoint {
     /// Returns true if the connection is relayed.
     pub fn is_relayed(&self) -> bool {
         match self {
-            ConnectedPoint::Dialer {
-                address,
-                role_override: _,
-                port_use: _,
-            } => address,
+            ConnectedPoint::Dialer { address, .. } => address,
             ConnectedPoint::Listener { local_addr, .. } => local_addr,
         }
         .iter()
