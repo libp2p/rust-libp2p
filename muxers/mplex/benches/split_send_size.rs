@@ -21,21 +21,23 @@
 //! A benchmark for the `split_send_size` configuration option
 //! using different transports.
 
+use std::{pin::Pin, time::Duration};
+
 use async_std::task;
 use criterion::{black_box, criterion_group, criterion_main, Criterion, Throughput};
-use futures::future::poll_fn;
-use futures::prelude::*;
-use futures::{channel::oneshot, future::join};
-use libp2p_core::muxing::StreamMuxerExt;
-use libp2p_core::transport::ListenerId;
-use libp2p_core::Endpoint;
-use libp2p_core::{multiaddr::multiaddr, muxing, transport, upgrade, Multiaddr, Transport};
+use futures::{
+    channel::oneshot,
+    future::{join, poll_fn},
+    prelude::*,
+};
+use libp2p_core::{
+    multiaddr::multiaddr, muxing, muxing::StreamMuxerExt, transport, transport::ListenerId,
+    upgrade, Endpoint, Multiaddr, Transport,
+};
 use libp2p_identity as identity;
 use libp2p_identity::PeerId;
 use libp2p_mplex as mplex;
 use libp2p_plaintext as plaintext;
-use std::pin::Pin;
-use std::time::Duration;
 use tracing_subscriber::EnvFilter;
 
 type BenchTransport = transport::Boxed<(PeerId, muxing::StreamMuxerBox)>;
@@ -120,7 +122,8 @@ fn run(
                 }
                 transport::TransportEvent::Incoming { upgrade, .. } => {
                     let (_peer, mut conn) = upgrade.await.unwrap();
-                    // Just calling `poll_inbound` without `poll` is fine here because mplex makes progress through all `poll_` functions. It is hacky though.
+                    // Just calling `poll_inbound` without `poll` is fine here because mplex makes
+                    // progress through all `poll_` functions. It is hacky though.
                     let mut s = poll_fn(|cx| conn.poll_inbound_unpin(cx))
                         .await
                         .expect("unexpected error");
@@ -158,7 +161,8 @@ fn run(
             .unwrap()
             .await
             .unwrap();
-        // Just calling `poll_outbound` without `poll` is fine here because mplex makes progress through all `poll_` functions. It is hacky though.
+        // Just calling `poll_outbound` without `poll` is fine here because mplex makes progress
+        // through all `poll_` functions. It is hacky though.
         let mut stream = poll_fn(|cx| conn.poll_outbound_unpin(cx)).await.unwrap();
         let mut off = 0;
         loop {

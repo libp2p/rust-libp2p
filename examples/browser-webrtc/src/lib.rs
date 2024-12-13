@@ -1,13 +1,11 @@
 #![cfg(target_arch = "wasm32")]
 
+use std::{io, time::Duration};
+
 use futures::StreamExt;
 use js_sys::Date;
-use libp2p::core::Multiaddr;
-use libp2p::ping;
-use libp2p::swarm::SwarmEvent;
+use libp2p::{core::Multiaddr, ping, swarm::SwarmEvent};
 use libp2p_webrtc_websys as webrtc_websys;
-use std::io;
-use std::time::Duration;
 use wasm_bindgen::prelude::*;
 use web_sys::{Document, HtmlElement};
 

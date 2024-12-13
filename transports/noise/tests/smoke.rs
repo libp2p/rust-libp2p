@@ -18,14 +18,17 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
+use std::io;
+
 use futures::prelude::*;
-use libp2p_core::transport::{MemoryTransport, Transport};
-use libp2p_core::upgrade;
-use libp2p_core::upgrade::{InboundConnectionUpgrade, OutboundConnectionUpgrade};
+use libp2p_core::{
+    transport::{MemoryTransport, Transport},
+    upgrade,
+    upgrade::{InboundConnectionUpgrade, OutboundConnectionUpgrade},
+};
 use libp2p_identity as identity;
 use libp2p_noise as noise;
 use quickcheck::*;
-use std::io;
 use tracing_subscriber::EnvFilter;
 
 #[allow(dead_code)]

@@ -18,13 +18,14 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
+use std::time::Duration;
+
 use futures::StreamExt;
 use libp2p::{
     identify, noise, ping, rendezvous,
     swarm::{NetworkBehaviour, SwarmEvent},
     tcp, yamux, Multiaddr,
 };
-use std::time::Duration;
 use tracing_subscriber::EnvFilter;
 
 #[tokio::main]
@@ -55,7 +56,6 @@ async fn main() {
             ping: ping::Behaviour::new(ping::Config::new().with_interval(Duration::from_secs(1))),
         })
         .unwrap()
-        .with_swarm_config(|cfg| cfg.with_idle_connection_timeout(Duration::from_secs(5)))
         .build();
 
     let _ = swarm.listen_on("/ip4/0.0.0.0/tcp/0".parse().unwrap());

@@ -18,28 +18,37 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::protocol::{Info, PushInfo, UpgradeError};
-use crate::{protocol, PROTOCOL_NAME, PUSH_PROTOCOL_NAME};
+use std::{
+    collections::HashSet,
+    task::{Context, Poll},
+    time::Duration,
+};
+
 use either::Either;
 use futures::prelude::*;
 use futures_bounded::Timeout;
 use futures_timer::Delay;
-use libp2p_core::upgrade::{ReadyUpgrade, SelectUpgrade};
-use libp2p_core::Multiaddr;
-use libp2p_identity::PeerId;
-use libp2p_identity::PublicKey;
-use libp2p_swarm::handler::{
-    ConnectionEvent, DialUpgradeError, FullyNegotiatedInbound, FullyNegotiatedOutbound,
-    ProtocolSupport,
+use libp2p_core::{
+    upgrade::{ReadyUpgrade, SelectUpgrade},
+    Multiaddr,
 };
+use libp2p_identity::{PeerId, PublicKey};
 use libp2p_swarm::{
+    handler::{
+        ConnectionEvent, DialUpgradeError, FullyNegotiatedInbound, FullyNegotiatedOutbound,
+        ProtocolSupport,
+    },
     ConnectionHandler, ConnectionHandlerEvent, StreamProtocol, StreamUpgradeError,
     SubstreamProtocol, SupportedProtocols,
 };
 use smallvec::SmallVec;
-use std::collections::HashSet;
-use std::{task::Context, task::Poll, time::Duration};
 use tracing::Level;
+
+use crate::{
+    protocol,
+    protocol::{Info, PushInfo, UpgradeError},
+    PROTOCOL_NAME, PUSH_PROTOCOL_NAME,
+};
 
 const STREAM_TIMEOUT: Duration = Duration::from_secs(60);
 const MAX_CONCURRENT_STREAMS_PER_CONNECTION: usize = 10;
@@ -233,10 +242,17 @@ impl Handler {
         }
     }
 
-    fn handle_incoming_info(&mut self, info: &Info) {
+    /// If the public key matches the remote peer, handles the given `info` and returns `true`.
+    fn handle_incoming_info(&mut self, info: &Info) -> bool {
+        let derived_peer_id = info.public_key.to_peer_id();
+        if self.remote_peer_id != derived_peer_id {
+            return false;
+        }
+
         self.remote_info.replace(info.clone());
 
         self.update_supported_protocols_for_remote(info);
+        true
     }
 
     fn update_supported_protocols_for_remote(&mut self, remote_info: &Info) {
@@ -335,45 +351,61 @@ impl ConnectionHandler for Handler {
             return Poll::Ready(event);
         }
 
-        match self.active_streams.poll_unpin(cx) {
-            Poll::Ready(Ok(Ok(Success::ReceivedIdentify(remote_info)))) => {
-                self.handle_incoming_info(&remote_info);
-
-                return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(Event::Identified(
-                    remote_info,
-                )));
-            }
-            Poll::Ready(Ok(Ok(Success::SentIdentifyPush(info)))) => {
-                return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(
-                    Event::IdentificationPushed(info),
-                ));
-            }
-            Poll::Ready(Ok(Ok(Success::SentIdentify))) => {
-                return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(
-                    Event::Identification,
-                ));
-            }
-            Poll::Ready(Ok(Ok(Success::ReceivedIdentifyPush(remote_push_info)))) => {
-                if let Some(mut info) = self.remote_info.clone() {
-                    info.merge(remote_push_info);
-                    self.handle_incoming_info(&info);
-
+        while let Poll::Ready(ready) = self.active_streams.poll_unpin(cx) {
+            match ready {
+                Ok(Ok(Success::ReceivedIdentify(remote_info))) => {
+                    if self.handle_incoming_info(&remote_info) {
+                        return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(
+                            Event::Identified(remote_info),
+                        ));
+                    } else {
+                        tracing::warn!(
+                            %self.remote_peer_id,
+                            ?remote_info.public_key,
+                            derived_peer_id=%remote_info.public_key.to_peer_id(),
+                            "Discarding received identify message as public key does not match remote peer ID",
+                        );
+                    }
+                }
+                Ok(Ok(Success::SentIdentifyPush(info))) => {
                     return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(
-                        Event::Identified(info),
+                        Event::IdentificationPushed(info),
                     ));
-                };
+                }
+                Ok(Ok(Success::SentIdentify)) => {
+                    return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(
+                        Event::Identification,
+                    ));
+                }
+                Ok(Ok(Success::ReceivedIdentifyPush(remote_push_info))) => {
+                    if let Some(mut info) = self.remote_info.clone() {
+                        info.merge(remote_push_info);
+
+                        if self.handle_incoming_info(&info) {
+                            return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(
+                                Event::Identified(info),
+                            ));
+                        } else {
+                            tracing::warn!(
+                                %self.remote_peer_id,
+                                ?info.public_key,
+                                derived_peer_id=%info.public_key.to_peer_id(),
+                                "Discarding received identify message as public key does not match remote peer ID",
+                            );
+                        }
+                    }
+                }
+                Ok(Err(e)) => {
+                    return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(
+                        Event::IdentificationError(StreamUpgradeError::Apply(e)),
+                    ));
+                }
+                Err(Timeout { .. }) => {
+                    return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(
+                        Event::IdentificationError(StreamUpgradeError::Timeout),
+                    ));
+                }
             }
-            Poll::Ready(Ok(Err(e))) => {
-                return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(
-                    Event::IdentificationError(StreamUpgradeError::Apply(e)),
-                ));
-            }
-            Poll::Ready(Err(Timeout { .. })) => {
-                return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(
-                    Event::IdentificationError(StreamUpgradeError::Timeout),
-                ));
-            }
-            Poll::Pending => {}
         }
 
         Poll::Pending
@@ -398,7 +430,7 @@ impl ConnectionHandler for Handler {
             ConnectionEvent::DialUpgradeError(DialUpgradeError { error, .. }) => {
                 self.events.push(ConnectionHandlerEvent::NotifyBehaviour(
                     Event::IdentificationError(
-                        error.map_upgrade_err(|e| void::unreachable(e.into_inner())),
+                        error.map_upgrade_err(|e| libp2p_core::util::unreachable(e.into_inner())),
                     ),
                 ));
                 self.trigger_next_identify.reset(self.interval);

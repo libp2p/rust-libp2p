@@ -18,10 +18,16 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::transport::{DialOpts, ListenerId, Transport, TransportError, TransportEvent};
+use std::{
+    error,
+    pin::Pin,
+    task::{Context, Poll},
+};
+
 use futures::prelude::*;
 use multiaddr::Multiaddr;
-use std::{error, pin::Pin, task::Context, task::Poll};
+
+use crate::transport::{DialOpts, ListenerId, Transport, TransportError, TransportEvent};
 
 /// See `Transport::map_err`.
 #[derive(Debug, Copy, Clone)]

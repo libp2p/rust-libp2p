@@ -36,8 +36,10 @@ use libp2p_swarm::{
     ConnectionHandler, ConnectionHandlerEvent, StreamProtocol, SubstreamProtocol,
 };
 
-use crate::client::{RunError, RunId};
-use crate::{RunParams, RunUpdate};
+use crate::{
+    client::{RunError, RunId},
+    RunParams, RunUpdate,
+};
 
 #[derive(Debug)]
 pub struct Command {
@@ -116,7 +118,7 @@ impl ConnectionHandler for Handler {
             #[allow(unreachable_patterns)]
             ConnectionEvent::FullyNegotiatedInbound(FullyNegotiatedInbound {
                 protocol, ..
-            }) => void::unreachable(protocol),
+            }) => libp2p_core::util::unreachable(protocol),
             ConnectionEvent::FullyNegotiatedOutbound(FullyNegotiatedOutbound {
                 protocol,
                 info: (),
@@ -149,7 +151,7 @@ impl ConnectionHandler for Handler {
             // TODO: remove when Rust 1.82 is MSRV
             #[allow(unreachable_patterns)]
             ConnectionEvent::ListenUpgradeError(ListenUpgradeError { info: (), error }) => {
-                void::unreachable(error)
+                libp2p_core::util::unreachable(error)
             }
             _ => {}
         }

@@ -43,6 +43,7 @@ allow = [
     "MIT",
     "MPL-2.0",
     "Unlicense",
+    "Unicode-3.0",
 ]
 # The confidence threshold for detecting a license from license text.
 # The higher the value, the more closely the license text must be to the
