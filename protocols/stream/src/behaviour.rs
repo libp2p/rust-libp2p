@@ -124,7 +124,7 @@ impl NetworkBehaviour for Behaviour {
         _connection_id: ConnectionId,
         event: THandlerOutEvent<Self>,
     ) {
-        void::unreachable(event);
+        libp2p_core::util::unreachable(event);
     }
 
     fn poll(

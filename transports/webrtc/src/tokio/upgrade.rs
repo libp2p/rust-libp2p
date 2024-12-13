@@ -18,27 +18,23 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use libp2p_webrtc_utils::{noise, Fingerprint};
+use std::{net::SocketAddr, sync::Arc, time::Duration};
 
-use futures::channel::oneshot;
-use futures::future::Either;
+use futures::{channel::oneshot, future::Either};
 use futures_timer::Delay;
 use libp2p_identity as identity;
 use libp2p_identity::PeerId;
-use std::{net::SocketAddr, sync::Arc, time::Duration};
-use webrtc::api::setting_engine::SettingEngine;
-use webrtc::api::APIBuilder;
-use webrtc::data::data_channel::DataChannel;
-use webrtc::data_channel::data_channel_init::RTCDataChannelInit;
-use webrtc::dtls_transport::dtls_role::DTLSRole;
-use webrtc::ice::network_type::NetworkType;
-use webrtc::ice::udp_mux::UDPMux;
-use webrtc::ice::udp_network::UDPNetwork;
-use webrtc::peer_connection::configuration::RTCConfiguration;
-use webrtc::peer_connection::RTCPeerConnection;
+use libp2p_webrtc_utils::{noise, Fingerprint};
+use webrtc::{
+    api::{setting_engine::SettingEngine, APIBuilder},
+    data::data_channel::DataChannel,
+    data_channel::data_channel_init::RTCDataChannelInit,
+    dtls_transport::dtls_role::DTLSRole,
+    ice::{network_type::NetworkType, udp_mux::UDPMux, udp_network::UDPNetwork},
+    peer_connection::{configuration::RTCConfiguration, RTCPeerConnection},
+};
 
-use crate::tokio::sdp::random_ufrag;
-use crate::tokio::{error::Error, sdp, stream::Stream, Connection};
+use crate::tokio::{error::Error, sdp, sdp::random_ufrag, stream::Stream, Connection};
 
 /// Creates a new outbound WebRTC connection.
 pub(crate) async fn outbound(

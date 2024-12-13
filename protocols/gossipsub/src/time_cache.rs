@@ -20,13 +20,18 @@
 
 //! This implements a time-based LRU cache for checking gossipsub message duplicates.
 
-use fnv::FnvHashMap;
-use std::collections::hash_map::{
-    self,
-    Entry::{Occupied, Vacant},
+use std::{
+    collections::{
+        hash_map::{
+            self,
+            Entry::{Occupied, Vacant},
+        },
+        VecDeque,
+    },
+    time::Duration,
 };
-use std::collections::VecDeque;
-use std::time::Duration;
+
+use fnv::FnvHashMap;
 use web_time::Instant;
 
 struct ExpiringElement<Element> {
@@ -206,7 +211,7 @@ mod test {
         cache.insert("t");
         assert!(!cache.insert("t"));
         cache.insert("e");
-        //assert!(!cache.insert("t"));
+        // assert!(!cache.insert("t"));
         assert!(!cache.insert("e"));
         // sleep until cache expiry
         std::thread::sleep(Duration::from_millis(101));

@@ -18,17 +18,21 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::protocol_stack;
+use std::{
+    collections::HashMap,
+    sync::{Arc, Mutex},
+};
+
 use libp2p_identity::PeerId;
 use libp2p_swarm::StreamProtocol;
-use prometheus_client::collector::Collector;
-use prometheus_client::encoding::{DescriptorEncoder, EncodeMetric};
-use prometheus_client::metrics::counter::Counter;
-use prometheus_client::metrics::gauge::ConstGauge;
-use prometheus_client::metrics::MetricType;
-use prometheus_client::registry::Registry;
-use std::collections::HashMap;
-use std::sync::{Arc, Mutex};
+use prometheus_client::{
+    collector::Collector,
+    encoding::{DescriptorEncoder, EncodeMetric},
+    metrics::{counter::Counter, gauge::ConstGauge, MetricType},
+    registry::Registry,
+};
+
+use crate::protocol_stack;
 
 const ALLOWED_PROTOCOLS: &[StreamProtocol] = &[
     #[cfg(feature = "dcutr")]

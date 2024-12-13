@@ -29,14 +29,12 @@ pub mod certificate;
 mod upgrade;
 mod verifier;
 
-use certificate::AlwaysResolvesCert;
-use libp2p_identity::Keypair;
-use libp2p_identity::PeerId;
 use std::sync::Arc;
 
+use certificate::AlwaysResolvesCert;
 pub use futures_rustls::TlsStream;
-pub use upgrade::Config;
-pub use upgrade::UpgradeError;
+use libp2p_identity::{Keypair, PeerId};
+pub use upgrade::{Config, UpgradeError};
 
 const P2P_ALPN: [u8; 6] = *b"libp2p";
 

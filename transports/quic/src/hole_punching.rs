@@ -1,14 +1,13 @@
-use crate::{provider::Provider, Error};
-
-use futures::future::Either;
-
-use rand::{distributions, Rng};
-
-use std::convert::Infallible;
 use std::{
+    convert::Infallible,
     net::{SocketAddr, UdpSocket},
     time::Duration,
 };
+
+use futures::future::Either;
+use rand::{distributions, Rng};
+
+use crate::{provider::Provider, Error};
 
 pub(crate) async fn hole_puncher<P: Provider>(
     socket: UdpSocket,

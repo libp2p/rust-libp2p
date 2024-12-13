@@ -1,7 +1,9 @@
-use futures::FutureExt;
-use std::task::{Context, Poll, Waker};
-use std::time::Duration;
+use std::{
+    task::{Context, Poll, Waker},
+    time::Duration,
+};
 
+use futures::FutureExt;
 use futures_timer::Delay;
 
 /// Default value chosen at `<https://github.com/libp2p/rust-libp2p/pull/4838#discussion_r1490184754>`.
@@ -9,18 +11,18 @@ pub(crate) const DEFAULT_AUTOMATIC_THROTTLE: Duration = Duration::from_millis(50
 
 #[derive(Debug)]
 pub(crate) struct Status {
-    /// If the user did not disable periodic bootstrap (by providing `None` for `periodic_interval`)
-    /// this is the periodic interval and the delay of the current period. When `Delay` finishes,
-    /// a bootstrap will be triggered and the `Delay` will be reset.
+    /// If the user did not disable periodic bootstrap (by providing `None` for
+    /// `periodic_interval`) this is the periodic interval and the delay of the current period.
+    /// When `Delay` finishes, a bootstrap will be triggered and the `Delay` will be reset.
     interval_and_delay: Option<(Duration, Delay)>,
 
     /// Configured duration to wait before triggering a bootstrap when a new peer
     /// is inserted in the routing table. `None` if automatic bootstrap is disabled.
     automatic_throttle: Option<Duration>,
     /// Timer that will be set (if automatic bootstrap is not disabled) when a new peer is inserted
-    /// in the routing table. When it finishes, it will trigger a bootstrap and will be set to `None`
-    /// again. If an other new peer is inserted in the routing table before this timer finishes,
-    /// the timer is reset.
+    /// in the routing table. When it finishes, it will trigger a bootstrap and will be set to
+    /// `None` again. If an other new peer is inserted in the routing table before this timer
+    /// finishes, the timer is reset.
     throttle_timer: Option<ThrottleTimer>,
 
     /// Number of bootstrap requests currently in progress. We ensure neither periodic bootstrap
@@ -108,16 +110,19 @@ impl Status {
             // A `throttle_timer` has been registered. It means one or more peers have been
             // inserted into the routing table and that a bootstrap request should be triggered.
             // However, to not risk cascading bootstrap requests, we wait a little time to ensure
-            // the user will not add more peers in the routing table in the next "throttle_timer" remaining.
+            // the user will not add more peers in the routing table in the next "throttle_timer"
+            // remaining.
             if throttle_delay.poll_unpin(cx).is_ready() {
                 // The `throttle_timer` is finished, triggering bootstrap right now.
                 // The call to `on_started` will reset `throttle_delay`.
                 return Poll::Ready(());
             }
 
-            // The `throttle_timer` is not finished but the periodic interval for triggering bootstrap might be reached.
+            // The `throttle_timer` is not finished but the periodic interval for triggering
+            // bootstrap might be reached.
         } else {
-            // No new peer has recently been inserted into the routing table or automatic bootstrap is disabled.
+            // No new peer has recently been inserted into the routing table or automatic bootstrap
+            // is disabled.
         }
 
         // Checking if the user has enabled the periodic bootstrap feature.
@@ -131,7 +136,8 @@ impl Status {
             // The user disabled periodic bootstrap.
         }
 
-        // Registering the `waker` so that we can wake up when calling `on_new_peer_in_routing_table`.
+        // Registering the `waker` so that we can wake up when calling
+        // `on_new_peer_in_routing_table`.
         self.waker = Some(cx.waker().clone());
         Poll::Pending
     }
@@ -175,8 +181,9 @@ impl futures::Future for ThrottleTimer {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use web_time::Instant;
+
+    use super::*;
 
     const MS_5: Duration = Duration::from_millis(5);
     const MS_100: Duration = Duration::from_millis(100);
@@ -296,7 +303,8 @@ mod tests {
 
             let elapsed = Instant::now().duration_since(start);
 
-            assert!(elapsed > (i * MS_100 - Duration::from_millis(10))); // Subtract 10ms to avoid flakes.
+            // Subtract 10ms to avoid flakes.
+            assert!(elapsed > (i * MS_100 - Duration::from_millis(10)));
         }
     }
 
@@ -308,7 +316,8 @@ mod tests {
         status.trigger();
         for _ in 0..10 {
             Delay::new(MS_100 / 2).await;
-            status.trigger(); // should reset throttle_timer
+            // should reset throttle_timer
+            status.trigger();
         }
         assert!(
             status.next().now_or_never().is_none(),
@@ -330,9 +339,12 @@ mod tests {
     ) {
         let mut status = Status::new(Some(MS_100), None);
 
-        status.on_started(); // first manually triggering
-        status.on_started(); // second manually triggering
-        status.on_finish(); // one finishes
+        // first manually triggering
+        status.on_started();
+        // second manually triggering
+        status.on_started();
+        // one finishes
+        status.on_finish();
 
         assert!(
             async_std::future::timeout(10 * MS_100, status.next())

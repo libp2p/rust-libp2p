@@ -20,31 +20,31 @@
 
 //! Configuration of transport protocol upgrades.
 
-pub use crate::upgrade::Version;
-
-use crate::transport::DialOpts;
-use crate::{
-    connection::ConnectedPoint,
-    muxing::{StreamMuxer, StreamMuxerBox},
-    transport::{
-        and_then::AndThen, boxed::boxed, timeout::TransportTimeout, ListenerId, Transport,
-        TransportError, TransportEvent,
-    },
-    upgrade::{
-        self, apply_inbound, apply_outbound, InboundConnectionUpgrade, InboundUpgradeApply,
-        OutboundConnectionUpgrade, OutboundUpgradeApply, UpgradeError,
-    },
-    Negotiated,
-};
-use futures::{prelude::*, ready};
-use libp2p_identity::PeerId;
-use multiaddr::Multiaddr;
 use std::{
     error::Error,
     fmt,
     pin::Pin,
     task::{Context, Poll},
     time::Duration,
+};
+
+use futures::{prelude::*, ready};
+use libp2p_identity::PeerId;
+use multiaddr::Multiaddr;
+
+pub use crate::upgrade::Version;
+use crate::{
+    connection::ConnectedPoint,
+    muxing::{StreamMuxer, StreamMuxerBox},
+    transport::{
+        and_then::AndThen, boxed::boxed, timeout::TransportTimeout, DialOpts, ListenerId,
+        Transport, TransportError, TransportEvent,
+    },
+    upgrade::{
+        self, apply_inbound, apply_outbound, InboundConnectionUpgrade, InboundUpgradeApply,
+        OutboundConnectionUpgrade, OutboundUpgradeApply, UpgradeError,
+    },
+    Negotiated,
 };
 
 /// A `Builder` facilitates upgrading of a [`Transport`] for use with
@@ -59,13 +59,13 @@ use std::{
 /// It thus enforces the following invariants on every transport
 /// obtained from [`multiplex`](Authenticated::multiplex):
 ///
-///   1. The transport must be [authenticated](Builder::authenticate)
-///      and [multiplexed](Authenticated::multiplex).
+///   1. The transport must be [authenticated](Builder::authenticate) and
+///      [multiplexed](Authenticated::multiplex).
 ///   2. Authentication must precede the negotiation of a multiplexer.
 ///   3. Applying a multiplexer is the last step in the upgrade process.
-///   4. The [`Transport::Output`] conforms to the requirements of a `Swarm`,
-///      namely a tuple of a [`PeerId`] (from the authentication upgrade) and a
-///      [`StreamMuxer`] (from the multiplexing upgrade).
+///   4. The [`Transport::Output`] conforms to the requirements of a `Swarm`, namely a tuple of a
+///      [`PeerId`] (from the authentication upgrade) and a [`StreamMuxer`] (from the multiplexing
+///      upgrade).
 #[derive(Clone)]
 pub struct Builder<T> {
     inner: T,

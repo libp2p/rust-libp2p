@@ -11,9 +11,10 @@ keywords = ["peer-to-peer", "libp2p", "networking"]
 categories = ["network-programming", "asynchronous"]
 
 [features]
-wasm-bindgen = ["getrandom/js"]
+wasm-bindgen = ["getrandom/js", "futures-timer/wasm-bindgen"]
 
 [dependencies]
+async-channel = "2.3.1"
 asynchronous-codec = { workspace = true }
 base64 = "0.22.1"
 byteorder = "1.5.0"
@@ -21,7 +22,7 @@ bytes = "1.6"
 either = "1.11"
 fnv = "1.0.7"
 futures = { workspace = true }
-futures-ticker = "0.0.3"
+futures-timer = "3.0.2"
 getrandom = "0.2.15"
 hex_fmt = "0.3.0"
 web-time = { workspace = true }
@@ -36,13 +37,11 @@ serde = { version = "1", optional = true, features = ["derive"] }
 sha2 = "0.10.8"
 smallvec = "1.13.2"
 tracing = { workspace = true }
-void = "1.0.2"
 
 # Metrics dependencies
 prometheus-client = { workspace = true }
 
 [dev-dependencies]
-async-std = { version = "1.6.3", features = ["unstable"] }
 hex = "0.4.2"
 libp2p-core = { workspace = true }
 libp2p-yamux = { workspace = true }
@@ -50,6 +49,7 @@ libp2p-noise = { workspace = true }
 libp2p-swarm-test = { path = "../../swarm-test" }
 quickcheck = { workspace = true }
 tracing-subscriber = { workspace = true, features = ["env-filter"] }
+tokio = { workspace = true, features = ["rt", "rt-multi-thread", "time", "macros"] }
 
 # Passing arguments to the docsrs builder in order to properly document cfg's.
 # More information: https://docs.rs/about/builds#cross-compiling

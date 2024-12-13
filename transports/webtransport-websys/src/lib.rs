@@ -1,5 +1,7 @@
 //! Libp2p WebTransport built on [web-sys](https://rustwasm.github.io/wasm-bindgen/web-sys/index.html)
 
+#![allow(unexpected_cfgs)]
+
 mod bindings;
 mod connection;
 mod endpoint;
@@ -9,7 +11,9 @@ mod stream;
 mod transport;
 mod utils;
 
-pub use self::connection::Connection;
-pub use self::error::Error;
-pub use self::stream::Stream;
-pub use self::transport::{Config, Transport};
+pub use self::{
+    connection::Connection,
+    error::Error,
+    stream::Stream,
+    transport::{Config, Transport},
+};

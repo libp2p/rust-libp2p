@@ -19,6 +19,8 @@ use bandwidth_metrics::*;
 use behaviour::*;
 use build::*;
 use dns::*;
+use libp2p_core::{muxing::StreamMuxerBox, Transport};
+use libp2p_identity::Keypair;
 use other_transport::*;
 use provider::*;
 use quic::*;
@@ -27,12 +29,14 @@ use swarm::*;
 use tcp::*;
 use websocket::*;
 
-use super::select_muxer::SelectMuxerUpgrade;
-use super::select_security::SelectSecurityUpgrade;
-use super::SwarmBuilder;
+pub use behaviour::BehaviourError;
+pub use other_transport::TransportError;
+#[cfg(all(not(target_arch = "wasm32"), feature = "websocket"))]
+pub use websocket::WebsocketError;
 
-use libp2p_core::{muxing::StreamMuxerBox, Transport};
-use libp2p_identity::Keypair;
+use super::{
+    select_muxer::SelectMuxerUpgrade, select_security::SelectSecurityUpgrade, SwarmBuilder,
+};
 
 #[allow(unreachable_pub)]
 pub trait IntoSecurityUpgrade<C> {

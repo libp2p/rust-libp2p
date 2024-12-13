@@ -18,14 +18,15 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use asynchronous_codec::{Decoder, Encoder};
-use bytes::{BufMut, Bytes, BytesMut};
-use libp2p_core::Endpoint;
 use std::{
     fmt,
     hash::{Hash, Hasher},
     io, mem,
 };
+
+use asynchronous_codec::{Decoder, Encoder};
+use bytes::{BufMut, Bytes, BytesMut};
+use libp2p_core::Endpoint;
 use unsigned_varint::{codec, encode};
 
 // Maximum size for a packet: 1MB as per the spec.

@@ -18,19 +18,19 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::proto;
-use crate::topic::Topic;
+use std::{io, iter, pin::Pin};
+
 use asynchronous_codec::Framed;
 use bytes::Bytes;
 use futures::{
     io::{AsyncRead, AsyncWrite},
-    Future,
+    Future, SinkExt, StreamExt,
 };
-use futures::{SinkExt, StreamExt};
 use libp2p_core::{InboundUpgrade, OutboundUpgrade, UpgradeInfo};
 use libp2p_identity::PeerId;
 use libp2p_swarm::StreamProtocol;
-use std::{io, iter, pin::Pin};
+
+use crate::{proto, topic::Topic};
 
 const MAX_MESSAGE_LEN_BYTES: usize = 2048;
 

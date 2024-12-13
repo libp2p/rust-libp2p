@@ -20,23 +20,26 @@
 
 mod peers;
 
-use libp2p_core::Multiaddr;
-use peers::closest::{
-    disjoint::ClosestDisjointPeersIter, ClosestPeersIter, ClosestPeersIterConfig,
-};
-use peers::fixed::FixedPeersIter;
-use peers::PeersIterState;
-use smallvec::SmallVec;
+use std::{num::NonZeroUsize, time::Duration};
 
-use crate::behaviour::PeerInfo;
-use crate::handler::HandlerIn;
-use crate::kbucket::{Key, KeyBytes};
-use crate::{QueryInfo, ALPHA_VALUE, K_VALUE};
 use either::Either;
 use fnv::FnvHashMap;
+use libp2p_core::Multiaddr;
 use libp2p_identity::PeerId;
-use std::{num::NonZeroUsize, time::Duration};
+use peers::{
+    closest::{disjoint::ClosestDisjointPeersIter, ClosestPeersIter, ClosestPeersIterConfig},
+    fixed::FixedPeersIter,
+    PeersIterState,
+};
+use smallvec::SmallVec;
 use web_time::Instant;
+
+use crate::{
+    behaviour::PeerInfo,
+    handler::HandlerIn,
+    kbucket::{Key, KeyBytes},
+    QueryInfo, ALPHA_VALUE, K_VALUE,
+};
 
 /// A `QueryPool` provides an aggregate state machine for driving `Query`s to completion.
 ///

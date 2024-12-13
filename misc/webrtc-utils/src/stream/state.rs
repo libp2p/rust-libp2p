@@ -18,9 +18,9 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use bytes::Bytes;
-
 use std::io;
+
+use bytes::Bytes;
 
 use crate::proto::Flag;
 
@@ -46,8 +46,8 @@ pub(crate) enum State {
 
 /// Represents the state of closing one half (either read or write) of the connection.
 ///
-/// Gracefully closing the read or write requires sending the `STOP_SENDING` or `FIN` flag respectively
-/// and flushing the underlying connection.
+/// Gracefully closing the read or write requires sending the `STOP_SENDING` or `FIN` flag
+/// respectively and flushing the underlying connection.
 #[derive(Debug, Copy, Clone)]
 pub(crate) enum Closing {
     Requested,
@@ -181,8 +181,8 @@ impl State {
 
     /// Whether we should read from the stream in the [`futures::AsyncWrite`] implementation.
     ///
-    /// This is necessary for read-closed streams because we would otherwise not read any more flags from
-    /// the socket.
+    /// This is necessary for read-closed streams because we would otherwise
+    /// not read any more flags from the socket.
     pub(crate) fn read_flags_in_async_write(&self) -> bool {
         matches!(self, Self::ReadClosed)
     }
@@ -324,8 +324,9 @@ impl State {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use std::io::ErrorKind;
+
+    use super::*;
 
     #[test]
     fn cannot_read_after_receiving_fin() {

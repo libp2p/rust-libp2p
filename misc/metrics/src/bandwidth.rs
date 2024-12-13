@@ -1,4 +1,10 @@
-use crate::protocol_stack;
+use std::{
+    convert::TryFrom as _,
+    io,
+    pin::Pin,
+    task::{Context, Poll},
+};
+
 use futures::{
     future::{MapOk, TryFutureExt},
     io::{IoSlice, IoSliceMut},
@@ -16,12 +22,8 @@ use prometheus_client::{
     metrics::{counter::Counter, family::Family},
     registry::{Registry, Unit},
 };
-use std::{
-    convert::TryFrom as _,
-    io,
-    pin::Pin,
-    task::{Context, Poll},
-};
+
+use crate::protocol_stack;
 
 #[derive(Debug, Clone)]
 #[pin_project::pin_project]

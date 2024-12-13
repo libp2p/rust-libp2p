@@ -1,7 +1,14 @@
-use futures::channel::{mpsc, oneshot};
-use futures::prelude::*;
-use futures::StreamExt;
+use std::{
+    collections::{hash_map, HashMap, HashSet},
+    error::Error,
+    time::Duration,
+};
 
+use futures::{
+    channel::{mpsc, oneshot},
+    prelude::*,
+    StreamExt,
+};
 use libp2p::{
     core::Multiaddr,
     identity, kad,
@@ -9,19 +16,13 @@ use libp2p::{
     noise,
     request_response::{self, OutboundRequestId, ProtocolSupport, ResponseChannel},
     swarm::{NetworkBehaviour, Swarm, SwarmEvent},
-    tcp, yamux, PeerId,
+    tcp, yamux, PeerId, StreamProtocol,
 };
-
-use libp2p::StreamProtocol;
 use serde::{Deserialize, Serialize};
-use std::collections::{hash_map, HashMap, HashSet};
-use std::error::Error;
-use std::time::Duration;
 
 /// Creates the network components, namely:
 ///
-/// - The network client to interact with the network layer from anywhere
-///   within your application.
+/// - The network client to interact with the network layer from anywhere within your application.
 ///
 /// - The network event stream, e.g. for incoming requests.
 ///

@@ -3,7 +3,7 @@ name = "libp2p"
 edition = "2021"
 rust-version = { workspace = true }
 description = "Peer-to-peer networking library"
-version = "0.54.1"
+version = "0.54.2"
 authors = ["Parity Technologies <admin@parity.io>"]
 license = "MIT"
 repository = "https://github.com/libp2p/rust-libp2p"
@@ -122,7 +122,7 @@ libp2p-webtransport-websys = { workspace = true, optional = true }
 libp2p-yamux = { workspace = true, optional = true }
 multiaddr = { workspace = true }
 pin-project = "1.0.0"
-thiserror = "1.0"
+thiserror = { workspace = true }
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 libp2p-dns = { workspace = true, optional = true }
@@ -142,7 +142,6 @@ clap = { version = "4.1.6", features = ["derive"] }
 tokio = { workspace = true, features = [ "io-util", "io-std", "macros", "rt", "rt-multi-thread"] }
 
 libp2p-mplex = { workspace = true }
-libp2p-noise = { workspace = true }
 libp2p-tcp = { workspace = true, features = ["tokio"] }
 tracing-subscriber = { workspace = true, features = ["env-filter"] }
 

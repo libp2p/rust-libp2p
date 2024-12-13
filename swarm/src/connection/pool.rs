@@ -18,40 +18,40 @@
 // LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
-use crate::connection::{Connection, ConnectionId, PendingPoint};
+use std::{
+    collections::HashMap,
+    convert::Infallible,
+    fmt,
+    num::{NonZeroU8, NonZeroUsize},
+    pin::Pin,
+    task::{Context, Poll, Waker},
+};
+
+use concurrent_dial::ConcurrentDial;
+use fnv::FnvHashMap;
+use futures::{
+    channel::{mpsc, oneshot},
+    future::{poll_fn, BoxFuture, Either},
+    prelude::*,
+    ready,
+    stream::{FuturesUnordered, SelectAll},
+};
+use libp2p_core::{
+    connection::Endpoint,
+    muxing::{StreamMuxerBox, StreamMuxerExt},
+    transport::PortUse,
+};
+use tracing::Instrument;
+use web_time::{Duration, Instant};
+
 use crate::{
     connection::{
-        Connected, ConnectionError, IncomingInfo, PendingConnectionError,
-        PendingInboundConnectionError, PendingOutboundConnectionError,
+        Connected, Connection, ConnectionError, ConnectionId, IncomingInfo, PendingConnectionError,
+        PendingInboundConnectionError, PendingOutboundConnectionError, PendingPoint,
     },
     transport::TransportError,
     ConnectedPoint, ConnectionHandler, Executor, Multiaddr, PeerId,
 };
-use concurrent_dial::ConcurrentDial;
-use fnv::FnvHashMap;
-use futures::prelude::*;
-use futures::stream::SelectAll;
-use futures::{
-    channel::{mpsc, oneshot},
-    future::{poll_fn, BoxFuture, Either},
-    ready,
-    stream::FuturesUnordered,
-};
-use libp2p_core::connection::Endpoint;
-use libp2p_core::muxing::{StreamMuxerBox, StreamMuxerExt};
-use libp2p_core::transport::PortUse;
-use std::task::Waker;
-use std::{
-    collections::HashMap,
-    fmt,
-    num::{NonZeroU8, NonZeroUsize},
-    pin::Pin,
-    task::Context,
-    task::Poll,
-};
-use tracing::Instrument;
-use void::Void;
-use web_time::{Duration, Instant};
 
 mod concurrent_dial;
 mod task;
@@ -115,7 +115,8 @@ where
     /// See [`Connection::max_negotiating_inbound_streams`].
     max_negotiating_inbound_streams: usize,
 
-    /// How many [`task::EstablishedConnectionEvent`]s can be buffered before the connection is back-pressured.
+    /// How many [`task::EstablishedConnectionEvent`]s can be buffered before the connection is
+    /// back-pressured.
     per_connection_event_buffer_size: usize,
 
     /// The executor to use for running connection tasks. Can either be a global executor
@@ -200,14 +201,14 @@ struct PendingConnection {
     peer_id: Option<PeerId>,
     endpoint: PendingPoint,
     /// When dropped, notifies the task which then knows to terminate.
-    abort_notifier: Option<oneshot::Sender<Void>>,
+    abort_notifier: Option<oneshot::Sender<Infallible>>,
     /// The moment we became aware of this possible connection, useful for timing metrics.
     accepted_at: Instant,
 }
 
 impl PendingConnection {
     fn is_for_same_remote_as(&self, other: PeerId) -> bool {
-        self.peer_id.map_or(false, |peer| peer == other)
+        self.peer_id == Some(other)
     }
 
     /// Aborts the connection attempt, closing the connection.
@@ -247,13 +248,11 @@ pub(crate) enum PoolEvent<ToBehaviour> {
     ///
     /// A connection may close if
     ///
-    ///   * it encounters an error, which includes the connection being
-    ///     closed by the remote. In this case `error` is `Some`.
-    ///   * it was actively closed by [`EstablishedConnection::start_close`],
-    ///     i.e. a successful, orderly close.
-    ///   * it was actively closed by [`Pool::disconnect`], i.e.
-    ///     dropped without an orderly close.
-    ///
+    ///   * it encounters an error, which includes the connection being closed by the remote. In
+    ///     this case `error` is `Some`.
+    ///   * it was actively closed by [`EstablishedConnection::start_close`], i.e. a successful,
+    ///     orderly close.
+    ///   * it was actively closed by [`Pool::disconnect`], i.e. dropped without an orderly close.
     ConnectionClosed {
         id: ConnectionId,
         /// Information about the connection that errored.
@@ -990,7 +989,7 @@ impl PoolConfig {
             task_command_buffer_size: 32,
             per_connection_event_buffer_size: 7,
             dial_concurrency_factor: NonZeroU8::new(8).expect("8 > 0"),
-            idle_connection_timeout: Duration::ZERO,
+            idle_connection_timeout: Duration::from_secs(10),
             substream_upgrade_protocol_override: None,
             max_negotiating_inbound_streams: 128,
         }

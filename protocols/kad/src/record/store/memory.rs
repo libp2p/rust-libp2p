@@ -18,12 +18,15 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use super::*;
+use std::{
+    collections::{hash_map, hash_set, HashMap, HashSet},
+    iter,
+};
 
-use crate::kbucket;
 use smallvec::SmallVec;
-use std::collections::{hash_map, hash_set, HashMap, HashSet};
-use std::iter;
+
+use super::*;
+use crate::kbucket;
 
 /// In-memory implementation of a `RecordStore`.
 pub struct MemoryStore {
@@ -208,10 +211,11 @@ impl RecordStore for MemoryStore {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use crate::SHA_256_MH;
     use quickcheck::*;
     use rand::Rng;
+
+    use super::*;
+    use crate::SHA_256_MH;
 
     fn random_multihash() -> Multihash<64> {
         Multihash::wrap(SHA_256_MH, &rand::thread_rng().gen::<[u8; 32]>()).unwrap()

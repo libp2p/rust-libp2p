@@ -18,15 +18,17 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::proto;
+use std::io;
+
 use asynchronous_codec::{FramedRead, FramedWrite};
 use futures::prelude::*;
 use libp2p_core::{multiaddr, Multiaddr};
 use libp2p_identity as identity;
 use libp2p_identity::PublicKey;
 use libp2p_swarm::StreamProtocol;
-use std::io;
 use thiserror::Error;
+
+use crate::proto;
 
 const MAX_MESSAGE_SIZE_BYTES: usize = 4096;
 
@@ -77,7 +79,8 @@ impl Info {
 }
 
 /// Identify push information of a peer sent in protocol messages.
-/// Note that missing fields should be ignored, as peers may choose to send partial updates containing only the fields whose values have changed.
+/// Note that missing fields should be ignored, as peers may choose to send partial updates
+/// containing only the fields whose values have changed.
 #[derive(Debug, Clone)]
 pub struct PushInfo {
     pub public_key: Option<PublicKey>,
@@ -264,8 +267,9 @@ pub enum UpgradeError {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use libp2p_identity as identity;
+
+    use super::*;
 
     #[test]
     fn skip_invalid_multiaddr() {

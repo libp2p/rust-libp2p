@@ -38,21 +38,24 @@
 ))]
 #![cfg_attr(docsrs, feature(doc_cfg, doc_auto_cfg))]
 
-use futures::stream::BoxStream;
+use std::{
+    collections::VecDeque,
+    io,
+    path::PathBuf,
+    pin::Pin,
+    task::{Context, Poll},
+};
+
 use futures::{
     future::{BoxFuture, Ready},
     prelude::*,
+    stream::BoxStream,
 };
-use libp2p_core::transport::ListenerId;
 use libp2p_core::{
     multiaddr::{Multiaddr, Protocol},
-    transport::{DialOpts, TransportError, TransportEvent},
+    transport::{DialOpts, ListenerId, TransportError, TransportEvent},
     Transport,
 };
-use std::collections::VecDeque;
-use std::pin::Pin;
-use std::task::{Context, Poll};
-use std::{io, path::PathBuf};
 
 pub type Listener<T> = BoxStream<
     'static,
@@ -241,14 +244,16 @@ fn multiaddr_to_path(addr: &Multiaddr) -> Result<PathBuf, ()> {
 
 #[cfg(all(test, feature = "async-std"))]
 mod tests {
-    use super::{multiaddr_to_path, UdsConfig};
+    use std::{borrow::Cow, path::Path};
+
     use futures::{channel::oneshot, prelude::*};
     use libp2p_core::{
         multiaddr::{Multiaddr, Protocol},
         transport::{DialOpts, ListenerId, PortUse},
         Endpoint, Transport,
     };
-    use std::{borrow::Cow, path::Path};
+
+    use super::{multiaddr_to_path, UdsConfig};
 
     #[test]
     fn multiaddr_to_path_conversion() {

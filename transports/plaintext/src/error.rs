@@ -18,9 +18,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use std::error;
-use std::fmt;
-use std::io::Error as IoError;
+use std::{error, fmt, io::Error as IoError};
 
 #[derive(Debug)]
 pub enum Error {

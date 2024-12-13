@@ -1,9 +1,9 @@
-#[allow(unused_imports)]
-use super::*;
-
-use crate::SwarmBuilder;
 use libp2p_core::Transport;
 use libp2p_swarm::Swarm;
+
+#[allow(unused_imports)]
+use super::*;
+use crate::SwarmBuilder;
 
 pub struct BuildPhase<T, B> {
     pub(crate) behaviour: B,

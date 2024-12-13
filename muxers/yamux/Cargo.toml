@@ -14,7 +14,7 @@ categories = ["network-programming", "asynchronous"]
 either = "1"
 futures = { workspace = true }
 libp2p-core = { workspace = true }
-thiserror = "1.0"
+thiserror = { workspace = true }
 yamux012 = { version = "0.12.1", package = "yamux" }
 yamux013 = { version = "0.13.3", package = "yamux" }
 tracing = { workspace = true }

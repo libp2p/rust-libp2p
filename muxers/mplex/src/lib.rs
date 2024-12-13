@@ -26,15 +26,22 @@ mod codec;
 mod config;
 mod io;
 
-pub use config::{MaxBufferBehaviour, MplexConfig};
+use std::{
+    cmp, iter,
+    pin::Pin,
+    sync::Arc,
+    task::{Context, Poll},
+};
 
 use bytes::Bytes;
 use codec::LocalStreamId;
+pub use config::{MaxBufferBehaviour, MplexConfig};
 use futures::{prelude::*, ready};
-use libp2p_core::muxing::{StreamMuxer, StreamMuxerEvent};
-use libp2p_core::upgrade::{InboundConnectionUpgrade, OutboundConnectionUpgrade, UpgradeInfo};
+use libp2p_core::{
+    muxing::{StreamMuxer, StreamMuxerEvent},
+    upgrade::{InboundConnectionUpgrade, OutboundConnectionUpgrade, UpgradeInfo},
+};
 use parking_lot::Mutex;
-use std::{cmp, iter, pin::Pin, sync::Arc, task::Context, task::Poll};
 
 impl UpgradeInfo for MplexConfig {
     type Info = &'static str;

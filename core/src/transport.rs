@@ -25,8 +25,6 @@
 //! any desired protocols. The rest of the module defines combinators for
 //! modifying a transport through composition with other transports or protocol upgrades.
 
-use futures::prelude::*;
-use multiaddr::Multiaddr;
 use std::{
     error::Error,
     fmt,
@@ -34,6 +32,9 @@ use std::{
     sync::atomic::{AtomicUsize, Ordering},
     task::{Context, Poll},
 };
+
+use futures::prelude::*;
+use multiaddr::Multiaddr;
 
 pub mod and_then;
 pub mod choice;
@@ -48,13 +49,11 @@ pub mod upgrade;
 mod boxed;
 mod optional;
 
+pub use self::{
+    boxed::Boxed, choice::OrTransport, memory::MemoryTransport, optional::OptionalTransport,
+    upgrade::Upgrade,
+};
 use crate::{ConnectedPoint, Endpoint};
-
-pub use self::boxed::Boxed;
-pub use self::choice::OrTransport;
-pub use self::memory::MemoryTransport;
-pub use self::optional::OptionalTransport;
-pub use self::upgrade::Upgrade;
 
 static NEXT_LISTENER_ID: AtomicUsize = AtomicUsize::new(1);
 
@@ -75,8 +74,9 @@ pub enum PortUse {
 pub struct DialOpts {
     /// The endpoint establishing a new connection.
     ///
-    /// When attempting a hole-punch, both parties simultaneously "dial" each other but one party has to be the "listener" on the final connection.
-    /// This option specifies the role of this node in the final connection.
+    /// When attempting a hole-punch, both parties simultaneously "dial" each other but one party
+    /// has to be the "listener" on the final connection. This option specifies the role of
+    /// this node in the final connection.
     pub role: Endpoint,
     /// The port use policy for a new connection.
     pub port_use: PortUse,
@@ -161,10 +161,10 @@ pub trait Transport {
 
     /// Poll for [`TransportEvent`]s.
     ///
-    /// A [`TransportEvent::Incoming`] should be produced whenever a connection is received at the lowest
-    /// level of the transport stack. The item must be a [`ListenerUpgrade`](Transport::ListenerUpgrade)
-    /// future that resolves to an [`Output`](Transport::Output) value once all protocol upgrades have
-    /// been applied.
+    /// A [`TransportEvent::Incoming`] should be produced whenever a connection is received at the
+    /// lowest level of the transport stack. The item must be a
+    /// [`ListenerUpgrade`](Transport::ListenerUpgrade) future that resolves to an
+    /// [`Output`](Transport::Output) value once all protocol upgrades have been applied.
     ///
     /// Transports are expected to produce [`TransportEvent::Incoming`] events only for
     /// listen addresses which have previously been announced via

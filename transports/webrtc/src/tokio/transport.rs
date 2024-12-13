@@ -18,6 +18,13 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
+use std::{
+    io,
+    net::{IpAddr, SocketAddr},
+    pin::Pin,
+    task::{Context, Poll, Waker},
+};
+
 use futures::{future::BoxFuture, prelude::*, stream::SelectAll};
 use if_watch::{tokio::IfWatcher, IfEvent};
 use libp2p_core::{
@@ -27,14 +34,6 @@ use libp2p_core::{
 use libp2p_identity as identity;
 use libp2p_identity::PeerId;
 use webrtc::peer_connection::configuration::RTCConfiguration;
-
-use std::net::IpAddr;
-use std::{
-    io,
-    net::SocketAddr,
-    pin::Pin,
-    task::{Context, Poll, Waker},
-};
 
 use crate::tokio::{
     certificate::Certificate,
@@ -60,8 +59,8 @@ impl Transport {
     ///
     /// ```
     /// use libp2p_identity as identity;
+    /// use libp2p_webrtc::tokio::{Certificate, Transport};
     /// use rand::thread_rng;
-    /// use libp2p_webrtc::tokio::{Transport, Certificate};
     ///
     /// let id_keys = identity::Keypair::generate_ed25519();
     /// let transport = Transport::new(id_keys, Certificate::generate(&mut thread_rng()).unwrap());
@@ -124,8 +123,8 @@ impl libp2p_core::Transport for Transport {
         dial_opts: DialOpts,
     ) -> Result<Self::Dial, TransportError<Self::Error>> {
         if dial_opts.role.is_listener() {
-            // TODO: As the listener of a WebRTC hole punch, we need to send a random UDP packet to the
-            // `addr`. See DCUtR specification below.
+            // TODO: As the listener of a WebRTC hole punch, we need to send a random UDP packet to
+            // the `addr`. See DCUtR specification below.
             //
             // https://github.com/libp2p/specs/blob/master/relay/DCUtR.md#the-protocol
             tracing::warn!("WebRTC hole punch is not yet supported");
@@ -426,11 +425,13 @@ fn parse_webrtc_listen_addr(addr: &Multiaddr) -> Option<SocketAddr> {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use std::net::Ipv6Addr;
+
     use futures::future::poll_fn;
     use libp2p_core::Transport as _;
     use rand::thread_rng;
-    use std::net::Ipv6Addr;
+
+    use super::*;
 
     #[test]
     fn missing_webrtc_protocol() {

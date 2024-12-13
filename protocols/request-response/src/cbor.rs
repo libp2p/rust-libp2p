@@ -37,19 +37,23 @@
 /// }
 ///
 /// let behaviour = cbor::Behaviour::<GreetRequest, GreetResponse>::new(
-///     [(StreamProtocol::new("/my-cbor-protocol"), ProtocolSupport::Full)],
-///     request_response::Config::default()
+///     [(
+///         StreamProtocol::new("/my-cbor-protocol"),
+///         ProtocolSupport::Full,
+///     )],
+///     request_response::Config::default(),
 /// );
 /// ```
 pub type Behaviour<Req, Resp> = crate::Behaviour<codec::Codec<Req, Resp>>;
 
 mod codec {
+    use std::{collections::TryReserveError, convert::Infallible, io, marker::PhantomData};
+
     use async_trait::async_trait;
     use cbor4ii::core::error::DecodeError;
     use futures::prelude::*;
     use libp2p_swarm::StreamProtocol;
     use serde::{de::DeserializeOwned, Serialize};
-    use std::{collections::TryReserveError, convert::Infallible, io, marker::PhantomData};
 
     /// Max request size in bytes
     const REQUEST_SIZE_MAXIMUM: u64 = 1024 * 1024;
@@ -168,12 +172,12 @@ mod codec {
 
 #[cfg(test)]
 mod tests {
-    use crate::cbor::codec::Codec;
-    use crate::Codec as _;
     use futures::AsyncWriteExt;
     use futures_ringbuf::Endpoint;
     use libp2p_swarm::StreamProtocol;
     use serde::{Deserialize, Serialize};
+
+    use crate::{cbor::codec::Codec, Codec as _};
 
     #[async_std::test]
     async fn test_codec() {

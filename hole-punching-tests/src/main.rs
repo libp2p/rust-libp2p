@@ -18,24 +18,27 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
+use std::{
+    collections::HashMap,
+    fmt, io,
+    net::{IpAddr, Ipv4Addr},
+    str::FromStr,
+    time::Duration,
+};
+
 use anyhow::{Context, Result};
 use either::Either;
 use futures::stream::StreamExt;
-use libp2p::core::transport::ListenerId;
-use libp2p::swarm::dial_opts::DialOpts;
-use libp2p::swarm::ConnectionId;
 use libp2p::{
-    core::multiaddr::{Multiaddr, Protocol},
+    core::{
+        multiaddr::{Multiaddr, Protocol},
+        transport::ListenerId,
+    },
     dcutr, identify, noise, ping, relay,
-    swarm::{NetworkBehaviour, SwarmEvent},
+    swarm::{dial_opts::DialOpts, ConnectionId, NetworkBehaviour, SwarmEvent},
     tcp, yamux, Swarm,
 };
 use redis::AsyncCommands;
-use std::collections::HashMap;
-use std::net::{IpAddr, Ipv4Addr};
-use std::str::FromStr;
-use std::time::Duration;
-use std::{fmt, io};
 
 /// The redis key we push the relay's TCP listen address to.
 const RELAY_TCP_ADDRESS: &str = "RELAY_TCP_ADDRESS";

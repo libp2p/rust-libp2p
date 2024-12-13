@@ -1,11 +1,14 @@
-use std::str::FromStr;
-use std::time::Duration;
+use std::{str::FromStr, time::Duration};
 
 use anyhow::{bail, Context, Result};
 use futures::{FutureExt, StreamExt};
-use libp2p::identity::Keypair;
-use libp2p::swarm::SwarmEvent;
-use libp2p::{identify, ping, swarm::NetworkBehaviour, Multiaddr};
+use libp2p::{
+    identify,
+    identity::Keypair,
+    ping,
+    swarm::{NetworkBehaviour, SwarmEvent},
+    Multiaddr,
+};
 #[cfg(target_arch = "wasm32")]
 use wasm_bindgen::prelude::*;
 

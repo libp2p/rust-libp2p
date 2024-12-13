@@ -1,5 +1,5 @@
-use super::*;
-use crate::SwarmBuilder;
+use std::{marker::PhantomData, sync::Arc};
+
 #[cfg(all(not(target_arch = "wasm32"), feature = "websocket"))]
 use libp2p_core::muxing::StreamMuxer;
 use libp2p_core::upgrade::{InboundConnectionUpgrade, OutboundConnectionUpgrade};
@@ -8,7 +8,9 @@ use libp2p_core::upgrade::{InboundConnectionUpgrade, OutboundConnectionUpgrade};
     all(not(target_arch = "wasm32"), feature = "websocket")
 ))]
 use libp2p_core::{InboundUpgrade, Negotiated, OutboundUpgrade, UpgradeInfo};
-use std::{marker::PhantomData, sync::Arc};
+
+use super::*;
+use crate::SwarmBuilder;
 
 pub struct QuicPhase<T> {
     pub(crate) transport: T,

@@ -19,7 +19,6 @@
 // DEALINGS IN THE SOFTWARE.
 
 //! Implementation of the [pnet](https://github.com/libp2p/specs/blob/master/pnet/Private-Networks-PSK-V1.md) protocol.
-//!
 //| The `pnet` protocol implements *Pre-shared Key Based Private Networks in libp2p*.
 //! Libp2p nodes configured with a pre-shared key can only communicate with other nodes with
 //! the same key.
@@ -27,15 +26,6 @@
 #![cfg_attr(docsrs, feature(doc_cfg, doc_auto_cfg))]
 
 mod crypt_writer;
-use crypt_writer::CryptWriter;
-use futures::prelude::*;
-use pin_project::pin_project;
-use rand::RngCore;
-use salsa20::{
-    cipher::{KeyIvInit, StreamCipher},
-    Salsa20, XSalsa20,
-};
-use sha3::{digest::ExtendableOutput, Shake128};
 use std::{
     error,
     fmt::{self, Write},
@@ -46,6 +36,16 @@ use std::{
     str::FromStr,
     task::{Context, Poll},
 };
+
+use crypt_writer::CryptWriter;
+use futures::prelude::*;
+use pin_project::pin_project;
+use rand::RngCore;
+use salsa20::{
+    cipher::{KeyIvInit, StreamCipher},
+    Salsa20, XSalsa20,
+};
+use sha3::{digest::ExtendableOutput, Shake128};
 
 const KEY_SIZE: usize = 32;
 const NONCE_SIZE: usize = 24;
@@ -319,8 +319,9 @@ impl fmt::Display for PnetError {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use quickcheck::*;
+
+    use super::*;
 
     impl Arbitrary for PreSharedKey {
         fn arbitrary(g: &mut Gen) -> PreSharedKey {

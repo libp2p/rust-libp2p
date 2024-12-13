@@ -1,10 +1,9 @@
+use std::{marker::PhantomData, sync::Arc};
+
 use super::*;
 #[allow(deprecated)]
 use crate::bandwidth::BandwidthSinks;
-use crate::transport_ext::TransportExt;
-use crate::SwarmBuilder;
-use std::marker::PhantomData;
-use std::sync::Arc;
+use crate::{transport_ext::TransportExt, SwarmBuilder};
 
 pub struct BandwidthLoggingPhase<T, R> {
     pub(crate) relay_behaviour: R,

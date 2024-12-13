@@ -18,13 +18,21 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::upgrade::{InboundConnectionUpgrade, OutboundConnectionUpgrade, UpgradeError};
-use crate::{connection::ConnectedPoint, Negotiated};
-use futures::{future::Either, prelude::*};
-use multistream_select::{DialerSelectFuture, ListenerSelectFuture};
-use std::{mem, pin::Pin, task::Context, task::Poll};
+use std::{
+    mem,
+    pin::Pin,
+    task::{Context, Poll},
+};
 
+use futures::{future::Either, prelude::*};
 pub(crate) use multistream_select::Version;
+use multistream_select::{DialerSelectFuture, ListenerSelectFuture};
+
+use crate::{
+    connection::ConnectedPoint,
+    upgrade::{InboundConnectionUpgrade, OutboundConnectionUpgrade, UpgradeError},
+    Negotiated,
+};
 
 // TODO: Still needed?
 /// Applies an upgrade to the inbound and outbound direction of a connection or substream.

@@ -21,17 +21,17 @@
 mod connecting;
 mod stream;
 
-pub use connecting::Connecting;
-pub use stream::Stream;
-
-use crate::{ConnectionError, Error};
-
-use futures::{future::BoxFuture, FutureExt};
-use libp2p_core::muxing::{StreamMuxer, StreamMuxerEvent};
 use std::{
     pin::Pin,
     task::{Context, Poll},
 };
+
+pub use connecting::Connecting;
+use futures::{future::BoxFuture, FutureExt};
+use libp2p_core::muxing::{StreamMuxer, StreamMuxerEvent};
+pub use stream::Stream;
+
+use crate::{ConnectionError, Error};
 
 /// State for a single opened QUIC connection.
 pub struct Connection {

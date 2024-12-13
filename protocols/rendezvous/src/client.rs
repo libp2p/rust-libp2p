@@ -18,24 +18,28 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::codec::Message::*;
-use crate::codec::{Cookie, ErrorCode, Message, Namespace, NewRegistration, Registration, Ttl};
-use futures::future::BoxFuture;
-use futures::future::FutureExt;
-use futures::stream::FuturesUnordered;
-use futures::stream::StreamExt;
-use libp2p_core::transport::PortUse;
-use libp2p_core::{Endpoint, Multiaddr, PeerRecord};
+use std::{
+    collections::HashMap,
+    iter,
+    task::{Context, Poll},
+    time::Duration,
+};
+
+use futures::{
+    future::{BoxFuture, FutureExt},
+    stream::{FuturesUnordered, StreamExt},
+};
+use libp2p_core::{transport::PortUse, Endpoint, Multiaddr, PeerRecord};
 use libp2p_identity::{Keypair, PeerId, SigningError};
 use libp2p_request_response::{OutboundRequestId, ProtocolSupport};
 use libp2p_swarm::{
     ConnectionDenied, ConnectionId, ExternalAddresses, FromSwarm, NetworkBehaviour, THandler,
     THandlerInEvent, THandlerOutEvent, ToSwarm,
 };
-use std::collections::HashMap;
-use std::iter;
-use std::task::{Context, Poll};
-use std::time::Duration;
+
+use crate::codec::{
+    Cookie, ErrorCode, Message, Message::*, Namespace, NewRegistration, Registration, Ttl,
+};
 
 pub struct Behaviour {
     inner: libp2p_request_response::Behaviour<crate::codec::Codec>,
@@ -47,12 +51,14 @@ pub struct Behaviour {
 
     /// Hold addresses of all peers that we have discovered so far.
     ///
-    /// Storing these internally allows us to assist the [`libp2p_swarm::Swarm`] in dialing by returning addresses from [`NetworkBehaviour::handle_pending_outbound_connection`].
+    /// Storing these internally allows us to assist the [`libp2p_swarm::Swarm`] in dialing by
+    /// returning addresses from [`NetworkBehaviour::handle_pending_outbound_connection`].
     discovered_peers: HashMap<(PeerId, Namespace), Vec<Multiaddr>>,
 
     registered_namespaces: HashMap<(PeerId, Namespace), Ttl>,
 
-    /// Tracks the expiry of registrations that we have discovered and stored in `discovered_peers` otherwise we have a memory leak.
+    /// Tracks the expiry of registrations that we have discovered and stored in `discovered_peers`
+    /// otherwise we have a memory leak.
     expiring_registrations: FuturesUnordered<BoxFuture<'static, (PeerId, Namespace)>>,
 
     external_addresses: ExternalAddresses,
@@ -81,8 +87,9 @@ impl Behaviour {
 
     /// Register our external addresses in the given namespace with the given rendezvous peer.
     ///
-    /// External addresses are either manually added via [`libp2p_swarm::Swarm::add_external_address`] or reported
-    /// by other [`NetworkBehaviour`]s via [`ToSwarm::ExternalAddrConfirmed`].
+    /// External addresses are either manually added via
+    /// [`libp2p_swarm::Swarm::add_external_address`] or reported by other [`NetworkBehaviour`]s
+    /// via [`ToSwarm::ExternalAddrConfirmed`].
     pub fn register(
         &mut self,
         namespace: Namespace,

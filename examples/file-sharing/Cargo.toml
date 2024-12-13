@@ -16,7 +16,6 @@ futures = { workspace = true }
 libp2p = { path = "../../libp2p", features = [ "tokio", "cbor", "dns", "kad", "noise", "macros", "request-response", "tcp", "websocket", "yamux"] }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true, features = ["env-filter"] }
-void = "1.0.2"
 
 [lints]
 workspace = true

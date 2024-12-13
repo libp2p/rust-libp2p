@@ -18,13 +18,14 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::{
-    multiaddr::{Multiaddr, Protocol},
-    transport::{DialOpts, ListenerId, TransportError, TransportEvent},
-};
 use std::{
     pin::Pin,
     task::{Context, Poll},
+};
+
+use crate::{
+    multiaddr::{Multiaddr, Protocol},
+    transport::{DialOpts, ListenerId, TransportError, TransportEvent},
 };
 
 /// Dropping all dial requests to non-global IP addresses.
@@ -104,7 +105,8 @@ mod ipv4_global {
 
     /// Returns [`true`] if the address appears to be globally reachable
     /// as specified by the [IANA IPv4 Special-Purpose Address Registry].
-    /// Whether or not an address is practically reachable will depend on your network configuration.
+    /// Whether or not an address is practically reachable will depend on your network
+    /// configuration.
     ///
     /// Most IPv4 addresses are globally reachable;
     /// unless they are specifically defined as *not* globally reachable.
@@ -121,7 +123,8 @@ mod ipv4_global {
     /// - Reserved addresses ([`is_reserved`](Ipv4Addr::is_reserved))
     /// - The [broadcast address] ([`is_broadcast`](Ipv4Addr::is_broadcast))
     ///
-    /// For the complete overview of which addresses are globally reachable, see the table at the [IANA IPv4 Special-Purpose Address Registry].
+    /// For the complete overview of which addresses are globally reachable, see the table at the
+    /// [IANA IPv4 Special-Purpose Address Registry].
     ///
     /// [IANA IPv4 Special-Purpose Address Registry]: https://www.iana.org/assignments/iana-ipv4-special-registry/iana-ipv4-special-registry.xhtml
     /// [unspecified address]: Ipv4Addr::UNSPECIFIED
@@ -154,9 +157,10 @@ mod ipv6_global {
     /// Returns `true` if the address is a unicast address with link-local scope,
     /// as defined in [RFC 4291].
     ///
-    /// A unicast address has link-local scope if it has the prefix `fe80::/10`, as per [RFC 4291 section 2.4].
-    /// Note that this encompasses more addresses than those defined in [RFC 4291 section 2.5.6],
-    /// which describes "Link-Local IPv6 Unicast Addresses" as having the following stricter format:
+    /// A unicast address has link-local scope if it has the prefix `fe80::/10`, as per [RFC 4291
+    /// section 2.4]. Note that this encompasses more addresses than those defined in [RFC 4291
+    /// section 2.5.6], which describes "Link-Local IPv6 Unicast Addresses" as having the
+    /// following stricter format:
     ///
     /// ```text
     /// | 10 bits  |         54 bits         |          64 bits           |
@@ -164,12 +168,14 @@ mod ipv6_global {
     /// |1111111010|           0             |       interface ID         |
     /// +----------+-------------------------+----------------------------+
     /// ```
-    /// So while currently the only addresses with link-local scope an application will encounter are all in `fe80::/64`,
-    /// this might change in the future with the publication of new standards. More addresses in `fe80::/10` could be allocated,
-    /// and those addresses will have link-local scope.
+    /// So while currently the only addresses with link-local scope an application will encounter
+    /// are all in `fe80::/64`, this might change in the future with the publication of new
+    /// standards. More addresses in `fe80::/10` could be allocated, and those addresses will
+    /// have link-local scope.
     ///
-    /// Also note that while [RFC 4291 section 2.5.3] mentions about the [loopback address] (`::1`) that "it is treated as having Link-Local scope",
-    /// this does not mean that the loopback address actually has link-local scope and this method will return `false` on it.
+    /// Also note that while [RFC 4291 section 2.5.3] mentions about the [loopback address] (`::1`)
+    /// that "it is treated as having Link-Local scope", this does not mean that the loopback
+    /// address actually has link-local scope and this method will return `false` on it.
     ///
     /// [RFC 4291]: https://tools.ietf.org/html/rfc4291
     /// [RFC 4291 section 2.4]: https://tools.ietf.org/html/rfc4291#section-2.4
@@ -207,7 +213,8 @@ mod ipv6_global {
 
     /// Returns [`true`] if the address appears to be globally reachable
     /// as specified by the [IANA IPv6 Special-Purpose Address Registry].
-    /// Whether or not an address is practically reachable will depend on your network configuration.
+    /// Whether or not an address is practically reachable will depend on your network
+    /// configuration.
     ///
     /// Most IPv6 addresses are globally reachable;
     /// unless they are specifically defined as *not* globally reachable.
@@ -219,13 +226,15 @@ mod ipv6_global {
     /// - Addresses reserved for benchmarking
     /// - Addresses reserved for documentation ([`is_documentation`](Ipv6Addr::is_documentation))
     /// - Unique local addresses ([`is_unique_local`](Ipv6Addr::is_unique_local))
-    /// - Unicast addresses with link-local scope ([`is_unicast_link_local`](Ipv6Addr::is_unicast_link_local))
+    /// - Unicast addresses with link-local scope
+    ///   ([`is_unicast_link_local`](Ipv6Addr::is_unicast_link_local))
     ///
-    /// For the complete overview of which addresses are globally reachable, see the table at the [IANA IPv6 Special-Purpose Address Registry].
+    /// For the complete overview of which addresses are globally reachable, see the table at the
+    /// [IANA IPv6 Special-Purpose Address Registry].
     ///
     /// Note that an address having global scope is not the same as being globally reachable,
-    /// and there is no direct relation between the two concepts: There exist addresses with global scope
-    /// that are not globally reachable (for example unique local addresses),
+    /// and there is no direct relation between the two concepts: There exist addresses with global
+    /// scope that are not globally reachable (for example unique local addresses),
     /// and addresses that are globally reachable without having global scope
     /// (multicast addresses with non-global scope).
     ///

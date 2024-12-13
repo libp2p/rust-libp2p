@@ -1,10 +1,6 @@
 use futures::{future, StreamExt};
-use libp2p_core::multiaddr::Protocol;
-use libp2p_core::transport::MemoryTransport;
-use libp2p_core::upgrade::Version;
-use libp2p_core::Transport;
+use libp2p_core::{multiaddr::Protocol, transport::MemoryTransport, upgrade::Version, Transport};
 use libp2p_swarm::{dummy, Config, Swarm, SwarmEvent};
-use std::time::Duration;
 
 #[tokio::test]
 async fn can_establish_connection() {
@@ -69,6 +65,6 @@ fn make_swarm() -> Swarm<dummy::Behaviour> {
         transport,
         dummy::Behaviour,
         identity.public().to_peer_id(),
-        Config::with_tokio_executor().with_idle_connection_timeout(Duration::from_secs(60)),
+        Config::with_tokio_executor(),
     )
 }

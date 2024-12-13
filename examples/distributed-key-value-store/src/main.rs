@@ -20,21 +20,23 @@
 
 #![doc = include_str!("../README.md")]
 
-use async_std::io;
-use futures::{prelude::*, select};
-use libp2p::kad;
-use libp2p::kad::store::MemoryStore;
-use libp2p::kad::Mode;
+use std::error::Error;
+
+use futures::stream::StreamExt;
 use libp2p::{
+    kad,
+    kad::{store::MemoryStore, Mode},
     mdns, noise,
     swarm::{NetworkBehaviour, SwarmEvent},
     tcp, yamux,
 };
-use std::error::Error;
-use std::time::Duration;
+use tokio::{
+    io::{self, AsyncBufReadExt},
+    select,
+};
 use tracing_subscriber::EnvFilter;
 
-#[async_std::main]
+#[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
     let _ = tracing_subscriber::fmt()
         .with_env_filter(EnvFilter::from_default_env())
@@ -44,11 +46,11 @@ async fn main() -> Result<(), Box<dyn Error>> {
     #[derive(NetworkBehaviour)]
     struct Behaviour {
         kademlia: kad::Behaviour<MemoryStore>,
-        mdns: mdns::async_io::Behaviour,
+        mdns: mdns::tokio::Behaviour,
     }
 
     let mut swarm = libp2p::SwarmBuilder::with_new_identity()
-        .with_async_std()
+        .with_tokio()
         .with_tcp(
             tcp::Config::default(),
             noise::Config::new,
@@ -60,19 +62,18 @@ async fn main() -> Result<(), Box<dyn Error>> {
                     key.public().to_peer_id(),
                     MemoryStore::new(key.public().to_peer_id()),
                 ),
-                mdns: mdns::async_io::Behaviour::new(
+                mdns: mdns::tokio::Behaviour::new(
                     mdns::Config::default(),
                     key.public().to_peer_id(),
                 )?,
             })
         })?
-        .with_swarm_config(|c| c.with_idle_connection_timeout(Duration::from_secs(60)))
         .build();
 
     swarm.behaviour_mut().kademlia.set_mode(Some(Mode::Server));
 
     // Read full lines from stdin
-    let mut stdin = io::BufReader::new(io::stdin()).lines().fuse();
+    let mut stdin = io::BufReader::new(io::stdin()).lines();
 
     // Listen on all interfaces and whatever port the OS assigns.
     swarm.listen_on("/ip4/0.0.0.0/tcp/0".parse()?)?;
@@ -80,7 +81,9 @@ async fn main() -> Result<(), Box<dyn Error>> {
     // Kick it off.
     loop {
         select! {
-        line = stdin.select_next_some() => handle_input_line(&mut swarm.behaviour_mut().kademlia, line.expect("Stdin not to close")),
+        Ok(Some(line)) = stdin.next_line() => {
+            handle_input_line(&mut swarm.behaviour_mut().kademlia, line);
+        }
         event = swarm.select_next_some() => match event {
             SwarmEvent::NewListenAddr { address, .. } => {
                 println!("Listening in {address:?}");

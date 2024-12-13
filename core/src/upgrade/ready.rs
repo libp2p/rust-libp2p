@@ -19,12 +19,14 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::upgrade::{InboundUpgrade, OutboundUpgrade, UpgradeInfo};
-use futures::future;
-use std::iter;
-use void::Void;
+use std::{convert::Infallible, iter};
 
-/// Implementation of [`UpgradeInfo`], [`InboundUpgrade`] and [`OutboundUpgrade`] that directly yields the substream.
+use futures::future;
+
+use crate::upgrade::{InboundUpgrade, OutboundUpgrade, UpgradeInfo};
+
+/// Implementation of [`UpgradeInfo`], [`InboundUpgrade`] and [`OutboundUpgrade`]
+/// that directly yields the substream.
 #[derive(Debug, Copy, Clone)]
 pub struct ReadyUpgrade<P> {
     protocol_name: P,
@@ -53,7 +55,7 @@ where
     P: AsRef<str> + Clone,
 {
     type Output = C;
-    type Error = Void;
+    type Error = Infallible;
     type Future = future::Ready<Result<Self::Output, Self::Error>>;
 
     fn upgrade_inbound(self, stream: C, _: Self::Info) -> Self::Future {
@@ -66,7 +68,7 @@ where
     P: AsRef<str> + Clone,
 {
     type Output = C;
-    type Error = Void;
+    type Error = Infallible;
     type Future = future::Ready<Result<Self::Output, Self::Error>>;
 
     fn upgrade_outbound(self, stream: C, _: Self::Info) -> Self::Future {

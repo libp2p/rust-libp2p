@@ -1,10 +1,14 @@
 //! The WebRTC [Stream] over the Connection
-use self::poll_data_channel::PollDataChannel;
+use std::{
+    pin::Pin,
+    task::{Context, Poll},
+};
+
 use futures::{AsyncRead, AsyncWrite};
 use send_wrapper::SendWrapper;
-use std::pin::Pin;
-use std::task::{Context, Poll};
 use web_sys::RtcDataChannel;
+
+use self::poll_data_channel::PollDataChannel;
 
 mod poll_data_channel;
 

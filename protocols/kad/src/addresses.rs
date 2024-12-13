@@ -18,9 +18,10 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
+use std::fmt;
+
 use libp2p_core::Multiaddr;
 use smallvec::SmallVec;
-use std::fmt;
 
 /// A non-empty list of (unique) addresses of a peer in the routing table.
 /// Every address must be a fully-qualified /p2p address.

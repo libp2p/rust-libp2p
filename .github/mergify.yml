@@ -32,6 +32,17 @@ pull_request_rules:
       - base=master
     actions:
       queue:
+        name: default
+
+  # Adds the Pr to the batch queue, so that we can run the interop tests. See the `external_prs` queue for more info.
+  - name: Add to batch merge queue
+    conditions:
+      # All branch protection rules are implicit: https://docs.mergify.com/conditions/#about-branch-protection
+      - label=send-it-batch
+      - base=master
+    actions:
+      queue:
+        name: external_prs
 
   - name: Add approved dependabot PRs to merge queue
     conditions:
@@ -40,6 +51,7 @@ pull_request_rules:
       - base=master
     actions:
       queue:
+        name: default
 
   - name: Remove reviews on updates after PR is queued for merging
     conditions:
@@ -74,3 +86,8 @@ pull_request_rules:
 queue_rules:
   - name: default
     conditions: []
+  # External PR's don't have access to secrets and variables, therefore they don't run the interop tests.
+  # using a batch queue allows to circumvent that as mergify creates it from an internal branch.
+  - name: external_prs
+    conditions: []
+    batch_size: 1

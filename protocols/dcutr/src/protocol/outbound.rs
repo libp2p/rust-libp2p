@@ -18,16 +18,17 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::proto;
-use crate::PROTOCOL_NAME;
+use std::io;
+
 use asynchronous_codec::Framed;
 use futures::prelude::*;
 use futures_timer::Delay;
 use libp2p_core::{multiaddr::Protocol, Multiaddr};
 use libp2p_swarm::Stream;
-use std::io;
 use thiserror::Error;
 use web_time::Instant;
+
+use crate::{proto, PROTOCOL_NAME};
 
 pub(crate) async fn handshake(
     stream: Stream,

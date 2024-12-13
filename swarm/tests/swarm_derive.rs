@@ -18,6 +18,8 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
+use std::fmt::Debug;
+
 use futures::StreamExt;
 use libp2p_core::{transport::PortUse, Endpoint, Multiaddr};
 use libp2p_identify as identify;
@@ -26,19 +28,18 @@ use libp2p_swarm::{
     behaviour::FromSwarm, dummy, ConnectionDenied, NetworkBehaviour, SwarmEvent, THandler,
     THandlerInEvent, THandlerOutEvent,
 };
-use std::fmt::Debug;
 
 /// Small utility to check that a type implements `NetworkBehaviour`.
 #[allow(dead_code)]
 fn require_net_behaviour<T: libp2p_swarm::NetworkBehaviour>() {}
 
 // TODO: doesn't compile
-/*#[test]
-fn empty() {
-    #[allow(dead_code)]
-    #[derive(NetworkBehaviour)]
-    struct Foo {}
-}*/
+// #[test]
+// fn empty() {
+// #[allow(dead_code)]
+// #[derive(NetworkBehaviour)]
+// struct Foo {}
+// }
 
 #[test]
 fn one_field() {
@@ -386,7 +387,7 @@ fn with_generics_constrained() {
 
     impl<A: Mark + 'static> NetworkBehaviour for Bar<A> {
         type ConnectionHandler = dummy::ConnectionHandler;
-        type ToSwarm = void::Void;
+        type ToSwarm = std::convert::Infallible;
 
         fn handle_established_inbound_connection(
             &mut self,
@@ -537,10 +538,10 @@ fn multiple_behaviour_attributes() {
 
 #[test]
 fn custom_out_event_no_type_parameters() {
+    use std::task::{Context, Poll};
+
     use libp2p_identity::PeerId;
     use libp2p_swarm::{ConnectionId, ToSwarm};
-    use std::task::Context;
-    use std::task::Poll;
 
     pub(crate) struct TemplatedBehaviour<T: 'static> {
         _data: T,
@@ -548,7 +549,7 @@ fn custom_out_event_no_type_parameters() {
 
     impl<T> NetworkBehaviour for TemplatedBehaviour<T> {
         type ConnectionHandler = dummy::ConnectionHandler;
-        type ToSwarm = void::Void;
+        type ToSwarm = std::convert::Infallible;
 
         fn handle_established_inbound_connection(
             &mut self,
@@ -579,7 +580,7 @@ fn custom_out_event_no_type_parameters() {
         ) {
             // TODO: remove when Rust 1.82 is MSRV
             #[allow(unreachable_patterns)]
-            void::unreachable(message);
+            libp2p_core::util::unreachable(message);
         }
 
         fn poll(
@@ -603,8 +604,8 @@ fn custom_out_event_no_type_parameters() {
         None,
     }
 
-    impl From<void::Void> for OutEvent {
-        fn from(_e: void::Void) -> Self {
+    impl From<std::convert::Infallible> for OutEvent {
+        fn from(_e: std::convert::Infallible) -> Self {
             Self::None
         }
     }

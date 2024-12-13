@@ -20,14 +20,14 @@
 
 //! Secp256k1 keys.
 
-use super::error::DecodingError;
+use core::{cmp, fmt, hash};
+
 use asn1_der::typed::{DerDecodable, Sequence};
-use core::cmp;
-use core::fmt;
-use core::hash;
 use libsecp256k1::{Message, Signature};
 use sha2::{Digest as ShaDigestTrait, Sha256};
 use zeroize::Zeroize;
+
+use super::error::DecodingError;
 
 /// A Secp256k1 keypair.
 #[derive(Clone)]

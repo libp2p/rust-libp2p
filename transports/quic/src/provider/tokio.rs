@@ -18,13 +18,14 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use futures::{future::BoxFuture, FutureExt};
 use std::{
     io,
     net::{SocketAddr, UdpSocket},
     task::{Context, Poll},
     time::Duration,
 };
+
+use futures::{future::BoxFuture, FutureExt};
 
 use crate::GenTransport;
 

@@ -1,5 +1,6 @@
 use std::{
     collections::{HashSet, VecDeque},
+    convert::Infallible,
     task::{Context, Poll},
 };
 
@@ -14,7 +15,6 @@ use libp2p_swarm::{
     ListenerClosed, ListenerError, NetworkBehaviour, NewListenAddr, Swarm, SwarmEvent, THandler,
     THandlerInEvent, THandlerOutEvent, ToSwarm,
 };
-
 use libp2p_swarm_test::SwarmExt;
 
 #[async_std::test]
@@ -79,7 +79,7 @@ impl Behaviour {
 
 impl NetworkBehaviour for Behaviour {
     type ConnectionHandler = dummy::ConnectionHandler;
-    type ToSwarm = void::Void;
+    type ToSwarm = Infallible;
 
     fn handle_established_inbound_connection(
         &mut self,

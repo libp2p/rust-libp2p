@@ -18,11 +18,12 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
+use std::{sync::Arc, time::Duration};
+
 use quinn::{
     crypto::rustls::{QuicClientConfig, QuicServerConfig},
     MtuDiscoveryConfig, VarInt,
 };
-use std::{sync::Arc, time::Duration};
 
 /// Config for the transport.
 #[derive(Clone)]

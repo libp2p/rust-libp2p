@@ -20,13 +20,6 @@
 
 #![allow(deprecated)]
 
-use crate::core::muxing::{StreamMuxer, StreamMuxerEvent};
-
-use futures::{
-    io::{IoSlice, IoSliceMut},
-    prelude::*,
-    ready,
-};
 use std::{
     convert::TryFrom as _,
     io,
@@ -37,6 +30,14 @@ use std::{
     },
     task::{Context, Poll},
 };
+
+use futures::{
+    io::{IoSlice, IoSliceMut},
+    prelude::*,
+    ready,
+};
+
+use crate::core::muxing::{StreamMuxer, StreamMuxerEvent};
 
 /// Wraps around a [`StreamMuxer`] and counts the number of bytes that go through all the opened
 /// streams.
@@ -123,7 +124,7 @@ impl BandwidthSinks {
     /// Returns the total number of bytes that have been downloaded on all the streams.
     ///
     /// > **Note**: This method is by design subject to race conditions. The returned value should
-    /// >           only ever be used for statistics purposes.
+    /// > only ever be used for statistics purposes.
     pub fn total_inbound(&self) -> u64 {
         self.inbound.load(Ordering::Relaxed)
     }
@@ -131,7 +132,7 @@ impl BandwidthSinks {
     /// Returns the total number of bytes that have been uploaded on all the streams.
     ///
     /// > **Note**: This method is by design subject to race conditions. The returned value should
-    /// >           only ever be used for statistics purposes.
+    /// > only ever be used for statistics purposes.
     pub fn total_outbound(&self) -> u64 {
         self.outbound.load(Ordering::Relaxed)
     }

@@ -31,21 +31,20 @@
 //! This crate provides a `Mdns` and `TokioMdns`, depending on the enabled features, which
 //! implements the `NetworkBehaviour` trait. This struct will automatically discover other
 //! libp2p nodes on the local network.
-//!
 
 #![cfg_attr(docsrs, feature(doc_cfg, doc_auto_cfg))]
 
-use std::net::{Ipv4Addr, Ipv6Addr};
-use std::time::Duration;
+use std::{
+    net::{Ipv4Addr, Ipv6Addr},
+    time::Duration,
+};
 
 mod behaviour;
-pub use crate::behaviour::{Behaviour, Event};
-
 #[cfg(feature = "async-io")]
 pub use crate::behaviour::async_io;
-
 #[cfg(feature = "tokio")]
 pub use crate::behaviour::tokio;
+pub use crate::behaviour::{Behaviour, Event};
 
 /// The DNS service name for all libp2p peers used to query for addresses.
 const SERVICE_NAME: &[u8] = b"_p2p._udp.local";

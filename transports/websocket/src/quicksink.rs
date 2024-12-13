@@ -19,25 +19,27 @@
 // ```no_run
 // use async_std::io;
 // use futures::prelude::*;
+//
 // use crate::quicksink::Action;
 //
 // crate::quicksink::make_sink(io::stdout(), |mut stdout, action| async move {
 //     match action {
 //         Action::Send(x) => stdout.write_all(x).await?,
 //         Action::Flush => stdout.flush().await?,
-//         Action::Close => stdout.close().await?
+//         Action::Close => stdout.close().await?,
 //     }
 //     Ok::<_, io::Error>(stdout)
 // });
 // ```
 
-use futures::{ready, sink::Sink};
-use pin_project_lite::pin_project;
 use std::{
     future::Future,
     pin::Pin,
     task::{Context, Poll},
 };
+
+use futures::{ready, sink::Sink};
+use pin_project_lite::pin_project;
 
 /// Returns a `Sink` impl based on the initial value and the given closure.
 ///
@@ -291,9 +293,10 @@ where
 
 #[cfg(test)]
 mod tests {
-    use crate::quicksink::{make_sink, Action};
     use async_std::{io, task};
     use futures::{channel::mpsc, prelude::*};
+
+    use crate::quicksink::{make_sink, Action};
 
     #[test]
     fn smoke_test() {

@@ -1,5 +1,6 @@
-use crate::behaviour::{ExternalAddrConfirmed, ExternalAddrExpired, FromSwarm};
 use libp2p_core::Multiaddr;
+
+use crate::behaviour::{ExternalAddrConfirmed, ExternalAddrExpired, FromSwarm};
 
 /// The maximum number of local external addresses. When reached any
 /// further externally reported addresses are ignored. The behaviour always
@@ -78,16 +79,19 @@ impl ExternalAddresses {
     }
 
     fn push_front(&mut self, addr: &Multiaddr) {
-        self.addresses.insert(0, addr.clone()); // We have at most `MAX_LOCAL_EXTERNAL_ADDRS` so this isn't very expensive.
+        // We have at most `MAX_LOCAL_EXTERNAL_ADDRS` so
+        // this isn't very expensive.
+        self.addresses.insert(0, addr.clone());
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use libp2p_core::multiaddr::Protocol;
     use once_cell::sync::Lazy;
     use rand::Rng;
+
+    use super::*;
 
     #[test]
     fn new_external_addr_returns_correct_changed_value() {

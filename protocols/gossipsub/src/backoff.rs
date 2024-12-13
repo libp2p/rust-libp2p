@@ -19,14 +19,18 @@
 // DEALINGS IN THE SOFTWARE.
 
 //! Data structure for efficiently storing known back-off's when pruning peers.
-use crate::topic::TopicHash;
-use libp2p_identity::PeerId;
-use std::collections::{
-    hash_map::{Entry, HashMap},
-    HashSet,
+use std::{
+    collections::{
+        hash_map::{Entry, HashMap},
+        HashSet,
+    },
+    time::Duration,
 };
-use std::time::Duration;
+
+use libp2p_identity::PeerId;
 use web_time::Instant;
+
+use crate::topic::TopicHash;
 
 #[derive(Copy, Clone)]
 struct HeartbeatIndex(usize);
@@ -68,8 +72,8 @@ impl BackoffStorage {
         }
     }
 
-    /// Updates the backoff for a peer (if there is already a more restrictive backoff then this call
-    /// doesn't change anything).
+    /// Updates the backoff for a peer (if there is already a more restrictive backoff then this
+    /// call doesn't change anything).
     pub(crate) fn update_backoff(&mut self, topic: &TopicHash, peer: &PeerId, time: Duration) {
         let instant = Instant::now() + time;
         let insert_into_backoffs_by_heartbeat =
@@ -124,7 +128,7 @@ impl BackoffStorage {
     pub(crate) fn is_backoff_with_slack(&self, topic: &TopicHash, peer: &PeerId) -> bool {
         self.backoffs
             .get(topic)
-            .map_or(false, |m| m.contains_key(peer))
+            .is_some_and(|m| m.contains_key(peer))
     }
 
     pub(crate) fn get_backoff_time(&self, topic: &TopicHash, peer: &PeerId) -> Option<Instant> {
@@ -155,7 +159,7 @@ impl BackoffStorage {
                     None => false,
                 };
                 if !keep {
-                    //remove from backoffs
+                    // remove from backoffs
                     if let Entry::Occupied(mut m) = backoffs.entry(topic.clone()) {
                         if m.get_mut().remove(peer).is_some() && m.get().is_empty() {
                             m.remove();

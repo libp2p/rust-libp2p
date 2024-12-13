@@ -18,16 +18,15 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use futures::stream::FuturesUnordered;
-use futures::StreamExt;
-use libp2p_core::multiaddr::Protocol;
-use libp2p_core::Multiaddr;
+use std::time::Duration;
+
+use futures::{stream::FuturesUnordered, StreamExt};
+use libp2p_core::{multiaddr::Protocol, Multiaddr};
 use libp2p_identity as identity;
 use libp2p_rendezvous as rendezvous;
 use libp2p_rendezvous::client::RegisterError;
 use libp2p_swarm::{DialError, Swarm, SwarmEvent};
 use libp2p_swarm_test::SwarmExt;
-use std::time::Duration;
 use tracing_subscriber::EnvFilter;
 
 #[tokio::test]
@@ -471,9 +470,11 @@ async fn new_combined_node() -> Swarm<Combined> {
 }
 
 async fn new_impersonating_client() -> Swarm<rendezvous::client::Behaviour> {
-    // In reality, if Eve were to try and fake someones identity, she would obviously only know the public key.
-    // Due to the type-safe API of the `Rendezvous` behaviour and `PeerRecord`, we actually cannot construct a bad `PeerRecord` (i.e. one that is claims to be someone else).
-    // As such, the best we can do is hand eve a completely different keypair from what she is using to authenticate her connection.
+    // In reality, if Eve were to try and fake someones identity, she would obviously only know the
+    // public key. Due to the type-safe API of the `Rendezvous` behaviour and `PeerRecord`, we
+    // actually cannot construct a bad `PeerRecord` (i.e. one that is claims to be someone else).
+    // As such, the best we can do is hand eve a completely different keypair from what she is using
+    // to authenticate her connection.
     let someone_else = identity::Keypair::generate_ed25519();
     let mut eve = Swarm::new_ephemeral(move |_| rendezvous::client::Behaviour::new(someone_else));
     eve.listen().with_memory_addr_external().await;

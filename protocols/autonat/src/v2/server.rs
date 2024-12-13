@@ -1,5 +1,4 @@
 mod behaviour;
 mod handler;
 
-pub use behaviour::Behaviour;
-pub use behaviour::Event;
+pub use behaviour::{Behaviour, Event};

@@ -18,7 +18,12 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::{transport::TransportError, Multiaddr};
+use std::{
+    num::NonZeroU8,
+    pin::Pin,
+    task::{Context, Poll},
+};
+
 use futures::{
     future::{BoxFuture, Future},
     ready,
@@ -26,11 +31,8 @@ use futures::{
 };
 use libp2p_core::muxing::StreamMuxerBox;
 use libp2p_identity::PeerId;
-use std::{
-    num::NonZeroU8,
-    pin::Pin,
-    task::{Context, Poll},
-};
+
+use crate::{transport::TransportError, Multiaddr};
 
 type Dial = BoxFuture<
     'static,

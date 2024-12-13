@@ -23,7 +23,6 @@
 
 pub(crate) use super::bucket::{AppliedPending, InsertResult, Node, K_VALUE};
 pub use super::key::*;
-
 use super::*;
 
 /// An immutable by-reference view of a bucket entry.

@@ -29,8 +29,8 @@
 //! connection or substream.
 //!
 //! > **Note**: Multiple versions of the same protocol are treated as different protocols.
-//! >           For example, `/foo/1.0.0` and `/foo/1.1.0` are totally unrelated as far as
-//! >           upgrading is concerned.
+//! > For example, `/foo/1.0.0` and `/foo/1.1.0` are totally unrelated as far as
+//! > upgrading is concerned.
 //!
 //! # Upgrade process
 //!
@@ -55,7 +55,6 @@
 //! > connection or substream. However if you use the recommended `Swarm` or
 //! > `ConnectionHandler` APIs, the upgrade is automatically handled for you and you don't
 //! > need to use these methods.
-//!
 
 mod apply;
 mod denied;
@@ -70,12 +69,12 @@ pub(crate) use apply::{
 };
 pub(crate) use error::UpgradeError;
 use futures::future::Future;
+pub use multistream_select::{NegotiatedComplete, NegotiationError, ProtocolError, Version};
 
 pub use self::{
     denied::DeniedUpgrade, pending::PendingUpgrade, ready::ReadyUpgrade, select::SelectUpgrade,
 };
 pub use crate::Negotiated;
-pub use multistream_select::{NegotiatedComplete, NegotiationError, ProtocolError, Version};
 
 /// Common trait for upgrades that can be applied on inbound substreams, outbound substreams,
 /// or both.

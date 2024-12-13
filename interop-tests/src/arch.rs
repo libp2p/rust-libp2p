@@ -1,7 +1,6 @@
 // Native re-exports
 #[cfg(not(target_arch = "wasm32"))]
 pub(crate) use native::{build_swarm, init_logger, sleep, Instant, RedisClient};
-
 // Wasm re-exports
 #[cfg(target_arch = "wasm32")]
 pub(crate) use wasm::{build_swarm, init_logger, sleep, Instant, RedisClient};
@@ -11,11 +10,13 @@ pub(crate) mod native {
     use std::time::Duration;
 
     use anyhow::{bail, Context, Result};
-    use futures::future::BoxFuture;
-    use futures::FutureExt;
-    use libp2p::identity::Keypair;
-    use libp2p::swarm::{NetworkBehaviour, Swarm};
-    use libp2p::{noise, tcp, tls, yamux};
+    use futures::{future::BoxFuture, FutureExt};
+    use libp2p::{
+        identity::Keypair,
+        noise,
+        swarm::{NetworkBehaviour, Swarm},
+        tcp, tls, yamux,
+    };
     use libp2p_mplex as mplex;
     use libp2p_webrtc as webrtc;
     use redis::AsyncCommands;
@@ -48,7 +49,6 @@ pub(crate) mod native {
                     .with_tokio()
                     .with_quic()
                     .with_behaviour(behaviour_constructor)?
-                    .with_swarm_config(|c| c.with_idle_connection_timeout(Duration::from_secs(5)))
                     .build(),
                 format!("/ip4/{ip}/udp/0/quic-v1"),
             ),
@@ -61,7 +61,6 @@ pub(crate) mod native {
                         mplex::MplexConfig::default,
                     )?
                     .with_behaviour(behaviour_constructor)?
-                    .with_swarm_config(|c| c.with_idle_connection_timeout(Duration::from_secs(5)))
                     .build(),
                 format!("/ip4/{ip}/tcp/0"),
             ),
@@ -74,7 +73,6 @@ pub(crate) mod native {
                         yamux::Config::default,
                     )?
                     .with_behaviour(behaviour_constructor)?
-                    .with_swarm_config(|c| c.with_idle_connection_timeout(Duration::from_secs(5)))
                     .build(),
                 format!("/ip4/{ip}/tcp/0"),
             ),
@@ -87,7 +85,6 @@ pub(crate) mod native {
                         mplex::MplexConfig::default,
                     )?
                     .with_behaviour(behaviour_constructor)?
-                    .with_swarm_config(|c| c.with_idle_connection_timeout(Duration::from_secs(5)))
                     .build(),
                 format!("/ip4/{ip}/tcp/0"),
             ),
@@ -100,7 +97,6 @@ pub(crate) mod native {
                         yamux::Config::default,
                     )?
                     .with_behaviour(behaviour_constructor)?
-                    .with_swarm_config(|c| c.with_idle_connection_timeout(Duration::from_secs(5)))
                     .build(),
                 format!("/ip4/{ip}/tcp/0"),
             ),
@@ -110,7 +106,6 @@ pub(crate) mod native {
                     .with_websocket(tls::Config::new, mplex::MplexConfig::default)
                     .await?
                     .with_behaviour(behaviour_constructor)?
-                    .with_swarm_config(|c| c.with_idle_connection_timeout(Duration::from_secs(5)))
                     .build(),
                 format!("/ip4/{ip}/tcp/0/ws"),
             ),
@@ -120,7 +115,6 @@ pub(crate) mod native {
                     .with_websocket(tls::Config::new, yamux::Config::default)
                     .await?
                     .with_behaviour(behaviour_constructor)?
-                    .with_swarm_config(|c| c.with_idle_connection_timeout(Duration::from_secs(5)))
                     .build(),
                 format!("/ip4/{ip}/tcp/0/ws"),
             ),
@@ -130,7 +124,6 @@ pub(crate) mod native {
                     .with_websocket(noise::Config::new, mplex::MplexConfig::default)
                     .await?
                     .with_behaviour(behaviour_constructor)?
-                    .with_swarm_config(|c| c.with_idle_connection_timeout(Duration::from_secs(5)))
                     .build(),
                 format!("/ip4/{ip}/tcp/0/ws"),
             ),
@@ -140,7 +133,6 @@ pub(crate) mod native {
                     .with_websocket(noise::Config::new, yamux::Config::default)
                     .await?
                     .with_behaviour(behaviour_constructor)?
-                    .with_swarm_config(|c| c.with_idle_connection_timeout(Duration::from_secs(5)))
                     .build(),
                 format!("/ip4/{ip}/tcp/0/ws"),
             ),
@@ -154,7 +146,6 @@ pub(crate) mod native {
                         ))
                     })?
                     .with_behaviour(behaviour_constructor)?
-                    .with_swarm_config(|c| c.with_idle_connection_timeout(Duration::from_secs(5)))
                     .build(),
                 format!("/ip4/{ip}/udp/0/webrtc-direct"),
             ),
@@ -186,15 +177,19 @@ pub(crate) mod native {
 
 #[cfg(target_arch = "wasm32")]
 pub(crate) mod wasm {
+    use std::time::Duration;
+
     use anyhow::{bail, Context, Result};
     use futures::future::{BoxFuture, FutureExt};
-    use libp2p::core::upgrade::Version;
-    use libp2p::identity::Keypair;
-    use libp2p::swarm::{NetworkBehaviour, Swarm};
-    use libp2p::{noise, websocket_websys, webtransport_websys, yamux, Transport as _};
+    use libp2p::{
+        core::upgrade::Version,
+        identity::Keypair,
+        noise,
+        swarm::{NetworkBehaviour, Swarm},
+        websocket_websys, webtransport_websys, yamux, Transport as _,
+    };
     use libp2p_mplex as mplex;
     use libp2p_webrtc_websys as webrtc_websys;
-    use std::time::Duration;
 
     use crate::{BlpopRequest, Muxer, SecProtocol, Transport};
 

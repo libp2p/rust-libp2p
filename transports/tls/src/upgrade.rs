@@ -18,20 +18,22 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::certificate;
-use crate::certificate::P2pCertificate;
-use futures::future::BoxFuture;
-use futures::AsyncWrite;
-use futures::{AsyncRead, FutureExt};
+use std::{
+    net::{IpAddr, Ipv4Addr},
+    sync::Arc,
+};
+
+use futures::{future::BoxFuture, AsyncRead, AsyncWrite, FutureExt};
 use futures_rustls::TlsStream;
-use libp2p_core::upgrade::{InboundConnectionUpgrade, OutboundConnectionUpgrade};
-use libp2p_core::UpgradeInfo;
+use libp2p_core::{
+    upgrade::{InboundConnectionUpgrade, OutboundConnectionUpgrade},
+    UpgradeInfo,
+};
 use libp2p_identity as identity;
 use libp2p_identity::PeerId;
 use rustls::{pki_types::ServerName, CommonState};
 
-use std::net::{IpAddr, Ipv4Addr};
-use std::sync::Arc;
+use crate::{certificate, certificate::P2pCertificate};
 
 #[derive(thiserror::Error, Debug)]
 pub enum UpgradeError {
@@ -102,8 +104,10 @@ where
 
     fn upgrade_outbound(self, socket: C, _: Self::Info) -> Self::Future {
         async move {
-            // Spec: In order to keep this flexibility for future versions, clients that only support the version of the handshake defined in this document MUST NOT send any value in the Server Name Indication.
-            // Setting `ServerName` to unspecified will disable the use of the SNI extension.
+            // Spec: In order to keep this flexibility for future versions, clients that only
+            // support the version of the handshake defined in this document MUST NOT send any value
+            // in the Server Name Indication. Setting `ServerName` to unspecified will
+            // disable the use of the SNI extension.
             let name = ServerName::IpAddress(rustls::pki_types::IpAddr::from(IpAddr::V4(
                 Ipv4Addr::UNSPECIFIED,
             )));

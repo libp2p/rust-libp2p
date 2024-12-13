@@ -21,13 +21,15 @@
 
 #![allow(unreachable_pub)]
 
-use either::Either;
-use futures::future::MapOk;
-use futures::{future, TryFutureExt};
-use libp2p_core::either::EitherFuture;
-use libp2p_core::upgrade::{InboundConnectionUpgrade, OutboundConnectionUpgrade, UpgradeInfo};
-use libp2p_identity::PeerId;
 use std::iter::{Chain, Map};
+
+use either::Either;
+use futures::{future, future::MapOk, TryFutureExt};
+use libp2p_core::{
+    either::EitherFuture,
+    upgrade::{InboundConnectionUpgrade, OutboundConnectionUpgrade, UpgradeInfo},
+};
+use libp2p_identity::PeerId;
 
 /// Upgrade that combines two upgrades into one. Supports all the protocols supported by either
 /// sub-upgrade.

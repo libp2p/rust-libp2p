@@ -1,3 +1,8 @@
+## 0.2.0-alpha.1
+
+- Deprecate `void` crate.
+  See [PR 5676](https://github.com/libp2p/rust-libp2p/pull/5676).
+
 ## 0.2.0-alpha
 
 <!-- Update to libp2p-swarm v0.45.0 -->

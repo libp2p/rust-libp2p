@@ -20,6 +20,8 @@
 
 #![doc = include_str!("../README.md")]
 
+use std::{error::Error, str::FromStr};
+
 use clap::Parser;
 use futures::{executor::block_on, future::FutureExt, stream::StreamExt};
 use libp2p::{
@@ -28,8 +30,6 @@ use libp2p::{
     swarm::{NetworkBehaviour, SwarmEvent},
     tcp, yamux, PeerId,
 };
-use std::str::FromStr;
-use std::{error::Error, time::Duration};
 use tracing_subscriber::EnvFilter;
 
 #[derive(Debug, Parser)]
@@ -105,7 +105,6 @@ async fn main() -> Result<(), Box<dyn Error>> {
                 )),
                 dcutr: dcutr::Behaviour::new(keypair.public().to_peer_id()),
             })?
-            .with_swarm_config(|c| c.with_idle_connection_timeout(Duration::from_secs(60)))
             .build();
 
     swarm

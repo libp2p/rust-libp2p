@@ -1,10 +1,18 @@
+use std::{
+    collections::VecDeque,
+    convert::Infallible,
+    io,
+    iter::{once, repeat},
+    task::{Context, Poll},
+    time::Duration,
+};
+
 use futures::{channel::oneshot, AsyncWrite};
 use futures_bounded::FuturesMap;
 use libp2p_core::{
     upgrade::{DeniedUpgrade, ReadyUpgrade},
     Multiaddr,
 };
-
 use libp2p_swarm::{
     handler::{
         ConnectionEvent, DialUpgradeError, FullyNegotiatedOutbound, OutboundUpgradeSend,
@@ -12,13 +20,6 @@ use libp2p_swarm::{
     },
     ConnectionHandler, ConnectionHandlerEvent, Stream, StreamProtocol, StreamUpgradeError,
     SubstreamProtocol,
-};
-use std::{
-    collections::VecDeque,
-    io,
-    iter::{once, repeat},
-    task::{Context, Poll},
-    time::Duration,
 };
 
 use crate::v2::{
@@ -208,7 +209,7 @@ impl ConnectionHandler for Handler {
 
 async fn start_stream_handle(
     req: DialRequest,
-    stream_recv: oneshot::Receiver<Result<Stream, StreamUpgradeError<void::Void>>>,
+    stream_recv: oneshot::Receiver<Result<Stream, StreamUpgradeError<Infallible>>>,
 ) -> Result<(Multiaddr, usize), Error> {
     let stream = stream_recv
         .await
@@ -218,7 +219,7 @@ async fn start_stream_handle(
             StreamUpgradeError::Timeout => Error::Io(io::ErrorKind::TimedOut.into()),
             // TODO: remove when Rust 1.82 is MSRV
             #[allow(unreachable_patterns)]
-            StreamUpgradeError::Apply(v) => void::unreachable(v),
+            StreamUpgradeError::Apply(v) => libp2p_core::util::unreachable(v),
             StreamUpgradeError::Io(e) => Error::Io(e),
         })?;
 
@@ -260,7 +261,9 @@ async fn start_stream_handle(
         Ok(_) => {}
         Err(err) => {
             if err.kind() == io::ErrorKind::ConnectionReset {
-                // The AutoNAT server may have already closed the stream (this is normal because the probe is finished), in this case we have this error:
+                // The AutoNAT server may have already closed the stream
+                // (this is normal because the probe is finished),
+                // in this case we have this error:
                 // Err(Custom { kind: ConnectionReset, error: Stopped(0) })
                 // so we silently ignore this error
             } else {

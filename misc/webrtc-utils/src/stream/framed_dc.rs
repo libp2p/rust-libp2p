@@ -21,8 +21,10 @@
 use asynchronous_codec::Framed;
 use futures::{AsyncRead, AsyncWrite};
 
-use crate::proto::Message;
-use crate::stream::{MAX_DATA_LEN, MAX_MSG_LEN, VARINT_LEN};
+use crate::{
+    proto::Message,
+    stream::{MAX_DATA_LEN, MAX_MSG_LEN, VARINT_LEN},
+};
 
 pub(crate) type FramedDc<T> = Framed<T, quick_protobuf_codec::Codec<Message>>;
 pub(crate) fn new<T>(inner: T) -> FramedDc<T>

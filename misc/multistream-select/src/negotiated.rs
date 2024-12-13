@@ -18,7 +18,12 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::protocol::{HeaderLine, Message, MessageReader, Protocol, ProtocolError};
+use std::{
+    error::Error,
+    fmt, io, mem,
+    pin::Pin,
+    task::{Context, Poll},
+};
 
 use futures::{
     io::{IoSlice, IoSliceMut},
@@ -26,12 +31,8 @@ use futures::{
     ready,
 };
 use pin_project::pin_project;
-use std::{
-    error::Error,
-    fmt, io, mem,
-    pin::Pin,
-    task::{Context, Poll},
-};
+
+use crate::protocol::{HeaderLine, Message, MessageReader, Protocol, ProtocolError};
 
 /// An I/O stream that has settled on an (application-layer) protocol to use.
 ///
@@ -59,8 +60,10 @@ pub struct NegotiatedComplete<TInner> {
 
 impl<TInner> Future for NegotiatedComplete<TInner>
 where
-    // `Unpin` is required not because of implementation details but because we produce the
-    // `Negotiated` as the output of the future.
+    // `Unpin` is required not because of
+    // implementation details but because we produce
+    // the `Negotiated` as the output of the
+    // future.
     TInner: AsyncRead + AsyncWrite + Unpin,
 {
     type Output = Result<Negotiated<TInner>, NegotiationError>;
@@ -250,13 +253,13 @@ where
     }
 
     // TODO: implement once method is stabilized in the futures crate
-    /*unsafe fn initializer(&self) -> Initializer {
-        match &self.state {
-            State::Completed { io, .. } => io.initializer(),
-            State::Expecting { io, .. } => io.inner_ref().initializer(),
-            State::Invalid => panic!("Negotiated: Invalid state"),
-        }
-    }*/
+    // unsafe fn initializer(&self) -> Initializer {
+    // match &self.state {
+    // State::Completed { io, .. } => io.initializer(),
+    // State::Expecting { io, .. } => io.inner_ref().initializer(),
+    // State::Invalid => panic!("Negotiated: Invalid state"),
+    // }
+    // }
 
     fn poll_read_vectored(
         mut self: Pin<&mut Self>,

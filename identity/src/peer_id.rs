@@ -18,17 +18,19 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
+use std::{fmt, str::FromStr};
+
 #[cfg(feature = "rand")]
 use rand::Rng;
 use sha2::Digest as _;
-use std::{fmt, str::FromStr};
 use thiserror::Error;
 
 /// Local type-alias for multihash.
 ///
 /// Must be big enough to accommodate for `MAX_INLINE_KEY_LENGTH`.
 /// 64 satisfies that and can hold 512 bit hashes which is what the ecosystem typically uses.
-/// Given that this appears in our type-signature, using a "common" number here makes us more compatible.
+/// Given that this appears in our type-signature,
+/// using a "common" number here makes us more compatible.
 type Multihash = multihash::Multihash<64>;
 
 #[cfg(feature = "serde")]

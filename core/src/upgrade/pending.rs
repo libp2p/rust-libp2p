@@ -19,10 +19,11 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::upgrade::{InboundUpgrade, OutboundUpgrade, UpgradeInfo};
+use std::{convert::Infallible, iter};
+
 use futures::future;
-use std::iter;
-use void::Void;
+
+use crate::upgrade::{InboundUpgrade, OutboundUpgrade, UpgradeInfo};
 
 /// Implementation of [`UpgradeInfo`], [`InboundUpgrade`] and [`OutboundUpgrade`] that always
 /// returns a pending upgrade.
@@ -53,8 +54,8 @@ impl<C, P> InboundUpgrade<C> for PendingUpgrade<P>
 where
     P: AsRef<str> + Clone,
 {
-    type Output = Void;
-    type Error = Void;
+    type Output = Infallible;
+    type Error = Infallible;
     type Future = future::Pending<Result<Self::Output, Self::Error>>;
 
     fn upgrade_inbound(self, _: C, _: Self::Info) -> Self::Future {
@@ -66,8 +67,8 @@ impl<C, P> OutboundUpgrade<C> for PendingUpgrade<P>
 where
     P: AsRef<str> + Clone,
 {
-    type Output = Void;
-    type Error = Void;
+    type Output = Infallible;
+    type Error = Infallible;
     type Future = future::Pending<Result<Self::Output, Self::Error>>;
 
     fn upgrade_outbound(self, _: C, _: Self::Info) -> Self::Future {

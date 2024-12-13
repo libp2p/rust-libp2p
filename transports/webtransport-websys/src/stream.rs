@@ -1,16 +1,20 @@
+use std::{
+    io,
+    pin::Pin,
+    task::{ready, Context, Poll},
+};
+
 use futures::{AsyncRead, AsyncWrite, FutureExt};
 use js_sys::Uint8Array;
 use send_wrapper::SendWrapper;
-use std::io;
-use std::pin::Pin;
-use std::task::ready;
-use std::task::{Context, Poll};
 use web_sys::{ReadableStreamDefaultReader, WritableStreamDefaultWriter};
 
-use crate::bindings::WebTransportBidirectionalStream;
-use crate::fused_js_promise::FusedJsPromise;
-use crate::utils::{detach_promise, parse_reader_response, to_io_error, to_js_type};
-use crate::Error;
+use crate::{
+    bindings::WebTransportBidirectionalStream,
+    fused_js_promise::FusedJsPromise,
+    utils::{detach_promise, parse_reader_response, to_io_error, to_js_type},
+    Error,
+};
 
 /// A stream on a connection.
 #[derive(Debug)]

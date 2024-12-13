@@ -1,10 +1,8 @@
-use base64::prelude::*;
-use serde::{Deserialize, Serialize};
-use std::error::Error;
-use std::path::Path;
+use std::{error::Error, path::Path};
 
-use libp2p_identity::Keypair;
-use libp2p_identity::PeerId;
+use base64::prelude::*;
+use libp2p_identity::{Keypair, PeerId};
+use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Serialize, Deserialize)]
 #[serde(rename_all = "PascalCase")]

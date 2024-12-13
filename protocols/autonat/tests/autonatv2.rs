@@ -1,15 +1,15 @@
-use libp2p_autonat::v2::client::{self, Config};
-use libp2p_autonat::v2::server;
-use libp2p_core::multiaddr::Protocol;
-use libp2p_core::transport::TransportError;
-use libp2p_core::Multiaddr;
+use std::{sync::Arc, time::Duration};
+
+use libp2p_autonat::v2::{
+    client::{self, Config},
+    server,
+};
+use libp2p_core::{multiaddr::Protocol, transport::TransportError, Multiaddr};
 use libp2p_swarm::{
     DialError, FromSwarm, NetworkBehaviour, NewExternalAddrCandidate, Swarm, SwarmEvent,
 };
 use libp2p_swarm_test::SwarmExt;
 use rand_core::OsRng;
-use std::sync::Arc;
-use std::time::Duration;
 use tokio::sync::oneshot;
 use tracing_subscriber::EnvFilter;
 

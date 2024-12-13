@@ -40,8 +40,8 @@ pub struct Stream {
 pub(crate) type DropListener = libp2p_webrtc_utils::DropListener<Compat<PollDataChannel>>;
 
 impl Stream {
-    /// Returns a new `Substream` and a listener, which will notify the receiver when/if the substream
-    /// is dropped.
+    /// Returns a new `Substream` and a listener, which will notify the receiver when/if the
+    /// substream is dropped.
     pub(crate) fn new(data_channel: Arc<DataChannel>) -> (Self, DropListener) {
         let mut data_channel = PollDataChannel::new(data_channel).compat();
         data_channel.get_mut().set_read_buf_capacity(MAX_MSG_LEN);

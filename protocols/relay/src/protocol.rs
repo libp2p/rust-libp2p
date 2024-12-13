@@ -18,9 +18,11 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::proto;
-use libp2p_swarm::StreamProtocol;
 use std::time::Duration;
+
+use libp2p_swarm::StreamProtocol;
+
+use crate::proto;
 
 pub(crate) mod inbound_hop;
 pub(crate) mod inbound_stop;

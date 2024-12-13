@@ -18,8 +18,9 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::codec::MAX_FRAME_SIZE;
 use std::cmp;
+
+use crate::codec::MAX_FRAME_SIZE;
 
 pub(crate) const DEFAULT_MPLEX_PROTOCOL_NAME: &str = "/mplex/6.7.0";
 

@@ -19,20 +19,22 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use bytes::Bytes;
-use futures::{channel::oneshot, prelude::*, ready};
-
 use std::{
     io,
     pin::Pin,
     task::{Context, Poll},
 };
 
-use crate::proto::{Flag, Message};
+use bytes::Bytes;
+use futures::{channel::oneshot, prelude::*, ready};
+
 use crate::{
-    stream::drop_listener::GracefullyClosed,
-    stream::framed_dc::FramedDc,
-    stream::state::{Closing, State},
+    proto::{Flag, Message},
+    stream::{
+        drop_listener::GracefullyClosed,
+        framed_dc::FramedDc,
+        state::{Closing, State},
+    },
 };
 
 mod drop_listener;
@@ -69,7 +71,8 @@ impl<T> Stream<T>
 where
     T: AsyncRead + AsyncWrite + Unpin + Clone,
 {
-    /// Returns a new [`Stream`] and a [`DropListener`], which will notify the receiver when/if the stream is dropped.
+    /// Returns a new [`Stream`] and a [`DropListener`],
+    /// which will notify the receiver when/if the stream is dropped.
     pub fn new(data_channel: T) -> (Self, DropListener<T>) {
         let (sender, receiver) = oneshot::channel();
 
@@ -175,8 +178,9 @@ where
         buf: &[u8],
     ) -> Poll<io::Result<usize>> {
         while self.state.read_flags_in_async_write() {
-            // TODO: In case AsyncRead::poll_read encountered an error or returned None earlier, we will poll the
-            // underlying I/O resource once more. Is that allowed? How about introducing a state IoReadClosed?
+            // TODO: In case AsyncRead::poll_read encountered an error or returned None earlier, we
+            // will poll the underlying I/O resource once more. Is that allowed? How
+            // about introducing a state IoReadClosed?
 
             let Self {
                 read_buffer,
@@ -265,10 +269,11 @@ where
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use crate::stream::framed_dc::codec;
     use asynchronous_codec::Encoder;
     use bytes::BytesMut;
+
+    use super::*;
+    use crate::stream::framed_dc::codec;
 
     #[test]
     fn max_data_len() {

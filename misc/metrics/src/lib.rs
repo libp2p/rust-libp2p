@@ -67,8 +67,8 @@ impl Metrics {
     /// Create a new set of Swarm and protocol [`Metrics`].
     ///
     /// ```
-    /// use prometheus_client::registry::Registry;
     /// use libp2p_metrics::Metrics;
+    /// use prometheus_client::registry::Registry;
     /// let mut registry = Registry::default();
     /// let metrics = Metrics::new(&mut registry);
     /// ```

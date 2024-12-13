@@ -18,14 +18,18 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::either::EitherFuture;
-use crate::upgrade::{
-    InboundConnectionUpgrade, InboundUpgrade, OutboundConnectionUpgrade, OutboundUpgrade,
-    UpgradeInfo,
-};
+use std::iter::{Chain, Map};
+
 use either::Either;
 use futures::future;
-use std::iter::{Chain, Map};
+
+use crate::{
+    either::EitherFuture,
+    upgrade::{
+        InboundConnectionUpgrade, InboundUpgrade, OutboundConnectionUpgrade, OutboundUpgrade,
+        UpgradeInfo,
+    },
+};
 
 /// Upgrade that combines two upgrades into one. Supports all the protocols supported by either
 /// sub-upgrade.

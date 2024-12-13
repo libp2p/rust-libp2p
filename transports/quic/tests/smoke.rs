@@ -1,16 +1,31 @@
 #![cfg(any(feature = "async-std", feature = "tokio"))]
 
-use futures::channel::{mpsc, oneshot};
-use futures::future::BoxFuture;
-use futures::future::{poll_fn, Either};
-use futures::stream::StreamExt;
-use futures::{future, AsyncReadExt, AsyncWriteExt, FutureExt, SinkExt};
+use std::{
+    future::Future,
+    io,
+    num::NonZeroU8,
+    pin::Pin,
+    sync::{Arc, Mutex},
+    task::Poll,
+    time::Duration,
+};
+
+use futures::{
+    channel::{mpsc, oneshot},
+    future,
+    future::{poll_fn, BoxFuture, Either},
+    stream::StreamExt,
+    AsyncReadExt, AsyncWriteExt, FutureExt, SinkExt,
+};
 use futures_timer::Delay;
-use libp2p_core::muxing::{StreamMuxerBox, StreamMuxerExt, SubstreamBox};
-use libp2p_core::transport::{Boxed, DialOpts, OrTransport, PortUse, TransportEvent};
-use libp2p_core::transport::{ListenerId, TransportError};
-use libp2p_core::Endpoint;
-use libp2p_core::{multiaddr::Protocol, upgrade, Multiaddr, Transport};
+use libp2p_core::{
+    multiaddr::Protocol,
+    muxing::{StreamMuxerBox, StreamMuxerExt, SubstreamBox},
+    transport::{
+        Boxed, DialOpts, ListenerId, OrTransport, PortUse, TransportError, TransportEvent,
+    },
+    upgrade, Endpoint, Multiaddr, Transport,
+};
 use libp2p_identity::PeerId;
 use libp2p_noise as noise;
 use libp2p_quic as quic;
@@ -18,15 +33,6 @@ use libp2p_tcp as tcp;
 use libp2p_yamux as yamux;
 use quic::Provider;
 use rand::RngCore;
-use std::future::Future;
-use std::io;
-use std::num::NonZeroU8;
-use std::task::Poll;
-use std::time::Duration;
-use std::{
-    pin::Pin,
-    sync::{Arc, Mutex},
-};
 use tracing_subscriber::EnvFilter;
 
 #[cfg(feature = "tokio")]
@@ -200,7 +206,8 @@ async fn wrapped_with_delay() {
 
 #[cfg(feature = "async-std")]
 #[async_std::test]
-#[ignore] // Transport currently does not validate PeerId. Enable once we make use of PeerId validation in rustls.
+#[ignore] // Transport currently does not validate PeerId.
+          // Enable once we make use of PeerId validation in rustls.
 async fn wrong_peerid() {
     use libp2p_identity::PeerId;
 

@@ -18,8 +18,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use prometheus_client::metrics::counter::Counter;
-use prometheus_client::registry::Registry;
+use prometheus_client::{metrics::counter::Counter, registry::Registry};
 
 pub(crate) struct Metrics {
     messages: Counter,

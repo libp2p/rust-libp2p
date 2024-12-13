@@ -18,16 +18,20 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::proto;
+use std::io;
+
 use async_trait::async_trait;
 use asynchronous_codec::{FramedRead, FramedWrite};
-use futures::io::{AsyncRead, AsyncWrite};
-use futures::{SinkExt, StreamExt};
+use futures::{
+    io::{AsyncRead, AsyncWrite},
+    SinkExt, StreamExt,
+};
 use libp2p_core::Multiaddr;
 use libp2p_identity::PeerId;
 use libp2p_request_response::{self as request_response};
 use libp2p_swarm::StreamProtocol;
-use std::io;
+
+use crate::proto;
 
 /// The protocol name used for negotiating with multistream-select.
 pub const DEFAULT_PROTOCOL_NAME: StreamProtocol = StreamProtocol::new("/libp2p/autonat/1.0.0");

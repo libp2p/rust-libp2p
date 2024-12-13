@@ -20,14 +20,14 @@
 
 #![doc = include_str!("../README.md")]
 
+use std::{error::Error, time::Duration};
+
 use futures::StreamExt;
 use libp2p::{
     identify, noise, ping, rendezvous,
     swarm::{NetworkBehaviour, SwarmEvent},
     tcp, yamux,
 };
-use std::error::Error;
-use std::time::Duration;
 use tracing_subscriber::EnvFilter;
 
 #[tokio::main]
@@ -55,7 +55,6 @@ async fn main() -> Result<(), Box<dyn Error>> {
             rendezvous: rendezvous::server::Behaviour::new(rendezvous::server::Config::default()),
             ping: ping::Behaviour::new(ping::Config::new().with_interval(Duration::from_secs(1))),
         })?
-        .with_swarm_config(|cfg| cfg.with_idle_connection_timeout(Duration::from_secs(5)))
         .build();
 
     let _ = swarm.listen_on("/ip4/0.0.0.0/tcp/62649".parse().unwrap());

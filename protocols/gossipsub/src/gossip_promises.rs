@@ -18,12 +18,12 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::peer_score::RejectReason;
-use crate::MessageId;
-use crate::ValidationError;
-use libp2p_identity::PeerId;
 use std::collections::HashMap;
+
+use libp2p_identity::PeerId;
 use web_time::Instant;
+
+use crate::{peer_score::RejectReason, MessageId, ValidationError};
 
 /// Tracks recently sent `IWANT` messages and checks if peers respond to them.
 #[derive(Default)]

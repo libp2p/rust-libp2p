@@ -42,13 +42,15 @@ pub trait Builder: Send + Unpin + 'static {
 
 #[cfg(feature = "async-io")]
 pub(crate) mod asio {
-    use super::*;
-    use async_io::Timer as AsioTimer;
-    use futures::Stream;
     use std::{
         pin::Pin,
         task::{Context, Poll},
     };
+
+    use async_io::Timer as AsioTimer;
+    use futures::Stream;
+
+    use super::*;
 
     /// Async Timer
     pub(crate) type AsyncTimer = Timer<AsioTimer>;
@@ -83,13 +85,15 @@ pub(crate) mod asio {
 
 #[cfg(feature = "tokio")]
 pub(crate) mod tokio {
-    use super::*;
-    use ::tokio::time::{self, Instant as TokioInstant, Interval, MissedTickBehavior};
-    use futures::Stream;
     use std::{
         pin::Pin,
         task::{Context, Poll},
     };
+
+    use ::tokio::time::{self, Instant as TokioInstant, Interval, MissedTickBehavior};
+    use futures::Stream;
+
+    use super::*;
 
     /// Tokio wrapper
     pub(crate) type TokioTimer = Timer<Interval>;

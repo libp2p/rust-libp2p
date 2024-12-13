@@ -1,4 +1,5 @@
 use std::{
+    convert::Infallible,
     io,
     task::{Context, Poll},
     time::Duration,
@@ -11,7 +12,6 @@ use libp2p_swarm::{
     handler::{ConnectionEvent, FullyNegotiatedInbound, ListenUpgradeError},
     ConnectionHandler, ConnectionHandlerEvent, StreamProtocol, SubstreamProtocol,
 };
-use void::Void;
 
 use crate::v2::{protocol, Nonce, DIAL_BACK_PROTOCOL};
 
@@ -28,7 +28,7 @@ impl Handler {
 }
 
 impl ConnectionHandler for Handler {
-    type FromBehaviour = Void;
+    type FromBehaviour = Infallible;
     type ToBehaviour = IncomingNonce;
     type InboundProtocol = ReadyUpgrade<StreamProtocol>;
     type OutboundProtocol = DeniedUpgrade;
@@ -83,10 +83,10 @@ impl ConnectionHandler for Handler {
                     tracing::warn!("Dial back request dropped, too many requests in flight");
                 }
             }
-            // TODO: remove when Rust 1.82 is MSRVprotocols/autonat/src/v2/client/handler/dial_back.rs
+            // TODO: remove when Rust 1.82 is MSRV
             #[allow(unreachable_patterns)]
             ConnectionEvent::ListenUpgradeError(ListenUpgradeError { error, .. }) => {
-                void::unreachable(error);
+                libp2p_core::util::unreachable(error);
             }
             _ => {}
         }

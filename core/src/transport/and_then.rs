@@ -18,14 +18,21 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
+use std::{
+    error,
+    marker::PhantomPinned,
+    pin::Pin,
+    task::{Context, Poll},
+};
+
+use either::Either;
+use futures::prelude::*;
+use multiaddr::Multiaddr;
+
 use crate::{
     connection::ConnectedPoint,
     transport::{DialOpts, ListenerId, Transport, TransportError, TransportEvent},
 };
-use either::Either;
-use futures::prelude::*;
-use multiaddr::Multiaddr;
-use std::{error, marker::PhantomPinned, pin::Pin, task::Context, task::Poll};
 
 /// See the [`Transport::and_then`] method.
 #[pin_project::pin_project]

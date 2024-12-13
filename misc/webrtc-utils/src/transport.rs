@@ -1,6 +1,8 @@
-use crate::fingerprint::Fingerprint;
-use libp2p_core::{multiaddr::Protocol, Multiaddr};
 use std::net::{IpAddr, SocketAddr};
+
+use libp2p_core::{multiaddr::Protocol, Multiaddr};
+
+use crate::fingerprint::Fingerprint;
 
 /// Parse the given [`Multiaddr`] into a [`SocketAddr`] and a [`Fingerprint`] for dialing.
 pub fn parse_webrtc_dial_addr(addr: &Multiaddr) -> Option<(SocketAddr, Fingerprint)> {
@@ -38,8 +40,9 @@ pub fn parse_webrtc_dial_addr(addr: &Multiaddr) -> Option<(SocketAddr, Fingerpri
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use std::net::{Ipv4Addr, Ipv6Addr};
+
+    use super::*;
 
     #[test]
     fn parse_valid_address_with_certhash_and_p2p() {

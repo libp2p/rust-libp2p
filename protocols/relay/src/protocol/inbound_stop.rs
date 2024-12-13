@@ -18,15 +18,19 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::proto;
-use crate::protocol::{self, MAX_MESSAGE_SIZE};
+use std::io;
+
 use asynchronous_codec::{Framed, FramedParts};
 use bytes::Bytes;
 use futures::prelude::*;
 use libp2p_identity::PeerId;
 use libp2p_swarm::Stream;
-use std::io;
 use thiserror::Error;
+
+use crate::{
+    proto,
+    protocol::{self, MAX_MESSAGE_SIZE},
+};
 
 pub(crate) async fn handle_open_circuit(io: Stream) -> Result<Circuit, Error> {
     let mut substream = Framed::new(io, quick_protobuf_codec::Codec::new(MAX_MESSAGE_SIZE));

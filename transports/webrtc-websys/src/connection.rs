@@ -1,23 +1,24 @@
 //! A libp2p connection backed by an [RtcPeerConnection](https://developer.mozilla.org/en-US/docs/Web/API/RTCPeerConnection).
 
-use super::{Error, Stream};
-use crate::stream::DropListener;
-use futures::channel::mpsc;
-use futures::stream::FuturesUnordered;
-use futures::StreamExt;
+use std::{
+    pin::Pin,
+    task::{ready, Context, Poll, Waker},
+};
+
+use futures::{channel::mpsc, stream::FuturesUnordered, StreamExt};
 use js_sys::{Object, Reflect};
 use libp2p_core::muxing::{StreamMuxer, StreamMuxerEvent};
 use libp2p_webrtc_utils::Fingerprint;
 use send_wrapper::SendWrapper;
-use std::pin::Pin;
-use std::task::Waker;
-use std::task::{ready, Context, Poll};
 use wasm_bindgen::prelude::*;
 use wasm_bindgen_futures::JsFuture;
 use web_sys::{
     RtcConfiguration, RtcDataChannel, RtcDataChannelEvent, RtcDataChannelInit, RtcDataChannelType,
     RtcSessionDescriptionInit,
 };
+
+use super::{Error, Stream};
+use crate::stream::DropListener;
 
 /// A WebRTC Connection.
 ///
@@ -31,7 +32,8 @@ pub struct Connection {
     closed: bool,
     /// An [`mpsc::channel`] for all inbound data channels.
     ///
-    /// Because the browser's WebRTC API is event-based, we need to use a channel to obtain all inbound data channels.
+    /// Because the browser's WebRTC API is event-based, we need to use a channel to obtain all
+    /// inbound data channels.
     inbound_data_channels: SendWrapper<mpsc::Receiver<RtcDataChannel>>,
     /// A list of futures, which, once completed, signal that a [`Stream`] has been dropped.
     drop_listeners: FuturesUnordered<DropListener>,
@@ -43,7 +45,8 @@ pub struct Connection {
 impl Connection {
     /// Create a new inner WebRTC Connection
     pub(crate) fn new(peer_connection: RtcPeerConnection) -> Self {
-        // An ondatachannel Future enables us to poll for incoming data channel events in poll_incoming
+        // An ondatachannel Future enables us to poll for incoming data channel events in
+        // poll_incoming
         let (mut tx_ondatachannel, rx_ondatachannel) = mpsc::channel(4); // we may get more than one data channel opened on a single peer connection
 
         let ondatachannel_closure = Closure::new(move |ev: RtcDataChannelEvent| {
@@ -120,7 +123,8 @@ impl StreamMuxer for Connection {
                 Poll::Ready(Ok(stream))
             }
             None => {
-                // This only happens if the [`RtcPeerConnection::ondatachannel`] closure gets freed which means we are most likely shutting down the connection.
+                // This only happens if the [`RtcPeerConnection::ondatachannel`] closure gets freed
+                // which means we are most likely shutting down the connection.
                 tracing::debug!("`Sender` for inbound data channels has been dropped");
                 Poll::Ready(Err(Error::Connection("connection closed".to_owned())))
             }

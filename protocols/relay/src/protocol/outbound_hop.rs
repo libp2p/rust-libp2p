@@ -18,22 +18,23 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use std::io;
-use std::time::Duration;
+use std::{io, time::Duration};
 
 use asynchronous_codec::{Framed, FramedParts};
 use bytes::Bytes;
 use futures::prelude::*;
 use futures_timer::Delay;
-use thiserror::Error;
-use web_time::SystemTime;
-
 use libp2p_core::Multiaddr;
 use libp2p_identity::PeerId;
 use libp2p_swarm::Stream;
+use thiserror::Error;
+use web_time::SystemTime;
 
-use crate::protocol::{Limit, MAX_MESSAGE_SIZE};
-use crate::{proto, HOP_PROTOCOL_NAME};
+use crate::{
+    proto,
+    protocol::{Limit, MAX_MESSAGE_SIZE},
+    HOP_PROTOCOL_NAME,
+};
 
 #[derive(Debug, Error)]
 pub enum ConnectError {

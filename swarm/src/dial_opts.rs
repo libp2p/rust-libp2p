@@ -19,13 +19,12 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::ConnectionId;
-use libp2p_core::connection::Endpoint;
-use libp2p_core::multiaddr::Protocol;
-use libp2p_core::transport::PortUse;
-use libp2p_core::Multiaddr;
-use libp2p_identity::PeerId;
 use std::num::NonZeroU8;
+
+use libp2p_core::{connection::Endpoint, multiaddr::Protocol, transport::PortUse, Multiaddr};
+use libp2p_identity::PeerId;
+
+use crate::ConnectionId;
 
 macro_rules! fn_override_role {
     () => {
@@ -130,7 +129,8 @@ impl DialOpts {
     /// Get the [`ConnectionId`] of this dial attempt.
     ///
     /// All future events of this dial will be associated with this ID.
-    /// See [`DialFailure`](crate::DialFailure) and [`ConnectionEstablished`](crate::behaviour::ConnectionEstablished).
+    /// See [`DialFailure`](crate::DialFailure) and
+    /// [`ConnectionEstablished`](crate::behaviour::ConnectionEstablished).
     pub fn connection_id(&self) -> ConnectionId {
         self.connection_id
     }
@@ -324,8 +324,8 @@ impl WithoutPeerIdWithAddress {
 /// # use libp2p_identity::PeerId;
 /// #
 /// DialOpts::peer_id(PeerId::random())
-///    .condition(PeerCondition::Disconnected)
-///    .build();
+///     .condition(PeerCondition::Disconnected)
+///     .build();
 /// ```
 #[derive(Debug, Copy, Clone, Default)]
 pub enum PeerCondition {
@@ -338,7 +338,7 @@ pub enum PeerCondition {
     NotDialing,
     /// A combination of [`Disconnected`](PeerCondition::Disconnected) and
     /// [`NotDialing`](PeerCondition::NotDialing). A new dialing attempt is
-    /// iniated _only if_ the peer is both considered disconnected and there
+    /// initiated _only if_ the peer is both considered disconnected and there
     /// is currently no ongoing dialing attempt.
     #[default]
     DisconnectedAndNotDialing,

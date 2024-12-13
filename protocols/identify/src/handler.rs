@@ -18,28 +18,37 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::protocol::{Info, PushInfo, UpgradeError};
-use crate::{protocol, PROTOCOL_NAME, PUSH_PROTOCOL_NAME};
+use std::{
+    collections::HashSet,
+    task::{Context, Poll},
+    time::Duration,
+};
+
 use either::Either;
 use futures::prelude::*;
 use futures_bounded::Timeout;
 use futures_timer::Delay;
-use libp2p_core::upgrade::{ReadyUpgrade, SelectUpgrade};
-use libp2p_core::Multiaddr;
-use libp2p_identity::PeerId;
-use libp2p_identity::PublicKey;
-use libp2p_swarm::handler::{
-    ConnectionEvent, DialUpgradeError, FullyNegotiatedInbound, FullyNegotiatedOutbound,
-    ProtocolSupport,
+use libp2p_core::{
+    upgrade::{ReadyUpgrade, SelectUpgrade},
+    Multiaddr,
 };
+use libp2p_identity::{PeerId, PublicKey};
 use libp2p_swarm::{
+    handler::{
+        ConnectionEvent, DialUpgradeError, FullyNegotiatedInbound, FullyNegotiatedOutbound,
+        ProtocolSupport,
+    },
     ConnectionHandler, ConnectionHandlerEvent, StreamProtocol, StreamUpgradeError,
     SubstreamProtocol, SupportedProtocols,
 };
 use smallvec::SmallVec;
-use std::collections::HashSet;
-use std::{task::Context, task::Poll, time::Duration};
 use tracing::Level;
+
+use crate::{
+    protocol,
+    protocol::{Info, PushInfo, UpgradeError},
+    PROTOCOL_NAME, PUSH_PROTOCOL_NAME,
+};
 
 const STREAM_TIMEOUT: Duration = Duration::from_secs(60);
 const MAX_CONCURRENT_STREAMS_PER_CONNECTION: usize = 10;
@@ -398,7 +407,7 @@ impl ConnectionHandler for Handler {
             ConnectionEvent::DialUpgradeError(DialUpgradeError { error, .. }) => {
                 self.events.push(ConnectionHandlerEvent::NotifyBehaviour(
                     Event::IdentificationError(
-                        error.map_upgrade_err(|e| void::unreachable(e.into_inner())),
+                        error.map_upgrade_err(|e| libp2p_core::util::unreachable(e.into_inner())),
                     ),
                 ));
                 self.trigger_next_identify.reset(self.interval);

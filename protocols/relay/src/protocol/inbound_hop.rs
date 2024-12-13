@@ -19,21 +19,18 @@
 // DEALINGS IN THE SOFTWARE.
 
 use std::time::Duration;
-use web_time::SystemTime;
 
 use asynchronous_codec::{Framed, FramedParts};
 use bytes::Bytes;
 use either::Either;
 use futures::prelude::*;
-use thiserror::Error;
-
 use libp2p_core::Multiaddr;
 use libp2p_identity::PeerId;
 use libp2p_swarm::Stream;
+use thiserror::Error;
+use web_time::SystemTime;
 
-use crate::proto;
-use crate::proto::message_v2::pb::mod_HopMessage::Type;
-use crate::protocol::MAX_MESSAGE_SIZE;
+use crate::{proto, proto::message_v2::pb::mod_HopMessage::Type, protocol::MAX_MESSAGE_SIZE};
 
 #[derive(Debug, Error)]
 pub enum Error {

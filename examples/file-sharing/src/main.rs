@@ -22,15 +22,12 @@
 
 mod network;
 
-use clap::Parser;
-use tokio::task::spawn;
+use std::{error::Error, io::Write, path::PathBuf};
 
-use futures::prelude::*;
-use futures::StreamExt;
+use clap::Parser;
+use futures::{prelude::*, StreamExt};
 use libp2p::{core::Multiaddr, multiaddr::Protocol};
-use std::error::Error;
-use std::io::Write;
-use std::path::PathBuf;
+use tokio::task::spawn;
 use tracing_subscriber::EnvFilter;
 
 #[tokio::main]

@@ -1,15 +1,20 @@
+use std::{
+    fmt,
+    future::Future,
+    mem,
+    pin::Pin,
+    task::{Context, Poll},
+    time::Duration,
+};
+
+use futures::{future, AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, Stream, StreamExt};
+use libp2p_core::{
+    muxing::StreamMuxerExt,
+    upgrade::{InboundConnectionUpgrade, OutboundConnectionUpgrade},
+    StreamMuxer, UpgradeInfo,
+};
+
 use crate::future::{BoxFuture, Either, FutureExt};
-use futures::{future, AsyncRead, AsyncWrite};
-use futures::{AsyncReadExt, Stream};
-use futures::{AsyncWriteExt, StreamExt};
-use libp2p_core::muxing::StreamMuxerExt;
-use libp2p_core::upgrade::{InboundConnectionUpgrade, OutboundConnectionUpgrade};
-use libp2p_core::{StreamMuxer, UpgradeInfo};
-use std::future::Future;
-use std::pin::Pin;
-use std::task::{Context, Poll};
-use std::time::Duration;
-use std::{fmt, mem};
 
 pub async fn connected_muxers_on_memory_ring_buffer<MC, M, E>() -> (M, M)
 where
@@ -41,7 +46,8 @@ where
         .unwrap()
 }
 
-/// Verifies that Alice can send a message and immediately close the stream afterwards and Bob can use `read_to_end` to read the entire message.
+/// Verifies that Alice can send a message and immediately close the stream afterwards and Bob can
+/// use `read_to_end` to read the entire message.
 pub async fn close_implies_flush<A, B, S, E>(alice: A, bob: B)
 where
     A: StreamMuxer<Substream = S, Error = E> + Unpin,
@@ -99,7 +105,8 @@ where
     .await;
 }
 
-/// Runs the given protocol between the two parties, ensuring commutativity, i.e. either party can be the dialer and listener.
+/// Runs the given protocol between the two parties, ensuring commutativity, i.e. either party can
+/// be the dialer and listener.
 async fn run_commutative<A, B, S, E, F1, F2>(
     mut alice: A,
     mut bob: B,
@@ -120,7 +127,8 @@ async fn run_commutative<A, B, S, E, F1, F2>(
 /// Runs a given protocol between the two parties.
 ///
 /// The first party will open a new substream and the second party will wait for this.
-/// The [`StreamMuxer`] is polled until both parties have completed the protocol to ensure that the underlying connection can make progress at all times.
+/// The [`StreamMuxer`] is polled until both parties have completed the protocol to ensure that the
+/// underlying connection can make progress at all times.
 async fn run<A, B, S, E, F1, F2>(
     dialer: &mut A,
     listener: &mut B,

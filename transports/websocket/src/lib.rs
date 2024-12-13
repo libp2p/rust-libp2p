@@ -27,6 +27,12 @@ pub mod framed;
 mod quicksink;
 pub mod tls;
 
+use std::{
+    io,
+    pin::Pin,
+    task::{Context, Poll},
+};
+
 use error::Error;
 use framed::{Connection, Incoming};
 use futures::{future::BoxFuture, prelude::*, ready};
@@ -37,11 +43,6 @@ use libp2p_core::{
     Transport,
 };
 use rw_stream_sink::RwStreamSink;
-use std::{
-    io,
-    pin::Pin,
-    task::{Context, Poll},
-};
 
 /// A Websocket transport.
 ///
@@ -75,18 +76,28 @@ use std::{
 /// # #[async_std::main]
 /// # async fn main() {
 ///
-/// let mut transport = websocket::WsConfig::new(dns::async_std::Transport::system(
-///     tcp::async_io::Transport::new(tcp::Config::default()),
-/// ).await.unwrap());
+/// let mut transport = websocket::WsConfig::new(
+///     dns::async_std::Transport::system(tcp::async_io::Transport::new(tcp::Config::default()))
+///         .await
+///         .unwrap(),
+/// );
 ///
 /// let rcgen_cert = generate_simple_self_signed(vec!["localhost".to_string()]).unwrap();
 /// let priv_key = websocket::tls::PrivateKey::new(rcgen_cert.serialize_private_key_der());
 /// let cert = websocket::tls::Certificate::new(rcgen_cert.serialize_der().unwrap());
 /// transport.set_tls_config(websocket::tls::Config::new(priv_key, vec![cert]).unwrap());
 ///
-/// let id = transport.listen_on(ListenerId::next(), "/ip4/127.0.0.1/tcp/0/tls/ws".parse().unwrap()).unwrap();
+/// let id = transport
+///     .listen_on(
+///         ListenerId::next(),
+///         "/ip4/127.0.0.1/tcp/0/tls/ws".parse().unwrap(),
+///     )
+///     .unwrap();
 ///
-/// let addr = future::poll_fn(|cx| Pin::new(&mut transport).poll(cx)).await.into_new_address().unwrap();
+/// let addr = future::poll_fn(|cx| Pin::new(&mut transport).poll(cx))
+///     .await
+///     .into_new_address()
+///     .unwrap();
 /// println!("Listening on {addr}");
 ///
 /// # }
@@ -105,13 +116,20 @@ use std::{
 /// # #[async_std::main]
 /// # async fn main() {
 ///
-/// let mut transport = websocket::WsConfig::new(
-///     tcp::async_io::Transport::new(tcp::Config::default()),
-/// );
+/// let mut transport =
+///     websocket::WsConfig::new(tcp::async_io::Transport::new(tcp::Config::default()));
 ///
-/// let id = transport.listen_on(ListenerId::next(), "/ip4/127.0.0.1/tcp/0/ws".parse().unwrap()).unwrap();
+/// let id = transport
+///     .listen_on(
+///         ListenerId::next(),
+///         "/ip4/127.0.0.1/tcp/0/ws".parse().unwrap(),
+///     )
+///     .unwrap();
 ///
-/// let addr = future::poll_fn(|cx| Pin::new(&mut transport).poll(cx)).await.into_new_address().unwrap();
+/// let addr = future::poll_fn(|cx| Pin::new(&mut transport).poll(cx))
+///     .await
+///     .into_new_address()
+///     .unwrap();
 /// println!("Listening on {addr}");
 ///
 /// # }
@@ -283,7 +301,6 @@ where
 
 #[cfg(test)]
 mod tests {
-    use super::WsConfig;
     use futures::prelude::*;
     use libp2p_core::{
         multiaddr::Protocol,
@@ -292,6 +309,8 @@ mod tests {
     };
     use libp2p_identity::PeerId;
     use libp2p_tcp as tcp;
+
+    use super::WsConfig;
 
     #[test]
     fn dialer_connects_to_listener_ipv4() {

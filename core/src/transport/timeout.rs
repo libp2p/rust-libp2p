@@ -24,14 +24,20 @@
 //! underlying `Transport`.
 // TODO: add example
 
-use crate::transport::DialOpts;
-use crate::{
-    transport::{ListenerId, TransportError, TransportEvent},
-    Multiaddr, Transport,
+use std::{
+    error, fmt, io,
+    pin::Pin,
+    task::{Context, Poll},
+    time::Duration,
 };
+
 use futures::prelude::*;
 use futures_timer::Delay;
-use std::{error, fmt, io, pin::Pin, task::Context, task::Poll, time::Duration};
+
+use crate::{
+    transport::{DialOpts, ListenerId, TransportError, TransportEvent},
+    Multiaddr, Transport,
+};
 
 /// A `TransportTimeout` is a `Transport` that wraps another `Transport` and adds
 /// timeouts to all inbound and outbound connection attempts.

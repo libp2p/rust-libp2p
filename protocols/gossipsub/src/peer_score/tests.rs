@@ -20,9 +20,7 @@
 
 /// A collection of unit tests mostly ported from the go implementation.
 use super::*;
-
-use crate::types::RawMessage;
-use crate::{IdentTopic as Topic, Message};
+use crate::{types::RawMessage, IdentTopic as Topic, Message};
 
 // estimates a value within variance
 fn within_variance(value: f64, expected: f64, variance: f64) -> bool {
@@ -447,7 +445,8 @@ fn test_score_mesh_message_deliveries_decay() {
     }
 
     let score_a = peer_score.score(&peer_id_a);
-    // the penalty is the difference between the threshold and the (decayed) mesh deliveries, squared.
+    // the penalty is the difference between the threshold and the (decayed)
+    // mesh deliveries, squared.
     let deficit = topic_params.mesh_message_deliveries_threshold - decayed_delivery_count;
     let penalty = deficit * deficit;
     let expected =

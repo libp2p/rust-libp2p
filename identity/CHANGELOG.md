@@ -1,3 +1,8 @@
+## 0.2.10
+
+- Deprecate `void` crate.
+  See [PR 5676](https://github.com/libp2p/rust-libp2p/pull/5676).
+
 ## 0.2.9
 
 - Add `rand` feature gate to ecdsa methods requiring a random number generator.
@@ -5,7 +10,7 @@
 
 ## 0.2.8
 
-- Bump `ring` to `0.17.5.
+- Bump `ring` to `0.17.5`.
   See [PR 4779](https://github.com/libp2p/rust-libp2p/pull/4779).
 
 ## 0.2.7

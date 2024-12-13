@@ -18,10 +18,10 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-pub(crate) use libp2p_webrtc_utils::sdp::random_ufrag;
-use libp2p_webrtc_utils::sdp::render_description;
-use libp2p_webrtc_utils::Fingerprint;
 use std::net::SocketAddr;
+
+pub(crate) use libp2p_webrtc_utils::sdp::random_ufrag;
+use libp2p_webrtc_utils::{sdp::render_description, Fingerprint};
 use webrtc::peer_connection::sdp::session_description::RTCSessionDescription;
 
 /// Creates the SDP answer used by the client.

@@ -23,6 +23,8 @@
 //! receives a request and sends a response, whereas the
 //! outbound upgrade send a request and receives a response.
 
+use std::convert::Infallible;
+
 use futures::future::{ready, Ready};
 use libp2p_core::upgrade::{InboundUpgrade, OutboundUpgrade, UpgradeInfo};
 use libp2p_swarm::Stream;
@@ -82,7 +84,7 @@ where
     P: AsRef<str> + Clone,
 {
     type Output = (Stream, P);
-    type Error = void::Void;
+    type Error = Infallible;
     type Future = Ready<Result<Self::Output, Self::Error>>;
 
     fn upgrade_inbound(self, io: Stream, protocol: Self::Info) -> Self::Future {
@@ -95,7 +97,7 @@ where
     P: AsRef<str> + Clone,
 {
     type Output = (Stream, P);
-    type Error = void::Void;
+    type Error = Infallible;
     type Future = Ready<Result<Self::Output, Self::Error>>;
 
     fn upgrade_outbound(self, io: Stream, protocol: Self::Info) -> Self::Future {
