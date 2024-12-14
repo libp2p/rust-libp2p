@@ -3126,6 +3126,7 @@ dependencies = [
  "libp2p-core",
  "libp2p-dns",
  "libp2p-identity",
+ "libp2p-logging",
  "libp2p-quic",
  "libp2p-swarm",
  "libp2p-swarm-test",
