@@ -1,7 +1,11 @@
 ## 0.54.2
 
+- Add `with_connection_timeout` on `SwarmBuilder` to allow configuration of the connection_timeout parameter.
+  See [PR 5575](https://github.com/libp2p/rust-libp2p/pull/5575).
+
 - Deprecate `void` crate.
   See [PR 5676](https://github.com/libp2p/rust-libp2p/pull/5676).
+
 - Update default for idle-connection-timeout to 10s.
   See [PR 4967](https://github.com/libp2p/rust-libp2p/pull/4967).
 
