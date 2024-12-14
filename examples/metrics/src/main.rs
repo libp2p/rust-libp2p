@@ -20,7 +20,7 @@
 
 #![doc = include_str!("../README.md")]
 
-use std::{error::Error, time::Duration};
+use std::error::Error;
 
 use futures::StreamExt;
 use libp2p::{
@@ -54,7 +54,6 @@ async fn main() -> Result<(), Box<dyn Error>> {
         )?
         .with_bandwidth_metrics(&mut metric_registry)
         .with_behaviour(|key| Behaviour::new(key.public()))?
-        .with_swarm_config(|cfg| cfg.with_idle_connection_timeout(Duration::from_secs(u64::MAX)))
         .build();
 
     swarm.listen_on("/ip4/0.0.0.0/tcp/0".parse()?)?;
