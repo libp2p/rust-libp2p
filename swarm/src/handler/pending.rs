@@ -51,7 +51,7 @@ impl ConnectionHandler for PendingConnectionHandler {
     type OutboundOpenInfo = Infallible;
     type InboundOpenInfo = ();
 
-    fn listen_protocol(&self) -> SubstreamProtocol<Self::InboundProtocol, Self::InboundOpenInfo> {
+    fn listen_protocol(&self) -> SubstreamProtocol<Self::InboundProtocol> {
         SubstreamProtocol::new(PendingUpgrade::new(self.protocol_name.clone()), ())
     }
 
@@ -64,20 +64,13 @@ impl ConnectionHandler for PendingConnectionHandler {
     fn poll(
         &mut self,
         _: &mut Context<'_>,
-    ) -> Poll<
-        ConnectionHandlerEvent<Self::OutboundProtocol, Self::OutboundOpenInfo, Self::ToBehaviour>,
-    > {
+    ) -> Poll<ConnectionHandlerEvent<Self::OutboundProtocol, Infallible, Self::ToBehaviour>> {
         Poll::Pending
     }
 
     fn on_connection_event(
         &mut self,
-        event: ConnectionEvent<
-            Self::InboundProtocol,
-            Self::OutboundProtocol,
-            Self::InboundOpenInfo,
-            Self::OutboundOpenInfo,
-        >,
+        event: ConnectionEvent<Self::InboundProtocol, Self::OutboundProtocol, (), Infallible>,
     ) {
         match event {
             // TODO: remove when Rust 1.82 is MSRV
