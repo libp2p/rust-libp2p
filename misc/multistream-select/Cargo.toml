@@ -24,7 +24,6 @@ futures_ringbuf = "0.4.0"
 quickcheck = { workspace = true }
 rand = "0.8"
 rw-stream-sink = { workspace = true }
-tracing-subscriber = { workspace = true, features = ["env-filter"] }
 libp2p-logging = { workspace = true }
 
 # Passing arguments to the docsrs builder in order to properly document cfg's.

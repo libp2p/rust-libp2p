@@ -3348,7 +3348,6 @@ dependencies = [
  "rand 0.8.5",
  "tokio",
  "tracing",
- "tracing-subscriber",
 ]
 
 [[package]]
@@ -3926,7 +3925,6 @@ dependencies = [
  "rw-stream-sink",
  "smallvec",
  "tracing",
- "tracing-subscriber",
  "unsigned-varint 0.8.0",
 ]
 

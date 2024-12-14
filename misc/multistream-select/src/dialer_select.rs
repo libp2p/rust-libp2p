@@ -214,9 +214,9 @@ mod tests {
         future::timeout,
         net::{TcpListener, TcpStream},
     };
+    use libp2p_logging::EnvFilter;
     use quickcheck::{Arbitrary, Gen, GenRange};
     use tracing::metadata::LevelFilter;
-    use tracing_subscriber::EnvFilter;
 
     use super::*;
     use crate::listener_select_proto;
