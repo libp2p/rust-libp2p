@@ -100,7 +100,7 @@ impl Behaviour {
         use sysinfo::{RefreshKind, System};
 
         let system_memory_bytes = System::new_with_specifics(
-            RefreshKind::new().with_memory(MemoryRefreshKind::new().with_ram()),
+            RefreshKind::default().with_memory(MemoryRefreshKind::default().with_ram()),
         )
         .total_memory();
 

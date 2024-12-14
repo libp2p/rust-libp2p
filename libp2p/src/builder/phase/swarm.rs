@@ -1,6 +1,9 @@
 #[allow(unused_imports)]
 use super::*;
 
+#[allow(unused)] // used below but due to feature flag combinations, clippy gives an unnecessary warning.
+const DEFAULT_CONNECTION_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(10);
+
 #[allow(dead_code)]
 pub struct SwarmPhase<T, B> {
     pub(crate) behaviour: B,
@@ -20,6 +23,7 @@ macro_rules! impl_with_swarm_config {
                         behaviour: self.phase.behaviour,
                         transport: self.phase.transport,
                         swarm_config: constructor($config),
+                        connection_timeout: DEFAULT_CONNECTION_TIMEOUT,
                     },
                     keypair: self.keypair,
                     phantom: std::marker::PhantomData,

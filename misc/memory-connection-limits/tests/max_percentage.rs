@@ -37,7 +37,7 @@ use util::*;
 fn max_percentage() {
     const CONNECTION_LIMIT: usize = 20;
     let system_info = sysinfo::System::new_with_specifics(
-        RefreshKind::new().with_memory(MemoryRefreshKind::new().with_ram()),
+        RefreshKind::default().with_memory(MemoryRefreshKind::default().with_ram()),
     );
 
     let mut network = Swarm::new_ephemeral(|_| TestBehaviour {
