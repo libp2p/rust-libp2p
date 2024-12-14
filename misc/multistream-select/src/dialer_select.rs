@@ -275,7 +275,7 @@ mod tests {
             ListenerProtos(listen_protos): ListenerProtos,
             DialPayload(dial_payload): DialPayload,
         ) {
-            libp2p_logging::init_tracing_subscriber_with_env_filter(
+            libp2p_logging::with_env_filter(
                 EnvFilter::builder()
                     .with_default_directive(LevelFilter::DEBUG.into())
                     .from_env_lossy(),

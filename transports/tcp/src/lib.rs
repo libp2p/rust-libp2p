@@ -762,7 +762,7 @@ mod tests {
 
     #[test]
     fn communicating_between_dialer_and_listener() {
-        libp2p_logging::init_tracing_subscriber_with_default_env_filter();
+        libp2p_logging::with_default_env_filter();
 
         async fn listener<T: Provider>(addr: Multiaddr, mut ready_tx: mpsc::Sender<Multiaddr>) {
             let mut tcp = Transport::<T>::default().boxed();
@@ -841,7 +841,7 @@ mod tests {
 
     #[test]
     fn wildcard_expansion() {
-        libp2p_logging::init_tracing_subscriber_with_default_env_filter();
+        libp2p_logging::with_default_env_filter();
 
         async fn listener<T: Provider>(addr: Multiaddr, mut ready_tx: mpsc::Sender<Multiaddr>) {
             let mut tcp = Transport::<T>::default().boxed();
@@ -919,7 +919,7 @@ mod tests {
 
     #[test]
     fn port_reuse_dialing() {
-        libp2p_logging::init_tracing_subscriber_with_default_env_filter();
+        libp2p_logging::with_default_env_filter();
 
         async fn listener<T: Provider>(
             addr: Multiaddr,
@@ -1036,7 +1036,7 @@ mod tests {
 
     #[test]
     fn port_reuse_listening() {
-        libp2p_logging::init_tracing_subscriber_with_default_env_filter();
+        libp2p_logging::with_default_env_filter();
 
         async fn listen_twice<T: Provider>(addr: Multiaddr) {
             let mut tcp = Transport::<T>::new(Config::new());
@@ -1090,7 +1090,7 @@ mod tests {
 
     #[test]
     fn listen_port_0() {
-        libp2p_logging::init_tracing_subscriber_with_default_env_filter();
+        libp2p_logging::with_default_env_filter();
 
         async fn listen<T: Provider>(addr: Multiaddr) -> Multiaddr {
             let mut tcp = Transport::<T>::default().boxed();
@@ -1125,7 +1125,7 @@ mod tests {
 
     #[test]
     fn listen_invalid_addr() {
-        libp2p_logging::init_tracing_subscriber_with_default_env_filter();
+        libp2p_logging::with_default_env_filter();
 
         fn test(addr: Multiaddr) {
             #[cfg(feature = "async-io")]
@@ -1146,7 +1146,7 @@ mod tests {
 
     #[test]
     fn test_remove_listener() {
-        libp2p_logging::init_tracing_subscriber_with_default_env_filter();
+        libp2p_logging::with_default_env_filter();
 
         async fn cycle_listeners<T: Provider>() -> bool {
             let mut tcp = Transport::<T>::default().boxed();

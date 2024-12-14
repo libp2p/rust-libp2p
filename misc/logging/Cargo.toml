@@ -5,6 +5,7 @@ edition = "2021"
 authors = ["Krishang Shah <shahkrishang11@gmail.com>"]
 license = "MIT"
 repository = "https://github.com/libp2p/rust-libp2p"
+publish = false
 
 [package.metadata.release]
 release = false

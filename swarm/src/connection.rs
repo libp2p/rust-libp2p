@@ -803,7 +803,7 @@ mod tests {
 
     #[test]
     fn max_negotiating_inbound_streams() {
-        libp2p_logging::init_tracing_subscriber_with_default_env_filter();
+        libp2p_logging::with_default_env_filter();
 
         fn prop(max_negotiating_inbound_streams: u8) {
             let max_negotiating_inbound_streams: usize = max_negotiating_inbound_streams.into();
@@ -971,7 +971,7 @@ mod tests {
 
     #[test]
     fn checked_add_fraction_can_add_u64_max() {
-        libp2p_logging::init_tracing_subscriber_with_default_env_filter();
+        libp2p_logging::with_default_env_filter();
         let start = Instant::now();
 
         let duration = checked_add_fraction(start, Duration::from_secs(u64::MAX));
@@ -981,7 +981,7 @@ mod tests {
 
     #[test]
     fn compute_new_shutdown_does_not_panic() {
-        libp2p_logging::init_tracing_subscriber_with_default_env_filter();
+        libp2p_logging::with_default_env_filter();
 
         #[derive(Debug)]
         struct ArbitraryShutdown(Shutdown);

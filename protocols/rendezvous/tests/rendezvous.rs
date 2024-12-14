@@ -30,7 +30,7 @@ use libp2p_swarm_test::SwarmExt;
 
 #[tokio::test]
 async fn given_successful_registration_then_successful_discovery() {
-    libp2p_logging::init_tracing_subscriber_with_default_env_filter();
+    libp2p_logging::with_default_env_filter();
     let namespace = rendezvous::Namespace::from_static("some-namespace");
     let ([mut alice, mut bob], mut robert) =
         new_server_with_connected_clients(rendezvous::server::Config::default()).await;
@@ -83,7 +83,7 @@ async fn given_successful_registration_then_successful_discovery() {
 
 #[tokio::test]
 async fn should_return_error_when_no_external_addresses() {
-    libp2p_logging::init_tracing_subscriber_with_default_env_filter();
+    libp2p_logging::with_default_env_filter();
     let namespace = rendezvous::Namespace::from_static("some-namespace");
     let server = new_server(rendezvous::server::Config::default()).await;
     let mut client = Swarm::new_ephemeral(rendezvous::client::Behaviour::new);
@@ -98,7 +98,7 @@ async fn should_return_error_when_no_external_addresses() {
 
 #[tokio::test]
 async fn given_successful_registration_then_refresh_ttl() {
-    libp2p_logging::init_tracing_subscriber_with_default_env_filter();
+    libp2p_logging::with_default_env_filter();
     let namespace = rendezvous::Namespace::from_static("some-namespace");
     let ([mut alice, mut bob], mut robert) =
         new_server_with_connected_clients(rendezvous::server::Config::default()).await;
@@ -164,7 +164,7 @@ async fn given_successful_registration_then_refresh_ttl() {
 
 #[tokio::test]
 async fn given_successful_registration_then_refresh_external_addrs() {
-    libp2p_logging::init_tracing_subscriber_with_default_env_filter();
+    libp2p_logging::with_default_env_filter();
     let namespace = rendezvous::Namespace::from_static("some-namespace");
     let ([mut alice], mut robert) =
         new_server_with_connected_clients(rendezvous::server::Config::default()).await;
@@ -215,7 +215,7 @@ async fn given_successful_registration_then_refresh_external_addrs() {
 
 #[tokio::test]
 async fn given_invalid_ttl_then_unsuccessful_registration() {
-    libp2p_logging::init_tracing_subscriber_with_default_env_filter();
+    libp2p_logging::with_default_env_filter();
     let namespace = rendezvous::Namespace::from_static("some-namespace");
     let ([mut alice], mut robert) =
         new_server_with_connected_clients(rendezvous::server::Config::default()).await;
@@ -242,7 +242,7 @@ async fn given_invalid_ttl_then_unsuccessful_registration() {
 
 #[tokio::test]
 async fn discover_allows_for_dial_by_peer_id() {
-    libp2p_logging::init_tracing_subscriber_with_default_env_filter();
+    libp2p_logging::with_default_env_filter();
     let namespace = rendezvous::Namespace::from_static("some-namespace");
     let ([mut alice, mut bob], robert) =
         new_server_with_connected_clients(rendezvous::server::Config::default()).await;
@@ -297,7 +297,7 @@ async fn discover_allows_for_dial_by_peer_id() {
 
 #[tokio::test]
 async fn eve_cannot_register() {
-    libp2p_logging::init_tracing_subscriber_with_default_env_filter();
+    libp2p_logging::with_default_env_filter();
     let namespace = rendezvous::Namespace::from_static("some-namespace");
     let mut robert = new_server(rendezvous::server::Config::default()).await;
     let mut eve = new_impersonating_client().await;
@@ -323,7 +323,7 @@ async fn eve_cannot_register() {
 // test if charlie can operate as client and server simultaneously
 #[tokio::test]
 async fn can_combine_client_and_server() {
-    libp2p_logging::init_tracing_subscriber_with_default_env_filter();
+    libp2p_logging::with_default_env_filter();
     let namespace = rendezvous::Namespace::from_static("some-namespace");
     let ([mut alice], mut robert) =
         new_server_with_connected_clients(rendezvous::server::Config::default()).await;
@@ -359,7 +359,7 @@ async fn can_combine_client_and_server() {
 
 #[tokio::test]
 async fn registration_on_clients_expire() {
-    libp2p_logging::init_tracing_subscriber_with_default_env_filter();
+    libp2p_logging::with_default_env_filter();
     let namespace = rendezvous::Namespace::from_static("some-namespace");
     let ([mut alice, mut bob], robert) =
         new_server_with_connected_clients(rendezvous::server::Config::default().with_min_ttl(1))

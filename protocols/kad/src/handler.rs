@@ -1082,7 +1082,7 @@ mod tests {
 
     #[test]
     fn compute_next_protocol_status_test() {
-        libp2p_logging::init_tracing_subscriber_with_default_env_filter();
+        libp2p_logging::with_default_env_filter();
 
         fn prop(now_supported: bool, current: Option<ProtocolStatus>) {
             let new = compute_new_protocol_status(now_supported, current);

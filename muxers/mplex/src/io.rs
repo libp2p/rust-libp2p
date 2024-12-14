@@ -1231,7 +1231,7 @@ mod tests {
 
     #[test]
     fn max_buffer_behaviour() {
-        libp2p_logging::init_tracing_subscriber_with_default_env_filter();
+        libp2p_logging::with_default_env_filter();
 
         fn prop(cfg: MplexConfig, overflow: NonZeroU8) {
             let mut r_buf = BytesMut::new();
@@ -1366,7 +1366,7 @@ mod tests {
 
     #[test]
     fn close_on_error() {
-        libp2p_logging::init_tracing_subscriber_with_default_env_filter();
+        libp2p_logging::with_default_env_filter();
 
         fn prop(cfg: MplexConfig, num_streams: NonZeroU8) {
             let num_streams = cmp::min(cfg.max_substreams, num_streams.get() as usize);

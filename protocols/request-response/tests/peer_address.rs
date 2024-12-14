@@ -10,7 +10,7 @@ use serde::{Deserialize, Serialize};
 #[async_std::test]
 #[cfg(feature = "cbor")]
 async fn dial_succeeds_after_adding_peers_address() {
-    libp2p_logging::init_tracing_subscriber_with_default_env_filter();
+    libp2p_logging::with_default_env_filter();
 
     let protocols = iter::once((StreamProtocol::new("/ping/1"), ProtocolSupport::Full));
     let config = request_response::Config::default();

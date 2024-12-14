@@ -35,7 +35,7 @@ use libp2p_swarm_test::SwarmExt as _;
 
 #[tokio::test]
 async fn connect() {
-    libp2p_logging::init_tracing_subscriber_with_default_env_filter();
+    libp2p_logging::with_default_env_filter();
 
     let mut relay = build_relay();
     let mut dst = build_client();

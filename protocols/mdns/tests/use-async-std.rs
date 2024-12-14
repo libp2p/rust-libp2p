@@ -27,14 +27,14 @@ use libp2p_swarm_test::SwarmExt as _;
 
 #[async_std::test]
 async fn test_discovery_async_std_ipv4() {
-    libp2p_logging::init_tracing_subscriber_with_default_env_filter();
+    libp2p_logging::with_default_env_filter();
 
     run_discovery_test(Config::default()).await
 }
 
 #[async_std::test]
 async fn test_discovery_async_std_ipv6() {
-    libp2p_logging::init_tracing_subscriber_with_default_env_filter();
+    libp2p_logging::with_default_env_filter();
 
     let config = Config {
         enable_ipv6: true,
@@ -45,7 +45,7 @@ async fn test_discovery_async_std_ipv6() {
 
 #[async_std::test]
 async fn test_expired_async_std() {
-    libp2p_logging::init_tracing_subscriber_with_default_env_filter();
+    libp2p_logging::with_default_env_filter();
 
     let config = Config {
         ttl: Duration::from_secs(1),
@@ -78,7 +78,7 @@ async fn test_expired_async_std() {
 
 #[async_std::test]
 async fn test_no_expiration_on_close_async_std() {
-    libp2p_logging::init_tracing_subscriber_with_default_env_filter();
+    libp2p_logging::with_default_env_filter();
     let config = Config {
         ttl: Duration::from_secs(120),
         query_interval: Duration::from_secs(10),

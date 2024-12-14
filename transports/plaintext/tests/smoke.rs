@@ -26,7 +26,7 @@ use quickcheck::QuickCheck;
 
 #[test]
 fn variable_msg_length() {
-    libp2p_logging::init_tracing_subscriber_with_default_env_filter();
+    libp2p_logging::with_default_env_filter();
 
     fn prop(msg: Vec<u8>) {
         let msg_to_send = msg.clone();

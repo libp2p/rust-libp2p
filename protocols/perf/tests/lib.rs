@@ -27,7 +27,7 @@ use libp2p_swarm_test::SwarmExt;
 
 #[tokio::test]
 async fn perf() {
-    libp2p_logging::init_tracing_subscriber_with_default_env_filter();
+    libp2p_logging::with_default_env_filter();
 
     let mut server = Swarm::new_ephemeral(|_| server::Behaviour::new());
     let server_peer_id = *server.local_peer_id();

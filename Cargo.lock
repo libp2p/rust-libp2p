@@ -3126,7 +3126,6 @@ dependencies = [
  "libp2p-core",
  "libp2p-dns",
  "libp2p-identity",
- "libp2p-logging",
  "libp2p-quic",
  "libp2p-swarm",
  "libp2p-swarm-test",
@@ -3139,6 +3138,7 @@ dependencies = [
  "thiserror 2.0.3",
  "tokio",
  "tracing",
+ "tracing-subscriber",
  "web-time 1.1.0",
 ]
 
@@ -3324,13 +3324,13 @@ dependencies = [
  "futures",
  "futures-timer",
  "libp2p",
- "libp2p-logging",
  "prometheus-client",
  "serde",
  "serde_derive",
  "serde_json",
  "tokio",
  "tracing",
+ "tracing-subscriber",
  "zeroize",
 ]
 

@@ -34,7 +34,7 @@ use serde::{Deserialize, Serialize};
 #[async_std::test]
 #[cfg(feature = "cbor")]
 async fn is_response_outbound() {
-    libp2p_logging::init_tracing_subscriber_with_default_env_filter();
+    libp2p_logging::with_default_env_filter();
     let ping = Ping("ping".to_string().into_bytes());
     let offline_peer = PeerId::random();
 

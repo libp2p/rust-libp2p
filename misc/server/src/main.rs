@@ -13,6 +13,7 @@ use libp2p::{
     tcp, yamux,
 };
 use prometheus_client::{metrics::info::Info, registry::Registry};
+use tracing_subscriber::EnvFilter;
 use zeroize::Zeroizing;
 
 mod behaviour;
@@ -41,7 +42,9 @@ struct Opts {
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
-    libp2p_logging::init_tracing_subscriber_with_default_env_filter();
+    let _ = tracing_subscriber::fmt()
+        .with_env_filter(EnvFilter::from_default_env())
+        .try_init();
 
     let opt = Opts::parse();
 

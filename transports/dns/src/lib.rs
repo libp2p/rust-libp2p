@@ -160,7 +160,7 @@ use async_trait::async_trait;
 use futures::{future::BoxFuture, prelude::*};
 pub use hickory_resolver::{
     config::{ResolverConfig, ResolverOpts},
-    {ResolveError, ResolveErrorKind},
+    ResolveError, ResolveErrorKind,
 };
 use hickory_resolver::{
     lookup::{Ipv4Lookup, Ipv6Lookup, TxtLookup},
@@ -629,7 +629,7 @@ mod tests {
 
     #[test]
     fn basic_resolve() {
-        libp2p_logging::init_tracing_subscriber_with_default_env_filter();
+        libp2p_logging::with_default_env_filter();
 
         #[derive(Clone)]
         struct CustomTransport;
