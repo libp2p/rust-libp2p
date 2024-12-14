@@ -429,9 +429,7 @@ async fn configured_interval_starts_after_first_identify() {
 
 #[async_std::test]
 async fn reject_mismatched_public_key() {
-    let _ = tracing_subscriber::fmt()
-        .with_env_filter(EnvFilter::from_default_env())
-        .try_init();
+    libp2p_logging::with_default_env_filter();
 
     let mut honest_swarm = Swarm::new_ephemeral(|identity| {
         identify::Behaviour::new(
