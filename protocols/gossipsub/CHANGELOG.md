@@ -246,7 +246,7 @@
 
 - Move from `open-metrics-client` to `prometheus-client` (see [PR 2442]).
 
-- Emit gossip of all non empty topics (see [PR 2481]).
+- Emit gossip of all non-empty topics (see [PR 2481]).
 
 - Merge NetworkBehaviour's inject_\* paired methods (see [PR 2445]).
 

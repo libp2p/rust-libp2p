@@ -1497,14 +1497,17 @@ impl Config {
     ///
     /// Defaults to 10s.
     ///
-    /// Typically, you shouldn't _need_ to modify this default as connections will be kept alive whilst they are "in use" (see below).
-    /// Depending on the application's usecase, it may be desirable to keep connections alive despite them not being in use.
+    /// Typically, you shouldn't _need_ to modify this default as connections will be kept alive
+    /// whilst they are "in use" (see below). Depending on the application's usecase, it may be
+    /// desirable to keep connections alive despite them not being in use.
     ///
     /// A connection is considered idle if:
     /// - There are no active inbound streams.
     /// - There are no active outbounds streams.
-    /// - There are no pending outbound streams (i.e. all streams requested via [`ConnectionHandlerEvent::OutboundSubstreamRequest`] have completed).
-    /// - Every [`ConnectionHandler`] returns `false` from [`ConnectionHandler::connection_keep_alive`].
+    /// - There are no pending outbound streams (i.e. all streams requested via
+    ///   [`ConnectionHandlerEvent::OutboundSubstreamRequest`] have completed).
+    /// - Every [`ConnectionHandler`] returns `false` from
+    ///   [`ConnectionHandler::connection_keep_alive`].
     ///
     /// Once all these conditions are true, the idle connection timeout starts ticking.
     pub fn with_idle_connection_timeout(mut self, timeout: Duration) -> Self {
