@@ -53,7 +53,6 @@ async fn main() -> Result<(), Box<dyn Error>> {
             rendezvous: rendezvous::client::Behaviour::new(key.clone()),
             ping: ping::Behaviour::new(ping::Config::new().with_interval(Duration::from_secs(1))),
         })?
-        .with_swarm_config(|cfg| cfg.with_idle_connection_timeout(Duration::from_secs(5)))
         .build();
 
     swarm.dial(rendezvous_point_address.clone()).unwrap();
