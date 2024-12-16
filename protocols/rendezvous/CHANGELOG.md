@@ -1,3 +1,7 @@
+## 0.15.1
+
+- Update to `libp2p-request-response` `v0.28.0`.
+
 ## 0.15.0
 
 <!-- Update to libp2p-swarm v0.45.0 -->
