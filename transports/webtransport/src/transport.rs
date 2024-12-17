@@ -32,7 +32,6 @@ pub struct GenTransport {
     server_tls_config: TlsServerConfig,
     keypair: Keypair,
     cert_hashes: Vec<CertHash>,
-
     /// Timeout for the [`Connecting`] future.
     handshake_timeout: Duration,
 

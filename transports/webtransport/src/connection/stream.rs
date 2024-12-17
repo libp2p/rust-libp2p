@@ -1,9 +1,8 @@
 use std::io;
 use std::pin::Pin;
 use std::task::{Context, Poll};
-use futures::{AsyncRead, AsyncWrite};
+use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
 use wtransport::{SendStream, RecvStream};
-use tokio;
 
 /// A single stream on a connection
 pub struct Stream {
@@ -25,7 +24,7 @@ impl Stream {
     }
 }
 
-impl AsyncRead for Stream {
+impl futures::AsyncRead for Stream {
     fn poll_read(
         mut self: Pin<&mut Self>,
         cx: &mut Context<'_>,
@@ -36,8 +35,8 @@ impl AsyncRead for Stream {
                 return Poll::Ready(Ok(0));
             }
         }
-        let mut read_buf = tokio::io::ReadBuf::new(buf);
-        let res = tokio::io::AsyncRead::poll_read(Pin::new(&mut self.recv), cx, &mut read_buf);
+        let mut read_buf = ReadBuf::new(buf);
+        let res = AsyncRead::poll_read(Pin::new(&mut self.recv), cx, &mut read_buf);
         match res {
             Poll::Ready(Ok(_)) => {
                 Poll::Ready(Ok(read_buf.filled().len()))
@@ -52,13 +51,13 @@ impl AsyncRead for Stream {
     }
 }
 
-impl AsyncWrite for Stream {
+impl futures::AsyncWrite for Stream {
     fn poll_write(mut self: Pin<&mut Self>, cx: &mut Context<'_>, buf: &[u8]) -> Poll<io::Result<usize>> {
-        tokio::io::AsyncWrite::poll_write(Pin::new(&mut self.send), cx, buf)
+        AsyncWrite::poll_write(Pin::new(&mut self.send), cx, buf)
     }
 
     fn poll_flush(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
-        tokio::io::AsyncWrite::poll_flush(Pin::new(&mut self.send), cx)
+        AsyncWrite::poll_flush(Pin::new(&mut self.send), cx)
     }
 
     fn poll_close(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
@@ -66,7 +65,7 @@ impl AsyncWrite for Stream {
             // For some reason poll_close needs to be 'fuse'able
             return Poll::Ready(close_result.map_err(Into::into));
         }
-        let close_result = futures::ready!(tokio::io::AsyncWrite::poll_shutdown(Pin::new(&mut self.send), cx));
+        let close_result = futures::ready!(AsyncWrite::poll_shutdown(Pin::new(&mut self.send), cx));
         self.close_result = Some(close_result.as_ref().map_err(|e| e.kind()).copied());
         Poll::Ready(close_result)
     }

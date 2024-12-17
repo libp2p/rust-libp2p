@@ -12,8 +12,7 @@ libp2p-core = { workspace = true }
 libp2p-tls = { workspace = true }
 libp2p-identity = { workspace = true, features = ["ed25519", "rand"] }
 libp2p-noise = { workspace = true }
-async-std = { version = "1.12.0", optional = true }
-tokio = { workspace = true, default-features = false, features = ["net", "rt", "time"], optional = true }
+tokio = { workspace = true, default-features = false, features = ["net", "rt", "time"] }
 futures = { workspace = true }
 tracing = { workspace = true }
 if-watch = { version = "3.2.0", features = ["tokio"] }
@@ -24,10 +23,6 @@ time = "0.3.36"
 sha2 = "0.10.8"
 quinn = { version = "0.11.2", default-features = false, features = ["rustls", "futures-io"] }
 wtransport = "0.4.0"
-
-#[features]
-#tokio = ["dep:tokio", "if-watch/tokio", "quinn/runtime-tokio"]
-#async-std = ["dep:async-std", "if-watch/smol", "quinn/runtime-async-std"]
 
 [lints]
 workspace = true
