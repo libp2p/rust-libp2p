@@ -1,7 +1,7 @@
 use std::{error::Error, path::Path};
 
 use libp2p::Multiaddr;
-use serde_derive::Deserialize;
+use serde::Deserialize;
 
 #[derive(Clone, Deserialize)]
 #[serde(rename_all = "PascalCase")]

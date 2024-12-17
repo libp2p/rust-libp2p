@@ -27,18 +27,13 @@ lru = "0.12.3"
 futures-bounded = { workspace = true }
 
 [dev-dependencies]
-clap = { version = "4.5.6", features = ["derive"] }
-libp2p-dns = { workspace = true, features = ["async-std"] }
 libp2p-identify = { workspace = true }
-libp2p-noise = { workspace = true }
-libp2p-ping = { workspace = true }
 libp2p-plaintext = { workspace = true }
 libp2p-relay = { workspace = true }
 libp2p-swarm = { workspace = true, features = ["macros"] }
 libp2p-swarm-test = { path = "../../swarm-test" }
 libp2p-tcp = { workspace = true, features = ["async-io"] }
 libp2p-yamux = { workspace = true }
-rand = "0.8"
 tracing-subscriber = { workspace = true, features = ["env-filter"] }
 tokio = { workspace = true, features = ["rt", "macros"] }
 
