@@ -8,6 +8,11 @@ rust-version.workspace = true
 libp2p-core = { workspace = true }
 libp2p-swarm = { workspace = true }
 lru = "*"
+futures-timer = "*"
+futures-util = "*"
+
+[dev-dependencies]
+libp2p-identity = { workspace = true, features = ["rand"] }
 
 [lints]
 workspace = true
