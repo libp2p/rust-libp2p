@@ -1,3 +1,10 @@
+## 0.47.1
+
+- Expose Distance private field U256 to public.
+  See [PR 5705](https://github.com/libp2p/rust-libp2p/pull/5705).
+- Fix systematic memory allocation when iterating over `KBuckets`.
+  See [PR 5715](https://github.com/libp2p/rust-libp2p/pull/5715).
+
 ## 0.47.0
 
 - Expose a kad query facility allowing specify num_results dynamicaly.
