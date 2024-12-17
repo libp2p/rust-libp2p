@@ -1,3 +1,8 @@
+## 0.35.1
+
+- Remove unused dependencies.
+  See [PR 5747](https://github.com/libp2p/rust-libp2p/pull/5747).
+
 ## 0.35.0
 
 - Implement refactored `Transport`.

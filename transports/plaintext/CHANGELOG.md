@@ -1,3 +1,8 @@
+## 0.42.1
+
+- Remove unused dependencies.
+  See [PR 5747](https://github.com/libp2p/rust-libp2p/pull/5747).
+
 ## 0.42.0
 
 <!-- Update to libp2p-swarm v0.45.0 -->

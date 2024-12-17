@@ -12,6 +12,9 @@
 - Update default for idle-connection-timeout to 10s.
   See [PR 4967](https://github.com/libp2p/rust-libp2p/pull/4967).
 
+- Remove unused dependencies.
+  See [PR 5747](https://github.com/libp2p/rust-libp2p/pull/5747).
+
 ## 0.45.1
 
 - Update `libp2p-swarm-derive` to version `0.35.0`, see [PR 5545]

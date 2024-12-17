@@ -5,6 +5,9 @@
 - Remove deprecated [`libp2p-lookup`](https://github.com/mxinden/libp2p-lookup) from Dockerfile.
   See [PR 5610](https://github.com/libp2p/rust-libp2p/pull/5610).
 
+- Remove unused dependencies.
+  See [PR 5747](https://github.com/libp2p/rust-libp2p/pull/5747).
+
 ## 0.12.7
 
 ### Changed

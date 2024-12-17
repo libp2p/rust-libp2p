@@ -3113,7 +3113,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-plaintext"
-version = "0.42.0"
+version = "0.42.1"
 dependencies = [
  "asynchronous-codec",
  "bytes",
@@ -3345,7 +3345,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-tcp"
-version = "0.42.0"
+version = "0.42.1"
 dependencies = [
  "async-io",
  "async-std",
@@ -3362,7 +3362,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-tls"
-version = "0.5.0"
+version = "0.5.1"
 dependencies = [
  "futures",
  "futures-rustls",
@@ -3408,7 +3408,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-webrtc"
-version = "0.8.0-alpha"
+version = "0.8.0-alpha.2"
 dependencies = [
  "async-trait",
  "futures",
@@ -3434,7 +3434,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-webrtc-utils"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
  "asynchronous-codec",
  "bytes",
@@ -3837,7 +3837,7 @@ dependencies = [
 
 [[package]]
 name = "multistream-select"
-version = "0.13.0"
+version = "0.13.1"
 dependencies = [
  "async-std",
  "bytes",

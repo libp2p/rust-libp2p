@@ -12,6 +12,9 @@
 - Expose swarm builder phase errors.
   See [PR 5726](https://github.com/libp2p/rust-libp2p/pull/5726).
 
+- Remove unused dependencies.
+  See [PR 5747](https://github.com/libp2p/rust-libp2p/pull/5747).
+
 ## 0.54.1
 
 - Update individual crates.

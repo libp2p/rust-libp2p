@@ -3,6 +3,9 @@
 - Expose Distance private field U256 to public.
   See [PR 5705](https://github.com/libp2p/rust-libp2p/pull/5705).
 
+- Remove unused dependencies.
+  See [PR 5747](https://github.com/libp2p/rust-libp2p/pull/5747).
+
 ## 0.47.0
 
 - Expose a kad query facility allowing specify num_results dynamicaly.

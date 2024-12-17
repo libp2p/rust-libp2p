@@ -3,6 +3,9 @@
 - Deprecate `void` crate.
   See [PR 5676](https://github.com/libp2p/rust-libp2p/pull/5676).
 
+- Remove unused dependencies.
+  See [PR 5747](https://github.com/libp2p/rust-libp2p/pull/5747).
+
 ## 0.11.1
 
 - Update `libp2p-tls` to version `0.5.0`, see [PR 5547]

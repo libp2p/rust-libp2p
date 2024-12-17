@@ -2,6 +2,9 @@
 - Discard `Info`s received from remote peers that contain a public key that doesn't match their peer ID.
   See [PR 5707](https://github.com/libp2p/rust-libp2p/pull/5707).
 
+- Remove unused dependencies.
+  See [PR 5747](https://github.com/libp2p/rust-libp2p/pull/5747).
+
 ## 0.46.0
 
 - Make `identify::Config` fields private and add getter functions.
