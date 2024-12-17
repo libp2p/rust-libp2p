@@ -474,7 +474,8 @@ where
 
                 let bucket_index = self.buckets_iter.next()?;
 
-                // Reusing the same buffer so if there were any allocation, it only happen once over a `ClosestIter` life.
+                // Reusing the same buffer so if there were any allocation, it only happen once over
+                // a `ClosestIter` life.
                 iter.buffer.clear();
 
                 (iter.buffer, bucket_index)
