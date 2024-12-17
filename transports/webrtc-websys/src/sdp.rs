@@ -1,5 +1,6 @@
-use libp2p_webrtc_utils::Fingerprint;
 use std::net::SocketAddr;
+
+use libp2p_webrtc_utils::Fingerprint;
 use web_sys::{RtcSdpType, RtcSessionDescriptionInit};
 
 /// Creates the SDP answer used by the client.

@@ -1,7 +1,30 @@
-## 0.47.1
+## 0.48.0
+
+- Correct state inconsistencies with the mesh and fanout when unsubscribing.
+  See [PR 5690](https://github.com/libp2p/rust-libp2p/pull/5690)
+
+- Deprecate `futures-ticker` and use `futures-timer` instead.
+  See [PR 5674](https://github.com/libp2p/rust-libp2p/pull/5674).
+
+- Apply `max_transmit_size` to the inner message instead of the final payload.
+  See [PR 5642](https://github.com/libp2p/rust-libp2p/pull/5642).
+
+- Deprecate `void` crate.
+  See [PR 5676](https://github.com/libp2p/rust-libp2p/pull/5676).
 
 - Attempt to publish to at least mesh_n peers when flood publish is disabled.
   See [PR 5578](https://github.com/libp2p/rust-libp2p/pull/5578).
+
+- Introduce back pressure and penalize slow peers. Drop stale messages that timeout before being
+  delivered.
+  See [PR 5595](https://github.com/libp2p/rust-libp2p/pull/5595).
+
+- Change `Behaviour::unsubscribe` and `Behaviour::report_message_validation_result`
+  to `bool` they don't need to be a `Result`.
+  See [PR 5595](https://github.com/libp2p/rust-libp2p/pull/5595).
+
+- Fix `cargo clippy` warnings in `rustc 1.84.0-beta.1`.
+  See [PR 5700](https://github.com/libp2p/rust-libp2p/pull/5700).
 
 ## 0.47.0
 
@@ -223,7 +246,7 @@
 
 - Move from `open-metrics-client` to `prometheus-client` (see [PR 2442]).
 
-- Emit gossip of all non empty topics (see [PR 2481]).
+- Emit gossip of all non-empty topics (see [PR 2481]).
 
 - Merge NetworkBehaviour's inject_\* paired methods (see [PR 2445]).
 

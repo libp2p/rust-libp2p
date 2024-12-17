@@ -22,11 +22,12 @@
 //!
 //! This module handles generation, signing, and verification of certificates.
 
+use std::sync::Arc;
+
 use libp2p_identity as identity;
 use libp2p_identity::PeerId;
 use x509_parser::{prelude::*, signature_algorithm::SignatureAlgorithm};
 
-use std::sync::Arc;
 use ::time::OffsetDateTime;
 
 /// The libp2p Public Key Extension is a X.509 extension
@@ -335,8 +336,8 @@ impl P2pCertificate<'_> {
         self.extension.public_key.to_peer_id()
     }
 
-    /// Verify the `signature` of the `message` signed by the private key corresponding to the public key stored
-    /// in the certificate.
+    /// Verify the `signature` of the `message` signed by the private key corresponding to the
+    /// public key stored in the certificate.
     pub fn verify_signature(
         &self,
         signature_scheme: rustls::SignatureScheme,
@@ -544,8 +545,9 @@ impl P2pCertificate<'_> {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use hex_literal::hex;
+
+    use super::*;
 
     #[test]
     fn sanity_check() {

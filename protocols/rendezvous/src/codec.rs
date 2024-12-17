@@ -18,16 +18,17 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::DEFAULT_TTL;
+use std::{fmt, io};
+
 use async_trait::async_trait;
-use asynchronous_codec::{BytesMut, Decoder, Encoder};
-use asynchronous_codec::{FramedRead, FramedWrite};
+use asynchronous_codec::{BytesMut, Decoder, Encoder, FramedRead, FramedWrite};
 use futures::{AsyncRead, AsyncWrite, SinkExt, StreamExt};
 use libp2p_core::{peer_record, signed_envelope, PeerRecord, SignedEnvelope};
 use libp2p_swarm::StreamProtocol;
 use quick_protobuf_codec::Codec as ProtobufCodec;
 use rand::RngCore;
-use std::{fmt, io};
+
+use crate::DEFAULT_TTL;
 
 pub type Ttl = u64;
 pub(crate) type Limit = u64;
@@ -54,7 +55,9 @@ pub struct Namespace(String);
 impl Namespace {
     /// Creates a new [`Namespace`] from a static string.
     ///
-    /// This will panic if the namespace is too long. We accepting panicking in this case because we are enforcing a `static lifetime which means this value can only be a constant in the program and hence we hope the developer checked that it is of an acceptable length.
+    /// This will panic if the namespace is too long. We accepting panicking in this case because we
+    /// are enforcing a `static lifetime which means this value can only be a constant in the
+    /// program and hence we hope the developer checked that it is of an acceptable length.
     pub fn from_static(value: &'static str) -> Self {
         if value.len() > crate::MAX_NAMESPACE {
             panic!("Namespace '{value}' is too long!")
@@ -109,7 +112,8 @@ pub struct Cookie {
 impl Cookie {
     /// Construct a new [`Cookie`] for a given namespace.
     ///
-    /// This cookie will only be valid for subsequent DISCOVER requests targeting the same namespace.
+    /// This cookie will only be valid for subsequent DISCOVER requests targeting the same
+    /// namespace.
     pub fn for_namespace(namespace: Namespace) -> Self {
         Self {
             id: rand::thread_rng().next_u64(),

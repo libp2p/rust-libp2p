@@ -70,20 +70,21 @@
 //!
 //! ```no_run
 //! use async_std::net::TcpStream;
-//! use multistream_select::{dialer_select_proto, Version};
 //! use futures::prelude::*;
+//! use multistream_select::{dialer_select_proto, Version};
 //!
 //! async_std::task::block_on(async move {
 //!     let socket = TcpStream::connect("127.0.0.1:10333").await.unwrap();
 //!
 //!     let protos = vec!["/echo/1.0.0", "/echo/2.5.0"];
-//!     let (protocol, _io) = dialer_select_proto(socket, protos, Version::V1).await.unwrap();
+//!     let (protocol, _io) = dialer_select_proto(socket, protos, Version::V1)
+//!         .await
+//!         .unwrap();
 //!
 //!     println!("Negotiated protocol: {:?}", protocol);
 //!     // You can now use `_io` to communicate with the remote.
 //! });
 //! ```
-//!
 
 #![cfg_attr(docsrs, feature(doc_cfg, doc_auto_cfg))]
 
@@ -93,10 +94,12 @@ mod listener_select;
 mod negotiated;
 mod protocol;
 
-pub use self::dialer_select::{dialer_select_proto, DialerSelectFuture};
-pub use self::listener_select::{listener_select_proto, ListenerSelectFuture};
-pub use self::negotiated::{Negotiated, NegotiatedComplete, NegotiationError};
-pub use self::protocol::ProtocolError;
+pub use self::{
+    dialer_select::{dialer_select_proto, DialerSelectFuture},
+    listener_select::{listener_select_proto, ListenerSelectFuture},
+    negotiated::{Negotiated, NegotiatedComplete, NegotiationError},
+    protocol::ProtocolError,
+};
 
 /// Supported multistream-select versions.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]

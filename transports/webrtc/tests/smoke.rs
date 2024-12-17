@@ -18,21 +18,30 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use futures::channel::mpsc;
-use futures::future::{BoxFuture, Either};
-use futures::stream::StreamExt;
-use futures::{future, ready, AsyncReadExt, AsyncWriteExt, FutureExt, SinkExt};
-use libp2p_core::muxing::{StreamMuxerBox, StreamMuxerExt};
-use libp2p_core::transport::{Boxed, DialOpts, ListenerId, PortUse, TransportEvent};
-use libp2p_core::{Endpoint, Multiaddr, Transport};
+use std::{
+    future::Future,
+    num::NonZeroU8,
+    pin::Pin,
+    task::{Context, Poll},
+    time::Duration,
+};
+
+use futures::{
+    channel::mpsc,
+    future,
+    future::{BoxFuture, Either},
+    ready,
+    stream::StreamExt,
+    AsyncReadExt, AsyncWriteExt, FutureExt, SinkExt,
+};
+use libp2p_core::{
+    muxing::{StreamMuxerBox, StreamMuxerExt},
+    transport::{Boxed, DialOpts, ListenerId, PortUse, TransportEvent},
+    Endpoint, Multiaddr, Transport,
+};
 use libp2p_identity::PeerId;
 use libp2p_webrtc as webrtc;
 use rand::{thread_rng, RngCore};
-use std::future::Future;
-use std::num::NonZeroU8;
-use std::pin::Pin;
-use std::task::{Context, Poll};
-use std::time::Duration;
 use tracing_subscriber::EnvFilter;
 
 #[tokio::test]

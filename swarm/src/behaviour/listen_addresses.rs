@@ -1,6 +1,8 @@
-use crate::behaviour::{ExpiredListenAddr, FromSwarm, NewListenAddr};
-use libp2p_core::Multiaddr;
 use std::collections::HashSet;
+
+use libp2p_core::Multiaddr;
+
+use crate::behaviour::{ExpiredListenAddr, FromSwarm, NewListenAddr};
 
 /// Utility struct for tracking the addresses a [`Swarm`](crate::Swarm) is listening on.
 #[derive(Debug, Default, Clone)]
@@ -32,9 +34,10 @@ impl ListenAddresses {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use libp2p_core::{multiaddr::Protocol, transport::ListenerId};
     use once_cell::sync::Lazy;
+
+    use super::*;
 
     #[test]
     fn new_listen_addr_returns_correct_changed_value() {

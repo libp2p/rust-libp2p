@@ -18,14 +18,15 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use bytes::{Buf as _, BufMut as _, Bytes, BytesMut};
-use futures::{io::IoSlice, prelude::*};
 use std::{
     convert::TryFrom as _,
     io,
     pin::Pin,
     task::{Context, Poll},
 };
+
+use bytes::{Buf as _, BufMut as _, Bytes, BytesMut};
+use futures::{io::IoSlice, prelude::*};
 
 const MAX_LEN_BYTES: u16 = 2;
 const MAX_FRAME_SIZE: u16 = (1 << (MAX_LEN_BYTES * 8 - MAX_LEN_BYTES)) - 1;
@@ -383,10 +384,12 @@ where
 
 #[cfg(test)]
 mod tests {
-    use crate::length_delimited::LengthDelimited;
+    use std::io::ErrorKind;
+
     use futures::{io::Cursor, prelude::*};
     use quickcheck::*;
-    use std::io::ErrorKind;
+
+    use crate::length_delimited::LengthDelimited;
 
     #[test]
     fn basic_read() {

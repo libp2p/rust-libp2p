@@ -23,12 +23,13 @@ use std::{net::SocketAddr, str::FromStr};
 use anyhow::{bail, Result};
 use clap::Parser;
 use futures::StreamExt;
-use libp2p::core::{multiaddr::Protocol, upgrade, Multiaddr};
-use libp2p::identity::PeerId;
-use libp2p::swarm::{NetworkBehaviour, Swarm, SwarmEvent};
-use libp2p::SwarmBuilder;
-use libp2p_perf::{client, server};
-use libp2p_perf::{Final, Intermediate, Run, RunParams, RunUpdate};
+use libp2p::{
+    core::{multiaddr::Protocol, upgrade, Multiaddr},
+    identity::PeerId,
+    swarm::{NetworkBehaviour, Swarm, SwarmEvent},
+    SwarmBuilder,
+};
+use libp2p_perf::{client, server, Final, Intermediate, Run, RunParams, RunUpdate};
 use serde::{Deserialize, Serialize};
 use tracing_subscriber::EnvFilter;
 use web_time::{Duration, Instant};
