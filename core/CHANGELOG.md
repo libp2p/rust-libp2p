@@ -326,7 +326,7 @@ See [PR 4568].
 
 - Remove `TInEvent` and `TOutEvent` trait parameters on most public types.
   `TInEvent` and `TOutEvent` are implied through `THandler` and thus
-  superflucious. Both are removed in favor of a derivation through `THandler`
+  superfluous. Both are removed in favor of a derivation through `THandler`
   (see [PR 2183]).
 
 - Require `ConnectionHandler::{InEvent,OutEvent,Error}` to implement `Debug`
