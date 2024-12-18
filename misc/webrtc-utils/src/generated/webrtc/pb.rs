@@ -57,6 +57,7 @@ pub enum Flag {
     FIN = 0,
     STOP_SENDING = 1,
     RESET = 2,
+    FIN_ACK = 3,
 }
 
 impl Default for Flag {
@@ -71,6 +72,7 @@ impl From<i32> for Flag {
             0 => Flag::FIN,
             1 => Flag::STOP_SENDING,
             2 => Flag::RESET,
+            3 => Flag::FIN_ACK,
             _ => Self::default(),
         }
     }
@@ -82,6 +84,7 @@ impl<'a> From<&'a str> for Flag {
             "FIN" => Flag::FIN,
             "STOP_SENDING" => Flag::STOP_SENDING,
             "RESET" => Flag::RESET,
+            "FIN_ACK" => Flag::FIN_ACK,
             _ => Self::default(),
         }
     }
