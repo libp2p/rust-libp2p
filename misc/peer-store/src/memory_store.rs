@@ -81,7 +81,7 @@ impl<'a> Store<'a> for MemoryStore {
         }
     }
 
-    fn addresses_of_peer<'b>(&self, peer: &'b PeerId) -> Option<impl Iterator<Item = &Multiaddr>> {
+    fn addresses_of_peer(&self, peer: &PeerId) -> Option<impl Iterator<Item = &Multiaddr>> {
         self.address_book
             .get(peer)
             .map(|record| record.records().map(|r| r.address))
@@ -129,7 +129,7 @@ pub struct AddressRecord<'a> {
     /// Whether the address expires.
     pub should_expire: bool,
 }
-impl<'a> AddressRecord<'a> {
+impl AddressRecord<'_> {
     /// How much time has passed since the address is last reported wrt. the given instant.  
     pub fn last_seen_since(&self, now: Instant) -> Duration {
         now.duration_since(*self.last_seen)
@@ -257,16 +257,14 @@ mod test {
         );
         thread::sleep(Duration::from_millis(2));
         store.check_ttl();
+        assert!(!store
+            .addresses_of_peer(&fake_peer)
+            .expect("peer to be in the store")
+            .any(|r| *r == addr_should_expire));
         assert!(store
             .addresses_of_peer(&fake_peer)
             .expect("peer to be in the store")
-            .find(|r| **r == addr_should_expire)
-            .is_none());
-        assert!(store
-            .addresses_of_peer(&fake_peer)
-            .expect("peer to be in the store")
-            .find(|r| **r == addr_no_expire)
-            .is_some());
+            .any(|r| *r == addr_no_expire));
     }
 
     #[test]
@@ -331,16 +329,14 @@ mod test {
             );
         }
         let first_record = Multiaddr::from_str("/ip4/127.0.0.1").expect("parsing to succeed");
-        assert!(store
+        assert!(!store
             .addresses_of_peer(&fake_peer)
             .expect("peer to be in the store")
-            .find(|addr| **addr == first_record)
-            .is_none());
+            .any(|addr| *addr == first_record));
         let second_record = Multiaddr::from_str("/ip4/127.0.0.2").expect("parsing to succeed");
         assert!(store
             .addresses_of_peer(&fake_peer)
             .expect("peer to be in the store")
-            .find(|addr| **addr == second_record)
-            .is_some());
+            .any(|addr| *addr == second_record));
     }
 }

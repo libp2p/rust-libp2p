@@ -58,7 +58,7 @@ where
     pub fn address_of_peer<'b>(
         &'a self,
         peer: &'b PeerId,
-    ) -> Option<impl Iterator<Item = &Multiaddr> + use<'a, 'b, S>> {
+    ) -> Option<impl Iterator<Item = &'a Multiaddr> + use<'a, 'b, S>> {
         self.store.addresses_of_peer(peer)
     }
 

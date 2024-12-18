@@ -24,7 +24,7 @@ pub trait Store<'a> {
     fn on_swarm_event(&mut self, event: &FromSwarm) -> Option<Event>;
 
     /// Get all stored addresses of the peer.
-    fn addresses_of_peer<'b>(&self, peer: &'b PeerId) -> Option<impl Iterator<Item = &Multiaddr>>;
+    fn addresses_of_peer(&self, peer: &PeerId) -> Option<impl Iterator<Item = &Multiaddr>>;
 
     /// Get all stored address records of the peer.
     fn address_record_of_peer(
