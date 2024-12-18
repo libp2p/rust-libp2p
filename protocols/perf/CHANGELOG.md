@@ -7,6 +7,9 @@
 - Deprecate `void` crate.
   See [PR 5676](https://github.com/libp2p/rust-libp2p/pull/5676).
 
+- Remove unused dependencies.
+  See [PR 5747](https://github.com/libp2p/rust-libp2p/pull/5747).
+
 ## 0.3.1
 - Use `web-time` instead of `instant`.
   See [PR 5347](https://github.com/libp2p/rust-libp2p/pull/5347).

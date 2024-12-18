@@ -3,6 +3,9 @@
 - Upgrade `hickory-proto`.
   See [PR 5727](https://github.com/libp2p/rust-libp2p/pull/5727)
 
+- Remove unused dependencies.
+  See [PR 5747](https://github.com/libp2p/rust-libp2p/pull/5747).
+
 ## 0.46.0
 
 <!-- Update to libp2p-swarm v0.45.0 -->

@@ -5,6 +5,9 @@
 - Fix systematic memory allocation when iterating over `KBuckets`.
   See [PR 5715](https://github.com/libp2p/rust-libp2p/pull/5715).
 
+- Remove unused dependencies.
+  See [PR 5747](https://github.com/libp2p/rust-libp2p/pull/5747).
+
 ## 0.47.0
 
 - Expose a kad query facility allowing specify num_results dynamicaly.

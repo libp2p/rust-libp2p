@@ -13,7 +13,6 @@ crate-type = ["cdylib", "rlib"]
 
 [dependencies]
 anyhow = "1"
-either = "1.11.0"
 futures = { workspace = true }
 rand = "0.8.5"
 serde = { version = "1", features = ["derive"] }
@@ -28,7 +27,7 @@ libp2p-noise = { workspace = true }
 libp2p-tls = { workspace = true }
 libp2p-webrtc = { workspace = true, features = ["tokio"] }
 mime_guess = "2.0"
-redis = { version = "0.24.0", default-features = false, features = [
+redis = { workspace = true, features = [
     "tokio-comp",
 ] }
 rust-embed = "8.4"

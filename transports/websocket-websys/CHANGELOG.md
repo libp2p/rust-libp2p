@@ -6,6 +6,9 @@
 - Fix `cargo clippy` warnings in `rustc 1.84.0-beta.1`.
   See [PR 5700](https://github.com/libp2p/rust-libp2p/pull/5700).
 
+- Remove unused dependencies.
+  See [PR 5747](https://github.com/libp2p/rust-libp2p/pull/5747).
+
 ## 0.4.0
 
 - Implement refactored `Transport`.
