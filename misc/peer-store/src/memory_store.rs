@@ -29,6 +29,7 @@ impl MemoryStore {
 
 impl<'a> Store<'a> for MemoryStore {
     type AddressRecord = AddressRecord<'a>;
+
     fn update_address(
         &mut self,
         peer: &PeerId,
@@ -37,14 +38,14 @@ impl<'a> Store<'a> for MemoryStore {
         should_expire: bool,
     ) -> bool {
         if let Some(record) = self.address_book.get_mut(peer) {
-            record.update_address(address, source, should_expire)
-        } else {
-            let mut new_record = record::PeerAddressRecord::new(self.config.record_capacity);
-            new_record.update_address(address, source, should_expire);
-            self.address_book.insert(*peer, new_record);
-            true
+            return record.update_address(address, source, should_expire);
         }
+        let mut new_record = record::PeerAddressRecord::new(self.config.record_capacity);
+        new_record.update_address(address, source, should_expire);
+        self.address_book.insert(*peer, new_record);
+        true
     }
+
     fn remove_address(&mut self, peer: &PeerId, address: &Multiaddr) -> bool {
         if let Some(record) = self.address_book.get_mut(peer) {
             return record.remove_address(address);
@@ -79,27 +80,33 @@ impl<'a> Store<'a> for MemoryStore {
             _ => None,
         }
     }
+
     fn addresses_of_peer<'b>(&self, peer: &'b PeerId) -> Option<impl Iterator<Item = &Multiaddr>> {
         self.address_book
             .get(peer)
             .map(|record| record.records().map(|r| r.address))
     }
+
     fn address_record_of_peer(
         &'a self,
         peer: &PeerId,
     ) -> Option<impl Iterator<Item = AddressRecord<'a>>> {
         self.address_book.get(peer).map(|record| record.records())
     }
+
     fn check_ttl(&mut self) {
         let now = Instant::now();
-        for (_, r) in &mut self.address_book {
+        for r in &mut self.address_book.values_mut() {
             r.check_ttl(now, self.config.record_ttl);
         }
     }
 }
 
 pub struct Config {
+    /// TTL for a record.
     record_ttl: Duration,
+    /// The capacaity of a record store.  
+    /// The least used record will be discarded when the store is full.
     record_capacity: NonZeroUsize,
 }
 
@@ -113,17 +120,24 @@ impl Default for Config {
 }
 
 pub struct AddressRecord<'a> {
-    /// The address of this record.
-    address: &'a Multiaddr,
+    /// The last time we saw this address.
     last_seen: &'a Instant,
+    /// The address of this record.
+    pub address: &'a Multiaddr,
+    /// How we observed the address.
     pub source: AddressSource,
+    /// Whether the address expires.
     pub should_expire: bool,
 }
 impl<'a> AddressRecord<'a> {
-    /// How much time has passed since the address is last reported wrt. current time.  
-    /// This may fail because of system time change.
-    pub fn last_seen(&self, now: Instant) -> std::time::Duration {
-        now.duration_since(self.last_seen.clone())
+    /// How much time has passed since the address is last reported wrt. the given instant.  
+    pub fn last_seen_since(&self, now: Instant) -> Duration {
+        now.duration_since(*self.last_seen)
+    }
+    /// How much time has passed since the address is last reported wrt. current time.
+    pub fn last_seen(&self) -> Duration {
+        let now = Instant::now();
+        now.duration_since(*self.last_seen)
     }
 }
 
@@ -133,9 +147,16 @@ mod record {
     use super::*;
 
     pub(crate) struct PeerAddressRecord {
+        /// A LRU(Least Recently Used) cache for addresses.  
+        /// Will delete the least-recently-used record when full.
         addresses: LruCache<Multiaddr, AddressRecord>,
     }
     impl PeerAddressRecord {
+        pub(crate) fn new(capacity: NonZeroUsize) -> Self {
+            Self {
+                addresses: LruCache::new(capacity),
+            }
+        }
         pub(crate) fn records(&self) -> impl Iterator<Item = super::AddressRecord> {
             self.addresses
                 .iter()
@@ -145,11 +166,6 @@ mod record {
                     source: record.source,
                     should_expire: record.should_expire,
                 })
-        }
-        pub(crate) fn new(capacity: NonZeroUsize) -> Self {
-            Self {
-                addresses: LruCache::new(capacity),
-            }
         }
         pub(crate) fn update_address(
             &mut self,
@@ -186,7 +202,9 @@ mod record {
     pub(crate) struct AddressRecord {
         /// The time when the address is last seen.
         last_seen: Instant,
+        /// How the address is discovered.
         source: AddressSource,
+        /// Whether the address will expire.
         should_expire: bool,
     }
     impl AddressRecord {

@@ -2,10 +2,10 @@ use libp2p_core::{Multiaddr, PeerId};
 use libp2p_swarm::FromSwarm;
 
 /// A store that
-/// - keep track of currently connected peers;
 /// - contains all observed addresses of peers;
 pub trait Store<'a> {
     type AddressRecord;
+
     /// Update an address record.  
     /// Returns `true` when the address is new.  
     fn update_address(
@@ -15,18 +15,23 @@ pub trait Store<'a> {
         source: AddressSource,
         should_expire: bool,
     ) -> bool;
+
     /// Remove an address record.
     /// Returns `true` when the address is removed.
     fn remove_address(&mut self, peer: &PeerId, address: &Multiaddr) -> bool;
+
     /// How this store handles events from the swarm.
     fn on_swarm_event(&mut self, event: &FromSwarm) -> Option<Event>;
+
     /// Get all stored addresses of the peer.
     fn addresses_of_peer<'b>(&self, peer: &'b PeerId) -> Option<impl Iterator<Item = &Multiaddr>>;
+
     /// Get all stored address records of the peer.
     fn address_record_of_peer(
         &'a self,
         peer: &PeerId,
     ) -> Option<impl Iterator<Item = Self::AddressRecord>>;
+
     /// C
     fn check_ttl(&mut self);
 }
