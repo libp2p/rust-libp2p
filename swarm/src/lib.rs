@@ -2303,9 +2303,7 @@ mod tests {
 
     #[tokio::test]
     async fn aborting_pending_connection_surfaces_error() {
-        let _ = tracing_subscriber::fmt()
-            .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
-            .try_init();
+        libp2p_test_utils::with_default_env_filter();
 
         let mut dialer = new_test_swarm(Config::with_tokio_executor());
         let mut listener = new_test_swarm(Config::with_tokio_executor());

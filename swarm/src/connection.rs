@@ -797,16 +797,13 @@ mod tests {
         StreamMuxer,
     };
     use quickcheck::*;
-    use tracing_subscriber::EnvFilter;
 
     use super::*;
     use crate::dummy;
 
     #[test]
     fn max_negotiating_inbound_streams() {
-        let _ = tracing_subscriber::fmt()
-            .with_env_filter(EnvFilter::from_default_env())
-            .try_init();
+        libp2p_test_utils::with_default_env_filter();
 
         fn prop(max_negotiating_inbound_streams: u8) {
             let max_negotiating_inbound_streams: usize = max_negotiating_inbound_streams.into();
@@ -974,9 +971,7 @@ mod tests {
 
     #[test]
     fn checked_add_fraction_can_add_u64_max() {
-        let _ = tracing_subscriber::fmt()
-            .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
-            .try_init();
+        libp2p_test_utils::with_default_env_filter();
         let start = Instant::now();
 
         let duration = checked_add_fraction(start, Duration::from_secs(u64::MAX));
@@ -986,9 +981,7 @@ mod tests {
 
     #[test]
     fn compute_new_shutdown_does_not_panic() {
-        let _ = tracing_subscriber::fmt()
-            .with_env_filter(EnvFilter::from_default_env())
-            .try_init();
+        libp2p_test_utils::with_default_env_filter();
 
         #[derive(Debug)]
         struct ArbitraryShutdown(Shutdown);

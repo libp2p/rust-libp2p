@@ -29,7 +29,6 @@ use libp2p_core::{
 use libp2p_identity as identity;
 use libp2p_noise as noise;
 use quickcheck::*;
-use tracing_subscriber::EnvFilter;
 
 #[allow(dead_code)]
 fn core_upgrade_compat() {
@@ -44,9 +43,7 @@ fn core_upgrade_compat() {
 
 #[test]
 fn xx() {
-    let _ = tracing_subscriber::fmt()
-        .with_env_filter(EnvFilter::from_default_env())
-        .try_init();
+    libp2p_test_utils::with_default_env_filter();
     fn prop(mut messages: Vec<Message>) -> bool {
         messages.truncate(5);
         let server_id = identity::Keypair::generate_ed25519();
