@@ -34,7 +34,7 @@ use std::{
     task::{Context, Poll},
     time::Instant,
 };
-
+use std::collections::VecDeque;
 use futures::{channel::mpsc, Stream, StreamExt};
 use if_watch::IfEvent;
 use libp2p_core::{transport::PortUse, Endpoint, Multiaddr};
@@ -188,6 +188,9 @@ where
     listen_addresses: Arc<RwLock<ListenAddresses>>,
 
     local_peer_id: PeerId,
+
+    /// Pending behaviour events to be emitted.
+    pending_events: VecDeque<Event>,
 }
 
 impl<P> Behaviour<P>
@@ -208,6 +211,7 @@ where
             closest_expiration: Default::default(),
             listen_addresses: Default::default(),
             local_peer_id,
+            pending_events: Default::default(),
         })
     }
 
@@ -304,6 +308,11 @@ where
         &mut self,
         cx: &mut Context<'_>,
     ) -> Poll<ToSwarm<Self::ToSwarm, THandlerInEvent<Self>>> {
+        // Checking for pending events and emit them
+        if let Some(event) = self.pending_events.pop_front() {
+            return Poll::Ready(ToSwarm::GenerateEvent(event));
+        }
+
         // Poll ifwatch.
         while let Poll::Ready(Some(event)) = Pin::new(&mut self.if_watch).poll_next(cx) {
             match event {
@@ -360,6 +369,8 @@ where
                 tracing::info!(%peer, address=%addr, "discovered peer on address");
                 self.discovered_nodes.push((peer, addr.clone(), expiration));
                 discovered.push((peer, addr));
+
+                self.pending_events.push_back(Event::NewExternalAddr(addr.clone()));
             }
         }
 
@@ -399,6 +410,9 @@ where
 pub enum Event {
     /// Discovered nodes through mDNS.
     Discovered(Vec<(PeerId, Multiaddr)>),
+
+    /// The multiaddress is reachable externally.
+    NewExternalAddr(Multiaddr),
 
     /// The given combinations of `PeerId` and `Multiaddr` have expired.
     ///
