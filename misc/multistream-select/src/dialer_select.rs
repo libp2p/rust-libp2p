@@ -214,7 +214,7 @@ mod tests {
         future::timeout,
         net::{TcpListener, TcpStream},
     };
-    use libp2p_logging::EnvFilter;
+    use libp2p_test_utils::EnvFilter;
     use quickcheck::{Arbitrary, Gen, GenRange};
     use tracing::metadata::LevelFilter;
 
@@ -275,7 +275,7 @@ mod tests {
             ListenerProtos(listen_protos): ListenerProtos,
             DialPayload(dial_payload): DialPayload,
         ) {
-            libp2p_logging::with_env_filter(
+            libp2p_test_utils::with_env_filter(
                 EnvFilter::builder()
                     .with_default_directive(LevelFilter::DEBUG.into())
                     .from_env_lossy(),

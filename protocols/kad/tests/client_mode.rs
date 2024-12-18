@@ -8,7 +8,7 @@ use MyBehaviourEvent::*;
 
 #[async_std::test]
 async fn server_gets_added_to_routing_table_by_client() {
-    libp2p_logging::with_default_env_filter();
+    libp2p_test_utils::with_default_env_filter();
 
     let mut client = Swarm::new_ephemeral(MyBehaviour::new);
     let mut server = Swarm::new_ephemeral(MyBehaviour::new);
@@ -38,7 +38,7 @@ async fn server_gets_added_to_routing_table_by_client() {
 
 #[async_std::test]
 async fn two_servers_add_each_other_to_routing_table() {
-    libp2p_logging::with_default_env_filter();
+    libp2p_test_utils::with_default_env_filter();
 
     let mut server1 = Swarm::new_ephemeral(MyBehaviour::new);
     let mut server2 = Swarm::new_ephemeral(MyBehaviour::new);
@@ -77,7 +77,7 @@ async fn two_servers_add_each_other_to_routing_table() {
 
 #[async_std::test]
 async fn adding_an_external_addresses_activates_server_mode_on_existing_connections() {
-    libp2p_logging::with_default_env_filter();
+    libp2p_test_utils::with_default_env_filter();
 
     let mut client = Swarm::new_ephemeral(MyBehaviour::new);
     let mut server = Swarm::new_ephemeral(MyBehaviour::new);
@@ -113,7 +113,7 @@ async fn adding_an_external_addresses_activates_server_mode_on_existing_connecti
 
 #[async_std::test]
 async fn set_client_to_server_mode() {
-    libp2p_logging::with_default_env_filter();
+    libp2p_test_utils::with_default_env_filter();
 
     let mut client = Swarm::new_ephemeral(MyBehaviour::new);
     client.behaviour_mut().kad.set_mode(Some(Mode::Client));

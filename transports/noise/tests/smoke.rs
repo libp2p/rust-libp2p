@@ -43,7 +43,7 @@ fn core_upgrade_compat() {
 
 #[test]
 fn xx() {
-    libp2p_logging::with_default_env_filter();
+    libp2p_test_utils::with_default_env_filter();
     fn prop(mut messages: Vec<Message>) -> bool {
         messages.truncate(5);
         let server_id = identity::Keypair::generate_ed25519();

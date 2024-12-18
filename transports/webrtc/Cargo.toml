@@ -41,7 +41,7 @@ pem = ["webrtc?/pem"]
 libp2p-identity = { workspace = true, features = ["rand"] }
 tokio = { workspace = true, features = ["full"] }
 quickcheck = "1.0.3"
-libp2p-logging = { workspace = true }
+libp2p-test-utils = { workspace = true }
 
 [[test]]
 name = "smoke"

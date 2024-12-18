@@ -323,7 +323,7 @@ fn query_iter() {
 
 #[test]
 fn unresponsive_not_returned_direct() {
-    libp2p_logging::with_default_env_filter();
+    libp2p_test_utils::with_default_env_filter();
     // Build one node. It contains fake addresses to non-existing nodes. We ask it to find a
     // random peer. We make sure that no fake address is returned.
 

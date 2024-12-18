@@ -49,7 +49,7 @@ async fn async_std_smoke() {
 #[cfg(feature = "tokio")]
 #[tokio::test]
 async fn endpoint_reuse() {
-    libp2p_logging::with_default_env_filter();
+    libp2p_test_utils::with_default_env_filter();
     let (_, mut a_transport) = create_default_transport::<quic::tokio::Provider>();
     let (_, mut b_transport) = create_default_transport::<quic::tokio::Provider>();
 
@@ -74,7 +74,7 @@ async fn endpoint_reuse() {
 #[cfg(feature = "async-std")]
 #[async_std::test]
 async fn ipv4_dial_ipv6() {
-    libp2p_logging::with_default_env_filter();
+    libp2p_test_utils::with_default_env_filter();
     let (a_peer_id, mut a_transport) = create_default_transport::<quic::async_std::Provider>();
     let (b_peer_id, mut b_transport) = create_default_transport::<quic::async_std::Provider>();
 
@@ -94,7 +94,7 @@ async fn ipv4_dial_ipv6() {
 async fn wrapped_with_delay() {
     use libp2p_core::transport::DialOpts;
 
-    libp2p_logging::with_default_env_filter();
+    libp2p_test_utils::with_default_env_filter();
 
     struct DialDelay(Arc<Mutex<Boxed<(PeerId, StreamMuxerBox)>>>);
 
@@ -264,7 +264,7 @@ async fn tcp_and_quic() {
 #[cfg(feature = "async-std")]
 #[test]
 fn concurrent_connections_and_streams_async_std() {
-    libp2p_logging::with_default_env_filter();
+    libp2p_test_utils::with_default_env_filter();
 
     quickcheck::QuickCheck::new()
         .min_tests_passed(1)
@@ -275,7 +275,7 @@ fn concurrent_connections_and_streams_async_std() {
 #[cfg(feature = "tokio")]
 #[test]
 fn concurrent_connections_and_streams_tokio() {
-    libp2p_logging::with_default_env_filter();
+    libp2p_test_utils::with_default_env_filter();
 
     let rt = tokio::runtime::Runtime::new().unwrap();
     let _guard = rt.enter();
@@ -292,7 +292,7 @@ async fn draft_29_support() {
     use futures::{future::poll_fn, select};
     use libp2p_core::transport::TransportError;
 
-    libp2p_logging::with_default_env_filter();
+    libp2p_test_utils::with_default_env_filter();
 
     let (_, mut a_transport) =
         create_transport::<quic::tokio::Provider>(|cfg| cfg.support_draft_29 = true);
@@ -367,7 +367,7 @@ async fn draft_29_support() {
 #[cfg(feature = "async-std")]
 #[async_std::test]
 async fn backpressure() {
-    libp2p_logging::with_default_env_filter();
+    libp2p_test_utils::with_default_env_filter();
     let max_stream_data = quic::Config::new(&generate_tls_keypair()).max_stream_data;
 
     let (mut stream_a, mut stream_b) = build_streams::<quic::async_std::Provider>().await;
@@ -391,7 +391,7 @@ async fn backpressure() {
 #[cfg(feature = "async-std")]
 #[async_std::test]
 async fn read_after_peer_dropped_stream() {
-    libp2p_logging::with_default_env_filter();
+    libp2p_test_utils::with_default_env_filter();
     let (mut stream_a, mut stream_b) = build_streams::<quic::async_std::Provider>().await;
 
     let data = vec![0; 10];
@@ -411,7 +411,7 @@ async fn read_after_peer_dropped_stream() {
 #[async_std::test]
 #[should_panic]
 async fn write_after_peer_dropped_stream() {
-    libp2p_logging::with_default_env_filter();
+    libp2p_test_utils::with_default_env_filter();
     let (stream_a, mut stream_b) = build_streams::<quic::async_std::Provider>().await;
     drop(stream_a);
     futures_timer::Delay::new(Duration::from_millis(100)).await;
@@ -465,7 +465,7 @@ async fn test_local_listener_reuse() {
 }
 
 async fn smoke<P: Provider>() {
-    libp2p_logging::with_default_env_filter();
+    libp2p_test_utils::with_default_env_filter();
 
     let (a_peer_id, mut a_transport) = create_default_transport::<P>();
     let (b_peer_id, mut b_transport) = create_default_transport::<P>();

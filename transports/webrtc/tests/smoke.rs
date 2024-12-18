@@ -45,7 +45,7 @@ use rand::{thread_rng, RngCore};
 
 #[tokio::test]
 async fn smoke() {
-    libp2p_logging::with_default_env_filter();
+    libp2p_test_utils::with_default_env_filter();
 
     let (a_peer_id, mut a_transport) = create_transport();
     let (b_peer_id, mut b_transport) = create_transport();
@@ -62,7 +62,7 @@ async fn smoke() {
 // Note: This test should likely be ported to the muxer compliance test suite.
 #[test]
 fn concurrent_connections_and_streams_tokio() {
-    libp2p_logging::with_default_env_filter();
+    libp2p_test_utils::with_default_env_filter();
 
     let rt = tokio::runtime::Runtime::new().unwrap();
     let _guard = rt.enter();

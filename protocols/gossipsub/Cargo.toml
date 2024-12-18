@@ -48,7 +48,7 @@ libp2p-yamux = { workspace = true }
 libp2p-noise = { workspace = true }
 libp2p-swarm-test = { path = "../../swarm-test" }
 quickcheck = { workspace = true }
-libp2p-logging = { workspace = true }
+libp2p-test-utils = { workspace = true }
 tokio = { workspace = true, features = ["rt", "rt-multi-thread", "time", "macros"] }
 
 # Passing arguments to the docsrs builder in order to properly document cfg's.

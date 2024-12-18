@@ -1,5 +1,5 @@
 [package]
-name = "libp2p-logging"
+name = "libp2p-test-utils"
 version = "0.1.0"
 edition = "2021"
 authors = ["Krishang Shah <shahkrishang11@gmail.com>"]

@@ -131,7 +131,7 @@ async fn build_node() -> Swarm<gossipsub::Behaviour> {
 
 #[test]
 fn multi_hop_propagation() {
-    libp2p_logging::with_default_env_filter();
+    libp2p_test_utils::with_default_env_filter();
 
     fn prop(num_nodes: u8, seed: u64) -> TestResult {
         if !(2..=50).contains(&num_nodes) {

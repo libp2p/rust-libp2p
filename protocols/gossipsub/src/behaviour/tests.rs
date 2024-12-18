@@ -4761,7 +4761,7 @@ fn test_limit_number_of_message_ids_inside_ihave() {
 
 #[test]
 fn test_iwant_penalties() {
-    libp2p_logging::with_default_env_filter();
+    libp2p_test_utils::with_default_env_filter();
     let config = ConfigBuilder::default()
         .iwant_followup_time(Duration::from_secs(4))
         .build()

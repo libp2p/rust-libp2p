@@ -629,7 +629,7 @@ mod tests {
 
     #[test]
     fn basic_resolve() {
-        libp2p_logging::with_default_env_filter();
+        libp2p_test_utils::with_default_env_filter();
 
         #[derive(Clone)]
         struct CustomTransport;
