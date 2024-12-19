@@ -22,6 +22,16 @@ mod iface;
 mod socket;
 mod timer;
 
+use futures::{channel::mpsc, Stream, StreamExt};
+use if_watch::IfEvent;
+use libp2p_core::{transport::PortUse, Endpoint, Multiaddr};
+use libp2p_identity::PeerId;
+use libp2p_swarm::{
+    behaviour::FromSwarm, dummy, ConnectionDenied, ConnectionId, ListenAddresses, NetworkBehaviour,
+    THandler, THandlerInEvent, THandlerOutEvent, ToSwarm,
+};
+use smallvec::SmallVec;
+use std::collections::VecDeque;
 use std::{
     cmp,
     collections::hash_map::{Entry, HashMap},
@@ -34,17 +44,7 @@ use std::{
     task::{Context, Poll},
     time::Instant,
 };
-use std::collections::VecDeque;
-use futures::{channel::mpsc, Stream, StreamExt};
-use if_watch::IfEvent;
-use libp2p_core::{transport::PortUse, Endpoint, Multiaddr};
-use libp2p_identity::PeerId;
-use libp2p_swarm::{
-    behaviour::FromSwarm, dummy, ConnectionDenied, ConnectionId, ListenAddresses, NetworkBehaviour,
-    THandler, THandlerInEvent, THandlerOutEvent, ToSwarm,
-};
-use smallvec::SmallVec;
-
+use std::convert::Infallible;
 use self::iface::InterfaceState;
 use crate::{
     behaviour::{socket::AsyncSocket, timer::Builder},
@@ -190,7 +190,7 @@ where
     local_peer_id: PeerId,
 
     /// Pending behaviour events to be emitted.
-    pending_events: VecDeque<Event>,
+    pending_events: VecDeque<ToSwarm<Event, Infallible>>,
 }
 
 impl<P> Behaviour<P>
@@ -310,7 +310,7 @@ where
     ) -> Poll<ToSwarm<Self::ToSwarm, THandlerInEvent<Self>>> {
         // Checking for pending events and emit them
         if let Some(event) = self.pending_events.pop_front() {
-            return Poll::Ready(ToSwarm::GenerateEvent(event));
+            return Poll::Ready(event);
         }
 
         // Poll ifwatch.
@@ -368,15 +368,19 @@ where
             } else {
                 tracing::info!(%peer, address=%addr, "discovered peer on address");
                 self.discovered_nodes.push((peer, addr.clone(), expiration));
-                discovered.push((peer, addr));
+                discovered.push((peer, addr.clone()));
 
-                self.pending_events.push_back(Event::NewExternalAddr(addr.clone()));
+                self.pending_events
+                    .push_back(ToSwarm::NewExternalAddrOfPeer {
+                        peer_id: peer,
+                        address: addr,
+                    });
             }
         }
 
         if !discovered.is_empty() {
             let event = Event::Discovered(discovered);
-            return Poll::Ready(ToSwarm::GenerateEvent(event));
+            self.pending_events.push_back(ToSwarm::GenerateEvent(event));
         }
         // Emit expired event.
         let now = Instant::now();
@@ -410,9 +414,6 @@ where
 pub enum Event {
     /// Discovered nodes through mDNS.
     Discovered(Vec<(PeerId, Multiaddr)>),
-
-    /// The multiaddress is reachable externally.
-    NewExternalAddr(Multiaddr),
 
     /// The given combinations of `PeerId` and `Multiaddr` have expired.
     ///
