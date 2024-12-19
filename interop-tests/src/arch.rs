@@ -49,7 +49,6 @@ pub(crate) mod native {
                     .with_tokio()
                     .with_quic()
                     .with_behaviour(behaviour_constructor)?
-                    .with_swarm_config(|c| c.with_idle_connection_timeout(Duration::from_secs(5)))
                     .build(),
                 format!("/ip4/{ip}/udp/0/quic-v1"),
             ),
@@ -62,7 +61,6 @@ pub(crate) mod native {
                         mplex::MplexConfig::default,
                     )?
                     .with_behaviour(behaviour_constructor)?
-                    .with_swarm_config(|c| c.with_idle_connection_timeout(Duration::from_secs(5)))
                     .build(),
                 format!("/ip4/{ip}/tcp/0"),
             ),
@@ -75,7 +73,6 @@ pub(crate) mod native {
                         yamux::Config::default,
                     )?
                     .with_behaviour(behaviour_constructor)?
-                    .with_swarm_config(|c| c.with_idle_connection_timeout(Duration::from_secs(5)))
                     .build(),
                 format!("/ip4/{ip}/tcp/0"),
             ),
@@ -88,7 +85,6 @@ pub(crate) mod native {
                         mplex::MplexConfig::default,
                     )?
                     .with_behaviour(behaviour_constructor)?
-                    .with_swarm_config(|c| c.with_idle_connection_timeout(Duration::from_secs(5)))
                     .build(),
                 format!("/ip4/{ip}/tcp/0"),
             ),
@@ -101,7 +97,6 @@ pub(crate) mod native {
                         yamux::Config::default,
                     )?
                     .with_behaviour(behaviour_constructor)?
-                    .with_swarm_config(|c| c.with_idle_connection_timeout(Duration::from_secs(5)))
                     .build(),
                 format!("/ip4/{ip}/tcp/0"),
             ),
@@ -111,7 +106,6 @@ pub(crate) mod native {
                     .with_websocket(tls::Config::new, mplex::MplexConfig::default)
                     .await?
                     .with_behaviour(behaviour_constructor)?
-                    .with_swarm_config(|c| c.with_idle_connection_timeout(Duration::from_secs(5)))
                     .build(),
                 format!("/ip4/{ip}/tcp/0/ws"),
             ),
@@ -121,7 +115,6 @@ pub(crate) mod native {
                     .with_websocket(tls::Config::new, yamux::Config::default)
                     .await?
                     .with_behaviour(behaviour_constructor)?
-                    .with_swarm_config(|c| c.with_idle_connection_timeout(Duration::from_secs(5)))
                     .build(),
                 format!("/ip4/{ip}/tcp/0/ws"),
             ),
@@ -131,7 +124,6 @@ pub(crate) mod native {
                     .with_websocket(noise::Config::new, mplex::MplexConfig::default)
                     .await?
                     .with_behaviour(behaviour_constructor)?
-                    .with_swarm_config(|c| c.with_idle_connection_timeout(Duration::from_secs(5)))
                     .build(),
                 format!("/ip4/{ip}/tcp/0/ws"),
             ),
@@ -141,7 +133,6 @@ pub(crate) mod native {
                     .with_websocket(noise::Config::new, yamux::Config::default)
                     .await?
                     .with_behaviour(behaviour_constructor)?
-                    .with_swarm_config(|c| c.with_idle_connection_timeout(Duration::from_secs(5)))
                     .build(),
                 format!("/ip4/{ip}/tcp/0/ws"),
             ),
@@ -155,7 +146,6 @@ pub(crate) mod native {
                         ))
                     })?
                     .with_behaviour(behaviour_constructor)?
-                    .with_swarm_config(|c| c.with_idle_connection_timeout(Duration::from_secs(5)))
                     .build(),
                 format!("/ip4/{ip}/udp/0/webrtc-direct"),
             ),
