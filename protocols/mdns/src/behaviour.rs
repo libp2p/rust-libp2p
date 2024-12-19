@@ -22,6 +22,16 @@ mod iface;
 mod socket;
 mod timer;
 
+use futures::{channel::mpsc, Stream, StreamExt};
+use if_watch::IfEvent;
+use libp2p_core::{transport::PortUse, Endpoint, Multiaddr};
+use libp2p_identity::PeerId;
+use libp2p_swarm::{
+    behaviour::FromSwarm, dummy, ConnectionDenied, ConnectionId, ListenAddresses, NetworkBehaviour,
+    THandler, THandlerInEvent, THandlerOutEvent, ToSwarm,
+};
+use smallvec::SmallVec;
+use std::collections::VecDeque;
 use std::{
     cmp,
     collections::hash_map::{Entry, HashMap},
@@ -34,17 +44,7 @@ use std::{
     task::{Context, Poll},
     time::Instant,
 };
-
-use futures::{channel::mpsc, Stream, StreamExt};
-use if_watch::IfEvent;
-use libp2p_core::{transport::PortUse, Endpoint, Multiaddr};
-use libp2p_identity::PeerId;
-use libp2p_swarm::{
-    behaviour::FromSwarm, dummy, ConnectionDenied, ConnectionId, ListenAddresses, NetworkBehaviour,
-    THandler, THandlerInEvent, THandlerOutEvent, ToSwarm,
-};
-use smallvec::SmallVec;
-
+use std::convert::Infallible;
 use self::iface::InterfaceState;
 use crate::{
     behaviour::{socket::AsyncSocket, timer::Builder},
@@ -188,6 +188,9 @@ where
     listen_addresses: Arc<RwLock<ListenAddresses>>,
 
     local_peer_id: PeerId,
+
+    /// Pending behaviour events to be emitted.
+    pending_events: VecDeque<ToSwarm<Event, Infallible>>,
 }
 
 impl<P> Behaviour<P>
@@ -208,6 +211,7 @@ where
             closest_expiration: Default::default(),
             listen_addresses: Default::default(),
             local_peer_id,
+            pending_events: Default::default(),
         })
     }
 
@@ -304,6 +308,11 @@ where
         &mut self,
         cx: &mut Context<'_>,
     ) -> Poll<ToSwarm<Self::ToSwarm, THandlerInEvent<Self>>> {
+        // Checking for pending events and emit them
+        if let Some(event) = self.pending_events.pop_front() {
+            return Poll::Ready(event);
+        }
+
         // Poll ifwatch.
         while let Poll::Ready(Some(event)) = Pin::new(&mut self.if_watch).poll_next(cx) {
             match event {
@@ -359,13 +368,19 @@ where
             } else {
                 tracing::info!(%peer, address=%addr, "discovered peer on address");
                 self.discovered_nodes.push((peer, addr.clone(), expiration));
-                discovered.push((peer, addr));
+                discovered.push((peer, addr.clone()));
+
+                self.pending_events
+                    .push_back(ToSwarm::NewExternalAddrOfPeer {
+                        peer_id: peer,
+                        address: addr,
+                    });
             }
         }
 
         if !discovered.is_empty() {
             let event = Event::Discovered(discovered);
-            return Poll::Ready(ToSwarm::GenerateEvent(event));
+            self.pending_events.push_back(ToSwarm::GenerateEvent(event));
         }
         // Emit expired event.
         let now = Instant::now();
