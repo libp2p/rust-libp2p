@@ -24,7 +24,11 @@ mod timer;
 
 use std::{
     cmp,
-    collections::hash_map::{Entry, HashMap},
+    collections::{
+        hash_map::{Entry, HashMap},
+        VecDeque,
+    },
+    convert::Infallible,
     fmt,
     future::Future,
     io,
@@ -188,6 +192,9 @@ where
     listen_addresses: Arc<RwLock<ListenAddresses>>,
 
     local_peer_id: PeerId,
+
+    /// Pending behaviour events to be emitted.
+    pending_events: VecDeque<ToSwarm<Event, Infallible>>,
 }
 
 impl<P> Behaviour<P>
@@ -208,6 +215,7 @@ where
             closest_expiration: Default::default(),
             listen_addresses: Default::default(),
             local_peer_id,
+            pending_events: Default::default(),
         })
     }
 
@@ -304,6 +312,11 @@ where
         &mut self,
         cx: &mut Context<'_>,
     ) -> Poll<ToSwarm<Self::ToSwarm, THandlerInEvent<Self>>> {
+        // Checking for pending events and emit them
+        if let Some(event) = self.pending_events.pop_front() {
+            return Poll::Ready(event);
+        }
+
         // Poll ifwatch.
         while let Poll::Ready(Some(event)) = Pin::new(&mut self.if_watch).poll_next(cx) {
             match event {
@@ -359,13 +372,20 @@ where
             } else {
                 tracing::info!(%peer, address=%addr, "discovered peer on address");
                 self.discovered_nodes.push((peer, addr.clone(), expiration));
-                discovered.push((peer, addr));
+                discovered.push((peer, addr.clone()));
+
+                self.pending_events
+                    .push_back(ToSwarm::NewExternalAddrOfPeer {
+                        peer_id: peer,
+                        address: addr,
+                    });
             }
         }
 
         if !discovered.is_empty() {
             let event = Event::Discovered(discovered);
-            return Poll::Ready(ToSwarm::GenerateEvent(event));
+            self.pending_events
+                .push_front(ToSwarm::GenerateEvent(event));
         }
         // Emit expired event.
         let now = Instant::now();
@@ -382,7 +402,7 @@ where
         });
         if !expired.is_empty() {
             let event = Event::Expired(expired);
-            return Poll::Ready(ToSwarm::GenerateEvent(event));
+            self.pending_events.push_back(ToSwarm::GenerateEvent(event));
         }
         if let Some(closest_expiration) = closest_expiration {
             let mut timer = P::Timer::at(closest_expiration);
