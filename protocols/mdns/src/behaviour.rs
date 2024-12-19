@@ -22,19 +22,13 @@ mod iface;
 mod socket;
 mod timer;
 
-use futures::{channel::mpsc, Stream, StreamExt};
-use if_watch::IfEvent;
-use libp2p_core::{transport::PortUse, Endpoint, Multiaddr};
-use libp2p_identity::PeerId;
-use libp2p_swarm::{
-    behaviour::FromSwarm, dummy, ConnectionDenied, ConnectionId, ListenAddresses, NetworkBehaviour,
-    THandler, THandlerInEvent, THandlerOutEvent, ToSwarm,
-};
-use smallvec::SmallVec;
-use std::collections::VecDeque;
 use std::{
     cmp,
-    collections::hash_map::{Entry, HashMap},
+    collections::{
+        hash_map::{Entry, HashMap},
+        VecDeque,
+    },
+    convert::Infallible,
     fmt,
     future::Future,
     io,
@@ -44,7 +38,17 @@ use std::{
     task::{Context, Poll},
     time::Instant,
 };
-use std::convert::Infallible;
+
+use futures::{channel::mpsc, Stream, StreamExt};
+use if_watch::IfEvent;
+use libp2p_core::{transport::PortUse, Endpoint, Multiaddr};
+use libp2p_identity::PeerId;
+use libp2p_swarm::{
+    behaviour::FromSwarm, dummy, ConnectionDenied, ConnectionId, ListenAddresses, NetworkBehaviour,
+    THandler, THandlerInEvent, THandlerOutEvent, ToSwarm,
+};
+use smallvec::SmallVec;
+
 use self::iface::InterfaceState;
 use crate::{
     behaviour::{socket::AsyncSocket, timer::Builder},
@@ -380,7 +384,8 @@ where
 
         if !discovered.is_empty() {
             let event = Event::Discovered(discovered);
-            self.pending_events.push_back(ToSwarm::GenerateEvent(event));
+            self.pending_events
+                .push_front(ToSwarm::GenerateEvent(event));
         }
         // Emit expired event.
         let now = Instant::now();
@@ -397,7 +402,7 @@ where
         });
         if !expired.is_empty() {
             let event = Event::Expired(expired);
-            return Poll::Ready(ToSwarm::GenerateEvent(event));
+            self.pending_events.push_back(ToSwarm::GenerateEvent(event));
         }
         if let Some(closest_expiration) = closest_expiration {
             let mut timer = P::Timer::at(closest_expiration);
