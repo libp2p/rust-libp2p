@@ -70,6 +70,17 @@ where
         self.pending_events
             .push_back(Event::RecordUpdated { peer: *peer });
     }
+
+    /// Get a immutable reference to the internal store.
+    pub fn store(&self) -> &S {
+        &self.store
+    }
+
+    /// Get a mutable reference to the internal store.
+    pub fn store_mut(&mut self) -> &mut S {
+        &mut self.store
+    }
+
     fn on_peer_connect(&mut self, peer: &PeerId) {
         self.connected_peers.insert(*peer);
     }

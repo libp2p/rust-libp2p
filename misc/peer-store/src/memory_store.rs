@@ -8,7 +8,7 @@ use libp2p_core::{Multiaddr, PeerId};
 use libp2p_swarm::FromSwarm;
 
 use super::{store::Event, Store};
-use crate::store::AddressSource;
+use crate::{store::AddressSource, Behaviour};
 
 /// A in-memory store.
 #[derive(Default)]
@@ -87,18 +87,24 @@ impl<'a> Store<'a> for MemoryStore {
             .map(|record| record.records().map(|r| r.address))
     }
 
-    fn address_record_of_peer(
-        &'a self,
-        peer: &PeerId,
-    ) -> Option<impl Iterator<Item = AddressRecord<'a>>> {
-        self.address_book.get(peer).map(|record| record.records())
-    }
-
     fn check_ttl(&mut self) {
         let now = Instant::now();
         for r in &mut self.address_book.values_mut() {
             r.check_ttl(now, self.config.record_ttl);
         }
+    }
+}
+
+impl Behaviour<MemoryStore> {
+    /// Get all stored address records of the peer.
+    pub fn address_record_of_peer(
+        &self,
+        peer: &PeerId,
+    ) -> Option<impl Iterator<Item = super::AddressRecord>> {
+        self.store()
+            .address_book
+            .get(peer)
+            .map(|record| record.records())
     }
 }
 

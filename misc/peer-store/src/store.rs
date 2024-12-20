@@ -26,13 +26,7 @@ pub trait Store<'a> {
     /// Get all stored addresses of the peer.
     fn addresses_of_peer(&self, peer: &PeerId) -> Option<impl Iterator<Item = &Multiaddr>>;
 
-    /// Get all stored address records of the peer.
-    fn address_record_of_peer(
-        &'a self,
-        peer: &PeerId,
-    ) -> Option<impl Iterator<Item = Self::AddressRecord>>;
-
-    /// C
+    /// Trigger grabage collection for records.
     fn check_ttl(&mut self);
 }
 
