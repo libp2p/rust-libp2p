@@ -39,7 +39,7 @@ To run the webrtc-direct test, you'll need the `chromedriver` in your `$PATH`, c
 # Running all interop tests locally with Compose
 
 To run this test against all released libp2p versions you'll need to have the
-(libp2p/test-plans)[https://github.com/libp2p/test-plans] checked out. Then do
+[libp2p/test-plans](https://github.com/libp2p/test-plans) checked out. Then do
 the following (from the root directory of this repository):
 
 1. Build the image: `docker build -t rust-libp2p-head . -f interop-tests/Dockerfile`.
