@@ -112,6 +112,7 @@ impl HandleInnerEvent for AsClient<'_> {
                         request_id,
                         response,
                     },
+                ..
             } => {
                 tracing::debug!(?response, "Outbound dial-back request returned response");
 
@@ -154,6 +155,7 @@ impl HandleInnerEvent for AsClient<'_> {
                 peer,
                 error,
                 request_id,
+                ..
             } => {
                 tracing::debug!(
                     %peer,
