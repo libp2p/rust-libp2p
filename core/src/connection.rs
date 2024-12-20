@@ -121,28 +121,18 @@ impl ConnectedPoint {
 
     /// Returns true if we are `Dialer`.
     pub fn is_dialer(&self) -> bool {
-        match self {
-            ConnectedPoint::Dialer { .. } => true,
-            ConnectedPoint::Listener { .. } => false,
-        }
+        matches!(self, ConnectedPoint::Dialer { .. })
     }
 
     /// Returns true if we are `Listener`.
     pub fn is_listener(&self) -> bool {
-        match self {
-            ConnectedPoint::Dialer { .. } => false,
-            ConnectedPoint::Listener { .. } => true,
-        }
+        matches!(self, ConnectedPoint::Listener { .. })
     }
 
     /// Returns true if the connection is relayed.
     pub fn is_relayed(&self) -> bool {
         match self {
-            ConnectedPoint::Dialer {
-                address,
-                role_override: _,
-                port_use: _,
-            } => address,
+            ConnectedPoint::Dialer { address, .. } => address,
             ConnectedPoint::Listener { local_addr, .. } => local_addr,
         }
         .iter()

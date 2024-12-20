@@ -142,7 +142,6 @@ clap = { version = "4.1.6", features = ["derive"] }
 tokio = { workspace = true, features = [ "io-util", "io-std", "macros", "rt", "rt-multi-thread"] }
 
 libp2p-mplex = { workspace = true }
-libp2p-noise = { workspace = true }
 libp2p-tcp = { workspace = true, features = ["tokio"] }
 tracing-subscriber = { workspace = true, features = ["env-filter"] }
 
