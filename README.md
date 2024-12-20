@@ -97,6 +97,7 @@ Conduct](https://github.com/ipfs/community/blob/master/code-of-conduct.md).
 - [OpenMina](https://github.com/openmina/openmina) - In-browser Mina Rust implementation.
 - [rust-ipfs](https://github.com/rs-ipfs/rust-ipfs) - IPFS implementation in Rust.
 - [Safe Network](https://github.com/maidsafe/safe_network) - Safe Network implementation in Rust.
+- [SQD Network](https://github.com/subsquid/sqd-network) - A decentralized storage for Web3 data.
 - [Starcoin](https://github.com/starcoinorg/starcoin) - A smart contract blockchain network that scales by layering.
 - [Subspace](https://github.com/subspace/subspace) - Subspace Network reference implementation
 - [Substrate](https://github.com/paritytech/substrate) - Framework for blockchain innovation,
