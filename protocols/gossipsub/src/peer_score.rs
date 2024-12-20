@@ -29,11 +29,9 @@ use std::{
 use libp2p_identity::PeerId;
 use web_time::Instant;
 
-use crate::{
-    metrics::{Metrics, Penalty},
-    time_cache::TimeCache,
-    MessageId, TopicHash,
-};
+#[cfg(feature = "metrics")]
+use crate::metrics::{Metrics, Penalty};
+use crate::{time_cache::TimeCache, MessageId, TopicHash};
 
 mod params;
 pub use params::{
@@ -225,16 +223,31 @@ impl PeerScore {
 
     /// Returns the score for a peer
     pub(crate) fn score(&self, peer_id: &PeerId) -> f64 {
-        self.metric_score(peer_id, None)
+        let (score, _, _) = self.calculate_score(peer_id);
+        score
     }
 
     /// Returns the score for a peer, logging metrics. This is called from the heartbeat and
     /// increments the metric counts for penalties.
-    pub(crate) fn metric_score(&self, peer_id: &PeerId, mut metrics: Option<&mut Metrics>) -> f64 {
+    #[cfg(feature = "metrics")]
+    pub(crate) fn metric_score(&self, peer_id: &PeerId, metrics: Option<&mut Metrics>) -> f64 {
+        let (score, num_message_deficit, num_ip_colocation) = self.calculate_score(peer_id);
+        if let Some(m) = metrics {
+            m.register_score_penalty(Penalty::MessageDeficit, num_message_deficit);
+            m.register_score_penalty(Penalty::IPColocation, num_ip_colocation);
+        }
+        score
+    }
+
+    fn calculate_score(&self, peer_id: &PeerId) -> (f64, u64, u64) {
         let Some(peer_stats) = self.peer_stats.get(peer_id) else {
-            return 0.0;
+            return (0.0, 0, 0);
         };
         let mut score = 0.0;
+        #[cfg_attr(not(feature = "metrics"), allow(unused_mut))]
+        let mut num_message_deficit_penalties = 0;
+        #[cfg_attr(not(feature = "metrics"), allow(unused_mut))]
+        let mut num_ip_colocation_penalties = 0;
 
         // topic scores
         for (topic, topic_stats) in peer_stats.topics.iter() {
@@ -279,8 +292,10 @@ impl PeerScore {
                         - topic_stats.mesh_message_deliveries;
                     let p3 = deficit * deficit;
                     topic_score += p3 * topic_params.mesh_message_deliveries_weight;
-                    if let Some(metrics) = metrics.as_mut() {
-                        metrics.register_score_penalty(Penalty::MessageDeficit);
+
+                    #[cfg(feature = "metrics")]
+                    {
+                        num_message_deficit_penalties += 1;
                     }
                     tracing::debug!(
                         peer=%peer_id,
@@ -332,8 +347,9 @@ impl PeerScore {
                 if (peers_in_ip as f64) > self.params.ip_colocation_factor_threshold {
                     let surplus = (peers_in_ip as f64) - self.params.ip_colocation_factor_threshold;
                     let p6 = surplus * surplus;
-                    if let Some(metrics) = metrics.as_mut() {
-                        metrics.register_score_penalty(Penalty::IPColocation);
+                    #[cfg(feature = "metrics")]
+                    {
+                        num_ip_colocation_penalties += 1;
                     }
                     tracing::debug!(
                         peer=%peer_id,
@@ -359,7 +375,11 @@ impl PeerScore {
             score += excess * self.params.slow_peer_weight;
         }
 
-        score
+        (
+            score,
+            num_message_deficit_penalties,
+            num_ip_colocation_penalties,
+        )
     }
 
     pub(crate) fn add_penalty(&mut self, peer_id: &PeerId, count: usize) {
