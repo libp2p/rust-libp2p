@@ -2781,7 +2781,6 @@ dependencies = [
  "quick-protobuf",
  "quickcheck-ext",
  "rand 0.8.5",
- "rw-stream-sink",
  "serde",
  "smallvec",
  "thiserror 2.0.3",
