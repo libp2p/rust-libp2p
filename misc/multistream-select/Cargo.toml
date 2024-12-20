@@ -22,7 +22,6 @@ unsigned-varint = { workspace = true }
 async-std = { version = "1.6.2", features = ["attributes"] }
 futures_ringbuf = "0.4.0"
 quickcheck = { workspace = true }
-rand = "0.8"
 rw-stream-sink = { workspace = true }
 tracing-subscriber = { workspace = true, features = ["env-filter"] }
 
