@@ -1,6 +1,6 @@
 ## 0.46.2
 
-- Emit `ToSwarm::NewExternalAddrOfPeer` on discovery
+- Emit `ToSwarm::NewExternalAddrOfPeer` on discovery.
   See [PR 5753](https://github.com/libp2p/rust-libp2p/pull/5753)
 
 ## 0.46.1
