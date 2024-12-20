@@ -100,7 +100,7 @@ impl Behaviour<MemoryStore> {
     pub fn address_record_of_peer(
         &self,
         peer: &PeerId,
-    ) -> Option<impl Iterator<Item = super::AddressRecord>> {
+    ) -> Option<impl Iterator<Item = AddressRecord>> {
         self.store()
             .address_book
             .get(peer)

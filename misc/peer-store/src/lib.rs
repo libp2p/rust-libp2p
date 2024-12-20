@@ -1,7 +1,6 @@
 mod behaviour;
-mod memory_store;
+pub mod memory_store;
 mod store;
 
-pub use behaviour::{Behaviour, Event};
-pub use memory_store::{AddressRecord, Config, MemoryStore};
+pub use behaviour::{Behaviour, Config, Event};
 pub use store::Store;
