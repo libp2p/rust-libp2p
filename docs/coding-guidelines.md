@@ -236,7 +236,7 @@ Concurrency adds complexity. Concurrency adds overhead due to synchronization.
 Thus unless proven to be a bottleneck, don't make things concurrent. As an example
 the hierarchical `NetworkBehaviour` state machine runs sequentially. It is easy
 to debug as it runs sequentially. Thus far there has been no proof that
-shows a speed up when running it concurrently.
+shows a speed-up when running it concurrently.
 
 ## Use `async/await` for sequential execution only
 
