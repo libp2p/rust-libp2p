@@ -9,7 +9,7 @@ pub use transport::GenTransport;
 pub use connection::{Connecting, Connection};
 pub use certificate::CertHash;
 use libp2p_core::transport::TransportError;
-// pub(crate) use connection::Stream;
+pub(crate) use connection::Stream;
 
 /// Errors that may happen on the [`GenTransport`] or a single [`Connection`].
 #[derive(Debug, thiserror::Error)]
@@ -25,6 +25,12 @@ pub enum Error {
     /// The [`Connecting`] future timed out.
     #[error("Unexpected HTTP endpoint of a libp2p WebTransport server {0}")]
     UnexpectedPath(String),
+
+    #[error(transparent)]
+    AuthenticationError(#[from] libp2p_noise::Error),
+
+    #[error("Unknown remote peer ID")]
+    UnknownRemotePeerId,
 
     /// The [`Connecting`] future timed out.
     #[error("Handshake with the remote timed out.")]

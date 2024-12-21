@@ -1,14 +1,13 @@
 use std::pin::Pin;
 use std::task::{Context, Poll};
 
+use futures::{FutureExt, ready};
 use futures::future::BoxFuture;
-use futures::FutureExt;
 use wtransport::{error::ConnectionError, RecvStream, SendStream};
 
 pub use connecting::Connecting;
 use libp2p_core::muxing::StreamMuxerEvent;
 use libp2p_core::StreamMuxer;
-use libp2p_identity::PeerId;
 
 pub(crate) use crate::connection::stream::Stream;
 use crate::Error;
@@ -33,22 +32,6 @@ impl Connection {
             closing: None,
         }
     }
-
-
-    /// Returns the address of the node we're connected to.
-    /// Panics if the connection is still handshaking.
-    fn remote_peer_id(&self) -> PeerId {
-        let cert_chain = self.connection
-            .peer_identity()
-            .expect("connection got identity because it passed TLS handshake; qed");
-        let cert = cert_chain.as_slice()
-            .first().expect("there should be exactly one certificate; qed");
-
-        let p2p_cert = libp2p_tls::certificate::parse_binary(cert.der())
-            .expect("the certificate was validated during TLS handshake; qed");
-
-        p2p_cert.peer_id()
-    }
 }
 
 impl StreamMuxer for Connection {
@@ -63,8 +46,7 @@ impl StreamMuxer for Connection {
             async move { connection.accept_bi().await }.boxed()
         });
 
-        let (send, recv) = futures::ready!(incoming.poll_unpin(cx))?;
-            // .map_err(ConnectionError)?;
+        let (send, recv) = ready!(incoming.poll_unpin(cx))?;
         this.incoming.take();
         let stream = Stream::new(send, recv);
         Poll::Ready(Ok(stream))

@@ -3,12 +3,11 @@ use std::pin::Pin;
 use std::task::{Context, Poll};
 use std::time::Duration;
 
+use futures::{FutureExt, ready};
 use futures::future::{BoxFuture, Either, Select, select};
-use futures::FutureExt;
 use futures_timer::Delay;
 use wtransport::endpoint::IncomingSession;
 
-use libp2p_core::StreamMuxer;
 use libp2p_core::upgrade::InboundConnectionUpgrade;
 use libp2p_identity::PeerId;
 
@@ -18,8 +17,6 @@ pub(crate) const WEBTRANSPORT_PATH: &str = "/.well-known/libp2p-webtransport?typ
 
 /// A Webtransport connection currently being negotiated.
 pub struct Connecting {
-    noise_config: libp2p_noise::Config,
-    // certhashes: Vec<CertHash>,
     connecting: Select<BoxFuture<'static, Result<(PeerId, Connection), Error>>, Delay>,
 }
 
@@ -27,19 +24,19 @@ impl Connecting {
     pub fn new(incoming_session: IncomingSession,
                noise_config: libp2p_noise::Config,
                timeout: Duration,
-               // certhashes: Vec<CertHash>,
     ) -> Self {
         Connecting {
-            noise_config,
-            // certhashes,
             connecting: select(
-                Self::handshake(incoming_session).boxed(),
+                Self::handshake(incoming_session, noise_config).boxed(),
                 Delay::new(timeout),
             ),
         }
     }
 
-    async fn handshake(incoming_session: IncomingSession) -> Result<(PeerId, Connection), Error> {
+    async fn handshake(
+        incoming_session: IncomingSession,
+        noise_config: libp2p_noise::Config,
+    ) -> Result<(PeerId, Connection), Error> {
         match incoming_session.await {
             Ok(session_request) => {
                 let path = session_request.path();
@@ -51,8 +48,12 @@ impl Connecting {
 
                 match session_request.accept().await {
                     Ok(wtransport_connection) => {
+                        // The client SHOULD start the handshake right after sending the CONNECT request,
+                        // without waiting for the server's response.
+                        let peer_id = Self::noise_auth(wtransport_connection.clone(), noise_config).await?;
                         let connection = Connection::new(wtransport_connection);
-                        Ok((connection.remote_peer_id(), connection))
+
+                        Ok((peer_id, connection))
                     }
                     Err(connection_error) => {
                         Err(Error::Connection(connection_error))
@@ -64,34 +65,46 @@ impl Connecting {
             }
         }
     }
+
+    async fn noise_auth(
+        connection: wtransport::Connection,
+        noise_config: libp2p_noise::Config,
+    ) -> Result<PeerId, Error> {
+        fn remote_peer_id(con: &wtransport::Connection,) -> PeerId {
+            let cert_chain = con
+                .peer_identity()
+                .expect("connection got identity because it passed TLS handshake; qed");
+            let cert = cert_chain.as_slice()
+                .first().expect("there should be exactly one certificate; qed");
+
+            let p2p_cert = libp2p_tls::certificate::parse_binary(cert.der())
+                .expect("the certificate was validated during TLS handshake; qed");
+
+            p2p_cert.peer_id()
+        }
+
+        let (send, recv) = connection.accept_bi().await?;
+        let stream = crate::Stream::new(send, recv);
+        let (actual_peer_id, _) = noise_config.upgrade_inbound(stream, "").await?;
+
+        let expected_peer_id = remote_peer_id(&connection);
+        // TODO: This should be part libp2p-noise
+        if actual_peer_id != expected_peer_id {
+            return Err(Error::UnknownRemotePeerId);
+        }
+
+        Ok(actual_peer_id)
+    }
 }
 
 impl Future for Connecting {
     type Output = Result<(PeerId, Connection), Error>;
 
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        let (peer_id, connection) = match futures::ready!(self.connecting.poll_unpin(cx)) {
+        let (peer_id, connection) = match ready!(self.connecting.poll_unpin(cx)) {
             Either::Right(_) => return Poll::Ready(Err(Error::HandshakeTimedOut)),
             Either::Left((res, _)) => res?,
         };
-
-        /*let session = WebTransportSession::accept(request, stream, h3_conn).await?;
-                let arc_session = Arc::new(session);
-                let webtr_stream =
-                    webtransport::accept_webtransport_stream(&arc_session).await?;
-
-                let certs = certhashes.iter().cloned().collect::<HashSet<_>>();
-                let t_noise = noise_config.with_webtransport_certhashes(certs);
-                t_noise.upgrade_inbound(webtr_stream, "").await?;
-
-                let muxer = webtransport::Connection::new(arc_session, connection);
-
-                return Ok((peer_id, StreamMuxerBox::new(muxer)));*/
-
-        // futures::ready!(incoming.poll_unpin(cx))
-        // t_noise.upgrade_inbound().await?;
-
-        // todo здесь же нужно будет делать нойз хэндшейк
 
         Poll::Ready(Ok((peer_id, connection)))
     }
