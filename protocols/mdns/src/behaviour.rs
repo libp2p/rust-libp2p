@@ -418,9 +418,7 @@ where
                 self.closest_expiration = Some(timer);
             }
 
-            if self.pending_events.is_empty() {
-                return Poll::Pending;
-            }
+            return Poll::Pending;
         }
     }
 }
