@@ -42,8 +42,11 @@ pub struct Config {
 impl Config {
     pub fn new(keypair: &libp2p_identity::Keypair, cert: Certificate) -> Self {
         let server_config: rustls::ServerConfig = libp2p_tls::make_webtransport_server_config(
-            &cert.cert, &cert.private_key, alpn_protocols(),
-        ).expect("A server config");
+            &cert.cert,
+            &cert.private_key,
+            alpn_protocols(),
+        )
+        .expect("A server config");
 
         Self {
             server_tls_config: server_config,
@@ -63,7 +66,6 @@ impl Config {
         vec![self.cert_hash.clone()]
     }
 }
-
 
 fn alpn_protocols() -> Vec<Vec<u8>> {
     vec![

@@ -2,7 +2,7 @@ use std::io;
 use std::pin::Pin;
 use std::task::{Context, Poll};
 use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
-use wtransport::{SendStream, RecvStream};
+use wtransport::{RecvStream, SendStream};
 
 /// A single stream on a connection
 pub struct Stream {
@@ -38,21 +38,19 @@ impl futures::AsyncRead for Stream {
         let mut read_buf = ReadBuf::new(buf);
         let res = AsyncRead::poll_read(Pin::new(&mut self.recv), cx, &mut read_buf);
         match res {
-            Poll::Ready(Ok(_)) => {
-                Poll::Ready(Ok(read_buf.filled().len()))
-            }
-            Poll::Ready(Err(e)) => {
-                Poll::Ready(Err(e))
-            }
-            Poll::Pending => {
-                Poll::Pending
-            }
+            Poll::Ready(Ok(_)) => Poll::Ready(Ok(read_buf.filled().len())),
+            Poll::Ready(Err(e)) => Poll::Ready(Err(e)),
+            Poll::Pending => Poll::Pending,
         }
     }
 }
 
 impl futures::AsyncWrite for Stream {
-    fn poll_write(mut self: Pin<&mut Self>, cx: &mut Context<'_>, buf: &[u8]) -> Poll<io::Result<usize>> {
+    fn poll_write(
+        mut self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+        buf: &[u8],
+    ) -> Poll<io::Result<usize>> {
         AsyncWrite::poll_write(Pin::new(&mut self.send), cx, buf)
     }
 

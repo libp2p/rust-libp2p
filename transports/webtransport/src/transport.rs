@@ -7,19 +7,19 @@ use std::sync::Arc;
 use std::task::{Context, Poll, Waker};
 use std::time::Duration;
 
-use futures::{prelude::*, stream::SelectAll};
 use futures::future::BoxFuture;
+use futures::{prelude::*, stream::SelectAll};
+use wtransport::endpoint::{endpoint_side::Server, Endpoint, IncomingSession};
 use wtransport::{config::TlsServerConfig, ServerConfig};
-use wtransport::endpoint::{Endpoint, endpoint_side::Server, IncomingSession};
 
-use libp2p_core::{Multiaddr, multiaddr::Protocol, multihash::Multihash, Transport};
 use libp2p_core::transport::{DialOpts, ListenerId, TransportError, TransportEvent};
+use libp2p_core::{multiaddr::Protocol, multihash::Multihash, Multiaddr, Transport};
 use libp2p_identity::{Keypair, PeerId};
 
 use crate::certificate::CertHash;
 use crate::config::Config;
-use crate::Connecting;
 use crate::connection::Connection;
+use crate::Connecting;
 use crate::Error;
 
 pub struct GenTransport {
@@ -56,10 +56,7 @@ impl GenTransport {
         &self,
         addr: Multiaddr,
         check_unspecified_addr: bool,
-    ) -> Result<
-        (SocketAddr, Option<PeerId>),
-        TransportError<<Self as Transport>::Error>,
-    > {
+    ) -> Result<(SocketAddr, Option<PeerId>), TransportError<<Self as Transport>::Error>> {
         //todo rewrite: addr.clone() should be avoided.
         let (socket_addr, peer_id) = multiaddr_to_socketaddr(&addr)
             .ok_or_else(|| TransportError::MultiaddrNotSupported(addr.clone()))?;
@@ -77,22 +74,24 @@ impl Transport for GenTransport {
     type ListenerUpgrade = Connecting;
     type Dial = Pending<Result<Self::Output, Self::Error>>;
 
-    fn listen_on(&mut self, id: ListenerId, addr: Multiaddr) -> Result<(), TransportError<Self::Error>> {
+    fn listen_on(
+        &mut self,
+        id: ListenerId,
+        addr: Multiaddr,
+    ) -> Result<(), TransportError<Self::Error>> {
         let (socket_addr, _peer_id) = self.remote_multiaddr_to_socketaddr(addr, false)?;
         let config = ServerConfig::builder()
             .with_bind_address(socket_addr)
             .with_custom_tls(self.server_tls_config.clone())
             .build();
 
-        let endpoint = wtransport::Endpoint::server(config)
-            .map_err(|e| { TransportError::Other(e.into()) })?;
+        let endpoint =
+            wtransport::Endpoint::server(config).map_err(|e| TransportError::Other(e.into()))?;
         let keypair = &self.keypair;
         let cert_hashes = &self.cert_hashes;
         let handshake_timeout = self.handshake_timeout.clone();
 
-        let listener = Listener::new(
-            id, endpoint, keypair, cert_hashes, handshake_timeout,
-        )?;
+        let listener = Listener::new(id, endpoint, keypair, cert_hashes, handshake_timeout)?;
         self.listeners.push(listener);
 
         if let Some(waker) = self.waker.take() {
@@ -113,13 +112,18 @@ impl Transport for GenTransport {
         }
     }
 
-    fn dial(&mut self, _addr: Multiaddr, _opts: DialOpts) -> Result<Self::Dial, TransportError<Self::Error>> {
+    fn dial(
+        &mut self,
+        _addr: Multiaddr,
+        _opts: DialOpts,
+    ) -> Result<Self::Dial, TransportError<Self::Error>> {
         panic!("Dial operation is not supported!")
     }
 
-    fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>)
-            -> Poll<TransportEvent<Self::ListenerUpgrade, Self::Error>>
-    {
+    fn poll(
+        mut self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+    ) -> Poll<TransportEvent<Self::ListenerUpgrade, Self::Error>> {
         if let Poll::Ready(Some(ev)) = self.listeners.poll_next_unpin(cx) {
             return Poll::Ready(ev);
         }
@@ -165,21 +169,22 @@ impl Listener {
         endpoint: Endpoint<Server>,
         keypair: &Keypair,
         cert_hashes: &Vec<CertHash>,
-        handshake_timeout: Duration, ) -> Result<Self, Error> {
+        handshake_timeout: Duration,
+    ) -> Result<Self, Error> {
         let endpoint = Arc::new(endpoint);
         let c_endpoint = Arc::clone(&endpoint);
         let accept = async move { c_endpoint.accept().await }.boxed();
 
         Ok(Listener {
-                listener_id,
-                endpoint,
-                accept,
-                handshake_timeout,
-                is_closed: false,
-                pending_event: None,
-                close_listener_waker: None,
-                keypair: keypair.clone(),
-                cert_hashes: cert_hashes.clone(),
+            listener_id,
+            endpoint,
+            accept,
+            handshake_timeout,
+            is_closed: false,
+            pending_event: None,
+            close_listener_waker: None,
+            keypair: keypair.clone(),
+            cert_hashes: cert_hashes.clone(),
         })
     }
 
@@ -256,7 +261,7 @@ impl Stream for Listener {
                     if !waker.will_wake(cx.waker()) {
                         self.close_listener_waker = Some(cx.waker().clone())
                     }
-                },
+                }
             }
 
             return Poll::Pending;
@@ -326,7 +331,9 @@ fn multiaddr_to_socketaddr(addr: &Multiaddr) -> Option<(SocketAddr, Option<PeerI
                 is_webtransport = true;
             }
             Protocol::Certhash(_) => {
-                tracing::error!("Cannot listen on a specific certhash for WebTransport address {addr}");
+                tracing::error!(
+                    "Cannot listen on a specific certhash for WebTransport address {addr}"
+                );
                 return None;
             }
             _ => return None,
@@ -339,14 +346,12 @@ fn multiaddr_to_socketaddr(addr: &Multiaddr) -> Option<(SocketAddr, Option<PeerI
     }
 
     match (proto1, proto2) {
-        (Protocol::Ip4(ip), Protocol::Udp(port)) => Some((
-            SocketAddr::new(ip.into(), port),
-            peer_id,
-        )),
-        (Protocol::Ip6(ip), Protocol::Udp(port)) => Some((
-            SocketAddr::new(ip.into(), port),
-            peer_id,
-        )),
+        (Protocol::Ip4(ip), Protocol::Udp(port)) => {
+            Some((SocketAddr::new(ip.into(), port), peer_id))
+        }
+        (Protocol::Ip6(ip), Protocol::Udp(port)) => {
+            Some((SocketAddr::new(ip.into(), port), peer_id))
+        }
         _ => None,
     }
 }

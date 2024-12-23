@@ -1,15 +1,15 @@
-mod transport;
-mod connection;
-mod config;
 mod certificate;
+mod config;
+mod connection;
+mod transport;
 
 use wtransport::error::ConnectionError;
 
-pub use transport::GenTransport;
-pub use connection::{Connecting, Connection};
 pub use certificate::CertHash;
-use libp2p_core::transport::TransportError;
 pub(crate) use connection::Stream;
+pub use connection::{Connecting, Connection};
+use libp2p_core::transport::TransportError;
+pub use transport::GenTransport;
 
 /// Errors that may happen on the [`GenTransport`] or a single [`Connection`].
 #[derive(Debug, thiserror::Error)]

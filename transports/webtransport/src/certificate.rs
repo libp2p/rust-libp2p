@@ -85,7 +85,7 @@ impl Certificate {
             MULTIHASH_SHA256_CODE,
             sha2::Sha256::digest(&self.cert.as_ref().as_ref()).as_ref(),
         )
-            .expect("fingerprint's len to be 32 bytes")
+        .expect("fingerprint's len to be 32 bytes")
     }
 
     pub fn to_bytes(&self) -> Vec<u8> {
