@@ -312,9 +312,8 @@ where
         &mut self,
         cx: &mut Context<'_>,
     ) -> Poll<ToSwarm<Self::ToSwarm, THandlerInEvent<Self>>> {
-        // Checking for pending events and emit them
-
         loop {
+            // Check for pending events and emit them.
             if let Some(event) = self.pending_events.pop_front() {
                 return Poll::Ready(event);
             }
