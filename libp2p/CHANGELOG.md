@@ -1,4 +1,10 @@
-## 0.54.2
+## 0.54.3
+
+- Update individual crates.
+    - Update to [`libp2p-mdns` `0.46.3`](protocols/mdns/CHANGELOG.md#0463).
+    - Update to [`libp2p-quic` `0.11.3`](transports/quic/CHANGELOG.md#0113).
+    - Update to [`libp2p-tcp` `0.42.1`](transports/tcp/CHANGELOG.md#0421).
+    - Update to [`libp2p-webrtc` `0.8.1-alpha`](transports/webrtc/CHANGELOG.md#081-alpha).
 
 - Add `with_connection_timeout` on `SwarmBuilder` to allow configuration of the connection_timeout parameter.
   See [PR 5575](https://github.com/libp2p/rust-libp2p/pull/5575).
