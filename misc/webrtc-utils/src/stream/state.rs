@@ -38,6 +38,7 @@ pub(crate) enum State {
         /// Whether the write side of our channel was already closed.
         read_closed: bool,
         inner: Closing,
+        fin_ack_received: bool,
     },
     BothClosed {
         reset: bool,
@@ -72,6 +73,20 @@ impl State {
             (Self::ReadClosed, Flag::STOP_SENDING) => {
                 *self = Self::BothClosed { reset: false };
             }
+            (
+                Self::ClosingWrite {
+                    inner: Closing::MessageSent,
+                    read_closed,
+                    fin_ack_received: false,
+                },
+                Flag::FIN_ACK,
+            ) => {
+                *self = Self::ClosingWrite {
+                    read_closed,
+                    inner: Closing::MessageSent,
+                    fin_ack_received: true,
+                };
+            }
             (_, Flag::RESET) => {
                 buffer.clear();
                 *self = Self::BothClosed { reset: true };
@@ -85,6 +100,7 @@ impl State {
             State::ClosingWrite {
                 read_closed: true,
                 inner,
+                ..
             } => {
                 debug_assert!(matches!(inner, Closing::MessageSent));
 
@@ -93,6 +109,7 @@ impl State {
             State::ClosingWrite {
                 read_closed: false,
                 inner,
+                ..
             } => {
                 debug_assert!(matches!(inner, Closing::MessageSent));
 
@@ -110,12 +127,15 @@ impl State {
 
     pub(crate) fn close_write_message_sent(&mut self) {
         match self {
-            State::ClosingWrite { inner, read_closed } => {
+            State::ClosingWrite {
+                inner, read_closed, ..
+            } => {
                 debug_assert!(matches!(inner, Closing::Requested));
 
                 *self = State::ClosingWrite {
                     read_closed: *read_closed,
                     inner: Closing::MessageSent,
+                    fin_ack_received: false,
                 };
             }
             State::Open
@@ -244,12 +264,14 @@ impl State {
                     *self = Self::ClosingWrite {
                         read_closed: false,
                         inner: Closing::Requested,
+                        fin_ack_received: false,
                     };
                 }
                 State::ReadClosed => {
                     *self = Self::ClosingWrite {
                         read_closed: true,
                         inner: Closing::Requested,
+                        fin_ack_received: false,
                     };
                 }
 
@@ -319,6 +341,26 @@ impl State {
                 }
             }
         }
+    }
+
+    /// Returns true if this state should acknowledge a received FIN flag with a FIN_ACK response, which occurs in ReadClosed, ClosingRead, or non-reset BothClosed states.
+    pub(crate) fn should_send_fin_ack(&self) -> bool {
+        matches!(
+            self,
+            Self::ReadClosed | Self::ClosingRead { .. } | Self::BothClosed { reset: false }
+        )
+    }
+
+    /// Returns true if we've received a FIN_ACK response in ClosingWrite state after sending our FIN message, indicating we can complete the write closure process.
+    pub(crate) fn fin_ack_received(&self) -> bool {
+        matches!(
+            self,
+            Self::ClosingWrite {
+                fin_ack_received: true,
+                inner: Closing::MessageSent,
+                ..
+            }
+        )
     }
 }
 
@@ -505,5 +547,131 @@ mod tests {
         open.handle_inbound_flag(Flag::RESET, &mut buffer);
 
         assert!(buffer.is_empty());
+    }
+
+    #[test]
+    fn should_send_fin_ack_when_read_closed() {
+        let mut state = State::Open;
+        state.handle_inbound_flag(Flag::FIN, &mut Bytes::default());
+        assert!(state.should_send_fin_ack());
+    }
+
+    #[test]
+    fn should_send_fin_ack_when_closing_read() {
+        let mut state = State::Open;
+        state.close_read_barrier().unwrap();
+        assert!(state.should_send_fin_ack());
+    }
+
+    #[test]
+    fn should_not_send_fin_ack_when_write_closed() {
+        let mut state = State::Open;
+        state.close_write_barrier().unwrap();
+        state.close_write_message_sent();
+        state.write_closed();
+        assert!(!state.should_send_fin_ack());
+    }
+
+    #[test]
+    fn fin_ack_received_transitions_to_write_closed() {
+        let mut state = State::Open;
+
+        // Start closing write side
+        state.close_write_barrier().unwrap();
+        state.close_write_message_sent();
+
+        // Receive FIN_ACK
+        state.handle_inbound_flag(Flag::FIN_ACK, &mut Bytes::default());
+        assert!(state.fin_ack_received());
+
+        // Call write_closed to complete transition
+        state.write_closed();
+
+        // Should transition to WriteClosed
+        match state {
+            State::WriteClosed => {}
+            _ => panic!("Expected WriteClosed state, got {:?}", state),
+        }
+    }
+
+    #[test]
+    fn fin_ack_received_transitions_to_both_closed() {
+        let mut state = State::Open;
+
+        // Close read side first
+        state.handle_inbound_flag(Flag::FIN, &mut Bytes::default());
+        assert!(matches!(state, State::ReadClosed));
+
+        // Start closing write side
+        state.close_write_barrier().unwrap();
+        state.close_write_message_sent();
+
+        // Receive FIN_ACK
+        state.handle_inbound_flag(Flag::FIN_ACK, &mut Bytes::default());
+        assert!(state.fin_ack_received());
+
+        // Call write_closed to complete transition
+        state.write_closed();
+
+        // Should transition to BothClosed
+        match state {
+            State::BothClosed { reset: false } => {}
+            _ => panic!("Expected BothClosed state, got {:?}", state),
+        }
+    }
+
+    #[test]
+    fn fin_ack_received_flag_is_set() {
+        let mut state = State::Open;
+
+        // Start closing write side
+        state.close_write_barrier().unwrap();
+        assert!(matches!(
+            state,
+            State::ClosingWrite {
+                fin_ack_received: false,
+                inner: Closing::Requested,
+                ..
+            }
+        ));
+
+        state.close_write_message_sent();
+        assert!(matches!(
+            state,
+            State::ClosingWrite {
+                fin_ack_received: false,
+                inner: Closing::MessageSent,
+                ..
+            }
+        ));
+
+        assert!(!state.fin_ack_received());
+
+        // Receive FIN_ACK
+        state.handle_inbound_flag(Flag::FIN_ACK, &mut Bytes::default());
+
+        assert!(state.fin_ack_received());
+        assert!(matches!(
+            state,
+            State::ClosingWrite {
+                fin_ack_received: true,
+                inner: Closing::MessageSent,
+                ..
+            }
+        ));
+    }
+
+    #[test]
+    fn ignore_fin_ack_in_wrong_state() {
+        let mut state = State::Open;
+
+        // Should ignore FIN_ACK in Open state
+        state.handle_inbound_flag(Flag::FIN_ACK, &mut Bytes::default());
+        assert!(matches!(state, State::Open));
+
+        // Should ignore FIN_ACK in ReadClosed state
+        state.handle_inbound_flag(Flag::FIN, &mut Bytes::default());
+        state.handle_inbound_flag(Flag::FIN_ACK, &mut Bytes::default());
+        assert!(matches!(state, State::ReadClosed));
     }
 }
