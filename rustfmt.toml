@@ -1,5 +1,5 @@
 # Imports
-reorder_imports  = true
+reorder_imports = true
 imports_granularity = "Crate"
 group_imports = "StdExternalCrate"
 

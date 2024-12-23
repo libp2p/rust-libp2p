@@ -323,9 +323,7 @@ fn query_iter() {
 
 #[test]
 fn unresponsive_not_returned_direct() {
-    let _ = tracing_subscriber::fmt()
-        .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
-        .try_init();
+    libp2p_test_utils::with_default_env_filter();
     // Build one node. It contains fake addresses to non-existing nodes. We ask it to find a
     // random peer. We make sure that no fake address is returned.
 

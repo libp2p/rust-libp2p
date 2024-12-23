@@ -36,8 +36,7 @@ libp2p-swarm = { workspace = true, features = ["macros", "async-std"] }
 libp2p-swarm-test = { workspace = true }
 libp2p-yamux = { workspace = true }
 quickcheck = { workspace = true }
-tracing-subscriber = { workspace = true, features = ["env-filter"] }
-
+libp2p-test-utils = { workspace = true }
 
 # Passing arguments to the docsrs builder in order to properly document cfg's.
 # More information: https://docs.rs/about/builds#cross-compiling

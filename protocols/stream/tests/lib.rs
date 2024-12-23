@@ -5,23 +5,20 @@ use libp2p_identity::PeerId;
 use libp2p_stream as stream;
 use libp2p_swarm::{StreamProtocol, Swarm};
 use libp2p_swarm_test::SwarmExt as _;
+use libp2p_test_utils::EnvFilter;
 use stream::OpenStreamError;
 use tracing::level_filters::LevelFilter;
-use tracing_subscriber::EnvFilter;
 
 const PROTOCOL: StreamProtocol = StreamProtocol::new("/test");
 
 #[tokio::test]
 async fn dropping_incoming_streams_deregisters() {
-    let _ = tracing_subscriber::fmt()
-        .with_env_filter(
-            EnvFilter::builder()
-                .with_default_directive(LevelFilter::DEBUG.into())
-                .from_env()
-                .unwrap(),
-        )
-        .with_test_writer()
-        .try_init();
+    libp2p_test_utils::with_env_filter(
+        EnvFilter::builder()
+            .with_default_directive(LevelFilter::DEBUG.into())
+            .from_env()
+            .unwrap(),
+    );
 
     let mut swarm1 = Swarm::new_ephemeral(|_| stream::Behaviour::new());
     let mut swarm2 = Swarm::new_ephemeral(|_| stream::Behaviour::new());
