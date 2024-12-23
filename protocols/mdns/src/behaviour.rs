@@ -385,8 +385,8 @@ where
 
             if !discovered.is_empty() {
                 let event = Event::Discovered(discovered);
-                /// Push to the front of the queue so that the behavior event is reported before
-                /// the individual discovered addresses.
+                // Push to the front of the queue so that the behavior event is reported before
+                // the individual discovered addresses.
                 self.pending_events
                     .push_front(ToSwarm::GenerateEvent(event));
                 continue;
