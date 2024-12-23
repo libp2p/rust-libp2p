@@ -67,7 +67,7 @@ jobs:
 
           echo "CRATE_VERSION=$CRATE_VERSION" >> $GITHUB_ENV
 
-      - name: Enforce version in `workspace.dependencies` matches latest version
+      - name: Enforce version in `workspace.dependencies` matches the latest version
         if: env.CRATE != 'libp2p'
         run: |
           SPECIFIED_VERSION=$(tq "workspace.dependencies.$CRATE.version" --file ./Cargo.toml)
@@ -77,7 +77,7 @@ jobs:
 
           test "$CRATE_VERSION" = "$SPECIFIED_VERSION" || test "=$CRATE_VERSION" = "$SPECIFIED_VERSION"
 
-      - name: Enforce version in CHANGELOG.md matches version in manifest
+      - name: Enforce version in CHANGELOG.md matches the version in manifest
         run: |
           MANIFEST_PATH=$(cargo metadata --format-version=1 --no-deps | jq -e -r '.packages[] | select(.name == "'"$CRATE"'") | .manifest_path')
           DIR_TO_CRATE=$(dirname "$MANIFEST_PATH")
