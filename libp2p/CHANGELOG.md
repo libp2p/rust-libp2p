@@ -1,3 +1,8 @@
+## 0.55.0(unreleased)
+
+- Introduce `libp2p-peer-store`.
+  See [PR 5724](https://github.com/libp2p/rust-libp2p/pull/5724).
+
 ## 0.54.2
 
 - Add `with_connection_timeout` on `SwarmBuilder` to allow configuration of the connection_timeout parameter.
