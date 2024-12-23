@@ -1,3 +1,8 @@
+## unreleased  
+
+- Make `prometheus-client` an optional dependency with feature `metrics`. 
+  See [PR 5711](https://github.com/libp2p/rust-libp2p/pull/5711).
+
 ## 0.48.0
 
 - Correct state inconsistencies with the mesh and fanout when unsubscribing.
