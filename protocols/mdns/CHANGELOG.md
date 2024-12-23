@@ -1,3 +1,7 @@
+## 0.46.3
+
+- Update `if-watch` to 3.2.1
+
 ## 0.46.2
 
 - Emit `ToSwarm::NewExternalAddrOfPeer` on discovery.

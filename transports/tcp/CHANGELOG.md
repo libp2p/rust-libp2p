@@ -1,3 +1,6 @@
+## 0.42.1
+- Update `if-watch` to 3.2.1
+
 ## 0.42.0
 
 - Implement refactored `Transport`.
