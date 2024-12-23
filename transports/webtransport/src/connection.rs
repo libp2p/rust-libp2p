@@ -1,8 +1,8 @@
 use std::pin::Pin;
 use std::task::{Context, Poll};
 
-use futures::{FutureExt, ready};
 use futures::future::BoxFuture;
+use futures::{ready, FutureExt};
 use wtransport::{error::ConnectionError, RecvStream, SendStream};
 
 pub use connecting::Connecting;
@@ -38,7 +38,10 @@ impl StreamMuxer for Connection {
     type Substream = Stream;
     type Error = Error;
 
-    fn poll_inbound(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<Self::Substream, Self::Error>> {
+    fn poll_inbound(
+        self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+    ) -> Poll<Result<Self::Substream, Self::Error>> {
         let this = self.get_mut();
 
         let incoming = this.incoming.get_or_insert_with(|| {
@@ -52,15 +55,38 @@ impl StreamMuxer for Connection {
         Poll::Ready(Ok(stream))
     }
 
-    fn poll_outbound(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<Self::Substream, Self::Error>> {
-        todo!()
-    }
-
     fn poll_close(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
-        todo!()
+        let this = self.get_mut();
+
+        let closing = this.closing.get_or_insert_with(|| {
+            this.connection.close(From::from(0u32), &[]);
+            let connection = this.connection.clone();
+            async move { connection.closed().await }.boxed()
+        });
+
+        match ready!(closing.poll_unpin(cx)) {
+            // Expected error given that `connection.close` was called above.
+            ConnectionError::LocallyClosed => {}
+            error => return Poll::Ready(Err(Error::Connection(error))),
+        };
+
+        Poll::Ready(Ok(()))
     }
 
-    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<StreamMuxerEvent, Self::Error>> {
-        todo!()
+    fn poll_outbound(
+        self: Pin<&mut Self>,
+        _cx: &mut Context<'_>,
+    ) -> Poll<Result<Self::Substream, Self::Error>> {
+        // Doesn't support outbound connections!
+        Poll::Pending
+    }
+
+    fn poll(
+        self: Pin<&mut Self>,
+        _cx: &mut Context<'_>,
+    ) -> Poll<Result<StreamMuxerEvent, Self::Error>> {
+        // TODO: If connection migration is enabled (currently disabled) address
+        // change on the connection needs to be handled.
+        Poll::Pending
     }
 }
