@@ -102,9 +102,9 @@ dependencies = [
 
 [[package]]
 name = "anstyle"
-version = "1.0.1"
+version = "1.0.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3a30da5c5f2d5e72842e00bcb57657162cdabef0931f40e2deb9b4140440cecd"
+checksum = "55cc3b69f167a1ef2e161439aa98aed94e6028e5f9a59be9a6ffb47aef1651f9"
 
 [[package]]
 name = "anstyle-parse"
@@ -157,12 +157,6 @@ name = "arrayref"
 version = "0.3.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6b4930d2cb77ce62f89ee5d5289b4ac049559b1c45539271f5ed4fdc7db34545"
-
-[[package]]
-name = "arrayvec"
-version = "0.7.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "96d30a06541fbafbc7f82ed10c06164cfbd2c401138f6addd8404629c4b16711"
 
 [[package]]
 name = "asn1-rs"
@@ -543,7 +537,6 @@ dependencies = [
  "futures",
  "libp2p",
  "tokio",
- "tracing",
  "tracing-subscriber",
 ]
 
@@ -554,7 +547,6 @@ dependencies = [
  "cfg-if",
  "clap",
  "libp2p",
- "opentelemetry 0.21.0",
  "opentelemetry-jaeger",
  "opentelemetry_sdk 0.21.2",
  "rand 0.8.5",
@@ -891,11 +883,9 @@ dependencies = [
 name = "chat-example"
 version = "0.1.0"
 dependencies = [
- "async-trait",
  "futures",
  "libp2p",
  "tokio",
- "tracing",
  "tracing-subscriber",
 ]
 
@@ -1268,7 +1258,6 @@ dependencies = [
  "futures",
  "futures-timer",
  "libp2p",
- "log",
  "tokio",
  "tracing",
  "tracing-subscriber",
@@ -1378,11 +1367,9 @@ dependencies = [
 name = "distributed-key-value-store-example"
 version = "0.1.0"
 dependencies = [
- "async-trait",
  "futures",
  "libp2p",
  "tokio",
- "tracing",
  "tracing-subscriber",
 ]
 
@@ -1480,6 +1467,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "env_filter"
+version = "0.1.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4f2c92ceda6ceec50f43169f9ee8424fe2db276791afde7b2cd8bc084cb376ab"
+dependencies = [
+ "log",
+ "regex",
+]
+
+[[package]]
 name = "env_logger"
 version = "0.8.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1491,15 +1488,15 @@ dependencies = [
 
 [[package]]
 name = "env_logger"
-version = "0.10.2"
+version = "0.11.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4cd405aab171cb85d6735e5c8d9db038c17d3ca007a4d2c25f337935c3d90580"
+checksum = "e13fa619b91fb2381732789fc5de83b45675e882f66623b7d8cb4f643017018d"
 dependencies = [
+ "anstream",
+ "anstyle",
+ "env_filter",
  "humantime",
- "is-terminal",
  "log",
- "regex",
- "termcolor",
 ]
 
 [[package]]
@@ -1597,7 +1594,6 @@ dependencies = [
  "libp2p",
  "serde",
  "tokio",
- "tracing",
  "tracing-subscriber",
 ]
 
@@ -2052,7 +2048,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "either",
- "env_logger 0.10.2",
+ "env_logger 0.11.5",
  "futures",
  "libp2p",
  "redis",
@@ -2353,7 +2349,6 @@ dependencies = [
  "futures",
  "libp2p",
  "tokio",
- "tracing",
  "tracing-subscriber",
 ]
 
@@ -2495,7 +2490,6 @@ dependencies = [
  "anyhow",
  "axum",
  "console_error_panic_hook",
- "either",
  "futures",
  "futures-timer",
  "libp2p",
@@ -2539,13 +2533,10 @@ name = "ipfs-kad-example"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "async-trait",
  "clap",
- "env_logger 0.10.2",
  "futures",
  "libp2p",
  "tokio",
- "tracing",
  "tracing-subscriber",
 ]
 
@@ -2553,12 +2544,10 @@ dependencies = [
 name = "ipfs-private-example"
 version = "0.1.0"
 dependencies = [
- "async-trait",
  "either",
  "futures",
  "libp2p",
  "tokio",
- "tracing",
  "tracing-subscriber",
 ]
 
@@ -2624,7 +2613,6 @@ version = "0.1.0"
 dependencies = [
  "base64 0.22.1",
  "clap",
- "libp2p-core",
  "libp2p-identity",
  "serde",
  "serde_json",
@@ -2657,9 +2645,7 @@ name = "libp2p"
 version = "0.54.2"
 dependencies = [
  "async-std",
- "async-trait",
  "bytes",
- "clap",
  "either",
  "futures",
  "futures-timer",
@@ -2722,7 +2708,6 @@ version = "0.13.2"
 dependencies = [
  "async-trait",
  "asynchronous-codec",
- "bytes",
  "either",
  "futures",
  "futures-bounded",
@@ -2779,11 +2764,8 @@ dependencies = [
  "parking_lot",
  "pin-project",
  "quick-protobuf",
- "quickcheck-ext",
  "rand 0.8.5",
  "rw-stream-sink",
- "serde",
- "smallvec",
  "thiserror 2.0.3",
  "tracing",
  "unsigned-varint 0.8.0",
@@ -2795,17 +2777,13 @@ name = "libp2p-dcutr"
 version = "0.12.1"
 dependencies = [
  "asynchronous-codec",
- "clap",
  "either",
  "futures",
  "futures-bounded",
  "futures-timer",
  "libp2p-core",
- "libp2p-dns",
  "libp2p-identify",
  "libp2p-identity",
- "libp2p-noise",
- "libp2p-ping",
  "libp2p-plaintext",
  "libp2p-relay",
  "libp2p-swarm",
@@ -2815,7 +2793,6 @@ dependencies = [
  "lru",
  "quick-protobuf",
  "quick-protobuf-codec",
- "rand 0.8.5",
  "thiserror 2.0.3",
  "tokio",
  "tracing",
@@ -2875,14 +2852,11 @@ dependencies = [
  "futures",
  "futures-timer",
  "getrandom 0.2.15",
- "hex",
  "hex_fmt",
  "libp2p-core",
  "libp2p-identity",
- "libp2p-noise",
  "libp2p-swarm",
  "libp2p-swarm-test",
- "libp2p-yamux",
  "prometheus-client",
  "quick-protobuf",
  "quick-protobuf-codec",
@@ -2891,7 +2865,6 @@ dependencies = [
  "regex",
  "serde",
  "sha2 0.10.8",
- "smallvec",
  "tokio",
  "tracing",
  "tracing-subscriber",
@@ -2912,7 +2885,6 @@ dependencies = [
  "libp2p-identity",
  "libp2p-swarm",
  "libp2p-swarm-test",
- "lru",
  "quick-protobuf",
  "quick-protobuf-codec",
  "smallvec",
@@ -2926,7 +2898,6 @@ name = "libp2p-identity"
 version = "0.2.10"
 dependencies = [
  "asn1_der",
- "base64 0.22.1",
  "bs58",
  "criterion",
  "ed25519-dalek",
@@ -2953,7 +2924,6 @@ dependencies = [
 name = "libp2p-kad"
 version = "0.47.1"
 dependencies = [
- "arrayvec",
  "async-std",
  "asynchronous-codec",
  "bytes",
@@ -2989,17 +2959,13 @@ version = "0.46.2"
 dependencies = [
  "async-io",
  "async-std",
- "data-encoding",
  "futures",
  "hickory-proto",
  "if-watch",
  "libp2p-core",
  "libp2p-identity",
- "libp2p-noise",
  "libp2p-swarm",
  "libp2p-swarm-test",
- "libp2p-tcp",
- "libp2p-yamux",
  "rand 0.8.5",
  "smallvec",
  "socket2",
@@ -3012,7 +2978,6 @@ dependencies = [
 name = "libp2p-memory-connection-limits"
 version = "0.3.1"
 dependencies = [
- "async-std",
  "libp2p-core",
  "libp2p-identify",
  "libp2p-identity",
@@ -3020,7 +2985,6 @@ dependencies = [
  "libp2p-swarm-derive",
  "libp2p-swarm-test",
  "memory-stats",
- "rand 0.8.5",
  "sysinfo",
  "tracing",
 ]
@@ -3085,7 +3049,6 @@ version = "0.45.1"
 dependencies = [
  "asynchronous-codec",
  "bytes",
- "curve25519-dalek",
  "futures",
  "futures_ringbuf",
  "libp2p-core",
@@ -3096,7 +3059,6 @@ dependencies = [
  "quick-protobuf",
  "quickcheck-ext",
  "rand 0.8.5",
- "sha2 0.10.8",
  "snow",
  "static_assertions",
  "thiserror 2.0.3",
@@ -3117,15 +3079,12 @@ dependencies = [
  "futures-timer",
  "libp2p",
  "libp2p-core",
- "libp2p-dns",
  "libp2p-identity",
- "libp2p-quic",
  "libp2p-swarm",
  "libp2p-swarm-test",
  "libp2p-tcp",
  "libp2p-tls",
  "libp2p-yamux",
- "rand 0.8.5",
  "serde",
  "serde_json",
  "thiserror 2.0.3",
@@ -3139,7 +3098,6 @@ dependencies = [
 name = "libp2p-ping"
 version = "0.45.1"
 dependencies = [
- "either",
  "futures",
  "futures-timer",
  "libp2p-core",
@@ -3150,7 +3108,6 @@ dependencies = [
  "rand 0.8.5",
  "tokio",
  "tracing",
- "tracing-subscriber",
  "web-time 1.1.0",
 ]
 
@@ -3167,7 +3124,6 @@ dependencies = [
  "quick-protobuf",
  "quick-protobuf-codec",
  "quickcheck-ext",
- "rand 0.8.5",
  "tracing",
  "tracing-subscriber",
 ]
@@ -3198,7 +3154,6 @@ name = "libp2p-quic"
 version = "0.11.2"
 dependencies = [
  "async-std",
- "bytes",
  "futures",
  "futures-timer",
  "if-watch",
@@ -3209,7 +3164,6 @@ dependencies = [
  "libp2p-tcp",
  "libp2p-tls",
  "libp2p-yamux",
- "parking_lot",
  "quickcheck",
  "quinn",
  "rand 0.8.5",
@@ -3260,15 +3214,10 @@ dependencies = [
  "futures",
  "futures-timer",
  "libp2p-core",
- "libp2p-identify",
  "libp2p-identity",
- "libp2p-noise",
- "libp2p-ping",
  "libp2p-request-response",
  "libp2p-swarm",
  "libp2p-swarm-test",
- "libp2p-tcp",
- "libp2p-yamux",
  "quick-protobuf",
  "quick-protobuf-codec",
  "rand 0.8.5",
@@ -3289,22 +3238,17 @@ dependencies = [
  "cbor4ii",
  "futures",
  "futures-bounded",
- "futures-timer",
  "futures_ringbuf",
  "libp2p-core",
  "libp2p-identity",
- "libp2p-noise",
  "libp2p-swarm",
  "libp2p-swarm-test",
- "libp2p-tcp",
- "libp2p-yamux",
  "rand 0.8.5",
  "serde",
  "serde_json",
  "smallvec",
  "tracing",
  "tracing-subscriber",
- "web-time 1.1.0",
 ]
 
 [[package]]
@@ -3315,11 +3259,9 @@ dependencies = [
  "base64 0.22.1",
  "clap",
  "futures",
- "futures-timer",
  "libp2p",
  "prometheus-client",
  "serde",
- "serde_derive",
  "serde_json",
  "tokio",
  "tracing",
@@ -3381,7 +3323,6 @@ name = "libp2p-swarm-derive"
 version = "0.35.0"
 dependencies = [
  "heck 0.5.0",
- "proc-macro2",
  "quote",
  "syn 2.0.89",
 ]
@@ -3399,7 +3340,6 @@ dependencies = [
  "libp2p-swarm",
  "libp2p-tcp",
  "libp2p-yamux",
- "rand 0.8.5",
  "tracing",
 ]
 
@@ -3414,7 +3354,6 @@ dependencies = [
  "if-watch",
  "libc",
  "libp2p-core",
- "libp2p-identity",
  "socket2",
  "tokio",
  "tracing",
@@ -3427,7 +3366,6 @@ version = "0.5.0"
 dependencies = [
  "futures",
  "futures-rustls",
- "hex",
  "hex-literal",
  "libp2p-core",
  "libp2p-identity",
@@ -3473,7 +3411,6 @@ name = "libp2p-webrtc"
 version = "0.8.0-alpha"
 dependencies = [
  "async-trait",
- "bytes",
  "futures",
  "futures-timer",
  "hex",
@@ -3486,10 +3423,8 @@ dependencies = [
  "quickcheck",
  "rand 0.8.5",
  "rcgen",
- "serde",
  "stun 0.6.0",
  "thiserror 2.0.3",
- "tinytemplate",
  "tokio",
  "tokio-util",
  "tracing",
@@ -3514,7 +3449,6 @@ dependencies = [
  "rand 0.8.5",
  "serde",
  "sha2 0.10.8",
- "thiserror 2.0.3",
  "tinytemplate",
  "tracing",
 ]
@@ -3573,7 +3507,6 @@ dependencies = [
  "libp2p-identity",
  "libp2p-noise",
  "libp2p-yamux",
- "parking_lot",
  "send_wrapper 0.6.0",
  "thiserror 2.0.3",
  "tracing",
@@ -3912,7 +3845,6 @@ dependencies = [
  "futures_ringbuf",
  "pin-project",
  "quickcheck-ext",
- "rand 0.8.5",
  "rw-stream-sink",
  "smallvec",
  "tracing",
@@ -4463,7 +4395,6 @@ dependencies = [
  "futures",
  "libp2p",
  "tokio",
- "tracing",
  "tracing-subscriber",
 ]
 
@@ -4976,7 +4907,6 @@ dependencies = [
  "futures",
  "libp2p",
  "tokio",
- "tracing",
  "tracing-subscriber",
 ]
 
