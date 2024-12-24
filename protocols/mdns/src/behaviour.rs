@@ -24,7 +24,11 @@ mod timer;
 
 use std::{
     cmp,
-    collections::hash_map::{Entry, HashMap},
+    collections::{
+        hash_map::{Entry, HashMap},
+        VecDeque,
+    },
+    convert::Infallible,
     fmt,
     future::Future,
     io,
@@ -188,6 +192,9 @@ where
     listen_addresses: Arc<RwLock<ListenAddresses>>,
 
     local_peer_id: PeerId,
+
+    /// Pending behaviour events to be emitted.
+    pending_events: VecDeque<ToSwarm<Event, Infallible>>,
 }
 
 impl<P> Behaviour<P>
@@ -208,6 +215,7 @@ where
             closest_expiration: Default::default(),
             listen_addresses: Default::default(),
             local_peer_id,
+            pending_events: Default::default(),
         })
     }
 
@@ -304,93 +312,113 @@ where
         &mut self,
         cx: &mut Context<'_>,
     ) -> Poll<ToSwarm<Self::ToSwarm, THandlerInEvent<Self>>> {
-        // Poll ifwatch.
-        while let Poll::Ready(Some(event)) = Pin::new(&mut self.if_watch).poll_next(cx) {
-            match event {
-                Ok(IfEvent::Up(inet)) => {
-                    let addr = inet.addr();
-                    if addr.is_loopback() {
-                        continue;
-                    }
-                    if addr.is_ipv4() && self.config.enable_ipv6
-                        || addr.is_ipv6() && !self.config.enable_ipv6
-                    {
-                        continue;
-                    }
-                    if let Entry::Vacant(e) = self.if_tasks.entry(addr) {
-                        match InterfaceState::<P::Socket, P::Timer>::new(
-                            addr,
-                            self.config.clone(),
-                            self.local_peer_id,
-                            self.listen_addresses.clone(),
-                            self.query_response_sender.clone(),
-                        ) {
-                            Ok(iface_state) => {
-                                e.insert(P::spawn(iface_state));
-                            }
-                            Err(err) => {
-                                tracing::error!("failed to create `InterfaceState`: {}", err)
+        loop {
+            // Check for pending events and emit them.
+            if let Some(event) = self.pending_events.pop_front() {
+                return Poll::Ready(event);
+            }
+
+            // Poll ifwatch.
+            while let Poll::Ready(Some(event)) = Pin::new(&mut self.if_watch).poll_next(cx) {
+                match event {
+                    Ok(IfEvent::Up(inet)) => {
+                        let addr = inet.addr();
+                        if addr.is_loopback() {
+                            continue;
+                        }
+                        if addr.is_ipv4() && self.config.enable_ipv6
+                            || addr.is_ipv6() && !self.config.enable_ipv6
+                        {
+                            continue;
+                        }
+                        if let Entry::Vacant(e) = self.if_tasks.entry(addr) {
+                            match InterfaceState::<P::Socket, P::Timer>::new(
+                                addr,
+                                self.config.clone(),
+                                self.local_peer_id,
+                                self.listen_addresses.clone(),
+                                self.query_response_sender.clone(),
+                            ) {
+                                Ok(iface_state) => {
+                                    e.insert(P::spawn(iface_state));
+                                }
+                                Err(err) => {
+                                    tracing::error!("failed to create `InterfaceState`: {}", err)
+                                }
                             }
                         }
                     }
-                }
-                Ok(IfEvent::Down(inet)) => {
-                    if let Some(handle) = self.if_tasks.remove(&inet.addr()) {
-                        tracing::info!(instance=%inet.addr(), "dropping instance");
+                    Ok(IfEvent::Down(inet)) => {
+                        if let Some(handle) = self.if_tasks.remove(&inet.addr()) {
+                            tracing::info!(instance=%inet.addr(), "dropping instance");
 
-                        handle.abort();
+                            handle.abort();
+                        }
                     }
+                    Err(err) => tracing::error!("if watch returned an error: {}", err),
                 }
-                Err(err) => tracing::error!("if watch returned an error: {}", err),
             }
-        }
-        // Emit discovered event.
-        let mut discovered = Vec::new();
+            // Emit discovered event.
+            let mut discovered = Vec::new();
 
-        while let Poll::Ready(Some((peer, addr, expiration))) =
-            self.query_response_receiver.poll_next_unpin(cx)
-        {
-            if let Some((_, _, cur_expires)) = self
-                .discovered_nodes
-                .iter_mut()
-                .find(|(p, a, _)| *p == peer && *a == addr)
+            while let Poll::Ready(Some((peer, addr, expiration))) =
+                self.query_response_receiver.poll_next_unpin(cx)
             {
-                *cur_expires = cmp::max(*cur_expires, expiration);
-            } else {
-                tracing::info!(%peer, address=%addr, "discovered peer on address");
-                self.discovered_nodes.push((peer, addr.clone(), expiration));
-                discovered.push((peer, addr));
-            }
-        }
+                if let Some((_, _, cur_expires)) = self
+                    .discovered_nodes
+                    .iter_mut()
+                    .find(|(p, a, _)| *p == peer && *a == addr)
+                {
+                    *cur_expires = cmp::max(*cur_expires, expiration);
+                } else {
+                    tracing::info!(%peer, address=%addr, "discovered peer on address");
+                    self.discovered_nodes.push((peer, addr.clone(), expiration));
+                    discovered.push((peer, addr.clone()));
 
-        if !discovered.is_empty() {
-            let event = Event::Discovered(discovered);
-            return Poll::Ready(ToSwarm::GenerateEvent(event));
-        }
-        // Emit expired event.
-        let now = Instant::now();
-        let mut closest_expiration = None;
-        let mut expired = Vec::new();
-        self.discovered_nodes.retain(|(peer, addr, expiration)| {
-            if *expiration <= now {
-                tracing::info!(%peer, address=%addr, "expired peer on address");
-                expired.push((*peer, addr.clone()));
-                return false;
+                    self.pending_events
+                        .push_back(ToSwarm::NewExternalAddrOfPeer {
+                            peer_id: peer,
+                            address: addr,
+                        });
+                }
             }
-            closest_expiration = Some(closest_expiration.unwrap_or(*expiration).min(*expiration));
-            true
-        });
-        if !expired.is_empty() {
-            let event = Event::Expired(expired);
-            return Poll::Ready(ToSwarm::GenerateEvent(event));
-        }
-        if let Some(closest_expiration) = closest_expiration {
-            let mut timer = P::Timer::at(closest_expiration);
-            let _ = Pin::new(&mut timer).poll_next(cx);
 
-            self.closest_expiration = Some(timer);
+            if !discovered.is_empty() {
+                let event = Event::Discovered(discovered);
+                // Push to the front of the queue so that the behavior event is reported before
+                // the individual discovered addresses.
+                self.pending_events
+                    .push_front(ToSwarm::GenerateEvent(event));
+                continue;
+            }
+            // Emit expired event.
+            let now = Instant::now();
+            let mut closest_expiration = None;
+            let mut expired = Vec::new();
+            self.discovered_nodes.retain(|(peer, addr, expiration)| {
+                if *expiration <= now {
+                    tracing::info!(%peer, address=%addr, "expired peer on address");
+                    expired.push((*peer, addr.clone()));
+                    return false;
+                }
+                closest_expiration =
+                    Some(closest_expiration.unwrap_or(*expiration).min(*expiration));
+                true
+            });
+            if !expired.is_empty() {
+                let event = Event::Expired(expired);
+                self.pending_events.push_back(ToSwarm::GenerateEvent(event));
+                continue;
+            }
+            if let Some(closest_expiration) = closest_expiration {
+                let mut timer = P::Timer::at(closest_expiration);
+                let _ = Pin::new(&mut timer).poll_next(cx);
+
+                self.closest_expiration = Some(timer);
+            }
+
+            return Poll::Pending;
         }
-        Poll::Pending
     }
 }
 
