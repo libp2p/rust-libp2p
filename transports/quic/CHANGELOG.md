@@ -1,3 +1,6 @@
+## 0.11.3
+- Update `if-watch` to 3.2.1
+
 ## 0.11.2
 
 - Deprecate `void` crate.
