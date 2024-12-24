@@ -84,7 +84,7 @@ libp2p-gossipsub = { version = "0.48.0", path = "protocols/gossipsub" }
 libp2p-identify = { version = "0.46.1", path = "protocols/identify" }
 libp2p-identity = { version = "0.2.10" }
 libp2p-kad = { version = "0.47.1", path = "protocols/kad" }
-libp2p-mdns = { version = "0.46.1", path = "protocols/mdns" }
+libp2p-mdns = { version = "0.46.2", path = "protocols/mdns" }
 libp2p-memory-connection-limits = { version = "0.3.1", path = "misc/memory-connection-limits" }
 libp2p-metrics = { version = "0.15.0", path = "misc/metrics" }
 libp2p-mplex = { version = "0.42.0", path = "muxers/mplex" }
@@ -117,9 +117,11 @@ libp2p-yamux = { version = "0.46.0", path = "muxers/yamux" }
 # External dependencies
 async-std-resolver = { version = "0.25.0-alpha.4", default-features = false }
 asynchronous-codec = { version = "0.7.0" }
+env_logger = "0.11"
 futures = "0.3.30"
 futures-bounded = { version = "0.2.4" }
 futures-rustls = { version = "0.26.0", default-features = false }
+getrandom = "0.2"
 hickory-proto = { version = "0.25.0-alpha.4", default-features = false }
 hickory-resolver = { version = "0.25.0-alpha.4", default-features = false }
 multiaddr = "0.18.1"

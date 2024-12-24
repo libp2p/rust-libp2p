@@ -26,8 +26,6 @@ pin-project = "1.1.5"
 quick-protobuf = "0.8"
 rand = "0.8"
 rw-stream-sink = { workspace = true }
-serde = { version = "1", optional = true, features = ["derive"] }
-smallvec = "1.13.2"
 thiserror = { workspace = true }
 tracing = { workspace = true }
 unsigned-varint = { workspace = true }
@@ -37,11 +35,10 @@ async-std = { version = "1.6.2", features = ["attributes"] }
 libp2p-mplex = { path = "../muxers/mplex" } # Using `path` here because this is a cyclic dev-dependency which otherwise breaks releasing.
 libp2p-noise = { path = "../transports/noise" } # Using `path` here because this is a cyclic dev-dependency which otherwise breaks releasing.
 multihash = { workspace = true, features = ["arb"] }
-quickcheck = { workspace = true }
 libp2p-identity = { workspace = true, features = ["ed25519", "rand"] }
 
 [features]
-serde = ["multihash/serde-codec", "dep:serde", "libp2p-identity/serde"]
+serde = ["multihash/serde-codec", "libp2p-identity/serde"]
 
 # Passing arguments to the docsrs builder in order to properly document cfg's.
 # More information: https://docs.rs/about/builds#cross-compiling
