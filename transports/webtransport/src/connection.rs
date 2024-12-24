@@ -15,6 +15,7 @@ use crate::Error;
 mod connecting;
 mod stream;
 
+/// State for a single opened Webtransport connection.
 pub struct Connection {
     /// Underlying connection.
     connection: wtransport::Connection,

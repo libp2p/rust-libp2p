@@ -315,7 +315,7 @@ fn multiaddr_to_socketaddr(addr: &Multiaddr) -> Option<(SocketAddr, Option<PeerI
     let proto2 = iter.next()?;
     let proto3 = iter.next()?;
 
-    if proto3 != Protocol::QuicV1 {
+    if !matches!(proto3, Protocol::QuicV1) {
         tracing::error!("Cannot listen on a non QUIC address {addr}");
         return None;
     }
@@ -358,21 +358,156 @@ fn multiaddr_to_socketaddr(addr: &Multiaddr) -> Option<(SocketAddr, Option<PeerI
 
 #[cfg(test)]
 mod test {
+    use super::*;
+    use crate::certificate::Certificate;
+    use futures::future::poll_fn;
+    use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
     use time::ext::NumericalDuration;
     use time::OffsetDateTime;
 
-    use crate::certificate::Certificate;
-
-    use super::*;
-
-    #[test]
-    fn test() {
+    /*#[tokio::test]
+    async fn test_close_listener() {
         let keypair = Keypair::generate_ed25519();
         let not_before = OffsetDateTime::now_utc().checked_sub(1.days()).unwrap();
         let cert = Certificate::generate(&keypair, not_before).expect("Generate certificate");
 
         let config = Config::new(&keypair, cert);
         let mut transport = GenTransport::new(config);
-        // todo write few tests: closing a listener, addresses parsing and so on
+
+        assert!(poll_fn(|cx| Pin::new(&mut transport).as_mut().poll(cx))
+            .now_or_never()
+            .is_none());
+
+        // Run test twice to check that there is no unexpected behaviour if `Transport.listener`
+        // is temporarily empty.
+        for _ in 0..2 {
+            let id = ListenerId::next();
+            transport
+                .listen_on(id, "/ip4/0.0.0.0/udp/0/quic-v1".parse().unwrap())
+                .unwrap();
+
+            match poll_fn(|cx| Pin::new(&mut transport).as_mut().poll(cx)).await {
+                TransportEvent::NewAddress {
+                    listener_id,
+                    listen_addr,
+                } => {
+                    assert_eq!(listener_id, id);
+                    assert!(
+                        matches!(listen_addr.iter().next(), Some(Protocol::Ip4(a)) if !a.is_unspecified())
+                    );
+                    assert!(
+                        matches!(listen_addr.iter().nth(1), Some(Protocol::Udp(port)) if port != 0)
+                    );
+                    assert!(matches!(listen_addr.iter().nth(2), Some(Protocol::QuicV1)));
+                }
+                e => panic!("Unexpected event: {e:?}"),
+            }
+            assert!(transport.remove_listener(id), "Expect listener to exist.");
+            match poll_fn(|cx| Pin::new(&mut transport).as_mut().poll(cx)).await {
+                TransportEvent::ListenerClosed {
+                    listener_id,
+                    reason: Ok(()),
+                } => {
+                    assert_eq!(listener_id, id);
+                }
+                e => panic!("Unexpected event: {e:?}"),
+            }
+            // Poll once again so that the listener has the chance to return `Poll::Ready(None)` and
+            // be removed from the list of listeners.
+            assert!(poll_fn(|cx| Pin::new(&mut transport).as_mut().poll(cx))
+                .now_or_never()
+                .is_none());
+            assert!(transport.listeners.is_empty());
+        }
+    }*/
+
+    #[test]
+    fn socket_to_multiaddr() {
+        let addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 12345);
+        let keypair = Keypair::generate_ed25519();
+        let not_before = OffsetDateTime::now_utc().checked_sub(1.days()).unwrap();
+        let cert = Certificate::generate(&keypair, not_before).expect("Generate certificate");
+        let certs = vec![cert.cert_hash()];
+
+        let mut res = socketaddr_to_multiaddr(&addr);
+
+        res = add_hashes(res, &certs);
+
+        assert!(multiaddr_to_socketaddr(&res.to_string().parse::<Multiaddr>().unwrap()).is_none());
+    }
+
+    #[test]
+    fn multiaddr_to_udp_conversion() {
+        assert!(
+            multiaddr_to_socketaddr(&"/ip4/127.0.0.1/udp/1234".parse::<Multiaddr>().unwrap())
+                .is_none()
+        );
+
+        assert!(multiaddr_to_socketaddr(
+            &"/ip4/127.0.0.1/udp/1234/quic-v1"
+                .parse::<Multiaddr>()
+                .unwrap()
+        )
+        .is_none());
+
+        assert_eq!(
+            multiaddr_to_socketaddr(
+                &"/ip4/127.0.0.1/udp/12345/quic-v1/webtransport"
+                    .parse::<Multiaddr>()
+                    .unwrap()
+            ),
+            Some((
+                SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 12345),
+                None
+            ))
+        );
+        assert_eq!(
+            multiaddr_to_socketaddr(
+                &"/ip4/255.255.255.255/udp/8080/quic-v1/webtransport"
+                    .parse::<Multiaddr>()
+                    .unwrap()
+            ),
+            Some((
+                SocketAddr::new(IpAddr::V4(Ipv4Addr::new(255, 255, 255, 255)), 8080),
+                None
+            ))
+        );
+        assert_eq!(
+            multiaddr_to_socketaddr(
+                &"/ip4/127.0.0.1/udp/55148/quic-v1/webtransport/p2p/12D3KooW9xk7Zp1gejwfwNpfm6L9zH5NL4Bx5rm94LRYJJHJuARZ"
+                    .parse::<Multiaddr>()
+                    .unwrap()
+            ),
+            Some((SocketAddr::new(
+                IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 55148),
+                  Some("12D3KooW9xk7Zp1gejwfwNpfm6L9zH5NL4Bx5rm94LRYJJHJuARZ".parse().unwrap())))
+        );
+        assert_eq!(
+            multiaddr_to_socketaddr(
+                &"/ip6/::1/udp/12345/quic-v1/webtransport"
+                    .parse::<Multiaddr>()
+                    .unwrap()
+            ),
+            Some((
+                SocketAddr::new(IpAddr::V6(Ipv6Addr::new(0, 0, 0, 0, 0, 0, 0, 1)), 12345),
+                None
+            ))
+        );
+        assert_eq!(
+            multiaddr_to_socketaddr(
+                &"/ip6/ffff:ffff:ffff:ffff:ffff:ffff:ffff:ffff/udp/8080/quic-v1/webtransport"
+                    .parse::<Multiaddr>()
+                    .unwrap()
+            ),
+            Some((
+                SocketAddr::new(
+                    IpAddr::V6(Ipv6Addr::new(
+                        65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535,
+                    )),
+                    8080,
+                ),
+                None
+            ))
+        );
     }
 }
