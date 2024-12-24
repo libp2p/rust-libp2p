@@ -42,7 +42,7 @@ enum Command {
     },
 }
 
-// Due to the fact that a peer id uses a SHA-256 multihash, it always starts with the
+// Due to the fact that a peer id uses an SHA-256 multihash, it always starts with the
 // bytes 0x1220, meaning that only some characters are valid.
 const ALLOWED_FIRST_BYTE: &[u8] = b"NPQRSTUVWXYZ";
 
