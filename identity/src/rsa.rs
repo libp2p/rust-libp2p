@@ -105,7 +105,7 @@ impl PublicKey {
         self.0.clone()
     }
 
-    /// Encode the RSA public key in DER as a X.509 SubjectPublicKeyInfo structure,
+    /// Encode the RSA public key in DER as an X.509 SubjectPublicKeyInfo structure,
     /// as defined in [RFC5280].
     ///
     /// [RFC5280]: https://tools.ietf.org/html/rfc5280#section-4.1
