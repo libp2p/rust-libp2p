@@ -2955,7 +2955,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-mdns"
-version = "0.46.2"
+version = "0.46.1"
 dependencies = [
  "async-io",
  "async-std",
