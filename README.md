@@ -85,7 +85,7 @@ Conduct](https://github.com/ipfs/community/blob/master/code-of-conduct.md).
 
 (open a pull request if you want your project to be added here)
 
-- [COMIT](https://github.com/comit-network/xmr-btc-swap) - Bitcoin–Monero Cross-chain Atomic Swap.
+- [COMMIT](https://github.com/comit-network/xmr-btc-swap) - Bitcoin–Monero Cross-chain Atomic Swap.
 - [Forest](https://github.com/ChainSafe/forest) - An implementation of Filecoin written in Rust.
 - [fuel-core](https://github.com/FuelLabs/fuel-core) - A Rust implementation of the Fuel protocol.
 - [HotShot](https://github.com/EspressoSystems/HotShot) - Decentralized sequencer in Rust developed by [Espresso Systems](https://www.espressosys.com/).
