@@ -5,9 +5,9 @@ mod transport;
 
 use wtransport::error::ConnectionError;
 
-pub use certificate::CertHash;
-pub(crate) use connection::Stream;
-pub use connection::{Connecting, Connection};
+pub use certificate::{CertHash, Certificate};
+pub use config::Config;
+pub(crate) use connection::{Connecting, Connection, Stream};
 use libp2p_core::transport::TransportError;
 pub use transport::GenTransport;
 

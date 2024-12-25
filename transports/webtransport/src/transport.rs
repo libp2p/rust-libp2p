@@ -1,20 +1,23 @@
 use std::collections::HashSet;
-use std::fmt;
 use std::future::Pending;
-use std::net::SocketAddr;
+use std::net::{IpAddr, SocketAddr, UdpSocket};
 use std::pin::Pin;
 use std::sync::Arc;
 use std::task::{Context, Poll, Waker};
 use std::time::Duration;
+use std::{fmt, io};
 
 use futures::future::BoxFuture;
-use futures::{prelude::*, stream::SelectAll};
+use futures::{prelude::*, ready, stream::SelectAll};
+use if_watch::tokio::IfWatcher;
+use if_watch::IfEvent;
 use wtransport::endpoint::{endpoint_side::Server, Endpoint, IncomingSession};
 use wtransport::{config::TlsServerConfig, ServerConfig};
 
 use libp2p_core::transport::{DialOpts, ListenerId, TransportError, TransportEvent};
-use libp2p_core::{multiaddr::Protocol, multihash::Multihash, Multiaddr, Transport};
+use libp2p_core::{multiaddr::Protocol, Multiaddr, Transport};
 use libp2p_identity::{Keypair, PeerId};
+use socket2::{Domain, Socket, Type};
 
 use crate::certificate::CertHash;
 use crate::config::Config;
@@ -90,8 +93,16 @@ impl Transport for GenTransport {
         let keypair = &self.keypair;
         let cert_hashes = &self.cert_hashes;
         let handshake_timeout = self.handshake_timeout.clone();
+        let socket = create_socket(socket_addr).map_err(Self::Error::from)?;
 
-        let listener = Listener::new(id, endpoint, keypair, cert_hashes, handshake_timeout)?;
+        let listener = Listener::new(
+            id,
+            socket,
+            endpoint,
+            keypair,
+            cert_hashes,
+            handshake_timeout,
+        )?;
         self.listeners.push(listener);
 
         if let Some(waker) = self.waker.take() {
@@ -147,6 +158,9 @@ struct Listener {
     listener_id: ListenerId,
     /// Endpoint
     endpoint: Arc<Endpoint<Server>>,
+    /// Watcher for network interface changes.
+    /// None if we are only listening on a single interface.
+    if_watcher: Option<IfWatcher>,
     /// A future to poll new incoming connections.
     accept: BoxFuture<'static, IncomingSession>,
     /// Timeout for connection establishment on inbound connections.
@@ -166,6 +180,7 @@ struct Listener {
 impl Listener {
     fn new(
         listener_id: ListenerId,
+        socket: UdpSocket,
         endpoint: Endpoint<Server>,
         keypair: &Keypair,
         cert_hashes: &Vec<CertHash>,
@@ -175,13 +190,29 @@ impl Listener {
         let c_endpoint = Arc::clone(&endpoint);
         let accept = async move { c_endpoint.accept().await }.boxed();
 
+        let if_watcher;
+        let pending_event;
+        let local_addr = socket.local_addr()?;
+        if local_addr.ip().is_unspecified() {
+            if_watcher = Some(IfWatcher::new()?);
+            pending_event = None;
+        } else {
+            if_watcher = None;
+            let ma = socketaddr_to_multiaddr(&local_addr);
+            pending_event = Some(TransportEvent::NewAddress {
+                listener_id,
+                listen_addr: ma,
+            })
+        }
+
         Ok(Listener {
             listener_id,
             endpoint,
+            if_watcher,
             accept,
             handshake_timeout,
             is_closed: false,
-            pending_event: None,
+            pending_event,
             close_listener_waker: None,
             keypair: keypair.clone(),
             cert_hashes: cert_hashes.clone(),
@@ -220,6 +251,47 @@ impl Listener {
 
         res
     }
+
+    fn poll_if_addr(&mut self, cx: &mut Context<'_>) -> Poll<<Self as Stream>::Item> {
+        let endpoint_addr = self.socket_addr();
+        let Some(if_watcher) = self.if_watcher.as_mut() else {
+            return Poll::Pending;
+        };
+        loop {
+            match ready!(if_watcher.poll_if_event(cx)) {
+                Ok(IfEvent::Up(inet)) => {
+                    if let Some(listen_addr) = ip_to_listen_addr(&endpoint_addr, inet.addr()) {
+                        tracing::debug!(
+                            address=%listen_addr,
+                            "New listen address"
+                        );
+                        return Poll::Ready(TransportEvent::NewAddress {
+                            listener_id: self.listener_id,
+                            listen_addr,
+                        });
+                    }
+                }
+                Ok(IfEvent::Down(inet)) => {
+                    if let Some(listen_addr) = ip_to_listen_addr(&endpoint_addr, inet.addr()) {
+                        tracing::debug!(
+                            address=%listen_addr,
+                            "Expired listen address"
+                        );
+                        return Poll::Ready(TransportEvent::AddressExpired {
+                            listener_id: self.listener_id,
+                            listen_addr,
+                        });
+                    }
+                }
+                Err(err) => {
+                    return Poll::Ready(TransportEvent::ListenerError {
+                        listener_id: self.listener_id,
+                        error: err.into(),
+                    })
+                }
+            }
+        }
+    }
 }
 
 impl Stream for Listener {
@@ -232,6 +304,9 @@ impl Stream for Listener {
             }
             if self.is_closed {
                 return Poll::Ready(None);
+            }
+            if let Poll::Ready(event) = self.poll_if_addr(cx) {
+                return Poll::Ready(Some(event));
             }
 
             match self.accept.poll_unpin(cx) {
@@ -252,6 +327,11 @@ impl Stream for Listener {
                     };
                     return Poll::Ready(Some(event));
                 }
+                // todo
+                // Poll::Ready(None) => {
+                //     self.close(Ok(()));
+                //     continue;
+                // }
                 Poll::Pending => {}
             };
 
@@ -280,6 +360,62 @@ impl fmt::Debug for Listener {
     }
 }
 
+fn create_socket(socket_addr: SocketAddr) -> io::Result<UdpSocket> {
+    let socket = Socket::new(
+        Domain::for_address(socket_addr),
+        Type::DGRAM,
+        Some(socket2::Protocol::UDP),
+    )?;
+    if socket_addr.is_ipv6() {
+        socket.set_only_v6(true)?;
+    }
+
+    socket.bind(&socket_addr.into())?;
+
+    Ok(socket.into())
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub(crate) enum SocketFamily {
+    Ipv4,
+    Ipv6,
+}
+
+impl SocketFamily {
+    fn is_same(a: &IpAddr, b: &IpAddr) -> bool {
+        matches!(
+            (a, b),
+            (IpAddr::V4(_), IpAddr::V4(_)) | (IpAddr::V6(_), IpAddr::V6(_))
+        )
+    }
+}
+
+impl From<IpAddr> for SocketFamily {
+    fn from(ip: IpAddr) -> Self {
+        match ip {
+            IpAddr::V4(_) => SocketFamily::Ipv4,
+            IpAddr::V6(_) => SocketFamily::Ipv6,
+        }
+    }
+}
+
+/// Turn an [`IpAddr`] reported by the interface watcher into a
+/// listen-address for the endpoint.
+///
+/// For this, the `ip` is combined with the port that the endpoint
+/// is actually bound.
+///
+/// Returns `None` if the `ip` is not the same socket family as the
+/// address that the endpoint is bound to.
+fn ip_to_listen_addr(endpoint_addr: &SocketAddr, ip: IpAddr) -> Option<Multiaddr> {
+    // True if either both addresses are Ipv4 or both Ipv6.
+    if !SocketFamily::is_same(&endpoint_addr.ip(), &ip) {
+        return None;
+    }
+    let socket_addr = SocketAddr::new(ip, endpoint_addr.port());
+    Some(socketaddr_to_multiaddr(&socket_addr))
+}
+
 /// Turns an IP address and port into the corresponding WebTransport multiaddr.
 fn socketaddr_to_multiaddr(socket_addr: &SocketAddr) -> Multiaddr {
     Multiaddr::empty()
@@ -289,7 +425,7 @@ fn socketaddr_to_multiaddr(socket_addr: &SocketAddr) -> Multiaddr {
         .with(Protocol::WebTransport)
 }
 
-fn add_hashes(m_addr: Multiaddr, hashes: &Vec<Multihash<64>>) -> Multiaddr {
+fn add_hashes(m_addr: Multiaddr, hashes: &Vec<CertHash>) -> Multiaddr {
     if !hashes.is_empty() {
         let mut vec = hashes.clone();
         let mut res = m_addr.with(Protocol::Certhash(
@@ -365,12 +501,17 @@ mod test {
     use time::ext::NumericalDuration;
     use time::OffsetDateTime;
 
-    /*#[tokio::test]
-    async fn test_close_listener() {
+    fn generate_keypair_and_cert() -> (Keypair, Certificate) {
         let keypair = Keypair::generate_ed25519();
         let not_before = OffsetDateTime::now_utc().checked_sub(1.days()).unwrap();
         let cert = Certificate::generate(&keypair, not_before).expect("Generate certificate");
 
+        (keypair, cert)
+    }
+
+    #[tokio::test]
+    async fn test_close_listener() {
+        let (keypair, cert) = generate_keypair_and_cert();
         let config = Config::new(&keypair, cert);
         let mut transport = GenTransport::new(config);
 
@@ -383,7 +524,10 @@ mod test {
         for _ in 0..2 {
             let id = ListenerId::next();
             transport
-                .listen_on(id, "/ip4/0.0.0.0/udp/0/quic-v1".parse().unwrap())
+                .listen_on(
+                    id,
+                    "/ip4/0.0.0.0/udp/0/quic-v1/webtransport".parse().unwrap(),
+                )
                 .unwrap();
 
             match poll_fn(|cx| Pin::new(&mut transport).as_mut().poll(cx)).await {
@@ -419,15 +563,13 @@ mod test {
                 .is_none());
             assert!(transport.listeners.is_empty());
         }
-    }*/
+    }
 
     #[test]
     fn socket_to_multiaddr() {
-        let addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 12345);
-        let keypair = Keypair::generate_ed25519();
-        let not_before = OffsetDateTime::now_utc().checked_sub(1.days()).unwrap();
-        let cert = Certificate::generate(&keypair, not_before).expect("Generate certificate");
+        let (_keypair, cert) = generate_keypair_and_cert();
         let certs = vec![cert.cert_hash()];
+        let addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 12345);
 
         let mut res = socketaddr_to_multiaddr(&addr);
 

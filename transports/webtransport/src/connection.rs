@@ -5,7 +5,7 @@ use futures::future::BoxFuture;
 use futures::{ready, FutureExt};
 use wtransport::{error::ConnectionError, RecvStream, SendStream};
 
-pub use connecting::Connecting;
+pub(crate) use connecting::Connecting;
 use libp2p_core::muxing::StreamMuxerEvent;
 use libp2p_core::StreamMuxer;
 
