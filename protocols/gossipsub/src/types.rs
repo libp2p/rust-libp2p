@@ -19,7 +19,7 @@
 // DEALINGS IN THE SOFTWARE.
 
 //! A collection of types using the Gossipsub system.
-use std::{collections::BTreeSet, fmt, fmt::Debug };
+use std::{collections::BTreeSet, fmt, fmt::Debug};
 
 use futures_timer::Delay;
 use hashlink::LinkedHashMap;
