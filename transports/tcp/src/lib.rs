@@ -130,7 +130,7 @@ impl PortReuse {
 impl Config {
     /// Creates a new configuration for a TCP/IP transport:
     ///
-    ///   * Nagle's algorithm, i.e. `TCP_NODELAY`, is _enabled_. See [`Config::nodelay`].
+    ///   * Nagle's algorithm is _disabled_, i.e. `TCP_NODELAY` _enabled_. See [`Config::nodelay`].
     ///   * Reuse of listening ports is _disabled_. See [`Config::port_reuse`].
     ///   * No custom `IP_TTL` is set. The default of the OS TCP stack applies. See [`Config::ttl`].
     ///   * The size of the listen backlog for new listening sockets is `1024`. See
@@ -138,7 +138,7 @@ impl Config {
     pub fn new() -> Self {
         Self {
             ttl: None,
-            nodelay: false, // Disable Nagle's algorithm by default
+            nodelay: true, // Disable Nagle's algorithm by default.
             backlog: 1024,
         }
     }
