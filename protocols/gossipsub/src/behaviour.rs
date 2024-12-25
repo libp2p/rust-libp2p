@@ -23,6 +23,7 @@ use std::{
     collections::{BTreeSet, HashMap, HashSet, VecDeque},
     fmt,
     fmt::Debug,
+    io::Error,
     net::IpAddr,
     task::{Context, Poll},
     time::Duration,
@@ -1815,12 +1816,14 @@ where
         raw_message: &RawMessage,
         reject_reason: RejectReason,
     ) {
-        if let Some((peer_score, ..)) = &mut self.peer_score {
-            if let Some(metrics) = self.metrics.as_mut() {
-                metrics.register_invalid_message(&raw_message.topic);
-            }
+        if let Some(metrics) = self.metrics.as_mut() {
+            metrics.register_invalid_message(&raw_message.topic);
+        }
 
-            if let Ok(message) = self.data_transform.inbound_transform(raw_message.clone()) {
+        let message = self.data_transform.inbound_transform(raw_message.clone());
+
+        match (&mut self.peer_score, message) {
+            (Some((peer_score, ..)), Ok(message)) => {
                 let message_id = self.config.message_id(&message);
 
                 peer_score.reject_message(
@@ -1832,12 +1835,20 @@ where
 
                 self.gossip_promises
                     .reject_message(&message_id, &reject_reason);
-            } else {
+            }
+            (Some((peer_score, ..)), Err(_)) => {
                 // The message is invalid, we reject it ignoring any gossip promises. If a peer is
                 // advertising this message via an IHAVE and it's invalid it will be double
                 // penalized, one for sending us an invalid and again for breaking a promise.
                 peer_score.reject_invalid_message(propagation_source, &raw_message.topic);
             }
+            (None, Ok(message)) => {
+                // Valid transformation without peer scoring
+                let message_id = self.config.message_id(&message);
+                self.gossip_promises
+                    .reject_message(&message_id, &reject_reason);
+            }
+            (None, Err(_)) => {}
         }
     }
 
@@ -2681,7 +2692,7 @@ where
 
         // forward the message to peers
         for peer_id in recipient_peers.iter() {
-
+            if let Some(peer) = self.connected_peers.get_mut(peer_id) {
                 if peer.dont_send.get(msg_id).is_some() {
                     tracing::debug!(%peer_id, message=%msg_id, "Peer doesn't want message");
                     continue;
@@ -2696,10 +2707,11 @@ where
                         timeout: Delay::new(self.config.forward_queue_duration()),
                     },
                 );
-
+            }
         }
         tracing::debug!("Completed forwarding message");
         true
+
     }
 
     /// Constructs a [`RawMessage`] performing message signing if required.
@@ -3303,11 +3315,13 @@ where
         if let Some((peer_score, _, delay)) = &mut self.peer_score {
             if delay.poll_unpin(cx).is_ready() {
                 peer_score.refresh_scores();
+                delay.reset(peer_score.params.decay_interval);
             }
         }
 
         if self.heartbeat.poll_unpin(cx).is_ready() {
             self.heartbeat();
+            self.heartbeat.reset(self.config.heartbeat_interval());
         }
 
         Poll::Pending
