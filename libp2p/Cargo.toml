@@ -94,7 +94,7 @@ bytes = "1"
 either = "1.9.0"
 futures = { workspace = true }
 futures-timer = "3.0.2" # Explicit dependency to be used in `wasm-bindgen` feature
-getrandom = "0.2.3"     # Explicit dependency to be used in `wasm-bindgen` feature
+getrandom = { workspace = true } # Explicit dependency to be used in `wasm-bindgen` feature
 # TODO feature flag?
 rw-stream-sink = { workspace = true }
 
@@ -137,8 +137,6 @@ libp2p-websocket = { workspace = true, optional = true }
 
 [dev-dependencies]
 async-std = { version = "1.6.2", features = ["attributes"] }
-async-trait = "0.1"
-clap = { version = "4.1.6", features = ["derive"] }
 tokio = { workspace = true, features = [ "io-util", "io-std", "macros", "rt", "rt-multi-thread"] }
 
 libp2p-mplex = { workspace = true }
