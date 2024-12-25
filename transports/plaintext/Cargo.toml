@@ -23,7 +23,6 @@ quick-protobuf-codec = { workspace = true }
 [dev-dependencies]
 libp2p-identity = { workspace = true, features = ["ed25519", "rand"] }
 quickcheck = { workspace = true }
-rand = "0.8"
 futures_ringbuf = "0.4.0"
 tracing-subscriber = { workspace = true, features = ["env-filter"] }
 

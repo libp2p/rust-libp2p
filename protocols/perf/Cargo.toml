@@ -19,9 +19,7 @@ futures-timer = "3.0"
 web-time = { workspace = true }
 libp2p = { workspace = true, features = ["tokio", "tcp", "quic", "tls", "yamux", "dns"] }
 libp2p-core = { workspace = true }
-libp2p-dns = { workspace = true, features = ["tokio"] }
 libp2p-identity = { workspace = true, features = ["rand"] }
-libp2p-quic = { workspace = true, features = ["tokio"] }
 libp2p-swarm = { workspace = true, features = ["macros", "tokio"] }
 libp2p-tcp = { workspace = true, features = ["tokio"] }
 libp2p-tls = { workspace = true }
@@ -34,7 +32,6 @@ tracing-subscriber = { workspace = true, features = ["env-filter"] }
 tokio = { workspace = true, features = ["macros", "rt", "rt-multi-thread"] }
 
 [dev-dependencies]
-rand = "0.8"
 libp2p-swarm-test = { path = "../../swarm-test" }
 
 # Passing arguments to the docsrs builder in order to properly document cfg's.
