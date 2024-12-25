@@ -1,0 +1,535 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="AutoImportSettings">
+    <option name="autoReloadType" value="ALL" />
+  </component>
+  <component name="CargoProjects">
+    <cargoProject FILE="$PROJECT_DIR$/Cargo.toml" />
+  </component>
+  <component name="ChangeListManager">
+    <list default="true" id="66d25d96-f37c-4661-a5fe-f53cd79098ea" name="Changes" comment="">
+      <change beforePath="$PROJECT_DIR$/.github/ISSUE_TEMPLATE/bug_report.yml" beforeDir="false" afterPath="$PROJECT_DIR$/.github/ISSUE_TEMPLATE/bug_report.yml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/.github/ISSUE_TEMPLATE/enhancement.yml" beforeDir="false" afterPath="$PROJECT_DIR$/.github/ISSUE_TEMPLATE/enhancement.yml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/.github/ISSUE_TEMPLATE/feature_request.yml" beforeDir="false" afterPath="$PROJECT_DIR$/.github/ISSUE_TEMPLATE/feature_request.yml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/.github/pull_request_template.md" beforeDir="false" afterPath="$PROJECT_DIR$/.github/pull_request_template.md" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/.github/workflows/ci.yml" beforeDir="false" afterPath="$PROJECT_DIR$/.github/workflows/ci.yml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/Cargo.lock" beforeDir="false" afterPath="$PROJECT_DIR$/Cargo.lock" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/Cargo.toml" beforeDir="false" afterPath="$PROJECT_DIR$/Cargo.toml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/core/Cargo.toml" beforeDir="false" afterPath="$PROJECT_DIR$/core/Cargo.toml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/examples/autonat/Cargo.toml" beforeDir="false" afterPath="$PROJECT_DIR$/examples/autonat/Cargo.toml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/examples/autonatv2/Cargo.toml" beforeDir="false" afterPath="$PROJECT_DIR$/examples/autonatv2/Cargo.toml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/examples/chat/Cargo.toml" beforeDir="false" afterPath="$PROJECT_DIR$/examples/chat/Cargo.toml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/examples/dcutr/Cargo.toml" beforeDir="false" afterPath="$PROJECT_DIR$/examples/dcutr/Cargo.toml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/examples/distributed-key-value-store/Cargo.toml" beforeDir="false" afterPath="$PROJECT_DIR$/examples/distributed-key-value-store/Cargo.toml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/examples/file-sharing/Cargo.toml" beforeDir="false" afterPath="$PROJECT_DIR$/examples/file-sharing/Cargo.toml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/examples/identify/Cargo.toml" beforeDir="false" afterPath="$PROJECT_DIR$/examples/identify/Cargo.toml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/examples/ipfs-kad/Cargo.toml" beforeDir="false" afterPath="$PROJECT_DIR$/examples/ipfs-kad/Cargo.toml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/examples/ipfs-private/Cargo.toml" beforeDir="false" afterPath="$PROJECT_DIR$/examples/ipfs-private/Cargo.toml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/examples/ping/Cargo.toml" beforeDir="false" afterPath="$PROJECT_DIR$/examples/ping/Cargo.toml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/examples/relay-server/Cargo.toml" beforeDir="false" afterPath="$PROJECT_DIR$/examples/relay-server/Cargo.toml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/hole-punching-tests/Cargo.toml" beforeDir="false" afterPath="$PROJECT_DIR$/hole-punching-tests/Cargo.toml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/identity/Cargo.toml" beforeDir="false" afterPath="$PROJECT_DIR$/identity/Cargo.toml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/interop-tests/Cargo.toml" beforeDir="false" afterPath="$PROJECT_DIR$/interop-tests/Cargo.toml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/libp2p/Cargo.toml" beforeDir="false" afterPath="$PROJECT_DIR$/libp2p/Cargo.toml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/misc/keygen/Cargo.toml" beforeDir="false" afterPath="$PROJECT_DIR$/misc/keygen/Cargo.toml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/misc/memory-connection-limits/Cargo.toml" beforeDir="false" afterPath="$PROJECT_DIR$/misc/memory-connection-limits/Cargo.toml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/misc/multistream-select/Cargo.toml" beforeDir="false" afterPath="$PROJECT_DIR$/misc/multistream-select/Cargo.toml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/misc/server/Cargo.toml" beforeDir="false" afterPath="$PROJECT_DIR$/misc/server/Cargo.toml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/misc/server/src/config.rs" beforeDir="false" afterPath="$PROJECT_DIR$/misc/server/src/config.rs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/misc/webrtc-utils/Cargo.toml" beforeDir="false" afterPath="$PROJECT_DIR$/misc/webrtc-utils/Cargo.toml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/protocols/autonat/Cargo.toml" beforeDir="false" afterPath="$PROJECT_DIR$/protocols/autonat/Cargo.toml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/protocols/dcutr/Cargo.toml" beforeDir="false" afterPath="$PROJECT_DIR$/protocols/dcutr/Cargo.toml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/protocols/gossipsub/Cargo.toml" beforeDir="false" afterPath="$PROJECT_DIR$/protocols/gossipsub/Cargo.toml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/protocols/gossipsub/src/behaviour.rs" beforeDir="false" afterPath="$PROJECT_DIR$/protocols/gossipsub/src/behaviour.rs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/protocols/gossipsub/src/behaviour/tests.rs" beforeDir="false" afterPath="$PROJECT_DIR$/protocols/gossipsub/src/behaviour/tests.rs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/protocols/gossipsub/src/types.rs" beforeDir="false" afterPath="$PROJECT_DIR$/protocols/gossipsub/src/types.rs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/protocols/identify/Cargo.toml" beforeDir="false" afterPath="$PROJECT_DIR$/protocols/identify/Cargo.toml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/protocols/kad/Cargo.toml" beforeDir="false" afterPath="$PROJECT_DIR$/protocols/kad/Cargo.toml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/protocols/mdns/CHANGELOG.md" beforeDir="false" afterPath="$PROJECT_DIR$/protocols/mdns/CHANGELOG.md" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/protocols/mdns/Cargo.toml" beforeDir="false" afterPath="$PROJECT_DIR$/protocols/mdns/Cargo.toml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/protocols/mdns/src/behaviour.rs" beforeDir="false" afterPath="$PROJECT_DIR$/protocols/mdns/src/behaviour.rs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/protocols/perf/Cargo.toml" beforeDir="false" afterPath="$PROJECT_DIR$/protocols/perf/Cargo.toml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/protocols/ping/Cargo.toml" beforeDir="false" afterPath="$PROJECT_DIR$/protocols/ping/Cargo.toml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/protocols/rendezvous/Cargo.toml" beforeDir="false" afterPath="$PROJECT_DIR$/protocols/rendezvous/Cargo.toml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/protocols/request-response/Cargo.toml" beforeDir="false" afterPath="$PROJECT_DIR$/protocols/request-response/Cargo.toml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/swarm-derive/Cargo.toml" beforeDir="false" afterPath="$PROJECT_DIR$/swarm-derive/Cargo.toml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/swarm-test/Cargo.toml" beforeDir="false" afterPath="$PROJECT_DIR$/swarm-test/Cargo.toml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/swarm/Cargo.toml" beforeDir="false" afterPath="$PROJECT_DIR$/swarm/Cargo.toml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/transports/noise/Cargo.toml" beforeDir="false" afterPath="$PROJECT_DIR$/transports/noise/Cargo.toml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/transports/plaintext/Cargo.toml" beforeDir="false" afterPath="$PROJECT_DIR$/transports/plaintext/Cargo.toml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/transports/quic/Cargo.toml" beforeDir="false" afterPath="$PROJECT_DIR$/transports/quic/Cargo.toml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/transports/tcp/Cargo.toml" beforeDir="false" afterPath="$PROJECT_DIR$/transports/tcp/Cargo.toml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/transports/tls/Cargo.toml" beforeDir="false" afterPath="$PROJECT_DIR$/transports/tls/Cargo.toml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/transports/webrtc-websys/Cargo.toml" beforeDir="false" afterPath="$PROJECT_DIR$/transports/webrtc-websys/Cargo.toml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/transports/webrtc/Cargo.toml" beforeDir="false" afterPath="$PROJECT_DIR$/transports/webrtc/Cargo.toml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/transports/websocket-websys/Cargo.toml" beforeDir="false" afterPath="$PROJECT_DIR$/transports/websocket-websys/Cargo.toml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/wasm-tests/webtransport-tests/Cargo.toml" beforeDir="false" afterPath="$PROJECT_DIR$/wasm-tests/webtransport-tests/Cargo.toml" afterDir="false" />
+    </list>
+    <option name="SHOW_DIALOG" value="false" />
+    <option name="HIGHLIGHT_CONFLICTS" value="true" />
+    <option name="HIGHLIGHT_NON_ACTIVE_CHANGELIST" value="false" />
+    <option name="LAST_RESOLUTION" value="IGNORE" />
+  </component>
+  <component name="ExecutionTargetManager" SELECTED_TARGET="RsBuildProfile:dev" />
+  <component name="Git.Settings">
+    <option name="RECENT_GIT_ROOT_PATH" value="$PROJECT_DIR$" />
+  </component>
+  <component name="MacroExpansionManager">
+    <option name="directoryName" value="o6ne9p8z" />
+  </component>
+  <component name="ProjectColorInfo">{
+  &quot;associatedIndex&quot;: 5
+}</component>
+  <component name="ProjectId" id="2nJJsGHiYQtGxV1cmVUJXnQ6p5m" />
+  <component name="ProjectViewState">
+    <option name="hideEmptyMiddlePackages" value="true" />
+    <option name="showLibraryContents" value="true" />
+  </component>
+  <component name="PropertiesComponent"><![CDATA[{
+  "keyToString": {
+    "Cargo.Test behaviour::tests::test_slow_peer_returns_failed_ihave_handling.executor": "Run",
+    "Cargo.Test rust-libp2p.executor": "Run",
+    "RunOnceActivity.ShowReadmeOnStart": "true",
+    "RunOnceActivity.rust.reset.selective.auto.import": "true",
+    "git-widget-placeholder": "Merging implement-gossipsub-1.2-beta",
+    "last_opened_file_path": "/Users/manasnagaraj/projects/oss/rust-libp2p",
+    "node.js.detected.package.eslint": "true",
+    "node.js.detected.package.tslint": "true",
+    "node.js.selected.package.eslint": "(autodetect)",
+    "node.js.selected.package.tslint": "(autodetect)",
+    "nodejs_package_manager_path": "npm",
+    "org.rust.cargo.project.model.PROJECT_DISCOVERY": "true",
+    "org.rust.cargo.project.model.impl.CargoExternalSystemProjectAware.subscribe.first.balloon": "",
+    "org.rust.first.attach.projects": "true",
+    "vue.rearranger.settings.migration": "true"
+  }
+}]]></component>
+  <component name="RunManager" selected="Cargo.Test rust-libp2p">
+    <configuration name="Run autonat_client" type="CargoCommandRunConfiguration" factoryName="Cargo Command">
+      <option name="command" value="run --package autonat-example --bin autonat_client" />
+      <option name="workingDirectory" value="file://$PROJECT_DIR$" />
+      <envs />
+      <option name="emulateTerminal" value="true" />
+      <option name="channel" value="DEFAULT" />
+      <option name="requiredFeatures" value="true" />
+      <option name="allFeatures" value="false" />
+      <option name="withSudo" value="false" />
+      <option name="buildTarget" value="REMOTE" />
+      <option name="backtrace" value="SHORT" />
+      <option name="isRedirectInput" value="false" />
+      <option name="redirectInputPath" value="" />
+      <method v="2">
+        <option name="CARGO.BUILD_TASK_PROVIDER" enabled="true" />
+      </method>
+    </configuration>
+    <configuration name="Run autonatv2_client" type="CargoCommandRunConfiguration" factoryName="Cargo Command">
+      <option name="command" value="run --package autonatv2 --bin autonatv2_client" />
+      <option name="workingDirectory" value="file://$PROJECT_DIR$" />
+      <envs />
+      <option name="emulateTerminal" value="true" />
+      <option name="channel" value="DEFAULT" />
+      <option name="requiredFeatures" value="true" />
+      <option name="allFeatures" value="false" />
+      <option name="withSudo" value="false" />
+      <option name="buildTarget" value="REMOTE" />
+      <option name="backtrace" value="SHORT" />
+      <option name="isRedirectInput" value="false" />
+      <option name="redirectInputPath" value="" />
+      <method v="2">
+        <option name="CARGO.BUILD_TASK_PROVIDER" enabled="true" />
+      </method>
+    </configuration>
+    <configuration name="Run browser-webrtc-example" type="CargoCommandRunConfiguration" factoryName="Cargo Command">
+      <option name="command" value="run --package browser-webrtc-example --bin browser-webrtc-example" />
+      <option name="workingDirectory" value="file://$PROJECT_DIR$" />
+      <envs />
+      <option name="emulateTerminal" value="true" />
+      <option name="channel" value="DEFAULT" />
+      <option name="requiredFeatures" value="true" />
+      <option name="allFeatures" value="false" />
+      <option name="withSudo" value="false" />
+      <option name="buildTarget" value="REMOTE" />
+      <option name="backtrace" value="SHORT" />
+      <option name="isRedirectInput" value="false" />
+      <option name="redirectInputPath" value="" />
+      <method v="2">
+        <option name="CARGO.BUILD_TASK_PROVIDER" enabled="true" />
+      </method>
+    </configuration>
+    <configuration name="Run chat-example" type="CargoCommandRunConfiguration" factoryName="Cargo Command">
+      <option name="command" value="run --package chat-example --bin chat-example" />
+      <option name="workingDirectory" value="file://$PROJECT_DIR$" />
+      <envs />
+      <option name="emulateTerminal" value="true" />
+      <option name="channel" value="DEFAULT" />
+      <option name="requiredFeatures" value="true" />
+      <option name="allFeatures" value="false" />
+      <option name="withSudo" value="false" />
+      <option name="buildTarget" value="REMOTE" />
+      <option name="backtrace" value="SHORT" />
+      <option name="isRedirectInput" value="false" />
+      <option name="redirectInputPath" value="" />
+      <method v="2">
+        <option name="CARGO.BUILD_TASK_PROVIDER" enabled="true" />
+      </method>
+    </configuration>
+    <configuration name="Run dcutr-example" type="CargoCommandRunConfiguration" factoryName="Cargo Command">
+      <option name="command" value="run --package dcutr-example --bin dcutr-example" />
+      <option name="workingDirectory" value="file://$PROJECT_DIR$" />
+      <envs />
+      <option name="emulateTerminal" value="true" />
+      <option name="channel" value="DEFAULT" />
+      <option name="requiredFeatures" value="true" />
+      <option name="allFeatures" value="false" />
+      <option name="withSudo" value="false" />
+      <option name="buildTarget" value="REMOTE" />
+      <option name="backtrace" value="SHORT" />
+      <option name="isRedirectInput" value="false" />
+      <option name="redirectInputPath" value="" />
+      <method v="2">
+        <option name="CARGO.BUILD_TASK_PROVIDER" enabled="true" />
+      </method>
+    </configuration>
+    <configuration name="Run distributed-key-value-store-example" type="CargoCommandRunConfiguration" factoryName="Cargo Command">
+      <option name="command" value="run --package distributed-key-value-store-example --bin distributed-key-value-store-example" />
+      <option name="workingDirectory" value="file://$PROJECT_DIR$" />
+      <envs />
+      <option name="emulateTerminal" value="true" />
+      <option name="channel" value="DEFAULT" />
+      <option name="requiredFeatures" value="true" />
+      <option name="allFeatures" value="false" />
+      <option name="withSudo" value="false" />
+      <option name="buildTarget" value="REMOTE" />
+      <option name="backtrace" value="SHORT" />
+      <option name="isRedirectInput" value="false" />
+      <option name="redirectInputPath" value="" />
+      <method v="2">
+        <option name="CARGO.BUILD_TASK_PROVIDER" enabled="true" />
+      </method>
+    </configuration>
+    <configuration name="Run file-sharing-example" type="CargoCommandRunConfiguration" factoryName="Cargo Command">
+      <option name="command" value="run --package file-sharing-example --bin file-sharing-example" />
+      <option name="workingDirectory" value="file://$PROJECT_DIR$" />
+      <envs />
+      <option name="emulateTerminal" value="true" />
+      <option name="channel" value="DEFAULT" />
+      <option name="requiredFeatures" value="true" />
+      <option name="allFeatures" value="false" />
+      <option name="withSudo" value="false" />
+      <option name="buildTarget" value="REMOTE" />
+      <option name="backtrace" value="SHORT" />
+      <option name="isRedirectInput" value="false" />
+      <option name="redirectInputPath" value="" />
+      <method v="2">
+        <option name="CARGO.BUILD_TASK_PROVIDER" enabled="true" />
+      </method>
+    </configuration>
+    <configuration name="Run hole-punching-tests" type="CargoCommandRunConfiguration" factoryName="Cargo Command">
+      <option name="command" value="run --package hole-punching-tests --bin hole-punching-tests" />
+      <option name="workingDirectory" value="file://$PROJECT_DIR$" />
+      <envs />
+      <option name="emulateTerminal" value="true" />
+      <option name="channel" value="DEFAULT" />
+      <option name="requiredFeatures" value="true" />
+      <option name="allFeatures" value="false" />
+      <option name="withSudo" value="false" />
+      <option name="buildTarget" value="REMOTE" />
+      <option name="backtrace" value="SHORT" />
+      <option name="isRedirectInput" value="false" />
+      <option name="redirectInputPath" value="" />
+      <method v="2">
+        <option name="CARGO.BUILD_TASK_PROVIDER" enabled="true" />
+      </method>
+    </configuration>
+    <configuration name="Run identify-example" type="CargoCommandRunConfiguration" factoryName="Cargo Command">
+      <option name="command" value="run --package identify-example --bin identify-example" />
+      <option name="workingDirectory" value="file://$PROJECT_DIR$" />
+      <envs />
+      <option name="emulateTerminal" value="true" />
+      <option name="channel" value="DEFAULT" />
+      <option name="requiredFeatures" value="true" />
+      <option name="allFeatures" value="false" />
+      <option name="withSudo" value="false" />
+      <option name="buildTarget" value="REMOTE" />
+      <option name="backtrace" value="SHORT" />
+      <option name="isRedirectInput" value="false" />
+      <option name="redirectInputPath" value="" />
+      <method v="2">
+        <option name="CARGO.BUILD_TASK_PROVIDER" enabled="true" />
+      </method>
+    </configuration>
+    <configuration name="Run ipfs-kad-example" type="CargoCommandRunConfiguration" factoryName="Cargo Command">
+      <option name="command" value="run --package ipfs-kad-example --bin ipfs-kad-example" />
+      <option name="workingDirectory" value="file://$PROJECT_DIR$" />
+      <envs />
+      <option name="emulateTerminal" value="true" />
+      <option name="channel" value="DEFAULT" />
+      <option name="requiredFeatures" value="true" />
+      <option name="allFeatures" value="false" />
+      <option name="withSudo" value="false" />
+      <option name="buildTarget" value="REMOTE" />
+      <option name="backtrace" value="SHORT" />
+      <option name="isRedirectInput" value="false" />
+      <option name="redirectInputPath" value="" />
+      <method v="2">
+        <option name="CARGO.BUILD_TASK_PROVIDER" enabled="true" />
+      </method>
+    </configuration>
+    <configuration name="Run ipfs-private-example" type="CargoCommandRunConfiguration" factoryName="Cargo Command">
+      <option name="command" value="run --package ipfs-private-example --bin ipfs-private-example" />
+      <option name="workingDirectory" value="file://$PROJECT_DIR$" />
+      <envs />
+      <option name="emulateTerminal" value="true" />
+      <option name="channel" value="DEFAULT" />
+      <option name="requiredFeatures" value="true" />
+      <option name="allFeatures" value="false" />
+      <option name="withSudo" value="false" />
+      <option name="buildTarget" value="REMOTE" />
+      <option name="backtrace" value="SHORT" />
+      <option name="isRedirectInput" value="false" />
+      <option name="redirectInputPath" value="" />
+      <method v="2">
+        <option name="CARGO.BUILD_TASK_PROVIDER" enabled="true" />
+      </method>
+    </configuration>
+    <configuration name="Run keygen" type="CargoCommandRunConfiguration" factoryName="Cargo Command">
+      <option name="buildProfileId" value="bench" />
+      <option name="command" value="run --package keygen --bin keygen" />
+      <option name="workingDirectory" value="file://$PROJECT_DIR$" />
+      <envs />
+      <option name="emulateTerminal" value="true" />
+      <option name="channel" value="DEFAULT" />
+      <option name="requiredFeatures" value="true" />
+      <option name="allFeatures" value="false" />
+      <option name="withSudo" value="false" />
+      <option name="buildTarget" value="REMOTE" />
+      <option name="backtrace" value="SHORT" />
+      <option name="isRedirectInput" value="false" />
+      <option name="redirectInputPath" value="" />
+      <method v="2">
+        <option name="CARGO.BUILD_TASK_PROVIDER" enabled="true" />
+      </method>
+    </configuration>
+    <configuration name="Run libp2p-server" type="CargoCommandRunConfiguration" factoryName="Cargo Command">
+      <option name="command" value="run --package libp2p-server --bin libp2p-server" />
+      <option name="workingDirectory" value="file://$PROJECT_DIR$" />
+      <envs />
+      <option name="emulateTerminal" value="true" />
+      <option name="channel" value="DEFAULT" />
+      <option name="requiredFeatures" value="true" />
+      <option name="allFeatures" value="false" />
+      <option name="withSudo" value="false" />
+      <option name="buildTarget" value="REMOTE" />
+      <option name="backtrace" value="SHORT" />
+      <option name="isRedirectInput" value="false" />
+      <option name="redirectInputPath" value="" />
+      <method v="2">
+        <option name="CARGO.BUILD_TASK_PROVIDER" enabled="true" />
+      </method>
+    </configuration>
+    <configuration name="Run metrics-example" type="CargoCommandRunConfiguration" factoryName="Cargo Command">
+      <option name="command" value="run --package metrics-example --bin metrics-example" />
+      <option name="workingDirectory" value="file://$PROJECT_DIR$" />
+      <envs />
+      <option name="emulateTerminal" value="true" />
+      <option name="channel" value="DEFAULT" />
+      <option name="requiredFeatures" value="true" />
+      <option name="allFeatures" value="false" />
+      <option name="withSudo" value="false" />
+      <option name="buildTarget" value="REMOTE" />
+      <option name="backtrace" value="SHORT" />
+      <option name="isRedirectInput" value="false" />
+      <option name="redirectInputPath" value="" />
+      <method v="2">
+        <option name="CARGO.BUILD_TASK_PROVIDER" enabled="true" />
+      </method>
+    </configuration>
+    <configuration name="Run native_ping" type="CargoCommandRunConfiguration" factoryName="Cargo Command">
+      <option name="command" value="run --package interop-tests --bin native_ping" />
+      <option name="workingDirectory" value="file://$PROJECT_DIR$" />
+      <envs />
+      <option name="emulateTerminal" value="true" />
+      <option name="channel" value="DEFAULT" />
+      <option name="requiredFeatures" value="true" />
+      <option name="allFeatures" value="false" />
+      <option name="withSudo" value="false" />
+      <option name="buildTarget" value="REMOTE" />
+      <option name="backtrace" value="SHORT" />
+      <option name="isRedirectInput" value="false" />
+      <option name="redirectInputPath" value="" />
+      <method v="2">
+        <option name="CARGO.BUILD_TASK_PROVIDER" enabled="true" />
+      </method>
+    </configuration>
+    <configuration name="Run perf" type="CargoCommandRunConfiguration" factoryName="Cargo Command">
+      <option name="command" value="run --package libp2p-perf --bin perf" />
+      <option name="workingDirectory" value="file://$PROJECT_DIR$" />
+      <envs />
+      <option name="emulateTerminal" value="true" />
+      <option name="channel" value="DEFAULT" />
+      <option name="requiredFeatures" value="true" />
+      <option name="allFeatures" value="false" />
+      <option name="withSudo" value="false" />
+      <option name="buildTarget" value="REMOTE" />
+      <option name="backtrace" value="SHORT" />
+      <option name="isRedirectInput" value="false" />
+      <option name="redirectInputPath" value="" />
+      <method v="2">
+        <option name="CARGO.BUILD_TASK_PROVIDER" enabled="true" />
+      </method>
+    </configuration>
+    <configuration name="Run ping-example" type="CargoCommandRunConfiguration" factoryName="Cargo Command">
+      <option name="command" value="run --package ping-example --bin ping-example" />
+      <option name="workingDirectory" value="file://$PROJECT_DIR$" />
+      <envs />
+      <option name="emulateTerminal" value="true" />
+      <option name="channel" value="DEFAULT" />
+      <option name="requiredFeatures" value="true" />
+      <option name="allFeatures" value="false" />
+      <option name="withSudo" value="false" />
+      <option name="buildTarget" value="REMOTE" />
+      <option name="backtrace" value="SHORT" />
+      <option name="isRedirectInput" value="false" />
+      <option name="redirectInputPath" value="" />
+      <method v="2">
+        <option name="CARGO.BUILD_TASK_PROVIDER" enabled="true" />
+      </method>
+    </configuration>
+    <configuration name="Run relay-server-example" type="CargoCommandRunConfiguration" factoryName="Cargo Command">
+      <option name="command" value="run --package relay-server-example --bin relay-server-example" />
+      <option name="workingDirectory" value="file://$PROJECT_DIR$" />
+      <envs />
+      <option name="emulateTerminal" value="true" />
+      <option name="channel" value="DEFAULT" />
+      <option name="requiredFeatures" value="true" />
+      <option name="allFeatures" value="false" />
+      <option name="withSudo" value="false" />
+      <option name="buildTarget" value="REMOTE" />
+      <option name="backtrace" value="SHORT" />
+      <option name="isRedirectInput" value="false" />
+      <option name="redirectInputPath" value="" />
+      <method v="2">
+        <option name="CARGO.BUILD_TASK_PROVIDER" enabled="true" />
+      </method>
+    </configuration>
+    <configuration name="Run rendezvous-example" type="CargoCommandRunConfiguration" factoryName="Cargo Command">
+      <option name="command" value="run --package rendezvous-example --bin rendezvous-example" />
+      <option name="workingDirectory" value="file://$PROJECT_DIR$" />
+      <envs />
+      <option name="emulateTerminal" value="true" />
+      <option name="channel" value="DEFAULT" />
+      <option name="requiredFeatures" value="true" />
+      <option name="allFeatures" value="false" />
+      <option name="withSudo" value="false" />
+      <option name="buildTarget" value="REMOTE" />
+      <option name="backtrace" value="SHORT" />
+      <option name="isRedirectInput" value="false" />
+      <option name="redirectInputPath" value="" />
+      <method v="2">
+        <option name="CARGO.BUILD_TASK_PROVIDER" enabled="true" />
+      </method>
+    </configuration>
+    <configuration name="Run stream-example" type="CargoCommandRunConfiguration" factoryName="Cargo Command">
+      <option name="command" value="run --package stream-example --bin stream-example" />
+      <option name="workingDirectory" value="file://$PROJECT_DIR$" />
+      <envs />
+      <option name="emulateTerminal" value="true" />
+      <option name="channel" value="DEFAULT" />
+      <option name="requiredFeatures" value="true" />
+      <option name="allFeatures" value="false" />
+      <option name="withSudo" value="false" />
+      <option name="buildTarget" value="REMOTE" />
+      <option name="backtrace" value="SHORT" />
+      <option name="isRedirectInput" value="false" />
+      <option name="redirectInputPath" value="" />
+      <method v="2">
+        <option name="CARGO.BUILD_TASK_PROVIDER" enabled="true" />
+      </method>
+    </configuration>
+    <configuration name="Run upnp-example" type="CargoCommandRunConfiguration" factoryName="Cargo Command">
+      <option name="command" value="run --package upnp-example --bin upnp-example" />
+      <option name="workingDirectory" value="file://$PROJECT_DIR$" />
+      <envs />
+      <option name="emulateTerminal" value="true" />
+      <option name="channel" value="DEFAULT" />
+      <option name="requiredFeatures" value="true" />
+      <option name="allFeatures" value="false" />
+      <option name="withSudo" value="false" />
+      <option name="buildTarget" value="REMOTE" />
+      <option name="backtrace" value="SHORT" />
+      <option name="isRedirectInput" value="false" />
+      <option name="redirectInputPath" value="" />
+      <method v="2">
+        <option name="CARGO.BUILD_TASK_PROVIDER" enabled="true" />
+      </method>
+    </configuration>
+    <configuration name="Test behaviour::tests::test_slow_peer_returns_failed_ihave_handling" type="CargoCommandRunConfiguration" factoryName="Cargo Command" temporary="true">
+      <option name="buildProfileId" value="test" />
+      <option name="command" value="test --package libp2p-gossipsub --lib behaviour::tests::test_slow_peer_returns_failed_ihave_handling -- --exact" />
+      <option name="workingDirectory" value="file://$PROJECT_DIR$" />
+      <envs />
+      <option name="emulateTerminal" value="true" />
+      <option name="channel" value="DEFAULT" />
+      <option name="requiredFeatures" value="true" />
+      <option name="allFeatures" value="false" />
+      <option name="withSudo" value="false" />
+      <option name="buildTarget" value="REMOTE" />
+      <option name="backtrace" value="SHORT" />
+      <option name="isRedirectInput" value="false" />
+      <option name="redirectInputPath" value="" />
+      <method v="2">
+        <option name="CARGO.BUILD_TASK_PROVIDER" enabled="true" />
+      </method>
+    </configuration>
+    <configuration name="Test rust-libp2p" type="CargoCommandRunConfiguration" factoryName="Cargo Command">
+      <option name="buildProfileId" value="dev" />
+      <option name="command" value="test --workspace" />
+      <option name="workingDirectory" value="file://$PROJECT_DIR$" />
+      <envs />
+      <option name="emulateTerminal" value="true" />
+      <option name="channel" value="DEFAULT" />
+      <option name="requiredFeatures" value="true" />
+      <option name="allFeatures" value="false" />
+      <option name="withSudo" value="false" />
+      <option name="buildTarget" value="REMOTE" />
+      <option name="backtrace" value="SHORT" />
+      <option name="isRedirectInput" value="false" />
+      <option name="redirectInputPath" value="" />
+      <method v="2">
+        <option name="CARGO.BUILD_TASK_PROVIDER" enabled="true" />
+      </method>
+    </configuration>
+    <recent_temporary>
+      <list>
+        <item itemvalue="Cargo.Test behaviour::tests::test_slow_peer_returns_failed_ihave_handling" />
+      </list>
+    </recent_temporary>
+  </component>
+  <component name="RustProjectSettings">
+    <option name="toolchainHomeDirectory" value="$USER_HOME$/.cargo/bin" />
+  </component>
+  <component name="SpellCheckerSettings" RuntimeDictionaries="0" Folders="0" CustomDictionaries="0" DefaultDictionary="application-level" UseSingleDictionary="true" transferred="true" />
+  <component name="TaskManager">
+    <task active="true" id="Default" summary="Default task">
+      <changelist id="66d25d96-f37c-4661-a5fe-f53cd79098ea" name="Changes" comment="" />
+      <created>1728685449599</created>
+      <option name="number" value="Default" />
+      <option name="presentableId" value="Default" />
+      <updated>1728685449599</updated>
+      <workItem from="1728685450698" duration="6350000" />
+      <workItem from="1728772184367" duration="35000" />
+      <workItem from="1732571820909" duration="51243000" />
+      <workItem from="1732908295171" duration="18550000" />
+      <workItem from="1733077986951" duration="15944000" />
+      <workItem from="1734469830459" duration="22786000" />
+      <workItem from="1734616486261" duration="7792000" />
+      <workItem from="1734655181853" duration="5777000" />
+      <workItem from="1734837793088" duration="8002000" />
+      <workItem from="1735150636548" duration="737000" />
+    </task>
+    <servers />
+  </component>
+  <component name="TypeScriptGeneratedFilesManager">
+    <option name="version" value="3" />
+  </component>
+</project>

@@ -19,7 +19,7 @@
 // DEALINGS IN THE SOFTWARE.
 
 //! A collection of types using the Gossipsub system.
-use std::{collections::BTreeSet, fmt, fmt::Debug};
+use std::{collections::BTreeSet, fmt, fmt::Debug, time::Instant};
 
 use futures_timer::Delay;
 use hashlink::LinkedHashMap;
@@ -29,7 +29,6 @@ use prometheus_client::encoding::EncodeLabelValue;
 use quick_protobuf::MessageWrite;
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
-use std::time::Instant;
 
 use crate::{rpc::Sender, rpc_proto::proto, TopicHash};
 
@@ -263,7 +262,8 @@ pub enum ControlAction {
     Graft(Graft),
     /// The node has been removed from the mesh - Prune control message.
     Prune(Prune),
-    /// The node requests us to not forward message ids (peer_id + sequence _number) - IDontWant control message.
+    /// The node requests us to not forward message ids (peer_id + sequence _number) - IDontWant
+    /// control message.
     IDontWant(IDontWant),
 }
 
@@ -329,7 +329,8 @@ pub enum RpcOut {
     IHave(IHave),
     /// Send a IWant control message.
     IWant(IWant),
-    /// The node requests us to not forward message ids (peer_id + sequence _number) - IDontWant control message.
+    /// The node requests us to not forward message ids (peer_id + sequence _number) - IDontWant
+    /// control message.
     IDontWant(IDontWant),
 }
 

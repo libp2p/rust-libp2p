@@ -2681,7 +2681,7 @@ where
 
         // forward the message to peers
         for peer_id in recipient_peers.iter() {
-            if let Some(peer) = self.connected_peers.get_mut(peer_id) {
+
                 if peer.dont_send.get(msg_id).is_some() {
                     tracing::debug!(%peer_id, message=%msg_id, "Peer doesn't want message");
                     continue;
@@ -2696,10 +2696,7 @@ where
                         timeout: Delay::new(self.config.forward_queue_duration()),
                     },
                 );
-            } else {
-                tracing::error!(peer = %peer_id,
-                    "Could not FORWARD, peer doesn't exist in connected peer list");
-            }
+
         }
         tracing::debug!("Completed forwarding message");
         true

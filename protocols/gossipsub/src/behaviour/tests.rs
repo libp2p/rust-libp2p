@@ -4619,7 +4619,7 @@ fn test_ignore_too_many_messages_in_ihave() {
     let (peer, receiver) = add_peer(&mut gs, &topics, false, false);
     receivers.insert(peer, receiver);
 
-    //peer has 30 messages
+    // peer has 30 messages
     let mut seq = 0;
     let message_ids: Vec<_> = (0..30)
         .map(|_| random_message(&mut seq, &topics))
@@ -5585,7 +5585,7 @@ fn test_slow_peer_returns_failed_ihave_handling() {
     topics.insert(topic_hash.clone());
 
     let slow_peer_id = PeerId::random();
-    peers.push(slow_peer_id);
+    // peers.push(slow_peer_id);
     gs.connected_peers.insert(
         slow_peer_id,
         PeerConnections {
@@ -5613,6 +5613,7 @@ fn test_slow_peer_returns_failed_ihave_handling() {
         },
     );
 
+    // First message.
     let publish_data = vec![1; 59];
     let transformed = gs
         .data_transform
@@ -5632,6 +5633,22 @@ fn test_slow_peer_returns_failed_ihave_handling() {
         &slow_peer_id,
         vec![(topic_hash.clone(), vec![msg_id.clone()])],
     );
+
+    // Second message.
+    let publish_data = vec![2; 59];
+    let transformed = gs
+        .data_transform
+        .outbound_transform(&topic_hash, publish_data.clone())
+        .unwrap();
+    let raw_message = gs
+        .build_raw_message(topic_hash.clone(), transformed)
+        .unwrap();
+    let msg_id = gs.config.message_id(&Message {
+        source: raw_message.source,
+        data: publish_data,
+        sequence_number: raw_message.sequence_number,
+        topic: raw_message.topic.clone(),
+    });
     gs.handle_ihave(&slow_peer_id, vec![(topic_hash, vec![msg_id.clone()])]);
 
     gs.heartbeat();
