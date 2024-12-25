@@ -97,7 +97,7 @@ pub fn make_webtransport_server_config(
     certificate: &CertificateDer<'static>,
     private_key: &PrivateKeyDer,
     protocols: Vec<Vec<u8>>,
-) -> Result<rustls::ServerConfig, certificate::GenError> {
+) -> rustls::ServerConfig {
     let mut provider = rustls::crypto::ring::default_provider();
     provider.cipher_suites = verifier::CIPHERSUITES.to_vec();
 
@@ -113,5 +113,5 @@ pub fn make_webtransport_server_config(
         .with_cert_resolver(cert_resolver);
     crypto.alpn_protocols = protocols.to_vec();
 
-    Ok(crypto)
+    crypto
 }

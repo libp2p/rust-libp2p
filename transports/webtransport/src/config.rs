@@ -45,8 +45,7 @@ impl Config {
             &cert.cert,
             &cert.private_key,
             alpn_protocols(),
-        )
-        .expect("A server config");
+        );
 
         Self {
             server_tls_config: server_config,
