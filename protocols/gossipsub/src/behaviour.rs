@@ -23,7 +23,6 @@ use std::{
     collections::{BTreeSet, HashMap, HashSet, VecDeque},
     fmt,
     fmt::Debug,
-    io::Error,
     net::IpAddr,
     task::{Context, Poll},
     time::Duration,
