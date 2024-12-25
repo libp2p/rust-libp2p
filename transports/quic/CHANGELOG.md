@@ -1,8 +1,3 @@
-## 0.11.3
-
-- Update `quinn` to 0.11.6
-  See [PR 5757](https://github.com/libp2p/rust-libp2p/pull/5757).
-
 ## 0.11.2
 
 - Deprecate `void` crate.
