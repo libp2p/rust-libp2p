@@ -208,21 +208,11 @@ impl NetworkBehaviour for Behaviour {
                 connection_id,
                 endpoint,
                 ..
-            }) => {
-                if !endpoint.is_relayed() {
-                    self.directly_connected_peers
-                        .entry(peer_id)
-                        .or_default()
-                        .push(connection_id);
-                }
-
-                if let Some(event) = self.pending_handler_commands.remove(&connection_id) {
-                    self.queued_actions.push_back(ToSwarm::NotifyHandler {
-                        peer_id,
-                        handler: NotifyHandler::One(connection_id),
-                        event: Either::Left(event),
-                    })
-                }
+            }) if !endpoint.is_relayed() => {
+                self.directly_connected_peers
+                    .entry(peer_id)
+                    .or_default()
+                    .push(connection_id);
             }
             FromSwarm::ConnectionClosed(connection_closed) => {
                 self.on_connection_closed(connection_closed)
