@@ -327,7 +327,10 @@ impl Stream for Listener {
                     };
                     return Poll::Ready(Some(event));
                 }
-                // todo
+                // todo See Endpoint<Server>::accept() implementation
+                // It just expects that "Endpoint cannot be closed",
+                // but it's an expected behavior that quic_incoming.accept() can return None.
+                // So it's not obvious how to handle this case.
                 // Poll::Ready(None) => {
                 //     self.close(Ok(()));
                 //     continue;
