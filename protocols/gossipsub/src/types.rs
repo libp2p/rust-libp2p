@@ -19,7 +19,7 @@
 // DEALINGS IN THE SOFTWARE.
 
 //! A collection of types using the Gossipsub system.
-use std::{collections::BTreeSet, fmt, fmt::Debug, time::Instant};
+use std::{collections::BTreeSet, fmt, fmt::Debug };
 
 use futures_timer::Delay;
 use hashlink::LinkedHashMap;
@@ -29,6 +29,7 @@ use prometheus_client::encoding::EncodeLabelValue;
 use quick_protobuf::MessageWrite;
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
+use web_time::Instant;
 
 use crate::{rpc::Sender, rpc_proto::proto, TopicHash};
 

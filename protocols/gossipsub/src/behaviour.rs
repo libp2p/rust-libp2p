@@ -2710,7 +2710,6 @@ where
         }
         tracing::debug!("Completed forwarding message");
         true
-
     }
 
     /// Constructs a [`RawMessage`] performing message signing if required.

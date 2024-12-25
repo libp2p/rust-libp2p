@@ -40,9 +40,9 @@ impl<'a> MessageRead<'a> for RPC {
 impl MessageWrite for RPC {
     fn get_size(&self) -> usize {
         0
-            + self.subscriptions.iter().map(|s| 1 + sizeof_len((s).get_size())).sum::<usize>()
-            + self.publish.iter().map(|s| 1 + sizeof_len((s).get_size())).sum::<usize>()
-            + self.control.as_ref().map_or(0, |m| 1 + sizeof_len((m).get_size()))
+        + self.subscriptions.iter().map(|s| 1 + sizeof_len((s).get_size())).sum::<usize>()
+        + self.publish.iter().map(|s| 1 + sizeof_len((s).get_size())).sum::<usize>()
+        + self.control.as_ref().map_or(0, |m| 1 + sizeof_len((m).get_size()))
     }
 
     fn write_message<W: WriterBackend>(&self, w: &mut Writer<W>) -> Result<()> {
@@ -55,43 +55,43 @@ impl MessageWrite for RPC {
 
 pub mod mod_RPC {
 
-    use super::*;
+use super::*;
 
-    #[allow(clippy::derive_partial_eq_without_eq)]
-    #[derive(Debug, Default, PartialEq, Clone)]
-    pub struct SubOpts {
-        pub subscribe: Option<bool>,
-        pub topic_id: Option<String>,
-    }
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Debug, Default, PartialEq, Clone)]
+pub struct SubOpts {
+    pub subscribe: Option<bool>,
+    pub topic_id: Option<String>,
+}
 
-    impl<'a> MessageRead<'a> for SubOpts {
-        fn from_reader(r: &mut BytesReader, bytes: &'a [u8]) -> Result<Self> {
-            let mut msg = Self::default();
-            while !r.is_eof() {
-                match r.next_tag(bytes) {
-                    Ok(8) => msg.subscribe = Some(r.read_bool(bytes)?),
-                    Ok(18) => msg.topic_id = Some(r.read_string(bytes)?.to_owned()),
-                    Ok(t) => { r.read_unknown(bytes, t)?; }
-                    Err(e) => return Err(e),
-                }
+impl<'a> MessageRead<'a> for SubOpts {
+    fn from_reader(r: &mut BytesReader, bytes: &'a [u8]) -> Result<Self> {
+        let mut msg = Self::default();
+        while !r.is_eof() {
+            match r.next_tag(bytes) {
+                Ok(8) => msg.subscribe = Some(r.read_bool(bytes)?),
+                Ok(18) => msg.topic_id = Some(r.read_string(bytes)?.to_owned()),
+                Ok(t) => { r.read_unknown(bytes, t)?; }
+                Err(e) => return Err(e),
             }
-            Ok(msg)
         }
+        Ok(msg)
+    }
+}
+
+impl MessageWrite for SubOpts {
+    fn get_size(&self) -> usize {
+        0
+        + self.subscribe.as_ref().map_or(0, |m| 1 + sizeof_varint(*(m) as u64))
+        + self.topic_id.as_ref().map_or(0, |m| 1 + sizeof_len((m).len()))
     }
 
-    impl MessageWrite for SubOpts {
-        fn get_size(&self) -> usize {
-            0
-                + self.subscribe.as_ref().map_or(0, |m| 1 + sizeof_varint(*(m) as u64))
-                + self.topic_id.as_ref().map_or(0, |m| 1 + sizeof_len((m).len()))
-        }
-
-        fn write_message<W: WriterBackend>(&self, w: &mut Writer<W>) -> Result<()> {
-            if let Some(ref s) = self.subscribe { w.write_with_tag(8, |w| w.write_bool(*s))?; }
-            if let Some(ref s) = self.topic_id { w.write_with_tag(18, |w| w.write_string(&**s))?; }
-            Ok(())
-        }
+    fn write_message<W: WriterBackend>(&self, w: &mut Writer<W>) -> Result<()> {
+        if let Some(ref s) = self.subscribe { w.write_with_tag(8, |w| w.write_bool(*s))?; }
+        if let Some(ref s) = self.topic_id { w.write_with_tag(18, |w| w.write_string(&**s))?; }
+        Ok(())
     }
+}
 
 }
 
@@ -128,12 +128,12 @@ impl<'a> MessageRead<'a> for Message {
 impl MessageWrite for Message {
     fn get_size(&self) -> usize {
         0
-            + self.from.as_ref().map_or(0, |m| 1 + sizeof_len((m).len()))
-            + self.data.as_ref().map_or(0, |m| 1 + sizeof_len((m).len()))
-            + self.seqno.as_ref().map_or(0, |m| 1 + sizeof_len((m).len()))
-            + 1 + sizeof_len((&self.topic).len())
-            + self.signature.as_ref().map_or(0, |m| 1 + sizeof_len((m).len()))
-            + self.key.as_ref().map_or(0, |m| 1 + sizeof_len((m).len()))
+        + self.from.as_ref().map_or(0, |m| 1 + sizeof_len((m).len()))
+        + self.data.as_ref().map_or(0, |m| 1 + sizeof_len((m).len()))
+        + self.seqno.as_ref().map_or(0, |m| 1 + sizeof_len((m).len()))
+        + 1 + sizeof_len((&self.topic).len())
+        + self.signature.as_ref().map_or(0, |m| 1 + sizeof_len((m).len()))
+        + self.key.as_ref().map_or(0, |m| 1 + sizeof_len((m).len()))
     }
 
     fn write_message<W: WriterBackend>(&self, w: &mut Writer<W>) -> Result<()> {
@@ -178,11 +178,11 @@ impl<'a> MessageRead<'a> for ControlMessage {
 impl MessageWrite for ControlMessage {
     fn get_size(&self) -> usize {
         0
-            + self.ihave.iter().map(|s| 1 + sizeof_len((s).get_size())).sum::<usize>()
-            + self.iwant.iter().map(|s| 1 + sizeof_len((s).get_size())).sum::<usize>()
-            + self.graft.iter().map(|s| 1 + sizeof_len((s).get_size())).sum::<usize>()
-            + self.prune.iter().map(|s| 1 + sizeof_len((s).get_size())).sum::<usize>()
-            + self.idontwant.iter().map(|s| 1 + sizeof_len((s).get_size())).sum::<usize>()
+        + self.ihave.iter().map(|s| 1 + sizeof_len((s).get_size())).sum::<usize>()
+        + self.iwant.iter().map(|s| 1 + sizeof_len((s).get_size())).sum::<usize>()
+        + self.graft.iter().map(|s| 1 + sizeof_len((s).get_size())).sum::<usize>()
+        + self.prune.iter().map(|s| 1 + sizeof_len((s).get_size())).sum::<usize>()
+        + self.idontwant.iter().map(|s| 1 + sizeof_len((s).get_size())).sum::<usize>()
     }
 
     fn write_message<W: WriterBackend>(&self, w: &mut Writer<W>) -> Result<()> {
@@ -220,8 +220,8 @@ impl<'a> MessageRead<'a> for ControlIHave {
 impl MessageWrite for ControlIHave {
     fn get_size(&self) -> usize {
         0
-            + self.topic_id.as_ref().map_or(0, |m| 1 + sizeof_len((m).len()))
-            + self.message_ids.iter().map(|s| 1 + sizeof_len((s).len())).sum::<usize>()
+        + self.topic_id.as_ref().map_or(0, |m| 1 + sizeof_len((m).len()))
+        + self.message_ids.iter().map(|s| 1 + sizeof_len((s).len())).sum::<usize>()
     }
 
     fn write_message<W: WriterBackend>(&self, w: &mut Writer<W>) -> Result<()> {
@@ -254,7 +254,7 @@ impl<'a> MessageRead<'a> for ControlIWant {
 impl MessageWrite for ControlIWant {
     fn get_size(&self) -> usize {
         0
-            + self.message_ids.iter().map(|s| 1 + sizeof_len((s).len())).sum::<usize>()
+        + self.message_ids.iter().map(|s| 1 + sizeof_len((s).len())).sum::<usize>()
     }
 
     fn write_message<W: WriterBackend>(&self, w: &mut Writer<W>) -> Result<()> {
@@ -286,7 +286,7 @@ impl<'a> MessageRead<'a> for ControlGraft {
 impl MessageWrite for ControlGraft {
     fn get_size(&self) -> usize {
         0
-            + self.topic_id.as_ref().map_or(0, |m| 1 + sizeof_len((m).len()))
+        + self.topic_id.as_ref().map_or(0, |m| 1 + sizeof_len((m).len()))
     }
 
     fn write_message<W: WriterBackend>(&self, w: &mut Writer<W>) -> Result<()> {
@@ -322,9 +322,9 @@ impl<'a> MessageRead<'a> for ControlPrune {
 impl MessageWrite for ControlPrune {
     fn get_size(&self) -> usize {
         0
-            + self.topic_id.as_ref().map_or(0, |m| 1 + sizeof_len((m).len()))
-            + self.peers.iter().map(|s| 1 + sizeof_len((s).get_size())).sum::<usize>()
-            + self.backoff.as_ref().map_or(0, |m| 1 + sizeof_varint(*(m) as u64))
+        + self.topic_id.as_ref().map_or(0, |m| 1 + sizeof_len((m).len()))
+        + self.peers.iter().map(|s| 1 + sizeof_len((s).get_size())).sum::<usize>()
+        + self.backoff.as_ref().map_or(0, |m| 1 + sizeof_varint(*(m) as u64))
     }
 
     fn write_message<W: WriterBackend>(&self, w: &mut Writer<W>) -> Result<()> {
@@ -358,7 +358,7 @@ impl<'a> MessageRead<'a> for ControlIDontWant {
 impl MessageWrite for ControlIDontWant {
     fn get_size(&self) -> usize {
         0
-            + self.message_ids.iter().map(|s| 1 + sizeof_len((s).len())).sum::<usize>()
+        + self.message_ids.iter().map(|s| 1 + sizeof_len((s).len())).sum::<usize>()
     }
 
     fn write_message<W: WriterBackend>(&self, w: &mut Writer<W>) -> Result<()> {
@@ -392,8 +392,8 @@ impl<'a> MessageRead<'a> for PeerInfo {
 impl MessageWrite for PeerInfo {
     fn get_size(&self) -> usize {
         0
-            + self.peer_id.as_ref().map_or(0, |m| 1 + sizeof_len((m).len()))
-            + self.signed_peer_record.as_ref().map_or(0, |m| 1 + sizeof_len((m).len()))
+        + self.peer_id.as_ref().map_or(0, |m| 1 + sizeof_len((m).len()))
+        + self.signed_peer_record.as_ref().map_or(0, |m| 1 + sizeof_len((m).len()))
     }
 
     fn write_message<W: WriterBackend>(&self, w: &mut Writer<W>) -> Result<()> {
@@ -430,9 +430,9 @@ impl<'a> MessageRead<'a> for TopicDescriptor {
 impl MessageWrite for TopicDescriptor {
     fn get_size(&self) -> usize {
         0
-            + self.name.as_ref().map_or(0, |m| 1 + sizeof_len((m).len()))
-            + self.auth.as_ref().map_or(0, |m| 1 + sizeof_len((m).get_size()))
-            + self.enc.as_ref().map_or(0, |m| 1 + sizeof_len((m).get_size()))
+        + self.name.as_ref().map_or(0, |m| 1 + sizeof_len((m).len()))
+        + self.auth.as_ref().map_or(0, |m| 1 + sizeof_len((m).get_size()))
+        + self.enc.as_ref().map_or(0, |m| 1 + sizeof_len((m).get_size()))
     }
 
     fn write_message<W: WriterBackend>(&self, w: &mut Writer<W>) -> Result<()> {
@@ -445,159 +445,159 @@ impl MessageWrite for TopicDescriptor {
 
 pub mod mod_TopicDescriptor {
 
-    use super::*;
+use super::*;
 
-    #[allow(clippy::derive_partial_eq_without_eq)]
-    #[derive(Debug, Default, PartialEq, Clone)]
-    pub struct AuthOpts {
-        pub mode: Option<gossipsub::pb::mod_TopicDescriptor::mod_AuthOpts::AuthMode>,
-        pub keys: Vec<Vec<u8>>,
-    }
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Debug, Default, PartialEq, Clone)]
+pub struct AuthOpts {
+    pub mode: Option<gossipsub::pb::mod_TopicDescriptor::mod_AuthOpts::AuthMode>,
+    pub keys: Vec<Vec<u8>>,
+}
 
-    impl<'a> MessageRead<'a> for AuthOpts {
-        fn from_reader(r: &mut BytesReader, bytes: &'a [u8]) -> Result<Self> {
-            let mut msg = Self::default();
-            while !r.is_eof() {
-                match r.next_tag(bytes) {
-                    Ok(8) => msg.mode = Some(r.read_enum(bytes)?),
-                    Ok(18) => msg.keys.push(r.read_bytes(bytes)?.to_owned()),
-                    Ok(t) => { r.read_unknown(bytes, t)?; }
-                    Err(e) => return Err(e),
-                }
-            }
-            Ok(msg)
-        }
-    }
-
-    impl MessageWrite for AuthOpts {
-        fn get_size(&self) -> usize {
-            0
-                + self.mode.as_ref().map_or(0, |m| 1 + sizeof_varint(*(m) as u64))
-                + self.keys.iter().map(|s| 1 + sizeof_len((s).len())).sum::<usize>()
-        }
-
-        fn write_message<W: WriterBackend>(&self, w: &mut Writer<W>) -> Result<()> {
-            if let Some(ref s) = self.mode { w.write_with_tag(8, |w| w.write_enum(*s as i32))?; }
-            for s in &self.keys { w.write_with_tag(18, |w| w.write_bytes(&**s))?; }
-            Ok(())
-        }
-    }
-
-    pub mod mod_AuthOpts {
-
-
-        #[derive(Debug, PartialEq, Eq, Clone, Copy)]
-        pub enum AuthMode {
-            NONE = 0,
-            KEY = 1,
-            WOT = 2,
-        }
-
-        impl Default for AuthMode {
-            fn default() -> Self {
-                AuthMode::NONE
+impl<'a> MessageRead<'a> for AuthOpts {
+    fn from_reader(r: &mut BytesReader, bytes: &'a [u8]) -> Result<Self> {
+        let mut msg = Self::default();
+        while !r.is_eof() {
+            match r.next_tag(bytes) {
+                Ok(8) => msg.mode = Some(r.read_enum(bytes)?),
+                Ok(18) => msg.keys.push(r.read_bytes(bytes)?.to_owned()),
+                Ok(t) => { r.read_unknown(bytes, t)?; }
+                Err(e) => return Err(e),
             }
         }
+        Ok(msg)
+    }
+}
 
-        impl From<i32> for AuthMode {
-            fn from(i: i32) -> Self {
-                match i {
-                    0 => AuthMode::NONE,
-                    1 => AuthMode::KEY,
-                    2 => AuthMode::WOT,
-                    _ => Self::default(),
-                }
-            }
-        }
-
-        impl<'a> From<&'a str> for AuthMode {
-            fn from(s: &'a str) -> Self {
-                match s {
-                    "NONE" => AuthMode::NONE,
-                    "KEY" => AuthMode::KEY,
-                    "WOT" => AuthMode::WOT,
-                    _ => Self::default(),
-                }
-            }
-        }
-
+impl MessageWrite for AuthOpts {
+    fn get_size(&self) -> usize {
+        0
+        + self.mode.as_ref().map_or(0, |m| 1 + sizeof_varint(*(m) as u64))
+        + self.keys.iter().map(|s| 1 + sizeof_len((s).len())).sum::<usize>()
     }
 
-    #[allow(clippy::derive_partial_eq_without_eq)]
-    #[derive(Debug, Default, PartialEq, Clone)]
-    pub struct EncOpts {
-        pub mode: Option<gossipsub::pb::mod_TopicDescriptor::mod_EncOpts::EncMode>,
-        pub key_hashes: Vec<Vec<u8>>,
+    fn write_message<W: WriterBackend>(&self, w: &mut Writer<W>) -> Result<()> {
+        if let Some(ref s) = self.mode { w.write_with_tag(8, |w| w.write_enum(*s as i32))?; }
+        for s in &self.keys { w.write_with_tag(18, |w| w.write_bytes(&**s))?; }
+        Ok(())
     }
+}
 
-    impl<'a> MessageRead<'a> for EncOpts {
-        fn from_reader(r: &mut BytesReader, bytes: &'a [u8]) -> Result<Self> {
-            let mut msg = Self::default();
-            while !r.is_eof() {
-                match r.next_tag(bytes) {
-                    Ok(8) => msg.mode = Some(r.read_enum(bytes)?),
-                    Ok(18) => msg.key_hashes.push(r.read_bytes(bytes)?.to_owned()),
-                    Ok(t) => { r.read_unknown(bytes, t)?; }
-                    Err(e) => return Err(e),
-                }
-            }
-            Ok(msg)
-        }
+pub mod mod_AuthOpts {
+
+
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
+pub enum AuthMode {
+    NONE = 0,
+    KEY = 1,
+    WOT = 2,
+}
+
+impl Default for AuthMode {
+    fn default() -> Self {
+        AuthMode::NONE
     }
+}
 
-    impl MessageWrite for EncOpts {
-        fn get_size(&self) -> usize {
-            0
-                + self.mode.as_ref().map_or(0, |m| 1 + sizeof_varint(*(m) as u64))
-                + self.key_hashes.iter().map(|s| 1 + sizeof_len((s).len())).sum::<usize>()
-        }
-
-        fn write_message<W: WriterBackend>(&self, w: &mut Writer<W>) -> Result<()> {
-            if let Some(ref s) = self.mode { w.write_with_tag(8, |w| w.write_enum(*s as i32))?; }
-            for s in &self.key_hashes { w.write_with_tag(18, |w| w.write_bytes(&**s))?; }
-            Ok(())
+impl From<i32> for AuthMode {
+    fn from(i: i32) -> Self {
+        match i {
+            0 => AuthMode::NONE,
+            1 => AuthMode::KEY,
+            2 => AuthMode::WOT,
+            _ => Self::default(),
         }
     }
+}
 
-    pub mod mod_EncOpts {
-
-
-        #[derive(Debug, PartialEq, Eq, Clone, Copy)]
-        pub enum EncMode {
-            NONE = 0,
-            SHAREDKEY = 1,
-            WOT = 2,
+impl<'a> From<&'a str> for AuthMode {
+    fn from(s: &'a str) -> Self {
+        match s {
+            "NONE" => AuthMode::NONE,
+            "KEY" => AuthMode::KEY,
+            "WOT" => AuthMode::WOT,
+            _ => Self::default(),
         }
-
-        impl Default for EncMode {
-            fn default() -> Self {
-                EncMode::NONE
-            }
-        }
-
-        impl From<i32> for EncMode {
-            fn from(i: i32) -> Self {
-                match i {
-                    0 => EncMode::NONE,
-                    1 => EncMode::SHAREDKEY,
-                    2 => EncMode::WOT,
-                    _ => Self::default(),
-                }
-            }
-        }
-
-        impl<'a> From<&'a str> for EncMode {
-            fn from(s: &'a str) -> Self {
-                match s {
-                    "NONE" => EncMode::NONE,
-                    "SHAREDKEY" => EncMode::SHAREDKEY,
-                    "WOT" => EncMode::WOT,
-                    _ => Self::default(),
-                }
-            }
-        }
-
     }
+}
+
+}
+
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Debug, Default, PartialEq, Clone)]
+pub struct EncOpts {
+    pub mode: Option<gossipsub::pb::mod_TopicDescriptor::mod_EncOpts::EncMode>,
+    pub key_hashes: Vec<Vec<u8>>,
+}
+
+impl<'a> MessageRead<'a> for EncOpts {
+    fn from_reader(r: &mut BytesReader, bytes: &'a [u8]) -> Result<Self> {
+        let mut msg = Self::default();
+        while !r.is_eof() {
+            match r.next_tag(bytes) {
+                Ok(8) => msg.mode = Some(r.read_enum(bytes)?),
+                Ok(18) => msg.key_hashes.push(r.read_bytes(bytes)?.to_owned()),
+                Ok(t) => { r.read_unknown(bytes, t)?; }
+                Err(e) => return Err(e),
+            }
+        }
+        Ok(msg)
+    }
+}
+
+impl MessageWrite for EncOpts {
+    fn get_size(&self) -> usize {
+        0
+        + self.mode.as_ref().map_or(0, |m| 1 + sizeof_varint(*(m) as u64))
+        + self.key_hashes.iter().map(|s| 1 + sizeof_len((s).len())).sum::<usize>()
+    }
+
+    fn write_message<W: WriterBackend>(&self, w: &mut Writer<W>) -> Result<()> {
+        if let Some(ref s) = self.mode { w.write_with_tag(8, |w| w.write_enum(*s as i32))?; }
+        for s in &self.key_hashes { w.write_with_tag(18, |w| w.write_bytes(&**s))?; }
+        Ok(())
+    }
+}
+
+pub mod mod_EncOpts {
+
+
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
+pub enum EncMode {
+    NONE = 0,
+    SHAREDKEY = 1,
+    WOT = 2,
+}
+
+impl Default for EncMode {
+    fn default() -> Self {
+        EncMode::NONE
+    }
+}
+
+impl From<i32> for EncMode {
+    fn from(i: i32) -> Self {
+        match i {
+            0 => EncMode::NONE,
+            1 => EncMode::SHAREDKEY,
+            2 => EncMode::WOT,
+            _ => Self::default(),
+        }
+    }
+}
+
+impl<'a> From<&'a str> for EncMode {
+    fn from(s: &'a str) -> Self {
+        match s {
+            "NONE" => EncMode::NONE,
+            "SHAREDKEY" => EncMode::SHAREDKEY,
+            "WOT" => EncMode::WOT,
+            _ => Self::default(),
+        }
+    }
+}
+
+}
 
 }
 
