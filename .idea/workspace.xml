@@ -8,62 +8,10 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="66d25d96-f37c-4661-a5fe-f53cd79098ea" name="Changes" comment="">
-      <change beforePath="$PROJECT_DIR$/.github/ISSUE_TEMPLATE/bug_report.yml" beforeDir="false" afterPath="$PROJECT_DIR$/.github/ISSUE_TEMPLATE/bug_report.yml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/.github/ISSUE_TEMPLATE/enhancement.yml" beforeDir="false" afterPath="$PROJECT_DIR$/.github/ISSUE_TEMPLATE/enhancement.yml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/.github/ISSUE_TEMPLATE/feature_request.yml" beforeDir="false" afterPath="$PROJECT_DIR$/.github/ISSUE_TEMPLATE/feature_request.yml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/.github/pull_request_template.md" beforeDir="false" afterPath="$PROJECT_DIR$/.github/pull_request_template.md" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/.github/workflows/ci.yml" beforeDir="false" afterPath="$PROJECT_DIR$/.github/workflows/ci.yml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/.idea/vcs.xml" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/Cargo.lock" beforeDir="false" afterPath="$PROJECT_DIR$/Cargo.lock" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/Cargo.toml" beforeDir="false" afterPath="$PROJECT_DIR$/Cargo.toml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/core/Cargo.toml" beforeDir="false" afterPath="$PROJECT_DIR$/core/Cargo.toml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/examples/autonat/Cargo.toml" beforeDir="false" afterPath="$PROJECT_DIR$/examples/autonat/Cargo.toml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/examples/autonatv2/Cargo.toml" beforeDir="false" afterPath="$PROJECT_DIR$/examples/autonatv2/Cargo.toml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/examples/chat/Cargo.toml" beforeDir="false" afterPath="$PROJECT_DIR$/examples/chat/Cargo.toml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/examples/dcutr/Cargo.toml" beforeDir="false" afterPath="$PROJECT_DIR$/examples/dcutr/Cargo.toml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/examples/distributed-key-value-store/Cargo.toml" beforeDir="false" afterPath="$PROJECT_DIR$/examples/distributed-key-value-store/Cargo.toml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/examples/file-sharing/Cargo.toml" beforeDir="false" afterPath="$PROJECT_DIR$/examples/file-sharing/Cargo.toml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/examples/identify/Cargo.toml" beforeDir="false" afterPath="$PROJECT_DIR$/examples/identify/Cargo.toml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/examples/ipfs-kad/Cargo.toml" beforeDir="false" afterPath="$PROJECT_DIR$/examples/ipfs-kad/Cargo.toml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/examples/ipfs-private/Cargo.toml" beforeDir="false" afterPath="$PROJECT_DIR$/examples/ipfs-private/Cargo.toml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/examples/ping/Cargo.toml" beforeDir="false" afterPath="$PROJECT_DIR$/examples/ping/Cargo.toml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/examples/relay-server/Cargo.toml" beforeDir="false" afterPath="$PROJECT_DIR$/examples/relay-server/Cargo.toml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/hole-punching-tests/Cargo.toml" beforeDir="false" afterPath="$PROJECT_DIR$/hole-punching-tests/Cargo.toml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/identity/Cargo.toml" beforeDir="false" afterPath="$PROJECT_DIR$/identity/Cargo.toml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/interop-tests/Cargo.toml" beforeDir="false" afterPath="$PROJECT_DIR$/interop-tests/Cargo.toml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/libp2p/Cargo.toml" beforeDir="false" afterPath="$PROJECT_DIR$/libp2p/Cargo.toml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/misc/keygen/Cargo.toml" beforeDir="false" afterPath="$PROJECT_DIR$/misc/keygen/Cargo.toml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/misc/memory-connection-limits/Cargo.toml" beforeDir="false" afterPath="$PROJECT_DIR$/misc/memory-connection-limits/Cargo.toml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/misc/multistream-select/Cargo.toml" beforeDir="false" afterPath="$PROJECT_DIR$/misc/multistream-select/Cargo.toml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/misc/server/Cargo.toml" beforeDir="false" afterPath="$PROJECT_DIR$/misc/server/Cargo.toml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/misc/server/src/config.rs" beforeDir="false" afterPath="$PROJECT_DIR$/misc/server/src/config.rs" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/misc/webrtc-utils/Cargo.toml" beforeDir="false" afterPath="$PROJECT_DIR$/misc/webrtc-utils/Cargo.toml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/protocols/autonat/Cargo.toml" beforeDir="false" afterPath="$PROJECT_DIR$/protocols/autonat/Cargo.toml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/protocols/dcutr/Cargo.toml" beforeDir="false" afterPath="$PROJECT_DIR$/protocols/dcutr/Cargo.toml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/protocols/gossipsub/Cargo.toml" beforeDir="false" afterPath="$PROJECT_DIR$/protocols/gossipsub/Cargo.toml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/protocols/gossipsub/src/behaviour.rs" beforeDir="false" afterPath="$PROJECT_DIR$/protocols/gossipsub/src/behaviour.rs" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/protocols/gossipsub/src/behaviour/tests.rs" beforeDir="false" afterPath="$PROJECT_DIR$/protocols/gossipsub/src/behaviour/tests.rs" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/protocols/gossipsub/src/types.rs" beforeDir="false" afterPath="$PROJECT_DIR$/protocols/gossipsub/src/types.rs" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/protocols/identify/Cargo.toml" beforeDir="false" afterPath="$PROJECT_DIR$/protocols/identify/Cargo.toml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/protocols/kad/Cargo.toml" beforeDir="false" afterPath="$PROJECT_DIR$/protocols/kad/Cargo.toml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/protocols/mdns/CHANGELOG.md" beforeDir="false" afterPath="$PROJECT_DIR$/protocols/mdns/CHANGELOG.md" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/protocols/mdns/Cargo.toml" beforeDir="false" afterPath="$PROJECT_DIR$/protocols/mdns/Cargo.toml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/protocols/mdns/src/behaviour.rs" beforeDir="false" afterPath="$PROJECT_DIR$/protocols/mdns/src/behaviour.rs" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/protocols/perf/Cargo.toml" beforeDir="false" afterPath="$PROJECT_DIR$/protocols/perf/Cargo.toml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/protocols/ping/Cargo.toml" beforeDir="false" afterPath="$PROJECT_DIR$/protocols/ping/Cargo.toml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/protocols/rendezvous/Cargo.toml" beforeDir="false" afterPath="$PROJECT_DIR$/protocols/rendezvous/Cargo.toml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/protocols/request-response/Cargo.toml" beforeDir="false" afterPath="$PROJECT_DIR$/protocols/request-response/Cargo.toml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/swarm-derive/Cargo.toml" beforeDir="false" afterPath="$PROJECT_DIR$/swarm-derive/Cargo.toml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/swarm-test/Cargo.toml" beforeDir="false" afterPath="$PROJECT_DIR$/swarm-test/Cargo.toml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/swarm/Cargo.toml" beforeDir="false" afterPath="$PROJECT_DIR$/swarm/Cargo.toml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/transports/noise/Cargo.toml" beforeDir="false" afterPath="$PROJECT_DIR$/transports/noise/Cargo.toml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/transports/plaintext/Cargo.toml" beforeDir="false" afterPath="$PROJECT_DIR$/transports/plaintext/Cargo.toml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/transports/quic/Cargo.toml" beforeDir="false" afterPath="$PROJECT_DIR$/transports/quic/Cargo.toml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/transports/tcp/Cargo.toml" beforeDir="false" afterPath="$PROJECT_DIR$/transports/tcp/Cargo.toml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/transports/tls/Cargo.toml" beforeDir="false" afterPath="$PROJECT_DIR$/transports/tls/Cargo.toml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/transports/webrtc-websys/Cargo.toml" beforeDir="false" afterPath="$PROJECT_DIR$/transports/webrtc-websys/Cargo.toml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/transports/webrtc/Cargo.toml" beforeDir="false" afterPath="$PROJECT_DIR$/transports/webrtc/Cargo.toml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/transports/websocket-websys/Cargo.toml" beforeDir="false" afterPath="$PROJECT_DIR$/transports/websocket-websys/Cargo.toml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/wasm-tests/webtransport-tests/Cargo.toml" beforeDir="false" afterPath="$PROJECT_DIR$/wasm-tests/webtransport-tests/Cargo.toml" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -85,25 +33,26 @@
     <option name="hideEmptyMiddlePackages" value="true" />
     <option name="showLibraryContents" value="true" />
   </component>
-  <component name="PropertiesComponent"><![CDATA[{
-  "keyToString": {
-    "Cargo.Test behaviour::tests::test_slow_peer_returns_failed_ihave_handling.executor": "Run",
-    "Cargo.Test rust-libp2p.executor": "Run",
-    "RunOnceActivity.ShowReadmeOnStart": "true",
-    "RunOnceActivity.rust.reset.selective.auto.import": "true",
-    "git-widget-placeholder": "Merging implement-gossipsub-1.2-beta",
-    "last_opened_file_path": "/Users/manasnagaraj/projects/oss/rust-libp2p",
-    "node.js.detected.package.eslint": "true",
-    "node.js.detected.package.tslint": "true",
-    "node.js.selected.package.eslint": "(autodetect)",
-    "node.js.selected.package.tslint": "(autodetect)",
-    "nodejs_package_manager_path": "npm",
-    "org.rust.cargo.project.model.PROJECT_DISCOVERY": "true",
-    "org.rust.cargo.project.model.impl.CargoExternalSystemProjectAware.subscribe.first.balloon": "",
-    "org.rust.first.attach.projects": "true",
-    "vue.rearranger.settings.migration": "true"
+  <component name="PropertiesComponent">{
+  &quot;keyToString&quot;: {
+    &quot;Cargo.Test behaviour::tests::doesnt_forward_idontwant.executor&quot;: &quot;Run&quot;,
+    &quot;Cargo.Test behaviour::tests::test_slow_peer_returns_failed_ihave_handling.executor&quot;: &quot;Run&quot;,
+    &quot;Cargo.Test rust-libp2p.executor&quot;: &quot;Run&quot;,
+    &quot;RunOnceActivity.ShowReadmeOnStart&quot;: &quot;true&quot;,
+    &quot;RunOnceActivity.rust.reset.selective.auto.import&quot;: &quot;true&quot;,
+    &quot;git-widget-placeholder&quot;: &quot;Merging implement-gossipsub-1.2-beta&quot;,
+    &quot;last_opened_file_path&quot;: &quot;/Users/manasnagaraj/projects/oss/rust-libp2p&quot;,
+    &quot;node.js.detected.package.eslint&quot;: &quot;true&quot;,
+    &quot;node.js.detected.package.tslint&quot;: &quot;true&quot;,
+    &quot;node.js.selected.package.eslint&quot;: &quot;(autodetect)&quot;,
+    &quot;node.js.selected.package.tslint&quot;: &quot;(autodetect)&quot;,
+    &quot;nodejs_package_manager_path&quot;: &quot;npm&quot;,
+    &quot;org.rust.cargo.project.model.PROJECT_DISCOVERY&quot;: &quot;true&quot;,
+    &quot;org.rust.cargo.project.model.impl.CargoExternalSystemProjectAware.subscribe.first.balloon&quot;: &quot;&quot;,
+    &quot;org.rust.first.attach.projects&quot;: &quot;true&quot;,
+    &quot;vue.rearranger.settings.migration&quot;: &quot;true&quot;
   }
-}]]></component>
+}</component>
   <component name="RunManager" selected="Cargo.Test rust-libp2p">
     <configuration name="Run autonat_client" type="CargoCommandRunConfiguration" factoryName="Cargo Command">
       <option name="command" value="run --package autonat-example --bin autonat_client" />
@@ -463,6 +412,24 @@
         <option name="CARGO.BUILD_TASK_PROVIDER" enabled="true" />
       </method>
     </configuration>
+    <configuration name="Test behaviour::tests::doesnt_forward_idontwant" type="CargoCommandRunConfiguration" factoryName="Cargo Command" temporary="true">
+      <option name="buildProfileId" value="test" />
+      <option name="command" value="test --package libp2p-gossipsub --lib behaviour::tests::doesnt_forward_idontwant -- --exact" />
+      <option name="workingDirectory" value="file://$PROJECT_DIR$" />
+      <envs />
+      <option name="emulateTerminal" value="true" />
+      <option name="channel" value="DEFAULT" />
+      <option name="requiredFeatures" value="true" />
+      <option name="allFeatures" value="false" />
+      <option name="withSudo" value="false" />
+      <option name="buildTarget" value="REMOTE" />
+      <option name="backtrace" value="SHORT" />
+      <option name="isRedirectInput" value="false" />
+      <option name="redirectInputPath" value="" />
+      <method v="2">
+        <option name="CARGO.BUILD_TASK_PROVIDER" enabled="true" />
+      </method>
+    </configuration>
     <configuration name="Test behaviour::tests::test_slow_peer_returns_failed_ihave_handling" type="CargoCommandRunConfiguration" factoryName="Cargo Command" temporary="true">
       <option name="buildProfileId" value="test" />
       <option name="command" value="test --package libp2p-gossipsub --lib behaviour::tests::test_slow_peer_returns_failed_ihave_handling -- --exact" />
@@ -501,6 +468,7 @@
     </configuration>
     <recent_temporary>
       <list>
+        <item itemvalue="Cargo.Test behaviour::tests::doesnt_forward_idontwant" />
         <item itemvalue="Cargo.Test behaviour::tests::test_slow_peer_returns_failed_ihave_handling" />
       </list>
     </recent_temporary>
@@ -525,7 +493,7 @@
       <workItem from="1734616486261" duration="7792000" />
       <workItem from="1734655181853" duration="5777000" />
       <workItem from="1734837793088" duration="8002000" />
-      <workItem from="1735150636548" duration="737000" />
+      <workItem from="1735150636548" duration="7098000" />
     </task>
     <servers />
   </component>
