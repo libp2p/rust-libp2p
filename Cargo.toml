@@ -30,6 +30,7 @@ members = [
     "misc/quickcheck-ext",
     "misc/rw-stream-sink",
     "misc/server",
+    "misc/test-utils",
     "misc/webrtc-utils",
     "muxers/mplex",
     "muxers/test-harness",
@@ -113,6 +114,7 @@ libp2p-websocket = { version = "0.44.1", path = "transports/websocket" }
 libp2p-websocket-websys = { version = "0.4.1", path = "transports/websocket-websys" }
 libp2p-webtransport-websys = { version = "0.4.1", path = "transports/webtransport-websys" }
 libp2p-yamux = { version = "0.46.0", path = "muxers/yamux" }
+libp2p-test-utils = { version = "0.1.0", path = "misc/test-utils" }
 
 # External dependencies
 async-std-resolver = { version = "0.25.0-alpha.4", default-features = false }
@@ -135,8 +137,8 @@ ring = "0.17.8"
 rw-stream-sink = { version = "0.4.0", path = "misc/rw-stream-sink" }
 thiserror = "2"
 tokio = { version = "1.38", default-features = false }
-tracing = "0.1.37"
-tracing-subscriber = "0.3"
+tracing = "0.1.41"
+tracing-subscriber = "0.3.19"
 unsigned-varint = { version = "0.8.0" }
 web-time = "1.1.0"
 

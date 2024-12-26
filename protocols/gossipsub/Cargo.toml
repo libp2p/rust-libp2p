@@ -44,7 +44,7 @@ prometheus-client = { workspace = true }
 libp2p-core = { workspace = true }
 libp2p-swarm-test = { path = "../../swarm-test" }
 quickcheck = { workspace = true }
-tracing-subscriber = { workspace = true, features = ["env-filter"] }
+libp2p-test-utils = { workspace = true }
 tokio = { workspace = true, features = ["rt", "rt-multi-thread", "time", "macros"] }
 
 # Passing arguments to the docsrs builder in order to properly document cfg's.
