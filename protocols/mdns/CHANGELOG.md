@@ -1,5 +1,7 @@
 ## 0.46.1
 
+- Emit `ToSwarm::NewExternalAddrOfPeer` on discovery.
+  See [PR 5753](https://github.com/libp2p/rust-libp2p/pull/5753)
 - Upgrade `hickory-proto`.
   See [PR 5727](https://github.com/libp2p/rust-libp2p/pull/5727)
 
