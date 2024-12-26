@@ -101,7 +101,7 @@ where
                 i < self.outbound,
                 i < self.explicit,
                 Multiaddr::empty(),
-                self.peer_kind.clone().or(Some(PeerKind::Gossipsubv1_1)),
+                self.peer_kind.or(Some(PeerKind::Gossipsubv1_1)),
             );
             peers.push(peer);
             receivers.insert(peer, receiver);
@@ -237,7 +237,7 @@ where
     gs.connected_peers.insert(
         peer,
         PeerConnections {
-            kind: kind.clone().unwrap_or(PeerKind::Floodsub),
+            kind: kind.unwrap_or(PeerKind::Floodsub),
             connections: vec![connection_id],
             topics: Default::default(),
             sender,

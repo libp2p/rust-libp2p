@@ -2692,7 +2692,7 @@ where
         // forward the message to peers
         for peer_id in recipient_peers.iter() {
             if let Some(peer) = self.connected_peers.get_mut(peer_id) {
-                if peer.dont_send.get(msg_id).is_some() {
+                if peer.dont_send.contains_key(msg_id) {
                     tracing::debug!(%peer_id, message=%msg_id, "Peer doesn't want message");
                     continue;
                 }
@@ -3002,7 +3002,7 @@ where
 
             // If metrics are enabled, register the disconnection of a peer based on its protocol.
             if let Some(metrics) = self.metrics.as_mut() {
-                metrics.peer_protocol_disconnected(connected_peer.kind.clone());
+                metrics.peer_protocol_disconnected(connected_peer.kind);
             }
 
             self.connected_peers.remove(&peer_id);
@@ -3131,7 +3131,7 @@ where
                 // We have identified the protocol this peer is using
 
                 if let Some(metrics) = self.metrics.as_mut() {
-                    metrics.peer_protocol_connected(kind.clone());
+                    metrics.peer_protocol_connected(kind);
                 }
 
                 if let PeerKind::NotSupported = kind {
