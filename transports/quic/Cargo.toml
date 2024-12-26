@@ -43,7 +43,7 @@ libp2p-tcp = { workspace = true, features = ["async-io"] }
 libp2p-yamux = { workspace = true }
 quickcheck = "1"
 tokio = { workspace = true, features = ["macros", "rt-multi-thread", "time"] }
-tracing-subscriber = { workspace = true, features = ["env-filter"] }
+libp2p-test-utils = { workspace = true }
 
 [[test]]
 name = "stream_compliance"
