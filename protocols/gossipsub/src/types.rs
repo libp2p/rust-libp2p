@@ -24,7 +24,6 @@ use std::{collections::BTreeSet, fmt, fmt::Debug};
 use futures_timer::Delay;
 use libp2p_identity::PeerId;
 use libp2p_swarm::ConnectionId;
-use prometheus_client::encoding::EncodeLabelValue;
 use quick_protobuf::MessageWrite;
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
@@ -112,7 +111,11 @@ pub(crate) struct PeerConnections {
 }
 
 /// Describes the types of peers that can exist in the gossipsub context.
-#[derive(Debug, Clone, PartialEq, Hash, EncodeLabelValue, Eq)]
+#[derive(Debug, Clone, PartialEq, Hash, Eq)]
+#[cfg_attr(
+    feature = "metrics",
+    derive(prometheus_client::encoding::EncodeLabelValue)
+)]
 pub enum PeerKind {
     /// A gossipsub 1.1 peer.
     Gossipsubv1_1,
