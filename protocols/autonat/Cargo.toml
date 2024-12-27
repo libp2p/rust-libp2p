@@ -37,7 +37,7 @@ thiserror = { workspace = true, optional = true }
 [dev-dependencies]
 tokio = { workspace = true, features = ["macros", "rt", "sync"] }
 libp2p-swarm-test = { path = "../../swarm-test" }
-tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+libp2p-test-utils = { workspace = true }
 libp2p-identify = { workspace = true }
 libp2p-swarm = { workspace = true, features = ["macros"] }
 
