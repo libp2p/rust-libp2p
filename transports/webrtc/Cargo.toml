@@ -23,12 +23,13 @@ libp2p-webrtc-utils = { workspace = true }
 multihash = { workspace = true }
 rand = "0.8"
 rcgen = { workspace = true }
-stun = "0.6"
+stun = "0.7"
 thiserror = { workspace = true }
 tokio = { workspace = true, features = ["net"], optional = true }
 tokio-util = { version = "0.7", features = ["compat"], optional = true }
 tracing = { workspace = true }
 webrtc = { version = "0.9.0", optional = true }
+webrtc-ice = "=0.10.0" # smoke tests only work with this version
 
 [features]
 tokio = ["dep:tokio", "dep:tokio-util", "dep:webrtc", "if-watch/tokio"]
