@@ -5585,7 +5585,6 @@ fn test_slow_peer_returns_failed_ihave_handling() {
     topics.insert(topic_hash.clone());
 
     let slow_peer_id = PeerId::random();
-    // peers.push(slow_peer_id);
     gs.connected_peers.insert(
         slow_peer_id,
         PeerConnections {
