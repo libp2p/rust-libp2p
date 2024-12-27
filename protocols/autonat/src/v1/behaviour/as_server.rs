@@ -107,6 +107,7 @@ impl HandleInnerEvent for AsServer<'_> {
                         request,
                         channel,
                     },
+                ..
             } => {
                 let probe_id = self.probe_id.next();
                 if !self.connected.contains_key(&peer) {
@@ -183,6 +184,7 @@ impl HandleInnerEvent for AsServer<'_> {
                 peer,
                 error,
                 request_id,
+                ..
             } => {
                 tracing::debug!(
                     %peer,

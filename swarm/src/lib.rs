@@ -1495,7 +1495,21 @@ impl Config {
 
     /// How long to keep a connection alive once it is idling.
     ///
-    /// Defaults to 0.
+    /// Defaults to 10s.
+    ///
+    /// Typically, you shouldn't _need_ to modify this default as connections will be kept alive
+    /// whilst they are "in use" (see below). Depending on the application's usecase, it may be
+    /// desirable to keep connections alive despite them not being in use.
+    ///
+    /// A connection is considered idle if:
+    /// - There are no active inbound streams.
+    /// - There are no active outbounds streams.
+    /// - There are no pending outbound streams (i.e. all streams requested via
+    ///   [`ConnectionHandlerEvent::OutboundSubstreamRequest`] have completed).
+    /// - Every [`ConnectionHandler`] returns `false` from
+    ///   [`ConnectionHandler::connection_keep_alive`].
+    ///
+    /// Once all these conditions are true, the idle connection timeout starts ticking.
     pub fn with_idle_connection_timeout(mut self, timeout: Duration) -> Self {
         self.pool_config.idle_connection_timeout = timeout;
         self
@@ -1784,12 +1798,7 @@ mod tests {
             .boxed();
         let behaviour = CallTraceBehaviour::new(MockBehaviour::new(dummy::ConnectionHandler));
 
-        Swarm::new(
-            transport,
-            behaviour,
-            local_public_key.into(),
-            config.with_idle_connection_timeout(Duration::from_secs(5)),
-        )
+        Swarm::new(transport, behaviour, local_public_key.into(), config)
     }
 
     fn swarms_connected<TBehaviour>(
@@ -2294,9 +2303,7 @@ mod tests {
 
     #[tokio::test]
     async fn aborting_pending_connection_surfaces_error() {
-        let _ = tracing_subscriber::fmt()
-            .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
-            .try_init();
+        libp2p_test_utils::with_default_env_filter();
 
         let mut dialer = new_test_swarm(Config::with_tokio_executor());
         let mut listener = new_test_swarm(Config::with_tokio_executor());

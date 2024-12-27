@@ -12,7 +12,6 @@ categories = ["network-programming", "asynchronous"]
 
 [dependencies]
 async-trait = "0.1"
-bytes = "1"
 futures = { workspace = true }
 futures-timer = "3"
 hex = "0.4"
@@ -24,10 +23,8 @@ libp2p-webrtc-utils = { workspace = true }
 multihash = { workspace = true }
 rand = "0.8"
 rcgen = { workspace = true }
-serde = { version = "1.0", features = ["derive"] }
 stun = "0.6"
 thiserror = { workspace = true }
-tinytemplate = "1.2"
 tokio = { workspace = true, features = ["net"], optional = true }
 tokio-util = { version = "0.7", features = ["compat"], optional = true }
 tracing = { workspace = true }
@@ -41,8 +38,7 @@ pem = ["webrtc?/pem"]
 libp2p-identity = { workspace = true, features = ["rand"] }
 tokio = { workspace = true, features = ["full"] }
 quickcheck = "1.0.3"
-tracing-subscriber = { workspace = true, features = ["env-filter"] }
-
+libp2p-test-utils = { workspace = true }
 
 [[test]]
 name = "smoke"
