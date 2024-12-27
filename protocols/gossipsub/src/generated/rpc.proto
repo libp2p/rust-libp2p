@@ -19,8 +19,8 @@ message Message {
 	optional bytes data = 2;
 	optional bytes seqno = 3;
 	required string topic = 4;
-  optional bytes signature = 5;
-  optional bytes key = 6;
+	optional bytes signature = 5;
+	optional bytes key = 6;
 }
 
 message ControlMessage {
@@ -28,6 +28,7 @@ message ControlMessage {
 	repeated ControlIWant iwant = 2;
 	repeated ControlGraft graft = 3;
 	repeated ControlPrune prune = 4;
+	repeated ControlIDontWant idontwant = 5;
 }
 
 message ControlIHave {
@@ -47,6 +48,10 @@ message ControlPrune {
 	optional string topic_id = 1;
 	repeated PeerInfo peers = 2; // gossipsub v1.1 PX
 	optional uint64 backoff = 3; // gossipsub v1.1 backoff time (in seconds)
+}
+
+message ControlIDontWant {
+	repeated bytes message_ids = 1;
 }
 
 message PeerInfo {
