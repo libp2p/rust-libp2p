@@ -24,6 +24,7 @@ fnv = "1.0.7"
 futures = { workspace = true }
 futures-timer = "3.0.2"
 getrandom = { workspace = true }
+hashlink = { workspace = true}
 hex_fmt = "0.3.0"
 web-time = { workspace = true }
 libp2p-core = { workspace = true }
