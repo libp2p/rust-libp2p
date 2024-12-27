@@ -173,28 +173,7 @@ impl<T: AuthenticatedMultiplexedTransport, Provider>
             .with_relay_client(security_upgrade, multiplexer_upgrade)
     }
 }
-impl<Provider, T: AuthenticatedMultiplexedTransport>
-    SwarmBuilder<Provider, OtherTransportPhase<T>>
-{
-    #[allow(deprecated)]
-    #[deprecated(note = "Use `with_bandwidth_metrics` instead.")]
-    pub fn with_bandwidth_logging(
-        self,
-    ) -> (
-        SwarmBuilder<
-            Provider,
-            BandwidthMetricsPhase<impl AuthenticatedMultiplexedTransport, NoRelayBehaviour>,
-        >,
-        Arc<BandwidthSinks>,
-    ) {
-        #[allow(deprecated)]
-        self.without_any_other_transports()
-            .without_dns()
-            .without_websocket()
-            .without_relay()
-            .with_bandwidth_logging()
-    }
-}
+
 #[cfg(feature = "metrics")]
 impl<Provider, T: AuthenticatedMultiplexedTransport>
     SwarmBuilder<Provider, OtherTransportPhase<T>>

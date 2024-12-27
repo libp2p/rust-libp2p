@@ -13,28 +13,6 @@ pub struct BandwidthLoggingPhase<T, R> {
 impl<T: AuthenticatedMultiplexedTransport, Provider, R>
     SwarmBuilder<Provider, BandwidthLoggingPhase<T, R>>
 {
-    #[allow(deprecated)]
-    #[deprecated(note = "Use `with_bandwidth_metrics` instead.")]
-    pub fn with_bandwidth_logging(
-        self,
-    ) -> (
-        SwarmBuilder<Provider, BandwidthMetricsPhase<impl AuthenticatedMultiplexedTransport, R>>,
-        Arc<BandwidthSinks>,
-    ) {
-        let (transport, sinks) = self.phase.transport.with_bandwidth_logging();
-        (
-            SwarmBuilder {
-                phase: BandwidthMetricsPhase {
-                    relay_behaviour: self.phase.relay_behaviour,
-                    transport,
-                },
-                keypair: self.keypair,
-                phantom: PhantomData,
-            },
-            sinks,
-        )
-    }
-
     pub fn without_bandwidth_logging(self) -> SwarmBuilder<Provider, BandwidthMetricsPhase<T, R>> {
         SwarmBuilder {
             phase: BandwidthMetricsPhase {
