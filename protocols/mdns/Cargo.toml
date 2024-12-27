@@ -34,7 +34,7 @@ async-std = { version = "1.9.0", features = ["attributes"] }
 libp2p-swarm = { workspace = true, features = ["tokio", "async-std"] }
 tokio = { workspace = true, features = ["macros", "rt", "rt-multi-thread", "time"] }
 libp2p-swarm-test = { path = "../../swarm-test" }
-tracing-subscriber = { workspace = true, features = ["env-filter"] }
+libp2p-test-utils = { workspace = true }
 
 [[test]]
 name = "use-async-std"
