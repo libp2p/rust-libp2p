@@ -98,7 +98,7 @@ use crate::{connection::AsStrHashEq, StreamProtocol};
 /// Implementors of this trait should keep in mind that the connection can be closed at any time.
 /// When a connection is closed gracefully, the substreams used by the handler may still
 /// continue reading data until the remote closes its side of the connection.
-#[allow(deprecated)] // TODO: Remove when {In, Out}boundOpenInfo is fully removed.
+#[expect(deprecated)] // TODO: Remove when {In, Out}boundOpenInfo is fully removed.
 pub trait ConnectionHandler: Send + 'static {
     /// A type representing the message(s) a
     /// [`NetworkBehaviour`](crate::behaviour::NetworkBehaviour) can send to a [`ConnectionHandler`]

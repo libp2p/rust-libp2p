@@ -86,7 +86,7 @@ where
         Ok(m)
     }
 
-    #[allow(deprecated)] // TODO: Remove when {In, Out}boundOpenInfo is fully removed.
+    #[expect(deprecated)] // TODO: Remove when {In, Out}boundOpenInfo is fully removed.
     fn on_listen_upgrade_error(
         &mut self,
         ListenUpgradeError {
@@ -108,7 +108,7 @@ where
     }
 }
 
-#[allow(deprecated)] // TODO: Remove when {In, Out}boundOpenInfo is fully removed.
+#[expect(deprecated)] // TODO: Remove when {In, Out}boundOpenInfo is fully removed.
 impl<K, H> ConnectionHandler for MultiHandler<K, H>
 where
     K: Clone + Debug + Hash + Eq + Send + 'static,
