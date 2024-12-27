@@ -173,7 +173,6 @@ impl<T: AuthenticatedMultiplexedTransport, Provider>
             .with_relay_client(security_upgrade, multiplexer_upgrade)
     }
 }
-
 #[cfg(feature = "metrics")]
 impl<Provider, T: AuthenticatedMultiplexedTransport>
     SwarmBuilder<Provider, OtherTransportPhase<T>>
