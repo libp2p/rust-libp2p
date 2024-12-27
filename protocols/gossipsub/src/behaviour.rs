@@ -1664,7 +1664,8 @@ where
                 );
                 self.handle_invalid_message(
                     propagation_source,
-                    raw_message,
+                    &raw_message.topic,
+                    Some(msg_id),
                     RejectReason::BlackListedSource,
                 );
                 return false;
@@ -1693,7 +1694,12 @@ where
                 source=%propagation_source,
                 "Dropping message claiming to be from self but forwarded from source"
             );
-            self.handle_invalid_message(propagation_source, raw_message, RejectReason::SelfOrigin);
+            self.handle_invalid_message(
+                propagation_source,
+                &raw_message.topic,
+                Some(msg_id),
+                RejectReason::SelfOrigin,
+            );
             return false;
         }
 
@@ -1721,7 +1727,8 @@ where
                 // Reject the message and return
                 self.handle_invalid_message(
                     propagation_source,
-                    &raw_message,
+                    &raw_message.topic,
+                    None,
                     RejectReason::ValidationError(ValidationError::TransformFailed),
                 );
                 return;
@@ -1799,30 +1806,24 @@ where
     fn handle_invalid_message(
         &mut self,
         propagation_source: &PeerId,
-        raw_message: &RawMessage,
+        topic_hash: &TopicHash,
+        message_id: Option<&MessageId>,
         reject_reason: RejectReason,
     ) {
         if let Some((peer_score, .., gossip_promises)) = &mut self.peer_score {
             if let Some(metrics) = self.metrics.as_mut() {
-                metrics.register_invalid_message(&raw_message.topic);
+                metrics.register_invalid_message(topic_hash);
             }
 
-            if let Ok(message) = self.data_transform.inbound_transform(raw_message.clone()) {
-                let message_id = self.config.message_id(&message);
+            if let Some(msg_id) = message_id {
+                peer_score.reject_message(propagation_source, msg_id, topic_hash, reject_reason);
 
-                peer_score.reject_message(
-                    propagation_source,
-                    &message_id,
-                    &message.topic,
-                    reject_reason,
-                );
-
-                gossip_promises.reject_message(&message_id, &reject_reason);
+                gossip_promises.reject_message(msg_id, &reject_reason);
             } else {
                 // The message is invalid, we reject it ignoring any gossip promises. If a peer is
                 // advertising this message via an IHAVE and it's invalid it will be double
                 // penalized, one for sending us an invalid and again for breaking a promise.
-                peer_score.reject_invalid_message(propagation_source, &raw_message.topic);
+                peer_score.reject_invalid_message(propagation_source, topic_hash);
             }
         }
     }
@@ -3126,7 +3127,8 @@ where
                     for (raw_message, validation_error) in invalid_messages {
                         self.handle_invalid_message(
                             &propagation_source,
-                            &raw_message,
+                            &raw_message.topic,
+                            None,
                             RejectReason::ValidationError(validation_error),
                         )
                     }
