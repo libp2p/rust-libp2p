@@ -1739,9 +1739,6 @@ where
         // Calculate the message id on the transformed data.
         let msg_id = self.config.message_id(&message);
 
-        // Broadcast IDONTWANT messages.
-        self.send_idontwant(&raw_message, &msg_id, propagation_source);
-
         // Check the validity of the message
         // Peers get penalized if this message is invalid. We don't add it to the duplicate cache
         // and instead continually penalize peers that repeatedly send this message.
@@ -1757,6 +1754,12 @@ where
             self.mcache.observe_duplicate(&msg_id, propagation_source);
             return;
         }
+
+        // Broadcast IDONTWANT messages
+        if raw_message.raw_protobuf_len() > self.config.idontwant_message_size_threshold() {
+            self.send_idontwant(&raw_message, &msg_id, propagation_source);
+        }
+
         tracing::debug!(
             message=%msg_id,
             "Put message in duplicate_cache and resolve promises"
