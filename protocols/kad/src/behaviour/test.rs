@@ -323,9 +323,7 @@ fn query_iter() {
 
 #[test]
 fn unresponsive_not_returned_direct() {
-    let _ = tracing_subscriber::fmt()
-        .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
-        .try_init();
+    libp2p_test_utils::with_default_env_filter();
     // Build one node. It contains fake addresses to non-existing nodes. We ask it to find a
     // random peer. We make sure that no fake address is returned.
 
@@ -1381,7 +1379,7 @@ fn network_behaviour_on_address_change() {
         port_use: PortUse::Reuse,
     };
 
-    // Mimick a connection being established.
+    // Mimic a connection being established.
     kademlia.on_swarm_event(FromSwarm::ConnectionEstablished(ConnectionEstablished {
         peer_id: remote_peer_id,
         connection_id,
@@ -1403,7 +1401,7 @@ fn network_behaviour_on_address_change() {
         .unwrap()
         .is_empty());
 
-    // Mimick the connection handler confirming the protocol for
+    // Mimic the connection handler confirming the protocol for
     // the test connection, so that the peer is added to the routing table.
     kademlia.on_connection_handler_event(
         remote_peer_id,
