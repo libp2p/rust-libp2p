@@ -5288,7 +5288,7 @@ fn sends_idontwant() {
 
     let message = RawMessage {
         source: Some(peers[1]),
-        data: vec![12u8;1024],
+        data: vec![12u8; 1024],
         sequence_number: Some(0),
         topic: topic_hashes[0].clone(),
         signature: None,
