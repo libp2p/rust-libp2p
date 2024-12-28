@@ -1,5 +1,8 @@
 ## 0.48.0
 
+- Introduce Gossipsub v1.2 [spec](https://github.com/libp2p/specs/blob/master/pubsub/gossipsub/gossipsub-v1.2.md).
+  See [PR 5697](https://github.com/libp2p/rust-libp2p/pull/5697)
+
 - Correct state inconsistencies with the mesh and fanout when unsubscribing.
   See [PR 5690](https://github.com/libp2p/rust-libp2p/pull/5690)
 

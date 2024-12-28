@@ -35,7 +35,7 @@ rand = "0.8"
 libp2p-swarm-test = { path = "../../swarm-test" }
 futures_ringbuf = "0.4.0"
 serde = { version = "1.0", features = ["derive"] }
-tracing-subscriber = { workspace = true, features = ["env-filter"] }
+libp2p-test-utils = { workspace = true }
 
 # Passing arguments to the docsrs builder in order to properly document cfg's.
 # More information: https://docs.rs/about/builds#cross-compiling

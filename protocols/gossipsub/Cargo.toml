@@ -24,6 +24,7 @@ fnv = "1.0.7"
 futures = { workspace = true }
 futures-timer = "3.0.2"
 getrandom = { workspace = true }
+hashlink = { workspace = true}
 hex_fmt = "0.3.0"
 web-time = { workspace = true }
 libp2p-core = { workspace = true }
@@ -44,7 +45,7 @@ prometheus-client = { workspace = true }
 libp2p-core = { workspace = true }
 libp2p-swarm-test = { path = "../../swarm-test" }
 quickcheck = { workspace = true }
-tracing-subscriber = { workspace = true, features = ["env-filter"] }
+libp2p-test-utils = { workspace = true }
 tokio = { workspace = true, features = ["rt", "rt-multi-thread", "time", "macros"] }
 
 # Passing arguments to the docsrs builder in order to properly document cfg's.
