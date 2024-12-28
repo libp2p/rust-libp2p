@@ -253,7 +253,9 @@ impl Listener {
         loop {
             match ready!(if_watcher.poll_if_event(cx)) {
                 Ok(IfEvent::Up(inet)) => {
-                    if let Some(listen_addr) = ip_to_listen_addr(&endpoint_addr, inet.addr(), &self.cert_hashes) {
+                    if let Some(listen_addr) =
+                        ip_to_listen_addr(&endpoint_addr, inet.addr(), &self.cert_hashes)
+                    {
                         tracing::debug!(
                             address=%listen_addr,
                             "New listen address"
@@ -265,7 +267,9 @@ impl Listener {
                     }
                 }
                 Ok(IfEvent::Down(inet)) => {
-                    if let Some(listen_addr) = ip_to_listen_addr(&endpoint_addr, inet.addr(), &self.cert_hashes) {
+                    if let Some(listen_addr) =
+                        ip_to_listen_addr(&endpoint_addr, inet.addr(), &self.cert_hashes)
+                    {
                         tracing::debug!(
                             address=%listen_addr,
                             "Expired listen address"
@@ -306,7 +310,8 @@ impl Stream for Listener {
                 Poll::Ready(incoming_session) => {
                     let endpoint = Arc::clone(&self.endpoint);
                     self.accept = async move { endpoint.accept().await }.boxed();
-                    let local_addr = socketaddr_to_multiaddr_with_hashes(&self.socket_addr(), &self.cert_hashes);
+                    let local_addr =
+                        socketaddr_to_multiaddr_with_hashes(&self.socket_addr(), &self.cert_hashes);
                     let remote_addr = incoming_session.remote_address();
                     let send_back_addr = socketaddr_to_multiaddr(&remote_addr);
                     let noise = self.noise_config();
@@ -402,7 +407,11 @@ impl From<IpAddr> for SocketFamily {
 ///
 /// Returns `None` if the `ip` is not the same socket family as the
 /// address that the endpoint is bound to.
-fn ip_to_listen_addr(endpoint_addr: &SocketAddr, ip: IpAddr, hashes: &Vec<CertHash>) -> Option<Multiaddr> {
+fn ip_to_listen_addr(
+    endpoint_addr: &SocketAddr,
+    ip: IpAddr,
+    hashes: &Vec<CertHash>,
+) -> Option<Multiaddr> {
     // True if either both addresses are Ipv4 or both Ipv6.
     if !SocketFamily::is_same(&endpoint_addr.ip(), &ip) {
         return None;
@@ -420,7 +429,10 @@ fn socketaddr_to_multiaddr(socket_addr: &SocketAddr) -> Multiaddr {
         .with(Protocol::WebTransport)
 }
 
-fn socketaddr_to_multiaddr_with_hashes(socket_addr: &SocketAddr, hashes: &Vec<CertHash>) -> Multiaddr {
+fn socketaddr_to_multiaddr_with_hashes(
+    socket_addr: &SocketAddr,
+    hashes: &Vec<CertHash>,
+) -> Multiaddr {
     let mut res = socketaddr_to_multiaddr(socket_addr);
 
     if !hashes.is_empty() {

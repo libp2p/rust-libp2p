@@ -55,7 +55,10 @@ impl Connecting {
                         // let peer_id =
                         //     Self::noise_auth(wtransport_connection.clone(), noise_config).await?;
 
-                        tracing::debug!("Accepted connection with sessionId={}", wtransport_connection.session_id());
+                        tracing::debug!(
+                            "Accepted connection with sessionId={}",
+                            wtransport_connection.session_id()
+                        );
 
                         let connection = Connection::new(wtransport_connection);
                         Ok((peer_id, connection))

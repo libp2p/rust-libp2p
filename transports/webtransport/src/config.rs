@@ -67,8 +67,5 @@ impl Config {
 }
 
 fn alpn_protocols() -> Vec<Vec<u8>> {
-    vec![
-        b"libp2p".to_vec(),
-        b"h3".to_vec(),
-    ]
+    vec![b"libp2p".to_vec(), b"h3".to_vec()]
 }

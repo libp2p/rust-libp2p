@@ -7,10 +7,10 @@ use time::OffsetDateTime;
 use wtransport::ClientConfig;
 use wtransport::Endpoint;
 
-use libp2p_core::{Multiaddr, Transport};
 use libp2p_core::multiaddr::Protocol;
 use libp2p_core::muxing::StreamMuxerBox;
 use libp2p_core::transport::{Boxed, ListenerId, TransportEvent};
+use libp2p_core::{Multiaddr, Transport};
 use libp2p_identity::{Keypair, PeerId};
 use libp2p_webtransport as webtransport;
 
@@ -30,36 +30,42 @@ async fn smoke() {
     let addr = start_listening(&mut transport, "/ip4/127.0.0.1/udp/0/quic-v1/webtransport").await;
     let socket_addr = multiaddr_to_socketaddr(&addr).unwrap();
 
-    let a =
-        async move {
-            loop {
-                match &mut transport.next().await {
-                    Some(TransportEvent::Incoming { listener_id, upgrade, .. }) => {
-                        tracing::debug!("Got incoming event. listener_id={}", listener_id);
-                        match upgrade.await {
-                            Ok((peer_id, _mutex)) => {
-                                tracing::debug!("Connection is opened. peer_id={}", peer_id);
-                                return Some(peer_id)
-                            },
-                            Err(e) => {
-                                tracing::error!("Upgrade got an error {:?}", e);
-                                return None;
-                            }
+    let a = async move {
+        loop {
+            match &mut transport.next().await {
+                Some(TransportEvent::Incoming {
+                    listener_id,
+                    upgrade,
+                    ..
+                }) => {
+                    tracing::debug!("Got incoming event. listener_id={}", listener_id);
+                    match upgrade.await {
+                        Ok((peer_id, _mutex)) => {
+                            tracing::debug!("Connection is opened. peer_id={}", peer_id);
+                            return Some(peer_id);
                         }
-                    } ,
-                    Some(e) => tracing::debug!("Got event {:?}", e),
-                    e => {
-                        tracing::error!("MY_TEST Got an error {:?}", e);
-                        return None;
+                        Err(e) => {
+                            tracing::error!("Upgrade got an error {:?}", e);
+                            return None;
+                        }
                     }
                 }
+                Some(e) => tracing::debug!("Got event {:?}", e),
+                e => {
+                    tracing::error!("MY_TEST Got an error {:?}", e);
+                    return None;
+                }
             }
-        };
+        }
+    };
 
-    let url = format!("https://{}/.well-known/libp2p-webtransport?type=noise", socket_addr);
+    let url = format!(
+        "https://{}/.well-known/libp2p-webtransport?type=noise",
+        socket_addr
+    );
     let b = async move {
         let client_key_pair = Keypair::generate_ed25519();
-        let client_tls= libp2p_tls::make_client_config(&client_key_pair, None).unwrap();
+        let client_tls = libp2p_tls::make_client_config(&client_key_pair, None).unwrap();
         let config = ClientConfig::builder()
             .with_bind_default()
             .with_custom_tls(client_tls)
@@ -68,7 +74,8 @@ async fn smoke() {
         match Endpoint::client(config)
             .unwrap()
             .connect(url.as_str())
-            .await {
+            .await
+        {
             Ok(_) => {}
             Err(_) => {}
         }
@@ -83,12 +90,8 @@ fn multiaddr_to_socketaddr(addr: &Multiaddr) -> Option<SocketAddr> {
     let proto2 = iter.next()?;
 
     match (proto1, proto2) {
-        (Protocol::Ip4(ip), Protocol::Udp(port)) => {
-            Some(SocketAddr::new(ip.into(), port))
-        }
-        (Protocol::Ip6(ip), Protocol::Udp(port)) => {
-            Some(SocketAddr::new(ip.into(), port))
-        }
+        (Protocol::Ip4(ip), Protocol::Udp(port)) => Some(SocketAddr::new(ip.into(), port)),
+        (Protocol::Ip6(ip), Protocol::Udp(port)) => Some(SocketAddr::new(ip.into(), port)),
         _ => None,
     }
 }
