@@ -72,7 +72,7 @@ impl<InnerTrans> TransportTimeout<InnerTrans> {
         }
     }
 
-    /// Wraps around a `Transport` to add timeouts to the ingoing connections.
+    /// Wraps around a `Transport` to add timeouts to the incoming connections.
     pub fn with_ingoing_timeout(trans: InnerTrans, timeout: Duration) -> Self {
         TransportTimeout {
             inner: trans,
