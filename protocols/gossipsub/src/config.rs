@@ -125,7 +125,6 @@ impl Config {
     /// Minimum number of peers in mesh network before adding more (D_lo in the spec, default is 5).
     pub fn mesh_n_low(&self) -> usize {
         self.mesh_n_low
-        idontwant_message_size_threshold: usize,
     }
 
     /// Maximum number of peers in mesh network before removing some (D_high in the spec, default
