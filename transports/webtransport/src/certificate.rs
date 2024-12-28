@@ -22,8 +22,8 @@ My suggestion would be:
 */
 #[derive(Debug, PartialEq, Eq)]
 pub struct Certificate {
-    pub cert: CertificateDer<'static>,
-    pub private_key: PrivateKeyDer<'static>,
+    pub der: CertificateDer<'static>,
+    pub private_key_der: PrivateKeyDer<'static>,
     pub not_before: OffsetDateTime,
     pub not_after: OffsetDateTime,
 }
@@ -49,8 +49,8 @@ impl From<io::Error> for Error {
 impl Clone for Certificate {
     fn clone(&self) -> Self {
         Self {
-            cert: self.cert.clone(),
-            private_key: self.private_key.clone_key(),
+            der: self.der.clone(),
+            private_key_der: self.private_key_der.clone_key(),
             not_before: self.not_before.clone(),
             not_after: self.not_after.clone(),
         }
@@ -73,8 +73,8 @@ impl Certificate {
         )?;
 
         Ok(Self {
-            cert,
-            private_key,
+            der: cert,
+            private_key_der: private_key,
             not_before,
             not_after,
         })
@@ -83,7 +83,7 @@ impl Certificate {
     pub(crate) fn cert_hash(&self) -> CertHash {
         Multihash::wrap(
             MULTIHASH_SHA256_CODE,
-            sha2::Sha256::digest(&self.cert.as_ref().as_ref()).as_ref(),
+            sha2::Sha256::digest(&self.der.as_ref().as_ref()).as_ref(),
         )
         .expect("fingerprint's len to be 32 bytes")
     }
@@ -91,8 +91,8 @@ impl Certificate {
     pub fn to_bytes(&self) -> Vec<u8> {
         let mut bytes = Vec::new();
 
-        Self::write_data(&mut bytes, self.cert.as_ref()).expect("Write cert data");
-        Self::write_data(&mut bytes, self.private_key.secret_der())
+        Self::write_data(&mut bytes, self.der.as_ref()).expect("Write cert data");
+        Self::write_data(&mut bytes, self.private_key_der.secret_der())
             .expect("Write private_key data");
 
         let nb_buff = self.not_before.unix_timestamp().to_be_bytes();
@@ -117,8 +117,8 @@ impl Certificate {
         let not_after = OffsetDateTime::from_unix_timestamp(na).unwrap();
 
         Ok(Self {
-            cert,
-            private_key,
+            der: cert,
+            private_key_der: private_key,
             not_before,
             not_after,
         })

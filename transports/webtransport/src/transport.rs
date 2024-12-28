@@ -12,7 +12,7 @@ use futures::{prelude::*, ready, stream::SelectAll};
 use if_watch::tokio::IfWatcher;
 use if_watch::IfEvent;
 use wtransport::endpoint::{endpoint_side::Server, Endpoint, IncomingSession};
-use wtransport::{config::TlsServerConfig, ServerConfig};
+use wtransport::ServerConfig;
 
 use libp2p_core::transport::{DialOpts, ListenerId, TransportError, TransportEvent};
 use libp2p_core::{multiaddr::Protocol, Multiaddr, Transport};
@@ -26,11 +26,7 @@ use crate::Connecting;
 use crate::Error;
 
 pub struct GenTransport {
-    server_tls_config: TlsServerConfig,
-    keypair: Keypair,
-    cert_hashes: Vec<CertHash>,
-    /// Timeout for the [`Connecting`] future.
-    handshake_timeout: Duration,
+    config: Config,
 
     listeners: SelectAll<Listener>,
     /// Waker to poll the transport again when a new listener is added.
@@ -39,16 +35,8 @@ pub struct GenTransport {
 
 impl GenTransport {
     pub fn new(config: Config) -> Self {
-        let handshake_timeout = config.handshake_timeout;
-        let keypair = config.keypair.clone();
-        let cert_hashes = config.cert_hashes();
-        let server_tls_config = config.server_tls_config;
-
         GenTransport {
-            server_tls_config,
-            keypair,
-            cert_hashes,
-            handshake_timeout,
+            config,
             listeners: SelectAll::new(),
             waker: None,
         }
@@ -83,17 +71,22 @@ impl Transport for GenTransport {
         addr: Multiaddr,
     ) -> Result<(), TransportError<Self::Error>> {
         let (socket_addr, _peer_id) = self.remote_multiaddr_to_socketaddr(addr, false)?;
+        let socket = create_socket(socket_addr).map_err(Self::Error::from)?;
+
+        let server_tls_config = self.config.server_tls_config();
+
         let config = ServerConfig::builder()
-            .with_bind_address(socket_addr)
-            .with_custom_tls(self.server_tls_config.clone())
+            .with_bind_socket(socket.try_clone().unwrap())
+            .with_custom_tls(server_tls_config)
+            //todo should be get from config
+            .keep_alive_interval(Some(Duration::from_secs(3)))
             .build();
 
         let endpoint =
             wtransport::Endpoint::server(config).map_err(|e| TransportError::Other(e.into()))?;
-        let keypair = &self.keypair;
-        let cert_hashes = &self.cert_hashes;
-        let handshake_timeout = self.handshake_timeout.clone();
-        let socket = create_socket(socket_addr).map_err(Self::Error::from)?;
+        let keypair = &self.config.keypair;
+        let cert_hashes = self.config.cert_hashes();
+        let handshake_timeout = self.config.handshake_timeout.clone();
 
         let listener = Listener::new(
             id,
@@ -183,7 +176,7 @@ impl Listener {
         socket: UdpSocket,
         endpoint: Endpoint<Server>,
         keypair: &Keypair,
-        cert_hashes: &Vec<CertHash>,
+        cert_hashes: Vec<CertHash>,
         handshake_timeout: Duration,
     ) -> Result<Self, Error> {
         let endpoint = Arc::new(endpoint);
@@ -215,7 +208,7 @@ impl Listener {
             pending_event,
             close_listener_waker: None,
             keypair: keypair.clone(),
-            cert_hashes: cert_hashes.clone(),
+            cert_hashes,
         })
     }
 
@@ -428,11 +421,11 @@ fn socketaddr_to_multiaddr(socket_addr: &SocketAddr) -> Multiaddr {
 }
 
 fn socketaddr_to_multiaddr_with_hashes(socket_addr: &SocketAddr, hashes: &Vec<CertHash>) -> Multiaddr {
-    let mut m_addr = socketaddr_to_multiaddr(socket_addr);
+    let mut res = socketaddr_to_multiaddr(socket_addr);
 
     if !hashes.is_empty() {
         let mut vec = hashes.clone();
-        let mut res = m_addr.with(Protocol::Certhash(
+        res = res.with(Protocol::Certhash(
             vec.pop().expect("Gets the last element"),
         ));
         if !vec.is_empty() {
@@ -440,11 +433,9 @@ fn socketaddr_to_multiaddr_with_hashes(socket_addr: &SocketAddr, hashes: &Vec<Ce
                 vec.pop().expect("Gets the last element"),
             ));
         };
-
-        res
-    } else {
-        m_addr
     }
+
+    res
 }
 
 /// Tries to turn a Webtransport multiaddress into a UDP [`SocketAddr`]. Returns None if the format

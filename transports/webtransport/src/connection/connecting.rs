@@ -36,23 +36,28 @@ impl Connecting {
 
     async fn handshake(
         incoming_session: IncomingSession,
-        noise_config: libp2p_noise::Config,
+        _noise_config: libp2p_noise::Config,
     ) -> Result<(PeerId, Connection), Error> {
         match incoming_session.await {
             Ok(session_request) => {
+                tracing::debug!("Got session request={:?}", session_request.path());
+
                 let path = session_request.path();
                 if path != WEBTRANSPORT_PATH {
                     return Err(Error::UnexpectedPath(String::from(path)));
                 }
-
                 match session_request.accept().await {
                     Ok(wtransport_connection) => {
                         // The client SHOULD start the handshake right after sending the CONNECT request,
                         // without waiting for the server's response.
-                        let peer_id =
-                            Self::noise_auth(wtransport_connection.clone(), noise_config).await?;
-                        let connection = Connection::new(wtransport_connection);
+                        let peer_id = PeerId::random();
+                        // todo a real noise auth
+                        // let peer_id =
+                        //     Self::noise_auth(wtransport_connection.clone(), noise_config).await?;
 
+                        tracing::debug!("Accepted connection with sessionId={}", wtransport_connection.session_id());
+
+                        let connection = Connection::new(wtransport_connection);
                         Ok((peer_id, connection))
                     }
                     Err(connection_error) => Err(Error::Connection(connection_error)),

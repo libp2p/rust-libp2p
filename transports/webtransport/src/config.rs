@@ -32,23 +32,15 @@ pub struct Config {
     /// info.
     pub keep_alive_interval: Duration,
 
-    pub server_tls_config: TlsServerConfig,
     /// Libp2p identity of the node.
     pub keypair: libp2p_identity::Keypair,
 
-    cert_hash: CertHash,
+    cert: Certificate,
 }
 
 impl Config {
     pub fn new(keypair: &libp2p_identity::Keypair, cert: Certificate) -> Self {
-        let server_config: rustls::ServerConfig = libp2p_tls::make_webtransport_server_config(
-            &cert.cert,
-            &cert.private_key,
-            alpn_protocols(),
-        );
-
         Self {
-            server_tls_config: server_config,
             handshake_timeout: Duration::from_secs(5),
             max_idle_timeout: 10 * 1000,
             max_concurrent_stream_limit: 256,
@@ -57,12 +49,20 @@ impl Config {
             // Ensure that one stream is not consuming the whole connection.
             max_stream_data: 10_000_000,
             keypair: keypair.clone(),
-            cert_hash: cert.cert_hash(),
+            cert,
         }
     }
 
+    pub fn server_tls_config(&self) -> TlsServerConfig {
+        libp2p_tls::make_webtransport_server_config(
+            &self.cert.der,
+            &self.cert.private_key_der,
+            alpn_protocols(),
+        )
+    }
+
     pub fn cert_hashes(&self) -> Vec<CertHash> {
-        vec![self.cert_hash.clone()]
+        vec![self.cert.cert_hash()]
     }
 }
 
@@ -70,9 +70,5 @@ fn alpn_protocols() -> Vec<Vec<u8>> {
     vec![
         b"libp2p".to_vec(),
         b"h3".to_vec(),
-        b"h3-32".to_vec(),
-        b"h3-31".to_vec(),
-        b"h3-30".to_vec(),
-        b"h3-29".to_vec(),
     ]
 }
