@@ -23,7 +23,7 @@ time = "0.3.36"
 sha2 = "0.10.8"
 socket2 = "0.5.7"
 quinn = { version = "0.11.2", default-features = false, features = ["rustls", "futures-io"] }
-wtransport = "0.5.0"
+wtransport = { version = "0.5.0", features = ["quinn"] }
 
 [dev-dependencies]
 libp2p-identity = { workspace = true, features = ["rand"] }

@@ -74,12 +74,11 @@ impl Transport for GenTransport {
         let socket = create_socket(socket_addr).map_err(Self::Error::from)?;
 
         let server_tls_config = self.config.server_tls_config();
+        let quic_transport_config = Arc::clone(&self.config.quic_transport_config);
 
         let config = ServerConfig::builder()
             .with_bind_socket(socket.try_clone().unwrap())
-            .with_custom_tls(server_tls_config)
-            //todo should be get from config
-            .keep_alive_interval(Some(Duration::from_secs(3)))
+            .with_custom_tls_and_transport(server_tls_config, quic_transport_config)
             .build();
 
         let endpoint =

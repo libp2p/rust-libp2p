@@ -1021,6 +1021,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "core-foundation"
+version = "0.10.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b55271e5c8c478ad3f38ad24ef34923091e0548492a266d19b3c0b4d82574c63"
+dependencies = [
+ "core-foundation-sys",
+ "libc",
+]
+
+[[package]]
 name = "core-foundation-sys"
 version = "0.8.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2071,6 +2081,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "httlib-huffman"
+version = "0.3.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1a9fcbcc408c5526c3ab80d534e5c86e7967c1fb7aa0a8c76abd1edc27deb877"
+
+[[package]]
 name = "http"
 version = "0.2.12"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2392,7 +2408,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cdf9d64cfcf380606e64f9a0bcf493616b65331199f984151a6fa11a7b3cde38"
 dependencies = [
  "async-io",
- "core-foundation",
+ "core-foundation 0.9.4",
  "fnv",
  "futures",
  "if-addrs",
@@ -3392,11 +3408,12 @@ dependencies = [
  "libp2p-identity",
  "libp2p-swarm",
  "libp2p-yamux",
- "rcgen",
+ "rcgen 0.11.3",
  "ring 0.17.8",
  "rustls 0.23.20",
  "rustls-webpki 0.101.7",
  "thiserror 2.0.9",
+ "time",
  "tokio",
  "x509-parser 0.16.0",
  "yasna",
@@ -3444,7 +3461,7 @@ dependencies = [
  "multihash",
  "quickcheck",
  "rand 0.8.5",
- "rcgen",
+ "rcgen 0.11.3",
  "stun 0.7.0",
  "thiserror 2.0.9",
  "tokio",
@@ -3509,7 +3526,7 @@ dependencies = [
  "libp2p-tcp",
  "parking_lot",
  "pin-project-lite",
- "rcgen",
+ "rcgen 0.11.3",
  "rw-stream-sink",
  "soketto",
  "thiserror 2.0.9",
@@ -3534,6 +3551,30 @@ dependencies = [
  "tracing",
  "wasm-bindgen",
  "web-sys",
+]
+
+[[package]]
+name = "libp2p-webtransport"
+version = "0.1.0"
+dependencies = [
+ "futures",
+ "futures-timer",
+ "if-watch",
+ "libp2p-core",
+ "libp2p-identity",
+ "libp2p-noise",
+ "libp2p-tls",
+ "quickcheck",
+ "quinn",
+ "rustls 0.23.20",
+ "sha2 0.10.8",
+ "socket2",
+ "thiserror 1.0.69",
+ "time",
+ "tokio",
+ "tracing",
+ "tracing-subscriber",
+ "wtransport",
 ]
 
 [[package]]
@@ -3888,7 +3929,7 @@ dependencies = [
  "openssl-probe",
  "openssl-sys",
  "schannel",
- "security-framework",
+ "security-framework 2.11.1",
  "security-framework-sys",
  "tempfile",
 ]
@@ -4059,6 +4100,12 @@ checksum = "62948e14d923ea95ea2c7c86c71013138b66525b86bdc08d2dcc262bdb497b87"
 dependencies = [
  "memchr",
 ]
+
+[[package]]
+name = "octets"
+version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "109983a091271ee8916076731ba5fdc9ee22fea871bc7c6ceab9bfd423eb1d99"
 
 [[package]]
 name = "oid-registry"
@@ -4844,6 +4891,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "rcgen"
+version = "0.13.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "75e669e5202259b5314d1ea5397316ad400819437857b90861765f24c4cf80a2"
+dependencies = [
+ "pem",
+ "ring 0.17.8",
+ "rustls-pki-types",
+ "time",
+ "yasna",
+]
+
+[[package]]
 name = "redis"
 version = "0.24.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5240,6 +5300,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "rustls-native-certs"
+version = "0.8.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7fcff2dd52b58a8d98a70243663a0d234c4e2b79235637849d15913394a247d3"
+dependencies = [
+ "openssl-probe",
+ "rustls-pki-types",
+ "schannel",
+ "security-framework 3.1.0",
+]
+
+[[package]]
 name = "rustls-pemfile"
 version = "2.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5382,7 +5454,20 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "897b2245f0b511c87893af39b033e5ca9cce68824c4d7e7630b5a1d339658d02"
 dependencies = [
  "bitflags 2.6.0",
- "core-foundation",
+ "core-foundation 0.9.4",
+ "core-foundation-sys",
+ "libc",
+ "security-framework-sys",
+]
+
+[[package]]
+name = "security-framework"
+version = "3.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "81d3f8c9bfcc3cbb6b0179eb57042d75b1582bdc65c3cb95f3fa999509c03cbc"
+dependencies = [
+ "bitflags 2.6.0",
+ "core-foundation 0.10.0",
  "core-foundation-sys",
  "libc",
  "security-framework-sys",
@@ -5878,7 +5963,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3c879d448e9d986b661742763247d3693ed13609438cf3d006f51f5368a5ba6b"
 dependencies = [
  "bitflags 2.6.0",
- "core-foundation",
+ "core-foundation 0.9.4",
  "system-configuration-sys",
 ]
 
@@ -6818,7 +6903,7 @@ dependencies = [
  "log",
  "pem",
  "rand 0.8.5",
- "rcgen",
+ "rcgen 0.11.3",
  "regex",
  "ring 0.16.20",
  "rtcp",
@@ -6882,7 +6967,7 @@ dependencies = [
  "pem",
  "rand 0.8.5",
  "rand_core 0.6.4",
- "rcgen",
+ "rcgen 0.11.3",
  "ring 0.16.20",
  "rustls 0.21.12",
  "sec1",
@@ -7364,6 +7449,43 @@ name = "writeable"
 version = "0.5.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1e9df38ee2d2c3c5948ea468a8406ff0db0b29ae1ffde1bcf20ef305bcc95c51"
+
+[[package]]
+name = "wtransport"
+version = "0.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "93a724f65db90b6a1ffa92ea4966cf03cb7e2bcd3ef7135b84dfe4339640d1b9"
+dependencies = [
+ "bytes",
+ "pem",
+ "quinn",
+ "rcgen 0.13.2",
+ "rustls 0.23.20",
+ "rustls-native-certs",
+ "rustls-pemfile",
+ "rustls-pki-types",
+ "sha2 0.10.8",
+ "socket2",
+ "thiserror 1.0.69",
+ "time",
+ "tokio",
+ "tracing",
+ "url",
+ "wtransport-proto",
+ "x509-parser 0.16.0",
+]
+
+[[package]]
+name = "wtransport-proto"
+version = "0.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "14e4882c24a62f15024609b3688e6e29a4c2129634d27debc849ccd3f9b9690b"
+dependencies = [
+ "httlib-huffman",
+ "octets",
+ "thiserror 1.0.69",
+ "url",
+]
 
 [[package]]
 name = "x25519-dalek"
