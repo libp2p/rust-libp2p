@@ -185,7 +185,7 @@ where
     }
 }
 
-/// An transport with peer authentication, obtained from [`Builder::authenticate`].
+/// A transport with peer authentication, obtained from [`Builder::authenticate`].
 #[derive(Clone)]
 pub struct Authenticated<T>(Builder<T>);
 
