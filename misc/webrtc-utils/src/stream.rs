@@ -254,15 +254,21 @@ where
                 Some(Closing::MessageSent) => {
                     ready!(self.io.poll_flush_unpin(cx))?;
 
-                    // Check if we've received FIN_ACK or deadline has passed
-                    if self.state.fin_ack_received()
-                        || self
-                            .fin_ack_deadline
-                            .is_some_and(|deadline| Instant::now() >= deadline)
+                    if self.state.fin_ack_received() {
+                        self.state.write_closed();
+                        let _ = self
+                            .drop_notifier
+                            .take()
+                            .expect("to not close twice")
+                            .send(GracefullyClosed {});
+                        return Poll::Ready(Ok(()));
+                    }
+
+                    if self
+                        .fin_ack_deadline
+                        .is_some_and(|deadline| Instant::now() >= deadline)
                     {
-                        if !self.state.fin_ack_received() {
-                            tracing::warn!("FIN_ACK timeout, forcing close");
-                        }
+                        tracing::warn!("FIN_ACK timeout, forcing close");
                         self.state.write_closed();
                         let _ = self
                             .drop_notifier
