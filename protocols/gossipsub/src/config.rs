@@ -841,6 +841,17 @@ impl ConfigBuilder {
         self
     }
 
+    // The message size threshold for which IDONTWANT messages are sent.
+    // Sending IDONTWANT messages for small messages can have a negative effect to the overall
+    // traffic and CPU load. This acts as a lower bound cutoff for the message size to which
+    // IDONTWANT won't be sent to peers. Only works if the peers support Gossipsub1.2
+    // (see https://github.com/libp2p/specs/blob/master/pubsub/gossipsub/gossipsub-v1.2.md#idontwant-message)
+    // default is 1kB
+    pub fn idontwant_message_size_threshold(&mut self, size: usize) -> &mut Self {
+        self.config.idontwant_message_size_threshold = size;
+        self
+    }
+
     /// Constructs a [`Config`] from the given configuration and validates the settings.
     pub fn build(&self) -> Result<Config, ConfigBuilderError> {
         // check all constraints on config
