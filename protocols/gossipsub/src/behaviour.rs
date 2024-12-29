@@ -1739,16 +1739,16 @@ where
         // Calculate the message id on the transformed data.
         let msg_id = self.config.message_id(&message);
 
+        // Broadcast IDONTWANT messages
+        if raw_message.raw_protobuf_len() > self.config.idontwant_message_size_threshold() {
+            self.send_idontwant(&raw_message, &msg_id, propagation_source);
+        }
+
         // Check the validity of the message
         // Peers get penalized if this message is invalid. We don't add it to the duplicate cache
         // and instead continually penalize peers that repeatedly send this message.
         if !self.message_is_valid(&msg_id, &mut raw_message, propagation_source) {
             return;
-        }
-
-        // Broadcast IDONTWANT messages
-        if raw_message.raw_protobuf_len() > self.config.idontwant_message_size_threshold() {
-            self.send_idontwant(&raw_message, &msg_id, propagation_source);
         }
 
         if !self.duplicate_cache.insert(msg_id.clone()) {
