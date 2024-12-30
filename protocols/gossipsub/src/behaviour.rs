@@ -758,7 +758,9 @@ where
         }
 
         // Broadcast IDONTWANT messages
-        if raw_message.raw_protobuf_len() > self.config.idontwant_message_size_threshold() {
+        if raw_message.raw_protobuf_len() > self.config.idontwant_message_size_threshold()
+            && self.config.idontwant_on_publish()
+        {
             self.send_idontwant(&raw_message, &msg_id, raw_message.source.as_ref());
         }
 
