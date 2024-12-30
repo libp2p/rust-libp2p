@@ -26,7 +26,7 @@
 //! to poll the underlying transport for incoming messages, and the `Sink` component
 //! is used to send messages to remote peers.
 
-use std::{io, iter, marker::PhantomData, time::Duration};
+use std::{io, marker::PhantomData, time::Duration};
 
 use asynchronous_codec::{Decoder, Encoder, Framed};
 use bytes::BytesMut;
@@ -164,18 +164,6 @@ impl ProtocolConfig {
     /// Modifies the maximum allowed size of a single Kademlia packet.
     pub fn set_max_packet_size(&mut self, size: usize) {
         self.max_packet_size = size;
-    }
-}
-
-impl Default for ProtocolConfig {
-    /// Returns the default configuration.
-    ///
-    /// Deprecated: use `ProtocolConfig::new` instead.
-    fn default() -> Self {
-        ProtocolConfig {
-            protocol_names: iter::once(DEFAULT_PROTO_NAME).collect(),
-            max_packet_size: DEFAULT_MAX_PACKET_SIZE,
-        }
     }
 }
 
