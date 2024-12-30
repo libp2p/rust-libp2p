@@ -3359,7 +3359,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-tcp"
-version = "0.42.0"
+version = "0.42.1"
 dependencies = [
  "async-io",
  "async-std",
