@@ -943,7 +943,7 @@ impl std::fmt::Debug for Config {
             "idontwant_message_size_threhold",
             &self.idontwant_message_size_threshold,
         );
-        let _ = builder.field("idontwant_on_publish",&self.idontwant_on_publish);
+        let _ = builder.field("idontwant_on_publish", &self.idontwant_on_publish);
         builder.finish()
     }
 }
