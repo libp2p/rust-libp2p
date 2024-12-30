@@ -2704,7 +2704,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-allow-block-list"
-version = "0.4.2"
+version = "0.4.1"
 dependencies = [
  "async-std",
  "libp2p-core",
