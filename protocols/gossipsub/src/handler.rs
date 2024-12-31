@@ -229,7 +229,7 @@ impl EnabledHandler {
             if let Some(peer_kind) = self.peer_kind.as_ref() {
                 self.peer_kind_sent = true;
                 return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(
-                    HandlerEvent::PeerKind(peer_kind.clone()),
+                    HandlerEvent::PeerKind(*peer_kind),
                 ));
             }
         }
