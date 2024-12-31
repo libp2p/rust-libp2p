@@ -1,3 +1,8 @@
+## 0.11.3
+
+- Deprecate `Config::support_draft_29`.
+  See [PR 5786](https://github.com/libp2p/rust-libp2p/pull/5786).
+
 ## 0.11.2
 
 - Deprecate `void` crate.
