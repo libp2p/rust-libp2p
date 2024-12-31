@@ -16,6 +16,16 @@ pub trait Store<'a> {
         should_expire: bool,
     ) -> bool;
 
+    /// Update an address record.  
+    /// Returns `true` when the address is new.  
+    fn update_certified_address(
+        &mut self,
+        peer: &PeerId,
+        record: libp2p_core::PeerRecord,
+        source: AddressSource,
+        should_expire: bool,
+    ) -> bool;
+
     /// Remove an address record.
     /// Returns `true` when the address is removed.
     fn remove_address(&mut self, peer: &PeerId, address: &Multiaddr) -> bool;
@@ -25,6 +35,9 @@ pub trait Store<'a> {
 
     /// Get all stored addresses of the peer.
     fn addresses_of_peer(&self, peer: &PeerId) -> Option<impl Iterator<Item = &Multiaddr>>;
+
+    /// Get addresses of the peer that have been signed.
+    fn certified_addresses_of_peer(&self, peer: &PeerId) -> Option<impl Iterator<Item = &Multiaddr>>;
 
     /// Trigger grabage collection for records.
     fn check_ttl(&mut self);

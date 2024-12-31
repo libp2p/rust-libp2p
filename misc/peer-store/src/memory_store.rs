@@ -46,6 +46,22 @@ impl<'a> Store<'a> for MemoryStore {
         true
     }
 
+    fn update_certified_address(
+        &mut self,
+        peer: &PeerId,
+        signed_address: libp2p_core::PeerRecord,
+        source: AddressSource,
+        should_expire: bool,
+    ) -> bool {
+        if let Some(record) = self.address_book.get_mut(peer) {
+            return record.update_certified_address(signed_address, source, should_expire);
+        }
+        let mut new_record = record::PeerAddressRecord::new(self.config.record_capacity);
+        new_record.update_certified_address(signed_address, source, should_expire);
+        self.address_book.insert(*peer, new_record);
+        true
+    }
+
     fn remove_address(&mut self, peer: &PeerId, address: &Multiaddr) -> bool {
         if let Some(record) = self.address_book.get_mut(peer) {
             return record.remove_address(address);
@@ -87,6 +103,20 @@ impl<'a> Store<'a> for MemoryStore {
             .map(|record| record.records().map(|r| r.address))
     }
 
+    fn certified_addresses_of_peer(
+        &self,
+        peer: &PeerId,
+    ) -> Option<impl Iterator<Item = &Multiaddr>> {
+        self.address_book.get(peer).and_then(|record| {
+            Some(
+                record
+                    .records()
+                    .filter(|r| r.signed.is_some())
+                    .map(|r| r.address),
+            )
+        })
+    }
+
     fn check_ttl(&mut self) {
         let now = Instant::now();
         for r in &mut self.address_book.values_mut() {
@@ -104,7 +134,7 @@ impl Behaviour<MemoryStore> {
         self.store()
             .address_book
             .get(peer)
-            .map(|record| record.records())
+            .and_then(|r| Some(r.records()))
     }
 }
 
@@ -134,6 +164,8 @@ pub struct AddressRecord<'a> {
     pub source: AddressSource,
     /// Whether the address expires.
     pub should_expire: bool,
+    /// Whether the address is signed.
+    pub signed: Option<&'a libp2p_core::PeerRecord>,
 }
 impl AddressRecord<'_> {
     /// How much time has passed since the address is last reported wrt. the given instant.  
@@ -148,6 +180,9 @@ impl AddressRecord<'_> {
 }
 
 mod record {
+    use std::rc::Rc;
+
+    use libp2p_core::PeerRecord;
     use lru::LruCache;
 
     use super::*;
@@ -164,14 +199,21 @@ mod record {
             }
         }
         pub(crate) fn records(&self) -> impl Iterator<Item = super::AddressRecord> {
-            self.addresses
-                .iter()
-                .map(|(address, record)| super::AddressRecord {
+            self.addresses.iter().map(|(address, record)| {
+                let AddressRecord {
+                    last_seen,
+                    source,
+                    should_expire,
+                    signature: signed,
+                } = record;
+                super::AddressRecord {
+                    last_seen,
                     address,
-                    last_seen: &record.last_seen,
-                    source: record.source,
-                    should_expire: record.should_expire,
-                })
+                    should_expire: *should_expire,
+                    source: *source,
+                    signed: signed.as_ref().map(|i| i.as_ref()),
+                }
+            })
         }
         pub(crate) fn update_address(
             &mut self,
@@ -185,9 +227,31 @@ mod record {
             }
             // new record won't call `Instant::now()` twice
             self.addresses.get_or_insert(address.clone(), || {
-                AddressRecord::new(source, should_expire)
+                AddressRecord::new(source, should_expire, None)
             });
             true
+        }
+        pub(crate) fn update_certified_address(
+            &mut self,
+            signed_record: PeerRecord,
+            source: AddressSource,
+            should_expire: bool,
+        ) -> bool {
+            let mut is_updated = false;
+            let signed_record = Rc::new(signed_record);
+            for address in signed_record.addresses() {
+                // promote the address or update with the latest signature.
+                if let Some(r) = self.addresses.get_mut(address) {
+                    r.signature = Some(signed_record.clone());
+                    continue;
+                }
+                // the address is not present. this defers cloning.
+                self.addresses.get_or_insert(address.clone(), || {
+                    AddressRecord::new(source, should_expire, Some(signed_record.clone()))
+                });
+                is_updated = true;
+            }
+            is_updated
         }
         pub(crate) fn remove_address(&mut self, address: &Multiaddr) -> bool {
             self.addresses.pop(address).is_some()
@@ -212,13 +276,22 @@ mod record {
         source: AddressSource,
         /// Whether the address will expire.
         should_expire: bool,
+        /// Reference to the `PeerRecord` that contains this address.  
+        /// The inner `PeerRecord` will be dropped automatically 
+        /// when there is no living reference to it.
+        signature: Option<Rc<libp2p_core::PeerRecord>>,
     }
     impl AddressRecord {
-        pub(crate) fn new(source: AddressSource, should_expire: bool) -> Self {
+        pub(crate) fn new(
+            source: AddressSource,
+            should_expire: bool,
+            signed: Option<Rc<libp2p_core::PeerRecord>>,
+        ) -> Self {
             Self {
                 last_seen: Instant::now(),
                 source,
                 should_expire,
+                signature: signed,
             }
         }
         pub(crate) fn update_last_seen(&mut self) {

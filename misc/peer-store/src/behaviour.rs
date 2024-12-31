@@ -71,6 +71,20 @@ where
             .push_back(Event::RecordUpdated { peer: *peer });
     }
 
+    /// Should be called when other protocol emits a [`PeerRecord`](libp2p_core::PeerRecord).  
+    /// This will always emit an `Event::RecordUpdated`.
+    pub fn on_signed_peer_record(
+        &mut self,
+        peer: &PeerId,
+        record: libp2p_core::PeerRecord,
+        source: AddressSource,
+    ) {
+        self.store
+            .update_certified_address(peer, record, source, false);
+        self.pending_events
+            .push_back(Event::RecordUpdated { peer: *peer });
+    }
+
     /// Get a immutable reference to the internal store.
     pub fn store(&self) -> &S {
         &self.store
@@ -137,15 +151,16 @@ where
         _effective_role: libp2p_core::Endpoint,
     ) -> Result<Vec<Multiaddr>, libp2p_swarm::ConnectionDenied> {
         if maybe_peer.is_none() {
-            return Ok(Vec::with_capacity(0));
+            return Ok(Vec::new());
         }
-        if let Some(i) = self
-            .store
-            .addresses_of_peer(&maybe_peer.expect("already handled"))
-        {
-            return Ok(i.cloned().collect());
+        let peer = maybe_peer.expect("already handled");
+        if let Some(unsigned) = self.store.addresses_of_peer(&peer) {
+            if let Some(signed) = self.store.certified_addresses_of_peer(&peer) {
+                return Ok(signed.chain(unsigned).cloned().collect());
+            }
+            return Ok(unsigned.cloned().collect());
         }
-        Ok(Vec::with_capacity(0))
+        Ok(Vec::new())
     }
 
     fn handle_established_outbound_connection(
