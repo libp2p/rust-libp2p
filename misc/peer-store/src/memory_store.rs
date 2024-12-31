@@ -27,8 +27,8 @@ impl MemoryStore {
     }
 }
 
-impl<'a> Store<'a> for MemoryStore {
-    type AddressRecord = AddressRecord<'a>;
+impl Store for MemoryStore {
+    type Event = ();
 
     fn update_address(
         &mut self,
@@ -100,28 +100,15 @@ impl<'a> Store<'a> for MemoryStore {
     fn addresses_of_peer(&self, peer: &PeerId) -> Option<impl Iterator<Item = &Multiaddr>> {
         self.address_book
             .get(peer)
-            .map(|record| record.records().map(|r| r.address))
+            .map(|record| record.records().map(|(addr, _)| addr))
     }
 
-    fn certified_addresses_of_peer(
-        &self,
-        peer: &PeerId,
-    ) -> Option<impl Iterator<Item = &Multiaddr>> {
-        self.address_book.get(peer).and_then(|record| {
-            Some(
-                record
-                    .records()
-                    .filter(|r| r.signed.is_some())
-                    .map(|r| r.address),
-            )
-        })
-    }
-
-    fn check_ttl(&mut self) {
+    fn poll(&mut self) -> Option<()> {
         let now = Instant::now();
         for r in &mut self.address_book.values_mut() {
             r.check_ttl(now, self.config.record_ttl);
         }
+        None
     }
 }
 
@@ -130,11 +117,8 @@ impl Behaviour<MemoryStore> {
     pub fn address_record_of_peer(
         &self,
         peer: &PeerId,
-    ) -> Option<impl Iterator<Item = AddressRecord>> {
-        self.store()
-            .address_book
-            .get(peer)
-            .and_then(|r| Some(r.records()))
+    ) -> Option<impl Iterator<Item = (&Multiaddr, &record::AddressRecord)>> {
+        self.store().address_book.get(peer).map(|r| r.records())
     }
 }
 
@@ -152,30 +136,6 @@ impl Default for Config {
             record_ttl: Duration::from_secs(600),
             record_capacity: NonZeroUsize::try_from(8).expect("8 > 0"),
         }
-    }
-}
-
-pub struct AddressRecord<'a> {
-    /// The last time we saw this address.
-    last_seen: &'a Instant,
-    /// The address of this record.
-    pub address: &'a Multiaddr,
-    /// How we observed the address.
-    pub source: AddressSource,
-    /// Whether the address expires.
-    pub should_expire: bool,
-    /// Whether the address is signed.
-    pub signed: Option<&'a libp2p_core::PeerRecord>,
-}
-impl AddressRecord<'_> {
-    /// How much time has passed since the address is last reported wrt. the given instant.  
-    pub fn last_seen_since(&self, now: Instant) -> Duration {
-        now.duration_since(*self.last_seen)
-    }
-    /// How much time has passed since the address is last reported wrt. current time.
-    pub fn last_seen(&self) -> Duration {
-        let now = Instant::now();
-        now.duration_since(*self.last_seen)
     }
 }
 
@@ -198,22 +158,8 @@ mod record {
                 addresses: LruCache::new(capacity),
             }
         }
-        pub(crate) fn records(&self) -> impl Iterator<Item = super::AddressRecord> {
-            self.addresses.iter().map(|(address, record)| {
-                let AddressRecord {
-                    last_seen,
-                    source,
-                    should_expire,
-                    signature: signed,
-                } = record;
-                super::AddressRecord {
-                    last_seen,
-                    address,
-                    should_expire: *should_expire,
-                    source: *source,
-                    signed: signed.as_ref().map(|i| i.as_ref()),
-                }
-            })
+        pub(crate) fn records(&self) -> impl Iterator<Item = (&Multiaddr, &AddressRecord)> {
+            self.addresses.iter()
         }
         pub(crate) fn update_address(
             &mut self,
@@ -269,17 +215,17 @@ mod record {
         }
     }
 
-    pub(crate) struct AddressRecord {
+    pub struct AddressRecord {
         /// The time when the address is last seen.
-        last_seen: Instant,
+        pub last_seen: Instant,
         /// How the address is discovered.
-        source: AddressSource,
+        pub source: AddressSource,
         /// Whether the address will expire.
-        should_expire: bool,
+        pub should_expire: bool,
         /// Reference to the `PeerRecord` that contains this address.  
-        /// The inner `PeerRecord` will be dropped automatically 
+        /// The inner `PeerRecord` will be dropped automatically
         /// when there is no living reference to it.
-        signature: Option<Rc<libp2p_core::PeerRecord>>,
+        pub signature: Option<Rc<libp2p_core::PeerRecord>>,
     }
     impl AddressRecord {
         pub(crate) fn new(
@@ -335,7 +281,7 @@ mod test {
             true,
         );
         thread::sleep(Duration::from_millis(2));
-        store.check_ttl();
+        store.poll();
         assert!(!store
             .addresses_of_peer(&fake_peer)
             .expect("peer to be in the store")
@@ -372,7 +318,7 @@ mod test {
                 .records()
                 .last()
                 .expect("addr in the record")
-                .address
+                .0
                 == addr1
         );
         store.update_address(
@@ -389,7 +335,7 @@ mod test {
                 .records()
                 .last()
                 .expect("addr in the record")
-                .address
+                .0
                 == addr2
         );
     }

@@ -3,8 +3,8 @@ use libp2p_swarm::FromSwarm;
 
 /// A store that
 /// - contains all observed addresses of peers;
-pub trait Store<'a> {
-    type AddressRecord;
+pub trait Store {
+    type Event;
 
     /// Update an address record.  
     /// Returns `true` when the address is new.  
@@ -36,11 +36,8 @@ pub trait Store<'a> {
     /// Get all stored addresses of the peer.
     fn addresses_of_peer(&self, peer: &PeerId) -> Option<impl Iterator<Item = &Multiaddr>>;
 
-    /// Get addresses of the peer that have been signed.
-    fn certified_addresses_of_peer(&self, peer: &PeerId) -> Option<impl Iterator<Item = &Multiaddr>>;
-
     /// Trigger grabage collection for records.
-    fn check_ttl(&mut self);
+    fn poll(&mut self) -> Option<Self::Event>;
 }
 
 pub enum Event {

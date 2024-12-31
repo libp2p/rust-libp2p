@@ -36,7 +36,7 @@ pub struct Behaviour<S> {
 
 impl<'a, S> Behaviour<S>
 where
-    S: Store<'a> + 'static,
+    S: Store + 'static,
 {
     pub fn new(store: S, config: Config) -> Self {
         Self {
@@ -124,9 +124,9 @@ where
     }
 }
 
-impl<'a, S> NetworkBehaviour for Behaviour<S>
+impl<S> NetworkBehaviour for Behaviour<S>
 where
-    S: Store<'a> + 'static,
+    S: Store + 'static,
 {
     type ConnectionHandler = dummy::ConnectionHandler;
 
@@ -154,13 +154,11 @@ where
             return Ok(Vec::new());
         }
         let peer = maybe_peer.expect("already handled");
-        if let Some(unsigned) = self.store.addresses_of_peer(&peer) {
-            if let Some(signed) = self.store.certified_addresses_of_peer(&peer) {
-                return Ok(signed.chain(unsigned).cloned().collect());
-            }
-            return Ok(unsigned.cloned().collect());
-        }
-        Ok(Vec::new())
+        Ok(self
+            .store
+            .addresses_of_peer(&peer)
+            .map(|i| i.cloned().collect())
+            .unwrap_or_default())
     }
 
     fn handle_established_outbound_connection(
@@ -216,15 +214,15 @@ where
     }
 }
 
-impl<'a, S> Behaviour<S>
+impl<S> Behaviour<S>
 where
-    S: Store<'a>,
+    S: Store,
 {
     /// Garbage collect records.
     fn poll_record_ttl(&mut self, cx: &mut std::task::Context<'_>) {
         if let Some(mut timer) = self.record_ttl_timer.take() {
             if let Poll::Ready(()) = timer.poll_unpin(cx) {
-                self.store.check_ttl();
+                self.store.poll();
                 self.record_ttl_timer = Some(Delay::new(self.config.check_record_ttl_interval));
             }
             self.record_ttl_timer = Some(timer)
