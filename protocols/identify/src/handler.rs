@@ -32,7 +32,7 @@ use libp2p_core::{
     upgrade::{ReadyUpgrade, SelectUpgrade},
     Multiaddr,
 };
-use libp2p_identity::{PeerId, PublicKey};
+use libp2p_identity::PeerId;
 use libp2p_swarm::{
     handler::{
         ConnectionEvent, DialUpgradeError, FullyNegotiatedInbound, FullyNegotiatedOutbound,
@@ -45,8 +45,8 @@ use smallvec::SmallVec;
 use tracing::Level;
 
 use crate::{
-    protocol,
-    protocol::{Info, PushInfo, UpgradeError},
+    behaviour::CryptoKey,
+    protocol::{self, Info, PushInfo, UpgradeError},
     PROTOCOL_NAME, PUSH_PROTOCOL_NAME,
 };
 
@@ -81,7 +81,7 @@ pub struct Handler {
     interval: Duration,
 
     /// The public key of the local peer.
-    public_key: PublicKey,
+    local_key: CryptoKey,
 
     /// Application-specific version of the protocol family used by the peer,
     /// e.g. `ipfs/1.0.0` or `polkadot/1.0.0`.
@@ -128,7 +128,7 @@ impl Handler {
     pub fn new(
         interval: Duration,
         remote_peer_id: PeerId,
-        public_key: PublicKey,
+        public_key: CryptoKey,
         protocol_version: String,
         agent_version: String,
         observed_addr: Multiaddr,
@@ -144,7 +144,7 @@ impl Handler {
             trigger_next_identify: Delay::new(Duration::ZERO),
             exchanged_one_periodic_identify: false,
             interval,
-            public_key,
+            local_key: public_key,
             protocol_version,
             agent_version,
             observed_addr,
@@ -232,13 +232,23 @@ impl Handler {
     }
 
     fn build_info(&mut self) -> Info {
+        let signed_envelope = match &self.local_key {
+            CryptoKey::Public(_) => None,
+            CryptoKey::Keypair { keypair, .. } => libp2p_core::PeerRecord::new(
+                keypair,
+                Vec::from_iter(self.external_addresses.iter().cloned()),
+            )
+            .ok()
+            .map(|r| r.into_signed_envelope()),
+        };
         Info {
-            public_key: self.public_key.clone(),
+            public_key: self.local_key.public_key().clone(),
             protocol_version: self.protocol_version.clone(),
             agent_version: self.agent_version.clone(),
             listen_addrs: Vec::from_iter(self.external_addresses.iter().cloned()),
             protocols: Vec::from_iter(self.local_supported_protocols.iter().cloned()),
             observed_addr: self.observed_addr.clone(),
+            signed_peer_record: signed_envelope,
         }
     }
 

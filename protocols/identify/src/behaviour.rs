@@ -26,9 +26,11 @@ use std::{
 };
 
 use libp2p_core::{
-    multiaddr, multiaddr::Protocol, transport::PortUse, ConnectedPoint, Endpoint, Multiaddr,
+    multiaddr::{self, Protocol},
+    transport::PortUse,
+    ConnectedPoint, Endpoint, Multiaddr,
 };
-use libp2p_identity::{PeerId, PublicKey};
+use libp2p_identity::{Keypair, PeerId, PublicKey};
 use libp2p_swarm::{
     behaviour::{ConnectionClosed, ConnectionEstablished, DialFailure, FromSwarm},
     ConnectionDenied, ConnectionId, DialError, ExternalAddresses, ListenAddresses,
@@ -118,7 +120,7 @@ pub struct Config {
     /// e.g. `ipfs/1.0.0` or `polkadot/1.0.0`.
     protocol_version: String,
     /// The public key of the local node. To report on the wire.
-    local_public_key: PublicKey,
+    local_key: CryptoKey,
     /// Name and version of the local peer implementation, similar to the
     /// `User-Agent` header in the HTTP protocol.
     ///
@@ -156,12 +158,25 @@ pub struct Config {
 
 impl Config {
     /// Creates a new configuration for the identify [`Behaviour`] that
-    /// advertises the given protocol version and public key.
-    pub fn new(protocol_version: String, local_public_key: PublicKey) -> Self {
+    /// advertises the given protocol version and public key.  
+    /// Use `new_with_keypair` for `SignedPeerRecord` support.  
+    pub fn new(protocol_version: String, public_key: PublicKey) -> Self {
         Self {
             protocol_version,
             agent_version: format!("rust-libp2p/{}", env!("CARGO_PKG_VERSION")),
-            local_public_key,
+            local_key: public_key.into(),
+            interval: Duration::from_secs(5 * 60),
+            push_listen_addr_updates: false,
+            cache_size: 100,
+            hide_listen_addrs: false,
+        }
+    }
+
+    pub fn new_with_keypair(protocol_version: String, local_keypair: Keypair) -> Self {
+        Self {
+            protocol_version,
+            agent_version: format!("rust-libp2p/{}", env!("CARGO_PKG_VERSION")),
+            local_key: local_keypair.into(),
             interval: Duration::from_secs(5 * 60),
             push_listen_addr_updates: false,
             cache_size: 100,
@@ -209,7 +224,7 @@ impl Config {
 
     /// Get the local public key of the Config.
     pub fn local_public_key(&self) -> &PublicKey {
-        &self.local_public_key
+        self.local_key.public_key()
     }
 
     /// Get the agent version of the Config.
@@ -380,7 +395,7 @@ impl NetworkBehaviour for Behaviour {
         Ok(Handler::new(
             self.config.interval,
             peer,
-            self.config.local_public_key.clone(),
+            self.config.local_key.clone(),
             self.config.protocol_version.clone(),
             self.config.agent_version.clone(),
             remote_addr.clone(),
@@ -413,7 +428,7 @@ impl NetworkBehaviour for Behaviour {
         Ok(Handler::new(
             self.config.interval,
             peer,
-            self.config.local_public_key.clone(),
+            self.config.local_key.clone(),
             self.config.protocol_version.clone(),
             self.config.agent_version.clone(),
             // TODO: This is weird? That is the public address we dialed,
@@ -666,6 +681,39 @@ impl PeerCache {
             cache.get(peer).collect()
         } else {
             Vec::new()
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+#[allow(clippy::large_enum_variant)]
+pub enum CryptoKey {
+    // With public key only the behaviour will not
+    // be able to produce a `SignedEnvelope`.
+    Public(PublicKey),
+    Keypair {
+        keypair: Keypair,
+        public_key: PublicKey,
+    },
+}
+impl From<PublicKey> for CryptoKey {
+    fn from(value: PublicKey) -> Self {
+        Self::Public(value)
+    }
+}
+impl From<Keypair> for CryptoKey {
+    fn from(value: Keypair) -> Self {
+        Self::Keypair {
+            public_key: value.public(),
+            keypair: value,
+        }
+    }
+}
+impl CryptoKey {
+    pub(crate) fn public_key(&self) -> &PublicKey {
+        match &self {
+            CryptoKey::Public(pubkey) => pubkey,
+            CryptoKey::Keypair { public_key, .. } => public_key,
         }
     }
 }

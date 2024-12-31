@@ -22,7 +22,7 @@ use std::io;
 
 use asynchronous_codec::{FramedRead, FramedWrite};
 use futures::prelude::*;
-use libp2p_core::{multiaddr, Multiaddr};
+use libp2p_core::{multiaddr, Multiaddr, SignedEnvelope};
 use libp2p_identity as identity;
 use libp2p_identity::PublicKey;
 use libp2p_swarm::StreamProtocol;
@@ -53,6 +53,7 @@ pub struct Info {
     pub protocols: Vec<StreamProtocol>,
     /// Address observed by or for the remote.
     pub observed_addr: Multiaddr,
+    pub signed_peer_record: Option<SignedEnvelope>,
 }
 
 impl Info {
@@ -108,6 +109,10 @@ where
         listenAddrs: listen_addrs,
         observedAddr: Some(info.observed_addr.to_vec()),
         protocols: info.protocols.iter().map(|p| p.to_string()).collect(),
+        signedPeerRecord: info
+            .signed_peer_record
+            .clone()
+            .map(|r| r.into_protobuf_encoding()),
     };
 
     let mut framed_io = FramedWrite::new(
@@ -166,7 +171,7 @@ where
 fn parse_listen_addrs(listen_addrs: Vec<Vec<u8>>) -> Vec<Multiaddr> {
     listen_addrs
         .into_iter()
-        .filter_map(|bytes| match Multiaddr::try_from(bytes) {
+        .filter_map(|bytes| match Multiaddr::try_from(bytes.to_vec()) {
             Ok(a) => Some(a),
             Err(e) => {
                 tracing::debug!("Unable to parse multiaddr: {e:?}");
@@ -179,7 +184,7 @@ fn parse_listen_addrs(listen_addrs: Vec<Vec<u8>>) -> Vec<Multiaddr> {
 fn parse_protocols(protocols: Vec<String>) -> Vec<StreamProtocol> {
     protocols
         .into_iter()
-        .filter_map(|p| match StreamProtocol::try_from_owned(p) {
+        .filter_map(|p| match StreamProtocol::try_from_owned(p.to_string()) {
             Ok(p) => Some(p),
             Err(e) => {
                 tracing::debug!("Received invalid protocol from peer: {e}");
@@ -200,7 +205,7 @@ fn parse_public_key(public_key: Option<Vec<u8>>) -> Option<PublicKey> {
 }
 
 fn parse_observed_addr(observed_addr: Option<Vec<u8>>) -> Option<Multiaddr> {
-    observed_addr.and_then(|bytes| match Multiaddr::try_from(bytes) {
+    observed_addr.and_then(|bytes| match Multiaddr::try_from(bytes.to_vec()) {
         Ok(a) => Some(a),
         Err(e) => {
             tracing::debug!("Unable to parse observed multiaddr: {e:?}");
@@ -228,6 +233,9 @@ impl TryFrom<proto::Identify> for Info {
             listen_addrs: parse_listen_addrs(msg.listenAddrs),
             protocols: parse_protocols(msg.protocols),
             observed_addr: parse_observed_addr(msg.observedAddr).unwrap_or(Multiaddr::empty()),
+            signed_peer_record: msg
+                .signedPeerRecord
+                .and_then(|b| SignedEnvelope::from_protobuf_encoding(b.as_ref()).ok()),
         };
 
         Ok(info)
@@ -240,8 +248,8 @@ impl TryFrom<proto::Identify> for PushInfo {
     fn try_from(msg: proto::Identify) -> Result<Self, Self::Error> {
         let info = PushInfo {
             public_key: parse_public_key(msg.publicKey),
-            protocol_version: msg.protocolVersion,
-            agent_version: msg.agentVersion,
+            protocol_version: msg.protocolVersion.map(|v| v.to_string()),
+            agent_version: msg.agentVersion.map(|v| v.to_string()),
             listen_addrs: parse_listen_addrs(msg.listenAddrs),
             protocols: parse_protocols(msg.protocols),
             observed_addr: parse_observed_addr(msg.observedAddr),
@@ -293,6 +301,7 @@ mod tests {
                     .public()
                     .encode_protobuf(),
             ),
+            signedPeerRecord: None,
         };
 
         let info = PushInfo::try_from(payload).expect("not to fail");
