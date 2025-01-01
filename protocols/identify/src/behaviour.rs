@@ -119,8 +119,10 @@ pub struct Config {
     /// Application-specific version of the protocol family used by the peer,
     /// e.g. `ipfs/1.0.0` or `polkadot/1.0.0`.
     protocol_version: String,
-    /// The public key of the local node. To report on the wire.
-    local_key: CryptoKey,
+    /// The key of the local node. Only the public key will be report on the wire.  
+    /// The behaviour will not produce [`PeerRecord`](libp2p_core::PeerRecord) when
+    /// supplied with a public key.  
+    local_key: KeyType,
     /// Name and version of the local peer implementation, similar to the
     /// `User-Agent` header in the HTTP protocol.
     ///
@@ -159,7 +161,7 @@ pub struct Config {
 impl Config {
     /// Creates a new configuration for the identify [`Behaviour`] that
     /// advertises the given protocol version and public key.  
-    /// Use `new_with_keypair` for `SignedPeerRecord` support.  
+    /// Use [`new_with_keypair`](Config::new_with_keypair) for `signedPeerRecord` support.  
     pub fn new(protocol_version: String, public_key: PublicKey) -> Self {
         Self {
             protocol_version,
@@ -172,7 +174,11 @@ impl Config {
         }
     }
 
-    pub fn new_with_keypair(protocol_version: String, local_keypair: Keypair) -> Self {
+    /// Creates a new configuration for the identify [`Behaviour`] that
+    /// advertises the given protocol version and public key.  
+    /// The private key will be used to sign [`PeerRecord`](libp2p_core::PeerRecord)
+    /// for verifiable address advertisement.
+    pub fn new_with_keypair(protocol_version: String, local_keypair: &Keypair) -> Self {
         Self {
             protocol_version,
             agent_version: format!("rust-libp2p/{}", env!("CARGO_PKG_VERSION")),
@@ -687,33 +693,33 @@ impl PeerCache {
 
 #[derive(Debug, Clone)]
 #[allow(clippy::large_enum_variant)]
-pub enum CryptoKey {
+pub(crate) enum KeyType {
     // With public key only the behaviour will not
     // be able to produce a `SignedEnvelope`.
-    Public(PublicKey),
+    PublicKey(PublicKey),
     Keypair {
         keypair: Keypair,
         public_key: PublicKey,
     },
 }
-impl From<PublicKey> for CryptoKey {
+impl From<PublicKey> for KeyType {
     fn from(value: PublicKey) -> Self {
-        Self::Public(value)
+        Self::PublicKey(value.clone())
     }
 }
-impl From<Keypair> for CryptoKey {
-    fn from(value: Keypair) -> Self {
+impl From<&Keypair> for KeyType {
+    fn from(value: &Keypair) -> Self {
         Self::Keypair {
             public_key: value.public(),
-            keypair: value,
+            keypair: value.clone(),
         }
     }
 }
-impl CryptoKey {
+impl KeyType {
     pub(crate) fn public_key(&self) -> &PublicKey {
         match &self {
-            CryptoKey::Public(pubkey) => pubkey,
-            CryptoKey::Keypair { public_key, .. } => public_key,
+            KeyType::PublicKey(pubkey) => pubkey,
+            KeyType::Keypair { public_key, .. } => public_key,
         }
     }
 }

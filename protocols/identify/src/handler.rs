@@ -45,7 +45,7 @@ use smallvec::SmallVec;
 use tracing::Level;
 
 use crate::{
-    behaviour::CryptoKey,
+    behaviour::KeyType,
     protocol::{self, Info, PushInfo, UpgradeError},
     PROTOCOL_NAME, PUSH_PROTOCOL_NAME,
 };
@@ -80,8 +80,8 @@ pub struct Handler {
     /// The interval of `trigger_next_identify`, i.e. the recurrent delay.
     interval: Duration,
 
-    /// The public key of the local peer.
-    local_key: CryptoKey,
+    /// The key of the local peer.
+    local_key: KeyType,
 
     /// Application-specific version of the protocol family used by the peer,
     /// e.g. `ipfs/1.0.0` or `polkadot/1.0.0`.
@@ -125,10 +125,10 @@ pub enum Event {
 
 impl Handler {
     /// Creates a new `Handler`.
-    pub fn new(
+    pub(crate) fn new(
         interval: Duration,
         remote_peer_id: PeerId,
-        public_key: CryptoKey,
+        public_key: KeyType,
         protocol_version: String,
         agent_version: String,
         observed_addr: Multiaddr,
@@ -233,8 +233,8 @@ impl Handler {
 
     fn build_info(&mut self) -> Info {
         let signed_envelope = match &self.local_key {
-            CryptoKey::Public(_) => None,
-            CryptoKey::Keypair { keypair, .. } => libp2p_core::PeerRecord::new(
+            KeyType::PublicKey(_) => None,
+            KeyType::Keypair { keypair, .. } => libp2p_core::PeerRecord::new(
                 keypair,
                 Vec::from_iter(self.external_addresses.iter().cloned()),
             )
