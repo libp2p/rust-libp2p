@@ -427,7 +427,7 @@ where
     /// connection is established.
     ///
     /// > **Note**: In order for such a dialing attempt to succeed,
-    /// > the `RequestResonse` protocol must either be embedded
+    /// > the `RequestResponse` protocol must either be embedded
     /// > in another `NetworkBehaviour` that provides peer and
     /// > address discovery, or known addresses of peers must be
     /// > managed via [`Behaviour::add_address`] and
