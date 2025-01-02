@@ -1827,11 +1827,11 @@ where
         reject_reason: RejectReason,
     ) {
         if let Some(metrics) = self.metrics.as_mut() {
-            metrics.register_invalid_message(&topic_hash);
+            metrics.register_invalid_message(topic_hash);
         }
         if let Some((peer_score, ..)) = &mut self.peer_score {
             if let Some(msg_id) = message_id {
-                peer_score.reject_message(propagation_source, &msg_id, topic_hash, reject_reason);
+                peer_score.reject_message(propagation_source, msg_id, topic_hash, reject_reason);
                 // The message itself is valid, but is from a banned peer or
                 // claiming to be self-origin but is actually forwarded from other peers.
                 return self.gossip_promises.reject_message(msg_id, &reject_reason);
