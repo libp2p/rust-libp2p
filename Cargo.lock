@@ -2935,7 +2935,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-kad"
-version = "0.47.1"
+version = "0.47.0"
 dependencies = [
  "async-std",
  "asynchronous-codec",
