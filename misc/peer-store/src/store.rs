@@ -1,3 +1,5 @@
+use std::task::Context;
+
 use libp2p_core::{Multiaddr, PeerId};
 use libp2p_swarm::FromSwarm;
 
@@ -37,7 +39,7 @@ pub trait Store {
     fn addresses_of_peer(&self, peer: &PeerId) -> Option<impl Iterator<Item = &Multiaddr>>;
 
     /// Trigger grabage collection for records.
-    fn poll(&mut self) -> Option<Self::Event>;
+    fn poll(&mut self, cx: &mut Context<'_>) -> Option<Self::Event>;
 }
 
 pub enum Event {

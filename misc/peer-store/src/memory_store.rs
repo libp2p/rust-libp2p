@@ -1,9 +1,12 @@
 use std::{
     collections::HashMap,
     num::NonZeroUsize,
+    task::{Context, Poll},
     time::{Duration, Instant},
 };
 
+use futures_timer::Delay;
+use futures_util::FutureExt;
 use libp2p_core::{Multiaddr, PeerId};
 use libp2p_swarm::FromSwarm;
 
@@ -15,6 +18,7 @@ use crate::{store::AddressSource, Behaviour};
 pub struct MemoryStore {
     /// An address book of peers regardless of their status(connected or not).
     address_book: HashMap<PeerId, record::PeerAddressRecord>,
+    record_ttl_timer: Option<Delay>,
     config: Config,
 }
 
@@ -23,6 +27,13 @@ impl MemoryStore {
         Self {
             config,
             ..Default::default()
+        }
+    }
+
+    fn check_record_ttl(&mut self) {
+        let now = Instant::now();
+        for r in &mut self.address_book.values_mut() {
+            r.check_ttl(now, self.config.record_ttl);
         }
     }
 }
@@ -103,10 +114,13 @@ impl Store for MemoryStore {
             .map(|record| record.records().map(|(addr, _)| addr))
     }
 
-    fn poll(&mut self) -> Option<()> {
-        let now = Instant::now();
-        for r in &mut self.address_book.values_mut() {
-            r.check_ttl(now, self.config.record_ttl);
+    fn poll(&mut self, cx: &mut Context<'_>) -> Option<()> {
+        if let Some(mut timer) = self.record_ttl_timer.take() {
+            if let Poll::Ready(()) = timer.poll_unpin(cx) {
+                self.check_record_ttl();
+                self.record_ttl_timer = Some(Delay::new(self.config.check_record_ttl_interval));
+            }
+            self.record_ttl_timer = Some(timer)
         }
         None
     }
@@ -125,9 +139,12 @@ impl Behaviour<MemoryStore> {
 pub struct Config {
     /// TTL for a record.
     record_ttl: Duration,
+
     /// The capacaity of a record store.  
     /// The least used record will be discarded when the store is full.
     record_capacity: NonZeroUsize,
+    /// The interval for garbage collecting records.
+    check_record_ttl_interval: Duration,
 }
 
 impl Default for Config {
@@ -135,6 +152,7 @@ impl Default for Config {
         Self {
             record_ttl: Duration::from_secs(600),
             record_capacity: NonZeroUsize::try_from(8).expect("8 > 0"),
+            check_record_ttl_interval: Duration::from_secs(5),
         }
     }
 }
@@ -263,6 +281,7 @@ mod test {
         let config = Config {
             record_capacity: NonZeroUsize::try_from(4).expect("4 > 0"),
             record_ttl: Duration::from_millis(1),
+            ..Default::default()
         };
         let mut store = MemoryStore::new(config);
         let fake_peer = PeerId::random();
@@ -281,7 +300,7 @@ mod test {
             true,
         );
         thread::sleep(Duration::from_millis(2));
-        store.poll();
+        store.check_record_ttl();
         assert!(!store
             .addresses_of_peer(&fake_peer)
             .expect("peer to be in the store")

@@ -1,11 +1,8 @@
 use std::{
     collections::{HashSet, VecDeque},
     task::Poll,
-    time::Duration,
 };
 
-use futures_timer::Delay;
-use futures_util::FutureExt;
 use libp2p_core::{Multiaddr, PeerId};
 use libp2p_swarm::{dummy, FromSwarm, NetworkBehaviour};
 
@@ -19,32 +16,23 @@ pub enum Event {
     RecordUpdated { peer: PeerId },
 }
 
-pub struct Config {
-    /// The interval for garbage collecting records.
-    check_record_ttl_interval: Duration,
-}
-
 pub struct Behaviour<S> {
     store: S,
     /// Peers that are currently connected.
     connected_peers: HashSet<PeerId>,
     /// Pending Events to be emitted back to the  [`libp2p_swarm::Swarm`].
     pending_events: VecDeque<Event>,
-    record_ttl_timer: Option<Delay>,
-    config: Config,
 }
 
 impl<'a, S> Behaviour<S>
 where
     S: Store + 'static,
 {
-    pub fn new(store: S, config: Config) -> Self {
+    pub fn new(store: S) -> Self {
         Self {
             store,
             connected_peers: HashSet::new(),
             pending_events: VecDeque::new(),
-            record_ttl_timer: Some(Delay::new(config.check_record_ttl_interval)),
-            config,
         }
     }
 
@@ -209,23 +197,7 @@ where
         if let Some(ev) = self.pending_events.pop_front() {
             return Poll::Ready(libp2p_swarm::ToSwarm::GenerateEvent(ev));
         }
-        self.poll_record_ttl(cx);
+        self.store.poll(cx);
         Poll::Pending
-    }
-}
-
-impl<S> Behaviour<S>
-where
-    S: Store,
-{
-    /// Garbage collect records.
-    fn poll_record_ttl(&mut self, cx: &mut std::task::Context<'_>) {
-        if let Some(mut timer) = self.record_ttl_timer.take() {
-            if let Poll::Ready(()) = timer.poll_unpin(cx) {
-                self.store.poll();
-                self.record_ttl_timer = Some(Delay::new(self.config.check_record_ttl_interval));
-            }
-            self.record_ttl_timer = Some(timer)
-        }
     }
 }
