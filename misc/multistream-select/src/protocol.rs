@@ -120,7 +120,7 @@ impl fmt::Display for Protocol {
 /// A multistream-select protocol message.
 ///
 /// Multistream-select protocol messages are exchanged with the goal
-/// of agreeing on a application-layer protocol to use on an I/O stream.
+/// of agreeing on an application-layer protocol to use on an I/O stream.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum Message {
     /// A header message identifies the multistream-select protocol
