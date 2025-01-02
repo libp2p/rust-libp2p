@@ -22,8 +22,7 @@ pub trait Store {
     /// Returns `true` when the address is new.  
     fn update_certified_address(
         &mut self,
-        peer: &PeerId,
-        record: libp2p_core::PeerRecord,
+        signed_record: &libp2p_core::PeerRecord,
         source: AddressSource,
         should_expire: bool,
     ) -> bool;

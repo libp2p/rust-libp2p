@@ -59,17 +59,17 @@ impl Store for MemoryStore {
 
     fn update_certified_address(
         &mut self,
-        peer: &PeerId,
-        signed_address: libp2p_core::PeerRecord,
+        signed_record: &libp2p_core::PeerRecord,
         source: AddressSource,
         should_expire: bool,
     ) -> bool {
-        if let Some(record) = self.address_book.get_mut(peer) {
-            return record.update_certified_address(signed_address, source, should_expire);
+        let peer = signed_record.peer_id();
+        if let Some(record) = self.address_book.get_mut(&peer) {
+            return record.update_certified_address(signed_record, source, should_expire);
         }
         let mut new_record = record::PeerAddressRecord::new(self.config.record_capacity);
-        new_record.update_certified_address(signed_address, source, should_expire);
-        self.address_book.insert(*peer, new_record);
+        new_record.update_certified_address(signed_record, source, should_expire);
+        self.address_book.insert(peer, new_record);
         true
     }
 
@@ -197,12 +197,12 @@ mod record {
         }
         pub(crate) fn update_certified_address(
             &mut self,
-            signed_record: PeerRecord,
+            signed_record: &PeerRecord,
             source: AddressSource,
             should_expire: bool,
         ) -> bool {
             let mut is_updated = false;
-            let signed_record = Rc::new(signed_record);
+            let signed_record = Rc::new(signed_record.clone());
             for address in signed_record.addresses() {
                 // promote the address or update with the latest signature.
                 if let Some(r) = self.addresses.get_mut(address) {

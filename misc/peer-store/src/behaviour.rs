@@ -63,14 +63,14 @@ where
     /// This will always emit an `Event::RecordUpdated`.
     pub fn on_signed_peer_record(
         &mut self,
-        peer: &PeerId,
-        record: libp2p_core::PeerRecord,
+        signed_record: &libp2p_core::PeerRecord,
         source: AddressSource,
     ) {
         self.store
-            .update_certified_address(peer, record, source, false);
-        self.pending_events
-            .push_back(Event::RecordUpdated { peer: *peer });
+            .update_certified_address(signed_record, source, false);
+        self.pending_events.push_back(Event::RecordUpdated {
+            peer: signed_record.peer_id(),
+        });
     }
 
     /// Get a immutable reference to the internal store.
