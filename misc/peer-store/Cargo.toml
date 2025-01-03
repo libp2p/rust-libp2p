@@ -1,0 +1,21 @@
+[package]
+name = "libp2p-peer-store"
+edition = "2021"
+version = "0.1.0"
+authors = ["drHuangMHT <DrHuangMHT@outlook.com>"]
+license = "MIT"
+repository = "https://github.com/libp2p/rust-libp2p"
+rust-version.workspace = true
+
+[dependencies]
+libp2p-core = { workspace = true }
+libp2p-swarm = { workspace = true }
+lru = "*"
+futures-timer = "*"
+futures-util = "*"
+
+[dev-dependencies]
+libp2p-identity = { workspace = true, features = ["rand"] }
+
+[lints]
+workspace = true
