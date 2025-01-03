@@ -131,13 +131,7 @@ impl SecretKey {
     ///
     /// [RFC3278]: https://tools.ietf.org/html/rfc3278#section-8.2
     pub fn sign(&self, msg: &[u8]) -> Vec<u8> {
-        let generic_array = Sha256::digest(msg);
-
-        // FIXME: Once `generic-array` hits 1.0, we should be able to just use `Into` here.
-        let mut array = [0u8; 32];
-        array.copy_from_slice(generic_array.as_slice());
-
-        let message = Message::parse(&array);
+        let message = Message::parse(&Sha256::digest(msg).into());
 
         libsecp256k1::sign(&message, &self.0)
             .0
