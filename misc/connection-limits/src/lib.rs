@@ -46,6 +46,9 @@ use libp2p_swarm::{
 /// contain a [`ConnectionDenied`] type that can be downcast to [`Exceeded`] error if (and only if)
 /// **this** behaviour denied the connection.
 ///
+/// You can also set Peer IDs and Multiaddrs that bypass the said limit. Connections that
+/// match the bypass rules will not be checked against limits.
+///
 /// If you employ multiple [`NetworkBehaviour`]s that manage connections,
 /// it may also be a different error.
 ///
@@ -67,6 +70,7 @@ use libp2p_swarm::{
 /// ```
 pub struct Behaviour {
     limits: ConnectionLimits,
+    bypass_rules: BypassRules,
 
     pending_inbound_connections: HashSet<ConnectionId>,
     pending_outbound_connections: HashSet<ConnectionId>,
@@ -76,9 +80,10 @@ pub struct Behaviour {
 }
 
 impl Behaviour {
-    pub fn new(limits: ConnectionLimits) -> Self {
+    pub fn new(limits: ConnectionLimits, bypass_rules: BypassRules) -> Self {
         Self {
             limits,
+            bypass_rules,
             pending_inbound_connections: Default::default(),
             pending_outbound_connections: Default::default(),
             established_inbound_connections: Default::default(),
@@ -91,6 +96,11 @@ impl Behaviour {
     /// > **Note**: A new limit will not be enforced against existing connections.
     pub fn limits_mut(&mut self) -> &mut ConnectionLimits {
         &mut self.limits
+    }
+
+    /// Returns a mutable reference to [`BypassRules`].
+    pub fn bypass_rules_mut(&mut self) -> &mut BypassRules {
+        &mut self.bypass_rules
     }
 }
 
@@ -208,6 +218,47 @@ impl ConnectionLimits {
     }
 }
 
+/// A set of rules that allows bypass of limits.
+#[derive(Debug, Clone, Default)]
+pub struct BypassRules {
+    /// Peer IDs that bypass limit check, regardless of inbound or outbound.
+    by_peer_id: HashSet<PeerId>,
+    /// Addresses that bypass limit check, regardless of inbound or outbound.
+    by_multiaddr: HashSet<Multiaddr>,
+}
+impl BypassRules {
+    pub fn new(peer_ids: HashSet<PeerId>, remote_multiaddrs: HashSet<Multiaddr>) -> Self {
+        Self {
+            by_peer_id: peer_ids,
+            by_multiaddr: remote_multiaddrs,
+        }
+    }
+    /// Add the peer to bypass list.
+    pub fn bypass_peer_id(&mut self, peer_id: &PeerId) {
+        self.by_peer_id.insert(*peer_id);
+    }
+    /// Remove the peer from bypass list.
+    pub fn remove_peer_id(&mut self, peer_id: &PeerId) {
+        self.by_peer_id.remove(peer_id);
+    }
+    /// Add the address to bypass list.
+    pub fn bypass_multiaddr(&mut self, multiaddr: &Multiaddr) {
+        self.by_multiaddr.insert(multiaddr.clone());
+    }
+    /// Remove the address to bypass list.
+    pub fn remove_multiaddr(&mut self, multiaddr: &Multiaddr) {
+        self.by_multiaddr.remove(multiaddr);
+    }
+    /// Whether the peer is in the bypass list.
+    pub fn is_peer_bypassed(&self, peer: &PeerId) -> bool {
+        self.by_peer_id.contains(peer)
+    }
+    /// Whether the address is in the bypass list.
+    pub fn is_addr_bypassed(&self, addr: &Multiaddr) -> bool {
+        self.by_multiaddr.contains(addr)
+    }
+}
+
 impl NetworkBehaviour for Behaviour {
     type ConnectionHandler = dummy::ConnectionHandler;
     type ToSwarm = Infallible;
@@ -215,15 +266,18 @@ impl NetworkBehaviour for Behaviour {
     fn handle_pending_inbound_connection(
         &mut self,
         connection_id: ConnectionId,
-        _: &Multiaddr,
-        _: &Multiaddr,
+        local_addr: &Multiaddr,
+        remote_addr: &Multiaddr,
     ) -> Result<(), ConnectionDenied> {
-        check_limit(
-            self.limits.max_pending_incoming,
-            self.pending_inbound_connections.len(),
-            Kind::PendingIncoming,
-        )?;
-
+        if !(self.bypass_rules.is_addr_bypassed(local_addr)
+            || self.bypass_rules.is_addr_bypassed(remote_addr))
+        {
+            check_limit(
+                self.limits.max_pending_incoming,
+                self.pending_inbound_connections.len(),
+                Kind::PendingIncoming,
+            )?;
+        }
         self.pending_inbound_connections.insert(connection_id);
 
         Ok(())
@@ -233,46 +287,60 @@ impl NetworkBehaviour for Behaviour {
         &mut self,
         connection_id: ConnectionId,
         peer: PeerId,
-        _: &Multiaddr,
-        _: &Multiaddr,
+        local_addr: &Multiaddr,
+        remote_addr: &Multiaddr,
     ) -> Result<THandler<Self>, ConnectionDenied> {
         self.pending_inbound_connections.remove(&connection_id);
 
-        check_limit(
-            self.limits.max_established_incoming,
-            self.established_inbound_connections.len(),
-            Kind::EstablishedIncoming,
-        )?;
-        check_limit(
-            self.limits.max_established_per_peer,
-            self.established_per_peer
-                .get(&peer)
-                .map(|connections| connections.len())
-                .unwrap_or(0),
-            Kind::EstablishedPerPeer,
-        )?;
-        check_limit(
-            self.limits.max_established_total,
-            self.established_inbound_connections.len()
-                + self.established_outbound_connections.len(),
-            Kind::EstablishedTotal,
-        )?;
-
+        if !(self.bypass_rules.is_addr_bypassed(local_addr)
+            || self.bypass_rules.is_addr_bypassed(remote_addr)
+            || self.bypass_rules.is_peer_bypassed(&peer))
+        {
+            check_limit(
+                self.limits.max_established_incoming,
+                self.established_inbound_connections.len(),
+                Kind::EstablishedIncoming,
+            )?;
+            check_limit(
+                self.limits.max_established_per_peer,
+                self.established_per_peer
+                    .get(&peer)
+                    .map(|connections| connections.len())
+                    .unwrap_or(0),
+                Kind::EstablishedPerPeer,
+            )?;
+            check_limit(
+                self.limits.max_established_total,
+                self.established_inbound_connections.len()
+                    + self.established_outbound_connections.len(),
+                Kind::EstablishedTotal,
+            )?;
+        }
         Ok(dummy::ConnectionHandler)
     }
 
     fn handle_pending_outbound_connection(
         &mut self,
         connection_id: ConnectionId,
-        _: Option<PeerId>,
-        _: &[Multiaddr],
+        maybe_peer: Option<PeerId>,
+        addresses: &[Multiaddr],
         _: Endpoint,
     ) -> Result<Vec<Multiaddr>, ConnectionDenied> {
-        check_limit(
-            self.limits.max_pending_outgoing,
-            self.pending_outbound_connections.len(),
-            Kind::PendingOutgoing,
-        )?;
+        let mut is_bypassed = false;
+        if let Some(peer) = maybe_peer {
+            is_bypassed = self.bypass_rules.is_peer_bypassed(&peer)
+        }
+        is_bypassed = is_bypassed
+            || addresses
+                .iter()
+                .any(|addr| self.bypass_rules.is_addr_bypassed(addr));
+        if !is_bypassed {
+            check_limit(
+                self.limits.max_pending_outgoing,
+                self.pending_outbound_connections.len(),
+                Kind::PendingOutgoing,
+            )?;
+        }
 
         self.pending_outbound_connections.insert(connection_id);
 
@@ -283,31 +351,33 @@ impl NetworkBehaviour for Behaviour {
         &mut self,
         connection_id: ConnectionId,
         peer: PeerId,
-        _: &Multiaddr,
+        addr: &Multiaddr,
         _: Endpoint,
         _: PortUse,
     ) -> Result<THandler<Self>, ConnectionDenied> {
         self.pending_outbound_connections.remove(&connection_id);
-
-        check_limit(
-            self.limits.max_established_outgoing,
-            self.established_outbound_connections.len(),
-            Kind::EstablishedOutgoing,
-        )?;
-        check_limit(
-            self.limits.max_established_per_peer,
-            self.established_per_peer
-                .get(&peer)
-                .map(|connections| connections.len())
-                .unwrap_or(0),
-            Kind::EstablishedPerPeer,
-        )?;
-        check_limit(
-            self.limits.max_established_total,
-            self.established_inbound_connections.len()
-                + self.established_outbound_connections.len(),
-            Kind::EstablishedTotal,
-        )?;
+        if !(self.bypass_rules.is_peer_bypassed(&peer) || self.bypass_rules.is_addr_bypassed(addr))
+        {
+            check_limit(
+                self.limits.max_established_outgoing,
+                self.established_outbound_connections.len(),
+                Kind::EstablishedOutgoing,
+            )?;
+            check_limit(
+                self.limits.max_established_per_peer,
+                self.established_per_peer
+                    .get(&peer)
+                    .map(|connections| connections.len())
+                    .unwrap_or(0),
+                Kind::EstablishedPerPeer,
+            )?;
+            check_limit(
+                self.limits.max_established_total,
+                self.established_inbound_connections.len()
+                    + self.established_outbound_connections.len(),
+                Kind::EstablishedTotal,
+            )?;
+        }
 
         Ok(dummy::ConnectionHandler)
     }
@@ -544,13 +614,13 @@ mod tests {
     impl Behaviour {
         fn new(limits: ConnectionLimits) -> Self {
             Self {
-                limits: super::Behaviour::new(limits),
+                limits: super::Behaviour::new(limits, Default::default()),
                 connection_denier: None.into(),
             }
         }
         fn new_with_connection_denier(limits: ConnectionLimits) -> Self {
             Self {
-                limits: super::Behaviour::new(limits),
+                limits: super::Behaviour::new(limits, Default::default()),
                 connection_denier: Some(ConnectionDenier {}).into(),
             }
         }
