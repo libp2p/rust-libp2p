@@ -109,9 +109,12 @@ impl Store for MemoryStore {
     }
 
     fn addresses_of_peer(&self, peer: &PeerId) -> Option<impl Iterator<Item = &Multiaddr>> {
-        self.address_book
-            .get(peer)
-            .map(|record| record.records().map(|(addr, _)| addr))
+        self.address_book.get(peer).map(|record| {
+            record
+                .records()
+                .filter(|(_, r)| !self.config.strict_mode || r.signature.is_some())
+                .map(|(addr, _)| addr)
+        })
     }
 
     fn poll(&mut self, cx: &mut Context<'_>) -> Option<()> {
@@ -127,7 +130,7 @@ impl Store for MemoryStore {
 }
 
 impl Behaviour<MemoryStore> {
-    /// Get all stored address records of the peer.
+    /// Get all stored address records of the peer, not affected by `strict_mode`.
     pub fn address_record_of_peer(
         &self,
         peer: &PeerId,
@@ -139,12 +142,13 @@ impl Behaviour<MemoryStore> {
 pub struct Config {
     /// TTL for a record.
     record_ttl: Duration,
-
     /// The capacaity of a record store.  
     /// The least used record will be discarded when the store is full.
     record_capacity: NonZeroUsize,
     /// The interval for garbage collecting records.
     check_record_ttl_interval: Duration,
+    /// Only provide signed addresses to the behaviour when set to true.
+    strict_mode: bool,
 }
 
 impl Default for Config {
@@ -153,6 +157,7 @@ impl Default for Config {
             record_ttl: Duration::from_secs(600),
             record_capacity: NonZeroUsize::try_from(8).expect("8 > 0"),
             check_record_ttl_interval: Duration::from_secs(5),
+            strict_mode: false,
         }
     }
 }
