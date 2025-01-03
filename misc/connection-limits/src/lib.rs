@@ -46,6 +46,9 @@ use libp2p_swarm::{
 /// contain a [`ConnectionDenied`] type that can be downcast to [`Exceeded`] error if (and only if)
 /// **this** behaviour denied the connection.
 ///
+/// You can also set Peer IDs and Multiaddrs that bypass the said limit. Connections that
+/// match the bypass rules will not be checked against limits.
+///
 /// If you employ multiple [`NetworkBehaviour`]s that manage connections,
 /// it may also be a different error.
 ///
@@ -95,6 +98,7 @@ impl Behaviour {
         &mut self.limits
     }
 
+    /// Returns a mutable reference to [`BypassRules`].
     pub fn bypass_rules_mut(&mut self) -> &mut BypassRules {
         &mut self.bypass_rules
     }
@@ -214,9 +218,12 @@ impl ConnectionLimits {
     }
 }
 
+/// A set of rules that allows bypass of limits.
 #[derive(Debug, Clone, Default)]
 pub struct BypassRules {
+    /// Peer IDs that bypass limit check, regardless of inbound or outbound.
     by_peer_id: HashSet<PeerId>,
+    /// Addresses that bypass limit check, regardless of inbound or outbound.
     by_multiaddr: HashSet<Multiaddr>,
 }
 impl BypassRules {
@@ -226,21 +233,27 @@ impl BypassRules {
             by_multiaddr: remote_multiaddrs,
         }
     }
+    /// Add the peer to bypass list.
     pub fn bypass_peer_id(&mut self, peer_id: &PeerId) {
         self.by_peer_id.insert(*peer_id);
     }
+    /// Remove the peer from bypass list.
     pub fn remove_peer_id(&mut self, peer_id: &PeerId) {
         self.by_peer_id.remove(peer_id);
     }
-    pub fn bypass_multiaddr(&mut self, multiaddr: Multiaddr) {
-        self.by_multiaddr.insert(multiaddr);
+    /// Add the address to bypass list.
+    pub fn bypass_multiaddr(&mut self, multiaddr: &Multiaddr) {
+        self.by_multiaddr.insert(multiaddr.clone());
     }
+    /// Remove the address to bypass list.
     pub fn remove_multiaddr(&mut self, multiaddr: &Multiaddr) {
         self.by_multiaddr.remove(multiaddr);
     }
+    /// Whether the peer is in the bypass list.
     pub fn is_peer_bypassed(&self, peer: &PeerId) -> bool {
         self.by_peer_id.contains(peer)
     }
+    /// Whether the address is in the bypass list.
     pub fn is_addr_bypassed(&self, addr: &Multiaddr) -> bool {
         self.by_multiaddr.contains(addr)
     }
