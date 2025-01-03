@@ -123,6 +123,7 @@ where
     /// The underlying handler.
     handler: THandler,
     /// Futures that upgrade incoming substreams.
+    #[expect(deprecated)] // TODO: Remove when {In, Out}boundOpenInfo is fully removed.
     negotiating_in: FuturesUnordered<
         StreamUpgrade<
             THandler::InboundOpenInfo,
@@ -131,6 +132,7 @@ where
         >,
     >,
     /// Futures that upgrade outgoing substreams.
+    #[expect(deprecated)] // TODO: Remove when {In, Out}boundOpenInfo is fully removed.
     negotiating_out: FuturesUnordered<
         StreamUpgrade<
             THandler::OutboundOpenInfo,
@@ -155,6 +157,7 @@ where
     ///
     /// The upgrade timeout is already ticking here so this may fail in case the remote is not
     /// quick enough in providing us with a new stream.
+    #[expect(deprecated)] // TODO: Remove when {In, Out}boundOpenInfo is fully removed.
     requested_substreams: FuturesUnordered<
         SubstreamRequested<THandler::OutboundOpenInfo, THandler::OutboundProtocol>,
     >,
@@ -168,6 +171,7 @@ where
     stream_counter: ActiveStreamCounter,
 }
 
+#[expect(deprecated)] // TODO: Remove when {In, Out}boundOpenInfo is fully removed.
 impl<THandler> fmt::Debug for Connection<THandler>
 where
     THandler: ConnectionHandler + fmt::Debug,
@@ -1189,20 +1193,13 @@ mod tests {
         type InboundOpenInfo = ();
         type OutboundOpenInfo = ();
 
-        fn listen_protocol(
-            &self,
-        ) -> SubstreamProtocol<Self::InboundProtocol, Self::InboundOpenInfo> {
+        fn listen_protocol(&self) -> SubstreamProtocol<Self::InboundProtocol> {
             SubstreamProtocol::new(DeniedUpgrade, ()).with_timeout(self.upgrade_timeout)
         }
 
         fn on_connection_event(
             &mut self,
-            event: ConnectionEvent<
-                Self::InboundProtocol,
-                Self::OutboundProtocol,
-                Self::InboundOpenInfo,
-                Self::OutboundOpenInfo,
-            >,
+            event: ConnectionEvent<Self::InboundProtocol, Self::OutboundProtocol>,
         ) {
             match event {
                 // TODO: remove when Rust 1.82 is MSRV
@@ -1242,13 +1239,7 @@ mod tests {
         fn poll(
             &mut self,
             _: &mut Context<'_>,
-        ) -> Poll<
-            ConnectionHandlerEvent<
-                Self::OutboundProtocol,
-                Self::OutboundOpenInfo,
-                Self::ToBehaviour,
-            >,
-        > {
+        ) -> Poll<ConnectionHandlerEvent<Self::OutboundProtocol, (), Self::ToBehaviour>> {
             if self.outbound_requested {
                 self.outbound_requested = false;
                 return Poll::Ready(ConnectionHandlerEvent::OutboundSubstreamRequest {
@@ -1269,9 +1260,7 @@ mod tests {
         type InboundOpenInfo = ();
         type OutboundOpenInfo = ();
 
-        fn listen_protocol(
-            &self,
-        ) -> SubstreamProtocol<Self::InboundProtocol, Self::InboundOpenInfo> {
+        fn listen_protocol(&self) -> SubstreamProtocol<Self::InboundProtocol> {
             SubstreamProtocol::new(
                 ManyProtocolsUpgrade {
                     protocols: Vec::from_iter(self.active_protocols.clone()),
@@ -1282,12 +1271,7 @@ mod tests {
 
         fn on_connection_event(
             &mut self,
-            event: ConnectionEvent<
-                Self::InboundProtocol,
-                Self::OutboundProtocol,
-                Self::InboundOpenInfo,
-                Self::OutboundOpenInfo,
-            >,
+            event: ConnectionEvent<Self::InboundProtocol, Self::OutboundProtocol>,
         ) {
             match event {
                 ConnectionEvent::LocalProtocolsChange(ProtocolsChange::Added(added)) => {
@@ -1319,13 +1303,7 @@ mod tests {
         fn poll(
             &mut self,
             _: &mut Context<'_>,
-        ) -> Poll<
-            ConnectionHandlerEvent<
-                Self::OutboundProtocol,
-                Self::OutboundOpenInfo,
-                Self::ToBehaviour,
-            >,
-        > {
+        ) -> Poll<ConnectionHandlerEvent<Self::OutboundProtocol, (), Self::ToBehaviour>> {
             if let Some(event) = self.events.pop() {
                 return Poll::Ready(event);
             }

@@ -553,6 +553,7 @@ where
 
     /// Polls the connection pool for events.
     #[tracing::instrument(level = "debug", name = "Pool::poll", skip(self, cx))]
+    #[expect(deprecated)] // TODO: Remove when {In, Out}boundOpenInfo is fully removed.
     pub(crate) fn poll(&mut self, cx: &mut Context<'_>) -> Poll<PoolEvent<THandler::ToBehaviour>>
     where
         THandler: ConnectionHandler + 'static,
