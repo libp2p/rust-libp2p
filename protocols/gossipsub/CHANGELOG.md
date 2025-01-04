@@ -1,6 +1,6 @@
 ## 0.48.0
 
-- Broadcast `IDONTWANT` on publish to avoid downloading data that is already available.
+- Allow broadcasting `IDONTWANT` messages when publishing to avoid downloading data that is already available.
   See [PR 5773](https://github.com/libp2p/rust-libp2p/pull/5773)
 
 - Add configurable `idontwant_message_size_threshold` parameter.
