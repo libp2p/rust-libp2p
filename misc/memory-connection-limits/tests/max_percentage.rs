@@ -20,23 +20,25 @@
 
 mod util;
 
+use std::time::Duration;
+
 use libp2p_core::Multiaddr;
 use libp2p_identity::PeerId;
 use libp2p_memory_connection_limits::*;
-use std::time::Duration;
-use sysinfo::{RefreshKind, SystemExt};
-use util::*;
-
 use libp2p_swarm::{
     dial_opts::{DialOpts, PeerCondition},
     DialError, Swarm,
 };
 use libp2p_swarm_test::SwarmExt;
+use sysinfo::{MemoryRefreshKind, RefreshKind};
+use util::*;
 
 #[test]
 fn max_percentage() {
     const CONNECTION_LIMIT: usize = 20;
-    let system_info = sysinfo::System::new_with_specifics(RefreshKind::new().with_memory());
+    let system_info = sysinfo::System::new_with_specifics(
+        RefreshKind::default().with_memory(MemoryRefreshKind::default().with_ram()),
+    );
 
     let mut network = Swarm::new_ephemeral(|_| TestBehaviour {
         connection_limits: Behaviour::with_max_percentage(0.1),
@@ -74,7 +76,9 @@ fn max_percentage() {
             .expect("Unexpected connection limit.");
     }
 
-    std::thread::sleep(Duration::from_millis(100)); // Memory stats are only updated every 100ms internally, ensure they are up-to-date when we try to exceed it.
+    // Memory stats are only updated every 100ms internally,
+    // ensure they are up-to-date when we try to exceed it.
+    std::thread::sleep(Duration::from_millis(100));
 
     match network
         .dial(

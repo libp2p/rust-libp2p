@@ -1,18 +1,14 @@
 use libp2p_identify as identify;
 use libp2p_identity as identity;
-use libp2p_kad::store::MemoryStore;
-use libp2p_kad::{Behaviour, Config, Event, Mode};
+use libp2p_kad::{store::MemoryStore, Behaviour, Config, Event, Mode};
 use libp2p_swarm::{Swarm, SwarmEvent};
 use libp2p_swarm_test::SwarmExt;
-use tracing_subscriber::EnvFilter;
 use Event::*;
 use MyBehaviourEvent::*;
 
 #[async_std::test]
 async fn server_gets_added_to_routing_table_by_client() {
-    let _ = tracing_subscriber::fmt()
-        .with_env_filter(EnvFilter::from_default_env())
-        .try_init();
+    libp2p_test_utils::with_default_env_filter();
 
     let mut client = Swarm::new_ephemeral(MyBehaviour::new);
     let mut server = Swarm::new_ephemeral(MyBehaviour::new);
@@ -23,21 +19,26 @@ async fn server_gets_added_to_routing_table_by_client() {
     let server_peer_id = *server.local_peer_id();
     async_std::task::spawn(server.loop_on_next());
 
-    let peer = client
+    let external_event_peer = client
+        .wait(|e| match e {
+            SwarmEvent::NewExternalAddrOfPeer { peer_id, .. } => Some(peer_id),
+            _ => None,
+        })
+        .await;
+    let routing_updated_peer = client
         .wait(|e| match e {
             SwarmEvent::Behaviour(Kad(RoutingUpdated { peer, .. })) => Some(peer),
             _ => None,
         })
         .await;
 
-    assert_eq!(peer, server_peer_id);
+    assert_eq!(external_event_peer, server_peer_id);
+    assert_eq!(routing_updated_peer, server_peer_id);
 }
 
 #[async_std::test]
 async fn two_servers_add_each_other_to_routing_table() {
-    let _ = tracing_subscriber::fmt()
-        .with_env_filter(EnvFilter::from_default_env())
-        .try_init();
+    libp2p_test_utils::with_default_env_filter();
 
     let mut server1 = Swarm::new_ephemeral(MyBehaviour::new);
     let mut server2 = Swarm::new_ephemeral(MyBehaviour::new);
@@ -76,9 +77,7 @@ async fn two_servers_add_each_other_to_routing_table() {
 
 #[async_std::test]
 async fn adding_an_external_addresses_activates_server_mode_on_existing_connections() {
-    let _ = tracing_subscriber::fmt()
-        .with_env_filter(EnvFilter::from_default_env())
-        .try_init();
+    libp2p_test_utils::with_default_env_filter();
 
     let mut client = Swarm::new_ephemeral(MyBehaviour::new);
     let mut server = Swarm::new_ephemeral(MyBehaviour::new);
@@ -97,7 +96,9 @@ async fn adding_an_external_addresses_activates_server_mode_on_existing_connecti
     // Server learns its external address (this could be through AutoNAT or some other mechanism).
     server.add_external_address(memory_addr);
 
-    // The server reconfigured its connection to the client to be in server mode, pushes that information to client which as a result updates its routing table and triggers a mode change to Mode::Server.
+    // The server reconfigured its connection to the client to be in server mode,
+    // pushes that information to client which as a result updates its routing
+    // table and triggers a mode change to Mode::Server.
     match libp2p_swarm_test::drive(&mut client, &mut server).await {
         (
             [Identify(identify::Event::Received { .. }), Kad(RoutingUpdated { peer: peer1, .. })],
@@ -112,9 +113,7 @@ async fn adding_an_external_addresses_activates_server_mode_on_existing_connecti
 
 #[async_std::test]
 async fn set_client_to_server_mode() {
-    let _ = tracing_subscriber::fmt()
-        .with_env_filter(EnvFilter::from_default_env())
-        .try_init();
+    libp2p_test_utils::with_default_env_filter();
 
     let mut client = Swarm::new_ephemeral(MyBehaviour::new);
     client.behaviour_mut().kad.set_mode(Some(Mode::Client));
@@ -126,6 +125,12 @@ async fn set_client_to_server_mode() {
 
     let server_peer_id = *server.local_peer_id();
 
+    let peer_id = client
+        .wait(|e| match e {
+            SwarmEvent::NewExternalAddrOfPeer { peer_id, .. } => Some(peer_id),
+            _ => None,
+        })
+        .await;
     let client_event = client.wait(|e| match e {
         SwarmEvent::Behaviour(Kad(RoutingUpdated { peer, .. })) => Some(peer),
         _ => None,
@@ -138,6 +143,7 @@ async fn set_client_to_server_mode() {
     let (peer, info) = futures::future::join(client_event, server_event).await;
 
     assert_eq!(peer, server_peer_id);
+    assert_eq!(peer_id, server_peer_id);
     assert!(info
         .protocols
         .iter()
@@ -179,7 +185,7 @@ impl MyBehaviour {
             kad: Behaviour::with_config(
                 local_peer_id,
                 MemoryStore::new(local_peer_id),
-                Config::default(),
+                Config::new(libp2p_kad::PROTOCOL_NAME),
             ),
         }
     }

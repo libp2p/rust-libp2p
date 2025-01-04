@@ -18,18 +18,27 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::behaviour::{
-    ConnectionClosed, ConnectionEstablished, DialFailure, ExpiredListenAddr, ExternalAddrExpired,
-    FromSwarm, ListenerClosed, ListenerError, NewExternalAddrCandidate, NewListenAddr, NewListener,
+use std::{
+    collections::HashMap,
+    task::{Context, Poll},
 };
+
+use libp2p_core::{
+    multiaddr::Multiaddr,
+    transport::{ListenerId, PortUse},
+    ConnectedPoint, Endpoint,
+};
+use libp2p_identity::PeerId;
+
 use crate::{
+    behaviour::{
+        ConnectionClosed, ConnectionEstablished, DialFailure, ExpiredListenAddr,
+        ExternalAddrExpired, FromSwarm, ListenerClosed, ListenerError, NewExternalAddrCandidate,
+        NewListenAddr, NewListener,
+    },
     ConnectionDenied, ConnectionHandler, ConnectionId, NetworkBehaviour, THandler, THandlerInEvent,
     THandlerOutEvent, ToSwarm,
 };
-use libp2p_core::{multiaddr::Multiaddr, transport::ListenerId, ConnectedPoint, Endpoint};
-use libp2p_identity::PeerId;
-use std::collections::HashMap;
-use std::task::{Context, Poll};
 
 /// A `MockBehaviour` is a `NetworkBehaviour` that allows for
 /// the instrumentation of return values, without keeping
@@ -41,7 +50,8 @@ where
     TOutEvent: Send + 'static,
 {
     /// The prototype protocols handler that is cloned for every
-    /// invocation of [`NetworkBehaviour::handle_established_inbound_connection`] and [`NetworkBehaviour::handle_established_outbound_connection`]
+    /// invocation of [`NetworkBehaviour::handle_established_inbound_connection`] and
+    /// [`NetworkBehaviour::handle_established_outbound_connection`]
     pub(crate) handler_proto: THandler,
     /// The addresses to return from [`NetworkBehaviour::handle_established_outbound_connection`].
     pub(crate) addresses: HashMap<PeerId, Vec<Multiaddr>>,
@@ -91,6 +101,7 @@ where
         _: PeerId,
         _: &Multiaddr,
         _: Endpoint,
+        _: PortUse,
     ) -> Result<THandler, ConnectionDenied> {
         Ok(self.handler_proto.clone())
     }
@@ -264,8 +275,8 @@ where
             })
             .take(other_established);
 
-        // We are informed that there are `other_established` additional connections. Ensure that the
-        // number of previous connections is consistent with this
+        // We are informed that there are `other_established` additional connections. Ensure that
+        // the number of previous connections is consistent with this
         if let Some(&prev) = other_peer_connections.next() {
             if prev < other_established {
                 assert_eq!(
@@ -301,6 +312,7 @@ where
             connection_id,
             endpoint,
             remaining_established,
+            cause,
         }: ConnectionClosed,
     ) {
         let mut other_closed_connections = self
@@ -316,8 +328,8 @@ where
             })
             .take(remaining_established);
 
-        // We are informed that there are `other_established` additional connections. Ensure that the
-        // number of previous connections is consistent with this
+        // We are informed that there are `other_established` additional connections. Ensure that
+        // the number of previous connections is consistent with this
         if let Some(&prev) = other_closed_connections.next() {
             if prev < remaining_established {
                 assert_eq!(
@@ -350,6 +362,7 @@ where
                 connection_id,
                 endpoint,
                 remaining_established,
+                cause,
             }));
     }
 }
@@ -425,6 +438,7 @@ where
         peer: PeerId,
         addr: &Multiaddr,
         role_override: Endpoint,
+        port_use: PortUse,
     ) -> Result<THandler<Self>, ConnectionDenied> {
         self.handle_established_outbound_connection.push((
             peer,
@@ -432,11 +446,18 @@ where
             role_override,
             connection_id,
         ));
-        self.inner
-            .handle_established_outbound_connection(connection_id, peer, addr, role_override)
+        self.inner.handle_established_outbound_connection(
+            connection_id,
+            peer,
+            addr,
+            role_override,
+            port_use,
+        )
     }
 
     fn on_swarm_event(&mut self, event: FromSwarm) {
+        self.inner.on_swarm_event(event);
+
         match event {
             FromSwarm::ConnectionEstablished(connection_established) => {
                 self.on_connection_established(connection_established)
@@ -444,68 +465,33 @@ where
             FromSwarm::ConnectionClosed(connection_closed) => {
                 self.on_connection_closed(connection_closed)
             }
-            FromSwarm::DialFailure(DialFailure {
-                peer_id,
-                connection_id,
-                error,
-            }) => {
+            FromSwarm::DialFailure(DialFailure { peer_id, .. }) => {
                 self.on_dial_failure.push(peer_id);
-                self.inner
-                    .on_swarm_event(FromSwarm::DialFailure(DialFailure {
-                        peer_id,
-                        connection_id,
-                        error,
-                    }));
             }
             FromSwarm::NewListener(NewListener { listener_id }) => {
                 self.on_new_listener.push(listener_id);
-                self.inner
-                    .on_swarm_event(FromSwarm::NewListener(NewListener { listener_id }));
             }
             FromSwarm::NewListenAddr(NewListenAddr { listener_id, addr }) => {
                 self.on_new_listen_addr.push((listener_id, addr.clone()));
-                self.inner
-                    .on_swarm_event(FromSwarm::NewListenAddr(NewListenAddr {
-                        listener_id,
-                        addr,
-                    }));
             }
             FromSwarm::ExpiredListenAddr(ExpiredListenAddr { listener_id, addr }) => {
                 self.on_expired_listen_addr
                     .push((listener_id, addr.clone()));
-                self.inner
-                    .on_swarm_event(FromSwarm::ExpiredListenAddr(ExpiredListenAddr {
-                        listener_id,
-                        addr,
-                    }));
             }
             FromSwarm::NewExternalAddrCandidate(NewExternalAddrCandidate { addr }) => {
                 self.on_new_external_addr.push(addr.clone());
-                self.inner
-                    .on_swarm_event(FromSwarm::NewExternalAddrCandidate(
-                        NewExternalAddrCandidate { addr },
-                    ));
             }
             FromSwarm::ExternalAddrExpired(ExternalAddrExpired { addr }) => {
                 self.on_expired_external_addr.push(addr.clone());
-                self.inner
-                    .on_swarm_event(FromSwarm::ExternalAddrExpired(ExternalAddrExpired { addr }));
             }
-            FromSwarm::ListenerError(ListenerError { listener_id, err }) => {
+            FromSwarm::ListenerError(ListenerError { listener_id, .. }) => {
                 self.on_listener_error.push(listener_id);
-                self.inner
-                    .on_swarm_event(FromSwarm::ListenerError(ListenerError { listener_id, err }));
             }
             FromSwarm::ListenerClosed(ListenerClosed {
                 listener_id,
                 reason,
             }) => {
                 self.on_listener_closed.push((listener_id, reason.is_ok()));
-                self.inner
-                    .on_swarm_event(FromSwarm::ListenerClosed(ListenerClosed {
-                        listener_id,
-                        reason,
-                    }));
             }
             _ => {}
         }

@@ -18,10 +18,13 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
+use std::{
+    collections::{HashMap, HashSet},
+    net::IpAddr,
+    time::Duration,
+};
+
 use crate::TopicHash;
-use std::collections::{HashMap, HashSet};
-use std::net::IpAddr;
-use std::time::Duration;
 
 /// The default number of seconds for a decay interval.
 const DEFAULT_DECAY_INTERVAL: u64 = 1;
@@ -117,12 +120,13 @@ pub struct PeerScoreParams {
 
     ///  P6: IP-colocation factor.
     ///  The parameter has an associated counter which counts the number of peers with the same IP.
-    ///  If the number of peers in the same IP exceeds `ip_colocation_factor_threshold, then the value
-    ///  is the square of the difference, ie `(peers_in_same_ip - ip_colocation_threshold)^2`.
-    ///  If the number of peers in the same IP is less than the threshold, then the value is 0.
-    ///  The weight of the parameter MUST be negative, unless you want to disable for testing.
-    ///  Note: In order to simulate many IPs in a manageable manner when testing, you can set the weight to 0
-    ///        thus disabling the IP colocation penalty.
+    ///  If the number of peers in the same IP exceeds `ip_colocation_factor_threshold, then the
+    /// value  is the square of the difference, ie `(peers_in_same_ip -
+    /// ip_colocation_threshold)^2`.  If the number of peers in the same IP is less than the
+    /// threshold, then the value is 0.  The weight of the parameter MUST be negative, unless
+    /// you want to disable for testing.  Note: In order to simulate many IPs in a manageable
+    /// manner when testing, you can set the weight to 0        thus disabling the IP
+    /// colocation penalty.
     pub ip_colocation_factor_weight: f64,
     pub ip_colocation_factor_threshold: f64,
     pub ip_colocation_factor_whitelist: HashSet<IpAddr>,
@@ -148,6 +152,13 @@ pub struct PeerScoreParams {
 
     /// Time to remember counters for a disconnected peer.
     pub retain_score: Duration,
+
+    /// Slow peer penalty conditions,
+    /// by default `slow_peer_weight` is 50 times lower than `behaviour_penalty_weight`
+    /// i.e. 50 slow peer penalties match 1 behaviour penalty.
+    pub slow_peer_weight: f64,
+    pub slow_peer_threshold: f64,
+    pub slow_peer_decay: f64,
 }
 
 impl Default for PeerScoreParams {
@@ -165,6 +176,9 @@ impl Default for PeerScoreParams {
             decay_interval: Duration::from_secs(DEFAULT_DECAY_INTERVAL),
             decay_to_zero: DEFAULT_DECAY_TO_ZERO,
             retain_score: Duration::from_secs(3600),
+            slow_peer_weight: -0.2,
+            slow_peer_threshold: 0.0,
+            slow_peer_decay: 0.2,
         }
     }
 }
@@ -229,16 +243,16 @@ pub struct TopicScoreParams {
 
     ///  P1: time in the mesh
     ///  This is the time the peer has been grafted in the mesh.
-    ///  The value of of the parameter is the `time/time_in_mesh_quantum`, capped by `time_in_mesh_cap`
-    ///  The weight of the parameter must be positive (or zero to disable).
+    ///  The value of the parameter is the `time/time_in_mesh_quantum`, capped by
+    /// `time_in_mesh_cap`  The weight of the parameter must be positive (or zero to disable).
     pub time_in_mesh_weight: f64,
     pub time_in_mesh_quantum: Duration,
     pub time_in_mesh_cap: f64,
 
     ///  P2: first message deliveries
     ///  This is the number of message deliveries in the topic.
-    ///  The value of the parameter is a counter, decaying with `first_message_deliveries_decay`, and capped
-    ///  by `first_message_deliveries_cap`.
+    ///  The value of the parameter is a counter, decaying with `first_message_deliveries_decay`,
+    /// and capped  by `first_message_deliveries_cap`.
     ///  The weight of the parameter MUST be positive (or zero to disable).
     pub first_message_deliveries_weight: f64,
     pub first_message_deliveries_decay: f64,
@@ -254,8 +268,8 @@ pub struct TopicScoreParams {
     ///  before we have forwarded it to them.
     ///  The parameter has an associated counter, decaying with `mesh_message_deliveries_decay`.
     ///  If the counter exceeds the threshold, its value is 0.
-    ///  If the counter is below the `mesh_message_deliveries_threshold`, the value is the square of
-    ///  the deficit, ie (`message_deliveries_threshold - counter)^2`
+    ///  If the counter is below the `mesh_message_deliveries_threshold`, the value is the square
+    /// of  the deficit, ie (`message_deliveries_threshold - counter)^2`
     ///  The penalty is only activated after `mesh_message_deliveries_activation` time in the mesh.
     ///  The weight of the parameter MUST be negative (or zero to disable).
     pub mesh_message_deliveries_weight: f64,

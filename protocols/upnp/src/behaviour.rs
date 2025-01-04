@@ -32,15 +32,20 @@ use std::{
     time::Duration,
 };
 
-use crate::tokio::{is_addr_global, Gateway};
 use futures::{channel::oneshot, Future, StreamExt};
 use futures_timer::Delay;
 use igd_next::PortMappingProtocol;
-use libp2p_core::{multiaddr, transport::ListenerId, Endpoint, Multiaddr};
+use libp2p_core::{
+    multiaddr,
+    transport::{ListenerId, PortUse},
+    Endpoint, Multiaddr,
+};
 use libp2p_swarm::{
     derive_prelude::PeerId, dummy, ConnectionDenied, ConnectionId, ExpiredListenAddr, FromSwarm,
     NetworkBehaviour, NewListenAddr, ToSwarm,
 };
+
+use crate::tokio::{is_addr_global, Gateway};
 
 /// The duration in seconds of a port mapping on the gateway.
 const MAPPING_DURATION: u32 = 3600;
@@ -248,6 +253,7 @@ impl NetworkBehaviour for Behaviour {
         _peer: PeerId,
         _addr: &Multiaddr,
         _role_override: Endpoint,
+        _port_use: PortUse,
     ) -> Result<libp2p_swarm::THandler<Self>, libp2p_swarm::ConnectionDenied> {
         Ok(dummy::ConnectionHandler)
     }
@@ -281,8 +287,9 @@ impl NetworkBehaviour for Behaviour {
 
                 match &mut self.state {
                     GatewayState::Searching(_) => {
-                        // As the gateway is not yet available we add the mapping with `MappingState::Inactive`
-                        // so that when and if it becomes available we map it.
+                        // As the gateway is not yet available we add the mapping with
+                        // `MappingState::Inactive` so that when and if it
+                        // becomes available we map it.
                         self.mappings.insert(
                             Mapping {
                                 listener_id,
@@ -361,7 +368,7 @@ impl NetworkBehaviour for Behaviour {
         _connection_id: ConnectionId,
         event: libp2p_swarm::THandlerOutEvent<Self>,
     ) {
-        void::unreachable(event)
+        libp2p_core::util::unreachable(event)
     }
 
     #[tracing::instrument(level = "trace", name = "NetworkBehaviour::poll", skip(self, cx))]

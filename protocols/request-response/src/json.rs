@@ -18,7 +18,8 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-/// A request-response behaviour using [`serde_json`] for serializing and deserializing the messages.
+/// A request-response behaviour using [`serde_json`] for serializing and deserializing the
+/// messages.
 ///
 /// # Example
 ///
@@ -36,19 +37,22 @@
 /// }
 ///
 /// let behaviour = json::Behaviour::<GreetRequest, GreetResponse>::new(
-///     [(StreamProtocol::new("/my-json-protocol"), ProtocolSupport::Full)],
-///     request_response::Config::default()
+///     [(
+///         StreamProtocol::new("/my-json-protocol"),
+///         ProtocolSupport::Full,
+///     )],
+///     request_response::Config::default(),
 /// );
 /// ```
 pub type Behaviour<Req, Resp> = crate::Behaviour<codec::Codec<Req, Resp>>;
 
 mod codec {
+    use std::{io, marker::PhantomData};
+
     use async_trait::async_trait;
     use futures::prelude::*;
-    use futures::{AsyncRead, AsyncWrite};
     use libp2p_swarm::StreamProtocol;
     use serde::{de::DeserializeOwned, Serialize};
-    use std::{io, marker::PhantomData};
 
     pub struct Codec<Req, Resp> {
         /// Max request size in bytes
@@ -160,11 +164,12 @@ mod codec {
 
 #[cfg(test)]
 mod tests {
-    use crate::Codec;
     use futures::AsyncWriteExt;
     use futures_ringbuf::Endpoint;
     use libp2p_swarm::StreamProtocol;
     use serde::{Deserialize, Serialize};
+
+    use crate::Codec;
 
     #[async_std::test]
     async fn test_codec() {

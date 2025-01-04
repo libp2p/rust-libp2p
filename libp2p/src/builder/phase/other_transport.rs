@@ -1,19 +1,18 @@
-use std::convert::Infallible;
-use std::marker::PhantomData;
-use std::sync::Arc;
+use std::{convert::Infallible, marker::PhantomData, sync::Arc};
 
-use libp2p_core::upgrade::{InboundConnectionUpgrade, OutboundConnectionUpgrade};
-use libp2p_core::Transport;
+use libp2p_core::{
+    upgrade::{InboundConnectionUpgrade, OutboundConnectionUpgrade},
+    Transport,
+};
 #[cfg(feature = "relay")]
 use libp2p_core::{Negotiated, UpgradeInfo};
 #[cfg(feature = "relay")]
 use libp2p_identity::PeerId;
 
+use super::*;
 #[allow(deprecated)]
 use crate::bandwidth::BandwidthSinks;
 use crate::SwarmBuilder;
-
-use super::*;
 
 pub struct OtherTransportPhase<T> {
     pub(crate) transport: T,
@@ -73,7 +72,7 @@ impl<Provider, T: AuthenticatedMultiplexedTransport>
 impl<T: AuthenticatedMultiplexedTransport>
     SwarmBuilder<super::provider::AsyncStd, OtherTransportPhase<T>>
 {
-    pub async fn with_dns(
+    pub fn with_dns(
         self,
     ) -> Result<
         SwarmBuilder<
@@ -82,7 +81,7 @@ impl<T: AuthenticatedMultiplexedTransport>
         >,
         std::io::Error,
     > {
-        self.without_any_other_transports().with_dns().await
+        self.without_any_other_transports().with_dns()
     }
 }
 #[cfg(all(not(target_arch = "wasm32"), feature = "tokio", feature = "dns"))]

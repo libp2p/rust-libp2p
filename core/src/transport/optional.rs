@@ -18,9 +18,14 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::transport::{ListenerId, Transport, TransportError, TransportEvent};
+use std::{
+    pin::Pin,
+    task::{Context, Poll},
+};
+
 use multiaddr::Multiaddr;
-use std::{pin::Pin, task::Context, task::Poll};
+
+use crate::transport::{DialOpts, ListenerId, Transport, TransportError, TransportEvent};
 
 /// Transport that is possibly disabled.
 ///
@@ -80,30 +85,15 @@ where
         }
     }
 
-    fn dial(&mut self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
-        if let Some(inner) = self.0.as_mut() {
-            inner.dial(addr)
-        } else {
-            Err(TransportError::MultiaddrNotSupported(addr))
-        }
-    }
-
-    fn dial_as_listener(
+    fn dial(
         &mut self,
         addr: Multiaddr,
+        opts: DialOpts,
     ) -> Result<Self::Dial, TransportError<Self::Error>> {
         if let Some(inner) = self.0.as_mut() {
-            inner.dial_as_listener(addr)
+            inner.dial(addr, opts)
         } else {
             Err(TransportError::MultiaddrNotSupported(addr))
-        }
-    }
-
-    fn address_translation(&self, server: &Multiaddr, observed: &Multiaddr) -> Option<Multiaddr> {
-        if let Some(inner) = &self.0 {
-            inner.address_translation(server, observed)
-        } else {
-            None
         }
     }
 

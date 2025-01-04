@@ -1,7 +1,10 @@
+use std::{
+    fmt,
+    hash::{Hash, Hasher},
+    sync::Arc,
+};
+
 use either::Either;
-use std::fmt;
-use std::hash::{Hash, Hasher};
-use std::sync::Arc;
 
 /// Identifies a protocol for a stream.
 ///
@@ -39,7 +42,9 @@ impl StreamProtocol {
         }
 
         Ok(StreamProtocol {
-            inner: Either::Right(Arc::from(protocol)), // FIXME: Can we somehow reuse the allocation from the owned string?
+            // FIXME: Can we somehow reuse the
+            // allocation from the owned string?
+            inner: Either::Right(Arc::from(protocol)),
         })
     }
 }

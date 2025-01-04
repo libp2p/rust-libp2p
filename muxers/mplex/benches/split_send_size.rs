@@ -21,21 +21,23 @@
 //! A benchmark for the `split_send_size` configuration option
 //! using different transports.
 
+use std::{pin::Pin, time::Duration};
+
 use async_std::task;
 use criterion::{black_box, criterion_group, criterion_main, Criterion, Throughput};
-use futures::future::poll_fn;
-use futures::prelude::*;
-use futures::{channel::oneshot, future::join};
-use libp2p_core::muxing::StreamMuxerExt;
-use libp2p_core::transport::ListenerId;
-use libp2p_core::{multiaddr::multiaddr, muxing, transport, upgrade, Multiaddr, Transport};
+use futures::{
+    channel::oneshot,
+    future::{join, poll_fn},
+    prelude::*,
+};
+use libp2p_core::{
+    multiaddr::multiaddr, muxing, muxing::StreamMuxerExt, transport, transport::ListenerId,
+    upgrade, Endpoint, Multiaddr, Transport,
+};
 use libp2p_identity as identity;
 use libp2p_identity::PeerId;
 use libp2p_mplex as mplex;
 use libp2p_plaintext as plaintext;
-use std::pin::Pin;
-use std::time::Duration;
-use tracing_subscriber::EnvFilter;
 
 type BenchTransport = transport::Boxed<(PeerId, muxing::StreamMuxerBox)>;
 
@@ -52,9 +54,7 @@ const BENCH_SIZES: [usize; 8] = [
 ];
 
 fn prepare(c: &mut Criterion) {
-    let _ = tracing_subscriber::fmt()
-        .with_env_filter(EnvFilter::from_default_env())
-        .try_init();
+    libp2p_test_utils::with_default_env_filter();
 
     let payload: Vec<u8> = vec![1; 1024 * 1024];
 
@@ -101,7 +101,7 @@ fn prepare(c: &mut Criterion) {
 fn run(
     receiver_trans: &mut BenchTransport,
     sender_trans: &mut BenchTransport,
-    payload: &Vec<u8>,
+    payload: &[u8],
     listen_addr: &Multiaddr,
 ) {
     receiver_trans
@@ -119,7 +119,8 @@ fn run(
                 }
                 transport::TransportEvent::Incoming { upgrade, .. } => {
                     let (_peer, mut conn) = upgrade.await.unwrap();
-                    // Just calling `poll_inbound` without `poll` is fine here because mplex makes progress through all `poll_` functions. It is hacky though.
+                    // Just calling `poll_inbound` without `poll` is fine here because mplex makes
+                    // progress through all `poll_` functions. It is hacky though.
                     let mut s = poll_fn(|cx| conn.poll_inbound_unpin(cx))
                         .await
                         .expect("unexpected error");
@@ -146,8 +147,19 @@ fn run(
     // Spawn and block on the sender, i.e. until all data is sent.
     let sender = async move {
         let addr = addr_receiver.await.unwrap();
-        let (_peer, mut conn) = sender_trans.dial(addr).unwrap().await.unwrap();
-        // Just calling `poll_outbound` without `poll` is fine here because mplex makes progress through all `poll_` functions. It is hacky though.
+        let (_peer, mut conn) = sender_trans
+            .dial(
+                addr,
+                transport::DialOpts {
+                    role: Endpoint::Dialer,
+                    port_use: transport::PortUse::Reuse,
+                },
+            )
+            .unwrap()
+            .await
+            .unwrap();
+        // Just calling `poll_outbound` without `poll` is fine here because mplex makes progress
+        // through all `poll_` functions. It is hacky though.
         let mut stream = poll_fn(|cx| conn.poll_outbound_unpin(cx)).await.unwrap();
         let mut off = 0;
         loop {

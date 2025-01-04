@@ -18,27 +18,33 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::behaviour::Mode;
-use crate::protocol::{
-    KadInStreamSink, KadOutStreamSink, KadPeer, KadRequestMsg, KadResponseMsg, ProtocolConfig,
+use std::{
+    collections::VecDeque,
+    error, fmt, io,
+    marker::PhantomData,
+    pin::Pin,
+    task::{Context, Poll, Waker},
+    time::Duration,
 };
-use crate::record::{self, Record};
-use crate::QueryId;
+
 use either::Either;
-use futures::channel::oneshot;
-use futures::prelude::*;
-use futures::stream::SelectAll;
+use futures::{channel::oneshot, prelude::*, stream::SelectAll};
 use libp2p_core::{upgrade, ConnectedPoint};
 use libp2p_identity::PeerId;
-use libp2p_swarm::handler::{ConnectionEvent, FullyNegotiatedInbound, FullyNegotiatedOutbound};
 use libp2p_swarm::{
+    handler::{ConnectionEvent, FullyNegotiatedInbound, FullyNegotiatedOutbound},
     ConnectionHandler, ConnectionHandlerEvent, Stream, StreamUpgradeError, SubstreamProtocol,
     SupportedProtocols,
 };
-use std::collections::VecDeque;
-use std::task::Waker;
-use std::time::Duration;
-use std::{error, fmt, io, marker::PhantomData, pin::Pin, task::Context, task::Poll};
+
+use crate::{
+    behaviour::Mode,
+    protocol::{
+        KadInStreamSink, KadOutStreamSink, KadPeer, KadRequestMsg, KadResponseMsg, ProtocolConfig,
+    },
+    record::{self, Record},
+    QueryId,
+};
 
 const MAX_NUM_STREAMS: usize = 32;
 
@@ -60,7 +66,8 @@ pub struct Handler {
     next_connec_unique_id: UniqueConnecId,
 
     /// List of active outbound streams.
-    outbound_substreams: futures_bounded::FuturesMap<QueryId, io::Result<Option<KadResponseMsg>>>,
+    outbound_substreams:
+        futures_bounded::FuturesTupleSet<io::Result<Option<KadResponseMsg>>, QueryId>,
 
     /// Contains one [`oneshot::Sender`] per outbound stream that we have requested.
     pending_streams:
@@ -453,7 +460,7 @@ impl Handler {
             remote_peer_id,
             next_connec_unique_id: UniqueConnecId(0),
             inbound_substreams: Default::default(),
-            outbound_substreams: futures_bounded::FuturesMap::new(
+            outbound_substreams: futures_bounded::FuturesTupleSet::new(
                 Duration::from_secs(10),
                 MAX_NUM_STREAMS,
             ),
@@ -497,10 +504,12 @@ impl Handler {
         >,
     ) {
         // If `self.allow_listening` is false, then we produced a `DeniedUpgrade` and `protocol`
-        // is a `Void`.
+        // is a `Infallible`.
         let protocol = match protocol {
             future::Either::Left(p) => p,
-            future::Either::Right(p) => void::unreachable(p),
+            // TODO: remove when Rust 1.82 is MSRV
+            #[allow(unreachable_patterns)]
+            future::Either::Right(p) => libp2p_core::util::unreachable(p),
         };
 
         if self.protocol_status.is_none() {
@@ -547,37 +556,42 @@ impl Handler {
             });
     }
 
-    /// Takes the given [`KadRequestMsg`] and composes it into an outbound request-response protocol handshake using a [`oneshot::channel`].
+    /// Takes the given [`KadRequestMsg`] and composes it into an outbound request-response protocol
+    /// handshake using a [`oneshot::channel`].
     fn queue_new_stream(&mut self, id: QueryId, msg: KadRequestMsg) {
         let (sender, receiver) = oneshot::channel();
 
         self.pending_streams.push_back(sender);
-        let result = self.outbound_substreams.try_push(id, async move {
-            let mut stream = receiver
-                .await
-                .map_err(|_| io::Error::from(io::ErrorKind::BrokenPipe))?
-                .map_err(|e| match e {
-                    StreamUpgradeError::Timeout => io::ErrorKind::TimedOut.into(),
-                    StreamUpgradeError::Apply(e) => e,
-                    StreamUpgradeError::NegotiationFailed => {
-                        io::Error::new(io::ErrorKind::ConnectionRefused, "protocol not supported")
-                    }
-                    StreamUpgradeError::Io(e) => e,
-                })?;
+        let result = self.outbound_substreams.try_push(
+            async move {
+                let mut stream = receiver
+                    .await
+                    .map_err(|_| io::Error::from(io::ErrorKind::BrokenPipe))?
+                    .map_err(|e| match e {
+                        StreamUpgradeError::Timeout => io::ErrorKind::TimedOut.into(),
+                        StreamUpgradeError::Apply(e) => e,
+                        StreamUpgradeError::NegotiationFailed => io::Error::new(
+                            io::ErrorKind::ConnectionRefused,
+                            "protocol not supported",
+                        ),
+                        StreamUpgradeError::Io(e) => e,
+                    })?;
 
-            let has_answer = !matches!(msg, KadRequestMsg::AddProvider { .. });
+                let has_answer = !matches!(msg, KadRequestMsg::AddProvider { .. });
 
-            stream.send(msg).await?;
-            stream.close().await?;
+                stream.send(msg).await?;
+                stream.close().await?;
 
-            if !has_answer {
-                return Ok(None);
-            }
+                if !has_answer {
+                    return Ok(None);
+                }
 
-            let msg = stream.next().await.ok_or(io::ErrorKind::UnexpectedEof)??;
+                let msg = stream.next().await.ok_or(io::ErrorKind::UnexpectedEof)??;
 
-            Ok(Some(msg))
-        });
+                Ok(Some(msg))
+            },
+            id,
+        );
 
         debug_assert!(
             result.is_ok(),
@@ -728,15 +742,15 @@ impl ConnectionHandler for Handler {
             }
 
             match self.outbound_substreams.poll_unpin(cx) {
-                Poll::Ready((query, Ok(Ok(Some(response))))) => {
+                Poll::Ready((Ok(Ok(Some(response))), query_id)) => {
                     return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(
-                        process_kad_response(response, query),
+                        process_kad_response(response, query_id),
                     ))
                 }
-                Poll::Ready((_, Ok(Ok(None)))) => {
+                Poll::Ready((Ok(Ok(None)), _)) => {
                     continue;
                 }
-                Poll::Ready((query_id, Ok(Err(e)))) => {
+                Poll::Ready((Ok(Err(e)), query_id)) => {
                     return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(
                         HandlerEvent::QueryError {
                             error: HandlerQueryErr::Io(e),
@@ -744,7 +758,7 @@ impl ConnectionHandler for Handler {
                         },
                     ))
                 }
-                Poll::Ready((query_id, Err(_timeout))) => {
+                Poll::Ready((Err(_timeout), query_id)) => {
                     return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(
                         HandlerEvent::QueryError {
                             error: HandlerQueryErr::Io(io::ErrorKind::TimedOut.into()),
@@ -1053,9 +1067,9 @@ fn process_kad_response(event: KadResponseMsg, query_id: QueryId) -> HandlerEven
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use quickcheck::{Arbitrary, Gen};
-    use tracing_subscriber::EnvFilter;
+
+    use super::*;
 
     impl Arbitrary for ProtocolStatus {
         fn arbitrary(g: &mut Gen) -> Self {
@@ -1068,9 +1082,7 @@ mod tests {
 
     #[test]
     fn compute_next_protocol_status_test() {
-        let _ = tracing_subscriber::fmt()
-            .with_env_filter(EnvFilter::from_default_env())
-            .try_init();
+        libp2p_test_utils::with_default_env_filter();
 
         fn prop(now_supported: bool, current: Option<ProtocolStatus>) {
             let new = compute_new_protocol_status(now_supported, current);

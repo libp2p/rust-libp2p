@@ -22,14 +22,17 @@
 
 pub mod store;
 
+use std::{
+    borrow::Borrow,
+    hash::{Hash, Hasher},
+};
+
 use bytes::Bytes;
-use instant::Instant;
 use libp2p_core::{multihash::Multihash, Multiaddr};
 use libp2p_identity::PeerId;
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
-use std::borrow::Borrow;
-use std::hash::{Hash, Hasher};
+use web_time::Instant;
 
 /// The (opaque) key of a record.
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
@@ -101,7 +104,7 @@ impl Record {
 
     /// Checks whether the record is expired w.r.t. the given `Instant`.
     pub fn is_expired(&self, now: Instant) -> bool {
-        self.expires.map_or(false, |t| now >= t)
+        self.expires.is_some_and(|t| now >= t)
     }
 }
 
@@ -154,16 +157,18 @@ impl ProviderRecord {
 
     /// Checks whether the provider record is expired w.r.t. the given `Instant`.
     pub fn is_expired(&self, now: Instant) -> bool {
-        self.expires.map_or(false, |t| now >= t)
+        self.expires.is_some_and(|t| now >= t)
     }
 }
 
 #[cfg(test)]
 mod tests {
+    use std::time::Duration;
+
+    use quickcheck::*;
+
     use super::*;
     use crate::SHA_256_MH;
-    use quickcheck::*;
-    use std::time::Duration;
 
     impl Arbitrary for Key {
         fn arbitrary(g: &mut Gen) -> Key {

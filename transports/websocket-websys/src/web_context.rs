@@ -1,4 +1,7 @@
-use wasm_bindgen::{prelude::*, JsCast};
+// TODO: remove when https://github.com/rust-lang/rust-clippy/issues/12377 fix lands in stable clippy.
+#![allow(clippy::empty_docs)]
+
+use wasm_bindgen::prelude::*;
 use web_sys::window;
 
 /// Web context that abstract the window vs web worker API

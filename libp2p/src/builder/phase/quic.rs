@@ -1,5 +1,5 @@
-use super::*;
-use crate::SwarmBuilder;
+use std::{marker::PhantomData, sync::Arc};
+
 #[cfg(all(not(target_arch = "wasm32"), feature = "websocket"))]
 use libp2p_core::muxing::StreamMuxer;
 use libp2p_core::upgrade::{InboundConnectionUpgrade, OutboundConnectionUpgrade};
@@ -8,7 +8,9 @@ use libp2p_core::upgrade::{InboundConnectionUpgrade, OutboundConnectionUpgrade};
     all(not(target_arch = "wasm32"), feature = "websocket")
 ))]
 use libp2p_core::{InboundUpgrade, Negotiated, OutboundUpgrade, UpgradeInfo};
-use std::{marker::PhantomData, sync::Arc};
+
+use super::*;
+use crate::SwarmBuilder;
 
 pub struct QuicPhase<T> {
     pub(crate) transport: T,
@@ -150,7 +152,7 @@ impl<Provider, T: AuthenticatedMultiplexedTransport> SwarmBuilder<Provider, Quic
 }
 #[cfg(all(not(target_arch = "wasm32"), feature = "async-std", feature = "dns"))]
 impl<T: AuthenticatedMultiplexedTransport> SwarmBuilder<super::provider::AsyncStd, QuicPhase<T>> {
-    pub async fn with_dns(
+    pub fn with_dns(
         self,
     ) -> Result<
         SwarmBuilder<
@@ -162,7 +164,6 @@ impl<T: AuthenticatedMultiplexedTransport> SwarmBuilder<super::provider::AsyncSt
         self.without_quic()
             .without_any_other_transports()
             .with_dns()
-            .await
     }
 }
 #[cfg(all(not(target_arch = "wasm32"), feature = "tokio", feature = "dns"))]

@@ -1,0 +1,13 @@
+{
+    "drips": {
+        "ethereum": {
+            "ownedBy": "0x79c49637182Ea32734f7e8445a3649c22ff348f2"
+        },
+        "filecoin": {
+            "ownedBy": "0x79c49637182Ea32734f7e8445a3649c22ff348f2"
+        }
+    },
+    "opRetro": {
+        "projectId": "0xdf1bb03d08808e2d789f5eac8462bdc560f1bb5b0877f0cf8c66ab53a0bc2f5c"
+    }
+}

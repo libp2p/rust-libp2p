@@ -18,13 +18,15 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use super::{Incoming, Provider};
+use std::{
+    io, net,
+    task::{Context, Poll},
+};
 
 use async_io::Async;
 use futures::future::{BoxFuture, FutureExt};
-use std::io;
-use std::net;
-use std::task::{Context, Poll};
+
+use super::{Incoming, Provider};
 
 /// A TCP [`Transport`](libp2p_core::Transport) that works with the `async-std` ecosystem.
 ///
@@ -40,9 +42,14 @@ use std::task::{Context, Poll};
 /// # async fn main() {
 /// let mut transport = tcp::async_io::Transport::new(tcp::Config::default());
 /// let id = ListenerId::next();
-/// transport.listen_on(id, "/ip4/127.0.0.1/tcp/0".parse().unwrap()).unwrap();
+/// transport
+///     .listen_on(id, "/ip4/127.0.0.1/tcp/0".parse().unwrap())
+///     .unwrap();
 ///
-/// let addr = future::poll_fn(|cx| Pin::new(&mut transport).poll(cx)).await.into_new_address().unwrap();
+/// let addr = future::poll_fn(|cx| Pin::new(&mut transport).poll(cx))
+///     .await
+///     .into_new_address()
+///     .unwrap();
 ///
 /// println!("Listening on {addr}");
 /// # }

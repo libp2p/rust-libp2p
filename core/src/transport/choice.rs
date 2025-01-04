@@ -18,12 +18,19 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::either::EitherFuture;
-use crate::transport::{ListenerId, Transport, TransportError, TransportEvent};
+use std::{
+    pin::Pin,
+    task::{Context, Poll},
+};
+
 use either::Either;
 use futures::future;
 use multiaddr::Multiaddr;
-use std::{pin::Pin, task::Context, task::Poll};
+
+use crate::{
+    either::EitherFuture,
+    transport::{DialOpts, ListenerId, Transport, TransportError, TransportEvent},
+};
 
 /// Struct returned by `or_transport()`.
 #[derive(Debug, Copy, Clone)]
@@ -92,79 +99,52 @@ where
         self.0.remove_listener(id) || self.1.remove_listener(id)
     }
 
-    fn dial(&mut self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
-        tracing::trace!(
-            address=%addr,
-            "Attempting to dial address using {}",
-            std::any::type_name::<A>()
-        );
-        let addr = match self.0.dial(addr) {
-            Ok(connec) => return Ok(EitherFuture::First(connec)),
-            Err(TransportError::MultiaddrNotSupported(addr)) => {
-                tracing::debug!(
-                    address=%addr,
-                    "Failed to dial address using {}",
-                    std::any::type_name::<A>()
-                );
-                addr
-            }
-            Err(TransportError::Other(err)) => {
-                return Err(TransportError::Other(Either::Left(err)))
-            }
-        };
-
-        tracing::trace!(
-            address=%addr,
-            "Attempting to dial address using {}",
-            std::any::type_name::<A>()
-        );
-        let addr = match self.1.dial(addr) {
-            Ok(connec) => return Ok(EitherFuture::Second(connec)),
-            Err(TransportError::MultiaddrNotSupported(addr)) => {
-                tracing::debug!(
-                    address=%addr,
-                    "Failed to dial address using {}",
-                    std::any::type_name::<A>()
-                );
-                addr
-            }
-            Err(TransportError::Other(err)) => {
-                return Err(TransportError::Other(Either::Right(err)))
-            }
-        };
-
-        Err(TransportError::MultiaddrNotSupported(addr))
-    }
-
-    fn dial_as_listener(
+    fn dial(
         &mut self,
         addr: Multiaddr,
+        opts: DialOpts,
     ) -> Result<Self::Dial, TransportError<Self::Error>> {
-        let addr = match self.0.dial_as_listener(addr) {
+        tracing::trace!(
+            address=%addr,
+            "Attempting to dial using {}",
+            std::any::type_name::<A>()
+        );
+        let addr = match self.0.dial(addr, opts) {
             Ok(connec) => return Ok(EitherFuture::First(connec)),
-            Err(TransportError::MultiaddrNotSupported(addr)) => addr,
+            Err(TransportError::MultiaddrNotSupported(addr)) => {
+                tracing::debug!(
+                    address=%addr,
+                    "Failed to dial using {}",
+                    std::any::type_name::<B>(),
+                );
+                addr
+            }
             Err(TransportError::Other(err)) => {
                 return Err(TransportError::Other(Either::Left(err)))
             }
         };
 
-        let addr = match self.1.dial_as_listener(addr) {
+        tracing::trace!(
+            address=%addr,
+            "Attempting to dial {}",
+            std::any::type_name::<A>()
+        );
+        let addr = match self.1.dial(addr, opts) {
             Ok(connec) => return Ok(EitherFuture::Second(connec)),
-            Err(TransportError::MultiaddrNotSupported(addr)) => addr,
+            Err(TransportError::MultiaddrNotSupported(addr)) => {
+                tracing::debug!(
+                    address=%addr,
+                    "Failed to dial using {}",
+                    std::any::type_name::<B>(),
+                );
+                addr
+            }
             Err(TransportError::Other(err)) => {
                 return Err(TransportError::Other(Either::Right(err)))
             }
         };
 
         Err(TransportError::MultiaddrNotSupported(addr))
-    }
-
-    fn address_translation(&self, server: &Multiaddr, observed: &Multiaddr) -> Option<Multiaddr> {
-        if let Some(addr) = self.0.address_translation(server, observed) {
-            Some(addr)
-        } else {
-            self.1.address_translation(server, observed)
-        }
     }
 
     fn poll(

@@ -18,22 +18,22 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use std::borrow::Cow;
-use std::sync::Arc;
-use std::time::Duration;
-
-use crate::error::ConfigBuilderError;
-use crate::protocol::{ProtocolConfig, ProtocolId, FLOODSUB_PROTOCOL};
-use crate::types::{Message, MessageId, PeerKind};
+use std::{borrow::Cow, sync::Arc, time::Duration};
 
 use libp2p_identity::PeerId;
 use libp2p_swarm::StreamProtocol;
 
+use crate::{
+    error::ConfigBuilderError,
+    protocol::{ProtocolConfig, ProtocolId, FLOODSUB_PROTOCOL},
+    types::{Message, MessageId, PeerKind},
+};
+
 /// The types of message validation that can be employed by gossipsub.
 #[derive(Debug, Clone)]
 pub enum ValidationMode {
-    /// This is the default setting. This requires the message author to be a valid [`PeerId`] and to
-    /// be present as well as the sequence number. All messages must have valid signatures.
+    /// This is the default setting. This requires the message author to be a valid [`PeerId`] and
+    /// to be present as well as the sequence number. All messages must have valid signatures.
     ///
     /// NOTE: This setting will reject messages from nodes using
     /// [`crate::behaviour::MessageAuthenticity::Anonymous`] and all messages that do not have
@@ -95,6 +95,10 @@ pub struct Config {
     max_ihave_messages: usize,
     iwant_followup_time: Duration,
     published_message_ids_cache_time: Duration,
+    connection_handler_queue_len: usize,
+    connection_handler_publish_duration: Duration,
+    connection_handler_forward_duration: Duration,
+    idontwant_message_size_threshold: usize,
 }
 
 impl Config {
@@ -131,8 +135,8 @@ impl Config {
 
     /// Affects how peers are selected when pruning a mesh due to over subscription.
     ///
-    ///  At least `retain_scores` of the retained peers will be high-scoring, while the remainder are
-    ///  chosen randomly (D_score in the spec, default is 4).
+    ///  At least `retain_scores` of the retained peers will be high-scoring, while the remainder
+    /// are  chosen randomly (D_score in the spec, default is 4).
     pub fn retain_scores(&self) -> usize {
         self.retain_scores
     }
@@ -174,7 +178,8 @@ impl Config {
 
     /// The maximum byte size for each gossipsub RPC (default is 65536 bytes).
     ///
-    /// This represents the maximum size of the entire protobuf payload. It must be at least
+    /// This represents the maximum size of the published message. It is additionally wrapped
+    /// in a protobuf struct, so the actual wire size may be a bit larger. It must be at least
     /// large enough to support basic control messages. If Peer eXchange is enabled, this
     /// must be large enough to transmit the desired peer information on pruning. It must be at
     /// least 100 bytes. Default is 65536 bytes.
@@ -262,9 +267,9 @@ impl Config {
         self.unsubscribe_backoff
     }
 
-    /// Number of heartbeat slots considered as slack for backoffs. This gurantees that we wait
+    /// Number of heartbeat slots considered as slack for backoffs. This guarantees that we wait
     /// at least backoff_slack heartbeats after a backoff is over before we try to graft. This
-    /// solves problems occuring through high latencies. In particular if
+    /// solves problems occurring through high latencies. In particular if
     /// `backoff_slack * heartbeat_interval` is longer than any latencies between processing
     /// prunes on our side and processing prunes on the receiving side this guarantees that we
     /// get not punished for too early grafting. The default is 1.
@@ -292,7 +297,7 @@ impl Config {
         self.mesh_outbound_min
     }
 
-    /// Number of heartbeat ticks that specifcy the interval in which opportunistic grafting is
+    /// Number of heartbeat ticks that specify the interval in which opportunistic grafting is
     /// applied. Every `opportunistic_graft_ticks` we will attempt to select some high-scoring mesh
     /// peers to replace lower-scoring ones, if the median score of our mesh peers falls below a
     /// threshold (see <https://godoc.org/github.com/libp2p/go-libp2p-pubsub#PeerScoreThresholds>).
@@ -350,6 +355,33 @@ impl Config {
     pub fn published_message_ids_cache_time(&self) -> Duration {
         self.published_message_ids_cache_time
     }
+
+    /// The max number of messages a `ConnectionHandler` can buffer. The default is 5000.
+    pub fn connection_handler_queue_len(&self) -> usize {
+        self.connection_handler_queue_len
+    }
+
+    /// The duration a message to be published can wait to be sent before it is abandoned. The
+    /// default is 5 seconds.
+    pub fn publish_queue_duration(&self) -> Duration {
+        self.connection_handler_publish_duration
+    }
+
+    /// The duration a message to be forwarded can wait to be sent before it is abandoned. The
+    /// default is 1s.
+    pub fn forward_queue_duration(&self) -> Duration {
+        self.connection_handler_forward_duration
+    }
+
+    // The message size threshold for which IDONTWANT messages are sent.
+    // Sending IDONTWANT messages for small messages can have a negative effect to the overall
+    // traffic and CPU load. This acts as a lower bound cutoff for the message size to which
+    // IDONTWANT won't be sent to peers. Only works if the peers support Gossipsub1.2
+    // (see https://github.com/libp2p/specs/blob/master/pubsub/gossipsub/gossipsub-v1.2.md#idontwant-message)
+    // default is 1kB
+    pub fn idontwant_message_size_threshold(&self) -> usize {
+        self.idontwant_message_size_threshold
+    }
 }
 
 impl Default for Config {
@@ -402,7 +434,9 @@ impl Default for ConfigBuilder {
                 }),
                 allow_self_origin: false,
                 do_px: false,
-                prune_peers: 0, // NOTE: Increasing this currently has little effect until Signed records are implemented.
+                // NOTE: Increasing this currently has little effect until Signed
+                // records are implemented.
+                prune_peers: 0,
                 prune_backoff: Duration::from_secs(60),
                 unsubscribe_backoff: Duration::from_secs(10),
                 backoff_slack: 1,
@@ -417,6 +451,10 @@ impl Default for ConfigBuilder {
                 max_ihave_messages: 10,
                 iwant_followup_time: Duration::from_secs(3),
                 published_message_ids_cache_time: Duration::from_secs(10),
+                connection_handler_queue_len: 5000,
+                connection_handler_publish_duration: Duration::from_secs(5),
+                connection_handler_forward_duration: Duration::from_secs(1),
+                idontwant_message_size_threshold: 1000,
             },
             invalid_protocol: false,
         }
@@ -433,7 +471,8 @@ impl From<Config> for ConfigBuilder {
 }
 
 impl ConfigBuilder {
-    /// The protocol id prefix to negotiate this protocol (default is `/meshsub/1.1.0` and `/meshsub/1.0.0`).
+    /// The protocol id prefix to negotiate this protocol (default is `/meshsub/1.1.0` and
+    /// `/meshsub/1.0.0`).
     pub fn protocol_id_prefix(
         &mut self,
         protocol_id_prefix: impl Into<Cow<'static, str>>,
@@ -523,8 +562,8 @@ impl ConfigBuilder {
 
     /// Affects how peers are selected when pruning a mesh due to over subscription.
     ///
-    /// At least [`Self::retain_scores`] of the retained peers will be high-scoring, while the remainder are
-    /// chosen randomly (D_score in the spec, default is 4).
+    /// At least [`Self::retain_scores`] of the retained peers will be high-scoring, while the
+    /// remainder are chosen randomly (D_score in the spec, default is 4).
     pub fn retain_scores(&mut self, retain_scores: usize) -> &mut Self {
         self.config.retain_scores = retain_scores;
         self
@@ -660,9 +699,9 @@ impl ConfigBuilder {
         self
     }
 
-    /// Number of heartbeat slots considered as slack for backoffs. This gurantees that we wait
+    /// Number of heartbeat slots considered as slack for backoffs. This guarantees that we wait
     /// at least backoff_slack heartbeats after a backoff is over before we try to graft. This
-    /// solves problems occuring through high latencies. In particular if
+    /// solves problems occurring through high latencies. In particular if
     /// `backoff_slack * heartbeat_interval` is longer than any latencies between processing
     /// prunes on our side and processing prunes on the receiving side this guarantees that we
     /// get not punished for too early grafting. The default is 1.
@@ -694,7 +733,7 @@ impl ConfigBuilder {
         self
     }
 
-    /// Number of heartbeat ticks that specifcy the interval in which opportunistic grafting is
+    /// Number of heartbeat ticks that specify the interval in which opportunistic grafting is
     /// applied. Every `opportunistic_graft_ticks` we will attempt to select some high-scoring mesh
     /// peers to replace lower-scoring ones, if the median score of our mesh peers falls below a
     /// threshold (see <https://godoc.org/github.com/libp2p/go-libp2p-pubsub#PeerScoreThresholds>).
@@ -782,6 +821,37 @@ impl ConfigBuilder {
         self
     }
 
+    /// The max number of messages a `ConnectionHandler` can buffer. The default is 5000.
+    pub fn connection_handler_queue_len(&mut self, len: usize) -> &mut Self {
+        self.config.connection_handler_queue_len = len;
+        self
+    }
+
+    /// The duration a message to be published can wait to be sent before it is abandoned. The
+    /// default is 5 seconds.
+    pub fn publish_queue_duration(&mut self, duration: Duration) -> &mut Self {
+        self.config.connection_handler_publish_duration = duration;
+        self
+    }
+
+    /// The duration a message to be forwarded can wait to be sent before it is abandoned. The
+    /// default is 1s.
+    pub fn forward_queue_duration(&mut self, duration: Duration) -> &mut Self {
+        self.config.connection_handler_forward_duration = duration;
+        self
+    }
+
+    // The message size threshold for which IDONTWANT messages are sent.
+    // Sending IDONTWANT messages for small messages can have a negative effect to the overall
+    // traffic and CPU load. This acts as a lower bound cutoff for the message size to which
+    // IDONTWANT won't be sent to peers. Only works if the peers support Gossipsub1.2
+    // (see https://github.com/libp2p/specs/blob/master/pubsub/gossipsub/gossipsub-v1.2.md#idontwant-message)
+    // default is 1kB
+    pub fn idontwant_message_size_threshold(&mut self, size: usize) -> &mut Self {
+        self.config.idontwant_message_size_threshold = size;
+        self
+    }
+
     /// Constructs a [`Config`] from the given configuration and validates the settings.
     pub fn build(&self) -> Result<Config, ConfigBuilderError> {
         // check all constraints on config
@@ -852,20 +922,25 @@ impl std::fmt::Debug for Config {
             "published_message_ids_cache_time",
             &self.published_message_ids_cache_time,
         );
+        let _ = builder.field(
+            "idontwant_message_size_threhold",
+            &self.idontwant_message_size_threshold,
+        );
         builder.finish()
     }
 }
 
 #[cfg(test)]
 mod test {
-    use super::*;
-    use crate::topic::IdentityHash;
-    use crate::types::PeerKind;
-    use crate::Topic;
+    use std::{
+        collections::hash_map::DefaultHasher,
+        hash::{Hash, Hasher},
+    };
+
     use libp2p_core::UpgradeInfo;
-    use libp2p_swarm::StreamProtocol;
-    use std::collections::hash_map::DefaultHasher;
-    use std::hash::{Hash, Hasher};
+
+    use super::*;
+    use crate::{topic::IdentityHash, Topic};
 
     #[test]
     fn create_config_with_message_id_as_plain_function() {

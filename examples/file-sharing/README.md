@@ -12,28 +12,28 @@ Retrievers can locate and retrieve files by their names from any node in the net
 Let's understand the flow of the file sharing process:
 
 - **File Providers**: Nodes A and B serve as file providers.
-Each node offers a specific file: file FA for node A and file FB for node B.
-To make their files available, they advertise themselves as providers on the DHT using `libp2p-kad`.
-This enables other nodes in the network to discover and retrieve their files.
+  Each node offers a specific file: file FA for node A and file FB for node B.
+  To make their files available, they advertise themselves as providers on the DHT using `libp2p-kad`.
+  This enables other nodes in the network to discover and retrieve their files.
 
 - **File Retrievers**: Node C acts as a file retriever.
-It wants to retrieve either file FA or FB.
-Using `libp2p-kad`, it can locate the providers for these files on the DHT without being directly connected to them.
-Node C connects to the corresponding provider node and requests the file content using `libp2p-request-response`.
+  It wants to retrieve either file FA or FB.
+  Using `libp2p-kad`, it can locate the providers for these files on the DHT without being directly connected to them.
+  Node C connects to the corresponding provider node and requests the file content using `libp2p-request-response`.
 
 - **DHT and Network Connectivity**: The DHT (Distributed Hash Table) plays a crucial role in the file sharing process.
-It allows nodes to store and discover information about file providers.
-Nodes in the network are interconnected via the DHT, enabling efficient file discovery and retrieval.
+  It allows nodes to store and discover information about file providers.
+  Nodes in the network are interconnected via the DHT, enabling efficient file discovery and retrieval.
 
 ## Architectural Properties
 
 The File Sharing application has the following architectural properties:
 
 - **Clean and Clonable Interface**: The application provides a clean and clonable async/await interface, allowing users to interact with the network layer seamlessly.
-The `Client` module encapsulates the necessary functionality for network communication.
+  The `Client` module encapsulates the necessary functionality for network communication.
 
 - **Efficient Network Handling**: The application operates with a single task that drives the network layer.
-This design choice ensures efficient network communication without the need for locks or complex synchronization mechanisms.
+  This design choice ensures efficient network communication without the need for locks or complex synchronization mechanisms.
 
 ## Usage
 

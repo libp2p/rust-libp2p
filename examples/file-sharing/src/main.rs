@@ -22,18 +22,15 @@
 
 mod network;
 
-use async_std::task::spawn;
-use clap::Parser;
+use std::{error::Error, io::Write, path::PathBuf};
 
-use futures::prelude::*;
-use futures::StreamExt;
+use clap::Parser;
+use futures::{prelude::*, StreamExt};
 use libp2p::{core::Multiaddr, multiaddr::Protocol};
-use std::error::Error;
-use std::io::Write;
-use std::path::PathBuf;
+use tokio::task::spawn;
 use tracing_subscriber::EnvFilter;
 
-#[async_std::main]
+#[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
     let _ = tracing_subscriber::fmt()
         .with_env_filter(EnvFilter::from_default_env())

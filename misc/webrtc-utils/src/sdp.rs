@@ -18,13 +18,13 @@
 // LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
-use crate::fingerprint::Fingerprint;
-use serde::Serialize;
 use std::net::{IpAddr, SocketAddr};
+
+use rand::{distributions::Alphanumeric, thread_rng, Rng};
+use serde::Serialize;
 use tinytemplate::TinyTemplate;
 
-use rand::distributions::Alphanumeric;
-use rand::{thread_rng, Rng};
+use crate::fingerprint::Fingerprint;
 
 pub fn answer(addr: SocketAddr, server_fingerprint: Fingerprint, client_ufrag: &str) -> String {
     let answer = render_description(
@@ -71,7 +71,8 @@ pub fn answer(addr: SocketAddr, server_fingerprint: Fingerprint, client_ufrag: &
 //     the answerer is received, which adds additional latency. setup:active allows the answer and
 //     the DTLS handshake to occur in parallel. Thus, setup:active is RECOMMENDED.
 //
-// a=candidate:<foundation> <component-id> <transport> <priority> <connection-address> <port> <cand-type>
+// a=candidate:<foundation> <component-id> <transport> <priority> <connection-address> <port>
+// <cand-type>
 //
 //     A transport address for a candidate that can be used for connectivity checks (RFC8839).
 //

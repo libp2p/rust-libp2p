@@ -18,26 +18,28 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::{protocol, PROTOCOL_NAME};
-use futures::future::{BoxFuture, Either};
-use futures::prelude::*;
-use futures_timer::Delay;
-use libp2p_core::upgrade::ReadyUpgrade;
-use libp2p_swarm::handler::{
-    ConnectionEvent, DialUpgradeError, FullyNegotiatedInbound, FullyNegotiatedOutbound,
-};
-use libp2p_swarm::{
-    ConnectionHandler, ConnectionHandlerEvent, Stream, StreamProtocol, StreamUpgradeError,
-    SubstreamProtocol,
-};
-use std::collections::VecDeque;
 use std::{
+    collections::VecDeque,
+    convert::Infallible,
     error::Error,
     fmt, io,
     task::{Context, Poll},
     time::Duration,
 };
-use void::Void;
+
+use futures::{
+    future::{BoxFuture, Either},
+    prelude::*,
+};
+use futures_timer::Delay;
+use libp2p_core::upgrade::ReadyUpgrade;
+use libp2p_swarm::{
+    handler::{ConnectionEvent, DialUpgradeError, FullyNegotiatedInbound, FullyNegotiatedOutbound},
+    ConnectionHandler, ConnectionHandlerEvent, Stream, StreamProtocol, StreamUpgradeError,
+    SubstreamProtocol,
+};
+
+use crate::{protocol, PROTOCOL_NAME};
 
 /// The configuration for outbound pings.
 #[derive(Debug, Clone)]
@@ -57,8 +59,7 @@ impl Config {
     /// These settings have the following effect:
     ///
     ///   * A ping is sent every 15 seconds on a healthy connection.
-    ///   * Every ping sent must yield a response within 20 seconds in order to
-    ///     be successful.
+    ///   * Every ping sent must yield a response within 20 seconds in order to be successful.
     pub fn new() -> Self {
         Self {
             timeout: Duration::from_secs(20),
@@ -95,12 +96,12 @@ pub enum Failure {
     Unsupported,
     /// The ping failed for reasons other than a timeout.
     Other {
-        error: Box<dyn std::error::Error + Send + 'static>,
+        error: Box<dyn std::error::Error + Send + Sync + 'static>,
     },
 }
 
 impl Failure {
-    fn other(e: impl std::error::Error + Send + 'static) -> Self {
+    fn other(e: impl std::error::Error + Send + Sync + 'static) -> Self {
         Self::Other { error: Box::new(e) }
     }
 }
@@ -184,6 +185,18 @@ impl Handler {
     ) {
         self.outbound = None; // Request a new substream on the next `poll`.
 
+        // Timer is already polled and expired before substream request is initiated
+        // and will be polled again later on in our `poll` because we reset `self.outbound`.
+        //
+        // `futures-timer` allows an expired timer to be polled again and returns
+        // immediately `Poll::Ready`. However in its WASM implementation there is
+        // a bug that causes the expired timer to panic.
+        // This is a workaround until a proper fix is merged and released.
+        // See libp2p/rust-libp2p#5447 for more info.
+        //
+        // TODO: remove when async-rs/futures-timer#74 gets merged.
+        self.interval.reset(Duration::new(0, 0));
+
         let error = match error {
             StreamUpgradeError::NegotiationFailed => {
                 debug_assert_eq!(self.state, State::Active);
@@ -198,7 +211,9 @@ impl Handler {
                     "ping protocol negotiation timed out",
                 )),
             },
-            StreamUpgradeError::Apply(e) => void::unreachable(e),
+            // TODO: remove when Rust 1.82 is MSRV
+            #[allow(unreachable_patterns)]
+            StreamUpgradeError::Apply(e) => libp2p_core::util::unreachable(e),
             StreamUpgradeError::Io(e) => Failure::Other { error: Box::new(e) },
         };
 
@@ -207,7 +222,7 @@ impl Handler {
 }
 
 impl ConnectionHandler for Handler {
-    type FromBehaviour = Void;
+    type FromBehaviour = Infallible;
     type ToBehaviour = Result<Duration, Failure>;
     type InboundProtocol = ReadyUpgrade<StreamProtocol>;
     type OutboundProtocol = ReadyUpgrade<StreamProtocol>;
@@ -218,7 +233,7 @@ impl ConnectionHandler for Handler {
         SubstreamProtocol::new(ReadyUpgrade::new(PROTOCOL_NAME), ())
     }
 
-    fn on_behaviour_event(&mut self, _: Void) {}
+    fn on_behaviour_event(&mut self, _: Infallible) {}
 
     #[tracing::instrument(level = "trace", name = "ConnectionHandler::poll", skip(self, cx))]
     fn poll(

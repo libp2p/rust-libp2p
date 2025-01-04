@@ -18,14 +18,18 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::error::{DecodeError, Error};
-use crate::proto::Exchange;
-use crate::Config;
+use std::io::{Error as IoError, ErrorKind as IoErrorKind};
+
 use asynchronous_codec::{Framed, FramedParts};
 use bytes::Bytes;
 use futures::prelude::*;
 use libp2p_identity::{PeerId, PublicKey};
-use std::io::{Error as IoError, ErrorKind as IoErrorKind};
+
+use crate::{
+    error::{DecodeError, Error},
+    proto::Exchange,
+    Config,
+};
 
 pub(crate) async fn handshake<S>(socket: S, config: Config) -> Result<(S, PublicKey, Bytes), Error>
 where

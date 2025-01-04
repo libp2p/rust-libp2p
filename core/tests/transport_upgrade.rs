@@ -18,17 +18,19 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
+use std::{io, pin::Pin};
+
 use futures::prelude::*;
-use libp2p_core::transport::{ListenerId, MemoryTransport, Transport};
-use libp2p_core::upgrade::{
-    self, InboundConnectionUpgrade, OutboundConnectionUpgrade, UpgradeInfo,
+use libp2p_core::{
+    transport::{DialOpts, ListenerId, MemoryTransport, PortUse, Transport},
+    upgrade::{self, InboundConnectionUpgrade, OutboundConnectionUpgrade, UpgradeInfo},
+    Endpoint,
 };
 use libp2p_identity as identity;
 use libp2p_mplex::MplexConfig;
 use libp2p_noise as noise;
 use multiaddr::{Multiaddr, Protocol};
 use rand::random;
-use std::{io, pin::Pin};
 
 #[derive(Clone)]
 struct HelloUpgrade {}
@@ -121,7 +123,17 @@ fn upgrade_pipeline() {
     };
 
     let client = async move {
-        let (peer, _mplex) = dialer_transport.dial(listen_addr2).unwrap().await.unwrap();
+        let (peer, _mplex) = dialer_transport
+            .dial(
+                listen_addr2,
+                DialOpts {
+                    role: Endpoint::Dialer,
+                    port_use: PortUse::New,
+                },
+            )
+            .unwrap()
+            .await
+            .unwrap();
         assert_eq!(peer, listener_id);
     };
 

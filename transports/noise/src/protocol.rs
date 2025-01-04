@@ -20,13 +20,14 @@
 
 //! Components of a Noise protocol.
 
-use crate::Error;
 use libp2p_identity as identity;
 use once_cell::sync::Lazy;
 use rand::{Rng as _, SeedableRng};
 use snow::params::NoiseParams;
 use x25519_dalek::{x25519, X25519_BASEPOINT_BYTES};
 use zeroize::Zeroize;
+
+use crate::Error;
 
 /// Prefix of static key signatures for domain separation.
 pub(crate) const STATIC_KEY_DOMAIN: &str = "noise-libp2p-static-key:";
@@ -292,8 +293,6 @@ impl snow::types::Dh for Keypair {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::protocol::PARAMS_XX;
-    use once_cell::sync::Lazy;
 
     #[test]
     fn handshake_hashes_disagree_if_prologue_differs() {
