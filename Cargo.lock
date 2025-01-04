@@ -3244,7 +3244,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-request-response"
-version = "0.28.0"
+version = "0.28.1"
 dependencies = [
  "anyhow",
  "async-std",
