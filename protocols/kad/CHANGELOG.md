@@ -12,6 +12,8 @@
   See [PR 5705](https://github.com/libp2p/rust-libp2p/pull/5705).
 - Fix systematic memory allocation when iterating over `KBuckets`.
   See [PR 5715](https://github.com/libp2p/rust-libp2p/pull/5715).
+- Remove deprecated default constructor for `ProtocolConfig`.
+  See [PR 5774](https://github.com/libp2p/rust-libp2p/pull/5774).
 
 ## 0.46.2
 

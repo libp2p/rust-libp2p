@@ -238,29 +238,6 @@ impl Config {
         }
     }
 
-    /// Returns the default configuration.
-    #[deprecated(note = "Use `Config::new` instead")]
-    #[allow(clippy::should_implement_trait)]
-    pub fn default() -> Self {
-        Default::default()
-    }
-
-    /// Sets custom protocol names.
-    ///
-    /// Kademlia nodes only communicate with other nodes using the same protocol
-    /// name. Using custom name(s) therefore allows to segregate the DHT from
-    /// others, if that is desired.
-    ///
-    /// More than one protocol name can be supplied. In this case the node will
-    /// be able to talk to other nodes supporting any of the provided names.
-    /// Multiple names must be used with caution to avoid network partitioning.
-    #[deprecated(note = "Use `Config::new` instead")]
-    #[allow(deprecated)]
-    pub fn set_protocol_names(&mut self, names: Vec<StreamProtocol>) -> &mut Self {
-        self.protocol_config.set_protocol_names(names);
-        self
-    }
-
     /// Sets the timeout for a single query.
     ///
     /// > **Note**: A single query usually comprises at least as many requests
