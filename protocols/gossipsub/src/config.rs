@@ -863,7 +863,7 @@ impl ConfigBuilder {
 
     /// Send IDONTWANT messages after publishing message on gossip. This is an optimisation
     /// to avoid bandwidth consumption by downloading the published message over gossip.
-    /// default is false
+    /// By default it is false.
     pub fn idontwant_on_publish(&mut self, idontwant_on_publish: bool) -> &mut Self {
         self.config.idontwant_on_publish = idontwant_on_publish;
         self
