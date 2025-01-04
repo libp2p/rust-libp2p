@@ -1,7 +1,7 @@
 ## 0.28.1
 
 - Allow configurable request and response sizes for `json` and `cbor` codec.
-  See [PR XXXX](https://github.com/libp2p/rust-libp2p/pull/XXXX).
+  See [PR 5792](https://github.com/libp2p/rust-libp2p/pull/5792).
 
 ## 0.28.0
 
