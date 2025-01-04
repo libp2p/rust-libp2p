@@ -45,7 +45,7 @@ impl<'a> MessageRead<'a> for Identify {
     }
 }
 
-impl<'a> MessageWrite for Identify {
+impl MessageWrite for Identify {
     fn get_size(&self) -> usize {
         0
         + self.protocolVersion.as_ref().map_or(0, |m| 1 + sizeof_len((m).len()))

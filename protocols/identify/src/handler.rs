@@ -128,7 +128,7 @@ impl Handler {
     pub(crate) fn new(
         interval: Duration,
         remote_peer_id: PeerId,
-        public_key: KeyType,
+        local_key: KeyType,
         protocol_version: String,
         agent_version: String,
         observed_addr: Multiaddr,
@@ -144,7 +144,7 @@ impl Handler {
             trigger_next_identify: Delay::new(Duration::ZERO),
             exchanged_one_periodic_identify: false,
             interval,
-            local_key: public_key,
+            local_key,
             protocol_version,
             agent_version,
             observed_addr,

@@ -171,7 +171,7 @@ where
 fn parse_listen_addrs(listen_addrs: Vec<Vec<u8>>) -> Vec<Multiaddr> {
     listen_addrs
         .into_iter()
-        .filter_map(|bytes| match Multiaddr::try_from(bytes.to_vec()) {
+        .filter_map(|bytes| match Multiaddr::try_from(bytes) {
             Ok(a) => Some(a),
             Err(e) => {
                 tracing::debug!("Unable to parse multiaddr: {e:?}");
@@ -184,7 +184,7 @@ fn parse_listen_addrs(listen_addrs: Vec<Vec<u8>>) -> Vec<Multiaddr> {
 fn parse_protocols(protocols: Vec<String>) -> Vec<StreamProtocol> {
     protocols
         .into_iter()
-        .filter_map(|p| match StreamProtocol::try_from_owned(p.to_string()) {
+        .filter_map(|p| match StreamProtocol::try_from_owned(p) {
             Ok(p) => Some(p),
             Err(e) => {
                 tracing::debug!("Received invalid protocol from peer: {e}");
@@ -205,7 +205,7 @@ fn parse_public_key(public_key: Option<Vec<u8>>) -> Option<PublicKey> {
 }
 
 fn parse_observed_addr(observed_addr: Option<Vec<u8>>) -> Option<Multiaddr> {
-    observed_addr.and_then(|bytes| match Multiaddr::try_from(bytes.to_vec()) {
+    observed_addr.and_then(|bytes| match Multiaddr::try_from(bytes) {
         Ok(a) => Some(a),
         Err(e) => {
             tracing::debug!("Unable to parse observed multiaddr: {e:?}");
@@ -248,8 +248,8 @@ impl TryFrom<proto::Identify> for PushInfo {
     fn try_from(msg: proto::Identify) -> Result<Self, Self::Error> {
         let info = PushInfo {
             public_key: parse_public_key(msg.publicKey),
-            protocol_version: msg.protocolVersion.map(|v| v.to_string()),
-            agent_version: msg.agentVersion.map(|v| v.to_string()),
+            protocol_version: msg.protocolVersion,
+            agent_version: msg.agentVersion,
             listen_addrs: parse_listen_addrs(msg.listenAddrs),
             protocols: parse_protocols(msg.protocols),
             observed_addr: parse_observed_addr(msg.observedAddr),
