@@ -168,12 +168,14 @@ impl NetworkBehaviour for Behaviour {
         local_addr: &Multiaddr,
         remote_addr: &Multiaddr,
     ) -> Result<THandler<Self>, ConnectionDenied> {
+        let pending_handler_command = self.pending_handler_commands.remove(&connection_id);
+
         if local_addr.is_relayed() {
             return Ok(Either::Right(dummy::ConnectionHandler));
         }
         let mut handler = Handler::new(self.local_peer_id, peer, remote_addr.clone());
 
-        if let Some(event) = self.pending_handler_commands.remove(&connection_id) {
+        if let Some(event) = pending_handler_command {
             handler.on_behaviour_event(event)
         }
 
@@ -188,13 +190,15 @@ impl NetworkBehaviour for Behaviour {
         _: Endpoint,
         _: PortUse,
     ) -> Result<THandler<Self>, ConnectionDenied> {
+        let pending_handler_command = self.pending_handler_commands.remove(&connection_id);
+
         if addr.is_relayed() {
             return Ok(Either::Right(dummy::ConnectionHandler));
         }
 
         let mut handler = Handler::new(self.local_peer_id, peer, addr.clone());
 
-        if let Some(event) = self.pending_handler_commands.remove(&connection_id) {
+        if let Some(event) = pending_handler_command {
             handler.on_behaviour_event(event)
         }
 
@@ -208,21 +212,11 @@ impl NetworkBehaviour for Behaviour {
                 connection_id,
                 endpoint,
                 ..
-            }) => {
-                if !endpoint.is_relayed() {
-                    self.directly_connected_peers
-                        .entry(peer_id)
-                        .or_default()
-                        .push(connection_id);
-                }
-
-                if let Some(event) = self.pending_handler_commands.remove(&connection_id) {
-                    self.queued_actions.push_back(ToSwarm::NotifyHandler {
-                        peer_id,
-                        handler: NotifyHandler::One(connection_id),
-                        event: Either::Left(event),
-                    })
-                }
+            }) if !endpoint.is_relayed() => {
+                self.directly_connected_peers
+                    .entry(peer_id)
+                    .or_default()
+                    .push(connection_id);
             }
             FromSwarm::ConnectionClosed(connection_closed) => {
                 self.on_connection_closed(connection_closed)
