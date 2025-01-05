@@ -83,12 +83,16 @@ mod codec {
     }
 
     impl<Req, Resp> Codec<Req, Resp> {
-        pub fn new(request_size_maximum: u64, response_size_maximum: u64) -> Self {
-            Self {
-                request_size_maximum,
-                response_size_maximum,
-                ..Default::default()
-            }
+        /// Set a limit for request size in bytes
+        pub fn set_request_size_maximum(mut self, request_size_maximum: u64) -> Self {
+            self.request_size_maximum = request_size_maximum;
+            self
+        }
+
+        /// Set a limit for response size in bytes
+        pub fn set_response_size_maximum(mut self, response_size_maximum: u64) -> Self {
+            self.response_size_maximum = response_size_maximum;
+            self
         }
     }
 
