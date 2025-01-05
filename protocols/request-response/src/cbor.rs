@@ -56,9 +56,9 @@ mod codec {
     use serde::{de::DeserializeOwned, Serialize};
 
     pub struct Codec<Req, Resp> {
-        /// Max request size in bytes
+        /// Max request size in bytes.
         request_size_maximum: u64,
-        /// Max response size in bytes
+        /// Max response size in bytes.
         response_size_maximum: u64,
         phantom: PhantomData<(Req, Resp)>,
     }
@@ -84,13 +84,13 @@ mod codec {
     }
 
     impl<Req, Resp> Codec<Req, Resp> {
-        /// Set a limit for request size in bytes
+        /// Sets the limit for request size in bytes.
         pub fn set_request_size_maximum(mut self, request_size_maximum: u64) -> Self {
             self.request_size_maximum = request_size_maximum;
             self
         }
 
-        /// Set a limit for response size in bytes
+        /// Sets the limit for response size in bytes.
         pub fn set_response_size_maximum(mut self, response_size_maximum: u64) -> Self {
             self.response_size_maximum = response_size_maximum;
             self
