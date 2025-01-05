@@ -675,9 +675,15 @@ where
                 // Gossipsub peers
                 None => {
                     tracing::debug!(topic=%topic_hash, "Topic not in the mesh");
+                    // `fanout_peers` is always non-empty if it's `Some`.
+                    let fanout_peers = self
+                        .fanout
+                        .get(&topic_hash)
+                        .map(|peers| if peers.is_empty() { None } else { Some(peers) })
+                        .unwrap_or(None);
                     // If we have fanout peers add them to the map.
-                    if self.fanout.contains_key(&topic_hash) {
-                        for peer in self.fanout.get(&topic_hash).expect("Topic must exist") {
+                    if let Some(peers) = fanout_peers {
+                        for peer in peers {
                             recipient_peers.insert(*peer);
                         }
                     } else {
