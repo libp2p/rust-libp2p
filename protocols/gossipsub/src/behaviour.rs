@@ -1829,22 +1829,22 @@ where
         if let Some(metrics) = self.metrics.as_mut() {
             metrics.register_invalid_message(topic_hash);
         }
+        if let Some(msg_id) = message_id {
+            // Valid transformation without peer scoring
+            self.gossip_promises.reject_message(msg_id, &reject_reason);
+        }
         if let Some((peer_score, ..)) = &mut self.peer_score {
+            // The compiler will optimize this pattern-matching
             if let Some(msg_id) = message_id {
-                peer_score.reject_message(propagation_source, msg_id, topic_hash, reject_reason);
                 // The message itself is valid, but is from a banned peer or
                 // claiming to be self-origin but is actually forwarded from other peers.
-                return self.gossip_promises.reject_message(msg_id, &reject_reason);
+                peer_score.reject_message(propagation_source, msg_id, topic_hash, reject_reason);
             } else {
                 // The message is invalid, we reject it ignoring any gossip promises. If a peer is
                 // advertising this message via an IHAVE and it's invalid it will be double
                 // penalized, one for sending us an invalid and again for breaking a promise.
-                return peer_score.reject_invalid_message(propagation_source, topic_hash);
+                peer_score.reject_invalid_message(propagation_source, topic_hash);
             }
-        }
-        if let Some(msg_id) = message_id {
-            // Valid transformation without peer scoring
-            self.gossip_promises.reject_message(msg_id, &reject_reason);
         }
     }
 
