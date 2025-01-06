@@ -679,8 +679,7 @@ where
                     let fanout_peers = self
                         .fanout
                         .get(&topic_hash)
-                        .map(|peers| if peers.is_empty() { None } else { Some(peers) })
-                        .unwrap_or(None);
+                        .filter(|peers| !peers.is_empty());
                     // If we have fanout peers add them to the map.
                     if let Some(peers) = fanout_peers {
                         for peer in peers {
