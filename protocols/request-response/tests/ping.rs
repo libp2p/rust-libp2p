@@ -30,14 +30,11 @@ use libp2p_swarm::{StreamProtocol, Swarm, SwarmEvent};
 use libp2p_swarm_test::SwarmExt;
 use rand::Rng;
 use serde::{Deserialize, Serialize};
-use tracing_subscriber::EnvFilter;
 
 #[async_std::test]
 #[cfg(feature = "cbor")]
 async fn is_response_outbound() {
-    let _ = tracing_subscriber::fmt()
-        .with_env_filter(EnvFilter::from_default_env())
-        .try_init();
+    libp2p_test_utils::with_default_env_filter();
     let ping = Ping("ping".to_string().into_bytes());
     let offline_peer = PeerId::random();
 
