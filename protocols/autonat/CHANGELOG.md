@@ -77,7 +77,7 @@ AutoNAT where port reuse is disabled. This information is now passed by the beha
 
 - Update to `libp2p-request-response` `v0.23.0`.
 
-- Replace `Behaviour`'s `NetworkBehaviour` implemention `inject_*` methods with the new `on_*` methods.
+- Replace `Behaviour`'s `NetworkBehaviour` implementation `inject_*` methods with the new `on_*` methods.
   See [PR 3011].
 
 - Update `rust-version` to reflect the actual MSRV: 1.62.0. See [PR 3090].
