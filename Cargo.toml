@@ -70,10 +70,10 @@ members = [
 resolver = "2"
 
 [workspace.package]
-rust-version = "1.75.0"
+rust-version = "1.83.0"
 
 [workspace.dependencies]
-libp2p = { version = "0.54.2", path = "libp2p" }
+libp2p = { version = "0.55.0", path = "libp2p" }
 libp2p-allow-block-list = { version = "0.4.1", path = "misc/allow-block-list" }
 libp2p-autonat = { version = "0.13.1", path = "protocols/autonat" }
 libp2p-connection-limits = { version = "0.4.1", path = "misc/connection-limits" }
