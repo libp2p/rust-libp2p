@@ -39,7 +39,7 @@ impl MemoryStore {
 }
 
 impl Store for MemoryStore {
-    type Event = ();
+    type ToSwarm = ();
 
     fn update_address(
         &mut self,
