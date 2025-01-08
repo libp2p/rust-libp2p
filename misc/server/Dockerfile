@@ -1,5 +1,5 @@
 # syntax=docker/dockerfile:1.5-labs
-FROM rust:1.81.0 as chef
+FROM rust:1.83.0 as chef
 RUN wget -q -O- https://github.com/LukeMathWalker/cargo-chef/releases/download/v0.1.62/cargo-chef-x86_64-unknown-linux-gnu.tar.gz | tar -zx -C /usr/local/bin
 WORKDIR /app
 
