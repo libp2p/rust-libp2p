@@ -101,7 +101,7 @@ pub fn generate(
     );
 
     let certificate = {
-        let mut params = rcgen::CertificateParams::new(vec![])?;
+        let mut params = rcgen::CertificateParams::default();
         params.distinguished_name = rcgen::DistinguishedName::new();
         params.custom_extensions.push(make_libp2p_extension(
             identity_keypair,
@@ -110,9 +110,7 @@ pub fn generate(
         params.self_signed(&certificate_keypair)?
     };
 
-    let rustls_certificate = rustls::pki_types::CertificateDer::from(certificate.der().to_vec());
-
-    Ok((rustls_certificate, rustls_key))
+    Ok((certificate.der().clone(), rustls_key))
 }
 
 /// Attempts to parse the provided bytes as a [`P2pCertificate`].
