@@ -199,7 +199,7 @@ pub struct ToggleConnectionHandler<TInner> {
 impl<TInner> ToggleConnectionHandler<TInner>
 where
     TInner: ConnectionHandler,
-{   
+{
     #[expect(deprecated)] // TODO: Remove when {In, Out}boundOpenInfo is fully removed.
     fn on_fully_negotiated_inbound(
         &mut self,
