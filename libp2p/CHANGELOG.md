@@ -1,4 +1,7 @@
-## 0.54.2
+## 0.55.0
+
+- Raise MSRV to 1.83.0.
+  See [PR 5650](https://github.com/libp2p/rust-libp2p/pull/5650).
 
 - Add `with_connection_timeout` on `SwarmBuilder` to allow configuration of the connection_timeout parameter.
   See [PR 5575](https://github.com/libp2p/rust-libp2p/pull/5575).
