@@ -3,6 +3,9 @@
 - Add connection id to the events emitted by a request-response `Behaviour`.
   See [PR 5719](https://github.com/libp2p/rust-libp2p/pull/5719).
 
+- Allow configurable request and response sizes for `json` and `cbor` codec.
+  See [PR 5792](https://github.com/libp2p/rust-libp2p/pull/5792).
+
 ## 0.27.1
 
 - Deprecate `void` crate.

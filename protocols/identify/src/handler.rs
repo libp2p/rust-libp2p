@@ -159,10 +159,7 @@ impl Handler {
         &mut self,
         FullyNegotiatedInbound {
             protocol: output, ..
-        }: FullyNegotiatedInbound<
-            <Self as ConnectionHandler>::InboundProtocol,
-            <Self as ConnectionHandler>::InboundOpenInfo,
-        >,
+        }: FullyNegotiatedInbound<<Self as ConnectionHandler>::InboundProtocol>,
     ) {
         match output {
             future::Either::Left(stream) => {
@@ -198,10 +195,7 @@ impl Handler {
         &mut self,
         FullyNegotiatedOutbound {
             protocol: output, ..
-        }: FullyNegotiatedOutbound<
-            <Self as ConnectionHandler>::OutboundProtocol,
-            <Self as ConnectionHandler>::OutboundOpenInfo,
-        >,
+        }: FullyNegotiatedOutbound<<Self as ConnectionHandler>::OutboundProtocol>,
     ) {
         match output {
             future::Either::Left(stream) => {
@@ -303,7 +297,7 @@ impl ConnectionHandler for Handler {
     type OutboundOpenInfo = ();
     type InboundOpenInfo = ();
 
-    fn listen_protocol(&self) -> SubstreamProtocol<Self::InboundProtocol, Self::InboundOpenInfo> {
+    fn listen_protocol(&self) -> SubstreamProtocol<Self::InboundProtocol> {
         SubstreamProtocol::new(
             SelectUpgrade::new(
                 ReadyUpgrade::new(PROTOCOL_NAME),
@@ -334,7 +328,7 @@ impl ConnectionHandler for Handler {
     fn poll(
         &mut self,
         cx: &mut Context<'_>,
-    ) -> Poll<ConnectionHandlerEvent<Self::OutboundProtocol, Self::OutboundOpenInfo, Event>> {
+    ) -> Poll<ConnectionHandlerEvent<Self::OutboundProtocol, (), Event>> {
         if let Some(event) = self.events.pop() {
             return Poll::Ready(event);
         }
@@ -413,12 +407,7 @@ impl ConnectionHandler for Handler {
 
     fn on_connection_event(
         &mut self,
-        event: ConnectionEvent<
-            Self::InboundProtocol,
-            Self::OutboundProtocol,
-            Self::InboundOpenInfo,
-            Self::OutboundOpenInfo,
-        >,
+        event: ConnectionEvent<Self::InboundProtocol, Self::OutboundProtocol>,
     ) {
         match event {
             ConnectionEvent::FullyNegotiatedInbound(fully_negotiated_inbound) => {
