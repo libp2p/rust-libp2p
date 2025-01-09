@@ -1,6 +1,6 @@
 [package]
 name = "libp2p-stream"
-version = "0.2.0-alpha"
+version = "0.2.0-alpha.1"
 edition = "2021"
 rust-version.workspace = true
 description = "Generic stream protocols for libp2p"
@@ -15,13 +15,12 @@ libp2p-core = { workspace = true }
 libp2p-identity = { workspace = true, features = ["peerid"] }
 libp2p-swarm = { workspace = true }
 tracing = { workspace = true }
-void = "1"
 rand = "0.8"
 
 [dev-dependencies]
 libp2p-swarm-test = { workspace = true }
 tokio = { workspace = true, features = ["full"] }
-tracing-subscriber = { workspace = true, features = ["env-filter"] }
+libp2p-test-utils = { workspace = true }
 
 [lints]
 workspace = true

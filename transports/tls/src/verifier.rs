@@ -23,7 +23,8 @@
 //! This module handles a verification of a client/server certificate chain
 //! and signatures allegedly by the given certificates.
 
-use crate::certificate;
+use std::sync::Arc;
+
 use libp2p_identity::PeerId;
 use rustls::{
     client::danger::{HandshakeSignatureValid, ServerCertVerified, ServerCertVerifier},
@@ -35,7 +36,8 @@ use rustls::{
     CertificateError, DigitallySignedStruct, DistinguishedName, OtherError, SignatureScheme,
     SupportedCipherSuite, SupportedProtocolVersion,
 };
-use std::sync::Arc;
+
+use crate::certificate;
 
 /// The protocol versions supported by this verifier.
 ///
@@ -67,8 +69,8 @@ pub(crate) struct Libp2pCertificateVerifier {
 ///
 /// - Exactly one certificate must be presented.
 /// - The certificate must be self-signed.
-/// - The certificate must have a valid libp2p extension that includes a
-///   signature of its public key.
+/// - The certificate must have a valid libp2p extension that includes a signature of its public
+///   key.
 impl Libp2pCertificateVerifier {
     pub(crate) fn new() -> Self {
         Self {
@@ -153,11 +155,11 @@ impl ServerCertVerifier for Libp2pCertificateVerifier {
 
 /// libp2p requires the following of X.509 client certificate chains:
 ///
-/// - Exactly one certificate must be presented. In particular, client
-///   authentication is mandatory in libp2p.
+/// - Exactly one certificate must be presented. In particular, client authentication is mandatory
+///   in libp2p.
 /// - The certificate must be self-signed.
-/// - The certificate must have a valid libp2p extension that includes a
-///   signature of its public key.
+/// - The certificate must have a valid libp2p extension that includes a signature of its public
+///   key.
 impl ClientCertVerifier for Libp2pCertificateVerifier {
     fn offer_client_auth(&self) -> bool {
         true

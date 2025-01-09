@@ -1,16 +1,31 @@
 #![cfg(any(feature = "async-std", feature = "tokio"))]
 
-use futures::channel::{mpsc, oneshot};
-use futures::future::BoxFuture;
-use futures::future::{poll_fn, Either};
-use futures::stream::StreamExt;
-use futures::{future, AsyncReadExt, AsyncWriteExt, FutureExt, SinkExt};
+use std::{
+    future::Future,
+    io,
+    num::NonZeroU8,
+    pin::Pin,
+    sync::{Arc, Mutex},
+    task::Poll,
+    time::Duration,
+};
+
+use futures::{
+    channel::{mpsc, oneshot},
+    future,
+    future::{poll_fn, BoxFuture, Either},
+    stream::StreamExt,
+    AsyncReadExt, AsyncWriteExt, FutureExt, SinkExt,
+};
 use futures_timer::Delay;
-use libp2p_core::muxing::{StreamMuxerBox, StreamMuxerExt, SubstreamBox};
-use libp2p_core::transport::{Boxed, DialOpts, OrTransport, PortUse, TransportEvent};
-use libp2p_core::transport::{ListenerId, TransportError};
-use libp2p_core::Endpoint;
-use libp2p_core::{multiaddr::Protocol, upgrade, Multiaddr, Transport};
+use libp2p_core::{
+    multiaddr::Protocol,
+    muxing::{StreamMuxerBox, StreamMuxerExt, SubstreamBox},
+    transport::{
+        Boxed, DialOpts, ListenerId, OrTransport, PortUse, TransportError, TransportEvent,
+    },
+    upgrade, Endpoint, Multiaddr, Transport,
+};
 use libp2p_identity::PeerId;
 use libp2p_noise as noise;
 use libp2p_quic as quic;
@@ -18,16 +33,6 @@ use libp2p_tcp as tcp;
 use libp2p_yamux as yamux;
 use quic::Provider;
 use rand::RngCore;
-use std::future::Future;
-use std::io;
-use std::num::NonZeroU8;
-use std::task::Poll;
-use std::time::Duration;
-use std::{
-    pin::Pin,
-    sync::{Arc, Mutex},
-};
-use tracing_subscriber::EnvFilter;
 
 #[cfg(feature = "tokio")]
 #[tokio::test]
@@ -44,9 +49,7 @@ async fn async_std_smoke() {
 #[cfg(feature = "tokio")]
 #[tokio::test]
 async fn endpoint_reuse() {
-    let _ = tracing_subscriber::fmt()
-        .with_env_filter(EnvFilter::from_default_env())
-        .try_init();
+    libp2p_test_utils::with_default_env_filter();
     let (_, mut a_transport) = create_default_transport::<quic::tokio::Provider>();
     let (_, mut b_transport) = create_default_transport::<quic::tokio::Provider>();
 
@@ -71,9 +74,7 @@ async fn endpoint_reuse() {
 #[cfg(feature = "async-std")]
 #[async_std::test]
 async fn ipv4_dial_ipv6() {
-    let _ = tracing_subscriber::fmt()
-        .with_env_filter(EnvFilter::from_default_env())
-        .try_init();
+    libp2p_test_utils::with_default_env_filter();
     let (a_peer_id, mut a_transport) = create_default_transport::<quic::async_std::Provider>();
     let (b_peer_id, mut b_transport) = create_default_transport::<quic::async_std::Provider>();
 
@@ -93,9 +94,7 @@ async fn ipv4_dial_ipv6() {
 async fn wrapped_with_delay() {
     use libp2p_core::transport::DialOpts;
 
-    let _ = tracing_subscriber::fmt()
-        .with_env_filter(EnvFilter::from_default_env())
-        .try_init();
+    libp2p_test_utils::with_default_env_filter();
 
     struct DialDelay(Arc<Mutex<Boxed<(PeerId, StreamMuxerBox)>>>);
 
@@ -200,7 +199,8 @@ async fn wrapped_with_delay() {
 
 #[cfg(feature = "async-std")]
 #[async_std::test]
-#[ignore] // Transport currently does not validate PeerId. Enable once we make use of PeerId validation in rustls.
+#[ignore] // Transport currently does not validate PeerId.
+          // Enable once we make use of PeerId validation in rustls.
 async fn wrong_peerid() {
     use libp2p_identity::PeerId;
 
@@ -264,9 +264,7 @@ async fn tcp_and_quic() {
 #[cfg(feature = "async-std")]
 #[test]
 fn concurrent_connections_and_streams_async_std() {
-    let _ = tracing_subscriber::fmt()
-        .with_env_filter(EnvFilter::from_default_env())
-        .try_init();
+    libp2p_test_utils::with_default_env_filter();
 
     quickcheck::QuickCheck::new()
         .min_tests_passed(1)
@@ -277,9 +275,7 @@ fn concurrent_connections_and_streams_async_std() {
 #[cfg(feature = "tokio")]
 #[test]
 fn concurrent_connections_and_streams_tokio() {
-    let _ = tracing_subscriber::fmt()
-        .with_env_filter(EnvFilter::from_default_env())
-        .try_init();
+    libp2p_test_utils::with_default_env_filter();
 
     let rt = tokio::runtime::Runtime::new().unwrap();
     let _guard = rt.enter();
@@ -296,9 +292,7 @@ async fn draft_29_support() {
     use futures::{future::poll_fn, select};
     use libp2p_core::transport::TransportError;
 
-    let _ = tracing_subscriber::fmt()
-        .with_env_filter(EnvFilter::from_default_env())
-        .try_init();
+    libp2p_test_utils::with_default_env_filter();
 
     let (_, mut a_transport) =
         create_transport::<quic::tokio::Provider>(|cfg| cfg.support_draft_29 = true);
@@ -373,9 +367,7 @@ async fn draft_29_support() {
 #[cfg(feature = "async-std")]
 #[async_std::test]
 async fn backpressure() {
-    let _ = tracing_subscriber::fmt()
-        .with_env_filter(EnvFilter::from_default_env())
-        .try_init();
+    libp2p_test_utils::with_default_env_filter();
     let max_stream_data = quic::Config::new(&generate_tls_keypair()).max_stream_data;
 
     let (mut stream_a, mut stream_b) = build_streams::<quic::async_std::Provider>().await;
@@ -399,9 +391,7 @@ async fn backpressure() {
 #[cfg(feature = "async-std")]
 #[async_std::test]
 async fn read_after_peer_dropped_stream() {
-    let _ = tracing_subscriber::fmt()
-        .with_env_filter(EnvFilter::from_default_env())
-        .try_init();
+    libp2p_test_utils::with_default_env_filter();
     let (mut stream_a, mut stream_b) = build_streams::<quic::async_std::Provider>().await;
 
     let data = vec![0; 10];
@@ -421,9 +411,7 @@ async fn read_after_peer_dropped_stream() {
 #[async_std::test]
 #[should_panic]
 async fn write_after_peer_dropped_stream() {
-    let _ = tracing_subscriber::fmt()
-        .with_env_filter(EnvFilter::from_default_env())
-        .try_init();
+    libp2p_test_utils::with_default_env_filter();
     let (stream_a, mut stream_b) = build_streams::<quic::async_std::Provider>().await;
     drop(stream_a);
     futures_timer::Delay::new(Duration::from_millis(100)).await;
@@ -477,9 +465,7 @@ async fn test_local_listener_reuse() {
 }
 
 async fn smoke<P: Provider>() {
-    let _ = tracing_subscriber::fmt()
-        .with_env_filter(EnvFilter::from_default_env())
-        .try_init();
+    libp2p_test_utils::with_default_env_filter();
 
     let (a_peer_id, mut a_transport) = create_default_transport::<P>();
     let (b_peer_id, mut b_transport) = create_default_transport::<P>();

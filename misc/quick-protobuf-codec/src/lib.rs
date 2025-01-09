@@ -1,10 +1,10 @@
 #![cfg_attr(docsrs, feature(doc_cfg, doc_auto_cfg))]
 
+use std::{io, marker::PhantomData};
+
 use asynchronous_codec::{Decoder, Encoder};
 use bytes::{Buf, BufMut, BytesMut};
 use quick_protobuf::{BytesReader, MessageRead, MessageWrite, Writer, WriterBackend};
-use std::io;
-use std::marker::PhantomData;
 
 mod generated;
 
@@ -12,6 +12,7 @@ mod generated;
 pub use generated::test as proto;
 
 /// [`Codec`] implements [`Encoder`] and [`Decoder`], uses [`unsigned_varint`]
+///
 /// to prefix messages with their length and uses [`quick_protobuf`] and a provided
 /// `struct` implementing [`MessageRead`] and [`MessageWrite`] to do the encoding.
 pub struct Codec<In, Out = In> {
@@ -119,7 +120,7 @@ impl<'a> BytesMutWriterBackend<'a> {
     }
 }
 
-impl<'a> WriterBackend for BytesMutWriterBackend<'a> {
+impl WriterBackend for BytesMutWriterBackend<'_> {
     fn pb_write_u8(&mut self, x: u8) -> quick_protobuf::Result<()> {
         self.dst.put_u8(x);
 
@@ -181,12 +182,13 @@ impl From<Error> for io::Error {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use asynchronous_codec::FramedRead;
-    use futures::io::Cursor;
-    use futures::{FutureExt, StreamExt};
-    use quickcheck::{Arbitrary, Gen, QuickCheck};
     use std::error::Error;
+
+    use asynchronous_codec::FramedRead;
+    use futures::{io::Cursor, FutureExt, StreamExt};
+    use quickcheck::{Arbitrary, Gen, QuickCheck};
+
+    use super::*;
 
     #[test]
     fn honors_max_message_length() {

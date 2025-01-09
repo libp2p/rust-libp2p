@@ -1,3 +1,5 @@
+use std::{io, iter, pin::pin, time::Duration};
+
 use anyhow::{bail, Result};
 use async_std::task::sleep;
 use async_trait::async_trait;
@@ -10,16 +12,10 @@ use libp2p_swarm_test::SwarmExt;
 use request_response::{
     Codec, InboundFailure, InboundRequestId, OutboundFailure, OutboundRequestId, ResponseChannel,
 };
-use std::pin::pin;
-use std::time::Duration;
-use std::{io, iter};
-use tracing_subscriber::EnvFilter;
 
 #[async_std::test]
 async fn report_outbound_failure_on_read_response() {
-    let _ = tracing_subscriber::fmt()
-        .with_env_filter(EnvFilter::from_default_env())
-        .try_init();
+    libp2p_test_utils::with_default_env_filter();
 
     let (peer1_id, mut swarm1) = new_swarm();
     let (peer2_id, mut swarm2) = new_swarm();
@@ -73,10 +69,7 @@ async fn report_outbound_failure_on_read_response() {
 
 #[async_std::test]
 async fn report_outbound_failure_on_write_request() {
-    let _ = tracing_subscriber::fmt()
-        .with_env_filter(EnvFilter::from_default_env())
-        .try_init();
-
+    libp2p_test_utils::with_default_env_filter();
     let (peer1_id, mut swarm1) = new_swarm();
     let (_peer2_id, mut swarm2) = new_swarm();
 
@@ -116,9 +109,7 @@ async fn report_outbound_failure_on_write_request() {
 
 #[async_std::test]
 async fn report_outbound_timeout_on_read_response() {
-    let _ = tracing_subscriber::fmt()
-        .with_env_filter(EnvFilter::from_default_env())
-        .try_init();
+    libp2p_test_utils::with_default_env_filter();
 
     // `swarm1` needs to have a bigger timeout to avoid racing
     let (peer1_id, mut swarm1) = new_swarm_with_timeout(Duration::from_millis(200));
@@ -163,9 +154,7 @@ async fn report_outbound_timeout_on_read_response() {
 
 #[async_std::test]
 async fn report_outbound_failure_on_max_streams() {
-    let _ = tracing_subscriber::fmt()
-        .with_env_filter(EnvFilter::from_default_env())
-        .try_init();
+    libp2p_test_utils::with_default_env_filter();
 
     // `swarm2` will be able to handle only 1 stream per time.
     let swarm2_config = request_response::Config::default()
@@ -215,9 +204,7 @@ async fn report_outbound_failure_on_max_streams() {
 
 #[async_std::test]
 async fn report_inbound_failure_on_read_request() {
-    let _ = tracing_subscriber::fmt()
-        .with_env_filter(EnvFilter::from_default_env())
-        .try_init();
+    libp2p_test_utils::with_default_env_filter();
 
     let (peer1_id, mut swarm1) = new_swarm();
     let (_peer2_id, mut swarm2) = new_swarm();
@@ -252,9 +239,7 @@ async fn report_inbound_failure_on_read_request() {
 
 #[async_std::test]
 async fn report_inbound_failure_on_write_response() {
-    let _ = tracing_subscriber::fmt()
-        .with_env_filter(EnvFilter::from_default_env())
-        .try_init();
+    libp2p_test_utils::with_default_env_filter();
 
     let (peer1_id, mut swarm1) = new_swarm();
     let (peer2_id, mut swarm2) = new_swarm();
@@ -318,9 +303,7 @@ async fn report_inbound_failure_on_write_response() {
 
 #[async_std::test]
 async fn report_inbound_timeout_on_write_response() {
-    let _ = tracing_subscriber::fmt()
-        .with_env_filter(EnvFilter::from_default_env())
-        .try_init();
+    libp2p_test_utils::with_default_env_filter();
 
     // `swarm2` needs to have a bigger timeout to avoid racing
     let (peer1_id, mut swarm1) = new_swarm_with_timeout(Duration::from_millis(100));
@@ -567,6 +550,7 @@ async fn wait_request(
                         request,
                         channel,
                     },
+                ..
             }) => {
                 return Ok((peer, request_id, request, channel));
             }
@@ -601,6 +585,7 @@ async fn wait_inbound_failure(
                 peer,
                 request_id,
                 error,
+                ..
             }) => {
                 return Ok((peer, request_id, error));
             }
@@ -619,6 +604,7 @@ async fn wait_outbound_failure(
                 peer,
                 request_id,
                 error,
+                ..
             }) => {
                 return Ok((peer, request_id, error));
             }

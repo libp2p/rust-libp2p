@@ -1,6 +1,6 @@
 [package]
 name = "libp2p-identity"
-version = "0.2.9"
+version = "0.2.10"
 edition = "2021"
 description = "Data structures and algorithms for identifying peers in libp2p."
 rust-version = "1.73.0" # MUST NOT inherit from workspace because we don't want to publish breaking changes to `libp2p-identity`.
@@ -25,8 +25,7 @@ rand = { version = "0.8", optional = true }
 sec1 = { version = "0.7", default-features = false, optional = true }
 serde = { version = "1", optional = true, features = ["derive"] }
 sha2 = { version = "0.10.8", optional = true }
-thiserror = { version = "1.0", optional = true }
-void = { version = "1.0", optional = true }
+thiserror = { workspace = true, optional = true }
 zeroize = { version = "1.8", optional = true }
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
@@ -34,7 +33,7 @@ ring = { workspace = true, features = ["alloc", "std"], optional = true }
 
 [features]
 secp256k1 = ["dep:libsecp256k1", "dep:asn1_der", "dep:sha2", "dep:hkdf", "dep:zeroize"]
-ecdsa = ["dep:p256", "dep:void", "dep:zeroize", "dep:sec1", "dep:sha2", "dep:hkdf"]
+ecdsa = ["dep:p256", "dep:zeroize", "dep:sec1", "dep:sha2", "dep:hkdf"]
 rsa = ["dep:ring", "dep:asn1_der", "dep:rand", "dep:zeroize"]
 ed25519 = ["dep:ed25519-dalek", "dep:zeroize", "dep:sha2", "dep:hkdf"]
 peerid = ["dep:multihash", "dep:bs58", "dep:thiserror", "dep:sha2", "dep:hkdf"]
@@ -42,7 +41,6 @@ rand = ["dep:rand", "ed25519-dalek?/rand_core"]
 
 [dev-dependencies]
 quickcheck = { workspace = true }
-base64 = "0.22.1"
 serde_json = "1.0"
 rmp-serde = "1.3"
 criterion = "0.5"

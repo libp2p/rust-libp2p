@@ -1,4 +1,5 @@
 use std::{
+    convert::Infallible,
     io,
     task::{Context, Poll},
     time::Duration,
@@ -11,7 +12,6 @@ use libp2p_swarm::{
     handler::{ConnectionEvent, FullyNegotiatedInbound, ListenUpgradeError},
     ConnectionHandler, ConnectionHandlerEvent, StreamProtocol, SubstreamProtocol,
 };
-use void::Void;
 
 use crate::v2::{protocol, Nonce, DIAL_BACK_PROTOCOL};
 
@@ -28,23 +28,21 @@ impl Handler {
 }
 
 impl ConnectionHandler for Handler {
-    type FromBehaviour = Void;
+    type FromBehaviour = Infallible;
     type ToBehaviour = IncomingNonce;
     type InboundProtocol = ReadyUpgrade<StreamProtocol>;
     type OutboundProtocol = DeniedUpgrade;
     type InboundOpenInfo = ();
     type OutboundOpenInfo = ();
 
-    fn listen_protocol(&self) -> SubstreamProtocol<Self::InboundProtocol, Self::InboundOpenInfo> {
+    fn listen_protocol(&self) -> SubstreamProtocol<Self::InboundProtocol> {
         SubstreamProtocol::new(ReadyUpgrade::new(DIAL_BACK_PROTOCOL), ())
     }
 
     fn poll(
         &mut self,
         cx: &mut Context<'_>,
-    ) -> Poll<
-        ConnectionHandlerEvent<Self::OutboundProtocol, Self::OutboundOpenInfo, Self::ToBehaviour>,
-    > {
+    ) -> Poll<ConnectionHandlerEvent<Self::OutboundProtocol, (), Self::ToBehaviour>> {
         loop {
             match self.inbound.poll_next_unpin(cx) {
                 Poll::Pending => return Poll::Pending,
@@ -68,12 +66,7 @@ impl ConnectionHandler for Handler {
 
     fn on_connection_event(
         &mut self,
-        event: ConnectionEvent<
-            Self::InboundProtocol,
-            Self::OutboundProtocol,
-            Self::InboundOpenInfo,
-            Self::OutboundOpenInfo,
-        >,
+        event: ConnectionEvent<Self::InboundProtocol, Self::OutboundProtocol>,
     ) {
         match event {
             ConnectionEvent::FullyNegotiatedInbound(FullyNegotiatedInbound {
@@ -83,8 +76,10 @@ impl ConnectionHandler for Handler {
                     tracing::warn!("Dial back request dropped, too many requests in flight");
                 }
             }
+            // TODO: remove when Rust 1.82 is MSRV
+            #[allow(unreachable_patterns)]
             ConnectionEvent::ListenUpgradeError(ListenUpgradeError { error, .. }) => {
-                void::unreachable(error);
+                libp2p_core::util::unreachable(error);
             }
             _ => {}
         }

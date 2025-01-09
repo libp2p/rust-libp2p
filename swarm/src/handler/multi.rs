@@ -21,14 +21,6 @@
 //! A [`ConnectionHandler`] implementation that combines multiple other [`ConnectionHandler`]s
 //! indexed by some key.
 
-use crate::handler::{
-    AddressChange, ConnectionEvent, ConnectionHandler, ConnectionHandlerEvent, DialUpgradeError,
-    FullyNegotiatedInbound, FullyNegotiatedOutbound, ListenUpgradeError, SubstreamProtocol,
-};
-use crate::upgrade::{InboundUpgradeSend, OutboundUpgradeSend, UpgradeInfoSend};
-use crate::Stream;
-use futures::{future::BoxFuture, prelude::*, ready};
-use rand::Rng;
 use std::{
     cmp,
     collections::{HashMap, HashSet},
@@ -38,6 +30,19 @@ use std::{
     iter,
     task::{Context, Poll},
     time::Duration,
+};
+
+use futures::{future::BoxFuture, prelude::*, ready};
+use rand::Rng;
+
+use crate::{
+    handler::{
+        AddressChange, ConnectionEvent, ConnectionHandler, ConnectionHandlerEvent,
+        DialUpgradeError, FullyNegotiatedInbound, FullyNegotiatedOutbound, ListenUpgradeError,
+        SubstreamProtocol,
+    },
+    upgrade::{InboundUpgradeSend, OutboundUpgradeSend, UpgradeInfoSend},
+    Stream,
 };
 
 /// A [`ConnectionHandler`] for multiple [`ConnectionHandler`]s of the same type.
@@ -81,6 +86,7 @@ where
         Ok(m)
     }
 
+    #[expect(deprecated)] // TODO: Remove when {In, Out}boundOpenInfo is fully removed.
     fn on_listen_upgrade_error(
         &mut self,
         ListenUpgradeError {
@@ -102,6 +108,7 @@ where
     }
 }
 
+#[expect(deprecated)] // TODO: Remove when {In, Out}boundOpenInfo is fully removed.
 impl<K, H> ConnectionHandler for MultiHandler<K, H>
 where
     K: Clone + Debug + Hash + Eq + Send + 'static,
@@ -248,7 +255,8 @@ where
             return Poll::Pending;
         }
 
-        // Not always polling handlers in the same order should give anyone the chance to make progress.
+        // Not always polling handlers in the same order
+        // should give anyone the chance to make progress.
         let pos = rand::thread_rng().gen_range(0..self.handlers.len());
 
         for (k, h) in self.handlers.iter_mut().skip(pos) {

@@ -18,9 +18,12 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use libp2p_core::multiaddr::{Multiaddr, Protocol};
-use libp2p_core::transport::upgrade::Version;
-use libp2p_core::transport::{MemoryTransport, Transport};
+use std::time::Duration;
+
+use libp2p_core::{
+    multiaddr::{Multiaddr, Protocol},
+    transport::{upgrade::Version, MemoryTransport, Transport},
+};
 use libp2p_dcutr as dcutr;
 use libp2p_identify as identify;
 use libp2p_identity as identity;
@@ -29,14 +32,10 @@ use libp2p_plaintext as plaintext;
 use libp2p_relay as relay;
 use libp2p_swarm::{Config, NetworkBehaviour, Swarm, SwarmEvent};
 use libp2p_swarm_test::SwarmExt as _;
-use std::time::Duration;
-use tracing_subscriber::EnvFilter;
 
-#[async_std::test]
+#[tokio::test]
 async fn connect() {
-    let _ = tracing_subscriber::fmt()
-        .with_env_filter(EnvFilter::from_default_env())
-        .try_init();
+    libp2p_test_utils::with_default_env_filter();
 
     let mut relay = build_relay();
     let mut dst = build_client();
@@ -53,7 +52,7 @@ async fn connect() {
     let relay_peer_id = *relay.local_peer_id();
     let dst_peer_id = *dst.local_peer_id();
 
-    async_std::task::spawn(relay.loop_on_next());
+    tokio::spawn(relay.loop_on_next());
 
     let dst_relayed_addr = relay_tcp_addr
         .with(Protocol::P2p(relay_peer_id))
@@ -68,7 +67,7 @@ async fn connect() {
         false, // No renewal.
     )
     .await;
-    async_std::task::spawn(dst.loop_on_next());
+    tokio::spawn(dst.loop_on_next());
 
     src.dial_and_wait(dst_relayed_addr.clone()).await;
 

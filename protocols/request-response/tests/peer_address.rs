@@ -1,18 +1,16 @@
+use std::iter;
+
 use libp2p_core::ConnectedPoint;
 use libp2p_request_response as request_response;
 use libp2p_request_response::ProtocolSupport;
 use libp2p_swarm::{StreamProtocol, Swarm, SwarmEvent};
 use libp2p_swarm_test::SwarmExt;
 use serde::{Deserialize, Serialize};
-use std::iter;
-use tracing_subscriber::EnvFilter;
 
 #[async_std::test]
 #[cfg(feature = "cbor")]
 async fn dial_succeeds_after_adding_peers_address() {
-    let _ = tracing_subscriber::fmt()
-        .with_env_filter(EnvFilter::from_default_env())
-        .try_init();
+    libp2p_test_utils::with_default_env_filter();
 
     let protocols = iter::once((StreamProtocol::new("/ping/1"), ProtocolSupport::Full));
     let config = request_response::Config::default();

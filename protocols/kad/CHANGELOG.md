@@ -1,10 +1,19 @@
 ## 0.47.0
 
-- Expose a kad query facility allowing specify num_results dynamicly.
+- Expose a kad query facility allowing specify num_results dynamicaly.
   See [PR 5555](https://github.com/libp2p/rust-libp2p/pull/5555).
 - Add `mode` getter on `Behaviour`.
   See [PR 5573](https://github.com/libp2p/rust-libp2p/pull/5573).
-  
+- Add `Behavior::find_closest_local_peers()`.
+  See [PR 5645](https://github.com/libp2p/rust-libp2p/pull/5645).
+- Fix `cargo clippy` warnings in `rustc 1.84.0-beta.1`.
+  See [PR 5700](https://github.com/libp2p/rust-libp2p/pull/5700).
+- Expose Distance private field U256 to public.
+  See [PR 5705](https://github.com/libp2p/rust-libp2p/pull/5705).
+- Fix systematic memory allocation when iterating over `KBuckets`.
+  See [PR 5715](https://github.com/libp2p/rust-libp2p/pull/5715).
+- Remove deprecated default constructor for `ProtocolConfig`.
+  See [PR 5774](https://github.com/libp2p/rust-libp2p/pull/5774).
 
 ## 0.46.2
 

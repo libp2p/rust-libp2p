@@ -18,23 +18,19 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use futures::stream::FuturesUnordered;
-use futures::StreamExt;
-use libp2p_core::multiaddr::Protocol;
-use libp2p_core::Multiaddr;
+use std::time::Duration;
+
+use futures::{stream::FuturesUnordered, StreamExt};
+use libp2p_core::{multiaddr::Protocol, Multiaddr};
 use libp2p_identity as identity;
 use libp2p_rendezvous as rendezvous;
 use libp2p_rendezvous::client::RegisterError;
 use libp2p_swarm::{DialError, Swarm, SwarmEvent};
 use libp2p_swarm_test::SwarmExt;
-use std::time::Duration;
-use tracing_subscriber::EnvFilter;
 
 #[tokio::test]
 async fn given_successful_registration_then_successful_discovery() {
-    let _ = tracing_subscriber::fmt()
-        .with_env_filter(EnvFilter::from_default_env())
-        .try_init();
+    libp2p_test_utils::with_default_env_filter();
     let namespace = rendezvous::Namespace::from_static("some-namespace");
     let ([mut alice, mut bob], mut robert) =
         new_server_with_connected_clients(rendezvous::server::Config::default()).await;
@@ -87,9 +83,7 @@ async fn given_successful_registration_then_successful_discovery() {
 
 #[tokio::test]
 async fn should_return_error_when_no_external_addresses() {
-    let _ = tracing_subscriber::fmt()
-        .with_env_filter(EnvFilter::from_default_env())
-        .try_init();
+    libp2p_test_utils::with_default_env_filter();
     let namespace = rendezvous::Namespace::from_static("some-namespace");
     let server = new_server(rendezvous::server::Config::default()).await;
     let mut client = Swarm::new_ephemeral(rendezvous::client::Behaviour::new);
@@ -104,9 +98,7 @@ async fn should_return_error_when_no_external_addresses() {
 
 #[tokio::test]
 async fn given_successful_registration_then_refresh_ttl() {
-    let _ = tracing_subscriber::fmt()
-        .with_env_filter(EnvFilter::from_default_env())
-        .try_init();
+    libp2p_test_utils::with_default_env_filter();
     let namespace = rendezvous::Namespace::from_static("some-namespace");
     let ([mut alice, mut bob], mut robert) =
         new_server_with_connected_clients(rendezvous::server::Config::default()).await;
@@ -172,9 +164,7 @@ async fn given_successful_registration_then_refresh_ttl() {
 
 #[tokio::test]
 async fn given_successful_registration_then_refresh_external_addrs() {
-    let _ = tracing_subscriber::fmt()
-        .with_env_filter(EnvFilter::from_default_env())
-        .try_init();
+    libp2p_test_utils::with_default_env_filter();
     let namespace = rendezvous::Namespace::from_static("some-namespace");
     let ([mut alice], mut robert) =
         new_server_with_connected_clients(rendezvous::server::Config::default()).await;
@@ -225,9 +215,7 @@ async fn given_successful_registration_then_refresh_external_addrs() {
 
 #[tokio::test]
 async fn given_invalid_ttl_then_unsuccessful_registration() {
-    let _ = tracing_subscriber::fmt()
-        .with_env_filter(EnvFilter::from_default_env())
-        .try_init();
+    libp2p_test_utils::with_default_env_filter();
     let namespace = rendezvous::Namespace::from_static("some-namespace");
     let ([mut alice], mut robert) =
         new_server_with_connected_clients(rendezvous::server::Config::default()).await;
@@ -254,9 +242,7 @@ async fn given_invalid_ttl_then_unsuccessful_registration() {
 
 #[tokio::test]
 async fn discover_allows_for_dial_by_peer_id() {
-    let _ = tracing_subscriber::fmt()
-        .with_env_filter(EnvFilter::from_default_env())
-        .try_init();
+    libp2p_test_utils::with_default_env_filter();
     let namespace = rendezvous::Namespace::from_static("some-namespace");
     let ([mut alice, mut bob], robert) =
         new_server_with_connected_clients(rendezvous::server::Config::default()).await;
@@ -311,9 +297,7 @@ async fn discover_allows_for_dial_by_peer_id() {
 
 #[tokio::test]
 async fn eve_cannot_register() {
-    let _ = tracing_subscriber::fmt()
-        .with_env_filter(EnvFilter::from_default_env())
-        .try_init();
+    libp2p_test_utils::with_default_env_filter();
     let namespace = rendezvous::Namespace::from_static("some-namespace");
     let mut robert = new_server(rendezvous::server::Config::default()).await;
     let mut eve = new_impersonating_client().await;
@@ -339,9 +323,7 @@ async fn eve_cannot_register() {
 // test if charlie can operate as client and server simultaneously
 #[tokio::test]
 async fn can_combine_client_and_server() {
-    let _ = tracing_subscriber::fmt()
-        .with_env_filter(EnvFilter::from_default_env())
-        .try_init();
+    libp2p_test_utils::with_default_env_filter();
     let namespace = rendezvous::Namespace::from_static("some-namespace");
     let ([mut alice], mut robert) =
         new_server_with_connected_clients(rendezvous::server::Config::default()).await;
@@ -377,9 +359,7 @@ async fn can_combine_client_and_server() {
 
 #[tokio::test]
 async fn registration_on_clients_expire() {
-    let _ = tracing_subscriber::fmt()
-        .with_env_filter(EnvFilter::from_default_env())
-        .try_init();
+    libp2p_test_utils::with_default_env_filter();
     let namespace = rendezvous::Namespace::from_static("some-namespace");
     let ([mut alice, mut bob], robert) =
         new_server_with_connected_clients(rendezvous::server::Config::default().with_min_ttl(1))
@@ -471,9 +451,11 @@ async fn new_combined_node() -> Swarm<Combined> {
 }
 
 async fn new_impersonating_client() -> Swarm<rendezvous::client::Behaviour> {
-    // In reality, if Eve were to try and fake someones identity, she would obviously only know the public key.
-    // Due to the type-safe API of the `Rendezvous` behaviour and `PeerRecord`, we actually cannot construct a bad `PeerRecord` (i.e. one that is claims to be someone else).
-    // As such, the best we can do is hand eve a completely different keypair from what she is using to authenticate her connection.
+    // In reality, if Eve were to try and fake someones identity, she would obviously only know the
+    // public key. Due to the type-safe API of the `Rendezvous` behaviour and `PeerRecord`, we
+    // actually cannot construct a bad `PeerRecord` (i.e. one that is claims to be someone else).
+    // As such, the best we can do is hand eve a completely different keypair from what she is using
+    // to authenticate her connection.
     let someone_else = identity::Keypair::generate_ed25519();
     let mut eve = Swarm::new_ephemeral(move |_| rendezvous::client::Behaviour::new(someone_else));
     eve.listen().with_memory_addr_external().await;

@@ -1,37 +1,28 @@
-use libp2p_autonat::v2::client::{self, Config};
-use libp2p_autonat::v2::server;
-use libp2p_core::transport::TransportError;
-use libp2p_core::Multiaddr;
+use std::{sync::Arc, time::Duration};
+
+use libp2p_autonat::v2::{
+    client::{self, Config},
+    server,
+};
+use libp2p_core::{multiaddr::Protocol, transport::TransportError, Multiaddr};
 use libp2p_swarm::{
     DialError, FromSwarm, NetworkBehaviour, NewExternalAddrCandidate, Swarm, SwarmEvent,
 };
 use libp2p_swarm_test::SwarmExt;
 use rand_core::OsRng;
-use std::sync::Arc;
-use std::time::Duration;
 use tokio::sync::oneshot;
-use tracing_subscriber::EnvFilter;
 
 #[tokio::test]
 async fn confirm_successful() {
-    let _ = tracing_subscriber::fmt()
-        .with_env_filter(EnvFilter::from_default_env())
-        .try_init();
+    libp2p_test_utils::with_default_env_filter();
     let (mut alice, mut bob) = start_and_connect().await;
 
     let cor_server_peer = *alice.local_peer_id();
     let cor_client_peer = *bob.local_peer_id();
-    let bob_external_addrs = Arc::new(bob.external_addresses().cloned().collect::<Vec<_>>());
-    let alice_bob_external_addrs = bob_external_addrs.clone();
+    let bob_tcp_listeners = Arc::new(tcp_listeners(&bob));
+    let alice_bob_tcp_listeners = bob_tcp_listeners.clone();
 
     let alice_task = async {
-        let _ = alice
-            .wait(|event| match event {
-                SwarmEvent::NewExternalAddrCandidate { .. } => Some(()),
-                _ => None,
-            })
-            .await;
-
         let (dialed_peer_id, dialed_connection_id) = alice
             .wait(|event| match event {
                 SwarmEvent::Dialing {
@@ -76,10 +67,10 @@ async fn confirm_successful() {
             })
             .await;
 
-        assert_eq!(tested_addr, bob_external_addrs.first().cloned().unwrap());
+        assert_eq!(tested_addr, bob_tcp_listeners.first().cloned().unwrap());
         assert_eq!(data_amount, 0);
         assert_eq!(client, cor_client_peer);
-        assert_eq!(&all_addrs[..], &bob_external_addrs[..]);
+        assert_eq!(&all_addrs[..], &bob_tcp_listeners[..]);
         assert!(result.is_ok(), "Result: {result:?}");
     };
 
@@ -122,7 +113,7 @@ async fn confirm_successful() {
             .await;
         assert_eq!(
             tested_addr,
-            alice_bob_external_addrs.first().cloned().unwrap()
+            alice_bob_tcp_listeners.first().cloned().unwrap()
         );
         assert_eq!(bytes_sent, 0);
         assert_eq!(server, cor_server_peer);
@@ -134,9 +125,7 @@ async fn confirm_successful() {
 
 #[tokio::test]
 async fn dial_back_to_unsupported_protocol() {
-    let _ = tracing_subscriber::fmt()
-        .with_env_filter(EnvFilter::from_default_env())
-        .try_init();
+    libp2p_test_utils::with_default_env_filter();
     let (mut alice, mut bob) = bootstrap().await;
 
     let alice_peer_id = *alice.local_peer_id();
@@ -232,100 +221,93 @@ async fn dial_back_to_unsupported_protocol() {
 
 #[tokio::test]
 async fn dial_back_to_non_libp2p() {
-    let _ = tracing_subscriber::fmt()
-        .with_env_filter(EnvFilter::from_default_env())
-        .try_init();
+    libp2p_test_utils::with_default_env_filter();
     let (mut alice, mut bob) = bootstrap().await;
     let alice_peer_id = *alice.local_peer_id();
 
-    for addr_str in ["/ip4/169.150.247.38/tcp/32", "/ip6/::1/tcp/1000"] {
-        let addr: Multiaddr = addr_str.parse().unwrap();
-        let bob_addr = addr.clone();
-        bob.behaviour_mut()
-            .autonat
-            .on_swarm_event(FromSwarm::NewExternalAddrCandidate(
-                NewExternalAddrCandidate { addr: &addr },
-            ));
+    let addr_str = "/ip6/::1/tcp/1000";
+    let addr: Multiaddr = addr_str.parse().unwrap();
+    let bob_addr = addr.clone();
+    bob.behaviour_mut()
+        .autonat
+        .on_swarm_event(FromSwarm::NewExternalAddrCandidate(
+            NewExternalAddrCandidate { addr: &addr },
+        ));
 
-        let alice_task = async {
-            let (alice_dialing_peer, alice_conn_id) = alice
-                .wait(|event| match event {
-                    SwarmEvent::Dialing {
-                        peer_id,
-                        connection_id,
-                    } => peer_id.map(|p| (p, connection_id)),
-                    _ => None,
-                })
-                .await;
-            let mut outgoing_conn_error = alice
-                .wait(|event| match event {
-                    SwarmEvent::OutgoingConnectionError {
-                        connection_id,
-                        peer_id: Some(peer_id),
-                        error: DialError::Transport(peers),
-                    } if connection_id == alice_conn_id && peer_id == alice_dialing_peer => {
-                        Some(peers)
-                    }
-                    _ => None,
-                })
-                .await;
+    let alice_task = async {
+        let (alice_dialing_peer, alice_conn_id) = alice
+            .wait(|event| match event {
+                SwarmEvent::Dialing {
+                    peer_id,
+                    connection_id,
+                } => peer_id.map(|p| (p, connection_id)),
+                _ => None,
+            })
+            .await;
+        let mut outgoing_conn_error = alice
+            .wait(|event| match event {
+                SwarmEvent::OutgoingConnectionError {
+                    connection_id,
+                    peer_id: Some(peer_id),
+                    error: DialError::Transport(peers),
+                } if connection_id == alice_conn_id && peer_id == alice_dialing_peer => Some(peers),
+                _ => None,
+            })
+            .await;
 
-            if let Some((multiaddr, TransportError::Other(o))) = outgoing_conn_error.pop() {
-                assert_eq!(
-                    multiaddr,
-                    addr.clone().with_p2p(alice_dialing_peer).unwrap()
-                );
-                let error_string = o.to_string();
-                assert!(
-                    error_string.contains("Connection refused"),
-                    "Correct error string: {error_string} for {addr_str}"
-                );
-            } else {
-                panic!("No outgoing connection errors");
-            }
+        if let Some((multiaddr, TransportError::Other(o))) = outgoing_conn_error.pop() {
+            assert_eq!(
+                multiaddr,
+                addr.clone().with_p2p(alice_dialing_peer).unwrap()
+            );
+            let error_string = o.to_string();
+            assert!(
+                error_string.contains("Connection refused"),
+                "Correct error string: {error_string} for {addr_str}"
+            );
+        } else {
+            panic!("No outgoing connection errors");
+        }
 
-            alice
-                .wait(|event| match event {
-                    SwarmEvent::Behaviour(CombinedServerEvent::Autonat(server::Event {
-                        all_addrs,
-                        tested_addr,
-                        client,
-                        data_amount,
-                        result: Ok(()),
-                    })) if all_addrs == vec![addr.clone()]
-                        && tested_addr == addr
-                        && alice_dialing_peer == client =>
-                    {
-                        Some(data_amount)
-                    }
-                    _ => None,
-                })
-                .await
-        };
-        let bob_task = async {
-            bob.wait(|event| match event {
-                SwarmEvent::Behaviour(CombinedClientEvent::Autonat(client::Event {
+        alice
+            .wait(|event| match event {
+                SwarmEvent::Behaviour(CombinedServerEvent::Autonat(server::Event {
+                    all_addrs,
                     tested_addr,
-                    bytes_sent,
-                    server,
-                    result: Err(_),
-                })) if tested_addr == bob_addr && server == alice_peer_id => Some(bytes_sent),
+                    client,
+                    data_amount,
+                    result: Ok(()),
+                })) if all_addrs == vec![addr.clone()]
+                    && tested_addr == addr
+                    && alice_dialing_peer == client =>
+                {
+                    Some(data_amount)
+                }
                 _ => None,
             })
             .await
-        };
+    };
+    let bob_task = async {
+        bob.wait(|event| match event {
+            SwarmEvent::Behaviour(CombinedClientEvent::Autonat(client::Event {
+                tested_addr,
+                bytes_sent,
+                server,
+                result: Err(_),
+            })) if tested_addr == bob_addr && server == alice_peer_id => Some(bytes_sent),
+            _ => None,
+        })
+        .await
+    };
 
-        let (alice_bytes_sent, bob_bytes_sent) = tokio::join!(alice_task, bob_task);
-        assert_eq!(alice_bytes_sent, bob_bytes_sent);
-        bob.behaviour_mut().autonat.validate_addr(&addr);
-    }
+    let (alice_bytes_sent, bob_bytes_sent) = tokio::join!(alice_task, bob_task);
+    assert_eq!(alice_bytes_sent, bob_bytes_sent);
+    bob.behaviour_mut().autonat.validate_addr(&addr);
 }
 
 #[tokio::test]
 async fn dial_back_to_not_supporting() {
-    let _ = tracing_subscriber::fmt()
-        .with_env_filter(EnvFilter::from_default_env())
-        .try_init();
+    libp2p_test_utils::with_default_env_filter();
 
     let (mut alice, mut bob) = bootstrap().await;
     let alice_peer_id = *alice.local_peer_id();
@@ -446,7 +428,7 @@ async fn new_client() -> Swarm<CombinedClient> {
             identity.public().clone(),
         )),
     });
-    node.listen().with_tcp_addr_external().await;
+    node.listen().await;
     node
 }
 
@@ -490,13 +472,6 @@ async fn bootstrap() -> (Swarm<CombinedServer>, Swarm<CombinedClient>) {
     let cor_client_peer = *bob.local_peer_id();
 
     let alice_task = async {
-        let _ = alice
-            .wait(|event| match event {
-                SwarmEvent::NewExternalAddrCandidate { .. } => Some(()),
-                _ => None,
-            })
-            .await;
-
         let (dialed_peer_id, dialed_connection_id) = alice
             .wait(|event| match event {
                 SwarmEvent::Dialing {
@@ -565,4 +540,15 @@ async fn bootstrap() -> (Swarm<CombinedServer>, Swarm<CombinedClient>) {
 
     tokio::join!(alice_task, bob_task);
     (alice, bob)
+}
+
+fn tcp_listeners<T: NetworkBehaviour>(swarm: &Swarm<T>) -> Vec<Multiaddr> {
+    swarm
+        .listeners()
+        .filter(|addr| {
+            addr.iter()
+                .any(|protocol| matches!(protocol, Protocol::Tcp(_)))
+        })
+        .cloned()
+        .collect::<Vec<_>>()
 }

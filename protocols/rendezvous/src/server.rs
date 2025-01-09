@@ -18,25 +18,27 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::codec::{Cookie, ErrorCode, Message, Namespace, NewRegistration, Registration, Ttl};
-use crate::{MAX_TTL, MIN_TTL};
+use std::{
+    collections::{HashMap, HashSet},
+    iter,
+    task::{ready, Context, Poll},
+    time::Duration,
+};
+
 use bimap::BiMap;
-use futures::future::BoxFuture;
-use futures::stream::FuturesUnordered;
-use futures::{FutureExt, StreamExt};
-use libp2p_core::transport::PortUse;
-use libp2p_core::{Endpoint, Multiaddr};
+use futures::{future::BoxFuture, stream::FuturesUnordered, FutureExt, StreamExt};
+use libp2p_core::{transport::PortUse, Endpoint, Multiaddr};
 use libp2p_identity::PeerId;
 use libp2p_request_response::ProtocolSupport;
-use libp2p_swarm::behaviour::FromSwarm;
 use libp2p_swarm::{
-    ConnectionDenied, ConnectionId, NetworkBehaviour, THandler, THandlerInEvent, THandlerOutEvent,
-    ToSwarm,
+    behaviour::FromSwarm, ConnectionDenied, ConnectionId, NetworkBehaviour, THandler,
+    THandlerInEvent, THandlerOutEvent, ToSwarm,
 };
-use std::collections::{HashMap, HashSet};
-use std::iter;
-use std::task::{ready, Context, Poll};
-use std::time::Duration;
+
+use crate::{
+    codec::{Cookie, ErrorCode, Message, Namespace, NewRegistration, Registration, Ttl},
+    MAX_TTL, MIN_TTL,
+};
 
 pub struct Behaviour {
     inner: libp2p_request_response::Behaviour<crate::codec::Codec>,
@@ -181,6 +183,7 @@ impl NetworkBehaviour for Behaviour {
                             libp2p_request_response::Message::Request {
                                 request, channel, ..
                             },
+                        ..
                     }) => {
                         if let Some((event, response)) =
                             handle_request(peer_id, request, &mut self.registrations)
@@ -200,6 +203,7 @@ impl NetworkBehaviour for Behaviour {
                         peer,
                         request_id,
                         error,
+                        ..
                     }) => {
                         tracing::warn!(
                             %peer,
@@ -215,6 +219,7 @@ impl NetworkBehaviour for Behaviour {
                     | ToSwarm::GenerateEvent(libp2p_request_response::Event::Message {
                         peer: _,
                         message: libp2p_request_response::Message::Response { .. },
+                        ..
                     })
                     | ToSwarm::GenerateEvent(libp2p_request_response::Event::OutboundFailure {
                         ..
@@ -534,10 +539,9 @@ pub struct CookieNamespaceMismatch;
 
 #[cfg(test)]
 mod tests {
-    use web_time::SystemTime;
-
     use libp2p_core::PeerRecord;
     use libp2p_identity as identity;
+    use web_time::SystemTime;
 
     use super::*;
 
@@ -792,7 +796,8 @@ mod tests {
                 .unwrap_err();
         }
 
-        /// Polls [`Registrations`] for at most `seconds` and panics if doesn't return an event within that time.
+        /// Polls [`Registrations`] for at most `seconds` and panics if doesn't
+        /// return an event within that time.
         async fn next_event_in_at_most(&mut self, seconds: u64) -> ExpiredRegistration {
             tokio::time::timeout(Duration::from_secs(seconds), self.next_event())
                 .await

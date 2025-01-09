@@ -20,15 +20,18 @@
 
 //! Protocol negotiation strategies for the peer acting as the dialer.
 
-use crate::protocol::{HeaderLine, Message, MessageIO, Protocol, ProtocolError};
-use crate::{Negotiated, NegotiationError, Version};
-
-use futures::prelude::*;
 use std::{
     convert::TryFrom as _,
     iter, mem,
     pin::Pin,
     task::{Context, Poll},
+};
+
+use futures::prelude::*;
+
+use crate::{
+    protocol::{HeaderLine, Message, MessageIO, Protocol, ProtocolError},
+    Negotiated, NegotiationError, Version,
 };
 
 /// Returns a `Future` that negotiates a protocol on the given I/O stream
@@ -84,8 +87,9 @@ enum State<R, N> {
 
 impl<R, I> Future for DialerSelectFuture<R, I>
 where
-    // The Unpin bound here is required because we produce a `Negotiated<R>` as the output.
-    // It also makes the implementation considerably easier to write.
+    // The Unpin bound here is required because we produce
+    // a `Negotiated<R>` as the output. It also makes
+    // the implementation considerably easier to write.
     R: AsyncRead + AsyncWrite + Unpin,
     I: Iterator,
     I::Item: AsRef<str>,
@@ -204,14 +208,18 @@ where
 
 #[cfg(test)]
 mod tests {
+    use std::time::Duration;
+
+    use async_std::{
+        future::timeout,
+        net::{TcpListener, TcpStream},
+    };
+    use libp2p_test_utils::EnvFilter;
+    use quickcheck::{Arbitrary, Gen, GenRange};
+    use tracing::metadata::LevelFilter;
+
     use super::*;
     use crate::listener_select_proto;
-    use async_std::future::timeout;
-    use async_std::net::{TcpListener, TcpStream};
-    use quickcheck::{Arbitrary, Gen, GenRange};
-    use std::time::Duration;
-    use tracing::metadata::LevelFilter;
-    use tracing_subscriber::EnvFilter;
 
     #[test]
     fn select_proto_basic() {
@@ -267,13 +275,11 @@ mod tests {
             ListenerProtos(listen_protos): ListenerProtos,
             DialPayload(dial_payload): DialPayload,
         ) {
-            let _ = tracing_subscriber::fmt()
-                .with_env_filter(
-                    EnvFilter::builder()
-                        .with_default_directive(LevelFilter::DEBUG.into())
-                        .from_env_lossy(),
-                )
-                .try_init();
+            libp2p_test_utils::with_env_filter(
+                EnvFilter::builder()
+                    .with_default_directive(LevelFilter::DEBUG.into())
+                    .from_env_lossy(),
+            );
 
             async_std::task::block_on(async move {
                 let listener = TcpListener::bind("0.0.0.0:0").await.unwrap();
@@ -353,8 +359,8 @@ mod tests {
                 .unwrap();
             assert_eq!(proto, "/proto1");
 
-            // client can close the connection even though protocol negotiation is not yet done, i.e.
-            // `_server_connection` had been untouched.
+            // client can close the connection even though protocol negotiation is not yet done,
+            // i.e. `_server_connection` had been untouched.
             io.close().await.unwrap();
         });
 

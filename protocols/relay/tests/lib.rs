@@ -18,33 +18,32 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use futures::executor::LocalPool;
-use futures::future::FutureExt;
-use futures::io::{AsyncRead, AsyncWrite};
-use futures::stream::StreamExt;
-use futures::task::Spawn;
-use libp2p_core::multiaddr::{Multiaddr, Protocol};
-use libp2p_core::muxing::StreamMuxerBox;
-use libp2p_core::transport::choice::OrTransport;
-use libp2p_core::transport::{Boxed, MemoryTransport, Transport};
-use libp2p_core::upgrade;
+use std::{error::Error, time::Duration};
+
+use futures::{
+    executor::LocalPool,
+    future::FutureExt,
+    io::{AsyncRead, AsyncWrite},
+    stream::StreamExt,
+    task::Spawn,
+};
+use libp2p_core::{
+    multiaddr::{Multiaddr, Protocol},
+    muxing::StreamMuxerBox,
+    transport::{choice::OrTransport, Boxed, MemoryTransport, Transport},
+    upgrade,
+};
 use libp2p_identity as identity;
 use libp2p_identity::PeerId;
 use libp2p_ping as ping;
 use libp2p_plaintext as plaintext;
 use libp2p_relay as relay;
-use libp2p_swarm::dial_opts::DialOpts;
-use libp2p_swarm::{Config, DialError, NetworkBehaviour, Swarm, SwarmEvent};
+use libp2p_swarm::{dial_opts::DialOpts, Config, DialError, NetworkBehaviour, Swarm, SwarmEvent};
 use libp2p_swarm_test::SwarmExt;
-use std::error::Error;
-use std::time::Duration;
-use tracing_subscriber::EnvFilter;
 
 #[test]
 fn reservation() {
-    let _ = tracing_subscriber::fmt()
-        .with_env_filter(EnvFilter::from_default_env())
-        .try_init();
+    libp2p_test_utils::with_default_env_filter();
     let mut pool = LocalPool::new();
 
     let relay_addr = Multiaddr::empty().with(Protocol::Memory(rand::random::<u64>()));
@@ -85,9 +84,7 @@ fn reservation() {
 
 #[test]
 fn new_reservation_to_same_relay_replaces_old() {
-    let _ = tracing_subscriber::fmt()
-        .with_env_filter(EnvFilter::from_default_env())
-        .try_init();
+    libp2p_test_utils::with_default_env_filter();
     let mut pool = LocalPool::new();
 
     let relay_addr = Multiaddr::empty().with(Protocol::Memory(rand::random::<u64>()));
@@ -184,9 +181,7 @@ fn new_reservation_to_same_relay_replaces_old() {
 
 #[test]
 fn connect() {
-    let _ = tracing_subscriber::fmt()
-        .with_env_filter(EnvFilter::from_default_env())
-        .try_init();
+    libp2p_test_utils::with_default_env_filter();
     let mut pool = LocalPool::new();
 
     let relay_addr = Multiaddr::empty().with(Protocol::Memory(rand::random::<u64>()));
@@ -270,9 +265,7 @@ async fn connection_established_to(
 
 #[test]
 fn handle_dial_failure() {
-    let _ = tracing_subscriber::fmt()
-        .with_env_filter(EnvFilter::from_default_env())
-        .try_init();
+    libp2p_test_utils::with_default_env_filter();
     let mut pool = LocalPool::new();
 
     let relay_addr = Multiaddr::empty().with(Protocol::Memory(rand::random::<u64>()));
@@ -291,9 +284,7 @@ fn handle_dial_failure() {
 
 #[test]
 fn propagate_reservation_error_to_listener() {
-    let _ = tracing_subscriber::fmt()
-        .with_env_filter(EnvFilter::from_default_env())
-        .try_init();
+    libp2p_test_utils::with_default_env_filter();
     let mut pool = LocalPool::new();
 
     let relay_addr = Multiaddr::empty().with(Protocol::Memory(rand::random::<u64>()));
@@ -340,9 +331,7 @@ fn propagate_reservation_error_to_listener() {
 
 #[test]
 fn propagate_connect_error_to_unknown_peer_to_dialer() {
-    let _ = tracing_subscriber::fmt()
-        .with_env_filter(EnvFilter::from_default_env())
-        .try_init();
+    libp2p_test_utils::with_default_env_filter();
     let mut pool = LocalPool::new();
 
     let relay_addr = Multiaddr::empty().with(Protocol::Memory(rand::random::<u64>()));
@@ -396,9 +385,7 @@ fn propagate_connect_error_to_unknown_peer_to_dialer() {
 
 #[test]
 fn reuse_connection() {
-    let _ = tracing_subscriber::fmt()
-        .with_env_filter(EnvFilter::from_default_env())
-        .try_init();
+    libp2p_test_utils::with_default_env_filter();
     let mut pool = LocalPool::new();
 
     let relay_addr = Multiaddr::empty().with(Protocol::Memory(rand::random::<u64>()));
@@ -414,10 +401,7 @@ fn reuse_connection() {
         .with(Protocol::P2p(relay_peer_id))
         .with(Protocol::P2pCircuit);
 
-    // To reuse the connection, we need to ensure it is not shut down due to being idle.
-    let mut client = build_client_with_config(
-        Config::with_async_std_executor().with_idle_connection_timeout(Duration::from_secs(1)),
-    );
+    let mut client = build_client();
     let client_peer_id = *client.local_peer_id();
 
     client.dial(relay_addr).unwrap();

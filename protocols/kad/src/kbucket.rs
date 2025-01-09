@@ -72,13 +72,12 @@ mod entry;
 #[allow(clippy::assign_op_pattern)]
 mod key;
 
-pub use bucket::NodeStatus;
-pub use entry::*;
+use std::{collections::VecDeque, num::NonZeroUsize, time::Duration};
 
 use bucket::KBucket;
-use std::collections::VecDeque;
-use std::num::NonZeroUsize;
-use std::time::Duration;
+pub use bucket::NodeStatus;
+pub use entry::*;
+use smallvec::SmallVec;
 use web_time::Instant;
 
 /// Maximum number of k-buckets.
@@ -177,7 +176,7 @@ impl BucketIndex {
         let lower = usize::pow(2, rem);
         let upper = usize::pow(2, rem + 1);
         bytes[31 - quot] = rng.gen_range(lower..upper) as u8;
-        Distance(U256::from(bytes))
+        Distance(U256::from_big_endian(bytes.as_slice()))
     }
 }
 
@@ -284,11 +283,8 @@ where
             iter: None,
             table: self,
             buckets_iter: ClosestBucketsIter::new(distance),
-            fmap: move |b: &KBucket<TKey, _>| -> Vec<_> {
-                let mut vec = Vec::with_capacity(bucket_size);
-                vec.extend(b.iter().map(|(n, _)| n.key.clone()));
-                vec
-            },
+            fmap: |(n, _status): (&Node<TKey, TVal>, NodeStatus)| n.key.clone(),
+            bucket_size,
         }
     }
 
@@ -309,15 +305,11 @@ where
             iter: None,
             table: self,
             buckets_iter: ClosestBucketsIter::new(distance),
-            fmap: move |b: &KBucket<_, TVal>| -> Vec<_> {
-                b.iter()
-                    .take(bucket_size)
-                    .map(|(n, status)| EntryView {
-                        node: n.clone(),
-                        status,
-                    })
-                    .collect()
+            fmap: |(n, status): (&Node<TKey, TVal>, NodeStatus)| EntryView {
+                node: n.clone(),
+                status,
             },
+            bucket_size,
         }
     }
 
@@ -360,10 +352,12 @@ struct ClosestIter<'a, TTarget, TKey, TVal, TMap, TOut> {
     /// distance of the local key to the target.
     buckets_iter: ClosestBucketsIter,
     /// The iterator over the entries in the currently traversed bucket.
-    iter: Option<std::vec::IntoIter<TOut>>,
+    iter: Option<ClosestIterBuffer<TOut>>,
     /// The projection function / mapping applied on each bucket as
     /// it is encountered, producing the next `iter`ator.
     fmap: TMap,
+    /// The maximal number of nodes that a bucket can contain.
+    bucket_size: usize,
 }
 
 /// An iterator over the bucket indices, in the order determined by the `Distance` of
@@ -465,38 +459,77 @@ where
     TTarget: AsRef<KeyBytes>,
     TKey: Clone + AsRef<KeyBytes>,
     TVal: Clone,
-    TMap: Fn(&KBucket<TKey, TVal>) -> Vec<TOut>,
+    TMap: Fn((&Node<TKey, TVal>, NodeStatus)) -> TOut,
     TOut: AsRef<KeyBytes>,
 {
     type Item = TOut;
 
     fn next(&mut self) -> Option<Self::Item> {
         loop {
-            match &mut self.iter {
-                Some(iter) => match iter.next() {
-                    Some(k) => return Some(k),
-                    None => self.iter = None,
-                },
-                None => {
-                    if let Some(i) = self.buckets_iter.next() {
-                        let bucket = &mut self.table.buckets[i.get()];
-                        if let Some(applied) = bucket.apply_pending() {
-                            self.table.applied_pending.push_back(applied)
-                        }
-                        let mut v = (self.fmap)(bucket);
-                        v.sort_by(|a, b| {
-                            self.target
-                                .as_ref()
-                                .distance(a.as_ref())
-                                .cmp(&self.target.as_ref().distance(b.as_ref()))
-                        });
-                        self.iter = Some(v.into_iter());
-                    } else {
-                        return None;
-                    }
+            let (mut buffer, bucket_index) = if let Some(mut iter) = self.iter.take() {
+                if let Some(next) = iter.next() {
+                    self.iter = Some(iter);
+                    return Some(next);
                 }
+
+                let bucket_index = self.buckets_iter.next()?;
+
+                // Reusing the same buffer so if there were any allocation, it only happen once over
+                // a `ClosestIter` life.
+                iter.buffer.clear();
+
+                (iter.buffer, bucket_index)
+            } else {
+                let bucket_index = self.buckets_iter.next()?;
+
+                // Allocation only occurs if `kbucket_size` is greater than `K_VALUE`.
+                (SmallVec::with_capacity(self.bucket_size), bucket_index)
+            };
+
+            let bucket = &mut self.table.buckets[bucket_index.get()];
+            if let Some(applied) = bucket.apply_pending() {
+                self.table.applied_pending.push_back(applied)
             }
+
+            buffer.extend(
+                bucket
+                    .iter()
+                    .take(self.bucket_size)
+                    .map(|e| (self.fmap)(e))
+                    .map(Some),
+            );
+            buffer.sort_by(|a, b| {
+                let a = a.as_ref().expect("just initialized");
+                let b = b.as_ref().expect("just initialized");
+                self.target
+                    .as_ref()
+                    .distance(a.as_ref())
+                    .cmp(&self.target.as_ref().distance(b.as_ref()))
+            });
+
+            self.iter = Some(ClosestIterBuffer::new(buffer));
         }
+    }
+}
+
+struct ClosestIterBuffer<TOut> {
+    buffer: SmallVec<[Option<TOut>; K_VALUE.get()]>,
+    index: usize,
+}
+
+impl<TOut> ClosestIterBuffer<TOut> {
+    fn new(buffer: SmallVec<[Option<TOut>; K_VALUE.get()]>) -> Self {
+        Self { buffer, index: 0 }
+    }
+}
+
+impl<TOut> Iterator for ClosestIterBuffer<TOut> {
+    type Item = TOut;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let entry = self.buffer.get_mut(self.index)?;
+        self.index += 1;
+        entry.take()
     }
 }
 
@@ -529,12 +562,12 @@ where
 
     /// Returns true if the bucket has a pending node.
     pub fn has_pending(&self) -> bool {
-        self.bucket.pending().map_or(false, |n| !n.is_ready())
+        self.bucket.pending().is_some_and(|n| !n.is_ready())
     }
 
     /// Tests whether the given distance falls into this bucket.
     pub fn contains(&self, d: &Distance) -> bool {
-        BucketIndex::new(d).map_or(false, |i| i == self.index)
+        BucketIndex::new(d).is_some_and(|i| i == self.index)
     }
 
     /// Generates a random distance that falls into this bucket.
@@ -561,9 +594,10 @@ where
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use libp2p_identity::PeerId;
     use quickcheck::*;
+
+    use super::*;
 
     type TestTable = KBucketsTable<KeyBytes, ()>;
 
@@ -651,7 +685,7 @@ mod tests {
     fn rand_distance() {
         fn prop(ix: u8) -> bool {
             let d = BucketIndex(ix as usize).rand_distance(&mut rand::thread_rng());
-            let n = U256::from(<[u8; 32]>::from(d.0));
+            let n = d.0;
             let b = U256::from(2);
             let e = U256::from(ix);
             let lower = b.pow(e);

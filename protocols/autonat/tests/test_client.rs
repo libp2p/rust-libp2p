@@ -18,7 +18,8 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use async_std::task::JoinHandle;
+use std::time::Duration;
+
 use libp2p_autonat::{
     Behaviour, Config, Event, NatStatus, OutboundProbeError, OutboundProbeEvent, ResponseError,
 };
@@ -26,13 +27,13 @@ use libp2p_core::Multiaddr;
 use libp2p_identity::PeerId;
 use libp2p_swarm::{Swarm, SwarmEvent};
 use libp2p_swarm_test::SwarmExt as _;
-use std::time::Duration;
+use tokio::task::JoinHandle;
 
 const MAX_CONFIDENCE: usize = 3;
 const TEST_RETRY_INTERVAL: Duration = Duration::from_secs(1);
 const TEST_REFRESH_INTERVAL: Duration = Duration::from_secs(2);
 
-#[async_std::test]
+#[tokio::test]
 async fn test_auto_probe() {
     let mut client = Swarm::new_ephemeral(|key| {
         Behaviour::new(
@@ -116,7 +117,8 @@ async fn test_auto_probe() {
 
     // It can happen that the server observed the established connection and
     // returned a response before the inbound established connection was reported at the client.
-    // In this (rare) case the `ConnectionEstablished` event occurs after the `OutboundProbeEvent::Response`.
+    // In this (rare) case the `ConnectionEstablished` event
+    // occurs after the `OutboundProbeEvent::Response`.
     if !had_connection_event {
         match client.next_swarm_event().await {
             SwarmEvent::ConnectionEstablished {
@@ -133,7 +135,7 @@ async fn test_auto_probe() {
     assert!(client.behaviour().public_address().is_some());
 }
 
-#[async_std::test]
+#[tokio::test]
 async fn test_confidence() {
     let mut client = Swarm::new_ephemeral(|key| {
         Behaviour::new(
@@ -217,7 +219,7 @@ async fn test_confidence() {
     }
 }
 
-#[async_std::test]
+#[tokio::test]
 async fn test_throttle_server_period() {
     let mut client = Swarm::new_ephemeral(|key| {
         Behaviour::new(
@@ -268,7 +270,7 @@ async fn test_throttle_server_period() {
     assert_eq!(client.behaviour().confidence(), 0);
 }
 
-#[async_std::test]
+#[tokio::test]
 async fn test_use_connected_as_server() {
     let mut client = Swarm::new_ephemeral(|key| {
         Behaviour::new(
@@ -306,7 +308,7 @@ async fn test_use_connected_as_server() {
     }
 }
 
-#[async_std::test]
+#[tokio::test]
 async fn test_outbound_failure() {
     let mut client = Swarm::new_ephemeral(|key| {
         Behaviour::new(
@@ -351,7 +353,7 @@ async fn test_outbound_failure() {
     let mut inactive_servers = Vec::new();
 
     for (id, handle) in servers.split_off(1) {
-        handle.cancel().await;
+        handle.abort();
         inactive_servers.push(id);
     }
 
@@ -375,7 +377,7 @@ async fn test_outbound_failure() {
     }
 }
 
-#[async_std::test]
+#[tokio::test]
 async fn test_global_ips_config() {
     let mut client = Swarm::new_ephemeral(|key| {
         Behaviour::new(
@@ -426,7 +428,7 @@ async fn new_server_swarm() -> (PeerId, Multiaddr, JoinHandle<()>) {
     let (_, multiaddr) = swarm.listen().await;
     let peer_id = *swarm.local_peer_id();
 
-    let task = async_std::task::spawn(swarm.loop_on_next());
+    let task = tokio::spawn(swarm.loop_on_next());
 
     (peer_id, multiaddr, task)
 }

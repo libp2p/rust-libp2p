@@ -1,0 +1,10 @@
+# Imports
+reorder_imports = true
+imports_granularity = "Crate"
+group_imports = "StdExternalCrate"
+
+# Docs
+wrap_comments = true
+comment_width = 100
+normalize_comments = true
+format_code_in_doc_comments = true

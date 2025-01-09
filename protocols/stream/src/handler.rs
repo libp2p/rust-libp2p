@@ -1,4 +1,5 @@
 use std::{
+    convert::Infallible,
     io,
     sync::{Arc, Mutex},
     task::{Context, Poll},
@@ -44,16 +45,14 @@ impl Handler {
 }
 
 impl ConnectionHandler for Handler {
-    type FromBehaviour = void::Void;
-    type ToBehaviour = void::Void;
+    type FromBehaviour = Infallible;
+    type ToBehaviour = Infallible;
     type InboundProtocol = Upgrade;
     type OutboundProtocol = Upgrade;
     type InboundOpenInfo = ();
     type OutboundOpenInfo = ();
 
-    fn listen_protocol(
-        &self,
-    ) -> swarm::SubstreamProtocol<Self::InboundProtocol, Self::InboundOpenInfo> {
+    fn listen_protocol(&self) -> swarm::SubstreamProtocol<Self::InboundProtocol> {
         swarm::SubstreamProtocol::new(
             Upgrade {
                 supported_protocols: Shared::lock(&self.shared).supported_inbound_protocols(),
@@ -65,13 +64,7 @@ impl ConnectionHandler for Handler {
     fn poll(
         &mut self,
         cx: &mut Context<'_>,
-    ) -> Poll<
-        swarm::ConnectionHandlerEvent<
-            Self::OutboundProtocol,
-            Self::OutboundOpenInfo,
-            Self::ToBehaviour,
-        >,
-    > {
+    ) -> Poll<swarm::ConnectionHandlerEvent<Self::OutboundProtocol, (), Self::ToBehaviour>> {
         if self.pending_upgrade.is_some() {
             return Poll::Pending;
         }
@@ -96,17 +89,14 @@ impl ConnectionHandler for Handler {
     }
 
     fn on_behaviour_event(&mut self, event: Self::FromBehaviour) {
-        void::unreachable(event)
+        // TODO: remove when Rust 1.82 is MSRV
+        #[allow(unreachable_patterns)]
+        libp2p_core::util::unreachable(event)
     }
 
     fn on_connection_event(
         &mut self,
-        event: ConnectionEvent<
-            Self::InboundProtocol,
-            Self::OutboundProtocol,
-            Self::InboundOpenInfo,
-            Self::OutboundOpenInfo,
-        >,
+        event: ConnectionEvent<Self::InboundProtocol, Self::OutboundProtocol>,
     ) {
         match event {
             ConnectionEvent::FullyNegotiatedInbound(FullyNegotiatedInbound {
@@ -143,7 +133,9 @@ impl ConnectionHandler for Handler {
                     swarm::StreamUpgradeError::Timeout => {
                         OpenStreamError::Io(io::Error::from(io::ErrorKind::TimedOut))
                     }
-                    swarm::StreamUpgradeError::Apply(v) => void::unreachable(v),
+                    // TODO: remove when Rust 1.82 is MSRV
+                    #[allow(unreachable_patterns)]
+                    swarm::StreamUpgradeError::Apply(v) => libp2p_core::util::unreachable(v),
                     swarm::StreamUpgradeError::NegotiationFailed => {
                         OpenStreamError::UnsupportedProtocol(p)
                     }
@@ -157,7 +149,8 @@ impl ConnectionHandler for Handler {
     }
 }
 
-/// Message from a [`Control`](crate::Control) to a [`ConnectionHandler`] to negotiate a new outbound stream.
+/// Message from a [`Control`](crate::Control) to
+/// a [`ConnectionHandler`] to negotiate a new outbound stream.
 #[derive(Debug)]
 pub(crate) struct NewStream {
     pub(crate) protocol: StreamProtocol,

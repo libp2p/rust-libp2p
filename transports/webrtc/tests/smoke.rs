@@ -18,28 +18,34 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use futures::channel::mpsc;
-use futures::future::{BoxFuture, Either};
-use futures::stream::StreamExt;
-use futures::{future, ready, AsyncReadExt, AsyncWriteExt, FutureExt, SinkExt};
-use libp2p_core::muxing::{StreamMuxerBox, StreamMuxerExt};
-use libp2p_core::transport::{Boxed, DialOpts, ListenerId, PortUse, TransportEvent};
-use libp2p_core::{Endpoint, Multiaddr, Transport};
+use std::{
+    future::Future,
+    num::NonZeroU8,
+    pin::Pin,
+    task::{Context, Poll},
+    time::Duration,
+};
+
+use futures::{
+    channel::mpsc,
+    future,
+    future::{BoxFuture, Either},
+    ready,
+    stream::StreamExt,
+    AsyncReadExt, AsyncWriteExt, FutureExt, SinkExt,
+};
+use libp2p_core::{
+    muxing::{StreamMuxerBox, StreamMuxerExt},
+    transport::{Boxed, DialOpts, ListenerId, PortUse, TransportEvent},
+    Endpoint, Multiaddr, Transport,
+};
 use libp2p_identity::PeerId;
 use libp2p_webrtc as webrtc;
 use rand::{thread_rng, RngCore};
-use std::future::Future;
-use std::num::NonZeroU8;
-use std::pin::Pin;
-use std::task::{Context, Poll};
-use std::time::Duration;
-use tracing_subscriber::EnvFilter;
 
 #[tokio::test]
 async fn smoke() {
-    let _ = tracing_subscriber::fmt()
-        .with_env_filter(EnvFilter::from_default_env())
-        .try_init();
+    libp2p_test_utils::with_default_env_filter();
 
     let (a_peer_id, mut a_transport) = create_transport();
     let (b_peer_id, mut b_transport) = create_transport();
@@ -56,9 +62,7 @@ async fn smoke() {
 // Note: This test should likely be ported to the muxer compliance test suite.
 #[test]
 fn concurrent_connections_and_streams_tokio() {
-    let _ = tracing_subscriber::fmt()
-        .with_env_filter(EnvFilter::from_default_env())
-        .try_init();
+    libp2p_test_utils::with_default_env_filter();
 
     let rt = tokio::runtime::Runtime::new().unwrap();
     let _guard = rt.enter();

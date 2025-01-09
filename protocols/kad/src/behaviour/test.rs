@@ -20,10 +20,6 @@
 
 #![cfg(test)]
 
-use super::*;
-
-use crate::record::{store::MemoryStore, Key};
-use crate::{K_VALUE, PROTOCOL_NAME, SHA_256_MH};
 use futures::{executor::block_on, future::poll_fn, prelude::*};
 use futures_timer::Delay;
 use libp2p_core::{
@@ -38,6 +34,12 @@ use libp2p_swarm::{self as swarm, Swarm, SwarmEvent};
 use libp2p_yamux as yamux;
 use quickcheck::*;
 use rand::{random, rngs::StdRng, thread_rng, Rng, SeedableRng};
+
+use super::*;
+use crate::{
+    record::{store::MemoryStore, Key},
+    K_VALUE, PROTOCOL_NAME, SHA_256_MH,
+};
 
 type TestSwarm = Swarm<Behaviour<MemoryStore>>;
 
@@ -62,8 +64,7 @@ fn build_node_with_config(cfg: Config) -> (Multiaddr, TestSwarm) {
         transport,
         behaviour,
         local_id,
-        swarm::Config::with_async_std_executor()
-            .with_idle_connection_timeout(Duration::from_secs(5)),
+        swarm::Config::with_async_std_executor(),
     );
 
     let address: Multiaddr = Protocol::Memory(random::<u64>()).into();
@@ -164,7 +165,8 @@ fn bootstrap() {
         let num_group = rng.gen_range(1..(num_total % K_VALUE.get()) + 2);
 
         let mut cfg = Config::new(PROTOCOL_NAME);
-        // Disabling periodic bootstrap and automatic bootstrap to prevent the bootstrap from triggering automatically.
+        // Disabling periodic bootstrap and automatic bootstrap to prevent the bootstrap from
+        // triggering automatically.
         cfg.set_periodic_bootstrap_interval(None);
         cfg.set_automatic_bootstrap_throttle(None);
         if rng.gen() {
@@ -246,7 +248,8 @@ fn query_iter() {
     fn run(rng: &mut impl Rng) {
         let num_total = rng.gen_range(2..20);
         let mut config = Config::new(PROTOCOL_NAME);
-        // Disabling periodic bootstrap and automatic bootstrap to prevent the bootstrap from triggering automatically.
+        // Disabling periodic bootstrap and automatic bootstrap to prevent the bootstrap from
+        // triggering automatically.
         config.set_periodic_bootstrap_interval(None);
         config.set_automatic_bootstrap_throttle(None);
         let mut swarms = build_connected_nodes_with_config(num_total, 1, config)
@@ -320,9 +323,7 @@ fn query_iter() {
 
 #[test]
 fn unresponsive_not_returned_direct() {
-    let _ = tracing_subscriber::fmt()
-        .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
-        .try_init();
+    libp2p_test_utils::with_default_env_filter();
     // Build one node. It contains fake addresses to non-existing nodes. We ask it to find a
     // random peer. We make sure that no fake address is returned.
 
@@ -561,7 +562,8 @@ fn put_record() {
 
         let mut config = Config::new(PROTOCOL_NAME);
         config.set_replication_factor(replication_factor);
-        // Disabling periodic bootstrap and automatic bootstrap to prevent the bootstrap from triggering automatically.
+        // Disabling periodic bootstrap and automatic bootstrap to prevent the bootstrap from
+        // triggering automatically.
         config.set_periodic_bootstrap_interval(None);
         config.set_automatic_bootstrap_throttle(None);
         if rng.gen() {
@@ -933,7 +935,8 @@ fn add_provider() {
 
         let mut config = Config::new(PROTOCOL_NAME);
         config.set_replication_factor(replication_factor);
-        // Disabling periodic bootstrap and automatic bootstrap to prevent the bootstrap from triggering automatically.
+        // Disabling periodic bootstrap and automatic bootstrap to prevent the bootstrap from
+        // triggering automatically.
         config.set_periodic_bootstrap_interval(None);
         config.set_automatic_bootstrap_throttle(None);
         if rng.gen() {
@@ -1161,7 +1164,8 @@ fn disjoint_query_does_not_finish_before_all_paths_did() {
     config.disjoint_query_paths(true);
     // I.e. setting the amount disjoint paths to be explored to 2.
     config.set_parallelism(NonZeroUsize::new(2).unwrap());
-    // Disabling periodic bootstrap and automatic bootstrap to prevent the bootstrap from triggering automatically.
+    // Disabling periodic bootstrap and automatic bootstrap to prevent the bootstrap from triggering
+    // automatically.
     config.set_periodic_bootstrap_interval(None);
     config.set_automatic_bootstrap_throttle(None);
 
@@ -1375,7 +1379,7 @@ fn network_behaviour_on_address_change() {
         port_use: PortUse::Reuse,
     };
 
-    // Mimick a connection being established.
+    // Mimic a connection being established.
     kademlia.on_swarm_event(FromSwarm::ConnectionEstablished(ConnectionEstablished {
         peer_id: remote_peer_id,
         connection_id,
@@ -1397,7 +1401,7 @@ fn network_behaviour_on_address_change() {
         .unwrap()
         .is_empty());
 
-    // Mimick the connection handler confirming the protocol for
+    // Mimic the connection handler confirming the protocol for
     // the test connection, so that the peer is added to the routing table.
     kademlia.on_connection_handler_event(
         remote_peer_id,

@@ -18,14 +18,17 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::topic::TopicHash;
-use crate::types::{MessageId, RawMessage};
-use libp2p_identity::PeerId;
-use std::collections::hash_map::Entry;
-use std::fmt::Debug;
 use std::{
-    collections::{HashMap, HashSet},
+    collections::{hash_map::Entry, HashMap, HashSet},
     fmt,
+    fmt::Debug,
+};
+
+use libp2p_identity::PeerId;
+
+use crate::{
+    topic::TopicHash,
+    types::{MessageId, RawMessage},
 };
 
 /// CacheEntry stored in the history.
@@ -210,7 +213,7 @@ impl MessageCache {
         &mut self,
         message_id: &MessageId,
     ) -> Option<(RawMessage, HashSet<PeerId>)> {
-        //We only remove the message from msgs and iwant_count and keep the message_id in the
+        // We only remove the message from msgs and iwant_count and keep the message_id in the
         // history vector. Zhe id in the history vector will simply be ignored on popping.
 
         self.iwant_counts.remove(message_id);
