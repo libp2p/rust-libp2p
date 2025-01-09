@@ -43,6 +43,7 @@ impl<TConnectionHandler, TMap> MapOutEvent<TConnectionHandler, TMap> {
     }
 }
 
+#[expect(deprecated)] // TODO: Remove when {In, Out}boundOpenInfo is fully removed.
 impl<TConnectionHandler, TMap, TNewOut> ConnectionHandler for MapOutEvent<TConnectionHandler, TMap>
 where
     TConnectionHandler: ConnectionHandler,
