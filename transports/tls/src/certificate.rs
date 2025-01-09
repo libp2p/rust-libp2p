@@ -40,10 +40,6 @@ const P2P_EXT_OID: [u64; 9] = [1, 3, 6, 1, 4, 1, 53594, 1, 1];
 /// in possession of the private host key at the time the certificate was signed.
 const P2P_SIGNING_PREFIX: [u8; 21] = *b"libp2p-tls-handshake:";
 
-// Certificates MUST use the NamedCurve encoding for elliptic curve parameters.
-// Similarly, hash functions with an output length less than 256 bits MUST NOT be used.
-static P2P_SIGNATURE_ALGORITHM: &rcgen::SignatureAlgorithm = &rcgen::PKCS_ECDSA_P256_SHA256;
-
 #[derive(Debug)]
 pub(crate) struct AlwaysResolvesCert(Arc<rustls::sign::CertifiedKey>);
 
@@ -99,24 +95,22 @@ pub fn generate(
     // Endpoints MAY generate a new key and certificate
     // for every connection attempt, or they MAY reuse the same key
     // and certificate for multiple connections.
-    let certificate_keypair = rcgen::KeyPair::generate(P2P_SIGNATURE_ALGORITHM)?;
+    let certificate_keypair = rcgen::KeyPair::generate()?;
     let rustls_key = rustls::pki_types::PrivateKeyDer::from(
         rustls::pki_types::PrivatePkcs8KeyDer::from(certificate_keypair.serialize_der()),
     );
 
     let certificate = {
-        let mut params = rcgen::CertificateParams::new(vec![]);
+        let mut params = rcgen::CertificateParams::new(vec![])?;
         params.distinguished_name = rcgen::DistinguishedName::new();
         params.custom_extensions.push(make_libp2p_extension(
             identity_keypair,
             &certificate_keypair,
         )?);
-        params.alg = P2P_SIGNATURE_ALGORITHM;
-        params.key_pair = Some(certificate_keypair);
-        rcgen::Certificate::from_params(params)?
+        params.self_signed(&certificate_keypair)?
     };
 
-    let rustls_certificate = rustls::pki_types::CertificateDer::from(certificate.serialize_der()?);
+    let rustls_certificate = rustls::pki_types::CertificateDer::from(certificate.der().to_vec());
 
     Ok((rustls_certificate, rustls_key))
 }
