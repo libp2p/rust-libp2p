@@ -10,6 +10,18 @@ MERGE_BASE=$(git merge-base "$HEAD_SHA" "$PR_BASE") # Find the merge base. This 
 SRC_DIFF_TO_BASE=$(git diff "$HEAD_SHA".."$MERGE_BASE" --name-status -- "$DIR_TO_CRATE/src" "$DIR_TO_CRATE/Cargo.toml")
 CHANGELOG_DIFF=$(git diff "$HEAD_SHA".."$MERGE_BASE" --name-only -- "$DIR_TO_CRATE/CHANGELOG.md")
 
+RELEASED_VERSION=$(cargo search $CRATE | grep -Po "(?<=^$CRATE = \")\d+\.\d+\.\d+")
+
+version_bump() {
+  released=$(echo $RELEASED_VERSION | cut -d '.' -f $1)
+  current=$(echo $CRATE_VERSION | cut -d '.' -f $1)
+  if [ "$current" -gt "$released" ]; then
+    echo "$((current-released))"
+  else 
+    echo 0
+  fi
+}
+
 # If the source files of this crate weren't touched in this PR, exit early.
 if [ -z "$SRC_DIFF_TO_BASE" ]; then
   exit 0;
@@ -21,8 +33,12 @@ if [ -z "$CHANGELOG_DIFF" ]; then
     exit 1
 fi
 
-# Code was touched, ensure the version used in the manifest hasn't been released yet.
-if git tag | grep -q "^$CRATE-v${CRATE_VERSION}$"; then
-    echo "v$CRATE_VERSION of '$CRATE' has already been released, please bump the version."
+major_bump=$(version_bump 1)
+minor_bump=$(version_bump 2)
+patch_bump=$(version_bump 3)
+
+# Code was touched, ensure the version used in the manifest has been bumped exactly once.
+if [ "$((major_bump+minor_bump+patch_bump))" -ne 1 ]; then
+    echo "v$CRATE_VERSION of '$CRATE' has either already been released, or the version bumped more than once. Please ensure that there has been exact one version bump since the last release."
     exit 1
 fi
