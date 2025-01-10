@@ -34,9 +34,9 @@
 //! used protocol(s) determined by the associated types of the handlers.
 //!
 //! > **Note**: A [`ConnectionHandler`] handles one or more protocols in the context of a single
-//! >           connection with a remote. In order to handle a protocol that requires knowledge of
-//! >           the network as a whole, see the
-//! >           [`NetworkBehaviour`](crate::behaviour::NetworkBehaviour) trait.
+//! > connection with a remote. In order to handle a protocol that requires knowledge of
+//! > the network as a whole, see the
+//! > [`NetworkBehaviour`](crate::behaviour::NetworkBehaviour) trait.
 
 pub mod either;
 mod map_in;
@@ -46,8 +46,15 @@ mod one_shot;
 mod pending;
 mod select;
 
-use crate::connection::AsStrHashEq;
-pub use crate::upgrade::{InboundUpgradeSend, OutboundUpgradeSend, SendWrapper, UpgradeInfoSend};
+use core::slice;
+use std::{
+    collections::{HashMap, HashSet},
+    error, fmt, io,
+    task::{Context, Poll},
+    time::Duration,
+};
+
+use libp2p_core::Multiaddr;
 pub use map_in::MapInEvent;
 pub use map_out::MapOutEvent;
 pub use one_shot::{OneShotHandler, OneShotHandlerConfig};
@@ -55,11 +62,8 @@ pub use pending::PendingConnectionHandler;
 pub use select::ConnectionHandlerSelect;
 use smallvec::SmallVec;
 
-use crate::StreamProtocol;
-use core::slice;
-use libp2p_core::Multiaddr;
-use std::collections::{HashMap, HashSet};
-use std::{error, fmt, io, task::Context, task::Poll, time::Duration};
+pub use crate::upgrade::{InboundUpgradeSend, OutboundUpgradeSend, SendWrapper, UpgradeInfoSend};
+use crate::{connection::AsStrHashEq, StreamProtocol};
 
 /// A handler for a set of protocols used on a connection with a remote.
 ///
@@ -71,17 +75,17 @@ use std::{error, fmt, io, task::Context, task::Poll, time::Duration};
 /// Communication with a remote over a set of protocols is initiated in one of two ways:
 ///
 ///   1. Dialing by initiating a new outbound substream. In order to do so,
-///      [`ConnectionHandler::poll()`] must return an [`ConnectionHandlerEvent::OutboundSubstreamRequest`],
-///      providing an instance of [`libp2p_core::upgrade::OutboundUpgrade`] that is used to negotiate the
-///      protocol(s). Upon success, [`ConnectionHandler::on_connection_event`] is called with
+///      [`ConnectionHandler::poll()`] must return an
+///      [`ConnectionHandlerEvent::OutboundSubstreamRequest`], providing an instance of
+///      [`libp2p_core::upgrade::OutboundUpgrade`] that is used to negotiate the protocol(s). Upon
+///      success, [`ConnectionHandler::on_connection_event`] is called with
 ///      [`ConnectionEvent::FullyNegotiatedOutbound`] translating the final output of the upgrade.
 ///
-///   2. Listening by accepting a new inbound substream. When a new inbound substream
-///      is created on a connection, [`ConnectionHandler::listen_protocol`] is called
-///      to obtain an instance of [`libp2p_core::upgrade::InboundUpgrade`] that is used to
-///      negotiate the protocol(s). Upon success,
-///      [`ConnectionHandler::on_connection_event`] is called with [`ConnectionEvent::FullyNegotiatedInbound`]
-///      translating the final output of the upgrade.
+///   2. Listening by accepting a new inbound substream. When a new inbound substream is created on
+///      a connection, [`ConnectionHandler::listen_protocol`] is called to obtain an instance of
+///      [`libp2p_core::upgrade::InboundUpgrade`] that is used to negotiate the protocol(s). Upon
+///      success, [`ConnectionHandler::on_connection_event`] is called with
+///      [`ConnectionEvent::FullyNegotiatedInbound`] translating the final output of the upgrade.
 ///
 ///
 /// # Connection Keep-Alive
@@ -94,27 +98,34 @@ use std::{error, fmt, io, task::Context, task::Poll, time::Duration};
 /// Implementors of this trait should keep in mind that the connection can be closed at any time.
 /// When a connection is closed gracefully, the substreams used by the handler may still
 /// continue reading data until the remote closes its side of the connection.
+#[expect(deprecated)] // TODO: Remove when {In, Out}boundOpenInfo is fully removed.
 pub trait ConnectionHandler: Send + 'static {
-    /// A type representing the message(s) a [`NetworkBehaviour`](crate::behaviour::NetworkBehaviour) can send to a [`ConnectionHandler`] via [`ToSwarm::NotifyHandler`](crate::behaviour::ToSwarm::NotifyHandler)
+    /// A type representing the message(s) a
+    /// [`NetworkBehaviour`](crate::behaviour::NetworkBehaviour) can send to a [`ConnectionHandler`]
+    /// via [`ToSwarm::NotifyHandler`](crate::behaviour::ToSwarm::NotifyHandler)
     type FromBehaviour: fmt::Debug + Send + 'static;
-    /// A type representing message(s) a [`ConnectionHandler`] can send to a [`NetworkBehaviour`](crate::behaviour::NetworkBehaviour) via [`ConnectionHandlerEvent::NotifyBehaviour`].
+    /// A type representing message(s) a [`ConnectionHandler`] can send to a
+    /// [`NetworkBehaviour`](crate::behaviour::NetworkBehaviour) via
+    /// [`ConnectionHandlerEvent::NotifyBehaviour`].
     type ToBehaviour: fmt::Debug + Send + 'static;
     /// The inbound upgrade for the protocol(s) used by the handler.
     type InboundProtocol: InboundUpgradeSend;
     /// The outbound upgrade for the protocol(s) used by the handler.
     type OutboundProtocol: OutboundUpgradeSend;
     /// The type of additional information returned from `listen_protocol`.
+    #[deprecated = "Track data in ConnectionHandler instead."]
     type InboundOpenInfo: Send + 'static;
     /// The type of additional information passed to an `OutboundSubstreamRequest`.
+    #[deprecated = "Track data in ConnectionHandler instead."]
     type OutboundOpenInfo: Send + 'static;
 
     /// The [`InboundUpgrade`](libp2p_core::upgrade::InboundUpgrade) to apply on inbound
     /// substreams to negotiate the desired protocols.
     ///
     /// > **Note**: The returned `InboundUpgrade` should always accept all the generally
-    /// >           supported protocols, even if in a specific context a particular one is
-    /// >           not supported, (eg. when only allowing one substream at a time for a protocol).
-    /// >           This allows a remote to put the list of supported protocols in a cache.
+    /// > supported protocols, even if in a specific context a particular one is
+    /// > not supported, (eg. when only allowing one substream at a time for a protocol).
+    /// > This allows a remote to put the list of supported protocols in a cache.
     fn listen_protocol(&self) -> SubstreamProtocol<Self::InboundProtocol, Self::InboundOpenInfo>;
 
     /// Returns whether the connection should be kept alive.
@@ -127,15 +138,21 @@ pub trait ConnectionHandler: Send + 'static {
     /// - We are negotiating inbound or outbound streams.
     /// - There are active [`Stream`](crate::Stream)s on the connection.
     ///
-    /// The combination of the above means that _most_ protocols will not need to override this method.
-    /// This method is only invoked when all of the above are `false`, i.e. when the connection is entirely idle.
+    /// The combination of the above means that _most_ protocols will not need to override this
+    /// method. This method is only invoked when all of the above are `false`, i.e. when the
+    /// connection is entirely idle.
     ///
     /// ## Exceptions
     ///
-    /// - Protocols like [circuit-relay v2](https://github.com/libp2p/specs/blob/master/relay/circuit-v2.md) need to keep a connection alive beyond these circumstances and can thus override this method.
-    /// - Protocols like [ping](https://github.com/libp2p/specs/blob/master/ping/ping.md) **don't** want to keep a connection alive despite an active streams.
+    /// - Protocols like [circuit-relay v2](https://github.com/libp2p/specs/blob/master/relay/circuit-v2.md)
+    ///   need to keep a connection alive beyond these circumstances and can thus override this
+    ///   method.
+    /// - Protocols like [ping](https://github.com/libp2p/specs/blob/master/ping/ping.md) **don't**
+    ///   want to keep a connection alive despite an active streams.
     ///
-    /// In that case, protocol authors can use [`Stream::ignore_for_keep_alive`](crate::Stream::ignore_for_keep_alive) to opt-out a particular stream from the keep-alive algorithm.
+    /// In that case, protocol authors can use
+    /// [`Stream::ignore_for_keep_alive`](crate::Stream::ignore_for_keep_alive) to opt-out a
+    /// particular stream from the keep-alive algorithm.
     fn connection_keep_alive(&self) -> bool {
         false
     }
@@ -160,7 +177,8 @@ pub trait ConnectionHandler: Send + 'static {
     /// To signal completion, [`Poll::Ready(None)`] should be returned.
     ///
     /// Implementations MUST have a [`fuse`](futures::StreamExt::fuse)-like behaviour.
-    /// That is, [`Poll::Ready(None)`] MUST be returned on repeated calls to [`ConnectionHandler::poll_close`].
+    /// That is, [`Poll::Ready(None)`] MUST be returned on repeated calls to
+    /// [`ConnectionHandler::poll_close`].
     fn poll_close(&mut self, _: &mut Context<'_>) -> Poll<Option<Self::ToBehaviour>> {
         Poll::Ready(None)
     }
@@ -209,7 +227,7 @@ pub trait ConnectionHandler: Send + 'static {
 /// Enumeration with the list of the possible stream events
 /// to pass to [`on_connection_event`](ConnectionHandler::on_connection_event).
 #[non_exhaustive]
-pub enum ConnectionEvent<'a, IP: InboundUpgradeSend, OP: OutboundUpgradeSend, IOI, OOI> {
+pub enum ConnectionEvent<'a, IP: InboundUpgradeSend, OP: OutboundUpgradeSend, IOI = (), OOI = ()> {
     /// Informs the handler about the output of a successful upgrade on a new inbound substream.
     FullyNegotiatedInbound(FullyNegotiatedInbound<IP, IOI>),
     /// Informs the handler about the output of a successful upgrade on a new outbound stream.
@@ -303,28 +321,31 @@ impl<IP: InboundUpgradeSend, OP: OutboundUpgradeSend, IOI, OOI>
 /// [`ConnectionHandler`] implementation to stop a malicious remote node to open and keep alive
 /// an excessive amount of inbound substreams.
 #[derive(Debug)]
-pub struct FullyNegotiatedInbound<IP: InboundUpgradeSend, IOI> {
+pub struct FullyNegotiatedInbound<IP: InboundUpgradeSend, IOI = ()> {
     pub protocol: IP::Output,
     pub info: IOI,
 }
 
-/// [`ConnectionEvent`] variant that informs the handler about successful upgrade on a new outbound stream.
+/// [`ConnectionEvent`] variant that informs the handler about successful upgrade on a new outbound
+/// stream.
 ///
 /// The `protocol` field is the information that was previously passed to
 /// [`ConnectionHandlerEvent::OutboundSubstreamRequest`].
 #[derive(Debug)]
-pub struct FullyNegotiatedOutbound<OP: OutboundUpgradeSend, OOI> {
+pub struct FullyNegotiatedOutbound<OP: OutboundUpgradeSend, OOI = ()> {
     pub protocol: OP::Output,
     pub info: OOI,
 }
 
-/// [`ConnectionEvent`] variant that informs the handler about a change in the address of the remote.
+/// [`ConnectionEvent`] variant that informs the handler about a change in the address of the
+/// remote.
 #[derive(Debug)]
 pub struct AddressChange<'a> {
     pub new_address: &'a Multiaddr,
 }
 
-/// [`ConnectionEvent`] variant that informs the handler about a change in the protocols supported on the connection.
+/// [`ConnectionEvent`] variant that informs the handler about a change in the protocols supported
+/// on the connection.
 #[derive(Debug, Clone)]
 pub enum ProtocolsChange<'a> {
     Added(ProtocolsAdded<'a>),
@@ -373,9 +394,11 @@ impl<'a> ProtocolsChange<'a> {
         }))
     }
 
-    /// Compute the [`ProtocolsChange`] that results from removing `to_remove` from `existing_protocols`. Removes the protocols from `existing_protocols`.
+    /// Compute the [`ProtocolsChange`] that results from removing `to_remove` from
+    /// `existing_protocols`. Removes the protocols from `existing_protocols`.
     ///
-    /// Returns `None` if the change is a no-op, i.e. none of the protocols in `to_remove` are in `existing_protocols`.
+    /// Returns `None` if the change is a no-op, i.e. none of the protocols in `to_remove` are in
+    /// `existing_protocols`.
     pub(crate) fn remove(
         existing_protocols: &mut HashSet<StreamProtocol>,
         to_remove: HashSet<StreamProtocol>,
@@ -397,7 +420,8 @@ impl<'a> ProtocolsChange<'a> {
         }))
     }
 
-    /// Compute the [`ProtocolsChange`]s required to go from `existing_protocols` to `new_protocols`.
+    /// Compute the [`ProtocolsChange`]s required to go from `existing_protocols` to
+    /// `new_protocols`.
     pub(crate) fn from_full_sets<T: AsRef<str>>(
         existing_protocols: &mut HashMap<AsStrHashEq<T>, bool>,
         new_protocols: impl IntoIterator<Item = T>,
@@ -429,7 +453,8 @@ impl<'a> ProtocolsChange<'a> {
 
         let num_new_protocols = buffer.len();
         // Drain all protocols that we haven't visited.
-        // For existing protocols that are not in `new_protocols`, the boolean will be false, meaning we need to remove it.
+        // For existing protocols that are not in `new_protocols`, the boolean will be false,
+        // meaning we need to remove it.
         existing_protocols.retain(|p, &mut is_supported| {
             if !is_supported {
                 buffer.extend(StreamProtocol::try_from_owned(p.0.as_ref().to_owned()).ok());
@@ -502,7 +527,7 @@ pub struct ListenUpgradeError<IOI, IP: InboundUpgradeSend> {
 /// The inbound substream protocol(s) are defined by [`ConnectionHandler::listen_protocol`]
 /// and the outbound substream protocol(s) by [`ConnectionHandlerEvent::OutboundSubstreamRequest`].
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
-pub struct SubstreamProtocol<TUpgrade, TInfo> {
+pub struct SubstreamProtocol<TUpgrade, TInfo = ()> {
     upgrade: TUpgrade,
     info: TInfo,
     timeout: Duration,

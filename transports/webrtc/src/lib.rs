@@ -23,7 +23,7 @@
 //!
 //! # Overview
 //!
-//! ## ICE
+//!  ## ICE
 //!
 //! RFCs: 8839, 8445 See also:
 //! <https://tools.ietf.org/id/draft-ietf-rtcweb-sdp-08.html#rfc.section.5.2.3>
@@ -39,10 +39,9 @@
 //!
 //! The ICE workflow works as follows:
 //!
-//! - An "offerer" determines ways in which it could be accessible (either an
-//!   IP address or through a relay using a TURN server), which are called "candidates". It then
-//!   generates a small text payload in a format called SDP, that describes the request for a
-//!   connection.
+//! - An "offerer" determines ways in which it could be accessible (either an IP address or through
+//!   a relay using a TURN server), which are called "candidates". It then generates a small text
+//!   payload in a format called SDP, that describes the request for a connection.
 //! - The offerer sends this SDP-encoded message to the answerer. The medium through which this
 //!   exchange is done is out of scope of the ICE protocol.
 //! - The answerer then finds its own candidates, and generates an answer, again in the SDP format.

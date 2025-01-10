@@ -1,19 +1,18 @@
-use crate::behaviour::{FromSwarm, NetworkBehaviour, ToSwarm};
-use crate::connection::ConnectionId;
-use crate::handler::{
-    ConnectionEvent, DialUpgradeError, FullyNegotiatedInbound, FullyNegotiatedOutbound,
+use std::{
+    convert::Infallible,
+    task::{Context, Poll},
 };
+
+use libp2p_core::{transport::PortUse, upgrade::DeniedUpgrade, Endpoint, Multiaddr};
+use libp2p_identity::PeerId;
+
 use crate::{
+    behaviour::{FromSwarm, NetworkBehaviour, ToSwarm},
+    connection::ConnectionId,
+    handler::{ConnectionEvent, DialUpgradeError, FullyNegotiatedInbound, FullyNegotiatedOutbound},
     ConnectionDenied, ConnectionHandlerEvent, StreamUpgradeError, SubstreamProtocol, THandler,
     THandlerInEvent, THandlerOutEvent,
 };
-use libp2p_core::transport::PortUse;
-use libp2p_core::upgrade::DeniedUpgrade;
-use libp2p_core::Endpoint;
-use libp2p_core::Multiaddr;
-use libp2p_identity::PeerId;
-use std::convert::Infallible;
-use std::task::{Context, Poll};
 
 /// Implementation of [`NetworkBehaviour`] that doesn't do anything.
 pub struct Behaviour;
@@ -61,7 +60,8 @@ impl NetworkBehaviour for Behaviour {
     fn on_swarm_event(&mut self, _event: FromSwarm) {}
 }
 
-/// An implementation of [`ConnectionHandler`] that neither handles any protocols nor does it keep the connection alive.
+/// An implementation of [`ConnectionHandler`] that neither handles any protocols nor does it keep
+/// the connection alive.
 #[derive(Clone)]
 pub struct ConnectionHandler;
 
@@ -71,9 +71,9 @@ impl crate::handler::ConnectionHandler for ConnectionHandler {
     type InboundProtocol = DeniedUpgrade;
     type OutboundProtocol = DeniedUpgrade;
     type InboundOpenInfo = ();
-    type OutboundOpenInfo = Infallible;
+    type OutboundOpenInfo = ();
 
-    fn listen_protocol(&self) -> SubstreamProtocol<Self::InboundProtocol, Self::InboundOpenInfo> {
+    fn listen_protocol(&self) -> SubstreamProtocol<Self::InboundProtocol> {
         SubstreamProtocol::new(DeniedUpgrade, ())
     }
 
@@ -86,20 +86,13 @@ impl crate::handler::ConnectionHandler for ConnectionHandler {
     fn poll(
         &mut self,
         _: &mut Context<'_>,
-    ) -> Poll<
-        ConnectionHandlerEvent<Self::OutboundProtocol, Self::OutboundOpenInfo, Self::ToBehaviour>,
-    > {
+    ) -> Poll<ConnectionHandlerEvent<Self::OutboundProtocol, (), Self::ToBehaviour>> {
         Poll::Pending
     }
 
     fn on_connection_event(
         &mut self,
-        event: ConnectionEvent<
-            Self::InboundProtocol,
-            Self::OutboundProtocol,
-            Self::InboundOpenInfo,
-            Self::OutboundOpenInfo,
-        >,
+        event: ConnectionEvent<Self::InboundProtocol, Self::OutboundProtocol>,
     ) {
         match event {
             // TODO: remove when Rust 1.82 is MSRV

@@ -21,11 +21,13 @@
 mod behaviour;
 mod handler;
 
-use std::sync::atomic::{AtomicUsize, Ordering};
+use std::{
+    convert::Infallible,
+    sync::atomic::{AtomicUsize, Ordering},
+};
 
 pub use behaviour::{Behaviour, Event};
 use libp2p_swarm::StreamUpgradeError;
-use std::convert::Infallible;
 
 static NEXT_RUN_ID: AtomicUsize = AtomicUsize::new(1);
 

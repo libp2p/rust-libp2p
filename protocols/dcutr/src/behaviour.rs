@@ -20,26 +20,28 @@
 
 //! [`NetworkBehaviour`] to act as a direct connection upgrade through relay node.
 
-use crate::{handler, protocol};
-use either::Either;
-use libp2p_core::connection::ConnectedPoint;
-use libp2p_core::multiaddr::Protocol;
-use libp2p_core::transport::PortUse;
-use libp2p_core::{Endpoint, Multiaddr};
-use libp2p_identity::PeerId;
-use libp2p_swarm::behaviour::{ConnectionClosed, DialFailure, FromSwarm};
-use libp2p_swarm::dial_opts::{self, DialOpts};
-use libp2p_swarm::{
-    dummy, ConnectionDenied, ConnectionHandler, ConnectionId, NewExternalAddrCandidate, THandler,
-    THandlerOutEvent,
+use std::{
+    collections::{HashMap, HashSet, VecDeque},
+    convert::Infallible,
+    num::NonZeroUsize,
+    task::{Context, Poll},
 };
-use libp2p_swarm::{NetworkBehaviour, NotifyHandler, THandlerInEvent, ToSwarm};
+
+use either::Either;
+use libp2p_core::{
+    connection::ConnectedPoint, multiaddr::Protocol, transport::PortUse, Endpoint, Multiaddr,
+};
+use libp2p_identity::PeerId;
+use libp2p_swarm::{
+    behaviour::{ConnectionClosed, DialFailure, FromSwarm},
+    dial_opts::{self, DialOpts},
+    dummy, ConnectionDenied, ConnectionHandler, ConnectionId, NetworkBehaviour,
+    NewExternalAddrCandidate, NotifyHandler, THandler, THandlerInEvent, THandlerOutEvent, ToSwarm,
+};
 use lru::LruCache;
-use std::collections::{HashMap, HashSet, VecDeque};
-use std::convert::Infallible;
-use std::num::NonZeroUsize;
-use std::task::{Context, Poll};
 use thiserror::Error;
+
+use crate::{handler, protocol};
 
 pub(crate) const MAX_NUMBER_OF_UPGRADE_ATTEMPTS: u8 = 3;
 
@@ -184,7 +186,8 @@ impl NetworkBehaviour for Behaviour {
                 handler::relayed::Handler::new(connected_point, self.observed_addresses());
             handler.on_behaviour_event(handler::relayed::Command::Connect);
 
-            return Ok(Either::Left(handler)); // TODO: We could make two `handler::relayed::Handler` here, one inbound one outbound.
+            // TODO: We could make two `handler::relayed::Handler` here, one inbound one outbound.
+            return Ok(Either::Left(handler));
         }
         self.direct_connections
             .entry(peer)
@@ -217,7 +220,8 @@ impl NetworkBehaviour for Behaviour {
                     port_use,
                 },
                 self.observed_addresses(),
-            ))); // TODO: We could make two `handler::relayed::Handler` here, one inbound one outbound.
+            ))); // TODO: We could make two `handler::relayed::Handler` here, one inbound one
+                 // outbound.
         }
 
         self.direct_connections
@@ -255,7 +259,8 @@ impl NetworkBehaviour for Behaviour {
             Either::Left(_) => connection_id,
             Either::Right(_) => match self.direct_to_relayed_connections.get(&connection_id) {
                 None => {
-                    // If the connection ID is unknown to us, it means we didn't create it so ignore any event coming from it.
+                    // If the connection ID is unknown to us, it means we didn't create it so ignore
+                    // any event coming from it.
                     return;
                 }
                 Some(relayed_connection_id) => *relayed_connection_id,
@@ -347,8 +352,9 @@ impl NetworkBehaviour for Behaviour {
 ///
 /// We use an [`LruCache`] to favor addresses that are reported more often.
 /// When attempting a hole-punch, we will try more frequent addresses first.
-/// Most of these addresses will come from observations by other nodes (via e.g. the identify protocol).
-/// More common observations mean a more likely stable port-mapping and thus a higher chance of a successful hole-punch.
+/// Most of these addresses will come from observations by other nodes (via e.g. the identify
+/// protocol). More common observations mean a more likely stable port-mapping and thus a higher
+/// chance of a successful hole-punch.
 struct Candidates {
     inner: LruCache<Multiaddr, ()>,
     me: PeerId,

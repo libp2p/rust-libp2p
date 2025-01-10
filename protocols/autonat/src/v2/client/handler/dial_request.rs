@@ -1,18 +1,3 @@
-use futures::{channel::oneshot, AsyncWrite};
-use futures_bounded::FuturesMap;
-use libp2p_core::{
-    upgrade::{DeniedUpgrade, ReadyUpgrade},
-    Multiaddr,
-};
-
-use libp2p_swarm::{
-    handler::{
-        ConnectionEvent, DialUpgradeError, FullyNegotiatedOutbound, OutboundUpgradeSend,
-        ProtocolsChange,
-    },
-    ConnectionHandler, ConnectionHandlerEvent, Stream, StreamProtocol, StreamUpgradeError,
-    SubstreamProtocol,
-};
 use std::{
     collections::VecDeque,
     convert::Infallible,
@@ -20,6 +5,21 @@ use std::{
     iter::{once, repeat},
     task::{Context, Poll},
     time::Duration,
+};
+
+use futures::{channel::oneshot, AsyncWrite};
+use futures_bounded::FuturesMap;
+use libp2p_core::{
+    upgrade::{DeniedUpgrade, ReadyUpgrade},
+    Multiaddr,
+};
+use libp2p_swarm::{
+    handler::{
+        ConnectionEvent, DialUpgradeError, FullyNegotiatedOutbound, OutboundUpgradeSend,
+        ProtocolsChange,
+    },
+    ConnectionHandler, ConnectionHandlerEvent, Stream, StreamProtocol, StreamUpgradeError,
+    SubstreamProtocol,
 };
 
 use crate::v2::{
@@ -72,7 +72,7 @@ pub struct Handler {
     queued_events: VecDeque<
         ConnectionHandlerEvent<
             <Self as ConnectionHandler>::OutboundProtocol,
-            <Self as ConnectionHandler>::OutboundOpenInfo,
+            (),
             <Self as ConnectionHandler>::ToBehaviour,
         >,
     >,
@@ -121,16 +121,14 @@ impl ConnectionHandler for Handler {
     type InboundOpenInfo = ();
     type OutboundOpenInfo = ();
 
-    fn listen_protocol(&self) -> SubstreamProtocol<Self::InboundProtocol, Self::InboundOpenInfo> {
+    fn listen_protocol(&self) -> SubstreamProtocol<Self::InboundProtocol> {
         SubstreamProtocol::new(DeniedUpgrade, ())
     }
 
     fn poll(
         &mut self,
         cx: &mut Context<'_>,
-    ) -> Poll<
-        ConnectionHandlerEvent<Self::OutboundProtocol, Self::OutboundOpenInfo, Self::ToBehaviour>,
-    > {
+    ) -> Poll<ConnectionHandlerEvent<Self::OutboundProtocol, (), Self::ToBehaviour>> {
         if let Some(event) = self.queued_events.pop_front() {
             return Poll::Ready(event);
         }
@@ -161,12 +159,7 @@ impl ConnectionHandler for Handler {
 
     fn on_connection_event(
         &mut self,
-        event: ConnectionEvent<
-            Self::InboundProtocol,
-            Self::OutboundProtocol,
-            Self::InboundOpenInfo,
-            Self::OutboundOpenInfo,
-        >,
+        event: ConnectionEvent<Self::InboundProtocol, Self::OutboundProtocol>,
     ) {
         match event {
             ConnectionEvent::DialUpgradeError(DialUpgradeError { error, .. }) => {
@@ -261,7 +254,9 @@ async fn start_stream_handle(
         Ok(_) => {}
         Err(err) => {
             if err.kind() == io::ErrorKind::ConnectionReset {
-                // The AutoNAT server may have already closed the stream (this is normal because the probe is finished), in this case we have this error:
+                // The AutoNAT server may have already closed the stream
+                // (this is normal because the probe is finished),
+                // in this case we have this error:
                 // Err(Custom { kind: ConnectionReset, error: Stopped(0) })
                 // so we silently ignore this error
             } else {

@@ -1,13 +1,10 @@
 // change to quick-protobuf-codec
 
-use std::io;
-use std::io::ErrorKind;
+use std::{io, io::ErrorKind};
 
 use asynchronous_codec::{Framed, FramedRead, FramedWrite};
-
 use futures::{AsyncRead, AsyncWrite, SinkExt, StreamExt};
 use libp2p_core::Multiaddr;
-
 use quick_protobuf_codec::Codec;
 use rand::Rng;
 
@@ -103,7 +100,10 @@ impl From<DialDataResponse> for proto::Message {
         );
         proto::Message {
             msg: proto::mod_Message::OneOfmsg::dialDataResponse(proto::DialDataResponse {
-                data: vec![0; val.data_count], // One could use Cow::Borrowed here, but it will require a modification of the generated code and that will fail the CI
+                // One could use Cow::Borrowed here, but it will
+                // require a modification of the generated code
+                // and that will fail the CI
+                data: vec![0; val.data_count],
             }),
         }
     }

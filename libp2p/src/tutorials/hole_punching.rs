@@ -57,8 +57,8 @@
 //! cargo build --bin relay-server-example
 //! ```
 //!
-//! You can find the binary at `target/debug/relay-server-example`. In case you built it locally, copy
-//! it to your server.
+//! You can find the binary at `target/debug/relay-server-example`. In case you built it locally,
+//! copy it to your server.
 //!
 //! On your server, start the relay server binary:
 //!
@@ -98,7 +98,8 @@
 //!
 //!    ``` bash
 //!    $ libp2p-lookup direct --address /ip4/111.11.111.111/tcp/4001
-//!    Lookup for peer with id PeerId("12D3KooWDpJ7As7BWAwRMfu1VU2WCqNjvq387JEYKDBj4kx6nXTN") succeeded.
+//!    Lookup for peer with id PeerId("12D3KooWDpJ7As7BWAwRMfu1VU2WCqNjvq387JEYKDBj4kx6nXTN")
+//! succeeded.
 //!
 //!    Protocol version: "/TODO/0.0.1"
 //!    Agent version: "rust-libp2p/0.36.0"
@@ -163,12 +164,18 @@
 //!    [`Multiaddr`](crate::Multiaddr).
 //!
 //!    ``` ignore
-//!    [2022-01-30T12:54:10Z INFO  client] Established connection to PeerId("12D3KooWPjceQrSwdWXPyLLeABRXmuqt69Rg3sBYbU1Nft9HyQ6X") via Dialer { address: "/ip4/$RELAY_PEER_ID/tcp/4001/p2p/12D3KooWDpJ7As7BWAwRMfu1VU2WCqNjvq387JEYKDBj4kx6nXTN/p2p-circuit/p2p/12D3KooWPjceQrSwdWXPyLLeABRXmuqt69Rg3sBYbU1Nft9HyQ6X", role_override: Dialer }
+//!    [2022-01-30T12:54:10Z INFO  client] Established connection to
+//!    PeerId("12D3KooWPjceQrSwdWXPyLLeABRXmuqt69Rg3sBYbU1Nft9HyQ6X") via Dialer { address:
+//!    "/ip4/$RELAY_PEER_ID/tcp/4001/p2p/12D3KooWDpJ7As7BWAwRMfu1VU2WCqNjvq387JEYKDBj4kx6nXTN/
+//!    p2p-circuit/p2p/12D3KooWPjceQrSwdWXPyLLeABRXmuqt69Rg3sBYbU1Nft9HyQ6X",
+//!    role_override: Dialer  }
 //!    ```
 //!
-//! 2. The direct connection upgrade, also known as hole punch, succeeding.
-//!    Reported by [`dcutr`](crate::dcutr) through [`Event`](crate::dcutr::Event) containing [`Result::Ok`] with the [`ConnectionId`](libp2p_swarm::ConnectionId) of the new direct connection.
+//! 2. The direct connection upgrade, also known as hole punch, succeeding. Reported by
+//!    [`dcutr`](crate::dcutr) through [`Event`](crate::dcutr::Event) containing [`Result::Ok`] with
+//!    the [`ConnectionId`](libp2p_swarm::ConnectionId) of the new direct connection.
 //!
 //!    ``` ignore
-//!    [2022-01-30T12:54:11Z INFO  client] Event { remote_peer_id: PeerId("12D3KooWPjceQrSwdWXPyLLeABRXmuqt69Rg3sBYbU1Nft9HyQ6X"), result: Ok(2) }
+//!    [2022-01-30T12:54:11Z INFO  client] Event { remote_peer_id:
+//!    PeerId("12D3KooWPjceQrSwdWXPyLLeABRXmuqt69Rg3sBYbU1Nft9HyQ6X"), result: Ok(2) }
 //!    ```

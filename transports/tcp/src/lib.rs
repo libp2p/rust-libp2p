@@ -30,21 +30,6 @@
 
 mod provider;
 
-#[cfg(feature = "async-io")]
-pub use provider::async_io;
-
-#[cfg(feature = "tokio")]
-pub use provider::tokio;
-
-use futures::{future::Ready, prelude::*, stream::SelectAll};
-use futures_timer::Delay;
-use if_watch::IfEvent;
-use libp2p_core::{
-    multiaddr::{Multiaddr, Protocol},
-    transport::{DialOpts, ListenerId, PortUse, TransportError, TransportEvent},
-};
-use provider::{Incoming, Provider};
-use socket2::{Domain, Socket, Type};
 use std::{
     collections::{HashSet, VecDeque},
     io,
@@ -54,6 +39,20 @@ use std::{
     task::{Context, Poll, Waker},
     time::Duration,
 };
+
+use futures::{future::Ready, prelude::*, stream::SelectAll};
+use futures_timer::Delay;
+use if_watch::IfEvent;
+use libp2p_core::{
+    multiaddr::{Multiaddr, Protocol},
+    transport::{DialOpts, ListenerId, PortUse, TransportError, TransportEvent},
+};
+#[cfg(feature = "async-io")]
+pub use provider::async_io;
+#[cfg(feature = "tokio")]
+pub use provider::tokio;
+use provider::{Incoming, Provider};
+use socket2::{Domain, Socket, Type};
 
 /// The configuration for a TCP/IP transport capability for libp2p.
 #[derive(Clone, Debug)]
@@ -131,14 +130,11 @@ impl PortReuse {
 impl Config {
     /// Creates a new configuration for a TCP/IP transport:
     ///
-    ///   * Nagle's algorithm, i.e. `TCP_NODELAY`, is _enabled_.
-    ///     See [`Config::nodelay`].
-    ///   * Reuse of listening ports is _disabled_.
-    ///     See [`Config::port_reuse`].
-    ///   * No custom `IP_TTL` is set. The default of the OS TCP stack applies.
-    ///     See [`Config::ttl`].
-    ///   * The size of the listen backlog for new listening sockets is `1024`.
-    ///     See [`Config::listen_backlog`].
+    ///   * Nagle's algorithm, i.e. `TCP_NODELAY`, is _enabled_. See [`Config::nodelay`].
+    ///   * Reuse of listening ports is _disabled_. See [`Config::port_reuse`].
+    ///   * No custom `IP_TTL` is set. The default of the OS TCP stack applies. See [`Config::ttl`].
+    ///   * The size of the listen backlog for new listening sockets is `1024`. See
+    ///     [`Config::listen_backlog`].
     pub fn new() -> Self {
         Self {
             ttl: None,
@@ -241,8 +237,8 @@ where
     /// The configuration of port reuse when dialing.
     port_reuse: PortReuse,
     /// All the active listeners.
-    /// The [`ListenStream`] struct contains a stream that we want to be pinned. Since the `VecDeque`
-    /// can be resized, the only way is to use a `Pin<Box<>>`.
+    /// The [`ListenStream`] struct contains a stream that we want to be pinned. Since the
+    /// `VecDeque` can be resized, the only way is to use a `Pin<Box<>>`.
     listeners: SelectAll<ListenStream<T>>,
     /// Pending transport events to return from [`libp2p_core::Transport::poll`].
     pending_events:
@@ -465,7 +461,8 @@ where
     pause: Option<Delay>,
     /// Pending event to reported.
     pending_event: Option<<Self as Stream>::Item>,
-    /// The listener can be manually closed with [`Transport::remove_listener`](libp2p_core::Transport::remove_listener).
+    /// The listener can be manually closed with
+    /// [`Transport::remove_listener`](libp2p_core::Transport::remove_listener).
     is_closed: bool,
     /// The stream must be awaken after it has been closed to deliver the last event.
     close_listener_waker: Option<Waker>,
@@ -621,7 +618,8 @@ where
         }
 
         if self.is_closed {
-            // Terminate the stream if the listener closed and all remaining events have been reported.
+            // Terminate the stream if the listener closed
+            // and all remaining events have been reported.
             return Poll::Ready(None);
         }
 
@@ -705,13 +703,13 @@ fn ip_to_multiaddr(ip: IpAddr, port: u16) -> Multiaddr {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use futures::{
         channel::{mpsc, oneshot},
         future::poll_fn,
     };
-    use libp2p_core::Endpoint;
-    use libp2p_core::Transport as _;
+    use libp2p_core::{Endpoint, Transport as _};
+
+    use super::*;
 
     #[test]
     fn multiaddr_to_tcp_conversion() {
@@ -764,9 +762,7 @@ mod tests {
 
     #[test]
     fn communicating_between_dialer_and_listener() {
-        let _ = tracing_subscriber::fmt()
-            .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
-            .try_init();
+        libp2p_test_utils::with_default_env_filter();
 
         async fn listener<T: Provider>(addr: Multiaddr, mut ready_tx: mpsc::Sender<Multiaddr>) {
             let mut tcp = Transport::<T>::default().boxed();
@@ -845,9 +841,7 @@ mod tests {
 
     #[test]
     fn wildcard_expansion() {
-        let _ = tracing_subscriber::fmt()
-            .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
-            .try_init();
+        libp2p_test_utils::with_default_env_filter();
 
         async fn listener<T: Provider>(addr: Multiaddr, mut ready_tx: mpsc::Sender<Multiaddr>) {
             let mut tcp = Transport::<T>::default().boxed();
@@ -925,9 +919,7 @@ mod tests {
 
     #[test]
     fn port_reuse_dialing() {
-        let _ = tracing_subscriber::fmt()
-            .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
-            .try_init();
+        libp2p_test_utils::with_default_env_filter();
 
         async fn listener<T: Provider>(
             addr: Multiaddr,
@@ -1044,9 +1036,7 @@ mod tests {
 
     #[test]
     fn port_reuse_listening() {
-        let _ = tracing_subscriber::fmt()
-            .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
-            .try_init();
+        libp2p_test_utils::with_default_env_filter();
 
         async fn listen_twice<T: Provider>(addr: Multiaddr) {
             let mut tcp = Transport::<T>::new(Config::new());
@@ -1100,9 +1090,7 @@ mod tests {
 
     #[test]
     fn listen_port_0() {
-        let _ = tracing_subscriber::fmt()
-            .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
-            .try_init();
+        libp2p_test_utils::with_default_env_filter();
 
         async fn listen<T: Provider>(addr: Multiaddr) -> Multiaddr {
             let mut tcp = Transport::<T>::default().boxed();
@@ -1137,9 +1125,7 @@ mod tests {
 
     #[test]
     fn listen_invalid_addr() {
-        let _ = tracing_subscriber::fmt()
-            .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
-            .try_init();
+        libp2p_test_utils::with_default_env_filter();
 
         fn test(addr: Multiaddr) {
             #[cfg(feature = "async-io")]
@@ -1160,9 +1146,7 @@ mod tests {
 
     #[test]
     fn test_remove_listener() {
-        let _ = tracing_subscriber::fmt()
-            .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
-            .try_init();
+        libp2p_test_utils::with_default_env_filter();
 
         async fn cycle_listeners<T: Provider>() -> bool {
             let mut tcp = Transport::<T>::default().boxed();

@@ -1,5 +1,5 @@
 # syntax=docker/dockerfile:1.5-labs
-FROM lukemathwalker/cargo-chef:0.1.67-rust-bullseye as chef
+FROM lukemathwalker/cargo-chef:0.1.68-rust-bullseye as chef
 WORKDIR /app
 
 FROM chef AS planner
@@ -15,7 +15,7 @@ COPY . .
 RUN RUSTFLAGS='-C target-feature=+crt-static' cargo build --release --package interop-tests --target $(rustc -vV | grep host | awk '{print $2}') --bin native_ping
 RUN cp /app/target/$(rustc -vV | grep host | awk '{print $2}')/release/native_ping /usr/local/bin/testplan
 
-FROM scratch
+FROM debian:bullseye
 COPY --from=builder /usr/local/bin/testplan /usr/local/bin/testplan
 ENV RUST_BACKTRACE=1
 ENTRYPOINT ["testplan"]

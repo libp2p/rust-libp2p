@@ -18,17 +18,19 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use futures::stream::{FuturesUnordered, SelectAll};
-use futures::StreamExt;
+use std::{task::Poll, time::Duration};
+
+use futures::{
+    stream::{FuturesUnordered, SelectAll},
+    StreamExt,
+};
 use libp2p_gossipsub as gossipsub;
 use libp2p_gossipsub::{MessageAuthenticity, ValidationMode};
 use libp2p_swarm::Swarm;
 use libp2p_swarm_test::SwarmExt as _;
 use quickcheck::{QuickCheck, TestResult};
 use rand::{seq::SliceRandom, SeedableRng};
-use std::{task::Poll, time::Duration};
 use tokio::{runtime::Runtime, time};
-use tracing_subscriber::EnvFilter;
 
 struct Graph {
     nodes: SelectAll<Swarm<gossipsub::Behaviour>>,
@@ -129,9 +131,7 @@ async fn build_node() -> Swarm<gossipsub::Behaviour> {
 
 #[test]
 fn multi_hop_propagation() {
-    let _ = tracing_subscriber::fmt()
-        .with_env_filter(EnvFilter::from_default_env())
-        .try_init();
+    libp2p_test_utils::with_default_env_filter();
 
     fn prop(num_nodes: u8, seed: u64) -> TestResult {
         if !(2..=50).contains(&num_nodes) {

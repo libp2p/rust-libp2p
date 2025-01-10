@@ -18,18 +18,24 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::record;
+use std::{
+    borrow::Borrow,
+    hash::{Hash, Hasher},
+};
+
 use libp2p_core::multihash::Multihash;
 use libp2p_identity::PeerId;
-use sha2::digest::generic_array::{typenum::U32, GenericArray};
-use sha2::{Digest, Sha256};
-use std::borrow::Borrow;
-use std::hash::{Hash, Hasher};
+use sha2::{
+    digest::generic_array::{typenum::U32, GenericArray},
+    Digest, Sha256,
+};
 use uint::*;
+
+use crate::record;
 
 construct_uint! {
     /// 256-bit unsigned integer.
-    pub(super) struct U256(4);
+    pub struct U256(4);
 }
 
 /// A `Key` in the DHT keyspace with preserved preimage.
@@ -163,8 +169,8 @@ impl KeyBytes {
     where
         U: AsRef<KeyBytes>,
     {
-        let a = U256::from(self.0.as_slice());
-        let b = U256::from(other.as_ref().0.as_slice());
+        let a = U256::from_big_endian(self.0.as_slice());
+        let b = U256::from_big_endian(other.as_ref().0.as_slice());
         Distance(a ^ b)
     }
 
@@ -174,8 +180,8 @@ impl KeyBytes {
     ///
     /// `self xor other = distance <==> other = self xor distance`
     pub fn for_distance(&self, d: Distance) -> KeyBytes {
-        let key_int = U256::from(self.0.as_slice()) ^ d.0;
-        KeyBytes(GenericArray::from(<[u8; 32]>::from(key_int)))
+        let key_int = U256::from_big_endian(self.0.as_slice()) ^ d.0;
+        KeyBytes(GenericArray::from(key_int.to_big_endian()))
     }
 }
 
@@ -187,7 +193,7 @@ impl AsRef<KeyBytes> for KeyBytes {
 
 /// A distance between two keys in the DHT keyspace.
 #[derive(Copy, Clone, PartialEq, Eq, Default, PartialOrd, Ord, Debug)]
-pub struct Distance(pub(super) U256);
+pub struct Distance(pub U256);
 
 impl Distance {
     /// Returns the integer part of the base 2 logarithm of the [`Distance`].
@@ -200,9 +206,10 @@ impl Distance {
 
 #[cfg(test)]
 mod tests {
+    use quickcheck::*;
+
     use super::*;
     use crate::SHA_256_MH;
-    use quickcheck::*;
 
     impl Arbitrary for Key<PeerId> {
         fn arbitrary(_: &mut Gen) -> Key<PeerId> {

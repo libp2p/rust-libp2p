@@ -18,13 +18,15 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
+use std::iter::Map;
+
+use either::Either;
+use futures::future;
+
 use crate::{
     either::EitherFuture,
     upgrade::{InboundUpgrade, OutboundUpgrade, UpgradeInfo},
 };
-use either::Either;
-use futures::future;
-use std::iter::Map;
 
 impl<A, B> UpgradeInfo for Either<A, B>
 where

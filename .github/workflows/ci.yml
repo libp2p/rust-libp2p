@@ -40,7 +40,7 @@ jobs:
 
       - uses: dtolnay/rust-toolchain@stable
 
-      - uses: Swatinem/rust-cache@82a92a6e8fbeee089604da2575dc567ae9ddeaab # v2.7.5
+      - uses: Swatinem/rust-cache@f0deed1e0edfc6a9be95417288c0e1099b1eeec3 # v2.7.7
         with:
           shared-key: stable-cache
           save-if: false
@@ -67,7 +67,7 @@ jobs:
 
           echo "CRATE_VERSION=$CRATE_VERSION" >> $GITHUB_ENV
 
-      - name: Enforce version in `workspace.dependencies` matches latest version
+      - name: Enforce version in `workspace.dependencies` matches the latest version
         if: env.CRATE != 'libp2p'
         run: |
           SPECIFIED_VERSION=$(tq "workspace.dependencies.$CRATE.version" --file ./Cargo.toml)
@@ -77,7 +77,7 @@ jobs:
 
           test "$CRATE_VERSION" = "$SPECIFIED_VERSION" || test "=$CRATE_VERSION" = "$SPECIFIED_VERSION"
 
-      - name: Enforce version in CHANGELOG.md matches version in manifest
+      - name: Enforce version in CHANGELOG.md matches the version in manifest
         run: |
           MANIFEST_PATH=$(cargo metadata --format-version=1 --no-deps | jq -e -r '.packages[] | select(.name == "'"$CRATE"'") | .manifest_path')
           DIR_TO_CRATE=$(dirname "$MANIFEST_PATH")
@@ -133,7 +133,7 @@ jobs:
             os: ubuntu-latest
           - target: "wasm32-unknown-emscripten"
             os: ubuntu-latest
-          - target: "wasm32-wasi"
+          - target: "wasm32-wasip1"
             os: ubuntu-latest
           - target: "x86_64-apple-darwin"
             os: macos-latest
@@ -149,7 +149,7 @@ jobs:
 
       - uses: r7kamura/rust-problem-matchers@9fe7ca9f6550e5d6358e179d451cc25ea6b54f98 #v1.5.0
 
-      - uses: Swatinem/rust-cache@82a92a6e8fbeee089604da2575dc567ae9ddeaab # v2.7.5
+      - uses: Swatinem/rust-cache@f0deed1e0edfc6a9be95417288c0e1099b1eeec3 # v2.7.7
         with:
           key: ${{ matrix.target }}
           save-if: ${{ github.ref == 'refs/heads/master' }}
@@ -174,7 +174,7 @@ jobs:
 
       - uses: r7kamura/rust-problem-matchers@9fe7ca9f6550e5d6358e179d451cc25ea6b54f98 #v1.5.0
 
-      - uses: Swatinem/rust-cache@82a92a6e8fbeee089604da2575dc567ae9ddeaab # v2.7.5
+      - uses: Swatinem/rust-cache@f0deed1e0edfc6a9be95417288c0e1099b1eeec3 # v2.7.7
         with:
           save-if: ${{ github.ref == 'refs/heads/master' }}
 
@@ -195,7 +195,7 @@ jobs:
 
       - uses: r7kamura/rust-problem-matchers@9fe7ca9f6550e5d6358e179d451cc25ea6b54f98 #v1.5.0
 
-      - uses: Swatinem/rust-cache@82a92a6e8fbeee089604da2575dc567ae9ddeaab # v2.7.5
+      - uses: Swatinem/rust-cache@f0deed1e0edfc6a9be95417288c0e1099b1eeec3 # v2.7.7
         with:
           key: ${{ matrix.features }}
           save-if: ${{ github.ref == 'refs/heads/master' }}
@@ -212,7 +212,7 @@ jobs:
 
       - uses: r7kamura/rust-problem-matchers@9fe7ca9f6550e5d6358e179d451cc25ea6b54f98 #v1.5.0
 
-      - uses: Swatinem/rust-cache@82a92a6e8fbeee089604da2575dc567ae9ddeaab # v2.7.5
+      - uses: Swatinem/rust-cache@f0deed1e0edfc6a9be95417288c0e1099b1eeec3 # v2.7.7
         with:
           save-if: ${{ github.ref == 'refs/heads/master' }}
 
@@ -225,7 +225,7 @@ jobs:
       fail-fast: false
       matrix:
         rust-version: [
-          1.80.0, # current stable
+          1.83.0, # current stable
           beta,
         ]
     steps:
@@ -238,7 +238,7 @@ jobs:
 
       - uses: r7kamura/rust-problem-matchers@9fe7ca9f6550e5d6358e179d451cc25ea6b54f98 #v1.5.0
 
-      - uses: Swatinem/rust-cache@82a92a6e8fbeee089604da2575dc567ae9ddeaab # v2.7.5
+      - uses: Swatinem/rust-cache@f0deed1e0edfc6a9be95417288c0e1099b1eeec3 # v2.7.7
         with:
           save-if: ${{ github.ref == 'refs/heads/master' }}
 
@@ -254,7 +254,7 @@ jobs:
 
       - uses: r7kamura/rust-problem-matchers@9fe7ca9f6550e5d6358e179d451cc25ea6b54f98 #v1.5.0
 
-      - uses: Swatinem/rust-cache@82a92a6e8fbeee089604da2575dc567ae9ddeaab # v2.7.5
+      - uses: Swatinem/rust-cache@f0deed1e0edfc6a9be95417288c0e1099b1eeec3 # v2.7.7
         with:
           save-if: ${{ github.ref == 'refs/heads/master' }}
 
@@ -273,7 +273,7 @@ jobs:
 
       - uses: r7kamura/rust-problem-matchers@9fe7ca9f6550e5d6358e179d451cc25ea6b54f98 #v1.5.0
 
-      - uses: Swatinem/rust-cache@82a92a6e8fbeee089604da2575dc567ae9ddeaab # v2.7.5
+      - uses: Swatinem/rust-cache@f0deed1e0edfc6a9be95417288c0e1099b1eeec3 # v2.7.7
         with:
           shared-key: stable-cache
           save-if: false
@@ -317,7 +317,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@nightly
         with:
           components: rustfmt
 
@@ -365,7 +365,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: Swatinem/rust-cache@82a92a6e8fbeee089604da2575dc567ae9ddeaab # v2.7.5
+      - uses: Swatinem/rust-cache@f0deed1e0edfc6a9be95417288c0e1099b1eeec3 # v2.7.7
 
       - run: cargo install --version 0.10.0 pb-rs --locked
 
@@ -391,7 +391,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: Swatinem/rust-cache@82a92a6e8fbeee089604da2575dc567ae9ddeaab # v2.7.5
+      - uses: Swatinem/rust-cache@f0deed1e0edfc6a9be95417288c0e1099b1eeec3 # v2.7.7
       - run: cargo metadata --locked --format-version=1 > /dev/null
 
   cargo-deny:

@@ -1,19 +1,23 @@
-use std::cmp::min;
-use std::io;
-use std::pin::Pin;
-use std::rc::Rc;
-use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::Mutex;
-use std::task::{Context, Poll};
+use std::{
+    cmp::min,
+    io,
+    pin::Pin,
+    rc::Rc,
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        Mutex,
+    },
+    task::{Context, Poll},
+};
 
 use bytes::BytesMut;
-use futures::task::AtomicWaker;
-use futures::{AsyncRead, AsyncWrite};
+use futures::{task::AtomicWaker, AsyncRead, AsyncWrite};
 use libp2p_webrtc_utils::MAX_MSG_LEN;
 use wasm_bindgen::prelude::*;
 use web_sys::{Event, MessageEvent, RtcDataChannel, RtcDataChannelEvent, RtcDataChannelState};
 
-/// [`PollDataChannel`] is a wrapper around [`RtcDataChannel`] which implements [`AsyncRead`] and [`AsyncWrite`].
+/// [`PollDataChannel`] is a wrapper around [`RtcDataChannel`] which implements [`AsyncRead`] and
+/// [`AsyncWrite`].
 #[derive(Debug, Clone)]
 pub(crate) struct PollDataChannel {
     /// The [`RtcDataChannel`] being wrapped.
@@ -25,7 +29,8 @@ pub(crate) struct PollDataChannel {
     /// Waker for when we are waiting for the DC to be opened.
     open_waker: Rc<AtomicWaker>,
 
-    /// Waker for when we are waiting to write (again) to the DC because we previously exceeded the [`MAX_MSG_LEN`] threshold.
+    /// Waker for when we are waiting to write (again) to the DC because we previously exceeded the
+    /// [`MAX_MSG_LEN`] threshold.
     write_waker: Rc<AtomicWaker>,
 
     /// Waker for when we are waiting for the DC to be closed.
@@ -33,9 +38,11 @@ pub(crate) struct PollDataChannel {
 
     /// Whether we've been overloaded with data by the remote.
     ///
-    /// This is set to `true` in case `read_buffer` overflows, i.e. the remote is sending us messages faster than we can read them.
-    /// In that case, we return an [`std::io::Error`] from [`AsyncRead`] or [`AsyncWrite`], depending which one gets called earlier.
-    /// Failing these will (very likely), cause the application developer to drop the stream which resets it.
+    /// This is set to `true` in case `read_buffer` overflows, i.e. the remote is sending us
+    /// messages faster than we can read them. In that case, we return an [`std::io::Error`]
+    /// from [`AsyncRead`] or [`AsyncWrite`], depending which one gets called earlier.
+    /// Failing these will (very likely),
+    /// cause the application developer to drop the stream which resets it.
     overloaded: Rc<AtomicBool>,
 
     // Store the closures for proper garbage collection.
@@ -83,7 +90,9 @@ impl PollDataChannel {
         inner.set_onclose(Some(on_close_closure.as_ref().unchecked_ref()));
 
         let new_data_waker = Rc::new(AtomicWaker::new());
-        let read_buffer = Rc::new(Mutex::new(BytesMut::new())); // We purposely don't use `with_capacity` so we don't eagerly allocate `MAX_READ_BUFFER` per stream.
+        // We purposely don't use `with_capacity`
+        // so we don't eagerly allocate `MAX_READ_BUFFER` per stream.
+        let read_buffer = Rc::new(Mutex::new(BytesMut::new()));
         let overloaded = Rc::new(AtomicBool::new(false));
 
         let on_message_closure = Closure::<dyn FnMut(_)>::new({

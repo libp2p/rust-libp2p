@@ -18,26 +18,30 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::protocol::{GossipsubCodec, ProtocolConfig};
-use crate::rpc::Receiver;
-use crate::rpc_proto::proto;
-use crate::types::{PeerKind, RawMessage, Rpc, RpcOut};
-use crate::ValidationError;
-use asynchronous_codec::Framed;
-use futures::future::Either;
-use futures::prelude::*;
-use futures::StreamExt;
-use libp2p_core::upgrade::DeniedUpgrade;
-use libp2p_swarm::handler::{
-    ConnectionEvent, ConnectionHandler, ConnectionHandlerEvent, DialUpgradeError,
-    FullyNegotiatedInbound, FullyNegotiatedOutbound, StreamUpgradeError, SubstreamProtocol,
-};
-use libp2p_swarm::Stream;
 use std::{
     pin::Pin,
     task::{Context, Poll},
 };
+
+use asynchronous_codec::Framed;
+use futures::{future::Either, prelude::*, StreamExt};
+use libp2p_core::upgrade::DeniedUpgrade;
+use libp2p_swarm::{
+    handler::{
+        ConnectionEvent, ConnectionHandler, ConnectionHandlerEvent, DialUpgradeError,
+        FullyNegotiatedInbound, FullyNegotiatedOutbound, StreamUpgradeError, SubstreamProtocol,
+    },
+    Stream,
+};
 use web_time::Instant;
+
+use crate::{
+    protocol::{GossipsubCodec, ProtocolConfig},
+    rpc::Receiver,
+    rpc_proto::proto,
+    types::{PeerKind, RawMessage, Rpc, RpcOut},
+    ValidationError,
+};
 
 /// The event emitted by the Handler. This informs the behaviour of various events created
 /// by the handler.
@@ -111,7 +115,6 @@ pub struct EnabledHandler {
     peer_kind: Option<PeerKind>,
 
     /// Keeps track on whether we have sent the peer kind to the behaviour.
-    //
     // NOTE: Use this flag rather than checking the substream count each poll.
     peer_kind_sent: bool,
 
@@ -195,7 +198,6 @@ impl EnabledHandler {
         &mut self,
         FullyNegotiatedOutbound { protocol, .. }: FullyNegotiatedOutbound<
             <Handler as ConnectionHandler>::OutboundProtocol,
-            <Handler as ConnectionHandler>::OutboundOpenInfo,
         >,
     ) {
         let (substream, peer_kind) = protocol;
@@ -218,7 +220,7 @@ impl EnabledHandler {
     ) -> Poll<
         ConnectionHandlerEvent<
             <Handler as ConnectionHandler>::OutboundProtocol,
-            <Handler as ConnectionHandler>::OutboundOpenInfo,
+            (),
             <Handler as ConnectionHandler>::ToBehaviour,
         >,
     > {
@@ -226,7 +228,7 @@ impl EnabledHandler {
             if let Some(peer_kind) = self.peer_kind.as_ref() {
                 self.peer_kind_sent = true;
                 return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(
-                    HandlerEvent::PeerKind(peer_kind.clone()),
+                    HandlerEvent::PeerKind(*peer_kind),
                 ));
             }
         }
@@ -424,7 +426,7 @@ impl ConnectionHandler for Handler {
     type OutboundOpenInfo = ();
     type OutboundProtocol = ProtocolConfig;
 
-    fn listen_protocol(&self) -> SubstreamProtocol<Self::InboundProtocol, Self::InboundOpenInfo> {
+    fn listen_protocol(&self) -> SubstreamProtocol<Self::InboundProtocol> {
         match self {
             Handler::Enabled(handler) => {
                 SubstreamProtocol::new(either::Either::Left(handler.listen_protocol.clone()), ())
@@ -459,9 +461,7 @@ impl ConnectionHandler for Handler {
     fn poll(
         &mut self,
         cx: &mut Context<'_>,
-    ) -> Poll<
-        ConnectionHandlerEvent<Self::OutboundProtocol, Self::OutboundOpenInfo, Self::ToBehaviour>,
-    > {
+    ) -> Poll<ConnectionHandlerEvent<Self::OutboundProtocol, (), Self::ToBehaviour>> {
         match self {
             Handler::Enabled(handler) => handler.poll(cx),
             Handler::Disabled(DisabledHandler::ProtocolUnsupported { peer_kind_sent }) => {
@@ -480,12 +480,7 @@ impl ConnectionHandler for Handler {
 
     fn on_connection_event(
         &mut self,
-        event: ConnectionEvent<
-            Self::InboundProtocol,
-            Self::OutboundProtocol,
-            Self::InboundOpenInfo,
-            Self::OutboundOpenInfo,
-        >,
+        event: ConnectionEvent<Self::InboundProtocol, Self::OutboundProtocol>,
     ) {
         match self {
             Handler::Enabled(handler) => {

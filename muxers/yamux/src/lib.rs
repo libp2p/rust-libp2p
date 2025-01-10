@@ -22,17 +22,20 @@
 
 #![cfg_attr(docsrs, feature(doc_cfg, doc_auto_cfg))]
 
+use std::{
+    collections::VecDeque,
+    io,
+    io::{IoSlice, IoSliceMut},
+    iter,
+    pin::Pin,
+    task::{Context, Poll, Waker},
+};
+
 use either::Either;
 use futures::{prelude::*, ready};
-use libp2p_core::muxing::{StreamMuxer, StreamMuxerEvent};
-use libp2p_core::upgrade::{InboundConnectionUpgrade, OutboundConnectionUpgrade, UpgradeInfo};
-use std::collections::VecDeque;
-use std::io::{IoSlice, IoSliceMut};
-use std::task::Waker;
-use std::{
-    io, iter,
-    pin::Pin,
-    task::{Context, Poll},
+use libp2p_core::{
+    muxing::{StreamMuxer, StreamMuxerEvent},
+    upgrade::{InboundConnectionUpgrade, OutboundConnectionUpgrade, UpgradeInfo},
 };
 use thiserror::Error;
 
@@ -40,10 +43,12 @@ use thiserror::Error;
 #[derive(Debug)]
 pub struct Muxer<C> {
     connection: Either<yamux012::Connection<C>, yamux013::Connection<C>>,
-    /// Temporarily buffers inbound streams in case our node is performing backpressure on the remote.
+    /// Temporarily buffers inbound streams in case our node is
+    /// performing backpressure on the remote.
     ///
-    /// The only way how yamux can make progress is by calling [`yamux013::Connection::poll_next_inbound`]. However, the
-    /// [`StreamMuxer`] interface is designed to allow a caller to selectively make progress via
+    /// The only way how yamux can make progress is by calling
+    /// [`yamux013::Connection::poll_next_inbound`]. However, the [`StreamMuxer`] interface is
+    /// designed to allow a caller to selectively make progress via
     /// [`StreamMuxer::poll_inbound`] and [`StreamMuxer::poll_outbound`] whilst the more general
     /// [`StreamMuxer::poll`] is designed to make progress on existing streams etc.
     ///
@@ -57,7 +62,8 @@ pub struct Muxer<C> {
 /// How many streams to buffer before we start resetting them.
 ///
 /// This is equal to the ACK BACKLOG in `rust-yamux`.
-/// Thus, for peers running on a recent version of `rust-libp2p`, we should never need to reset streams because they'll voluntarily stop opening them once they hit the ACK backlog.
+/// Thus, for peers running on a recent version of `rust-libp2p`, we should never need to reset
+/// streams because they'll voluntarily stop opening them once they hit the ACK backlog.
 const MAX_BUFFERED_INBOUND_STREAMS: usize = 256;
 
 impl<C> Muxer<C>

@@ -1,3 +1,5 @@
+use std::{convert::Infallible, sync::atomic::AtomicUsize};
+
 use async_std::stream::StreamExt;
 use criterion::{criterion_group, criterion_main, Criterion};
 use libp2p_core::{
@@ -5,7 +7,6 @@ use libp2p_core::{
 };
 use libp2p_identity::PeerId;
 use libp2p_swarm::{ConnectionHandler, NetworkBehaviour, StreamProtocol};
-use std::{convert::Infallible, sync::atomic::AtomicUsize};
 use web_time::Duration;
 
 macro_rules! gen_behaviour {
@@ -82,7 +83,7 @@ benchmarks! {
         SpinningBehaviour20::bench().name(m).poll_count(500).protocols_per_behaviour(100),
     ];
 }
-//fn main() {}
+// fn main() {}
 
 trait BigBehaviour: Sized {
     fn behaviours(&mut self) -> &mut [SpinningBehaviour];
@@ -280,9 +281,7 @@ impl ConnectionHandler for SpinningHandler {
 
     type OutboundOpenInfo = ();
 
-    fn listen_protocol(
-        &self,
-    ) -> libp2p_swarm::SubstreamProtocol<Self::InboundProtocol, Self::InboundOpenInfo> {
+    fn listen_protocol(&self) -> libp2p_swarm::SubstreamProtocol<Self::InboundProtocol> {
         libp2p_swarm::SubstreamProtocol::new(Upgrade(self.protocols), ())
     }
 
@@ -290,11 +289,7 @@ impl ConnectionHandler for SpinningHandler {
         &mut self,
         cx: &mut std::task::Context<'_>,
     ) -> std::task::Poll<
-        libp2p_swarm::ConnectionHandlerEvent<
-            Self::OutboundProtocol,
-            Self::OutboundOpenInfo,
-            Self::ToBehaviour,
-        >,
+        libp2p_swarm::ConnectionHandlerEvent<Self::OutboundProtocol, (), Self::ToBehaviour>,
     > {
         if self.iter_count == usize::MAX {
             return std::task::Poll::Pending;
@@ -321,8 +316,6 @@ impl ConnectionHandler for SpinningHandler {
         _event: libp2p_swarm::handler::ConnectionEvent<
             Self::InboundProtocol,
             Self::OutboundProtocol,
-            Self::InboundOpenInfo,
-            Self::OutboundOpenInfo,
         >,
     ) {
     }

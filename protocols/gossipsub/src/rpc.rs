@@ -18,7 +18,6 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use futures::{stream::Peekable, Stream, StreamExt};
 use std::{
     future::Future,
     pin::Pin,
@@ -28,6 +27,8 @@ use std::{
     },
     task::{Context, Poll},
 };
+
+use futures::{stream::Peekable, Stream, StreamExt};
 
 use crate::types::RpcOut;
 
@@ -88,7 +89,7 @@ impl Sender {
             | RpcOut::Prune(_)
             | RpcOut::Subscribe(_)
             | RpcOut::Unsubscribe(_) => &self.priority_sender,
-            RpcOut::Forward { .. } | RpcOut::IHave(_) | RpcOut::IWant(_) => {
+            RpcOut::Forward { .. } | RpcOut::IHave(_) | RpcOut::IWant(_) | RpcOut::IDontWant(_) => {
                 &self.non_priority_sender
             }
         };

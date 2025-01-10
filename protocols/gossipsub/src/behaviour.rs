@@ -19,11 +19,10 @@
 // DEALINGS IN THE SOFTWARE.
 
 use std::{
-    cmp::{max, Ordering},
-    collections::HashSet,
-    collections::VecDeque,
-    collections::{BTreeSet, HashMap},
+    cmp::{max, Ordering, Ordering::Equal},
+    collections::{BTreeSet, HashMap, HashSet, VecDeque},
     fmt,
+    fmt::Debug,
     net::IpAddr,
     task::{Context, Poll},
     time::Duration,
@@ -31,55 +30,55 @@ use std::{
 
 use futures::FutureExt;
 use futures_timer::Delay;
-use prometheus_client::registry::Registry;
-use rand::{seq::SliceRandom, thread_rng};
-
+use hashlink::LinkedHashMap;
 use libp2p_core::{
-    multiaddr::Protocol::Ip4, multiaddr::Protocol::Ip6, transport::PortUse, Endpoint, Multiaddr,
+    multiaddr::Protocol::{Ip4, Ip6},
+    transport::PortUse,
+    Endpoint, Multiaddr,
 };
-use libp2p_identity::Keypair;
-use libp2p_identity::PeerId;
+use libp2p_identity::{Keypair, PeerId};
 use libp2p_swarm::{
     behaviour::{AddressChange, ConnectionClosed, ConnectionEstablished, FromSwarm},
     dial_opts::DialOpts,
     ConnectionDenied, ConnectionId, NetworkBehaviour, NotifyHandler, THandler, THandlerInEvent,
     THandlerOutEvent, ToSwarm,
 };
+use prometheus_client::registry::Registry;
+use quick_protobuf::{MessageWrite, Writer};
+use rand::{seq::SliceRandom, thread_rng};
 use web_time::{Instant, SystemTime};
 
-use crate::peer_score::{PeerScore, PeerScoreParams, PeerScoreThresholds, RejectReason};
-use crate::protocol::SIGNING_PREFIX;
-use crate::subscription_filter::{AllowAllSubscriptionFilter, TopicSubscriptionFilter};
-use crate::time_cache::DuplicateCache;
-use crate::topic::{Hasher, Topic, TopicHash};
-use crate::transform::{DataTransform, IdentityTransform};
-use crate::types::{
-    ControlAction, Message, MessageAcceptance, MessageId, PeerInfo, RawMessage, Subscription,
-    SubscriptionAction,
-};
-use crate::types::{PeerConnections, PeerKind, RpcOut};
-use crate::{backoff::BackoffStorage, FailedMessages};
 use crate::{
+    backoff::BackoffStorage,
     config::{Config, ValidationMode},
-    types::Graft,
-};
-use crate::{gossip_promises::GossipPromises, types::Prune};
-use crate::{
+    gossip_promises::GossipPromises,
     handler::{Handler, HandlerEvent, HandlerIn},
-    types::IWant,
-};
-use crate::{mcache::MessageCache, types::IHave};
-use crate::{
+    mcache::MessageCache,
     metrics::{Churn, Config as MetricsConfig, Inclusion, Metrics, Penalty},
+    peer_score::{PeerScore, PeerScoreParams, PeerScoreThresholds, RejectReason},
+    protocol::SIGNING_PREFIX,
     rpc::Sender,
+    rpc_proto::proto,
+    subscription_filter::{AllowAllSubscriptionFilter, TopicSubscriptionFilter},
+    time_cache::DuplicateCache,
+    topic::{Hasher, Topic, TopicHash},
+    transform::{DataTransform, IdentityTransform},
+    types::{
+        ControlAction, Graft, IDontWant, IHave, IWant, Message, MessageAcceptance, MessageId,
+        PeerConnections, PeerInfo, PeerKind, Prune, RawMessage, RpcOut, Subscription,
+        SubscriptionAction,
+    },
+    FailedMessages, PublishError, SubscriptionError, TopicScoreParams, ValidationError,
 };
-use crate::{rpc_proto::proto, TopicScoreParams};
-use crate::{PublishError, SubscriptionError, ValidationError};
-use quick_protobuf::{MessageWrite, Writer};
-use std::{cmp::Ordering::Equal, fmt::Debug};
 
 #[cfg(test)]
 mod tests;
+
+/// IDONTWANT cache capacity.
+const IDONTWANT_CAP: usize = 10_000;
+
+/// IDONTWANT timeout before removal.
+const IDONTWANT_TIMEOUT: Duration = Duration::new(3, 0);
 
 /// Determines if published messages should be signed or not.
 ///
@@ -221,8 +220,9 @@ impl From<MessageAuthenticity> for PublishConfig {
                 let public_key = keypair.public();
                 let key_enc = public_key.encode_protobuf();
                 let key = if key_enc.len() <= 42 {
-                    // The public key can be inlined in [`rpc_proto::proto::::Message::from`], so we don't include it
-                    // specifically in the [`rpc_proto::proto::Message::key`] field.
+                    // The public key can be inlined in [`rpc_proto::proto::::Message::from`], so we
+                    // don't include it specifically in the
+                    // [`rpc_proto::proto::Message::key`] field.
                     None
                 } else {
                     // Include the protobuf encoding of the public key in the message.
@@ -289,7 +289,7 @@ pub struct Behaviour<D = IdentityTransform, F = AllowAllSubscriptionFilter> {
     /// The last publish time for fanout topics.
     fanout_last_pub: HashMap<TopicHash, Instant>,
 
-    ///Storage for backoffs
+    /// Storage for backoffs
     backoffs: BackoffStorage,
 
     /// Message cache for the last few heartbeats.
@@ -314,7 +314,7 @@ pub struct Behaviour<D = IdentityTransform, F = AllowAllSubscriptionFilter> {
 
     /// Stores optional peer score data together with thresholds, decay interval and gossip
     /// promises.
-    peer_score: Option<(PeerScore, PeerScoreThresholds, Delay, GossipPromises)>,
+    peer_score: Option<(PeerScore, PeerScoreThresholds, Delay)>,
 
     /// Counts the number of `IHAVE` received from each peer since the last heartbeat.
     count_received_ihave: HashMap<PeerId, usize>,
@@ -339,6 +339,9 @@ pub struct Behaviour<D = IdentityTransform, F = AllowAllSubscriptionFilter> {
 
     /// Tracks the numbers of failed messages per peer-id.
     failed_messages: HashMap<PeerId, FailedMessages>,
+
+    /// Tracks recently sent `IWANT` messages and checks if peers respond to them.
+    gossip_promises: GossipPromises,
 }
 
 impl<D, F> Behaviour<D, F>
@@ -472,6 +475,7 @@ where
             subscription_filter,
             data_transform,
             failed_messages: Default::default(),
+            gossip_promises: Default::default(),
         })
     }
 }
@@ -671,9 +675,14 @@ where
                 // Gossipsub peers
                 None => {
                     tracing::debug!(topic=%topic_hash, "Topic not in the mesh");
+                    // `fanout_peers` is always non-empty if it's `Some`.
+                    let fanout_peers = self
+                        .fanout
+                        .get(&topic_hash)
+                        .filter(|peers| !peers.is_empty());
                     // If we have fanout peers add them to the map.
-                    if self.fanout.contains_key(&topic_hash) {
-                        for peer in self.fanout.get(&topic_hash).expect("Topic must exist") {
+                    if let Some(peers) = fanout_peers {
+                        for peer in peers {
                             recipient_peers.insert(*peer);
                         }
                     } else {
@@ -751,6 +760,13 @@ where
 
         if publish_failed {
             return Err(PublishError::AllQueuesFull(recipient_peers.len()));
+        }
+
+        // Broadcast IDONTWANT messages
+        if raw_message.raw_protobuf_len() > self.config.idontwant_message_size_threshold()
+            && self.config.idontwant_on_publish()
+        {
+            self.send_idontwant(&raw_message, &msg_id, raw_message.source.as_ref());
         }
 
         tracing::debug!(message=%msg_id, "Published message");
@@ -905,7 +921,7 @@ where
 
         let interval = Delay::new(params.decay_interval);
         let peer_score = PeerScore::new_with_message_delivery_time_callback(params, callback);
-        self.peer_score = Some((peer_score, threshold, interval, GossipPromises::default()));
+        self.peer_score = Some((peer_score, threshold, interval));
         Ok(())
     }
 
@@ -1169,7 +1185,7 @@ where
     }
 
     fn score_below_threshold_from_scores(
-        peer_score: &Option<(PeerScore, PeerScoreThresholds, Delay, GossipPromises)>,
+        peer_score: &Option<(PeerScore, PeerScoreThresholds, Delay)>,
         peer_id: &PeerId,
         threshold: impl Fn(&PeerScoreThresholds) -> f64,
     ) -> (bool, f64) {
@@ -1230,10 +1246,7 @@ where
                 return false;
             }
 
-            self.peer_score
-                .as_ref()
-                .map(|(_, _, _, promises)| !promises.contains(id))
-                .unwrap_or(true)
+            !self.gossip_promises.contains(id)
         };
 
         for (topic, ids) in ihave_msgs {
@@ -1280,13 +1293,11 @@ where
             iwant_ids_vec.truncate(iask);
             *iasked += iask;
 
-            if let Some((_, _, _, gossip_promises)) = &mut self.peer_score {
-                gossip_promises.add_promise(
-                    *peer_id,
-                    &iwant_ids_vec,
-                    Instant::now() + self.config.iwant_followup_time(),
-                );
-            }
+            self.gossip_promises.add_promise(
+                *peer_id,
+                &iwant_ids_vec,
+                Instant::now() + self.config.iwant_followup_time(),
+            );
             tracing::trace!(
                 peer=%peer_id,
                 "IHAVE: Asking for the following messages from peer: {:?}",
@@ -1415,7 +1426,7 @@ where
                                     + self.config.graft_flood_threshold())
                                     - self.config.prune_backoff();
                                 if flood_cutoff > now {
-                                    //extra penalty
+                                    // extra penalty
                                     peer_score.add_penalty(peer_id, 1);
                                 }
                             }
@@ -1436,15 +1447,16 @@ where
                             topic=%topic_hash,
                             "GRAFT: ignoring peer with negative score"
                         );
-                        // we do send them PRUNE however, because it's a matter of protocol correctness
+                        // we do send them PRUNE however, because it's a matter of protocol
+                        // correctness
                         to_prune_topics.insert(topic_hash.clone());
                         // but we won't PX to them
                         do_px = false;
                         continue;
                     }
 
-                    // check mesh upper bound and only allow graft if the upper bound is not reached or
-                    // if it is an outbound peer
+                    // check mesh upper bound and only allow graft if the upper bound is not reached
+                    // or if it is an outbound peer
                     if peers.len() >= self.config.mesh_n_high()
                         && !self.outbound_peers.contains(peer_id)
                     {
@@ -1572,7 +1584,7 @@ where
             self.remove_peer_from_mesh(peer_id, &topic_hash, backoff, true, Churn::Prune);
 
             if self.mesh.contains_key(&topic_hash) {
-                //connect to px peers
+                // connect to px peers
                 if !px.is_empty() {
                     // we ignore PX from peers with insufficient score
                     if below_threshold {
@@ -1604,7 +1616,7 @@ where
         let n = self.config.prune_peers();
         // Ignore peerInfo with no ID
         //
-        //TODO: Once signed records are spec'd: Can we use peerInfo without any IDs if they have a
+        // TODO: Once signed records are spec'd: Can we use peerInfo without any IDs if they have a
         // signed peer record?
         px.retain(|p| p.peer_id.is_some());
         if px.len() > n {
@@ -1649,14 +1661,15 @@ where
                 peer=%propagation_source,
                 "Rejecting message from blacklisted peer"
             );
-            if let Some((peer_score, .., gossip_promises)) = &mut self.peer_score {
+            self.gossip_promises
+                .reject_message(msg_id, &RejectReason::BlackListedPeer);
+            if let Some((peer_score, ..)) = &mut self.peer_score {
                 peer_score.reject_message(
                     propagation_source,
                     msg_id,
                     &raw_message.topic,
                     RejectReason::BlackListedPeer,
                 );
-                gossip_promises.reject_message(msg_id, &RejectReason::BlackListedPeer);
             }
             return false;
         }
@@ -1689,7 +1702,7 @@ where
         let self_published = !self.config.allow_self_origin()
             && if let Some(own_id) = self.publish_config.get_own_id() {
                 own_id != propagation_source
-                    && raw_message.source.as_ref().map_or(false, |s| s == own_id)
+                    && raw_message.source.as_ref().is_some_and(|s| s == own_id)
             } else {
                 self.published_message_ids.contains(msg_id)
             };
@@ -1738,6 +1751,11 @@ where
         // Calculate the message id on the transformed data.
         let msg_id = self.config.message_id(&message);
 
+        // Broadcast IDONTWANT messages
+        if raw_message.raw_protobuf_len() > self.config.idontwant_message_size_threshold() {
+            self.send_idontwant(&raw_message, &msg_id, Some(propagation_source));
+        }
+
         // Check the validity of the message
         // Peers get penalized if this message is invalid. We don't add it to the duplicate cache
         // and instead continually penalize peers that repeatedly send this message.
@@ -1753,6 +1771,7 @@ where
             self.mcache.observe_duplicate(&msg_id, propagation_source);
             return;
         }
+
         tracing::debug!(
             message=%msg_id,
             "Put message in duplicate_cache and resolve promises"
@@ -1765,9 +1784,11 @@ where
 
         // Tells score that message arrived (but is maybe not fully validated yet).
         // Consider the message as delivered for gossip promises.
-        if let Some((peer_score, .., gossip_promises)) = &mut self.peer_score {
+        self.gossip_promises.message_delivered(&msg_id);
+
+        // Tells score that message arrived (but is maybe not fully validated yet).
+        if let Some((peer_score, ..)) = &mut self.peer_score {
             peer_score.validate_message(propagation_source, &msg_id, &message.topic);
-            gossip_promises.message_delivered(&msg_id);
         }
 
         // Add the message to our memcache
@@ -1809,12 +1830,14 @@ where
         raw_message: &RawMessage,
         reject_reason: RejectReason,
     ) {
-        if let Some((peer_score, .., gossip_promises)) = &mut self.peer_score {
-            if let Some(metrics) = self.metrics.as_mut() {
-                metrics.register_invalid_message(&raw_message.topic);
-            }
+        if let Some(metrics) = self.metrics.as_mut() {
+            metrics.register_invalid_message(&raw_message.topic);
+        }
 
-            if let Ok(message) = self.data_transform.inbound_transform(raw_message.clone()) {
+        let message = self.data_transform.inbound_transform(raw_message.clone());
+
+        match (&mut self.peer_score, message) {
+            (Some((peer_score, ..)), Ok(message)) => {
                 let message_id = self.config.message_id(&message);
 
                 peer_score.reject_message(
@@ -1824,13 +1847,22 @@ where
                     reject_reason,
                 );
 
-                gossip_promises.reject_message(&message_id, &reject_reason);
-            } else {
+                self.gossip_promises
+                    .reject_message(&message_id, &reject_reason);
+            }
+            (Some((peer_score, ..)), Err(_)) => {
                 // The message is invalid, we reject it ignoring any gossip promises. If a peer is
                 // advertising this message via an IHAVE and it's invalid it will be double
                 // penalized, one for sending us an invalid and again for breaking a promise.
                 peer_score.reject_invalid_message(propagation_source, &raw_message.topic);
             }
+            (None, Ok(message)) => {
+                // Valid transformation without peer scoring
+                let message_id = self.config.message_id(&message);
+                self.gossip_promises
+                    .reject_message(&message_id, &reject_reason);
+            }
+            (None, Err(_)) => {}
         }
     }
 
@@ -1897,7 +1929,7 @@ where
 
                     // if the mesh needs peers add the peer to the mesh
                     if !self.explicit_peers.contains(propagation_source)
-                        && matches!(peer.kind, PeerKind::Gossipsubv1_1 | PeerKind::Gossipsub)
+                        && peer.kind.is_gossipsub()
                         && !Self::score_below_threshold_from_scores(
                             &self.peer_score,
                             propagation_source,
@@ -2001,8 +2033,8 @@ where
 
     /// Applies penalties to peers that did not respond to our IWANT requests.
     fn apply_iwant_penalties(&mut self) {
-        if let Some((peer_score, .., gossip_promises)) = &mut self.peer_score {
-            for (peer, count) in gossip_promises.get_broken_promises() {
+        if let Some((peer_score, ..)) = &mut self.peer_score {
+            for (peer, count) in self.gossip_promises.get_broken_promises() {
                 peer_score.add_penalty(&peer, count);
                 if let Some(metrics) = self.metrics.as_mut() {
                     metrics.register_score_penalty(Penalty::BrokenPromise);
@@ -2223,7 +2255,7 @@ where
                 && peers.len() > 1
                 && self.peer_score.is_some()
             {
-                if let Some((_, thresholds, _, _)) = &self.peer_score {
+                if let Some((_, thresholds, _)) = &self.peer_score {
                     // Opportunistic grafting works as follows: we check the median score of peers
                     // in the mesh; if this score is below the opportunisticGraftThreshold, we
                     // select a few peers at random with score over the median.
@@ -2316,7 +2348,7 @@ where
         for (topic_hash, peers) in self.fanout.iter_mut() {
             let mut to_remove_peers = Vec::new();
             let publish_threshold = match &self.peer_score {
-                Some((_, thresholds, _, _)) => thresholds.publish_threshold,
+                Some((_, thresholds, _)) => thresholds.publish_threshold,
                 _ => 0.0,
             };
             for peer_id in peers.iter() {
@@ -2408,6 +2440,17 @@ where
                 }));
         }
         self.failed_messages.shrink_to_fit();
+
+        // Flush stale IDONTWANTs.
+        for peer in self.connected_peers.values_mut() {
+            while let Some((_front, instant)) = peer.dont_send.front() {
+                if (*instant + IDONTWANT_TIMEOUT) >= Instant::now() {
+                    break;
+                } else {
+                    peer.dont_send.pop_front();
+                }
+            }
+        }
 
         tracing::debug!("Completed Heartbeat");
         if let Some(metrics) = self.metrics.as_mut() {
@@ -2564,6 +2607,49 @@ where
         }
     }
 
+    /// Helper function which sends an IDONTWANT message to mesh\[topic\] peers.
+    fn send_idontwant(
+        &mut self,
+        message: &RawMessage,
+        msg_id: &MessageId,
+        propagation_source: Option<&PeerId>,
+    ) {
+        let Some(mesh_peers) = self.mesh.get(&message.topic) else {
+            return;
+        };
+
+        let iwant_peers = self.gossip_promises.peers_for_message(msg_id);
+
+        let recipient_peers: Vec<PeerId> = mesh_peers
+            .iter()
+            .chain(iwant_peers.iter())
+            .filter(|&peer_id| {
+                Some(peer_id) != propagation_source && Some(peer_id) != message.source.as_ref()
+            })
+            .cloned()
+            .collect();
+
+        for peer_id in recipient_peers {
+            let Some(peer) = self.connected_peers.get_mut(&peer_id) else {
+                tracing::error!(peer = %peer_id,
+                    "Could not IDONTWANT, peer doesn't exist in connected peer list");
+                continue;
+            };
+
+            // Only gossipsub 1.2 peers support IDONTWANT.
+            if peer.kind != PeerKind::Gossipsubv1_2 {
+                continue;
+            }
+
+            self.send_message(
+                peer_id,
+                RpcOut::IDontWant(IDontWant {
+                    message_ids: vec![msg_id.clone()],
+                }),
+            );
+        }
+    }
+
     /// Helper function which forwards a message to mesh\[topic\] peers.
     ///
     /// Returns true if at least one peer was messaged.
@@ -2619,13 +2705,23 @@ where
         }
 
         // forward the message to peers
-        for peer in recipient_peers.iter() {
-            let event = RpcOut::Forward {
-                message: message.clone(),
-                timeout: Delay::new(self.config.forward_queue_duration()),
-            };
-            tracing::debug!(%peer, message=%msg_id, "Sending message to peer");
-            self.send_message(*peer, event);
+        for peer_id in recipient_peers.iter() {
+            if let Some(peer) = self.connected_peers.get_mut(peer_id) {
+                if peer.dont_send.contains_key(msg_id) {
+                    tracing::debug!(%peer_id, message=%msg_id, "Peer doesn't want message");
+                    continue;
+                }
+
+                tracing::debug!(%peer_id, message=%msg_id, "Sending message to peer");
+
+                self.send_message(
+                    *peer_id,
+                    RpcOut::Forward {
+                        message: message.clone(),
+                        timeout: Delay::new(self.config.forward_queue_duration()),
+                    },
+                );
+            }
         }
         tracing::debug!("Completed forwarding message");
         true
@@ -2761,14 +2857,14 @@ where
                         failed_messages.non_priority += 1;
                         failed_messages.forward += 1;
                     }
-                    RpcOut::IWant(_) | RpcOut::IHave(_) => {
+                    RpcOut::IWant(_) | RpcOut::IHave(_) | RpcOut::IDontWant(_) => {
                         failed_messages.non_priority += 1;
                     }
                     RpcOut::Graft(_)
                     | RpcOut::Prune(_)
                     | RpcOut::Subscribe(_)
                     | RpcOut::Unsubscribe(_) => {
-                        unreachable!("Channel for highpriority contorl messages is unbounded and should always be open.")
+                        unreachable!("Channel for highpriority control messages is unbounded and should always be open.")
                     }
                 }
 
@@ -2867,8 +2963,8 @@ where
                     .expect("Previously established connection to peer must be present");
                 peer.connections.remove(index);
 
-                // If there are more connections and this peer is in a mesh, inform the first connection
-                // handler.
+                // If there are more connections and this peer is in a mesh, inform the first
+                // connection handler.
                 if !peer.connections.is_empty() {
                     for topic in &peer.topics {
                         if let Some(mesh_peers) = self.mesh.get(topic) {
@@ -2921,7 +3017,7 @@ where
 
             // If metrics are enabled, register the disconnection of a peer based on its protocol.
             if let Some(metrics) = self.metrics.as_mut() {
-                metrics.peer_protocol_disconnected(connected_peer.kind.clone());
+                metrics.peer_protocol_disconnected(connected_peer.kind);
             }
 
             self.connected_peers.remove(&peer_id);
@@ -3001,6 +3097,7 @@ where
                 connections: vec![],
                 sender: Sender::new(self.config.connection_handler_queue_len()),
                 topics: Default::default(),
+                dont_send: LinkedHashMap::new(),
             });
         // Add the new connection
         connected_peer.connections.push(connection_id);
@@ -3027,6 +3124,7 @@ where
                 connections: vec![],
                 sender: Sender::new(self.config.connection_handler_queue_len()),
                 topics: Default::default(),
+                dont_send: LinkedHashMap::new(),
             });
         // Add the new connection
         connected_peer.connections.push(connection_id);
@@ -3048,7 +3146,7 @@ where
                 // We have identified the protocol this peer is using
 
                 if let Some(metrics) = self.metrics.as_mut() {
-                    metrics.peer_protocol_connected(kind.clone());
+                    metrics.peer_protocol_connected(kind);
                 }
 
                 if let PeerKind::NotSupported = kind {
@@ -3076,7 +3174,7 @@ where
             }
             HandlerEvent::MessageDropped(rpc) => {
                 // Account for this in the scoring logic
-                if let Some((peer_score, _, _, _)) = &mut self.peer_score {
+                if let Some((peer_score, _, _)) = &mut self.peer_score {
                     peer_score.failed_message_slow_peer(&propagation_source);
                 }
 
@@ -3162,7 +3260,8 @@ where
                 }
 
                 // Handle control messages
-                // group some control messages, this minimises SendEvents (code is simplified to handle each event at a time however)
+                // group some control messages, this minimises SendEvents (code is simplified to
+                // handle each event at a time however)
                 let mut ihave_msgs = vec![];
                 let mut graft_msgs = vec![];
                 let mut prune_msgs = vec![];
@@ -3183,6 +3282,24 @@ where
                             peers,
                             backoff,
                         }) => prune_msgs.push((topic_hash, peers, backoff)),
+                        ControlAction::IDontWant(IDontWant { message_ids }) => {
+                            let Some(peer) = self.connected_peers.get_mut(&propagation_source)
+                            else {
+                                tracing::error!(peer = %propagation_source,
+                                    "Could not handle IDONTWANT, peer doesn't exist in connected peer list");
+                                continue;
+                            };
+                            if let Some(metrics) = self.metrics.as_mut() {
+                                metrics.register_idontwant(message_ids.len());
+                            }
+                            for message_id in message_ids {
+                                peer.dont_send.insert(message_id, Instant::now());
+                                // Don't exceed capacity.
+                                if peer.dont_send.len() > IDONTWANT_CAP {
+                                    peer.dont_send.pop_front();
+                                }
+                            }
+                        }
                     }
                 }
                 if !ihave_msgs.is_empty() {
@@ -3208,7 +3325,7 @@ where
         }
 
         // update scores
-        if let Some((peer_score, _, delay, _)) = &mut self.peer_score {
+        if let Some((peer_score, _, delay)) = &mut self.peer_score {
             if delay.poll_unpin(cx).is_ready() {
                 peer_score.refresh_scores();
                 delay.reset(peer_score.params.decay_interval);
@@ -3335,7 +3452,7 @@ fn get_random_peers_dynamic(
         .iter()
         .filter(|(_, p)| p.topics.contains(topic_hash))
         .filter(|(peer_id, _)| f(peer_id))
-        .filter(|(_, p)| p.kind == PeerKind::Gossipsub || p.kind == PeerKind::Gossipsubv1_1)
+        .filter(|(_, p)| p.kind.is_gossipsub())
         .map(|(peer_id, _)| *peer_id)
         .collect::<Vec<PeerId>>();
 

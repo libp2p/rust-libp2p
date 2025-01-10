@@ -18,16 +18,23 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::handler::{
-    AddressChange, ConnectionEvent, ConnectionHandler, ConnectionHandlerEvent, DialUpgradeError,
-    FullyNegotiatedInbound, FullyNegotiatedOutbound, InboundUpgradeSend, ListenUpgradeError,
-    OutboundUpgradeSend, StreamUpgradeError, SubstreamProtocol,
+use std::{
+    cmp,
+    task::{Context, Poll},
 };
-use crate::upgrade::SendWrapper;
+
 use either::Either;
 use futures::{future, ready};
 use libp2p_core::upgrade::SelectUpgrade;
-use std::{cmp, task::Context, task::Poll};
+
+use crate::{
+    handler::{
+        AddressChange, ConnectionEvent, ConnectionHandler, ConnectionHandlerEvent,
+        DialUpgradeError, FullyNegotiatedInbound, FullyNegotiatedOutbound, InboundUpgradeSend,
+        ListenUpgradeError, OutboundUpgradeSend, StreamUpgradeError, SubstreamProtocol,
+    },
+    upgrade::SendWrapper,
+};
 
 /// Implementation of [`ConnectionHandler`] that combines two protocols into one.
 #[derive(Debug, Clone)]
@@ -145,6 +152,7 @@ where
     TProto1: ConnectionHandler,
     TProto2: ConnectionHandler,
 {
+    #[expect(deprecated)] // TODO: Remove when {In, Out}boundOpenInfo is fully removed.
     fn on_listen_upgrade_error(
         &mut self,
         ListenUpgradeError {
@@ -174,6 +182,7 @@ where
     }
 }
 
+#[expect(deprecated)] // TODO: Remove when {In, Out}boundOpenInfo is fully removed.
 impl<TProto1, TProto2> ConnectionHandler for ConnectionHandlerSelect<TProto1, TProto2>
 where
     TProto1: ConnectionHandler,

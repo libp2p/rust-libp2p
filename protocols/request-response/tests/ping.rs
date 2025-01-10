@@ -20,6 +20,8 @@
 
 //! Integration tests for the `Behaviour`.
 
+use std::{io, iter};
+
 use futures::prelude::*;
 use libp2p_identity::PeerId;
 use libp2p_request_response as request_response;
@@ -28,15 +30,11 @@ use libp2p_swarm::{StreamProtocol, Swarm, SwarmEvent};
 use libp2p_swarm_test::SwarmExt;
 use rand::Rng;
 use serde::{Deserialize, Serialize};
-use std::{io, iter};
-use tracing_subscriber::EnvFilter;
 
 #[async_std::test]
 #[cfg(feature = "cbor")]
 async fn is_response_outbound() {
-    let _ = tracing_subscriber::fmt()
-        .with_env_filter(EnvFilter::from_default_env())
-        .try_init();
+    libp2p_test_utils::with_default_env_filter();
     let ping = Ping("ping".to_string().into_bytes());
     let offline_peer = PeerId::random();
 
@@ -64,6 +62,7 @@ async fn is_response_outbound() {
             peer,
             request_id: req_id,
             error: _error,
+            ..
         } => {
             assert_eq!(&offline_peer, &peer);
             assert_eq!(req_id, request_id1);
@@ -115,6 +114,7 @@ async fn ping_protocol() {
                         request_response::Message::Request {
                             request, channel, ..
                         },
+                    ..
                 }) => {
                     assert_eq!(&request, &expected_ping);
                     assert_eq!(&peer, &peer2_id);
@@ -156,6 +156,7 @@ async fn ping_protocol() {
                             request_id,
                             response,
                         },
+                    ..
                 } => {
                     count += 1;
                     assert_eq!(&response, &expected_pong);
@@ -204,7 +205,8 @@ async fn emits_inbound_connection_closed_failure() {
             event = swarm1.select_next_some() => match event {
                 SwarmEvent::Behaviour(request_response::Event::Message {
                     peer,
-                    message: request_response::Message::Request { request, channel, .. }
+                    message: request_response::Message::Request { request, channel, .. },
+                    ..
                 }) => {
                     assert_eq!(&request, &ping);
                     assert_eq!(&peer, &peer2_id);
@@ -269,7 +271,8 @@ async fn emits_inbound_connection_closed_if_channel_is_dropped() {
             event = swarm1.select_next_some() => {
                 if let SwarmEvent::Behaviour(request_response::Event::Message {
                     peer,
-                    message: request_response::Message::Request { request, channel, .. }
+                    message: request_response::Message::Request { request, channel, .. },
+                    ..
                 }) = event {
                     assert_eq!(&request, &ping);
                     assert_eq!(&peer, &peer2_id);
