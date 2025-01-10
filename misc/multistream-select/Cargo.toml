@@ -23,7 +23,7 @@ async-std = { version = "1.6.2", features = ["attributes"] }
 futures_ringbuf = "0.4.0"
 quickcheck = { workspace = true }
 rw-stream-sink = { workspace = true }
-tracing-subscriber = { workspace = true, features = ["env-filter"] }
+libp2p-test-utils = { workspace = true }
 
 # Passing arguments to the docsrs builder in order to properly document cfg's.
 # More information: https://docs.rs/about/builds#cross-compiling

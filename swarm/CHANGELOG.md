@@ -12,6 +12,13 @@
 - Update default for idle-connection-timeout to 10s.
   See [PR 4967](https://github.com/libp2p/rust-libp2p/pull/4967).
 
+- Deprecate `ConnectionHandler::{InboundOpenInfo, OutboundOpenInfo}` associated type.  
+  Previously, users could tag pending sub streams with custom data and retrieve the data 
+  after the substream has been negotiated.
+  But substreams themselves are completely interchangeable, users should instead track 
+  additional data inside `ConnectionHandler` after negotiation.   
+  See [PR 5242](https://github.com/libp2p/rust-libp2p/pull/5242).
+
 ## 0.45.1
 
 - Update `libp2p-swarm-derive` to version `0.35.0`, see [PR 5545]

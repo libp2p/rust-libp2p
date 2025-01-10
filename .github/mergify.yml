@@ -1,57 +1,17 @@
-defaults:
-  actions:
-    queue:
-      method: squash
-      commit_message_template: |
-        {{ title }}
-
-        {{ body | get_section("## Description", "") }}
-
-        Pull-Request: #{{ number }}.
-
-        {{ body | get_section("## Attributions", "") }}
-
 pull_request_rules:
   - name: Ask to resolve conflict
     conditions:
       - conflict
       - -author=dependabot[bot]
       - or:
-        - -draft # Don't report conflicts on regular draft.
-        - and: # Do report conflicts on draft that are scheduled for the next major release.
-          - draft
-          - milestone~=v[0-9]\.[0-9]{2}
+          - -draft # Don't report conflicts on regular draft.
+          - and: # Do report conflicts on draft that are scheduled for the next major release.
+              - draft
+              - milestone~=v[0-9]\.[0-9]{2}
     actions:
       comment:
-        message: This pull request has merge conflicts. Could you please resolve them @{{author}}? 🙏
-
-  - name: Add to merge queue
-    conditions:
-      # All branch protection rules are implicit: https://docs.mergify.com/conditions/#about-branch-protection
-      - label=send-it
-      - base=master
-    actions:
-      queue:
-        name: default
-
-  # Adds the Pr to the batch queue, so that we can run the interop tests. See the `external_prs` queue for more info.
-  - name: Add to batch merge queue
-    conditions:
-      # All branch protection rules are implicit: https://docs.mergify.com/conditions/#about-branch-protection
-      - label=send-it-batch
-      - base=master
-    actions:
-      queue:
-        name: external_prs
-
-  - name: Add approved dependabot PRs to merge queue
-    conditions:
-      # All branch protection rules are implicit: https://docs.mergify.com/conditions/#about-branch-protection
-      - author=dependabot[bot]
-      - base=master
-    actions:
-      queue:
-        name: default
+        message: This pull request has merge conflicts. Could you please resolve them
+          @{{author}}? 🙏
 
   - name: Remove reviews on updates after PR is queued for merging
     conditions:
@@ -61,7 +21,8 @@ pull_request_rules:
       - author!=dependabot[bot]
     actions:
       dismiss_reviews:
-        message: Approvals have been dismissed because the PR was updated after the `send-it` label was applied.
+        message: Approvals have been dismissed because the PR was updated after the
+          `send-it` label was applied.
         changes_requested: false
 
   - name: Approve trivial maintainer PRs
@@ -83,11 +44,26 @@ pull_request_rules:
       review:
         type: APPROVE
 
+  - name: Add approved dependabot PRs to merge queue
+    conditions:
+      # All branch protection rules are implicit: https://docs.mergify.com/conditions/#about-branch-protection
+      - author=dependabot[bot]
+      - base=master
+    actions:
+      queue:
+
 queue_rules:
-  - name: default
-    conditions: []
-  # External PR's don't have access to secrets and variables, therefore they don't run the interop tests.
-  # using a batch queue allows to circumvent that as mergify creates it from an internal branch.
-  - name: external_prs
-    conditions: []
-    batch_size: 1
+  - name: Add to merge queue
+    queue_conditions:
+      - label=send-it
+      - base=master
+    merge_conditions: []
+    merge_method: squash
+    commit_message_template: |
+      {{ title }}
+
+      {{ body | get_section("## Description", "") }}
+
+      Pull-Request: #{{ number }}.
+
+      {{ body | get_section("## Attributions", "") }}
