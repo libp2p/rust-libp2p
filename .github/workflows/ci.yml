@@ -133,7 +133,7 @@ jobs:
             os: ubuntu-latest
           - target: "wasm32-unknown-emscripten"
             os: ubuntu-latest
-          - target: "wasm32-wasi"
+          - target: "wasm32-wasip1"
             os: ubuntu-latest
           - target: "x86_64-apple-darwin"
             os: macos-latest
