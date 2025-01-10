@@ -13,7 +13,7 @@
   See [PR 4967](https://github.com/libp2p/rust-libp2p/pull/4967).
 
 - Deprecate `ConnectionHandler::{InboundOpenInfo, OutboundOpenInfo}` associated type.  
-  Previously, users can tag pending substreams with custom data and retrieve the data 
+  Previously, users could tag pending sub streams with custom data and retrieve the data 
   after the substream has been negotiated.
   But substreams themselves are completely interchangeable, users should instead track 
   additional data inside `ConnectionHandler` after negotiation.   
