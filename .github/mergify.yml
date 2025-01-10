@@ -52,8 +52,16 @@ pull_request_rules:
     actions:
       queue:
 
+  - name: Add send-it labeled PRs to merge queue
+    conditions:
+      # All branch protection rules are implicit: https://docs.mergify.com/conditions/#about-branch-protection
+      - base=master
+      - label=send-it
+    actions:
+      queue:
+
 queue_rules:
-  - name: Add to merge queue
+  - name: default merge queue
     queue_conditions:
       - label=send-it
       - base=master
