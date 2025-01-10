@@ -1,7 +1,7 @@
-## 0.4.0-alpha.2
+## 0.4.0
 
 - Bump version of web-sys and update `__Nonexhaustive` to `__Invalid`.
-  See [PR 5569](https://github.com/libp2p/rust-libp2p/pull/5569) 
+  See [PR 5569](https://github.com/libp2p/rust-libp2p/pull/5569)
 
 ## 0.4.0-alpha
 
