@@ -22,7 +22,7 @@ use std::io;
 
 use asynchronous_codec::{FramedRead, FramedWrite};
 use futures::prelude::*;
-use libp2p_core::{multiaddr, Multiaddr, SignedEnvelope};
+use libp2p_core::{multiaddr, Multiaddr, PeerRecord, SignedEnvelope};
 use libp2p_identity as identity;
 use libp2p_identity::PublicKey;
 use libp2p_swarm::StreamProtocol;
@@ -226,16 +226,29 @@ impl TryFrom<proto::Identify> for Info {
             }
         };
 
+        let signed_peer_record = msg
+            .signedPeerRecord
+            .and_then(|b| SignedEnvelope::from_protobuf_encoding(b.as_ref()).ok());
+
+        // When signedPeerRecord contains valid addresses, ignore addresses in listenAddrs.  
+        // When signedPeerRecord is invalid or signed by others, ignore the signedPeerRecord(set to `None`).  
+        let (signed_peer_record, listen_addrs) = signed_peer_record
+            .as_ref()
+            .and_then(|envelope| PeerRecord::try_deserialize_signed_envelope(&envelope).ok())
+            .and_then(|(envelope_public_key, _, _, addresses)| {
+                (*envelope_public_key == public_key).then_some(addresses)
+            })
+            .map(|addrs| (signed_peer_record, addrs))
+            .unwrap_or_else(|| (None, parse_listen_addrs(msg.listenAddrs)));
+
         let info = Info {
             public_key,
             protocol_version: msg.protocolVersion.unwrap_or_default(),
             agent_version: msg.agentVersion.unwrap_or_default(),
-            listen_addrs: parse_listen_addrs(msg.listenAddrs),
+            listen_addrs,
             protocols: parse_protocols(msg.protocols),
             observed_addr: parse_observed_addr(msg.observedAddr).unwrap_or(Multiaddr::empty()),
-            signed_peer_record: msg
-                .signedPeerRecord
-                .and_then(|b| SignedEnvelope::from_protobuf_encoding(b.as_ref()).ok()),
+            signed_peer_record,
         };
 
         Ok(info)
