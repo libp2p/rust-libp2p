@@ -33,8 +33,11 @@ pub enum Error {
     UnknownRemotePeerId,
 
     /// The [`Connecting`] future timed out.
-    #[error("Handshake with the remote timed out.")]
+    #[error("Handshake with the remote timed out")]
     HandshakeTimedOut,
+
+    #[error("Dial operation is not allowed on a libp2p WebTransport server")]
+    DialOperationIsNotAllowed,
 }
 
 impl From<Error> for TransportError<Error> {

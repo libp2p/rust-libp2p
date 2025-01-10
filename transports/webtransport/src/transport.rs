@@ -120,7 +120,7 @@ impl Transport for GenTransport {
         _addr: Multiaddr,
         _opts: DialOpts,
     ) -> Result<Self::Dial, TransportError<Self::Error>> {
-        panic!("Dial operation is not supported!")
+        Err(TransportError::Other(Error::DialOperationIsNotAllowed))
     }
 
     fn poll(
@@ -323,10 +323,9 @@ impl Stream for Listener {
                     };
                     return Poll::Ready(Some(event));
                 }
-                // todo See Endpoint<Server>::accept() implementation
-                // It just expects that "Endpoint cannot be closed",
-                // but it's an expected behavior that quic_incoming.accept() can return None.
-                // So it's not obvious how to handle this case.
+                // todo Думаю, что нужно получать не IncomingSession, а
+                // todo Result с запросом на соединение. Тогда можно будет грамотно обработать ошибки
+                // todo и закрыть здесь листенер
                 // Poll::Ready(None) => {
                 //     self.close(Ok(()));
                 //     continue;
