@@ -21,15 +21,19 @@
 mod as_client;
 mod as_server;
 
-use crate::protocol::{AutoNatCodec, DialRequest, DialResponse, ResponseError};
-use crate::DEFAULT_PROTOCOL_NAME;
+use std::{
+    collections::{HashMap, HashSet, VecDeque},
+    iter,
+    task::{Context, Poll},
+    time::Duration,
+};
+
 use as_client::AsClient;
 pub use as_client::{OutboundProbeError, OutboundProbeEvent};
 use as_server::AsServer;
 pub use as_server::{InboundProbeError, InboundProbeEvent};
 use futures_timer::Delay;
-use instant::Instant;
-use libp2p_core::{multiaddr::Protocol, ConnectedPoint, Endpoint, Multiaddr};
+use libp2p_core::{multiaddr::Protocol, transport::PortUse, ConnectedPoint, Endpoint, Multiaddr};
 use libp2p_identity::PeerId;
 use libp2p_request_response::{
     self as request_response, InboundRequestId, OutboundRequestId, ProtocolSupport, ResponseChannel,
@@ -39,11 +43,11 @@ use libp2p_swarm::{
     ConnectionDenied, ConnectionId, ListenAddresses, NetworkBehaviour, THandler, THandlerInEvent,
     THandlerOutEvent, ToSwarm,
 };
-use std::{
-    collections::{HashMap, HashSet, VecDeque},
-    iter,
-    task::{Context, Poll},
-    time::Duration,
+use web_time::Instant;
+
+use crate::{
+    protocol::{AutoNatCodec, DialRequest, DialResponse, ResponseError},
+    DEFAULT_PROTOCOL_NAME,
 };
 
 /// Config for the [`Behaviour`].
@@ -147,17 +151,18 @@ pub enum Event {
 
 /// [`NetworkBehaviour`] for AutoNAT.
 ///
-/// The behaviour frequently runs probes to determine whether the local peer is behind NAT and/ or a firewall, or
-/// publicly reachable.
-/// In a probe, a dial-back request is sent to a peer that is randomly selected from the list of fixed servers and
-/// connected peers. Upon receiving a dial-back request, the remote tries to dial the included addresses. When a
-/// first address was successfully dialed, a status Ok will be send back together with the dialed address. If no address
-/// can be reached a dial-error is send back.
+/// The behaviour frequently runs probes to determine whether the local peer is behind NAT and/ or a
+/// firewall, or publicly reachable.
+/// In a probe, a dial-back request is sent to a peer that is randomly selected from the list of
+/// fixed servers and connected peers. Upon receiving a dial-back request, the remote tries to dial
+/// the included addresses. When a first address was successfully dialed, a status Ok will be send
+/// back together with the dialed address. If no address can be reached a dial-error is send back.
 /// Based on the received response, the sender assumes themselves to be public or private.
-/// The status is retried in a frequency of [`Config::retry_interval`] or [`Config::retry_interval`], depending on whether
-/// enough confidence in the assumed NAT status was reached or not.
-/// The confidence increases each time a probe confirms the assumed status, and decreases if a different status is reported.
-/// If the confidence is 0, the status is flipped and the Behaviour will report the new status in an `OutEvent`.
+/// The status is retried in a frequency of [`Config::retry_interval`] or
+/// [`Config::retry_interval`], depending on whether enough confidence in the assumed NAT status was
+/// reached or not. The confidence increases each time a probe confirms the assumed status, and
+/// decreases if a different status is reported. If the confidence is 0, the status is flipped and
+/// the Behaviour will report the new status in an `OutEvent`.
 pub struct Behaviour {
     // Local peer id
     local_peer_id: PeerId,
@@ -194,11 +199,12 @@ pub struct Behaviour {
     ongoing_outbound: HashMap<OutboundRequestId, ProbeId>,
 
     // Connected peers with the observed address of each connection.
-    // If the endpoint of a connection is relayed or not global (in case of Config::only_global_ips),
-    // the observed address is `None`.
+    // If the endpoint of a connection is relayed or not global (in case of
+    // Config::only_global_ips), the observed address is `None`.
     connected: HashMap<PeerId, HashMap<ConnectionId, Option<Multiaddr>>>,
 
-    // Used servers in recent outbound probes that are throttled through Config::throttle_server_period.
+    // Used servers in recent outbound probes that are throttled through
+    // Config::throttle_server_period.
     throttled_servers: Vec<(PeerId, Instant)>,
 
     // Recent probes done for clients
@@ -263,11 +269,12 @@ impl Behaviour {
     }
 
     /// Add a peer to the list over servers that may be used for probes.
-    /// These peers are used for dial-request even if they are currently not connection, in which case a connection will be
-    /// establish before sending the dial-request.
+    /// These peers are used for dial-request even if they are currently not connection, in which
+    /// case a connection will be establish before sending the dial-request.
     pub fn add_server(&mut self, peer: PeerId, address: Option<Multiaddr>) {
         self.servers.insert(peer);
         if let Some(addr) = address {
+            #[allow(deprecated)]
             self.inner.add_address(&peer, addr);
         }
     }
@@ -337,6 +344,7 @@ impl Behaviour {
             ConnectedPoint::Dialer {
                 address,
                 role_override: Endpoint::Dialer,
+                port_use: _,
             } => {
                 if let Some(event) = self.as_server().on_outbound_connection(&peer, address) {
                     self.pending_actions
@@ -346,6 +354,7 @@ impl Behaviour {
             ConnectedPoint::Dialer {
                 address: _,
                 role_override: Endpoint::Listener,
+                port_use: _,
             } => {
                 // Outgoing connection was dialed as a listener. In other words outgoing connection
                 // was dialed as part of a hole punch. `libp2p-autonat` never attempts to hole
@@ -511,9 +520,15 @@ impl NetworkBehaviour for Behaviour {
         peer: PeerId,
         addr: &Multiaddr,
         role_override: Endpoint,
+        port_use: PortUse,
     ) -> Result<THandler<Self>, ConnectionDenied> {
-        self.inner
-            .handle_established_outbound_connection(connection_id, peer, addr, role_override)
+        self.inner.handle_established_outbound_connection(
+            connection_id,
+            peer,
+            addr,
+            role_override,
+            port_use,
+        )
     }
 
     fn on_swarm_event(&mut self, event: FromSwarm) {
@@ -554,7 +569,8 @@ impl NetworkBehaviour for Behaviour {
 
 type Action = ToSwarm<<Behaviour as NetworkBehaviour>::ToSwarm, THandlerInEvent<Behaviour>>;
 
-// Trait implemented for `AsClient` and `AsServer` to handle events from the inner [`request_response::Behaviour`] Protocol.
+// Trait implemented for `AsClient` and `AsServer` to handle events from the inner
+// [`request_response::Behaviour`] Protocol.
 trait HandleInnerEvent {
     fn handle_event(
         &mut self,
@@ -661,7 +677,8 @@ impl GlobalIp for std::net::Ipv6Addr {
 
         // Variation of unstable method [`std::net::Ipv6Addr::multicast_scope`] that instead of the
         // `Ipv6MulticastScope` just returns if the scope is global or not.
-        // Equivalent to `Ipv6Addr::multicast_scope(..).map(|scope| matches!(scope, Ipv6MulticastScope::Global))`.
+        // Equivalent to `Ipv6Addr::multicast_scope(..).map(|scope| matches!(scope,
+        // Ipv6MulticastScope::Global))`.
         fn is_multicast_scope_global(addr: &std::net::Ipv6Addr) -> Option<bool> {
             match addr.segments()[0] & 0x000f {
                 14 => Some(true),         // Global multicast scope.

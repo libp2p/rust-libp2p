@@ -4,9 +4,9 @@
 Please write a summary of your changes and why you made them.
 This section will appear as the commit message after merging.
 Please craft it accordingly.
-For a quick primer on good commit mesages, check out this blog post: https://cbea.ms/git-commit/
+For a quick primer on good commit messages, check out this blog post: https://cbea.ms/git-commit/
 
-Please include any relevant issues in here, for example:
+Please include any relevant issues here, for example:
 
 Related https://github.com/libp2p/rust-libp2p/issues/ABCD.
 Fixes https://github.com/libp2p/rust-libp2p/issues/XYZ.
@@ -15,7 +15,7 @@ Fixes https://github.com/libp2p/rust-libp2p/issues/XYZ.
 ## Notes & open questions
 
 <!--
-Any notes, remarks or open questions you have to make about the PR which don't need to go into the final commit message.
+Any notes, remarks, or open questions you have to make about the PR that don't need to go into the final commit message.
 -->
 
 ## Change checklist

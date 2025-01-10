@@ -2,20 +2,14 @@
 # More documentation for the advisories section can be found here:
 # https://embarkstudios.github.io/cargo-deny/checks/advisories/cfg.html
 [advisories]
+# Version of the advisory config. See https://github.com/EmbarkStudios/cargo-deny/pull/611
+version = 2
 # The path where the advisory database is cloned/fetched into
 db-path = "~/cargo/advisory-db"
 # The url of the advisory database to use
-db-urls = [ "https://github.com/rustsec/advisory-db" ]
-# The lint level for security vulnerabilities
-vulnerability = "deny"
-# The lint level for unmaintained crates
-unmaintained = "warn"
+db-urls = ["https://github.com/rustsec/advisory-db"]
 # The lint level for crates that have been yanked from their source registry
 yanked = "warn"
-# The lint level for crates with security notices. Note that as of
-# 2019-12-17 there are no security notice advisories in
-# https://github.com/rustsec/advisory-db
-notice = "warn"
 # A list of advisory IDs to ignore. Note that ignored advisories will still
 # output a note when they are encountered.
 ignore = [
@@ -35,35 +29,23 @@ ignore = [
 # More documentation for the licenses section can be found here:
 # https://embarkstudios.github.io/cargo-deny/checks/licenses/cfg.html
 [licenses]
-# The lint level for crates which do not have a detectable license
-unlicensed = "deny"
-# List of explictly allowed licenses
+# Version of the license config. See https://github.com/EmbarkStudios/cargo-deny/pull/611
+version = 2
+# List of explicitly allowed licenses
 # See https://spdx.org/licenses/ for list of possible licenses
-# [possible values: any SPDX 3.7 short identifier (+ optional exception)].
+# [possible values: any SPDX 3.11 short identifier (+ optional exception)].
 allow = [
+    "Apache-2.0 WITH LLVM-exception",
     "Apache-2.0",
     "BSD-2-Clause",
+    "BSD-3-Clause",
+    "ISC",
     "MIT",
+    "MPL-2.0",
     "Unlicense",
+    "Unicode-3.0",
+    "Zlib",
 ]
-# List of explictly disallowed licenses
-# See https://spdx.org/licenses/ for list of possible licenses
-# [possible values: any SPDX 3.7 short identifier (+ optional exception)].
-deny = []
-# Lint level for licenses considered copyleft
-copyleft = "allow"
-# Blanket approval or denial for OSI-approved or FSF Free/Libre licenses
-# * both - The license will be approved if it is both OSI-approved *AND* FSF
-# * either - The license will be approved if it is either OSI-approved *OR* FSF
-# * osi-only - The license will be approved if is OSI-approved *AND NOT* FSF
-# * fsf-only - The license will be approved if is FSF *AND NOT* OSI-approved
-# * neither - This predicate is ignored and the default lint level is used
-allow-osi-fsf-free = "both"
-# Lint level used when no other predicates are matched
-# 1. License isn't in the allow or deny lists
-# 2. License isn't copyleft
-# 3. License isn't OSI/FSF, or allow-osi-fsf-free = "neither"
-default = "deny"
 # The confidence threshold for detecting a license from license text.
 # The higher the value, the more closely the license text must be to the
 # canonical license text of a valid SPDX license file.
@@ -76,7 +58,7 @@ exceptions = [
     # https://www.openssl.org/blog/blog/2017/03/22/license/
     # ring crate is ISC & MIT
     { allow = ["ISC", "MIT", "OpenSSL"], name = "ring" },
-    # libp2p is not re-distributing unicode tables data by itself 
+    # libp2p is not re-distributing unicode tables data by itself
     { allow = ["MIT", "Apache-2.0", "Unicode-DFS-2016"], name = "unicode-ident" },
 ]
 

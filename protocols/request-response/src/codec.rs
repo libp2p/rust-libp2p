@@ -18,9 +18,10 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
+use std::io;
+
 use async_trait::async_trait;
 use futures::prelude::*;
-use std::io;
 
 /// A `Codec` defines the request and response types
 /// for a request-response [`Behaviour`](crate::Behaviour) protocol or

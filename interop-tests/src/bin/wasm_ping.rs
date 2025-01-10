@@ -1,25 +1,26 @@
 #![allow(non_upper_case_globals)]
 
-use std::future::IntoFuture;
-use std::process::Stdio;
-use std::time::Duration;
+use std::{future::IntoFuture, process::Stdio, time::Duration};
 
 use anyhow::{bail, Context, Result};
-use axum::http::{header, Uri};
-use axum::response::{Html, IntoResponse, Response};
-use axum::routing::get;
-use axum::{extract::State, http::StatusCode, routing::post, Json, Router};
+use axum::{
+    extract::State,
+    http::{header, StatusCode, Uri},
+    response::{Html, IntoResponse, Response},
+    routing::{get, post},
+    Json, Router,
+};
+use interop_tests::{BlpopRequest, Report};
 use redis::{AsyncCommands, Client};
 use thirtyfour::prelude::*;
-use tokio::io::{AsyncBufReadExt, BufReader};
-use tokio::net::TcpListener;
-use tokio::process::Child;
-use tokio::sync::mpsc;
-use tower_http::cors::CorsLayer;
-use tower_http::trace::TraceLayer;
+use tokio::{
+    io::{AsyncBufReadExt, BufReader},
+    net::TcpListener,
+    process::Child,
+    sync::mpsc,
+};
+use tower_http::{cors::CorsLayer, trace::TraceLayer};
 use tracing_subscriber::{fmt, prelude::*, EnvFilter};
-
-use interop_tests::{BlpopRequest, Report};
 
 mod config;
 
@@ -130,6 +131,8 @@ async fn open_in_browser() -> Result<(Child, WebDriver)> {
     // run a webdriver client
     let mut caps = DesiredCapabilities::chrome();
     caps.set_headless()?;
+    caps.set_disable_dev_shm_usage()?;
+    caps.set_no_sandbox()?;
     let driver = WebDriver::new("http://localhost:45782", caps).await?;
     // go to the wasm test service
     driver.goto(format!("http://{BIND_ADDR}")).await?;
@@ -149,7 +152,7 @@ async fn redis_blpop(
         StatusCode::INTERNAL_SERVER_ERROR
     })?;
     let res = conn
-        .blpop(&request.key, request.timeout as usize)
+        .blpop(&request.key, request.timeout as f64)
         .await
         .map_err(|e| {
             tracing::warn!(

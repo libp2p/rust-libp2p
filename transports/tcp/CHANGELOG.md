@@ -1,3 +1,22 @@
+## 0.42.1
+
+- Fix the disabling of Nagle's algorithm, which requires setting `TCP_NODELAY` to _true_.
+  See [PR 5764](https://github.com/libp2p/rust-libp2p/pull/5764)
+
+## 0.42.0
+
+- Implement refactored `Transport`.
+  See [PR 4568]
+- Deprecate `port_reuse` setting, as this is now decided by the behaviour, not the transport.
+  See [PR 4568]
+
+[PR 4568]: https://github.com/libp2p/rust-libp2p/pull/4568
+
+## 0.41.1
+
+- Disable Nagle's algorithm (i.e. `TCP_NODELAY`) by default.
+  See [PR 4916](https://github.com/libp2p/rust-libp2p/pull/4916)
+
 ## 0.41.0
 
 

@@ -73,21 +73,6 @@ mod handler;
 #[cfg(feature = "json")]
 pub mod json;
 
-pub use codec::Codec;
-pub use handler::ProtocolSupport;
-
-use crate::handler::OutboundMessage;
-use futures::channel::oneshot;
-use handler::Handler;
-use libp2p_core::{ConnectedPoint, Endpoint, Multiaddr};
-use libp2p_identity::PeerId;
-use libp2p_swarm::{
-    behaviour::{AddressChange, ConnectionClosed, DialFailure, FromSwarm},
-    dial_opts::DialOpts,
-    ConnectionDenied, ConnectionHandler, ConnectionId, NetworkBehaviour, NotifyHandler, THandler,
-    THandlerInEvent, THandlerOutEvent, ToSwarm,
-};
-use smallvec::SmallVec;
 use std::{
     collections::{HashMap, HashSet, VecDeque},
     fmt, io,
@@ -95,6 +80,22 @@ use std::{
     task::{Context, Poll},
     time::Duration,
 };
+
+pub use codec::Codec;
+use futures::channel::oneshot;
+use handler::Handler;
+pub use handler::ProtocolSupport;
+use libp2p_core::{transport::PortUse, ConnectedPoint, Endpoint, Multiaddr};
+use libp2p_identity::PeerId;
+use libp2p_swarm::{
+    behaviour::{AddressChange, ConnectionClosed, DialFailure, FromSwarm},
+    dial_opts::DialOpts,
+    ConnectionDenied, ConnectionHandler, ConnectionId, NetworkBehaviour, NotifyHandler,
+    PeerAddresses, THandler, THandlerInEvent, THandlerOutEvent, ToSwarm,
+};
+use smallvec::SmallVec;
+
+use crate::handler::OutboundMessage;
 
 /// An inbound request or response.
 #[derive(Debug)]
@@ -130,6 +131,8 @@ pub enum Event<TRequest, TResponse, TChannelResponse = TResponse> {
     Message {
         /// The peer who sent the message.
         peer: PeerId,
+        /// The connection used.
+        connection_id: ConnectionId,
         /// The incoming message.
         message: Message<TRequest, TResponse, TChannelResponse>,
     },
@@ -137,6 +140,8 @@ pub enum Event<TRequest, TResponse, TChannelResponse = TResponse> {
     OutboundFailure {
         /// The peer to whom the request was sent.
         peer: PeerId,
+        /// The connection used.
+        connection_id: ConnectionId,
         /// The (local) ID of the failed request.
         request_id: OutboundRequestId,
         /// The error that occurred.
@@ -146,6 +151,8 @@ pub enum Event<TRequest, TResponse, TChannelResponse = TResponse> {
     InboundFailure {
         /// The peer from whom the request was received.
         peer: PeerId,
+        /// The connection used.
+        connection_id: ConnectionId,
         /// The ID of the failed inbound request.
         request_id: InboundRequestId,
         /// The error that occurred.
@@ -158,6 +165,8 @@ pub enum Event<TRequest, TResponse, TChannelResponse = TResponse> {
     ResponseSent {
         /// The peer to whom the response was sent.
         peer: PeerId,
+        /// The connection used.
+        connection_id: ConnectionId,
         /// The ID of the inbound request whose response was sent.
         request_id: InboundRequestId,
     },
@@ -353,11 +362,11 @@ where
     /// Pending events to return from `poll`.
     pending_events:
         VecDeque<ToSwarm<Event<TCodec::Request, TCodec::Response>, OutboundMessage<TCodec>>>,
-    /// The currently connected peers, their pending outbound and inbound responses and their known,
-    /// reachable addresses, if any.
+    /// The currently connected peers, their pending outbound and inbound responses and their
+    /// known, reachable addresses, if any.
     connected: HashMap<PeerId, SmallVec<[Connection; 2]>>,
     /// Externally managed addresses via `add_address` and `remove_address`.
-    addresses: HashMap<PeerId, HashSet<Multiaddr>>,
+    addresses: PeerAddresses,
     /// Requests that have not yet been sent and are waiting for a connection
     /// to be established.
     pending_outbound_requests: HashMap<PeerId, SmallVec<[OutboundMessage<TCodec>; 10]>>,
@@ -367,7 +376,8 @@ impl<TCodec> Behaviour<TCodec>
 where
     TCodec: Codec + Default + Clone + Send + 'static,
 {
-    /// Creates a new `Behaviour` for the given protocols and configuration, using [`Default`] to construct the codec.
+    /// Creates a new `Behaviour` for the given protocols and configuration, using [`Default`] to
+    /// construct the codec.
     pub fn new<I>(protocols: I, cfg: Config) -> Self
     where
         I: IntoIterator<Item = (TCodec::Protocol, ProtocolSupport)>,
@@ -406,7 +416,7 @@ where
             pending_events: VecDeque::new(),
             connected: HashMap::new(),
             pending_outbound_requests: HashMap::new(),
-            addresses: HashMap::new(),
+            addresses: PeerAddresses::default(),
         }
     }
 
@@ -470,20 +480,15 @@ where
     ///
     /// Returns true if the address was added, false otherwise (i.e. if the
     /// address is already in the list).
+    #[deprecated(note = "Use `Swarm::add_peer_address` instead.")]
     pub fn add_address(&mut self, peer: &PeerId, address: Multiaddr) -> bool {
-        self.addresses.entry(*peer).or_default().insert(address)
+        self.addresses.add(*peer, address)
     }
 
-    /// Removes an address of a peer previously added via `add_address`.
+    /// Removes an address of a peer previously added via [`Behaviour::add_address`].
+    #[deprecated(note = "Will be removed with the next breaking release and won't be replaced.")]
     pub fn remove_address(&mut self, peer: &PeerId, address: &Multiaddr) {
-        let mut last = false;
-        if let Some(addresses) = self.addresses.get_mut(peer) {
-            addresses.retain(|a| a != address);
-            last = addresses.is_empty();
-        }
-        if last {
-            self.addresses.remove(peer);
-        }
+        self.addresses.remove(peer, address);
     }
 
     /// Checks whether a peer is currently connected.
@@ -572,10 +577,10 @@ where
     fn remove_pending_outbound_response(
         &mut self,
         peer: &PeerId,
-        connection: ConnectionId,
+        connection_id: ConnectionId,
         request: OutboundRequestId,
     ) -> bool {
-        self.get_connection_mut(peer, connection)
+        self.get_connection_mut(peer, connection_id)
             .map(|c| c.pending_outbound_responses.remove(&request))
             .unwrap_or(false)
     }
@@ -588,10 +593,10 @@ where
     fn remove_pending_inbound_response(
         &mut self,
         peer: &PeerId,
-        connection: ConnectionId,
+        connection_id: ConnectionId,
         request: InboundRequestId,
     ) -> bool {
-        self.get_connection_mut(peer, connection)
+        self.get_connection_mut(peer, connection_id)
             .map(|c| c.pending_inbound_responses.remove(&request))
             .unwrap_or(false)
     }
@@ -601,11 +606,11 @@ where
     fn get_connection_mut(
         &mut self,
         peer: &PeerId,
-        connection: ConnectionId,
+        connection_id: ConnectionId,
     ) -> Option<&mut Connection> {
         self.connected
             .get_mut(peer)
-            .and_then(|connections| connections.iter_mut().find(|c| c.id == connection))
+            .and_then(|connections| connections.iter_mut().find(|c| c.id == connection_id))
     }
 
     fn on_address_change(
@@ -662,6 +667,7 @@ where
             self.pending_events
                 .push_back(ToSwarm::GenerateEvent(Event::InboundFailure {
                     peer: peer_id,
+                    connection_id,
                     request_id,
                     error: InboundFailure::ConnectionClosed,
                 }));
@@ -671,13 +677,21 @@ where
             self.pending_events
                 .push_back(ToSwarm::GenerateEvent(Event::OutboundFailure {
                     peer: peer_id,
+                    connection_id,
                     request_id,
                     error: OutboundFailure::ConnectionClosed,
                 }));
         }
     }
 
-    fn on_dial_failure(&mut self, DialFailure { peer_id, .. }: DialFailure) {
+    fn on_dial_failure(
+        &mut self,
+        DialFailure {
+            peer_id,
+            connection_id,
+            ..
+        }: DialFailure,
+    ) {
         if let Some(peer) = peer_id {
             // If there are pending outgoing requests when a dial failure occurs,
             // it is implied that we are not connected to the peer, since pending
@@ -690,6 +704,7 @@ where
                     self.pending_events
                         .push_back(ToSwarm::GenerateEvent(Event::OutboundFailure {
                             peer,
+                            connection_id,
                             request_id: request.request_id,
                             error: OutboundFailure::DialFailure,
                         }));
@@ -698,7 +713,8 @@ where
         }
     }
 
-    /// Preloads a new [`Handler`] with requests that are waiting to be sent to the newly connected peer.
+    /// Preloads a new [`Handler`] with requests that are
+    /// waiting to be sent to the newly connected peer.
     fn preload_new_handler(
         &mut self,
         handler: &mut Handler<TCodec>,
@@ -764,9 +780,9 @@ where
         if let Some(connections) = self.connected.get(&peer) {
             addresses.extend(connections.iter().filter_map(|c| c.remote_address.clone()))
         }
-        if let Some(more) = self.addresses.get(&peer) {
-            addresses.extend(more.iter().cloned());
-        }
+
+        let cached_addrs = self.addresses.get(&peer);
+        addresses.extend(cached_addrs);
 
         Ok(addresses)
     }
@@ -777,6 +793,7 @@ where
         peer: PeerId,
         remote_address: &Multiaddr,
         _: Endpoint,
+        _: PortUse,
     ) -> Result<THandler<Self>, ConnectionDenied> {
         let mut handler = Handler::new(
             self.inbound_protocols.clone(),
@@ -797,6 +814,7 @@ where
     }
 
     fn on_swarm_event(&mut self, event: FromSwarm) {
+        self.addresses.on_swarm_event(&event);
         match event {
             FromSwarm::ConnectionEstablished(_) => {}
             FromSwarm::ConnectionClosed(connection_closed) => {
@@ -811,7 +829,7 @@ where
     fn on_connection_handler_event(
         &mut self,
         peer: PeerId,
-        connection: ConnectionId,
+        connection_id: ConnectionId,
         event: THandlerOutEvent<Self>,
     ) {
         match event {
@@ -819,7 +837,8 @@ where
                 request_id,
                 response,
             } => {
-                let removed = self.remove_pending_outbound_response(&peer, connection, request_id);
+                let removed =
+                    self.remove_pending_outbound_response(&peer, connection_id, request_id);
                 debug_assert!(
                     removed,
                     "Expect request_id to be pending before receiving response.",
@@ -830,13 +849,17 @@ where
                     response,
                 };
                 self.pending_events
-                    .push_back(ToSwarm::GenerateEvent(Event::Message { peer, message }));
+                    .push_back(ToSwarm::GenerateEvent(Event::Message {
+                        peer,
+                        connection_id,
+                        message,
+                    }));
             }
             handler::Event::Request {
                 request_id,
                 request,
                 sender,
-            } => match self.get_connection_mut(&peer, connection) {
+            } => match self.get_connection_mut(&peer, connection_id) {
                 Some(connection) => {
                     let inserted = connection.pending_inbound_responses.insert(request_id);
                     debug_assert!(inserted, "Expect id of new request to be unknown.");
@@ -848,14 +871,19 @@ where
                         channel,
                     };
                     self.pending_events
-                        .push_back(ToSwarm::GenerateEvent(Event::Message { peer, message }));
+                        .push_back(ToSwarm::GenerateEvent(Event::Message {
+                            peer,
+                            connection_id,
+                            message,
+                        }));
                 }
                 None => {
-                    tracing::debug!("Connection ({connection}) closed after `Event::Request` ({request_id}) has been emitted.");
+                    tracing::debug!("Connection ({connection_id}) closed after `Event::Request` ({request_id}) has been emitted.");
                 }
             },
             handler::Event::ResponseSent(request_id) => {
-                let removed = self.remove_pending_inbound_response(&peer, connection, request_id);
+                let removed =
+                    self.remove_pending_inbound_response(&peer, connection_id, request_id);
                 debug_assert!(
                     removed,
                     "Expect request_id to be pending before response is sent."
@@ -864,11 +892,13 @@ where
                 self.pending_events
                     .push_back(ToSwarm::GenerateEvent(Event::ResponseSent {
                         peer,
+                        connection_id,
                         request_id,
                     }));
             }
             handler::Event::ResponseOmission(request_id) => {
-                let removed = self.remove_pending_inbound_response(&peer, connection, request_id);
+                let removed =
+                    self.remove_pending_inbound_response(&peer, connection_id, request_id);
                 debug_assert!(
                     removed,
                     "Expect request_id to be pending before response is omitted.",
@@ -877,12 +907,14 @@ where
                 self.pending_events
                     .push_back(ToSwarm::GenerateEvent(Event::InboundFailure {
                         peer,
+                        connection_id,
                         request_id,
                         error: InboundFailure::ResponseOmission,
                     }));
             }
             handler::Event::OutboundTimeout(request_id) => {
-                let removed = self.remove_pending_outbound_response(&peer, connection, request_id);
+                let removed =
+                    self.remove_pending_outbound_response(&peer, connection_id, request_id);
                 debug_assert!(
                     removed,
                     "Expect request_id to be pending before request times out."
@@ -891,12 +923,14 @@ where
                 self.pending_events
                     .push_back(ToSwarm::GenerateEvent(Event::OutboundFailure {
                         peer,
+                        connection_id,
                         request_id,
                         error: OutboundFailure::Timeout,
                     }));
             }
             handler::Event::OutboundUnsupportedProtocols(request_id) => {
-                let removed = self.remove_pending_outbound_response(&peer, connection, request_id);
+                let removed =
+                    self.remove_pending_outbound_response(&peer, connection_id, request_id);
                 debug_assert!(
                     removed,
                     "Expect request_id to be pending before failing to connect.",
@@ -905,28 +939,33 @@ where
                 self.pending_events
                     .push_back(ToSwarm::GenerateEvent(Event::OutboundFailure {
                         peer,
+                        connection_id,
                         request_id,
                         error: OutboundFailure::UnsupportedProtocols,
                     }));
             }
             handler::Event::OutboundStreamFailed { request_id, error } => {
-                let removed = self.remove_pending_outbound_response(&peer, connection, request_id);
+                let removed =
+                    self.remove_pending_outbound_response(&peer, connection_id, request_id);
                 debug_assert!(removed, "Expect request_id to be pending upon failure");
 
                 self.pending_events
                     .push_back(ToSwarm::GenerateEvent(Event::OutboundFailure {
                         peer,
+                        connection_id,
                         request_id,
                         error: OutboundFailure::Io(error),
                     }))
             }
             handler::Event::InboundTimeout(request_id) => {
-                let removed = self.remove_pending_inbound_response(&peer, connection, request_id);
+                let removed =
+                    self.remove_pending_inbound_response(&peer, connection_id, request_id);
 
                 if removed {
                     self.pending_events
                         .push_back(ToSwarm::GenerateEvent(Event::InboundFailure {
                             peer,
+                            connection_id,
                             request_id,
                             error: InboundFailure::Timeout,
                         }));
@@ -938,12 +977,14 @@ where
                 }
             }
             handler::Event::InboundStreamFailed { request_id, error } => {
-                let removed = self.remove_pending_inbound_response(&peer, connection, request_id);
+                let removed =
+                    self.remove_pending_inbound_response(&peer, connection_id, request_id);
 
                 if removed {
                     self.pending_events
                         .push_back(ToSwarm::GenerateEvent(Event::InboundFailure {
                             peer,
+                            connection_id,
                             request_id,
                             error: InboundFailure::Io(error),
                         }));

@@ -17,12 +17,11 @@
 // LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
-
-use super::{
-    Action, AutoNatCodec, Config, DialRequest, DialResponse, Event, HandleInnerEvent, ProbeId,
-    ResponseError,
+use std::{
+    collections::{HashMap, HashSet, VecDeque},
+    num::NonZeroU8,
 };
-use instant::Instant;
+
 use libp2p_core::{multiaddr::Protocol, Multiaddr};
 use libp2p_identity::PeerId;
 use libp2p_request_response::{
@@ -32,9 +31,11 @@ use libp2p_swarm::{
     dial_opts::{DialOpts, PeerCondition},
     ConnectionId, DialError, ToSwarm,
 };
-use std::{
-    collections::{HashMap, HashSet, VecDeque},
-    num::NonZeroU8,
+use web_time::Instant;
+
+use super::{
+    Action, AutoNatCodec, Config, DialRequest, DialResponse, Event, HandleInnerEvent, ProbeId,
+    ResponseError,
 };
 
 /// Inbound probe failed.
@@ -92,7 +93,7 @@ pub(crate) struct AsServer<'a> {
     >,
 }
 
-impl<'a> HandleInnerEvent for AsServer<'a> {
+impl HandleInnerEvent for AsServer<'_> {
     fn handle_event(
         &mut self,
         event: request_response::Event<DialRequest, DialResponse>,
@@ -106,8 +107,24 @@ impl<'a> HandleInnerEvent for AsServer<'a> {
                         request,
                         channel,
                     },
+                ..
             } => {
                 let probe_id = self.probe_id.next();
+                if !self.connected.contains_key(&peer) {
+                    tracing::debug!(
+                        %peer,
+                        "Reject inbound dial request from peer since it is not connected"
+                    );
+
+                    return VecDeque::from([ToSwarm::GenerateEvent(Event::InboundProbe(
+                        InboundProbeEvent::Error {
+                            probe_id,
+                            peer,
+                            error: InboundProbeError::Response(ResponseError::DialRefused),
+                        },
+                    ))]);
+                }
+
                 match self.resolve_inbound_request(peer, request) {
                     Ok(addrs) => {
                         tracing::debug!(
@@ -135,6 +152,7 @@ impl<'a> HandleInnerEvent for AsServer<'a> {
                                         NonZeroU8::new(1).expect("1 > 0"),
                                     )
                                     .addresses(addrs)
+                                    .allocate_new_port()
                                     .build(),
                             },
                         ])
@@ -166,6 +184,7 @@ impl<'a> HandleInnerEvent for AsServer<'a> {
                 peer,
                 error,
                 request_id,
+                ..
             } => {
                 tracing::debug!(
                     %peer,
@@ -193,7 +212,7 @@ impl<'a> HandleInnerEvent for AsServer<'a> {
     }
 }
 
-impl<'a> AsServer<'a> {
+impl AsServer<'_> {
     pub(crate) fn on_outbound_connection(
         &mut self,
         peer: &PeerId,
@@ -364,9 +383,9 @@ impl<'a> AsServer<'a> {
 
 #[cfg(test)]
 mod test {
-    use super::*;
-
     use std::net::Ipv4Addr;
+
+    use super::*;
 
     fn random_ip<'a>() -> Protocol<'a> {
         Protocol::Ip4(Ipv4Addr::new(

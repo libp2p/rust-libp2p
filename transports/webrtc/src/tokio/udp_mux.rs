@@ -18,6 +18,15 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
+use std::{
+    collections::{HashMap, HashSet},
+    io,
+    io::ErrorKind,
+    net::SocketAddr,
+    sync::Arc,
+    task::{Context, Poll},
+};
+
 use async_trait::async_trait;
 use futures::{
     channel::oneshot,
@@ -31,16 +40,9 @@ use stun::{
 };
 use thiserror::Error;
 use tokio::{io::ReadBuf, net::UdpSocket};
-use webrtc::ice::udp_mux::{UDPMux, UDPMuxConn, UDPMuxConnParams, UDPMuxWriter};
-use webrtc::util::{Conn, Error};
-
-use std::{
-    collections::{HashMap, HashSet},
-    io,
-    io::ErrorKind,
-    net::SocketAddr,
-    sync::Arc,
-    task::{Context, Poll},
+use webrtc::{
+    ice::udp_mux::{UDPMux, UDPMuxConn, UDPMuxConnParams, UDPMuxWriter},
+    util::{Conn, Error},
 };
 
 use crate::tokio::req_res_chan;
@@ -303,8 +305,8 @@ impl UDPMuxNewAddr {
             if let Poll::Ready(Some((ufrag, response))) =
                 self.remove_conn_command.poll_next_unpin(cx)
             {
-                // Pion's ice implementation has both `RemoveConnByFrag` and `RemoveConn`, but since `conns`
-                // is keyed on `ufrag` their implementation is equivalent.
+                // Pion's ice implementation has both `RemoveConnByFrag` and `RemoveConn`, but since
+                // `conns` is keyed on `ufrag` their implementation is equivalent.
 
                 if let Some(removed_conn) = self.conns.remove(&ufrag) {
                     for address in removed_conn.get_addresses() {
@@ -336,8 +338,9 @@ impl UDPMuxNewAddr {
                             let conn = self.address_map.get(&addr);
 
                             let conn = match conn {
-                                // If we couldn't find the connection based on source address, see if
-                                // this is a STUN message and if so if we can find the connection based on ufrag.
+                                // If we couldn't find the connection based on source address, see
+                                // if this is a STUN message and if
+                                // so if we can find the connection based on ufrag.
                                 None if is_stun_message(read.filled()) => {
                                     match self.conn_from_stun_message(read.filled(), &addr) {
                                         Some(Ok(s)) => Some(s),

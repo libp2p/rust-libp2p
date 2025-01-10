@@ -18,14 +18,23 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::handler::{
-    ConnectionEvent, ConnectionHandler, ConnectionHandlerEvent, DialUpgradeError,
-    FullyNegotiatedInbound, FullyNegotiatedOutbound, SubstreamProtocol,
+use std::{
+    error,
+    fmt::Debug,
+    task::{Context, Poll},
+    time::Duration,
 };
-use crate::upgrade::{InboundUpgradeSend, OutboundUpgradeSend};
-use crate::StreamUpgradeError;
+
 use smallvec::SmallVec;
-use std::{error, fmt::Debug, task::Context, task::Poll, time::Duration};
+
+use crate::{
+    handler::{
+        ConnectionEvent, ConnectionHandler, ConnectionHandlerEvent, DialUpgradeError,
+        FullyNegotiatedInbound, FullyNegotiatedOutbound, SubstreamProtocol,
+    },
+    upgrade::{InboundUpgradeSend, OutboundUpgradeSend},
+    StreamUpgradeError,
+};
 
 /// A [`ConnectionHandler`] that opens a new substream for each request.
 // TODO: Debug
@@ -71,7 +80,7 @@ where
     /// Returns a reference to the listen protocol configuration.
     ///
     /// > **Note**: If you modify the protocol, modifications will only applies to future inbound
-    /// >           substreams, not the ones already being negotiated.
+    /// > substreams, not the ones already being negotiated.
     pub fn listen_protocol_ref(&self) -> &SubstreamProtocol<TInbound, ()> {
         &self.listen_protocol
     }
@@ -79,7 +88,7 @@ where
     /// Returns a mutable reference to the listen protocol configuration.
     ///
     /// > **Note**: If you modify the protocol, modifications will only applies to future inbound
-    /// >           substreams, not the ones already being negotiated.
+    /// > substreams, not the ones already being negotiated.
     pub fn listen_protocol_mut(&mut self) -> &mut SubstreamProtocol<TInbound, ()> {
         &mut self.listen_protocol
     }
@@ -120,7 +129,7 @@ where
     type OutboundOpenInfo = ();
     type InboundOpenInfo = ();
 
-    fn listen_protocol(&self) -> SubstreamProtocol<Self::InboundProtocol, Self::InboundOpenInfo> {
+    fn listen_protocol(&self) -> SubstreamProtocol<Self::InboundProtocol> {
         self.listen_protocol.clone()
     }
 
@@ -131,9 +140,7 @@ where
     fn poll(
         &mut self,
         _: &mut Context<'_>,
-    ) -> Poll<
-        ConnectionHandlerEvent<Self::OutboundProtocol, Self::OutboundOpenInfo, Self::ToBehaviour>,
-    > {
+    ) -> Poll<ConnectionHandlerEvent<Self::OutboundProtocol, (), Self::ToBehaviour>> {
         if !self.events_out.is_empty() {
             return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(
                 self.events_out.remove(0),
@@ -160,12 +167,7 @@ where
 
     fn on_connection_event(
         &mut self,
-        event: ConnectionEvent<
-            Self::InboundProtocol,
-            Self::OutboundProtocol,
-            Self::InboundOpenInfo,
-            Self::OutboundOpenInfo,
-        >,
+        event: ConnectionEvent<Self::InboundProtocol, Self::OutboundProtocol>,
     ) {
         match event {
             ConnectionEvent::FullyNegotiatedInbound(FullyNegotiatedInbound {
@@ -212,16 +214,16 @@ impl Default for OneShotHandlerConfig {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use std::convert::Infallible;
 
-    use futures::executor::block_on;
-    use futures::future::poll_fn;
+    use futures::{executor::block_on, future::poll_fn};
     use libp2p_core::upgrade::DeniedUpgrade;
-    use void::Void;
+
+    use super::*;
 
     #[test]
     fn do_not_keep_idle_connection_alive() {
-        let mut handler: OneShotHandler<_, DeniedUpgrade, Void> = OneShotHandler::new(
+        let mut handler: OneShotHandler<_, DeniedUpgrade, Infallible> = OneShotHandler::new(
             SubstreamProtocol::new(DeniedUpgrade {}, ()),
             Default::default(),
         );
@@ -232,6 +234,6 @@ mod tests {
             }
         }));
 
-        assert!(matches!(handler.connection_keep_alive(), false));
+        assert!(!handler.connection_keep_alive());
     }
 }

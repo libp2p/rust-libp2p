@@ -11,7 +11,7 @@ It showcases how peers can connect, discover each other using mDNS, and engage i
 	```
 
 2. Mutual mDNS discovery may take a few seconds. When each peer does discover the other
-it will print a message like:
+   it will print a message like:
 	```sh
 	mDNS discovered a new peer: {peerId}
 	```

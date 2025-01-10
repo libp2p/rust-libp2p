@@ -1,9 +1,11 @@
-use futures::channel::oneshot;
-use futures::StreamExt;
-use libp2p_core::transport::ListenerId;
-use libp2p_core::Transport;
-use libp2p_quic as quic;
 use std::time::Duration;
+
+use futures::{channel::oneshot, StreamExt};
+use libp2p_core::{
+    transport::{DialOpts, ListenerId, PortUse},
+    Endpoint, Transport,
+};
+use libp2p_quic as quic;
 
 #[async_std::test]
 async fn close_implies_flush() {
@@ -47,7 +49,15 @@ async fn connected_peers() -> (quic::Connection, quic::Connection) {
             listener.next().await;
         }
     });
-    let dial_fut = dialer.dial(listen_address).unwrap();
+    let dial_fut = dialer
+        .dial(
+            listen_address,
+            DialOpts {
+                role: Endpoint::Dialer,
+                port_use: PortUse::Reuse,
+            },
+        )
+        .unwrap();
     async_std::task::spawn(async move {
         let connection = dial_fut.await.unwrap().1;
 

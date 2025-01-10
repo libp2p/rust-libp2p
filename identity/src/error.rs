@@ -20,8 +20,7 @@
 
 //! Errors during identity key operations.
 
-use std::error::Error;
-use std::fmt;
+use std::{error::Error, fmt};
 
 use crate::KeyType;
 

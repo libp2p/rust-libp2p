@@ -20,10 +20,9 @@
 
 //! ECDSA keys with secp256r1 curve support.
 
-use super::error::DecodingError;
-use core::cmp;
-use core::fmt;
-use core::hash;
+use core::{cmp, fmt, hash};
+use std::convert::Infallible;
+
 use p256::{
     ecdsa::{
         signature::{Signer, Verifier},
@@ -32,8 +31,9 @@ use p256::{
     EncodedPoint,
 };
 use sec1::{DecodeEcPrivateKey, EncodeEcPrivateKey};
-use void::Void;
 use zeroize::Zeroize;
+
+use super::error::DecodingError;
 
 /// An ECDSA keypair generated using `secp256r1` curve.
 #[derive(Clone)]
@@ -94,6 +94,7 @@ pub struct SecretKey(SigningKey);
 
 impl SecretKey {
     /// Generate a new random ECDSA secret key.
+    #[cfg(feature = "rand")]
     pub fn generate() -> SecretKey {
         SecretKey(SigningKey::random(&mut rand::thread_rng()))
     }
@@ -157,7 +158,8 @@ impl PublicKey {
         self.0.verify(msg, &sig).is_ok()
     }
 
-    /// Try to parse a public key from a byte buffer containing raw components of a key with or without compression.
+    /// Try to parse a public key from a byte buffer containing raw
+    /// components of a key with or without compression.
     pub fn try_from_bytes(k: &[u8]) -> Result<PublicKey, DecodingError> {
         let enc_pt = EncodedPoint::from_bytes(k)
             .map_err(|e| DecodingError::failed_to_parse("ecdsa p256 encoded point", e))?;
@@ -167,7 +169,8 @@ impl PublicKey {
             .map(PublicKey)
     }
 
-    /// Convert a public key into a byte buffer containing raw components of the key without compression.
+    /// Convert a public key into a byte buffer containing
+    /// raw components of the key without compression.
     pub fn to_bytes(&self) -> Vec<u8> {
         self.0.to_encoded_point(false).as_bytes().to_owned()
     }
@@ -181,7 +184,10 @@ impl PublicKey {
     /// Try to decode a public key from a DER encoded byte buffer as defined by SEC1 standard.
     pub fn try_decode_der(k: &[u8]) -> Result<PublicKey, DecodingError> {
         let buf = Self::del_asn1_header(k).ok_or_else(|| {
-            DecodingError::failed_to_parse::<Void, _>("ASN.1-encoded ecdsa p256 public key", None)
+            DecodingError::failed_to_parse::<Infallible, _>(
+                "ASN.1-encoded ecdsa p256 public key",
+                None,
+            )
         })?;
         Self::try_from_bytes(buf)
     }

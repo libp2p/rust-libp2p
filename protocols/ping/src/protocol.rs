@@ -18,11 +18,12 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
+use std::{io, time::Duration};
+
 use futures::prelude::*;
-use instant::Instant;
 use libp2p_swarm::StreamProtocol;
 use rand::{distributions, prelude::*};
-use std::{io, time::Duration};
+use web_time::Instant;
 
 pub const PROTOCOL_NAME: StreamProtocol = StreamProtocol::new("/ipfs/ping/1.0.0");
 
@@ -40,12 +41,10 @@ pub const PROTOCOL_NAME: StreamProtocol = StreamProtocol::new("/ipfs/ping/1.0.0"
 /// Successful pings report the round-trip time.
 ///
 /// > **Note**: The round-trip time of a ping may be subject to delays induced
-/// >           by the underlying transport, e.g. in the case of TCP there is
-/// >           Nagle's algorithm, delayed acks and similar configuration options
-/// >           which can affect latencies especially on otherwise low-volume
-/// >           connections.
-#[derive(Default, Debug, Copy, Clone)]
-pub(crate) struct Ping;
+/// > by the underlying transport, e.g. in the case of TCP there is
+/// > Nagle's algorithm, delayed acks and similar configuration options
+/// > which can affect latencies especially on otherwise low-volume
+/// > connections.
 const PING_SIZE: usize = 32;
 
 /// Sends a ping and waits for the pong.
@@ -83,17 +82,17 @@ where
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use futures::StreamExt;
     use libp2p_core::{
         multiaddr::multiaddr,
-        transport::{memory::MemoryTransport, ListenerId, Transport},
+        transport::{memory::MemoryTransport, DialOpts, ListenerId, PortUse, Transport},
+        Endpoint,
     };
-    use rand::{thread_rng, Rng};
-    use std::time::Duration;
 
-    #[test]
-    fn ping_pong() {
+    use super::*;
+
+    #[tokio::test]
+    async fn ping_pong() {
         let mem_addr = multiaddr![Memory(thread_rng().gen::<u64>())];
         let mut transport = MemoryTransport::new().boxed();
         transport.listen_on(ListenerId::next(), mem_addr).unwrap();
@@ -104,21 +103,25 @@ mod tests {
             .and_then(|ev| ev.into_new_address())
             .expect("MemoryTransport not listening on an address!");
 
-        async_std::task::spawn(async move {
+        tokio::spawn(async move {
             let transport_event = transport.next().await.unwrap();
             let (listener_upgrade, _) = transport_event.into_incoming().unwrap();
             let conn = listener_upgrade.await.unwrap();
             recv_ping(conn).await.unwrap();
         });
 
-        async_std::task::block_on(async move {
-            let c = MemoryTransport::new()
-                .dial(listener_addr)
-                .unwrap()
-                .await
-                .unwrap();
-            let (_, rtt) = send_ping(c).await.unwrap();
-            assert!(rtt > Duration::from_secs(0));
-        });
+        let c = MemoryTransport::new()
+            .dial(
+                listener_addr,
+                DialOpts {
+                    role: Endpoint::Dialer,
+                    port_use: PortUse::Reuse,
+                },
+            )
+            .unwrap()
+            .await
+            .unwrap();
+        let (_, rtt) = send_ping(c).await.unwrap();
+        assert!(rtt > Duration::from_secs(0));
     }
 }

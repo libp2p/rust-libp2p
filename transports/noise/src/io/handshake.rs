@@ -23,21 +23,23 @@
 pub(super) mod proto {
     #![allow(unreachable_pub)]
     include!("../generated/mod.rs");
-    pub use self::payload::proto::NoiseExtensions;
-    pub use self::payload::proto::NoiseHandshakePayload;
+    pub use self::payload::proto::{NoiseExtensions, NoiseHandshakePayload};
 }
 
-use super::framed::Codec;
-use crate::io::Output;
-use crate::protocol::{KeypairIdentity, PublicKey, STATIC_KEY_DOMAIN};
-use crate::Error;
+use std::{collections::HashSet, io, mem};
+
 use asynchronous_codec::Framed;
 use futures::prelude::*;
 use libp2p_identity as identity;
 use multihash::Multihash;
 use quick_protobuf::MessageWrite;
-use std::collections::HashSet;
-use std::{io, mem};
+
+use super::framed::Codec;
+use crate::{
+    io::Output,
+    protocol::{KeypairIdentity, PublicKey, STATIC_KEY_DOMAIN},
+    Error,
+};
 
 //////////////////////////////////////////////////////////////////////////////
 // Internal
@@ -73,7 +75,6 @@ where
     /// will be sent and received on the given I/O resource and using the
     /// provided session for cryptographic operations according to the chosen
     /// Noise handshake pattern.
-
     pub(crate) fn new(
         io: T,
         session: snow::HandshakeState,
@@ -107,7 +108,7 @@ where
             .id_remote_pubkey
             .ok_or_else(|| Error::AuthenticationFailed)?;
 
-        let is_valid_signature = self.dh_remote_pubkey_sig.as_ref().map_or(false, |s| {
+        let is_valid_signature = self.dh_remote_pubkey_sig.as_ref().is_some_and(|s| {
             id_pk.verify(&[STATIC_KEY_DOMAIN.as_bytes(), pubkey.as_ref()].concat(), s)
         });
 
@@ -143,12 +144,16 @@ where
     }
 }
 
-/// Maps the provided [`Framed`] from the [`snow::HandshakeState`] into the [`snow::TransportState`].
+/// Maps the provided [`Framed`] from the [`snow::HandshakeState`] into the
+/// [`snow::TransportState`].
 ///
-/// This is a bit tricky because [`Framed`] cannot just be de-composed but only into its [`FramedParts`](asynchronous_codec::FramedParts).
-/// However, we need to retain the original [`FramedParts`](asynchronous_codec::FramedParts) because they contain the active read & write buffers.
+/// This is a bit tricky because [`Framed`] cannot just be de-composed but only into its
+/// [`FramedParts`](asynchronous_codec::FramedParts). However, we need to retain the original
+/// [`FramedParts`](asynchronous_codec::FramedParts) because they contain the active read & write
+/// buffers.
 ///
-/// Those are likely **not** empty because the remote may directly write to the stream again after the noise handshake finishes.
+/// Those are likely **not** empty because the remote may directly write to the stream again after
+/// the noise handshake finishes.
 fn map_into_transport<T>(
     framed: Framed<T, Codec<snow::HandshakeState>>,
 ) -> Result<(PublicKey, Framed<T, Codec<snow::TransportState>>), Error>
@@ -248,7 +253,7 @@ where
         ..Default::default()
     };
 
-    pb.identity_sig = state.identity.signature.clone();
+    pb.identity_sig.clone_from(&state.identity.signature);
 
     // If this is the responder then send WebTransport certhashes to initiator, if any.
     if state.io.codec().is_responder() {

@@ -23,7 +23,7 @@ To run the example, follow these steps:
    cargo run --bin stream-example -- <address>
    ```
 
-3. Both terminals should now continuosly print messages. 
+3. Both terminals should now continuously print messages. 
 
 ## Conclusion
 
