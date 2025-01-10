@@ -3,7 +3,8 @@
 - Deprecate `void` crate.
   See [PR 5676](https://github.com/libp2p/rust-libp2p/pull/5676).
 
-- Allow setting Peer IDs and Multiaddrs that bypass limit check.
+- Allow setting Peer IDs and custom filter for bypassing limit check. 
+  Connections to specific peers OR matching the custom filter won't be counted toward limits.
   See [PR 5720](https://github.com/libp2p/rust-libp2p/pull/5720).
 
 ## 0.4.0
