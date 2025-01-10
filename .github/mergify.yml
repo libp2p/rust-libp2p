@@ -1,4 +1,3 @@
-
 pull_request_rules:
   - name: Ask to resolve conflict
     conditions:
@@ -45,50 +44,20 @@ pull_request_rules:
       review:
         type: APPROVE
 
-  - name: Add approved dependabot PRs to merge queue + Add to batch merge queue +
-      Add to merge queue
-    conditions: []
+  - name: Add approved dependabot PRs to merge queue
+    conditions:
+      # All branch protection rules are implicit: https://docs.mergify.com/conditions/#about-branch-protection
+      - author=dependabot[bot]
+      - base=master
     actions:
       queue:
+
 queue_rules:
-  - name: duplicated default from Add to merge queue
+  - name: Add to merge queue
     queue_conditions:
       - label=send-it
       - base=master
     merge_conditions: []
-    merge_method: squash
-    commit_message_template: |
-      {{ title }}
-
-      {{ body | get_section("## Description", "") }}
-
-      Pull-Request: #{{ number }}.
-
-      {{ body | get_section("## Attributions", "") }}
-  - name: duplicated default from Add approved dependabot PRs to merge queue
-    queue_conditions:
-      - author=dependabot[bot]
-      - base=master
-    merge_conditions: []
-    merge_method: squash
-    commit_message_template: |
-      {{ title }}
-
-      {{ body | get_section("## Description", "") }}
-
-      Pull-Request: #{{ number }}.
-
-      {{ body | get_section("## Attributions", "") }}
-  - name: default
-    conditions: []
-  # External PR's don't have access to secrets and variables, therefore they don't run the interop tests.
-  # using a batch queue allows to circumvent that as mergify creates it from an internal branch.
-  - name: external_prs
-    queue_conditions:
-      - label=send-it-batch
-      - base=master
-    merge_conditions: []
-    batch_size: 1
     merge_method: squash
     commit_message_template: |
       {{ title }}
