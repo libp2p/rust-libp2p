@@ -225,8 +225,8 @@ where
                         // The bucket is full with connected nodes. Drop the pending node.
                         return None;
                     }
-                    debug_assert!(self.first_connected_pos.map_or(true, |p| p > 0)); // (*)
-                                                                                     // The pending node will be inserted.
+                    debug_assert!(self.first_connected_pos.is_none_or(|p| p > 0)); // (*)
+                                                                                   // The pending node will be inserted.
                     let inserted = pending.node.clone();
                     // A connected pending node goes at the end of the list for
                     // the connected peers, removing the least-recently connected.
