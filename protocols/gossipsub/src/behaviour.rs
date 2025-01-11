@@ -675,9 +675,14 @@ where
                 // Gossipsub peers
                 None => {
                     tracing::debug!(topic=%topic_hash, "Topic not in the mesh");
+                    // `fanout_peers` is always non-empty if it's `Some`.
+                    let fanout_peers = self
+                        .fanout
+                        .get(&topic_hash)
+                        .filter(|peers| !peers.is_empty());
                     // If we have fanout peers add them to the map.
-                    if self.fanout.contains_key(&topic_hash) {
-                        for peer in self.fanout.get(&topic_hash).expect("Topic must exist") {
+                    if let Some(peers) = fanout_peers {
+                        for peer in peers {
                             recipient_peers.insert(*peer);
                         }
                     } else {
@@ -755,6 +760,13 @@ where
 
         if publish_failed {
             return Err(PublishError::AllQueuesFull(recipient_peers.len()));
+        }
+
+        // Broadcast IDONTWANT messages
+        if raw_message.raw_protobuf_len() > self.config.idontwant_message_size_threshold()
+            && self.config.idontwant_on_publish()
+        {
+            self.send_idontwant(&raw_message, &msg_id, raw_message.source.as_ref());
         }
 
         tracing::debug!(message=%msg_id, "Published message");
@@ -1739,8 +1751,10 @@ where
         // Calculate the message id on the transformed data.
         let msg_id = self.config.message_id(&message);
 
-        // Broadcast IDONTWANT messages.
-        self.send_idontwant(&raw_message, &msg_id, propagation_source);
+        // Broadcast IDONTWANT messages
+        if raw_message.raw_protobuf_len() > self.config.idontwant_message_size_threshold() {
+            self.send_idontwant(&raw_message, &msg_id, Some(propagation_source));
+        }
 
         // Check the validity of the message
         // Peers get penalized if this message is invalid. We don't add it to the duplicate cache
@@ -1757,6 +1771,7 @@ where
             self.mcache.observe_duplicate(&msg_id, propagation_source);
             return;
         }
+
         tracing::debug!(
             message=%msg_id,
             "Put message in duplicate_cache and resolve promises"
@@ -2597,7 +2612,7 @@ where
         &mut self,
         message: &RawMessage,
         msg_id: &MessageId,
-        propagation_source: &PeerId,
+        propagation_source: Option<&PeerId>,
     ) {
         let Some(mesh_peers) = self.mesh.get(&message.topic) else {
             return;
@@ -2608,8 +2623,8 @@ where
         let recipient_peers: Vec<PeerId> = mesh_peers
             .iter()
             .chain(iwant_peers.iter())
-            .filter(|peer_id| {
-                *peer_id != propagation_source && Some(*peer_id) != message.source.as_ref()
+            .filter(|&peer_id| {
+                Some(peer_id) != propagation_source && Some(peer_id) != message.source.as_ref()
             })
             .cloned()
             .collect();
