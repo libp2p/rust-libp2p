@@ -162,11 +162,11 @@ impl Config {
     /// Creates a new configuration for the identify [`Behaviour`] that
     /// advertises the given protocol version and public key.  
     /// Use [`new_with_keypair`](Config::new_with_keypair) for `signedPeerRecord` support.  
-    pub fn new(protocol_version: String, public_key: PublicKey) -> Self {
+    pub fn new(protocol_version: String, local_public_key: PublicKey) -> Self {
         Self {
             protocol_version,
             agent_version: format!("rust-libp2p/{}", env!("CARGO_PKG_VERSION")),
-            local_key: public_key.into(),
+            local_key: local_public_key.into(),
             interval: Duration::from_secs(5 * 60),
             push_listen_addr_updates: false,
             cache_size: 100,
@@ -178,11 +178,11 @@ impl Config {
     /// advertises the given protocol version and public key.  
     /// The private key will be used to sign [`PeerRecord`](libp2p_core::PeerRecord)
     /// for verifiable address advertisement.
-    pub fn new_with_signed_peer_record(protocol_version: String, keypair: &Keypair) -> Self {
+    pub fn new_with_signed_peer_record(protocol_version: String, local_keypair: &Keypair) -> Self {
         Self {
             protocol_version,
             agent_version: format!("rust-libp2p/{}", env!("CARGO_PKG_VERSION")),
-            local_key: keypair.into(),
+            local_key: local_keypair.into(),
             interval: Duration::from_secs(5 * 60),
             push_listen_addr_updates: false,
             cache_size: 100,
