@@ -230,11 +230,12 @@ impl TryFrom<proto::Identify> for Info {
             .signedPeerRecord
             .and_then(|b| SignedEnvelope::from_protobuf_encoding(b.as_ref()).ok());
 
-        // When signedPeerRecord contains valid addresses, ignore addresses in listenAddrs.  
-        // When signedPeerRecord is invalid or signed by others, ignore the signedPeerRecord(set to `None`).  
+        // When signedPeerRecord contains valid addresses, ignore addresses in listenAddrs.
+        // When signedPeerRecord is invalid or signed by others, ignore the signedPeerRecord(set to
+        // `None`).
         let (signed_peer_record, listen_addrs) = signed_peer_record
             .as_ref()
-            .and_then(|envelope| PeerRecord::try_deserialize_signed_envelope(&envelope).ok())
+            .and_then(|envelope| PeerRecord::try_deserialize_signed_envelope(envelope).ok())
             .and_then(|(envelope_public_key, _, _, addresses)| {
                 (*envelope_public_key == public_key).then_some(addresses)
             })
