@@ -61,9 +61,8 @@ pull_request_rules:
       queue:
 
 queue_rules:
-  - name: default merge queue
+  - name: default
     queue_conditions:
-      - label=send-it
       - base=master
     merge_conditions: []
     merge_method: squash
