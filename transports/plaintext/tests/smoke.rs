@@ -23,10 +23,13 @@ use libp2p_core::upgrade::InboundConnectionUpgrade;
 use libp2p_identity as identity;
 use libp2p_plaintext as plaintext;
 use quickcheck::QuickCheck;
+use tracing_subscriber::EnvFilter;
 
 #[test]
 fn variable_msg_length() {
-    libp2p_test_utils::with_default_env_filter();
+    let _ = tracing_subscriber::fmt()
+        .with_env_filter(EnvFilter::from_default_env())
+        .try_init();
 
     fn prop(msg: Vec<u8>) {
         let msg_to_send = msg.clone();
