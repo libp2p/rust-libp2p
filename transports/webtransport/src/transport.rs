@@ -11,14 +11,14 @@ use futures::future::BoxFuture;
 use futures::{prelude::*, ready, stream::SelectAll};
 use if_watch::tokio::IfWatcher;
 use if_watch::IfEvent;
-use wtransport::endpoint::{endpoint_side::Server, Endpoint, IncomingSession};
+use wtransport::endpoint::{endpoint_side::Server, Endpoint, SessionRequest};
 use wtransport::ServerConfig;
 
 use libp2p_core::transport::{DialOpts, ListenerId, TransportError, TransportEvent};
 use libp2p_core::{multiaddr::Protocol, Multiaddr, Transport};
 use libp2p_identity::{Keypair, PeerId};
 use socket2::{Domain, Socket, Type};
-use wtransport::config::QuicTransportConfig;
+use wtransport::error::ConnectionError;
 use crate::certificate::CertHash;
 use crate::config::Config;
 use crate::connection::Connection;
@@ -154,7 +154,7 @@ struct Listener {
     /// None if we are only listening on a single interface.
     if_watcher: Option<IfWatcher>,
     /// A future to poll new incoming connections.
-    accept: BoxFuture<'static, IncomingSession>,
+    accept: BoxFuture<'static, Result<SessionRequest, ConnectionError>>,
     /// Timeout for connection establishment on inbound connections.
     handshake_timeout: Duration,
     /// Whether the listener was closed and the stream should terminate.
@@ -180,7 +180,7 @@ impl Listener {
     ) -> Result<Self, Error> {
         let endpoint = Arc::new(endpoint);
         let c_endpoint = Arc::clone(&endpoint);
-        let accept = async move { c_endpoint.accept().await }.boxed();
+        let accept = async move { c_endpoint.accept().await.await }.boxed();
 
         let if_watcher;
         let pending_event;
@@ -306,30 +306,32 @@ impl Stream for Listener {
             }
 
             match self.accept.poll_unpin(cx) {
-                Poll::Ready(incoming_session) => {
+                Poll::Ready(Ok(session_request)) => {
+                    tracing::debug!("Got session request={:?}", session_request.path());
+
                     let endpoint = Arc::clone(&self.endpoint);
-                    self.accept = async move { endpoint.accept().await }.boxed();
+                    self.accept = async move { endpoint.accept().await.await }.boxed();
                     let local_addr =
                         socketaddr_to_multiaddr_with_hashes(&self.socket_addr(), &self.cert_hashes);
-                    let remote_addr = incoming_session.remote_address();
+
+                    let remote_addr = session_request.remote_address();
                     let send_back_addr = socketaddr_to_multiaddr(&remote_addr);
                     let noise = self.noise_config();
 
                     let event = TransportEvent::Incoming {
-                        upgrade: Connecting::new(incoming_session, noise, self.handshake_timeout),
+                        upgrade: Connecting::new(session_request, noise, self.handshake_timeout),
                         local_addr,
                         send_back_addr,
                         listener_id: self.listener_id,
                     };
                     return Poll::Ready(Some(event));
                 }
-                // todo Думаю, что нужно получать не IncomingSession, а
-                // todo Result с запросом на соединение. Тогда можно будет грамотно обработать ошибки
-                // todo и закрыть здесь листенер
-                // Poll::Ready(None) => {
-                //     self.close(Ok(()));
-                //     continue;
-                // }
+                Poll::Ready(Err(connection_error)) => {
+                    tracing::error!("Got the error {}", connection_error);
+                    self.close(Err(Error::Connection(connection_error)));
+
+                    continue;
+                }
                 Poll::Pending => {}
             };
 
