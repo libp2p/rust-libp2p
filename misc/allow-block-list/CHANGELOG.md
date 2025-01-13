@@ -1,4 +1,4 @@
-## 0.4.1
+## 0.5.0
 
 - Add getters & setters for the allowed/blocked peers.
   Return a `bool` for every "insert/remove" function, informing if a change was performed.
