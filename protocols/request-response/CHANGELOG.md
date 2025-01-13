@@ -6,6 +6,8 @@
 - Allow configurable request and response sizes for `json` and `cbor` codec.
   See [PR 5792](https://github.com/libp2p/rust-libp2p/pull/5792).
 
+- Remove async-trait for RPIT. See [PR 5812](https:/github.com/libp2p/rust-libp2p/pull/5812).
+
 ## 0.27.1
 
 - Deprecate `void` crate.

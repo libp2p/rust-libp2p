@@ -3,7 +3,8 @@
 - Add `tokio` runtime support and make `tokio` and `async-std` runtimes optional behind features.
   See [PR 5551].
   - Update default for idle-connection-timeout to 10s on `SwarmExt::new_ephemeral` methods.
-  See [PR 4967](https://github.com/libp2p/rust-libp2p/pull/4967).
+  See [PR 4967](https://github.com/libp2p/rust-libp2p/pull/4967).  
+- Remove async-trait for RPIT. See [PR 5812](https:/github.com/libp2p/rust-libp2p/pull/5812).
 
 [PR 5551]: https://github.com/libp2p/rust-libp2p/pull/5551
 

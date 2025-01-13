@@ -1,3 +1,7 @@
+## 0.43.0
+
+- Remove async-trait for RPIT. See [PR 5812](https:/github.com/libp2p/rust-libp2p/pull/5812).
+
 ## 0.42.1
 
 - Upgrade `async-std-resolver` and `hickory-resolver`.
