@@ -12,7 +12,6 @@ categories = ["network-programming", "asynchronous"]
 
 [dependencies]
 async-std-resolver = { workspace = true, features = ["system-config"], optional = true }
-async-trait = "0.1.80"
 futures = { workspace = true }
 libp2p-core = { workspace = true }
 libp2p-identity = { workspace = true }

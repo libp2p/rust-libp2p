@@ -156,7 +156,6 @@ use std::{
     task::{Context, Poll},
 };
 
-use async_trait::async_trait;
 use futures::{future::BoxFuture, prelude::*};
 pub use hickory_resolver::{
     config::{ResolverConfig, ResolverOpts},
@@ -583,34 +582,56 @@ fn invalid_data(e: impl Into<Box<dyn std::error::Error + Send + Sync>>) -> io::E
     io::Error::new(io::ErrorKind::InvalidData, e)
 }
 
-#[async_trait::async_trait]
 #[doc(hidden)]
 pub trait Resolver {
-    async fn lookup_ip(&self, name: String) -> Result<LookupIp, ResolveError>;
-    async fn ipv4_lookup(&self, name: String) -> Result<Ipv4Lookup, ResolveError>;
-    async fn ipv6_lookup(&self, name: String) -> Result<Ipv6Lookup, ResolveError>;
-    async fn txt_lookup(&self, name: String) -> Result<TxtLookup, ResolveError>;
+    fn lookup_ip(
+        &self,
+        name: String,
+    ) -> impl Send + Future<Output = Result<LookupIp, ResolveError>>;
+    fn ipv4_lookup(
+        &self,
+        name: String,
+    ) -> impl Send + Future<Output = Result<Ipv4Lookup, ResolveError>>;
+    fn ipv6_lookup(
+        &self,
+        name: String,
+    ) -> impl Send + Future<Output = Result<Ipv6Lookup, ResolveError>>;
+    fn txt_lookup(
+        &self,
+        name: String,
+    ) -> impl Send + Future<Output = Result<TxtLookup, ResolveError>>;
 }
 
-#[async_trait]
 impl<C> Resolver for hickory_resolver::Resolver<C>
 where
     C: ConnectionProvider,
 {
-    async fn lookup_ip(&self, name: String) -> Result<LookupIp, ResolveError> {
-        self.lookup_ip(name).await
+    fn lookup_ip(
+        &self,
+        name: String,
+    ) -> impl Send + Future<Output = Result<LookupIp, ResolveError>> {
+        self.lookup_ip(name)
     }
 
-    async fn ipv4_lookup(&self, name: String) -> Result<Ipv4Lookup, ResolveError> {
-        self.ipv4_lookup(name).await
+    fn ipv4_lookup(
+        &self,
+        name: String,
+    ) -> impl Send + Future<Output = Result<Ipv4Lookup, ResolveError>> {
+        self.ipv4_lookup(name)
     }
 
-    async fn ipv6_lookup(&self, name: String) -> Result<Ipv6Lookup, ResolveError> {
-        self.ipv6_lookup(name).await
+    fn ipv6_lookup(
+        &self,
+        name: String,
+    ) -> impl Send + Future<Output = Result<Ipv6Lookup, ResolveError>> {
+        self.ipv6_lookup(name)
     }
 
-    async fn txt_lookup(&self, name: String) -> Result<TxtLookup, ResolveError> {
-        self.txt_lookup(name).await
+    fn txt_lookup(
+        &self,
+        name: String,
+    ) -> impl Send + Future<Output = Result<TxtLookup, ResolveError>> {
+        self.txt_lookup(name)
     }
 }
 

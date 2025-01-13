@@ -18,9 +18,12 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use std::{fmt::Debug, future::IntoFuture, time::Duration};
+use std::{
+    fmt::Debug,
+    future::{Future, IntoFuture},
+    time::Duration,
+};
 
-use async_trait::async_trait;
 use futures::{
     future::{BoxFuture, Either},
     FutureExt, StreamExt,
@@ -34,7 +37,6 @@ use libp2p_swarm::{
 
 /// An extension trait for [`Swarm`] that makes it
 /// easier to set up a network of [`Swarm`]s for tests.
-#[async_trait]
 pub trait SwarmExt {
     type NB: NetworkBehaviour;
 
@@ -67,7 +69,7 @@ pub trait SwarmExt {
     /// By default, this iterator will not yield any addresses.
     /// To add listen addresses as external addresses, use
     /// [`ListenFuture::with_memory_addr_external`] or [`ListenFuture::with_tcp_addr_external`].
-    async fn connect<T>(&mut self, other: &mut Swarm<T>)
+    fn connect<T>(&mut self, other: &mut Swarm<T>) -> impl Send + Future<Output = ()>
     where
         T: NetworkBehaviour + Send,
         <T as NetworkBehaviour>::ToSwarm: Debug;
@@ -80,10 +82,10 @@ pub trait SwarmExt {
     ///
     /// Because we don't have access to the other [`Swarm`],
     /// we can't guarantee that it makes progress.
-    async fn dial_and_wait(&mut self, addr: Multiaddr) -> PeerId;
+    fn dial_and_wait(&mut self, addr: Multiaddr) -> impl Send + Future<Output = PeerId>;
 
     /// Wait for specified condition to return `Some`.
-    async fn wait<E, P>(&mut self, predicate: P) -> E
+    fn wait<E, P>(&mut self, predicate: P) -> impl Send + Future<Output = E>
     where
         P: Fn(SwarmEvent<<Self::NB as NetworkBehaviour>::ToSwarm>) -> Option<E>,
         P: Send;
@@ -97,14 +99,18 @@ pub trait SwarmExt {
     /// Returns the next [`SwarmEvent`] or times out after 10 seconds.
     ///
     /// If the 10s timeout does not fit your usecase, please fall back to `StreamExt::next`.
-    async fn next_swarm_event(&mut self) -> SwarmEvent<<Self::NB as NetworkBehaviour>::ToSwarm>;
+    fn next_swarm_event(
+        &mut self,
+    ) -> impl Send + Unpin + Future<Output = SwarmEvent<<Self::NB as NetworkBehaviour>::ToSwarm>>;
 
     /// Returns the next behaviour event or times out after 10 seconds.
     ///
     /// If the 10s timeout does not fit your usecase, please fall back to `StreamExt::next`.
-    async fn next_behaviour_event(&mut self) -> <Self::NB as NetworkBehaviour>::ToSwarm;
+    fn next_behaviour_event(
+        &mut self,
+    ) -> impl Send + Unpin + Future<Output = <Self::NB as NetworkBehaviour>::ToSwarm>;
 
-    async fn loop_on_next(self);
+    fn loop_on_next(self) -> impl Send + Future<Output = ()>;
 }
 
 /// Drives two [`Swarm`]s until a certain number of events are emitted.
@@ -215,7 +221,6 @@ impl<TBehaviourOutEvent> TryIntoOutput<SwarmEvent<TBehaviourOutEvent>>
     }
 }
 
-#[async_trait]
 impl<B> SwarmExt for Swarm<B>
 where
     B: NetworkBehaviour + Send,
@@ -277,55 +282,59 @@ where
         )
     }
 
-    async fn connect<T>(&mut self, other: &mut Swarm<T>)
+    fn connect<T>(&mut self, other: &mut Swarm<T>) -> impl Send + Future<Output = ()>
     where
         T: NetworkBehaviour + Send,
         <T as NetworkBehaviour>::ToSwarm: Debug,
     {
-        let external_addresses = other.external_addresses().cloned().collect();
+        async move {
+            let external_addresses = other.external_addresses().cloned().collect();
 
-        let dial_opts = DialOpts::peer_id(*other.local_peer_id())
-            .addresses(external_addresses)
-            .condition(PeerCondition::Always)
-            .build();
+            let dial_opts = DialOpts::peer_id(*other.local_peer_id())
+                .addresses(external_addresses)
+                .condition(PeerCondition::Always)
+                .build();
 
-        self.dial(dial_opts).unwrap();
+            self.dial(dial_opts).unwrap();
 
-        let mut dialer_done = false;
-        let mut listener_done = false;
+            let mut dialer_done = false;
+            let mut listener_done = false;
 
-        loop {
-            match futures::future::select(self.next_swarm_event(), other.next_swarm_event()).await {
-                Either::Left((SwarmEvent::ConnectionEstablished { .. }, _)) => {
-                    dialer_done = true;
+            loop {
+                match futures::future::select(self.next_swarm_event(), other.next_swarm_event())
+                    .await
+                {
+                    Either::Left((SwarmEvent::ConnectionEstablished { .. }, _)) => {
+                        dialer_done = true;
+                    }
+                    Either::Right((SwarmEvent::ConnectionEstablished { .. }, _)) => {
+                        listener_done = true;
+                    }
+                    Either::Left((other, _)) => {
+                        tracing::debug!(
+                            dialer=?other,
+                            "Ignoring event from dialer"
+                        );
+                    }
+                    Either::Right((other, _)) => {
+                        tracing::debug!(
+                            listener=?other,
+                            "Ignoring event from listener"
+                        );
+                    }
                 }
-                Either::Right((SwarmEvent::ConnectionEstablished { .. }, _)) => {
-                    listener_done = true;
-                }
-                Either::Left((other, _)) => {
-                    tracing::debug!(
-                        dialer=?other,
-                        "Ignoring event from dialer"
-                    );
-                }
-                Either::Right((other, _)) => {
-                    tracing::debug!(
-                        listener=?other,
-                        "Ignoring event from listener"
-                    );
-                }
-            }
 
-            if dialer_done && listener_done {
-                return;
+                if dialer_done && listener_done {
+                    return;
+                }
             }
         }
     }
 
-    async fn dial_and_wait(&mut self, addr: Multiaddr) -> PeerId {
+    fn dial_and_wait(&mut self, addr: Multiaddr) -> impl Send + Future<Output = PeerId> {
         self.dial(addr.clone()).unwrap();
 
-        self.wait(|e| match e {
+        self.wait(move |e| match e {
             SwarmEvent::ConnectionEstablished {
                 endpoint, peer_id, ..
             } => (endpoint.get_remote_address() == &addr).then_some(peer_id),
@@ -337,18 +346,19 @@ where
                 None
             }
         })
-        .await
     }
 
-    async fn wait<E, P>(&mut self, predicate: P) -> E
+    fn wait<E, P>(&mut self, predicate: P) -> impl Send + Future<Output = E>
     where
         P: Fn(SwarmEvent<<B as NetworkBehaviour>::ToSwarm>) -> Option<E>,
         P: Send,
     {
-        loop {
-            let event = self.next_swarm_event().await;
-            if let Some(e) = predicate(event) {
-                break e;
+        async move {
+            loop {
+                let event = self.next_swarm_event().await;
+                if let Some(e) = predicate(event) {
+                    break e;
+                }
             }
         }
     }
@@ -361,33 +371,44 @@ where
         }
     }
 
-    async fn next_swarm_event(&mut self) -> SwarmEvent<<Self::NB as NetworkBehaviour>::ToSwarm> {
-        match futures::future::select(
-            futures_timer::Delay::new(Duration::from_secs(10)),
-            self.select_next_some(),
-        )
-        .await
-        {
-            Either::Left(((), _)) => panic!("Swarm did not emit an event within 10s"),
-            Either::Right((event, _)) => {
+    fn next_swarm_event(
+        &mut self,
+    ) -> impl Send + Unpin + Future<Output = SwarmEvent<<Self::NB as NetworkBehaviour>::ToSwarm>>
+    {
+        Box::pin(async move {
+            match futures::future::select(
+                futures_timer::Delay::new(Duration::from_secs(10)),
+                self.select_next_some(),
+            )
+            .await
+            {
+                Either::Left(((), _)) => panic!("Swarm did not emit an event within 10s"),
+                Either::Right((event, _)) => {
+                    tracing::trace!(?event);
+
+                    event
+                }
+            }
+        })
+    }
+
+    fn next_behaviour_event(
+        &mut self,
+    ) -> impl Send + Unpin + Future<Output = <Self::NB as NetworkBehaviour>::ToSwarm> {
+        Box::pin(async move {
+            loop {
+                if let Ok(event) = self.next_swarm_event().await.try_into_behaviour_event() {
+                    return event;
+                }
+            }
+        })
+    }
+
+    fn loop_on_next(mut self) -> impl Send + Future<Output = ()> {
+        async move {
+            while let Some(event) = self.next().await {
                 tracing::trace!(?event);
-
-                event
             }
-        }
-    }
-
-    async fn next_behaviour_event(&mut self) -> <Self::NB as NetworkBehaviour>::ToSwarm {
-        loop {
-            if let Ok(event) = self.next_swarm_event().await.try_into_behaviour_event() {
-                return event;
-            }
-        }
-    }
-
-    async fn loop_on_next(mut self) {
-        while let Some(event) = self.next().await {
-            tracing::trace!(?event);
         }
     }
 }
