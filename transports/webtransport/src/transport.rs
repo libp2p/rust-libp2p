@@ -14,16 +14,16 @@ use if_watch::IfEvent;
 use wtransport::endpoint::{endpoint_side::Server, Endpoint, SessionRequest};
 use wtransport::ServerConfig;
 
-use libp2p_core::transport::{DialOpts, ListenerId, TransportError, TransportEvent};
-use libp2p_core::{multiaddr::Protocol, Multiaddr, Transport};
-use libp2p_identity::{Keypair, PeerId};
-use socket2::{Domain, Socket, Type};
-use wtransport::error::ConnectionError;
 use crate::certificate::CertHash;
 use crate::config::Config;
 use crate::connection::Connection;
 use crate::Connecting;
 use crate::Error;
+use libp2p_core::transport::{DialOpts, ListenerId, TransportError, TransportEvent};
+use libp2p_core::{multiaddr::Protocol, Multiaddr, Transport};
+use libp2p_identity::{Keypair, PeerId};
+use socket2::{Domain, Socket, Type};
+use wtransport::error::ConnectionError;
 
 pub struct GenTransport {
     config: Config,
