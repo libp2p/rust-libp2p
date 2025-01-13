@@ -49,7 +49,6 @@ pub type Behaviour<Req, Resp> = crate::Behaviour<codec::Codec<Req, Resp>>;
 mod codec {
     use std::{io, marker::PhantomData};
 
-    use async_trait::async_trait;
     use futures::prelude::*;
     use libp2p_swarm::StreamProtocol;
     use serde::{de::DeserializeOwned, Serialize};
@@ -96,7 +95,6 @@ mod codec {
         }
     }
 
-    #[async_trait]
     impl<Req, Resp> crate::Codec for Codec<Req, Resp>
     where
         Req: Send + Serialize + DeserializeOwned,
@@ -106,62 +104,78 @@ mod codec {
         type Request = Req;
         type Response = Resp;
 
-        async fn read_request<T>(&mut self, _: &Self::Protocol, io: &mut T) -> io::Result<Req>
+        fn read_request<T>(
+            &mut self,
+            _: &Self::Protocol,
+            io: &mut T,
+        ) -> impl Send + Future<Output = io::Result<Req>>
         where
             T: AsyncRead + Unpin + Send,
         {
-            let mut vec = Vec::new();
+            async move {
+                let mut vec = Vec::new();
 
-            io.take(self.request_size_maximum)
-                .read_to_end(&mut vec)
-                .await?;
+                io.take(self.request_size_maximum)
+                    .read_to_end(&mut vec)
+                    .await?;
 
-            Ok(serde_json::from_slice(vec.as_slice())?)
+                Ok(serde_json::from_slice(vec.as_slice())?)
+            }
         }
 
-        async fn read_response<T>(&mut self, _: &Self::Protocol, io: &mut T) -> io::Result<Resp>
+        fn read_response<T>(
+            &mut self,
+            _: &Self::Protocol,
+            io: &mut T,
+        ) -> impl Send + Future<Output = io::Result<Resp>>
         where
             T: AsyncRead + Unpin + Send,
         {
-            let mut vec = Vec::new();
+            async move {
+                let mut vec = Vec::new();
 
-            io.take(self.response_size_maximum)
-                .read_to_end(&mut vec)
-                .await?;
+                io.take(self.response_size_maximum)
+                    .read_to_end(&mut vec)
+                    .await?;
 
-            Ok(serde_json::from_slice(vec.as_slice())?)
+                Ok(serde_json::from_slice(vec.as_slice())?)
+            }
         }
 
-        async fn write_request<T>(
+        fn write_request<T>(
             &mut self,
             _: &Self::Protocol,
             io: &mut T,
             req: Self::Request,
-        ) -> io::Result<()>
+        ) -> impl Send + Future<Output = io::Result<()>>
         where
             T: AsyncWrite + Unpin + Send,
         {
-            let data = serde_json::to_vec(&req)?;
+            async move {
+                let data = serde_json::to_vec(&req)?;
 
-            io.write_all(data.as_ref()).await?;
+                io.write_all(data.as_ref()).await?;
 
-            Ok(())
+                Ok(())
+            }
         }
 
-        async fn write_response<T>(
+        fn write_response<T>(
             &mut self,
             _: &Self::Protocol,
             io: &mut T,
             resp: Self::Response,
-        ) -> io::Result<()>
+        ) -> impl Send + Future<Output = io::Result<()>>
         where
             T: AsyncWrite + Unpin + Send,
         {
-            let data = serde_json::to_vec(&resp)?;
+            async move {
+                let data = serde_json::to_vec(&resp)?;
 
-            io.write_all(data.as_ref()).await?;
+                io.write_all(data.as_ref()).await?;
 
-            Ok(())
+                Ok(())
+            }
         }
     }
 }

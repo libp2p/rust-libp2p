@@ -2,7 +2,6 @@ use std::{io, iter, pin::pin, time::Duration};
 
 use anyhow::{bail, Result};
 use async_std::task::sleep;
-use async_trait::async_trait;
 use futures::prelude::*;
 use libp2p_identity::PeerId;
 use libp2p_request_response as request_response;
@@ -417,106 +416,113 @@ impl TryFrom<u8> for Action {
     }
 }
 
-#[async_trait]
 impl Codec for TestCodec {
     type Protocol = StreamProtocol;
     type Request = Action;
     type Response = Action;
 
-    async fn read_request<T>(
+    fn read_request<T>(
         &mut self,
         _protocol: &Self::Protocol,
         io: &mut T,
-    ) -> io::Result<Self::Request>
+    ) -> impl Send + Future<Output = io::Result<Self::Request>>
     where
         T: AsyncRead + Unpin + Send,
     {
-        let mut buf = Vec::new();
-        io.read_to_end(&mut buf).await?;
+        async move {
+            let mut buf = Vec::new();
+            io.read_to_end(&mut buf).await?;
 
-        if buf.is_empty() {
-            return Err(io::ErrorKind::UnexpectedEof.into());
-        }
-
-        assert_eq!(buf.len(), 1);
-
-        match buf[0].try_into()? {
-            Action::FailOnReadRequest => {
-                Err(io::Error::new(io::ErrorKind::Other, "FailOnReadRequest"))
+            if buf.is_empty() {
+                return Err(io::ErrorKind::UnexpectedEof.into());
             }
-            action => Ok(action),
+
+            assert_eq!(buf.len(), 1);
+
+            match buf[0].try_into()? {
+                Action::FailOnReadRequest => {
+                    Err(io::Error::new(io::ErrorKind::Other, "FailOnReadRequest"))
+                }
+                action => Ok(action),
+            }
         }
     }
 
-    async fn read_response<T>(
+    fn read_response<T>(
         &mut self,
         _protocol: &Self::Protocol,
         io: &mut T,
-    ) -> io::Result<Self::Response>
+    ) -> impl Send + Future<Output = io::Result<Self::Response>>
     where
         T: AsyncRead + Unpin + Send,
     {
-        let mut buf = Vec::new();
-        io.read_to_end(&mut buf).await?;
+        async move {
+            let mut buf = Vec::new();
+            io.read_to_end(&mut buf).await?;
 
-        if buf.is_empty() {
-            return Err(io::ErrorKind::UnexpectedEof.into());
-        }
-
-        assert_eq!(buf.len(), 1);
-
-        match buf[0].try_into()? {
-            Action::FailOnReadResponse => {
-                Err(io::Error::new(io::ErrorKind::Other, "FailOnReadResponse"))
+            if buf.is_empty() {
+                return Err(io::ErrorKind::UnexpectedEof.into());
             }
-            Action::TimeoutOnReadResponse => loop {
-                sleep(Duration::MAX).await;
-            },
-            action => Ok(action),
+
+            assert_eq!(buf.len(), 1);
+
+            match buf[0].try_into()? {
+                Action::FailOnReadResponse => {
+                    Err(io::Error::new(io::ErrorKind::Other, "FailOnReadResponse"))
+                }
+                Action::TimeoutOnReadResponse => loop {
+                    sleep(Duration::MAX).await;
+                },
+                action => Ok(action),
+            }
         }
     }
 
-    async fn write_request<T>(
+    fn write_request<T>(
         &mut self,
         _protocol: &Self::Protocol,
         io: &mut T,
         req: Self::Request,
-    ) -> io::Result<()>
+    ) -> impl Send + Future<Output = io::Result<()>>
     where
         T: AsyncWrite + Unpin + Send,
     {
-        match req {
-            Action::FailOnWriteRequest => {
-                Err(io::Error::new(io::ErrorKind::Other, "FailOnWriteRequest"))
-            }
-            action => {
-                let bytes = [action.into()];
-                io.write_all(&bytes).await?;
-                Ok(())
+        async move {
+            match req {
+                Action::FailOnWriteRequest => {
+                    Err(io::Error::new(io::ErrorKind::Other, "FailOnWriteRequest"))
+                }
+                action => {
+                    let bytes = [action.into()];
+                    io.write_all(&bytes).await?;
+                    Ok(())
+                }
             }
         }
     }
 
-    async fn write_response<T>(
+    fn write_response<T>(
         &mut self,
         _protocol: &Self::Protocol,
         io: &mut T,
         res: Self::Response,
-    ) -> io::Result<()>
+    ) -> impl Send + Future<Output = io::Result<()>>
     where
         T: AsyncWrite + Unpin + Send,
     {
-        match res {
-            Action::FailOnWriteResponse => {
-                Err(io::Error::new(io::ErrorKind::Other, "FailOnWriteResponse"))
-            }
-            Action::TimeoutOnWriteResponse => loop {
-                sleep(Duration::MAX).await;
-            },
-            action => {
-                let bytes = [action.into()];
-                io.write_all(&bytes).await?;
-                Ok(())
+        async move {
+            match res {
+                Action::FailOnWriteResponse => {
+                    Err(io::Error::new(io::ErrorKind::Other, "FailOnWriteResponse"))
+                }
+                Action::TimeoutOnWriteResponse => loop {
+                    sleep(Duration::MAX).await;
+                },
+                action => {
+                    let bytes = [action.into()];
+                    io.write_all(&bytes).await?;
+                    Ok(())
+                }
             }
         }
     }

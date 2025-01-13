@@ -18,9 +18,8 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use std::{fmt, io};
+use std::{fmt, future::Future, io};
 
-use async_trait::async_trait;
 use asynchronous_codec::{BytesMut, Decoder, Encoder, FramedRead, FramedWrite};
 use futures::{AsyncRead, AsyncWrite, SinkExt, StreamExt};
 use libp2p_core::{peer_record, signed_envelope, PeerRecord, SignedEnvelope};
@@ -241,66 +240,77 @@ impl Decoder for Codec {
 #[derive(Clone, Default)]
 pub struct Codec {}
 
-#[async_trait]
 impl libp2p_request_response::Codec for Codec {
     type Protocol = StreamProtocol;
     type Request = Message;
     type Response = Message;
 
-    async fn read_request<T>(&mut self, _: &Self::Protocol, io: &mut T) -> io::Result<Self::Request>
-    where
-        T: AsyncRead + Unpin + Send,
-    {
-        let message = FramedRead::new(io, self.clone())
-            .next()
-            .await
-            .ok_or(io::ErrorKind::UnexpectedEof)??;
-
-        Ok(message)
-    }
-
-    async fn read_response<T>(
+    fn read_request<T>(
         &mut self,
         _: &Self::Protocol,
         io: &mut T,
-    ) -> io::Result<Self::Response>
+    ) -> impl Send + Future<Output = io::Result<Self::Request>>
     where
         T: AsyncRead + Unpin + Send,
     {
-        let message = FramedRead::new(io, self.clone())
-            .next()
-            .await
-            .ok_or(io::ErrorKind::UnexpectedEof)??;
+        async move {
+            let message = FramedRead::new(io, self.clone())
+                .next()
+                .await
+                .ok_or(io::ErrorKind::UnexpectedEof)??;
 
-        Ok(message)
+            Ok(message)
+        }
     }
 
-    async fn write_request<T>(
+    fn read_response<T>(
+        &mut self,
+        _: &Self::Protocol,
+        io: &mut T,
+    ) -> impl Send + Future<Output = io::Result<Self::Response>>
+    where
+        T: AsyncRead + Unpin + Send,
+    {
+        async move {
+            let message = FramedRead::new(io, self.clone())
+                .next()
+                .await
+                .ok_or(io::ErrorKind::UnexpectedEof)??;
+
+            Ok(message)
+        }
+    }
+
+    fn write_request<T>(
         &mut self,
         _: &Self::Protocol,
         io: &mut T,
         req: Self::Request,
-    ) -> io::Result<()>
+    ) -> impl Send + Future<Output = io::Result<()>>
     where
         T: AsyncWrite + Unpin + Send,
     {
-        FramedWrite::new(io, self.clone()).send(req).await?;
+        async move {
+            FramedWrite::new(io, self.clone()).send(req).await?;
 
-        Ok(())
+            Ok(())
+        }
     }
 
-    async fn write_response<T>(
+    fn write_response<T>(
         &mut self,
         _: &Self::Protocol,
         io: &mut T,
         res: Self::Response,
-    ) -> io::Result<()>
+    ) -> impl Send + Future<Output = io::Result<()>>
     where
         T: AsyncWrite + Unpin + Send,
     {
-        FramedWrite::new(io, self.clone()).send(res).await?;
+        async move {
+            FramedWrite::new(io, self.clone()).send(res).await?;
 
-        Ok(())
+            Ok(())
+        }
     }
 }
 

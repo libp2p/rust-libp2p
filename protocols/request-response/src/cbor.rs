@@ -47,9 +47,10 @@
 pub type Behaviour<Req, Resp> = crate::Behaviour<codec::Codec<Req, Resp>>;
 
 mod codec {
-    use std::{collections::TryReserveError, convert::Infallible, io, marker::PhantomData};
+    use std::{
+        collections::TryReserveError, convert::Infallible, future::Future, io, marker::PhantomData,
+    };
 
-    use async_trait::async_trait;
     use cbor4ii::core::error::DecodeError;
     use futures::prelude::*;
     use libp2p_swarm::StreamProtocol;
@@ -97,7 +98,6 @@ mod codec {
         }
     }
 
-    #[async_trait]
     impl<Req, Resp> crate::Codec for Codec<Req, Resp>
     where
         Req: Send + Serialize + DeserializeOwned,
@@ -107,64 +107,80 @@ mod codec {
         type Request = Req;
         type Response = Resp;
 
-        async fn read_request<T>(&mut self, _: &Self::Protocol, io: &mut T) -> io::Result<Req>
+        fn read_request<T>(
+            &mut self,
+            _: &Self::Protocol,
+            io: &mut T,
+        ) -> impl Send + Future<Output = io::Result<Req>>
         where
             T: AsyncRead + Unpin + Send,
         {
-            let mut vec = Vec::new();
+            async move {
+                let mut vec = Vec::new();
 
-            io.take(self.request_size_maximum)
-                .read_to_end(&mut vec)
-                .await?;
+                io.take(self.request_size_maximum)
+                    .read_to_end(&mut vec)
+                    .await?;
 
-            cbor4ii::serde::from_slice(vec.as_slice()).map_err(decode_into_io_error)
+                cbor4ii::serde::from_slice(vec.as_slice()).map_err(decode_into_io_error)
+            }
         }
 
-        async fn read_response<T>(&mut self, _: &Self::Protocol, io: &mut T) -> io::Result<Resp>
+        fn read_response<T>(
+            &mut self,
+            _: &Self::Protocol,
+            io: &mut T,
+        ) -> impl Send + Future<Output = io::Result<Resp>>
         where
             T: AsyncRead + Unpin + Send,
         {
-            let mut vec = Vec::new();
+            async move {
+                let mut vec = Vec::new();
 
-            io.take(self.response_size_maximum)
-                .read_to_end(&mut vec)
-                .await?;
+                io.take(self.response_size_maximum)
+                    .read_to_end(&mut vec)
+                    .await?;
 
-            cbor4ii::serde::from_slice(vec.as_slice()).map_err(decode_into_io_error)
+                cbor4ii::serde::from_slice(vec.as_slice()).map_err(decode_into_io_error)
+            }
         }
 
-        async fn write_request<T>(
+        fn write_request<T>(
             &mut self,
             _: &Self::Protocol,
             io: &mut T,
             req: Self::Request,
-        ) -> io::Result<()>
+        ) -> impl Send + Future<Output = io::Result<()>>
         where
             T: AsyncWrite + Unpin + Send,
         {
-            let data: Vec<u8> =
-                cbor4ii::serde::to_vec(Vec::new(), &req).map_err(encode_into_io_error)?;
+            async move {
+                let data: Vec<u8> =
+                    cbor4ii::serde::to_vec(Vec::new(), &req).map_err(encode_into_io_error)?;
 
-            io.write_all(data.as_ref()).await?;
+                io.write_all(data.as_ref()).await?;
 
-            Ok(())
+                Ok(())
+            }
         }
 
-        async fn write_response<T>(
+        fn write_response<T>(
             &mut self,
             _: &Self::Protocol,
             io: &mut T,
             resp: Self::Response,
-        ) -> io::Result<()>
+        ) -> impl Send + Future<Output = io::Result<()>>
         where
             T: AsyncWrite + Unpin + Send,
         {
-            let data: Vec<u8> =
-                cbor4ii::serde::to_vec(Vec::new(), &resp).map_err(encode_into_io_error)?;
+            async move {
+                let data: Vec<u8> =
+                    cbor4ii::serde::to_vec(Vec::new(), &resp).map_err(encode_into_io_error)?;
 
-            io.write_all(data.as_ref()).await?;
+                io.write_all(data.as_ref()).await?;
 
-            Ok(())
+                Ok(())
+            }
         }
     }
 

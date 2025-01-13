@@ -2718,7 +2718,6 @@ dependencies = [
 name = "libp2p-autonat"
 version = "0.13.1"
 dependencies = [
- "async-trait",
  "asynchronous-codec",
  "either",
  "futures",
@@ -2814,11 +2813,10 @@ dependencies = [
 
 [[package]]
 name = "libp2p-dns"
-version = "0.42.1"
+version = "0.43.0"
 dependencies = [
  "async-std",
  "async-std-resolver",
- "async-trait",
  "futures",
  "hickory-resolver",
  "libp2p-core",
@@ -3221,7 +3219,6 @@ dependencies = [
 name = "libp2p-rendezvous"
 version = "0.15.1"
 dependencies = [
- "async-trait",
  "asynchronous-codec",
  "bimap",
  "futures",
@@ -3247,7 +3244,6 @@ version = "0.28.0"
 dependencies = [
  "anyhow",
  "async-std",
- "async-trait",
  "cbor4ii",
  "futures",
  "futures-bounded",
@@ -3344,7 +3340,6 @@ dependencies = [
 name = "libp2p-swarm-test"
 version = "0.5.0"
 dependencies = [
- "async-trait",
  "futures",
  "futures-timer",
  "libp2p-core",

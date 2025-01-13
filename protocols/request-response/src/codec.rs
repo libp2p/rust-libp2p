@@ -20,13 +20,11 @@
 
 use std::io;
 
-use async_trait::async_trait;
 use futures::prelude::*;
 
 /// A `Codec` defines the request and response types
 /// for a request-response [`Behaviour`](crate::Behaviour) protocol or
 /// protocol family and how they are encoded / decoded on an I/O stream.
-#[async_trait]
 pub trait Codec {
     /// The type of protocol(s) or protocol versions being negotiated.
     type Protocol: AsRef<str> + Send + Clone;
@@ -37,43 +35,43 @@ pub trait Codec {
 
     /// Reads a request from the given I/O stream according to the
     /// negotiated protocol.
-    async fn read_request<T>(
+    fn read_request<T>(
         &mut self,
         protocol: &Self::Protocol,
         io: &mut T,
-    ) -> io::Result<Self::Request>
+    ) -> impl Send + Future<Output = io::Result<Self::Request>>
     where
         T: AsyncRead + Unpin + Send;
 
     /// Reads a response from the given I/O stream according to the
     /// negotiated protocol.
-    async fn read_response<T>(
+    fn read_response<T>(
         &mut self,
         protocol: &Self::Protocol,
         io: &mut T,
-    ) -> io::Result<Self::Response>
+    ) -> impl Send + Future<Output = io::Result<Self::Response>>
     where
         T: AsyncRead + Unpin + Send;
 
     /// Writes a request to the given I/O stream according to the
     /// negotiated protocol.
-    async fn write_request<T>(
+    fn write_request<T>(
         &mut self,
         protocol: &Self::Protocol,
         io: &mut T,
         req: Self::Request,
-    ) -> io::Result<()>
+    ) -> impl Send + Future<Output = io::Result<()>>
     where
         T: AsyncWrite + Unpin + Send;
 
     /// Writes a response to the given I/O stream according to the
     /// negotiated protocol.
-    async fn write_response<T>(
+    fn write_response<T>(
         &mut self,
         protocol: &Self::Protocol,
         io: &mut T,
         res: Self::Response,
-    ) -> io::Result<()>
+    ) -> impl Send + Future<Output = io::Result<()>>
     where
         T: AsyncWrite + Unpin + Send;
 }

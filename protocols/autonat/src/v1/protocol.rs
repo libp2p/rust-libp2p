@@ -18,9 +18,8 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use std::io;
+use std::{future::Future, io};
 
-use async_trait::async_trait;
 use asynchronous_codec::{FramedRead, FramedWrite};
 use futures::{
     io::{AsyncRead, AsyncWrite},
@@ -39,72 +38,83 @@ pub const DEFAULT_PROTOCOL_NAME: StreamProtocol = StreamProtocol::new("/libp2p/a
 #[derive(Clone)]
 pub struct AutoNatCodec;
 
-#[async_trait]
 impl request_response::Codec for AutoNatCodec {
     type Protocol = StreamProtocol;
     type Request = DialRequest;
     type Response = DialResponse;
 
-    async fn read_request<T>(&mut self, _: &StreamProtocol, io: &mut T) -> io::Result<Self::Request>
-    where
-        T: AsyncRead + Send + Unpin,
-    {
-        let message = FramedRead::new(io, codec())
-            .next()
-            .await
-            .ok_or(io::ErrorKind::UnexpectedEof)??;
-        let request = DialRequest::from_proto(message)?;
-
-        Ok(request)
-    }
-
-    async fn read_response<T>(
+    fn read_request<T>(
         &mut self,
         _: &StreamProtocol,
         io: &mut T,
-    ) -> io::Result<Self::Response>
+    ) -> impl Send + Future<Output = io::Result<Self::Request>>
     where
         T: AsyncRead + Send + Unpin,
     {
-        let message = FramedRead::new(io, codec())
-            .next()
-            .await
-            .ok_or(io::ErrorKind::UnexpectedEof)??;
-        let response = DialResponse::from_proto(message)?;
+        async move {
+            let message = FramedRead::new(io, codec())
+                .next()
+                .await
+                .ok_or(io::ErrorKind::UnexpectedEof)??;
+            let request = DialRequest::from_proto(message)?;
 
-        Ok(response)
+            Ok(request)
+        }
     }
 
-    async fn write_request<T>(
+    fn read_response<T>(
+        &mut self,
+        _: &StreamProtocol,
+        io: &mut T,
+    ) -> impl Send + Future<Output = io::Result<Self::Response>>
+    where
+        T: AsyncRead + Send + Unpin,
+    {
+        async move {
+            let message = FramedRead::new(io, codec())
+                .next()
+                .await
+                .ok_or(io::ErrorKind::UnexpectedEof)??;
+            let response = DialResponse::from_proto(message)?;
+
+            Ok(response)
+        }
+    }
+
+    fn write_request<T>(
         &mut self,
         _: &StreamProtocol,
         io: &mut T,
         data: Self::Request,
-    ) -> io::Result<()>
+    ) -> impl Send + Future<Output = io::Result<()>>
     where
         T: AsyncWrite + Send + Unpin,
     {
-        let mut framed = FramedWrite::new(io, codec());
-        framed.send(data.into_proto()).await?;
-        framed.close().await?;
+        async move {
+            let mut framed = FramedWrite::new(io, codec());
+            framed.send(data.into_proto()).await?;
+            framed.close().await?;
 
-        Ok(())
+            Ok(())
+        }
     }
 
-    async fn write_response<T>(
+    fn write_response<T>(
         &mut self,
         _: &StreamProtocol,
         io: &mut T,
         data: Self::Response,
-    ) -> io::Result<()>
+    ) -> impl Send + Future<Output = io::Result<()>>
     where
         T: AsyncWrite + Send + Unpin,
     {
-        let mut framed = FramedWrite::new(io, codec());
-        framed.send(data.into_proto()).await?;
-        framed.close().await?;
+        async move {
+            let mut framed = FramedWrite::new(io, codec());
+            framed.send(data.into_proto()).await?;
+            framed.close().await?;
 
-        Ok(())
+            Ok(())
+        }
     }
 }
 
