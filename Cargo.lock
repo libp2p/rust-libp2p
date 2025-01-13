@@ -3563,6 +3563,7 @@ dependencies = [
  "libp2p-core",
  "libp2p-identity",
  "libp2p-noise",
+ "libp2p-test-utils",
  "libp2p-tls",
  "quickcheck",
  "quinn",
@@ -3573,7 +3574,6 @@ dependencies = [
  "time",
  "tokio",
  "tracing",
- "tracing-subscriber",
  "wtransport",
 ]
 

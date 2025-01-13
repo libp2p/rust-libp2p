@@ -1,12 +1,18 @@
-use quinn::{TransportConfig, VarInt};
-use std::sync::Arc;
 use std::time::Duration;
-use wtransport::config::TlsServerConfig;
+
+use quinn::{MtuDiscoveryConfig, VarInt};
+use wtransport::config::{QuicTransportConfig, TlsServerConfig};
 
 use crate::certificate::{CertHash, Certificate};
 
 pub struct Config {
-    pub quic_transport_config: Arc<TransportConfig>,
+    max_idle_timeout: u32,
+    max_concurrent_stream_limit: u32,
+    keep_alive_interval: Duration,
+    max_connection_data: u32,
+    max_stream_data: u32,
+    mtu_discovery_config: MtuDiscoveryConfig,
+
     /// Timeout for the initial handshake when establishing a connection.
     /// The actual timeout is the minimum of this and the [`Config::max_idle_timeout`].
     pub handshake_timeout: Duration,
@@ -24,24 +30,15 @@ impl Config {
         let max_connection_data = 15_000_000;
         // Ensure that one stream is not consuming the whole connection.
         let max_stream_data = 10_000_000;
-        let mtu_discovery_config = Some(Default::default());
-
-        let mut transport = quinn::TransportConfig::default();
-        // Disable uni-directional streams.
-        transport.max_concurrent_uni_streams(0u32.into());
-        transport.max_concurrent_bidi_streams(max_concurrent_stream_limit.into());
-        // Disable datagrams.
-        transport.datagram_receive_buffer_size(None);
-        transport.keep_alive_interval(Some(keep_alive_interval));
-        transport.max_idle_timeout(Some(VarInt::from_u32(max_idle_timeout).into()));
-        transport.allow_spin(false);
-        transport.stream_receive_window(max_stream_data.into());
-        transport.receive_window(max_connection_data.into());
-        transport.mtu_discovery_config(mtu_discovery_config);
-        let transport = Arc::new(transport);
+        let mtu_discovery_config = Default::default();
 
         Self {
-            quic_transport_config: transport,
+            max_idle_timeout,
+            max_concurrent_stream_limit,
+            keep_alive_interval,
+            max_connection_data,
+            max_stream_data,
+            mtu_discovery_config,
             handshake_timeout: Duration::from_secs(5),
             keypair: keypair.clone(),
             cert,
@@ -54,6 +51,23 @@ impl Config {
             &self.cert.private_key_der,
             alpn_protocols(),
         )
+    }
+
+    pub fn get_quic_transport_config(&self) -> QuicTransportConfig {
+        let mut res = QuicTransportConfig::default();
+        // Disable uni-directional streams.
+        res.max_concurrent_uni_streams(0u32.into());
+        res.max_concurrent_bidi_streams(self.max_concurrent_stream_limit.into());
+        // Disable datagrams.
+        res.datagram_receive_buffer_size(None);
+        res.keep_alive_interval(Some(self.keep_alive_interval.clone()));
+        res.max_idle_timeout(Some(VarInt::from_u32(self.max_idle_timeout).into()));
+        res.allow_spin(false);
+        res.stream_receive_window(self.max_stream_data.into());
+        res.receive_window(self.max_connection_data.into());
+        res.mtu_discovery_config(Some(self.mtu_discovery_config.clone()));
+
+        res
     }
 
     pub fn cert_hashes(&self) -> Vec<CertHash> {

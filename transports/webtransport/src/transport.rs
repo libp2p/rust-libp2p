@@ -18,7 +18,7 @@ use libp2p_core::transport::{DialOpts, ListenerId, TransportError, TransportEven
 use libp2p_core::{multiaddr::Protocol, Multiaddr, Transport};
 use libp2p_identity::{Keypair, PeerId};
 use socket2::{Domain, Socket, Type};
-
+use wtransport::config::QuicTransportConfig;
 use crate::certificate::CertHash;
 use crate::config::Config;
 use crate::connection::Connection;
@@ -74,7 +74,7 @@ impl Transport for GenTransport {
         let socket = create_socket(socket_addr).map_err(Self::Error::from)?;
 
         let server_tls_config = self.config.server_tls_config();
-        let quic_transport_config = Arc::clone(&self.config.quic_transport_config);
+        let quic_transport_config = self.config.get_quic_transport_config();
 
         let config = ServerConfig::builder()
             .with_bind_socket(socket.try_clone().unwrap())
