@@ -2730,7 +2730,6 @@ dependencies = [
  "libp2p-request-response",
  "libp2p-swarm",
  "libp2p-swarm-test",
- "libp2p-test-utils",
  "quick-protobuf",
  "quick-protobuf-codec",
  "rand 0.8.5",
@@ -2738,6 +2737,7 @@ dependencies = [
  "thiserror 2.0.9",
  "tokio",
  "tracing",
+ "tracing-subscriber",
  "web-time 1.1.0",
 ]
 
@@ -2801,7 +2801,6 @@ dependencies = [
  "libp2p-swarm",
  "libp2p-swarm-test",
  "libp2p-tcp",
- "libp2p-test-utils",
  "libp2p-yamux",
  "lru",
  "quick-protobuf",
@@ -2809,6 +2808,7 @@ dependencies = [
  "thiserror 2.0.9",
  "tokio",
  "tracing",
+ "tracing-subscriber",
  "web-time 1.1.0",
 ]
 
@@ -2823,11 +2823,11 @@ dependencies = [
  "hickory-resolver",
  "libp2p-core",
  "libp2p-identity",
- "libp2p-test-utils",
  "parking_lot",
  "smallvec",
  "tokio",
  "tracing",
+ "tracing-subscriber",
 ]
 
 [[package]]
@@ -2870,7 +2870,6 @@ dependencies = [
  "libp2p-identity",
  "libp2p-swarm",
  "libp2p-swarm-test",
- "libp2p-test-utils",
  "prometheus-client",
  "quick-protobuf",
  "quick-protobuf-codec",
@@ -2881,6 +2880,7 @@ dependencies = [
  "sha2 0.10.8",
  "tokio",
  "tracing",
+ "tracing-subscriber",
  "web-time 1.1.0",
 ]
 
@@ -2898,12 +2898,12 @@ dependencies = [
  "libp2p-identity",
  "libp2p-swarm",
  "libp2p-swarm-test",
- "libp2p-test-utils",
  "quick-protobuf",
  "quick-protobuf-codec",
  "smallvec",
  "thiserror 2.0.9",
  "tracing",
+ "tracing-subscriber",
 ]
 
 [[package]]
@@ -2951,7 +2951,6 @@ dependencies = [
  "libp2p-noise",
  "libp2p-swarm",
  "libp2p-swarm-test",
- "libp2p-test-utils",
  "libp2p-yamux",
  "quick-protobuf",
  "quick-protobuf-codec",
@@ -2962,6 +2961,7 @@ dependencies = [
  "smallvec",
  "thiserror 2.0.9",
  "tracing",
+ "tracing-subscriber",
  "uint",
  "web-time 1.1.0",
 ]
@@ -2979,12 +2979,12 @@ dependencies = [
  "libp2p-identity",
  "libp2p-swarm",
  "libp2p-swarm-test",
- "libp2p-test-utils",
  "rand 0.8.5",
  "smallvec",
  "socket2",
  "tokio",
  "tracing",
+ "tracing-subscriber",
 ]
 
 [[package]]
@@ -3035,13 +3035,13 @@ dependencies = [
  "libp2p-muxer-test-harness",
  "libp2p-plaintext",
  "libp2p-tcp",
- "libp2p-test-utils",
  "nohash-hasher",
  "parking_lot",
  "quickcheck-ext",
  "rand 0.8.5",
  "smallvec",
  "tracing",
+ "tracing-subscriber",
  "unsigned-varint",
 ]
 
@@ -3066,7 +3066,6 @@ dependencies = [
  "futures_ringbuf",
  "libp2p-core",
  "libp2p-identity",
- "libp2p-test-utils",
  "multiaddr",
  "multihash",
  "once_cell",
@@ -3077,6 +3076,7 @@ dependencies = [
  "static_assertions",
  "thiserror 2.0.9",
  "tracing",
+ "tracing-subscriber",
  "x25519-dalek",
  "zeroize",
 ]
@@ -3096,7 +3096,6 @@ dependencies = [
  "libp2p-swarm",
  "libp2p-swarm-test",
  "libp2p-tcp",
- "libp2p-test-utils",
  "libp2p-tls",
  "libp2p-yamux",
  "serde",
@@ -3135,11 +3134,11 @@ dependencies = [
  "futures_ringbuf",
  "libp2p-core",
  "libp2p-identity",
- "libp2p-test-utils",
  "quick-protobuf",
  "quick-protobuf-codec",
  "quickcheck-ext",
  "tracing",
+ "tracing-subscriber",
 ]
 
 [[package]]
@@ -3176,7 +3175,6 @@ dependencies = [
  "libp2p-muxer-test-harness",
  "libp2p-noise",
  "libp2p-tcp",
- "libp2p-test-utils",
  "libp2p-tls",
  "libp2p-yamux",
  "quickcheck",
@@ -3188,6 +3186,7 @@ dependencies = [
  "thiserror 2.0.9",
  "tokio",
  "tracing",
+ "tracing-subscriber",
 ]
 
 [[package]]
@@ -3206,7 +3205,6 @@ dependencies = [
  "libp2p-plaintext",
  "libp2p-swarm",
  "libp2p-swarm-test",
- "libp2p-test-utils",
  "libp2p-yamux",
  "quick-protobuf",
  "quick-protobuf-codec",
@@ -3215,6 +3213,7 @@ dependencies = [
  "static_assertions",
  "thiserror 2.0.9",
  "tracing",
+ "tracing-subscriber",
  "web-time 1.1.0",
 ]
 
@@ -3232,13 +3231,13 @@ dependencies = [
  "libp2p-request-response",
  "libp2p-swarm",
  "libp2p-swarm-test",
- "libp2p-test-utils",
  "quick-protobuf",
  "quick-protobuf-codec",
  "rand 0.8.5",
  "thiserror 2.0.9",
  "tokio",
  "tracing",
+ "tracing-subscriber",
  "web-time 1.1.0",
 ]
 
@@ -3257,12 +3256,12 @@ dependencies = [
  "libp2p-identity",
  "libp2p-swarm",
  "libp2p-swarm-test",
- "libp2p-test-utils",
  "rand 0.8.5",
  "serde",
  "serde_json",
  "smallvec",
  "tracing",
+ "tracing-subscriber",
 ]
 
 [[package]]
@@ -3292,10 +3291,10 @@ dependencies = [
  "libp2p-identity",
  "libp2p-swarm",
  "libp2p-swarm-test",
- "libp2p-test-utils",
  "rand 0.8.5",
  "tokio",
  "tracing",
+ "tracing-subscriber",
 ]
 
 [[package]]
@@ -3317,7 +3316,6 @@ dependencies = [
  "libp2p-plaintext",
  "libp2p-swarm-derive",
  "libp2p-swarm-test",
- "libp2p-test-utils",
  "libp2p-yamux",
  "lru",
  "multistream-select",
@@ -3327,6 +3325,7 @@ dependencies = [
  "smallvec",
  "tokio",
  "tracing",
+ "tracing-subscriber",
  "trybuild",
  "wasm-bindgen-futures",
  "web-time 1.1.0",
@@ -3368,16 +3367,9 @@ dependencies = [
  "if-watch",
  "libc",
  "libp2p-core",
- "libp2p-test-utils",
  "socket2",
  "tokio",
  "tracing",
-]
-
-[[package]]
-name = "libp2p-test-utils"
-version = "0.1.0"
-dependencies = [
  "tracing-subscriber",
 ]
 
@@ -3439,7 +3431,6 @@ dependencies = [
  "libp2p-core",
  "libp2p-identity",
  "libp2p-noise",
- "libp2p-test-utils",
  "libp2p-webrtc-utils",
  "multihash",
  "quickcheck",
@@ -3450,6 +3441,7 @@ dependencies = [
  "tokio",
  "tokio-util",
  "tracing",
+ "tracing-subscriber",
  "webrtc",
  "webrtc-ice",
 ]
@@ -3867,12 +3859,12 @@ dependencies = [
  "bytes",
  "futures",
  "futures_ringbuf",
- "libp2p-test-utils",
  "pin-project",
  "quickcheck-ext",
  "rw-stream-sink",
  "smallvec",
  "tracing",
+ "tracing-subscriber",
  "unsigned-varint",
 ]
 

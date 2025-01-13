@@ -41,7 +41,7 @@ libp2p-swarm = { path = "../../swarm", features = ["macros"] }
 libp2p-swarm-test = { path = "../../swarm-test" }
 libp2p-yamux = { workspace = true }
 quickcheck = { workspace = true }
-libp2p-test-utils = { workspace = true }
+tracing-subscriber = { workspace = true, features = ["env-filter"] }
 
 [features]
 serde = ["dep:serde", "bytes/serde"]
