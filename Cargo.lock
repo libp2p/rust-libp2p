@@ -2704,7 +2704,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-allow-block-list"
-version = "0.4.1"
+version = "0.5.0"
 dependencies = [
  "async-std",
  "libp2p-core",
@@ -2716,7 +2716,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-autonat"
-version = "0.13.1"
+version = "0.14.0"
 dependencies = [
  "async-trait",
  "asynchronous-codec",
@@ -2743,7 +2743,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-connection-limits"
-version = "0.4.1"
+version = "0.5.0"
 dependencies = [
  "async-std",
  "libp2p-core",
@@ -2759,7 +2759,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-core"
-version = "0.42.1"
+version = "0.43.0"
 dependencies = [
  "async-std",
  "either",
@@ -2989,7 +2989,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-memory-connection-limits"
-version = "0.3.1"
+version = "0.4.0"
 dependencies = [
  "libp2p-core",
  "libp2p-identify",
@@ -3109,7 +3109,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-ping"
-version = "0.45.1"
+version = "0.46.0"
 dependencies = [
  "futures",
  "futures-timer",
@@ -3164,7 +3164,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-quic"
-version = "0.11.2"
+version = "0.11.1"
 dependencies = [
  "async-std",
  "futures",
@@ -3284,7 +3284,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-stream"
-version = "0.2.0-alpha.1"
+version = "0.3.0-alpha"
 dependencies = [
  "futures",
  "libp2p-core",
@@ -3299,7 +3299,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-swarm"
-version = "0.45.2"
+version = "0.46.0"
 dependencies = [
  "async-std",
  "criterion",
