@@ -23,6 +23,7 @@ use std::{
     io,
     pin::Pin,
     task::{Context, Poll},
+    time::{Duration, Instant},
 };
 
 use bytes::Bytes;
@@ -53,6 +54,8 @@ const VARINT_LEN: usize = 2;
 const PROTO_OVERHEAD: usize = 5;
 /// Maximum length of data, in bytes.
 const MAX_DATA_LEN: usize = MAX_MSG_LEN - VARINT_LEN - PROTO_OVERHEAD;
+/// FIN_ACK timeout
+const FIN_ACK_TIMEOUT: Duration = Duration::from_secs(10);
 
 pub use drop_listener::DropListener;
 /// A stream backed by a WebRTC data channel.
@@ -65,6 +68,7 @@ pub struct Stream<T> {
     read_buffer: Bytes,
     /// Dropping this will close the oneshot and notify the receiver by emitting `Canceled`.
     drop_notifier: Option<oneshot::Sender<GracefullyClosed>>,
+    fin_ack_deadline: Option<Instant>,
 }
 
 impl<T> Stream<T>
@@ -81,6 +85,7 @@ where
             state: State::Open,
             read_buffer: Bytes::default(),
             drop_notifier: Some(sender),
+            fin_ack_deadline: None,
         };
         let listener = DropListener::new(framed_dc::new(data_channel), receiver);
 
@@ -146,6 +151,16 @@ where
                 Some((flag, message)) => {
                     if let Some(flag) = flag {
                         state.handle_inbound_flag(flag, read_buffer);
+
+                        // Send FIN_ACK in response to FIN
+                        if flag == Flag::FIN && state.should_send_fin_ack() {
+                            ready!(io.poll_ready_unpin(cx))?;
+                            io.start_send_unpin(Message {
+                                flag: Some(Flag::FIN_ACK),
+                                message: None,
+                            })?;
+                            ready!(io.poll_flush_unpin(cx))?;
+                        }
                     }
 
                     debug_assert!(read_buffer.is_empty());
@@ -231,19 +246,39 @@ where
                     })?;
                     self.state.close_write_message_sent();
 
+                    // Set deadline when sending FIN
+                    self.fin_ack_deadline = Some(Instant::now() + FIN_ACK_TIMEOUT);
+
                     continue;
                 }
                 Some(Closing::MessageSent) => {
                     ready!(self.io.poll_flush_unpin(cx))?;
 
-                    self.state.write_closed();
-                    let _ = self
-                        .drop_notifier
-                        .take()
-                        .expect("to not close twice")
-                        .send(GracefullyClosed {});
+                    if self.state.fin_ack_received() {
+                        self.state.write_closed();
+                        let _ = self
+                            .drop_notifier
+                            .take()
+                            .expect("to not close twice")
+                            .send(GracefullyClosed {});
+                        return Poll::Ready(Ok(()));
+                    }
 
-                    return Poll::Ready(Ok(()));
+                    if self
+                        .fin_ack_deadline
+                        .is_some_and(|deadline| Instant::now() >= deadline)
+                    {
+                        tracing::warn!("FIN_ACK timeout, forcing close");
+                        self.state.write_closed();
+                        let _ = self
+                            .drop_notifier
+                            .take()
+                            .expect("to not close twice")
+                            .send(GracefullyClosed {});
+                        return Poll::Ready(Ok(()));
+                    }
+
+                    return Poll::Pending;
                 }
                 None => return Poll::Ready(Ok(())),
             }

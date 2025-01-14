@@ -1,3 +1,8 @@
+## 0.3.1
+
+- Implement FIN_ACK support for WebRTC streams.
+  See [PR 5687](https://github.com/libp2p/rust-libp2p/pull/5687).
+
 ## 0.3.0
 
 <!-- Update to libp2p-swarm v0.45.0 -->
@@ -15,6 +20,6 @@
 ## 0.1.0
 
 - Initial release.
-  See [PR 4248].
+  See [PR 4248](https://github.com/libp2p/rust-libp2p/pull/4248).
 
 [PR 4248]: https://github.com/libp2p/rust-libp2p/pull/4248
