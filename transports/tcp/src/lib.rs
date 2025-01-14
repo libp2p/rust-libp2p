@@ -59,8 +59,8 @@ use socket2::{Domain, Socket, Type};
 pub struct Config {
     /// TTL to set for opened sockets, or `None` to keep default.
     ttl: Option<u32>,
-    /// `TCP_NODELAY` to set for opened sockets, or `None` to keep default.
-    nodelay: Option<bool>,
+    /// `TCP_NODELAY` to set for opened sockets.
+    nodelay: bool,
     /// Size of the listen backlog for listen sockets.
     backlog: u32,
 }
@@ -130,7 +130,7 @@ impl PortReuse {
 impl Config {
     /// Creates a new configuration for a TCP/IP transport:
     ///
-    ///   * Nagle's algorithm, i.e. `TCP_NODELAY`, is _enabled_. See [`Config::nodelay`].
+    ///   * Nagle's algorithm is _disabled_, i.e. `TCP_NODELAY` _enabled_. See [`Config::nodelay`].
     ///   * Reuse of listening ports is _disabled_. See [`Config::port_reuse`].
     ///   * No custom `IP_TTL` is set. The default of the OS TCP stack applies. See [`Config::ttl`].
     ///   * The size of the listen backlog for new listening sockets is `1024`. See
@@ -138,7 +138,7 @@ impl Config {
     pub fn new() -> Self {
         Self {
             ttl: None,
-            nodelay: Some(false), // Disable Nagle's algorithm by default
+            nodelay: true, // Disable Nagle's algorithm by default.
             backlog: 1024,
         }
     }
@@ -151,7 +151,7 @@ impl Config {
 
     /// Configures the `TCP_NODELAY` option for new sockets.
     pub fn nodelay(mut self, value: bool) -> Self {
-        self.nodelay = Some(value);
+        self.nodelay = value;
         self
     }
 
@@ -198,9 +198,7 @@ impl Config {
         if let Some(ttl) = self.ttl {
             socket.set_ttl(ttl)?;
         }
-        if let Some(nodelay) = self.nodelay {
-            socket.set_nodelay(nodelay)?;
-        }
+        socket.set_nodelay(self.nodelay)?;
         socket.set_reuse_address(true)?;
         #[cfg(all(unix, not(any(target_os = "solaris", target_os = "illumos"))))]
         if port_use == PortUse::Reuse {
@@ -762,7 +760,9 @@ mod tests {
 
     #[test]
     fn communicating_between_dialer_and_listener() {
-        libp2p_test_utils::with_default_env_filter();
+        let _ = tracing_subscriber::fmt()
+            .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
+            .try_init();
 
         async fn listener<T: Provider>(addr: Multiaddr, mut ready_tx: mpsc::Sender<Multiaddr>) {
             let mut tcp = Transport::<T>::default().boxed();
@@ -841,7 +841,9 @@ mod tests {
 
     #[test]
     fn wildcard_expansion() {
-        libp2p_test_utils::with_default_env_filter();
+        let _ = tracing_subscriber::fmt()
+            .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
+            .try_init();
 
         async fn listener<T: Provider>(addr: Multiaddr, mut ready_tx: mpsc::Sender<Multiaddr>) {
             let mut tcp = Transport::<T>::default().boxed();
@@ -919,7 +921,9 @@ mod tests {
 
     #[test]
     fn port_reuse_dialing() {
-        libp2p_test_utils::with_default_env_filter();
+        let _ = tracing_subscriber::fmt()
+            .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
+            .try_init();
 
         async fn listener<T: Provider>(
             addr: Multiaddr,
@@ -1036,7 +1040,9 @@ mod tests {
 
     #[test]
     fn port_reuse_listening() {
-        libp2p_test_utils::with_default_env_filter();
+        let _ = tracing_subscriber::fmt()
+            .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
+            .try_init();
 
         async fn listen_twice<T: Provider>(addr: Multiaddr) {
             let mut tcp = Transport::<T>::new(Config::new());
@@ -1090,7 +1096,9 @@ mod tests {
 
     #[test]
     fn listen_port_0() {
-        libp2p_test_utils::with_default_env_filter();
+        let _ = tracing_subscriber::fmt()
+            .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
+            .try_init();
 
         async fn listen<T: Provider>(addr: Multiaddr) -> Multiaddr {
             let mut tcp = Transport::<T>::default().boxed();
@@ -1125,7 +1133,9 @@ mod tests {
 
     #[test]
     fn listen_invalid_addr() {
-        libp2p_test_utils::with_default_env_filter();
+        let _ = tracing_subscriber::fmt()
+            .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
+            .try_init();
 
         fn test(addr: Multiaddr) {
             #[cfg(feature = "async-io")]
@@ -1146,7 +1156,9 @@ mod tests {
 
     #[test]
     fn test_remove_listener() {
-        libp2p_test_utils::with_default_env_filter();
+        let _ = tracing_subscriber::fmt()
+            .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
+            .try_init();
 
         async fn cycle_listeners<T: Provider>() -> bool {
             let mut tcp = Transport::<T>::default().boxed();

@@ -1,4 +1,4 @@
-## 0.4.1
+## 0.5.0
 
 - Deprecate `void` crate.
   See [PR 5676](https://github.com/libp2p/rust-libp2p/pull/5676).
