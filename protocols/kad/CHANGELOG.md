@@ -15,6 +15,8 @@
 - Remove deprecated default constructor for `ProtocolConfig`.
   See [PR 5774](https://github.com/libp2p/rust-libp2p/pull/5774).
 
+<!-- Update to libp2p-core v0.43.0 -->
+
 ## 0.46.2
 
 - Emit `ToSwarm::NewExternalAddrOfPeer`.
