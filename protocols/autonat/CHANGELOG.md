@@ -1,4 +1,4 @@
-## 0.13.1
+## 0.14.0
 
 - Verify that an incoming AutoNAT dial comes from a connected peer. See [PR 5597](https://github.com/libp2p/rust-libp2p/pull/5597).
 - Deprecate `void` crate.
