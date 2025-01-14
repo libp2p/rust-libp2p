@@ -1,4 +1,4 @@
-## 0.42.1
+## 0.43.0
 
 - Added `libp2p::core::util::unreachable` that is a drop-in replacement of `void::unreachable`.
   See [PR 5676](https://github.com/libp2p/rust-libp2p/pull/5676).

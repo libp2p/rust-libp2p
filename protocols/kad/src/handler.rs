@@ -1057,6 +1057,7 @@ fn process_kad_response(event: KadResponseMsg, query_id: QueryId) -> HandlerEven
 #[cfg(test)]
 mod tests {
     use quickcheck::{Arbitrary, Gen};
+    use tracing_subscriber::EnvFilter;
 
     use super::*;
 
@@ -1071,7 +1072,9 @@ mod tests {
 
     #[test]
     fn compute_next_protocol_status_test() {
-        libp2p_test_utils::with_default_env_filter();
+        let _ = tracing_subscriber::fmt()
+            .with_env_filter(EnvFilter::from_default_env())
+            .try_init();
 
         fn prop(now_supported: bool, current: Option<ProtocolStatus>) {
             let new = compute_new_protocol_status(now_supported, current);
