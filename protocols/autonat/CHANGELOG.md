@@ -5,6 +5,8 @@
   See [PR 5676](https://github.com/libp2p/rust-libp2p/pull/5676).
 - Update to `libp2p-request-response` `v0.28.0`.
 
+<!-- Update to libp2p-core v0.43.0 -->
+
 ## 0.13.0
 
 - Due to the refactor of `Transport` it's no longer required to create a seperate transport for

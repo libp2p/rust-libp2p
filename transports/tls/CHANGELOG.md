@@ -1,3 +1,7 @@
+## 0.6.0
+
+<!-- Update to libp2p-core v0.43.0 -->
+
 ## 0.5.0
 
 <!-- Update to libp2p-swarm v0.45.0 -->
