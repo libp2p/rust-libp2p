@@ -15,6 +15,13 @@
 - Expose swarm builder phase errors.
   See [PR 5726](https://github.com/libp2p/rust-libp2p/pull/5726).
 
+- Deprecate `ConnectionHandler::{InboundOpenInfo, OutboundOpenInfo}` associated type.  
+  Previously, users could tag pending sub streams with custom data and retrieve the data 
+  after the substream has been negotiated.
+  But substreams themselves are completely interchangeable, users should instead track 
+  additional data inside `ConnectionHandler` after negotiation.   
+  See [PR 5242](https://github.com/libp2p/rust-libp2p/pull/5242).
+
 ## 0.54.1
 
 - Update individual crates.
