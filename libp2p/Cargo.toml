@@ -44,6 +44,7 @@ full = [
     "tokio",
     "uds",
     "wasm-bindgen",
+    "webrtc-websys",
     "websocket-websys",
     "websocket",
     "webtransport-websys",
