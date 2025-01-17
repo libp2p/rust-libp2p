@@ -1,3 +1,7 @@
+## 0.55.1
+- Introduce `libp2p-webrtc-websys` behind `webrtc-websys` feature flag.
+  See [PR XXXX](https://github.com/libp2p/rust-libp2p/pull/XXXX)
+
 ## 0.55.0
 
 - Raise MSRV to 1.83.0.
