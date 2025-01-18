@@ -59,7 +59,7 @@ jobs:
 
       - uses: taiki-e/cache-cargo-install-action@v2
         with:
-          tool: tomlq
+          tool: tomlq@0.1.6
 
       - name: Extract version from manifest
         run: |

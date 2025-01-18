@@ -38,6 +38,8 @@
 - Fixe an issue where an `InsufficientPeers` error could occur under certain conditions, despite having peers subscribed to a topic.
   See [PR 5793](https://github.com/libp2p/rust-libp2p/pull/5793).
 
+<!-- Update to libp2p-core v0.43.0 -->
+
 ## 0.47.0
 
 <!-- Update to libp2p-swarm v0.45.0 -->

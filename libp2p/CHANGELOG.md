@@ -22,6 +22,8 @@
   additional data inside `ConnectionHandler` after negotiation.   
   See [PR 5242](https://github.com/libp2p/rust-libp2p/pull/5242).
 
+<!-- Update to libp2p-core v0.43.0 -->
+
 ## 0.54.1
 
 - Update individual crates.
