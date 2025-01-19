@@ -35,13 +35,18 @@ use crate::{
     rpc_proto::proto,
     topic::TopicHash,
     types::{
-        ControlAction, Graft, IHave, IWant, MessageId, PeerInfo, PeerKind, Prune, RawMessage, Rpc,
-        Subscription, SubscriptionAction,
+        ControlAction, Graft, IDontWant, IHave, IWant, MessageId, PeerInfo, PeerKind, Prune,
+        RawMessage, Rpc, Subscription, SubscriptionAction,
     },
     ValidationError,
 };
 
 pub(crate) const SIGNING_PREFIX: &[u8] = b"libp2p-pubsub:";
+
+pub(crate) const GOSSIPSUB_1_2_0_PROTOCOL: ProtocolId = ProtocolId {
+    protocol: StreamProtocol::new("/meshsub/1.2.0"),
+    kind: PeerKind::Gossipsubv1_2,
+};
 
 pub(crate) const GOSSIPSUB_1_1_0_PROTOCOL: ProtocolId = ProtocolId {
     protocol: StreamProtocol::new("/meshsub/1.1.0"),
@@ -72,7 +77,11 @@ impl Default for ProtocolConfig {
         Self {
             max_transmit_size: 65536,
             validation_mode: ValidationMode::Strict,
-            protocol_ids: vec![GOSSIPSUB_1_1_0_PROTOCOL, GOSSIPSUB_1_0_0_PROTOCOL],
+            protocol_ids: vec![
+                GOSSIPSUB_1_2_0_PROTOCOL,
+                GOSSIPSUB_1_1_0_PROTOCOL,
+                GOSSIPSUB_1_0_0_PROTOCOL,
+            ],
         }
     }
 }
@@ -479,10 +488,25 @@ impl Decoder for GossipsubCodec {
                 }));
             }
 
+            let idontwant_msgs: Vec<ControlAction> = rpc_control
+                .idontwant
+                .into_iter()
+                .map(|idontwant| {
+                    ControlAction::IDontWant(IDontWant {
+                        message_ids: idontwant
+                            .message_ids
+                            .into_iter()
+                            .map(MessageId::from)
+                            .collect::<Vec<_>>(),
+                    })
+                })
+                .collect();
+
             control_msgs.extend(ihave_msgs);
             control_msgs.extend(iwant_msgs);
             control_msgs.extend(graft_msgs);
             control_msgs.extend(prune_msgs);
+            control_msgs.extend(idontwant_msgs);
         }
 
         Ok(Some(HandlerEvent::Message {

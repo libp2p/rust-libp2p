@@ -299,7 +299,7 @@ impl Encoder for Codec {
                         role: Endpoint::Listener,
                     },
                 data,
-            } => (num << 3 | 1, data),
+            } => ((num << 3) | 1, data),
             Frame::Data {
                 stream_id:
                     LocalStreamId {
@@ -307,35 +307,35 @@ impl Encoder for Codec {
                         role: Endpoint::Dialer,
                     },
                 data,
-            } => (num << 3 | 2, data),
+            } => ((num << 3) | 2, data),
             Frame::Close {
                 stream_id:
                     LocalStreamId {
                         num,
                         role: Endpoint::Listener,
                     },
-            } => (num << 3 | 3, Bytes::new()),
+            } => ((num << 3) | 3, Bytes::new()),
             Frame::Close {
                 stream_id:
                     LocalStreamId {
                         num,
                         role: Endpoint::Dialer,
                     },
-            } => (num << 3 | 4, Bytes::new()),
+            } => ((num << 3) | 4, Bytes::new()),
             Frame::Reset {
                 stream_id:
                     LocalStreamId {
                         num,
                         role: Endpoint::Listener,
                     },
-            } => (num << 3 | 5, Bytes::new()),
+            } => ((num << 3) | 5, Bytes::new()),
             Frame::Reset {
                 stream_id:
                     LocalStreamId {
                         num,
                         role: Endpoint::Dialer,
                     },
-            } => (num << 3 | 6, Bytes::new()),
+            } => ((num << 3) | 6, Bytes::new()),
         };
 
         let mut header_buf = encode::u64_buffer();

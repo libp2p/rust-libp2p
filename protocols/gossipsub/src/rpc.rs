@@ -89,7 +89,7 @@ impl Sender {
             | RpcOut::Prune(_)
             | RpcOut::Subscribe(_)
             | RpcOut::Unsubscribe(_) => &self.priority_sender,
-            RpcOut::Forward { .. } | RpcOut::IHave(_) | RpcOut::IWant(_) => {
+            RpcOut::Forward { .. } | RpcOut::IHave(_) | RpcOut::IWant(_) | RpcOut::IDontWant(_) => {
                 &self.non_priority_sender
             }
         };

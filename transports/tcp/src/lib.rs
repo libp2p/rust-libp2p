@@ -59,8 +59,8 @@ use socket2::{Domain, Socket, Type};
 pub struct Config {
     /// TTL to set for opened sockets, or `None` to keep default.
     ttl: Option<u32>,
-    /// `TCP_NODELAY` to set for opened sockets, or `None` to keep default.
-    nodelay: Option<bool>,
+    /// `TCP_NODELAY` to set for opened sockets.
+    nodelay: bool,
     /// Size of the listen backlog for listen sockets.
     backlog: u32,
 }
@@ -130,7 +130,7 @@ impl PortReuse {
 impl Config {
     /// Creates a new configuration for a TCP/IP transport:
     ///
-    ///   * Nagle's algorithm, i.e. `TCP_NODELAY`, is _enabled_. See [`Config::nodelay`].
+    ///   * Nagle's algorithm is _disabled_, i.e. `TCP_NODELAY` _enabled_. See [`Config::nodelay`].
     ///   * Reuse of listening ports is _disabled_. See [`Config::port_reuse`].
     ///   * No custom `IP_TTL` is set. The default of the OS TCP stack applies. See [`Config::ttl`].
     ///   * The size of the listen backlog for new listening sockets is `1024`. See
@@ -138,7 +138,7 @@ impl Config {
     pub fn new() -> Self {
         Self {
             ttl: None,
-            nodelay: Some(false), // Disable Nagle's algorithm by default
+            nodelay: true, // Disable Nagle's algorithm by default.
             backlog: 1024,
         }
     }
@@ -151,7 +151,7 @@ impl Config {
 
     /// Configures the `TCP_NODELAY` option for new sockets.
     pub fn nodelay(mut self, value: bool) -> Self {
-        self.nodelay = Some(value);
+        self.nodelay = value;
         self
     }
 
@@ -198,9 +198,7 @@ impl Config {
         if let Some(ttl) = self.ttl {
             socket.set_ttl(ttl)?;
         }
-        if let Some(nodelay) = self.nodelay {
-            socket.set_nodelay(nodelay)?;
-        }
+        socket.set_nodelay(self.nodelay)?;
         socket.set_reuse_address(true)?;
         #[cfg(all(unix, not(any(target_os = "solaris", target_os = "illumos"))))]
         if port_use == PortUse::Reuse {
