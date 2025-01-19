@@ -12,15 +12,6 @@ CHANGELOG_DIFF=$(git diff "$HEAD_SHA".."$MERGE_BASE" --name-only -- "$DIR_TO_CRA
 
 RELEASED_VERSION=$(git tag | grep "^$CRATE-v" | tail -n1 | grep -Po "\d+\.\d+\.\d+")
 
-version_bump() {
-  released=$(echo $RELEASED_VERSION | cut -d '.' -f $1)
-  current=$(echo $CRATE_VERSION | cut -d '.' -f $1)
-  if [ "$current" -gt "$released" ]; then
-    echo "$((current-released))"
-  else 
-    echo 0
-  fi
-}
 
 # If the source files of this crate weren't touched in this PR, exit early.
 if [ -z "$SRC_DIFF_TO_BASE" ]; then
@@ -33,12 +24,22 @@ if [ -z "$CHANGELOG_DIFF" ]; then
     exit 1
 fi
 
-major_bump=$(version_bump 1)
-minor_bump=$(version_bump 2)
-patch_bump=$(version_bump 3)
+IFS='.' read -r -a current <<< "$CRATE_VERSION"
+IFS='.' read -r -a released <<< "$RELEASED_VERSION"
 
-# Code was touched, ensure the version used in the manifest has been bumped exactly once.
-if [ "$((major_bump+minor_bump+patch_bump))" -ne 1 ]; then
-    echo "v$CRATE_VERSION of '$CRATE' has either already been released, or the version bumped more than once. Please ensure that there has been exact one version bump since the last release."
-    exit 1
-fi
+for i in $(seq 0 2); 
+do
+  case $((current[i]-released[i])) in
+    0)  continue ;;
+    1)  if [[ -n $(printf "%s\n" "${current[@]:i+1}" | grep -vFx '0') ]]; then
+          echo "Patch version has been bumped even though minor isn't released yet".
+          exit 1
+        fi
+        exit 0 ;;
+    *)  echo "Version of '$CRATE' has been bumped more than once since last release v$RELEASED_VERSION."
+        exit 1 ;;
+    esac
+done
+
+echo "v$CRATE_VERSION of '$CRATE' has already been released, please bump the version."
+exit 1
