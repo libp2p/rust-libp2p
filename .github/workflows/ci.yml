@@ -59,7 +59,7 @@ jobs:
 
       - uses: taiki-e/cache-cargo-install-action@v2
         with:
-          tool: tomlq@0.1.6
+          tool: tomlq
 
       - name: Extract version from manifest
         run: |
@@ -70,7 +70,7 @@ jobs:
       - name: Enforce version in `workspace.dependencies` matches the latest version
         if: env.CRATE != 'libp2p'
         run: |
-          SPECIFIED_VERSION=$(tq "workspace.dependencies.$CRATE.version" --file ./Cargo.toml)
+          SPECIFIED_VERSION=$(tq "workspace.dependencies.$CRATE.version" -r --file ./Cargo.toml)
 
           echo "Package version: $CRATE_VERSION";
           echo "Specified version: $SPECIFIED_VERSION";
