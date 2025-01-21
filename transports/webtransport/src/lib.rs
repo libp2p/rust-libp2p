@@ -6,10 +6,10 @@ mod transport;
 pub use self::{
     certificate::{CertHash, Certificate},
     config::Config,
-    connection::Stream,
+    connection::{Connection, Stream},
     transport::GenTransport,
 };
-pub(crate) use connection::{Connecting, Connection};
+pub(crate) use connection::Connecting;
 use libp2p_core::transport::TransportError;
 use wtransport::error::ConnectionError;
 
@@ -24,7 +24,6 @@ pub enum Error {
     #[error(transparent)]
     Io(#[from] std::io::Error),
 
-    /// The [`Connecting`] future timed out.
     #[error("Unexpected HTTP endpoint of a libp2p WebTransport server {0}")]
     UnexpectedPath(String),
 
@@ -34,7 +33,6 @@ pub enum Error {
     #[error("Unknown remote peer ID")]
     UnknownRemotePeerId,
 
-    /// The [`Connecting`] future timed out.
     #[error("Handshake with the remote timed out")]
     HandshakeTimedOut,
 

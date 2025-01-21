@@ -6,13 +6,12 @@ use wtransport::config::{QuicTransportConfig, TlsServerConfig};
 use crate::certificate::{CertHash, Certificate};
 
 pub struct Config {
-    max_idle_timeout: u32,
-    max_concurrent_stream_limit: u32,
-    keep_alive_interval: Duration,
-    max_connection_data: u32,
-    max_stream_data: u32,
-    mtu_discovery_config: MtuDiscoveryConfig,
-
+    pub max_idle_timeout: u32,
+    pub max_concurrent_stream_limit: u32,
+    pub keep_alive_interval: Duration,
+    pub max_connection_data: u32,
+    pub max_stream_data: u32,
+    pub mtu_discovery_config: MtuDiscoveryConfig,
     /// Timeout for the initial handshake when establishing a connection.
     /// The actual timeout is the minimum of this and the [`Config::max_idle_timeout`].
     pub handshake_timeout: Duration,
