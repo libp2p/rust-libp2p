@@ -15,7 +15,7 @@ pub struct Stream {
 }
 
 impl Stream {
-    pub(super) fn new(send: SendStream, recv: RecvStream) -> Self {
+    pub fn new(send: SendStream, recv: RecvStream) -> Self {
         Self {
             send,
             recv,

@@ -3,13 +3,15 @@ mod config;
 mod connection;
 mod transport;
 
-use wtransport::error::ConnectionError;
-
-pub use certificate::{CertHash, Certificate};
-pub use config::Config;
-pub(crate) use connection::{Connecting, Connection, Stream};
+pub use self::{
+    certificate::{CertHash, Certificate},
+    config::Config,
+    connection::Stream,
+    transport::GenTransport,
+};
+pub(crate) use connection::{Connecting, Connection};
 use libp2p_core::transport::TransportError;
-pub use transport::GenTransport;
+use wtransport::error::ConnectionError;
 
 /// Errors that may happen on the [`GenTransport`] or a single [`Connection`].
 #[derive(Debug, thiserror::Error)]

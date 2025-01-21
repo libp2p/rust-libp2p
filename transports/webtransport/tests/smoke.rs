@@ -1,87 +1,102 @@
-use std::net::SocketAddr;
+mod client;
 
-use futures::join;
+use crate::client::WtClient;
+use futures::channel::mpsc;
 use futures::stream::StreamExt;
-use time::ext::NumericalDuration;
-use time::OffsetDateTime;
-use wtransport::ClientConfig;
-use wtransport::Endpoint;
-
+use futures::{future, AsyncReadExt, AsyncWriteExt, SinkExt};
 use libp2p_core::multiaddr::Protocol;
-use libp2p_core::muxing::StreamMuxerBox;
+use libp2p_core::muxing::{StreamMuxerBox, StreamMuxerExt};
 use libp2p_core::transport::{Boxed, ListenerId, TransportEvent};
 use libp2p_core::{Multiaddr, Transport};
 use libp2p_identity::{Keypair, PeerId};
 use libp2p_webtransport as webtransport;
+use libp2p_webtransport::{CertHash, Certificate};
+use std::collections::HashSet;
+use std::net::SocketAddr;
+use std::time::Duration;
+use time::ext::NumericalDuration;
+use time::OffsetDateTime;
 
 #[tokio::test]
 async fn smoke() {
-    let subscriber = tracing_subscriber::fmt()
-        .with_max_level(tracing::Level::DEBUG)
-        .compact()
-        .finish();
-    tracing::subscriber::set_global_default(subscriber).unwrap();
+    libp2p_test_utils::with_default_env_filter();
 
-    let (keypair, cert) = generate_keypair_and_certificate();
-    let config = webtransport::Config::new(&keypair, cert);
-    let mut transport = webtransport::GenTransport::new(config)
-        .map(|(p, c), _| (p, StreamMuxerBox::new(c)))
-        .boxed();
-    let addr = start_listening(&mut transport, "/ip4/127.0.0.1/udp/0/quic-v1/webtransport").await;
-    let socket_addr = multiaddr_to_socketaddr(&addr).unwrap();
+    let (keypair, cert, certhashes) = generate_keypair_and_certificate();
+    let (mut listener_tx, mut listener_rx) = mpsc::channel(1);
 
-    let a = async move {
+    tokio::spawn(async move {
+        let (peer_id, mut transport) = create_transport(keypair, cert);
+        let addr =
+            start_listening(&mut transport, "/ip4/127.0.0.1/udp/0/quic-v1/webtransport").await;
+
+        listener_tx.send((peer_id, addr)).await.unwrap();
+
         loop {
-            match &mut transport.next().await {
-                Some(TransportEvent::Incoming {
-                    listener_id,
-                    upgrade,
-                    ..
-                }) => {
-                    tracing::debug!("Got incoming event. listener_id={}", listener_id);
-                    match upgrade.await {
-                        Ok((peer_id, _mutex)) => {
-                            tracing::debug!("Connection is opened. peer_id={}", peer_id);
-                            return Some(peer_id);
-                        }
-                        Err(e) => {
-                            tracing::error!("Upgrade got an error {:?}", e);
-                            return None;
-                        }
-                    }
-                }
-                Some(e) => tracing::debug!("Got event {:?}", e),
-                e => {
-                    tracing::error!("MY_TEST Got an error {:?}", e);
-                    return None;
+            if let TransportEvent::Incoming { upgrade, .. } = transport.select_next_some().await {
+                let (_, mut connection) = upgrade.await.unwrap();
+
+                loop {
+                    let Ok(mut inbound_stream) = future::poll_fn(|cx| {
+                        let _ = connection.poll_unpin(cx)?;
+                        connection.poll_inbound_unpin(cx)
+                    })
+                    .await
+                    else {
+                        return;
+                    };
+
+                    let mut pong = [0u8; 4];
+                    inbound_stream.write_all(b"PING").await.unwrap();
+                    inbound_stream.flush().await.unwrap();
+                    inbound_stream.read_exact(&mut pong).await.unwrap();
+                    assert_eq!(&pong, b"PONG");
                 }
             }
         }
-    };
+    });
 
-    let url = format!(
-        "https://{}/.well-known/libp2p-webtransport?type=noise",
-        socket_addr
-    );
-    let b = async move {
-        let client_key_pair = Keypair::generate_ed25519();
-        let client_tls = libp2p_tls::make_client_config(&client_key_pair, None).unwrap();
-        let config = ClientConfig::builder()
-            .with_bind_default()
-            .with_custom_tls(client_tls)
-            .build();
+    let (mut complete_tx, mut complete_rx) = mpsc::channel(1);
 
-        match Endpoint::client(config)
-            .unwrap()
-            .connect(url.as_str())
-            .await
-        {
-            Ok(_) => {}
-            Err(_) => {}
+    tokio::spawn(async move {
+        if let Some((peer_id, addr)) = listener_rx.next().await {
+            let socket_addr = multiaddr_to_socketaddr(&addr).unwrap();
+            let url = format!(
+                "https://{}/.well-known/libp2p-webtransport?type=noise",
+                socket_addr
+            );
+            let mut client = WtClient::new(url, peer_id, certhashes);
+            let mut stream = client.connect().await.unwrap();
+
+            // assert_eq!(peer_id, actual_peer_id);
+
+            let mut ping = [0u8; 4];
+            stream.write_all(b"PONG").await.unwrap();
+            stream.flush().await.unwrap();
+            stream.read_exact(&mut ping).await.unwrap();
+            assert_eq!(&ping, b"PING");
+
+            complete_tx.send(()).await.unwrap();
         }
-    };
+    });
 
-    matches!(join!(a, b), (Some(_id), ()));
+    tokio::time::timeout(Duration::from_secs(30), async move {
+        complete_rx.next().await.unwrap();
+    })
+    .await
+    .unwrap();
+}
+
+fn create_transport(
+    keypair: Keypair,
+    certificate: Certificate,
+) -> (PeerId, Boxed<(PeerId, StreamMuxerBox)>) {
+    let peer_id = keypair.public().to_peer_id();
+    let config = webtransport::Config::new(&keypair, certificate);
+    let transport = webtransport::GenTransport::new(config)
+        .map(|(p, c), _| (p, StreamMuxerBox::new(c)))
+        .boxed();
+
+    (peer_id, transport)
 }
 
 fn multiaddr_to_socketaddr(addr: &Multiaddr) -> Option<SocketAddr> {
@@ -106,11 +121,13 @@ async fn start_listening(transport: &mut Boxed<(PeerId, StreamMuxerBox)>, addr: 
     }
 }
 
-fn generate_keypair_and_certificate() -> (Keypair, webtransport::Certificate) {
+fn generate_keypair_and_certificate() -> (Keypair, webtransport::Certificate, HashSet<CertHash>) {
     let keypair = Keypair::generate_ed25519();
     let not_before = OffsetDateTime::now_utc().checked_sub(1.days()).unwrap();
-    let cert =
-        webtransport::Certificate::generate(&keypair, not_before).expect("Generate certificate");
+    let cert = Certificate::generate(&keypair, not_before).expect("Generate certificate");
+    let mut certhashes: HashSet<CertHash> = HashSet::with_capacity(1);
+    let hash = cert.cert_hash();
+    certhashes.insert(hash);
 
-    (keypair, cert)
+    (keypair, cert, certhashes)
 }

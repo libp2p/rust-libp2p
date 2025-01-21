@@ -9,7 +9,7 @@ pub(crate) use connecting::Connecting;
 use libp2p_core::muxing::StreamMuxerEvent;
 use libp2p_core::StreamMuxer;
 
-pub(crate) use crate::connection::stream::Stream;
+pub use crate::connection::stream::Stream;
 use crate::Error;
 
 mod connecting;

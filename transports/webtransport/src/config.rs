@@ -24,7 +24,7 @@ pub struct Config {
 
 impl Config {
     pub fn new(keypair: &libp2p_identity::Keypair, cert: Certificate) -> Self {
-        let max_idle_timeout = 10 * 1000;
+        let max_idle_timeout = 30 * 1000;
         let max_concurrent_stream_limit = 256;
         let keep_alive_interval = Duration::from_secs(5);
         let max_connection_data = 15_000_000;
@@ -47,7 +47,7 @@ impl Config {
 
     pub fn server_tls_config(&self) -> TlsServerConfig {
         libp2p_tls::make_webtransport_server_config(
-            &self.cert.der,
+            self.cert.der.clone(),
             &self.cert.private_key_der,
             alpn_protocols(),
         )
@@ -55,14 +55,13 @@ impl Config {
 
     pub fn get_quic_transport_config(&self) -> QuicTransportConfig {
         let mut res = QuicTransportConfig::default();
-        // Disable uni-directional streams.
-        res.max_concurrent_uni_streams(0u32.into());
+
+        res.max_concurrent_uni_streams(100u32.into());
         res.max_concurrent_bidi_streams(self.max_concurrent_stream_limit.into());
-        // Disable datagrams.
         res.datagram_receive_buffer_size(None);
         res.keep_alive_interval(Some(self.keep_alive_interval.clone()));
         res.max_idle_timeout(Some(VarInt::from_u32(self.max_idle_timeout).into()));
-        res.allow_spin(false);
+        res.allow_spin(true);
         res.stream_receive_window(self.max_stream_data.into());
         res.receive_window(self.max_connection_data.into());
         res.mtu_discovery_config(Some(self.mtu_discovery_config.clone()));

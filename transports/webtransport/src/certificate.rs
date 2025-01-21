@@ -80,7 +80,7 @@ impl Certificate {
         })
     }
 
-    pub(crate) fn cert_hash(&self) -> CertHash {
+    pub fn cert_hash(&self) -> CertHash {
         Multihash::wrap(
             MULTIHASH_SHA256_CODE,
             sha2::Sha256::digest(&self.der.as_ref().as_ref()).as_ref(),

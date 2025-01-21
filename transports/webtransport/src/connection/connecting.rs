@@ -36,7 +36,7 @@ impl Connecting {
 
     async fn handshake(
         session_request: SessionRequest,
-        _noise_config: libp2p_noise::Config,
+        noise_config: libp2p_noise::Config,
     ) -> Result<(PeerId, Connection), Error> {
         let path = session_request.path();
         if path != WEBTRANSPORT_PATH {
@@ -46,10 +46,7 @@ impl Connecting {
             Ok(wtransport_connection) => {
                 // The client SHOULD start the handshake right after sending the CONNECT request,
                 // without waiting for the server's response.
-                let peer_id = PeerId::random();
-                // todo a real noise auth
-                // let peer_id =
-                //     Self::noise_auth(wtransport_connection.clone(), noise_config).await?;
+                let peer_id = Self::noise_auth(wtransport_connection.clone(), noise_config).await?;
 
                 tracing::debug!(
                     "Accepted connection with sessionId={}",
@@ -67,32 +64,11 @@ impl Connecting {
         connection: wtransport::Connection,
         noise_config: libp2p_noise::Config,
     ) -> Result<PeerId, Error> {
-        fn remote_peer_id(con: &wtransport::Connection) -> PeerId {
-            let cert_chain = con
-                .peer_identity()
-                .expect("connection got identity because it passed TLS handshake; qed");
-            let cert = cert_chain
-                .as_slice()
-                .first()
-                .expect("there should be exactly one certificate; qed");
-
-            let p2p_cert = libp2p_tls::certificate::parse_binary(cert.der())
-                .expect("the certificate was validated during TLS handshake; qed");
-
-            p2p_cert.peer_id()
-        }
-
         let (send, recv) = connection.accept_bi().await?;
         let stream = crate::Stream::new(send, recv);
-        let (actual_peer_id, _) = noise_config.upgrade_inbound(stream, "").await?;
+        let (peer_id, _) = noise_config.upgrade_inbound(stream, "").await?;
 
-        let expected_peer_id = remote_peer_id(&connection);
-        // TODO: This should be part libp2p-noise
-        if actual_peer_id != expected_peer_id {
-            return Err(Error::UnknownRemotePeerId);
-        }
-
-        Ok(actual_peer_id)
+        Ok(peer_id)
     }
 }
 

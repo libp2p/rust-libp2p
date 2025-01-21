@@ -87,6 +87,8 @@ impl Transport for GenTransport {
         let cert_hashes = self.config.cert_hashes();
         let handshake_timeout = self.config.handshake_timeout.clone();
 
+        tracing::debug!("Listening on {:?}, listenerId {}", &socket, &id);
+
         let listener = Listener::new(
             id,
             socket,
@@ -109,6 +111,9 @@ impl Transport for GenTransport {
             // Close the listener, which will eventually finish its stream.
             // `SelectAll` removes streams once they are finished.
             listener.close(Ok(()));
+
+            tracing::debug!("Listener {id} was removed");
+
             true
         } else {
             false
@@ -180,7 +185,7 @@ impl Listener {
     ) -> Result<Self, Error> {
         let endpoint = Arc::new(endpoint);
         let c_endpoint = Arc::clone(&endpoint);
-        let accept = async move { c_endpoint.accept().await.await }.boxed();
+        let accept = Self::accept(c_endpoint, listener_id).boxed();
 
         let if_watcher;
         let pending_event;
@@ -209,6 +214,20 @@ impl Listener {
             keypair: keypair.clone(),
             cert_hashes,
         })
+    }
+
+    async fn accept(
+        endpoint: Arc<Endpoint<Server>>,
+        id: ListenerId,
+    ) -> Result<SessionRequest, ConnectionError> {
+        let incoming_session = endpoint.accept().await;
+        tracing::debug!(
+            "Listener {id} got incoming session from {}",
+            incoming_session.remote_address()
+        );
+        let res = incoming_session.await;
+
+        res
     }
 
     /// Report the listener as closed in a [`TransportEvent::ListenerClosed`] and
@@ -307,10 +326,14 @@ impl Stream for Listener {
 
             match self.accept.poll_unpin(cx) {
                 Poll::Ready(Ok(session_request)) => {
-                    tracing::debug!("Got session request={:?}", session_request.path());
+                    tracing::debug!(
+                        "Listener {} got session request={:?}",
+                        &self.listener_id,
+                        session_request.path()
+                    );
 
                     let endpoint = Arc::clone(&self.endpoint);
-                    self.accept = async move { endpoint.accept().await.await }.boxed();
+                    self.accept = Self::accept(endpoint, self.listener_id.clone()).boxed();
                     let local_addr =
                         socketaddr_to_multiaddr_with_hashes(&self.socket_addr(), &self.cert_hashes);
 
@@ -332,7 +355,9 @@ impl Stream for Listener {
 
                     continue;
                 }
-                Poll::Pending => {}
+                Poll::Pending => {
+                    tracing::debug!("Listener {} pending", &self.listener_id);
+                }
             };
 
             match &self.close_listener_waker {
