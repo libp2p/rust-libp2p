@@ -3,7 +3,7 @@ name = "libp2p-noise"
 edition = "2021"
 rust-version = { workspace = true }
 description = "Cryptographic handshake protocol using the noise framework."
-version = "0.45.1"
+version = "0.46.0"
 authors = ["Parity Technologies <admin@parity.io>"]
 license = "MIT"
 repository = "https://github.com/libp2p/rust-libp2p"
@@ -34,7 +34,7 @@ snow = { version = "0.9.5", features = ["default-resolver"], default-features = 
 [dev-dependencies]
 futures_ringbuf = "0.4.0"
 quickcheck = { workspace = true }
-libp2p-test-utils = { workspace = true }
+tracing-subscriber = { workspace = true, features = ["env-filter"] }
 libp2p-identity = { workspace = true, features = ["rand"] }
 
 # Passing arguments to the docsrs builder in order to properly document cfg's.

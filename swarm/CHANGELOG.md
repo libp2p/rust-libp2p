@@ -1,4 +1,4 @@
-## 0.45.2
+## 0.46.0
 
 - Don't report `NewExternalAddrCandidate` for confirmed external addresses.
   See [PR 5582](https://github.com/libp2p/rust-libp2p/pull/5582).
@@ -18,6 +18,8 @@
   But substreams themselves are completely interchangeable, users should instead track 
   additional data inside `ConnectionHandler` after negotiation.   
   See [PR 5242](https://github.com/libp2p/rust-libp2p/pull/5242).
+
+<!-- Update to libp2p-core v0.43.0 -->
 
 ## 0.45.1
 

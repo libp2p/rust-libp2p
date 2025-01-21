@@ -12,10 +12,13 @@ use libp2p_swarm_test::SwarmExt;
 use request_response::{
     Codec, InboundFailure, InboundRequestId, OutboundFailure, OutboundRequestId, ResponseChannel,
 };
+use tracing_subscriber::EnvFilter;
 
 #[async_std::test]
 async fn report_outbound_failure_on_read_response() {
-    libp2p_test_utils::with_default_env_filter();
+    let _ = tracing_subscriber::fmt()
+        .with_env_filter(EnvFilter::from_default_env())
+        .try_init();
 
     let (peer1_id, mut swarm1) = new_swarm();
     let (peer2_id, mut swarm2) = new_swarm();
@@ -69,7 +72,10 @@ async fn report_outbound_failure_on_read_response() {
 
 #[async_std::test]
 async fn report_outbound_failure_on_write_request() {
-    libp2p_test_utils::with_default_env_filter();
+    let _ = tracing_subscriber::fmt()
+        .with_env_filter(EnvFilter::from_default_env())
+        .try_init();
+
     let (peer1_id, mut swarm1) = new_swarm();
     let (_peer2_id, mut swarm2) = new_swarm();
 
@@ -109,7 +115,9 @@ async fn report_outbound_failure_on_write_request() {
 
 #[async_std::test]
 async fn report_outbound_timeout_on_read_response() {
-    libp2p_test_utils::with_default_env_filter();
+    let _ = tracing_subscriber::fmt()
+        .with_env_filter(EnvFilter::from_default_env())
+        .try_init();
 
     // `swarm1` needs to have a bigger timeout to avoid racing
     let (peer1_id, mut swarm1) = new_swarm_with_timeout(Duration::from_millis(200));
@@ -154,7 +162,9 @@ async fn report_outbound_timeout_on_read_response() {
 
 #[async_std::test]
 async fn report_outbound_failure_on_max_streams() {
-    libp2p_test_utils::with_default_env_filter();
+    let _ = tracing_subscriber::fmt()
+        .with_env_filter(EnvFilter::from_default_env())
+        .try_init();
 
     // `swarm2` will be able to handle only 1 stream per time.
     let swarm2_config = request_response::Config::default()
@@ -204,7 +214,9 @@ async fn report_outbound_failure_on_max_streams() {
 
 #[async_std::test]
 async fn report_inbound_failure_on_read_request() {
-    libp2p_test_utils::with_default_env_filter();
+    let _ = tracing_subscriber::fmt()
+        .with_env_filter(EnvFilter::from_default_env())
+        .try_init();
 
     let (peer1_id, mut swarm1) = new_swarm();
     let (_peer2_id, mut swarm2) = new_swarm();
@@ -239,7 +251,9 @@ async fn report_inbound_failure_on_read_request() {
 
 #[async_std::test]
 async fn report_inbound_failure_on_write_response() {
-    libp2p_test_utils::with_default_env_filter();
+    let _ = tracing_subscriber::fmt()
+        .with_env_filter(EnvFilter::from_default_env())
+        .try_init();
 
     let (peer1_id, mut swarm1) = new_swarm();
     let (peer2_id, mut swarm2) = new_swarm();
@@ -303,7 +317,9 @@ async fn report_inbound_failure_on_write_response() {
 
 #[async_std::test]
 async fn report_inbound_timeout_on_write_response() {
-    libp2p_test_utils::with_default_env_filter();
+    let _ = tracing_subscriber::fmt()
+        .with_env_filter(EnvFilter::from_default_env())
+        .try_init();
 
     // `swarm2` needs to have a bigger timeout to avoid racing
     let (peer1_id, mut swarm1) = new_swarm_with_timeout(Duration::from_millis(100));

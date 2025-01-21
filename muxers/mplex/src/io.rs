@@ -1231,7 +1231,10 @@ mod tests {
 
     #[test]
     fn max_buffer_behaviour() {
-        libp2p_test_utils::with_default_env_filter();
+        use tracing_subscriber::EnvFilter;
+        let _ = tracing_subscriber::fmt()
+            .with_env_filter(EnvFilter::from_default_env())
+            .try_init();
 
         fn prop(cfg: MplexConfig, overflow: NonZeroU8) {
             let mut r_buf = BytesMut::new();
@@ -1366,7 +1369,10 @@ mod tests {
 
     #[test]
     fn close_on_error() {
-        libp2p_test_utils::with_default_env_filter();
+        use tracing_subscriber::EnvFilter;
+        let _ = tracing_subscriber::fmt()
+            .with_env_filter(EnvFilter::from_default_env())
+            .try_init();
 
         fn prop(cfg: MplexConfig, num_streams: NonZeroU8) {
             let num_streams = cmp::min(cfg.max_substreams, num_streams.get() as usize);
