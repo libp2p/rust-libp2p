@@ -16,10 +16,13 @@ use std::net::SocketAddr;
 use std::time::Duration;
 use time::ext::NumericalDuration;
 use time::OffsetDateTime;
+use tracing_subscriber::EnvFilter;
 
 #[tokio::test]
 async fn smoke() {
-    libp2p_test_utils::with_default_env_filter();
+    let _ = tracing_subscriber::fmt()
+        .with_env_filter(EnvFilter::from_default_env())
+        .try_init();
 
     let (keypair, cert, certhashes) = generate_keypair_and_certificate();
     let (mut listener_tx, mut listener_rx) = mpsc::channel(1);
