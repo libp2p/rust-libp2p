@@ -1,15 +1,18 @@
-use std::future::Future;
-use std::pin::Pin;
-use std::task::{Context, Poll};
-use std::time::Duration;
+use std::{
+    future::Future,
+    pin::Pin,
+    task::{Context, Poll},
+    time::Duration,
+};
 
-use futures::future::{select, BoxFuture, Either, Select};
-use futures::{ready, FutureExt};
+use futures::{
+    future::{select, BoxFuture, Either, Select},
+    ready, FutureExt,
+};
 use futures_timer::Delay;
-use wtransport::endpoint::SessionRequest;
-
 use libp2p_core::upgrade::InboundConnectionUpgrade;
 use libp2p_identity::PeerId;
+use wtransport::endpoint::SessionRequest;
 
 use crate::{Connection, Error};
 

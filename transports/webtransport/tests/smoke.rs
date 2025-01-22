@@ -1,24 +1,22 @@
-use futures::channel::mpsc;
-use futures::stream::StreamExt;
-use futures::{future, AsyncReadExt, AsyncWriteExt, SinkExt};
-use libp2p_core::multiaddr::Protocol;
-use libp2p_core::muxing::{StreamMuxerBox, StreamMuxerExt};
-use libp2p_core::transport::{Boxed, ListenerId, TransportEvent};
-use libp2p_core::upgrade::OutboundConnectionUpgrade;
-use libp2p_core::{Multiaddr, Transport, UpgradeInfo};
+use std::{collections::HashSet, io, net::SocketAddr, sync::Arc, time::Duration};
+
+use futures::{channel::mpsc, future, stream::StreamExt, AsyncReadExt, AsyncWriteExt, SinkExt};
+use libp2p_core::{
+    multiaddr::Protocol,
+    muxing::{StreamMuxerBox, StreamMuxerExt},
+    transport::{Boxed, ListenerId, TransportEvent},
+    upgrade::OutboundConnectionUpgrade,
+    Multiaddr, Transport, UpgradeInfo,
+};
 use libp2p_identity::{Keypair, PeerId};
 use libp2p_webtransport as webtransport;
 use libp2p_webtransport::{CertHash, Certificate, Stream};
-use std::collections::HashSet;
-use std::io;
-use std::net::SocketAddr;
-use std::sync::Arc;
-use std::time::Duration;
-use time::ext::NumericalDuration;
-use time::OffsetDateTime;
+use time::{ext::NumericalDuration, OffsetDateTime};
 use tracing_subscriber::EnvFilter;
-use wtransport::error::{ConnectingError, ConnectionError, StreamOpeningError};
-use wtransport::{ClientConfig, Connection, Endpoint};
+use wtransport::{
+    error::{ConnectingError, ConnectionError, StreamOpeningError},
+    ClientConfig, Connection, Endpoint,
+};
 
 #[tokio::test]
 async fn smoke() {

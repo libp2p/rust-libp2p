@@ -1,25 +1,27 @@
-use std::io;
-use std::io::{Cursor, Read, Write};
-
-use rustls::pki_types::{CertificateDer, PrivateKeyDer};
-use sha2::Digest;
-use time::{Duration, OffsetDateTime};
+use std::{
+    io,
+    io::{Cursor, Read, Write},
+};
 
 use libp2p_core::multihash::Multihash;
 use libp2p_tls::certificate;
+use rustls::pki_types::{CertificateDer, PrivateKeyDer};
+use sha2::Digest;
+use time::{Duration, OffsetDateTime};
 
 const MULTIHASH_SHA256_CODE: u64 = 0x12;
 const CERT_VALID_PERIOD: Duration = Duration::days(14);
 
 pub type CertHash = Multihash<64>;
 
-/*
-I would like to avoid interacting with the file system as much as possible.
-My suggestion would be:
-- libp2p::webtransport::Transport::new takes a list of certificates (of type libp2p::webtransport::Certificate)
-- libp2p::webtransport::Certificate::generate allows users generate a new certificate with certain parameters (validity date etc)
-- libp2p::webtransport::Certificate::{parse,to_bytes} allow users to serialize and deserialize certificates
-*/
+// I would like to avoid interacting with the file system as much as possible.
+// My suggestion would be:
+// - libp2p::webtransport::Transport::new takes a list of certificates (of type
+//   libp2p::webtransport::Certificate)
+// - libp2p::webtransport::Certificate::generate allows users generate a new certificate with
+//   certain parameters (validity date etc)
+// - libp2p::webtransport::Certificate::{parse,to_bytes} allow users to serialize and deserialize
+//   certificates
 #[derive(Debug, PartialEq, Eq)]
 pub struct Certificate {
     pub der: CertificateDer<'static>,

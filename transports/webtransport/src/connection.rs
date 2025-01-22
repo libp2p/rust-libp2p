@@ -1,13 +1,12 @@
-use std::pin::Pin;
-use std::task::{Context, Poll};
-
-use futures::future::BoxFuture;
-use futures::{ready, FutureExt};
-use wtransport::{error::ConnectionError, RecvStream, SendStream};
+use std::{
+    pin::Pin,
+    task::{Context, Poll},
+};
 
 pub(crate) use connecting::Connecting;
-use libp2p_core::muxing::StreamMuxerEvent;
-use libp2p_core::StreamMuxer;
+use futures::{future::BoxFuture, ready, FutureExt};
+use libp2p_core::{muxing::StreamMuxerEvent, StreamMuxer};
+use wtransport::{error::ConnectionError, RecvStream, SendStream};
 
 pub use crate::connection::stream::Stream;
 use crate::Error;

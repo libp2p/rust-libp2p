@@ -1,29 +1,31 @@
-use std::collections::HashSet;
-use std::future::Pending;
-use std::net::{IpAddr, SocketAddr, UdpSocket};
-use std::pin::Pin;
-use std::sync::Arc;
-use std::task::{Context, Poll, Waker};
-use std::time::Duration;
-use std::{fmt, io};
+use std::{
+    collections::HashSet,
+    fmt,
+    future::Pending,
+    io,
+    net::{IpAddr, SocketAddr, UdpSocket},
+    pin::Pin,
+    sync::Arc,
+    task::{Context, Poll, Waker},
+    time::Duration,
+};
 
-use futures::future::BoxFuture;
-use futures::{prelude::*, ready, stream::SelectAll};
-use if_watch::tokio::IfWatcher;
-use if_watch::IfEvent;
-use wtransport::endpoint::{endpoint_side::Server, Endpoint, SessionRequest};
-use wtransport::ServerConfig;
-
-use crate::certificate::CertHash;
-use crate::config::Config;
-use crate::connection::Connection;
-use crate::Connecting;
-use crate::Error;
-use libp2p_core::transport::{DialOpts, ListenerId, TransportError, TransportEvent};
-use libp2p_core::{multiaddr::Protocol, Multiaddr, Transport};
+use futures::{future::BoxFuture, prelude::*, ready, stream::SelectAll};
+use if_watch::{tokio::IfWatcher, IfEvent};
+use libp2p_core::{
+    multiaddr::Protocol,
+    transport::{DialOpts, ListenerId, TransportError, TransportEvent},
+    Multiaddr, Transport,
+};
 use libp2p_identity::{Keypair, PeerId};
 use socket2::{Domain, Socket, Type};
-use wtransport::error::ConnectionError;
+use wtransport::{
+    endpoint::{endpoint_side::Server, Endpoint, SessionRequest},
+    error::ConnectionError,
+    ServerConfig,
+};
+
+use crate::{certificate::CertHash, config::Config, connection::Connection, Connecting, Error};
 
 pub struct GenTransport {
     config: Config,
@@ -48,7 +50,6 @@ impl GenTransport {
         addr: Multiaddr,
         check_unspecified_addr: bool,
     ) -> Result<(SocketAddr, Option<PeerId>), TransportError<<Self as Transport>::Error>> {
-        //todo rewrite: addr.clone() should be avoided.
         let (socket_addr, peer_id) = multiaddr_to_socketaddr(&addr)
             .ok_or_else(|| TransportError::MultiaddrNotSupported(addr.clone()))?;
         if check_unspecified_addr && (socket_addr.port() == 0 || socket_addr.ip().is_unspecified())
@@ -522,12 +523,13 @@ fn multiaddr_to_socketaddr(addr: &Multiaddr) -> Option<(SocketAddr, Option<PeerI
 
 #[cfg(test)]
 mod test {
+    use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
+
+    use futures::future::poll_fn;
+    use time::{ext::NumericalDuration, OffsetDateTime};
+
     use super::*;
     use crate::certificate::Certificate;
-    use futures::future::poll_fn;
-    use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
-    use time::ext::NumericalDuration;
-    use time::OffsetDateTime;
 
     fn generate_keypair_and_cert() -> (Keypair, Certificate) {
         let keypair = Keypair::generate_ed25519();
