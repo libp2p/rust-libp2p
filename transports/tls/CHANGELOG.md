@@ -1,9 +1,8 @@
-## 0.7.0
-
-- added functions to generate a webtransport certificate, 
-to make webtransport server and client TLS configurations
-
 ## 0.6.0
+
+- Added functions to generate a webtransport certificate,
+  to make webtransport server and client TLS configurations.
+  See [PR 5701](https://github.com/libp2p/rust-libp2p/pull/5701)
 
 <!-- Update to libp2p-core v0.43.0 -->
 
