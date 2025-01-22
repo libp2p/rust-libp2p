@@ -3260,7 +3260,15 @@ where
                 let mut ihave_msgs = vec![];
                 let mut graft_msgs = vec![];
                 let mut prune_msgs = vec![];
-                for control_msg in rpc.control_msgs {
+                for (count, control_msg) in rpc.control_msgs.into_iter().enumerate() {
+                    // Only process the amount of messages the configuration allows.
+                    if self.config.max_messages_per_rpc().is_some()
+                        && Some(count) >= self.config.max_messages_per_rpc()
+                    {
+                        tracing::warn!("Received more control messages than permitted. Ignoring further messages. Processed: {}", count);
+                        break;
+                    }
+
                     match control_msg {
                         ControlAction::IHave(IHave {
                             topic_hash,
