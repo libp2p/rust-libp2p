@@ -24,10 +24,10 @@ pub type CertHash = Multihash<64>;
 //   certificates
 #[derive(Debug, PartialEq, Eq)]
 pub struct Certificate {
-    pub der: CertificateDer<'static>,
-    pub private_key_der: PrivateKeyDer<'static>,
-    pub not_before: OffsetDateTime,
-    pub not_after: OffsetDateTime,
+    der: CertificateDer<'static>,
+    private_key_der: PrivateKeyDer<'static>,
+    not_before: OffsetDateTime,
+    not_after: OffsetDateTime,
 }
 
 #[derive(Debug)]
@@ -76,6 +76,14 @@ impl Certificate {
             not_before,
             not_after,
         })
+    }
+
+    pub fn get_certificate_der(&self) -> CertificateDer<'static> {
+        self.der.clone()
+    }
+
+    pub fn get_private_key_der(&self) -> &PrivateKeyDer {
+        &self.private_key_der
     }
 
     pub fn cert_hash(&self) -> CertHash {

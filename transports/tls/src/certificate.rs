@@ -27,6 +27,7 @@ use std::sync::Arc;
 use ::time::OffsetDateTime;
 use libp2p_identity as identity;
 use libp2p_identity::PeerId;
+use rustls::pki_types::{CertificateDer, PrivateKeyDer};
 use x509_parser::{prelude::*, signature_algorithm::SignatureAlgorithm};
 
 /// The libp2p Public Key Extension is a X.509 extension
@@ -50,8 +51,8 @@ pub(crate) struct AlwaysResolvesCert(Arc<rustls::sign::CertifiedKey>);
 
 impl AlwaysResolvesCert {
     pub(crate) fn new(
-        cert: rustls::pki_types::CertificateDer<'static>,
-        key: &rustls::pki_types::PrivateKeyDer<'_>,
+        cert: CertificateDer<'static>,
+        key: &PrivateKeyDer<'_>,
     ) -> Result<Self, rustls::Error> {
         let certified_key = rustls::sign::CertifiedKey::new(
             vec![cert],

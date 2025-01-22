@@ -46,8 +46,8 @@ impl Config {
 
     pub fn server_tls_config(&self) -> TlsServerConfig {
         libp2p_tls::make_webtransport_server_config(
-            self.cert.der.clone(),
-            &self.cert.private_key_der,
+            self.cert.get_certificate_der(),
+            &self.cert.get_private_key_der(),
             alpn_protocols(),
         )
     }

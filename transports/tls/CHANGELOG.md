@@ -1,4 +1,4 @@
-## 0.7.0
+## 0.6.1
 
 - Added functions to generate a webtransport certificate,
   to make webtransport server and client TLS configurations.
