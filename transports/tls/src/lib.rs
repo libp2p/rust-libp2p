@@ -99,7 +99,7 @@ pub fn make_webtransport_server_config(
     protocols: Vec<Vec<u8>>,
 ) -> rustls::ServerConfig {
     let cert_resolver = Arc::new(
-        AlwaysResolvesCert::new(certificate, &private_key)
+        AlwaysResolvesCert::new(certificate, private_key)
             .expect("Server cert key DER is valid; qed"),
     );
     let mut crypto = rustls::ServerConfig::builder()
@@ -114,7 +114,7 @@ pub fn make_webtransport_server_config(
 pub fn make_webtransport_client_config(
     remote_peer_id: Option<PeerId>,
     protocols: Vec<Vec<u8>>,
-) -> Result<rustls::ClientConfig, certificate::GenError> {
+) -> rustls::ClientConfig {
     let mut config = rustls::ClientConfig::builder()
         .dangerous()
         .with_custom_certificate_verifier(Arc::new(
@@ -124,5 +124,5 @@ pub fn make_webtransport_client_config(
 
     config.alpn_protocols = protocols;
 
-    Ok(config)
+    config
 }

@@ -48,8 +48,7 @@ impl WtClient {
         let client_tls = libp2p_tls::make_webtransport_client_config(
             Some(self.remote_peer_id),
             alpn_protocols(),
-        )
-        .unwrap();
+        );
 
         let config = ClientConfig::builder()
             .with_bind_default()
