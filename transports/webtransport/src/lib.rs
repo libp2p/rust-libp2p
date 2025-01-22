@@ -28,7 +28,7 @@ pub enum Error {
     UnexpectedPath(String),
 
     #[error(transparent)]
-    AuthenticationError(#[from] libp2p_noise::Error),
+    Authentication(#[from] libp2p_noise::Error),
 
     #[error("Unknown remote peer ID")]
     UnknownRemotePeerId,

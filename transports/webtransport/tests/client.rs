@@ -62,7 +62,7 @@ impl WtClient {
 
         tracing::debug!("Connection is established to {}", self.url.as_str());
 
-        let _ = self.authenticate().await?;
+        self.authenticate().await?;
         let stream = self.create_bidirectional_stream().await?;
 
         Ok(stream)

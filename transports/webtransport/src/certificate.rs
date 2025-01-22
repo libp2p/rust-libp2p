@@ -51,8 +51,8 @@ impl Clone for Certificate {
         Self {
             der: self.der.clone(),
             private_key_der: self.private_key_der.clone_key(),
-            not_before: self.not_before.clone(),
-            not_after: self.not_after.clone(),
+            not_before: self.not_before,
+            not_after: self.not_after,
         }
     }
 }
@@ -63,14 +63,10 @@ impl Certificate {
         not_before: OffsetDateTime,
     ) -> Result<Self, Error> {
         let not_after = not_before
-            .clone()
             .checked_add(CERT_VALID_PERIOD)
             .expect("Addition does not overflow");
-        let (cert, private_key) = certificate::generate_with_validity_period(
-            identity_keypair,
-            not_before.clone(),
-            not_after.clone(),
-        )?;
+        let (cert, private_key) =
+            certificate::generate_with_validity_period(identity_keypair, not_before, not_after)?;
 
         Ok(Self {
             der: cert,
@@ -83,7 +79,7 @@ impl Certificate {
     pub fn cert_hash(&self) -> CertHash {
         Multihash::wrap(
             MULTIHASH_SHA256_CODE,
-            sha2::Sha256::digest(&self.der.as_ref().as_ref()).as_ref(),
+            sha2::Sha256::digest(self.der.as_ref()).as_ref(),
         )
         .expect("fingerprint's len to be 32 bytes")
     }
@@ -126,9 +122,9 @@ impl Certificate {
 
     fn write_data<W: Write>(w: &mut W, data: &[u8]) -> Result<(), io::Error> {
         let size = data.len() as u64;
-        let mut size_buf = size.to_be_bytes();
+        let size_buf = size.to_be_bytes();
 
-        w.write_all(&mut size_buf)?;
+        w.write_all(&size_buf)?;
         w.write_all(data)?;
 
         Ok(())
@@ -138,14 +134,14 @@ impl Certificate {
         let size = Self::read_i64(r)? as usize;
         let mut res = vec![0u8; size];
 
-        r.read(res.as_mut_slice())?;
+        r.read_exact(res.as_mut_slice())?;
 
         Ok(res)
     }
 
     fn read_i64<R: Read>(r: &mut R) -> Result<i64, io::Error> {
         let mut buffer = [0u8; 8];
-        r.read(&mut buffer)?;
+        r.read_exact(&mut buffer)?;
 
         Ok(i64::from_be_bytes(buffer))
     }

@@ -85,7 +85,7 @@ impl Transport for GenTransport {
             wtransport::Endpoint::server(config).map_err(|e| TransportError::Other(e.into()))?;
         let keypair = &self.config.keypair;
         let cert_hashes = self.config.cert_hashes();
-        let handshake_timeout = self.config.handshake_timeout.clone();
+        let handshake_timeout = self.config.handshake_timeout;
 
         tracing::debug!("Listening on {:?}, listenerId {}", &socket, &id);
 
@@ -221,13 +221,13 @@ impl Listener {
         id: ListenerId,
     ) -> Result<SessionRequest, ConnectionError> {
         let incoming_session = endpoint.accept().await;
+
         tracing::debug!(
             "Listener {id} got incoming session from {}",
             incoming_session.remote_address()
         );
-        let res = incoming_session.await;
 
-        res
+        incoming_session.await
     }
 
     /// Report the listener as closed in a [`TransportEvent::ListenerClosed`] and
@@ -258,9 +258,8 @@ impl Listener {
     fn noise_config(&self) -> libp2p_noise::Config {
         let res = libp2p_noise::Config::new(&self.keypair).expect("Getting a noise config");
         let set = self.cert_hashes.iter().cloned().collect::<HashSet<_>>();
-        let res = res.with_webtransport_certhashes(set);
 
-        res
+        res.with_webtransport_certhashes(set)
     }
 
     fn poll_if_addr(&mut self, cx: &mut Context<'_>) -> Poll<<Self as Stream>::Item> {
@@ -333,7 +332,7 @@ impl Stream for Listener {
                     );
 
                     let endpoint = Arc::clone(&self.endpoint);
-                    self.accept = Self::accept(endpoint, self.listener_id.clone()).boxed();
+                    self.accept = Self::accept(endpoint, self.listener_id).boxed();
                     let local_addr =
                         socketaddr_to_multiaddr_with_hashes(&self.socket_addr(), &self.cert_hashes);
 
@@ -435,7 +434,7 @@ impl From<IpAddr> for SocketFamily {
 fn ip_to_listen_addr(
     endpoint_addr: &SocketAddr,
     ip: IpAddr,
-    hashes: &Vec<CertHash>,
+    hashes: &[CertHash],
 ) -> Option<Multiaddr> {
     // True if either both addresses are Ipv4 or both Ipv6.
     if !SocketFamily::is_same(&endpoint_addr.ip(), &ip) {
@@ -454,14 +453,11 @@ fn socketaddr_to_multiaddr(socket_addr: &SocketAddr) -> Multiaddr {
         .with(Protocol::WebTransport)
 }
 
-fn socketaddr_to_multiaddr_with_hashes(
-    socket_addr: &SocketAddr,
-    hashes: &Vec<CertHash>,
-) -> Multiaddr {
+fn socketaddr_to_multiaddr_with_hashes(socket_addr: &SocketAddr, hashes: &[CertHash]) -> Multiaddr {
     let mut res = socketaddr_to_multiaddr(socket_addr);
 
     if !hashes.is_empty() {
-        let mut vec = hashes.clone();
+        let mut vec = hashes.to_owned();
         res = res.with(Protocol::Certhash(
             vec.pop().expect("Gets the last element"),
         ));

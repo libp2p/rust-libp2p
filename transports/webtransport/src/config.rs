@@ -58,7 +58,7 @@ impl Config {
         res.max_concurrent_uni_streams(100u32.into());
         res.max_concurrent_bidi_streams(self.max_concurrent_stream_limit.into());
         res.datagram_receive_buffer_size(None);
-        res.keep_alive_interval(Some(self.keep_alive_interval.clone()));
+        res.keep_alive_interval(Some(self.keep_alive_interval));
         res.max_idle_timeout(Some(VarInt::from_u32(self.max_idle_timeout).into()));
         res.allow_spin(true);
         res.stream_receive_window(self.max_stream_data.into());
