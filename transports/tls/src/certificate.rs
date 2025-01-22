@@ -163,7 +163,6 @@ pub fn generate_with_validity_period(
     Ok((rustls_certificate, rustls_key))
 }
 
-
 /// Attempts to parse the provided bytes as a [`P2pCertificate`].
 ///
 /// For this to succeed, the certificate must contain the specified extension and the signature must
@@ -178,9 +177,7 @@ pub fn parse<'a>(
 ///
 /// For this to succeed, the certificate must contain the specified extension and the signature must
 /// match the embedded public key.
-pub fn parse_binary(
-    der_input: &[u8],
-) -> Result<P2pCertificate, ParseError> {
+pub fn parse_binary(der_input: &[u8]) -> Result<P2pCertificate, ParseError> {
     let certificate = parse_unverified(der_input)?;
 
     certificate.verify()?;

@@ -1,3 +1,8 @@
+## 0.7.0
+
+- added functions to generate a webtransport certificate, 
+to make webtransport server and client TLS configurations
+
 ## 0.6.0
 
 <!-- Update to libp2p-core v0.43.0 -->
