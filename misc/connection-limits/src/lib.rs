@@ -290,7 +290,7 @@ impl NetworkBehaviour for Behaviour {
         local_addr: &Multiaddr,
         remote_addr: &Multiaddr,
     ) -> Result<(), ConnectionDenied> {
-        if !self
+        if self
             .bypass_rules
             .is_bypassed(None, std::slice::from_ref(remote_addr), Some(local_addr))
         {
@@ -355,7 +355,7 @@ impl NetworkBehaviour for Behaviour {
         addresses: &[Multiaddr],
         _: Endpoint,
     ) -> Result<Vec<Multiaddr>, ConnectionDenied> {
-        if !self
+        if self
             .bypass_rules
             .is_bypassed(maybe_peer.as_ref(), addresses, None)
         {
@@ -382,7 +382,7 @@ impl NetworkBehaviour for Behaviour {
         _: PortUse,
     ) -> Result<THandler<Self>, ConnectionDenied> {
         self.pending_outbound_connections.remove(&connection_id);
-        if !self
+        if self
             .bypass_rules
             .is_bypassed(Some(&peer), std::slice::from_ref(addr), None)
         {
