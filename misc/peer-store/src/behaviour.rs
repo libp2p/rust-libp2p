@@ -1,10 +1,7 @@
-use std::{
-    collections::{HashSet, VecDeque},
-    task::Poll,
-};
+use std::{collections::VecDeque, task::Poll};
 
 use libp2p_core::{Multiaddr, PeerId};
-use libp2p_swarm::{dummy, FromSwarm, NetworkBehaviour};
+use libp2p_swarm::{dummy, NetworkBehaviour};
 
 use crate::store::{AddressSource, Store};
 
@@ -21,8 +18,6 @@ pub enum Event<S: Store> {
 
 pub struct Behaviour<S: Store> {
     store: S,
-    /// Peers that are currently connected.
-    connected_peers: HashSet<PeerId>,
     /// Pending Events to be emitted back to the  [`libp2p_swarm::Swarm`].
     pending_events: VecDeque<Event<S>>,
 }
@@ -34,14 +29,8 @@ where
     pub fn new(store: S) -> Self {
         Self {
             store,
-            connected_peers: HashSet::new(),
             pending_events: VecDeque::new(),
         }
-    }
-
-    /// List peers that are currently connected to this peer.
-    pub fn list_connected(&self) -> impl Iterator<Item = &PeerId> {
-        self.connected_peers.iter()
     }
 
     /// Try to get all observed address of the given peer.  
@@ -86,12 +75,6 @@ where
         &mut self.store
     }
 
-    fn on_peer_connect(&mut self, peer: &PeerId) {
-        self.connected_peers.insert(*peer);
-    }
-    fn on_peer_disconnect(&mut self, peer: &PeerId) {
-        self.connected_peers.remove(peer);
-    }
     fn on_address_update(
         &mut self,
         peer: &PeerId,
@@ -169,19 +152,6 @@ where
         if let Some(ev) = self.store.on_swarm_event(&event) {
             self.handle_store_event(ev);
         };
-        match event {
-            FromSwarm::ConnectionClosed(info) => {
-                if info.remaining_established < 1 {
-                    self.on_peer_disconnect(&info.peer_id);
-                }
-            }
-            FromSwarm::ConnectionEstablished(info) => {
-                if info.other_established == 0 {
-                    self.on_peer_connect(&info.peer_id);
-                }
-            }
-            _ => {}
-        }
     }
 
     fn on_connection_handler_event(
