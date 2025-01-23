@@ -214,9 +214,9 @@ mod tests {
         future::timeout,
         net::{TcpListener, TcpStream},
     };
-    use libp2p_test_utils::EnvFilter;
     use quickcheck::{Arbitrary, Gen, GenRange};
     use tracing::metadata::LevelFilter;
+    use tracing_subscriber::EnvFilter;
 
     use super::*;
     use crate::listener_select_proto;
@@ -275,11 +275,13 @@ mod tests {
             ListenerProtos(listen_protos): ListenerProtos,
             DialPayload(dial_payload): DialPayload,
         ) {
-            libp2p_test_utils::with_env_filter(
-                EnvFilter::builder()
-                    .with_default_directive(LevelFilter::DEBUG.into())
-                    .from_env_lossy(),
-            );
+            let _ = tracing_subscriber::fmt()
+                .with_env_filter(
+                    EnvFilter::builder()
+                        .with_default_directive(LevelFilter::DEBUG.into())
+                        .from_env_lossy(),
+                )
+                .try_init();
 
             async_std::task::block_on(async move {
                 let listener = TcpListener::bind("0.0.0.0:0").await.unwrap();

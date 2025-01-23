@@ -1,4 +1,8 @@
 ## 0.48.0
+
+- Allow broadcasting `IDONTWANT` messages when publishing to avoid downloading data that is already available.
+  See [PR 5773](https://github.com/libp2p/rust-libp2p/pull/5773)
+
 - Add configurable `idontwant_message_size_threshold` parameter.
   See [PR 5770](https://github.com/libp2p/rust-libp2p/pull/5770)
 
@@ -30,6 +34,11 @@
 
 - Fix `cargo clippy` warnings in `rustc 1.84.0-beta.1`.
   See [PR 5700](https://github.com/libp2p/rust-libp2p/pull/5700).
+
+- Fixe an issue where an `InsufficientPeers` error could occur under certain conditions, despite having peers subscribed to a topic.
+  See [PR 5793](https://github.com/libp2p/rust-libp2p/pull/5793).
+
+<!-- Update to libp2p-core v0.43.0 -->
 
 ## 0.47.0
 

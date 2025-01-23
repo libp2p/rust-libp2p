@@ -1,6 +1,8 @@
-## 0.15.1
+## 0.16.0
 
 - Update to `libp2p-request-response` `v0.28.0`.
+
+<!-- Update to libp2p-core v0.43.0 -->
 
 ## 0.15.0
 
