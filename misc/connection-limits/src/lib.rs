@@ -294,12 +294,15 @@ impl NetworkBehaviour for Behaviour {
             .bypass_rules
             .is_bypassed(None, std::slice::from_ref(remote_addr), Some(local_addr))
         {
-            check_limit(
-                self.limits.max_pending_incoming,
-                self.pending_inbound_connections.len(),
-                Kind::PendingIncoming,
-            )?;
+            return Ok(());
         }
+
+        check_limit(
+            self.limits.max_pending_incoming,
+            self.pending_inbound_connections.len(),
+            Kind::PendingIncoming,
+        )?;
+
         self.pending_inbound_connections.insert(connection_id);
 
         Ok(())
@@ -314,31 +317,34 @@ impl NetworkBehaviour for Behaviour {
     ) -> Result<THandler<Self>, ConnectionDenied> {
         self.pending_inbound_connections.remove(&connection_id);
 
-        if !self.bypass_rules.is_bypassed(
+        if self.bypass_rules.is_bypassed(
             Some(&peer),
             std::slice::from_ref(remote_addr),
             Some(local_addr),
         ) {
-            check_limit(
-                self.limits.max_established_incoming,
-                self.established_inbound_connections.len(),
-                Kind::EstablishedIncoming,
-            )?;
-            check_limit(
-                self.limits.max_established_per_peer,
-                self.established_per_peer
-                    .get(&peer)
-                    .map(|connections| connections.len())
-                    .unwrap_or(0),
-                Kind::EstablishedPerPeer,
-            )?;
-            check_limit(
-                self.limits.max_established_total,
-                self.established_inbound_connections.len()
-                    + self.established_outbound_connections.len(),
-                Kind::EstablishedTotal,
-            )?;
+            return Ok(dummy::ConnectionHandler);
         }
+
+        check_limit(
+            self.limits.max_established_incoming,
+            self.established_inbound_connections.len(),
+            Kind::EstablishedIncoming,
+        )?;
+        check_limit(
+            self.limits.max_established_per_peer,
+            self.established_per_peer
+                .get(&peer)
+                .map(|connections| connections.len())
+                .unwrap_or(0),
+            Kind::EstablishedPerPeer,
+        )?;
+        check_limit(
+            self.limits.max_established_total,
+            self.established_inbound_connections.len()
+                + self.established_outbound_connections.len(),
+            Kind::EstablishedTotal,
+        )?;
+
         Ok(dummy::ConnectionHandler)
     }
 
@@ -353,12 +359,14 @@ impl NetworkBehaviour for Behaviour {
             .bypass_rules
             .is_bypassed(maybe_peer.as_ref(), addresses, None)
         {
-            check_limit(
-                self.limits.max_pending_outgoing,
-                self.pending_outbound_connections.len(),
-                Kind::PendingOutgoing,
-            )?;
+            return Ok(vec![]);
         }
+
+        check_limit(
+            self.limits.max_pending_outgoing,
+            self.pending_outbound_connections.len(),
+            Kind::PendingOutgoing,
+        )?;
 
         self.pending_outbound_connections.insert(connection_id);
 
@@ -378,26 +386,28 @@ impl NetworkBehaviour for Behaviour {
             .bypass_rules
             .is_bypassed(Some(&peer), std::slice::from_ref(addr), None)
         {
-            check_limit(
-                self.limits.max_established_outgoing,
-                self.established_outbound_connections.len(),
-                Kind::EstablishedOutgoing,
-            )?;
-            check_limit(
-                self.limits.max_established_per_peer,
-                self.established_per_peer
-                    .get(&peer)
-                    .map(|connections| connections.len())
-                    .unwrap_or(0),
-                Kind::EstablishedPerPeer,
-            )?;
-            check_limit(
-                self.limits.max_established_total,
-                self.established_inbound_connections.len()
-                    + self.established_outbound_connections.len(),
-                Kind::EstablishedTotal,
-            )?;
+            return Ok(dummy::ConnectionHandler);
         }
+
+        check_limit(
+            self.limits.max_established_outgoing,
+            self.established_outbound_connections.len(),
+            Kind::EstablishedOutgoing,
+        )?;
+        check_limit(
+            self.limits.max_established_per_peer,
+            self.established_per_peer
+                .get(&peer)
+                .map(|connections| connections.len())
+                .unwrap_or(0),
+            Kind::EstablishedPerPeer,
+        )?;
+        check_limit(
+            self.limits.max_established_total,
+            self.established_inbound_connections.len()
+                + self.established_outbound_connections.len(),
+            Kind::EstablishedTotal,
+        )?;
 
         Ok(dummy::ConnectionHandler)
     }
