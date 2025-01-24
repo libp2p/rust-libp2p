@@ -23,17 +23,22 @@ use futures::future::Either;
 use libp2p_mdns::{tokio::Behaviour, Config, Event};
 use libp2p_swarm::{Swarm, SwarmEvent};
 use libp2p_swarm_test::SwarmExt as _;
+use tracing_subscriber::EnvFilter;
 
 #[tokio::test]
 async fn test_discovery_tokio_ipv4() {
-    libp2p_test_utils::with_default_env_filter();
+    let _ = tracing_subscriber::fmt()
+        .with_env_filter(EnvFilter::from_default_env())
+        .try_init();
 
     run_discovery_test(Config::default()).await
 }
 
 #[tokio::test]
 async fn test_discovery_tokio_ipv6() {
-    libp2p_test_utils::with_default_env_filter();
+    let _ = tracing_subscriber::fmt()
+        .with_env_filter(EnvFilter::from_default_env())
+        .try_init();
 
     let config = Config {
         enable_ipv6: true,
@@ -44,7 +49,9 @@ async fn test_discovery_tokio_ipv6() {
 
 #[tokio::test]
 async fn test_expired_tokio() {
-    libp2p_test_utils::with_default_env_filter();
+    let _ = tracing_subscriber::fmt()
+        .with_env_filter(EnvFilter::from_default_env())
+        .try_init();
 
     let config = Config {
         ttl: Duration::from_secs(1),

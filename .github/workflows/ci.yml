@@ -70,7 +70,7 @@ jobs:
       - name: Enforce version in `workspace.dependencies` matches the latest version
         if: env.CRATE != 'libp2p'
         run: |
-          SPECIFIED_VERSION=$(tq "workspace.dependencies.$CRATE.version" --file ./Cargo.toml)
+          SPECIFIED_VERSION=$(tq "workspace.dependencies.$CRATE.version" -r --file ./Cargo.toml)
 
           echo "Package version: $CRATE_VERSION";
           echo "Specified version: $SPECIFIED_VERSION";
