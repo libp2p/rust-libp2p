@@ -1,6 +1,6 @@
 ## 0.48.1
 - Improve `max_messages_per_rpc` consistency by ensuring RPC control messages also adhere to the existing limits.
-  See [PR XXXX](https://github.com/libp2p/rust-libp2p/pull/XXXX)
+  See [PR 5826](https://github.com/libp2p/rust-libp2p/pull/5826)
 
 ## 0.48.0
 
