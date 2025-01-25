@@ -31,6 +31,7 @@ use libp2p_mplex::MplexConfig;
 use libp2p_noise as noise;
 use multiaddr::{Multiaddr, Protocol};
 use rand::random;
+use tokio::runtime::Runtime;
 
 #[derive(Clone)]
 struct HelloUpgrade {}
@@ -137,6 +138,7 @@ fn upgrade_pipeline() {
         assert_eq!(peer, listener_id);
     };
 
-    async_std::task::spawn(server);
-    async_std::task::block_on(client);
+    let rt = Runtime::new().unwrap();
+    rt.spawn(server);
+    rt.block_on(client);
 }

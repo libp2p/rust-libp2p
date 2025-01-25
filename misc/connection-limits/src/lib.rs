@@ -381,6 +381,7 @@ mod tests {
     };
     use libp2p_swarm_test::SwarmExt;
     use quickcheck::*;
+    use tokio::runtime::Runtime;
 
     use super::*;
 
@@ -452,7 +453,8 @@ mod tests {
                 )
             });
 
-            async_std::task::block_on(async {
+            let rt = Runtime::new().unwrap();
+            rt.block_on(async {
                 let (listen_addr, _) = swarm1.listen().with_memory_addr_external().await;
 
                 for _ in 0..limit {
@@ -461,7 +463,7 @@ mod tests {
 
                 swarm2.dial(listen_addr).unwrap();
 
-                async_std::task::spawn(swarm2.loop_on_next());
+                tokio::spawn(swarm2.loop_on_next());
 
                 let cause = swarm1
                     .wait(|event| match event {
@@ -503,11 +505,12 @@ mod tests {
         });
         let mut swarm2 = Swarm::new_ephemeral(|_| Behaviour::new(ConnectionLimits::default()));
 
-        async_std::task::block_on(async {
+        let rt = Runtime::new().unwrap();
+        rt.block_on(async {
             // Have swarm2 dial swarm1.
             let (listen_addr, _) = swarm1.listen().await;
             swarm2.dial(listen_addr).unwrap();
-            async_std::task::spawn(swarm2.loop_on_next());
+            tokio::spawn(swarm2.loop_on_next());
 
             // Wait for the ConnectionDenier of swarm1 to deny the established connection.
             let cause = swarm1
