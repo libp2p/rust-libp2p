@@ -98,6 +98,8 @@ pub struct Config {
     connection_handler_queue_len: usize,
     connection_handler_publish_duration: Duration,
     connection_handler_forward_duration: Duration,
+    idontwant_message_size_threshold: usize,
+    idontwant_on_publish: bool,
 }
 
 impl Config {
@@ -371,6 +373,23 @@ impl Config {
     pub fn forward_queue_duration(&self) -> Duration {
         self.connection_handler_forward_duration
     }
+
+    /// The message size threshold for which IDONTWANT messages are sent.
+    /// Sending IDONTWANT messages for small messages can have a negative effect to the overall
+    /// traffic and CPU load. This acts as a lower bound cutoff for the message size to which
+    /// IDONTWANT won't be sent to peers. Only works if the peers support Gossipsub1.2
+    /// (see <https://github.com/libp2p/specs/blob/master/pubsub/gossipsub/gossipsub-v1.2.md#idontwant-message>)
+    /// default is 1kB
+    pub fn idontwant_message_size_threshold(&self) -> usize {
+        self.idontwant_message_size_threshold
+    }
+
+    /// Send IDONTWANT messages after publishing message on gossip. This is an optimisation
+    /// to avoid bandwidth consumption by downloading the published message over gossip.
+    /// By default it is false.
+    pub fn idontwant_on_publish(&self) -> bool {
+        self.idontwant_on_publish
+    }
 }
 
 impl Default for Config {
@@ -443,6 +462,8 @@ impl Default for ConfigBuilder {
                 connection_handler_queue_len: 5000,
                 connection_handler_publish_duration: Duration::from_secs(5),
                 connection_handler_forward_duration: Duration::from_secs(1),
+                idontwant_message_size_threshold: 1000,
+                idontwant_on_publish: false,
             },
             invalid_protocol: false,
         }
@@ -829,6 +850,25 @@ impl ConfigBuilder {
         self
     }
 
+    /// The message size threshold for which IDONTWANT messages are sent.
+    /// Sending IDONTWANT messages for small messages can have a negative effect to the overall
+    /// traffic and CPU load. This acts as a lower bound cutoff for the message size to which
+    /// IDONTWANT won't be sent to peers. Only works if the peers support Gossipsub1.2
+    /// (see <https://github.com/libp2p/specs/blob/master/pubsub/gossipsub/gossipsub-v1.2.md#idontwant-message>)
+    /// default is 1kB
+    pub fn idontwant_message_size_threshold(&mut self, size: usize) -> &mut Self {
+        self.config.idontwant_message_size_threshold = size;
+        self
+    }
+
+    /// Send IDONTWANT messages after publishing message on gossip. This is an optimisation
+    /// to avoid bandwidth consumption by downloading the published message over gossip.
+    /// By default it is false.
+    pub fn idontwant_on_publish(&mut self, idontwant_on_publish: bool) -> &mut Self {
+        self.config.idontwant_on_publish = idontwant_on_publish;
+        self
+    }
+
     /// Constructs a [`Config`] from the given configuration and validates the settings.
     pub fn build(&self) -> Result<Config, ConfigBuilderError> {
         // check all constraints on config
@@ -899,6 +939,11 @@ impl std::fmt::Debug for Config {
             "published_message_ids_cache_time",
             &self.published_message_ids_cache_time,
         );
+        let _ = builder.field(
+            "idontwant_message_size_threhold",
+            &self.idontwant_message_size_threshold,
+        );
+        let _ = builder.field("idontwant_on_publish", &self.idontwant_on_publish);
         builder.finish()
     }
 }

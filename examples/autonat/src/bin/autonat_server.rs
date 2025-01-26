@@ -20,7 +20,7 @@
 
 #![doc = include_str!("../../README.md")]
 
-use std::{error::Error, net::Ipv4Addr, time::Duration};
+use std::{error::Error, net::Ipv4Addr};
 
 use clap::Parser;
 use futures::StreamExt;
@@ -56,7 +56,6 @@ async fn main() -> Result<(), Box<dyn Error>> {
             yamux::Config::default,
         )?
         .with_behaviour(|key| Behaviour::new(key.public()))?
-        .with_swarm_config(|c| c.with_idle_connection_timeout(Duration::from_secs(60)))
         .build();
 
     swarm.listen_on(

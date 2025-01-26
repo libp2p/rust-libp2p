@@ -159,10 +159,7 @@ impl Handler {
         &mut self,
         FullyNegotiatedInbound {
             protocol: output, ..
-        }: FullyNegotiatedInbound<
-            <Self as ConnectionHandler>::InboundProtocol,
-            <Self as ConnectionHandler>::InboundOpenInfo,
-        >,
+        }: FullyNegotiatedInbound<<Self as ConnectionHandler>::InboundProtocol>,
     ) {
         match output {
             future::Either::Left(stream) => {
@@ -198,10 +195,7 @@ impl Handler {
         &mut self,
         FullyNegotiatedOutbound {
             protocol: output, ..
-        }: FullyNegotiatedOutbound<
-            <Self as ConnectionHandler>::OutboundProtocol,
-            <Self as ConnectionHandler>::OutboundOpenInfo,
-        >,
+        }: FullyNegotiatedOutbound<<Self as ConnectionHandler>::OutboundProtocol>,
     ) {
         match output {
             future::Either::Left(stream) => {
@@ -242,10 +236,17 @@ impl Handler {
         }
     }
 
-    fn handle_incoming_info(&mut self, info: &Info) {
+    /// If the public key matches the remote peer, handles the given `info` and returns `true`.
+    fn handle_incoming_info(&mut self, info: &Info) -> bool {
+        let derived_peer_id = info.public_key.to_peer_id();
+        if self.remote_peer_id != derived_peer_id {
+            return false;
+        }
+
         self.remote_info.replace(info.clone());
 
         self.update_supported_protocols_for_remote(info);
+        true
     }
 
     fn update_supported_protocols_for_remote(&mut self, remote_info: &Info) {
@@ -296,7 +297,7 @@ impl ConnectionHandler for Handler {
     type OutboundOpenInfo = ();
     type InboundOpenInfo = ();
 
-    fn listen_protocol(&self) -> SubstreamProtocol<Self::InboundProtocol, Self::InboundOpenInfo> {
+    fn listen_protocol(&self) -> SubstreamProtocol<Self::InboundProtocol> {
         SubstreamProtocol::new(
             SelectUpgrade::new(
                 ReadyUpgrade::new(PROTOCOL_NAME),
@@ -327,7 +328,7 @@ impl ConnectionHandler for Handler {
     fn poll(
         &mut self,
         cx: &mut Context<'_>,
-    ) -> Poll<ConnectionHandlerEvent<Self::OutboundProtocol, Self::OutboundOpenInfo, Event>> {
+    ) -> Poll<ConnectionHandlerEvent<Self::OutboundProtocol, (), Event>> {
         if let Some(event) = self.events.pop() {
             return Poll::Ready(event);
         }
@@ -344,45 +345,61 @@ impl ConnectionHandler for Handler {
             return Poll::Ready(event);
         }
 
-        match self.active_streams.poll_unpin(cx) {
-            Poll::Ready(Ok(Ok(Success::ReceivedIdentify(remote_info)))) => {
-                self.handle_incoming_info(&remote_info);
-
-                return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(Event::Identified(
-                    remote_info,
-                )));
-            }
-            Poll::Ready(Ok(Ok(Success::SentIdentifyPush(info)))) => {
-                return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(
-                    Event::IdentificationPushed(info),
-                ));
-            }
-            Poll::Ready(Ok(Ok(Success::SentIdentify))) => {
-                return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(
-                    Event::Identification,
-                ));
-            }
-            Poll::Ready(Ok(Ok(Success::ReceivedIdentifyPush(remote_push_info)))) => {
-                if let Some(mut info) = self.remote_info.clone() {
-                    info.merge(remote_push_info);
-                    self.handle_incoming_info(&info);
-
+        while let Poll::Ready(ready) = self.active_streams.poll_unpin(cx) {
+            match ready {
+                Ok(Ok(Success::ReceivedIdentify(remote_info))) => {
+                    if self.handle_incoming_info(&remote_info) {
+                        return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(
+                            Event::Identified(remote_info),
+                        ));
+                    } else {
+                        tracing::warn!(
+                            %self.remote_peer_id,
+                            ?remote_info.public_key,
+                            derived_peer_id=%remote_info.public_key.to_peer_id(),
+                            "Discarding received identify message as public key does not match remote peer ID",
+                        );
+                    }
+                }
+                Ok(Ok(Success::SentIdentifyPush(info))) => {
                     return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(
-                        Event::Identified(info),
+                        Event::IdentificationPushed(info),
                     ));
-                };
+                }
+                Ok(Ok(Success::SentIdentify)) => {
+                    return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(
+                        Event::Identification,
+                    ));
+                }
+                Ok(Ok(Success::ReceivedIdentifyPush(remote_push_info))) => {
+                    if let Some(mut info) = self.remote_info.clone() {
+                        info.merge(remote_push_info);
+
+                        if self.handle_incoming_info(&info) {
+                            return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(
+                                Event::Identified(info),
+                            ));
+                        } else {
+                            tracing::warn!(
+                                %self.remote_peer_id,
+                                ?info.public_key,
+                                derived_peer_id=%info.public_key.to_peer_id(),
+                                "Discarding received identify message as public key does not match remote peer ID",
+                            );
+                        }
+                    }
+                }
+                Ok(Err(e)) => {
+                    return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(
+                        Event::IdentificationError(StreamUpgradeError::Apply(e)),
+                    ));
+                }
+                Err(Timeout { .. }) => {
+                    return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(
+                        Event::IdentificationError(StreamUpgradeError::Timeout),
+                    ));
+                }
             }
-            Poll::Ready(Ok(Err(e))) => {
-                return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(
-                    Event::IdentificationError(StreamUpgradeError::Apply(e)),
-                ));
-            }
-            Poll::Ready(Err(Timeout { .. })) => {
-                return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(
-                    Event::IdentificationError(StreamUpgradeError::Timeout),
-                ));
-            }
-            Poll::Pending => {}
         }
 
         Poll::Pending
@@ -390,12 +407,7 @@ impl ConnectionHandler for Handler {
 
     fn on_connection_event(
         &mut self,
-        event: ConnectionEvent<
-            Self::InboundProtocol,
-            Self::OutboundProtocol,
-            Self::InboundOpenInfo,
-            Self::OutboundOpenInfo,
-        >,
+        event: ConnectionEvent<Self::InboundProtocol, Self::OutboundProtocol>,
     ) {
         match event {
             ConnectionEvent::FullyNegotiatedInbound(fully_negotiated_inbound) => {
