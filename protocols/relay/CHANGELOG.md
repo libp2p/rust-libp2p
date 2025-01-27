@@ -1,3 +1,7 @@
+## 0.19.1
+
+- Remove duplicated forwarding of pending events to connection handler.
+
 ## 0.19.0
 
 - Deprecate `void` crate.
