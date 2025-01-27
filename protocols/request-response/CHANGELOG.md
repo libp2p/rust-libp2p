@@ -9,6 +9,9 @@
 - Allow configurable request and response sizes for `json` and `cbor` codec.
   See [PR 5792](https://github.com/libp2p/rust-libp2p/pull/5792).
 
+- fix: public cbor/json codec module
+  See [PR 5830](https://github.com/libp2p/rust-libp2p/pull/5830).
+
 <!-- Update to libp2p-core v0.43.0 -->
 
 ## 0.27.0
