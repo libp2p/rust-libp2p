@@ -1,3 +1,7 @@
+## 0.42.0
+
+<!-- Update to libp2p-core v0.43.0 -->
+
 ## 0.41.0
 
 - Implement refactored `Transport`.

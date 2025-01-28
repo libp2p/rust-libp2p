@@ -40,10 +40,13 @@ use libp2p_plaintext as plaintext;
 use libp2p_relay as relay;
 use libp2p_swarm::{dial_opts::DialOpts, Config, DialError, NetworkBehaviour, Swarm, SwarmEvent};
 use libp2p_swarm_test::SwarmExt;
+use tracing_subscriber::EnvFilter;
 
 #[test]
 fn reservation() {
-    libp2p_test_utils::with_default_env_filter();
+    let _ = tracing_subscriber::fmt()
+        .with_env_filter(EnvFilter::from_default_env())
+        .try_init();
     let mut pool = LocalPool::new();
 
     let relay_addr = Multiaddr::empty().with(Protocol::Memory(rand::random::<u64>()));
@@ -84,7 +87,9 @@ fn reservation() {
 
 #[test]
 fn new_reservation_to_same_relay_replaces_old() {
-    libp2p_test_utils::with_default_env_filter();
+    let _ = tracing_subscriber::fmt()
+        .with_env_filter(EnvFilter::from_default_env())
+        .try_init();
     let mut pool = LocalPool::new();
 
     let relay_addr = Multiaddr::empty().with(Protocol::Memory(rand::random::<u64>()));
@@ -181,7 +186,9 @@ fn new_reservation_to_same_relay_replaces_old() {
 
 #[test]
 fn connect() {
-    libp2p_test_utils::with_default_env_filter();
+    let _ = tracing_subscriber::fmt()
+        .with_env_filter(EnvFilter::from_default_env())
+        .try_init();
     let mut pool = LocalPool::new();
 
     let relay_addr = Multiaddr::empty().with(Protocol::Memory(rand::random::<u64>()));
@@ -265,7 +272,9 @@ async fn connection_established_to(
 
 #[test]
 fn handle_dial_failure() {
-    libp2p_test_utils::with_default_env_filter();
+    let _ = tracing_subscriber::fmt()
+        .with_env_filter(EnvFilter::from_default_env())
+        .try_init();
     let mut pool = LocalPool::new();
 
     let relay_addr = Multiaddr::empty().with(Protocol::Memory(rand::random::<u64>()));
@@ -284,7 +293,9 @@ fn handle_dial_failure() {
 
 #[test]
 fn propagate_reservation_error_to_listener() {
-    libp2p_test_utils::with_default_env_filter();
+    let _ = tracing_subscriber::fmt()
+        .with_env_filter(EnvFilter::from_default_env())
+        .try_init();
     let mut pool = LocalPool::new();
 
     let relay_addr = Multiaddr::empty().with(Protocol::Memory(rand::random::<u64>()));
@@ -331,7 +342,9 @@ fn propagate_reservation_error_to_listener() {
 
 #[test]
 fn propagate_connect_error_to_unknown_peer_to_dialer() {
-    libp2p_test_utils::with_default_env_filter();
+    let _ = tracing_subscriber::fmt()
+        .with_env_filter(EnvFilter::from_default_env())
+        .try_init();
     let mut pool = LocalPool::new();
 
     let relay_addr = Multiaddr::empty().with(Protocol::Memory(rand::random::<u64>()));
@@ -385,7 +398,9 @@ fn propagate_connect_error_to_unknown_peer_to_dialer() {
 
 #[test]
 fn reuse_connection() {
-    libp2p_test_utils::with_default_env_filter();
+    let _ = tracing_subscriber::fmt()
+        .with_env_filter(EnvFilter::from_default_env())
+        .try_init();
     let mut pool = LocalPool::new();
 
     let relay_addr = Multiaddr::empty().with(Protocol::Memory(rand::random::<u64>()));
