@@ -2707,12 +2707,12 @@ dependencies = [
 name = "libp2p-allow-block-list"
 version = "0.5.0"
 dependencies = [
- "async-std",
  "libp2p-core",
  "libp2p-identity",
  "libp2p-swarm",
  "libp2p-swarm-derive",
  "libp2p-swarm-test",
+ "tokio",
 ]
 
 [[package]]
@@ -2746,7 +2746,6 @@ dependencies = [
 name = "libp2p-connection-limits"
 version = "0.5.0"
 dependencies = [
- "async-std",
  "libp2p-core",
  "libp2p-identify",
  "libp2p-identity",
@@ -2756,13 +2755,13 @@ dependencies = [
  "libp2p-swarm-test",
  "quickcheck-ext",
  "rand 0.8.5",
+ "tokio",
 ]
 
 [[package]]
 name = "libp2p-core"
 version = "0.43.0"
 dependencies = [
- "async-std",
  "either",
  "fnv",
  "futures",
@@ -2780,6 +2779,7 @@ dependencies = [
  "rand 0.8.5",
  "rw-stream-sink",
  "thiserror 2.0.9",
+ "tokio",
  "tracing",
  "unsigned-varint",
  "web-time 1.1.0",
