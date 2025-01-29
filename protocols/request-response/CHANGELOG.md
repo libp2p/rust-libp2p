@@ -1,3 +1,8 @@
+## 0.28.1
+
+- fix: public cbor/json codec module
+  See [PR 5830](https://github.com/libp2p/rust-libp2p/pull/5830).
+
 ## 0.28.0
 
 - Deprecate `void` crate.

@@ -15,7 +15,7 @@ libp2p-swarm = { workspace = true }
 libp2p-identity = { workspace = true, features = ["peerid"] }
 
 [dev-dependencies]
-tokio = { workspace = true, features = ["rt-multi-thread"] }
+tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
 libp2p-identify = { workspace = true }
 libp2p-ping = { workspace = true }
 libp2p-swarm-derive = { path = "../../swarm-derive" }
