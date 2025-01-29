@@ -13,7 +13,7 @@ Take care to not merge the configuration change too early because it will block 
 ## Mergify
 
 We utilize mergify as a merge-queue and overall automation bot on the repository.
-The configuration file is [.github/mergify.yml](../.github/mergify.yml).
+The configuration file is [mergify](../.github/mergify.yml).
 
 The main feature is the `send-it` label.
 Once a PR fulfills all merge requirements (approvals, passing CI, etc), applying the `send-it` labels activates mergify's merge-queue.
@@ -63,6 +63,6 @@ For the most part, the labels we use on issues are pretty self-explanatory.
 
 - `decision-pending`: Documents that the issue is blocked.
   Maintainers are encouraged to provide their input on issues marked with this label.
-- `need/author-input`: Integrates with our [.github/workflows/stale.yml](../.github/workflows/stale.yml) workflow.
+- `need/author-input`: Integrates with our [workflows](../.github/workflows/stale.yml).
   Any issue tagged with this label will be auto-closed due to inactivity after a certain time.
 
