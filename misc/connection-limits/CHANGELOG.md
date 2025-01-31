@@ -1,7 +1,7 @@
 ## 0.5.1
 
-- Allow setting Peer IDs and custom filter for bypassing limit check. 
-  Connections to specific peers OR matching the custom filter won't be counted toward limits.
+- Allow setting Peer IDs for bypassing limit check. 
+  Connections to the specified peers won't be counted toward limits.
   See [PR 5720](https://github.com/libp2p/rust-libp2p/pull/5720).
 
 ## 0.5.0

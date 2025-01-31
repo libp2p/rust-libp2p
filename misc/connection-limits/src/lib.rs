@@ -33,12 +33,6 @@ use libp2p_swarm::{
     THandlerInEvent, THandlerOutEvent, ToSwarm,
 };
 
-type BypassFn = fn(
-    remote_peer: Option<&PeerId>,
-    remote_addresses: &[Multiaddr],
-    local_addresses: Option<&Multiaddr>,
-) -> bool;
-
 /// A [`NetworkBehaviour`] that enforces a set of [`ConnectionLimits`].
 ///
 /// For these limits to take effect, this needs to be composed
@@ -52,8 +46,8 @@ type BypassFn = fn(
 /// contain a [`ConnectionDenied`] type that can be downcast to [`Exceeded`] error if (and only if)
 /// **this** behaviour denied the connection.
 ///
-/// You can also set Peer IDs and Multiaddrs that bypass the said limit. Connections that
-/// match the bypass rules will not be checked against limits.
+/// You can also set Peer IDs that bypass the said limit. Connections that
+/// match the bypass rules will not be checked against or counted for limits.
 ///
 /// If you employ multiple [`NetworkBehaviour`]s that manage connections,
 /// it may also be a different error.
@@ -226,20 +220,15 @@ impl ConnectionLimits {
 
 /// A set of rules that allows bypass of limits.
 /// Connections that match the rules won't be counted toward limits.
-#[derive(Debug, Clone, Default)]
+#[derive(Default)]
 pub struct BypassRules {
     /// Peer IDs that bypass limit check, regardless of inbound or outbound.
     by_peer_id: HashSet<PeerId>,
-    /// The custom bypass rule. Note that the rules are applied in OR logic,
-    /// allow connections that matches ANY of the rules.  
-    /// Cannot be mutated at runtime.
-    custom: Option<BypassFn>,
 }
 impl BypassRules {
     pub fn new(peer_ids: HashSet<PeerId>) -> Self {
         Self {
             by_peer_id: peer_ids,
-            custom: None,
         }
     }
     /// Add the peer to bypass list.
@@ -250,33 +239,9 @@ impl BypassRules {
     pub fn remove_peer_id(&mut self, peer_id: &PeerId) {
         self.by_peer_id.remove(peer_id);
     }
-    /// Set the custom bypass rule. Note that the rules are applied in OR logic,
-    /// allow connections that matches ANY of the rules.  
-    /// This rule cannot be mutated at runtime, or capture any environment.
-    pub fn set_custom_bypass(mut self, bypass_fn: BypassFn) -> Self {
-        let _ = self.custom.insert(bypass_fn);
-        self
-    }
-    /// Remove the address to bypass list.
-    pub fn remove_custom_bypass(&mut self) {
-        self.custom.take();
-    }
-    /// Whether the peer is in the bypass list.
-    pub fn is_peer_bypassed(&self, peer: &PeerId) -> bool {
-        self.by_peer_id.contains(peer)
-    }
-    /// Whether the connection is bypassed, the rules are applied in OR logic.
-    pub fn is_bypassed(
-        &self,
-        remote_peer: Option<&PeerId>,
-        remote_addresses: &[Multiaddr],
-        local_addresses: Option<&Multiaddr>,
-    ) -> bool {
-        let is_peer_id_bypassed = remote_peer.is_some_and(|peer| self.by_peer_id.contains(peer));
-        let is_connection_bypassed = self
-            .custom
-            .is_some_and(|f| f(remote_peer, remote_addresses, local_addresses));
-        is_peer_id_bypassed || is_connection_bypassed
+    /// Whether the connection is bypassed.
+    pub fn is_bypassed(&mut self, remote_peer: &PeerId) -> bool {
+        self.by_peer_id.contains(remote_peer)
     }
 }
 
@@ -287,16 +252,9 @@ impl NetworkBehaviour for Behaviour {
     fn handle_pending_inbound_connection(
         &mut self,
         connection_id: ConnectionId,
-        local_addr: &Multiaddr,
-        remote_addr: &Multiaddr,
+        _: &Multiaddr,
+        _: &Multiaddr,
     ) -> Result<(), ConnectionDenied> {
-        if self
-            .bypass_rules
-            .is_bypassed(None, std::slice::from_ref(remote_addr), Some(local_addr))
-        {
-            return Ok(());
-        }
-
         check_limit(
             self.limits.max_pending_incoming,
             self.pending_inbound_connections.len(),
@@ -312,16 +270,12 @@ impl NetworkBehaviour for Behaviour {
         &mut self,
         connection_id: ConnectionId,
         peer: PeerId,
-        local_addr: &Multiaddr,
-        remote_addr: &Multiaddr,
+        _: &Multiaddr,
+        _: &Multiaddr,
     ) -> Result<THandler<Self>, ConnectionDenied> {
         self.pending_inbound_connections.remove(&connection_id);
 
-        if self.bypass_rules.is_bypassed(
-            Some(&peer),
-            std::slice::from_ref(remote_addr),
-            Some(local_addr),
-        ) {
+        if self.bypass_rules.is_bypassed(&peer) {
             return Ok(dummy::ConnectionHandler);
         }
 
@@ -352,13 +306,10 @@ impl NetworkBehaviour for Behaviour {
         &mut self,
         connection_id: ConnectionId,
         maybe_peer: Option<PeerId>,
-        addresses: &[Multiaddr],
+        _: &[Multiaddr],
         _: Endpoint,
     ) -> Result<Vec<Multiaddr>, ConnectionDenied> {
-        if self
-            .bypass_rules
-            .is_bypassed(maybe_peer.as_ref(), addresses, None)
-        {
+        if maybe_peer.is_some_and(|peer| self.bypass_rules.is_bypassed(&peer)) {
             return Ok(vec![]);
         }
 
@@ -377,15 +328,12 @@ impl NetworkBehaviour for Behaviour {
         &mut self,
         connection_id: ConnectionId,
         peer: PeerId,
-        addr: &Multiaddr,
+        _: &Multiaddr,
         _: Endpoint,
         _: PortUse,
     ) -> Result<THandler<Self>, ConnectionDenied> {
         self.pending_outbound_connections.remove(&connection_id);
-        if self
-            .bypass_rules
-            .is_bypassed(Some(&peer), std::slice::from_ref(addr), None)
-        {
+        if self.bypass_rules.is_bypassed(&peer) {
             return Ok(dummy::ConnectionHandler);
         }
 
