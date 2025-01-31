@@ -78,7 +78,6 @@ Conduct](https://github.com/ipfs/community/blob/master/code-of-conduct.md).
 
 (In alphabetical order.)
 
-- Guillaume Michel ([@guillaumemichel](https://github.com/guillaumemichel))
 - João Oliveira ([@jxs](https://github.com/jxs))
 
 ## Notable users
