@@ -46,7 +46,7 @@
 /// ```
 pub type Behaviour<Req, Resp> = crate::Behaviour<codec::Codec<Req, Resp>>;
 
-mod codec {
+pub mod codec {
     use std::{collections::TryReserveError, convert::Infallible, io, marker::PhantomData};
 
     use async_trait::async_trait;

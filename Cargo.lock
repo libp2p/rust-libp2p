@@ -2654,7 +2654,7 @@ checksum = "b5aba8db14291edd000dfcc4d620c7ebfb122c613afb886ca8803fa4e128a20a"
 
 [[package]]
 name = "libp2p"
-version = "0.55.0"
+version = "0.55.1"
 dependencies = [
  "async-std",
  "bytes",
@@ -2690,6 +2690,7 @@ dependencies = [
  "libp2p-tls",
  "libp2p-uds",
  "libp2p-upnp",
+ "libp2p-webrtc-websys",
  "libp2p-websocket",
  "libp2p-websocket-websys",
  "libp2p-webtransport-websys",
@@ -2706,12 +2707,12 @@ dependencies = [
 name = "libp2p-allow-block-list"
 version = "0.5.0"
 dependencies = [
- "async-std",
  "libp2p-core",
  "libp2p-identity",
  "libp2p-swarm",
  "libp2p-swarm-derive",
  "libp2p-swarm-test",
+ "tokio",
 ]
 
 [[package]]
@@ -2745,7 +2746,6 @@ dependencies = [
 name = "libp2p-connection-limits"
 version = "0.5.0"
 dependencies = [
- "async-std",
  "libp2p-core",
  "libp2p-identify",
  "libp2p-identity",
@@ -2755,13 +2755,13 @@ dependencies = [
  "libp2p-swarm-test",
  "quickcheck-ext",
  "rand 0.8.5",
+ "tokio",
 ]
 
 [[package]]
 name = "libp2p-core"
 version = "0.43.0"
 dependencies = [
- "async-std",
  "either",
  "fnv",
  "futures",
@@ -2779,6 +2779,7 @@ dependencies = [
  "rand 0.8.5",
  "rw-stream-sink",
  "thiserror 2.0.9",
+ "tokio",
  "tracing",
  "unsigned-varint",
  "web-time 1.1.0",
@@ -2852,7 +2853,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-gossipsub"
-version = "0.48.0"
+version = "0.48.1"
 dependencies = [
  "async-channel 2.3.1",
  "asynchronous-codec",
@@ -3191,7 +3192,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-relay"
-version = "0.19.0"
+version = "0.19.1"
 dependencies = [
  "asynchronous-codec",
  "bytes",
@@ -3243,7 +3244,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-request-response"
-version = "0.28.0"
+version = "0.28.1"
 dependencies = [
  "anyhow",
  "async-std",
