@@ -21,7 +21,7 @@ pub enum Event {
 
 /// A in-memory store.
 #[derive(Default)]
-pub struct MemoryStore<T> {
+pub struct MemoryStore<T = ()> {
     /// The internal store.
     records: HashMap<PeerId, record::PeerRecord<T>>,
     pending_events: VecDeque<Event>,
@@ -173,11 +173,12 @@ where
     }
 }
 
+#[derive(Debug, Clone)]
 pub struct Config {
-    /// TTL for a record.
+    /// TTL of an address record.
     record_ttl: Duration,
-    /// The capacaity of a record store.  
-    /// The least used record will be discarded when the store is full.
+    /// The capacaity of an address store.  
+    /// The least active address will be discarded to make room for new address.
     record_capacity: NonZeroUsize,
     /// The interval for garbage collecting records.
     check_record_ttl_interval: Duration,
@@ -196,8 +197,47 @@ impl Default for Config {
     }
 }
 
+impl Config {
+    /// TTL of all address records.
+    pub fn record_ttl(&self) -> &Duration {
+        &self.record_ttl
+    }
+    /// Set TTL for all address records.
+    pub fn set_record_ttl(mut self, ttl: Duration) -> Self {
+        self.record_ttl = ttl;
+        self
+    }
+    /// Capacity for address records.
+    /// The least active address will be dropped to make room for new address.
+    pub fn record_capacity(&self) -> &NonZeroUsize {
+        &self.record_capacity
+    }
+    /// Set the capacity for address records.
+    pub fn set_record_capacity(mut self, capacity: NonZeroUsize) -> Self {
+        self.record_capacity = capacity;
+        self
+    }
+    /// The interval for garbage collecting records.
+    pub fn check_record_ttl_interval(&self) -> &Duration {
+        &self.check_record_ttl_interval
+    }
+    /// Set the interval for garbage collecting records.
+    pub fn set_check_record_ttl_interval(mut self, interval: Duration) -> Self {
+        self.check_record_ttl_interval = interval;
+        self
+    }
+    /// Only provide signed addresses to the behaviour when true.
+    pub fn is_strict_mode(&self) -> bool {
+        self.strict_mode
+    }
+    /// Set `strict_mode`.
+    pub fn set_strict_mode(mut self, is_strict: bool) -> Self {
+        self.strict_mode = is_strict;
+        self
+    }
+}
 mod record {
-    use std::rc::Rc;
+    use std::sync::Arc;
 
     use lru::LruCache;
 
@@ -216,9 +256,11 @@ mod record {
                 custom: None,
             }
         }
+
         pub(crate) fn addresses(&self) -> impl Iterator<Item = (&Multiaddr, &AddressRecord)> {
             self.addresses.iter()
         }
+
         pub(crate) fn update_address(
             &mut self,
             address: &Multiaddr,
@@ -235,6 +277,7 @@ mod record {
             });
             true
         }
+
         pub(crate) fn update_certified_address(
             &mut self,
             signed_record: &libp2p_core::PeerRecord,
@@ -242,7 +285,7 @@ mod record {
             should_expire: bool,
         ) -> bool {
             let mut is_updated = false;
-            let signed_record = Rc::new(signed_record.clone());
+            let signed_record = Arc::new(signed_record.clone());
             for address in signed_record.addresses() {
                 // promote the address or update with the latest signature.
                 if let Some(r) = self.addresses.get_mut(address) {
@@ -257,9 +300,11 @@ mod record {
             }
             is_updated
         }
+
         pub(crate) fn remove_address(&mut self, address: &Multiaddr) -> bool {
             self.addresses.pop(address).is_some()
         }
+
         pub(crate) fn check_addresses_ttl(&mut self, now: Instant, ttl: Duration) {
             let mut records_to_be_deleted = Vec::new();
             for (k, record) in self.addresses.iter() {
@@ -271,12 +316,15 @@ mod record {
                 self.addresses.pop(&k);
             }
         }
+
         pub(crate) fn get_custom_data(&self) -> Option<&T> {
             self.custom.as_ref()
         }
+
         pub(crate) fn take_custom_data(&mut self) -> Option<T> {
             self.custom.take()
         }
+
         pub(crate) fn insert_custom_data(&mut self, custom_data: T) {
             let _ = self.custom.insert(custom_data);
         }
@@ -292,13 +340,13 @@ mod record {
         /// Reference to the `PeerRecord` that contains this address.  
         /// The inner `PeerRecord` will be dropped automatically
         /// when there is no living reference to it.
-        pub signature: Option<Rc<libp2p_core::PeerRecord>>,
+        pub signature: Option<Arc<libp2p_core::PeerRecord>>,
     }
     impl AddressRecord {
         pub(crate) fn new(
             source: AddressSource,
             should_expire: bool,
-            signed: Option<Rc<libp2p_core::PeerRecord>>,
+            signed: Option<Arc<libp2p_core::PeerRecord>>,
         ) -> Self {
             Self {
                 last_seen: Instant::now(),
@@ -332,18 +380,18 @@ mod test {
             record_ttl: Duration::from_millis(1),
             ..Default::default()
         };
-        let mut store: MemoryStore<()> = MemoryStore::new(config);
-        let fake_peer = PeerId::random();
+        let mut store: MemoryStore = MemoryStore::new(config);
+        let peer = PeerId::random();
         let addr_no_expire = Multiaddr::from_str("/ip4/127.0.0.1").expect("parsing to succeed");
         let addr_should_expire = Multiaddr::from_str("/ip4/127.0.0.2").expect("parsing to succeed");
         store.update_address(
-            &fake_peer,
+            &peer,
             &addr_no_expire,
             crate::store::AddressSource::Manual,
             false,
         );
         store.update_address(
-            &fake_peer,
+            &peer,
             &addr_should_expire,
             crate::store::AddressSource::Manual,
             true,
@@ -351,37 +399,27 @@ mod test {
         thread::sleep(Duration::from_millis(2));
         store.check_record_ttl();
         assert!(!store
-            .addresses_of_peer(&fake_peer)
+            .addresses_of_peer(&peer)
             .expect("peer to be in the store")
             .any(|r| *r == addr_should_expire));
         assert!(store
-            .addresses_of_peer(&fake_peer)
+            .addresses_of_peer(&peer)
             .expect("peer to be in the store")
             .any(|r| *r == addr_no_expire));
     }
 
     #[test]
     fn recent_use_bubble_up() {
-        let mut store: MemoryStore<()> = MemoryStore::new(Default::default());
-        let fake_peer = PeerId::random();
+        let mut store: MemoryStore = MemoryStore::new(Default::default());
+        let peer = PeerId::random();
         let addr1 = Multiaddr::from_str("/ip4/127.0.0.1").expect("parsing to succeed");
         let addr2 = Multiaddr::from_str("/ip4/127.0.0.2").expect("parsing to succeed");
-        store.update_address(
-            &fake_peer,
-            &addr1,
-            crate::store::AddressSource::Manual,
-            false,
-        );
-        store.update_address(
-            &fake_peer,
-            &addr2,
-            crate::store::AddressSource::Manual,
-            false,
-        );
+        store.update_address(&peer, &addr1, crate::store::AddressSource::Manual, false);
+        store.update_address(&peer, &addr2, crate::store::AddressSource::Manual, false);
         assert!(
             *store
                 .records
-                .get(&fake_peer)
+                .get(&peer)
                 .expect("peer to be in the store")
                 .addresses()
                 .last()
@@ -389,16 +427,11 @@ mod test {
                 .0
                 == addr1
         );
-        store.update_address(
-            &fake_peer,
-            &addr1,
-            crate::store::AddressSource::Manual,
-            false,
-        );
+        store.update_address(&peer, &addr1, crate::store::AddressSource::Manual, false);
         assert!(
             *store
                 .records
-                .get(&fake_peer)
+                .get(&peer)
                 .expect("peer to be in the store")
                 .addresses()
                 .last()
@@ -410,12 +443,12 @@ mod test {
 
     #[test]
     fn bounded_store() {
-        let mut store: MemoryStore<()> = MemoryStore::new(Default::default());
-        let fake_peer = PeerId::random();
+        let mut store: MemoryStore = MemoryStore::new(Default::default());
+        let peer = PeerId::random();
         for i in 1..10 {
             let addr_string = format!("/ip4/127.0.0.{}", i);
             store.update_address(
-                &fake_peer,
+                &peer,
                 &Multiaddr::from_str(&addr_string).expect("parsing to succeed"),
                 crate::store::AddressSource::Manual,
                 false,
@@ -423,12 +456,12 @@ mod test {
         }
         let first_record = Multiaddr::from_str("/ip4/127.0.0.1").expect("parsing to succeed");
         assert!(!store
-            .addresses_of_peer(&fake_peer)
+            .addresses_of_peer(&peer)
             .expect("peer to be in the store")
             .any(|addr| *addr == first_record));
         let second_record = Multiaddr::from_str("/ip4/127.0.0.2").expect("parsing to succeed");
         assert!(store
-            .addresses_of_peer(&fake_peer)
+            .addresses_of_peer(&peer)
             .expect("peer to be in the store")
             .any(|addr| *addr == second_record));
     }

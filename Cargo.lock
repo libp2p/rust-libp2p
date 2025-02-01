@@ -3113,6 +3113,7 @@ version = "0.1.0"
 dependencies = [
  "futures-timer",
  "futures-util",
+ "libp2p",
  "libp2p-core",
  "libp2p-identity",
  "libp2p-swarm",

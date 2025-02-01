@@ -16,6 +16,7 @@ futures-util = "*"
 
 [dev-dependencies]
 libp2p-identity = { workspace = true, features = ["rand"] }
+libp2p = { workspace = true, features = ["macros", "identify"] }
 
 [lints]
 workspace = true
