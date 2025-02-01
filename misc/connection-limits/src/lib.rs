@@ -70,7 +70,8 @@ use libp2p_swarm::{
 /// ```
 pub struct Behaviour {
     limits: ConnectionLimits,
-    bypass_rules: BypassRules,
+    /// Peer IDs that bypass limit check, regardless of inbound or outbound.
+    bypass_peer_id: HashSet<PeerId>,
 
     pending_inbound_connections: HashSet<ConnectionId>,
     pending_outbound_connections: HashSet<ConnectionId>,
@@ -80,10 +81,10 @@ pub struct Behaviour {
 }
 
 impl Behaviour {
-    pub fn new(limits: ConnectionLimits, bypass_rules: BypassRules) -> Self {
+    pub fn new(limits: ConnectionLimits) -> Self {
         Self {
             limits,
-            bypass_rules,
+            bypass_peer_id: Default::default(),
             pending_inbound_connections: Default::default(),
             pending_outbound_connections: Default::default(),
             established_inbound_connections: Default::default(),
@@ -98,9 +99,17 @@ impl Behaviour {
         &mut self.limits
     }
 
-    /// Returns a mutable reference to [`BypassRules`].
-    pub fn bypass_rules_mut(&mut self) -> &mut BypassRules {
-        &mut self.bypass_rules
+    /// Add the peer to bypass list.
+    pub fn bypass_peer_id(&mut self, peer_id: &PeerId) {
+        self.bypass_peer_id.insert(*peer_id);
+    }
+    /// Remove the peer from bypass list.
+    pub fn remove_peer_id(&mut self, peer_id: &PeerId) {
+        self.bypass_peer_id.remove(peer_id);
+    }
+    /// Whether the connection is bypassed.
+    pub fn is_bypassed(&mut self, remote_peer: &PeerId) -> bool {
+        self.bypass_peer_id.contains(remote_peer)
     }
 }
 
@@ -218,33 +227,6 @@ impl ConnectionLimits {
     }
 }
 
-/// A set of rules that allows bypass of limits.
-/// Connections that match the rules won't be counted toward limits.
-#[derive(Default)]
-pub struct BypassRules {
-    /// Peer IDs that bypass limit check, regardless of inbound or outbound.
-    by_peer_id: HashSet<PeerId>,
-}
-impl BypassRules {
-    pub fn new(peer_ids: HashSet<PeerId>) -> Self {
-        Self {
-            by_peer_id: peer_ids,
-        }
-    }
-    /// Add the peer to bypass list.
-    pub fn bypass_peer_id(&mut self, peer_id: &PeerId) {
-        self.by_peer_id.insert(*peer_id);
-    }
-    /// Remove the peer from bypass list.
-    pub fn remove_peer_id(&mut self, peer_id: &PeerId) {
-        self.by_peer_id.remove(peer_id);
-    }
-    /// Whether the connection is bypassed.
-    pub fn is_bypassed(&mut self, remote_peer: &PeerId) -> bool {
-        self.by_peer_id.contains(remote_peer)
-    }
-}
-
 impl NetworkBehaviour for Behaviour {
     type ConnectionHandler = dummy::ConnectionHandler;
     type ToSwarm = Infallible;
@@ -275,10 +257,9 @@ impl NetworkBehaviour for Behaviour {
     ) -> Result<THandler<Self>, ConnectionDenied> {
         self.pending_inbound_connections.remove(&connection_id);
 
-        if self.bypass_rules.is_bypassed(&peer) {
+        if self.is_bypassed(&peer) {
             return Ok(dummy::ConnectionHandler);
         }
-
         check_limit(
             self.limits.max_established_incoming,
             self.established_inbound_connections.len(),
@@ -309,10 +290,9 @@ impl NetworkBehaviour for Behaviour {
         _: &[Multiaddr],
         _: Endpoint,
     ) -> Result<Vec<Multiaddr>, ConnectionDenied> {
-        if maybe_peer.is_some_and(|peer| self.bypass_rules.is_bypassed(&peer)) {
+        if maybe_peer.is_some_and(|peer| self.is_bypassed(&peer)) {
             return Ok(vec![]);
         }
-
         check_limit(
             self.limits.max_pending_outgoing,
             self.pending_outbound_connections.len(),
@@ -333,7 +313,7 @@ impl NetworkBehaviour for Behaviour {
         _: PortUse,
     ) -> Result<THandler<Self>, ConnectionDenied> {
         self.pending_outbound_connections.remove(&connection_id);
-        if self.bypass_rules.is_bypassed(&peer) {
+        if self.is_bypassed(&peer) {
             return Ok(dummy::ConnectionHandler);
         }
 
@@ -592,13 +572,13 @@ mod tests {
     impl Behaviour {
         fn new(limits: ConnectionLimits) -> Self {
             Self {
-                limits: super::Behaviour::new(limits, Default::default()),
+                limits: super::Behaviour::new(limits),
                 connection_denier: None.into(),
             }
         }
         fn new_with_connection_denier(limits: ConnectionLimits) -> Self {
             Self {
-                limits: super::Behaviour::new(limits, Default::default()),
+                limits: super::Behaviour::new(limits),
                 connection_denier: Some(ConnectionDenier {}).into(),
             }
         }
