@@ -38,7 +38,7 @@ all-features = true
 libp2p-identity = { workspace = true, features = ["rand"] }
 libp2p-muxer-test-harness = { path = "../../muxers/test-harness" }
 libp2p-noise = { workspace = true }
-libp2p-tcp = { workspace = true, features = ["async-io"] }
+libp2p-tcp = { workspace = true, features = ["tokio"] }
 libp2p-yamux = { workspace = true }
 quickcheck = "1"
 tokio = { workspace = true, features = ["macros", "rt-multi-thread", "time"] }
