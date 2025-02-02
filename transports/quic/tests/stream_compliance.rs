@@ -7,7 +7,6 @@ use libp2p_core::{
 };
 use libp2p_quic as quic;
 
-#[cfg(feature = "tokio")]
 #[tokio::test]
 async fn close_implies_flush() {
     let (alice, bob) = connected_peers().await;
@@ -15,7 +14,6 @@ async fn close_implies_flush() {
     libp2p_muxer_test_harness::close_implies_flush(alice, bob).await;
 }
 
-#[cfg(feature = "tokio")]
 #[tokio::test]
 async fn read_after_close() {
     let (alice, bob) = connected_peers().await;

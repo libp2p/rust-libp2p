@@ -47,7 +47,7 @@ tracing-subscriber = { workspace = true, features = ["env-filter"] }
 
 [[test]]
 name = "stream_compliance"
-required-features = ["async-std"]
+required-features = ["tokio"]
 
 [lints]
 workspace = true
