@@ -946,7 +946,7 @@
   pending outbound upgrades. As a result only those upgrades are polled that are
   ready to progress.
 
-  Implementors of `InboundUpgrade` and `OutboundUpgrade` need to ensure to wake
+  Implementers of `InboundUpgrade` and `OutboundUpgrade` need to ensure to wake
   up the underlying task once they are ready to make progress as they won't be
   polled otherwise.
 
