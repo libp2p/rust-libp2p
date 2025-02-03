@@ -158,7 +158,7 @@
 - Update dependencies.
 
 - Don't close connection if ping protocol is unsupported by remote.
-  Previously, a failed protocol negotation for ping caused a force close of the connection.
+  Previously, a failed protocol negotiation for ping caused a force close of the connection.
   As a result, all nodes in a network had to support ping.
   To allow networks where some nodes don't support ping, we now emit
   `PingFailure::Unsupported` once for every connection on which ping is not supported.
