@@ -1,36 +1,22 @@
 #![cfg(any(feature = "async-std", feature = "tokio"))]
 
-use std::{
-    future::Future,
-    io,
-    num::NonZeroU8,
-    pin::Pin,
-    sync::{Arc, Mutex},
-    task::Poll,
-    time::Duration,
-};
+use std::{future::Future, io, num::NonZeroU8, pin::Pin, task::Poll, time::Duration};
 
 use futures::{
     channel::{mpsc, oneshot},
     future,
-    future::{poll_fn, BoxFuture, Either},
+    future::{poll_fn, Either},
     stream::StreamExt,
     AsyncReadExt, AsyncWriteExt, FutureExt, SinkExt,
 };
-use futures_timer::Delay;
 use libp2p_core::{
     multiaddr::Protocol,
     muxing::{StreamMuxerBox, StreamMuxerExt, SubstreamBox},
-    transport::{
-        Boxed, DialOpts, ListenerId, OrTransport, PortUse, TransportError, TransportEvent,
-    },
-    upgrade, Endpoint, Multiaddr, Transport,
+    transport::{Boxed, DialOpts, ListenerId, PortUse, TransportEvent},
+    Endpoint, Multiaddr, Transport,
 };
 use libp2p_identity::PeerId;
-use libp2p_noise as noise;
 use libp2p_quic as quic;
-use libp2p_tcp as tcp;
-use libp2p_yamux as yamux;
 use quic::Provider;
 use rand::RngCore;
 use tracing_subscriber::EnvFilter;
@@ -293,88 +279,6 @@ fn concurrent_connections_and_streams_tokio() {
     quickcheck::QuickCheck::new()
         .min_tests_passed(1)
         .quickcheck(prop::<quic::tokio::Provider> as fn(_, _) -> _);
-}
-
-#[cfg(feature = "tokio")]
-#[tokio::test]
-async fn draft_29_support() {
-    use std::task::Poll;
-
-    use futures::{future::poll_fn, select};
-    use libp2p_core::transport::TransportError;
-
-    let _ = tracing_subscriber::fmt()
-        .with_env_filter(EnvFilter::from_default_env())
-        .try_init();
-
-    let (_, mut a_transport) =
-        create_transport::<quic::tokio::Provider>(|cfg| cfg.support_draft_29 = true);
-    let (_, mut b_transport) =
-        create_transport::<quic::tokio::Provider>(|cfg| cfg.support_draft_29 = true);
-
-    // If a server supports draft-29 all its QUIC addresses can be dialed on draft-29 or version-1
-    let a_quic_addr = start_listening(&mut a_transport, "/ip4/127.0.0.1/udp/0/quic").await;
-    let a_quic_mapped_addr = swap_protocol!(a_quic_addr, Quic => QuicV1);
-    let a_quic_v1_addr = start_listening(&mut a_transport, "/ip4/127.0.0.1/udp/0/quic-v1").await;
-    let a_quic_v1_mapped_addr = swap_protocol!(a_quic_v1_addr, QuicV1 => Quic);
-
-    connect(&mut a_transport, &mut b_transport, a_quic_addr.clone()).await;
-    connect(&mut a_transport, &mut b_transport, a_quic_mapped_addr).await;
-    connect(&mut a_transport, &mut b_transport, a_quic_v1_addr).await;
-    connect(&mut a_transport, &mut b_transport, a_quic_v1_mapped_addr).await;
-
-    let (_, mut c_transport) =
-        create_transport::<quic::tokio::Provider>(|cfg| cfg.support_draft_29 = false);
-    assert!(matches!(
-        c_transport.dial(
-            a_quic_addr,
-            DialOpts {
-                role: Endpoint::Dialer,
-                port_use: PortUse::New
-            }
-        ),
-        Err(TransportError::MultiaddrNotSupported(_))
-    ));
-
-    // Test disabling draft-29 on a server.
-    let (_, mut d_transport) =
-        create_transport::<quic::tokio::Provider>(|cfg| cfg.support_draft_29 = false);
-    assert!(matches!(
-        d_transport.listen_on(
-            ListenerId::next(),
-            "/ip4/127.0.0.1/udp/0/quic".parse().unwrap()
-        ),
-        Err(TransportError::MultiaddrNotSupported(_))
-    ));
-    let d_quic_v1_addr = start_listening(&mut d_transport, "/ip4/127.0.0.1/udp/0/quic-v1").await;
-    let d_quic_addr_mapped = swap_protocol!(d_quic_v1_addr, QuicV1 => Quic);
-    let dial = b_transport
-        .dial(
-            d_quic_addr_mapped,
-            DialOpts {
-                role: Endpoint::Dialer,
-                port_use: PortUse::Reuse,
-            },
-        )
-        .unwrap();
-    let drive_transports = poll_fn::<(), _>(|cx| {
-        let _ = b_transport.poll_next_unpin(cx);
-        let _ = d_transport.poll_next_unpin(cx);
-        Poll::Pending
-    });
-    select! {
-        _ = drive_transports.fuse() => {}
-        result = dial.fuse() => {
-            #[allow(clippy::single_match)]
-            match result {
-                Ok(_) => panic!("Unexpected success dialing version-1-only server with draft-29."),
-                // FIXME: We currently get a Handshake timeout if the server does not support our version.
-                // Correct would be to get an quinn error "VersionMismatch".
-                Err(_) => {}
-                // Err(e) => assert!(format!("{:?}", e).contains("VersionMismatch"), "Got unexpected error {}", e),
-            }
-        }
-    }
 }
 
 #[cfg(feature = "async-std")]

@@ -51,16 +51,6 @@ pub struct Config {
     /// of a connection.
     pub max_connection_data: u32,
 
-    /// Support QUIC version draft-29 for dialing and listening.
-    ///
-    /// Per default only QUIC Version 1 / [`libp2p_core::multiaddr::Protocol::QuicV1`]
-    /// is supported.
-    ///
-    /// If support for draft-29 is enabled servers support draft-29 and version 1 on all
-    /// QUIC listening addresses.
-    /// As client the version is chosen based on the remote's address.
-    pub support_draft_29: bool,
-
     /// TLS client config for the inner [`quinn::ClientConfig`].
     client_tls_config: Arc<QuicClientConfig>,
     /// TLS server config for the inner [`quinn::ServerConfig`].
@@ -85,7 +75,6 @@ impl Config {
         Self {
             client_tls_config,
             server_tls_config,
-            support_draft_29: false,
             handshake_timeout: Duration::from_secs(5),
             max_idle_timeout: 10 * 1000,
             max_concurrent_stream_limit: 256,
@@ -132,7 +121,6 @@ impl From<Config> for QuinnConfig {
             keep_alive_interval,
             max_connection_data,
             max_stream_data,
-            support_draft_29,
             handshake_timeout: _,
             keypair,
             mtu_discovery_config,
@@ -169,9 +157,7 @@ impl From<Config> for QuinnConfig {
             })
             .unwrap_or_default();
 
-        if !support_draft_29 {
-            endpoint_config.supported_versions(vec![1]);
-        }
+        endpoint_config.supported_versions(vec![1]);
 
         QuinnConfig {
             client_config,
