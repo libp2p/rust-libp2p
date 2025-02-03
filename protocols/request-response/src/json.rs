@@ -46,7 +46,7 @@
 /// ```
 pub type Behaviour<Req, Resp> = crate::Behaviour<codec::Codec<Req, Resp>>;
 
-mod codec {
+pub mod codec {
     use std::{io, marker::PhantomData};
 
     use async_trait::async_trait;

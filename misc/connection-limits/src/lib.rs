@@ -381,6 +381,7 @@ mod tests {
     };
     use libp2p_swarm_test::SwarmExt;
     use quickcheck::*;
+    use tokio::runtime::Runtime;
 
     use super::*;
 
@@ -452,7 +453,8 @@ mod tests {
                 )
             });
 
-            async_std::task::block_on(async {
+            let rt = Runtime::new().unwrap();
+            rt.block_on(async {
                 let (listen_addr, _) = swarm1.listen().with_memory_addr_external().await;
 
                 for _ in 0..limit {
@@ -461,7 +463,7 @@ mod tests {
 
                 swarm2.dial(listen_addr).unwrap();
 
-                async_std::task::spawn(swarm2.loop_on_next());
+                tokio::spawn(swarm2.loop_on_next());
 
                 let cause = swarm1
                     .wait(|event| match event {
@@ -496,42 +498,40 @@ mod tests {
     /// in [`SwarmEvent::ConnectionEstablished`] as the connection might still be denied by a
     /// sibling [`NetworkBehaviour`] in the former case. Only in the latter case
     /// ([`SwarmEvent::ConnectionEstablished`]) can the connection be seen as established.
-    #[test]
-    fn support_other_behaviour_denying_connection() {
+    #[tokio::test]
+    async fn support_other_behaviour_denying_connection() {
         let mut swarm1 = Swarm::new_ephemeral(|_| {
             Behaviour::new_with_connection_denier(ConnectionLimits::default())
         });
         let mut swarm2 = Swarm::new_ephemeral(|_| Behaviour::new(ConnectionLimits::default()));
 
-        async_std::task::block_on(async {
-            // Have swarm2 dial swarm1.
-            let (listen_addr, _) = swarm1.listen().await;
-            swarm2.dial(listen_addr).unwrap();
-            async_std::task::spawn(swarm2.loop_on_next());
+        // Have swarm2 dial swarm1.
+        let (listen_addr, _) = swarm1.listen().await;
+        swarm2.dial(listen_addr).unwrap();
+        tokio::spawn(swarm2.loop_on_next());
 
-            // Wait for the ConnectionDenier of swarm1 to deny the established connection.
-            let cause = swarm1
-                .wait(|event| match event {
-                    SwarmEvent::IncomingConnectionError {
-                        error: ListenError::Denied { cause },
-                        ..
-                    } => Some(cause),
-                    _ => None,
-                })
-                .await;
+        // Wait for the ConnectionDenier of swarm1 to deny the established connection.
+        let cause = swarm1
+            .wait(|event| match event {
+                SwarmEvent::IncomingConnectionError {
+                    error: ListenError::Denied { cause },
+                    ..
+                } => Some(cause),
+                _ => None,
+            })
+            .await;
 
-            cause.downcast::<std::io::Error>().unwrap();
+        cause.downcast::<std::io::Error>().unwrap();
 
-            assert_eq!(
-                0,
-                swarm1
-                    .behaviour_mut()
-                    .limits
-                    .established_inbound_connections
-                    .len(),
-                "swarm1 connection limit behaviour to not count denied established connection as established connection"
-            )
-        });
+        assert_eq!(
+            0,
+            swarm1
+                .behaviour_mut()
+                .limits
+                .established_inbound_connections
+                .len(),
+            "swarm1 connection limit behaviour to not count denied established connection as established connection"
+        )
     }
 
     #[derive(libp2p_swarm_derive::NetworkBehaviour)]
