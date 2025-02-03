@@ -1,6 +1,6 @@
 ## 0.47.0
 
-- Expose a kad query facility allowing specify num_results dynamicaly.
+- Expose a kad query facility allowing specify num_results dynamically.
   See [PR 5555](https://github.com/libp2p/rust-libp2p/pull/5555).
 - Add `mode` getter on `Behaviour`.
   See [PR 5573](https://github.com/libp2p/rust-libp2p/pull/5573).
