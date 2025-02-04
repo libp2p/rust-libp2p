@@ -24,7 +24,7 @@ pub enum Event {
 pub struct MemoryStore<T = ()> {
     /// The internal store.
     records: HashMap<PeerId, record::PeerRecord<T>>,
-    pending_events: VecDeque<Event>,
+    pending_events: VecDeque<super::store::Event<Event>>,
     record_ttl_timer: Option<Delay>,
     config: Config,
 }
@@ -39,35 +39,54 @@ impl<T> MemoryStore<T> {
         }
     }
 
-    fn check_record_ttl(&mut self) {
-        let now = Instant::now();
-        for r in &mut self.records.values_mut() {
-            r.check_addresses_ttl(now, self.config.record_ttl);
-        }
-    }
-
     pub fn get_custom_data(&self, peer: &PeerId) -> Option<&T> {
         self.records.get(peer).and_then(|r| r.get_custom_data())
     }
+
+    /// Take ownership of the internal data, leaving `None` in its place.
     pub fn take_custom_data(&mut self, peer: &PeerId) -> Option<T> {
         self.records
             .get_mut(peer)
             .and_then(|r| r.take_custom_data())
     }
+
+    /// Insert the data and notify the swarm about the update, dropping the old data if it exists.
     pub fn insert_custom_data(&mut self, peer: &PeerId, custom_data: T) {
+        self.insert_custom_data_silent(peer, custom_data);
+        self.pending_events
+            .push_back(super::store::Event::Store(Event::CustomDataUpdated(*peer)));
+    }
+
+    /// Insert the data without notifying the swarm. Old data will be dropped if it exists.
+    pub fn insert_custom_data_silent(&mut self, peer: &PeerId, custom_data: T) {
         if let Some(r) = self.records.get_mut(peer) {
             return r.insert_custom_data(custom_data);
         }
         let mut new_record = PeerRecord::new(self.config.record_capacity);
         new_record.insert_custom_data(custom_data);
         self.records.insert(*peer, new_record);
-        self.pending_events
-            .push_back(Event::CustomDataUpdated(*peer));
+    }
+
+    /// Iterate over all internal records.
+    pub fn record_iter(&self) -> impl Iterator<Item = (&PeerId, &PeerRecord<T>)> {
+        self.records.iter()
+    }
+
+    /// Iterate over all internal records mutably.
+    pub fn record_iter_mut(&mut self) -> impl Iterator<Item = (&PeerId, &mut PeerRecord<T>)> {
+        self.records.iter_mut()
+    }
+
+    fn check_record_ttl(&mut self) {
+        let now = Instant::now();
+        for r in &mut self.records.values_mut() {
+            r.check_addresses_ttl(now, self.config.record_ttl);
+        }
     }
 }
 
 impl<T> Store for MemoryStore<T> {
-    type ToSwarm = Event;
+    type FromStore = Event;
 
     fn update_address(
         &mut self,
@@ -108,13 +127,14 @@ impl<T> Store for MemoryStore<T> {
         false
     }
 
-    fn on_swarm_event(&mut self, swarm_event: &FromSwarm) -> Option<super::store::Event> {
+    fn on_swarm_event(&mut self, swarm_event: &FromSwarm) {
         match swarm_event {
             FromSwarm::NewExternalAddrOfPeer(info) => {
                 if self.update_address(&info.peer_id, info.addr, AddressSource::Behaviour, true) {
-                    return Some(super::store::Event::RecordUpdated(info.peer_id));
+                    self
+                        .pending_events
+                        .push_back(super::store::Event::RecordUpdated(info.peer_id));
                 }
-                None
             }
             FromSwarm::ConnectionEstablished(info) => {
                 let mut is_record_updated = false;
@@ -128,11 +148,11 @@ impl<T> Store for MemoryStore<T> {
                     false,
                 );
                 if is_record_updated {
-                    return Some(super::store::Event::RecordUpdated(info.peer_id));
+                    self.pending_events
+                        .push_back(super::store::Event::RecordUpdated(info.peer_id));
                 }
-                None
             }
-            _ => None,
+            _ => {},
         }
     }
 
@@ -145,7 +165,7 @@ impl<T> Store for MemoryStore<T> {
         })
     }
 
-    fn poll(&mut self, cx: &mut Context<'_>) -> Option<Self::ToSwarm> {
+    fn poll(&mut self, cx: &mut Context<'_>) -> Option<super::store::Event<Self::FromStore>> {
         if let Some(mut timer) = self.record_ttl_timer.take() {
             if let Poll::Ready(()) = timer.poll_unpin(cx) {
                 self.check_record_ttl();
@@ -243,7 +263,7 @@ mod record {
 
     use super::*;
 
-    pub(crate) struct PeerRecord<T> {
+    pub struct PeerRecord<T> {
         /// A LRU(Least Recently Used) cache for addresses.  
         /// Will delete the least-recently-used record when full.
         addresses: LruCache<Multiaddr, AddressRecord>,

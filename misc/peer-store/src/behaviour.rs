@@ -20,7 +20,7 @@ pub enum Event<T> {
 pub struct Behaviour<S: Store> {
     store: S,
     /// Pending Events to be emitted back to the  [`libp2p_swarm::Swarm`].
-    pending_events: VecDeque<Event<S::ToSwarm>>,
+    pending_events: VecDeque<Event<S::FromStore>>,
 }
 
 impl<'a, S> Behaviour<S>
@@ -43,8 +43,8 @@ where
         self.store.addresses_of_peer(peer)
     }
 
-    /// Manually update a record.  
-    /// This will always emit an `Event::RecordUpdated`.
+    /// Manually update a address record.  
+    /// This will always emit [`Event::RecordUpdated`].
     pub fn update_address(&mut self, peer: &PeerId, address: &Multiaddr) {
         self.store
             .update_address(peer, address, AddressSource::Manual, false);
@@ -53,17 +53,19 @@ where
     }
 
     /// Should be called when other protocol emits a [`PeerRecord`](libp2p_core::PeerRecord).  
-    /// This will always emit an `Event::RecordUpdated`.
     pub fn on_signed_peer_record(
         &mut self,
         signed_record: &libp2p_core::PeerRecord,
         source: AddressSource,
     ) {
-        self.store
-            .update_certified_address(signed_record, source, false);
-        self.pending_events.push_back(Event::RecordUpdated {
-            peer: signed_record.peer_id(),
-        });
+        if self
+            .store
+            .update_certified_address(signed_record, source, false)
+        {
+            self.pending_events.push_back(Event::RecordUpdated {
+                peer: signed_record.peer_id(),
+            });
+        }
     }
 
     /// Get a immutable reference to the internal store.
@@ -91,10 +93,11 @@ where
                 .push_back(Event::RecordUpdated { peer: *peer });
         }
     }
-    fn handle_store_event(&mut self, event: super::store::Event) {
+    fn handle_store_event(&mut self, event: super::store::Event<<S as Store>::FromStore>) {
         use super::store::Event::*;
         match event {
             RecordUpdated(peer) => self.pending_events.push_back(Event::RecordUpdated { peer }),
+            Store(ev) => self.pending_events.push_back(Event::Store(ev)),
         }
     }
 }
@@ -102,11 +105,11 @@ where
 impl<S> NetworkBehaviour for Behaviour<S>
 where
     S: Store + 'static,
-    <S as Store>::ToSwarm: Send + Sync,
+    <S as Store>::FromStore: Send + Sync,
 {
     type ConnectionHandler = dummy::ConnectionHandler;
 
-    type ToSwarm = Event<S::ToSwarm>;
+    type ToSwarm = Event<S::FromStore>;
 
     fn handle_established_inbound_connection(
         &mut self,
@@ -150,9 +153,7 @@ where
     }
 
     fn on_swarm_event(&mut self, event: libp2p_swarm::FromSwarm) {
-        if let Some(ev) = self.store.on_swarm_event(&event) {
-            self.handle_store_event(ev);
-        };
+        self.store.on_swarm_event(&event);
     }
 
     fn on_connection_handler_event(
@@ -169,12 +170,13 @@ where
         cx: &mut std::task::Context<'_>,
     ) -> std::task::Poll<libp2p_swarm::ToSwarm<Self::ToSwarm, libp2p_swarm::THandlerInEvent<Self>>>
     {
+        if let Some(ev) = self.store.poll(cx) {
+            self.handle_store_event(ev);
+        };
+
         if let Some(ev) = self.pending_events.pop_front() {
             return Poll::Ready(libp2p_swarm::ToSwarm::GenerateEvent(ev));
         }
-        if let Some(ev) = self.store.poll(cx) {
-            self.pending_events.push_back(Event::Store(ev));
-        };
         Poll::Pending
     }
 }
