@@ -579,13 +579,14 @@ mod tests {
                 )
             });
 
+            let rt = Runtime::new().unwrap();
             let bypassed_peer_id = *swarm3.local_peer_id();
             swarm1
                 .behaviour_mut()
                 .limits
                 .bypass_peer_id(&bypassed_peer_id);
 
-            async_std::task::block_on(async {
+            rt.block_on(async {
                 let (listen_addr, _) = swarm1.listen().with_memory_addr_external().await;
 
                 for _ in 0..limit {
@@ -594,8 +595,8 @@ mod tests {
 
                 swarm3.dial(listen_addr.clone()).unwrap();
 
-                async_std::task::spawn(swarm2.loop_on_next());
-                async_std::task::spawn(swarm3.loop_on_next());
+                tokio::spawn(swarm2.loop_on_next());
+                tokio::spawn(swarm3.loop_on_next());
 
                 swarm1
                     .wait(|event| match event {
