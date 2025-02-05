@@ -1,3 +1,8 @@
+## 0.14.1
+
+- Fix infinity loop on wrong `nonce` when performing `dial_back`.
+  See [PR 5848](https://github.com/libp2p/rust-libp2p/pull/5848).
+
 ## 0.14.0
 
 - Verify that an incoming AutoNAT dial comes from a connected peer. See [PR 5597](https://github.com/libp2p/rust-libp2p/pull/5597).

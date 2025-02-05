@@ -2717,7 +2717,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-autonat"
-version = "0.14.0"
+version = "0.14.1"
 dependencies = [
  "async-trait",
  "asynchronous-codec",
