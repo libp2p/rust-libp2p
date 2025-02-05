@@ -2833,7 +2833,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-floodsub"
-version = "0.46.0"
+version = "0.46.1"
 dependencies = [
  "asynchronous-codec",
  "bytes",

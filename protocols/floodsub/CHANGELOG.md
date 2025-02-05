@@ -1,3 +1,7 @@
+## 0.46.1
+- Rename types to match naming convention in [discussion 2174](https://github.com/libp2p/rust-libp2p/discussions/2174).
+  See [PR XXXX](https://github.com/libp2p/rust-libp2p/pull/XXXX).
+
 ## 0.46.0
 
 <!-- Update to libp2p-core v0.43.0 -->

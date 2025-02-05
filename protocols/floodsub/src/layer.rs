@@ -40,19 +40,18 @@ use libp2p_swarm::{
 };
 use smallvec::SmallVec;
 
-use crate::{
-    protocol::{
-        FloodsubMessage, FloodsubProtocol, FloodsubRpc, FloodsubSubscription,
-        FloodsubSubscriptionAction,
-    },
-    topic::Topic,
-    FloodsubConfig,
-};
+use crate::{protocol::{
+    FloodsubMessage, FloodsubProtocol, FloodsubRpc, FloodsubSubscription,
+    FloodsubSubscriptionAction,
+}, topic::Topic, Config, FloodsubConfig};
+
+#[deprecated = "Use `Behaviour` instead."]
+pub type Floodsub = Behaviour;
 
 /// Network behaviour that handles the floodsub protocol.
-pub struct Floodsub {
+pub struct Behaviour {
     /// Events that need to be yielded to the outside when polling.
-    events: VecDeque<ToSwarm<FloodsubEvent, FloodsubRpc>>,
+    events: VecDeque<ToSwarm<Event, FloodsubRpc>>,
 
     config: FloodsubConfig,
 
@@ -73,15 +72,15 @@ pub struct Floodsub {
     received: CuckooFilter<DefaultHasher>,
 }
 
-impl Floodsub {
+impl Behaviour {
     /// Creates a `Floodsub` with default configuration.
     pub fn new(local_peer_id: PeerId) -> Self {
-        Self::from_config(FloodsubConfig::new(local_peer_id))
+        Self::from_config(Config::new(local_peer_id))
     }
 
     /// Creates a `Floodsub` with the given configuration.
-    pub fn from_config(config: FloodsubConfig) -> Self {
-        Floodsub {
+    pub fn from_config(config: Config) -> Self {
+        Behaviour {
             events: VecDeque::new(),
             config,
             target_peers: FnvHashSet::default(),
@@ -241,7 +240,7 @@ impl Floodsub {
             }
             if self.config.subscribe_local_messages {
                 self.events
-                    .push_back(ToSwarm::GenerateEvent(FloodsubEvent::Message(
+                    .push_back(ToSwarm::GenerateEvent(Event::Message(
                         message.clone(),
                     )));
             }
@@ -337,9 +336,9 @@ impl Floodsub {
     }
 }
 
-impl NetworkBehaviour for Floodsub {
+impl NetworkBehaviour for Behaviour {
     type ConnectionHandler = OneShotHandler<FloodsubProtocol, FloodsubRpc, InnerMessage>;
-    type ToSwarm = FloodsubEvent;
+    type ToSwarm = Event;
 
     fn handle_established_inbound_connection(
         &mut self,
@@ -393,7 +392,7 @@ impl NetworkBehaviour for Floodsub {
                         remote_peer_topics.push(subscription.topic.clone());
                     }
                     self.events
-                        .push_back(ToSwarm::GenerateEvent(FloodsubEvent::Subscribed {
+                        .push_back(ToSwarm::GenerateEvent(Event::Subscribed {
                             peer_id: propagation_source,
                             topic: subscription.topic,
                         }));
@@ -406,7 +405,7 @@ impl NetworkBehaviour for Floodsub {
                         remote_peer_topics.remove(pos);
                     }
                     self.events
-                        .push_back(ToSwarm::GenerateEvent(FloodsubEvent::Unsubscribed {
+                        .push_back(ToSwarm::GenerateEvent(Event::Unsubscribed {
                             peer_id: propagation_source,
                             topic: subscription.topic,
                         }));
@@ -439,7 +438,7 @@ impl NetworkBehaviour for Floodsub {
                 .iter()
                 .any(|t| message.topics.iter().any(|u| t == u))
             {
-                let event = FloodsubEvent::Message(message.clone());
+                let event = Event::Message(message.clone());
                 self.events.push_back(ToSwarm::GenerateEvent(event));
             }
 
@@ -530,9 +529,12 @@ impl From<()> for InnerMessage {
     }
 }
 
+#[deprecated = "Use `Event` instead."]
+pub type FloodsubEvent = Event;
+
 /// Event that can happen on the floodsub behaviour.
 #[derive(Debug)]
-pub enum FloodsubEvent {
+pub enum Event {
     /// A message has been received.
     Message(FloodsubMessage),
 
