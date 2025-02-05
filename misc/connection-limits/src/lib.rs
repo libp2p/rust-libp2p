@@ -485,13 +485,10 @@ mod tests {
                 .addresses(vec![addr.clone()])
                 .build(),
         ) {
-            match e {
-                DialError::Denied { cause } => {
-                    cause
-                        .downcast::<Exceeded>()
-                        .expect_err("Unexpected connection denied because of limit");
-                }
-                _ => {}
+            if let DialError::Denied { cause } = e {
+                cause
+                    .downcast::<Exceeded>()
+                    .expect_err("Unexpected connection denied because of limit");
             }
         }
         let not_bypassed_peer = loop {
