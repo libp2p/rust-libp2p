@@ -29,7 +29,6 @@ serde_json = "1.0"
 thiserror = { workspace = true }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true, features = ["env-filter"] }
-libp2p-test-utils = { workspace = true }
 tokio = { workspace = true, features = ["macros", "rt", "rt-multi-thread"] }
 
 [dev-dependencies]

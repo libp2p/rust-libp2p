@@ -552,7 +552,6 @@ mod tests {
                     .flatten()
                     .collect::<HashSet<_>>()
                     .into_iter()
-                    .map(Key::from)
                     .collect::<Vec<_>>();
 
                 deduplicated.sort_unstable_by(|a, b| {

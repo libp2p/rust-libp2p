@@ -1,3 +1,10 @@
+## 0.43.0
+
+- Fix the disabling of Nagle's algorithm, which requires setting `TCP_NODELAY` to _true_.
+  See [PR 5764](https://github.com/libp2p/rust-libp2p/pull/5764)
+
+<!-- Update to libp2p-core v0.43.0 -->
+
 ## 0.42.0
 
 - Implement refactored `Transport`.

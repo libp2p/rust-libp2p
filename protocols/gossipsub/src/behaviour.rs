@@ -675,9 +675,14 @@ where
                 // Gossipsub peers
                 None => {
                     tracing::debug!(topic=%topic_hash, "Topic not in the mesh");
+                    // `fanout_peers` is always non-empty if it's `Some`.
+                    let fanout_peers = self
+                        .fanout
+                        .get(&topic_hash)
+                        .filter(|peers| !peers.is_empty());
                     // If we have fanout peers add them to the map.
-                    if self.fanout.contains_key(&topic_hash) {
-                        for peer in self.fanout.get(&topic_hash).expect("Topic must exist") {
+                    if let Some(peers) = fanout_peers {
+                        for peer in peers {
                             recipient_peers.insert(*peer);
                         }
                     } else {
@@ -755,6 +760,13 @@ where
 
         if publish_failed {
             return Err(PublishError::AllQueuesFull(recipient_peers.len()));
+        }
+
+        // Broadcast IDONTWANT messages
+        if raw_message.raw_protobuf_len() > self.config.idontwant_message_size_threshold()
+            && self.config.idontwant_on_publish()
+        {
+            self.send_idontwant(&raw_message, &msg_id, raw_message.source.as_ref());
         }
 
         tracing::debug!(message=%msg_id, "Published message");
@@ -1672,7 +1684,8 @@ where
                 );
                 self.handle_invalid_message(
                     propagation_source,
-                    raw_message,
+                    &raw_message.topic,
+                    Some(msg_id),
                     RejectReason::BlackListedSource,
                 );
                 return false;
@@ -1701,7 +1714,12 @@ where
                 source=%propagation_source,
                 "Dropping message claiming to be from self but forwarded from source"
             );
-            self.handle_invalid_message(propagation_source, raw_message, RejectReason::SelfOrigin);
+            self.handle_invalid_message(
+                propagation_source,
+                &raw_message.topic,
+                Some(msg_id),
+                RejectReason::SelfOrigin,
+            );
             return false;
         }
 
@@ -1729,7 +1747,8 @@ where
                 // Reject the message and return
                 self.handle_invalid_message(
                     propagation_source,
-                    &raw_message,
+                    &raw_message.topic,
+                    None,
                     RejectReason::ValidationError(ValidationError::TransformFailed),
                 );
                 return;
@@ -1741,7 +1760,7 @@ where
 
         // Broadcast IDONTWANT messages
         if raw_message.raw_protobuf_len() > self.config.idontwant_message_size_threshold() {
-            self.send_idontwant(&raw_message, &msg_id, propagation_source);
+            self.send_idontwant(&raw_message, &msg_id, Some(propagation_source));
         }
 
         // Check the validity of the message
@@ -1815,42 +1834,29 @@ where
     fn handle_invalid_message(
         &mut self,
         propagation_source: &PeerId,
-        raw_message: &RawMessage,
+        topic_hash: &TopicHash,
+        message_id: Option<&MessageId>,
         reject_reason: RejectReason,
     ) {
         if let Some(metrics) = self.metrics.as_mut() {
-            metrics.register_invalid_message(&raw_message.topic);
+            metrics.register_invalid_message(topic_hash);
         }
-
-        let message = self.data_transform.inbound_transform(raw_message.clone());
-
-        match (&mut self.peer_score, message) {
-            (Some((peer_score, ..)), Ok(message)) => {
-                let message_id = self.config.message_id(&message);
-
-                peer_score.reject_message(
-                    propagation_source,
-                    &message_id,
-                    &message.topic,
-                    reject_reason,
-                );
-
-                self.gossip_promises
-                    .reject_message(&message_id, &reject_reason);
-            }
-            (Some((peer_score, ..)), Err(_)) => {
+        if let Some(msg_id) = message_id {
+            // Valid transformation without peer scoring
+            self.gossip_promises.reject_message(msg_id, &reject_reason);
+        }
+        if let Some((peer_score, ..)) = &mut self.peer_score {
+            // The compiler will optimize this pattern-matching
+            if let Some(msg_id) = message_id {
+                // The message itself is valid, but is from a banned peer or
+                // claiming to be self-origin but is actually forwarded from other peers.
+                peer_score.reject_message(propagation_source, msg_id, topic_hash, reject_reason);
+            } else {
                 // The message is invalid, we reject it ignoring any gossip promises. If a peer is
                 // advertising this message via an IHAVE and it's invalid it will be double
                 // penalized, one for sending us an invalid and again for breaking a promise.
-                peer_score.reject_invalid_message(propagation_source, &raw_message.topic);
+                peer_score.reject_invalid_message(propagation_source, topic_hash);
             }
-            (None, Ok(message)) => {
-                // Valid transformation without peer scoring
-                let message_id = self.config.message_id(&message);
-                self.gossip_promises
-                    .reject_message(&message_id, &reject_reason);
-            }
-            (None, Err(_)) => {}
         }
     }
 
@@ -2600,7 +2606,7 @@ where
         &mut self,
         message: &RawMessage,
         msg_id: &MessageId,
-        propagation_source: &PeerId,
+        propagation_source: Option<&PeerId>,
     ) {
         let Some(mesh_peers) = self.mesh.get(&message.topic) else {
             return;
@@ -2611,8 +2617,8 @@ where
         let recipient_peers: Vec<PeerId> = mesh_peers
             .iter()
             .chain(iwant_peers.iter())
-            .filter(|peer_id| {
-                *peer_id != propagation_source && Some(*peer_id) != message.source.as_ref()
+            .filter(|&peer_id| {
+                Some(peer_id) != propagation_source && Some(peer_id) != message.source.as_ref()
             })
             .cloned()
             .collect();
@@ -3219,7 +3225,8 @@ where
                     for (raw_message, validation_error) in invalid_messages {
                         self.handle_invalid_message(
                             &propagation_source,
-                            &raw_message,
+                            &raw_message.topic,
+                            None,
                             RejectReason::ValidationError(validation_error),
                         )
                     }
@@ -3238,8 +3245,10 @@ where
                 // Handle messages
                 for (count, raw_message) in rpc.messages.into_iter().enumerate() {
                     // Only process the amount of messages the configuration allows.
-                    if self.config.max_messages_per_rpc().is_some()
-                        && Some(count) >= self.config.max_messages_per_rpc()
+                    if self
+                        .config
+                        .max_messages_per_rpc()
+                        .is_some_and(|max_msg| count >= max_msg)
                     {
                         tracing::warn!("Received more messages than permitted. Ignoring further messages. Processed: {}", count);
                         break;
@@ -3253,7 +3262,17 @@ where
                 let mut ihave_msgs = vec![];
                 let mut graft_msgs = vec![];
                 let mut prune_msgs = vec![];
-                for control_msg in rpc.control_msgs {
+                for (count, control_msg) in rpc.control_msgs.into_iter().enumerate() {
+                    // Only process the amount of messages the configuration allows.
+                    if self
+                        .config
+                        .max_messages_per_rpc()
+                        .is_some_and(|max_msg| count >= max_msg)
+                    {
+                        tracing::warn!("Received more control messages than permitted. Ignoring further messages. Processed: {}", count);
+                        break;
+                    }
+
                     match control_msg {
                         ControlAction::IHave(IHave {
                             topic_hash,
