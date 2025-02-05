@@ -2657,7 +2657,7 @@ checksum = "5aaeb2981e0606ca11d79718f8bb01164f1d6ed75080182d3abf017e6d244b6d"
 
 [[package]]
 name = "libp2p"
-version = "0.55.0"
+version = "0.55.1"
 dependencies = [
  "async-std",
  "bytes",
@@ -2693,6 +2693,7 @@ dependencies = [
  "libp2p-tls",
  "libp2p-uds",
  "libp2p-upnp",
+ "libp2p-webrtc-websys",
  "libp2p-websocket",
  "libp2p-websocket-websys",
  "libp2p-webtransport-websys",
@@ -2709,12 +2710,12 @@ dependencies = [
 name = "libp2p-allow-block-list"
 version = "0.5.0"
 dependencies = [
- "async-std",
  "libp2p-core",
  "libp2p-identity",
  "libp2p-swarm",
  "libp2p-swarm-derive",
  "libp2p-swarm-test",
+ "tokio",
 ]
 
 [[package]]
@@ -2748,7 +2749,6 @@ dependencies = [
 name = "libp2p-connection-limits"
 version = "0.5.0"
 dependencies = [
- "async-std",
  "libp2p-core",
  "libp2p-identify",
  "libp2p-identity",
@@ -2758,13 +2758,13 @@ dependencies = [
  "libp2p-swarm-test",
  "quickcheck-ext",
  "rand 0.8.5",
+ "tokio",
 ]
 
 [[package]]
 name = "libp2p-core"
 version = "0.43.0"
 dependencies = [
- "async-std",
  "either",
  "fnv",
  "futures",
@@ -2781,7 +2781,8 @@ dependencies = [
  "quick-protobuf",
  "rand 0.8.5",
  "rw-stream-sink",
- "thiserror 2.0.3",
+ "thiserror 2.0.9",
+ "tokio",
  "tracing",
  "unsigned-varint 0.8.0",
  "web-time 1.1.0",
@@ -2855,7 +2856,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-gossipsub"
-version = "0.48.0"
+version = "0.48.1"
 dependencies = [
  "async-channel 2.3.1",
  "asynchronous-codec",
@@ -3194,7 +3195,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-relay"
-version = "0.19.0"
+version = "0.19.1"
 dependencies = [
  "asynchronous-codec",
  "bytes",
@@ -3246,7 +3247,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-request-response"
-version = "0.28.0"
+version = "0.28.1"
 dependencies = [
  "anyhow",
  "async-std",
@@ -3336,7 +3337,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-swarm-derive"
-version = "0.35.0"
+version = "0.35.1"
 dependencies = [
  "heck 0.5.0",
  "quote",
@@ -4094,9 +4095,9 @@ checksum = "624a8340c38c1b80fd549087862da4ba43e08858af025b236e509b6649fc13d5"
 
 [[package]]
 name = "openssl"
-version = "0.10.66"
+version = "0.10.70"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9529f4786b70a3e8c61e11179af17ab6188ad8d0ded78c5529441ed39d4bd9c1"
+checksum = "61cfb4e166a8bb8c9b55c500bc2308550148ece889be90f609377e58140f42c6"
 dependencies = [
  "bitflags 2.4.1",
  "cfg-if",
@@ -4126,9 +4127,9 @@ checksum = "ff011a302c396a5197692431fc1948019154afc178baf7d8e37367442a4601cf"
 
 [[package]]
 name = "openssl-sys"
-version = "0.9.103"
+version = "0.9.105"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7f9e8deee91df40a943c71b917e5874b951d32a802526c85721ce3b776c929d6"
+checksum = "8b22d5b84be05a8d6947c7cb71f7c849aa0f112acd4bf51c2a7c1c988ac0a9dc"
 dependencies = [
  "cc",
  "libc",

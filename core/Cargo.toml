@@ -31,7 +31,7 @@ tracing = { workspace = true }
 unsigned-varint = { workspace = true }
 
 [dev-dependencies]
-async-std = { version = "1.6.2", features = ["attributes"] }
+tokio = { workspace = true, features = ["rt", "macros"] }
 libp2p-mplex = { path = "../muxers/mplex" } # Using `path` here because this is a cyclic dev-dependency which otherwise breaks releasing.
 libp2p-noise = { path = "../transports/noise" } # Using `path` here because this is a cyclic dev-dependency which otherwise breaks releasing.
 multihash = { workspace = true, features = ["arb"] }

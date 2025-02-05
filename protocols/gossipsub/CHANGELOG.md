@@ -3,6 +3,11 @@
 - Make `prometheus-client` an optional dependency with feature `metrics`. 
   See [PR 5711](https://github.com/libp2p/rust-libp2p/pull/5711).
 
+## 0.48.1
+- Improve `max_messages_per_rpc` consistency by ensuring RPC control messages also adhere to the existing limits.
+  See [PR 5826](https://github.com/libp2p/rust-libp2p/pull/5826)
+
+
 ## 0.48.0
 
 - Allow broadcasting `IDONTWANT` messages when publishing to avoid downloading data that is already available.
