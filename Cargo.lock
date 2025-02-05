@@ -2889,7 +2889,6 @@ dependencies = [
 name = "libp2p-identify"
 version = "0.46.0"
 dependencies = [
- "async-std",
  "asynchronous-codec",
  "either",
  "futures",
@@ -2903,6 +2902,7 @@ dependencies = [
  "quick-protobuf-codec",
  "smallvec",
  "thiserror 2.0.9",
+ "tokio",
  "tracing",
  "tracing-subscriber",
 ]

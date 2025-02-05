@@ -11,7 +11,7 @@ use libp2p_swarm::{Swarm, SwarmEvent};
 use libp2p_swarm_test::SwarmExt;
 use tracing_subscriber::EnvFilter;
 
-#[async_std::test]
+#[tokio::test]
 async fn periodic_identify() {
     let _ = tracing_subscriber::fmt()
         .with_env_filter(EnvFilter::from_default_env())
@@ -82,7 +82,7 @@ async fn periodic_identify() {
         other => panic!("Unexpected events: {other:?}"),
     }
 }
-#[async_std::test]
+#[tokio::test]
 async fn only_emits_address_candidate_once_per_connection() {
     let _ = tracing_subscriber::fmt()
         .with_env_filter(EnvFilter::from_default_env())
@@ -105,7 +105,7 @@ async fn only_emits_address_candidate_once_per_connection() {
     swarm2.listen().with_memory_addr_external().await;
     swarm1.connect(&mut swarm2).await;
 
-    async_std::task::spawn(swarm2.loop_on_next());
+    tokio::spawn(swarm2.loop_on_next());
 
     let swarm_events = futures::stream::poll_fn(|cx| swarm1.poll_next_unpin(cx))
         .take(8)
@@ -154,7 +154,7 @@ async fn only_emits_address_candidate_once_per_connection() {
     );
 }
 
-#[async_std::test]
+#[tokio::test]
 async fn emits_unique_listen_addresses() {
     let _ = tracing_subscriber::fmt()
         .with_env_filter(EnvFilter::from_default_env())
@@ -180,7 +180,7 @@ async fn emits_unique_listen_addresses() {
     let swarm2_peer_id = *swarm2.local_peer_id();
     swarm1.connect(&mut swarm2).await;
 
-    async_std::task::spawn(swarm2.loop_on_next());
+    tokio::spawn(swarm2.loop_on_next());
 
     let swarm_events = futures::stream::poll_fn(|cx| swarm1.poll_next_unpin(cx))
         .take(8)
@@ -226,7 +226,7 @@ async fn emits_unique_listen_addresses() {
     assert!(reported_addrs.contains(&(swarm2_peer_id, swarm2_tcp_listen_addr)));
 }
 
-#[async_std::test]
+#[tokio::test]
 async fn hides_listen_addresses() {
     let _ = tracing_subscriber::fmt()
         .with_env_filter(EnvFilter::from_default_env())
@@ -253,7 +253,7 @@ async fn hides_listen_addresses() {
     let swarm2_peer_id = *swarm2.local_peer_id();
     swarm1.connect(&mut swarm2).await;
 
-    async_std::task::spawn(swarm2.loop_on_next());
+    tokio::spawn(swarm2.loop_on_next());
 
     let swarm_events = futures::stream::poll_fn(|cx| swarm1.poll_next_unpin(cx))
         .take(8)
@@ -297,7 +297,7 @@ async fn hides_listen_addresses() {
     assert!(reported_addrs.contains(&(swarm2_peer_id, swarm2_tcp_listen_addr)));
 }
 
-#[async_std::test]
+#[tokio::test]
 async fn identify_push() {
     let _ = tracing_subscriber::fmt()
         .with_env_filter(EnvFilter::from_default_env())
@@ -349,7 +349,7 @@ async fn identify_push() {
     assert!(swarm1_received_info.listen_addrs.is_empty());
 }
 
-#[async_std::test]
+#[tokio::test]
 async fn discover_peer_after_disconnect() {
     let _ = tracing_subscriber::fmt()
         .with_env_filter(EnvFilter::from_default_env())
@@ -369,7 +369,7 @@ async fn discover_peer_after_disconnect() {
     swarm2.connect(&mut swarm1).await;
 
     let swarm1_peer_id = *swarm1.local_peer_id();
-    async_std::task::spawn(swarm1.loop_on_next());
+    tokio::spawn(swarm1.loop_on_next());
 
     // Wait until we identified.
     swarm2
@@ -402,7 +402,7 @@ async fn discover_peer_after_disconnect() {
     assert_eq!(connected_peer, swarm1_peer_id);
 }
 
-#[async_std::test]
+#[tokio::test]
 async fn configured_interval_starts_after_first_identify() {
     let _ = tracing_subscriber::fmt()
         .with_env_filter(EnvFilter::from_default_env())
@@ -426,7 +426,7 @@ async fn configured_interval_starts_after_first_identify() {
     swarm1.listen().with_memory_addr_external().await;
     swarm2.connect(&mut swarm1).await;
 
-    async_std::task::spawn(swarm2.loop_on_next());
+    tokio::spawn(swarm2.loop_on_next());
 
     let start = Instant::now();
 
@@ -442,7 +442,7 @@ async fn configured_interval_starts_after_first_identify() {
     assert!(time_to_first_identify < identify_interval)
 }
 
-#[async_std::test]
+#[tokio::test]
 async fn reject_mismatched_public_key() {
     let _ = tracing_subscriber::fmt()
         .with_env_filter(EnvFilter::from_default_env())
