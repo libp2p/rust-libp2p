@@ -480,16 +480,14 @@ mod tests {
             .limits
             .bypass_peer_id(&bypassed_peer);
         assert!(network.behaviour().limits.is_bypassed(&bypassed_peer));
-        if let Err(e) = network.dial(
+        if let Err(DialError::Denied { cause }) = network.dial(
             DialOpts::peer_id(bypassed_peer)
                 .addresses(vec![addr.clone()])
                 .build(),
         ) {
-            if let DialError::Denied { cause } = e {
-                cause
-                    .downcast::<Exceeded>()
-                    .expect_err("Unexpected connection denied because of limit");
-            }
+            cause
+                .downcast::<Exceeded>()
+                .expect_err("Unexpected connection denied because of limit");
         }
         let not_bypassed_peer = loop {
             let new_peer = PeerId::random();
