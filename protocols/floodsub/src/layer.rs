@@ -43,7 +43,7 @@ use smallvec::SmallVec;
 use crate::{protocol::{
     FloodsubMessage, FloodsubProtocol, FloodsubRpc, FloodsubSubscription,
     FloodsubSubscriptionAction,
-}, topic::Topic, Config, FloodsubConfig};
+}, topic::Topic, Config};
 
 #[deprecated = "Use `Behaviour` instead."]
 pub type Floodsub = Behaviour;
@@ -53,7 +53,7 @@ pub struct Behaviour {
     /// Events that need to be yielded to the outside when polling.
     events: VecDeque<ToSwarm<Event, FloodsubRpc>>,
 
-    config: FloodsubConfig,
+    config: Config,
 
     /// List of peers to send messages to.
     target_peers: FnvHashSet<PeerId>,
