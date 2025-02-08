@@ -127,10 +127,10 @@
 
 - Update to `libp2p-swarm` `v0.41.0`.
 
-- Replace `RequestResponse`'s `NetworkBehaviour` implemention `inject_*` methods with the new `on_*` methods.
+- Replace `RequestResponse`'s `NetworkBehaviour` implementation `inject_*` methods with the new `on_*` methods.
   See [PR 3011].
 
-- Replace `RequestResponseHandler`'s `ConnectionHandler` implemention `inject_*` methods
+- Replace `RequestResponseHandler`'s `ConnectionHandler` implementation `inject_*` methods
   with the new `on_*` methods. See [PR 3085].
 
 - Update `rust-version` to reflect the actual MSRV: 1.62.0. See [PR 3090].

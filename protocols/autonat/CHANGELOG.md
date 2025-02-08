@@ -14,7 +14,7 @@
 
 ## 0.13.0
 
-- Due to the refactor of `Transport` it's no longer required to create a seperate transport for
+- Due to the refactor of `Transport` it's no longer required to create a separate transport for
 AutoNAT where port reuse is disabled. This information is now passed by the behaviour.
   See [PR 4568](https://github.com/libp2p/rust-libp2p/pull/4568).
 - Introduce the new AutoNATv2 protocol.
@@ -34,7 +34,7 @@ AutoNAT where port reuse is disabled. This information is now passed by the beha
 ## 0.12.0
 
 - Remove `Clone`, `PartialEq` and `Eq` implementations on `Event` and its sub-structs.
-  The `Event` also contains errors which are not clonable or comparable.
+  The `Event` also contains errors which are not cloneable or comparable.
   See [PR 3914](https://github.com/libp2p/rust-libp2p/pull/3914).
 
 ## 0.11.0
@@ -84,7 +84,7 @@ AutoNAT where port reuse is disabled. This information is now passed by the beha
 
 - Update to `libp2p-request-response` `v0.23.0`.
 
-- Replace `Behaviour`'s `NetworkBehaviour` implemention `inject_*` methods with the new `on_*` methods.
+- Replace `Behaviour`'s `NetworkBehaviour` implementation `inject_*` methods with the new `on_*` methods.
   See [PR 3011].
 
 - Update `rust-version` to reflect the actual MSRV: 1.62.0. See [PR 3090].
