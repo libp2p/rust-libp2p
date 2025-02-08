@@ -124,10 +124,10 @@
 
 - Update to `libp2p-swarm` `v0.41.0`.
 
-- Replace `Behaviour`'s `NetworkBehaviour` implemention `inject_*` methods with the new `on_*` methods.
+- Replace `Behaviour`'s `NetworkBehaviour` implementation `inject_*` methods with the new `on_*` methods.
   See [PR 3011].
 
-- Replace `Handler`'s `ConnectionHandler` implemention `inject_*` methods with the new `on_*` methods.
+- Replace `Handler`'s `ConnectionHandler` implementation `inject_*` methods with the new `on_*` methods.
   See [PR 3085].
 
 - Update `rust-version` to reflect the actual MSRV: 1.62.0. See [PR 3090].
@@ -191,7 +191,7 @@
 
 - Update to `libp2p-swarm` `v0.36.0`.
 
-- Expose explicits errors via `UpgradeError` instead of generic `io::Error`. See [PR 2630].
+- Expose explicit errors via `UpgradeError` instead of generic `io::Error`. See [PR 2630].
 
 [PR 2630]: https://github.com/libp2p/rust-libp2p/pull/2630
 ## 0.35.0

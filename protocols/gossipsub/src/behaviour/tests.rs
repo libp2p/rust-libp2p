@@ -2339,7 +2339,7 @@ fn test_accept_only_outbound_peer_grafts_when_mesh_full() {
     assert_eq!(gs.mesh[&topics[0]].len(), config.mesh_n_high());
 
     // create an outbound and an inbound peer
-    let (inbound, _in_reciver) = add_peer(&mut gs, &topics, false, false);
+    let (inbound, _in_receiver) = add_peer(&mut gs, &topics, false, false);
     let (outbound, _out_receiver) = add_peer(&mut gs, &topics, true, false);
 
     // send grafts
