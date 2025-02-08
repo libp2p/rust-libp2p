@@ -37,7 +37,6 @@ mod proto {
 
 #[allow(deprecated)]
 pub use self::layer::{Floodsub, FloodsubEvent};
-
 pub use self::{
     layer::{Behaviour, Event},
     protocol::{FloodsubMessage, FloodsubRpc},
