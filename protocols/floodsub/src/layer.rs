@@ -40,10 +40,14 @@ use libp2p_swarm::{
 };
 use smallvec::SmallVec;
 
-use crate::{protocol::{
-    FloodsubMessage, FloodsubProtocol, FloodsubRpc, FloodsubSubscription,
-    FloodsubSubscriptionAction,
-}, topic::Topic, Config};
+use crate::{
+    protocol::{
+        FloodsubMessage, FloodsubProtocol, FloodsubRpc, FloodsubSubscription,
+        FloodsubSubscriptionAction,
+    },
+    topic::Topic,
+    Config,
+};
 
 #[deprecated = "Use `Behaviour` instead."]
 pub type Floodsub = Behaviour;
@@ -240,9 +244,7 @@ impl Behaviour {
             }
             if self.config.subscribe_local_messages {
                 self.events
-                    .push_back(ToSwarm::GenerateEvent(Event::Message(
-                        message.clone(),
-                    )));
+                    .push_back(ToSwarm::GenerateEvent(Event::Message(message.clone())));
             }
         }
         // Don't publish the message if we have to check subscriptions
