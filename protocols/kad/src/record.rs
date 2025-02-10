@@ -25,7 +25,6 @@ pub mod store;
 use std::{
     borrow::Borrow,
     hash::{Hash, Hasher},
-    time::SystemTime,
 };
 
 use bytes::Bytes;
@@ -33,6 +32,7 @@ use libp2p_core::{multihash::Multihash, Multiaddr};
 use libp2p_identity::PeerId;
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
+use web_time::SystemTime;
 
 /// The (opaque) key of a record.
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]

@@ -26,11 +26,7 @@
 //! to poll the underlying transport for incoming messages, and the `Sink` component
 //! is used to send messages to remote peers.
 
-use std::{
-    io,
-    marker::PhantomData,
-    time::{Duration, SystemTime},
-};
+use std::{io, marker::PhantomData, time::Duration};
 
 use asynchronous_codec::{Decoder, Encoder, Framed};
 use bytes::BytesMut;
@@ -42,6 +38,7 @@ use libp2p_core::{
 use libp2p_identity::PeerId;
 use libp2p_swarm::StreamProtocol;
 use tracing::debug;
+use web_time::SystemTime;
 
 use crate::{
     proto,

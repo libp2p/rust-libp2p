@@ -21,7 +21,7 @@
 use std::{
     collections::btree_map::{BTreeMap, Entry},
     num::NonZeroUsize,
-    time::{Duration, SystemTime},
+    time::Duration,
 };
 
 use super::*;
@@ -29,6 +29,7 @@ use crate::{
     kbucket::{Distance, Key, KeyBytes},
     ALPHA_VALUE, K_VALUE,
 };
+use web_time::SystemTime;
 
 pub(crate) mod disjoint;
 /// A peer iterator for a dynamically changing list of peers, sorted by increasing

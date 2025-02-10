@@ -187,7 +187,7 @@ impl ClosestDisjointPeersIter {
         updated
     }
 
-    pub(crate) fn next(&mut self, now: SystemTime) -> PeersIterState<'_> {
+    pub(crate) fn next(&mut self, now: web_time::SystemTime) -> PeersIterState<'_> {
         let mut state = None;
 
         // Ensure querying each iterator at most once.
@@ -600,7 +600,7 @@ mod tests {
 
     #[test]
     fn s_kademlia_disjoint_paths() {
-        let now = SystemTime::now();
+        let now = web_time::SystemTime::now();
         let target: KeyBytes = Key::from(PeerId::random()).into();
 
         let mut pool = [0; 12]
@@ -811,7 +811,7 @@ mod tests {
     }
 
     impl PeerIterator {
-        fn next(&mut self, now: SystemTime) -> PeersIterState<'_> {
+        fn next(&mut self, now: web_time::SystemTime) -> PeersIterState<'_> {
             match self {
                 PeerIterator::Disjoint(iter) => iter.next(now),
                 PeerIterator::Closest(iter) => iter.next(now),
@@ -952,7 +952,7 @@ mod tests {
 
     #[test]
     fn failure_can_not_overwrite_previous_success() {
-        let now = SystemTime::now();
+        let now = web_time::SystemTime::now();
         let peer = PeerId::random();
         let mut iter = ClosestDisjointPeersIter::new(
             Key::from(PeerId::random()).into(),

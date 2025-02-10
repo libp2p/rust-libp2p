@@ -63,13 +63,14 @@ use std::{
     collections::HashSet,
     pin::Pin,
     task::{Context, Poll},
-    time::{Duration, SystemTime},
+    time::Duration,
     vec,
 };
 
 use futures::prelude::*;
 use futures_timer::Delay;
 use libp2p_identity::PeerId;
+use web_time::SystemTime;
 
 use crate::record::{self, store::RecordStore, ProviderRecord, Record};
 

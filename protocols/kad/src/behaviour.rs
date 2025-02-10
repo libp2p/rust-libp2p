@@ -27,7 +27,7 @@ use std::{
     fmt,
     num::NonZeroUsize,
     task::{Context, Poll, Waker},
-    time::{Duration, SystemTime},
+    time::Duration,
     vec,
 };
 
@@ -43,6 +43,7 @@ use libp2p_swarm::{
 };
 use thiserror::Error;
 use tracing::Level;
+use web_time::SystemTime;
 
 pub use crate::query::QueryStats;
 use crate::{

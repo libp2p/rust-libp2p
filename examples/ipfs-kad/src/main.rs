@@ -20,11 +20,7 @@
 
 #![doc = include_str!("../README.md")]
 
-use std::{
-    num::NonZeroUsize,
-    ops::Add,
-    time::{Duration, SystemTime},
-};
+use std::{num::NonZeroUsize, ops::Add, time::Duration};
 
 use anyhow::{bail, Result};
 use clap::Parser;
@@ -36,6 +32,7 @@ use libp2p::{
     tcp, yamux, PeerId,
 };
 use tracing_subscriber::EnvFilter;
+use web_time::SystemTime;
 
 const BOOTNODES: [&str; 4] = [
     "QmNnooDu7bfjPFoTZYxMNLWUQJyrVwtbZg5gBMjTezGAJN",

@@ -20,10 +20,7 @@
 
 mod peers;
 
-use std::{
-    num::NonZeroUsize,
-    time::{Duration, SystemTime},
-};
+use std::{num::NonZeroUsize, time::Duration};
 
 use either::Either;
 use fnv::FnvHashMap;
@@ -35,6 +32,7 @@ use peers::{
     PeersIterState,
 };
 use smallvec::SmallVec;
+use web_time::SystemTime;
 
 use crate::{
     behaviour::PeerInfo,
