@@ -8,7 +8,7 @@ use libp2p_swarm_test::SwarmExt;
 use serde::{Deserialize, Serialize};
 use tracing_subscriber::EnvFilter;
 
-#[async_std::test]
+#[tokio::test]
 #[cfg(feature = "cbor")]
 async fn dial_succeeds_after_adding_peers_address() {
     let _ = tracing_subscriber::fmt()
@@ -34,7 +34,7 @@ async fn dial_succeeds_after_adding_peers_address() {
 
     swarm.dial(peer_id2).unwrap();
 
-    async_std::task::spawn(swarm2.loop_on_next());
+    tokio::spawn(swarm2.loop_on_next());
 
     let (connected_peer_id, connected_address) = swarm
         .wait(|event| match event {

@@ -202,7 +202,7 @@ mod tests {
 
     use crate::{cbor::codec::Codec, Codec as _};
 
-    #[async_std::test]
+    #[tokio::test]
     async fn test_codec() {
         let expected_request = TestRequest {
             payload: "test_payload".to_string(),

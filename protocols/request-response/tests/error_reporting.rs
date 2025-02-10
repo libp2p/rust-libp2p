@@ -1,7 +1,6 @@
 use std::{io, iter, pin::pin, time::Duration};
 
 use anyhow::{bail, Result};
-use async_std::task::sleep;
 use async_trait::async_trait;
 use futures::prelude::*;
 use libp2p_identity::PeerId;
@@ -12,9 +11,10 @@ use libp2p_swarm_test::SwarmExt;
 use request_response::{
     Codec, InboundFailure, InboundRequestId, OutboundFailure, OutboundRequestId, ResponseChannel,
 };
+use tokio::time::sleep;
 use tracing_subscriber::EnvFilter;
 
-#[async_std::test]
+#[tokio::test]
 async fn report_outbound_failure_on_read_response() {
     let _ = tracing_subscriber::fmt()
         .with_env_filter(EnvFilter::from_default_env())
@@ -70,7 +70,7 @@ async fn report_outbound_failure_on_read_response() {
     futures::future::select(server_task, client_task).await;
 }
 
-#[async_std::test]
+#[tokio::test]
 async fn report_outbound_failure_on_write_request() {
     let _ = tracing_subscriber::fmt()
         .with_env_filter(EnvFilter::from_default_env())
@@ -113,7 +113,7 @@ async fn report_outbound_failure_on_write_request() {
     futures::future::select(server_task, client_task).await;
 }
 
-#[async_std::test]
+#[tokio::test]
 async fn report_outbound_timeout_on_read_response() {
     let _ = tracing_subscriber::fmt()
         .with_env_filter(EnvFilter::from_default_env())
@@ -160,7 +160,7 @@ async fn report_outbound_timeout_on_read_response() {
     futures::future::select(server_task, client_task).await;
 }
 
-#[async_std::test]
+#[tokio::test]
 async fn report_outbound_failure_on_max_streams() {
     let _ = tracing_subscriber::fmt()
         .with_env_filter(EnvFilter::from_default_env())
@@ -212,7 +212,7 @@ async fn report_outbound_failure_on_max_streams() {
     futures::future::select(swarm1_task, swarm2_task).await;
 }
 
-#[async_std::test]
+#[tokio::test]
 async fn report_inbound_failure_on_read_request() {
     let _ = tracing_subscriber::fmt()
         .with_env_filter(EnvFilter::from_default_env())
@@ -249,7 +249,7 @@ async fn report_inbound_failure_on_read_request() {
     futures::future::select(server_task, client_task).await;
 }
 
-#[async_std::test]
+#[tokio::test]
 async fn report_inbound_failure_on_write_response() {
     let _ = tracing_subscriber::fmt()
         .with_env_filter(EnvFilter::from_default_env())
@@ -315,7 +315,7 @@ async fn report_inbound_failure_on_write_response() {
     futures::future::select(server_task, client_task).await;
 }
 
-#[async_std::test]
+#[tokio::test]
 async fn report_inbound_timeout_on_write_response() {
     let _ = tracing_subscriber::fmt()
         .with_env_filter(EnvFilter::from_default_env())
