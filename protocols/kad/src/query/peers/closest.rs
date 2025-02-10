@@ -21,10 +21,8 @@
 use std::{
     collections::btree_map::{BTreeMap, Entry},
     num::NonZeroUsize,
-    time::Duration,
+    time::{Duration, SystemTime},
 };
-
-use web_time::Instant;
 
 use super::*;
 use crate::{
@@ -301,7 +299,7 @@ impl ClosestPeersIter {
     }
 
     /// Advances the state of the iterator, potentially getting a new peer to contact.
-    pub fn next(&mut self, now: Instant) -> PeersIterState<'_> {
+    pub fn next(&mut self, now: SystemTime) -> PeersIterState<'_> {
         if let State::Finished = self.state {
             return PeersIterState::Finished;
         }
@@ -479,7 +477,7 @@ enum PeerState {
     NotContacted,
 
     /// The iterator is waiting for a result from the peer.
-    Waiting(Instant),
+    Waiting(SystemTime),
 
     /// A result was not delivered for the peer within the configured timeout.
     ///
@@ -597,7 +595,7 @@ mod tests {
     #[test]
     fn termination_and_parallelism() {
         fn prop(mut iter: ClosestPeersIter, seed: Seed) {
-            let now = Instant::now();
+            let now = SystemTime::now();
             let mut rng = StdRng::from_seed(seed.0);
 
             let mut expected = iter
@@ -703,7 +701,7 @@ mod tests {
     #[test]
     fn no_duplicates() {
         fn prop(mut iter: ClosestPeersIter, closer: ArbitraryPeerId) -> bool {
-            let now = Instant::now();
+            let now = SystemTime::now();
 
             let closer = vec![closer.0];
 
@@ -745,7 +743,7 @@ mod tests {
     #[test]
     fn timeout() {
         fn prop(mut iter: ClosestPeersIter) -> bool {
-            let mut now = Instant::now();
+            let mut now = SystemTime::now();
             let peer = iter
                 .closest_peers
                 .values()
@@ -797,7 +795,7 @@ mod tests {
     #[test]
     fn without_success_try_up_to_k_peers() {
         fn prop(mut iter: ClosestPeersIter) {
-            let now = Instant::now();
+            let now = SystemTime::now();
 
             for _ in 0..(usize::min(iter.closest_peers.len(), K_VALUE.get())) {
                 match iter.next(now) {

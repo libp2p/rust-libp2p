@@ -23,7 +23,7 @@
 use std::{
     num::NonZeroUsize,
     ops::Add,
-    time::{Duration, Instant},
+    time::{Duration, SystemTime},
 };
 
 use anyhow::{bail, Result};
@@ -99,7 +99,7 @@ async fn main() -> Result<()> {
             let mut pk_record =
                 kad::Record::new(pk_record_key, local_key.public().encode_protobuf());
             pk_record.publisher = Some(*swarm.local_peer_id());
-            pk_record.expires = Some(Instant::now().add(Duration::from_secs(60)));
+            pk_record.expires = Some(SystemTime::now().add(Duration::from_secs(60)));
 
             swarm
                 .behaviour_mut()

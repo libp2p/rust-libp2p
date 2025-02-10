@@ -26,7 +26,11 @@
 //! to poll the underlying transport for incoming messages, and the `Sink` component
 //! is used to send messages to remote peers.
 
-use std::{io, marker::PhantomData, time::Duration};
+use std::{
+    io,
+    marker::PhantomData,
+    time::{Duration, SystemTime},
+};
 
 use asynchronous_codec::{Decoder, Encoder, Framed};
 use bytes::BytesMut;
@@ -38,7 +42,6 @@ use libp2p_core::{
 use libp2p_identity::PeerId;
 use libp2p_swarm::StreamProtocol;
 use tracing::debug;
-use web_time::Instant;
 
 use crate::{
     proto,
@@ -550,7 +553,7 @@ fn record_from_proto(record: proto::Record) -> Result<Record, io::Error> {
     };
 
     let expires = if record.ttl > 0 {
-        Some(Instant::now() + Duration::from_secs(record.ttl as u64))
+        Some(SystemTime::now() + Duration::from_secs(record.ttl as u64))
     } else {
         None
     };
@@ -571,9 +574,20 @@ fn record_to_proto(record: Record) -> proto::Record {
         ttl: record
             .expires
             .map(|t| {
-                let now = Instant::now();
+                let now = SystemTime::now();
                 if t > now {
-                    (t - now).as_secs() as u32
+                    now.duration_since(SystemTime::UNIX_EPOCH)
+                        .map(|now_duration| {
+                            let target_duration = t
+                                .duration_since(SystemTime::UNIX_EPOCH)
+                                .unwrap_or(now_duration);
+                            if target_duration > now_duration {
+                                (target_duration - now_duration).as_secs() as u32
+                            } else {
+                                1
+                            }
+                        })
+                        .unwrap_or(1)
                 } else {
                     1 // because 0 means "does not expire"
                 }

@@ -63,14 +63,13 @@ use std::{
     collections::HashSet,
     pin::Pin,
     task::{Context, Poll},
-    time::Duration,
+    time::{Duration, SystemTime},
     vec,
 };
 
 use futures::prelude::*;
 use futures_timer::Delay;
 use libp2p_identity::PeerId;
-use web_time::Instant;
 
 use crate::record::{self, store::RecordStore, ProviderRecord, Record};
 
@@ -102,7 +101,9 @@ impl<T> PeriodicJob<T> {
     #[cfg(test)]
     fn asap(&mut self) {
         if let PeriodicJobState::Waiting(delay, deadline) = &mut self.state {
-            let new_deadline = Instant::now().checked_sub(Duration::from_secs(1)).unwrap();
+            let new_deadline = SystemTime::now()
+                .checked_sub(Duration::from_secs(1))
+                .unwrap();
             *deadline = new_deadline;
             delay.reset(Duration::from_secs(1));
         }
@@ -110,7 +111,7 @@ impl<T> PeriodicJob<T> {
 
     /// Returns `true` if the job is currently not running but ready
     /// to be run, `false` otherwise.
-    fn check_ready(&mut self, cx: &mut Context<'_>, now: Instant) -> bool {
+    fn check_ready(&mut self, cx: &mut Context<'_>, now: SystemTime) -> bool {
         if let PeriodicJobState::Waiting(delay, deadline) = &mut self.state {
             if now >= *deadline || !Future::poll(Pin::new(delay), cx).is_pending() {
                 return true;
@@ -124,7 +125,7 @@ impl<T> PeriodicJob<T> {
 #[derive(Debug)]
 enum PeriodicJobState<T> {
     Running(T),
-    Waiting(Delay, Instant),
+    Waiting(Delay, SystemTime),
 }
 
 //////////////////////////////////////////////////////////////////////////////
@@ -133,7 +134,7 @@ enum PeriodicJobState<T> {
 /// Periodic job for replicating / publishing records.
 pub(crate) struct PutRecordJob {
     local_id: PeerId,
-    next_publish: Option<Instant>,
+    next_publish: Option<SystemTime>,
     publish_interval: Option<Duration>,
     record_ttl: Option<Duration>,
     skipped: HashSet<record::Key>,
@@ -149,7 +150,7 @@ impl PutRecordJob {
         publish_interval: Option<Duration>,
         record_ttl: Option<Duration>,
     ) -> Self {
-        let now = Instant::now();
+        let now = SystemTime::now();
         let deadline = now + replicate_interval;
         let delay = Delay::new(replicate_interval);
         let next_publish = publish_interval.map(|i| now + i);
@@ -185,7 +186,11 @@ impl PutRecordJob {
     #[cfg(test)]
     pub(crate) fn asap(&mut self, publish: bool) {
         if publish {
-            self.next_publish = Some(Instant::now().checked_sub(Duration::from_secs(1)).unwrap())
+            self.next_publish = Some(
+                SystemTime::now()
+                    .checked_sub(Duration::from_secs(1))
+                    .unwrap(),
+            )
         }
         self.inner.asap()
     }
@@ -199,7 +204,7 @@ impl PutRecordJob {
         &mut self,
         cx: &mut Context<'_>,
         store: &mut T,
-        now: Instant,
+        now: SystemTime,
     ) -> Poll<Record>
     where
         T: RecordStore,
@@ -266,7 +271,7 @@ pub(crate) struct AddProviderJob {
 impl AddProviderJob {
     /// Creates a new periodic job for provider announcements.
     pub(crate) fn new(interval: Duration) -> Self {
-        let now = Instant::now();
+        let now = SystemTime::now();
         Self {
             inner: PeriodicJob {
                 interval,
@@ -302,7 +307,7 @@ impl AddProviderJob {
         &mut self,
         cx: &mut Context<'_>,
         store: &mut T,
-        now: Instant,
+        now: SystemTime,
     ) -> Poll<ProviderRecord>
     where
         T: RecordStore,
@@ -378,7 +383,7 @@ mod tests {
             }
 
             block_on(poll_fn(|ctx| {
-                let now = Instant::now() + job.inner.interval;
+                let now = SystemTime::now() + job.inner.interval;
                 // All (non-expired) records in the store must be yielded by the job.
                 for r in store.records().map(|r| r.into_owned()).collect::<Vec<_>>() {
                     if !r.is_expired(now) {
@@ -408,7 +413,7 @@ mod tests {
             }
 
             block_on(poll_fn(|ctx| {
-                let now = Instant::now() + job.inner.interval;
+                let now = SystemTime::now() + job.inner.interval;
                 // All (non-expired) records in the store must be yielded by the job.
                 for r in store.provided().map(|r| r.into_owned()).collect::<Vec<_>>() {
                     if !r.is_expired(now) {

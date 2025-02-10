@@ -25,6 +25,7 @@ pub mod store;
 use std::{
     borrow::Borrow,
     hash::{Hash, Hasher},
+    time::SystemTime,
 };
 
 use bytes::Bytes;
@@ -32,7 +33,6 @@ use libp2p_core::{multihash::Multihash, Multiaddr};
 use libp2p_identity::PeerId;
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
-use web_time::Instant;
 
 /// The (opaque) key of a record.
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
@@ -76,6 +76,7 @@ impl<const S: usize> From<Multihash<S>> for Key {
 }
 
 /// A record stored in the DHT.
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Record {
     /// Key of the record.
@@ -85,7 +86,7 @@ pub struct Record {
     /// The (original) publisher of the record.
     pub publisher: Option<PeerId>,
     /// The expiration time as measured by a local, monotonic clock.
-    pub expires: Option<Instant>,
+    pub expires: Option<SystemTime>,
 }
 
 impl Record {
@@ -103,7 +104,7 @@ impl Record {
     }
 
     /// Checks whether the record is expired w.r.t. the given `Instant`.
-    pub fn is_expired(&self, now: Instant) -> bool {
+    pub fn is_expired(&self, now: SystemTime) -> bool {
         self.expires.is_some_and(|t| now >= t)
     }
 }
@@ -114,6 +115,7 @@ impl Record {
 /// Note: Two [`ProviderRecord`]s as well as their corresponding hashes are
 /// equal iff their `key` and `provider` fields are equal. See the [`Hash`] and
 /// [`PartialEq`] implementations.
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 #[derive(Clone, Debug)]
 pub struct ProviderRecord {
     /// The key whose value is provided by the provider.
@@ -121,7 +123,7 @@ pub struct ProviderRecord {
     /// The provider of the value for the key.
     pub provider: PeerId,
     /// The expiration time as measured by a local, monotonic clock.
-    pub expires: Option<Instant>,
+    pub expires: Option<SystemTime>,
     /// The known addresses that the provider may be listening on.
     pub addresses: Vec<Multiaddr>,
 }
@@ -156,7 +158,7 @@ impl ProviderRecord {
     }
 
     /// Checks whether the provider record is expired w.r.t. the given `Instant`.
-    pub fn is_expired(&self, now: Instant) -> bool {
+    pub fn is_expired(&self, now: SystemTime) -> bool {
         self.expires.is_some_and(|t| now >= t)
     }
 }
@@ -188,7 +190,7 @@ mod tests {
                     None
                 },
                 expires: if bool::arbitrary(g) {
-                    Some(Instant::now() + Duration::from_secs(g.gen_range(0..60)))
+                    Some(SystemTime::now() + Duration::from_secs(g.gen_range(0..60)))
                 } else {
                     None
                 },
@@ -202,7 +204,7 @@ mod tests {
                 key: Key::arbitrary(g),
                 provider: PeerId::random(),
                 expires: if bool::arbitrary(g) {
-                    Some(Instant::now() + Duration::from_secs(g.gen_range(0..60)))
+                    Some(SystemTime::now() + Duration::from_secs(g.gen_range(0..60)))
                 } else {
                     None
                 },

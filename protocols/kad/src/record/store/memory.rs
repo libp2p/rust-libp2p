@@ -267,7 +267,7 @@ mod tests {
         let mut rec = ProviderRecord::new(key, prv, Vec::new());
         assert!(store.add_provider(rec.clone()).is_ok());
         assert_eq!(vec![rec.clone()], store.providers(&rec.key).to_vec());
-        rec.expires = Some(Instant::now());
+        rec.expires = Some(SystemTime::now());
         assert!(store.add_provider(rec.clone()).is_ok());
         assert_eq!(vec![rec.clone()], store.providers(&rec.key).to_vec());
     }
@@ -283,7 +283,7 @@ mod tests {
             vec![Cow::Borrowed(&rec)],
             store.provided().collect::<Vec<_>>()
         );
-        rec.expires = Some(Instant::now());
+        rec.expires = Some(SystemTime::now());
         assert!(store.add_provider(rec.clone()).is_ok());
         assert_eq!(
             vec![Cow::Borrowed(&rec)],
