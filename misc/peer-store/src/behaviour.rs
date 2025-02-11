@@ -17,6 +17,19 @@ pub enum Event<T> {
     Store(T),
 }
 
+/// Behaviour that maintains an address book of peers.
+/// Usage:
+/// ```
+/// use libp2p::swarm::NetworkBehaviour;
+/// use libp2p_peer_store::memory_store::MemoryStore;
+/// use libp2p_peer_store::Behaviour;
+///     
+/// #[derive(NetworkBehaviour)]
+/// struct ComposedBehaviour {
+///    peer_store: Behaviour<MemoryStore>,
+///    identify: libp2p::identify::Behaviour,
+/// }
+/// ```
 pub struct Behaviour<S: Store> {
     store: S,
     /// Pending Events to be emitted back to the  [`libp2p_swarm::Swarm`].
@@ -136,18 +149,5 @@ where
             return Poll::Ready(libp2p_swarm::ToSwarm::GenerateEvent(ev));
         }
         Poll::Pending
-    }
-}
-
-#[cfg(test)]
-mod test {
-    use libp2p::swarm::NetworkBehaviour;
-
-    use crate::memory_store::MemoryStore;
-
-    #[derive(NetworkBehaviour)]
-    struct Behaviour {
-        peer_store: super::Behaviour<MemoryStore>,
-        identify: libp2p::identify::Behaviour,
     }
 }
