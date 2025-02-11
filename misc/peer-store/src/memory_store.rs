@@ -16,6 +16,7 @@ use crate::{store::AddressSource, Behaviour};
 
 #[derive(Debug, Clone)]
 pub enum Event {
+    /// Custom data of the peer has been updated.
     CustomDataUpdated(PeerId),
 }
 
@@ -24,12 +25,16 @@ pub enum Event {
 pub struct MemoryStore<T = ()> {
     /// The internal store.
     records: HashMap<PeerId, record::PeerRecord<T>>,
+    /// Events to emit to [`Behaviour`] and [`Swarm`](libp2p_swarm::Swarm)
     pending_events: VecDeque<super::store::Event<Event>>,
+    /// Timer for garbage collect records.
     record_ttl_timer: Option<Delay>,
+    /// Config of the store.
     config: Config,
 }
 
 impl<T> MemoryStore<T> {
+    /// Create a new [`MemoryStore`] with the give config.
     pub fn new(config: Config) -> Self {
         Self {
             config,
@@ -39,6 +44,8 @@ impl<T> MemoryStore<T> {
         }
     }
 
+    /// Update an address record.  
+    /// Returns `true` when the address is new.  
     fn update_address(
         &mut self,
         peer: &PeerId,
@@ -55,6 +62,8 @@ impl<T> MemoryStore<T> {
         true
     }
 
+    /// Update an address record.  
+    /// Returns `true` when the address is new.
     pub fn update_certified_address(
         &mut self,
         signed_record: &libp2p_core::PeerRecord,
@@ -71,6 +80,8 @@ impl<T> MemoryStore<T> {
         true
     }
 
+    /// Remove an address record.
+    /// Returns `true` when the address is removed.
     pub fn remove_address(&mut self, peer: &PeerId, address: &Multiaddr) -> bool {
         if let Some(record) = self.records.get_mut(peer) {
             return record.remove_address(address);

@@ -11,26 +11,25 @@ pub enum Event<T> {
     /// The peer's record has been updated.  
     /// Manually updating a record will always emit this event
     /// even if it provides no new information.
-    RecordUpdated {
-        peer: PeerId,
-    },
+    RecordUpdated { peer: PeerId },
+    /// Event from the internal store.
     Store(T),
 }
 
-/// Behaviour that maintains an address book of peers.
+/// Behaviour that maintains a peer address book.
 /// Usage:
 /// ```
 /// use libp2p::swarm::NetworkBehaviour;
-/// use libp2p_peer_store::memory_store::MemoryStore;
-/// use libp2p_peer_store::Behaviour;
-///     
+/// use libp2p_peer_store::{memory_store::MemoryStore, Behaviour};
+///
 /// #[derive(NetworkBehaviour)]
 /// struct ComposedBehaviour {
-///    peer_store: Behaviour<MemoryStore>,
-///    identify: libp2p::identify::Behaviour,
+///     peer_store: Behaviour<MemoryStore>,
+///     identify: libp2p::identify::Behaviour,
 /// }
 /// ```
 pub struct Behaviour<S: Store> {
+    /// The internal store.
     store: S,
     /// Pending Events to be emitted back to the  [`libp2p_swarm::Swarm`].
     pending_events: VecDeque<Event<S::FromStore>>,
@@ -40,6 +39,7 @@ impl<'a, S> Behaviour<S>
 where
     S: Store + 'static,
 {
+    /// Build a new [`Behaviour`] with the given store.
     pub fn new(store: S) -> Self {
         Self {
             store,
@@ -56,7 +56,7 @@ where
         self.store.addresses_of_peer(peer)
     }
 
-    /// Get a immutable reference to the internal store.
+    /// Get an immutable reference to the internal store.
     pub fn store(&self) -> &S {
         &self.store
     }

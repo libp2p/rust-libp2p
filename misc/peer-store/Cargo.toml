@@ -10,9 +10,9 @@ rust-version.workspace = true
 [dependencies]
 libp2p-core = { workspace = true }
 libp2p-swarm = { workspace = true }
-lru = "*"
-futures-timer = "*"
-futures-util = "*"
+lru = "0.12.3"
+futures-timer = "3.0.3"
+futures-util = "0.3.31"
 
 [dev-dependencies]
 libp2p-identity = { workspace = true, features = ["rand"] }
