@@ -29,6 +29,7 @@ full = [
     "memory-connection-limits",
     "metrics",
     "noise",
+    "peer-store",
     "ping",
     "plaintext",
     "pnet",
