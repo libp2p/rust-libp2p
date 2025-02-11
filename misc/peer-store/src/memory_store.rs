@@ -39,6 +39,45 @@ impl<T> MemoryStore<T> {
         }
     }
 
+    fn update_address(
+        &mut self,
+        peer: &PeerId,
+        address: &Multiaddr,
+        source: AddressSource,
+        should_expire: bool,
+    ) -> bool {
+        if let Some(record) = self.records.get_mut(peer) {
+            return record.update_address(address, source, should_expire);
+        }
+        let mut new_record = record::PeerRecord::new(self.config.record_capacity);
+        new_record.update_address(address, source, should_expire);
+        self.records.insert(*peer, new_record);
+        true
+    }
+
+    pub fn update_certified_address(
+        &mut self,
+        signed_record: &libp2p_core::PeerRecord,
+        source: AddressSource,
+        should_expire: bool,
+    ) -> bool {
+        let peer = signed_record.peer_id();
+        if let Some(record) = self.records.get_mut(&peer) {
+            return record.update_certified_address(signed_record, source, should_expire);
+        }
+        let mut new_record = record::PeerRecord::new(self.config.record_capacity);
+        new_record.update_certified_address(signed_record, source, should_expire);
+        self.records.insert(peer, new_record);
+        true
+    }
+
+    pub fn remove_address(&mut self, peer: &PeerId, address: &Multiaddr) -> bool {
+        if let Some(record) = self.records.get_mut(peer) {
+            return record.remove_address(address);
+        }
+        false
+    }
+
     pub fn get_custom_data(&self, peer: &PeerId) -> Option<&T> {
         self.records.get(peer).and_then(|r| r.get_custom_data())
     }
@@ -88,51 +127,11 @@ impl<T> MemoryStore<T> {
 impl<T> Store for MemoryStore<T> {
     type FromStore = Event;
 
-    fn update_address(
-        &mut self,
-        peer: &PeerId,
-        address: &Multiaddr,
-        source: AddressSource,
-        should_expire: bool,
-    ) -> bool {
-        if let Some(record) = self.records.get_mut(peer) {
-            return record.update_address(address, source, should_expire);
-        }
-        let mut new_record = record::PeerRecord::new(self.config.record_capacity);
-        new_record.update_address(address, source, should_expire);
-        self.records.insert(*peer, new_record);
-        true
-    }
-
-    fn update_certified_address(
-        &mut self,
-        signed_record: &libp2p_core::PeerRecord,
-        source: AddressSource,
-        should_expire: bool,
-    ) -> bool {
-        let peer = signed_record.peer_id();
-        if let Some(record) = self.records.get_mut(&peer) {
-            return record.update_certified_address(signed_record, source, should_expire);
-        }
-        let mut new_record = record::PeerRecord::new(self.config.record_capacity);
-        new_record.update_certified_address(signed_record, source, should_expire);
-        self.records.insert(peer, new_record);
-        true
-    }
-
-    fn remove_address(&mut self, peer: &PeerId, address: &Multiaddr) -> bool {
-        if let Some(record) = self.records.get_mut(peer) {
-            return record.remove_address(address);
-        }
-        false
-    }
-
     fn on_swarm_event(&mut self, swarm_event: &FromSwarm) {
         match swarm_event {
             FromSwarm::NewExternalAddrOfPeer(info) => {
                 if self.update_address(&info.peer_id, info.addr, AddressSource::Behaviour, true) {
-                    self
-                        .pending_events
+                    self.pending_events
                         .push_back(super::store::Event::RecordUpdated(info.peer_id));
                 }
             }
@@ -152,7 +151,7 @@ impl<T> Store for MemoryStore<T> {
                         .push_back(super::store::Event::RecordUpdated(info.peer_id));
                 }
             }
-            _ => {},
+            _ => {}
         }
     }
 
