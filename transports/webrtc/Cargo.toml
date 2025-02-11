@@ -1,6 +1,6 @@
 [package]
 name = "libp2p-webrtc"
-version = "0.8.0-alpha"
+version = "0.9.0-alpha"
 authors = ["Parity Technologies <admin@parity.io>"]
 description = "WebRTC transport for libp2p"
 repository = "https://github.com/libp2p/rust-libp2p"
@@ -12,11 +12,10 @@ categories = ["network-programming", "asynchronous"]
 
 [dependencies]
 async-trait = "0.1"
-bytes = "1"
 futures = { workspace = true }
 futures-timer = "3"
 hex = "0.4"
-if-watch = "3.2"
+if-watch = { workspace = true }
 libp2p-core = { workspace = true }
 libp2p-noise = { workspace = true }
 libp2p-identity = { workspace = true }
@@ -24,14 +23,13 @@ libp2p-webrtc-utils = { workspace = true }
 multihash = { workspace = true }
 rand = "0.8"
 rcgen = { workspace = true }
-serde = { version = "1.0", features = ["derive"] }
-stun = "0.6"
+stun = "0.7"
 thiserror = { workspace = true }
-tinytemplate = "1.2"
 tokio = { workspace = true, features = ["net"], optional = true }
 tokio-util = { version = "0.7", features = ["compat"], optional = true }
 tracing = { workspace = true }
 webrtc = { version = "0.9.0", optional = true }
+webrtc-ice = "=0.10.0" # smoke tests only work with this version
 
 [features]
 tokio = ["dep:tokio", "dep:tokio-util", "dep:webrtc", "if-watch/tokio"]

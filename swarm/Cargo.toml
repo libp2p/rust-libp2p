@@ -3,7 +3,7 @@ name = "libp2p-swarm"
 edition = "2021"
 rust-version = { workspace = true }
 description = "The libp2p swarm"
-version = "0.45.2"
+version = "0.46.0"
 authors = ["Parity Technologies <admin@parity.io>"]
 license = "MIT"
 repository = "https://github.com/libp2p/rust-libp2p"
@@ -15,7 +15,7 @@ either = "1.11.0"
 fnv = "1.0"
 futures = { workspace = true }
 futures-timer = "3.0.3"
-getrandom = { version = "0.2.15", features = ["js"], optional = true } # Explicit dependency to be used in `wasm-bindgen` feature
+getrandom = { workspace = true, features = ["js"], optional = true } # Explicit dependency to be used in `wasm-bindgen` feature
 web-time = { workspace = true }
 libp2p-core = { workspace = true }
 libp2p-identity = { workspace = true }

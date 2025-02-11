@@ -20,7 +20,6 @@ libp2p-swarm = { workspace = true }
 libp2p-tcp = { workspace = true }
 libp2p-yamux = { workspace = true }
 futures = { workspace = true }
-rand = "0.8.5"
 tracing = { workspace = true }
 futures-timer = "3.0.3"
 

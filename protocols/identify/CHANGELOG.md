@@ -1,16 +1,13 @@
-## 0.46.1
-- Discard `Info`s received from remote peers that contain a public key that doesn't match their peer ID.
-  See [PR 5707](https://github.com/libp2p/rust-libp2p/pull/5707).
-
 ## 0.46.0
-
-- Make `identify::Config` fields private and add getter functions.
-  See [PR 5663](https://github.com/libp2p/rust-libp2p/pull/5663).
-
-## 0.45.1
 
 - Add `hide_listen_addrs` option to prevent leaking (local) listen addresses.
   See [PR 5507](https://github.com/libp2p/rust-libp2p/pull/5507).
+- Make `identify::Config` fields private and add getter functions.
+  See [PR 5663](https://github.com/libp2p/rust-libp2p/pull/5663).
+- Discard `Info`s received from remote peers that contain a public key that doesn't match their peer ID.
+  See [PR 5707](https://github.com/libp2p/rust-libp2p/pull/5707).
+
+<!-- Update to libp2p-core v0.43.0 -->
 
 ## 0.45.0
 
@@ -127,10 +124,10 @@
 
 - Update to `libp2p-swarm` `v0.41.0`.
 
-- Replace `Behaviour`'s `NetworkBehaviour` implemention `inject_*` methods with the new `on_*` methods.
+- Replace `Behaviour`'s `NetworkBehaviour` implementation `inject_*` methods with the new `on_*` methods.
   See [PR 3011].
 
-- Replace `Handler`'s `ConnectionHandler` implemention `inject_*` methods with the new `on_*` methods.
+- Replace `Handler`'s `ConnectionHandler` implementation `inject_*` methods with the new `on_*` methods.
   See [PR 3085].
 
 - Update `rust-version` to reflect the actual MSRV: 1.62.0. See [PR 3090].
@@ -194,7 +191,7 @@
 
 - Update to `libp2p-swarm` `v0.36.0`.
 
-- Expose explicits errors via `UpgradeError` instead of generic `io::Error`. See [PR 2630].
+- Expose explicit errors via `UpgradeError` instead of generic `io::Error`. See [PR 2630].
 
 [PR 2630]: https://github.com/libp2p/rust-libp2p/pull/2630
 ## 0.35.0
