@@ -77,7 +77,7 @@
   See [PR 4755](https://github.com/libp2p/rust-libp2p/pull/4755).
 - Add `PeerCondition::DisconnectedAndNotDialing` variant, combining pre-existing conditions.
   This is the new default.
-  A new dialing attempt is iniated _only if_ the peer is both considered disconnected and there is currently no ongoing dialing attempt.
+  A new dialing attempt is initiated _only if_ the peer is both considered disconnected and there is currently no ongoing dialing attempt.
   See [PR 4225](https://github.com/libp2p/rust-libp2p/pull/4225).
 - Remove deprecated `keep_alive_timeout` in `OneShotHandlerConfig`.
   See [PR 4677](https://github.com/libp2p/rust-libp2p/pull/4677).
@@ -129,7 +129,7 @@
 - Improve error message when `DialPeerCondition` prevents a dial.
   See [PR 4409].
 
-- Introduce `SwarmBuilder::idle_conncetion_timeout` and deprecate `keep_alive::Behaviour` as a result.
+- Introduce `SwarmBuilder::idle_connection_timeout` and deprecate `keep_alive::Behaviour` as a result.
   See [PR 4161].
 
 [PR 4426]: https://github.com/libp2p/rust-libp2p/pull/4426
@@ -955,7 +955,7 @@
   pending outbound upgrades. As a result only those upgrades are polled that are
   ready to progress.
 
-  Implementors of `InboundUpgrade` and `OutboundUpgrade` need to ensure to wake
+  Implementers of `InboundUpgrade` and `OutboundUpgrade` need to ensure to wake
   up the underlying task once they are ready to make progress as they won't be
   polled otherwise.
 

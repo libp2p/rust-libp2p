@@ -862,7 +862,7 @@ fn test_score_ip_colocation() {
 }
 
 #[test]
-fn test_score_behaviour_penality() {
+fn test_score_behaviour_penalty() {
     // Create parameters with reasonable default values
     let behaviour_penalty_weight = -1.0;
     let behaviour_penalty_decay = 0.99;

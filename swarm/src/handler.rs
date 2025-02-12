@@ -95,7 +95,7 @@ use crate::{connection::AsStrHashEq, StreamProtocol};
 /// implemented by the handler can include conditions for terminating the connection.
 /// The lifetime of successfully negotiated substreams is fully controlled by the handler.
 ///
-/// Implementors of this trait should keep in mind that the connection can be closed at any time.
+/// Implementers of this trait should keep in mind that the connection can be closed at any time.
 /// When a connection is closed gracefully, the substreams used by the handler may still
 /// continue reading data until the remote closes its side of the connection.
 #[expect(deprecated)] // TODO: Remove when {In, Out}boundOpenInfo is fully removed.
