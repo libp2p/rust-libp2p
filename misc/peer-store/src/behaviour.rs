@@ -31,7 +31,7 @@ pub enum Event<T> {
 pub struct Behaviour<S: Store> {
     /// The internal store.
     store: S,
-    /// Pending Events to be emitted back to the  [`libp2p_swarm::Swarm`].
+    /// Pending Events to be emitted back to [`Swarm`](libp2p_swarm::Swarm).
     pending_events: VecDeque<Event<S::FromStore>>,
 }
 

@@ -11,12 +11,16 @@ rust-version.workspace = true
 libp2p-core = { workspace = true }
 libp2p-swarm = { workspace = true }
 lru = "0.12.3"
-futures-timer = "3.0.3"
-futures-util = "0.3.31"
+serde = { version = "1.0.217", features = ["derive"], optional = true }
 
 [dev-dependencies]
-libp2p-identity = { workspace = true, features = ["rand"] }
+libp2p-identity = { workspace = true, features = ["rand", "serde"] }
 libp2p = { workspace = true, features = ["macros", "identify"] }
+serde_json = { version = "1.0.134" }
 
 [lints]
 workspace = true
+
+[features]
+serde = ["dep:serde"]
+default = ["serde"]

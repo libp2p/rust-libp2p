@@ -1,18 +1,15 @@
 use std::{
     collections::{HashMap, VecDeque},
     num::NonZeroUsize,
-    task::{Context, Poll},
-    time::{Duration, Instant},
 };
 
-use futures_timer::Delay;
-use futures_util::FutureExt;
+#[cfg(feature = "serde")]
+use ::serde::{Deserialize, Serialize};
 use libp2p_core::{Multiaddr, PeerId};
 use libp2p_swarm::FromSwarm;
-use record::PeerRecord;
+pub use record::PeerRecord;
 
 use super::Store;
-use crate::{store::AddressSource, Behaviour};
 
 #[derive(Debug, Clone)]
 pub enum Event {
@@ -22,71 +19,63 @@ pub enum Event {
 
 /// A in-memory store.
 #[derive(Default)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[cfg_attr(
+    feature = "serde",
+    serde(bound(
+        serialize = "T: Clone + Serialize ",
+        deserialize = "T: Clone + Deserialize<'de>"
+    ))
+)]
 pub struct MemoryStore<T = ()> {
     /// The internal store.
     records: HashMap<PeerId, record::PeerRecord<T>>,
     /// Events to emit to [`Behaviour`] and [`Swarm`](libp2p_swarm::Swarm)
+    #[cfg_attr(feature = "serde", serde(skip))]
     pending_events: VecDeque<super::store::Event<Event>>,
-    /// Timer for garbage collect records.
-    record_ttl_timer: Option<Delay>,
     /// Config of the store.
     config: Config,
 }
 
 impl<T> MemoryStore<T> {
-    /// Create a new [`MemoryStore`] with the give config.
+    /// Create a new [`MemoryStore`] with the given config.
     pub fn new(config: Config) -> Self {
         Self {
             config,
             records: HashMap::new(),
-            record_ttl_timer: None,
             pending_events: VecDeque::default(),
         }
     }
 
-    /// Update an address record.  
+    /// Update an address record and notify swarm when the address is new.  
     /// Returns `true` when the address is new.  
-    fn update_address(
-        &mut self,
-        peer: &PeerId,
-        address: &Multiaddr,
-        source: AddressSource,
-        should_expire: bool,
-    ) -> bool {
-        if let Some(record) = self.records.get_mut(peer) {
-            return record.update_address(address, source, should_expire);
+    pub fn update_address(&mut self, peer: &PeerId, address: &Multiaddr) -> bool {
+        let is_updated = self.update_address_silent(peer, address);
+        if is_updated {
+            self.pending_events
+                .push_back(crate::store::Event::RecordUpdated(*peer));
         }
-        let mut new_record = record::PeerRecord::new(self.config.record_capacity);
-        new_record.update_address(address, source, should_expire);
-        self.records.insert(*peer, new_record);
-        true
+        is_updated
     }
 
-    /// Update an address record.  
-    /// Returns `true` when the address is new.
-    pub fn update_certified_address(
-        &mut self,
-        signed_record: &libp2p_core::PeerRecord,
-        source: AddressSource,
-        should_expire: bool,
-    ) -> bool {
-        let peer = signed_record.peer_id();
-        if let Some(record) = self.records.get_mut(&peer) {
-            return record.update_certified_address(signed_record, source, should_expire);
+    /// Update an address record without notifying swarm.  
+    /// Returns `true` when the address is new.  
+    pub fn update_address_silent(&mut self, peer: &PeerId, address: &Multiaddr) -> bool {
+        if let Some(record) = self.records.get_mut(peer) {
+            return record.update_address(address);
         }
         let mut new_record = record::PeerRecord::new(self.config.record_capacity);
-        new_record.update_certified_address(signed_record, source, should_expire);
-        self.records.insert(peer, new_record);
+        new_record.update_address(address);
+        self.records.insert(*peer, new_record);
         true
     }
 
     /// Remove an address record.
     /// Returns `true` when the address is removed.
     pub fn remove_address(&mut self, peer: &PeerId, address: &Multiaddr) -> bool {
-        if let Some(record) = self.records.get_mut(peer) {
-            return record.remove_address(address);
-        }
-        false
+        self.records
+            .get_mut(peer)
+            .is_some_and(|r| r.remove_address(address))
     }
 
     pub fn get_custom_data(&self, peer: &PeerId) -> Option<&T> {
@@ -126,13 +115,6 @@ impl<T> MemoryStore<T> {
     pub fn record_iter_mut(&mut self) -> impl Iterator<Item = (&PeerId, &mut PeerRecord<T>)> {
         self.records.iter_mut()
     }
-
-    fn check_record_ttl(&mut self) {
-        let now = Instant::now();
-        for r in &mut self.records.values_mut() {
-            r.check_addresses_ttl(now, self.config.record_ttl);
-        }
-    }
 }
 
 impl<T> Store for MemoryStore<T> {
@@ -141,22 +123,15 @@ impl<T> Store for MemoryStore<T> {
     fn on_swarm_event(&mut self, swarm_event: &FromSwarm) {
         match swarm_event {
             FromSwarm::NewExternalAddrOfPeer(info) => {
-                if self.update_address(&info.peer_id, info.addr, AddressSource::Behaviour, true) {
-                    self.pending_events
-                        .push_back(super::store::Event::RecordUpdated(info.peer_id));
-                }
+                self.update_address(&info.peer_id, info.addr);
             }
             FromSwarm::ConnectionEstablished(info) => {
                 let mut is_record_updated = false;
                 for failed_addr in info.failed_addresses {
                     is_record_updated |= self.remove_address(&info.peer_id, failed_addr);
                 }
-                is_record_updated |= self.update_address(
-                    &info.peer_id,
-                    info.endpoint.get_remote_address(),
-                    AddressSource::DirectConnection,
-                    false,
-                );
+                is_record_updated |=
+                    self.update_address_silent(&info.peer_id, info.endpoint.get_remote_address());
                 if is_record_updated {
                     self.pending_events
                         .push_back(super::store::Event::RecordUpdated(info.peer_id));
@@ -167,76 +142,34 @@ impl<T> Store for MemoryStore<T> {
     }
 
     fn addresses_of_peer(&self, peer: &PeerId) -> Option<impl Iterator<Item = &Multiaddr>> {
-        self.records.get(peer).map(|record| {
-            record
-                .addresses()
-                .filter(|(_, r)| !self.config.strict_mode || r.signature.is_some())
-                .map(|(addr, _)| addr)
-        })
+        self.records.get(peer).map(|record| record.addresses())
     }
 
-    fn poll(&mut self, cx: &mut Context<'_>) -> Option<super::store::Event<Self::FromStore>> {
-        if let Some(mut timer) = self.record_ttl_timer.take() {
-            if let Poll::Ready(()) = timer.poll_unpin(cx) {
-                self.check_record_ttl();
-                self.record_ttl_timer = Some(Delay::new(self.config.check_record_ttl_interval));
-            }
-            self.record_ttl_timer = Some(timer)
-        }
-        if let Some(ev) = self.pending_events.pop_front() {
-            return Some(ev);
-        }
-        None
-    }
-}
-
-impl<T> Behaviour<MemoryStore<T>>
-where
-    T: 'static,
-{
-    /// Get all stored address records of the peer, not affected by `strict_mode`.
-    pub fn address_record_of_peer(
-        &self,
-        peer: &PeerId,
-    ) -> Option<impl Iterator<Item = (&Multiaddr, &record::AddressRecord)>> {
-        self.store().records.get(peer).map(|r| r.addresses())
+    fn poll(
+        &mut self,
+        _: &mut std::task::Context<'_>,
+    ) -> Option<super::store::Event<Self::FromStore>> {
+        self.pending_events.pop_front()
     }
 }
 
 #[derive(Debug, Clone)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct Config {
-    /// TTL of an address record.
-    record_ttl: Duration,
     /// The capacaity of an address store.  
     /// The least active address will be discarded to make room for new address.
     record_capacity: NonZeroUsize,
-    /// The interval for garbage collecting records.
-    check_record_ttl_interval: Duration,
-    /// Only provide signed addresses to the behaviour when set to true.
-    strict_mode: bool,
 }
 
 impl Default for Config {
     fn default() -> Self {
         Self {
-            record_ttl: Duration::from_secs(600),
             record_capacity: NonZeroUsize::try_from(8).expect("8 > 0"),
-            check_record_ttl_interval: Duration::from_secs(5),
-            strict_mode: false,
         }
     }
 }
 
 impl Config {
-    /// TTL of all address records.
-    pub fn record_ttl(&self) -> &Duration {
-        &self.record_ttl
-    }
-    /// Set TTL for all address records.
-    pub fn set_record_ttl(mut self, ttl: Duration) -> Self {
-        self.record_ttl = ttl;
-        self
-    }
     /// Capacity for address records.
     /// The least active address will be dropped to make room for new address.
     pub fn record_capacity(&self) -> &NonZeroUsize {
@@ -247,196 +180,148 @@ impl Config {
         self.record_capacity = capacity;
         self
     }
-    /// The interval for garbage collecting records.
-    pub fn check_record_ttl_interval(&self) -> &Duration {
-        &self.check_record_ttl_interval
-    }
-    /// Set the interval for garbage collecting records.
-    pub fn set_check_record_ttl_interval(mut self, interval: Duration) -> Self {
-        self.check_record_ttl_interval = interval;
-        self
-    }
-    /// Only provide signed addresses to the behaviour when true.
-    pub fn is_strict_mode(&self) -> bool {
-        self.strict_mode
-    }
-    /// Set `strict_mode`.
-    pub fn set_strict_mode(mut self, is_strict: bool) -> Self {
-        self.strict_mode = is_strict;
-        self
-    }
 }
 mod record {
-    use std::sync::Arc;
 
     use lru::LruCache;
 
     use super::*;
 
+    #[derive(Debug, Clone)]
+    #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+    #[cfg_attr(
+        feature = "serde",
+        serde(bound(
+            serialize = "T: Clone + Serialize ",
+            deserialize = "T: Clone + Deserialize<'de>"
+        ))
+    )]
+    #[cfg_attr(feature = "serde", serde(from = "super::serde::PeerRecord<T>"))]
+    #[cfg_attr(feature = "serde", serde(into = "super::serde::PeerRecord<T>"))]
     pub struct PeerRecord<T> {
         /// A LRU(Least Recently Used) cache for addresses.  
         /// Will delete the least-recently-used record when full.
-        addresses: LruCache<Multiaddr, AddressRecord>,
-        custom: Option<T>,
+        addresses: LruCache<Multiaddr, ()>,
+        custom_data: Option<T>,
     }
     impl<T> PeerRecord<T> {
-        pub(crate) fn new(capacity: NonZeroUsize) -> Self {
+        pub(crate) fn new(cap: NonZeroUsize) -> Self {
             Self {
-                addresses: LruCache::new(capacity),
-                custom: None,
+                addresses: LruCache::new(cap),
+                custom_data: None,
             }
         }
 
-        pub(crate) fn addresses(&self) -> impl Iterator<Item = (&Multiaddr, &AddressRecord)> {
-            self.addresses.iter()
+        /// Build from an iterator. The order is reversed(FILO-ish).
+        pub(crate) fn from_iter(
+            cap: NonZeroUsize,
+            addr_iter: impl Iterator<Item = Multiaddr>,
+            custom_data: Option<T>,
+        ) -> Self {
+            let mut lru = LruCache::new(cap);
+            for addr in addr_iter {
+                lru.get_or_insert(addr, || ());
+            }
+            Self {
+                addresses: lru,
+                custom_data,
+            }
         }
 
-        pub(crate) fn update_address(
-            &mut self,
-            address: &Multiaddr,
-            source: AddressSource,
-            should_expire: bool,
-        ) -> bool {
-            if let Some(record) = self.addresses.get_mut(address) {
-                record.update_last_seen();
+        pub(crate) fn destruct(self) -> (NonZeroUsize, Vec<Multiaddr>, Option<T>) {
+            let cap = self.addresses.cap();
+            let mut addresses = self
+                .addresses
+                .into_iter()
+                .map(|(addr, _)| addr)
+                .collect::<Vec<_>>();
+            // This is somewhat unusual: `LruCache::iter()` retains LRU order
+            // while `LruCache::into_iter()` reverses the order.
+            addresses.reverse();
+            (cap, addresses, self.custom_data)
+        }
+
+        /// Iterate over all addresses. More recently-used address comes first.
+        /// Does not change the order.
+        pub fn addresses(&self) -> impl Iterator<Item = &Multiaddr> {
+            self.addresses.iter().map(|(addr, _)| addr)
+        }
+
+        /// Update the address in the LRU cache, promote it to the front if it exists,
+        /// insert it to the front if not.
+        /// Returns true when the address is new.
+        pub fn update_address(&mut self, address: &Multiaddr) -> bool {
+            if self.addresses.get(address).is_some() {
                 return false;
             }
-            // new record won't call `Instant::now()` twice
-            self.addresses.get_or_insert(address.clone(), || {
-                AddressRecord::new(source, should_expire, None)
-            });
+            self.addresses.get_or_insert(address.clone(), || ());
             true
         }
 
-        pub(crate) fn update_certified_address(
-            &mut self,
-            signed_record: &libp2p_core::PeerRecord,
-            source: AddressSource,
-            should_expire: bool,
-        ) -> bool {
-            let mut is_updated = false;
-            let signed_record = Arc::new(signed_record.clone());
-            for address in signed_record.addresses() {
-                // promote the address or update with the latest signature.
-                if let Some(r) = self.addresses.get_mut(address) {
-                    r.signature = Some(signed_record.clone());
-                    continue;
-                }
-                // the address is not present. this defers cloning.
-                self.addresses.get_or_insert(address.clone(), || {
-                    AddressRecord::new(source, should_expire, Some(signed_record.clone()))
-                });
-                is_updated = true;
-            }
-            is_updated
-        }
-
-        pub(crate) fn remove_address(&mut self, address: &Multiaddr) -> bool {
+        /// Remove the address in the LRU cache regardless of its position.
+        /// Returns true when the address is removed, false when not exist.
+        pub fn remove_address(&mut self, address: &Multiaddr) -> bool {
             self.addresses.pop(address).is_some()
         }
 
-        pub(crate) fn check_addresses_ttl(&mut self, now: Instant, ttl: Duration) {
-            let mut records_to_be_deleted = Vec::new();
-            for (k, record) in self.addresses.iter() {
-                if record.is_expired(now, ttl) {
-                    records_to_be_deleted.push(k.clone());
-                }
-            }
-            for k in records_to_be_deleted {
-                self.addresses.pop(&k);
-            }
+        pub fn get_custom_data(&self) -> Option<&T> {
+            self.custom_data.as_ref()
         }
 
-        pub(crate) fn get_custom_data(&self) -> Option<&T> {
-            self.custom.as_ref()
+        pub fn take_custom_data(&mut self) -> Option<T> {
+            self.custom_data.take()
         }
 
-        pub(crate) fn take_custom_data(&mut self) -> Option<T> {
-            self.custom.take()
-        }
-
-        pub(crate) fn insert_custom_data(&mut self, custom_data: T) {
-            let _ = self.custom.insert(custom_data);
+        pub fn insert_custom_data(&mut self, custom_data: T) {
+            let _ = self.custom_data.insert(custom_data);
         }
     }
+}
 
-    pub struct AddressRecord {
-        /// The time when the address is last seen.
-        pub last_seen: Instant,
-        /// How the address is discovered.
-        pub source: AddressSource,
-        /// Whether the address will expire.
-        pub should_expire: bool,
-        /// Reference to the `PeerRecord` that contains this address.  
-        /// The inner `PeerRecord` will be dropped automatically
-        /// when there is no living reference to it.
-        pub signature: Option<Arc<libp2p_core::PeerRecord>>,
+#[cfg(feature = "serde")]
+pub(crate) mod serde {
+    use std::num::NonZeroUsize;
+
+    use libp2p_core::Multiaddr;
+    use serde::{Deserialize, Serialize};
+
+    /// Helper struct for serializing and deserializing [`PeerRecord`](super::record::PeerRecord)
+    #[derive(Debug, Clone, Serialize, Deserialize)]
+    pub struct PeerRecord<T> {
+        pub addresses: Vec<Multiaddr>,
+        pub cap: NonZeroUsize,
+        pub custom_data: Option<T>,
     }
-    impl AddressRecord {
-        pub(crate) fn new(
-            source: AddressSource,
-            should_expire: bool,
-            signed: Option<Arc<libp2p_core::PeerRecord>>,
-        ) -> Self {
-            Self {
-                last_seen: Instant::now(),
-                source,
-                should_expire,
-                signature: signed,
+    impl<T: Clone> From<PeerRecord<T>> for super::PeerRecord<T> {
+        fn from(value: PeerRecord<T>) -> Self {
+            // Need to reverse the iterator because `LruCache` is FILO.
+            super::PeerRecord::from_iter(
+                value.cap,
+                value.addresses.into_iter().rev(),
+                value.custom_data,
+            )
+        }
+    }
+    impl<T: Clone> From<super::PeerRecord<T>> for PeerRecord<T> {
+        fn from(value: super::PeerRecord<T>) -> Self {
+            let (cap, addresses, custom_data) = value.destruct();
+            PeerRecord {
+                addresses,
+                cap,
+                custom_data,
             }
-        }
-        pub(crate) fn update_last_seen(&mut self) {
-            self.last_seen = Instant::now();
-        }
-        pub(crate) fn is_expired(&self, now: Instant, ttl: Duration) -> bool {
-            self.should_expire && now.duration_since(self.last_seen) > ttl
         }
     }
 }
 
 #[cfg(test)]
 mod test {
-    use std::{num::NonZeroUsize, str::FromStr, thread, time::Duration};
+    use std::str::FromStr;
 
     use libp2p_core::{Multiaddr, PeerId};
 
-    use super::{Config, MemoryStore};
+    use super::MemoryStore;
     use crate::Store;
-
-    #[test]
-    fn record_expire() {
-        let config = Config {
-            record_capacity: NonZeroUsize::try_from(4).expect("4 > 0"),
-            record_ttl: Duration::from_millis(1),
-            ..Default::default()
-        };
-        let mut store: MemoryStore = MemoryStore::new(config);
-        let peer = PeerId::random();
-        let addr_no_expire = Multiaddr::from_str("/ip4/127.0.0.1").expect("parsing to succeed");
-        let addr_should_expire = Multiaddr::from_str("/ip4/127.0.0.2").expect("parsing to succeed");
-        store.update_address(
-            &peer,
-            &addr_no_expire,
-            crate::store::AddressSource::Manual,
-            false,
-        );
-        store.update_address(
-            &peer,
-            &addr_should_expire,
-            crate::store::AddressSource::Manual,
-            true,
-        );
-        thread::sleep(Duration::from_millis(2));
-        store.check_record_ttl();
-        assert!(!store
-            .addresses_of_peer(&peer)
-            .expect("peer to be in the store")
-            .any(|r| *r == addr_should_expire));
-        assert!(store
-            .addresses_of_peer(&peer)
-            .expect("peer to be in the store")
-            .any(|r| *r == addr_no_expire));
-    }
 
     #[test]
     fn recent_use_bubble_up() {
@@ -444,30 +329,38 @@ mod test {
         let peer = PeerId::random();
         let addr1 = Multiaddr::from_str("/ip4/127.0.0.1").expect("parsing to succeed");
         let addr2 = Multiaddr::from_str("/ip4/127.0.0.2").expect("parsing to succeed");
-        store.update_address(&peer, &addr1, crate::store::AddressSource::Manual, false);
-        store.update_address(&peer, &addr2, crate::store::AddressSource::Manual, false);
+        let addr3 = Multiaddr::from_str("/ip4/127.0.0.3").expect("parsing to succeed");
+        store.update_address(&peer, &addr1);
+        store.update_address(&peer, &addr2);
+        store.update_address(&peer, &addr3);
         assert!(
-            *store
+            store
                 .records
                 .get(&peer)
                 .expect("peer to be in the store")
                 .addresses()
-                .last()
-                .expect("addr in the record")
-                .0
-                == addr1
+                .collect::<Vec<_>>()
+                == vec![&addr3, &addr2, &addr1]
         );
-        store.update_address(&peer, &addr1, crate::store::AddressSource::Manual, false);
+        store.update_address(&peer, &addr1);
         assert!(
-            *store
+            store
                 .records
                 .get(&peer)
                 .expect("peer to be in the store")
                 .addresses()
-                .last()
-                .expect("addr in the record")
-                .0
-                == addr2
+                .collect::<Vec<_>>()
+                == vec![&addr1, &addr3, &addr2]
+        );
+        store.update_address(&peer, &addr3);
+        assert!(
+            store
+                .records
+                .get(&peer)
+                .expect("peer to be in the store")
+                .addresses()
+                .collect::<Vec<_>>()
+                == vec![&addr3, &addr1, &addr2]
         );
     }
 
@@ -480,8 +373,6 @@ mod test {
             store.update_address(
                 &peer,
                 &Multiaddr::from_str(&addr_string).expect("parsing to succeed"),
-                crate::store::AddressSource::Manual,
-                false,
             );
         }
         let first_record = Multiaddr::from_str("/ip4/127.0.0.1").expect("parsing to succeed");
@@ -490,9 +381,65 @@ mod test {
             .expect("peer to be in the store")
             .any(|addr| *addr == first_record));
         let second_record = Multiaddr::from_str("/ip4/127.0.0.2").expect("parsing to succeed");
-        assert!(store
-            .addresses_of_peer(&peer)
-            .expect("peer to be in the store")
-            .any(|addr| *addr == second_record));
+        assert!(
+            *store
+                .addresses_of_peer(&peer)
+                .expect("peer to be in the store")
+                .last()
+                .expect("addr to exist")
+                == second_record
+        );
+    }
+
+    #[test]
+    fn serde_roundtrip() {
+        let store_json = r#"
+    {
+        "records": {
+            "1Aea5mXJrZNUwKxNU2y9xFE2qTFMjvFYSBf4T8cWEEP5Zd": 
+                {
+                    "addresses": [ "/ip4/127.0.0.2", "/ip4/127.0.0.3", "/ip4/127.0.0.4",
+                                   "/ip4/127.0.0.5", "/ip4/127.0.0.6", "/ip4/127.0.0.7",
+                                   "/ip4/127.0.0.8", "/ip4/127.0.0.9" ],
+                    "cap": 8,
+                    "custom_data": 7
+                }
+        },
+        "config": {
+            "record_capacity": 8
+        }
+    }
+        "#;
+        let store: MemoryStore<u32> = serde_json::from_str(store_json).unwrap();
+        let peer = PeerId::from_str("1Aea5mXJrZNUwKxNU2y9xFE2qTFMjvFYSBf4T8cWEEP5Zd")
+            .expect("Parsing to succeed.");
+        let mut addresses = Vec::new();
+        for i in 2..10 {
+            let addr_string = format!("/ip4/127.0.0.{}", i);
+            addresses.push(Multiaddr::from_str(&addr_string).expect("parsing to succeed"));
+        }
+        // should retain order when deserializing from bytes.
+        assert_eq!(
+            store
+                .addresses_of_peer(&peer)
+                .expect("Peer to exist")
+                .cloned()
+                .collect::<Vec<_>>(),
+            addresses
+        );
+        assert_eq!(*store.get_custom_data(&peer).expect("Peer to exist"), 7);
+        let ser = serde_json::to_string(&store).expect("Serialize to succeed.");
+        let store_de: MemoryStore<u32> =
+            serde_json::from_str(&ser).expect("Deserialize to succeed");
+        // should retain order when serializing
+        assert_eq!(
+            store_de
+                .addresses_of_peer(&peer)
+                .expect("Peer to exist")
+                .cloned()
+                .collect::<Vec<_>>(),
+            addresses
+        );
+        assert_eq!(*store_de.get_custom_data(&peer).expect("Peer to exist"), 7);
     }
 }
