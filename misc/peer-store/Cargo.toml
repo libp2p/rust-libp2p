@@ -14,8 +14,10 @@ lru = "0.12.3"
 serde = { version = "1.0.217", features = ["derive"], optional = true }
 
 [dev-dependencies]
+tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
 libp2p-identity = { workspace = true, features = ["rand", "serde"] }
 libp2p = { workspace = true, features = ["macros", "identify"] }
+libp2p-swarm-test = { path = "../../swarm-test", features = ["tokio"]}
 serde_json = { version = "1.0.134" }
 
 [lints]
