@@ -34,6 +34,7 @@ use std::sync::Arc;
 use certificate::AlwaysResolvesCert;
 pub use futures_rustls::TlsStream;
 use libp2p_identity::{Keypair, PeerId};
+use rustls::pki_types::{CertificateDer, PrivateKeyDer};
 pub use upgrade::{Config, UpgradeError};
 
 const P2P_ALPN: [u8; 6] = *b"libp2p";
@@ -88,4 +89,39 @@ pub fn make_server_config(
     crypto.alpn_protocols = vec![P2P_ALPN.to_vec()];
 
     Ok(crypto)
+}
+
+/// Create a TLS server configuration for libp2p.
+pub fn make_webtransport_server_config(
+    certificate: CertificateDer<'static>,
+    private_key: &PrivateKeyDer,
+    protocols: Vec<Vec<u8>>,
+) -> rustls::ServerConfig {
+    let cert_resolver = Arc::new(
+        AlwaysResolvesCert::new(certificate, private_key)
+            .expect("Server cert key DER is valid; qed"),
+    );
+    let mut crypto = rustls::ServerConfig::builder()
+        .with_no_client_auth()
+        .with_cert_resolver(cert_resolver);
+
+    crypto.alpn_protocols = protocols;
+
+    crypto
+}
+
+pub fn make_webtransport_client_config(
+    remote_peer_id: Option<PeerId>,
+    protocols: Vec<Vec<u8>>,
+) -> rustls::ClientConfig {
+    let mut config = rustls::ClientConfig::builder()
+        .dangerous()
+        .with_custom_certificate_verifier(Arc::new(
+            verifier::Libp2pCertificateVerifier::with_remote_peer_id(remote_peer_id),
+        ))
+        .with_no_client_auth();
+
+    config.alpn_protocols = protocols;
+
+    config
 }
