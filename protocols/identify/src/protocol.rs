@@ -218,7 +218,7 @@ impl TryFrom<proto::Identify> for Info {
     type Error = UpgradeError;
 
     fn try_from(msg: proto::Identify) -> Result<Self, Self::Error> {
-        let public_key = {
+        let identify_public_key = {
             match parse_public_key(msg.publicKey) {
                 Some(key) => key,
                 // This will always produce a DecodingError if the public key is missing.
@@ -226,30 +226,29 @@ impl TryFrom<proto::Identify> for Info {
             }
         };
 
-        let signed_peer_record = msg
+        let signed_envelope = msg
             .signedPeerRecord
             .and_then(|b| SignedEnvelope::from_protobuf_encoding(b.as_ref()).ok());
 
         // When signedPeerRecord contains valid addresses, ignore addresses in listenAddrs.
-        // When signedPeerRecord is invalid or signed by others, ignore the signedPeerRecord(set to
-        // `None`).
-        let (signed_peer_record, listen_addrs) = signed_peer_record
+        // When signedPeerRecord is invalid or signed by others, ignore the signedPeerRecord(set to `None`).
+        let (signed_envelope, listen_addrs) = signed_envelope
             .as_ref()
             .and_then(|envelope| PeerRecord::try_deserialize_signed_envelope(envelope).ok())
             .and_then(|(envelope_public_key, _, _, addresses)| {
-                (*envelope_public_key == public_key).then_some(addresses)
+                (*envelope_public_key == identify_public_key).then_some(addresses)
             })
-            .map(|addrs| (signed_peer_record, addrs))
+            .map(|addrs| (signed_envelope, addrs))
             .unwrap_or_else(|| (None, parse_listen_addrs(msg.listenAddrs)));
 
         let info = Info {
-            public_key,
+            public_key: identify_public_key,
             protocol_version: msg.protocolVersion.unwrap_or_default(),
             agent_version: msg.agentVersion.unwrap_or_default(),
             listen_addrs,
             protocols: parse_protocols(msg.protocols),
             observed_addr: parse_observed_addr(msg.observedAddr).unwrap_or(Multiaddr::empty()),
-            signed_peer_record,
+            signed_peer_record: signed_envelope,
         };
 
         Ok(info)
