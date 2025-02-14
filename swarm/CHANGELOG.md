@@ -2,7 +2,7 @@
 - Undo `ConnectionHandler::{InboundOpenInfo, OutboundOpenInfo}` deprecation.
   Substreams are not completely interchangeable and a certain Substream may be associated with a
   certain upgrade.
-  See [PR XXXX](https://github.com/libp2p/rust-libp2p/pull/XXXX).
+  See [PR 5860](https://github.com/libp2p/rust-libp2p/pull/5860).
 
 ## 0.46.0
 
