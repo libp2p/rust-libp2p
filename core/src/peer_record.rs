@@ -1,11 +1,11 @@
-use libp2p_identity::{Keypair, PeerId, SigningError};
+use libp2p_identity::{Keypair, PeerId, PublicKey, SigningError};
 use quick_protobuf::{BytesReader, Writer};
 use web_time::SystemTime;
 
 use crate::{proto, signed_envelope, signed_envelope::SignedEnvelope, DecodeError, Multiaddr};
 
-const PAYLOAD_TYPE: &str = "/libp2p/routing-state-record";
-const DOMAIN_SEP: &str = "libp2p-routing-state";
+pub const PAYLOAD_TYPE: &str = "/libp2p/routing-state-record";
+pub const DOMAIN_SEP: &str = "libp2p-routing-state";
 
 /// Represents a peer routing record.
 ///
@@ -30,26 +30,7 @@ impl PeerRecord {
     /// If this function succeeds, the [`SignedEnvelope`] contained a peer record with a valid
     /// signature and can hence be considered authenticated.
     pub fn from_signed_envelope(envelope: SignedEnvelope) -> Result<Self, FromEnvelopeError> {
-        use quick_protobuf::MessageRead;
-
-        let (payload, signing_key) =
-            envelope.payload_and_signing_key(String::from(DOMAIN_SEP), PAYLOAD_TYPE.as_bytes())?;
-        let mut reader = BytesReader::from_bytes(payload);
-        let record = proto::PeerRecord::from_reader(&mut reader, payload).map_err(DecodeError)?;
-
-        let peer_id = PeerId::from_bytes(&record.peer_id)?;
-
-        if peer_id != signing_key.to_peer_id() {
-            return Err(FromEnvelopeError::MismatchedSignature);
-        }
-
-        let seq = record.seq;
-        let addresses = record
-            .addresses
-            .into_iter()
-            .map(|a| a.multiaddr.to_vec().try_into())
-            .collect::<Result<Vec<_>, _>>()?;
-
+        let (_, peer_id, seq, addresses) = Self::try_deserialize_signed_envelope(&envelope)?;
         Ok(Self {
             peer_id,
             seq,
@@ -125,6 +106,30 @@ impl PeerRecord {
 
     pub fn addresses(&self) -> &[Multiaddr] {
         self.addresses.as_slice()
+    }
+
+    pub fn try_deserialize_signed_envelope(
+        envelope: &SignedEnvelope,
+    ) -> Result<(&PublicKey, PeerId, u64, Vec<Multiaddr>), FromEnvelopeError> {
+        use quick_protobuf::MessageRead;
+
+        let (payload, signing_key) =
+            envelope.payload_and_signing_key(String::from(DOMAIN_SEP), PAYLOAD_TYPE.as_bytes())?;
+        let mut reader = BytesReader::from_bytes(payload);
+        let record = proto::PeerRecord::from_reader(&mut reader, payload).map_err(DecodeError)?;
+
+        let peer_id = PeerId::from_bytes(&record.peer_id)?;
+
+        if peer_id != signing_key.to_peer_id() {
+            return Err(FromEnvelopeError::MismatchedSignature);
+        }
+
+        let addresses = record
+            .addresses
+            .into_iter()
+            .map(|a| a.multiaddr.to_vec().try_into())
+            .collect::<Result<Vec<_>, _>>()?;
+        Ok((signing_key, peer_id, record.seq, addresses))
     }
 }
 
