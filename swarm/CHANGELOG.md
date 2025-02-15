@@ -1,3 +1,9 @@
+## 0.46.1
+- Undo `ConnectionHandler::{InboundOpenInfo, OutboundOpenInfo}` deprecation.
+  Substreams are not completely interchangeable and a certain Substream may be associated with a
+  certain upgrade.
+  See [PR 5860](https://github.com/libp2p/rust-libp2p/pull/5860).
+
 ## 0.46.0
 
 - Don't report `NewExternalAddrCandidate` for confirmed external addresses.
@@ -12,11 +18,11 @@
 - Update default for idle-connection-timeout to 10s.
   See [PR 4967](https://github.com/libp2p/rust-libp2p/pull/4967).
 
-- Deprecate `ConnectionHandler::{InboundOpenInfo, OutboundOpenInfo}` associated type.  
-  Previously, users could tag pending sub streams with custom data and retrieve the data 
+- Deprecate `ConnectionHandler::{InboundOpenInfo, OutboundOpenInfo}` associated type.
+  Previously, users could tag pending sub streams with custom data and retrieve the data
   after the substream has been negotiated.
-  But substreams themselves are completely interchangeable, users should instead track 
-  additional data inside `ConnectionHandler` after negotiation.   
+  But substreams themselves are completely interchangeable, users should instead track
+  additional data inside `ConnectionHandler` after negotiation.
   See [PR 5242](https://github.com/libp2p/rust-libp2p/pull/5242).
 
 <!-- Update to libp2p-core v0.43.0 -->

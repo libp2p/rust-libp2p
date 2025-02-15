@@ -98,7 +98,6 @@ use crate::{connection::AsStrHashEq, StreamProtocol};
 /// Implementers of this trait should keep in mind that the connection can be closed at any time.
 /// When a connection is closed gracefully, the substreams used by the handler may still
 /// continue reading data until the remote closes its side of the connection.
-#[expect(deprecated)] // TODO: Remove when {In, Out}boundOpenInfo is fully removed.
 pub trait ConnectionHandler: Send + 'static {
     /// A type representing the message(s) a
     /// [`NetworkBehaviour`](crate::behaviour::NetworkBehaviour) can send to a [`ConnectionHandler`]
@@ -113,10 +112,8 @@ pub trait ConnectionHandler: Send + 'static {
     /// The outbound upgrade for the protocol(s) used by the handler.
     type OutboundProtocol: OutboundUpgradeSend;
     /// The type of additional information returned from `listen_protocol`.
-    #[deprecated = "Track data in ConnectionHandler instead."]
     type InboundOpenInfo: Send + 'static;
     /// The type of additional information passed to an `OutboundSubstreamRequest`.
-    #[deprecated = "Track data in ConnectionHandler instead."]
     type OutboundOpenInfo: Send + 'static;
 
     /// The [`InboundUpgrade`](libp2p_core::upgrade::InboundUpgrade) to apply on inbound
