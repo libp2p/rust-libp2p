@@ -161,7 +161,8 @@ pub struct Config {
 impl Config {
     /// Creates a new configuration for the identify [`Behaviour`] that
     /// advertises the given protocol version and public key.  
-    /// Use [`new_with_keypair`](Config::new_with_keypair) for `signedPeerRecord` support.  
+    /// Use [`new_with_signed_peer_record`](Config::new_with_signed_peer_record) for
+    /// `signedPeerRecord` support.
     pub fn new(protocol_version: String, local_public_key: PublicKey) -> Self {
         Self {
             protocol_version,

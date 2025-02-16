@@ -53,6 +53,7 @@ pub struct Info {
     pub protocols: Vec<StreamProtocol>,
     /// Address observed by or for the remote.
     pub observed_addr: Multiaddr,
+    /// Verifiable addresses of the peer.
     pub signed_peer_record: Option<SignedEnvelope>,
 }
 

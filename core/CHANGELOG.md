@@ -1,3 +1,10 @@
+## 0.43.1
+
+- Add `libp2p::core::peer_record::PeerRecord::try_deserialize_signed_peer_record`
+  utility method for deserializing `SignedEnvelope` without creating an instance of
+  `PeerRecord`.
+  See [PR 5785](https://github.com/libp2p/rust-libp2p/pull/5785)
+
 ## 0.43.0
 
 - Added `libp2p::core::util::unreachable` that is a drop-in replacement of `void::unreachable`.
