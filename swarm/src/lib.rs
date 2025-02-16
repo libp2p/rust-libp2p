@@ -1768,8 +1768,8 @@ mod tests {
         multiaddr,
         multiaddr::multiaddr,
         transport,
-        transport::{memory::MemoryTransportError, PortUse, TransportEvent},
-        upgrade, Endpoint,
+        transport::{memory::MemoryTransportError, TransportEvent},
+        upgrade,
     };
     use libp2p_identity as identity;
     use libp2p_plaintext as plaintext;
