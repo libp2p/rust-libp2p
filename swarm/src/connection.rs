@@ -123,7 +123,6 @@ where
     /// The underlying handler.
     handler: THandler,
     /// Futures that upgrade incoming substreams.
-    #[expect(deprecated)] // TODO: Remove when {In, Out}boundOpenInfo is fully removed.
     negotiating_in: FuturesUnordered<
         StreamUpgrade<
             THandler::InboundOpenInfo,
@@ -132,7 +131,6 @@ where
         >,
     >,
     /// Futures that upgrade outgoing substreams.
-    #[expect(deprecated)] // TODO: Remove when {In, Out}boundOpenInfo is fully removed.
     negotiating_out: FuturesUnordered<
         StreamUpgrade<
             THandler::OutboundOpenInfo,
@@ -157,7 +155,6 @@ where
     ///
     /// The upgrade timeout is already ticking here so this may fail in case the remote is not
     /// quick enough in providing us with a new stream.
-    #[expect(deprecated)] // TODO: Remove when {In, Out}boundOpenInfo is fully removed.
     requested_substreams: FuturesUnordered<
         SubstreamRequested<THandler::OutboundOpenInfo, THandler::OutboundProtocol>,
     >,
@@ -171,7 +168,6 @@ where
     stream_counter: ActiveStreamCounter,
 }
 
-#[expect(deprecated)] // TODO: Remove when {In, Out}boundOpenInfo is fully removed.
 impl<THandler> fmt::Debug for Connection<THandler>
 where
     THandler: ConnectionHandler + fmt::Debug,
