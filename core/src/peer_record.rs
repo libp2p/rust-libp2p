@@ -108,6 +108,13 @@ impl PeerRecord {
         self.addresses.as_slice()
     }
 
+    /// Utility method for deserializing an [`SignedEnvelope`] using
+    /// [`PeerRecord`]-specific [domain separation](https://github.com/libp2p/specs/blob/master/RFC/0003-routing-records.md#signed-envelope-domain)
+    ///  and [payload type](https://github.com/libp2p/specs/blob/master/RFC/0003-routing-records.md#signed-envelope-payload-type). 
+    /// Useful for extracting the address only.  
+    /// Returns `Ok((envelope_public_key, envelope_signer_id, sequence_number, signed_addresses))` 
+    /// when the envelope is valid. 
+    /// Will fail when the source of the addresses doesn't match signer of the envelope.
     pub fn try_deserialize_signed_envelope(
         envelope: &SignedEnvelope,
     ) -> Result<(&PublicKey, PeerId, u64, Vec<Multiaddr>), FromEnvelopeError> {
