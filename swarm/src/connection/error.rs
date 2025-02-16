@@ -64,83 +64,29 @@ impl From<io::Error> for ConnectionError {
 /// Note: Addresses for an outbound connection are dialed in parallel. Thus, compared to
 /// [`PendingInboundConnectionError`], one or more [`TransportError`]s can occur for a single
 /// connection.
-pub(crate) type PendingOutboundConnectionError =
-    PendingConnectionError<Vec<(Multiaddr, TransportError<io::Error>)>>;
+#[derive(Debug)]
+pub(crate) enum PendingOutboundConnectionError {
+    Transport(Vec<(Multiaddr, TransportError<io::Error>)>),
+    Aborted,
+    WrongPeerId {
+        obtained: PeerId,
+        address: Multiaddr,
+    },
+    LocalPeerId {
+        address: Multiaddr,
+    }
+}
 
 /// Errors that can occur in the context of a pending incoming `Connection`.
-pub(crate) type PendingInboundConnectionError = PendingConnectionError<TransportError<io::Error>>;
-
-/// Errors that can occur in the context of a pending `Connection`.
 #[derive(Debug)]
-pub enum PendingConnectionError<TTransErr> {
-    /// An error occurred while negotiating the transport protocol(s) on a connection.
-    Transport(TTransErr),
-
-    /// Pending connection attempt has been aborted.
+pub(crate) enum PendingInboundConnectionError {
+    Transport(TransportError<io::Error>),
     Aborted,
-
-    /// The peer identity obtained on the connection did not
-    /// match the one that was expected.
     WrongPeerId {
         obtained: PeerId,
         endpoint: ConnectedPoint,
     },
-
-    /// The connection was dropped because it resolved to our own [`PeerId`].
-    LocalPeerId { endpoint: ConnectedPoint },
-}
-
-impl<T> PendingConnectionError<T> {
-    pub fn map<U>(self, f: impl FnOnce(T) -> U) -> PendingConnectionError<U> {
-        match self {
-            PendingConnectionError::Transport(t) => PendingConnectionError::Transport(f(t)),
-            PendingConnectionError::Aborted => PendingConnectionError::Aborted,
-            PendingConnectionError::WrongPeerId { obtained, endpoint } => {
-                PendingConnectionError::WrongPeerId { obtained, endpoint }
-            }
-            PendingConnectionError::LocalPeerId { endpoint } => {
-                PendingConnectionError::LocalPeerId { endpoint }
-            }
-        }
-    }
-}
-
-impl<TTransErr> fmt::Display for PendingConnectionError<TTransErr>
-where
-    TTransErr: fmt::Display + fmt::Debug,
-{
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            PendingConnectionError::Aborted => write!(f, "Pending connection: Aborted."),
-            PendingConnectionError::Transport(err) => {
-                write!(
-                    f,
-                    "Pending connection: Transport error on connection: {err}"
-                )
-            }
-            PendingConnectionError::WrongPeerId { obtained, endpoint } => {
-                write!(
-                    f,
-                    "Pending connection: Unexpected peer ID {obtained} at {endpoint:?}."
-                )
-            }
-            PendingConnectionError::LocalPeerId { endpoint } => {
-                write!(f, "Pending connection: Local peer ID at {endpoint:?}.")
-            }
-        }
-    }
-}
-
-impl<TTransErr> std::error::Error for PendingConnectionError<TTransErr>
-where
-    TTransErr: std::error::Error + 'static,
-{
-    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
-        match self {
-            PendingConnectionError::Transport(_) => None,
-            PendingConnectionError::WrongPeerId { .. } => None,
-            PendingConnectionError::LocalPeerId { .. } => None,
-            PendingConnectionError::Aborted => None,
-        }
+    LocalPeerId {
+        endpoint: ConnectedPoint,
     }
 }

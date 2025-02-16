@@ -18,15 +18,6 @@
 // LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
-use std::{
-    collections::HashMap,
-    convert::Infallible,
-    fmt,
-    num::{NonZeroU8, NonZeroUsize},
-    pin::Pin,
-    task::{Context, Poll, Waker},
-};
-
 use concurrent_dial::ConcurrentDial;
 use fnv::FnvHashMap;
 use futures::{
@@ -41,12 +32,20 @@ use libp2p_core::{
     muxing::{StreamMuxerBox, StreamMuxerExt},
     transport::PortUse,
 };
+use std::{
+    collections::HashMap,
+    convert::Infallible,
+    fmt,
+    num::{NonZeroU8, NonZeroUsize},
+    pin::Pin,
+    task::{Context, Poll, Waker},
+};
 use tracing::Instrument;
 use web_time::{Duration, Instant};
 
 use crate::{
     connection::{
-        Connected, Connection, ConnectionError, ConnectionId, IncomingInfo, PendingConnectionError,
+        Connected, Connection, ConnectionError, ConnectionId, IncomingInfo,
         PendingInboundConnectionError, PendingOutboundConnectionError, PendingPoint,
     },
     transport::TransportError,
@@ -693,17 +692,56 @@ where
                     let check_peer_id = || {
                         if let Some(peer) = expected_peer_id {
                             if peer != obtained_peer_id {
-                                return Err(PendingConnectionError::WrongPeerId {
-                                    obtained: obtained_peer_id,
-                                    endpoint: endpoint.clone(),
-                                });
+                                return match &endpoint {
+                                    ConnectedPoint::Dialer { address, .. } => {
+                                        Err(PoolEvent::PendingOutboundConnectionError {
+                                            id,
+                                            error: PendingOutboundConnectionError::WrongPeerId {
+                                                obtained: obtained_peer_id,
+                                                address: address.clone(),
+                                            },
+                                            peer: None,
+                                        })
+                                    }
+                                    ConnectedPoint::Listener {
+                                        send_back_addr,
+                                        local_addr,
+                                    } => Err(PoolEvent::PendingInboundConnectionError {
+                                        id,
+                                        send_back_addr: send_back_addr.clone(),
+                                        local_addr: local_addr.clone(),
+                                        error: PendingInboundConnectionError::WrongPeerId {
+                                            obtained: obtained_peer_id,
+                                            endpoint: endpoint.clone(),
+                                        },
+                                    }),
+                                };
                             }
                         }
 
                         if self.local_id == obtained_peer_id {
-                            return Err(PendingConnectionError::LocalPeerId {
-                                endpoint: endpoint.clone(),
-                            });
+                            return match &endpoint {
+                                ConnectedPoint::Dialer { address, .. } => {
+                                    Err(PoolEvent::PendingOutboundConnectionError {
+                                        id,
+                                        error: PendingOutboundConnectionError::LocalPeerId {
+                                            address: address.clone(),
+                                        },
+                                        peer: Option::from(obtained_peer_id),
+                                    })
+                                }
+                                ConnectedPoint::Listener {
+                                    send_back_addr,
+                                    local_addr,
+                                } => Err(PoolEvent::PendingInboundConnectionError {
+                                    id,
+                                    send_back_addr: send_back_addr.clone(),
+                                    local_addr: local_addr.clone(),
+                                    error: PendingInboundConnectionError::LocalPeerId {
+                                        endpoint: endpoint.clone(),
+                                    },
+                                }),
+                            };
                         }
 
                         Ok(())
@@ -722,27 +760,7 @@ where
                             Poll::Ready(())
                         }));
 
-                        match endpoint {
-                            ConnectedPoint::Dialer { .. } => {
-                                return Poll::Ready(PoolEvent::PendingOutboundConnectionError {
-                                    id,
-                                    error: error
-                                        .map(|t| vec![(endpoint.get_remote_address().clone(), t)]),
-                                    peer: expected_peer_id.or(Some(obtained_peer_id)),
-                                })
-                            }
-                            ConnectedPoint::Listener {
-                                send_back_addr,
-                                local_addr,
-                            } => {
-                                return Poll::Ready(PoolEvent::PendingInboundConnectionError {
-                                    id,
-                                    error,
-                                    send_back_addr,
-                                    local_addr,
-                                })
-                            }
-                        };
+                        return Poll::Ready(error);
                     }
 
                     let established_in = accepted_at.elapsed();
