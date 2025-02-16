@@ -226,19 +226,17 @@ impl TryFrom<proto::Identify> for Info {
             }
         };
 
-        let signed_envelope = msg
-            .signedPeerRecord
-            .and_then(|b| SignedEnvelope::from_protobuf_encoding(b.as_ref()).ok());
-
         // When signedPeerRecord contains valid addresses, ignore addresses in listenAddrs.
-        // When signedPeerRecord is invalid or signed by others, ignore the signedPeerRecord(set to `None`).
-        let (signed_envelope, listen_addrs) = signed_envelope
-            .as_ref()
-            .and_then(|envelope| PeerRecord::try_deserialize_signed_envelope(envelope).ok())
-            .and_then(|(envelope_public_key, _, _, addresses)| {
-                (*envelope_public_key == identify_public_key).then_some(addresses)
+        // When signedPeerRecord is invalid or signed by others, ignore the signedPeerRecord(set to
+        // `None`).
+        let (signed_envelope, listen_addrs) = msg
+            .signedPeerRecord
+            .and_then(|b| {
+                let envelope = SignedEnvelope::from_protobuf_encoding(b.as_ref()).ok()?;
+                let (envelope_public_key, _, _, addresses) =
+                    PeerRecord::try_deserialize_signed_envelope(&envelope).ok()?;
+                (*envelope_public_key == identify_public_key).then_some((Some(envelope), addresses))
             })
-            .map(|addrs| (signed_envelope, addrs))
             .unwrap_or_else(|| (None, parse_listen_addrs(msg.listenAddrs)));
 
         let info = Info {
