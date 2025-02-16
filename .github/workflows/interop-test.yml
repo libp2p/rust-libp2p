@@ -35,6 +35,7 @@ jobs:
         uses: libp2p/test-plans/.github/actions/run-transport-interop-test@master
         with:
           test-filter: ${{ matrix.flavour }}-rust-libp2p-head
+          test-results-suffix: ${{matrix.flavour}}
           extra-versions: ${{ github.workspace }}/interop-tests/${{ matrix.flavour }}-ping-version.json
           s3-cache-bucket: ${{ vars.S3_LIBP2P_BUILD_CACHE_BUCKET_NAME }}
           s3-access-key-id: ${{ vars.S3_LIBP2P_BUILD_CACHE_AWS_ACCESS_KEY_ID }}
