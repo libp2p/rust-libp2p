@@ -692,26 +692,26 @@ impl PeerCache {
 }
 
 #[derive(Debug, Clone)]
-#[allow(clippy::large_enum_variant)]
 pub(crate) enum KeyType {
     // With public key only the behaviour will not
     // be able to produce a `SignedEnvelope`.
-    PublicKey(PublicKey),
+    // Reduce enum size with heap allocated `Box<T>`
+    PublicKey(Box<PublicKey>),
     Keypair {
-        keypair: Keypair,
-        public_key: PublicKey,
+        keypair: Box<Keypair>,
+        public_key: Box<PublicKey>,
     },
 }
 impl From<PublicKey> for KeyType {
     fn from(value: PublicKey) -> Self {
-        Self::PublicKey(value.clone())
+        Self::PublicKey(value.clone().into())
     }
 }
 impl From<&Keypair> for KeyType {
     fn from(value: &Keypair) -> Self {
         Self::Keypair {
-            public_key: value.public(),
-            keypair: value.clone(),
+            public_key: value.public().into(),
+            keypair: value.clone().into(),
         }
     }
 }
