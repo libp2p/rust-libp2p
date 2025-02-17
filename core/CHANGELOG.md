@@ -326,7 +326,7 @@ See [PR 4568].
 
 - Remove `TInEvent` and `TOutEvent` trait parameters on most public types.
   `TInEvent` and `TOutEvent` are implied through `THandler` and thus
-  superflucious. Both are removed in favor of a derivation through `THandler`
+  superfluous. Both are removed in favor of a derivation through `THandler`
   (see [PR 2183]).
 
 - Require `ConnectionHandler::{InEvent,OutEvent,Error}` to implement `Debug`
@@ -445,7 +445,7 @@ See [PR 4568].
 - New configurable connection limits for established connections and
   dedicated connection counters. Removed the connection limit dedicated
   to outgoing pending connection _per peer_. Connection limits are now
-  represented by `u32` intead of `usize` types.
+  represented by `u32` instead of `usize` types.
   [PR 1848](https://github.com/libp2p/rust-libp2p/pull/1848/).
 
 - Update `multihash`.

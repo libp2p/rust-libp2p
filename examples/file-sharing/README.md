@@ -29,7 +29,7 @@ Let's understand the flow of the file sharing process:
 
 The File Sharing application has the following architectural properties:
 
-- **Clean and Clonable Interface**: The application provides a clean and clonable async/await interface, allowing users to interact with the network layer seamlessly.
+- **Clean and Cloneable Interface**: The application provides a clean and cloneable async/await interface, allowing users to interact with the network layer seamlessly.
   The `Client` module encapsulates the necessary functionality for network communication.
 
 - **Efficient Network Handling**: The application operates with a single task that drives the network layer.

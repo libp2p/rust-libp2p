@@ -1,3 +1,9 @@
+## 0.5.1
+
+- Allow setting Peer IDs for bypassing limit check. 
+  Connections to the specified peers won't be counted toward limits.
+  See [PR 5720](https://github.com/libp2p/rust-libp2p/pull/5720).
+
 ## 0.5.0
 
 - Deprecate `void` crate.

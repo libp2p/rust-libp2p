@@ -79,8 +79,8 @@ where
     }
 }
 
-#[test]
-fn upgrade_pipeline() {
+#[tokio::test]
+async fn upgrade_pipeline() {
     let listener_keys = identity::Keypair::generate_ed25519();
     let listener_id = listener_keys.public().to_peer_id();
     let mut listener_transport = MemoryTransport::default()
@@ -137,6 +137,7 @@ fn upgrade_pipeline() {
         assert_eq!(peer, listener_id);
     };
 
-    async_std::task::spawn(server);
-    async_std::task::block_on(client);
+    tokio::spawn(server);
+
+    client.await;
 }

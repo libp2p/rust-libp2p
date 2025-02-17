@@ -72,12 +72,12 @@
 - Update to `if-watch` `3.0.0` and both rename `TokioMdns` to `Behaviour` living in `tokio::Behaviour`,
 and move and rename `Mdns` to `async_io::Behaviour`. See [PR 3096].
 
-- Remove the remaning `Mdns` prefixes from types as per [discussion 2174].
+- Remove the remaining `Mdns` prefixes from types as per [discussion 2174].
   I.e the `Mdns` prefix has been removed from various types like `MdnsEvent`.
   Users should prefer importing the mdns protocol as a module (`use libp2p::mdns;`),
   and refer to its types via `mdns::`. For example: `mdns::Behaviour` or `mdns::Event`.
 
-- Replace `GenMdns`'s `NetworkBehaviour` implemention `inject_*` methods with the new `on_*` methods.
+- Replace `GenMdns`'s `NetworkBehaviour` implementation `inject_*` methods with the new `on_*` methods.
   See [PR 3011].
 
 - Use `trust-dns-proto` to parse DNS messages. See [PR 3102].

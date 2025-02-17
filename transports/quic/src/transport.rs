@@ -845,12 +845,12 @@ mod tests {
         );
     }
 
-    #[cfg(feature = "async-std")]
-    #[async_std::test]
+    #[cfg(feature = "tokio")]
+    #[tokio::test]
     async fn test_close_listener() {
         let keypair = libp2p_identity::Keypair::generate_ed25519();
         let config = Config::new(&keypair);
-        let mut transport = crate::async_std::Transport::new(config);
+        let mut transport = crate::tokio::Transport::new(config);
         assert!(poll_fn(|cx| Pin::new(&mut transport).as_mut().poll(cx))
             .now_or_never()
             .is_none());

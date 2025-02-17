@@ -35,15 +35,20 @@ mod proto {
     pub(crate) use self::floodsub::pb::{mod_RPC::SubOpts, Message, RPC};
 }
 
+#[allow(deprecated)]
+pub use self::layer::{Floodsub, FloodsubEvent};
 pub use self::{
-    layer::{Floodsub, FloodsubEvent},
+    layer::{Behaviour, Event},
     protocol::{FloodsubMessage, FloodsubRpc},
     topic::Topic,
 };
 
+#[deprecated = "Use `Config` instead."]
+pub type FloodsubConfig = Config;
+
 /// Configuration options for the Floodsub protocol.
 #[derive(Debug, Clone)]
-pub struct FloodsubConfig {
+pub struct Config {
     /// Peer id of the local node. Used for the source of the messages that we publish.
     pub local_peer_id: PeerId,
 
@@ -52,7 +57,7 @@ pub struct FloodsubConfig {
     pub subscribe_local_messages: bool,
 }
 
-impl FloodsubConfig {
+impl Config {
     pub fn new(local_peer_id: PeerId) -> Self {
         Self {
             local_peer_id,
