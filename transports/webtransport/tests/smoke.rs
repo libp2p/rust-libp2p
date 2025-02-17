@@ -95,7 +95,7 @@ fn create_transport(
 ) -> (PeerId, Boxed<(PeerId, StreamMuxerBox)>) {
     let peer_id = keypair.public().to_peer_id();
     let config = webtransport::Config::new(&keypair, certificate);
-    let transport = webtransport::GenTransport::new(config)
+    let transport = webtransport::Transport::new(config)
         .map(|(p, c), _| (p, StreamMuxerBox::new(c)))
         .boxed();
 

@@ -11,7 +11,7 @@ pub use self::{
     certificate::{CertHash, Certificate},
     config::Config,
     connection::{Connection, Stream},
-    transport::GenTransport,
+    transport::Transport,
 };
 
 /// Errors that may happen on the [`GenTransport`] or a single [`Connection`].

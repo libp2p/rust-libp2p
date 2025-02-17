@@ -127,13 +127,7 @@ pub fn generate_with_validity_period(
     identity_keypair: &identity::Keypair,
     not_before: OffsetDateTime,
     not_after: OffsetDateTime,
-) -> Result<
-    (
-        CertificateDer<'static>,
-        PrivateKeyDer<'static>,
-    ),
-    GenError,
-> {
+) -> Result<(CertificateDer<'static>, PrivateKeyDer<'static>), GenError> {
     // Keypair used to sign the certificate.
     // SHOULD NOT be related to the host's key.
     // Endpoints MAY generate a new key and certificate

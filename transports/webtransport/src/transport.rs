@@ -15,7 +15,7 @@ use if_watch::{tokio::IfWatcher, IfEvent};
 use libp2p_core::{
     multiaddr::Protocol,
     transport::{DialOpts, ListenerId, TransportError, TransportEvent},
-    Multiaddr, Transport,
+    Multiaddr,
 };
 use libp2p_identity::{Keypair, PeerId};
 use socket2::{Domain, Socket, Type};
@@ -35,32 +35,17 @@ pub struct Transport {
     waker: Option<Waker>,
 }
 
-impl GenTransport {
+impl Transport {
     pub fn new(config: Config) -> Self {
-        GenTransport {
+        Transport {
             config,
             listeners: SelectAll::new(),
             waker: None,
         }
     }
-
-    /// Extract the addr, quic version and peer id from the given [`Multiaddr`].
-    fn remote_multiaddr_to_socketaddr(
-        &self,
-        addr: Multiaddr,
-        check_unspecified_addr: bool,
-    ) -> Result<(SocketAddr, Option<PeerId>), TransportError<<Self as Transport>::Error>> {
-        let (socket_addr, peer_id) = multiaddr_to_socketaddr(&addr)
-            .ok_or_else(|| TransportError::MultiaddrNotSupported(addr.clone()))?;
-        if check_unspecified_addr && (socket_addr.port() == 0 || socket_addr.ip().is_unspecified())
-        {
-            return Err(TransportError::MultiaddrNotSupported(addr));
-        }
-        Ok((socket_addr, peer_id))
-    }
 }
 
-impl Transport for GenTransport {
+impl libp2p_core::Transport for Transport {
     type Output = (PeerId, Connection);
     type Error = Error;
     type ListenerUpgrade = Connecting;
@@ -71,7 +56,8 @@ impl Transport for GenTransport {
         id: ListenerId,
         addr: Multiaddr,
     ) -> Result<(), TransportError<Self::Error>> {
-        let (socket_addr, _peer_id) = self.remote_multiaddr_to_socketaddr(addr, false)?;
+        let (socket_addr, _peer_id) = multiaddr_to_socketaddr(&addr)
+            .ok_or_else(|| TransportError::MultiaddrNotSupported(addr.clone()))?;
         let socket = create_socket(socket_addr).map_err(Self::Error::from)?;
 
         let server_tls_config = self.config.server_tls_config();
@@ -303,7 +289,7 @@ impl Listener {
 }
 
 impl Stream for Listener {
-    type Item = TransportEvent<<GenTransport as Transport>::ListenerUpgrade, Error>;
+    type Item = TransportEvent<<Transport as libp2p_core::Transport>::ListenerUpgrade, Error>;
 
     fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
         loop {
@@ -519,6 +505,7 @@ mod test {
     use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
 
     use futures::future::poll_fn;
+    use libp2p_core::Transport as CoreTransport;
     use time::{ext::NumericalDuration, OffsetDateTime};
 
     use super::*;
@@ -536,7 +523,7 @@ mod test {
     async fn test_close_listener() {
         let (keypair, cert) = generate_keypair_and_cert();
         let config = Config::new(&keypair, cert);
-        let mut transport = GenTransport::new(config);
+        let mut transport = Transport::new(config);
 
         assert!(poll_fn(|cx| Pin::new(&mut transport).as_mut().poll(cx))
             .now_or_never()
