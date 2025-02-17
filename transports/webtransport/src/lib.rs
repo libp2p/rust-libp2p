@@ -14,7 +14,7 @@ pub use self::{
     transport::Transport,
 };
 
-/// Errors that may happen on the [`GenTransport`] or a single [`Connection`].
+/// Errors that may happen on the [`Transport`] or a single [`Connection`].
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
     /// Error after the remote has been reached.
