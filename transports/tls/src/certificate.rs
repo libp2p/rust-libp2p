@@ -129,8 +129,8 @@ pub fn generate_with_validity_period(
     not_after: OffsetDateTime,
 ) -> Result<
     (
-        rustls::pki_types::CertificateDer<'static>,
-        rustls::pki_types::PrivateKeyDer<'static>,
+        CertificateDer<'static>,
+        PrivateKeyDer<'static>,
     ),
     GenError,
 > {
