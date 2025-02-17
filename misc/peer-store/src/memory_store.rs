@@ -299,7 +299,7 @@ pub(crate) mod serde {
         }
     }
 
-    /// Helper struct for serializing and deserializing [`PeerRecord`](super::record::PeerRecord)
+    /// Helper struct for serializing and deserializing [`PeerRecord`](super::PeerRecord)
     #[derive(Debug, Clone, Serialize, Deserialize)]
     pub struct PeerRecord<T> {
         pub addresses: Vec<Multiaddr>,
