@@ -137,14 +137,7 @@ impl Transport for GenTransport {
             return Poll::Ready(ev);
         }
 
-        match &self.waker {
-            None => self.waker = Some(cx.waker().clone()),
-            Some(waker) => {
-                if !waker.will_wake(cx.waker()) {
-                    self.waker = Some(cx.waker().clone());
-                }
-            }
-        };
+        self.waker = Some(cx.waker().clone());
 
         Poll::Pending
     }
