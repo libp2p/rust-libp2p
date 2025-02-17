@@ -27,7 +27,7 @@ use wtransport::{
 
 use crate::{certificate::CertHash, config::Config, connection::Connection, Connecting, Error};
 
-pub struct GenTransport {
+pub struct Transport {
     config: Config,
 
     listeners: SelectAll<Listener>,
