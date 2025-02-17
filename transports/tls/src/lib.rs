@@ -37,7 +37,7 @@ use libp2p_identity::{Keypair, PeerId};
 use rustls::pki_types::{CertificateDer, PrivateKeyDer};
 pub use upgrade::{Config, UpgradeError};
 
-const P2P_ALPN: [u8; 6] = *b"libp2p";
+pub const P2P_ALPN: [u8; 6] = *b"libp2p";
 
 /// Create a TLS client configuration for libp2p.
 pub fn make_client_config(

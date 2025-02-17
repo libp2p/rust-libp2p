@@ -109,9 +109,16 @@ impl libp2p_core::Transport for Transport {
 
     fn dial(
         &mut self,
-        _addr: Multiaddr,
+        addr: Multiaddr,
         _opts: DialOpts,
     ) -> Result<Self::Dial, TransportError<Self::Error>> {
+        // We should return MultiaddrNotSupported here if it's not a webstransport address.
+        // Users can combine multiple transports with combinators like the 'OrTransport',
+        // that in case of a MultiaddrNotSupported still checks if any other transports support
+        // dialing that address.
+        let (_, _) = multiaddr_to_socketaddr(&addr)
+            .ok_or_else(|| TransportError::MultiaddrNotSupported(addr.clone()))?;
+
         Err(TransportError::Other(Error::DialOperationIsNotAllowed))
     }
 
@@ -471,7 +478,7 @@ fn multiaddr_to_socketaddr(addr: &Multiaddr) -> Option<(SocketAddr, Option<PeerI
             Protocol::P2p(id) => {
                 peer_id = Some(id);
             }
-            Protocol::WebTransport => {
+            Protocol::WebTransport if !is_webtransport => {
                 is_webtransport = true;
             }
             Protocol::Certhash(_) => {

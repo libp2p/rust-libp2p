@@ -74,5 +74,5 @@ impl Config {
 }
 
 fn alpn_protocols() -> Vec<Vec<u8>> {
-    vec![b"libp2p".to_vec(), b"h3".to_vec()]
+    vec![libp2p_tls::P2P_ALPN.to_vec(), b"h3".to_vec()]
 }
