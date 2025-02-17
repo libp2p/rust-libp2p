@@ -1,3 +1,16 @@
+//! An in-memory [`Store`] implementation.
+//!
+//! ## Usage
+//! ```
+//! let store: MemoryStore<()> = MemoryStore::new(Default::default());
+//! let behaviour = crate::Behaviour::new(store);
+//! ```
+//!
+//! ## Persistent storage
+//! [`MemoryStore`] keeps all records in memory and will lose all the data
+//! once de-allocated. In order to persist the data, enable `serde` feature
+//! of `lib2p-peer-store` to read from and write to disk.
+
 use std::{
     collections::{HashMap, VecDeque},
     num::NonZeroUsize,
@@ -11,13 +24,15 @@ pub use record::PeerRecord;
 
 use super::Store;
 
+/// Event from the store and emitted to [`Swarm`](libp2p_swarm::Swarm).
 #[derive(Debug, Clone)]
 pub enum Event {
     /// Custom data of the peer has been updated.
     CustomDataUpdated(PeerId),
 }
 
-/// A in-memory store.
+/// A in-memory store that uses LRU cache for bounded storage of addresses
+/// and a frequency-based ordering of addresses.
 #[derive(Default)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 #[cfg_attr(
@@ -30,7 +45,7 @@ pub enum Event {
 pub struct MemoryStore<T = ()> {
     /// The internal store.
     records: HashMap<PeerId, record::PeerRecord<T>>,
-    /// Events to emit to [`Behaviour`] and [`Swarm`](libp2p_swarm::Swarm)
+    /// Events to emit to [`Behaviour`](crate::Behaviour) and [`Swarm`](libp2p_swarm::Swarm)
     #[cfg_attr(feature = "serde", serde(skip))]
     pending_events: VecDeque<super::store::Event<Event>>,
     /// Config of the store.
@@ -153,6 +168,7 @@ impl<T> Store for MemoryStore<T> {
     }
 }
 
+/// Config for [`MemoryStore`].
 #[derive(Debug, Clone)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct Config {
@@ -187,6 +203,7 @@ mod record {
 
     use super::*;
 
+    /// Internal record of [`MemoryStore`](crate::memory_store::MemoryStore).
     #[derive(Debug, Clone)]
     #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
     #[cfg_attr(
@@ -202,6 +219,7 @@ mod record {
         /// A LRU(Least Recently Used) cache for addresses.  
         /// Will delete the least-recently-used record when full.
         addresses: LruCache<Multiaddr, ()>,
+        /// Custom data attached to the peer.
         custom_data: Option<T>,
     }
     impl<T> PeerRecord<T> {
