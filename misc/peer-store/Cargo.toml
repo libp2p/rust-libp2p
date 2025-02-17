@@ -12,6 +12,7 @@ libp2p-core = { workspace = true }
 libp2p-swarm = { workspace = true }
 lru = "0.12.3"
 serde = { version = "1.0.217", features = ["derive"], optional = true }
+libp2p-identity = { workspace = true, optional = true}
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
@@ -24,5 +25,4 @@ serde_json = { version = "1.0.134" }
 workspace = true
 
 [features]
-serde = ["dep:serde"]
-default = ["serde"]
+serde = ["dep:serde", "libp2p-identity/serde"]

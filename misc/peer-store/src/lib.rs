@@ -2,14 +2,11 @@
 //! about foreign peers.
 //!
 //! ## Important Discrepancies
-//! - **PeerStore is a local**:
-//! The peer store itself doesn't facilitate any information exchange between
-//! peers. You will need other protocols like `libp2p-kad` to share
-//! addresses you know across the network.
-//! - **PeerStore is a standalone**:
-//! Other protocols cannot expect the existence of PeerStore, and need
-//! to be manually hooked up to PeerStore in order to obtain information
-//! it provides.
+//! - **PeerStore is a local**: The peer store itself doesn't facilitate any information exchange
+//!   between peers. You will need other protocols like `libp2p-kad` to share addresses you know
+//!   across the network.
+//! - **PeerStore is a standalone**: Other protocols cannot expect the existence of PeerStore, and
+//!   need to be manually hooked up to PeerStore in order to obtain information it provides.
 //!
 //! ## Usage
 //! Compose [`Behaviour`] with other [`NetworkBehaviour`](libp2p_swarm::NetworkBehaviour),

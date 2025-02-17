@@ -20,7 +20,7 @@ use std::{
 use ::serde::{Deserialize, Serialize};
 use libp2p_core::{Multiaddr, PeerId};
 use libp2p_swarm::FromSwarm;
-pub use record::PeerRecord;
+use lru::LruCache;
 
 use super::Store;
 
@@ -44,7 +44,7 @@ pub enum Event {
 )]
 pub struct MemoryStore<T = ()> {
     /// The internal store.
-    records: HashMap<PeerId, record::PeerRecord<T>>,
+    records: HashMap<PeerId, PeerRecord<T>>,
     /// Events to emit to [`Behaviour`](crate::Behaviour) and [`Swarm`](libp2p_swarm::Swarm)
     #[cfg_attr(feature = "serde", serde(skip))]
     pending_events: VecDeque<super::store::Event<Event>>,
@@ -79,7 +79,7 @@ impl<T> MemoryStore<T> {
         if let Some(record) = self.records.get_mut(peer) {
             return record.update_address(address);
         }
-        let mut new_record = record::PeerRecord::new(self.config.record_capacity);
+        let mut new_record = PeerRecord::new(self.config.record_capacity);
         new_record.update_address(address);
         self.records.insert(*peer, new_record);
         true
@@ -197,46 +197,85 @@ impl Config {
         self
     }
 }
-mod record {
 
-    use lru::LruCache;
-
-    use super::*;
-
-    /// Internal record of [`MemoryStore`](crate::memory_store::MemoryStore).
-    #[derive(Debug, Clone)]
-    #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
-    #[cfg_attr(
-        feature = "serde",
-        serde(bound(
-            serialize = "T: Clone + Serialize ",
-            deserialize = "T: Clone + Deserialize<'de>"
-        ))
-    )]
-    #[cfg_attr(feature = "serde", serde(from = "super::serde::PeerRecord<T>"))]
-    #[cfg_attr(feature = "serde", serde(into = "super::serde::PeerRecord<T>"))]
-    pub struct PeerRecord<T> {
-        /// A LRU(Least Recently Used) cache for addresses.  
-        /// Will delete the least-recently-used record when full.
-        addresses: LruCache<Multiaddr, ()>,
-        /// Custom data attached to the peer.
-        custom_data: Option<T>,
-    }
-    impl<T> PeerRecord<T> {
-        pub(crate) fn new(cap: NonZeroUsize) -> Self {
-            Self {
-                addresses: LruCache::new(cap),
-                custom_data: None,
-            }
+/// Internal record of [`MemoryStore`].
+#[derive(Debug, Clone)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[cfg_attr(
+    feature = "serde",
+    serde(bound(
+        serialize = "T: Clone + Serialize ",
+        deserialize = "T: Clone + Deserialize<'de>"
+    ))
+)]
+#[cfg_attr(feature = "serde", serde(from = "serde::PeerRecord<T>"))]
+#[cfg_attr(feature = "serde", serde(into = "serde::PeerRecord<T>"))]
+pub struct PeerRecord<T> {
+    /// A LRU(Least Recently Used) cache for addresses.  
+    /// Will delete the least-recently-used record when full.
+    addresses: LruCache<Multiaddr, ()>,
+    /// Custom data attached to the peer.
+    custom_data: Option<T>,
+}
+impl<T> PeerRecord<T> {
+    pub(crate) fn new(cap: NonZeroUsize) -> Self {
+        Self {
+            addresses: LruCache::new(cap),
+            custom_data: None,
         }
+    }
 
+    /// Iterate over all addresses. More recently-used address comes first.
+    /// Does not change the order.
+    pub fn addresses(&self) -> impl Iterator<Item = &Multiaddr> {
+        self.addresses.iter().map(|(addr, _)| addr)
+    }
+
+    /// Update the address in the LRU cache, promote it to the front if it exists,
+    /// insert it to the front if not.
+    /// Returns true when the address is new.
+    pub fn update_address(&mut self, address: &Multiaddr) -> bool {
+        if self.addresses.get(address).is_some() {
+            return false;
+        }
+        self.addresses.get_or_insert(address.clone(), || ());
+        true
+    }
+
+    /// Remove the address in the LRU cache regardless of its position.
+    /// Returns true when the address is removed, false when not exist.
+    pub fn remove_address(&mut self, address: &Multiaddr) -> bool {
+        self.addresses.pop(address).is_some()
+    }
+
+    pub fn get_custom_data(&self) -> Option<&T> {
+        self.custom_data.as_ref()
+    }
+
+    pub fn take_custom_data(&mut self) -> Option<T> {
+        self.custom_data.take()
+    }
+
+    pub fn insert_custom_data(&mut self, custom_data: T) {
+        let _ = self.custom_data.insert(custom_data);
+    }
+}
+
+#[cfg(feature = "serde")]
+pub(crate) mod serde {
+    use std::num::NonZeroUsize;
+
+    use libp2p_core::Multiaddr;
+    use serde::{Deserialize, Serialize};
+
+    impl<T> super::PeerRecord<T> {
         /// Build from an iterator. The order is reversed(FILO-ish).
         pub(crate) fn from_iter(
             cap: NonZeroUsize,
             addr_iter: impl Iterator<Item = Multiaddr>,
             custom_data: Option<T>,
         ) -> Self {
-            let mut lru = LruCache::new(cap);
+            let mut lru = lru::LruCache::new(cap);
             for addr in addr_iter {
                 lru.get_or_insert(addr, || ());
             }
@@ -258,50 +297,7 @@ mod record {
             addresses.reverse();
             (cap, addresses, self.custom_data)
         }
-
-        /// Iterate over all addresses. More recently-used address comes first.
-        /// Does not change the order.
-        pub fn addresses(&self) -> impl Iterator<Item = &Multiaddr> {
-            self.addresses.iter().map(|(addr, _)| addr)
-        }
-
-        /// Update the address in the LRU cache, promote it to the front if it exists,
-        /// insert it to the front if not.
-        /// Returns true when the address is new.
-        pub fn update_address(&mut self, address: &Multiaddr) -> bool {
-            if self.addresses.get(address).is_some() {
-                return false;
-            }
-            self.addresses.get_or_insert(address.clone(), || ());
-            true
-        }
-
-        /// Remove the address in the LRU cache regardless of its position.
-        /// Returns true when the address is removed, false when not exist.
-        pub fn remove_address(&mut self, address: &Multiaddr) -> bool {
-            self.addresses.pop(address).is_some()
-        }
-
-        pub fn get_custom_data(&self) -> Option<&T> {
-            self.custom_data.as_ref()
-        }
-
-        pub fn take_custom_data(&mut self) -> Option<T> {
-            self.custom_data.take()
-        }
-
-        pub fn insert_custom_data(&mut self, custom_data: T) {
-            let _ = self.custom_data.insert(custom_data);
-        }
     }
-}
-
-#[cfg(feature = "serde")]
-pub(crate) mod serde {
-    use std::num::NonZeroUsize;
-
-    use libp2p_core::Multiaddr;
-    use serde::{Deserialize, Serialize};
 
     /// Helper struct for serializing and deserializing [`PeerRecord`](super::record::PeerRecord)
     #[derive(Debug, Clone, Serialize, Deserialize)]
