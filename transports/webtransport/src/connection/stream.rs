@@ -39,12 +39,8 @@ impl futures::AsyncRead for Stream {
             }
         }
         let mut read_buf = ReadBuf::new(buf);
-        let res = AsyncRead::poll_read(Pin::new(&mut self.recv), cx, &mut read_buf);
-        match res {
-            Poll::Ready(Ok(_)) => Poll::Ready(Ok(read_buf.filled().len())),
-            Poll::Ready(Err(e)) => Poll::Ready(Err(e)),
-            Poll::Pending => Poll::Pending,
-        }
+        AsyncRead::poll_read(Pin::new(&mut self.recv), cx, &mut read_buf)
+            .map_ok(|()| read_buf.filled().len())
     }
 }
 
