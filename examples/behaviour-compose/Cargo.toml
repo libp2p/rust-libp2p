@@ -1,0 +1,12 @@
+[package]
+name = "behaviour-compose"
+version = "0.1.0"
+edition = "2021"
+rust-version.workspace = true
+
+[dependencies]
+libp2p = { workspace = true, features = ["identify", "ping", "mdns", "tokio"]}
+derive_more = {version = "2", features = ["from"]}
+
+[lints]
+workspace = true
