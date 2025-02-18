@@ -87,7 +87,7 @@ libp2p-kad = { version = "0.47.0", path = "protocols/kad" }
 libp2p-mdns = { version = "0.47.0", path = "protocols/mdns" }
 libp2p-memory-connection-limits = { version = "0.4.0", path = "misc/memory-connection-limits" }
 libp2p-metrics = { version = "0.16.0", path = "misc/metrics" }
-libp2p-mplex = { version = "0.43.0", path = "muxers/mplex" }
+libp2p-mplex = { version = "0.43.1", path = "muxers/mplex" }
 libp2p-noise = { version = "0.46.0", path = "transports/noise" }
 libp2p-perf = { version = "0.4.0", path = "protocols/perf" }
 libp2p-ping = { version = "0.46.0", path = "protocols/ping" }

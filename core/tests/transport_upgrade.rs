@@ -27,7 +27,7 @@ use libp2p_core::{
     Endpoint,
 };
 use libp2p_identity as identity;
-use libp2p_mplex::MplexConfig;
+use libp2p_mplex::Config;
 use libp2p_noise as noise;
 use multiaddr::{Multiaddr, Protocol};
 use rand::random;
@@ -89,7 +89,7 @@ async fn upgrade_pipeline() {
         .apply(HelloUpgrade {})
         .apply(HelloUpgrade {})
         .apply(HelloUpgrade {})
-        .multiplex(MplexConfig::default())
+        .multiplex(Config::default())
         .boxed();
 
     let dialer_keys = identity::Keypair::generate_ed25519();
@@ -100,7 +100,7 @@ async fn upgrade_pipeline() {
         .apply(HelloUpgrade {})
         .apply(HelloUpgrade {})
         .apply(HelloUpgrade {})
-        .multiplex(MplexConfig::default())
+        .multiplex(Config::default())
         .boxed();
 
     let listen_addr1 = Multiaddr::from(Protocol::Memory(random::<u64>()));
