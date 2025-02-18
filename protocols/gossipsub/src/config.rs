@@ -26,7 +26,8 @@ use libp2p_swarm::StreamProtocol;
 use crate::{
     error::ConfigBuilderError,
     protocol::{ProtocolConfig, ProtocolId, FLOODSUB_PROTOCOL},
-    types::{Message, MessageId, PeerKind}, TopicHash, TopicScoreParams,
+    types::{Message, MessageId, PeerKind},
+    TopicHash,
 };
 
 /// The types of message validation that can be employed by gossipsub.
@@ -59,12 +60,14 @@ pub enum Version {
     V1_1,
 }
 
+/// Defines the overall configuration for mesh parameters and max transmit sizes
+/// for topics.
 #[derive(Clone, PartialEq, Eq)]
 pub struct TopicConfigs {
     pub(crate) topic_mesh_params: HashMap<TopicHash, TopicMeshConfig>,
     pub(crate) topic_max_transmit_sizes: HashMap<TopicHash, usize>,
     pub(crate) default_mesh_params: TopicMeshConfig,
-    pub(crate) default_max_transmit_size: usize
+    pub(crate) default_max_transmit_size: usize,
 }
 
 impl Default for TopicConfigs {
@@ -73,15 +76,16 @@ impl Default for TopicConfigs {
             topic_mesh_params: HashMap::new(),
             topic_max_transmit_sizes: HashMap::new(),
             default_mesh_params: Default::default(),
-            default_max_transmit_size: 65536
+            default_max_transmit_size: 65536,
         }
     }
 }
 
+/// Defines the mesh network parameters for a given topic.
 #[derive(Clone, PartialEq, Eq)]
 pub struct TopicMeshConfig {
     pub mesh_n: usize,
-    pub mesh_n_low: usize, 
+    pub mesh_n_low: usize,
     pub mesh_n_high: usize,
     pub mesh_outbound_min: usize,
 }
@@ -90,9 +94,9 @@ impl Default for TopicMeshConfig {
     fn default() -> Self {
         Self {
             mesh_n: 6,
-            mesh_n_low: 5, 
+            mesh_n_low: 5,
             mesh_n_high: 12,
-            mesh_outbound_min: 2 
+            mesh_outbound_min: 2,
         }
     }
 }
@@ -121,28 +125,40 @@ impl TopicConfigs {
     pub fn mesh_config_for_topic(&self, topic: &TopicHash) -> Option<&TopicMeshConfig> {
         self.topic_mesh_params.get(topic)
     }
-    
+
     /// Minimum number of outbound peers in the mesh network before adding more (D_out in the spec).
     /// This value must be smaller or equal than `mesh_n / 2` and smaller than `mesh_n_low`.
     /// The default is 2.
     pub fn mesh_outbound_min(&self, topic: &TopicHash) -> usize {
-        self.mesh_config_for_topic(topic).cloned().unwrap_or_default().mesh_outbound_min
+        self.mesh_config_for_topic(topic)
+            .cloned()
+            .unwrap_or_default()
+            .mesh_outbound_min
     }
 
     /// Target number of peers for the mesh network (D in the spec, default is 6).
     pub fn mesh_n(&self, topic: &TopicHash) -> usize {
-        self.mesh_config_for_topic(topic).cloned().unwrap_or_default().mesh_n
+        self.mesh_config_for_topic(topic)
+            .cloned()
+            .unwrap_or_default()
+            .mesh_n
     }
 
     /// Minimum number of peers in mesh network before adding more (D_lo in the spec, default is 5).
     pub fn mesh_n_low(&self, topic: &TopicHash) -> usize {
-        self.mesh_config_for_topic(topic).cloned().unwrap_or_default().mesh_n_low
+        self.mesh_config_for_topic(topic)
+            .cloned()
+            .unwrap_or_default()
+            .mesh_n_low
     }
 
     /// Maximum number of peers in mesh network before removing some (D_high in the spec, default
     /// is 12).
     pub fn mesh_n_high(&self, topic: &TopicHash) -> usize {
-        self.mesh_config_for_topic(topic).clone().unwrap().mesh_n_high
+        self.mesh_config_for_topic(topic)
+            .cloned()
+            .unwrap_or_default()
+            .mesh_n_high
     }
 }
 
@@ -193,7 +209,7 @@ pub struct Config {
     connection_handler_forward_duration: Duration,
     idontwant_message_size_threshold: usize,
     idontwant_on_publish: bool,
-    topic_configuration: TopicConfigs
+    topic_configuration: TopicConfigs,
 }
 
 impl Config {
@@ -470,7 +486,9 @@ impl Config {
     /// The topic configuration sets mesh parameters for a given topic. See [`TopicMeshConfig`]
     /// for defaults.
     pub fn set_topic_config(&mut self, topic: TopicHash, config: TopicMeshConfig) -> &mut Self {
-        self.topic_configuration.topic_mesh_params.insert(topic, config);
+        self.topic_configuration
+            .topic_mesh_params
+            .insert(topic, config);
         self
     }
 }
@@ -543,7 +561,7 @@ impl Default for ConfigBuilder {
                 connection_handler_forward_duration: Duration::from_secs(1),
                 idontwant_message_size_threshold: 1000,
                 idontwant_on_publish: false,
-                topic_configuration: TopicConfigs::default()
+                topic_configuration: TopicConfigs::default(),
             },
             invalid_protocol: false,
         }
@@ -681,8 +699,15 @@ impl ConfigBuilder {
     }
 
     /// The maximum byte size for each gossip for a given topic. (default is 2048 bytes).
-    pub fn max_transmit_size_for_topic(&mut self, max_transmit_size: usize, topic: TopicHash) -> &mut Self {
-        self.config.topic_configuration.topic_max_transmit_sizes.insert(topic, max_transmit_size);
+    pub fn max_transmit_size_for_topic(
+        &mut self,
+        max_transmit_size: usize,
+        topic: TopicHash,
+    ) -> &mut Self {
+        self.config
+            .topic_configuration
+            .topic_max_transmit_sizes
+            .insert(topic, max_transmit_size);
         self
     }
 
@@ -924,29 +949,35 @@ impl ConfigBuilder {
 
     /// The topic configuration sets mesh parameter sizes for a given topic. Notes on default
     /// below.
-    /// 
+    ///
     /// mesh_outbound_min
     /// Minimum number of outbound peers in the mesh network before adding more (D_out in the spec).
     /// This value must be smaller or equal than `mesh_n / 2` and smaller than `mesh_n_low`.
     /// The default is 2.
-    /// 
+    ///
     /// mesh_n
     /// Target number of peers for the mesh network for a given topic (D in the spec, default is 6).
-    /// 
+    ///
     /// mesh_n_low
     /// Minimum number of peers in mesh network before adding more for a given topic (D_lo in the spec, default is 4).
-    /// 
+    ///
     /// mesh_n_high
     /// Maximum number of peers in mesh network before removing some for a given topic (D_high in the spec, default
     /// is 12).
     pub fn set_topic_config(&mut self, topic: TopicHash, config: TopicMeshConfig) -> &mut Self {
-        self.config.topic_configuration.topic_mesh_params.insert(topic, config);
+        self.config
+            .topic_configuration
+            .topic_mesh_params
+            .insert(topic, config);
         self
     }
 
     /// The topic max size sets message sizes for a given topic.
     pub fn set_topic_max_transmit_size(&mut self, topic: TopicHash, max_size: usize) -> &mut Self {
-        self.config.topic_configuration.topic_max_transmit_sizes.insert(topic, max_size);
+        self.config
+            .topic_configuration
+            .topic_max_transmit_sizes
+            .insert(topic, max_size);
         self
     }
 
@@ -954,21 +985,37 @@ impl ConfigBuilder {
     pub fn build(&self) -> Result<Config, ConfigBuilderError> {
         // check all constraints on config
 
-        let pre_configured_topics = self.config.topic_configuration.topic_max_transmit_sizes.keys();
+        let pre_configured_topics = self
+            .config
+            .topic_configuration
+            .topic_max_transmit_sizes
+            .keys();
         for topic in pre_configured_topics {
-            if self.config.topic_configuration.max_transmit_size_for_topic(topic) < 100 {
+            if self
+                .config
+                .topic_configuration
+                .max_transmit_size_for_topic(topic)
+                < 100
+            {
                 return Err(ConfigBuilderError::MaxTransmissionSizeTooSmall);
             }
 
-            let TopicMeshConfig { mesh_n, mesh_n_low, mesh_n_high, mesh_outbound_min } = self.config.topic_configuration.mesh_config_for_topic(topic).cloned().unwrap_or_default();
-            
-            if !(mesh_outbound_min <= mesh_n_low
-                && mesh_n_low <= mesh_n
-                && mesh_n <= mesh_n_high)
-            {
+            let TopicMeshConfig {
+                mesh_n,
+                mesh_n_low,
+                mesh_n_high,
+                mesh_outbound_min,
+            } = self
+                .config
+                .topic_configuration
+                .mesh_config_for_topic(topic)
+                .cloned()
+                .unwrap_or_default();
+
+            if !(mesh_outbound_min <= mesh_n_low && mesh_n_low <= mesh_n && mesh_n <= mesh_n_high) {
                 return Err(ConfigBuilderError::MeshParametersInvalid);
             }
-    
+
             if mesh_outbound_min * 2 > mesh_n {
                 return Err(ConfigBuilderError::MeshOutboundInvalid);
             }
@@ -996,9 +1043,18 @@ impl std::fmt::Debug for Config {
         let _ = builder.field("protocol", &self.protocol);
         let _ = builder.field("history_length", &self.history_length);
         let _ = builder.field("history_gossip", &self.history_gossip);
-        let _ = builder.field("mesh_n", &self.topic_configuration.default_mesh_params.mesh_n);
-        let _ = builder.field("mesh_n_low", &self.topic_configuration.default_mesh_params.mesh_n_low);
-        let _ = builder.field("mesh_n_high", &self.topic_configuration.default_mesh_params.mesh_n_high);
+        let _ = builder.field(
+            "mesh_n",
+            &self.topic_configuration.default_mesh_params.mesh_n,
+        );
+        let _ = builder.field(
+            "mesh_n_low",
+            &self.topic_configuration.default_mesh_params.mesh_n_low,
+        );
+        let _ = builder.field(
+            "mesh_n_high",
+            &self.topic_configuration.default_mesh_params.mesh_n_high,
+        );
         let _ = builder.field("retain_scores", &self.retain_scores);
         let _ = builder.field("gossip_lazy", &self.gossip_lazy);
         let _ = builder.field("gossip_factor", &self.gossip_factor);
@@ -1014,7 +1070,13 @@ impl std::fmt::Debug for Config {
         let _ = builder.field("backoff_slack", &self.backoff_slack);
         let _ = builder.field("flood_publish", &self.flood_publish);
         let _ = builder.field("graft_flood_threshold", &self.graft_flood_threshold);
-        let _ = builder.field("mesh_outbound_min", &self.topic_configuration.default_mesh_params.mesh_outbound_min);
+        let _ = builder.field(
+            "mesh_outbound_min",
+            &self
+                .topic_configuration
+                .default_mesh_params
+                .mesh_outbound_min,
+        );
         let _ = builder.field("opportunistic_graft_ticks", &self.opportunistic_graft_ticks);
         let _ = builder.field("opportunistic_graft_peers", &self.opportunistic_graft_peers);
         let _ = builder.field("max_messages_per_rpc", &self.max_messages_per_rpc);

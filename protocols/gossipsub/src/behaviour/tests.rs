@@ -28,8 +28,11 @@ use rand::Rng;
 
 use super::*;
 use crate::{
-    config::{ConfigBuilder, TopicMeshConfig}, rpc::Receiver, subscription_filter::WhitelistSubscriptionFilter,
-    types::Rpc, IdentTopic as Topic,
+    config::{ConfigBuilder, TopicMeshConfig},
+    rpc::Receiver,
+    subscription_filter::WhitelistSubscriptionFilter,
+    types::Rpc,
+    IdentTopic as Topic,
 };
 
 #[derive(Default, Debug)]
@@ -691,12 +694,8 @@ fn test_publish_without_flood_publishing() {
         .flood_publish(false)
         .build()
         .unwrap();
-    let topic_config = TopicMeshConfig {
-        mesh_n: 6,
-        mesh_n_high: 12,
-        mesh_n_low: 4,
-        mesh_outbound_min: 2,
-    };
+    let topic_config = TopicMeshConfig::default();
+
     config.set_topic_config(topic_hash.clone(), topic_config);
 
     let (mut gs, _, receivers, topic_hashes) = inject_nodes1()
@@ -779,14 +778,9 @@ fn test_fanout() {
         .flood_publish(false)
         .build()
         .unwrap();
-    let topic_config = TopicMeshConfig {
-        mesh_n: 6,
-        mesh_n_high: 12,
-        mesh_n_low: 4,
-        mesh_outbound_min: 2,
-    };
-    config.set_topic_config(topic_hash.clone(), topic_config);
+    let topic_config = TopicMeshConfig::default();
 
+    config.set_topic_config(topic_hash.clone(), topic_config);
 
     let (mut gs, _, receivers, topic_hashes) = inject_nodes1()
         .peer_no(20)
@@ -1849,10 +1843,7 @@ fn test_mesh_addition() {
     }
 
     // Verify the pruned peers are removed from the mesh.
-    assert_eq!(
-        gs.mesh.get(&topics[0]).unwrap().len(),
-        mesh_n_low - 1
-    );
+    assert_eq!(gs.mesh.get(&topics[0]).unwrap().len(), mesh_n_low - 1);
 
     // run a heartbeat
     gs.heartbeat();
@@ -1867,16 +1858,11 @@ fn test_mesh_subtraction() {
     let mut config = Config::default();
     let topic = String::from("test");
     let topic_hash = TopicHash::from_raw(topic.clone());
-    let topic_config = TopicMeshConfig {
-        mesh_n: 6,
-        mesh_n_high: 12,
-        mesh_n_low: 4,
-        mesh_outbound_min: 2,
-    };
+    let topic_config = TopicMeshConfig::default();
+
     config.set_topic_config(topic_hash.clone(), topic_config);
 
     let mesh_n_high = config.topic_configuration().mesh_n_high(&topic_hash);
-    let mesh_n_low = config.topic_configuration().mesh_n_low(&topic_hash);
     let mesh_n = config.topic_configuration().mesh_n(&topic_hash);
 
     // Adds mesh_low peers and PRUNE 2 giving us a deficit.
@@ -2279,16 +2265,10 @@ fn test_flood_publish() {
 fn test_gossip_to_at_least_gossip_lazy_peers() {
     let mut config: Config = Config::default();
 
-    //  `topic` and setup a default
-    // mesh config
     let topic_str = "topic";
     let topic_hash = TopicHash::from_raw(topic_str);
-    let topic_config = TopicMeshConfig {
-        mesh_n: 6,
-        mesh_n_high: 12,
-        mesh_n_low: 4,
-        mesh_outbound_min: 2
-    };
+    let topic_config = TopicMeshConfig::default();
+
     config.set_topic_config(topic_hash.clone(), topic_config);
 
     let mesh_n_low = config.topic_configuration().mesh_n_low(&topic_hash);
@@ -2487,7 +2467,7 @@ fn test_add_outbound_peers_if_min_is_not_satisfied() {
 
     let topic = String::from("test");
     let topic_hash = TopicHash::from_raw(topic.clone());
-    
+
     let topic_config = TopicMeshConfig::default();
     config.set_topic_config(topic_hash.clone(), topic_config);
 
@@ -2519,10 +2499,7 @@ fn test_add_outbound_peers_if_min_is_not_satisfied() {
     gs.heartbeat();
 
     // The outbound peers got additionally added
-    assert_eq!(
-        gs.mesh[&topics[0]].len(),
-        mesh_n_high + mesh_outbound_min
-    );
+    assert_eq!(gs.mesh[&topics[0]].len(), mesh_n_high + mesh_outbound_min);
 }
 
 #[test]
@@ -2577,12 +2554,8 @@ fn test_dont_graft_to_negative_scored_peers() {
     let mut config = Config::default();
     let topic = String::from("test");
     let topic_hash = TopicHash::from_raw(topic.clone());
-    let topic_config = TopicMeshConfig {
-        mesh_n: 6,
-        mesh_n_high: 12,
-        mesh_n_low: 4,
-        mesh_outbound_min: 2,
-    };
+    let topic_config = TopicMeshConfig::default();
+
     config.set_topic_config(topic_hash.clone(), topic_config);
 
     let mesh_n_high = config.topic_configuration().mesh_n_high(&topic_hash);
@@ -2723,12 +2696,8 @@ fn test_do_not_gossip_to_peers_below_gossip_threshold() {
     let mut config = Config::default();
     let topic_str = "test";
     let topic_hash = TopicHash::from_raw(topic_str);
-    let topic_config = TopicMeshConfig {
-        mesh_n: 6,
-        mesh_n_high: 12,
-        mesh_n_low: 4,
-        mesh_outbound_min: 2,
-    };
+    let topic_config = TopicMeshConfig::default();
+
     config.set_topic_config(topic_hash.clone(), topic_config);
     let peer_score_params = PeerScoreParams::default();
     let peer_score_thresholds = PeerScoreThresholds {
@@ -2807,12 +2776,8 @@ fn test_iwant_msg_from_peer_below_gossip_threshold_gets_ignored() {
     let mut config = Config::default();
     let topic_str = "test";
     let topic_hash = TopicHash::from_raw(topic_str);
-    let topic_config = TopicMeshConfig {
-        mesh_n: 6,
-        mesh_n_high: 12,
-        mesh_n_low: 4,
-        mesh_outbound_min: 2,
-    };
+    let topic_config = TopicMeshConfig::default();
+
     config.set_topic_config(topic_hash.clone(), topic_config);
     let peer_score_params = PeerScoreParams::default();
     let peer_score_thresholds = PeerScoreThresholds {
@@ -2907,12 +2872,8 @@ fn test_ihave_msg_from_peer_below_gossip_threshold_gets_ignored() {
     let mut config = Config::default();
     let topic_str = "test";
     let topic_hash = TopicHash::from_raw(topic_str);
-    let topic_config = TopicMeshConfig {
-        mesh_n: 6,
-        mesh_n_high: 12,
-        mesh_n_low: 4,
-        mesh_outbound_min: 2,
-    };
+    let topic_config = TopicMeshConfig::default();
+
     config.set_topic_config(topic_hash.clone(), topic_config);
 
     let peer_score_params = PeerScoreParams::default();
@@ -4501,8 +4462,16 @@ fn test_scoring_p7_grafts_before_backoff() {
 fn test_opportunistic_grafting() {
     let topic = String::from("test");
     let topic_hash = TopicHash::from_raw(topic.clone());
-    let config = ConfigBuilder::default().set_topic_config(topic_hash, 
-        TopicMeshConfig { mesh_n: 5, mesh_n_low: 3, mesh_n_high: 7, mesh_outbound_min: 0 }) // mesh_outbound_min: deactivate outbound handling
+    let config = ConfigBuilder::default()
+        .set_topic_config(
+            topic_hash,
+            TopicMeshConfig {
+                mesh_n: 5,
+                mesh_n_low: 3,
+                mesh_n_high: 7,
+                mesh_outbound_min: 0,
+            },
+        ) // mesh_outbound_min: deactivate outbound handling
         .opportunistic_graft_ticks(2)
         .opportunistic_graft_peers(2)
         .build()
@@ -4615,12 +4584,8 @@ fn test_ignore_too_many_iwants_from_same_peer_for_same_message() {
     let mut config = Config::default();
     let topic = String::from("test");
     let topic_hash = TopicHash::from_raw(topic.clone());
-    let topic_config = TopicMeshConfig {
-        mesh_n: 6,
-        mesh_n_high: 12,
-        mesh_n_low: 4,
-        mesh_outbound_min: 2,
-    };
+    let topic_config = TopicMeshConfig::default();
+
     config.set_topic_config(topic_hash.clone(), topic_config);
 
     let mesh_n_high = config.topic_configuration().mesh_n_high(&topic_hash);
@@ -4679,12 +4644,8 @@ fn test_ignore_too_many_ihaves() {
         .unwrap();
     let topic = String::from("test");
     let topic_hash = TopicHash::from_raw(topic.clone());
-    let topic_config = TopicMeshConfig {
-        mesh_n: 6,
-        mesh_n_high: 12,
-        mesh_n_low: 4,
-        mesh_outbound_min: 2,
-    };
+    let topic_config = TopicMeshConfig::default();
+
     config.set_topic_config(topic_hash.clone(), topic_config);
 
     let mesh_n_high = config.topic_configuration().mesh_n_high(&topic_hash);
@@ -4769,12 +4730,8 @@ fn test_ignore_too_many_messages_in_ihave() {
         .unwrap();
     let topic = String::from("test");
     let topic_hash = TopicHash::from_raw(topic.clone());
-    let topic_config = TopicMeshConfig {
-        mesh_n: 6,
-        mesh_n_high: 12,
-        mesh_n_low: 4,
-        mesh_outbound_min: 2,
-    };
+    let topic_config = TopicMeshConfig::default();
+
     config.set_topic_config(topic_hash.clone(), topic_config);
 
     let mesh_n_high = config.topic_configuration().mesh_n_high(&topic_hash);
@@ -4862,18 +4819,12 @@ fn test_limit_number_of_message_ids_inside_ihave() {
         .unwrap();
     let topic = String::from("test");
     let topic_hash = TopicHash::from_raw(topic.clone());
-    let topic_config = TopicMeshConfig {
-        mesh_n: 6,
-        mesh_n_high: 12,
-        mesh_n_low: 4,
-        mesh_outbound_min: 2,
-    };
+    let topic_config = TopicMeshConfig::default();
+
     config.set_topic_config(topic_hash.clone(), topic_config);
 
-    let mesh_n = config.topic_configuration().mesh_n(&topic_hash);
-    let mesh_n_low = config.topic_configuration().mesh_n_low(&topic_hash);
     let mesh_n_high = config.topic_configuration().mesh_n_high(&topic_hash);
-    
+
     // build gossipsub with full mesh
     let (mut gs, peers, mut receivers, topics) = inject_nodes1()
         .peer_no(mesh_n_high)
@@ -5080,12 +5031,8 @@ fn test_publish_to_floodsub_peers_without_flood_publish() {
         .unwrap();
     let topic = String::from("test");
     let topic_hash = TopicHash::from_raw(topic.clone());
-    let topic_config = TopicMeshConfig {
-        mesh_n: 6,
-        mesh_n_high: 12,
-        mesh_n_low: 4,
-        mesh_outbound_min: 2,
-    };
+    let topic_config = TopicMeshConfig::default();
+
     config.set_topic_config(topic_hash.clone(), topic_config);
 
     let mesh_n_low = config.topic_configuration().mesh_n_low(&topic_hash);
@@ -5148,12 +5095,8 @@ fn test_do_not_use_floodsub_in_fanout() {
         .unwrap();
     let topic = String::from("test");
     let topic_hash = TopicHash::from_raw(topic.clone());
-    let topic_config = TopicMeshConfig {
-        mesh_n: 6,
-        mesh_n_high: 12,
-        mesh_n_low: 4,
-        mesh_outbound_min: 2,
-    };
+    let topic_config = TopicMeshConfig::default();
+
     config.set_topic_config(topic_hash.clone(), topic_config);
     let mesh_n_low = config.topic_configuration().mesh_n_low(&topic_hash);
 

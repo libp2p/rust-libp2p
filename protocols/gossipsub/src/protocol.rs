@@ -30,10 +30,15 @@ use libp2p_swarm::StreamProtocol;
 use quick_protobuf::{MessageWrite, Writer};
 
 use crate::{
-    config::{TopicConfigs, ValidationMode}, handler::HandlerEvent, rpc_proto::proto, topic::TopicHash, types::{
+    config::{TopicConfigs, ValidationMode},
+    handler::HandlerEvent,
+    rpc_proto::proto,
+    topic::TopicHash,
+    types::{
         ControlAction, Graft, IDontWant, IHave, IWant, MessageId, PeerInfo, PeerKind, Prune,
         RawMessage, Rpc, Subscription, SubscriptionAction,
-    }, Config, Topic, ValidationError
+    },
+    ValidationError,
 };
 
 pub(crate) const SIGNING_PREFIX: &[u8] = b"libp2p-pubsub:";
@@ -64,7 +69,7 @@ pub struct ProtocolConfig {
     /// Determines the level of validation to be done on incoming messages.
     pub(crate) validation_mode: ValidationMode,
     /// Configurations for topics including max transmit size and mesh parameters.
-    pub(crate) config: TopicConfigs 
+    pub(crate) config: TopicConfigs,
 }
 
 impl Default for ProtocolConfig {
@@ -76,7 +81,7 @@ impl Default for ProtocolConfig {
                 GOSSIPSUB_1_1_0_PROTOCOL,
                 GOSSIPSUB_1_0_0_PROTOCOL,
             ],
-            config: TopicConfigs::default()
+            config: TopicConfigs::default(),
         }
     }
 }
@@ -117,7 +122,11 @@ where
         Box::pin(future::ok((
             Framed::new(
                 socket,
-                GossipsubCodec::new(self.config.default_max_transmit_size, self.validation_mode, self.config),
+                GossipsubCodec::new(
+                    self.config.default_max_transmit_size,
+                    self.validation_mode,
+                    self.config,
+                ),
             ),
             protocol_id.kind,
         )))
@@ -136,7 +145,11 @@ where
         Box::pin(future::ok((
             Framed::new(
                 socket,
-                GossipsubCodec::new(self.config.default_max_transmit_size, self.validation_mode,self.config),
+                GossipsubCodec::new(
+                    self.config.default_max_transmit_size,
+                    self.validation_mode,
+                    self.config,
+                ),
             ),
             protocol_id.kind,
         )))
@@ -151,16 +164,20 @@ pub struct GossipsubCodec {
     /// The codec to handle common encoding/decoding of protobuf messages
     codec: quick_protobuf_codec::Codec<proto::RPC>,
     /// Configurations for topics including max transmit size and mesh parameters.
-    config: TopicConfigs 
+    config: TopicConfigs,
 }
 
 impl GossipsubCodec {
-    pub fn new(max_length: usize, validation_mode: ValidationMode, config: TopicConfigs) -> GossipsubCodec {
+    pub fn new(
+        max_length: usize,
+        validation_mode: ValidationMode,
+        config: TopicConfigs,
+    ) -> GossipsubCodec {
         let codec = quick_protobuf_codec::Codec::new(max_length);
         GossipsubCodec {
             validation_mode,
             codec,
-            config
+            config,
         }
     }
 
@@ -257,7 +274,7 @@ impl Decoder for GossipsubCodec {
                     key: message.key,
                     validated: false,
                 };
-                
+
                 invalid_messages.push((message, ValidationError::MessageTooLarge));
                 continue;
             }
@@ -620,7 +637,11 @@ mod tests {
                 control_msgs: vec![],
             };
 
-            let mut codec = GossipsubCodec::new(u32::MAX as usize, ValidationMode::Strict, TopicConfigs::default());
+            let mut codec = GossipsubCodec::new(
+                u32::MAX as usize,
+                ValidationMode::Strict,
+                TopicConfigs::default(),
+            );
             let mut buf = BytesMut::new();
             codec.encode(rpc.into_protobuf(), &mut buf).unwrap();
             let decoded_rpc = codec.decode(&mut buf).unwrap().unwrap();

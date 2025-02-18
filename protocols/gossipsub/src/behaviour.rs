@@ -595,13 +595,24 @@ where
             .outbound_transform(&topic.clone(), data.clone())?;
 
         // check that the size doesn't exceed the max transmission size.
-        if transformed_data.len() > self.config.topic_configuration().max_transmit_size_for_topic(&topic.clone()) {
+        if transformed_data.len()
+            > self
+                .config
+                .topic_configuration()
+                .max_transmit_size_for_topic(&topic.clone())
+        {
             return Err(PublishError::MessageTooLarge);
         }
 
         let raw_message = self.build_raw_message(topic.clone(), transformed_data)?;
 
-        let mesh_n = self.config.topic_configuration().mesh_config_for_topic(&topic).cloned().unwrap_or_default().mesh_n;
+        let mesh_n = self
+            .config
+            .topic_configuration()
+            .mesh_config_for_topic(&topic)
+            .cloned()
+            .unwrap_or_default()
+            .mesh_n;
 
         // calculate the message id from the un-transformed data
         let msg_id = self.config.message_id(&Message {
@@ -651,7 +662,6 @@ where
                     // We have a mesh set. We want to make sure to publish to at least `mesh_n`
                     // peers (if possible).
                     let needed_extra_peers = mesh_n.saturating_sub(mesh_peers.len());
-
 
                     if needed_extra_peers > 0 {
                         // We don't have `mesh_n` peers in our mesh, we will randomly select extras
@@ -969,7 +979,13 @@ where
         }
 
         let mut added_peers = HashSet::new();
-        let mesh_n = self.config.topic_configuration().mesh_config_for_topic(&topic_hash).cloned().unwrap_or_default().mesh_n;
+        let mesh_n = self
+            .config
+            .topic_configuration()
+            .mesh_config_for_topic(topic_hash)
+            .cloned()
+            .unwrap_or_default()
+            .mesh_n;
 
         if let Some(m) = self.metrics.as_mut() {
             m.joined(topic_hash)
@@ -1020,7 +1036,7 @@ where
             let new_peers = get_random_peers(
                 &self.connected_peers,
                 topic_hash,
-               mesh_n - added_peers.len(),
+                mesh_n - added_peers.len(),
                 |peer| {
                     !added_peers.contains(peer)
                         && !self.explicit_peers.contains(peer)
@@ -1460,11 +1476,14 @@ where
 
                     // check mesh upper bound and only allow graft if the upper bound is not reached
                     // or if it is an outbound peer
-                    let mesh_n_high = self.config.topic_configuration().mesh_config_for_topic(&topic_hash).cloned().unwrap_or_default().mesh_n_high;
-                    if peers.len() >= mesh_n_high
-                    // if peers.len() >= self.config.mesh_n_high()
-                        && !self.outbound_peers.contains(peer_id)
-                    {
+                    let mesh_n_high = self
+                        .config
+                        .topic_configuration()
+                        .mesh_config_for_topic(&topic_hash)
+                        .cloned()
+                        .unwrap_or_default()
+                        .mesh_n_high;
+                    if peers.len() >= mesh_n_high && !self.outbound_peers.contains(peer_id) {
                         to_prune_topics.insert(topic_hash.clone());
                         continue;
                     }
@@ -1908,8 +1927,6 @@ where
             }
         };
 
-
-
         for subscription in filtered_topics {
             // get the peers from the mapping, or insert empty lists if the topic doesn't exist
             let topic_hash = &subscription.topic_hash;
@@ -1942,10 +1959,14 @@ where
                             .is_backoff_with_slack(topic_hash, propagation_source)
                     {
                         if let Some(peers) = self.mesh.get_mut(topic_hash) {
-                            let mesh_n_low = self.config.topic_configuration().mesh_config_for_topic(&topic_hash).cloned().unwrap_or_default().mesh_n_low;
-                            if peers.len() < mesh_n_low
-                                && peers.insert(*propagation_source)
-                            {
+                            let mesh_n_low = self
+                                .config
+                                .topic_configuration()
+                                .mesh_config_for_topic(topic_hash)
+                                .cloned()
+                                .unwrap_or_default()
+                                .mesh_n_low;
+                            if peers.len() < mesh_n_low && peers.insert(*propagation_source) {
                                 tracing::debug!(
                                     peer=%propagation_source,
                                     topic=%topic_hash,
@@ -2099,8 +2120,17 @@ where
             let backoffs = &self.backoffs;
             let outbound_peers = &self.outbound_peers;
 
-            let TopicMeshConfig { mesh_n, mesh_n_low, mesh_n_high, mesh_outbound_min } = self.config
-            .topic_configuration().mesh_config_for_topic(&topic_hash).cloned().unwrap_or_default();
+            let TopicMeshConfig {
+                mesh_n,
+                mesh_n_low,
+                mesh_n_high,
+                mesh_outbound_min,
+            } = self
+                .config
+                .topic_configuration()
+                .mesh_config_for_topic(topic_hash)
+                .cloned()
+                .unwrap_or_default();
 
             // drop all peers with negative score, without PX
             // if there is at some point a stable retain method for BTreeSet the following can be
@@ -2138,7 +2168,7 @@ where
             }
 
             // too little peers - add some
-            if peers.len() < mesh_n_low { 
+            if peers.len() < mesh_n_low {
                 tracing::debug!(
                     topic=%topic_hash,
                     "HEARTBEAT: Mesh low. Topic contains: {} needs: {}",
@@ -2356,7 +2386,13 @@ where
                 Some((_, thresholds, _)) => thresholds.publish_threshold,
                 _ => 0.0,
             };
-            let mesh_n = self.config.topic_configuration().mesh_config_for_topic(&topic_hash).unwrap().mesh_n;
+            let mesh_n = self
+                .config
+                .topic_configuration()
+                .mesh_config_for_topic(topic_hash)
+                .cloned()
+                .unwrap_or_default()
+                .mesh_n;
 
             for peer_id in peers.iter() {
                 // is the peer still subscribed to the topic?
