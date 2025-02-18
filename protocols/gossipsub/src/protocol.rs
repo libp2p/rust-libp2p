@@ -27,18 +27,13 @@ use futures::prelude::*;
 use libp2p_core::{InboundUpgrade, OutboundUpgrade, UpgradeInfo};
 use libp2p_identity::{PeerId, PublicKey};
 use libp2p_swarm::StreamProtocol;
-use quick_protobuf::Writer;
+use quick_protobuf::{MessageWrite, Writer};
 
 use crate::{
-    config::ValidationMode,
-    handler::HandlerEvent,
-    rpc_proto::proto,
-    topic::TopicHash,
-    types::{
+    config::{TopicConfigs, ValidationMode}, handler::HandlerEvent, rpc_proto::proto, topic::TopicHash, types::{
         ControlAction, Graft, IDontWant, IHave, IWant, MessageId, PeerInfo, PeerKind, Prune,
         RawMessage, Rpc, Subscription, SubscriptionAction,
-    },
-    ValidationError,
+    }, Config, Topic, ValidationError
 };
 
 pub(crate) const SIGNING_PREFIX: &[u8] = b"libp2p-pubsub:";
@@ -66,22 +61,22 @@ pub(crate) const FLOODSUB_PROTOCOL: ProtocolId = ProtocolId {
 pub struct ProtocolConfig {
     /// The Gossipsub protocol id to listen on.
     pub(crate) protocol_ids: Vec<ProtocolId>,
-    /// The maximum transmit size for a packet.
-    pub(crate) max_transmit_size: usize,
     /// Determines the level of validation to be done on incoming messages.
     pub(crate) validation_mode: ValidationMode,
+    /// Configurations for topics including max transmit size and mesh parameters.
+    pub(crate) config: TopicConfigs 
 }
 
 impl Default for ProtocolConfig {
     fn default() -> Self {
         Self {
-            max_transmit_size: 65536,
             validation_mode: ValidationMode::Strict,
             protocol_ids: vec![
                 GOSSIPSUB_1_2_0_PROTOCOL,
                 GOSSIPSUB_1_1_0_PROTOCOL,
                 GOSSIPSUB_1_0_0_PROTOCOL,
             ],
+            config: TopicConfigs::default()
         }
     }
 }
@@ -122,7 +117,7 @@ where
         Box::pin(future::ok((
             Framed::new(
                 socket,
-                GossipsubCodec::new(self.max_transmit_size, self.validation_mode),
+                GossipsubCodec::new(self.config.default_max_transmit_size, self.validation_mode, self.config),
             ),
             protocol_id.kind,
         )))
@@ -141,7 +136,7 @@ where
         Box::pin(future::ok((
             Framed::new(
                 socket,
-                GossipsubCodec::new(self.max_transmit_size, self.validation_mode),
+                GossipsubCodec::new(self.config.default_max_transmit_size, self.validation_mode,self.config),
             ),
             protocol_id.kind,
         )))
@@ -155,14 +150,17 @@ pub struct GossipsubCodec {
     validation_mode: ValidationMode,
     /// The codec to handle common encoding/decoding of protobuf messages
     codec: quick_protobuf_codec::Codec<proto::RPC>,
+    /// Configurations for topics including max transmit size and mesh parameters.
+    config: TopicConfigs 
 }
 
 impl GossipsubCodec {
-    pub fn new(max_length: usize, validation_mode: ValidationMode) -> GossipsubCodec {
+    pub fn new(max_length: usize, validation_mode: ValidationMode, config: TopicConfigs) -> GossipsubCodec {
         let codec = quick_protobuf_codec::Codec::new(max_length);
         GossipsubCodec {
             validation_mode,
             codec,
+            config
         }
     }
 
@@ -246,6 +244,24 @@ impl Decoder for GossipsubCodec {
         let mut invalid_messages = Vec::new();
 
         for message in rpc.publish.into_iter() {
+            let topic = TopicHash::from_raw(&message.topic);
+
+            // Check the message size to ensure it doesn't bypass the configured max.
+            if message.get_size() > self.config.max_transmit_size_for_topic(&topic) {
+                let message = RawMessage {
+                    source: None, // don't bother inform the application
+                    data: message.data.unwrap_or_default(),
+                    sequence_number: None, // don't inform the application
+                    topic: TopicHash::from_raw(message.topic),
+                    signature: None, // don't inform the application
+                    key: message.key,
+                    validated: false,
+                };
+                
+                invalid_messages.push((message, ValidationError::MessageTooLarge));
+                continue;
+            }
+
             // Keep track of the type of invalid message.
             let mut invalid_kind = None;
             let mut verify_signature = false;
@@ -604,7 +620,7 @@ mod tests {
                 control_msgs: vec![],
             };
 
-            let mut codec = GossipsubCodec::new(u32::MAX as usize, ValidationMode::Strict);
+            let mut codec = GossipsubCodec::new(u32::MAX as usize, ValidationMode::Strict, TopicConfigs::default());
             let mut buf = BytesMut::new();
             codec.encode(rpc.into_protobuf(), &mut buf).unwrap();
             let decoded_rpc = codec.decode(&mut buf).unwrap().unwrap();
