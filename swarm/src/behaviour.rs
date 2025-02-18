@@ -121,6 +121,39 @@ use crate::{
 ///     }
 /// }
 /// ```
+///
+/// ## Manually compose multiple `NetworkBehaviour`s without derive macro
+///
+/// To fully understand how to compose behaviours, the core concepts cannot be forgotten:
+/// - [`Swarm`] only holds **one `NetworkBehaviour` instance**: All composed behaviour instances
+/// should live under one composed instance, typically a struct.
+/// - [`NetworkBehaviour`] only requires **one `ConnectionHandler` type** and only assign one per
+///   connection: All `ConnectionHandler`
+/// should
+/// The
+/// "illusion" of multiple behaviour acting together comes from properly delegating calls
+/// and composing events.
+///
+/// The key takeway in manually composing `NetworkBehaviours` is that
+/// changes in the [`Swarm`] being properly propagated to all children `NetworkBehaviour`
+/// and events from all children being properly composed into one event(using enums).
+///
+/// All `NetworkBehaviour` comes with corresponding `ConnectionHandler`, which also need
+/// to be composed properly.
+///
+/// ```
+/// struct Behaviour {
+///     ping: ping::Behaviour,
+///     identify: identify::Behaviour,
+/// }
+///
+/// enum ConnectionHandler {
+///     Ping(ping::ConnectionHandler),
+///     Identify(identify::ConnectionHandler),
+/// }
+///
+/// impl NetworkBehaviour for Behaviour {}
+/// ```
 pub trait NetworkBehaviour: 'static {
     /// Handler for all the protocols the network behaviour supports.
     type ConnectionHandler: ConnectionHandler;
