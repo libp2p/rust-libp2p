@@ -74,7 +74,7 @@ pub(crate) enum PendingOutboundConnectionError {
     },
     LocalPeerId {
         address: Multiaddr,
-    }
+    },
 }
 
 /// Errors that can occur in the context of a pending incoming `Connection`.
@@ -88,5 +88,5 @@ pub(crate) enum PendingInboundConnectionError {
     },
     LocalPeerId {
         endpoint: ConnectedPoint,
-    }
+    },
 }

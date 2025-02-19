@@ -110,8 +110,7 @@ pub use behaviour::{
 pub use connection::{pool::ConnectionCounters, ConnectionError, ConnectionId, SupportedProtocols};
 use connection::{
     pool::{EstablishedConnection, Pool, PoolConfig, PoolEvent},
-    IncomingInfo, PendingInboundConnectionError,
-    PendingOutboundConnectionError,
+    IncomingInfo, PendingInboundConnectionError, PendingOutboundConnectionError,
 };
 use dial_opts::{DialOpts, PeerCondition};
 pub use executor::Executor;
@@ -1549,7 +1548,9 @@ impl From<PendingOutboundConnectionError> for DialError {
             PendingOutboundConnectionError::WrongPeerId { obtained, address } => {
                 DialError::WrongPeerId { obtained, address }
             }
-            PendingOutboundConnectionError::LocalPeerId { address } => DialError::LocalPeerId { address },
+            PendingOutboundConnectionError::LocalPeerId { address } => {
+                DialError::LocalPeerId { address }
+            }
             PendingOutboundConnectionError::Transport(e) => DialError::Transport(e),
         }
     }
