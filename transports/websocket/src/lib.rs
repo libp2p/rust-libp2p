@@ -134,6 +134,10 @@ use rw_stream_sink::RwStreamSink;
 ///
 /// # }
 /// ```
+
+#[deprecated = "Use `Config` instead"]
+pub type WsConfig<Transport> = Config<Transport>;
+
 #[derive(Debug)]
 pub struct Config<T: Transport>
 where
