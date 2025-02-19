@@ -43,6 +43,9 @@ use libp2p_core::{
 };
 use parking_lot::Mutex;
 
+#[deprecated = "Use `Config` instead"]
+pub type MplexConfig = Config;
+
 impl UpgradeInfo for Config {
     type Info = &'static str;
     type InfoIter = iter::Once<Self::Info>;
