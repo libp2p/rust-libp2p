@@ -51,7 +51,7 @@ const MAX_DATA_SIZE: usize = 256 * 1024 * 1024;
 
 /// A Websocket transport whose output type is a [`Stream`] and [`Sink`] of
 /// frame payloads which does not implement [`AsyncRead`] or
-/// [`AsyncWrite`]. See [`crate::WsConfig`] if you require the latter.
+/// [`AsyncWrite`]. See [`crate::Config`] if you require the latter.
 #[derive(Debug)]
 pub struct Config<T> {
     transport: Arc<Mutex<T>>,

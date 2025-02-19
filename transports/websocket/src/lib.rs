@@ -76,7 +76,7 @@ use rw_stream_sink::RwStreamSink;
 /// # #[async_std::main]
 /// # async fn main() {
 ///
-/// let mut transport = websocket::WsConfig::new(
+/// let mut transport = websocket::Config::new(
 ///     dns::async_std::Transport::system(tcp::async_io::Transport::new(tcp::Config::default()))
 ///         .await
 ///         .unwrap(),
@@ -117,7 +117,7 @@ use rw_stream_sink::RwStreamSink;
 /// # async fn main() {
 ///
 /// let mut transport =
-///     websocket::WsConfig::new(tcp::async_io::Transport::new(tcp::Config::default()));
+///     websocket::Config::new(tcp::async_io::Transport::new(tcp::Config::default()));
 ///
 /// let id = transport
 ///     .listen_on(
@@ -235,7 +235,7 @@ where
     }
 }
 
-/// Type alias corresponding to `framed::WsConfig::Dial` and `framed::WsConfig::ListenerUpgrade`.
+/// Type alias corresponding to `framed::Config::Dial` and `framed::Config::ListenerUpgrade`.
 pub type InnerFuture<T, E> = BoxFuture<'static, Result<Connection<T>, Error<E>>>;
 
 /// Function type that wraps a websocket connection (see. `wrap_connection`).
