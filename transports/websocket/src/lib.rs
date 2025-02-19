@@ -135,15 +135,15 @@ use rw_stream_sink::RwStreamSink;
 /// # }
 /// ```
 #[derive(Debug)]
-pub struct WsConfig<T: Transport>
+pub struct Config<T: Transport>
 where
     T: Transport,
     T::Output: AsyncRead + AsyncWrite + Send + Unpin + 'static,
 {
-    transport: libp2p_core::transport::map::Map<framed::WsConfig<T>, WrapperFn<T::Output>>,
+    transport: libp2p_core::transport::map::Map<framed::Config<T>, WrapperFn<T::Output>>,
 }
 
-impl<T: Transport> WsConfig<T>
+impl<T: Transport> Config<T>
 where
     T: Transport + Send + Unpin + 'static,
     T::Error: Send + 'static,
@@ -161,8 +161,7 @@ where
     /// > the inner transport.
     pub fn new(transport: T) -> Self {
         Self {
-            transport: framed::WsConfig::new(transport)
-                .map(wrap_connection as WrapperFn<T::Output>),
+            transport: framed::Config::new(transport).map(wrap_connection as WrapperFn<T::Output>),
         }
     }
 
@@ -195,7 +194,7 @@ where
     }
 }
 
-impl<T> Transport for WsConfig<T>
+impl<T> Transport for Config<T>
 where
     T: Transport + Send + Unpin + 'static,
     T::Error: Send + 'static,
@@ -310,7 +309,7 @@ mod tests {
     use libp2p_identity::PeerId;
     use libp2p_tcp as tcp;
 
-    use super::WsConfig;
+    use super::Config;
 
     #[test]
     fn dialer_connects_to_listener_ipv4() {
@@ -324,8 +323,8 @@ mod tests {
         futures::executor::block_on(connect(a))
     }
 
-    fn new_ws_config() -> WsConfig<tcp::async_io::Transport> {
-        WsConfig::new(tcp::async_io::Transport::new(tcp::Config::default()))
+    fn new_ws_config() -> Config<tcp::async_io::Transport> {
+        Config::new(tcp::async_io::Transport::new(tcp::Config::default()))
     }
 
     async fn connect(listen_addr: Multiaddr) {

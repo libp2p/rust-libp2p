@@ -53,7 +53,7 @@ const MAX_DATA_SIZE: usize = 256 * 1024 * 1024;
 /// frame payloads which does not implement [`AsyncRead`] or
 /// [`AsyncWrite`]. See [`crate::WsConfig`] if you require the latter.
 #[derive(Debug)]
-pub struct WsConfig<T> {
+pub struct Config<T> {
     transport: Arc<Mutex<T>>,
     max_data_size: usize,
     tls_config: tls::Config,
@@ -62,13 +62,13 @@ pub struct WsConfig<T> {
     listener_protos: HashMap<ListenerId, WsListenProto<'static>>,
 }
 
-impl<T> WsConfig<T>
+impl<T> Config<T>
 where
     T: Send,
 {
     /// Create a new websocket transport based on another transport.
     pub fn new(transport: T) -> Self {
-        WsConfig {
+        Config {
             transport: Arc::new(Mutex::new(transport)),
             max_data_size: MAX_DATA_SIZE,
             tls_config: tls::Config::client(),
@@ -108,7 +108,7 @@ where
 
 type TlsOrPlain<T> = future::Either<future::Either<client::TlsStream<T>, server::TlsStream<T>>, T>;
 
-impl<T> Transport for WsConfig<T>
+impl<T> Transport for Config<T>
 where
     T: Transport + Send + Unpin + 'static,
     T::Error: Send + 'static,
@@ -242,7 +242,7 @@ where
     }
 }
 
-impl<T> WsConfig<T>
+impl<T> Config<T>
 where
     T: Transport + Send + Unpin + 'static,
     T::Error: Send + 'static,
