@@ -1,3 +1,8 @@
+## 0.20.0
+
+- Emit new `libp2p::relay::Event::ReservationRemoved` when the client connection is dropped.
+  See [PR 5874](https://github.com/libp2p/rust-libp2p/pull/5874).
+
 ## 0.19.1
 
 - Remove duplicated forwarding of pending events to connection handler.

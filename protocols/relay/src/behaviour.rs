@@ -195,6 +195,8 @@ pub enum Event {
     },
     /// An inbound reservation has timed out.
     ReservationTimedOut { src_peer_id: PeerId },
+    /// A reservation has been removed.
+    ReservationRemoved { src_peer_id: PeerId },
     /// An inbound circuit request has been denied.
     CircuitReqDenied {
         src_peer_id: PeerId,
@@ -280,6 +282,11 @@ impl Behaviour {
             peer.get_mut().remove(&connection_id);
             if peer.get().is_empty() {
                 peer.remove();
+
+                self.queued_actions
+                    .push_back(ToSwarm::GenerateEvent(Event::ReservationRemoved {
+                        src_peer_id: peer_id,
+                    }));
             }
         }
 
