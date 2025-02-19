@@ -1,7 +1,7 @@
 ## 0.43.1
 
 - Rename types to match naming convention in [discussion 2174](https://github.com/libp2p/rust-libp2p/discussions/2174).
-  See [PR XXXX](https://github.com/libp2p/rust-libp2p/pull/XXXX).
+  See [PR 5870](https://github.com/libp2p/rust-libp2p/pull/5870).
 
 ## 0.43.0
 
