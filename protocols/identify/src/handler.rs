@@ -19,9 +19,7 @@
 // DEALINGS IN THE SOFTWARE.
 
 use std::{
-    collections::HashSet,
-    task::{Context, Poll},
-    time::Duration,
+    collections::HashSet, sync::Arc, task::{Context, Poll}, time::Duration
 };
 
 use either::Either;
@@ -81,7 +79,7 @@ pub struct Handler {
     interval: Duration,
 
     /// The key of the local peer.
-    local_key: KeyType,
+    local_key: Arc<KeyType>,
 
     /// Application-specific version of the protocol family used by the peer,
     /// e.g. `ipfs/1.0.0` or `polkadot/1.0.0`.
@@ -128,7 +126,7 @@ impl Handler {
     pub(crate) fn new(
         interval: Duration,
         remote_peer_id: PeerId,
-        local_key: KeyType,
+        local_key: Arc<KeyType>,
         protocol_version: String,
         agent_version: String,
         observed_addr: Multiaddr,
@@ -226,7 +224,7 @@ impl Handler {
     }
 
     fn build_info(&mut self) -> Info {
-        let signed_envelope = match &self.local_key {
+        let signed_envelope = match self.local_key.as_ref() {
             KeyType::PublicKey(_) => None,
             KeyType::Keypair { keypair, .. } => libp2p_core::PeerRecord::new(
                 keypair,

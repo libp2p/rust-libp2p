@@ -21,6 +21,7 @@
 use std::{
     collections::{hash_map::Entry, HashMap, HashSet, VecDeque},
     num::NonZeroUsize,
+    sync::Arc,
     task::{Context, Poll},
     time::Duration,
 };
@@ -122,7 +123,7 @@ pub struct Config {
     /// The key of the local node. Only the public key will be report on the wire.  
     /// The behaviour will not produce [`PeerRecord`](libp2p_core::PeerRecord) when
     /// supplied with a public key.  
-    local_key: KeyType,
+    local_key: Arc<KeyType>,
     /// Name and version of the local peer implementation, similar to the
     /// `User-Agent` header in the HTTP protocol.
     ///
@@ -164,15 +165,7 @@ impl Config {
     /// Use [`new_with_signed_peer_record`](Config::new_with_signed_peer_record) for
     /// `signedPeerRecord` support.
     pub fn new(protocol_version: String, local_public_key: PublicKey) -> Self {
-        Self {
-            protocol_version,
-            agent_version: format!("rust-libp2p/{}", env!("CARGO_PKG_VERSION")),
-            local_key: local_public_key.into(),
-            interval: Duration::from_secs(5 * 60),
-            push_listen_addr_updates: false,
-            cache_size: 100,
-            hide_listen_addrs: false,
-        }
+        Self::new_with_key(protocol_version, local_public_key.into())
     }
 
     /// Creates a new configuration for the identify [`Behaviour`] that
@@ -180,10 +173,14 @@ impl Config {
     /// The private key will be used to sign [`PeerRecord`](libp2p_core::PeerRecord)
     /// for verifiable address advertisement.
     pub fn new_with_signed_peer_record(protocol_version: String, local_keypair: &Keypair) -> Self {
+        Self::new_with_key(protocol_version, local_keypair.into())
+    }
+
+    fn new_with_key(protocol_version: String, key_type: KeyType) -> Self {
         Self {
             protocol_version,
             agent_version: format!("rust-libp2p/{}", env!("CARGO_PKG_VERSION")),
-            local_key: local_keypair.into(),
+            local_key: Arc::new(key_type),
             interval: Duration::from_secs(5 * 60),
             push_listen_addr_updates: false,
             cache_size: 100,
@@ -693,26 +690,24 @@ impl PeerCache {
 }
 
 #[derive(Debug, Clone)]
+#[allow(clippy::large_enum_variant)]
 pub(crate) enum KeyType {
-    // With public key only the behaviour will not
-    // be able to produce a `SignedEnvelope`.
-    // Reduce enum size with heap allocated `Box<T>`
-    PublicKey(Box<PublicKey>),
+    PublicKey(PublicKey),
     Keypair {
-        keypair: Box<Keypair>,
-        public_key: Box<PublicKey>,
+        keypair: Keypair,
+        public_key: PublicKey,
     },
 }
 impl From<PublicKey> for KeyType {
     fn from(value: PublicKey) -> Self {
-        Self::PublicKey(value.clone().into())
+        Self::PublicKey(value)
     }
 }
 impl From<&Keypair> for KeyType {
     fn from(value: &Keypair) -> Self {
         Self::Keypair {
-            public_key: value.public().into(),
-            keypair: value.clone().into(),
+            public_key: value.public(),
+            keypair: value.clone(),
         }
     }
 }
