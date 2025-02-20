@@ -58,7 +58,7 @@ pub(crate) mod native {
                     .with_tcp(
                         tcp::Config::default(),
                         tls::Config::new,
-                        mplex::MplexConfig::default,
+                        mplex::Config::default,
                     )?
                     .with_behaviour(behaviour_constructor)?
                     .build(),
@@ -82,7 +82,7 @@ pub(crate) mod native {
                     .with_tcp(
                         tcp::Config::default(),
                         noise::Config::new,
-                        mplex::MplexConfig::default,
+                        mplex::Config::default,
                     )?
                     .with_behaviour(behaviour_constructor)?
                     .build(),
@@ -103,7 +103,7 @@ pub(crate) mod native {
             (Transport::Ws, Some(SecProtocol::Tls), Some(Muxer::Mplex)) => (
                 libp2p::SwarmBuilder::with_new_identity()
                     .with_tokio()
-                    .with_websocket(tls::Config::new, mplex::MplexConfig::default)
+                    .with_websocket(tls::Config::new, mplex::Config::default)
                     .await?
                     .with_behaviour(behaviour_constructor)?
                     .build(),
@@ -121,7 +121,7 @@ pub(crate) mod native {
             (Transport::Ws, Some(SecProtocol::Noise), Some(Muxer::Mplex)) => (
                 libp2p::SwarmBuilder::with_new_identity()
                     .with_tokio()
-                    .with_websocket(noise::Config::new, mplex::MplexConfig::default)
+                    .with_websocket(noise::Config::new, mplex::Config::default)
                     .await?
                     .with_behaviour(behaviour_constructor)?
                     .build(),
@@ -235,7 +235,7 @@ pub(crate) mod wasm {
                                 noise::Config::new(&local_key)
                                     .context("failed to initialise noise")?,
                             )
-                            .multiplex(mplex::MplexConfig::new()))
+                            .multiplex(mplex::Config::new()))
                     })?
                     .with_behaviour(behaviour_constructor)?
                     .with_swarm_config(|c| c.with_idle_connection_timeout(Duration::from_secs(5)))

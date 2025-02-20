@@ -1,3 +1,7 @@
+## 0.45.1
+- Rename types to match naming convention in [discussion 2174](https://github.com/libp2p/rust-libp2p/discussions/2174).
+  See [PR 5873](https://github.com/libp2p/rust-libp2p/pull/5873).
+
 ## 0.45.0
 
 - fix: Return `Error::InvalidMultiaddr` when dialed to a `/dnsaddr` address

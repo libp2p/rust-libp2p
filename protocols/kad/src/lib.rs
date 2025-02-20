@@ -88,7 +88,7 @@ pub use record::{store, Key as RecordKey, ProviderRecord, Record};
 /// DHT should agree on the choices made for (1) and (2).
 ///
 /// The current value is `20`.
-pub const K_VALUE: NonZeroUsize = unsafe { NonZeroUsize::new_unchecked(20) };
+pub const K_VALUE: NonZeroUsize = NonZeroUsize::new(20).unwrap();
 
 /// The `α` parameter of the Kademlia specification.
 ///
@@ -98,7 +98,7 @@ pub const K_VALUE: NonZeroUsize = unsafe { NonZeroUsize::new_unchecked(20) };
 /// locating the closest peers to a key.
 ///
 /// The current value is `3`.
-pub const ALPHA_VALUE: NonZeroUsize = unsafe { NonZeroUsize::new_unchecked(3) };
+pub const ALPHA_VALUE: NonZeroUsize = NonZeroUsize::new(3).unwrap();
 
 pub const PROTOCOL_NAME: StreamProtocol = protocol::DEFAULT_PROTO_NAME;
 

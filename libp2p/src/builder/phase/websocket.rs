@@ -93,7 +93,7 @@ macro_rules! impl_websocket_builder {
             {
                 let security_upgrade = security_upgrade.into_security_upgrade(&self.keypair)
                     .map_err(WebsocketErrorInner::SecurityUpgrade)?;
-                let websocket_transport = libp2p_websocket::WsConfig::new(
+                let websocket_transport = libp2p_websocket::Config::new(
                     $dnsTcp.await.map_err(WebsocketErrorInner::Dns)?,
                 )
                     .upgrade(libp2p_core::upgrade::Version::V1Lazy)

@@ -1,3 +1,8 @@
+## 0.43.1
+
+- Rename `MplexConfig` to `Config` for consistency with other crates (see [discussion 2174](https://github.com/libp2p/rust-libp2p/discussions/2174)).
+  See [PR 5870](https://github.com/libp2p/rust-libp2p/pull/5870).
+
 ## 0.43.0
 
 <!-- Update to libp2p-core v0.43.0 -->

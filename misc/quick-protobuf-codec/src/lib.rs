@@ -252,7 +252,7 @@ mod tests {
 
         let mut src = BytesMut::new();
         src.extend_from_slice(encoded_length);
-        src.extend(std::iter::repeat(0).take(length));
+        src.extend(std::iter::repeat_n(0, length));
         src
     }
 

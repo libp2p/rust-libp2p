@@ -20,7 +20,7 @@ yamux013 = { version = "0.13.3", package = "yamux" }
 tracing = { workspace = true }
 
 [dev-dependencies]
-async-std = { version = "1.7.0", features = ["attributes"] }
+tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
 libp2p-muxer-test-harness = { path = "../test-harness" }
 
 # Passing arguments to the docsrs builder in order to properly document cfg's.
