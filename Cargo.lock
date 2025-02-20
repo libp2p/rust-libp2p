@@ -3036,7 +3036,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-mplex"
-version = "0.43.0"
+version = "0.43.1"
 dependencies = [
  "async-std",
  "asynchronous-codec",
@@ -3502,7 +3502,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-websocket"
-version = "0.45.0"
+version = "0.45.1"
 dependencies = [
  "async-std",
  "either",
