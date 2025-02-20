@@ -1,3 +1,7 @@
+## 0.9.0
+
+- Cut stable release.
+
 ## 0.9.0-alpha
 
 <!-- Update to libp2p-core v0.43.0 -->
