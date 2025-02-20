@@ -121,7 +121,6 @@ libp2p-relay = { workspace = true, optional = true }
 libp2p-rendezvous = { workspace = true, optional = true }
 libp2p-request-response = { workspace = true, optional = true }
 libp2p-swarm = { workspace = true }
-libp2p-webrtc = { workspace = true, optional = true }
 libp2p-webrtc-websys = { workspace = true, optional = true }
 libp2p-websocket-websys = { workspace = true, optional = true }
 libp2p-webtransport-websys = { workspace = true, optional = true }
@@ -139,6 +138,7 @@ libp2p-tcp = { workspace = true, optional = true }
 libp2p-tls = { workspace = true, optional = true }
 libp2p-uds = { workspace = true, optional = true }
 libp2p-upnp = { workspace = true, optional = true }
+libp2p-webrtc = { workspace = true, optional = true }
 libp2p-websocket = { workspace = true, optional = true }
 
 [dev-dependencies]
