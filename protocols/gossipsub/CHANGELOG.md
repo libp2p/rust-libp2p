@@ -39,7 +39,7 @@
 - Fix `cargo clippy` warnings in `rustc 1.84.0-beta.1`.
   See [PR 5700](https://github.com/libp2p/rust-libp2p/pull/5700).
 
-- Fixe an issue where an `InsufficientPeers` error could occur under certain conditions, despite having peers subscribed to a topic.
+- Fix an issue where an `InsufficientPeers` error could occur under certain conditions, despite having peers subscribed to a topic.
   See [PR 5793](https://github.com/libp2p/rust-libp2p/pull/5793).
 
 <!-- Update to libp2p-core v0.43.0 -->
@@ -75,7 +75,7 @@
 - Deprecate `gossipsub::Config::idle_timeout` in favor of `SwarmBuilder::idle_connection_timeout`.
   See [PR 4648].
 
-<!-- Interal changes:
+<!-- Internal changes:
 
 - Allow new clippy lint.
 
@@ -91,7 +91,7 @@
 
 ## 0.45.1
 
-- Add getter function to o  btain `TopicScoreParams`.
+- Add getter function to obtain `TopicScoreParams`.
   See [PR 4231].
 
 [PR 4231]: https://github.com/libp2p/rust-libp2p/pull/4231
