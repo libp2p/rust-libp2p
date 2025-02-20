@@ -1,3 +1,7 @@
+## 0.20.0
+
+- Emit `relay::Event::ReservationClosed` when all the connections with the client is dropped.
+
 ## 0.19.1
 
 - Remove duplicated forwarding of pending events to connection handler.

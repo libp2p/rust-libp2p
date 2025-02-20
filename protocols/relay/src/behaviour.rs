@@ -193,6 +193,8 @@ pub enum Event {
         src_peer_id: PeerId,
         error: inbound_hop::Error,
     },
+    /// A reservation has been closed.
+    ReservationClosed { src_peer_id: PeerId },
     /// An inbound reservation has timed out.
     ReservationTimedOut { src_peer_id: PeerId },
     /// An inbound circuit request has been denied.
@@ -280,6 +282,10 @@ impl Behaviour {
             peer.get_mut().remove(&connection_id);
             if peer.get().is_empty() {
                 peer.remove();
+                self.queued_actions
+                    .push_back(ToSwarm::GenerateEvent(Event::ReservationClosed {
+                        src_peer_id: peer_id,
+                    }));
             }
         }
 
