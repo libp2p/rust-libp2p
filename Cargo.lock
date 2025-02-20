@@ -3566,12 +3566,12 @@ dependencies = [
 name = "libp2p-yamux"
 version = "0.47.0"
 dependencies = [
- "async-std",
  "either",
  "futures",
  "libp2p-core",
  "libp2p-muxer-test-harness",
  "thiserror 2.0.9",
+ "tokio",
  "tracing",
  "yamux 0.12.1",
  "yamux 0.13.4",
