@@ -59,7 +59,6 @@ pub struct Config {
     /// If support for draft-29 is enabled servers support draft-29 and version 1 on all
     /// QUIC listening addresses.
     /// As client the version is chosen based on the remote's address.
-    #[expect(deprecated)]
     #[deprecated(note = "QUIC draft versions are no longer supported")]
     pub support_draft_29: bool,
 
@@ -74,6 +73,7 @@ pub struct Config {
     mtu_discovery_config: Option<MtuDiscoveryConfig>,
 }
 
+#[expect(deprecated)]
 impl Config {
     /// Creates a new configuration object with default values.
     pub fn new(keypair: &libp2p_identity::Keypair) -> Self {
@@ -87,7 +87,6 @@ impl Config {
         Self {
             client_tls_config,
             server_tls_config,
-            #[expect(deprecated)]
             support_draft_29: false,
             handshake_timeout: Duration::from_secs(5),
             max_idle_timeout: 10 * 1000,
@@ -125,6 +124,7 @@ pub(crate) struct QuinnConfig {
     pub(crate) endpoint_config: quinn::EndpointConfig,
 }
 
+#[expect(deprecated)]
 impl From<Config> for QuinnConfig {
     fn from(config: Config) -> QuinnConfig {
         let Config {
@@ -135,7 +135,6 @@ impl From<Config> for QuinnConfig {
             keep_alive_interval,
             max_connection_data,
             max_stream_data,
-            #[expect(deprecated)]
             support_draft_29,
             handshake_timeout: _,
             keypair,
@@ -173,7 +172,6 @@ impl From<Config> for QuinnConfig {
             })
             .unwrap_or_default();
 
-        #[expect(deprecated)]
         if !support_draft_29 {
             endpoint_config.supported_versions(vec![1]);
         }
