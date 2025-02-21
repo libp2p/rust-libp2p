@@ -2772,7 +2772,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-core"
-version = "0.43.0"
+version = "0.43.1"
 dependencies = [
  "either",
  "fnv",
@@ -2899,7 +2899,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-identify"
-version = "0.46.0"
+version = "0.47.0"
 dependencies = [
  "asynchronous-codec",
  "either",
