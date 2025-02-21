@@ -165,7 +165,7 @@ impl Config {
     /// Use [`new_with_signed_peer_record`](Config::new_with_signed_peer_record) for
     /// `signedPeerRecord` support.
     pub fn new(protocol_version: String, local_public_key: PublicKey) -> Self {
-        Self::new_with_key(protocol_version, local_public_key.into())
+        Self::new_with_key(protocol_version, local_public_key)
     }
 
     /// Creates a new configuration for the identify [`Behaviour`] that
@@ -173,14 +173,14 @@ impl Config {
     /// The private key will be used to sign [`PeerRecord`](libp2p_core::PeerRecord)
     /// for verifiable address advertisement.
     pub fn new_with_signed_peer_record(protocol_version: String, local_keypair: &Keypair) -> Self {
-        Self::new_with_key(protocol_version, local_keypair.into())
+        Self::new_with_key(protocol_version, local_keypair)
     }
 
-    fn new_with_key(protocol_version: String, key_type: KeyType) -> Self {
+    fn new_with_key(protocol_version: String, key: impl Into<KeyType>) -> Self {
         Self {
             protocol_version,
             agent_version: format!("rust-libp2p/{}", env!("CARGO_PKG_VERSION")),
-            local_key: Arc::new(key_type),
+            local_key: Arc::new(key.into()),
             interval: Duration::from_secs(5 * 60),
             push_listen_addr_updates: false,
             cache_size: 100,
