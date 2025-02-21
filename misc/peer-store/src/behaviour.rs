@@ -74,8 +74,8 @@ where
         &mut self.store
     }
 
-    fn handle_store_event(&mut self, event: super::store::Event<<S as Store>::FromStore>) {
-        use super::store::Event::*;
+    fn handle_store_event(&mut self, event: crate::store::Event<<S as Store>::FromStore>) {
+        use crate::store::Event::*;
         match event {
             RecordUpdated(peer) => self.pending_events.push_back(Event::RecordUpdated { peer }),
             Store(ev) => self.pending_events.push_back(Event::Store(ev)),

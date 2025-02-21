@@ -14,6 +14,7 @@
 use std::{
     collections::{HashMap, VecDeque},
     num::NonZeroUsize,
+    task::Waker,
 };
 
 #[cfg(feature = "serde")]
@@ -47,9 +48,12 @@ pub struct MemoryStore<T = ()> {
     records: HashMap<PeerId, PeerRecord<T>>,
     /// Events to emit to [`Behaviour`](crate::Behaviour) and [`Swarm`](libp2p_swarm::Swarm)
     #[cfg_attr(feature = "serde", serde(skip))]
-    pending_events: VecDeque<super::store::Event<Event>>,
+    pending_events: VecDeque<crate::store::Event<Event>>,
     /// Config of the store.
     config: Config,
+    /// Waker for store events.
+    #[cfg_attr(feature = "serde", serde(skip))]
+    waker: Option<Waker>,
 }
 
 impl<T> MemoryStore<T> {
@@ -59,6 +63,7 @@ impl<T> MemoryStore<T> {
             config,
             records: HashMap::new(),
             pending_events: VecDeque::default(),
+            waker: None,
         }
     }
 
@@ -69,6 +74,9 @@ impl<T> MemoryStore<T> {
         if is_updated {
             self.pending_events
                 .push_back(crate::store::Event::RecordUpdated(*peer));
+            if let Some(waker) = self.waker.take() {
+                waker.wake();
+            }
         }
         is_updated
     }
@@ -108,7 +116,10 @@ impl<T> MemoryStore<T> {
     pub fn insert_custom_data(&mut self, peer: &PeerId, custom_data: T) {
         self.insert_custom_data_silent(peer, custom_data);
         self.pending_events
-            .push_back(super::store::Event::Store(Event::CustomDataUpdated(*peer)));
+            .push_back(crate::store::Event::Store(Event::CustomDataUpdated(*peer)));
+        if let Some(waker) = self.waker.take() {
+            waker.wake();
+        }
     }
 
     /// Insert the data without notifying the swarm. Old data will be dropped if it exists.
@@ -126,7 +137,8 @@ impl<T> MemoryStore<T> {
         self.records.iter()
     }
 
-    /// Iterate over all internal records mutably.
+    /// Iterate over all internal records mutably.  
+    /// Will not wake up the task.
     pub fn record_iter_mut(&mut self) -> impl Iterator<Item = (&PeerId, &mut PeerRecord<T>)> {
         self.records.iter_mut()
     }
@@ -149,7 +161,10 @@ impl<T> Store for MemoryStore<T> {
                     self.update_address_silent(&info.peer_id, info.endpoint.get_remote_address());
                 if is_record_updated {
                     self.pending_events
-                        .push_back(super::store::Event::RecordUpdated(info.peer_id));
+                        .push_back(crate::store::Event::RecordUpdated(info.peer_id));
+                    if let Some(waker) = self.waker.take() {
+                        waker.wake(); // wake up because of update
+                    }
                 }
             }
             _ => {}
@@ -162,8 +177,11 @@ impl<T> Store for MemoryStore<T> {
 
     fn poll(
         &mut self,
-        _: &mut std::task::Context<'_>,
-    ) -> Option<super::store::Event<Self::FromStore>> {
+        cx: &mut std::task::Context<'_>,
+    ) -> Option<crate::store::Event<Self::FromStore>> {
+        if self.pending_events.is_empty() {
+            self.waker = Some(cx.waker().clone());
+        }
         self.pending_events.pop_front()
     }
 }
