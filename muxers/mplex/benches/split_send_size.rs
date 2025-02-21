@@ -184,7 +184,7 @@ fn run(
 }
 
 fn tcp_transport(split_send_size: usize) -> BenchTransport {
-    let mut mplex = mplex::MplexConfig::default();
+    let mut mplex = mplex::Config::default();
     mplex.set_split_send_size(split_send_size);
 
     libp2p_tcp::async_io::Transport::new(libp2p_tcp::Config::default().nodelay(true))
@@ -198,7 +198,7 @@ fn tcp_transport(split_send_size: usize) -> BenchTransport {
 }
 
 fn mem_transport(split_send_size: usize) -> BenchTransport {
-    let mut mplex = mplex::MplexConfig::default();
+    let mut mplex = mplex::Config::default();
     mplex.set_split_send_size(split_send_size);
 
     transport::MemoryTransport::default()
