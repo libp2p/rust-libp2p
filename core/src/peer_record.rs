@@ -4,8 +4,8 @@ use web_time::SystemTime;
 
 use crate::{proto, signed_envelope, signed_envelope::SignedEnvelope, DecodeError, Multiaddr};
 
-pub const PAYLOAD_TYPE: &str = "/libp2p/routing-state-record";
-pub const DOMAIN_SEP: &str = "libp2p-routing-state";
+const PAYLOAD_TYPE: &str = "/libp2p/routing-state-record";
+const DOMAIN_SEP: &str = "libp2p-routing-state";
 
 /// Represents a peer routing record.
 ///

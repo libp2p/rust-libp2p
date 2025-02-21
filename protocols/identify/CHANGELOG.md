@@ -1,4 +1,4 @@
-## 0.46.1 
+## 0.47.0
 
 - Implement optional `signedPeerRecord` support for identify messages.
   See [PR 5785](https://github.com/libp2p/rust-libp2p/pull/5785)

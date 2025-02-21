@@ -1,6 +1,6 @@
 ## 0.43.1
 
-- Add `libp2p::core::peer_record::PeerRecord::try_deserialize_signed_peer_record`
+- Add `libp2p_core::peer_record::PeerRecord::try_deserialize_signed_peer_record`
   utility method for deserializing `SignedEnvelope` without creating an instance of
   `PeerRecord`.
   See [PR 5785](https://github.com/libp2p/rust-libp2p/pull/5785)
