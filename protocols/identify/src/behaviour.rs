@@ -121,8 +121,8 @@ pub struct Config {
     /// e.g. `ipfs/1.0.0` or `polkadot/1.0.0`.
     protocol_version: String,
     /// The key of the local node. Only the public key will be report on the wire.  
-    /// The behaviour will not produce [`PeerRecord`](libp2p_core::PeerRecord) when
-    /// supplied with a public key.  
+    /// The behaviour will send signed [`PeerRecord`](libp2p_core::PeerRecord) in
+    /// its identify message only when supplied with a keypair.  
     local_key: Arc<KeyType>,
     /// Name and version of the local peer implementation, similar to the
     /// `User-Agent` header in the HTTP protocol.

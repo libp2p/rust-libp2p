@@ -19,7 +19,10 @@
 // DEALINGS IN THE SOFTWARE.
 
 use std::{
-    collections::HashSet, sync::Arc, task::{Context, Poll}, time::Duration
+    collections::HashSet,
+    sync::Arc,
+    task::{Context, Poll},
+    time::Duration,
 };
 
 use either::Either;
