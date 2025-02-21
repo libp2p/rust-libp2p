@@ -59,7 +59,6 @@ pub struct Config {
     /// If support for draft-29 is enabled servers support draft-29 and version 1 on all
     /// QUIC listening addresses.
     /// As client the version is chosen based on the remote's address.
-    #[allow(deprecated)]
     #[deprecated(note = "QUIC draft versions are no longer supported")]
     pub support_draft_29: bool,
 
