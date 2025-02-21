@@ -3,7 +3,7 @@
 Below is a high level roadmap for the rust-libp2p project.
 Items are ordered by priority (high to low).
 
-This is a living document.
+This is a living document. We believe new feature growth should be driven by our user community. Many of the items below are contributions made by downstream users.
 Input is always welcome e.g. via GitHub issues or pull requests.
 
 This is the roadmap of the Rust implementation of libp2p.
