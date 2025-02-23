@@ -684,19 +684,18 @@ fn test_join() {
 fn test_publish_without_flood_publishing() {
     let publish_topic = String::from("test_publish");
     let topic_hash = TopicHash::from_raw(publish_topic.clone());
+    let topic_config = TopicMeshConfig::default();
 
     // node should:
     // - Send publish message to all peers
     // - Insert message into gs.mcache and gs.received
 
     // turn off flood publish to test old behaviour
-    let mut config = ConfigBuilder::default()
+    let config = ConfigBuilder::default()
         .flood_publish(false)
+        .set_topic_config(topic_hash.clone(), topic_config)
         .build()
         .unwrap();
-    let topic_config = TopicMeshConfig::default();
-
-    config.set_topic_config(topic_hash.clone(), topic_config);
 
     let (mut gs, _, receivers, topic_hashes) = inject_nodes1()
         .peer_no(20)
@@ -753,7 +752,7 @@ fn test_publish_without_flood_publishing() {
     let config: Config = Config::default();
     assert_eq!(
         publishes.len(),
-        config.topic_configuration().mesh_n(&topic_hash),
+        config.mesh_n_for_topic(&topic_hash),
         "Should send a publish message to at least mesh_n peers"
     );
 
@@ -772,15 +771,14 @@ fn test_fanout() {
     // - Insert message into gs.mcache and gs.received
     let fanout_topic = String::from("test_fanout");
     let topic_hash = TopicHash::from_raw(fanout_topic.clone());
-
-    // turn off flood publish to test fanout behaviour
-    let mut config = ConfigBuilder::default()
-        .flood_publish(false)
-        .build()
-        .unwrap();
     let topic_config = TopicMeshConfig::default();
 
-    config.set_topic_config(topic_hash.clone(), topic_config);
+    // turn off flood publish to test fanout behaviour
+    let config = ConfigBuilder::default()
+        .flood_publish(false)
+        .set_topic_config(topic_hash.clone(), topic_config)
+        .build()
+        .unwrap();
 
     let (mut gs, _, receivers, topic_hashes) = inject_nodes1()
         .peer_no(20)
@@ -809,7 +807,7 @@ fn test_fanout() {
             .get(&TopicHash::from_raw(fanout_topic))
             .unwrap()
             .len(),
-        gs.config.topic_configuration().mesh_n(&topic_hash),
+        gs.config.mesh_n_for_topic(&topic_hash),
         "Fanout should contain `mesh_n` peers for fanout topic"
     );
 
@@ -841,7 +839,7 @@ fn test_fanout() {
 
     assert_eq!(
         publishes.len(),
-        gs.config.topic_configuration().mesh_n(&topic_hash),
+        gs.config.mesh_n_for_topic(&topic_hash),
         "Should send a publish message to `mesh_n` fanout peers"
     );
 
@@ -1816,15 +1814,17 @@ fn no_gossip_gets_sent_to_explicit_peers() {
 /// Tests the mesh maintenance addition
 #[test]
 fn test_mesh_addition() {
-    let mut config: Config = Config::default();
     let topic = String::from("test");
     let topic_hash = TopicHash::from_raw(topic.clone());
     let topic_config = TopicMeshConfig::default();
 
-    config.set_topic_config(topic_hash.clone(), topic_config);
+    let config: Config = ConfigBuilder::default()
+        .set_topic_config(topic_hash.clone(), topic_config)
+        .build()
+        .unwrap();
 
-    let mesh_n = config.topic_configuration().mesh_n(&topic_hash);
-    let mesh_n_low = config.topic_configuration().mesh_n_low(&topic_hash);
+    let mesh_n = config.mesh_n_for_topic(&topic_hash);
+    let mesh_n_low = config.mesh_n_low_for_topic(&topic_hash);
 
     // Adds mesh_low peers and PRUNE 2 giving us a deficit.
     let (mut gs, peers, _receivers, topics) = inject_nodes1()
@@ -1855,15 +1855,17 @@ fn test_mesh_addition() {
 /// Tests the mesh maintenance subtraction
 #[test]
 fn test_mesh_subtraction() {
-    let mut config = Config::default();
     let topic = String::from("test");
     let topic_hash = TopicHash::from_raw(topic.clone());
     let topic_config = TopicMeshConfig::default();
 
-    config.set_topic_config(topic_hash.clone(), topic_config);
+    let config = ConfigBuilder::default()
+        .set_topic_config(topic_hash.clone(), topic_config)
+        .build()
+        .unwrap();
 
-    let mesh_n_high = config.topic_configuration().mesh_n_high(&topic_hash);
-    let mesh_n = config.topic_configuration().mesh_n(&topic_hash);
+    let mesh_n_high = config.mesh_n_high_for_topic(&topic_hash);
+    let mesh_n = config.mesh_n_for_topic(&topic_hash);
 
     // Adds mesh_low peers and PRUNE 2 giving us a deficit.
     let n = mesh_n_high + 10;
@@ -2203,14 +2205,16 @@ fn test_unsubscribe_backoff() {
 
 #[test]
 fn test_flood_publish() {
-    let mut config: Config = Config::default();
-
     let topic = "test";
     let topic_hash = TopicHash::from_raw(topic);
     let topic_config = TopicMeshConfig::default();
-    config.set_topic_config(topic_hash.clone(), topic_config);
 
-    let mesh_n_high = config.topic_configuration().mesh_n_high(&topic_hash);
+    let config: Config = ConfigBuilder::default()
+        .set_topic_config(topic_hash.clone(), topic_config)
+        .build()
+        .unwrap();
+
+    let mesh_n_high = config.mesh_n_high_for_topic(&topic_hash);
 
     // Adds more peers than mesh can hold to test flood publishing
     let (mut gs, _, receivers, _) = inject_nodes1()
@@ -2263,21 +2267,22 @@ fn test_flood_publish() {
 
 #[test]
 fn test_gossip_to_at_least_gossip_lazy_peers() {
-    let mut config: Config = Config::default();
-
     let topic_str = "topic";
     let topic_hash = TopicHash::from_raw(topic_str);
     let topic_config = TopicMeshConfig::default();
 
-    config.set_topic_config(topic_hash.clone(), topic_config);
+    let config: Config = ConfigBuilder::default()
+        .set_topic_config(topic_hash.clone(), topic_config)
+        .build()
+        .unwrap();
 
-    let mesh_n_low = config.topic_configuration().mesh_n_low(&topic_hash);
+    let mesh_n_low = config.mesh_n_low_for_topic(&topic_hash);
 
     // add more peers than in mesh to test gossipping
     // by default only mesh_n_low peers will get added to mesh
     let (mut gs, _, receivers, topic_hashes) = inject_nodes1()
         .peer_no(mesh_n_low + config.gossip_lazy() + 1)
-        .topics(vec!["topic".into()])
+        .topics(vec![topic_str.into()])
         .to_subscribe(true)
         .create_network();
 
@@ -2314,15 +2319,16 @@ fn test_gossip_to_at_least_gossip_lazy_peers() {
 
 #[test]
 fn test_gossip_to_at_most_gossip_factor_peers() {
-    let mut config: Config = Config::default();
-
     let topic = String::from("topic");
     let topic_hash = TopicHash::from_raw(topic.clone());
     let topic_config = TopicMeshConfig::default();
 
-    config.set_topic_config(topic_hash.clone(), topic_config);
+    let config: Config = ConfigBuilder::default()
+        .set_topic_config(topic_hash.clone(), topic_config)
+        .build()
+        .unwrap();
 
-    let mesh_n_low = config.topic_configuration().mesh_n_low(&topic_hash);
+    let mesh_n_low = config.mesh_n_low_for_topic(&topic_hash);
 
     // add a lot of peers
     let m = mesh_n_low + config.gossip_lazy() * (2.0 / config.gossip_factor()) as usize;
@@ -2367,15 +2373,16 @@ fn test_gossip_to_at_most_gossip_factor_peers() {
 
 #[test]
 fn test_accept_only_outbound_peer_grafts_when_mesh_full() {
-    let mut config: Config = Config::default();
-
     let topic_str = "topic";
     let topic_hash = TopicHash::from_raw(topic_str);
     let topic_config = TopicMeshConfig::default();
 
-    config.set_topic_config(topic_hash.clone(), topic_config);
+    let config: Config = ConfigBuilder::default()
+        .set_topic_config(topic_hash.clone(), topic_config)
+        .build()
+        .unwrap();
 
-    let mesh_n_high = config.topic_configuration().mesh_n_high(&topic_hash);
+    let mesh_n_high = config.mesh_n_high_for_topic(&topic_hash);
 
     // enough peers to fill the mesh
     let (mut gs, peers, _, topics) = inject_nodes1()
@@ -2417,20 +2424,22 @@ fn test_do_not_remove_too_many_outbound_peers() {
     let n = 2 * m;
     let topic_str = "test";
     let topic_hash = TopicHash::from_raw(topic_str);
-
-    let mut config = ConfigBuilder::default().build().unwrap();
     let topic_config = TopicMeshConfig {
         mesh_n: n,
         mesh_n_high: n,
         mesh_n_low: n,
         mesh_outbound_min: m,
     };
-    config.set_topic_config(topic_hash.clone(), topic_config);
+
+    let config = ConfigBuilder::default()
+        .set_topic_config(topic_hash.clone(), topic_config)
+        .build()
+        .unwrap();
 
     // fill the mesh with inbound connections
     let (mut gs, peers, _receivers, topics) = inject_nodes1()
         .peer_no(n)
-        .topics(vec!["test".into()])
+        .topics(vec![topic_str.into()])
         .to_subscribe(true)
         .gs_config(config)
         .create_network();
@@ -2463,16 +2472,17 @@ fn test_do_not_remove_too_many_outbound_peers() {
 
 #[test]
 fn test_add_outbound_peers_if_min_is_not_satisfied() {
-    let mut config: Config = Config::default();
-
     let topic = String::from("test");
     let topic_hash = TopicHash::from_raw(topic.clone());
-
     let topic_config = TopicMeshConfig::default();
-    config.set_topic_config(topic_hash.clone(), topic_config);
 
-    let mesh_n_high = config.topic_configuration().mesh_n_high(&topic_hash);
-    let mesh_outbound_min = config.topic_configuration().mesh_outbound_min(&topic_hash);
+    let config: Config = ConfigBuilder::default()
+        .set_topic_config(topic_hash.clone(), topic_config)
+        .build()
+        .unwrap();
+
+    let mesh_n_high = config.mesh_n_high_for_topic(&topic_hash);
+    let mesh_outbound_min = config.mesh_outbound_min_for_topic(&topic_hash);
 
     // Fill full mesh with inbound peers
     let (mut gs, peers, _, topics) = inject_nodes1()
@@ -2551,19 +2561,21 @@ fn test_prune_negative_scored_peers() {
 
 #[test]
 fn test_dont_graft_to_negative_scored_peers() {
-    let mut config = Config::default();
     let topic = String::from("test");
     let topic_hash = TopicHash::from_raw(topic.clone());
     let topic_config = TopicMeshConfig::default();
 
-    config.set_topic_config(topic_hash.clone(), topic_config);
+    let config = ConfigBuilder::default()
+        .set_topic_config(topic_hash.clone(), topic_config)
+        .build()
+        .unwrap();
 
-    let mesh_n_high = config.topic_configuration().mesh_n_high(&topic_hash);
+    let mesh_n_high = config.mesh_n_high_for_topic(&topic_hash);
 
     // init full mesh
     let (mut gs, peers, _, topics) = inject_nodes1()
         .peer_no(mesh_n_high)
-        .topics(vec!["test".into()])
+        .topics(vec![topic])
         .to_subscribe(true)
         .gs_config(config)
         .scoring(Some((
@@ -2693,12 +2705,15 @@ fn test_only_send_nonnegative_scoring_peers_in_px() {
 
 #[test]
 fn test_do_not_gossip_to_peers_below_gossip_threshold() {
-    let mut config = Config::default();
     let topic_str = "test";
     let topic_hash = TopicHash::from_raw(topic_str);
     let topic_config = TopicMeshConfig::default();
 
-    config.set_topic_config(topic_hash.clone(), topic_config);
+    let config = ConfigBuilder::default()
+        .set_topic_config(topic_hash.clone(), topic_config)
+        .build()
+        .unwrap();
+
     let peer_score_params = PeerScoreParams::default();
     let peer_score_thresholds = PeerScoreThresholds {
         gossip_threshold: 3.0 * peer_score_params.behaviour_penalty_weight,
@@ -2707,8 +2722,8 @@ fn test_do_not_gossip_to_peers_below_gossip_threshold() {
 
     // Build full mesh
     let (mut gs, peers, mut receivers, topics) = inject_nodes1()
-        .peer_no(config.topic_configuration().mesh_n(&topic_hash))
-        .topics(vec!["test".into()])
+        .peer_no(config.mesh_n_for_topic(&topic_hash))
+        .topics(vec![topic_str.into()])
         .to_subscribe(true)
         .gs_config(config)
         .scoring(Some((peer_score_params, peer_score_thresholds)))
@@ -2773,12 +2788,15 @@ fn test_do_not_gossip_to_peers_below_gossip_threshold() {
 
 #[test]
 fn test_iwant_msg_from_peer_below_gossip_threshold_gets_ignored() {
-    let mut config = Config::default();
     let topic_str = "test";
     let topic_hash = TopicHash::from_raw(topic_str);
     let topic_config = TopicMeshConfig::default();
 
-    config.set_topic_config(topic_hash.clone(), topic_config);
+    let config = ConfigBuilder::default()
+        .set_topic_config(topic_hash.clone(), topic_config)
+        .build()
+        .unwrap();
+
     let peer_score_params = PeerScoreParams::default();
     let peer_score_thresholds = PeerScoreThresholds {
         gossip_threshold: 3.0 * peer_score_params.behaviour_penalty_weight,
@@ -2787,7 +2805,7 @@ fn test_iwant_msg_from_peer_below_gossip_threshold_gets_ignored() {
 
     // Build full mesh
     let (mut gs, peers, mut receivers, topics) = inject_nodes1()
-        .peer_no(config.topic_configuration().mesh_n(&topic_hash))
+        .peer_no(config.mesh_n_for_topic(&topic_hash))
         .topics(vec!["test".into()])
         .to_subscribe(true)
         .gs_config(config)
@@ -2869,12 +2887,14 @@ fn test_iwant_msg_from_peer_below_gossip_threshold_gets_ignored() {
 
 #[test]
 fn test_ihave_msg_from_peer_below_gossip_threshold_gets_ignored() {
-    let mut config = Config::default();
     let topic_str = "test";
     let topic_hash = TopicHash::from_raw(topic_str);
     let topic_config = TopicMeshConfig::default();
 
-    config.set_topic_config(topic_hash.clone(), topic_config);
+    let config = ConfigBuilder::default()
+        .set_topic_config(topic_hash.clone(), topic_config)
+        .build()
+        .unwrap();
 
     let peer_score_params = PeerScoreParams::default();
     let peer_score_thresholds = PeerScoreThresholds {
@@ -2883,7 +2903,7 @@ fn test_ihave_msg_from_peer_below_gossip_threshold_gets_ignored() {
     };
     // build full mesh
     let (mut gs, peers, mut receivers, topics) = inject_nodes1()
-        .peer_no(config.topic_configuration().mesh_n(&topic_hash))
+        .peer_no(config.mesh_n_for_topic(&topic_hash))
         .topics(vec!["test".into()])
         .to_subscribe(true)
         .gs_config(config)
@@ -3280,8 +3300,8 @@ fn test_keep_best_scoring_peers_on_oversubscription() {
         .build()
         .unwrap();
 
-    let mesh_n_high = config.topic_configuration().mesh_n_high(&topic_hash);
-    let mesh_n = config.topic_configuration().mesh_n(&topic_hash);
+    let mesh_n_high = config.mesh_n_high_for_topic(&topic_hash);
+    let mesh_n = config.mesh_n_for_topic(&topic_hash);
 
     // build mesh with more peers than mesh can hold
     let n = mesh_n_high + 1;
@@ -4581,19 +4601,21 @@ fn test_ignore_graft_from_unknown_topic() {
 
 #[test]
 fn test_ignore_too_many_iwants_from_same_peer_for_same_message() {
-    let mut config = Config::default();
     let topic = String::from("test");
     let topic_hash = TopicHash::from_raw(topic.clone());
     let topic_config = TopicMeshConfig::default();
 
-    config.set_topic_config(topic_hash.clone(), topic_config);
+    let config = ConfigBuilder::default()
+        .set_topic_config(topic_hash.clone(), topic_config)
+        .build()
+        .unwrap();
 
-    let mesh_n_high = config.topic_configuration().mesh_n_high(&topic_hash);
+    let mesh_n_high = config.mesh_n_high_for_topic(&topic_hash);
 
     // build gossipsub with full mesh
     let (mut gs, _, mut receivers, topics) = inject_nodes1()
         .peer_no(mesh_n_high)
-        .topics(vec!["test".into()])
+        .topics(vec![topic])
         .to_subscribe(false)
         .create_network();
 
@@ -4638,22 +4660,22 @@ fn test_ignore_too_many_iwants_from_same_peer_for_same_message() {
 
 #[test]
 fn test_ignore_too_many_ihaves() {
-    let mut config = ConfigBuilder::default()
-        .max_ihave_messages(10)
-        .build()
-        .unwrap();
     let topic = String::from("test");
     let topic_hash = TopicHash::from_raw(topic.clone());
     let topic_config = TopicMeshConfig::default();
 
-    config.set_topic_config(topic_hash.clone(), topic_config);
+    let config = ConfigBuilder::default()
+        .max_ihave_messages(10)
+        .set_topic_config(topic_hash.clone(), topic_config)
+        .build()
+        .unwrap();
 
-    let mesh_n_high = config.topic_configuration().mesh_n_high(&topic_hash);
+    let mesh_n_high = config.mesh_n_high_for_topic(&topic_hash);
 
     // build gossipsub with full mesh
     let (mut gs, _, mut receivers, topics) = inject_nodes1()
         .peer_no(mesh_n_high)
-        .topics(vec!["test".into()])
+        .topics(vec![topic])
         .to_subscribe(false)
         .gs_config(config.clone())
         .create_network();
@@ -4723,23 +4745,23 @@ fn test_ignore_too_many_ihaves() {
 
 #[test]
 fn test_ignore_too_many_messages_in_ihave() {
-    let mut config = ConfigBuilder::default()
-        .max_ihave_messages(10)
-        .max_ihave_length(10)
-        .build()
-        .unwrap();
     let topic = String::from("test");
     let topic_hash = TopicHash::from_raw(topic.clone());
     let topic_config = TopicMeshConfig::default();
 
-    config.set_topic_config(topic_hash.clone(), topic_config);
+    let config = ConfigBuilder::default()
+        .max_ihave_messages(10)
+        .max_ihave_length(10)
+        .set_topic_config(topic_hash.clone(), topic_config)
+        .build()
+        .unwrap();
 
-    let mesh_n_high = config.topic_configuration().mesh_n_high(&topic_hash);
+    let mesh_n_high = config.mesh_n_high_for_topic(&topic_hash);
 
     // build gossipsub with full mesh
     let (mut gs, _, mut receivers, topics) = inject_nodes1()
         .peer_no(mesh_n_high)
-        .topics(vec!["test".into()])
+        .topics(vec![topic])
         .to_subscribe(false)
         .gs_config(config.clone())
         .create_network();
@@ -4812,18 +4834,18 @@ fn test_ignore_too_many_messages_in_ihave() {
 
 #[test]
 fn test_limit_number_of_message_ids_inside_ihave() {
-    let mut config = ConfigBuilder::default()
-        .max_ihave_messages(10)
-        .max_ihave_length(100)
-        .build()
-        .unwrap();
     let topic = String::from("test");
     let topic_hash = TopicHash::from_raw(topic.clone());
     let topic_config = TopicMeshConfig::default();
 
-    config.set_topic_config(topic_hash.clone(), topic_config);
+    let config = ConfigBuilder::default()
+        .max_ihave_messages(10)
+        .max_ihave_length(100)
+        .set_topic_config(topic_hash.clone(), topic_config)
+        .build()
+        .unwrap();
 
-    let mesh_n_high = config.topic_configuration().mesh_n_high(&topic_hash);
+    let mesh_n_high = config.mesh_n_high_for_topic(&topic_hash);
 
     // build gossipsub with full mesh
     let (mut gs, peers, mut receivers, topics) = inject_nodes1()
@@ -5025,17 +5047,17 @@ fn test_iwant_penalties() {
 
 #[test]
 fn test_publish_to_floodsub_peers_without_flood_publish() {
-    let mut config = ConfigBuilder::default()
-        .flood_publish(false)
-        .build()
-        .unwrap();
     let topic = String::from("test");
     let topic_hash = TopicHash::from_raw(topic.clone());
     let topic_config = TopicMeshConfig::default();
 
-    config.set_topic_config(topic_hash.clone(), topic_config);
+    let config = ConfigBuilder::default()
+        .flood_publish(false)
+        .set_topic_config(topic_hash.clone(), topic_config)
+        .build()
+        .unwrap();
 
-    let mesh_n_low = config.topic_configuration().mesh_n_low(&topic_hash);
+    let mesh_n_low = config.mesh_n_low_for_topic(&topic_hash);
 
     let (mut gs, _, mut receivers, topics) = inject_nodes1()
         .peer_no(mesh_n_low - 1)
@@ -5089,16 +5111,17 @@ fn test_publish_to_floodsub_peers_without_flood_publish() {
 
 #[test]
 fn test_do_not_use_floodsub_in_fanout() {
-    let mut config = ConfigBuilder::default()
-        .flood_publish(false)
-        .build()
-        .unwrap();
     let topic = String::from("test");
     let topic_hash = TopicHash::from_raw(topic.clone());
     let topic_config = TopicMeshConfig::default();
 
-    config.set_topic_config(topic_hash.clone(), topic_config);
-    let mesh_n_low = config.topic_configuration().mesh_n_low(&topic_hash);
+    let config = ConfigBuilder::default()
+        .flood_publish(false)
+        .set_topic_config(topic_hash.clone(), topic_config)
+        .build()
+        .unwrap();
+
+    let mesh_n_low = config.mesh_n_low_for_topic(&topic_hash);
 
     let (mut gs, _, mut receivers, _) = inject_nodes1()
         .peer_no(mesh_n_low - 1)
