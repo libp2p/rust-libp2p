@@ -82,11 +82,7 @@ pub(crate) enum PendingOutboundConnectionError {
 pub(crate) enum PendingInboundConnectionError {
     Transport(TransportError<io::Error>),
     Aborted,
-    WrongPeerId {
-        obtained: PeerId,
-        endpoint: ConnectedPoint,
-    },
     LocalPeerId {
         endpoint: ConnectedPoint,
-    },
+    }
 }

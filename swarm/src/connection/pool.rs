@@ -699,21 +699,10 @@ where
                                                 obtained: obtained_peer_id,
                                                 address: address.clone(),
                                             },
-                                            peer: None,
+                                            peer: expected_peer_id.or(Some(obtained_peer_id)),
                                         })
                                     }
-                                    ConnectedPoint::Listener {
-                                        send_back_addr,
-                                        local_addr,
-                                    } => Err(PoolEvent::PendingInboundConnectionError {
-                                        id,
-                                        send_back_addr: send_back_addr.clone(),
-                                        local_addr: local_addr.clone(),
-                                        error: PendingInboundConnectionError::WrongPeerId {
-                                            obtained: obtained_peer_id,
-                                            endpoint: endpoint.clone(),
-                                        },
-                                    }),
+                                    ConnectedPoint::Listener {.. } => unreachable!("There shouldn't be an expected PeerId on inbound connections."),
                                 };
                             }
                         }
@@ -726,7 +715,7 @@ where
                                         error: PendingOutboundConnectionError::LocalPeerId {
                                             address: address.clone(),
                                         },
-                                        peer: Option::from(obtained_peer_id),
+                                        peer: expected_peer_id.or(Some(obtained_peer_id)),
                                     })
                                 }
                                 ConnectedPoint::Listener {

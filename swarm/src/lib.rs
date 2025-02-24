@@ -1645,9 +1645,6 @@ impl From<PendingInboundConnectionError> for ListenError {
         match error {
             PendingInboundConnectionError::Transport(inner) => ListenError::Transport(inner),
             PendingInboundConnectionError::Aborted => ListenError::Aborted,
-            PendingInboundConnectionError::WrongPeerId { obtained, endpoint } => {
-                ListenError::WrongPeerId { obtained, endpoint }
-            }
             PendingInboundConnectionError::LocalPeerId { endpoint } => {
                 ListenError::LocalPeerId { endpoint }
             }
