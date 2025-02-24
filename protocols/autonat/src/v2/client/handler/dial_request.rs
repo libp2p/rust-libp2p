@@ -2,7 +2,7 @@ use std::{
     collections::VecDeque,
     convert::Infallible,
     io,
-    iter::{once, repeat},
+    iter::{once, repeat_n},
     task::{Context, Poll},
     time::Duration,
 };
@@ -326,8 +326,7 @@ where
 {
     let count_full = num_bytes / DATA_FIELD_LEN_UPPER_BOUND;
     let partial_len = num_bytes % DATA_FIELD_LEN_UPPER_BOUND;
-    for req in repeat(DATA_FIELD_LEN_UPPER_BOUND)
-        .take(count_full)
+    for req in repeat_n(DATA_FIELD_LEN_UPPER_BOUND, count_full)
         .chain(once(partial_len))
         .filter(|e| *e > 0)
         .map(|data_count| {
