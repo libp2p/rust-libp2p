@@ -5,8 +5,8 @@ edition = "2021"
 rust-version.workspace = true
 
 [dependencies]
-libp2p = { workspace = true, features = ["identify", "ping", "mdns", "tokio"]}
-derive_more = {version = "2", features = ["from"]}
+libp2p = { workspace = true, features = ["identify", "ping", "mdns", "tokio"] }
+futures = { workspace = true }
 
 [lints]
 workspace = true

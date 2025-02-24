@@ -1,3 +1,4 @@
+#![no_main]
 //! # Manually composing `NetworkBehaviour`s
 //!
 //! In most cases, `NetworkBehaviour` derive macro should be able to
@@ -13,17 +14,13 @@
 //! - [`NetworkBehaviour`] only requires **one `ConnectionHandler` type**
 //! and only assign one instance of it per connection: All `ConnectionHandler`s should also reside
 //! in the same instance, also a struct.
-//! The "illusion" of multiple behaviour acting together comes from properly delegating calls
-//! and composing events.  
+//! The "illusion" of multiple behaviour acting together comes from properly **delegating** calls
+//! and **aggregating** events.  
 //! This tutorial is broken down into two parts: composing `NetworkBehaviour` and composing
 //! `ConnectionHandler`. The former is easier to understand and implement, while the latter is more
-//! complex because it involves how peers negotiate protocols.
+//! complex because it involves how peers negotiate protocols. But they need to work together.
 //!
 //! Proceeding to their dedicated modules for more information.
 
-mod behaviour;
-mod connection_handler;
-
-fn main() {
-    println!("Hello, world!");
-}
+pub mod behaviour;
+pub mod connection_handler;
