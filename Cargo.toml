@@ -88,7 +88,7 @@ libp2p-kad = { version = "0.47.0", path = "protocols/kad" }
 libp2p-mdns = { version = "0.47.0", path = "protocols/mdns" }
 libp2p-memory-connection-limits = { version = "0.4.0", path = "misc/memory-connection-limits" }
 libp2p-metrics = { version = "0.16.0", path = "misc/metrics" }
-libp2p-mplex = { version = "0.43.0", path = "muxers/mplex" }
+libp2p-mplex = { version = "0.43.1", path = "muxers/mplex" }
 libp2p-noise = { version = "0.46.0", path = "transports/noise" }
 libp2p-perf = { version = "0.4.0", path = "protocols/perf" }
 libp2p-ping = { version = "0.46.0", path = "protocols/ping" }
@@ -110,7 +110,7 @@ libp2p-upnp = { version = "0.4.0", path = "protocols/upnp" }
 libp2p-webrtc = { version = "0.9.0-alpha", path = "transports/webrtc" }
 libp2p-webrtc-utils = { version = "0.4.0", path = "misc/webrtc-utils" }
 libp2p-webrtc-websys = { version = "0.4.0", path = "transports/webrtc-websys" }
-libp2p-websocket = { version = "0.45.0", path = "transports/websocket" }
+libp2p-websocket = { version = "0.45.1", path = "transports/websocket" }
 libp2p-websocket-websys = { version = "0.5.0", path = "transports/websocket-websys" }
 libp2p-webtransport = { version = "0.1.0", path = "transports/webtransport" }
 libp2p-webtransport-websys = { version = "0.5.0", path = "transports/webtransport-websys" }
