@@ -2,8 +2,8 @@
 //!
 //! ## Usage
 //! ```
-//! use libp2p_peer_store::{Behaviour, memory_store::MemoryStore};
-//! 
+//! use libp2p_peer_store::{memory_store::MemoryStore, Behaviour};
+//!
 //! let store: MemoryStore<()> = MemoryStore::new(Default::default());
 //! let behaviour = Behaviour::new(store);
 //! ```
