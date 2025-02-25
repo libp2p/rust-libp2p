@@ -44,6 +44,7 @@ full = [
     "tokio",
     "uds",
     "wasm-bindgen",
+    "webrtc",
     "webrtc-websys",
     "websocket-websys",
     "websocket",
@@ -84,6 +85,7 @@ tls = ["dep:libp2p-tls"]
 tokio = [ "libp2p-swarm/tokio", "libp2p-mdns?/tokio", "libp2p-tcp?/tokio", "libp2p-dns?/tokio", "libp2p-quic?/tokio", "libp2p-upnp?/tokio"]
 uds = ["dep:libp2p-uds"]
 wasm-bindgen = [ "futures-timer/wasm-bindgen", "getrandom/js", "libp2p-swarm/wasm-bindgen", "libp2p-gossipsub?/wasm-bindgen"]
+webrtc = ['dep:libp2p-webrtc']
 webrtc-websys = ['dep:libp2p-webrtc-websys']
 websocket-websys = ["dep:libp2p-websocket-websys"]
 websocket = ["dep:libp2p-websocket"]
@@ -136,6 +138,7 @@ libp2p-tcp = { workspace = true, optional = true }
 libp2p-tls = { workspace = true, optional = true }
 libp2p-uds = { workspace = true, optional = true }
 libp2p-upnp = { workspace = true, optional = true }
+libp2p-webrtc = { workspace = true, optional = true }
 libp2p-websocket = { workspace = true, optional = true }
 
 [dev-dependencies]

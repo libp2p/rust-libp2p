@@ -2702,6 +2702,7 @@ dependencies = [
  "libp2p-tls",
  "libp2p-uds",
  "libp2p-upnp",
+ "libp2p-webrtc",
  "libp2p-webrtc-websys",
  "libp2p-websocket",
  "libp2p-websocket-websys",
@@ -3434,7 +3435,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-webrtc"
-version = "0.9.0-alpha"
+version = "0.9.0"
 dependencies = [
  "async-trait",
  "futures",
