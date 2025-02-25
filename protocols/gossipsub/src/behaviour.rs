@@ -2090,7 +2090,8 @@ where
             let broken_promises = self.gossip_promises.get_broken_promises();
             #[cfg(feature = "metrics")]
             if let Some(metrics) = self.metrics.as_mut() {
-                metrics.register_score_penalty(Penalty::BrokenPromise, broken_promises.len() as u64);
+                metrics
+                    .register_score_penalty(Penalty::BrokenPromise, broken_promises.len() as u64);
             }
             for (peer, count) in broken_promises {
                 peer_score.add_penalty(&peer, count);
