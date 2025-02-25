@@ -2,8 +2,10 @@
 //!
 //! ## Usage
 //! ```
+//! use libp2p_peer_store::{Behaviour, memory_store::MemoryStore};
+//! 
 //! let store: MemoryStore<()> = MemoryStore::new(Default::default());
-//! let behaviour = crate::Behaviour::new(store);
+//! let behaviour = Behaviour::new(store);
 //! ```
 //!
 //! ## Persistent storage
