@@ -18,6 +18,14 @@
 // LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
+use std::{
+    collections::HashMap,
+    convert::Infallible,
+    fmt,
+    num::{NonZeroU8, NonZeroUsize},
+    pin::Pin,
+    task::{Context, Poll, Waker},
+};
 use concurrent_dial::ConcurrentDial;
 use fnv::FnvHashMap;
 use futures::{
@@ -31,14 +39,6 @@ use libp2p_core::{
     connection::Endpoint,
     muxing::{StreamMuxerBox, StreamMuxerExt},
     transport::PortUse,
-};
-use std::{
-    collections::HashMap,
-    convert::Infallible,
-    fmt,
-    num::{NonZeroU8, NonZeroUsize},
-    pin::Pin,
-    task::{Context, Poll, Waker},
 };
 use tracing::Instrument;
 use web_time::{Duration, Instant};
@@ -715,7 +715,7 @@ where
                                         error: PendingOutboundConnectionError::LocalPeerId {
                                             address: address.clone(),
                                         },
-                                        peer: expected_peer_id.or(Some(obtained_peer_id)),
+                                        peer: Some(obtained_peer_id),
                                     })
                                 }
                                 ConnectedPoint::Listener {
@@ -726,7 +726,7 @@ where
                                     send_back_addr: send_back_addr.clone(),
                                     local_addr: local_addr.clone(),
                                     error: PendingInboundConnectionError::LocalPeerId {
-                                        endpoint: endpoint.clone(),
+                                        address: send_back_addr.clone(),
                                     },
                                 }),
                             };

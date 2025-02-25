@@ -1631,7 +1631,7 @@ pub enum ListenError {
     },
     /// The connection was dropped because it resolved to our own [`PeerId`].
     LocalPeerId {
-        endpoint: ConnectedPoint,
+        address: Multiaddr,
     },
     Denied {
         cause: ConnectionDenied,
@@ -1645,8 +1645,8 @@ impl From<PendingInboundConnectionError> for ListenError {
         match error {
             PendingInboundConnectionError::Transport(inner) => ListenError::Transport(inner),
             PendingInboundConnectionError::Aborted => ListenError::Aborted,
-            PendingInboundConnectionError::LocalPeerId { endpoint } => {
-                ListenError::LocalPeerId { endpoint }
+            PendingInboundConnectionError::LocalPeerId { address } => {
+                ListenError::LocalPeerId { address }
             }
         }
     }
@@ -1669,8 +1669,8 @@ impl fmt::Display for ListenError {
             ListenError::Denied { cause } => {
                 write!(f, "Listen error: Denied: {cause}")
             }
-            ListenError::LocalPeerId { endpoint } => {
-                write!(f, "Listen error: Local peer ID at {endpoint:?}.")
+            ListenError::LocalPeerId { address } => {
+                write!(f, "Listen error: Local peer ID at {address:?}.")
             }
         }
     }

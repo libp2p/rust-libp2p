@@ -20,7 +20,7 @@
 
 use std::{fmt, io};
 
-use crate::{transport::TransportError, ConnectedPoint, Multiaddr, PeerId};
+use crate::{transport::TransportError, Multiaddr, PeerId};
 
 /// Errors that can occur in the context of an established `Connection`.
 #[derive(Debug)]
@@ -82,7 +82,5 @@ pub(crate) enum PendingOutboundConnectionError {
 pub(crate) enum PendingInboundConnectionError {
     Transport(TransportError<io::Error>),
     Aborted,
-    LocalPeerId {
-        endpoint: ConnectedPoint,
-    }
+    LocalPeerId { address: Multiaddr}
 }
