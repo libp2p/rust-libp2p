@@ -10,8 +10,6 @@ use libp2p_core::{Negotiated, UpgradeInfo};
 use libp2p_identity::PeerId;
 
 use super::*;
-#[allow(deprecated)]
-use crate::bandwidth::BandwidthSinks;
 use crate::SwarmBuilder;
 
 pub struct OtherTransportPhase<T> {

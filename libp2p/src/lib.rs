@@ -141,9 +141,6 @@ pub use libp2p_yamux as yamux;
 pub use multiaddr;
 
 mod builder;
-mod transport_ext;
-
-pub mod bandwidth;
 
 #[cfg(doc)]
 pub mod tutorials;
@@ -166,5 +163,4 @@ pub use self::{
     },
     multiaddr::{multiaddr as build_multiaddr, Multiaddr},
     swarm::Swarm,
-    transport_ext::TransportExt,
 };
