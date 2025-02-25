@@ -123,6 +123,9 @@ pub use libp2p_uds as uds;
 #[cfg(not(target_arch = "wasm32"))]
 #[doc(inline)]
 pub use libp2p_upnp as upnp;
+#[cfg(feature = "webrtc-websys")]
+#[doc(inline)]
+pub use libp2p_webrtc_websys as webrtc_websys;
 #[cfg(feature = "websocket")]
 #[cfg(not(target_arch = "wasm32"))]
 #[doc(inline)]

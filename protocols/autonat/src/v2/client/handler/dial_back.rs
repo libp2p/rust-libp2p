@@ -35,16 +35,14 @@ impl ConnectionHandler for Handler {
     type InboundOpenInfo = ();
     type OutboundOpenInfo = ();
 
-    fn listen_protocol(&self) -> SubstreamProtocol<Self::InboundProtocol, Self::InboundOpenInfo> {
+    fn listen_protocol(&self) -> SubstreamProtocol<Self::InboundProtocol> {
         SubstreamProtocol::new(ReadyUpgrade::new(DIAL_BACK_PROTOCOL), ())
     }
 
     fn poll(
         &mut self,
         cx: &mut Context<'_>,
-    ) -> Poll<
-        ConnectionHandlerEvent<Self::OutboundProtocol, Self::OutboundOpenInfo, Self::ToBehaviour>,
-    > {
+    ) -> Poll<ConnectionHandlerEvent<Self::OutboundProtocol, (), Self::ToBehaviour>> {
         loop {
             match self.inbound.poll_next_unpin(cx) {
                 Poll::Pending => return Poll::Pending,
@@ -68,12 +66,7 @@ impl ConnectionHandler for Handler {
 
     fn on_connection_event(
         &mut self,
-        event: ConnectionEvent<
-            Self::InboundProtocol,
-            Self::OutboundProtocol,
-            Self::InboundOpenInfo,
-            Self::OutboundOpenInfo,
-        >,
+        event: ConnectionEvent<Self::InboundProtocol, Self::OutboundProtocol>,
     ) {
         match event {
             ConnectionEvent::FullyNegotiatedInbound(FullyNegotiatedInbound {
@@ -116,12 +109,7 @@ fn perform_dial_back(
             match receiver.await {
                 Ok(Ok(())) => {}
                 Ok(Err(e)) => return Some((Err(e), state)),
-                Err(_) => {
-                    return Some((
-                        Err(io::Error::new(io::ErrorKind::Other, "Sender got cancelled")),
-                        state,
-                    ));
-                }
+                Err(_) => return None,
             }
             if let Err(e) = protocol::dial_back_response(&mut state.stream).await {
                 return Some((Err(e), state));

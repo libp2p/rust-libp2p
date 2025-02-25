@@ -2,7 +2,7 @@ use std::{
     collections::VecDeque,
     convert::Infallible,
     io,
-    iter::{once, repeat},
+    iter::{once, repeat_n},
     task::{Context, Poll},
     time::Duration,
 };
@@ -72,7 +72,7 @@ pub struct Handler {
     queued_events: VecDeque<
         ConnectionHandlerEvent<
             <Self as ConnectionHandler>::OutboundProtocol,
-            <Self as ConnectionHandler>::OutboundOpenInfo,
+            (),
             <Self as ConnectionHandler>::ToBehaviour,
         >,
     >,
@@ -121,16 +121,14 @@ impl ConnectionHandler for Handler {
     type InboundOpenInfo = ();
     type OutboundOpenInfo = ();
 
-    fn listen_protocol(&self) -> SubstreamProtocol<Self::InboundProtocol, Self::InboundOpenInfo> {
+    fn listen_protocol(&self) -> SubstreamProtocol<Self::InboundProtocol> {
         SubstreamProtocol::new(DeniedUpgrade, ())
     }
 
     fn poll(
         &mut self,
         cx: &mut Context<'_>,
-    ) -> Poll<
-        ConnectionHandlerEvent<Self::OutboundProtocol, Self::OutboundOpenInfo, Self::ToBehaviour>,
-    > {
+    ) -> Poll<ConnectionHandlerEvent<Self::OutboundProtocol, (), Self::ToBehaviour>> {
         if let Some(event) = self.queued_events.pop_front() {
             return Poll::Ready(event);
         }
@@ -161,12 +159,7 @@ impl ConnectionHandler for Handler {
 
     fn on_connection_event(
         &mut self,
-        event: ConnectionEvent<
-            Self::InboundProtocol,
-            Self::OutboundProtocol,
-            Self::InboundOpenInfo,
-            Self::OutboundOpenInfo,
-        >,
+        event: ConnectionEvent<Self::InboundProtocol, Self::OutboundProtocol>,
     ) {
         match event {
             ConnectionEvent::DialUpgradeError(DialUpgradeError { error, .. }) => {
@@ -333,8 +326,7 @@ where
 {
     let count_full = num_bytes / DATA_FIELD_LEN_UPPER_BOUND;
     let partial_len = num_bytes % DATA_FIELD_LEN_UPPER_BOUND;
-    for req in repeat(DATA_FIELD_LEN_UPPER_BOUND)
-        .take(count_full)
+    for req in repeat_n(DATA_FIELD_LEN_UPPER_BOUND, count_full)
         .chain(once(partial_len))
         .filter(|e| *e > 0)
         .map(|data_count| {

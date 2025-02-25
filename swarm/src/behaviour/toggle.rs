@@ -231,7 +231,6 @@ where
             panic!("Unexpected Either::Right in enabled `on_fully_negotiated_inbound`.")
         }
     }
-
     fn on_listen_upgrade_error(
         &mut self,
         ListenUpgradeError { info, error: err }: ListenUpgradeError<
