@@ -1,7 +1,7 @@
 [package]
 name = "libp2p-upnp"
-edition = "2021"
-rust-version = "1.60.0"
+edition = "2024"
+rust-version = "1.85.0"
 description = "UPnP support for libp2p transports"
 version = "0.4.0"
 license = "MIT"

@@ -52,7 +52,7 @@
 //!    [package]
 //!        name = "rust-libp2p-tutorial"
 //!        version = "0.1.0"
-//!        edition = "2021"
+//!        edition = "2024"
 //!
 //!    [dependencies]
 //!        libp2p = { version = "0.54", features = ["noise", "ping", "tcp", "tokio", "yamux"] }

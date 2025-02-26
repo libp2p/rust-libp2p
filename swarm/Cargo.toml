@@ -1,6 +1,6 @@
 [package]
 name = "libp2p-swarm"
-edition = "2021"
+edition = "2024"
 rust-version = { workspace = true }
 description = "The libp2p swarm"
 version = "0.46.1"
