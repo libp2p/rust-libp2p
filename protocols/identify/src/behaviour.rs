@@ -606,6 +606,9 @@ impl NetworkBehaviour for Behaviour {
                         DialError::WrongPeerId {
                             endpoint: ConnectedPoint::Dialer { address, .. },
                             ..
+                        }
+                        | DialError::LocalPeerId {
+                            endpoint: ConnectedPoint::Dialer { address, .. },
                         } => {
                             cache.remove(&peer_id, address);
                         }
