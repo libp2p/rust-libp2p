@@ -66,21 +66,32 @@ impl From<io::Error> for ConnectionError {
 /// connection.
 #[derive(Debug)]
 pub(crate) enum PendingOutboundConnectionError {
+    /// An error occurred while negotiating the transport protocol(s) on a connection.
     Transport(Vec<(Multiaddr, TransportError<io::Error>)>),
+
+    /// Pending connection attempt has been aborted.
     Aborted,
+
+    /// The peer identity obtained on the connection did not
+    /// match the one that was expected.
     WrongPeerId {
         obtained: PeerId,
         address: Multiaddr,
     },
-    LocalPeerId {
-        address: Multiaddr,
-    },
+
+    /// The connection was dropped because it resolved to our own [`PeerId`].
+    LocalPeerId { address: Multiaddr },
 }
 
 /// Errors that can occur in the context of a pending incoming `Connection`.
 #[derive(Debug)]
 pub(crate) enum PendingInboundConnectionError {
+    /// An error occurred while negotiating the transport protocol(s) on a connection.
     Transport(TransportError<io::Error>),
+
+    /// Pending connection attempt has been aborted.
     Aborted,
-    LocalPeerId { address: Multiaddr}
+
+    /// The connection was dropped because it resolved to our own [`PeerId`].
+    LocalPeerId { address: Multiaddr },
 }

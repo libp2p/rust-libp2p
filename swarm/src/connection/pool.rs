@@ -699,7 +699,7 @@ where
                                                 obtained: obtained_peer_id,
                                                 address: address.clone(),
                                             },
-                                            peer: expected_peer_id.or(Some(obtained_peer_id)),
+                                            peer: Some(peer),
                                         })
                                     }
                                     ConnectedPoint::Listener {.. } => unreachable!("There shouldn't be an expected PeerId on inbound connections."),
