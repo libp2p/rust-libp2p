@@ -243,7 +243,7 @@ impl MdnsPeer {
                     return None;
                 }
 
-                if let RData::TXT(ref txt) = add_record.data() {
+                if let RData::TXT(txt) = add_record.data() {
                     Some(txt)
                 } else {
                     None

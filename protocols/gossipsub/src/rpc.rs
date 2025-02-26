@@ -126,7 +126,7 @@ impl Receiver {
         let priority = match self.priority.as_mut().poll_peek_mut(cx) {
             Poll::Ready(Some(RpcOut::Publish {
                 message: _,
-                ref mut timeout,
+                timeout,
             })) => {
                 if Pin::new(timeout).poll(cx).is_ready() {
                     // Return the message.
@@ -141,8 +141,7 @@ impl Receiver {
 
         let non_priority = match self.non_priority.as_mut().poll_peek_mut(cx) {
             Poll::Ready(Some(RpcOut::Forward {
-                message: _,
-                ref mut timeout,
+                message: _, timeout,
             })) => {
                 if Pin::new(timeout).poll(cx).is_ready() {
                     // Return the message.

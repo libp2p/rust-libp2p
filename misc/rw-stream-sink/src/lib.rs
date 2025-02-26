@@ -71,7 +71,7 @@ where
 
         // Grab the item to copy from.
         let item_to_copy = loop {
-            if let Some(ref mut i) = this.current_item {
+            if let Some(i) = this.current_item {
                 if i.position() < i.get_ref().as_ref().len() as u64 {
                     break i;
                 }

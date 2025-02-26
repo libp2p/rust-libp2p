@@ -2449,8 +2449,8 @@ where
                     let stats = query.stats().clone();
                     if let QueryInfo::GetRecord {
                         key,
-                        ref mut step,
-                        ref mut found_a_record,
+                        step,
+                        found_a_record,
                         cache_candidates,
                     } = &mut query.info
                     {

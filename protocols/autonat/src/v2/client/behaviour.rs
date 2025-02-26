@@ -293,7 +293,7 @@ where
                 return;
             };
 
-            let nonce = self.rng.gen();
+            let nonce = self.rng.r#gen();
             self.address_candidates
                 .get_mut(&addr)
                 .expect("only emit candidates")
@@ -314,7 +314,7 @@ where
     ///
     /// More frequently reported candidates are considered to more likely be external addresses and
     /// thus tested first.
-    fn untested_candidates(&self) -> impl Iterator<Item = Multiaddr> {
+    fn untested_candidates(&self) -> impl Iterator<Item = Multiaddr> + use<R> {
         let mut entries = self
             .address_candidates
             .iter()
