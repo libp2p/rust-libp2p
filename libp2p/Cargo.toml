@@ -99,7 +99,6 @@ futures-timer = "3.0.2" # Explicit dependency to be used in `wasm-bindgen` featu
 getrandom = { workspace = true } # Explicit dependency to be used in `wasm-bindgen` feature
 # TODO feature flag?
 rw-stream-sink = { workspace = true }
-
 libp2p-allow-block-list = { workspace = true }
 libp2p-autonat = { workspace = true, optional = true }
 libp2p-connection-limits = { workspace = true }
@@ -119,13 +118,15 @@ libp2p-relay = { workspace = true, optional = true }
 libp2p-rendezvous = { workspace = true, optional = true }
 libp2p-request-response = { workspace = true, optional = true }
 libp2p-swarm = { workspace = true }
-libp2p-webrtc-websys = { workspace = true, optional = true }
-libp2p-websocket-websys = { workspace = true, optional = true }
-libp2p-webtransport-websys = { workspace = true, optional = true }
 libp2p-yamux = { workspace = true, optional = true }
 multiaddr = { workspace = true }
 pin-project = "1.0.0"
 thiserror = { workspace = true }
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+libp2p-webrtc-websys = { workspace = true, optional = true }
+libp2p-websocket-websys = { workspace = true, optional = true }
+libp2p-webtransport-websys = { workspace = true, optional = true }
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 libp2p-dns = { workspace = true, optional = true }
