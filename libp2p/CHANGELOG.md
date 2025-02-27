@@ -2,6 +2,10 @@
 - Introduce `libp2p-webrtc-websys` behind `webrtc-websys` feature flag.
   See [PR 5819](https://github.com/libp2p/rust-libp2p/pull/5819).
 
+- Adds TopicsConfig structure and topic_configuration key to Config and ProtocolConfig to enable
+  setting message and mesh-*-n sizes on the Gossipsub configuration. Adds appropriate functions to
+  allow modifying default values from the config interface. 
+
 ## 0.55.0
 
 - Raise MSRV to 1.83.0.
