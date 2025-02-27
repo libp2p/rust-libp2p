@@ -1,3 +1,7 @@
+## 0.16.1
+- Add `ReservationClosed` as a relay metric.
+  See [PR 5869](https://github.com/libp2p/rust-libp2p/pull/5869).
+
 ## 0.16.0
 
 <!-- Update to libp2p-core v0.43.0 -->

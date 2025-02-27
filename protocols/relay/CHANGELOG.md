@@ -1,6 +1,8 @@
-## 0.19.1
+## 0.20.0
 
 - Remove duplicated forwarding of pending events to connection handler.
+- Emit `relay::Event::ReservationClosed` when an active reservation is dropped due to the connection closing.
+  See [PR 5869](https://github.com/libp2p/rust-libp2p/pull/5869).
 
 ## 0.19.0
 
