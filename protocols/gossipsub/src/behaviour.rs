@@ -3053,6 +3053,13 @@ where
             }
         }
     }
+
+    /// Register topics to ensure metrics are recorded correctly for these topics.
+    pub fn register_topics_for_metrics(&mut self, topics: Vec<TopicHash>) {
+        if let Some(metrics) = &mut self.metrics {
+            metrics.register_allowed_topics(topics);
+        }
+    }
 }
 
 fn get_ip_addr(addr: &Multiaddr) -> Option<IpAddr> {
