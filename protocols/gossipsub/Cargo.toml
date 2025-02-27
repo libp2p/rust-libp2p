@@ -24,14 +24,16 @@ fnv = "1.0.7"
 futures = { workspace = true }
 futures-timer = "3.0.2"
 getrandom = { workspace = true }
-hashlink = { workspace = true}
+hashlink = { workspace = true }
 hex_fmt = "0.3.0"
 web-time = { workspace = true }
-libp2p-core = { workspace = true }
-libp2p-identity = { workspace = true, features = ["rand"] }
-libp2p-swarm = { workspace = true }
+# Libp2p crates, updated to use crates.io versions so that we can use this gossipsub fork with
+# crates.io libp2p
+libp2p-core = "0.43"
+libp2p-identity = { version = "0.2", features = ["rand"] }
+libp2p-swarm = "0.46"
 quick-protobuf = "0.8"
-quick-protobuf-codec = { workspace = true }
+quick-protobuf-codec = "0.3.1"
 rand = "0.8"
 regex = "1.10.5"
 serde = { version = "1", optional = true, features = ["derive"] }
@@ -42,8 +44,7 @@ tracing = { workspace = true }
 prometheus-client = { workspace = true }
 
 [dev-dependencies]
-libp2p-core = { workspace = true }
-libp2p-swarm-test = { path = "../../swarm-test" }
+libp2p-swarm-test = "0.5.0"
 quickcheck = { workspace = true }
 tracing-subscriber = { workspace = true, features = ["env-filter"] }
 tokio = { workspace = true, features = ["rt", "rt-multi-thread", "time", "macros"] }
