@@ -46,7 +46,7 @@ use web_time::{Duration, Instant};
 
 use crate::{
     connection::{
-        Connected, Connection, ConnectionError, ConnectionId, IncomingInfo, PendingConnectionError,
+        Connected, Connection, ConnectionError, ConnectionId, IncomingInfo,
         PendingInboundConnectionError, PendingOutboundConnectionError, PendingPoint,
     },
     transport::TransportError,
@@ -692,17 +692,45 @@ where
                     let check_peer_id = || {
                         if let Some(peer) = expected_peer_id {
                             if peer != obtained_peer_id {
-                                return Err(PendingConnectionError::WrongPeerId {
-                                    obtained: obtained_peer_id,
-                                    endpoint: endpoint.clone(),
-                                });
+                                return match &endpoint {
+                                    ConnectedPoint::Dialer { address, .. } => {
+                                        Err(PoolEvent::PendingOutboundConnectionError {
+                                            id,
+                                            error: PendingOutboundConnectionError::WrongPeerId {
+                                                obtained: obtained_peer_id,
+                                                address: address.clone(),
+                                            },
+                                            peer: Some(peer),
+                                        })
+                                    }
+                                    ConnectedPoint::Listener {.. } => unreachable!("There shouldn't be an expected PeerId on inbound connections."),
+                                };
                             }
                         }
 
                         if self.local_id == obtained_peer_id {
-                            return Err(PendingConnectionError::LocalPeerId {
-                                endpoint: endpoint.clone(),
-                            });
+                            return match &endpoint {
+                                ConnectedPoint::Dialer { address, .. } => {
+                                    Err(PoolEvent::PendingOutboundConnectionError {
+                                        id,
+                                        error: PendingOutboundConnectionError::LocalPeerId {
+                                            address: address.clone(),
+                                        },
+                                        peer: Some(obtained_peer_id),
+                                    })
+                                }
+                                ConnectedPoint::Listener {
+                                    send_back_addr,
+                                    local_addr,
+                                } => Err(PoolEvent::PendingInboundConnectionError {
+                                    id,
+                                    send_back_addr: send_back_addr.clone(),
+                                    local_addr: local_addr.clone(),
+                                    error: PendingInboundConnectionError::LocalPeerId {
+                                        address: send_back_addr.clone(),
+                                    },
+                                }),
+                            };
                         }
 
                         Ok(())
@@ -721,27 +749,7 @@ where
                             Poll::Ready(())
                         }));
 
-                        match endpoint {
-                            ConnectedPoint::Dialer { .. } => {
-                                return Poll::Ready(PoolEvent::PendingOutboundConnectionError {
-                                    id,
-                                    error: error
-                                        .map(|t| vec![(endpoint.get_remote_address().clone(), t)]),
-                                    peer: expected_peer_id.or(Some(obtained_peer_id)),
-                                })
-                            }
-                            ConnectedPoint::Listener {
-                                send_back_addr,
-                                local_addr,
-                            } => {
-                                return Poll::Ready(PoolEvent::PendingInboundConnectionError {
-                                    id,
-                                    error,
-                                    send_back_addr,
-                                    local_addr,
-                                })
-                            }
-                        };
+                        return Poll::Ready(error);
                     }
 
                     let established_in = accepted_at.elapsed();
