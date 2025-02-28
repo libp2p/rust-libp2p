@@ -1,4 +1,4 @@
-use libp2p_identity::{Keypair, PeerId, PublicKey, SigningError};
+use libp2p_identity::{Keypair, PeerId, SigningError};
 use quick_protobuf::{BytesReader, Writer};
 use web_time::SystemTime;
 
@@ -30,7 +30,26 @@ impl PeerRecord {
     /// If this function succeeds, the [`SignedEnvelope`] contained a peer record with a valid
     /// signature and can hence be considered authenticated.
     pub fn from_signed_envelope(envelope: SignedEnvelope) -> Result<Self, FromEnvelopeError> {
-        let (_, peer_id, seq, addresses) = Self::try_deserialize_signed_envelope(&envelope)?;
+        use quick_protobuf::MessageRead;
+
+        let (payload, signing_key) =
+            envelope.payload_and_signing_key(String::from(DOMAIN_SEP), PAYLOAD_TYPE.as_bytes())?;
+        let mut reader = BytesReader::from_bytes(payload);
+        let record = proto::PeerRecord::from_reader(&mut reader, payload).map_err(DecodeError)?;
+
+        let peer_id = PeerId::from_bytes(&record.peer_id)?;
+
+        if peer_id != signing_key.to_peer_id() {
+            return Err(FromEnvelopeError::MismatchedSignature);
+        }
+
+        let seq = record.seq;
+        let addresses = record
+            .addresses
+            .into_iter()
+            .map(|a| a.multiaddr.to_vec().try_into())
+            .collect::<Result<Vec<_>, _>>()?;
+
         Ok(Self {
             peer_id,
             seq,
@@ -106,37 +125,6 @@ impl PeerRecord {
 
     pub fn addresses(&self) -> &[Multiaddr] {
         self.addresses.as_slice()
-    }
-
-    /// Utility method for deserializing an [`SignedEnvelope`] using
-    /// [`PeerRecord`]-specific [domain separation](https://github.com/libp2p/specs/blob/master/RFC/0003-routing-records.md#signed-envelope-domain)
-    ///  and [payload type](https://github.com/libp2p/specs/blob/master/RFC/0003-routing-records.md#signed-envelope-payload-type).
-    /// Useful for extracting the address only.  
-    /// Returns `Ok((envelope_public_key, envelope_signer_id, sequence_number, signed_addresses))`
-    /// when the envelope is valid.
-    /// Will fail when the source of the addresses doesn't match signer of the envelope.
-    pub fn try_deserialize_signed_envelope(
-        envelope: &SignedEnvelope,
-    ) -> Result<(&PublicKey, PeerId, u64, Vec<Multiaddr>), FromEnvelopeError> {
-        use quick_protobuf::MessageRead;
-
-        let (payload, signing_key) =
-            envelope.payload_and_signing_key(String::from(DOMAIN_SEP), PAYLOAD_TYPE.as_bytes())?;
-        let mut reader = BytesReader::from_bytes(payload);
-        let record = proto::PeerRecord::from_reader(&mut reader, payload).map_err(DecodeError)?;
-
-        let peer_id = PeerId::from_bytes(&record.peer_id)?;
-
-        if peer_id != signing_key.to_peer_id() {
-            return Err(FromEnvelopeError::MismatchedSignature);
-        }
-
-        let addresses = record
-            .addresses
-            .into_iter()
-            .map(|a| a.multiaddr.to_vec().try_into())
-            .collect::<Result<Vec<_>, _>>()?;
-        Ok((signing_key, peer_id, record.seq, addresses))
     }
 }
 
