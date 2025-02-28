@@ -3105,7 +3105,6 @@ dependencies = [
  "libp2p-swarm",
  "libp2p-swarm-test",
  "lru",
- "serde",
  "serde_json",
  "tokio",
 ]

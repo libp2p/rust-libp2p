@@ -7,11 +7,6 @@
 //! let store: MemoryStore<()> = MemoryStore::new(Default::default());
 //! let behaviour = Behaviour::new(store);
 //! ```
-//!
-//! ## Persistent storage
-//! [`MemoryStore`] keeps all records in memory and will lose all the data
-//! once de-allocated. In order to persist the data, enable `serde` feature
-//! of `lib2p-peer-store` to read from and write to disk.
 
 use std::{
     collections::{HashMap, VecDeque},
@@ -19,8 +14,6 @@ use std::{
     task::Waker,
 };
 
-#[cfg(feature = "serde")]
-use ::serde::{Deserialize, Serialize};
 use libp2p_core::{Multiaddr, PeerId};
 use libp2p_swarm::FromSwarm;
 use lru::LruCache;
@@ -37,24 +30,14 @@ pub enum Event {
 /// A in-memory store that uses LRU cache for bounded storage of addresses
 /// and a frequency-based ordering of addresses.
 #[derive(Default)]
-#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
-#[cfg_attr(
-    feature = "serde",
-    serde(bound(
-        serialize = "T: Clone + Serialize ",
-        deserialize = "T: Clone + Deserialize<'de>"
-    ))
-)]
 pub struct MemoryStore<T = ()> {
     /// The internal store.
     records: HashMap<PeerId, PeerRecord<T>>,
     /// Events to emit to [`Behaviour`](crate::Behaviour) and [`Swarm`](libp2p_swarm::Swarm)
-    #[cfg_attr(feature = "serde", serde(skip))]
     pending_events: VecDeque<crate::store::Event<Event>>,
     /// Config of the store.
     config: Config,
     /// Waker for store events.
-    #[cfg_attr(feature = "serde", serde(skip))]
     waker: Option<Waker>,
 }
 
@@ -190,7 +173,6 @@ impl<T> Store for MemoryStore<T> {
 
 /// Config for [`MemoryStore`].
 #[derive(Debug, Clone)]
-#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct Config {
     /// The capacaity of an address store.  
     /// The least active address will be discarded to make room for new address.
@@ -220,16 +202,6 @@ impl Config {
 
 /// Internal record of [`MemoryStore`].
 #[derive(Debug, Clone)]
-#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
-#[cfg_attr(
-    feature = "serde",
-    serde(bound(
-        serialize = "T: Clone + Serialize ",
-        deserialize = "T: Clone + Deserialize<'de>"
-    ))
-)]
-#[cfg_attr(feature = "serde", serde(from = "serde::PeerRecord<T>"))]
-#[cfg_attr(feature = "serde", serde(into = "serde::PeerRecord<T>"))]
 pub struct PeerRecord<T> {
     /// A LRU(Least Recently Used) cache for addresses.  
     /// Will delete the least-recently-used record when full.
@@ -278,73 +250,6 @@ impl<T> PeerRecord<T> {
 
     pub fn insert_custom_data(&mut self, custom_data: T) {
         let _ = self.custom_data.insert(custom_data);
-    }
-}
-
-#[cfg(feature = "serde")]
-pub(crate) mod serde {
-    use std::num::NonZeroUsize;
-
-    use libp2p_core::Multiaddr;
-    use serde::{Deserialize, Serialize};
-
-    impl<T> super::PeerRecord<T> {
-        /// Build from an iterator. The order is reversed(FILO-ish).
-        pub(crate) fn from_iter(
-            cap: NonZeroUsize,
-            addr_iter: impl Iterator<Item = Multiaddr>,
-            custom_data: Option<T>,
-        ) -> Self {
-            let mut lru = lru::LruCache::new(cap);
-            for addr in addr_iter {
-                lru.get_or_insert(addr, || ());
-            }
-            Self {
-                addresses: lru,
-                custom_data,
-            }
-        }
-
-        pub(crate) fn destruct(self) -> (NonZeroUsize, Vec<Multiaddr>, Option<T>) {
-            let cap = self.addresses.cap();
-            let mut addresses = self
-                .addresses
-                .into_iter()
-                .map(|(addr, _)| addr)
-                .collect::<Vec<_>>();
-            // This is somewhat unusual: `LruCache::iter()` retains LRU order
-            // while `LruCache::into_iter()` reverses the order.
-            addresses.reverse();
-            (cap, addresses, self.custom_data)
-        }
-    }
-
-    /// Helper struct for serializing and deserializing [`PeerRecord`](super::PeerRecord)
-    #[derive(Debug, Clone, Serialize, Deserialize)]
-    pub struct PeerRecord<T> {
-        pub addresses: Vec<Multiaddr>,
-        pub cap: NonZeroUsize,
-        pub custom_data: Option<T>,
-    }
-    impl<T: Clone> From<PeerRecord<T>> for super::PeerRecord<T> {
-        fn from(value: PeerRecord<T>) -> Self {
-            // Need to reverse the iterator because `LruCache` is FILO.
-            super::PeerRecord::from_iter(
-                value.cap,
-                value.addresses.into_iter().rev(),
-                value.custom_data,
-            )
-        }
-    }
-    impl<T: Clone> From<super::PeerRecord<T>> for PeerRecord<T> {
-        fn from(value: super::PeerRecord<T>) -> Self {
-            let (cap, addresses, custom_data) = value.destruct();
-            PeerRecord {
-                addresses,
-                cap,
-                custom_data,
-            }
-        }
     }
 }
 
@@ -426,58 +331,6 @@ mod test {
                 .expect("addr to exist")
                 == second_record
         );
-    }
-
-    #[test]
-    fn serde_roundtrip() {
-        let store_json = r#"
-    {
-        "records": {
-            "1Aea5mXJrZNUwKxNU2y9xFE2qTFMjvFYSBf4T8cWEEP5Zd": 
-                {
-                    "addresses": [ "/ip4/127.0.0.2", "/ip4/127.0.0.3", "/ip4/127.0.0.4",
-                                   "/ip4/127.0.0.5", "/ip4/127.0.0.6", "/ip4/127.0.0.7",
-                                   "/ip4/127.0.0.8", "/ip4/127.0.0.9" ],
-                    "cap": 8,
-                    "custom_data": 7
-                }
-        },
-        "config": {
-            "record_capacity": 8
-        }
-    }
-        "#;
-        let store: MemoryStore<u32> = serde_json::from_str(store_json).unwrap();
-        let peer = PeerId::from_str("1Aea5mXJrZNUwKxNU2y9xFE2qTFMjvFYSBf4T8cWEEP5Zd")
-            .expect("Parsing to succeed.");
-        let mut addresses = Vec::new();
-        for i in 2..10 {
-            let addr_string = format!("/ip4/127.0.0.{}", i);
-            addresses.push(Multiaddr::from_str(&addr_string).expect("parsing to succeed"));
-        }
-        // should retain order when deserializing from bytes.
-        assert_eq!(
-            store
-                .addresses_of_peer(&peer)
-                .expect("Peer to exist")
-                .cloned()
-                .collect::<Vec<_>>(),
-            addresses
-        );
-        assert_eq!(*store.get_custom_data(&peer).expect("Peer to exist"), 7);
-        let ser = serde_json::to_string(&store).expect("Serialize to succeed.");
-        let store_de: MemoryStore<u32> =
-            serde_json::from_str(&ser).expect("Deserialize to succeed");
-        // should retain order when serializing
-        assert_eq!(
-            store_de
-                .addresses_of_peer(&peer)
-                .expect("Peer to exist")
-                .cloned()
-                .collect::<Vec<_>>(),
-            addresses
-        );
-        assert_eq!(*store_de.get_custom_data(&peer).expect("Peer to exist"), 7);
     }
 
     #[test]
