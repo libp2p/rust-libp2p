@@ -1,9 +1,15 @@
+## 0.49.0
+
+- Make `prometheus-client` an optional dependency with feature `metrics`. 
+  See [PR 5711](https://github.com/libp2p/rust-libp2p/pull/5711).
+
 ## 0.48.1
 - Allow whitelisting topics for metrics to ensure metrics are recorded correctly for these topics.
   See [PR 5895](https://github.com/libp2p/rust-libp2p/pull/5895)
 
 - Improve `max_messages_per_rpc` consistency by ensuring RPC control messages also adhere to the existing limits.
   See [PR 5826](https://github.com/libp2p/rust-libp2p/pull/5826)
+
 
 ## 0.48.0
 
