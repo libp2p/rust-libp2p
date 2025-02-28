@@ -1,9 +1,7 @@
 use std::{marker::PhantomData, sync::Arc};
 
 use super::*;
-#[allow(deprecated)]
-use crate::bandwidth::BandwidthSinks;
-use crate::{transport_ext::TransportExt, SwarmBuilder};
+use crate::SwarmBuilder;
 
 pub struct BandwidthMetricsPhase<T, R> {
     pub(crate) relay_behaviour: R,
