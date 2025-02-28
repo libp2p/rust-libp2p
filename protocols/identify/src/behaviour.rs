@@ -603,13 +603,8 @@ impl NetworkBehaviour for Behaviour {
                                 cache.remove(&peer_id, addr);
                             }
                         }
-                        DialError::WrongPeerId {
-                            endpoint: ConnectedPoint::Dialer { address, .. },
-                            ..
-                        }
-                        | DialError::LocalPeerId {
-                            endpoint: ConnectedPoint::Dialer { address, .. },
-                        } => {
+                        DialError::WrongPeerId { address, .. }
+                        | DialError::LocalPeerId { address } => {
                             cache.remove(&peer_id, address);
                         }
                         _ => (),
