@@ -648,6 +648,13 @@ impl Metrics {
             metric.set(metric.get() - 1);
         }
     }
+
+    /// Registers a set of topics that we want to store calculate metrics for.
+    pub(crate) fn register_allowed_topics(&mut self, topics: Vec<TopicHash>) {
+        for topic_hash in topics {
+            self.topic_info.insert(topic_hash, true);
+        }
+    }
 }
 
 /// Reasons why a peer was included in the mesh.
