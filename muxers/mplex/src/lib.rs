@@ -35,7 +35,7 @@ use std::{
 
 use bytes::Bytes;
 use codec::LocalStreamId;
-pub use config::{MaxBufferBehaviour, MplexConfig};
+pub use config::{Config, MaxBufferBehaviour};
 use futures::{prelude::*, ready};
 use libp2p_core::{
     muxing::{StreamMuxer, StreamMuxerEvent},
@@ -43,7 +43,10 @@ use libp2p_core::{
 };
 use parking_lot::Mutex;
 
-impl UpgradeInfo for MplexConfig {
+#[deprecated = "Use `Config` instead"]
+pub type MplexConfig = Config;
+
+impl UpgradeInfo for Config {
     type Info = &'static str;
     type InfoIter = iter::Once<Self::Info>;
 
@@ -52,7 +55,7 @@ impl UpgradeInfo for MplexConfig {
     }
 }
 
-impl<C> InboundConnectionUpgrade<C> for MplexConfig
+impl<C> InboundConnectionUpgrade<C> for Config
 where
     C: AsyncRead + AsyncWrite + Unpin,
 {
@@ -68,7 +71,7 @@ where
     }
 }
 
-impl<C> OutboundConnectionUpgrade<C> for MplexConfig
+impl<C> OutboundConnectionUpgrade<C> for Config
 where
     C: AsyncRead + AsyncWrite + Unpin,
 {

@@ -561,7 +561,7 @@ fn ufrag_from_stun_message(buffer: &[u8], local_ufrag: bool) -> Result<String, E
                 let res = if local_ufrag {
                     s.split(':').next()
                 } else {
-                    s.split(':').last()
+                    s.split(':').next_back()
                 };
                 match res {
                     Some(s) => Ok(s.to_owned()),
