@@ -272,7 +272,7 @@ where
         // Asynchronously resolve all DNS names in the address before proceeding
         // with dialing on the underlying transport.
         async move {
-            let mut last_err = None;
+            let mut dial_errors: Vec<Error<T::Error>> = Vec::new();
             let mut dns_lookups = 0;
             let mut dial_attempts = 0;
             // We optimise for the common case of a single DNS component
@@ -295,7 +295,7 @@ where
                 }) {
                     if dns_lookups == MAX_DNS_LOOKUPS {
                         tracing::debug!(address=%addr, "Too many DNS lookups, dropping unresolved address");
-                        last_err = Some(Error::TooManyLookups);
+                        dial_errors.push(Error::TooManyLookups);   // this is imp
                         // There may still be fully resolved addresses in `unresolved`,
                         // so keep going until `unresolved` is empty.
                         continue;
@@ -303,12 +303,8 @@ where
                     dns_lookups += 1;
                     match resolve(&name, &resolver).await {
                         Err(e) => {
-                            if unresolved.is_empty() {
-                                return Err(e);
-                            }
-                            // If there are still unresolved addresses, there is
-                            // a chance of success, but we track the last error.
-                            last_err = Some(e);
+                             // Record the resolution error.
+                             dial_errors.push(e);
                         }
                         Ok(Resolved::One(ip)) => {
                             tracing::trace!(protocol=%name, resolved=%ip);
@@ -369,17 +365,19 @@ where
                         Ok(out) => return Ok(out),
                         Err(err) => {
                             tracing::debug!("Dial error: {:?}.", err);
-                            if unresolved.is_empty() {
-                                return Err(err);
-                            }
+                            dial_errors.push(err);
                             if dial_attempts == MAX_DIAL_ATTEMPTS {
                                 tracing::debug!(
                                     "Aborting dialing after {} attempts.",
                                     MAX_DIAL_ATTEMPTS
                                 );
-                                return Err(err);
+                                break;
                             }
-                            last_err = Some(err);
+                            if unresolved.is_empty(){
+                                // If there are no further addresses to try—or we've hit the limit—
+                                // break out of the loop.
+                                break;
+                            }
                         }
                     }
                 }
@@ -389,10 +387,17 @@ where
             // attempt, return that error. Otherwise there were no valid DNS records
             // for the given address to begin with (i.e. DNS lookups succeeded but
             // produced no records relevant for the given `addr`).
-            Err(last_err.unwrap_or_else(|| {
-                Error::ResolveError(ResolveErrorKind::Message("No matching records found.").into())
-            }))
-        }
+            if !dial_errors.is_empty() {
+                if dial_errors.len() ==1{
+                    Err(dial_errors.pop().unwrap())
+                } else {
+                    Err(Error::DialErrors(dial_errors))
+                }
+            } else {
+                Err(Error::ResolveError(ResolveErrorKind::Message("No Matching Records Found").into()))
+            }
+
+            }
         .boxed()
         .right_future()
     }
@@ -416,6 +421,8 @@ pub enum Error<TErr> {
     /// is returned and the DNS records for the domain(s) being dialed
     /// should be investigated.
     TooManyLookups,
+    /// Multiple dial errors were encountered.
+    DialErrors(Vec<Error<TErr>>),
 }
 
 impl<TErr> fmt::Display for Error<TErr>
@@ -428,6 +435,13 @@ where
             Error::ResolveError(err) => write!(f, "{err}"),
             Error::MultiaddrNotSupported(a) => write!(f, "Unsupported resolved address: {a}"),
             Error::TooManyLookups => write!(f, "Too many DNS lookups"),
+            Error::DialErrors(errs) => {
+                write!(f, "Multiple dial errors occured:")?;
+                for err in errs{
+                    write!(f, "/n - {err}")?;
+                }
+                Ok(())
+            }
         }
     }
 }
@@ -442,6 +456,7 @@ where
             Error::ResolveError(err) => Some(err),
             Error::MultiaddrNotSupported(_) => None,
             Error::TooManyLookups => None,
+            Error::DialErrors(errs) => errs.first().and_then(|e| e.source()),
         }
     }
 }
