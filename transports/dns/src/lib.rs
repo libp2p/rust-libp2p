@@ -800,4 +800,125 @@ mod tests {
             rt.block_on(run(tokio::Transport::custom(CustomTransport, config, opts)));
         }
     }
+
+    #[test]
+    fn aggregated_dial_errors() {
+        let _ = tracing_subscriber::fmt()
+                .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
+                .try_init();
+
+        #[derive(Clone)]
+        struct AlwaysFailTransport;
+
+        impl libp2p_core::Transport for AlwaysFailTransport{
+            type Output = ();
+            type Error = std::io::Error;
+            type ListenerUpgrade = BoxFuture<'static, Result<Self::Output, Self::Error>>;
+            type Dial = BoxFuture<'static, Result<Self::Output, Self::Error>>;
+
+            fn listen_on(
+                    &mut self,
+                    id: ListenerId,
+                    addr: Multiaddr,
+                ) -> Result<(), TransportError<Self::Error>> {
+                unimplemented!()
+            }
+
+            fn remove_listener(&mut self, id: ListenerId) -> bool {
+                false
+            }
+
+            fn dial(
+                    &mut self,
+                    addr: Multiaddr,
+                    opts: DialOpts,
+                ) -> Result<Self::Dial, TransportError<Self::Error>> {
+                // Every dial attempt fails with an error that includes the address.
+                Ok(Box::pin(future::ready(Err(io::Error::new(
+                    io::ErrorKind::Other,
+                    format!("dial error for {}", addr)
+                )))))
+            }
+
+            fn poll(
+                    self: Pin<&mut Self>,
+                    cx: &mut Context<'_>,
+                ) -> Poll<TransportEvent<Self::ListenerUpgrade, Self::Error>> {
+                unimplemented!()
+            }
+        }
+
+        #[derive(Clone)]
+        struct FakeResolver;
+
+        #[async_trait::async_trait]
+        impl Resolver for FakeResolver {
+            async fn lookup_ip(&self, _name: String) -> Result<LookupIp, ResolveError> {
+                let ip1 = Protocol::ip4(Ipv4Addr::new(127, 0, 0, 1));
+                let ip2 = Protocol::ip4(Ip4Addr::new(192, 168, 1, 1));
+                // Turn these into a LookupIp-like structure for the DNS transport:
+                Ok(vec![ip1, ip2].into_iter().collect())
+            }
+
+            async fn ipv4_lookup(&self, _name: String) -> Result<Ipv4Lookup, ResolveError> {
+                Err(ResolveError::from(io::Error::new(
+                    io::ErrorKind::Other, 
+                    "ipv4_lookup not implemented"
+                )))
+            }
+
+            async fn ipv6_lookup(&self, _name: String) -> Result<Ipv6Lookup, ResolveError>  {
+                Err(ResolveError::from(io::Error::new(
+                    io::ErrorKind::Other,
+                    "ipv6_lookup not implemented."
+                )))
+            }
+
+            async fn txt_lookup(&self, _name: String) -> Result<TxtLookup, ResolveError> {
+                Err(ResolveError::from(io::Error::new(
+                    io::ErrorKind::Other,
+                    "txtlookup not implemented"
+                )))
+            }
+        }
+
+        async fn run_tests() {
+            let inner = Arc::new(Mutex::new(AlwaysFailTransport))
+            let mut transport = Transport {
+                inner, 
+                resolver: FakeResolver,
+            };
+
+            let dial_opts = DialOpts {
+                role: Endpoint::Dialer,
+                port_use: PortUse::Reuse,
+            };
+
+            // This address requires DNS resolution, yielding two IP addresses, 
+            // forcing two dial attempts. Both fail.
+            let addr: Multiaddr = "/dns4/fakeexample.com/tcp/1234".parse().wrap();
+            let dial_future = transport.dial(addr, dial_opts).unwrap();
+            let result = dial_future.await;
+
+            match result {
+                Err(Error::DialErrors(errs)) => {
+                    // We expect at least 2 errors, one per resolved IP.
+                    assert!(
+                        errs.len() >= 2, "Expected multiple dial errors, but got {}",
+                        errs.len()
+                    );
+                    for e in errs {
+                        let msg = format!( "{}", e);
+                        // Check for the string "dial error" to confirm each attempt failed.
+                        assert!(
+                            msg.contains("dial error"),
+                            "Error message does not contain 'dial error': {}",
+                            msg
+                        );
+                    }
+                }
+                
+            }
+        }
+    }
 }
