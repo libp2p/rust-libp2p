@@ -68,6 +68,7 @@ fn is_quic_addr(addr: &Multiaddr, v1: bool) -> bool {
         && fifth.is_none()
 }
 
+/// Whether an [`Multiaddr`] is a valid for the TCP transport.
 fn is_tcp_addr(addr: &Multiaddr) -> bool {
     use Protocol::*;
 
@@ -83,6 +84,13 @@ fn is_tcp_addr(addr: &Multiaddr) -> bool {
     };
 
     matches!(first, Ip4(_) | Ip6(_) | Dns(_) | Dns4(_) | Dns6(_)) && matches!(second, Tcp(_))
+}
+
+/// Whether the server, and observed [`Multiaddr`] are equivalent transports.
+fn is_valid_connection(server: &Multiaddr, observed: &Multiaddr) -> bool {
+    (is_tcp_addr(server) && is_tcp_addr(observed))
+        || (is_quic_addr(server, true) && is_quic_addr(observed, true))
+        || (is_quic_addr(server, false) && is_quic_addr(observed, false))
 }
 
 /// Network behaviour that automatically identifies nodes periodically, returns information
@@ -329,10 +337,7 @@ impl Behaviour {
                     .listen_addresses
                     .iter()
                     .filter_map(|server| {
-                        if (is_tcp_addr(server) && is_tcp_addr(observed))
-                            || (is_quic_addr(server, true) && is_quic_addr(observed, true))
-                            || (is_quic_addr(server, false) && is_quic_addr(observed, false))
-                        {
+                        if is_valid_connection(server, observed) {
                             _address_translation(server, observed)
                         } else {
                             None
