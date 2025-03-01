@@ -2,6 +2,8 @@
 
 - Upgrade `async-std-resolver` and `hickory-resolver`.
   See [PR 5727](https://github.com/libp2p/rust-libp2p/pull/5727)
+- Report all transport errors in a dial attempt instead of only returning the last error. 
+  See [PR #5899](https://github.com/libp2p/rust-libp2p/pull/5899).
 
 <!-- Update to libp2p-core v0.43.0 -->
 
