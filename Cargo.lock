@@ -3032,7 +3032,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-metrics"
-version = "0.16.0"
+version = "0.16.1"
 dependencies = [
  "futures",
  "libp2p-core",
@@ -3219,7 +3219,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-relay"
-version = "0.19.1"
+version = "0.20.0"
 dependencies = [
  "asynchronous-codec",
  "bytes",
@@ -3327,7 +3327,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-swarm"
-version = "0.46.1"
+version = "0.47.0"
 dependencies = [
  "async-std",
  "criterion",
