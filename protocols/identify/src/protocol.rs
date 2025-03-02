@@ -22,7 +22,7 @@ use std::io;
 
 use asynchronous_codec::{FramedRead, FramedWrite};
 use futures::prelude::*;
-use libp2p_core::{multiaddr, Multiaddr};
+use libp2p_core::{multiaddr, Multiaddr, PeerRecord, SignedEnvelope};
 use libp2p_identity as identity;
 use libp2p_identity::PublicKey;
 use libp2p_swarm::StreamProtocol;
@@ -53,6 +53,8 @@ pub struct Info {
     pub protocols: Vec<StreamProtocol>,
     /// Address observed by or for the remote.
     pub observed_addr: Multiaddr,
+    /// Verifiable addresses of the peer.
+    pub signed_peer_record: Option<SignedEnvelope>,
 }
 
 impl Info {
@@ -108,6 +110,10 @@ where
         listenAddrs: listen_addrs,
         observedAddr: Some(info.observed_addr.to_vec()),
         protocols: info.protocols.iter().map(|p| p.to_string()).collect(),
+        signedPeerRecord: info
+            .signed_peer_record
+            .clone()
+            .map(|r| r.into_protobuf_encoding()),
     };
 
     let mut framed_io = FramedWrite::new(
@@ -213,7 +219,7 @@ impl TryFrom<proto::Identify> for Info {
     type Error = UpgradeError;
 
     fn try_from(msg: proto::Identify) -> Result<Self, Self::Error> {
-        let public_key = {
+        let identify_public_key = {
             match parse_public_key(msg.publicKey) {
                 Some(key) => key,
                 // This will always produce a DecodingError if the public key is missing.
@@ -221,13 +227,29 @@ impl TryFrom<proto::Identify> for Info {
             }
         };
 
+        // When signedPeerRecord contains valid addresses, ignore addresses in listenAddrs.
+        // When signedPeerRecord is invalid or signed by others, ignore the signedPeerRecord(set to
+        // `None`).
+        let (listen_addrs, signed_envelope) = msg
+            .signedPeerRecord
+            .and_then(|b| {
+                let envelope = SignedEnvelope::from_protobuf_encoding(b.as_ref()).ok()?;
+                let peer_record = PeerRecord::from_signed_envelope(envelope).ok()?;
+                (peer_record.peer_id() == identify_public_key.to_peer_id()).then_some((
+                    peer_record.addresses().to_vec(),
+                    Some(peer_record.into_signed_envelope()),
+                ))
+            })
+            .unwrap_or_else(|| (parse_listen_addrs(msg.listenAddrs), None));
+
         let info = Info {
-            public_key,
+            public_key: identify_public_key,
             protocol_version: msg.protocolVersion.unwrap_or_default(),
             agent_version: msg.agentVersion.unwrap_or_default(),
-            listen_addrs: parse_listen_addrs(msg.listenAddrs),
+            listen_addrs,
             protocols: parse_protocols(msg.protocols),
             observed_addr: parse_observed_addr(msg.observedAddr).unwrap_or(Multiaddr::empty()),
+            signed_peer_record: signed_envelope,
         };
 
         Ok(info)
@@ -267,7 +289,11 @@ pub enum UpgradeError {
 
 #[cfg(test)]
 mod tests {
+    use std::str::FromStr;
+
+    use libp2p_core::PeerRecord;
     use libp2p_identity as identity;
+    use quick_protobuf::{BytesReader, MessageRead, MessageWrite, Writer};
 
     use super::*;
 
@@ -293,10 +319,87 @@ mod tests {
                     .public()
                     .encode_protobuf(),
             ),
+            signedPeerRecord: None,
         };
 
         let info = PushInfo::try_from(payload).expect("not to fail");
 
         assert_eq!(info.listen_addrs, vec![valid_multiaddr])
+    }
+
+    #[test]
+    fn protobuf_roundtrip() {
+        // from go implementation of identify,
+        // see https://github.com/libp2p/go-libp2p/blob/2209ae05976df6a1cc2631c961f57549d109008c/p2p/protocol/identify/pb/identify.pb.go#L133
+        // signedPeerRecord field is a dummy one that can't be properly parsed into SignedEnvelope,
+        // but the wire format doesn't care.
+        let go_protobuf: [u8; 375] = [
+            0x0a, 0x27, 0x70, 0x32, 0x70, 0x2f, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x63, 0x6f, 0x6c,
+            0x2f, 0x69, 0x64, 0x65, 0x6e, 0x74, 0x69, 0x66, 0x79, 0x2f, 0x70, 0x62, 0x2f, 0x69,
+            0x64, 0x65, 0x6e, 0x74, 0x69, 0x66, 0x79, 0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x12,
+            0x0b, 0x69, 0x64, 0x65, 0x6e, 0x74, 0x69, 0x66, 0x79, 0x2e, 0x70, 0x62, 0x22, 0x86,
+            0x02, 0x0a, 0x08, 0x49, 0x64, 0x65, 0x6e, 0x74, 0x69, 0x66, 0x79, 0x12, 0x28, 0x0a,
+            0x0f, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x63, 0x6f, 0x6c, 0x56, 0x65, 0x72, 0x73, 0x69,
+            0x6f, 0x6e, 0x18, 0x05, 0x20, 0x01, 0x28, 0x09, 0x52, 0x0f, 0x70, 0x72, 0x6f, 0x74,
+            0x6f, 0x63, 0x6f, 0x6c, 0x56, 0x65, 0x72, 0x73, 0x69, 0x6f, 0x6e, 0x12, 0x22, 0x0a,
+            0x0c, 0x61, 0x67, 0x65, 0x6e, 0x74, 0x56, 0x65, 0x72, 0x73, 0x69, 0x6f, 0x6e, 0x18,
+            0x06, 0x20, 0x01, 0x28, 0x09, 0x52, 0x0c, 0x61, 0x67, 0x65, 0x6e, 0x74, 0x56, 0x65,
+            0x72, 0x73, 0x69, 0x6f, 0x6e, 0x12, 0x1c, 0x0a, 0x09, 0x70, 0x75, 0x62, 0x6c, 0x69,
+            0x63, 0x4b, 0x65, 0x79, 0x18, 0x01, 0x20, 0x01, 0x28, 0x0c, 0x52, 0x09, 0x70, 0x75,
+            0x62, 0x6c, 0x69, 0x63, 0x4b, 0x65, 0x79, 0x12, 0x20, 0x0a, 0x0b, 0x6c, 0x69, 0x73,
+            0x74, 0x65, 0x6e, 0x41, 0x64, 0x64, 0x72, 0x73, 0x18, 0x02, 0x20, 0x03, 0x28, 0x0c,
+            0x52, 0x0b, 0x6c, 0x69, 0x73, 0x74, 0x65, 0x6e, 0x41, 0x64, 0x64, 0x72, 0x73, 0x12,
+            0x22, 0x0a, 0x0c, 0x6f, 0x62, 0x73, 0x65, 0x72, 0x76, 0x65, 0x64, 0x41, 0x64, 0x64,
+            0x72, 0x18, 0x04, 0x20, 0x01, 0x28, 0x0c, 0x52, 0x0c, 0x6f, 0x62, 0x73, 0x65, 0x72,
+            0x76, 0x65, 0x64, 0x41, 0x64, 0x64, 0x72, 0x12, 0x1c, 0x0a, 0x09, 0x70, 0x72, 0x6f,
+            0x74, 0x6f, 0x63, 0x6f, 0x6c, 0x73, 0x18, 0x03, 0x20, 0x03, 0x28, 0x09, 0x52, 0x09,
+            0x70, 0x72, 0x6f, 0x74, 0x6f, 0x63, 0x6f, 0x6c, 0x73, 0x12, 0x2a, 0x0a, 0x10, 0x73,
+            0x69, 0x67, 0x6e, 0x65, 0x64, 0x50, 0x65, 0x65, 0x72, 0x52, 0x65, 0x63, 0x6f, 0x72,
+            0x64, 0x18, 0x08, 0x20, 0x01, 0x28, 0x0c, 0x52, 0x10, 0x73, 0x69, 0x67, 0x6e, 0x65,
+            0x64, 0x50, 0x65, 0x65, 0x72, 0x52, 0x65, 0x63, 0x6f, 0x72, 0x64, 0x42, 0x36, 0x5a,
+            0x34, 0x67, 0x69, 0x74, 0x68, 0x75, 0x62, 0x2e, 0x63, 0x6f, 0x6d, 0x2f, 0x6c, 0x69,
+            0x62, 0x70, 0x32, 0x70, 0x2f, 0x67, 0x6f, 0x2d, 0x6c, 0x69, 0x62, 0x70, 0x32, 0x70,
+            0x2f, 0x70, 0x32, 0x70, 0x2f, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x63, 0x6f, 0x6c, 0x2f,
+            0x69, 0x64, 0x65, 0x6e, 0x74, 0x69, 0x66, 0x79, 0x2f, 0x70, 0x62,
+        ];
+        let mut buf = [0u8; 375];
+        let mut message =
+            proto::Identify::from_reader(&mut BytesReader::from_bytes(&go_protobuf), &go_protobuf)
+                .expect("read to succeed");
+
+        // The actual bytes they put in is "github.com/libp2p/go-libp2p/p2p/protocol/identify/pb".
+        // Starting with Z4 means it is zig-zag-encoded 4-byte varint of string, appended by
+        // protobuf.
+        assert_eq!(
+            String::from_utf8(
+                message
+                    .signedPeerRecord
+                    .clone()
+                    .expect("field to be present")
+            )
+            .expect("parse to succeed"),
+            "Z4github.com/libp2p/go-libp2p/p2p/protocol/identify/pb".to_string()
+        );
+        message
+            .write_message(&mut Writer::new(&mut buf[..]))
+            .expect("same length after roundtrip");
+        assert_eq!(go_protobuf, buf);
+
+        let identity = identity::Keypair::generate_ed25519();
+        let record = PeerRecord::new(
+            &identity,
+            vec![Multiaddr::from_str("/ip4/0.0.0.0").expect("parse to succeed")],
+        )
+        .expect("infallible siging using ed25519");
+        message
+            .signedPeerRecord
+            .replace(record.into_signed_envelope().into_protobuf_encoding());
+        let mut buf = Vec::new();
+        message
+            .write_message(&mut Writer::new(&mut buf))
+            .expect("write to succeed");
+        let parsed_message = proto::Identify::from_reader(&mut BytesReader::from_bytes(&buf), &buf)
+            .expect("read to succeed");
+        assert_eq!(message, parsed_message)
     }
 }
