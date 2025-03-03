@@ -2,6 +2,8 @@
 
 - Implement optional `signedPeerRecord` support for identify messages.
   See [PR 5785](https://github.com/libp2p/rust-libp2p/pull/5785)
+- Fix `Identify::discovered_peers` to remove peers on `DialError::{WrongPeerId, LocalPeerId}` events.
+  See [PR 5890](https://github.com/libp2p/rust-libp2p/pull/5890).
 
 ## 0.46.0
 

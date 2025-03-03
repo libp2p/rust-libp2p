@@ -149,7 +149,7 @@ pub struct Config {
     /// How many entries of discovered peers to keep before we discard
     /// the least-recently used one.
     ///
-    /// Disabled by default.
+    /// Defaults to 100
     cache_size: usize,
 
     /// Whether to include our listen addresses in our responses. If enabled,
@@ -591,13 +591,24 @@ impl NetworkBehaviour for Behaviour {
                 self.outbound_connections_with_ephemeral_port
                     .remove(&connection_id);
             }
-            FromSwarm::DialFailure(DialFailure { peer_id, error, .. }) => {
-                if let (Some(peer_id), Some(cache), DialError::Transport(errors)) =
-                    (peer_id, self.discovered_peers.0.as_mut(), error)
-                {
-                    for (addr, _error) in errors {
-                        cache.remove(&peer_id, addr);
-                    }
+            FromSwarm::DialFailure(DialFailure {
+                peer_id: Some(peer_id),
+                error,
+                ..
+            }) => {
+                if let Some(cache) = self.discovered_peers.0.as_mut() {
+                    match error {
+                        DialError::Transport(errors) => {
+                            for (addr, _error) in errors {
+                                cache.remove(&peer_id, addr);
+                            }
+                        }
+                        DialError::WrongPeerId { address, .. }
+                        | DialError::LocalPeerId { address } => {
+                            cache.remove(&peer_id, address);
+                        }
+                        _ => (),
+                    };
                 }
             }
             _ => {}
