@@ -1,7 +1,5 @@
 ## 0.12.1
 
-<!-- Update to libp2p-core v0.43.0 -->
-
 - Deprecate `Config::support_draft_29`.
   See [PR 5786](https://github.com/libp2p/rust-libp2p/pull/5786).
 
