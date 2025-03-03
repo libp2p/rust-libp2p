@@ -295,7 +295,7 @@ where
                 }) {
                     if dns_lookups == MAX_DNS_LOOKUPS {
                         tracing::debug!(address=%addr, "Too many DNS lookups, dropping unresolved address");
-                        dial_errors.push(Error::TooManyLookups);  
+                        dial_errors.push(Error::TooManyLookups);
                         // There may still be fully resolved addresses in `unresolved`,
                         // so keep going until `unresolved` is empty.
                         continue;
@@ -814,7 +814,7 @@ mod tests {
             fn listen_on(
                 &mut self,
                 _id: ListenerId,
-                addr: Multiaddr,
+                _addr: Multiaddr,
             ) -> Result<(), TransportError<Self::Error>> {
                 unimplemented!()
             }
