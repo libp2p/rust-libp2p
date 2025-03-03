@@ -295,7 +295,7 @@ where
                 }) {
                     if dns_lookups == MAX_DNS_LOOKUPS {
                         tracing::debug!(address=%addr, "Too many DNS lookups, dropping unresolved address");
-                        dial_errors.push(Error::TooManyLookups);   // this is imp
+                        dial_errors.push(Error::TooManyLookups);  
                         // There may still be fully resolved addresses in `unresolved`,
                         // so keep going until `unresolved` is empty.
                         continue;
@@ -366,6 +366,13 @@ where
                         Err(err) => {
                             tracing::debug!("Dial error: {:?}.", err);
                             dial_errors.push(err);
+
+                            if unresolved.is_empty(){
+                                // If there are no further addresses to try—or we've hit the limit—
+                                // break out of the loop.
+                                break;
+                            }
+
                             if dial_attempts == MAX_DIAL_ATTEMPTS {
                                 tracing::debug!(
                                     "Aborting dialing after {} attempts.",
@@ -373,31 +380,19 @@ where
                                 );
                                 break;
                             }
-                            if unresolved.is_empty(){
-                                // If there are no further addresses to try—or we've hit the limit—
-                                // break out of the loop.
-                                break;
-                            }
+
                         }
                     }
                 }
             }
-
-            // At this point, if there was at least one failed dialing
-            // attempt, return that error. Otherwise there were no valid DNS records
-            // for the given address to begin with (i.e. DNS lookups succeeded but
-            // produced no records relevant for the given `addr`).
+            // If we have any dial errors, aggregate them. Otherwise, report that no valid
+            // DNS records were found for the address.
             if !dial_errors.is_empty() {
-                if dial_errors.len() ==1{
-                    Err(dial_errors.pop().unwrap())
-                } else {
-                    Err(Error::DialErrors(dial_errors))
-                }
+                Err(Error::Dial(dial_errors))
             } else {
                 Err(Error::ResolveError(ResolveErrorKind::Message("No Matching Records Found").into()))
             }
-
-            }
+        }
         .boxed()
         .right_future()
     }
@@ -422,7 +417,7 @@ pub enum Error<TErr> {
     /// should be investigated.
     TooManyLookups,
     /// Multiple dial errors were encountered.
-    DialErrors(Vec<Error<TErr>>),
+    Dial(Vec<Error<TErr>>),
 }
 
 impl<TErr> fmt::Display for Error<TErr>
@@ -435,7 +430,7 @@ where
             Error::ResolveError(err) => write!(f, "{err}"),
             Error::MultiaddrNotSupported(a) => write!(f, "Unsupported resolved address: {a}"),
             Error::TooManyLookups => write!(f, "Too many DNS lookups"),
-            Error::DialErrors(errs) => {
+            Error::Dial(errs) => {
                 write!(f, "Multiple dial errors occured:")?;
                 for err in errs {
                     write!(f, "/n - {err}")?;
@@ -456,7 +451,7 @@ where
             Error::ResolveError(err) => Some(err),
             Error::MultiaddrNotSupported(_) => None,
             Error::TooManyLookups => None,
-            Error::DialErrors(errs) => errs.first().and_then(|e| e.source()),
+            Error::Dial(errs) => errs.first().and_then(|e| e.source()),
         }
     }
 }
@@ -819,7 +814,7 @@ mod tests {
             fn listen_on(
                 &mut self,
                 _id: ListenerId,
-                _addr: Multiaddr,
+                addr: Multiaddr,
             ) -> Result<(), TransportError<Self::Error>> {
                 unimplemented!()
             }
@@ -831,7 +826,7 @@ mod tests {
             fn dial(
                 &mut self,
                 _addr: Multiaddr,
-                _opts: DialOpts,
+                _: DialOpts,
             ) -> Result<Self::Dial, TransportError<Self::Error>> {
                 // Every dial attempt fails with an error that includes the address.
                 Ok(Box::pin(future::ready(Err(io::Error::new(
@@ -867,7 +862,7 @@ mod tests {
             let result = dial_future.await;
 
             match result {
-                Err(Error::DialErrors(errs)) => {
+                Err(Error::Dial(errs)) => {
                     // We expect at least 2 errors, one per resolved IP.
                     assert!(
                         errs.len() >= 2,
