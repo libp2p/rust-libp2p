@@ -425,13 +425,6 @@ where
     /// If the targeted peer is currently not connected, a dialing
     /// attempt is initiated and the request is sent as soon as a
     /// connection is established.
-    ///
-    /// > **Note**: In order for such a dialing attempt to succeed,
-    /// > the `RequestResponse` protocol must either be embedded
-    /// > in another `NetworkBehaviour` that provides peer and
-    /// > address discovery, or known addresses of peers must be
-    /// > managed via [`Behaviour::add_address`] and
-    /// > [`Behaviour::remove_address`].
     pub fn send_request(&mut self, peer: &PeerId, request: TCodec::Request) -> OutboundRequestId {
         let request_id = self.next_outbound_request_id();
         let request = OutboundMessage {
