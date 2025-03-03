@@ -303,8 +303,8 @@ where
                     dns_lookups += 1;
                     match resolve(&name, &resolver).await {
                         Err(e) => {
-                             // Record the resolution error.
-                             dial_errors.push(e);
+                            // Record the resolution error.
+                            dial_errors.push(e);
                         }
                         Ok(Resolved::One(ip)) => {
                             tracing::trace!(protocol=%name, resolved=%ip);
