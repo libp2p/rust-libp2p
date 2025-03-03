@@ -825,13 +825,13 @@ mod tests {
 
             fn dial(
                 &mut self,
-                _addr: Multiaddr,
+                addr: Multiaddr,
                 _: DialOpts,
             ) -> Result<Self::Dial, TransportError<Self::Error>> {
                 // Every dial attempt fails with an error that includes the address.
                 Ok(Box::pin(future::ready(Err(io::Error::new(
                     io::ErrorKind::Other,
-                    format!("dial error for {}", _addr),
+                    format!("dial error for {}", addr),
                 )))))
             }
 
