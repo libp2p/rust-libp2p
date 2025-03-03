@@ -24,4 +24,12 @@ message Identify {
   optional bytes observedAddr = 4;
 
   repeated string protocols = 3;
+
+  // signedPeerRecord contains a serialized SignedEnvelope containing a PeerRecord,
+  // signed by the sending node. It contains the same addresses as the listenAddrs field, but
+  // in a form that lets us share authenticated addrs with other peers.
+  // see https://github.com/libp2p/rust-libp2p/blob/8ac5b5aac5f5c25a85f1065e292deeaf58290189/core/src/generated/envelope.proto#L12 
+  // and https://github.com/libp2p/rust-libp2p/blob/8ac5b5aac5f5c25a85f1065e292deeaf58290189/core/src/generated/peer_record.proto#L11 
+  // for message definitions.
+  optional bytes signedPeerRecord = 8;
 }

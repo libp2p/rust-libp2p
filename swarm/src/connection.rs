@@ -36,9 +36,7 @@ use std::{
 };
 
 pub use error::ConnectionError;
-pub(crate) use error::{
-    PendingConnectionError, PendingInboundConnectionError, PendingOutboundConnectionError,
-};
+pub(crate) use error::{PendingInboundConnectionError, PendingOutboundConnectionError};
 use futures::{future::BoxFuture, stream, stream::FuturesUnordered, FutureExt, StreamExt};
 use futures_timer::Delay;
 use libp2p_core::{
