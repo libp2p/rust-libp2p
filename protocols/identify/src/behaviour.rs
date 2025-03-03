@@ -21,14 +21,17 @@
 use std::{
     collections::{hash_map::Entry, HashMap, HashSet, VecDeque},
     num::NonZeroUsize,
+    sync::Arc,
     task::{Context, Poll},
     time::Duration,
 };
 
 use libp2p_core::{
-    multiaddr, multiaddr::Protocol, transport::PortUse, ConnectedPoint, Endpoint, Multiaddr,
+    multiaddr::{self, Protocol},
+    transport::PortUse,
+    ConnectedPoint, Endpoint, Multiaddr,
 };
-use libp2p_identity::{PeerId, PublicKey};
+use libp2p_identity::{Keypair, PeerId, PublicKey};
 use libp2p_swarm::{
     behaviour::{ConnectionClosed, ConnectionEstablished, DialFailure, FromSwarm},
     ConnectionDenied, ConnectionId, DialError, ExternalAddresses, ListenAddresses,
@@ -117,8 +120,10 @@ pub struct Config {
     /// Application-specific version of the protocol family used by the peer,
     /// e.g. `ipfs/1.0.0` or `polkadot/1.0.0`.
     protocol_version: String,
-    /// The public key of the local node. To report on the wire.
-    local_public_key: PublicKey,
+    /// The key of the local node. Only the public key will be report on the wire.  
+    /// The behaviour will send signed [`PeerRecord`](libp2p_core::PeerRecord) in
+    /// its identify message only when supplied with a keypair.  
+    local_key: Arc<KeyType>,
     /// Name and version of the local peer implementation, similar to the
     /// `User-Agent` header in the HTTP protocol.
     ///
@@ -156,12 +161,26 @@ pub struct Config {
 
 impl Config {
     /// Creates a new configuration for the identify [`Behaviour`] that
-    /// advertises the given protocol version and public key.
+    /// advertises the given protocol version and public key.  
+    /// Use [`new_with_signed_peer_record`](Config::new_with_signed_peer_record) for
+    /// `signedPeerRecord` support.
     pub fn new(protocol_version: String, local_public_key: PublicKey) -> Self {
+        Self::new_with_key(protocol_version, local_public_key)
+    }
+
+    /// Creates a new configuration for the identify [`Behaviour`] that
+    /// advertises the given protocol version and public key.  
+    /// The private key will be used to sign [`PeerRecord`](libp2p_core::PeerRecord)
+    /// for verifiable address advertisement.
+    pub fn new_with_signed_peer_record(protocol_version: String, local_keypair: &Keypair) -> Self {
+        Self::new_with_key(protocol_version, local_keypair)
+    }
+
+    fn new_with_key(protocol_version: String, key: impl Into<KeyType>) -> Self {
         Self {
             protocol_version,
             agent_version: format!("rust-libp2p/{}", env!("CARGO_PKG_VERSION")),
-            local_public_key,
+            local_key: Arc::new(key.into()),
             interval: Duration::from_secs(5 * 60),
             push_listen_addr_updates: false,
             cache_size: 100,
@@ -209,7 +228,7 @@ impl Config {
 
     /// Get the local public key of the Config.
     pub fn local_public_key(&self) -> &PublicKey {
-        &self.local_public_key
+        self.local_key.public_key()
     }
 
     /// Get the agent version of the Config.
@@ -380,7 +399,7 @@ impl NetworkBehaviour for Behaviour {
         Ok(Handler::new(
             self.config.interval,
             peer,
-            self.config.local_public_key.clone(),
+            self.config.local_key.clone(),
             self.config.protocol_version.clone(),
             self.config.agent_version.clone(),
             remote_addr.clone(),
@@ -413,7 +432,7 @@ impl NetworkBehaviour for Behaviour {
         Ok(Handler::new(
             self.config.interval,
             peer,
-            self.config.local_public_key.clone(),
+            self.config.local_key.clone(),
             self.config.protocol_version.clone(),
             self.config.agent_version.clone(),
             // TODO: This is weird? That is the public address we dialed,
@@ -666,6 +685,37 @@ impl PeerCache {
             cache.get(peer).collect()
         } else {
             Vec::new()
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+#[allow(clippy::large_enum_variant)]
+pub(crate) enum KeyType {
+    PublicKey(PublicKey),
+    Keypair {
+        keypair: Keypair,
+        public_key: PublicKey,
+    },
+}
+impl From<PublicKey> for KeyType {
+    fn from(value: PublicKey) -> Self {
+        Self::PublicKey(value)
+    }
+}
+impl From<&Keypair> for KeyType {
+    fn from(value: &Keypair) -> Self {
+        Self::Keypair {
+            public_key: value.public(),
+            keypair: value.clone(),
+        }
+    }
+}
+impl KeyType {
+    pub(crate) fn public_key(&self) -> &PublicKey {
+        match &self {
+            KeyType::PublicKey(pubkey) => pubkey,
+            KeyType::Keypair { public_key, .. } => public_key,
         }
     }
 }

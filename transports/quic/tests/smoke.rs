@@ -295,6 +295,7 @@ fn concurrent_connections_and_streams_tokio() {
         .quickcheck(prop::<quic::tokio::Provider> as fn(_, _) -> _);
 }
 
+#[expect(deprecated)]
 #[cfg(feature = "tokio")]
 #[tokio::test]
 async fn draft_29_support() {
