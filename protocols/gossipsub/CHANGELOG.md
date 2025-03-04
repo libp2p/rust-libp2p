@@ -5,6 +5,8 @@
 - Improve `max_messages_per_rpc` consistency by ensuring RPC control messages also adhere to the existing limits.
   See [PR 5826](https://github.com/libp2p/rust-libp2p/pull/5826)
 
+- Create `DEFAULT_MAX_TRANSMIT_SIZE` and use it in the code and docs. The main motivation is to fix the incorrect value mentioned in the docs and prevent it from happening again. See [PR 5906](https://github.com/libp2p/rust-libp2p/pull/5906)
+
 ## 0.48.0
 
 - Allow broadcasting `IDONTWANT` messages when publishing to avoid downloading data that is already available.

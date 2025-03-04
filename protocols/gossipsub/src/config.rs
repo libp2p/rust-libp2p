@@ -177,7 +177,8 @@ impl Config {
         self.check_explicit_peers_ticks
     }
 
-    /// The maximum byte size for each gossipsub RPC (default is 65536 bytes).
+    /// The maximum byte size for each gossipsub RPC (default is
+    /// [`crate::protocol::DEFAULT_MAX_TRANSMIT_SIZE`] bytes).
     ///
     /// This represents the maximum size of the published message. It is additionally wrapped
     /// in a protobuf struct, so the actual wire size may be a bit larger. It must be at least
@@ -619,7 +620,8 @@ impl ConfigBuilder {
         self
     }
 
-    /// The maximum byte size for each gossip (default is 2048 bytes).
+    /// The maximum byte size for each gossip (default is
+    /// [`crate::protocol::DEFAULT_MAX_TRANSMIT_SIZE`] bytes).
     pub fn max_transmit_size(&mut self, max_transmit_size: usize) -> &mut Self {
         self.config.protocol.max_transmit_size = max_transmit_size;
         self
