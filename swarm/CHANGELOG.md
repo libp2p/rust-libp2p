@@ -1,4 +1,6 @@
-## 0.46.1
+## 0.47.0
+- Separate the `PendingConnectionError` into two parts `PendingOutboundConnectionError` and `PendingInboundConnectionError` to have better control over error handling. See [PR](https://github.com/libp2p/rust-libp2p/pull/5861)
+
 - Undo `ConnectionHandler::{InboundOpenInfo, OutboundOpenInfo}` deprecation.
   Substreams are not completely interchangeable and a certain Substream may be associated with a
   certain upgrade.
