@@ -23,13 +23,11 @@
 //! Using a peer iterator in a query involves performing the following steps
 //! repeatedly and in an alternating fashion:
 //!
-//!   1. Calling `next` to observe the next state of the iterator and determine
-//!      what to do, which is to either issue new requests to peers or continue
-//!      waiting for responses.
+//!   1. Calling `next` to observe the next state of the iterator and determine what to do, which is
+//!      to either issue new requests to peers or continue waiting for responses.
 //!
-//!   2. When responses are received or requests fail, providing input to the
-//!      iterator via the `on_success` and `on_failure` callbacks,
-//!      respectively, followed by repeating step (1).
+//!   2. When responses are received or requests fail, providing input to the iterator via the
+//!      `on_success` and `on_failure` callbacks, respectively, followed by repeating step (1).
 //!
 //! When a call to `next` returns [`Finished`], no more peers can be obtained
 //! from the iterator and the results can be obtained from `into_result`.
@@ -40,8 +38,9 @@
 
 pub(crate) mod closest;
 pub(crate) mod fixed;
-use libp2p_identity::PeerId;
 use std::borrow::Cow;
+
+use libp2p_identity::PeerId;
 
 /// The state of a peer iterator.
 #[derive(Debug, Clone, PartialEq, Eq)]

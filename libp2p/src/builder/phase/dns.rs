@@ -1,6 +1,7 @@
+use std::marker::PhantomData;
+
 use super::*;
 use crate::SwarmBuilder;
-use std::marker::PhantomData;
 
 pub struct DnsPhase<T> {
     pub(crate) transport: T,

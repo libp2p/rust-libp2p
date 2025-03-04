@@ -49,6 +49,8 @@ use crate::transport::ConnectingMode;
 use crate::webtransport::WebtransportConnectingError;
 use crate::{webtransport, Connection, ConnectionError, Error};
 
+use crate::{Connection, ConnectionError, Error};
+
 /// A QUIC connection currently being negotiated.
 pub struct Connecting {
     connecting: Select<BoxFuture<'static, Result<(PeerId, StreamMuxerBox), Error>>, Delay>,

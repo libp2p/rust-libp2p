@@ -64,6 +64,7 @@ pub struct Config {
     /// If support for draft-29 is enabled servers support draft-29 and version 1 on all
     /// QUIC listening addresses.
     /// As client the version is chosen based on the remote's address.
+    #[deprecated(note = "QUIC draft versions are no longer supported")]
     pub support_draft_29: bool,
 
     /// TLS client config for the inner [`quinn::ClientConfig`].
@@ -79,6 +80,7 @@ pub struct Config {
     webtransport_certhashes: Vec<Multihash<64>>,
 }
 
+#[expect(deprecated)]
 impl Config {
     /// Creates a new configuration object with default values.
     pub fn new(keypair: &libp2p_identity::Keypair, webtransport_cert: Option<Certificate>) -> Self {
@@ -145,6 +147,7 @@ pub(crate) struct QuinnConfig {
     pub(crate) webtransport_certhashes: Vec<Multihash<64>>,
 }
 
+#[expect(deprecated)]
 impl From<Config> for QuinnConfig {
     fn from(config: Config) -> QuinnConfig {
         let Config {

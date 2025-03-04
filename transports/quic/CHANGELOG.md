@@ -1,3 +1,12 @@
+## 0.12.1
+
+- Deprecate `Config::support_draft_29`.
+  See [PR 5786](https://github.com/libp2p/rust-libp2p/pull/5786).
+
+## 0.12.0
+
+<!-- Update to libp2p-core v0.43.0 -->
+
 ## 0.11.1
 
 - Update `libp2p-tls` to version `0.5.0`, see [PR 5547]

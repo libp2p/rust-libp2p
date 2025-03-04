@@ -30,21 +30,6 @@
 
 mod provider;
 
-#[cfg(feature = "async-io")]
-pub use provider::async_io;
-
-#[cfg(feature = "tokio")]
-pub use provider::tokio;
-
-use futures::{future::Ready, prelude::*, stream::SelectAll};
-use futures_timer::Delay;
-use if_watch::IfEvent;
-use libp2p_core::{
-    multiaddr::{Multiaddr, Protocol},
-    transport::{DialOpts, ListenerId, PortUse, TransportError, TransportEvent},
-};
-use provider::{Incoming, Provider};
-use socket2::{Domain, Socket, Type};
 use std::{
     collections::{HashSet, VecDeque},
     io,
@@ -55,13 +40,27 @@ use std::{
     time::Duration,
 };
 
+use futures::{future::Ready, prelude::*, stream::SelectAll};
+use futures_timer::Delay;
+use if_watch::IfEvent;
+use libp2p_core::{
+    multiaddr::{Multiaddr, Protocol},
+    transport::{DialOpts, ListenerId, PortUse, TransportError, TransportEvent},
+};
+#[cfg(feature = "async-io")]
+pub use provider::async_io;
+#[cfg(feature = "tokio")]
+pub use provider::tokio;
+use provider::{Incoming, Provider};
+use socket2::{Domain, Socket, Type};
+
 /// The configuration for a TCP/IP transport capability for libp2p.
 #[derive(Clone, Debug)]
 pub struct Config {
     /// TTL to set for opened sockets, or `None` to keep default.
     ttl: Option<u32>,
-    /// `TCP_NODELAY` to set for opened sockets, or `None` to keep default.
-    nodelay: Option<bool>,
+    /// `TCP_NODELAY` to set for opened sockets.
+    nodelay: bool,
     /// Size of the listen backlog for listen sockets.
     backlog: u32,
 }
@@ -131,18 +130,15 @@ impl PortReuse {
 impl Config {
     /// Creates a new configuration for a TCP/IP transport:
     ///
-    ///   * Nagle's algorithm, i.e. `TCP_NODELAY`, is _enabled_.
-    ///     See [`Config::nodelay`].
-    ///   * Reuse of listening ports is _disabled_.
-    ///     See [`Config::port_reuse`].
-    ///   * No custom `IP_TTL` is set. The default of the OS TCP stack applies.
-    ///     See [`Config::ttl`].
-    ///   * The size of the listen backlog for new listening sockets is `1024`.
-    ///     See [`Config::listen_backlog`].
+    ///   * Nagle's algorithm is _disabled_, i.e. `TCP_NODELAY` _enabled_. See [`Config::nodelay`].
+    ///   * Reuse of listening ports is _disabled_. See [`Config::port_reuse`].
+    ///   * No custom `IP_TTL` is set. The default of the OS TCP stack applies. See [`Config::ttl`].
+    ///   * The size of the listen backlog for new listening sockets is `1024`. See
+    ///     [`Config::listen_backlog`].
     pub fn new() -> Self {
         Self {
             ttl: None,
-            nodelay: Some(false), // Disable Nagle's algorithm by default
+            nodelay: true, // Disable Nagle's algorithm by default.
             backlog: 1024,
         }
     }
@@ -155,7 +151,7 @@ impl Config {
 
     /// Configures the `TCP_NODELAY` option for new sockets.
     pub fn nodelay(mut self, value: bool) -> Self {
-        self.nodelay = Some(value);
+        self.nodelay = value;
         self
     }
 
@@ -202,9 +198,7 @@ impl Config {
         if let Some(ttl) = self.ttl {
             socket.set_ttl(ttl)?;
         }
-        if let Some(nodelay) = self.nodelay {
-            socket.set_nodelay(nodelay)?;
-        }
+        socket.set_nodelay(self.nodelay)?;
         socket.set_reuse_address(true)?;
         #[cfg(all(unix, not(any(target_os = "solaris", target_os = "illumos"))))]
         if port_use == PortUse::Reuse {
@@ -241,8 +235,8 @@ where
     /// The configuration of port reuse when dialing.
     port_reuse: PortReuse,
     /// All the active listeners.
-    /// The [`ListenStream`] struct contains a stream that we want to be pinned. Since the `VecDeque`
-    /// can be resized, the only way is to use a `Pin<Box<>>`.
+    /// The [`ListenStream`] struct contains a stream that we want to be pinned. Since the
+    /// `VecDeque` can be resized, the only way is to use a `Pin<Box<>>`.
     listeners: SelectAll<ListenStream<T>>,
     /// Pending transport events to return from [`libp2p_core::Transport::poll`].
     pending_events:
@@ -465,7 +459,8 @@ where
     pause: Option<Delay>,
     /// Pending event to reported.
     pending_event: Option<<Self as Stream>::Item>,
-    /// The listener can be manually closed with [`Transport::remove_listener`](libp2p_core::Transport::remove_listener).
+    /// The listener can be manually closed with
+    /// [`Transport::remove_listener`](libp2p_core::Transport::remove_listener).
     is_closed: bool,
     /// The stream must be awaken after it has been closed to deliver the last event.
     close_listener_waker: Option<Waker>,
@@ -621,7 +616,8 @@ where
         }
 
         if self.is_closed {
-            // Terminate the stream if the listener closed and all remaining events have been reported.
+            // Terminate the stream if the listener closed
+            // and all remaining events have been reported.
             return Poll::Ready(None);
         }
 
@@ -705,13 +701,13 @@ fn ip_to_multiaddr(ip: IpAddr, port: u16) -> Multiaddr {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use futures::{
         channel::{mpsc, oneshot},
         future::poll_fn,
     };
-    use libp2p_core::Endpoint;
-    use libp2p_core::Transport as _;
+    use libp2p_core::{Endpoint, Transport as _};
+
+    use super::*;
 
     #[test]
     fn multiaddr_to_tcp_conversion() {

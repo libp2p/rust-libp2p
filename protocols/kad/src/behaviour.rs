@@ -22,41 +22,46 @@
 
 mod test;
 
-use crate::addresses::Addresses;
-use crate::handler::{Handler, HandlerEvent, HandlerIn, RequestId};
-use crate::kbucket::{self, Distance, KBucketConfig, KBucketsTable, NodeStatus};
-use crate::protocol::{ConnectionType, KadPeer, ProtocolConfig};
-use crate::query::{Query, QueryConfig, QueryId, QueryPool, QueryPoolState};
-use crate::record::{
-    self,
-    store::{self, RecordStore},
-    ProviderRecord, Record,
+use std::{
+    collections::{BTreeMap, HashMap, HashSet, VecDeque},
+    fmt,
+    num::NonZeroUsize,
+    task::{Context, Poll, Waker},
+    time::Duration,
+    vec,
 };
-use crate::{bootstrap, K_VALUE};
-use crate::{jobs::*, protocol};
+
 use fnv::FnvHashSet;
 use libp2p_core::{transport::PortUse, ConnectedPoint, Endpoint, Multiaddr};
 use libp2p_identity::PeerId;
-use libp2p_swarm::behaviour::{
-    AddressChange, ConnectionClosed, ConnectionEstablished, DialFailure, FromSwarm,
-};
 use libp2p_swarm::{
+    behaviour::{AddressChange, ConnectionClosed, ConnectionEstablished, DialFailure, FromSwarm},
     dial_opts::{self, DialOpts},
     ConnectionDenied, ConnectionHandler, ConnectionId, DialError, ExternalAddresses,
     ListenAddresses, NetworkBehaviour, NotifyHandler, StreamProtocol, THandler, THandlerInEvent,
     THandlerOutEvent, ToSwarm,
 };
-use std::collections::{BTreeMap, HashMap, HashSet, VecDeque};
-use std::fmt;
-use std::num::NonZeroUsize;
-use std::task::{Context, Poll, Waker};
-use std::time::Duration;
-use std::vec;
 use thiserror::Error;
 use tracing::Level;
 use web_time::Instant;
 
 pub use crate::query::QueryStats;
+use crate::{
+    addresses::Addresses,
+    bootstrap,
+    handler::{Handler, HandlerEvent, HandlerIn, RequestId},
+    jobs::*,
+    kbucket::{self, Distance, KBucketConfig, KBucketsTable, NodeStatus},
+    protocol,
+    protocol::{ConnectionType, KadPeer, ProtocolConfig},
+    query::{Query, QueryConfig, QueryId, QueryPool, QueryPoolState},
+    record::{
+        self,
+        store::{self, RecordStore},
+        ProviderRecord, Record,
+    },
+    K_VALUE,
+};
 
 /// `Behaviour` is a `NetworkBehaviour` that implements the libp2p
 /// Kademlia protocol.
@@ -157,8 +162,9 @@ pub enum StoreInserts {
     /// the record is forwarded immediately to the [`RecordStore`].
     Unfiltered,
     /// Whenever a (provider) record is received, an event is emitted.
-    /// Provider records generate a [`InboundRequest::AddProvider`] under [`Event::InboundRequest`],
-    /// normal records generate a [`InboundRequest::PutRecord`] under [`Event::InboundRequest`].
+    /// Provider records generate a [`InboundRequest::AddProvider`] under
+    /// [`Event::InboundRequest`], normal records generate a [`InboundRequest::PutRecord`]
+    /// under [`Event::InboundRequest`].
     ///
     /// When deemed valid, a (provider) record needs to be explicitly stored in
     /// the [`RecordStore`] via [`RecordStore::put`] or [`RecordStore::add_provider`],
@@ -205,9 +211,10 @@ pub enum Caching {
     /// [`GetRecordOk::FinishedWithNoAdditionalRecord`] is always empty.
     Disabled,
     /// Up to `max_peers` peers not returning a record that are closest to the key
-    /// being looked up are tracked and returned in [`GetRecordOk::FinishedWithNoAdditionalRecord`].
-    /// The write-back operation must be performed explicitly, if
-    /// desired and after choosing a record from the results, via [`Behaviour::put_record_to`].
+    /// being looked up are tracked and returned in
+    /// [`GetRecordOk::FinishedWithNoAdditionalRecord`]. The write-back operation must be
+    /// performed explicitly, if desired and after choosing a record from the results, via
+    /// [`Behaviour::put_record_to`].
     Enabled { max_peers: u16 },
 }
 
@@ -229,29 +236,6 @@ impl Config {
             periodic_bootstrap_interval: Some(Duration::from_secs(5 * 60)),
             automatic_bootstrap_throttle: Some(bootstrap::DEFAULT_AUTOMATIC_THROTTLE),
         }
-    }
-
-    /// Returns the default configuration.
-    #[deprecated(note = "Use `Config::new` instead")]
-    #[allow(clippy::should_implement_trait)]
-    pub fn default() -> Self {
-        Default::default()
-    }
-
-    /// Sets custom protocol names.
-    ///
-    /// Kademlia nodes only communicate with other nodes using the same protocol
-    /// name. Using custom name(s) therefore allows to segregate the DHT from
-    /// others, if that is desired.
-    ///
-    /// More than one protocol name can be supplied. In this case the node will
-    /// be able to talk to other nodes supporting any of the provided names.
-    /// Multiple names must be used with caution to avoid network partitioning.
-    #[deprecated(note = "Use `Config::new` instead")]
-    #[allow(deprecated)]
-    pub fn set_protocol_names(&mut self, names: Vec<StreamProtocol>) -> &mut Self {
-        self.protocol_config.set_protocol_names(names);
-        self
     }
 
     /// Sets the timeout for a single query.
@@ -427,6 +411,8 @@ impl Config {
     /// Sets the configuration for the k-buckets.
     ///
     /// * Default to K_VALUE.
+    ///
+    /// **WARNING**: setting a `size` higher that `K_VALUE` may imply additional memory allocations.
     pub fn set_kbucket_size(&mut self, size: NonZeroUsize) -> &mut Self {
         self.kbucket_config.set_bucket_size(size);
         self
@@ -442,16 +428,17 @@ impl Config {
         self
     }
 
-    /// Sets the time to wait before calling [`Behaviour::bootstrap`] after a new peer is inserted in the routing table.
-    /// This prevent cascading bootstrap requests when multiple peers are inserted into the routing table "at the same time".
-    /// This also allows to wait a little bit for other potential peers to be inserted into the routing table before
-    /// triggering a bootstrap, giving more context to the future bootstrap request.
+    /// Sets the time to wait before calling [`Behaviour::bootstrap`] after a new peer is inserted
+    /// in the routing table. This prevent cascading bootstrap requests when multiple peers are
+    /// inserted into the routing table "at the same time". This also allows to wait a little
+    /// bit for other potential peers to be inserted into the routing table before triggering a
+    /// bootstrap, giving more context to the future bootstrap request.
     ///
     /// * Default to `500` ms.
-    /// * Set to `Some(Duration::ZERO)` to never wait before triggering a bootstrap request when a new peer
-    ///     is inserted in the routing table.
-    /// * Set to `None` to disable automatic bootstrap (no bootstrap request will be triggered when a new
-    ///     peer is inserted in the routing table).
+    /// * Set to `Some(Duration::ZERO)` to never wait before triggering a bootstrap request when a
+    ///   new peer is inserted in the routing table.
+    /// * Set to `None` to disable automatic bootstrap (no bootstrap request will be triggered when
+    ///   a new peer is inserted in the routing table).
     #[cfg(test)]
     pub(crate) fn set_automatic_bootstrap_throttle(
         &mut self,
@@ -573,15 +560,13 @@ where
     ///
     /// Explicitly adding addresses of peers serves two purposes:
     ///
-    ///   1. In order for a node to join the DHT, it must know about at least
-    ///      one other node of the DHT.
+    ///   1. In order for a node to join the DHT, it must know about at least one other node of the
+    ///      DHT.
     ///
-    ///   2. When a remote peer initiates a connection and that peer is not
-    ///      yet in the routing table, the `Kademlia` behaviour must be
-    ///      informed of an address on which that peer is listening for
-    ///      connections before it can be added to the routing table
-    ///      from where it can subsequently be discovered by all peers
-    ///      in the DHT.
+    ///   2. When a remote peer initiates a connection and that peer is not yet in the routing
+    ///      table, the `Kademlia` behaviour must be informed of an address on which that peer is
+    ///      listening for connections before it can be added to the routing table from where it can
+    ///      subsequently be discovered by all peers in the DHT.
     ///
     /// If the routing table has been updated as a result of this operation,
     /// a [`Event::RoutingUpdated`] event is emitted.
@@ -771,12 +756,30 @@ where
         self.queries.add_iter_closest(target, peer_keys, info)
     }
 
-    /// Returns closest peers to the given key; takes peers from local routing table only.
+    /// Returns all peers ordered by distance to the given key; takes peers from local routing table
+    /// only.
     pub fn get_closest_local_peers<'a, K: Clone>(
         &'a mut self,
         key: &'a kbucket::Key<K>,
     ) -> impl Iterator<Item = kbucket::Key<PeerId>> + 'a {
         self.kbuckets.closest_keys(key)
+    }
+
+    /// Finds the closest peers to a `key` in the context of a request by the `source` peer, such
+    /// that the `source` peer is never included in the result.
+    ///
+    /// Takes peers from local routing table only. Only returns number of peers equal to configured
+    /// replication factor.
+    pub fn find_closest_local_peers<'a, K: Clone>(
+        &'a mut self,
+        key: &'a kbucket::Key<K>,
+        source: &'a PeerId,
+    ) -> impl Iterator<Item = KadPeer> + 'a {
+        self.kbuckets
+            .closest(key)
+            .filter(move |e| e.node.key.preimage() != source)
+            .take(self.queries.config().replication_factor.get())
+            .map(KadPeer::from)
     }
 
     /// Performs a lookup for a record in the DHT.
@@ -965,7 +968,8 @@ where
     ///
     /// > **Note**: Bootstrap does not require to be called manually. It is periodically
     /// > invoked at regular intervals based on the configured `periodic_bootstrap_interval` (see
-    /// > [`Config::set_periodic_bootstrap_interval`] for details) and it is also automatically invoked
+    /// > [`Config::set_periodic_bootstrap_interval`] for details) and it is also automatically
+    /// > invoked
     /// > when a new peer is inserted in the routing table.
     /// > This parameter is used to call [`Behaviour::bootstrap`] periodically and automatically
     /// > to ensure a healthy routing table.
@@ -1089,10 +1093,12 @@ where
 
     /// Set the [`Mode`] in which we should operate.
     ///
-    /// By default, we are in [`Mode::Client`] and will swap into [`Mode::Server`] as soon as we have a confirmed, external address via [`FromSwarm::ExternalAddrConfirmed`].
+    /// By default, we are in [`Mode::Client`] and will swap into [`Mode::Server`] as soon as we
+    /// have a confirmed, external address via [`FromSwarm::ExternalAddrConfirmed`].
     ///
-    /// Setting a mode via this function disables this automatic behaviour and unconditionally operates in the specified mode.
-    /// To reactivate the automatic configuration, pass [`None`] instead.
+    /// Setting a mode via this function disables this automatic behaviour and unconditionally
+    /// operates in the specified mode. To reactivate the automatic configuration, pass [`None`]
+    /// instead.
     pub fn set_mode(&mut self, mode: Option<Mode>) {
         match mode {
             Some(mode) => {
@@ -1173,8 +1179,8 @@ where
                     "Previous match arm handled empty list"
                 );
 
-                // Previously, server-mode, now also server-mode because > 1 external address. Don't log anything to avoid spam.
-
+                // Previously, server-mode, now also server-mode because > 1 external address.
+                //  Don't log anything to avoid spam.
                 Mode::Server
             }
         };
@@ -1210,22 +1216,6 @@ where
             }
             query.on_success(source, others_iter.cloned().map(|kp| kp.node_id))
         }
-    }
-
-    /// Finds the closest peers to a `target` in the context of a request by
-    /// the `source` peer, such that the `source` peer is never included in the
-    /// result.
-    fn find_closest<T: Clone>(
-        &mut self,
-        target: &kbucket::Key<T>,
-        source: &PeerId,
-    ) -> Vec<KadPeer> {
-        self.kbuckets
-            .closest(target)
-            .filter(|e| e.node.key.preimage() != source)
-            .take(self.queries.config().replication_factor.get())
-            .map(KadPeer::from)
-            .collect()
     }
 
     /// Collects all peers who are known to be providers of the value for a given `Multihash`.
@@ -2155,7 +2145,8 @@ where
         }
     }
 
-    /// Preloads a new [`Handler`] with requests that are waiting to be sent to the newly connected peer.
+    /// Preloads a new [`Handler`] with requests that are waiting
+    /// to be sent to the newly connected peer.
     fn preload_new_handler(
         &mut self,
         handler: &mut Handler,
@@ -2300,7 +2291,9 @@ where
             }
 
             HandlerEvent::FindNodeReq { key, request_id } => {
-                let closer_peers = self.find_closest(&kbucket::Key::new(key), &source);
+                let closer_peers = self
+                    .find_closest_local_peers(&kbucket::Key::new(key), &source)
+                    .collect::<Vec<_>>();
 
                 self.queued_events
                     .push_back(ToSwarm::GenerateEvent(Event::InboundRequest {
@@ -2328,7 +2321,9 @@ where
 
             HandlerEvent::GetProvidersReq { key, request_id } => {
                 let provider_peers = self.provider_peers(&key, &source);
-                let closer_peers = self.find_closest(&kbucket::Key::new(key), &source);
+                let closer_peers = self
+                    .find_closest_local_peers(&kbucket::Key::new(key), &source)
+                    .collect::<Vec<_>>();
 
                 self.queued_events
                     .push_back(ToSwarm::GenerateEvent(Event::InboundRequest {
@@ -2422,7 +2417,9 @@ where
                     None => None,
                 };
 
-                let closer_peers = self.find_closest(&kbucket::Key::new(key), &source);
+                let closer_peers = self
+                    .find_closest_local_peers(&kbucket::Key::new(key), &source)
+                    .collect::<Vec<_>>();
 
                 self.queued_events
                     .push_back(ToSwarm::GenerateEvent(Event::InboundRequest {
@@ -2747,7 +2744,6 @@ pub struct PeerRecord {
 #[allow(clippy::large_enum_variant)]
 pub enum Event {
     /// An inbound request has been received and handled.
-    //
     // Note on the difference between 'request' and 'query': A request is a
     // single request-response style exchange with a single remote peer. A query
     // is made of multiple requests across multiple remote peers.
@@ -3353,7 +3349,7 @@ pub struct QueryMut<'a> {
     query: &'a mut Query,
 }
 
-impl<'a> QueryMut<'a> {
+impl QueryMut<'_> {
     pub fn id(&self) -> QueryId {
         self.query.id()
     }
@@ -3383,7 +3379,7 @@ pub struct QueryRef<'a> {
     query: &'a Query,
 }
 
-impl<'a> QueryRef<'a> {
+impl QueryRef<'_> {
     pub fn id(&self) -> QueryId {
         self.query.id()
     }

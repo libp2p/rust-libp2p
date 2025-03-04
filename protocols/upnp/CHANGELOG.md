@@ -1,3 +1,10 @@
+## 0.4.0
+
+- update igd-next to 0.15.1.
+  See [PR XXXX](https://github.com/libp2p/rust-libp2p/pull/XXXX).
+
+<!-- Update to libp2p-core v0.43.0 -->
+
 ## 0.3.0
 
 <!-- Update to libp2p-swarm v0.45.0 -->

@@ -1,12 +1,12 @@
-use futures::{AsyncRead, AsyncWrite};
-use libp2p_core::muxing::SubstreamBox;
-use libp2p_core::Negotiated;
 use std::{
     io::{IoSlice, IoSliceMut},
     pin::Pin,
     sync::Arc,
     task::{Context, Poll},
 };
+
+use futures::{AsyncRead, AsyncWrite};
+use libp2p_core::{muxing::SubstreamBox, Negotiated};
 
 /// Counter for the number of active streams on a connection.
 #[derive(Debug, Clone)]

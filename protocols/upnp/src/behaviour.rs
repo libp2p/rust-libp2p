@@ -32,7 +32,6 @@ use std::{
     time::Duration,
 };
 
-use crate::tokio::{is_addr_global, Gateway};
 use futures::{channel::oneshot, Future, StreamExt};
 use futures_timer::Delay;
 use igd_next::PortMappingProtocol;
@@ -45,6 +44,8 @@ use libp2p_swarm::{
     derive_prelude::PeerId, dummy, ConnectionDenied, ConnectionId, ExpiredListenAddr, FromSwarm,
     NetworkBehaviour, NewListenAddr, ToSwarm,
 };
+
+use crate::tokio::{is_addr_global, Gateway};
 
 /// The duration in seconds of a port mapping on the gateway.
 const MAPPING_DURATION: u32 = 3600;
@@ -263,12 +264,10 @@ impl NetworkBehaviour for Behaviour {
                 listener_id,
                 addr: multiaddr,
             }) => {
-                let (addr, protocol) = match multiaddr_to_socketaddr_protocol(multiaddr.clone()) {
-                    Ok(addr_port) => addr_port,
-                    Err(()) => {
-                        tracing::debug!("multiaddress not supported for UPnP {multiaddr}");
-                        return;
-                    }
+                let Ok((addr, protocol)) = multiaddr_to_socketaddr_protocol(multiaddr.clone())
+                else {
+                    tracing::debug!("multiaddress not supported for UPnP {multiaddr}");
+                    return;
                 };
 
                 if let Some((mapping, _state)) = self
@@ -286,8 +285,9 @@ impl NetworkBehaviour for Behaviour {
 
                 match &mut self.state {
                     GatewayState::Searching(_) => {
-                        // As the gateway is not yet available we add the mapping with `MappingState::Inactive`
-                        // so that when and if it becomes available we map it.
+                        // As the gateway is not yet available we add the mapping with
+                        // `MappingState::Inactive` so that when and if it
+                        // becomes available we map it.
                         self.mappings.insert(
                             Mapping {
                                 listener_id,
@@ -366,7 +366,7 @@ impl NetworkBehaviour for Behaviour {
         _connection_id: ConnectionId,
         event: libp2p_swarm::THandlerOutEvent<Self>,
     ) {
-        void::unreachable(event)
+        libp2p_core::util::unreachable(event)
     }
 
     #[tracing::instrument(level = "trace", name = "NetworkBehaviour::poll", skip(self, cx))]

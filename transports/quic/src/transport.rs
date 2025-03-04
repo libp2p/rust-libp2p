@@ -18,43 +18,45 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::config::{Config, QuinnConfig};
-use crate::hole_punching::hole_puncher;
-use crate::provider::Provider;
-use crate::{ConnectError, Connecting, Error};
+use std::{
+    collections::{
+        hash_map::{DefaultHasher, Entry},
+        HashMap, HashSet,
+    },
+    fmt,
+    hash::{Hash, Hasher},
+    io,
+    net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr, UdpSocket},
+    pin::Pin,
+    task::{Context, Poll, Waker},
+    time::Duration,
+};
 
-use futures::channel::oneshot;
-use futures::future::{BoxFuture, Either};
-use futures::ready;
-use futures::stream::StreamExt;
-use futures::{prelude::*, stream::SelectAll};
-
+use futures::{
+    channel::oneshot,
+    future::{BoxFuture, Either},
+    prelude::*,
+    ready,
+    stream::{SelectAll, StreamExt},
+};
 use if_watch::IfEvent;
 
 use libp2p_core::multihash::Multihash;
 use libp2p_core::muxing::StreamMuxerBox;
-use libp2p_core::transport::{DialOpts, PortUse};
-use libp2p_core::Endpoint;
 use libp2p_core::{
     multiaddr::{Multiaddr, Protocol},
-    transport::{ListenerId, TransportError, TransportEvent},
-    Transport,
+    transport::{DialOpts, ListenerId, PortUse, TransportError, TransportEvent},
+    Endpoint, Transport,
 };
 use libp2p_identity::PeerId;
 use socket2::{Domain, Socket, Type};
-use std::collections::hash_map::{DefaultHasher, Entry};
-use std::collections::{HashMap, HashSet};
-use std::fmt::{Debug, Formatter};
-use std::hash::{Hash, Hasher};
-use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, UdpSocket};
-use std::time::Duration;
-use std::{fmt, io};
-use std::{
-    net::SocketAddr,
-    pin::Pin,
-    task::{Context, Poll, Waker},
-};
 
+use crate::{
+    config::{Config, QuinnConfig},
+    hole_punching::hole_puncher,
+    provider::Provider,
+    ConnectError, Connecting, Connection, Error,
+};
 /// Implementation of the [`Transport`] trait for QUIC.
 ///
 /// By default, only QUIC Version 1 (RFC 9000) is supported. In the [`Multiaddr`] this maps to
@@ -84,6 +86,7 @@ pub struct GenTransport<P: Provider> {
     hole_punch_attempts: HashMap<SocketAddr, oneshot::Sender<Connecting>>,
 }
 
+#[expect(deprecated)]
 impl<P: Provider> GenTransport<P> {
     /// Create a new [`GenTransport`] with the given [`Config`].
     pub fn new(config: Config) -> Self {
@@ -877,9 +880,10 @@ fn socketaddr_to_multiaddr(socket_addr: &SocketAddr, version: ProtocolVersion) -
 #[cfg(test)]
 #[cfg(any(feature = "async-std", feature = "tokio"))]
 mod tests {
+    use futures::future::poll_fn;
+
     use super::*;
     use crate::webtransport;
-    use futures::future::poll_fn;
     use time::OffsetDateTime;
 
     #[test]
@@ -996,12 +1000,12 @@ mod tests {
         );
     }
 
-    #[cfg(feature = "async-std")]
-    #[async_std::test]
+    #[cfg(feature = "tokio")]
+    #[tokio::test]
     async fn test_close_listener() {
         let keypair = libp2p_identity::Keypair::generate_ed25519();
         let config = Config::new(&keypair, None);
-        let mut transport = crate::async_std::Transport::new(config);
+        let mut transport = crate::tokio::Transport::new(config);
         assert!(poll_fn(|cx| Pin::new(&mut transport).as_mut().poll(cx))
             .now_or_never()
             .is_none());

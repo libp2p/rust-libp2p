@@ -3,7 +3,7 @@ name = "libp2p-relay"
 edition = "2021"
 rust-version = { workspace = true }
 description = "Communications relaying for libp2p"
-version = "0.18.0"
+version = "0.20.0"
 authors = ["Parity Technologies <admin@parity.io>", "Max Inden <mail@max-inden.de>"]
 license = "MIT"
 repository = "https://github.com/libp2p/rust-libp2p"
@@ -25,9 +25,8 @@ quick-protobuf = "0.8"
 quick-protobuf-codec = { workspace = true }
 rand = "0.8.4"
 static_assertions = "1"
-thiserror = "1.0"
+thiserror = { workspace = true }
 tracing = { workspace = true }
-void = "1"
 
 [dev-dependencies]
 libp2p-identity = { workspace = true, features = ["rand"] }

@@ -31,12 +31,12 @@
 //! #[derive(NetworkBehaviour)]
 //! # #[behaviour(prelude = "libp2p_swarm::derive_prelude")]
 //! struct MyBehaviour {
-//!    allowed_peers: allow_block_list::Behaviour<AllowedPeers>,
+//!     allowed_peers: allow_block_list::Behaviour<AllowedPeers>,
 //! }
 //!
 //! # fn main() {
 //! let behaviour = MyBehaviour {
-//!     allowed_peers: allow_block_list::Behaviour::default()
+//!     allowed_peers: allow_block_list::Behaviour::default(),
 //! };
 //! # }
 //! ```
@@ -51,27 +51,29 @@
 //! #[derive(NetworkBehaviour)]
 //! # #[behaviour(prelude = "libp2p_swarm::derive_prelude")]
 //! struct MyBehaviour {
-//!    blocked_peers: allow_block_list::Behaviour<BlockedPeers>,
+//!     blocked_peers: allow_block_list::Behaviour<BlockedPeers>,
 //! }
 //!
 //! # fn main() {
 //! let behaviour = MyBehaviour {
-//!     blocked_peers: allow_block_list::Behaviour::default()
+//!     blocked_peers: allow_block_list::Behaviour::default(),
 //! };
 //! # }
 //! ```
 
-use libp2p_core::transport::PortUse;
-use libp2p_core::{Endpoint, Multiaddr};
+use std::{
+    collections::{HashSet, VecDeque},
+    convert::Infallible,
+    fmt,
+    task::{Context, Poll, Waker},
+};
+
+use libp2p_core::{transport::PortUse, Endpoint, Multiaddr};
 use libp2p_identity::PeerId;
 use libp2p_swarm::{
     dummy, CloseConnection, ConnectionDenied, ConnectionId, FromSwarm, NetworkBehaviour, THandler,
     THandlerInEvent, THandlerOutEvent, ToSwarm,
 };
-use std::collections::{HashSet, VecDeque};
-use std::fmt;
-use std::task::{Context, Poll, Waker};
-use void::Void;
 
 /// A [`NetworkBehaviour`] that can act as an allow or block list.
 #[derive(Default, Debug)]
@@ -101,7 +103,8 @@ impl Behaviour<AllowedPeers> {
 
     /// Allow connections to the given peer.
     ///
-    /// Returns whether the peer was newly inserted. Does nothing if the peer was already present in the set.
+    /// Returns whether the peer was newly inserted. Does nothing if the peer
+    /// was already present in the set.
     pub fn allow_peer(&mut self, peer: PeerId) -> bool {
         let inserted = self.state.peers.insert(peer);
         if inserted {
@@ -116,7 +119,8 @@ impl Behaviour<AllowedPeers> {
     ///
     /// All active connections to this peer will be closed immediately.
     ///
-    /// Returns whether the peer was present in the set. Does nothing if the peer was not present in the set.
+    /// Returns whether the peer was present in the set. Does nothing if the peer
+    /// was not present in the set.
     pub fn disallow_peer(&mut self, peer: PeerId) -> bool {
         let removed = self.state.peers.remove(&peer);
         if removed {
@@ -139,7 +143,8 @@ impl Behaviour<BlockedPeers> {
     ///
     /// All active connections to this peer will be closed immediately.
     ///
-    /// Returns whether the peer was newly inserted. Does nothing if the peer was already present in the set.
+    /// Returns whether the peer was newly inserted. Does nothing if the peer was already present in
+    /// the set.
     pub fn block_peer(&mut self, peer: PeerId) -> bool {
         let inserted = self.state.peers.insert(peer);
         if inserted {
@@ -153,7 +158,8 @@ impl Behaviour<BlockedPeers> {
 
     /// Unblock connections to a given peer.
     ///
-    /// Returns whether the peer was present in the set. Does nothing if the peer was not present in the set.
+    /// Returns whether the peer was present in the set. Does nothing if the peer
+    /// was not present in the set.
     pub fn unblock_peer(&mut self, peer: PeerId) -> bool {
         let removed = self.state.peers.remove(&peer);
         if removed {
@@ -222,7 +228,7 @@ where
     S: Enforce,
 {
     type ConnectionHandler = dummy::ConnectionHandler;
-    type ToSwarm = Void;
+    type ToSwarm = Infallible;
 
     fn handle_established_inbound_connection(
         &mut self,
@@ -271,7 +277,9 @@ where
         _: ConnectionId,
         event: THandlerOutEvent<Self>,
     ) {
-        void::unreachable(event)
+        // TODO: remove when Rust 1.82 is MSRV
+        #[allow(unreachable_patterns)]
+        libp2p_core::util::unreachable(event)
     }
 
     fn poll(
@@ -292,11 +300,12 @@ where
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use libp2p_swarm::{dial_opts::DialOpts, DialError, ListenError, Swarm, SwarmEvent};
     use libp2p_swarm_test::SwarmExt;
 
-    #[async_std::test]
+    use super::*;
+
+    #[tokio::test]
     async fn cannot_dial_blocked_peer() {
         let mut dialer = Swarm::new_ephemeral(|_| Behaviour::<BlockedPeers>::default());
         let mut listener = Swarm::new_ephemeral(|_| Behaviour::<BlockedPeers>::default());
@@ -310,7 +319,7 @@ mod tests {
         assert!(cause.downcast::<Blocked>().is_ok());
     }
 
-    #[async_std::test]
+    #[tokio::test]
     async fn can_dial_unblocked_peer() {
         let mut dialer = Swarm::new_ephemeral(|_| Behaviour::<BlockedPeers>::default());
         let mut listener = Swarm::new_ephemeral(|_| Behaviour::<BlockedPeers>::default());
@@ -324,7 +333,7 @@ mod tests {
         dial(&mut dialer, &listener).unwrap();
     }
 
-    #[async_std::test]
+    #[tokio::test]
     async fn blocked_peer_cannot_dial_us() {
         let mut dialer = Swarm::new_ephemeral(|_| Behaviour::<BlockedPeers>::default());
         let mut listener = Swarm::new_ephemeral(|_| Behaviour::<BlockedPeers>::default());
@@ -332,7 +341,7 @@ mod tests {
 
         listener.behaviour_mut().block_peer(*dialer.local_peer_id());
         dial(&mut dialer, &listener).unwrap();
-        async_std::task::spawn(dialer.loop_on_next());
+        tokio::spawn(dialer.loop_on_next());
 
         let cause = listener
             .wait(|e| match e {
@@ -346,7 +355,7 @@ mod tests {
         assert!(cause.downcast::<Blocked>().is_ok());
     }
 
-    #[async_std::test]
+    #[tokio::test]
     async fn connections_get_closed_upon_blocked() {
         let mut dialer = Swarm::new_ephemeral(|_| Behaviour::<BlockedPeers>::default());
         let mut listener = Swarm::new_ephemeral(|_| Behaviour::<BlockedPeers>::default());
@@ -372,7 +381,7 @@ mod tests {
         assert_eq!(closed_listener_peer, *dialer.local_peer_id());
     }
 
-    #[async_std::test]
+    #[tokio::test]
     async fn cannot_dial_peer_unless_allowed() {
         let mut dialer = Swarm::new_ephemeral(|_| Behaviour::<AllowedPeers>::default());
         let mut listener = Swarm::new_ephemeral(|_| Behaviour::<AllowedPeers>::default());
@@ -387,7 +396,7 @@ mod tests {
         assert!(dial(&mut dialer, &listener).is_ok());
     }
 
-    #[async_std::test]
+    #[tokio::test]
     async fn cannot_dial_disallowed_peer() {
         let mut dialer = Swarm::new_ephemeral(|_| Behaviour::<AllowedPeers>::default());
         let mut listener = Swarm::new_ephemeral(|_| Behaviour::<AllowedPeers>::default());
@@ -404,7 +413,7 @@ mod tests {
         assert!(cause.downcast::<NotAllowed>().is_ok());
     }
 
-    #[async_std::test]
+    #[tokio::test]
     async fn not_allowed_peer_cannot_dial_us() {
         let mut dialer = Swarm::new_ephemeral(|_| Behaviour::<AllowedPeers>::default());
         let mut listener = Swarm::new_ephemeral(|_| Behaviour::<AllowedPeers>::default());
@@ -441,7 +450,7 @@ mod tests {
         assert!(incoming_cause.downcast::<NotAllowed>().is_ok());
     }
 
-    #[async_std::test]
+    #[tokio::test]
     async fn connections_get_closed_upon_disallow() {
         let mut dialer = Swarm::new_ephemeral(|_| Behaviour::<AllowedPeers>::default());
         let mut listener = Swarm::new_ephemeral(|_| Behaviour::<AllowedPeers>::default());

@@ -1,7 +1,51 @@
-## 0.47.1
+## 0.48.1
+- Allow whitelisting topics for metrics to ensure metrics are recorded correctly for these topics.
+  See [PR 5895](https://github.com/libp2p/rust-libp2p/pull/5895)
+
+- Improve `max_messages_per_rpc` consistency by ensuring RPC control messages also adhere to the existing limits.
+  See [PR 5826](https://github.com/libp2p/rust-libp2p/pull/5826)
+
+## 0.48.0
+
+- Allow broadcasting `IDONTWANT` messages when publishing to avoid downloading data that is already available.
+  See [PR 5773](https://github.com/libp2p/rust-libp2p/pull/5773)
+
+- Add configurable `idontwant_message_size_threshold` parameter.
+  See [PR 5770](https://github.com/libp2p/rust-libp2p/pull/5770)
+
+- Introduce Gossipsub v1.2 [spec](https://github.com/libp2p/specs/blob/master/pubsub/gossipsub/gossipsub-v1.2.md).
+  See [PR 5697](https://github.com/libp2p/rust-libp2p/pull/5697)
+
+- Correct state inconsistencies with the mesh and fanout when unsubscribing.
+  See [PR 5690](https://github.com/libp2p/rust-libp2p/pull/5690)
+
+- Deprecate `futures-ticker` and use `futures-timer` instead.
+  See [PR 5674](https://github.com/libp2p/rust-libp2p/pull/5674).
+
+- Apply `max_transmit_size` to the inner message instead of the final payload.
+  See [PR 5642](https://github.com/libp2p/rust-libp2p/pull/5642).
+
+- Deprecate `void` crate.
+  See [PR 5676](https://github.com/libp2p/rust-libp2p/pull/5676).
 
 - Attempt to publish to at least mesh_n peers when flood publish is disabled.
   See [PR 5578](https://github.com/libp2p/rust-libp2p/pull/5578).
+
+- Introduce back pressure and penalize slow peers. Drop stale messages that timeout before being
+  delivered.
+  See [PR 5595](https://github.com/libp2p/rust-libp2p/pull/5595).
+
+- Change `Behaviour::unsubscribe` and `Behaviour::report_message_validation_result`
+  to `bool` they don't need to be a `Result`.
+  See [PR 5595](https://github.com/libp2p/rust-libp2p/pull/5595).
+
+- Fix `cargo clippy` warnings in `rustc 1.84.0-beta.1`.
+  See [PR 5700](https://github.com/libp2p/rust-libp2p/pull/5700).
+
+- Fix an issue where an `InsufficientPeers` error could occur under certain conditions, despite having peers subscribed to a topic.
+  See [PR 5793](https://github.com/libp2p/rust-libp2p/pull/5793).
+
+<!-- Update to libp2p-core v0.43.0 -->
 
 ## 0.47.0
 
@@ -34,7 +78,7 @@
 - Deprecate `gossipsub::Config::idle_timeout` in favor of `SwarmBuilder::idle_connection_timeout`.
   See [PR 4648].
 
-<!-- Interal changes:
+<!-- Internal changes:
 
 - Allow new clippy lint.
 
@@ -50,7 +94,7 @@
 
 ## 0.45.1
 
-- Add getter function to o  btain `TopicScoreParams`.
+- Add getter function to obtain `TopicScoreParams`.
   See [PR 4231].
 
 [PR 4231]: https://github.com/libp2p/rust-libp2p/pull/4231
@@ -223,7 +267,7 @@
 
 - Move from `open-metrics-client` to `prometheus-client` (see [PR 2442]).
 
-- Emit gossip of all non empty topics (see [PR 2481]).
+- Emit gossip of all non-empty topics (see [PR 2481]).
 
 - Merge NetworkBehaviour's inject_\* paired methods (see [PR 2445]).
 

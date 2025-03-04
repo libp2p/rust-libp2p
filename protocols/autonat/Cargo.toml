@@ -3,8 +3,12 @@ name = "libp2p-autonat"
 edition = "2021"
 rust-version = { workspace = true }
 description = "NAT and firewall detection for libp2p"
-version = "0.13.1"
-authors = ["David Craven <david@craven.ch>", "Elena Frank <elena.frank@protonmail.com>", "Hannes Furmans <hannes@umgefahren.xyz>"]
+version = "0.14.1"
+authors = [
+    "David Craven <david@craven.ch>",
+    "Elena Frank <elena.frank@protonmail.com>",
+    "Hannes Furmans <hannes@umgefahren.xyz>",
+]
 license = "MIT"
 repository = "https://github.com/libp2p/rust-libp2p"
 keywords = ["peer-to-peer", "libp2p", "networking"]
@@ -14,7 +18,6 @@ categories = ["network-programming", "asynchronous"]
 [dependencies]
 async-trait = { version = "0.1", optional = true }
 asynchronous-codec = { workspace = true }
-bytes = { version = "1", optional = true }
 either = { version = "1.9.0", optional = true }
 futures = { workspace = true }
 futures-bounded = { workspace = true, optional = true }
@@ -29,21 +32,19 @@ tracing = { workspace = true }
 quick-protobuf-codec = { workspace = true }
 rand = "0.8"
 rand_core = { version = "0.6", optional = true }
-thiserror = { version = "1.0.52", optional = true }
-void = { version = "1", optional = true }
+thiserror = { workspace = true, optional = true }
 
 [dev-dependencies]
-tokio = { version = "1", features = ["macros", "rt", "sync"]}
-async-std = { version = "1.10", features = ["attributes"] }
+tokio = { workspace = true, features = ["macros", "rt", "sync"] }
 libp2p-swarm-test = { path = "../../swarm-test" }
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 libp2p-identify = { workspace = true }
-libp2p-swarm = { workspace = true, features = ["macros"]}
+libp2p-swarm = { workspace = true, features = ["macros"] }
 
 [features]
 default = ["v1", "v2"]
 v1 = ["dep:libp2p-request-response", "dep:web-time", "dep:async-trait"]
-v2 = ["dep:bytes", "dep:either", "dep:futures-bounded", "dep:thiserror", "dep:void", "dep:rand_core"]
+v2 = ["dep:either", "dep:futures-bounded", "dep:thiserror", "dep:rand_core"]
 
 # Passing arguments to the docsrs builder in order to properly document cfg's.
 # More information: https://docs.rs/about/builds#cross-compiling

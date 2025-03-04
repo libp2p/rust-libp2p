@@ -18,11 +18,20 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::{error::Error, quicksink, tls};
+use std::{
+    borrow::Cow,
+    collections::HashMap,
+    fmt, io, mem,
+    net::IpAddr,
+    ops::DerefMut,
+    pin::Pin,
+    sync::Arc,
+    task::{Context, Poll},
+};
+
 use either::Either;
 use futures::{future::BoxFuture, prelude::*, ready, stream::BoxStream};
-use futures_rustls::rustls::pki_types::ServerName;
-use futures_rustls::{client, server};
+use futures_rustls::{client, rustls::pki_types::ServerName, server};
 use libp2p_core::{
     multiaddr::{Multiaddr, Protocol},
     transport::{DialOpts, ListenerId, TransportError, TransportEvent},
@@ -33,20 +42,21 @@ use soketto::{
     connection::{self, CloseReason},
     handshake,
 };
-use std::borrow::Cow;
-use std::net::IpAddr;
-use std::{collections::HashMap, ops::DerefMut, sync::Arc};
-use std::{fmt, io, mem, pin::Pin, task::Context, task::Poll};
 use url::Url;
+
+use crate::{error::Error, quicksink, tls};
 
 /// Max. number of payload bytes of a single frame.
 const MAX_DATA_SIZE: usize = 256 * 1024 * 1024;
 
 /// A Websocket transport whose output type is a [`Stream`] and [`Sink`] of
 /// frame payloads which does not implement [`AsyncRead`] or
-/// [`AsyncWrite`]. See [`crate::WsConfig`] if you require the latter.
+/// [`AsyncWrite`]. See [`crate::Config`] if you require the latter.
+#[deprecated = "Use `Config` instead"]
+pub type WsConfig<T> = Config<T>;
+
 #[derive(Debug)]
-pub struct WsConfig<T> {
+pub struct Config<T> {
     transport: Arc<Mutex<T>>,
     max_data_size: usize,
     tls_config: tls::Config,
@@ -55,13 +65,13 @@ pub struct WsConfig<T> {
     listener_protos: HashMap<ListenerId, WsListenProto<'static>>,
 }
 
-impl<T> WsConfig<T>
+impl<T> Config<T>
 where
     T: Send,
 {
     /// Create a new websocket transport based on another transport.
     pub fn new(transport: T) -> Self {
-        WsConfig {
+        Config {
             transport: Arc::new(Mutex::new(transport)),
             max_data_size: MAX_DATA_SIZE,
             tls_config: tls::Config::client(),
@@ -101,7 +111,7 @@ where
 
 type TlsOrPlain<T> = future::Either<future::Either<client::TlsStream<T>, server::TlsStream<T>>, T>;
 
-impl<T> Transport for WsConfig<T>
+impl<T> Transport for Config<T>
 where
     T: Transport + Send + Unpin + 'static,
     T::Error: Send + 'static,
@@ -235,7 +245,7 @@ where
     }
 }
 
-impl<T> WsConfig<T>
+impl<T> Config<T>
 where
     T: Transport + Send + Unpin + 'static,
     T::Error: Send + 'static,
@@ -442,7 +452,7 @@ pub(crate) enum WsListenProto<'a> {
     TlsWs(Cow<'a, str>),
 }
 
-impl<'a> WsListenProto<'a> {
+impl WsListenProto<'_> {
     pub(crate) fn append_on_addr(&self, addr: &mut Multiaddr) {
         match self {
             WsListenProto::Ws(path) => {
@@ -510,8 +520,7 @@ fn parse_ws_dial_addr<T>(addr: Multiaddr) -> Result<WsAddress, Error<T>> {
             }
             (Some(Protocol::Dns(h)), Some(Protocol::Tcp(port)))
             | (Some(Protocol::Dns4(h)), Some(Protocol::Tcp(port)))
-            | (Some(Protocol::Dns6(h)), Some(Protocol::Tcp(port)))
-            | (Some(Protocol::Dnsaddr(h)), Some(Protocol::Tcp(port))) => {
+            | (Some(Protocol::Dns6(h)), Some(Protocol::Tcp(port))) => {
                 break (format!("{h}:{port}"), tls::dns_name_ref(&h)?)
             }
             (Some(_), Some(p)) => {
@@ -810,9 +819,11 @@ where
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use libp2p_identity::PeerId;
     use std::io;
+
+    use libp2p_identity::PeerId;
+
+    use super::*;
 
     #[test]
     fn listen_addr() {
@@ -992,6 +1003,12 @@ mod tests {
         assert!(!info.use_tls);
         assert_eq!(info.server_name, "::1".try_into().unwrap());
         assert_eq!(info.tcp_addr, "/ip6/::1/tcp/2222".parse().unwrap());
+
+        // Check `/dnsaddr`
+        let addr = "/dnsaddr/example.com/tcp/2222/ws"
+            .parse::<Multiaddr>()
+            .unwrap();
+        parse_ws_dial_addr::<io::Error>(addr).unwrap_err();
 
         // Check non-ws address
         let addr = "/ip4/127.0.0.1/tcp/2222".parse::<Multiaddr>().unwrap();

@@ -18,6 +18,8 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
+use std::{error::Error, time::Duration};
+
 use futures::StreamExt;
 use libp2p::{
     multiaddr::Protocol,
@@ -25,8 +27,6 @@ use libp2p::{
     swarm::{NetworkBehaviour, SwarmEvent},
     tcp, yamux, Multiaddr,
 };
-use std::error::Error;
-use std::time::Duration;
 use tracing_subscriber::EnvFilter;
 
 const NAMESPACE: &str = "rendezvous";
@@ -53,7 +53,6 @@ async fn main() -> Result<(), Box<dyn Error>> {
             rendezvous: rendezvous::client::Behaviour::new(key.clone()),
             ping: ping::Behaviour::new(ping::Config::new().with_interval(Duration::from_secs(1))),
         })?
-        .with_swarm_config(|cfg| cfg.with_idle_connection_timeout(Duration::from_secs(5)))
         .build();
 
     swarm.dial(rendezvous_point_address.clone()).unwrap();

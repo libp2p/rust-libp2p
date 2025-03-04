@@ -18,22 +18,24 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::behaviour::FromSwarm;
-use crate::connection::ConnectionId;
-use crate::handler::{
-    AddressChange, ConnectionEvent, ConnectionHandler, ConnectionHandlerEvent, DialUpgradeError,
-    FullyNegotiatedInbound, FullyNegotiatedOutbound, ListenUpgradeError, SubstreamProtocol,
-};
-use crate::upgrade::SendWrapper;
-use crate::{
-    ConnectionDenied, NetworkBehaviour, THandler, THandlerInEvent, THandlerOutEvent, ToSwarm,
-};
+use std::task::{Context, Poll};
+
 use either::Either;
 use futures::future;
-use libp2p_core::transport::PortUse;
-use libp2p_core::{upgrade::DeniedUpgrade, Endpoint, Multiaddr};
+use libp2p_core::{transport::PortUse, upgrade::DeniedUpgrade, Endpoint, Multiaddr};
 use libp2p_identity::PeerId;
-use std::{task::Context, task::Poll};
+
+use crate::{
+    behaviour::FromSwarm,
+    connection::ConnectionId,
+    handler::{
+        AddressChange, ConnectionEvent, ConnectionHandler, ConnectionHandlerEvent,
+        DialUpgradeError, FullyNegotiatedInbound, FullyNegotiatedOutbound, ListenUpgradeError,
+        SubstreamProtocol,
+    },
+    upgrade::SendWrapper,
+    ConnectionDenied, NetworkBehaviour, THandler, THandlerInEvent, THandlerOutEvent, ToSwarm,
+};
 
 /// Implementation of `NetworkBehaviour` that can be either in the disabled or enabled state.
 ///
@@ -210,7 +212,9 @@ where
     ) {
         let out = match out {
             future::Either::Left(out) => out,
-            future::Either::Right(v) => void::unreachable(v),
+            // TODO: remove when Rust 1.82 is MSRV
+            #[allow(unreachable_patterns)]
+            future::Either::Right(v) => libp2p_core::util::unreachable(v),
         };
 
         if let Either::Left(info) = info {
@@ -227,7 +231,6 @@ where
             panic!("Unexpected Either::Right in enabled `on_fully_negotiated_inbound`.")
         }
     }
-
     fn on_listen_upgrade_error(
         &mut self,
         ListenUpgradeError { info, error: err }: ListenUpgradeError<
@@ -251,7 +254,9 @@ where
 
         let err = match err {
             Either::Left(e) => e,
-            Either::Right(v) => void::unreachable(v),
+            // TODO: remove when Rust 1.82 is MSRV
+            #[allow(unreachable_patterns)]
+            Either::Right(v) => libp2p_core::util::unreachable(v),
         };
 
         inner.on_connection_event(ConnectionEvent::ListenUpgradeError(ListenUpgradeError {

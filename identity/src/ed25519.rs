@@ -20,12 +20,12 @@
 
 //! Ed25519 keys.
 
-use super::error::DecodingError;
-use core::cmp;
-use core::fmt;
-use core::hash;
+use core::{cmp, fmt, hash};
+
 use ed25519_dalek::{self as ed25519, Signer as _, Verifier as _};
 use zeroize::Zeroize;
+
+use super::error::DecodingError;
 
 /// An Ed25519 keypair.
 #[derive(Clone)]
@@ -152,7 +152,8 @@ impl PublicKey {
         self.0.to_bytes()
     }
 
-    /// Try to parse a public key from a byte array containing the actual key as produced by `to_bytes`.
+    /// Try to parse a public key from a byte array containing
+    /// the actual key as produced by `to_bytes`.
     pub fn try_from_bytes(k: &[u8]) -> Result<PublicKey, DecodingError> {
         let k = <[u8; 32]>::try_from(k)
             .map_err(|e| DecodingError::failed_to_parse("Ed25519 public key", e))?;
@@ -206,8 +207,9 @@ impl SecretKey {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use quickcheck::*;
+
+    use super::*;
 
     fn eq_keypairs(kp1: &Keypair, kp2: &Keypair) -> bool {
         kp1.public() == kp2.public() && kp1.0.to_bytes() == kp2.0.to_bytes()

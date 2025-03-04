@@ -100,8 +100,9 @@ enum Kind {
 
 #[cfg(all(test, feature = "pem"))]
 mod test {
-    use super::*;
     use rand::thread_rng;
+
+    use super::*;
 
     #[test]
     fn test_certificate_serialize_pem_and_from_pem() {

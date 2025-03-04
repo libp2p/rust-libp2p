@@ -1,19 +1,21 @@
-use futures::channel::oneshot;
-use futures::StreamExt;
-use libp2p_core::transport::{DialOpts, ListenerId, PortUse};
-use libp2p_core::{Endpoint, Transport};
-use libp2p_quic as quic;
 use std::time::Duration;
 use libp2p_core::muxing::StreamMuxerBox;
 
-#[async_std::test]
+use futures::{channel::oneshot, StreamExt};
+use libp2p_core::{
+    transport::{DialOpts, ListenerId, PortUse},
+    Endpoint, Transport,
+};
+use libp2p_quic as quic;
+
+#[tokio::test]
 async fn close_implies_flush() {
     let (alice, bob) = connected_peers().await;
 
     libp2p_muxer_test_harness::close_implies_flush(alice, bob).await;
 }
 
-#[async_std::test]
+#[tokio::test]
 async fn read_after_close() {
     let (alice, bob) = connected_peers().await;
 
@@ -35,10 +37,10 @@ async fn connected_peers() -> (StreamMuxerBox, StreamMuxerBox) {
     let (dialer_conn_sender, dialer_conn_receiver) = oneshot::channel();
     let (listener_conn_sender, listener_conn_receiver) = oneshot::channel();
 
-    async_std::task::spawn(async move {
+    tokio::spawn(async move {
         let (upgrade, _) = listener.next().await.unwrap().into_incoming().unwrap();
 
-        async_std::task::spawn(async move {
+        tokio::spawn(async move {
             let (_, connection) = upgrade.await.unwrap();
 
             let _ = listener_conn_sender.send(connection);
@@ -57,13 +59,13 @@ async fn connected_peers() -> (StreamMuxerBox, StreamMuxerBox) {
             },
         )
         .unwrap();
-    async_std::task::spawn(async move {
+    tokio::spawn(async move {
         let connection = dial_fut.await.unwrap().1;
 
         let _ = dialer_conn_sender.send(connection);
     });
 
-    async_std::task::spawn(async move {
+    tokio::spawn(async move {
         loop {
             dialer.next().await;
         }
@@ -74,10 +76,10 @@ async fn connected_peers() -> (StreamMuxerBox, StreamMuxerBox) {
         .unwrap()
 }
 
-fn new_transport() -> quic::async_std::Transport {
+fn new_transport() -> quic::tokio::Transport {
     let keypair = libp2p_identity::Keypair::generate_ed25519();
     let mut config = quic::Config::new(&keypair, None);
     config.handshake_timeout = Duration::from_secs(1);
 
-    quic::async_std::Transport::new(config)
+    quic::tokio::Transport::new(config)
 }
