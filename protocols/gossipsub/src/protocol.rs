@@ -275,7 +275,7 @@ impl Decoder for GossipsubCodec {
                     validated: false,
                 };
 
-                invalid_messages.push((message, ValidationError::MessageTooLarge));
+                invalid_messages.push((message, ValidationError::TransformFailed));
                 continue;
             }
 
