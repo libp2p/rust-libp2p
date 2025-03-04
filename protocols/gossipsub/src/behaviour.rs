@@ -2680,6 +2680,18 @@ where
             }
         }
 
+        // Add floodsub peers
+        for (peer_id, peer) in &self.connected_peers {
+            if peer.kind == PeerKind::Floodsub
+                && peer.topics.contains(&message.topic)
+                && !self
+                    .score_below_threshold(peer_id, |ts| ts.publish_threshold)
+                    .0
+            {
+                recipient_peers.insert(*peer_id);
+            }
+        }
+
         // add mesh peers
         let topic = &message.topic;
         // mesh
