@@ -61,7 +61,7 @@ pub(crate) const FLOODSUB_PROTOCOL: ProtocolId = ProtocolId {
     kind: PeerKind::Floodsub,
 };
 
-pub(crate) const DEFAULT_MAX_TRANSMIT_SIZE: usize = 65536;
+pub const DEFAULT_MAX_TRANSMIT_SIZE: usize = 65536;
 
 /// Implementation of [`InboundUpgrade`] and [`OutboundUpgrade`] for the Gossipsub protocol.
 #[derive(Debug, Clone)]
