@@ -136,3 +136,5 @@ pub type Rpc = self::types::Rpc;
 
 pub type IdentTopic = Topic<self::topic::IdentityHash>;
 pub type Sha256Topic = Topic<self::topic::Sha256Hash>;
+
+pub use crate::protocol::DEFAULT_MAX_TRANSMIT_SIZE;
