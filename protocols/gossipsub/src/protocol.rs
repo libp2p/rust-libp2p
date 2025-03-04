@@ -61,6 +61,8 @@ pub(crate) const FLOODSUB_PROTOCOL: ProtocolId = ProtocolId {
     kind: PeerKind::Floodsub,
 };
 
+pub(crate) const DEFAULT_MAX_TRANSMIT_SIZE: usize = 65536;
+
 /// Implementation of [`InboundUpgrade`] and [`OutboundUpgrade`] for the Gossipsub protocol.
 #[derive(Debug, Clone)]
 pub struct ProtocolConfig {
@@ -75,7 +77,7 @@ pub struct ProtocolConfig {
 impl Default for ProtocolConfig {
     fn default() -> Self {
         Self {
-            max_transmit_size: 65536,
+            max_transmit_size: DEFAULT_MAX_TRANSMIT_SIZE,
             validation_mode: ValidationMode::Strict,
             protocol_ids: vec![
                 GOSSIPSUB_1_2_0_PROTOCOL,
