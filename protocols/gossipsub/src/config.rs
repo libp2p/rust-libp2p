@@ -735,8 +735,8 @@ impl ConfigBuilder {
         self
     }
 
-    /// Maximum number of peers in mesh network for a topic before removing some (D_high in the spec, default
-    /// is 12).
+    /// Maximum number of peers in mesh network for a topic before removing some (D_high in the
+    /// spec, default is 12).
     pub fn mesh_n_high_for_topic(
         &mut self,
         mesh_n_high: usize,
@@ -761,7 +761,8 @@ impl ConfigBuilder {
         self
     }
 
-    /// Minimum number of peers in mesh network for a topic before adding more (D_lo in the spec, default is 4).
+    /// Minimum number of peers in mesh network for a topic before adding more (D_lo in the spec,
+    /// default is 4).
     pub fn mesh_n_low_for_topic(&mut self, mesh_n_low: usize, topic_hash: TopicHash) -> &mut Self {
         self.config
             .topic_configuration
@@ -962,9 +963,9 @@ impl ConfigBuilder {
         self
     }
 
-    /// Minimum number of outbound peers in the mesh network for a topic before adding more (D_out in the spec).
-    /// This value must be smaller or equal than `mesh_n / 2` and smaller than `mesh_n_low`.
-    /// The default is 2.
+    /// Minimum number of outbound peers in the mesh network for a topic before adding more (D_out
+    /// in the spec). This value must be smaller or equal than `mesh_n / 2` and smaller than
+    /// `mesh_n_low`. The default is 2.
     pub fn mesh_outbound_min_for_topic(
         &mut self,
         mesh_outbound_min: usize,
@@ -1119,11 +1120,12 @@ impl ConfigBuilder {
     /// Target number of peers for the mesh network for a given topic (D in the spec, default is 6).
     ///
     /// mesh_n_low
-    /// Minimum number of peers in mesh network before adding more for a given topic (D_lo in the spec, default is 4).
+    /// Minimum number of peers in mesh network before adding more for a given topic (D_lo in the
+    /// spec, default is 4).
     ///
     /// mesh_n_high
-    /// Maximum number of peers in mesh network before removing some for a given topic (D_high in the spec, default
-    /// is 12).
+    /// Maximum number of peers in mesh network before removing some for a given topic (D_high in
+    /// the spec, default is 12).
     pub fn set_topic_config(&mut self, topic: TopicHash, config: TopicMeshConfig) -> &mut Self {
         self.config
             .topic_configuration
