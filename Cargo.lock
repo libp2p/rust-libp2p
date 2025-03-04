@@ -2690,6 +2690,7 @@ dependencies = [
  "libp2p-metrics",
  "libp2p-mplex",
  "libp2p-noise",
+ "libp2p-peer-store",
  "libp2p-ping",
  "libp2p-plaintext",
  "libp2p-pnet",
@@ -3095,6 +3096,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "libp2p-peer-store"
+version = "0.1.0"
+dependencies = [
+ "libp2p",
+ "libp2p-core",
+ "libp2p-identity",
+ "libp2p-swarm",
+ "libp2p-swarm-test",
+ "lru",
+ "serde_json",
+ "tokio",
+]
+
+[[package]]
 name = "libp2p-perf"
 version = "0.4.0"
 dependencies = [
@@ -3177,7 +3192,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-quic"
-version = "0.12.0"
+version = "0.12.1"
 dependencies = [
  "async-std",
  "futures",
