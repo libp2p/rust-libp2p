@@ -1,6 +1,6 @@
 [package]
 name = "libp2p-uds"
-edition = "2021"
+edition.workspace = true
 rust-version = { workspace = true }
 description = "Unix domain sockets transport for libp2p"
 version = "0.42.0"

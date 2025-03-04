@@ -1,6 +1,6 @@
 [package]
 name = "libp2p-autonat"
-edition = "2021"
+edition.workspace = true
 rust-version = { workspace = true }
 description = "NAT and firewall detection for libp2p"
 version = "0.14.1"

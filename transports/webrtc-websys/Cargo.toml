@@ -2,7 +2,7 @@
 authors = ["Doug Anderson <DougAnderson444@peerpiper.io>"]
 categories = ["asynchronous", "network-programming", "wasm", "web-programming"]
 description = "WebRTC for libp2p under WASM environment"
-edition = "2021"
+edition.workspace = true
 keywords = ["libp2p", "networking", "peer-to-peer"]
 license = "MIT"
 name = "libp2p-webrtc-websys"

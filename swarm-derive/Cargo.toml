@@ -1,6 +1,6 @@
 [package]
 name = "libp2p-swarm-derive"
-edition = "2021"
+edition.workspace = true
 rust-version = { workspace = true }
 description = "Procedural macros of libp2p-swarm"
 version = "0.35.1"

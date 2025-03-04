@@ -1,6 +1,6 @@
 [package]
 name = "libp2p-dcutr"
-edition = "2021"
+edition.workspace = true
 rust-version = { workspace = true }
 description = "Direct connection upgrade through relay"
 version = "0.13.0"
