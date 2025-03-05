@@ -1,0 +1,27 @@
+[package]
+name = "webrtc-signaling"
+version = "0.1.0"
+edition = "2021"
+rust-version.workspace = true
+description = "WebRTC signaling protocol for libp2p"
+license = "MIT"
+
+[dependencies]
+async-trait = "0.1.80"
+serde = { version = "1.0", optional = true}
+serde_json = { version = "1.0.117", optional = true }
+futures = { workspace = true }
+tokio = { workspace = true, features = ["full"] }
+tracing = { workspace = true }
+thiserror = { workspace = true }
+
+[features]
+json = ["dep:serde", "dep:serde_json"]
+
+[dev-dependencies]
+libp2p-swarm-test = { workspace = true }
+tokio = { workspace = true, features = ["full"] }
+tracing-subscriber = { workspace = true, features = ["env-filter"] }
+
+[lints]
+workspace = true
