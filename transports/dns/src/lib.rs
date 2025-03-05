@@ -469,7 +469,7 @@ fn resolve<'a, E: 'a + Send, R: Resolver>(
     resolver: &'a R,
 ) -> BoxFuture<'a, Result<Resolved<'a>, Error<E>>> {
     match proto {
-        Protocol::Dns(ref name) => resolver
+        Protocol::Dns(name) => resolver
             .lookup_ip(name.clone().into_owned())
             .map(move |res| match res {
                 Ok(ips) => {
@@ -492,7 +492,7 @@ fn resolve<'a, E: 'a + Send, R: Resolver>(
                 Err(e) => Err(Error::ResolveError(e)),
             })
             .boxed(),
-        Protocol::Dns4(ref name) => resolver
+        Protocol::Dns4(name) => resolver
             .ipv4_lookup(name.clone().into_owned())
             .map(move |res| match res {
                 Ok(ips) => {
@@ -516,7 +516,7 @@ fn resolve<'a, E: 'a + Send, R: Resolver>(
                 Err(e) => Err(Error::ResolveError(e)),
             })
             .boxed(),
-        Protocol::Dns6(ref name) => resolver
+        Protocol::Dns6(name) => resolver
             .ipv6_lookup(name.clone().into_owned())
             .map(move |res| match res {
                 Ok(ips) => {
@@ -540,7 +540,7 @@ fn resolve<'a, E: 'a + Send, R: Resolver>(
                 Err(e) => Err(Error::ResolveError(e)),
             })
             .boxed(),
-        Protocol::Dnsaddr(ref name) => {
+        Protocol::Dnsaddr(name) => {
             let name = [DNSADDR_PREFIX, name].concat();
             resolver
                 .txt_lookup(name)
