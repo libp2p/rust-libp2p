@@ -1,3 +1,7 @@
+## 0.43.1
+- Remove `once_cell` dependency.
+  See [PR 5913](https://github.com/libp2p/rust-libp2p/pull/5913)
+
 ## 0.43.0
 
 - Added `libp2p::core::util::unreachable` that is a drop-in replacement of `void::unreachable`.
@@ -6,8 +10,8 @@
 ## 0.42.0
 
 - Update `Transport::dial` function signature with a `DialOpts` param and remove `Transport::dial_as_listener`:
-  - `DialOpts` struct contains `PortUse` and `Endpoint`, 
-  - `PortUse` allows controlling port allocation of new connections (defaults to `PortUse::Reuse`)   - 
+  - `DialOpts` struct contains `PortUse` and `Endpoint`,
+  - `PortUse` allows controlling port allocation of new connections (defaults to `PortUse::Reuse`)   -
   - Add `port_use` field to `ConnectedPoint`
   - Set `endpoint` field in `DialOpts` to `Endpoint::Listener` to dial as a listener
 - Remove `Transport::address_translation` and relocate functionality to `libp2p_swarm`

@@ -1,5 +1,8 @@
 ## 0.5.0
 
+- Remove `once_cell` dependency.
+  See [PR 5913](https://github.com/libp2p/rust-libp2p/pull/5913)
+
 - Fix `cargo clippy` warnings in `rustc 1.84.0-beta.1`.
   See [PR 5700](https://github.com/libp2p/rust-libp2p/pull/5700).
 
@@ -10,7 +13,7 @@
 - Implement refactored `Transport`.
   See [PR 4568](https://github.com/libp2p/rust-libp2p/pull/4568)
 - Bump version of web-sys and wasm-bindgen.
-  See [PR 5569](https://github.com/libp2p/rust-libp2p/pull/5569) 
+  See [PR 5569](https://github.com/libp2p/rust-libp2p/pull/5569)
 
 ## 0.3.0
 

@@ -2773,7 +2773,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-core"
-version = "0.43.0"
+version = "0.43.1"
 dependencies = [
  "either",
  "fnv",
@@ -3071,7 +3071,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-noise"
-version = "0.46.0"
+version = "0.46.1"
 dependencies = [
  "asynchronous-codec",
  "bytes",
