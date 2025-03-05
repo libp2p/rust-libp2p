@@ -29,6 +29,7 @@ full = [
     "memory-connection-limits",
     "metrics",
     "noise",
+    "peer-store",
     "ping",
     "plaintext",
     "pnet",
@@ -69,6 +70,7 @@ mdns = ["dep:libp2p-mdns"]
 memory-connection-limits = ["dep:libp2p-memory-connection-limits"]
 metrics = ["dep:libp2p-metrics"]
 noise = ["dep:libp2p-noise"]
+peer-store = ["dep:libp2p-peer-store"]
 ping = ["dep:libp2p-ping", "libp2p-metrics?/ping"]
 plaintext = ["dep:libp2p-plaintext"]
 pnet = ["dep:libp2p-pnet"]
@@ -111,6 +113,7 @@ libp2p-identity = { workspace = true, features = ["rand"] }
 libp2p-kad = { workspace = true, optional = true }
 libp2p-metrics = { workspace = true, optional = true }
 libp2p-noise = { workspace = true, optional = true }
+libp2p-peer-store = { workspace = true, optional = true }
 libp2p-ping = { workspace = true, optional = true }
 libp2p-plaintext = { workspace = true, optional = true }
 libp2p-pnet = { workspace = true, optional = true }

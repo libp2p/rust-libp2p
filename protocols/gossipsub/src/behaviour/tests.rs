@@ -1199,6 +1199,59 @@ fn test_handle_iwant_msg_not_cached() {
     );
 }
 
+#[test]
+fn test_handle_iwant_msg_but_already_sent_idontwant() {
+    let (mut gs, peers, receivers, _) = inject_nodes1()
+        .peer_no(20)
+        .topics(Vec::new())
+        .to_subscribe(true)
+        .create_network();
+
+    let raw_message = RawMessage {
+        source: Some(peers[11]),
+        data: vec![1, 2, 3, 4],
+        sequence_number: Some(1u64),
+        topic: TopicHash::from_raw("topic"),
+        signature: None,
+        key: None,
+        validated: true,
+    };
+
+    // Transform the inbound message
+    let message = &gs
+        .data_transform
+        .inbound_transform(raw_message.clone())
+        .unwrap();
+
+    let msg_id = gs.config.message_id(message);
+    gs.mcache.put(&msg_id, raw_message);
+
+    // Receive IDONTWANT from Peer 1.
+    let rpc = Rpc {
+        messages: vec![],
+        subscriptions: vec![],
+        control_msgs: vec![ControlAction::IDontWant(IDontWant {
+            message_ids: vec![msg_id.clone()],
+        })],
+    };
+    gs.on_connection_handler_event(
+        peers[1],
+        ConnectionId::new_unchecked(0),
+        HandlerEvent::Message {
+            rpc,
+            invalid_messages: vec![],
+        },
+    );
+
+    // Receive IWANT from Peer 1.
+    gs.handle_iwant(&peers[1], vec![msg_id.clone()]);
+
+    // Check that no messages are sent.
+    receivers.iter().for_each(|(_, receiver)| {
+        assert!(receiver.non_priority.get_ref().is_empty());
+    });
+}
+
 /// tests that an event is created when a peer shares that it has a message we want
 #[test]
 fn test_handle_ihave_subscribed_and_msg_not_cached() {
