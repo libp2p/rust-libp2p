@@ -1,6 +1,6 @@
 [package]
 name = "libp2p"
-edition = "2021"
+edition.workspace = true
 rust-version = { workspace = true }
 description = "Peer-to-peer networking library"
 version = "0.55.1"

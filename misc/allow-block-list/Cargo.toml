@@ -1,6 +1,6 @@
 [package]
 name = "libp2p-allow-block-list"
-edition = "2021"
+edition.workspace = true
 rust-version = { workspace = true }
 description = "Allow/block list connection management for libp2p."
 version = "0.5.0"

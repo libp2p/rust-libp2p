@@ -1,6 +1,6 @@
 [package]
 name = "libp2p-webtransport-websys"
-edition = "2021"
+edition.workspace = true
 rust-version = { workspace = true }
 description = "WebTransport for libp2p under WASM environment"
 version = "0.5.0"

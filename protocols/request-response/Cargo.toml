@@ -1,6 +1,6 @@
 [package]
 name = "libp2p-request-response"
-edition = "2021"
+edition.workspace = true
 rust-version = { workspace = true }
 description = "Generic Request/Response Protocols"
 version = "0.28.1"

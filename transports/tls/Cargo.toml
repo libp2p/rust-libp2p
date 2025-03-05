@@ -1,7 +1,7 @@
 [package]
 name = "libp2p-tls"
 version = "0.6.0"
-edition = "2021"
+edition.workspace = true
 rust-version = { workspace = true }
 description = "TLS configuration based on libp2p TLS specs."
 repository = "https://github.com/libp2p/rust-libp2p"

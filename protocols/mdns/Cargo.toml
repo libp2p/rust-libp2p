@@ -1,6 +1,6 @@
 [package]
 name = "libp2p-mdns"
-edition = "2021"
+edition.workspace = true
 rust-version = { workspace = true }
 version = "0.47.0"
 description = "Implementation of the libp2p mDNS discovery method"

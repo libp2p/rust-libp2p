@@ -1,6 +1,6 @@
 [package]
 name = "multistream-select"
-edition = "2021"
+edition.workspace = true
 rust-version = { workspace = true }
 description = "Multistream-select negotiation protocol for libp2p"
 version = "0.13.0"

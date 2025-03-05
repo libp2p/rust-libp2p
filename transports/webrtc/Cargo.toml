@@ -5,7 +5,7 @@ authors = ["Parity Technologies <admin@parity.io>"]
 description = "WebRTC transport for libp2p"
 repository = "https://github.com/libp2p/rust-libp2p"
 license = "MIT"
-edition = "2021"
+edition.workspace = true
 rust-version = { workspace = true }
 keywords = ["peer-to-peer", "libp2p", "networking"]
 categories = ["network-programming", "asynchronous"]

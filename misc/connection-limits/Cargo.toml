@@ -1,6 +1,6 @@
 [package]
 name = "libp2p-connection-limits"
-edition = "2021"
+edition.workspace = true
 rust-version = { workspace = true }
 description = "Connection limits for libp2p."
 version = "0.5.1"
