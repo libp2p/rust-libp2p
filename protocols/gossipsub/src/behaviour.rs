@@ -2673,15 +2673,17 @@ where
 
         // Populate the recipient peers mapping
 
-        // Add explicit peers
-        for peer_id in &self.explicit_peers {
-            let Some(peer) = self.connected_peers.get(peer_id) else {
-                continue;
-            };
+        // Add explicit peers and floodsub peers
+        for (peer_id, peer) in &self.connected_peers {
             if Some(peer_id) != propagation_source
                 && !originating_peers.contains(peer_id)
                 && Some(peer_id) != message.source.as_ref()
                 && peer.topics.contains(&message.topic)
+                && (self.explicit_peers.contains(peer_id)
+                    || (peer.kind == PeerKind::Floodsub
+                        && !self
+                            .score_below_threshold(peer_id, |ts| ts.publish_threshold)
+                            .0))
             {
                 recipient_peers.insert(*peer_id);
             }
