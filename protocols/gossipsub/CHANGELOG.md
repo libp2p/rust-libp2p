@@ -1,4 +1,4 @@
-## 0.48.2
+## 0.49.0
 
 - Improve error messaging by renaming `PublishError::InsufficientPeers` to 
   `PublishError::NoPeersSubscribedToTopic`. This change makes it clearer that the error occurs 
