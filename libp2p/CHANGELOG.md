@@ -1,6 +1,4 @@
 ## 0.55.1
-- Remove `once_cell` dependency.
-  See [PR 5913](https://github.com/libp2p/rust-libp2p/pull/5913)
 
 - Introduce `libp2p-webrtc-websys` behind `webrtc-websys` feature flag.
   See [PR 5819](https://github.com/libp2p/rust-libp2p/pull/5819).
