@@ -8,6 +8,9 @@
 - Respect already received IDONTWANT messages when handling IWANT.
   See [PR 5901](https://github.com/libp2p/rust-libp2p/pull/5901)
 
+- Adds functions to ConfigBuilder interface allowing modification of mesh-n-*   params and max transmit sizes per topic. Modifies behaviour.rs, GossipsubCodec, ProtocolConfig to use new config defaults and methods to check values against topics.
+  See [PR 5868](https://github.com/libp2p/rust-libp2p/pull/5868)
+
 ## 0.48.0
 
 - Allow broadcasting `IDONTWANT` messages when publishing to avoid downloading data that is already available.
