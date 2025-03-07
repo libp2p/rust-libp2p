@@ -1344,6 +1344,13 @@ where
                         "IWANT: Peer has asked for message too many times; ignoring request"
                     );
                 } else {
+                    if let Some(peer) = self.connected_peers.get_mut(peer_id) {
+                        if peer.dont_send.contains_key(&id) {
+                            tracing::debug!(%peer_id, message=%id, "Peer already sent IDONTWANT for this message");
+                            continue;
+                        }
+                    }
+
                     tracing::debug!(peer=%peer_id, "IWANT: Sending cached messages to peer");
                     self.send_message(
                         *peer_id,
@@ -2666,15 +2673,17 @@ where
 
         // Populate the recipient peers mapping
 
-        // Add explicit peers
-        for peer_id in &self.explicit_peers {
-            let Some(peer) = self.connected_peers.get(peer_id) else {
-                continue;
-            };
+        // Add explicit peers and floodsub peers
+        for (peer_id, peer) in &self.connected_peers {
             if Some(peer_id) != propagation_source
                 && !originating_peers.contains(peer_id)
                 && Some(peer_id) != message.source.as_ref()
                 && peer.topics.contains(&message.topic)
+                && (self.explicit_peers.contains(peer_id)
+                    || (peer.kind == PeerKind::Floodsub
+                        && !self
+                            .score_below_threshold(peer_id, |ts| ts.publish_threshold)
+                            .0))
             {
                 recipient_peers.insert(*peer_id);
             }
@@ -3053,6 +3062,13 @@ where
             }
         }
     }
+
+    /// Register topics to ensure metrics are recorded correctly for these topics.
+    pub fn register_topics_for_metrics(&mut self, topics: Vec<TopicHash>) {
+        if let Some(metrics) = &mut self.metrics {
+            metrics.register_allowed_topics(topics);
+        }
+    }
 }
 
 fn get_ip_addr(addr: &Multiaddr) -> Option<IpAddr> {
@@ -3245,8 +3261,10 @@ where
                 // Handle messages
                 for (count, raw_message) in rpc.messages.into_iter().enumerate() {
                     // Only process the amount of messages the configuration allows.
-                    if self.config.max_messages_per_rpc().is_some()
-                        && Some(count) >= self.config.max_messages_per_rpc()
+                    if self
+                        .config
+                        .max_messages_per_rpc()
+                        .is_some_and(|max_msg| count >= max_msg)
                     {
                         tracing::warn!("Received more messages than permitted. Ignoring further messages. Processed: {}", count);
                         break;
@@ -3260,7 +3278,17 @@ where
                 let mut ihave_msgs = vec![];
                 let mut graft_msgs = vec![];
                 let mut prune_msgs = vec![];
-                for control_msg in rpc.control_msgs {
+                for (count, control_msg) in rpc.control_msgs.into_iter().enumerate() {
+                    // Only process the amount of messages the configuration allows.
+                    if self
+                        .config
+                        .max_messages_per_rpc()
+                        .is_some_and(|max_msg| count >= max_msg)
+                    {
+                        tracing::warn!("Received more control messages than permitted. Ignoring further messages. Processed: {}", count);
+                        break;
+                    }
+
                     match control_msg {
                         ControlAction::IHave(IHave {
                             topic_hash,

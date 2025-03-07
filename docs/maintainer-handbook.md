@@ -1,6 +1,6 @@
 # Maintainer handbook
 
-This document describes what ever maintainer of the repository should know.
+This document describes whatever maintainer of the repository should know.
 
 ## GitHub settings
 
