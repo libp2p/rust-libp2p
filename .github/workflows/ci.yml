@@ -19,8 +19,8 @@ jobs:
     name: Test ${{ matrix.crate }}
     runs-on: ${{ fromJSON(
       github.repository == 'libp2p/rust-libp2p' && (
-        (contains(fromJSON('["libp2p-webrtc", "libp2p"]'), matrix.crate) && '["self-hosted", "linux", "x64", "2xlarge"]') ||
-        (contains(fromJSON('["libp2p-quic", "libp2p-perf"]'), matrix.crate) && '["self-hosted", "linux", "x64", "xlarge"]') ||
+        (contains(fromJSON('["libp2p"]'), matrix.crate) && '["self-hosted", "linux", "x64", "2xlarge"]') ||
+        (contains(fromJSON('["libp2p-webrtc", "libp2p-quic", "libp2p-perf"]'), matrix.crate) && '["self-hosted", "linux", "x64", "xlarge"]') ||
         '["self-hosted", "linux", "x64", "large"]'
       ) || '"ubuntu-latest"') }}
     timeout-minutes: 10
@@ -31,6 +31,7 @@ jobs:
         crate: ${{ fromJSON(needs.gather_published_crates.outputs.members) }}
     env:
       CRATE: ${{ matrix.crate }}
+      RUST_LOG: info
     steps:
       - uses: actions/checkout@v4
         with:
@@ -46,7 +47,7 @@ jobs:
           save-if: false
 
       - name: Run all tests
-        run: cargo test --package "$CRATE" --all-features
+        run: cargo test --package "$CRATE" --all-features -- --test-threads=1
 
       - name: Check if we compile without any features activated
         run: cargo build --package "$CRATE" --no-default-features
