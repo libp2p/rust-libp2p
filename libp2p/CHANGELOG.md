@@ -1,6 +1,9 @@
 ## 0.55.1
 - Introduce `libp2p-webrtc-websys` behind `webrtc-websys` feature flag.
   See [PR 5819](https://github.com/libp2p/rust-libp2p/pull/5819).
+  
+- Introduce `libp2p-peer-store`.
+  See [PR 5724](https://github.com/libp2p/rust-libp2p/pull/5724).
 
 - Make the `*-websys` variants (`libp2p-webrtc-websys`, `libp2p-websocket-websys`, `libp2p-webtransport-websys`) only available on wasm32 target architecture.
   See [PR 5891](https://github.com/libp2p/rust-libp2p/pull/5891).
