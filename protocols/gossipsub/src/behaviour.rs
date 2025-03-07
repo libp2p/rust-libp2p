@@ -717,6 +717,7 @@ where
             // Floodsub peers
             for (peer, connections) in &self.connected_peers {
                 if connections.kind == PeerKind::Floodsub
+                    && connections.topics.contains(&topic_hash)
                     && !self
                         .score_below_threshold(peer, |ts| ts.publish_threshold)
                         .0
