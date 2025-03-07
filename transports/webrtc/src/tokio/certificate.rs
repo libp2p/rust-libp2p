@@ -18,6 +18,8 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
+use std::time::{Duration, SystemTime};
+
 use rand::{distributions::DistString, CryptoRng, Rng};
 use webrtc::peer_connection::certificate::RTCCertificate;
 
@@ -37,12 +39,19 @@ impl Certificate {
     where
         R: CryptoRng + Rng,
     {
-        let mut params = rcgen::CertificateParams::new(vec![
-            rand::distributions::Alphanumeric.sample_string(&mut rand::thread_rng(), 16)
-        ]);
-        params.alg = &rcgen::PKCS_ECDSA_P256_SHA256;
+        let subject_alt_names =
+            vec![rand::distributions::Alphanumeric.sample_string(&mut rand::thread_rng(), 16)];
+        let certificate = webrtc::dtls::crypto::Certificate::generate_self_signed_with_alg(
+            subject_alt_names,
+            &rcgen::PKCS_ECDSA_P256_SHA256,
+        )
+        .map_err(Kind::InvalidCertificate)?;
         Ok(Self {
-            inner: RTCCertificate::from_params(params).expect("default params to work"),
+            inner: RTCCertificate::from_existing(
+                certificate,
+                // expires in 4000 years
+                SystemTime::now() + Duration::from_secs(365 * 24 * 60 * 60 * 4000),
+            ),
         })
     }
 
@@ -96,6 +105,8 @@ pub struct Error(#[from] Kind);
 enum Kind {
     #[error(transparent)]
     InvalidPEM(#[from] webrtc::Error),
+    #[error(transparent)]
+    InvalidCertificate(#[from] webrtc::dtls::Error),
 }
 
 #[cfg(all(test, feature = "pem"))]

@@ -133,8 +133,8 @@ multistream-select = { version = "0.13.0", path = "misc/multistream-select" }
 prometheus-client = "0.22.2"
 quick-protobuf-codec = { version = "0.3.1", path = "misc/quick-protobuf-codec" }
 quickcheck = { package = "quickcheck-ext", path = "misc/quickcheck-ext" }
-rcgen = "0.11.3"
-ring = "0.17.8"
+rcgen = "0.13.2"
+ring = "0.17.13"
 rw-stream-sink = { version = "0.4.0", path = "misc/rw-stream-sink" }
 thiserror = "2"
 tokio = { version = "1.38", default-features = false }
