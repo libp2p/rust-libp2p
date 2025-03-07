@@ -1,6 +1,6 @@
 [package]
 name = "libp2p-tcp"
-edition = "2021"
+edition.workspace = true
 rust-version = { workspace = true }
 description = "TCP/IP transport protocol for libp2p"
 version = "0.43.0"
