@@ -5,6 +5,12 @@
 - Improve `max_messages_per_rpc` consistency by ensuring RPC control messages also adhere to the existing limits.
   See [PR 5826](https://github.com/libp2p/rust-libp2p/pull/5826)
 
+- Respect already received IDONTWANT messages when handling IWANT.
+  See [PR 5901](https://github.com/libp2p/rust-libp2p/pull/5901)
+
+- Fix messages were not forwarded to floodsub peers.
+  See [PR 5908](https://github.com/libp2p/rust-libp2p/pull/5908)
+
 ## 0.48.0
 
 - Allow broadcasting `IDONTWANT` messages when publishing to avoid downloading data that is already available.
