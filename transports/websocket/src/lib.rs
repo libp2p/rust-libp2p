@@ -70,7 +70,6 @@ use rw_stream_sink::RwStreamSink;
 /// # use libp2p_dns as dns;
 /// # use libp2p_tcp as tcp;
 /// # use libp2p_websocket as websocket;
-/// # use rcgen::generate_simple_self_signed;
 /// # use std::pin::Pin;
 /// #
 /// # #[async_std::main]
@@ -82,9 +81,12 @@ use rw_stream_sink::RwStreamSink;
 ///         .unwrap(),
 /// );
 ///
-/// let rcgen_cert = generate_simple_self_signed(vec!["localhost".to_string()]).unwrap();
-/// let priv_key = websocket::tls::PrivateKey::new(rcgen_cert.serialize_private_key_der());
-/// let cert = websocket::tls::Certificate::new(rcgen_cert.serialize_der().unwrap());
+/// let rcgen::CertifiedKey {
+///     cert: rcgen_cert,
+///     key_pair,
+/// } = rcgen::generate_simple_self_signed(vec!["localhost".to_string()]).unwrap();
+/// let priv_key = websocket::tls::PrivateKey::new(key_pair.serialize_der());
+/// let cert = websocket::tls::Certificate::new(rcgen_cert.der().to_vec());
 /// transport.set_tls_config(websocket::tls::Config::new(priv_key, vec![cert]).unwrap());
 ///
 /// let id = transport
