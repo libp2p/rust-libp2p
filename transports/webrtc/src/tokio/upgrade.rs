@@ -199,7 +199,7 @@ async fn create_substream_for_noise_handshake(conn: &RTCPeerConnection) -> Resul
     // Wait until the data channel is opened and detach it.
     crate::tokio::connection::register_data_channel_open_handler(data_channel, tx).await;
 
-    let channel = match futures::future::select(rx, Delay::new(Duration::from_secs(10))).await {
+    let channel = match futures::future::select(rx, Delay::new(Duration::from_secs(60))).await {
         Either::Left((Ok(channel), _)) => channel,
         Either::Left((Err(_), _)) => {
             return Err(Error::Internal("failed to open data channel".to_owned()))
