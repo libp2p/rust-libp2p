@@ -1,6 +1,6 @@
 [package]
 name = "libp2p-relay"
-edition = "2021"
+edition.workspace = true
 rust-version = { workspace = true }
 description = "Communications relaying for libp2p"
 version = "0.20.0"

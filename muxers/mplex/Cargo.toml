@@ -1,6 +1,6 @@
 [package]
 name = "libp2p-mplex"
-edition = "2021"
+edition.workspace = true
 rust-version = { workspace = true }
 description = "Mplex multiplexing protocol for libp2p"
 version = "0.43.1"

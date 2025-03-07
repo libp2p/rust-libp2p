@@ -1,6 +1,6 @@
 [package]
 name = "libp2p-core"
-edition = "2021"
+edition.workspace = true
 rust-version = { workspace = true }
 description = "Core traits and structs of libp2p"
 version = "0.43.0"
