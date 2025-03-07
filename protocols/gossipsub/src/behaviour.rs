@@ -1344,6 +1344,13 @@ where
                         "IWANT: Peer has asked for message too many times; ignoring request"
                     );
                 } else {
+                    if let Some(peer) = self.connected_peers.get_mut(peer_id) {
+                        if peer.dont_send.contains_key(&id) {
+                            tracing::debug!(%peer_id, message=%id, "Peer already sent IDONTWANT for this message");
+                            continue;
+                        }
+                    }
+
                     tracing::debug!(peer=%peer_id, "IWANT: Sending cached messages to peer");
                     self.send_message(
                         *peer_id,
@@ -3051,6 +3058,13 @@ where
                     endpoint_new
                 )
             }
+        }
+    }
+
+    /// Register topics to ensure metrics are recorded correctly for these topics.
+    pub fn register_topics_for_metrics(&mut self, topics: Vec<TopicHash>) {
+        if let Some(metrics) = &mut self.metrics {
+            metrics.register_allowed_topics(topics);
         }
     }
 }
