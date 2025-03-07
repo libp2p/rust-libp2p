@@ -1,3 +1,17 @@
+## 0.4.0
+
+- Cut stable release.
+  See [PR 5807](https://github.com/libp2p/rust-libp2p/pull/5807)
+- Bump version of web-sys and update `__Nonexhaustive` to `__Invalid`.
+  See [PR 5569](https://github.com/libp2p/rust-libp2p/pull/5569)
+
+<!-- Update to libp2p-core v0.43.0 -->
+
+## 0.4.0-alpha
+
+- Implement refactored `Transport`.
+  See [PR 4568](https://github.com/libp2p/rust-libp2p/pull/4568)
+
 ## 0.3.0-alpha
 
 - Bump version in order to publish a new version dependent on latest `libp2p-core`.

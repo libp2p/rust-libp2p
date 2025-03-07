@@ -18,23 +18,31 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::codec::{Codec, Frame, LocalStreamId, RemoteStreamId};
-use crate::{MaxBufferBehaviour, MplexConfig};
-use asynchronous_codec::Framed;
-use bytes::Bytes;
-use futures::task::{waker_ref, ArcWake, AtomicWaker, WakerRef};
-use futures::{prelude::*, ready, stream::Fuse};
-use nohash_hasher::{IntMap, IntSet};
-use parking_lot::Mutex;
-use smallvec::SmallVec;
-use std::collections::VecDeque;
+pub(crate) use std::io::{Error, Result};
 use std::{
-    cmp, fmt, io, mem,
+    cmp,
+    collections::VecDeque,
+    fmt, io, mem,
     sync::Arc,
     task::{Context, Poll, Waker},
 };
 
-pub(crate) use std::io::{Error, Result};
+use asynchronous_codec::Framed;
+use bytes::Bytes;
+use futures::{
+    prelude::*,
+    ready,
+    stream::Fuse,
+    task::{waker_ref, ArcWake, AtomicWaker, WakerRef},
+};
+use nohash_hasher::{IntMap, IntSet};
+use parking_lot::Mutex;
+use smallvec::SmallVec;
+
+use crate::{
+    codec::{Codec, Frame, LocalStreamId, RemoteStreamId},
+    Config, MaxBufferBehaviour,
+};
 /// A connection identifier.
 ///
 /// Randomly generated and mainly intended to improve log output
@@ -62,7 +70,7 @@ pub(crate) struct Multiplexed<C> {
     /// The underlying multiplexed I/O stream.
     io: Fuse<Framed<C, Codec>>,
     /// The configuration.
-    config: MplexConfig,
+    config: Config,
     /// The buffer of new inbound substreams that have not yet
     /// been drained by `poll_next_stream`. This buffer is
     /// effectively bounded by `max_substreams - substreams.len()`.
@@ -114,7 +122,7 @@ where
     C: AsyncRead + AsyncWrite + Unpin,
 {
     /// Creates a new multiplexed I/O stream.
-    pub(crate) fn new(io: C, config: MplexConfig) -> Self {
+    pub(crate) fn new(io: C, config: Config) -> Self {
         let id = ConnectionId(rand::random());
         tracing::debug!(connection=%id, "New multiplexed connection");
         Multiplexed {
@@ -302,13 +310,11 @@ where
     /// reading and writing immediately. The remote is informed
     /// based on the current state of the substream:
     ///
-    /// * If the substream was open, a `Reset` frame is sent at
-    ///   the next opportunity.
-    /// * If the substream was half-closed, i.e. a `Close` frame
-    ///   has already been sent, nothing further happens.
-    /// * If the substream was half-closed by the remote, i.e.
-    ///   a `Close` frame has already been received, a `Close`
-    ///   frame is sent at the next opportunity.
+    /// * If the substream was open, a `Reset` frame is sent at the next opportunity.
+    /// * If the substream was half-closed, i.e. a `Close` frame has already been sent, nothing
+    ///   further happens.
+    /// * If the substream was half-closed by the remote, i.e. a `Close` frame has already been
+    ///   received, a `Close` frame is sent at the next opportunity.
     ///
     /// If the multiplexed stream is closed or encountered
     /// an error earlier, or there is no known substream with
@@ -1146,15 +1152,14 @@ const EXTRA_PENDING_FRAMES: usize = 1000;
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use std::{collections::HashSet, num::NonZeroU8, ops::DerefMut, pin::Pin};
+
     use async_std::task;
     use asynchronous_codec::{Decoder, Encoder};
     use bytes::BytesMut;
     use quickcheck::*;
-    use std::collections::HashSet;
-    use std::num::NonZeroU8;
-    use std::ops::DerefMut;
-    use std::pin::Pin;
+
+    use super::*;
 
     impl Arbitrary for MaxBufferBehaviour {
         fn arbitrary(g: &mut Gen) -> MaxBufferBehaviour {
@@ -1163,9 +1168,9 @@ mod tests {
         }
     }
 
-    impl Arbitrary for MplexConfig {
-        fn arbitrary(g: &mut Gen) -> MplexConfig {
-            MplexConfig {
+    impl Arbitrary for Config {
+        fn arbitrary(g: &mut Gen) -> Config {
+            Config {
                 max_substreams: g.gen_range(1..100),
                 max_buffer_len: g.gen_range(1..1000),
                 max_buffer_behaviour: MaxBufferBehaviour::arbitrary(g),
@@ -1231,7 +1236,7 @@ mod tests {
             .with_env_filter(EnvFilter::from_default_env())
             .try_init();
 
-        fn prop(cfg: MplexConfig, overflow: NonZeroU8) {
+        fn prop(cfg: Config, overflow: NonZeroU8) {
             let mut r_buf = BytesMut::new();
             let mut codec = Codec::new();
 
@@ -1369,7 +1374,7 @@ mod tests {
             .with_env_filter(EnvFilter::from_default_env())
             .try_init();
 
-        fn prop(cfg: MplexConfig, num_streams: NonZeroU8) {
+        fn prop(cfg: Config, num_streams: NonZeroU8) {
             let num_streams = cmp::min(cfg.max_substreams, num_streams.get() as usize);
 
             // Setup the multiplexed connection.

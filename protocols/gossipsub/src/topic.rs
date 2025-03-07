@@ -18,12 +18,14 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::rpc_proto::proto;
+use std::fmt;
+
 use base64::prelude::*;
 use prometheus_client::encoding::EncodeLabelSet;
 use quick_protobuf::Writer;
 use sha2::{Digest, Sha256};
-use std::fmt;
+
+use crate::rpc_proto::proto;
 
 /// A generic trait that can be extended for various hashing types for a topic.
 pub trait Hasher {
@@ -49,14 +51,14 @@ impl Hasher for Sha256Hash {
     fn hash(topic_string: String) -> TopicHash {
         use quick_protobuf::MessageWrite;
 
-        let topic_descripter = proto::TopicDescriptor {
+        let topic_descriptor = proto::TopicDescriptor {
             name: Some(topic_string),
             auth: None,
             enc: None,
         };
-        let mut bytes = Vec::with_capacity(topic_descripter.get_size());
+        let mut bytes = Vec::with_capacity(topic_descriptor.get_size());
         let mut writer = Writer::new(&mut bytes);
-        topic_descripter
+        topic_descriptor
             .write_message(&mut writer)
             .expect("Encoding to succeed");
         let hash = BASE64_STANDARD.encode(Sha256::digest(&bytes));

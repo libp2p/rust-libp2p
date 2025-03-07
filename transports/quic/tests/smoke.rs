@@ -1,15 +1,31 @@
 #![cfg(any(feature = "async-std", feature = "tokio"))]
 
-use futures::channel::{mpsc, oneshot};
-use futures::future::BoxFuture;
-use futures::future::{poll_fn, Either};
-use futures::stream::StreamExt;
-use futures::{future, AsyncReadExt, AsyncWriteExt, FutureExt, SinkExt};
+use std::{
+    future::Future,
+    io,
+    num::NonZeroU8,
+    pin::Pin,
+    sync::{Arc, Mutex},
+    task::Poll,
+    time::Duration,
+};
+
+use futures::{
+    channel::{mpsc, oneshot},
+    future,
+    future::{poll_fn, BoxFuture, Either},
+    stream::StreamExt,
+    AsyncReadExt, AsyncWriteExt, FutureExt, SinkExt,
+};
 use futures_timer::Delay;
-use libp2p_core::muxing::{StreamMuxerBox, StreamMuxerExt, SubstreamBox};
-use libp2p_core::transport::{Boxed, OrTransport, TransportEvent};
-use libp2p_core::transport::{ListenerId, TransportError};
-use libp2p_core::{multiaddr::Protocol, upgrade, Multiaddr, Transport};
+use libp2p_core::{
+    multiaddr::Protocol,
+    muxing::{StreamMuxerBox, StreamMuxerExt, SubstreamBox},
+    transport::{
+        Boxed, DialOpts, ListenerId, OrTransport, PortUse, TransportError, TransportEvent,
+    },
+    upgrade, Endpoint, Multiaddr, Transport,
+};
 use libp2p_identity::PeerId;
 use libp2p_noise as noise;
 use libp2p_quic as quic;
@@ -17,15 +33,6 @@ use libp2p_tcp as tcp;
 use libp2p_yamux as yamux;
 use quic::Provider;
 use rand::RngCore;
-use std::future::Future;
-use std::io;
-use std::num::NonZeroU8;
-use std::task::Poll;
-use std::time::Duration;
-use std::{
-    pin::Pin,
-    sync::{Arc, Mutex},
-};
 use tracing_subscriber::EnvFilter;
 
 #[cfg(feature = "tokio")]
@@ -34,10 +41,10 @@ async fn tokio_smoke() {
     smoke::<quic::tokio::Provider>().await
 }
 
-#[cfg(feature = "async-std")]
-#[async_std::test]
+#[cfg(feature = "tokio")]
+#[tokio::test]
 async fn async_std_smoke() {
-    smoke::<quic::async_std::Provider>().await
+    smoke::<quic::tokio::Provider>().await
 }
 
 #[cfg(feature = "tokio")]
@@ -67,14 +74,14 @@ async fn endpoint_reuse() {
     assert_eq!(a_send_back_addr, a_addr);
 }
 
-#[cfg(feature = "async-std")]
-#[async_std::test]
+#[cfg(feature = "tokio")]
+#[tokio::test]
 async fn ipv4_dial_ipv6() {
     let _ = tracing_subscriber::fmt()
         .with_env_filter(EnvFilter::from_default_env())
         .try_init();
-    let (a_peer_id, mut a_transport) = create_default_transport::<quic::async_std::Provider>();
-    let (b_peer_id, mut b_transport) = create_default_transport::<quic::async_std::Provider>();
+    let (a_peer_id, mut a_transport) = create_default_transport::<quic::tokio::Provider>();
+    let (b_peer_id, mut b_transport) = create_default_transport::<quic::tokio::Provider>();
 
     let a_addr = start_listening(&mut a_transport, "/ip6/::1/udp/0/quic-v1").await;
     let ((a_connected, _, _), (b_connected, _)) =
@@ -87,9 +94,11 @@ async fn ipv4_dial_ipv6() {
 /// Tests that a [`Transport::dial`] wakes up the task previously polling [`Transport::poll`].
 ///
 /// See https://github.com/libp2p/rust-libp2p/pull/3306 for context.
-#[cfg(feature = "async-std")]
-#[async_std::test]
+#[cfg(feature = "tokio")]
+#[tokio::test]
 async fn wrapped_with_delay() {
+    use libp2p_core::transport::DialOpts;
+
     let _ = tracing_subscriber::fmt()
         .with_env_filter(EnvFilter::from_default_env())
         .try_init();
@@ -114,18 +123,14 @@ async fn wrapped_with_delay() {
             self.0.lock().unwrap().remove_listener(id)
         }
 
-        fn address_translation(
-            &self,
-            listen: &Multiaddr,
-            observed: &Multiaddr,
-        ) -> Option<Multiaddr> {
-            self.0.lock().unwrap().address_translation(listen, observed)
-        }
-
         /// Delayed dial, i.e. calling [`Transport::dial`] on the inner [`Transport`] not within the
         /// synchronous [`Transport::dial`] method, but within the [`Future`] returned by the outer
         /// [`Transport::dial`].
-        fn dial(&mut self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
+        fn dial(
+            &mut self,
+            addr: Multiaddr,
+            dial_opts: DialOpts,
+        ) -> Result<Self::Dial, TransportError<Self::Error>> {
             let t = self.0.clone();
             Ok(async move {
                 // Simulate DNS lookup. Giving the `Transport::poll` the chance to return
@@ -133,22 +138,19 @@ async fn wrapped_with_delay() {
                 // on the inner transport below.
                 Delay::new(Duration::from_millis(100)).await;
 
-                let dial = t.lock().unwrap().dial(addr).map_err(|e| match e {
-                    TransportError::MultiaddrNotSupported(_) => {
-                        panic!()
-                    }
-                    TransportError::Other(e) => e,
-                })?;
+                let dial = t
+                    .lock()
+                    .unwrap()
+                    .dial(addr, dial_opts)
+                    .map_err(|e| match e {
+                        TransportError::MultiaddrNotSupported(_) => {
+                            panic!()
+                        }
+                        TransportError::Other(e) => e,
+                    })?;
                 dial.await
             }
             .boxed())
-        }
-
-        fn dial_as_listener(
-            &mut self,
-            addr: Multiaddr,
-        ) -> Result<Self::Dial, TransportError<Self::Error>> {
-            self.0.lock().unwrap().dial_as_listener(addr)
         }
 
         fn poll(
@@ -159,15 +161,15 @@ async fn wrapped_with_delay() {
         }
     }
 
-    let (a_peer_id, mut a_transport) = create_default_transport::<quic::async_std::Provider>();
+    let (a_peer_id, mut a_transport) = create_default_transport::<quic::tokio::Provider>();
     let (b_peer_id, mut b_transport) = {
-        let (id, transport) = create_default_transport::<quic::async_std::Provider>();
+        let (id, transport) = create_default_transport::<quic::tokio::Provider>();
         (id, DialDelay(Arc::new(Mutex::new(transport))).boxed())
     };
 
     // Spawn A
     let a_addr = start_listening(&mut a_transport, "/ip6/::1/udp/0/quic-v1").await;
-    let listener = async_std::task::spawn(async move {
+    let listener = tokio::spawn(async move {
         let (upgrade, _) = a_transport
             .select_next_some()
             .await
@@ -182,26 +184,35 @@ async fn wrapped_with_delay() {
     //
     // Note that the dial is spawned on a different task than the transport allowing the transport
     // task to poll the transport once and then suspend, waiting for the wakeup from the dial.
-    let dial = async_std::task::spawn({
-        let dial = b_transport.dial(a_addr).unwrap();
+    let dial = tokio::spawn({
+        let dial = b_transport
+            .dial(
+                a_addr,
+                DialOpts {
+                    role: Endpoint::Dialer,
+                    port_use: PortUse::Reuse,
+                },
+            )
+            .unwrap();
         async { dial.await.unwrap().0 }
     });
-    async_std::task::spawn(async move { b_transport.next().await });
+    tokio::spawn(async move { b_transport.next().await });
 
     let (a_connected, b_connected) = future::join(listener, dial).await;
 
-    assert_eq!(a_connected, b_peer_id);
-    assert_eq!(b_connected, a_peer_id);
+    assert_eq!(a_connected.unwrap(), b_peer_id);
+    assert_eq!(b_connected.unwrap(), a_peer_id);
 }
 
-#[cfg(feature = "async-std")]
-#[async_std::test]
-#[ignore] // Transport currently does not validate PeerId. Enable once we make use of PeerId validation in rustls.
+#[cfg(feature = "tokio")]
+#[tokio::test]
+#[ignore] // Transport currently does not validate PeerId.
+          // Enable once we make use of PeerId validation in rustls.
 async fn wrong_peerid() {
     use libp2p_identity::PeerId;
 
-    let (a_peer_id, mut a_transport) = create_default_transport::<quic::async_std::Provider>();
-    let (b_peer_id, mut b_transport) = create_default_transport::<quic::async_std::Provider>();
+    let (a_peer_id, mut a_transport) = create_default_transport::<quic::tokio::Provider>();
+    let (b_peer_id, mut b_transport) = create_default_transport::<quic::tokio::Provider>();
 
     let a_addr = start_listening(&mut a_transport, "/ip6/::1/udp/0/quic-v1").await;
     let a_addr_random_peer = a_addr.with(Protocol::P2p(PeerId::random()));
@@ -213,15 +224,15 @@ async fn wrong_peerid() {
     assert_eq!(b_connected, a_peer_id);
 }
 
-#[cfg(feature = "async-std")]
+#[cfg(feature = "tokio")]
 fn new_tcp_quic_transport() -> (PeerId, Boxed<(PeerId, StreamMuxerBox)>) {
     let keypair = generate_tls_keypair();
     let peer_id = keypair.public().to_peer_id();
     let mut config = quic::Config::new(&keypair);
     config.handshake_timeout = Duration::from_secs(1);
 
-    let quic_transport = quic::async_std::Transport::new(config);
-    let tcp_transport = tcp::async_io::Transport::new(tcp::Config::default())
+    let quic_transport = quic::tokio::Transport::new(config);
+    let tcp_transport = tcp::tokio::Transport::new(tcp::Config::default())
         .upgrade(upgrade::Version::V1)
         .authenticate(noise::Config::new(&keypair).unwrap())
         .multiplex(yamux::Config::default());
@@ -236,8 +247,8 @@ fn new_tcp_quic_transport() -> (PeerId, Boxed<(PeerId, StreamMuxerBox)>) {
     (peer_id, transport)
 }
 
-#[cfg(feature = "async-std")]
-#[async_std::test]
+#[cfg(feature = "tokio")]
+#[tokio::test]
 async fn tcp_and_quic() {
     let (a_peer_id, mut a_transport) = new_tcp_quic_transport();
     let (b_peer_id, mut b_transport) = new_tcp_quic_transport();
@@ -315,7 +326,13 @@ async fn draft_29_support() {
     let (_, mut c_transport) =
         create_transport::<quic::tokio::Provider>(|cfg| cfg.support_draft_29 = false);
     assert!(matches!(
-        c_transport.dial(a_quic_addr),
+        c_transport.dial(
+            a_quic_addr,
+            DialOpts {
+                role: Endpoint::Dialer,
+                port_use: PortUse::New
+            }
+        ),
         Err(TransportError::MultiaddrNotSupported(_))
     ));
 
@@ -331,7 +348,15 @@ async fn draft_29_support() {
     ));
     let d_quic_v1_addr = start_listening(&mut d_transport, "/ip4/127.0.0.1/udp/0/quic-v1").await;
     let d_quic_addr_mapped = swap_protocol!(d_quic_v1_addr, QuicV1 => Quic);
-    let dial = b_transport.dial(d_quic_addr_mapped).unwrap();
+    let dial = b_transport
+        .dial(
+            d_quic_addr_mapped,
+            DialOpts {
+                role: Endpoint::Dialer,
+                port_use: PortUse::Reuse,
+            },
+        )
+        .unwrap();
     let drive_transports = poll_fn::<(), _>(|cx| {
         let _ = b_transport.poll_next_unpin(cx);
         let _ = d_transport.poll_next_unpin(cx);
@@ -352,15 +377,15 @@ async fn draft_29_support() {
     }
 }
 
-#[cfg(feature = "async-std")]
-#[async_std::test]
+#[cfg(feature = "tokio")]
+#[tokio::test]
 async fn backpressure() {
     let _ = tracing_subscriber::fmt()
         .with_env_filter(EnvFilter::from_default_env())
         .try_init();
     let max_stream_data = quic::Config::new(&generate_tls_keypair()).max_stream_data;
 
-    let (mut stream_a, mut stream_b) = build_streams::<quic::async_std::Provider>().await;
+    let (mut stream_a, mut stream_b) = build_streams::<quic::tokio::Provider>().await;
 
     let data = vec![0; max_stream_data as usize - 1];
 
@@ -378,13 +403,13 @@ async fn backpressure() {
     assert!(stream_a.write(&more_data).now_or_never().is_some());
 }
 
-#[cfg(feature = "async-std")]
-#[async_std::test]
+#[cfg(feature = "tokio")]
+#[tokio::test]
 async fn read_after_peer_dropped_stream() {
     let _ = tracing_subscriber::fmt()
         .with_env_filter(EnvFilter::from_default_env())
         .try_init();
-    let (mut stream_a, mut stream_b) = build_streams::<quic::async_std::Provider>().await;
+    let (mut stream_a, mut stream_b) = build_streams::<quic::tokio::Provider>().await;
 
     let data = vec![0; 10];
 
@@ -399,16 +424,16 @@ async fn read_after_peer_dropped_stream() {
     assert_eq!(data, buf)
 }
 
-#[cfg(feature = "async-std")]
-#[async_std::test]
+#[cfg(feature = "tokio")]
+#[tokio::test]
 #[should_panic]
 async fn write_after_peer_dropped_stream() {
     let _ = tracing_subscriber::fmt()
         .with_env_filter(EnvFilter::from_default_env())
         .try_init();
-    let (stream_a, mut stream_b) = build_streams::<quic::async_std::Provider>().await;
+    let (stream_a, mut stream_b) = build_streams::<quic::tokio::Provider>().await;
     drop(stream_a);
-    futures_timer::Delay::new(Duration::from_millis(1)).await;
+    futures_timer::Delay::new(Duration::from_millis(100)).await;
 
     let data = vec![0; 10];
     stream_b.write_all(&data).await.expect("Write failed.");
@@ -765,7 +790,20 @@ async fn dial(
     transport: &mut Boxed<(PeerId, StreamMuxerBox)>,
     addr: Multiaddr,
 ) -> io::Result<(PeerId, StreamMuxerBox)> {
-    match future::select(transport.dial(addr).unwrap(), transport.next()).await {
+    match future::select(
+        transport
+            .dial(
+                addr,
+                DialOpts {
+                    role: Endpoint::Dialer,
+                    port_use: PortUse::Reuse,
+                },
+            )
+            .unwrap(),
+        transport.next(),
+    )
+    .await
+    {
         Either::Left((conn, _)) => conn,
         Either::Right((event, _)) => {
             panic!("Unexpected event: {event:?}")

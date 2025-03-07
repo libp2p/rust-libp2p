@@ -1,3 +1,12 @@
+## 0.42.0
+
+<!-- Update to libp2p-core v0.43.0 -->
+
+## 0.41.0
+
+- Implement refactored `Transport`.
+  See [PR 4568](https://github.com/libp2p/rust-libp2p/pull/4568)
+
 ## 0.40.0
 
 

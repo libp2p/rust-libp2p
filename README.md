@@ -79,7 +79,6 @@ Conduct](https://github.com/ipfs/community/blob/master/code-of-conduct.md).
 (In alphabetical order.)
 
 - João Oliveira ([@jxs](https://github.com/jxs))
-- Thomas Eizinger ([@thomaseizinger](https://github.com/thomaseizinger))
 
 ## Notable users
 
@@ -97,8 +96,11 @@ Conduct](https://github.com/ipfs/community/blob/master/code-of-conduct.md).
 - [OpenMina](https://github.com/openmina/openmina) - In-browser Mina Rust implementation.
 - [rust-ipfs](https://github.com/rs-ipfs/rust-ipfs) - IPFS implementation in Rust.
 - [Safe Network](https://github.com/maidsafe/safe_network) - Safe Network implementation in Rust.
+- [SQD Network](https://github.com/subsquid/sqd-network) - A decentralized storage for Web3 data.
 - [Starcoin](https://github.com/starcoinorg/starcoin) - A smart contract blockchain network that scales by layering.
 - [Subspace](https://github.com/subspace/subspace) - Subspace Network reference implementation
 - [Substrate](https://github.com/paritytech/substrate) - Framework for blockchain innovation,
 used by [Polkadot](https://www.parity.io/technologies/polkadot/).
+- [Swarm NL](https://github.com/algorealmInc/SwarmNL) - A library that makes it easy to configure the networking requirements for any distributed application.
 - [Taple](https://github.com/opencanarias/taple-core) - Sustainable DLT for asset and process traceability by [OpenCanarias](https://www.opencanarias.com/en/).
+- [Ceylon](https://github.com/ceylonai/ceylon) - A Multi-Agent System (MAS) Development Framework.

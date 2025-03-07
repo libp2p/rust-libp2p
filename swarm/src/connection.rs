@@ -23,42 +23,47 @@ mod error;
 pub(crate) mod pool;
 mod supported_protocols;
 
+use std::{
+    collections::{HashMap, HashSet},
+    fmt,
+    fmt::{Display, Formatter},
+    future::Future,
+    io, mem,
+    pin::Pin,
+    sync::atomic::{AtomicUsize, Ordering},
+    task::{Context, Poll, Waker},
+    time::Duration,
+};
+
 pub use error::ConnectionError;
 pub(crate) use error::{
     PendingConnectionError, PendingInboundConnectionError, PendingOutboundConnectionError,
 };
-pub use supported_protocols::SupportedProtocols;
-
-use crate::handler::{
-    AddressChange, ConnectionEvent, ConnectionHandler, DialUpgradeError, FullyNegotiatedInbound,
-    FullyNegotiatedOutbound, ListenUpgradeError, ProtocolSupport, ProtocolsAdded, ProtocolsChange,
-    UpgradeInfoSend,
+use futures::{future::BoxFuture, stream, stream::FuturesUnordered, FutureExt, StreamExt};
+use futures_timer::Delay;
+use libp2p_core::{
+    connection::ConnectedPoint,
+    multiaddr::Multiaddr,
+    muxing::{StreamMuxerBox, StreamMuxerEvent, StreamMuxerExt, SubstreamBox},
+    transport::PortUse,
+    upgrade,
+    upgrade::{NegotiationError, ProtocolError},
+    Endpoint,
 };
-use crate::stream::ActiveStreamCounter;
-use crate::upgrade::{InboundUpgradeSend, OutboundUpgradeSend};
+use libp2p_identity::PeerId;
+pub use supported_protocols::SupportedProtocols;
+use web_time::Instant;
+
 use crate::{
+    handler::{
+        AddressChange, ConnectionEvent, ConnectionHandler, DialUpgradeError,
+        FullyNegotiatedInbound, FullyNegotiatedOutbound, ListenUpgradeError, ProtocolSupport,
+        ProtocolsChange, UpgradeInfoSend,
+    },
+    stream::ActiveStreamCounter,
+    upgrade::{InboundUpgradeSend, OutboundUpgradeSend},
     ConnectionHandlerEvent, Stream, StreamProtocol, StreamUpgradeError, SubstreamProtocol,
 };
-use futures::future::BoxFuture;
-use futures::stream::FuturesUnordered;
-use futures::StreamExt;
-use futures::{stream, FutureExt};
-use futures_timer::Delay;
-use instant::Instant;
-use libp2p_core::connection::ConnectedPoint;
-use libp2p_core::multiaddr::Multiaddr;
-use libp2p_core::muxing::{StreamMuxerBox, StreamMuxerEvent, StreamMuxerExt, SubstreamBox};
-use libp2p_core::upgrade;
-use libp2p_core::upgrade::{NegotiationError, ProtocolError};
-use libp2p_core::Endpoint;
-use libp2p_identity::PeerId;
-use std::collections::HashSet;
-use std::fmt::{Display, Formatter};
-use std::future::Future;
-use std::sync::atomic::{AtomicUsize, Ordering};
-use std::task::Waker;
-use std::time::Duration;
-use std::{fmt, io, mem, pin::Pin, task::Context, task::Poll};
 
 static NEXT_CONNECTION_ID: AtomicUsize = AtomicUsize::new(1);
 
@@ -72,7 +77,8 @@ impl ConnectionId {
     /// [`Swarm`](crate::Swarm) enforces that [`ConnectionId`]s are unique and not reused.
     /// This constructor does not, hence the _unchecked_.
     ///
-    /// It is primarily meant for allowing manual tests of [`NetworkBehaviour`](crate::NetworkBehaviour)s.
+    /// It is primarily meant for allowing manual tests of
+    /// [`NetworkBehaviour`](crate::NetworkBehaviour)s.
     pub fn new_unchecked(id: usize) -> Self {
         Self(id)
     }
@@ -147,14 +153,17 @@ where
     max_negotiating_inbound_streams: usize,
     /// Contains all upgrades that are waiting for a new outbound substream.
     ///
-    /// The upgrade timeout is already ticking here so this may fail in case the remote is not quick
-    /// enough in providing us with a new stream.
+    /// The upgrade timeout is already ticking here so this may fail in case the remote is not
+    /// quick enough in providing us with a new stream.
     requested_substreams: FuturesUnordered<
         SubstreamRequested<THandler::OutboundOpenInfo, THandler::OutboundProtocol>,
     >,
 
-    local_supported_protocols: HashSet<StreamProtocol>,
+    local_supported_protocols:
+        HashMap<AsStrHashEq<<THandler::InboundProtocol as UpgradeInfoSend>::Info>, bool>,
     remote_supported_protocols: HashSet<StreamProtocol>,
+    protocol_buffer: Vec<StreamProtocol>,
+
     idle_timeout: Duration,
     stream_counter: ActiveStreamCounter,
 }
@@ -187,11 +196,17 @@ where
         idle_timeout: Duration,
     ) -> Self {
         let initial_protocols = gather_supported_protocols(&handler);
+        let mut buffer = Vec::new();
+
         if !initial_protocols.is_empty() {
             handler.on_connection_event(ConnectionEvent::LocalProtocolsChange(
-                ProtocolsChange::Added(ProtocolsAdded::from_set(&initial_protocols)),
+                ProtocolsChange::from_initial_protocols(
+                    initial_protocols.keys().map(|e| &e.0),
+                    &mut buffer,
+                ),
             ));
         }
+
         Connection {
             muxing: muxer,
             handler,
@@ -203,6 +218,7 @@ where
             requested_substreams: Default::default(),
             local_supported_protocols: initial_protocols,
             remote_supported_protocols: Default::default(),
+            protocol_buffer: buffer,
             idle_timeout,
             stream_counter: ActiveStreamCounter::default(),
         }
@@ -213,7 +229,8 @@ where
         self.handler.on_behaviour_event(event);
     }
 
-    /// Begins an orderly shutdown of the connection, returning a stream of final events and a `Future` that resolves when connection shutdown is complete.
+    /// Begins an orderly shutdown of the connection, returning a stream of final events and a
+    /// `Future` that resolves when connection shutdown is complete.
     pub(crate) fn close(
         self,
     ) -> (
@@ -250,6 +267,7 @@ where
             substream_upgrade_protocol_override,
             local_supported_protocols: supported_protocols,
             remote_supported_protocols,
+            protocol_buffer,
             idle_timeout,
             stream_counter,
             ..
@@ -287,30 +305,30 @@ where
                     ProtocolSupport::Added(protocols),
                 )) => {
                     if let Some(added) =
-                        ProtocolsChange::add(remote_supported_protocols, &protocols)
+                        ProtocolsChange::add(remote_supported_protocols, protocols, protocol_buffer)
                     {
                         handler.on_connection_event(ConnectionEvent::RemoteProtocolsChange(added));
-                        remote_supported_protocols.extend(protocols);
+                        remote_supported_protocols.extend(protocol_buffer.drain(..));
                     }
-
                     continue;
                 }
                 Poll::Ready(ConnectionHandlerEvent::ReportRemoteProtocols(
                     ProtocolSupport::Removed(protocols),
                 )) => {
-                    if let Some(removed) =
-                        ProtocolsChange::remove(remote_supported_protocols, &protocols)
-                    {
+                    if let Some(removed) = ProtocolsChange::remove(
+                        remote_supported_protocols,
+                        protocols,
+                        protocol_buffer,
+                    ) {
                         handler
                             .on_connection_event(ConnectionEvent::RemoteProtocolsChange(removed));
-                        remote_supported_protocols.retain(|p| !protocols.contains(p));
                     }
-
                     continue;
                 }
             }
 
-            // In case the [`ConnectionHandler`] can not make any more progress, poll the negotiating outbound streams.
+            // In case the [`ConnectionHandler`] can not make any more progress, poll the
+            // negotiating outbound streams.
             match negotiating_out.poll_next_unpin(cx) {
                 Poll::Pending | Poll::Ready(None) => {}
                 Poll::Ready(Some((info, Ok(protocol)))) => {
@@ -358,7 +376,8 @@ where
             }
 
             // Check if the connection (and handler) should be shut down.
-            // As long as we're still negotiating substreams or have any active streams shutdown is always postponed.
+            // As long as we're still negotiating substreams or have
+            // any active streams shutdown is always postponed.
             if negotiating_in.is_empty()
                 && negotiating_out.is_empty()
                 && requested_substreams.is_empty()
@@ -409,7 +428,9 @@ where
                             stream_counter.clone(),
                         ));
 
-                        continue; // Go back to the top, handler can potentially make progress again.
+                        // Go back to the top,
+                        // handler can potentially make progress again.
+                        continue;
                     }
                 }
             }
@@ -426,25 +447,29 @@ where
                             stream_counter.clone(),
                         ));
 
-                        continue; // Go back to the top, handler can potentially make progress again.
+                        // Go back to the top,
+                        // handler can potentially make progress again.
+                        continue;
                     }
                 }
             }
 
-            let new_protocols = gather_supported_protocols(handler);
-            let changes = ProtocolsChange::from_full_sets(supported_protocols, &new_protocols);
+            let changes = ProtocolsChange::from_full_sets(
+                supported_protocols,
+                handler.listen_protocol().upgrade().protocol_info(),
+                protocol_buffer,
+            );
 
             if !changes.is_empty() {
                 for change in changes {
                     handler.on_connection_event(ConnectionEvent::LocalProtocolsChange(change));
                 }
-
-                *supported_protocols = new_protocols;
-
-                continue; // Go back to the top, handler can potentially make progress again.
+                // Go back to the top, handler can potentially make progress again.
+                continue;
             }
 
-            return Poll::Pending; // Nothing can make progress, return `Pending`.
+            // Nothing can make progress, return `Pending`.
+            return Poll::Pending;
         }
     }
 
@@ -454,12 +479,14 @@ where
     }
 }
 
-fn gather_supported_protocols(handler: &impl ConnectionHandler) -> HashSet<StreamProtocol> {
+fn gather_supported_protocols<C: ConnectionHandler>(
+    handler: &C,
+) -> HashMap<AsStrHashEq<<C::InboundProtocol as UpgradeInfoSend>::Info>, bool> {
     handler
         .listen_protocol()
         .upgrade()
         .protocol_info()
-        .filter_map(|i| StreamProtocol::try_from_owned(i.as_ref().to_owned()).ok())
+        .map(|info| (AsStrHashEq(info), true))
         .collect()
 }
 
@@ -470,7 +497,8 @@ fn compute_new_shutdown(
 ) -> Option<Shutdown> {
     match (current_shutdown, handler_keep_alive) {
         (_, false) if idle_timeout == Duration::ZERO => Some(Shutdown::Asap),
-        (Shutdown::Later(_), false) => None, // Do nothing, i.e. let the shutdown timer continue to tick.
+        // Do nothing, i.e. let the shutdown timer continue to tick.
+        (Shutdown::Later(_), false) => None,
         (_, false) => {
             let now = Instant::now();
             let safe_keep_alive = checked_add_fraction(now, idle_timeout);
@@ -481,10 +509,12 @@ fn compute_new_shutdown(
     }
 }
 
-/// Repeatedly halves and adds the [`Duration`] to the [`Instant`] until [`Instant::checked_add`] succeeds.
+/// Repeatedly halves and adds the [`Duration`]
+/// to the [`Instant`] until [`Instant::checked_add`] succeeds.
 ///
-/// [`Instant`] depends on the underlying platform and has a limit of which points in time it can represent.
-/// The [`Duration`] computed by the this function may not be the longest possible that we can add to `now` but it will work.
+/// [`Instant`] depends on the underlying platform and has a limit of which points in time it can
+/// represent. The [`Duration`] computed by the this function may not be the longest possible that
+/// we can add to `now` but it will work.
 fn checked_add_fraction(start: Instant, mut duration: Duration) -> Duration {
     while start.checked_add(duration).is_none() {
         tracing::debug!(start=?start, duration=?duration, "start + duration cannot be presented, halving duration");
@@ -504,7 +534,7 @@ pub(crate) struct IncomingInfo<'a> {
     pub(crate) send_back_addr: &'a Multiaddr,
 }
 
-impl<'a> IncomingInfo<'a> {
+impl IncomingInfo<'_> {
     /// Builds the [`ConnectedPoint`] corresponding to the incoming connection.
     pub(crate) fn create_connected_point(&self) -> ConnectedPoint {
         ConnectedPoint::Listener {
@@ -734,20 +764,43 @@ enum Shutdown {
     Later(Delay),
 }
 
+// Structure used to avoid allocations when storing the protocols in the `HashMap.
+// Instead of allocating a new `String` for the key,
+// we use `T::as_ref()` in `Hash`, `Eq` and `PartialEq` requirements.
+pub(crate) struct AsStrHashEq<T>(pub(crate) T);
+
+impl<T: AsRef<str>> Eq for AsStrHashEq<T> {}
+
+impl<T: AsRef<str>> PartialEq for AsStrHashEq<T> {
+    fn eq(&self, other: &Self) -> bool {
+        self.0.as_ref() == other.0.as_ref()
+    }
+}
+
+impl<T: AsRef<str>> std::hash::Hash for AsStrHashEq<T> {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.0.as_ref().hash(state)
+    }
+}
+
 #[cfg(test)]
 mod tests {
+    use std::{
+        convert::Infallible,
+        sync::{Arc, Weak},
+        time::Instant,
+    };
+
+    use futures::{future, AsyncRead, AsyncWrite};
+    use libp2p_core::{
+        upgrade::{DeniedUpgrade, InboundUpgrade, OutboundUpgrade, UpgradeInfo},
+        StreamMuxer,
+    };
+    use quickcheck::*;
+    use tracing_subscriber::EnvFilter;
+
     use super::*;
     use crate::dummy;
-    use futures::future;
-    use futures::AsyncRead;
-    use futures::AsyncWrite;
-    use libp2p_core::upgrade::{DeniedUpgrade, InboundUpgrade, OutboundUpgrade, UpgradeInfo};
-    use libp2p_core::StreamMuxer;
-    use quickcheck::*;
-    use std::sync::{Arc, Weak};
-    use std::time::Instant;
-    use tracing_subscriber::EnvFilter;
-    use void::Void;
 
     #[test]
     fn max_negotiating_inbound_streams() {
@@ -875,7 +928,8 @@ mod tests {
         );
         assert!(connection.handler.remote_removed.is_empty());
 
-        // Third, stop listening on a protocol it never advertised (we can't control what handlers do so this needs to be handled gracefully).
+        // Third, stop listening on a protocol it never advertised (we can't control what handlers
+        // do so this needs to be handled gracefully).
         connection.handler.remote_removes_support_for(&["/baz"]);
         let _ = connection.poll_noop_waker();
 
@@ -985,7 +1039,7 @@ mod tests {
 
     impl StreamMuxer for DummyStreamMuxer {
         type Substream = PendingSubstream;
-        type Error = Void;
+        type Error = Infallible;
 
         fn poll_inbound(
             self: Pin<&mut Self>,
@@ -1020,7 +1074,7 @@ mod tests {
 
     impl StreamMuxer for PendingStreamMuxer {
         type Substream = PendingSubstream;
-        type Error = Void;
+        type Error = Infallible;
 
         fn poll_inbound(
             self: Pin<&mut Self>,
@@ -1082,7 +1136,7 @@ mod tests {
 
     struct MockConnectionHandler {
         outbound_requested: bool,
-        error: Option<StreamUpgradeError<Void>>,
+        error: Option<StreamUpgradeError<Infallible>>,
         upgrade_timeout: Duration,
     }
 
@@ -1102,7 +1156,7 @@ mod tests {
 
     #[derive(Default)]
     struct ConfigurableProtocolConnectionHandler {
-        events: Vec<ConnectionHandlerEvent<DeniedUpgrade, (), Void>>,
+        events: Vec<ConnectionHandlerEvent<DeniedUpgrade, (), Infallible>>,
         active_protocols: HashSet<StreamProtocol>,
         local_added: Vec<Vec<StreamProtocol>>,
         local_removed: Vec<Vec<StreamProtocol>>,
@@ -1135,40 +1189,39 @@ mod tests {
     }
 
     impl ConnectionHandler for MockConnectionHandler {
-        type FromBehaviour = Void;
-        type ToBehaviour = Void;
+        type FromBehaviour = Infallible;
+        type ToBehaviour = Infallible;
         type InboundProtocol = DeniedUpgrade;
         type OutboundProtocol = DeniedUpgrade;
         type InboundOpenInfo = ();
         type OutboundOpenInfo = ();
 
-        fn listen_protocol(
-            &self,
-        ) -> SubstreamProtocol<Self::InboundProtocol, Self::InboundOpenInfo> {
+        fn listen_protocol(&self) -> SubstreamProtocol<Self::InboundProtocol> {
             SubstreamProtocol::new(DeniedUpgrade, ()).with_timeout(self.upgrade_timeout)
         }
 
         fn on_connection_event(
             &mut self,
-            event: ConnectionEvent<
-                Self::InboundProtocol,
-                Self::OutboundProtocol,
-                Self::InboundOpenInfo,
-                Self::OutboundOpenInfo,
-            >,
+            event: ConnectionEvent<Self::InboundProtocol, Self::OutboundProtocol>,
         ) {
             match event {
+                // TODO: remove when Rust 1.82 is MSRV
+                #[allow(unreachable_patterns)]
                 ConnectionEvent::FullyNegotiatedInbound(FullyNegotiatedInbound {
                     protocol,
                     ..
-                }) => void::unreachable(protocol),
+                }) => libp2p_core::util::unreachable(protocol),
+                // TODO: remove when Rust 1.82 is MSRV
+                #[allow(unreachable_patterns)]
                 ConnectionEvent::FullyNegotiatedOutbound(FullyNegotiatedOutbound {
                     protocol,
                     ..
-                }) => void::unreachable(protocol),
+                }) => libp2p_core::util::unreachable(protocol),
                 ConnectionEvent::DialUpgradeError(DialUpgradeError { error, .. }) => {
                     self.error = Some(error)
                 }
+                // TODO: remove when Rust 1.82 is MSRV
+                #[allow(unreachable_patterns)]
                 ConnectionEvent::AddressChange(_)
                 | ConnectionEvent::ListenUpgradeError(_)
                 | ConnectionEvent::LocalProtocolsChange(_)
@@ -1177,7 +1230,9 @@ mod tests {
         }
 
         fn on_behaviour_event(&mut self, event: Self::FromBehaviour) {
-            void::unreachable(event)
+            // TODO: remove when Rust 1.82 is MSRV
+            #[allow(unreachable_patterns)]
+            libp2p_core::util::unreachable(event)
         }
 
         fn connection_keep_alive(&self) -> bool {
@@ -1187,13 +1242,7 @@ mod tests {
         fn poll(
             &mut self,
             _: &mut Context<'_>,
-        ) -> Poll<
-            ConnectionHandlerEvent<
-                Self::OutboundProtocol,
-                Self::OutboundOpenInfo,
-                Self::ToBehaviour,
-            >,
-        > {
+        ) -> Poll<ConnectionHandlerEvent<Self::OutboundProtocol, (), Self::ToBehaviour>> {
             if self.outbound_requested {
                 self.outbound_requested = false;
                 return Poll::Ready(ConnectionHandlerEvent::OutboundSubstreamRequest {
@@ -1207,16 +1256,14 @@ mod tests {
     }
 
     impl ConnectionHandler for ConfigurableProtocolConnectionHandler {
-        type FromBehaviour = Void;
-        type ToBehaviour = Void;
+        type FromBehaviour = Infallible;
+        type ToBehaviour = Infallible;
         type InboundProtocol = ManyProtocolsUpgrade;
         type OutboundProtocol = DeniedUpgrade;
         type InboundOpenInfo = ();
         type OutboundOpenInfo = ();
 
-        fn listen_protocol(
-            &self,
-        ) -> SubstreamProtocol<Self::InboundProtocol, Self::InboundOpenInfo> {
+        fn listen_protocol(&self) -> SubstreamProtocol<Self::InboundProtocol> {
             SubstreamProtocol::new(
                 ManyProtocolsUpgrade {
                     protocols: Vec::from_iter(self.active_protocols.clone()),
@@ -1227,12 +1274,7 @@ mod tests {
 
         fn on_connection_event(
             &mut self,
-            event: ConnectionEvent<
-                Self::InboundProtocol,
-                Self::OutboundProtocol,
-                Self::InboundOpenInfo,
-                Self::OutboundOpenInfo,
-            >,
+            event: ConnectionEvent<Self::InboundProtocol, Self::OutboundProtocol>,
         ) {
             match event {
                 ConnectionEvent::LocalProtocolsChange(ProtocolsChange::Added(added)) => {
@@ -1252,7 +1294,9 @@ mod tests {
         }
 
         fn on_behaviour_event(&mut self, event: Self::FromBehaviour) {
-            void::unreachable(event)
+            // TODO: remove when Rust 1.82 is MSRV
+            #[allow(unreachable_patterns)]
+            libp2p_core::util::unreachable(event)
         }
 
         fn connection_keep_alive(&self) -> bool {
@@ -1262,13 +1306,7 @@ mod tests {
         fn poll(
             &mut self,
             _: &mut Context<'_>,
-        ) -> Poll<
-            ConnectionHandlerEvent<
-                Self::OutboundProtocol,
-                Self::OutboundOpenInfo,
-                Self::ToBehaviour,
-            >,
-        > {
+        ) -> Poll<ConnectionHandlerEvent<Self::OutboundProtocol, (), Self::ToBehaviour>> {
             if let Some(event) = self.events.pop() {
                 return Poll::Ready(event);
             }
@@ -1292,7 +1330,7 @@ mod tests {
 
     impl<C> InboundUpgrade<C> for ManyProtocolsUpgrade {
         type Output = C;
-        type Error = Void;
+        type Error = Infallible;
         type Future = future::Ready<Result<Self::Output, Self::Error>>;
 
         fn upgrade_inbound(self, stream: C, _: Self::Info) -> Self::Future {
@@ -1302,7 +1340,7 @@ mod tests {
 
     impl<C> OutboundUpgrade<C> for ManyProtocolsUpgrade {
         type Output = C;
-        type Error = Void;
+        type Error = Infallible;
         type Future = future::Ready<Result<Self::Output, Self::Error>>;
 
         fn upgrade_outbound(self, stream: C, _: Self::Info) -> Self::Future {
@@ -1322,6 +1360,7 @@ enum PendingPoint {
     Dialer {
         /// Same as [`ConnectedPoint::Dialer`] `role_override`.
         role_override: Endpoint,
+        port_use: PortUse,
     },
     /// The socket comes from a listener.
     Listener {
@@ -1335,7 +1374,14 @@ enum PendingPoint {
 impl From<ConnectedPoint> for PendingPoint {
     fn from(endpoint: ConnectedPoint) -> Self {
         match endpoint {
-            ConnectedPoint::Dialer { role_override, .. } => PendingPoint::Dialer { role_override },
+            ConnectedPoint::Dialer {
+                role_override,
+                port_use,
+                ..
+            } => PendingPoint::Dialer {
+                role_override,
+                port_use,
+            },
             ConnectedPoint::Listener {
                 local_addr,
                 send_back_addr,

@@ -1,7 +1,40 @@
+## 0.14.1
+
+- Fix infinity loop on wrong `nonce` when performing `dial_back`.
+  See [PR 5848](https://github.com/libp2p/rust-libp2p/pull/5848).
+
+## 0.14.0
+
+- Verify that an incoming AutoNAT dial comes from a connected peer. See [PR 5597](https://github.com/libp2p/rust-libp2p/pull/5597).
+- Deprecate `void` crate.
+  See [PR 5676](https://github.com/libp2p/rust-libp2p/pull/5676).
+- Update to `libp2p-request-response` `v0.28.0`.
+
+<!-- Update to libp2p-core v0.43.0 -->
+
+## 0.13.0
+
+- Due to the refactor of `Transport` it's no longer required to create a separate transport for
+AutoNAT where port reuse is disabled. This information is now passed by the behaviour.
+  See [PR 4568](https://github.com/libp2p/rust-libp2p/pull/4568).
+- Introduce the new AutoNATv2 protocol.
+  It's split into a client and a server part, represented in their respective modules
+  Features:
+    - The server now always dials back over a newly allocated port.
+      This more accurately reflects the reachability state for other peers and avoids accidental hole punching.
+    - The server can now test addresses different from the observed address (i.e., the connection to the server was made through a `p2p-circuit`). To mitigate against DDoS attacks, the client has to send more data to the server than the dial-back costs.
+  See [PR 5526](https://github.com/libp2p/rust-libp2p/pull/5526).
+
+<!-- Update to libp2p-swarm v0.45.0 -->
+
+## 0.12.1
+- Use `web-time` instead of `instant`.
+  See [PR 5347](https://github.com/libp2p/rust-libp2p/pull/5347).
+
 ## 0.12.0
 
 - Remove `Clone`, `PartialEq` and `Eq` implementations on `Event` and its sub-structs.
-  The `Event` also contains errors which are not clonable or comparable.
+  The `Event` also contains errors which are not cloneable or comparable.
   See [PR 3914](https://github.com/libp2p/rust-libp2p/pull/3914).
 
 ## 0.11.0
@@ -51,7 +84,7 @@
 
 - Update to `libp2p-request-response` `v0.23.0`.
 
-- Replace `Behaviour`'s `NetworkBehaviour` implemention `inject_*` methods with the new `on_*` methods.
+- Replace `Behaviour`'s `NetworkBehaviour` implementation `inject_*` methods with the new `on_*` methods.
   See [PR 3011].
 
 - Update `rust-version` to reflect the actual MSRV: 1.62.0. See [PR 3090].

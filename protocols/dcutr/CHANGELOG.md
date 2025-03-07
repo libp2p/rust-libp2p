@@ -1,3 +1,18 @@
+## 0.13.0
+
+- Deprecate `void` crate.
+  See [PR 5676](https://github.com/libp2p/rust-libp2p/pull/5676).
+
+<!-- Update to libp2p-core v0.43.0 -->
+
+## 0.12.0
+
+<!-- Update to libp2p-swarm v0.45.0 -->
+
+## 0.11.1
+- Use `web-time` instead of `instant`.
+  See [PR 5347](https://github.com/libp2p/rust-libp2p/pull/5347).
+
 ## 0.11.0
 
 - Add `ConnectionId` to `Event::DirectConnectionUpgradeSucceeded` and `Event::DirectConnectionUpgradeFailed`.
@@ -60,10 +75,10 @@
 
 - Update to `libp2p-swarm` `v0.41.0`.
 
-- Replace `Behaviour`'s `NetworkBehaviour` implemention `inject_*` methods with the new `on_*` methods.
+- Replace `Behaviour`'s `NetworkBehaviour` implementation `inject_*` methods with the new `on_*` methods.
   See [PR 3011].
 
-- Replace `direct::Handler` and `relayed::Handler`'s `ConnectionHandler` implemention `inject_*`
+- Replace `direct::Handler` and `relayed::Handler`'s `ConnectionHandler` implementation `inject_*`
   methods with the new `on_*` methods. See [PR 3085].
 
 - Update `rust-version` to reflect the actual MSRV: 1.62.0. See [PR 3090].

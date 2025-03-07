@@ -24,7 +24,7 @@
 //! has ownership of a connection, lets you open and close substreams.
 //!
 //! > **Note**: You normally don't need to use the methods of the `StreamMuxer` directly, as this
-//! >           is managed by the library's internals.
+//! > is managed by the library's internals.
 //!
 //! Each substream of a connection is an isolated stream of data. All the substreams are muxed
 //! together so that the data read from or written to each substream doesn't influence the other
@@ -36,9 +36,9 @@
 //! require maintaining long-lived channels of communication.
 //!
 //! > **Example**: The Kademlia protocol opens a new substream for each request it wants to
-//! >              perform. Multiple requests can be performed simultaneously by opening multiple
-//! >              substreams, without having to worry about associating responses with the
-//! >              right request.
+//! > perform. Multiple requests can be performed simultaneously by opening multiple
+//! > substreams, without having to worry about associating responses with the
+//! > right request.
 //!
 //! # Implementing a muxing protocol
 //!
@@ -50,21 +50,23 @@
 //! The upgrade process will take ownership of the connection, which makes it possible for the
 //! implementation of `StreamMuxer` to control everything that happens on the wire.
 
-use futures::{task::Context, task::Poll, AsyncRead, AsyncWrite};
-use multiaddr::Multiaddr;
-use std::future::Future;
-use std::pin::Pin;
+use std::{future::Future, pin::Pin};
 
-pub use self::boxed::StreamMuxerBox;
-pub use self::boxed::SubstreamBox;
+use futures::{
+    task::{Context, Poll},
+    AsyncRead, AsyncWrite,
+};
+use multiaddr::Multiaddr;
+
+pub use self::boxed::{StreamMuxerBox, SubstreamBox};
 
 mod boxed;
 
 /// Provides multiplexing for a connection by allowing users to open substreams.
 ///
-/// A substream created by a [`StreamMuxer`] is a type that implements [`AsyncRead`] and [`AsyncWrite`].
-/// The [`StreamMuxer`] itself is modelled closely after [`AsyncWrite`]. It features `poll`-style
-/// functions that allow the implementation to make progress on various tasks.
+/// A substream created by a [`StreamMuxer`] is a type that implements [`AsyncRead`] and
+/// [`AsyncWrite`]. The [`StreamMuxer`] itself is modelled closely after [`AsyncWrite`]. It features
+/// `poll`-style functions that allow the implementation to make progress on various tasks.
 pub trait StreamMuxer {
     /// Type of the object that represents the raw substream where data can be read and written.
     type Substream: AsyncRead + AsyncWrite;
@@ -90,13 +92,13 @@ pub trait StreamMuxer {
 
     /// Poll to close this [`StreamMuxer`].
     ///
-    /// After this has returned `Poll::Ready(Ok(()))`, the muxer has become useless and may be safely
-    /// dropped.
+    /// After this has returned `Poll::Ready(Ok(()))`, the muxer has become useless and may be
+    /// safely dropped.
     ///
     /// > **Note**: You are encouraged to call this method and wait for it to return `Ready`, so
-    /// >           that the remote is properly informed of the shutdown. However, apart from
-    /// >           properly informing the remote, there is no difference between this and
-    /// >           immediately dropping the muxer.
+    /// > that the remote is properly informed of the shutdown. However, apart from
+    /// > properly informing the remote, there is no difference between this and
+    /// > immediately dropping the muxer.
     fn poll_close(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>>;
 
     /// Poll to allow the underlying connection to make progress.
@@ -120,7 +122,8 @@ pub enum StreamMuxerEvent {
 
 /// Extension trait for [`StreamMuxer`].
 pub trait StreamMuxerExt: StreamMuxer + Sized {
-    /// Convenience function for calling [`StreamMuxer::poll_inbound`] for [`StreamMuxer`]s that are `Unpin`.
+    /// Convenience function for calling [`StreamMuxer::poll_inbound`]
+    /// for [`StreamMuxer`]s that are `Unpin`.
     fn poll_inbound_unpin(
         &mut self,
         cx: &mut Context<'_>,
@@ -131,7 +134,8 @@ pub trait StreamMuxerExt: StreamMuxer + Sized {
         Pin::new(self).poll_inbound(cx)
     }
 
-    /// Convenience function for calling [`StreamMuxer::poll_outbound`] for [`StreamMuxer`]s that are `Unpin`.
+    /// Convenience function for calling [`StreamMuxer::poll_outbound`]
+    /// for [`StreamMuxer`]s that are `Unpin`.
     fn poll_outbound_unpin(
         &mut self,
         cx: &mut Context<'_>,
@@ -142,7 +146,8 @@ pub trait StreamMuxerExt: StreamMuxer + Sized {
         Pin::new(self).poll_outbound(cx)
     }
 
-    /// Convenience function for calling [`StreamMuxer::poll`] for [`StreamMuxer`]s that are `Unpin`.
+    /// Convenience function for calling [`StreamMuxer::poll`]
+    /// for [`StreamMuxer`]s that are `Unpin`.
     fn poll_unpin(&mut self, cx: &mut Context<'_>) -> Poll<Result<StreamMuxerEvent, Self::Error>>
     where
         Self: Unpin,
@@ -150,7 +155,8 @@ pub trait StreamMuxerExt: StreamMuxer + Sized {
         Pin::new(self).poll(cx)
     }
 
-    /// Convenience function for calling [`StreamMuxer::poll_close`] for [`StreamMuxer`]s that are `Unpin`.
+    /// Convenience function for calling [`StreamMuxer::poll_close`]
+    /// for [`StreamMuxer`]s that are `Unpin`.
     fn poll_close_unpin(&mut self, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>>
     where
         Self: Unpin,

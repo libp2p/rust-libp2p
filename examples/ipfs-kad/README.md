@@ -87,5 +87,5 @@ Failed to insert the PK record
 ## Conclusion
 
 In conclusion, this example provides a practical demonstration of using the Rust P2P Library to interact with the Kademlia protocol on the IPFS network.
-By examining the code and running the example, users can gain insights into the inner workings of Kademlia and how it performs various basic actions like getting the closes peers or inserting records into the DHT.
+By examining the code and running the example, users can gain insights into the inner workings of Kademlia and how it performs various basic actions like getting the closest peers or inserting records into the DHT.
 This knowledge can be valuable when developing peer-to-peer applications or understanding decentralized networks.

@@ -1,3 +1,5 @@
+use std::{io, iter, pin::pin, time::Duration};
+
 use anyhow::{bail, Result};
 use async_std::task::sleep;
 use async_trait::async_trait;
@@ -10,9 +12,6 @@ use libp2p_swarm_test::SwarmExt;
 use request_response::{
     Codec, InboundFailure, InboundRequestId, OutboundFailure, OutboundRequestId, ResponseChannel,
 };
-use std::pin::pin;
-use std::time::Duration;
-use std::{io, iter};
 use tracing_subscriber::EnvFilter;
 
 #[async_std::test]
@@ -159,6 +158,58 @@ async fn report_outbound_timeout_on_read_response() {
     let server_task = pin!(server_task);
     let client_task = pin!(client_task);
     futures::future::select(server_task, client_task).await;
+}
+
+#[async_std::test]
+async fn report_outbound_failure_on_max_streams() {
+    let _ = tracing_subscriber::fmt()
+        .with_env_filter(EnvFilter::from_default_env())
+        .try_init();
+
+    // `swarm2` will be able to handle only 1 stream per time.
+    let swarm2_config = request_response::Config::default()
+        .with_request_timeout(Duration::from_millis(100))
+        .with_max_concurrent_streams(1);
+
+    let (peer1_id, mut swarm1) = new_swarm();
+    let (peer2_id, mut swarm2) = new_swarm_with_config(swarm2_config);
+
+    swarm1.listen().with_memory_addr_external().await;
+    swarm2.connect(&mut swarm1).await;
+
+    let swarm1_task = async move {
+        let _req_id = swarm1
+            .behaviour_mut()
+            .send_request(&peer2_id, Action::FailOnMaxStreams);
+
+        // Keep the connection alive, otherwise swarm2 may receive `ConnectionClosed` instead.
+        wait_no_events(&mut swarm1).await;
+    };
+
+    // Expects OutboundFailure::Io failure.
+    let swarm2_task = async move {
+        let (peer, _inbound_req_id, action, _resp_channel) =
+            wait_request(&mut swarm2).await.unwrap();
+        assert_eq!(peer, peer1_id);
+        assert_eq!(action, Action::FailOnMaxStreams);
+
+        // A task for sending back a response is already scheduled so max concurrent
+        // streams is reached and no new tasks can be scheduled.
+        //
+        // We produce the failure by creating new request before we response.
+        let outbound_req_id = swarm2
+            .behaviour_mut()
+            .send_request(&peer1_id, Action::FailOnMaxStreams);
+
+        let (peer, req_id_done, error) = wait_outbound_failure(&mut swarm2).await.unwrap();
+        assert_eq!(peer, peer1_id);
+        assert_eq!(req_id_done, outbound_req_id);
+        assert!(matches!(error, OutboundFailure::Io(_)));
+    };
+
+    let swarm1_task = pin!(swarm1_task);
+    let swarm2_task = pin!(swarm2_task);
+    futures::future::select(swarm1_task, swarm2_task).await;
 }
 
 #[async_std::test]
@@ -332,6 +383,7 @@ enum Action {
     FailOnWriteRequest,
     FailOnWriteResponse,
     TimeoutOnWriteResponse,
+    FailOnMaxStreams,
 }
 
 impl From<Action> for u8 {
@@ -343,6 +395,7 @@ impl From<Action> for u8 {
             Action::FailOnWriteRequest => 3,
             Action::FailOnWriteResponse => 4,
             Action::TimeoutOnWriteResponse => 5,
+            Action::FailOnMaxStreams => 6,
         }
     }
 }
@@ -358,6 +411,7 @@ impl TryFrom<u8> for Action {
             3 => Ok(Action::FailOnWriteRequest),
             4 => Ok(Action::FailOnWriteResponse),
             5 => Ok(Action::TimeoutOnWriteResponse),
+            6 => Ok(Action::FailOnMaxStreams),
             _ => Err(io::Error::new(io::ErrorKind::Other, "invalid action")),
         }
     }
@@ -468,17 +522,23 @@ impl Codec for TestCodec {
     }
 }
 
-fn new_swarm_with_timeout(
-    timeout: Duration,
+fn new_swarm_with_config(
+    cfg: request_response::Config,
 ) -> (PeerId, Swarm<request_response::Behaviour<TestCodec>>) {
     let protocols = iter::once((StreamProtocol::new("/test/1"), ProtocolSupport::Full));
-    let cfg = request_response::Config::default().with_request_timeout(timeout);
 
     let swarm =
         Swarm::new_ephemeral(|_| request_response::Behaviour::<TestCodec>::new(protocols, cfg));
     let peed_id = *swarm.local_peer_id();
 
     (peed_id, swarm)
+}
+
+fn new_swarm_with_timeout(
+    timeout: Duration,
+) -> (PeerId, Swarm<request_response::Behaviour<TestCodec>>) {
+    let cfg = request_response::Config::default().with_request_timeout(timeout);
+    new_swarm_with_config(cfg)
 }
 
 fn new_swarm() -> (PeerId, Swarm<request_response::Behaviour<TestCodec>>) {
@@ -506,6 +566,7 @@ async fn wait_request(
                         request,
                         channel,
                     },
+                ..
             }) => {
                 return Ok((peer, request_id, request, channel));
             }
@@ -540,6 +601,7 @@ async fn wait_inbound_failure(
                 peer,
                 request_id,
                 error,
+                ..
             }) => {
                 return Ok((peer, request_id, error));
             }
@@ -558,6 +620,7 @@ async fn wait_outbound_failure(
                 peer,
                 request_id,
                 error,
+                ..
             }) => {
                 return Ok((peer, request_id, error));
             }

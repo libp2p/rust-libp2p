@@ -18,25 +18,26 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::ResponseError;
-
-use super::{
-    Action, AutoNatCodec, Config, DialRequest, DialResponse, Event, HandleInnerEvent, NatStatus,
-    ProbeId,
-};
-use futures::FutureExt;
-use futures_timer::Delay;
-use instant::Instant;
-use libp2p_core::Multiaddr;
-use libp2p_identity::PeerId;
-use libp2p_request_response::{self as request_response, OutboundFailure, OutboundRequestId};
-use libp2p_swarm::{ConnectionId, ListenAddresses, ToSwarm};
-use rand::{seq::SliceRandom, thread_rng};
 use std::{
     collections::{HashMap, HashSet, VecDeque},
     task::{Context, Poll},
     time::Duration,
 };
+
+use futures::FutureExt;
+use futures_timer::Delay;
+use libp2p_core::Multiaddr;
+use libp2p_identity::PeerId;
+use libp2p_request_response::{self as request_response, OutboundFailure, OutboundRequestId};
+use libp2p_swarm::{ConnectionId, ListenAddresses, ToSwarm};
+use rand::{seq::SliceRandom, thread_rng};
+use web_time::Instant;
+
+use super::{
+    Action, AutoNatCodec, Config, DialRequest, DialResponse, Event, HandleInnerEvent, NatStatus,
+    ProbeId,
+};
+use crate::ResponseError;
 
 /// Outbound probe failed or was aborted.
 #[derive(Debug)]
@@ -98,7 +99,7 @@ pub(crate) struct AsClient<'a> {
     pub(crate) other_candidates: &'a HashSet<Multiaddr>,
 }
 
-impl<'a> HandleInnerEvent for AsClient<'a> {
+impl HandleInnerEvent for AsClient<'_> {
     fn handle_event(
         &mut self,
         event: request_response::Event<DialRequest, DialResponse>,
@@ -111,6 +112,7 @@ impl<'a> HandleInnerEvent for AsClient<'a> {
                         request_id,
                         response,
                     },
+                ..
             } => {
                 tracing::debug!(?response, "Outbound dial-back request returned response");
 
@@ -153,6 +155,7 @@ impl<'a> HandleInnerEvent for AsClient<'a> {
                 peer,
                 error,
                 request_id,
+                ..
             } => {
                 tracing::debug!(
                     %peer,
@@ -179,7 +182,7 @@ impl<'a> HandleInnerEvent for AsClient<'a> {
     }
 }
 
-impl<'a> AsClient<'a> {
+impl AsClient<'_> {
     pub(crate) fn poll_auto_probe(&mut self, cx: &mut Context<'_>) -> Poll<OutboundProbeEvent> {
         match self.schedule_probe.poll_unpin(cx) {
             Poll::Ready(()) => {

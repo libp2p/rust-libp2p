@@ -1,3 +1,15 @@
+## 0.43.0
+
+- Upgrade `async-std-resolver` and `hickory-resolver`.
+  See [PR 5727](https://github.com/libp2p/rust-libp2p/pull/5727)
+
+<!-- Update to libp2p-core v0.43.0 -->
+
+## 0.42.0
+
+- Implement refactored `Transport`.
+  See [PR 4568](https://github.com/libp2p/rust-libp2p/pull/4568)
+
 ## 0.41.1
 
 - Add hidden API that removes unnecessary async for `async-std`.

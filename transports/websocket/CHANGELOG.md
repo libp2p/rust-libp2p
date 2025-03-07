@@ -1,3 +1,31 @@
+## 0.45.1
+- Rename types to match naming convention in [discussion 2174](https://github.com/libp2p/rust-libp2p/discussions/2174).
+  See [PR 5873](https://github.com/libp2p/rust-libp2p/pull/5873).
+
+## 0.45.0
+
+- fix: Return `Error::InvalidMultiaddr` when dialed to a `/dnsaddr` address
+  See [PR 5613](https://github.com/libp2p/rust-libp2p/pull/5613)
+
+<!-- Update to libp2p-core v0.43.0 -->
+
+## 0.44.0
+
+- Implement refactored `Transport`.
+  See [PR 4568](https://github.com/libp2p/rust-libp2p/pull/4568)
+- Allow wss connections on IP addresses.
+  See [PR 5525](https://github.com/libp2p/rust-libp2p/pull/5525).
+- Add support for `/tls/ws` and keep `/wss` backward compatible.
+  See [PR 5523](https://github.com/libp2p/rust-libp2p/pull/5523).
+
+## 0.43.2
+
+- fix: Avoid websocket panic on polling after errors. See [PR 5482].
+
+[PR 5482]: https://github.com/libp2p/rust-libp2p/pull/5482
+
+## 0.43.1
+
 ## 0.43.0
 
 

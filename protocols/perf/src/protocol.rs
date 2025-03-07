@@ -18,14 +18,14 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use futures_timer::Delay;
-use instant::Instant;
 use std::time::Duration;
 
 use futures::{
     future::{select, Either},
     AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, FutureExt, SinkExt, Stream, StreamExt,
 };
+use futures_timer::Delay;
+use web_time::Instant;
 
 use crate::{Final, Intermediate, Run, RunDuration, RunParams, RunUpdate};
 
@@ -67,7 +67,7 @@ async fn send_receive_inner<S: AsyncRead + AsyncWrite + Unpin + Send + 'static>(
     stream.write_all(&to_receive_bytes).await?;
 
     let write_start = Instant::now();
-    let mut intermittant_start = Instant::now();
+    let mut intermittent_start = Instant::now();
     let mut sent = 0;
     let mut intermittent_sent = 0;
 
@@ -82,13 +82,13 @@ async fn send_receive_inner<S: AsyncRead + AsyncWrite + Unpin + Send + 'static>(
                     delay.reset(REPORT_INTERVAL);
                     progress
                         .send(Intermediate {
-                            duration: intermittant_start.elapsed(),
+                            duration: intermittent_start.elapsed(),
                             sent: sent - intermittent_sent,
                             received: 0,
                         })
                         .await
                         .expect("receiver not to be dropped");
-                    intermittant_start = Instant::now();
+                    intermittent_start = Instant::now();
                     intermittent_sent = sent;
                 }
                 Either::Right((n, _)) => break n?,
@@ -102,13 +102,13 @@ async fn send_receive_inner<S: AsyncRead + AsyncWrite + Unpin + Send + 'static>(
                 delay.reset(REPORT_INTERVAL);
                 progress
                     .send(Intermediate {
-                        duration: intermittant_start.elapsed(),
+                        duration: intermittent_start.elapsed(),
                         sent: sent - intermittent_sent,
                         received: 0,
                     })
                     .await
                     .expect("receiver not to be dropped");
-                intermittant_start = Instant::now();
+                intermittent_start = Instant::now();
                 intermittent_sent = sent;
             }
             Either::Right((Ok(_), _)) => break,
@@ -128,13 +128,13 @@ async fn send_receive_inner<S: AsyncRead + AsyncWrite + Unpin + Send + 'static>(
                     delay.reset(REPORT_INTERVAL);
                     progress
                         .send(Intermediate {
-                            duration: intermittant_start.elapsed(),
+                            duration: intermittent_start.elapsed(),
                             sent: sent - intermittent_sent,
                             received: received - intermittend_received,
                         })
                         .await
                         .expect("receiver not to be dropped");
-                    intermittant_start = Instant::now();
+                    intermittent_start = Instant::now();
                     intermittent_sent = sent;
                     intermittend_received = received;
                 }

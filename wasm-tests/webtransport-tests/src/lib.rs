@@ -1,14 +1,17 @@
-use futures::channel::oneshot;
-use futures::{AsyncReadExt, AsyncWriteExt};
+#![allow(unexpected_cfgs)]
+use std::{future::poll_fn, pin::Pin};
+
+use futures::{channel::oneshot, AsyncReadExt, AsyncWriteExt};
 use getrandom::getrandom;
-use libp2p_core::{StreamMuxer, Transport as _};
+use libp2p_core::{
+    transport::{DialOpts, PortUse},
+    Endpoint, StreamMuxer, Transport as _,
+};
 use libp2p_identity::{Keypair, PeerId};
 use libp2p_noise as noise;
 use libp2p_webtransport_websys::{Config, Connection, Error, Stream, Transport};
 use multiaddr::{Multiaddr, Protocol};
 use multihash::Multihash;
-use std::future::poll_fn;
-use std::pin::Pin;
 use wasm_bindgen::JsCast;
 use wasm_bindgen_futures::{spawn_local, JsFuture};
 use wasm_bindgen_test::{wasm_bindgen_test, wasm_bindgen_test_configure};
@@ -17,7 +20,7 @@ use web_sys::{window, Response};
 wasm_bindgen_test_configure!(run_in_browser);
 
 #[wasm_bindgen_test]
-async fn single_conn_single_stream() {
+pub async fn single_conn_single_stream() {
     let mut conn = new_connection_to_echo_server().await;
     let mut stream = create_stream(&mut conn).await;
 
@@ -25,7 +28,7 @@ async fn single_conn_single_stream() {
 }
 
 #[wasm_bindgen_test]
-async fn single_conn_single_stream_incoming() {
+pub async fn single_conn_single_stream_incoming() {
     let mut conn = new_connection_to_echo_server().await;
     let mut stream = incoming_stream(&mut conn).await;
 
@@ -33,7 +36,7 @@ async fn single_conn_single_stream_incoming() {
 }
 
 #[wasm_bindgen_test]
-async fn single_conn_multiple_streams() {
+pub async fn single_conn_multiple_streams() {
     let mut conn = new_connection_to_echo_server().await;
     let mut tasks = Vec::new();
     let mut streams = Vec::new();
@@ -56,7 +59,7 @@ async fn single_conn_multiple_streams() {
 }
 
 #[wasm_bindgen_test]
-async fn multiple_conn_multiple_streams() {
+pub async fn multiple_conn_multiple_streams() {
     let mut tasks = Vec::new();
     let mut conns = Vec::new();
 
@@ -87,7 +90,7 @@ async fn multiple_conn_multiple_streams() {
 }
 
 #[wasm_bindgen_test]
-async fn multiple_conn_multiple_streams_sequential() {
+pub async fn multiple_conn_multiple_streams_sequential() {
     for _ in 0..10 {
         let mut conn = new_connection_to_echo_server().await;
 
@@ -104,7 +107,7 @@ async fn multiple_conn_multiple_streams_sequential() {
 }
 
 #[wasm_bindgen_test]
-async fn read_leftovers() {
+pub async fn read_leftovers() {
     let mut conn = new_connection_to_echo_server().await;
     let mut stream = create_stream(&mut conn).await;
 
@@ -127,7 +130,7 @@ async fn read_leftovers() {
 }
 
 #[wasm_bindgen_test]
-async fn allow_read_after_closing_writer() {
+pub async fn allow_read_after_closing_writer() {
     let mut conn = new_connection_to_echo_server().await;
     let mut stream = create_stream(&mut conn).await;
 
@@ -153,7 +156,7 @@ async fn allow_read_after_closing_writer() {
 }
 
 #[wasm_bindgen_test]
-async fn poll_outbound_error_after_connection_close() {
+pub async fn poll_outbound_error_after_connection_close() {
     let mut conn = new_connection_to_echo_server().await;
 
     // Make sure that poll_outbound works well before closing the connection
@@ -171,7 +174,7 @@ async fn poll_outbound_error_after_connection_close() {
 }
 
 #[wasm_bindgen_test]
-async fn poll_inbound_error_after_connection_close() {
+pub async fn poll_inbound_error_after_connection_close() {
     let mut conn = new_connection_to_echo_server().await;
 
     // Make sure that poll_inbound works well before closing the connection
@@ -189,7 +192,7 @@ async fn poll_inbound_error_after_connection_close() {
 }
 
 #[wasm_bindgen_test]
-async fn read_error_after_connection_drop() {
+pub async fn read_error_after_connection_drop() {
     let mut conn = new_connection_to_echo_server().await;
     let mut stream = create_stream(&mut conn).await;
 
@@ -204,7 +207,7 @@ async fn read_error_after_connection_drop() {
 }
 
 #[wasm_bindgen_test]
-async fn read_error_after_connection_close() {
+pub async fn read_error_after_connection_close() {
     let mut conn = new_connection_to_echo_server().await;
     let mut stream = create_stream(&mut conn).await;
 
@@ -222,7 +225,7 @@ async fn read_error_after_connection_close() {
 }
 
 #[wasm_bindgen_test]
-async fn write_error_after_connection_drop() {
+pub async fn write_error_after_connection_drop() {
     let mut conn = new_connection_to_echo_server().await;
     let mut stream = create_stream(&mut conn).await;
 
@@ -237,7 +240,7 @@ async fn write_error_after_connection_drop() {
 }
 
 #[wasm_bindgen_test]
-async fn write_error_after_connection_close() {
+pub async fn write_error_after_connection_close() {
     let mut conn = new_connection_to_echo_server().await;
     let mut stream = create_stream(&mut conn).await;
 
@@ -255,7 +258,7 @@ async fn write_error_after_connection_close() {
 }
 
 #[wasm_bindgen_test]
-async fn connect_without_peer_id() {
+pub async fn connect_without_peer_id() {
     let mut addr = fetch_server_addr().await;
     let keypair = Keypair::generate_ed25519();
 
@@ -263,11 +266,21 @@ async fn connect_without_peer_id() {
     addr.pop();
 
     let mut transport = Transport::new(Config::new(&keypair));
-    transport.dial(addr).unwrap().await.unwrap();
+    transport
+        .dial(
+            addr,
+            DialOpts {
+                role: Endpoint::Dialer,
+                port_use: PortUse::Reuse,
+            },
+        )
+        .unwrap()
+        .await
+        .unwrap();
 }
 
 #[wasm_bindgen_test]
-async fn error_on_unknown_peer_id() {
+pub async fn error_on_unknown_peer_id() {
     let mut addr = fetch_server_addr().await;
     let keypair = Keypair::generate_ed25519();
 
@@ -278,12 +291,22 @@ async fn error_on_unknown_peer_id() {
     addr.push(Protocol::P2p(PeerId::random()));
 
     let mut transport = Transport::new(Config::new(&keypair));
-    let e = transport.dial(addr.clone()).unwrap().await.unwrap_err();
+    let e = transport
+        .dial(
+            addr.clone(),
+            DialOpts {
+                role: Endpoint::Dialer,
+                port_use: PortUse::Reuse,
+            },
+        )
+        .unwrap()
+        .await
+        .unwrap_err();
     assert!(matches!(e, Error::UnknownRemotePeerId));
 }
 
 #[wasm_bindgen_test]
-async fn error_on_unknown_certhash() {
+pub async fn error_on_unknown_certhash() {
     let mut addr = fetch_server_addr().await;
     let keypair = Keypair::generate_ed25519();
 
@@ -297,7 +320,17 @@ async fn error_on_unknown_certhash() {
     addr.push(peer_id);
 
     let mut transport = Transport::new(Config::new(&keypair));
-    let e = transport.dial(addr.clone()).unwrap().await.unwrap_err();
+    let e = transport
+        .dial(
+            addr.clone(),
+            DialOpts {
+                role: Endpoint::Dialer,
+                port_use: PortUse::Reuse,
+            },
+        )
+        .unwrap()
+        .await
+        .unwrap_err();
     assert!(matches!(
         e,
         Error::Noise(noise::Error::UnknownWebTransportCerthashes(..))
@@ -310,7 +343,17 @@ async fn new_connection_to_echo_server() -> Connection {
 
     let mut transport = Transport::new(Config::new(&keypair));
 
-    let (_peer_id, conn) = transport.dial(addr).unwrap().await.unwrap();
+    let (_peer_id, conn) = transport
+        .dial(
+            addr,
+            DialOpts {
+                role: Endpoint::Dialer,
+                port_use: PortUse::Reuse,
+            },
+        )
+        .unwrap()
+        .await
+        .unwrap();
 
     conn
 }

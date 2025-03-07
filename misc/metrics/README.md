@@ -1,1 +1,0 @@
-For a Grafana dashboard displaying the metrics exposed through this crate, see https://kademlia-exporter.max-inden.de/d/Pfr0Fj6Mk/rust-libp2p
