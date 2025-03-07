@@ -81,7 +81,10 @@ use rw_stream_sink::RwStreamSink;
 ///         .unwrap(),
 /// );
 ///
-/// let rcgen::CertifiedKey { cert: rcgen_cert, key_pair } = rcgen::generate_simple_self_signed(vec!["localhost".to_string()]).unwrap();
+/// let rcgen::CertifiedKey {
+///     cert: rcgen_cert,
+///     key_pair,
+/// } = rcgen::generate_simple_self_signed(vec!["localhost".to_string()]).unwrap();
 /// let priv_key = websocket::tls::PrivateKey::new(key_pair.serialize_der());
 /// let cert = websocket::tls::Certificate::new(rcgen_cert.der().to_vec());
 /// transport.set_tls_config(websocket::tls::Config::new(priv_key, vec![cert]).unwrap());
