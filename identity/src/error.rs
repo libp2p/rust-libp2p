@@ -115,11 +115,8 @@ impl SigningError {
     }
 
     #[cfg(all(feature = "rsa", not(target_arch = "wasm32")))]
-    pub(crate) fn source(self, source: impl Error + Send + Sync + 'static) -> Self {
-        Self {
-            source: Some(Box::new(source)),
-            ..self
-        }
+    pub(crate) fn set_source(&mut self, source: impl Error + Send + Sync + 'static) {
+        self.source = Some(Box::new(source));
     }
 }
 
@@ -150,10 +147,11 @@ impl OtherVariantError {
 
 impl fmt::Display for OtherVariantError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str(&format!(
+        write!(
+            f,
             "Cannot convert to the given type, the actual key type inside is {}",
             self.actual
-        ))
+         )
     }
 }
 
