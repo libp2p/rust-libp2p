@@ -632,7 +632,7 @@ where
             .peekable();
 
         if peers_on_topic.peek().is_none() {
-            return Err(PublishError::InsufficientPeers);
+            return Err(PublishError::NoPeersSubscribedToTopic);
         }
 
         let mut recipient_peers = HashSet::new();
@@ -755,7 +755,7 @@ where
         }
 
         if recipient_peers.is_empty() {
-            return Err(PublishError::InsufficientPeers);
+            return Err(PublishError::NoPeersSubscribedToTopic);
         }
 
         if publish_failed {
