@@ -20,7 +20,6 @@
 
 use std::{
     collections::{HashMap, VecDeque},
-    convert::Infalliable,
     iter,
     task::{Context, Poll},
     time::Duration,
@@ -43,7 +42,7 @@ use crate::codec::{
 };
 
 pub struct Behaviour {
-    events: VecDeque<ToSwarm<Event,Infalliable>>,
+    events: VecDeque<ToSwarm<<Self as NetworkBehaviour>::ToSwarm, THandlerInEvent<Self>>>,
 
     inner: libp2p_request_response::Behaviour<crate::codec::Codec>,
 
