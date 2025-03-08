@@ -6,7 +6,6 @@
   peer availability issue.
   See [PR 5912](https://github.com/libp2p/rust-libp2p/pull/5912)
   
-## 0.48.1
 - Allow whitelisting topics for metrics to ensure metrics are recorded correctly for these topics.
   See [PR 5895](https://github.com/libp2p/rust-libp2p/pull/5895)
 
