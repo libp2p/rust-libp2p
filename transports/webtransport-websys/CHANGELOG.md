@@ -1,3 +1,8 @@
+## 0.5.1
+
+- Remove `once_cell` dependency.
+  See [PR 5913](https://github.com/libp2p/rust-libp2p/pull/5913)
+
 ## 0.5.0
 
 - Fix `cargo clippy` warnings in `rustc 1.84.0-beta.1`.

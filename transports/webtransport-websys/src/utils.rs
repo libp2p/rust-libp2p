@@ -1,14 +1,13 @@
-use std::io;
+use std::{io, sync::LazyLock};
 
 use js_sys::{Promise, Reflect};
-use once_cell::sync::Lazy;
 use send_wrapper::SendWrapper;
 use wasm_bindgen::{JsCast, JsValue};
 
 use crate::Error;
 
 type Closure = wasm_bindgen::closure::Closure<dyn FnMut(JsValue)>;
-static DO_NOTHING: Lazy<SendWrapper<Closure>> = Lazy::new(|| {
+static DO_NOTHING: LazyLock<SendWrapper<Closure>> = LazyLock::new(|| {
     let cb = Closure::new(|_| {});
     SendWrapper::new(cb)
 });
