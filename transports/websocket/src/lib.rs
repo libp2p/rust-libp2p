@@ -70,7 +70,6 @@ use rw_stream_sink::RwStreamSink;
 /// # use libp2p_dns as dns;
 /// # use libp2p_tcp as tcp;
 /// # use libp2p_websocket as websocket;
-/// # use rcgen::generate_simple_self_signed;
 /// # use std::pin::Pin;
 /// #
 /// # #[async_std::main]
