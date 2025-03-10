@@ -31,7 +31,7 @@ features = ["ring", "std"] # Must enable this to allow for custom verification c
 hex-literal = "0.4.1"
 libp2p-core = { workspace = true }
 libp2p-identity = { workspace = true, features = ["ed25519", "rsa", "secp256k1", "ecdsa", "rand"] }
-libp2p-swarm = { workspace = true, features = ["tokio"] }
+libp2p-swarm = { version = "0.46.0", features = ["tokio"] }
 libp2p-yamux = { workspace = true }
 tokio = { workspace = true, features = ["full"] }
 
