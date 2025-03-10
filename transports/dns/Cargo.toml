@@ -1,6 +1,6 @@
 [package]
 name = "libp2p-dns"
-edition = "2021"
+edition.workspace = true
 rust-version = { workspace = true }
 description = "DNS transport implementation for libp2p"
 version = "0.43.0"

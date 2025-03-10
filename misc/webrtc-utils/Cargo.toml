@@ -2,7 +2,7 @@
 authors = ["Doug Anderson <DougAnderson444@peerpiper.io>"]
 categories = ["network-programming"]
 description = "Utilities for WebRTC in libp2p"
-edition = "2021"
+edition.workspace = true
 license = "MIT"
 name = "libp2p-webrtc-utils"
 repository = "https://github.com/libp2p/rust-libp2p"
