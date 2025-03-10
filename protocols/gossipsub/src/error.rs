@@ -20,6 +20,7 @@
 
 //! Error types that can result from gossipsub.
 
+use crate::types::MessageId;
 use libp2p_identity::SigningError;
 
 /// Error associated with publishing a gossipsub message.
@@ -38,7 +39,12 @@ pub enum PublishError {
     TransformFailed(std::io::Error),
     /// Messages could not be sent because the queues for all peers were full. The usize represents
     /// the number of peers that were attempted.
-    AllQueuesFull(usize),
+    AllQueuesFull {
+        /// The messages that failed
+        failed_messages: Vec<MessageId>,
+        // The number of peers that we attempted to send to.
+        peers_to_publish_to: usize,
+    },
 }
 
 impl std::fmt::Display for PublishError {
