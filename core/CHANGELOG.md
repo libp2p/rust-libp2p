@@ -1,3 +1,7 @@
+## 0.43.1
+- Remove `once_cell` dependency.
+  See [PR 5913](https://github.com/libp2p/rust-libp2p/pull/5913)
+
 ## 0.43.0
 
 - Added `libp2p::core::util::unreachable` that is a drop-in replacement of `void::unreachable`.
