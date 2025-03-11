@@ -1,7 +1,15 @@
-## 0.18.1
+## 0.20.0
+
+- Remove duplicated forwarding of pending events to connection handler.
+- Emit `relay::Event::ReservationClosed` when an active reservation is dropped due to the connection closing.
+  See [PR 5869](https://github.com/libp2p/rust-libp2p/pull/5869).
+
+## 0.19.0
 
 - Deprecate `void` crate.
   See [PR 5676](https://github.com/libp2p/rust-libp2p/pull/5676).
+
+<!-- Update to libp2p-core v0.43.0 -->
 
 ## 0.18.0
 
@@ -129,10 +137,10 @@
 
 - Update to `libp2p-swarm` `v0.41.0`.
 
-- Replace `Client` and `Relay`'s `NetworkBehaviour` implemention `inject_*` methods with the new `on_*` methods.
+- Replace `Client` and `Relay`'s `NetworkBehaviour` implementation `inject_*` methods with the new `on_*` methods.
   See [PR 3011].
 
-- Replace `client::Handler` and `relay::Handler`'s `ConnectionHandler` implemention `inject_*` methods
+- Replace `client::Handler` and `relay::Handler`'s `ConnectionHandler` implementation `inject_*` methods
   with the new `on_*` methods. See [PR 3085].
 
 - Update `rust-version` to reflect the actual MSRV: 1.62.0. See [PR 3090].
@@ -191,7 +199,7 @@
   circuit requests with one per peer. And deny new circuits before accepting new
   circuits. See [PR 2698].
 
-- Expose explicits errors via `UpgradeError` instead of generic `io::Error`. See
+- Expose explicit errors via `UpgradeError` instead of generic `io::Error`. See
   [PR 2698].
 
 [PR 2698]: https://github.com/libp2p/rust-libp2p/pull/2698/

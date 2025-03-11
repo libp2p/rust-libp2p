@@ -1,9 +1,9 @@
 [package]
 name = "libp2p-allow-block-list"
-edition = "2021"
+edition.workspace = true
 rust-version = { workspace = true }
 description = "Allow/block list connection management for libp2p."
-version = "0.4.1"
+version = "0.5.0"
 license = "MIT"
 repository = "https://github.com/libp2p/rust-libp2p"
 keywords = ["peer-to-peer", "libp2p", "networking"]
@@ -15,7 +15,7 @@ libp2p-swarm = { workspace = true }
 libp2p-identity = { workspace = true, features = ["peerid"] }
 
 [dev-dependencies]
-async-std = { version = "1.12.0", features = ["attributes"] }
+tokio = { workspace = true, features = ["rt", "macros"] }
 libp2p-swarm-derive = { path = "../../swarm-derive" }
 libp2p-swarm-test = { path = "../../swarm-test" }
 

@@ -1,7 +1,11 @@
-## 0.11.2
+## 0.12.1
 
-- Deprecate `void` crate.
-  See [PR 5676](https://github.com/libp2p/rust-libp2p/pull/5676).
+- Deprecate `Config::support_draft_29`.
+  See [PR 5786](https://github.com/libp2p/rust-libp2p/pull/5786).
+
+## 0.12.0
+
+<!-- Update to libp2p-core v0.43.0 -->
 
 ## 0.11.1
 

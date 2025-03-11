@@ -9,10 +9,13 @@ use libp2p_identify as identify;
 use libp2p_identity::Keypair;
 use libp2p_swarm::{Swarm, SwarmEvent};
 use libp2p_swarm_test::SwarmExt;
+use tracing_subscriber::EnvFilter;
 
-#[async_std::test]
+#[tokio::test]
 async fn periodic_identify() {
-    libp2p_test_utils::with_default_env_filter();
+    let _ = tracing_subscriber::fmt()
+        .with_env_filter(EnvFilter::from_default_env())
+        .try_init();
 
     let mut swarm1 = Swarm::new_ephemeral(|identity| {
         identify::Behaviour::new(
@@ -79,9 +82,11 @@ async fn periodic_identify() {
         other => panic!("Unexpected events: {other:?}"),
     }
 }
-#[async_std::test]
+#[tokio::test]
 async fn only_emits_address_candidate_once_per_connection() {
-    libp2p_test_utils::with_default_env_filter();
+    let _ = tracing_subscriber::fmt()
+        .with_env_filter(EnvFilter::from_default_env())
+        .try_init();
 
     let mut swarm1 = Swarm::new_ephemeral(|identity| {
         identify::Behaviour::new(
@@ -100,7 +105,7 @@ async fn only_emits_address_candidate_once_per_connection() {
     swarm2.listen().with_memory_addr_external().await;
     swarm1.connect(&mut swarm2).await;
 
-    async_std::task::spawn(swarm2.loop_on_next());
+    tokio::spawn(swarm2.loop_on_next());
 
     let swarm_events = futures::stream::poll_fn(|cx| swarm1.poll_next_unpin(cx))
         .take(8)
@@ -149,9 +154,11 @@ async fn only_emits_address_candidate_once_per_connection() {
     );
 }
 
-#[async_std::test]
+#[tokio::test]
 async fn emits_unique_listen_addresses() {
-    libp2p_test_utils::with_default_env_filter();
+    let _ = tracing_subscriber::fmt()
+        .with_env_filter(EnvFilter::from_default_env())
+        .try_init();
 
     let mut swarm1 = Swarm::new_ephemeral(|identity| {
         identify::Behaviour::new(
@@ -173,7 +180,7 @@ async fn emits_unique_listen_addresses() {
     let swarm2_peer_id = *swarm2.local_peer_id();
     swarm1.connect(&mut swarm2).await;
 
-    async_std::task::spawn(swarm2.loop_on_next());
+    tokio::spawn(swarm2.loop_on_next());
 
     let swarm_events = futures::stream::poll_fn(|cx| swarm1.poll_next_unpin(cx))
         .take(8)
@@ -219,9 +226,11 @@ async fn emits_unique_listen_addresses() {
     assert!(reported_addrs.contains(&(swarm2_peer_id, swarm2_tcp_listen_addr)));
 }
 
-#[async_std::test]
+#[tokio::test]
 async fn hides_listen_addresses() {
-    libp2p_test_utils::with_default_env_filter();
+    let _ = tracing_subscriber::fmt()
+        .with_env_filter(EnvFilter::from_default_env())
+        .try_init();
 
     let mut swarm1 = Swarm::new_ephemeral(|identity| {
         identify::Behaviour::new(
@@ -244,7 +253,7 @@ async fn hides_listen_addresses() {
     let swarm2_peer_id = *swarm2.local_peer_id();
     swarm1.connect(&mut swarm2).await;
 
-    async_std::task::spawn(swarm2.loop_on_next());
+    tokio::spawn(swarm2.loop_on_next());
 
     let swarm_events = futures::stream::poll_fn(|cx| swarm1.poll_next_unpin(cx))
         .take(8)
@@ -288,9 +297,11 @@ async fn hides_listen_addresses() {
     assert!(reported_addrs.contains(&(swarm2_peer_id, swarm2_tcp_listen_addr)));
 }
 
-#[async_std::test]
+#[tokio::test]
 async fn identify_push() {
-    libp2p_test_utils::with_default_env_filter();
+    let _ = tracing_subscriber::fmt()
+        .with_env_filter(EnvFilter::from_default_env())
+        .try_init();
 
     let mut swarm1 = Swarm::new_ephemeral(|identity| {
         identify::Behaviour::new(identify::Config::new("a".to_string(), identity.public()))
@@ -338,9 +349,11 @@ async fn identify_push() {
     assert!(swarm1_received_info.listen_addrs.is_empty());
 }
 
-#[async_std::test]
+#[tokio::test]
 async fn discover_peer_after_disconnect() {
-    libp2p_test_utils::with_default_env_filter();
+    let _ = tracing_subscriber::fmt()
+        .with_env_filter(EnvFilter::from_default_env())
+        .try_init();
 
     let mut swarm1 = Swarm::new_ephemeral(|identity| {
         identify::Behaviour::new(identify::Config::new("a".to_string(), identity.public()))
@@ -356,7 +369,7 @@ async fn discover_peer_after_disconnect() {
     swarm2.connect(&mut swarm1).await;
 
     let swarm1_peer_id = *swarm1.local_peer_id();
-    async_std::task::spawn(swarm1.loop_on_next());
+    tokio::spawn(swarm1.loop_on_next());
 
     // Wait until we identified.
     swarm2
@@ -389,9 +402,11 @@ async fn discover_peer_after_disconnect() {
     assert_eq!(connected_peer, swarm1_peer_id);
 }
 
-#[async_std::test]
+#[tokio::test]
 async fn configured_interval_starts_after_first_identify() {
-    libp2p_test_utils::with_default_env_filter();
+    let _ = tracing_subscriber::fmt()
+        .with_env_filter(EnvFilter::from_default_env())
+        .try_init();
 
     let identify_interval = Duration::from_secs(5);
 
@@ -411,7 +426,7 @@ async fn configured_interval_starts_after_first_identify() {
     swarm1.listen().with_memory_addr_external().await;
     swarm2.connect(&mut swarm1).await;
 
-    async_std::task::spawn(swarm2.loop_on_next());
+    tokio::spawn(swarm2.loop_on_next());
 
     let start = Instant::now();
 
@@ -427,9 +442,11 @@ async fn configured_interval_starts_after_first_identify() {
     assert!(time_to_first_identify < identify_interval)
 }
 
-#[async_std::test]
+#[tokio::test]
 async fn reject_mismatched_public_key() {
-    libp2p_test_utils::with_default_env_filter();
+    let _ = tracing_subscriber::fmt()
+        .with_env_filter(EnvFilter::from_default_env())
+        .try_init();
 
     let mut honest_swarm = Swarm::new_ephemeral(|identity| {
         identify::Behaviour::new(

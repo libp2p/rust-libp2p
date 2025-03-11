@@ -1,4 +1,28 @@
+## 0.49.0
+
+- Improve error messaging by renaming `PublishError::InsufficientPeers` to 
+  `PublishError::NoPeersSubscribedToTopic`. This change makes it clearer that the error occurs 
+  specifically when trying to publish to a topic with no subscribed peers, rather than a general 
+  peer availability issue.
+  See [PR 5912](https://github.com/libp2p/rust-libp2p/pull/5912)
+  
+- Allow whitelisting topics for metrics to ensure metrics are recorded correctly for these topics.
+  See [PR 5895](https://github.com/libp2p/rust-libp2p/pull/5895)
+
+- Improve `max_messages_per_rpc` consistency by ensuring RPC control messages also adhere to the existing limits.
+  See [PR 5826](https://github.com/libp2p/rust-libp2p/pull/5826)
+
+- Respect already received IDONTWANT messages when handling IWANT.
+  See [PR 5901](https://github.com/libp2p/rust-libp2p/pull/5901)
+
+- Fix messages were not forwarded to floodsub peers.
+  See [PR 5908](https://github.com/libp2p/rust-libp2p/pull/5908)
+
 ## 0.48.0
+
+- Allow broadcasting `IDONTWANT` messages when publishing to avoid downloading data that is already available.
+  See [PR 5773](https://github.com/libp2p/rust-libp2p/pull/5773)
+
 - Add configurable `idontwant_message_size_threshold` parameter.
   See [PR 5770](https://github.com/libp2p/rust-libp2p/pull/5770)
 
@@ -31,6 +55,11 @@
 - Fix `cargo clippy` warnings in `rustc 1.84.0-beta.1`.
   See [PR 5700](https://github.com/libp2p/rust-libp2p/pull/5700).
 
+- Fix an issue where an `InsufficientPeers` error could occur under certain conditions, despite having peers subscribed to a topic.
+  See [PR 5793](https://github.com/libp2p/rust-libp2p/pull/5793).
+
+<!-- Update to libp2p-core v0.43.0 -->
+
 ## 0.47.0
 
 <!-- Update to libp2p-swarm v0.45.0 -->
@@ -62,7 +91,7 @@
 - Deprecate `gossipsub::Config::idle_timeout` in favor of `SwarmBuilder::idle_connection_timeout`.
   See [PR 4648].
 
-<!-- Interal changes:
+<!-- Internal changes:
 
 - Allow new clippy lint.
 
@@ -78,7 +107,7 @@
 
 ## 0.45.1
 
-- Add getter function to o  btain `TopicScoreParams`.
+- Add getter function to obtain `TopicScoreParams`.
   See [PR 4231].
 
 [PR 4231]: https://github.com/libp2p/rust-libp2p/pull/4231

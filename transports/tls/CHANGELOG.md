@@ -1,3 +1,12 @@
+## 0.6.1
+
+- Upgrade `rcgen` to `v0.13`
+  See [PR 5917](https://github.com/libp2p/rust-libp2p/pull/5917).
+
+## 0.6.0
+
+<!-- Update to libp2p-core v0.43.0 -->
+
 ## 0.5.0
 
 <!-- Update to libp2p-swarm v0.45.0 -->

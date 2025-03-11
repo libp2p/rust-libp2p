@@ -29,8 +29,9 @@ pub enum PublishError {
     Duplicate,
     /// An error occurred whilst signing the message.
     SigningError(SigningError),
-    /// There were no peers to send this message to.
-    InsufficientPeers,
+    /// No peers are currently subscribed to receive messages on this topic.
+    /// Wait for peers to subscribe or check your network connectivity.
+    NoPeersSubscribedToTopic,
     /// The overall message was too large. This could be due to excessive topics or an excessive
     /// message size.
     MessageTooLarge,

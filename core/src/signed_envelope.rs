@@ -49,7 +49,7 @@ impl SignedEnvelope {
     /// Extract the payload and signing key of this [`SignedEnvelope`].
     ///
     /// You must provide the correct domain-separation string and expected payload type in order to
-    /// get the payload. This guards against accidental mis-use of the payload where the
+    /// get the payload. This guards against accidental misuse of the payload where the
     /// signature was created for a different purpose or payload type.
     ///
     /// It is the caller's responsibility to check that the signing key is what

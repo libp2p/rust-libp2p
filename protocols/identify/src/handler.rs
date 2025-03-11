@@ -20,6 +20,7 @@
 
 use std::{
     collections::HashSet,
+    sync::Arc,
     task::{Context, Poll},
     time::Duration,
 };
@@ -32,7 +33,7 @@ use libp2p_core::{
     upgrade::{ReadyUpgrade, SelectUpgrade},
     Multiaddr,
 };
-use libp2p_identity::{PeerId, PublicKey};
+use libp2p_identity::PeerId;
 use libp2p_swarm::{
     handler::{
         ConnectionEvent, DialUpgradeError, FullyNegotiatedInbound, FullyNegotiatedOutbound,
@@ -45,8 +46,8 @@ use smallvec::SmallVec;
 use tracing::Level;
 
 use crate::{
-    protocol,
-    protocol::{Info, PushInfo, UpgradeError},
+    behaviour::KeyType,
+    protocol::{self, Info, PushInfo, UpgradeError},
     PROTOCOL_NAME, PUSH_PROTOCOL_NAME,
 };
 
@@ -80,8 +81,8 @@ pub struct Handler {
     /// The interval of `trigger_next_identify`, i.e. the recurrent delay.
     interval: Duration,
 
-    /// The public key of the local peer.
-    public_key: PublicKey,
+    /// The key of the local peer.
+    local_key: Arc<KeyType>,
 
     /// Application-specific version of the protocol family used by the peer,
     /// e.g. `ipfs/1.0.0` or `polkadot/1.0.0`.
@@ -125,10 +126,10 @@ pub enum Event {
 
 impl Handler {
     /// Creates a new `Handler`.
-    pub fn new(
+    pub(crate) fn new(
         interval: Duration,
         remote_peer_id: PeerId,
-        public_key: PublicKey,
+        local_key: Arc<KeyType>,
         protocol_version: String,
         agent_version: String,
         observed_addr: Multiaddr,
@@ -144,7 +145,7 @@ impl Handler {
             trigger_next_identify: Delay::new(Duration::ZERO),
             exchanged_one_periodic_identify: false,
             interval,
-            public_key,
+            local_key,
             protocol_version,
             agent_version,
             observed_addr,
@@ -159,10 +160,7 @@ impl Handler {
         &mut self,
         FullyNegotiatedInbound {
             protocol: output, ..
-        }: FullyNegotiatedInbound<
-            <Self as ConnectionHandler>::InboundProtocol,
-            <Self as ConnectionHandler>::InboundOpenInfo,
-        >,
+        }: FullyNegotiatedInbound<<Self as ConnectionHandler>::InboundProtocol>,
     ) {
         match output {
             future::Either::Left(stream) => {
@@ -198,10 +196,7 @@ impl Handler {
         &mut self,
         FullyNegotiatedOutbound {
             protocol: output, ..
-        }: FullyNegotiatedOutbound<
-            <Self as ConnectionHandler>::OutboundProtocol,
-            <Self as ConnectionHandler>::OutboundOpenInfo,
-        >,
+        }: FullyNegotiatedOutbound<<Self as ConnectionHandler>::OutboundProtocol>,
     ) {
         match output {
             future::Either::Left(stream) => {
@@ -232,13 +227,23 @@ impl Handler {
     }
 
     fn build_info(&mut self) -> Info {
+        let signed_envelope = match self.local_key.as_ref() {
+            KeyType::PublicKey(_) => None,
+            KeyType::Keypair { keypair, .. } => libp2p_core::PeerRecord::new(
+                keypair,
+                Vec::from_iter(self.external_addresses.iter().cloned()),
+            )
+            .ok()
+            .map(|r| r.into_signed_envelope()),
+        };
         Info {
-            public_key: self.public_key.clone(),
+            public_key: self.local_key.public_key().clone(),
             protocol_version: self.protocol_version.clone(),
             agent_version: self.agent_version.clone(),
             listen_addrs: Vec::from_iter(self.external_addresses.iter().cloned()),
             protocols: Vec::from_iter(self.local_supported_protocols.iter().cloned()),
             observed_addr: self.observed_addr.clone(),
+            signed_peer_record: signed_envelope,
         }
     }
 
@@ -303,7 +308,7 @@ impl ConnectionHandler for Handler {
     type OutboundOpenInfo = ();
     type InboundOpenInfo = ();
 
-    fn listen_protocol(&self) -> SubstreamProtocol<Self::InboundProtocol, Self::InboundOpenInfo> {
+    fn listen_protocol(&self) -> SubstreamProtocol<Self::InboundProtocol> {
         SubstreamProtocol::new(
             SelectUpgrade::new(
                 ReadyUpgrade::new(PROTOCOL_NAME),
@@ -334,7 +339,7 @@ impl ConnectionHandler for Handler {
     fn poll(
         &mut self,
         cx: &mut Context<'_>,
-    ) -> Poll<ConnectionHandlerEvent<Self::OutboundProtocol, Self::OutboundOpenInfo, Event>> {
+    ) -> Poll<ConnectionHandlerEvent<Self::OutboundProtocol, (), Event>> {
         if let Some(event) = self.events.pop() {
             return Poll::Ready(event);
         }
@@ -413,12 +418,7 @@ impl ConnectionHandler for Handler {
 
     fn on_connection_event(
         &mut self,
-        event: ConnectionEvent<
-            Self::InboundProtocol,
-            Self::OutboundProtocol,
-            Self::InboundOpenInfo,
-            Self::OutboundOpenInfo,
-        >,
+        event: ConnectionEvent<Self::InboundProtocol, Self::OutboundProtocol>,
     ) {
         match event {
             ConnectionEvent::FullyNegotiatedInbound(fully_negotiated_inbound) => {

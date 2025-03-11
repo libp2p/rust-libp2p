@@ -35,7 +35,6 @@ impl ListenAddresses {
 #[cfg(test)]
 mod tests {
     use libp2p_core::{multiaddr::Protocol, transport::ListenerId};
-    use once_cell::sync::Lazy;
 
     use super::*;
 
@@ -76,6 +75,6 @@ mod tests {
         })
     }
 
-    static MEMORY_ADDR: Lazy<Multiaddr> =
-        Lazy::new(|| Multiaddr::empty().with(Protocol::Memory(1000)));
+    static MEMORY_ADDR: std::sync::LazyLock<Multiaddr> =
+        std::sync::LazyLock::new(|| Multiaddr::empty().with(Protocol::Memory(1000)));
 }

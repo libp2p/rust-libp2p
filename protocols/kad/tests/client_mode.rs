@@ -3,12 +3,15 @@ use libp2p_identity as identity;
 use libp2p_kad::{store::MemoryStore, Behaviour, Config, Event, Mode};
 use libp2p_swarm::{Swarm, SwarmEvent};
 use libp2p_swarm_test::SwarmExt;
+use tracing_subscriber::EnvFilter;
 use Event::*;
 use MyBehaviourEvent::*;
 
-#[async_std::test]
+#[tokio::test]
 async fn server_gets_added_to_routing_table_by_client() {
-    libp2p_test_utils::with_default_env_filter();
+    let _ = tracing_subscriber::fmt()
+        .with_env_filter(EnvFilter::from_default_env())
+        .try_init();
 
     let mut client = Swarm::new_ephemeral(MyBehaviour::new);
     let mut server = Swarm::new_ephemeral(MyBehaviour::new);
@@ -17,7 +20,7 @@ async fn server_gets_added_to_routing_table_by_client() {
     client.connect(&mut server).await;
 
     let server_peer_id = *server.local_peer_id();
-    async_std::task::spawn(server.loop_on_next());
+    tokio::spawn(server.loop_on_next());
 
     let external_event_peer = client
         .wait(|e| match e {
@@ -36,9 +39,11 @@ async fn server_gets_added_to_routing_table_by_client() {
     assert_eq!(routing_updated_peer, server_peer_id);
 }
 
-#[async_std::test]
+#[tokio::test]
 async fn two_servers_add_each_other_to_routing_table() {
-    libp2p_test_utils::with_default_env_filter();
+    let _ = tracing_subscriber::fmt()
+        .with_env_filter(EnvFilter::from_default_env())
+        .try_init();
 
     let mut server1 = Swarm::new_ephemeral(MyBehaviour::new);
     let mut server2 = Swarm::new_ephemeral(MyBehaviour::new);
@@ -63,7 +68,7 @@ async fn two_servers_add_each_other_to_routing_table() {
     server1.listen().with_memory_addr_external().await;
     server2.connect(&mut server1).await;
 
-    async_std::task::spawn(server1.loop_on_next());
+    tokio::spawn(server1.loop_on_next());
 
     let peer = server2
         .wait(|e| match e {
@@ -75,9 +80,11 @@ async fn two_servers_add_each_other_to_routing_table() {
     assert_eq!(peer, server1_peer_id);
 }
 
-#[async_std::test]
+#[tokio::test]
 async fn adding_an_external_addresses_activates_server_mode_on_existing_connections() {
-    libp2p_test_utils::with_default_env_filter();
+    let _ = tracing_subscriber::fmt()
+        .with_env_filter(EnvFilter::from_default_env())
+        .try_init();
 
     let mut client = Swarm::new_ephemeral(MyBehaviour::new);
     let mut server = Swarm::new_ephemeral(MyBehaviour::new);
@@ -111,9 +118,11 @@ async fn adding_an_external_addresses_activates_server_mode_on_existing_connecti
     }
 }
 
-#[async_std::test]
+#[tokio::test]
 async fn set_client_to_server_mode() {
-    libp2p_test_utils::with_default_env_filter();
+    let _ = tracing_subscriber::fmt()
+        .with_env_filter(EnvFilter::from_default_env())
+        .try_init();
 
     let mut client = Swarm::new_ephemeral(MyBehaviour::new);
     client.behaviour_mut().kad.set_mode(Some(Mode::Client));
@@ -151,7 +160,7 @@ async fn set_client_to_server_mode() {
 
     client.behaviour_mut().kad.set_mode(Some(Mode::Server));
 
-    async_std::task::spawn(client.loop_on_next());
+    tokio::spawn(client.loop_on_next());
 
     let info = server
         .wait(|e| match e {
