@@ -172,7 +172,7 @@ impl<T> Store for MemoryStore<T> {
                     }
                     DialError::WrongPeerId { obtained, address } => {
                         // The stored peer id is incorrect, remove incorrect and add correct one.
-                        self.remove_address(&peer, &address);
+                        self.remove_address(&peer, address);
                         self.update_address(obtained, address);
                     }
                     DialError::Transport(errors) => {
