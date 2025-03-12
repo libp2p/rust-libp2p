@@ -64,7 +64,7 @@ impl<T> MemoryStore<T> {
 
     /// Update an address record without notifying swarm.  
     /// Returns `true` when the address is new.  
-    pub fn update_address_silent(&mut self, peer: &PeerId, address: &Multiaddr) -> bool {
+    fn update_address_silent(&mut self, peer: &PeerId, address: &Multiaddr) -> bool {
         if let Some(record) = self.records.get_mut(peer) {
             return record.update_address(address);
         }
@@ -86,7 +86,7 @@ impl<T> MemoryStore<T> {
 
     /// Remove an address record without notifying swarm.
     /// Returns `true` when the address is removed.
-    pub fn remove_address_silent(&mut self, peer: &PeerId, address: &Multiaddr) -> bool {
+    fn remove_address_silent(&mut self, peer: &PeerId, address: &Multiaddr) -> bool {
         self.records
             .get_mut(peer)
             .is_some_and(|r| r.remove_address(address))
@@ -110,7 +110,7 @@ impl<T> MemoryStore<T> {
     }
 
     /// Insert the data without notifying the swarm. Old data will be dropped if it exists.
-    pub fn insert_custom_data_silent(&mut self, peer: &PeerId, custom_data: T) {
+    fn insert_custom_data_silent(&mut self, peer: &PeerId, custom_data: T) {
         if let Some(r) = self.records.get_mut(peer) {
             return r.insert_custom_data(custom_data);
         }
