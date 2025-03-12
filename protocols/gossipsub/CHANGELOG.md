@@ -1,4 +1,11 @@
-## 0.48.1
+## 0.49.0
+
+- Improve error messaging by renaming `PublishError::InsufficientPeers` to 
+  `PublishError::NoPeersSubscribedToTopic`. This change makes it clearer that the error occurs 
+  specifically when trying to publish to a topic with no subscribed peers, rather than a general 
+  peer availability issue.
+  See [PR 5912](https://github.com/libp2p/rust-libp2p/pull/5912)
+  
 - Allow whitelisting topics for metrics to ensure metrics are recorded correctly for these topics.
   See [PR 5895](https://github.com/libp2p/rust-libp2p/pull/5895)
 

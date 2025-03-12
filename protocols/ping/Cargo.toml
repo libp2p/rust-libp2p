@@ -1,6 +1,6 @@
 [package]
 name = "libp2p-ping"
-edition = "2021"
+edition.workspace = true
 rust-version = { workspace = true }
 description = "Ping protocol for libp2p"
 version = "0.46.0"

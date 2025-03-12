@@ -1,4 +1,7 @@
 ## 0.47.0
+- Remove `once_cell` dependency.
+  See [PR 5913](https://github.com/libp2p/rust-libp2p/pull/5913)
+
 - Separate the `PendingConnectionError` into two parts `PendingOutboundConnectionError` and `PendingInboundConnectionError` to have better control over error handling. See [PR](https://github.com/libp2p/rust-libp2p/pull/5861)
 
 - Undo `ConnectionHandler::{InboundOpenInfo, OutboundOpenInfo}` deprecation.
