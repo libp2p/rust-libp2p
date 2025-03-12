@@ -87,8 +87,9 @@ impl ExternalAddresses {
 
 #[cfg(test)]
 mod tests {
+    use std::sync::LazyLock;
+
     use libp2p_core::multiaddr::Protocol;
-    use once_cell::sync::Lazy;
     use rand::Rng;
 
     use super::*;
@@ -179,8 +180,8 @@ mod tests {
         })
     }
 
-    static MEMORY_ADDR_1000: Lazy<Multiaddr> =
-        Lazy::new(|| Multiaddr::empty().with(Protocol::Memory(1000)));
-    static MEMORY_ADDR_2000: Lazy<Multiaddr> =
-        Lazy::new(|| Multiaddr::empty().with(Protocol::Memory(2000)));
+    static MEMORY_ADDR_1000: LazyLock<Multiaddr> =
+        LazyLock::new(|| Multiaddr::empty().with(Protocol::Memory(1000)));
+    static MEMORY_ADDR_2000: LazyLock<Multiaddr> =
+        LazyLock::new(|| Multiaddr::empty().with(Protocol::Memory(2000)));
 }

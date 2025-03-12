@@ -1,6 +1,6 @@
 [package]
 name = "libp2p-yamux"
-edition = "2021"
+edition.workspace = true
 rust-version = { workspace = true }
 description = "Yamux multiplexing protocol for libp2p"
 version = "0.47.0"

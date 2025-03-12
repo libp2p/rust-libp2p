@@ -1,7 +1,7 @@
 [package]
 name = "libp2p-swarm-test"
 version = "0.5.0"
-edition = "2021"
+edition.workspace = true
 rust-version = { workspace = true }
 license = "MIT"
 description = "Test framework for code building on top of libp2p-swarm"
