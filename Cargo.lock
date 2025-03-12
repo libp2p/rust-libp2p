@@ -2793,7 +2793,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-core"
-version = "0.43.0"
+version = "0.43.1"
 dependencies = [
  "either",
  "fnv",
@@ -2805,7 +2805,6 @@ dependencies = [
  "multiaddr",
  "multihash",
  "multistream-select",
- "once_cell",
  "parking_lot",
  "pin-project",
  "quick-protobuf",
@@ -3092,7 +3091,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-noise"
-version = "0.46.0"
+version = "0.46.1"
 dependencies = [
  "asynchronous-codec",
  "bytes",
@@ -3102,7 +3101,6 @@ dependencies = [
  "libp2p-identity",
  "multiaddr",
  "multihash",
- "once_cell",
  "quick-protobuf",
  "quickcheck-ext",
  "rand 0.8.5",
@@ -3367,7 +3365,6 @@ dependencies = [
  "libp2p-yamux",
  "lru",
  "multistream-select",
- "once_cell",
  "quickcheck-ext",
  "rand 0.8.5",
  "smallvec",
@@ -3578,7 +3575,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-webtransport-websys"
-version = "0.5.0"
+version = "0.5.1"
 dependencies = [
  "futures",
  "js-sys",
@@ -3588,7 +3585,6 @@ dependencies = [
  "multiaddr",
  "multibase",
  "multihash",
- "once_cell",
  "send_wrapper 0.6.0",
  "thiserror 2.0.12",
  "tracing",
