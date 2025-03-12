@@ -8,6 +8,10 @@
 - Make the `*-websys` variants (`libp2p-webrtc-websys`, `libp2p-websocket-websys`, `libp2p-webtransport-websys`) only available on wasm32 target architecture.
   See [PR 5891](https://github.com/libp2p/rust-libp2p/pull/5891).
   
+- Adds TopicsConfig structure and topic_configuration key to Config and ProtocolConfig to enable
+  setting message and mesh-*-n sizes on the Gossipsub configuration. Adds appropriate functions to
+  allow modifying default values from the config interface. 
+
 ## 0.55.0
 
 - Raise MSRV to 1.83.0.
