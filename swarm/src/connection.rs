@@ -36,9 +36,7 @@ use std::{
 };
 
 pub use error::ConnectionError;
-pub(crate) use error::{
-    PendingConnectionError, PendingInboundConnectionError, PendingOutboundConnectionError,
-};
+pub(crate) use error::{PendingInboundConnectionError, PendingOutboundConnectionError};
 use futures::{future::BoxFuture, stream, stream::FuturesUnordered, FutureExt, StreamExt};
 use futures_timer::Delay;
 use libp2p_core::{
@@ -123,7 +121,6 @@ where
     /// The underlying handler.
     handler: THandler,
     /// Futures that upgrade incoming substreams.
-    #[expect(deprecated)] // TODO: Remove when {In, Out}boundOpenInfo is fully removed.
     negotiating_in: FuturesUnordered<
         StreamUpgrade<
             THandler::InboundOpenInfo,
@@ -132,7 +129,6 @@ where
         >,
     >,
     /// Futures that upgrade outgoing substreams.
-    #[expect(deprecated)] // TODO: Remove when {In, Out}boundOpenInfo is fully removed.
     negotiating_out: FuturesUnordered<
         StreamUpgrade<
             THandler::OutboundOpenInfo,
@@ -157,7 +153,6 @@ where
     ///
     /// The upgrade timeout is already ticking here so this may fail in case the remote is not
     /// quick enough in providing us with a new stream.
-    #[expect(deprecated)] // TODO: Remove when {In, Out}boundOpenInfo is fully removed.
     requested_substreams: FuturesUnordered<
         SubstreamRequested<THandler::OutboundOpenInfo, THandler::OutboundProtocol>,
     >,
@@ -171,7 +166,6 @@ where
     stream_counter: ActiveStreamCounter,
 }
 
-#[expect(deprecated)] // TODO: Remove when {In, Out}boundOpenInfo is fully removed.
 impl<THandler> fmt::Debug for Connection<THandler>
 where
     THandler: ConnectionHandler + fmt::Debug,
@@ -801,13 +795,16 @@ mod tests {
         StreamMuxer,
     };
     use quickcheck::*;
+    use tracing_subscriber::EnvFilter;
 
     use super::*;
     use crate::dummy;
 
     #[test]
     fn max_negotiating_inbound_streams() {
-        libp2p_test_utils::with_default_env_filter();
+        let _ = tracing_subscriber::fmt()
+            .with_env_filter(EnvFilter::from_default_env())
+            .try_init();
 
         fn prop(max_negotiating_inbound_streams: u8) {
             let max_negotiating_inbound_streams: usize = max_negotiating_inbound_streams.into();
@@ -975,7 +972,9 @@ mod tests {
 
     #[test]
     fn checked_add_fraction_can_add_u64_max() {
-        libp2p_test_utils::with_default_env_filter();
+        let _ = tracing_subscriber::fmt()
+            .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
+            .try_init();
         let start = Instant::now();
 
         let duration = checked_add_fraction(start, Duration::from_secs(u64::MAX));
@@ -985,7 +984,9 @@ mod tests {
 
     #[test]
     fn compute_new_shutdown_does_not_panic() {
-        libp2p_test_utils::with_default_env_filter();
+        let _ = tracing_subscriber::fmt()
+            .with_env_filter(EnvFilter::from_default_env())
+            .try_init();
 
         #[derive(Debug)]
         struct ArbitraryShutdown(Shutdown);

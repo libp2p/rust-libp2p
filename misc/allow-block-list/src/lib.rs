@@ -305,7 +305,7 @@ mod tests {
 
     use super::*;
 
-    #[async_std::test]
+    #[tokio::test]
     async fn cannot_dial_blocked_peer() {
         let mut dialer = Swarm::new_ephemeral(|_| Behaviour::<BlockedPeers>::default());
         let mut listener = Swarm::new_ephemeral(|_| Behaviour::<BlockedPeers>::default());
@@ -319,7 +319,7 @@ mod tests {
         assert!(cause.downcast::<Blocked>().is_ok());
     }
 
-    #[async_std::test]
+    #[tokio::test]
     async fn can_dial_unblocked_peer() {
         let mut dialer = Swarm::new_ephemeral(|_| Behaviour::<BlockedPeers>::default());
         let mut listener = Swarm::new_ephemeral(|_| Behaviour::<BlockedPeers>::default());
@@ -333,7 +333,7 @@ mod tests {
         dial(&mut dialer, &listener).unwrap();
     }
 
-    #[async_std::test]
+    #[tokio::test]
     async fn blocked_peer_cannot_dial_us() {
         let mut dialer = Swarm::new_ephemeral(|_| Behaviour::<BlockedPeers>::default());
         let mut listener = Swarm::new_ephemeral(|_| Behaviour::<BlockedPeers>::default());
@@ -341,7 +341,7 @@ mod tests {
 
         listener.behaviour_mut().block_peer(*dialer.local_peer_id());
         dial(&mut dialer, &listener).unwrap();
-        async_std::task::spawn(dialer.loop_on_next());
+        tokio::spawn(dialer.loop_on_next());
 
         let cause = listener
             .wait(|e| match e {
@@ -355,7 +355,7 @@ mod tests {
         assert!(cause.downcast::<Blocked>().is_ok());
     }
 
-    #[async_std::test]
+    #[tokio::test]
     async fn connections_get_closed_upon_blocked() {
         let mut dialer = Swarm::new_ephemeral(|_| Behaviour::<BlockedPeers>::default());
         let mut listener = Swarm::new_ephemeral(|_| Behaviour::<BlockedPeers>::default());
@@ -381,7 +381,7 @@ mod tests {
         assert_eq!(closed_listener_peer, *dialer.local_peer_id());
     }
 
-    #[async_std::test]
+    #[tokio::test]
     async fn cannot_dial_peer_unless_allowed() {
         let mut dialer = Swarm::new_ephemeral(|_| Behaviour::<AllowedPeers>::default());
         let mut listener = Swarm::new_ephemeral(|_| Behaviour::<AllowedPeers>::default());
@@ -396,7 +396,7 @@ mod tests {
         assert!(dial(&mut dialer, &listener).is_ok());
     }
 
-    #[async_std::test]
+    #[tokio::test]
     async fn cannot_dial_disallowed_peer() {
         let mut dialer = Swarm::new_ephemeral(|_| Behaviour::<AllowedPeers>::default());
         let mut listener = Swarm::new_ephemeral(|_| Behaviour::<AllowedPeers>::default());
@@ -413,7 +413,7 @@ mod tests {
         assert!(cause.downcast::<NotAllowed>().is_ok());
     }
 
-    #[async_std::test]
+    #[tokio::test]
     async fn not_allowed_peer_cannot_dial_us() {
         let mut dialer = Swarm::new_ephemeral(|_| Behaviour::<AllowedPeers>::default());
         let mut listener = Swarm::new_ephemeral(|_| Behaviour::<AllowedPeers>::default());
@@ -450,7 +450,7 @@ mod tests {
         assert!(incoming_cause.downcast::<NotAllowed>().is_ok());
     }
 
-    #[async_std::test]
+    #[tokio::test]
     async fn connections_get_closed_upon_disallow() {
         let mut dialer = Swarm::new_ephemeral(|_| Behaviour::<AllowedPeers>::default());
         let mut listener = Swarm::new_ephemeral(|_| Behaviour::<AllowedPeers>::default());

@@ -1,4 +1,12 @@
+## 0.28.1
+
+- fix: public cbor/json codec module
+  See [PR 5830](https://github.com/libp2p/rust-libp2p/pull/5830).
+
 ## 0.28.0
+
+- Deprecate `void` crate.
+  See [PR 5676](https://github.com/libp2p/rust-libp2p/pull/5676).
 
 - Add connection id to the events emitted by a request-response `Behaviour`.
   See [PR 5719](https://github.com/libp2p/rust-libp2p/pull/5719).
@@ -6,10 +14,7 @@
 - Allow configurable request and response sizes for `json` and `cbor` codec.
   See [PR 5792](https://github.com/libp2p/rust-libp2p/pull/5792).
 
-## 0.27.1
-
-- Deprecate `void` crate.
-  See [PR 5676](https://github.com/libp2p/rust-libp2p/pull/5676).
+<!-- Update to libp2p-core v0.43.0 -->
 
 ## 0.27.0
 
@@ -122,10 +127,10 @@
 
 - Update to `libp2p-swarm` `v0.41.0`.
 
-- Replace `RequestResponse`'s `NetworkBehaviour` implemention `inject_*` methods with the new `on_*` methods.
+- Replace `RequestResponse`'s `NetworkBehaviour` implementation `inject_*` methods with the new `on_*` methods.
   See [PR 3011].
 
-- Replace `RequestResponseHandler`'s `ConnectionHandler` implemention `inject_*` methods
+- Replace `RequestResponseHandler`'s `ConnectionHandler` implementation `inject_*` methods
   with the new `on_*` methods. See [PR 3085].
 
 - Update `rust-version` to reflect the actual MSRV: 1.62.0. See [PR 3090].

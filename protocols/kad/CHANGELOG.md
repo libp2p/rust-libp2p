@@ -1,6 +1,6 @@
 ## 0.47.0
 
-- Expose a kad query facility allowing specify num_results dynamicaly.
+- Expose a kad query facility allowing specify num_results dynamically.
   See [PR 5555](https://github.com/libp2p/rust-libp2p/pull/5555).
 - Add `mode` getter on `Behaviour`.
   See [PR 5573](https://github.com/libp2p/rust-libp2p/pull/5573).
@@ -14,6 +14,8 @@
   See [PR 5715](https://github.com/libp2p/rust-libp2p/pull/5715).
 - Remove deprecated default constructor for `ProtocolConfig`.
   See [PR 5774](https://github.com/libp2p/rust-libp2p/pull/5774).
+
+<!-- Update to libp2p-core v0.43.0 -->
 
 ## 0.46.2
 

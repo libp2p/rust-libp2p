@@ -198,7 +198,7 @@ mod tests {
         do_bootstrap(status);
     }
 
-    #[async_std::test]
+    #[tokio::test]
     async fn immediate_automatic_bootstrap_is_triggered_immediately() {
         let mut status = Status::new(Some(Duration::from_secs(1)), Some(Duration::ZERO));
 
@@ -216,14 +216,14 @@ mod tests {
         );
 
         assert!(
-            async_std::future::timeout(Duration::from_millis(500), status.next())
+            tokio::time::timeout(Duration::from_millis(500), status.next())
                 .await
                 .is_ok(),
             "bootstrap to be triggered in less then the configured delay because we connected to a new peer"
         );
     }
 
-    #[async_std::test]
+    #[tokio::test]
     async fn delayed_automatic_bootstrap_is_triggered_before_periodic_bootstrap() {
         let mut status = Status::new(Some(Duration::from_secs(1)), Some(MS_5));
 
@@ -241,7 +241,7 @@ mod tests {
         );
 
         assert!(
-            async_std::future::timeout(MS_5 * 2, status.next())
+            tokio::time::timeout(MS_5 * 2, status.next())
                 .await
                 .is_ok(),
             "bootstrap to be triggered in less then the configured periodic delay because we connected to a new peer"
@@ -263,7 +263,7 @@ mod tests {
         )
     }
 
-    #[async_std::test]
+    #[tokio::test]
     async fn given_periodic_bootstrap_when_routing_table_updated_then_wont_bootstrap_until_next_interval(
     ) {
         let mut status = Status::new(Some(MS_100), Some(MS_5));
@@ -283,7 +283,7 @@ mod tests {
         assert!(elapsed > MS_100);
     }
 
-    #[async_std::test]
+    #[tokio::test]
     async fn given_no_periodic_bootstrap_and_automatic_bootstrap_when_new_entry_then_will_bootstrap(
     ) {
         let mut status = Status::new(None, Some(Duration::ZERO));
@@ -293,7 +293,7 @@ mod tests {
         status.next().await;
     }
 
-    #[async_std::test]
+    #[tokio::test]
     async fn given_periodic_bootstrap_and_no_automatic_bootstrap_triggers_periodically() {
         let mut status = Status::new(Some(MS_100), None);
 
@@ -308,7 +308,7 @@ mod tests {
         }
     }
 
-    #[async_std::test]
+    #[tokio::test]
     async fn given_no_periodic_bootstrap_and_automatic_bootstrap_reset_throttle_when_multiple_peers(
     ) {
         let mut status = Status::new(None, Some(MS_100));
@@ -327,14 +327,14 @@ mod tests {
         Delay::new(MS_100 - MS_5).await;
 
         assert!(
-            async_std::future::timeout(MS_5*2, status.next())
+            tokio::time::timeout(MS_5*2, status.next())
                 .await
                 .is_ok(),
             "bootstrap to be triggered in the configured throttle delay because we connected to a new peer"
         );
     }
 
-    #[async_std::test]
+    #[tokio::test]
     async fn given_periodic_bootstrap_and_no_automatic_bootstrap_manually_triggering_prevent_periodic(
     ) {
         let mut status = Status::new(Some(MS_100), None);
@@ -347,7 +347,7 @@ mod tests {
         status.on_finish();
 
         assert!(
-            async_std::future::timeout(10 * MS_100, status.next())
+            tokio::time::timeout(10 * MS_100, status.next())
                 .await
                 .is_err(),
             "periodic bootstrap to never be triggered because one is still being run"

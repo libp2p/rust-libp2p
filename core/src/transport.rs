@@ -104,7 +104,7 @@ pub struct DialOpts {
 /// by a [`Transport`] through an upgrade mechanism that is initiated via
 /// [`upgrade`](Transport::upgrade).
 ///
-/// Note for implementors: Futures returned by [`Transport::dial`] should only
+/// Note for implementers: Futures returned by [`Transport::dial`] should only
 /// do work once polled for the first time. E.g. in the case of TCP, connecting
 /// to the remote should not happen immediately on [`Transport::dial`] but only
 /// once the returned [`Future`] is polled. The caller of [`Transport::dial`]

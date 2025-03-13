@@ -427,11 +427,12 @@ where
     /// connection is established.
     ///
     /// > **Note**: In order for such a dialing attempt to succeed,
-    /// > the `RequestResonse` protocol must either be embedded
+    /// > the `RequestResponse` protocol must either be embedded
     /// > in another `NetworkBehaviour` that provides peer and
     /// > address discovery, or known addresses of peers must be
-    /// > managed via [`Behaviour::add_address`] and
-    /// > [`Behaviour::remove_address`].
+    /// > managed via [`libp2p_swarm::Swarm::add_peer_address`].
+    /// > Addresses are automatically removed when dial attempts
+    /// > to them fail.
     pub fn send_request(&mut self, peer: &PeerId, request: TCodec::Request) -> OutboundRequestId {
         let request_id = self.next_outbound_request_id();
         let request = OutboundMessage {

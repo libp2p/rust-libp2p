@@ -1199,6 +1199,59 @@ fn test_handle_iwant_msg_not_cached() {
     );
 }
 
+#[test]
+fn test_handle_iwant_msg_but_already_sent_idontwant() {
+    let (mut gs, peers, receivers, _) = inject_nodes1()
+        .peer_no(20)
+        .topics(Vec::new())
+        .to_subscribe(true)
+        .create_network();
+
+    let raw_message = RawMessage {
+        source: Some(peers[11]),
+        data: vec![1, 2, 3, 4],
+        sequence_number: Some(1u64),
+        topic: TopicHash::from_raw("topic"),
+        signature: None,
+        key: None,
+        validated: true,
+    };
+
+    // Transform the inbound message
+    let message = &gs
+        .data_transform
+        .inbound_transform(raw_message.clone())
+        .unwrap();
+
+    let msg_id = gs.config.message_id(message);
+    gs.mcache.put(&msg_id, raw_message);
+
+    // Receive IDONTWANT from Peer 1.
+    let rpc = Rpc {
+        messages: vec![],
+        subscriptions: vec![],
+        control_msgs: vec![ControlAction::IDontWant(IDontWant {
+            message_ids: vec![msg_id.clone()],
+        })],
+    };
+    gs.on_connection_handler_event(
+        peers[1],
+        ConnectionId::new_unchecked(0),
+        HandlerEvent::Message {
+            rpc,
+            invalid_messages: vec![],
+        },
+    );
+
+    // Receive IWANT from Peer 1.
+    gs.handle_iwant(&peers[1], vec![msg_id.clone()]);
+
+    // Check that no messages are sent.
+    receivers.iter().for_each(|(_, receiver)| {
+        assert!(receiver.non_priority.get_ref().is_empty());
+    });
+}
+
 /// tests that an event is created when a peer shares that it has a message we want
 #[test]
 fn test_handle_ihave_subscribed_and_msg_not_cached() {
@@ -2339,7 +2392,7 @@ fn test_accept_only_outbound_peer_grafts_when_mesh_full() {
     assert_eq!(gs.mesh[&topics[0]].len(), config.mesh_n_high());
 
     // create an outbound and an inbound peer
-    let (inbound, _in_reciver) = add_peer(&mut gs, &topics, false, false);
+    let (inbound, _in_receiver) = add_peer(&mut gs, &topics, false, false);
     let (outbound, _out_receiver) = add_peer(&mut gs, &topics, true, false);
 
     // send grafts
@@ -4766,7 +4819,10 @@ fn test_limit_number_of_message_ids_inside_ihave() {
 
 #[test]
 fn test_iwant_penalties() {
-    libp2p_test_utils::with_default_env_filter();
+    // use tracing_subscriber::EnvFilter;
+    // let _ = tracing_subscriber::fmt()
+    // .with_env_filter(EnvFilter::from_default_env())
+    // .try_init();
     let config = ConfigBuilder::default()
         .iwant_followup_time(Duration::from_secs(4))
         .build()
