@@ -1,6 +1,6 @@
 ## 0.49.0
 
-- Fix race conditions for messages published which are already in the network.
+- Fix a race condition for messages published which are already in the network.
   See [PR 5928](https://github.com/libp2p/rust-libp2p/pull/5928)
 
 - Improve error messaging by renaming `PublishError::InsufficientPeers` to
