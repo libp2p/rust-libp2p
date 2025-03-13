@@ -18,6 +18,9 @@
 - Fix messages were not forwarded to floodsub peers.
   See [PR 5908](https://github.com/libp2p/rust-libp2p/pull/5908)
 
+- Fix messages were published to all floodsub peers regardless of their topic.
+  See [PR 5904](https://github.com/libp2p/rust-libp2p/pull/5904)
+
 ## 0.48.0
 
 - Allow broadcasting `IDONTWANT` messages when publishing to avoid downloading data that is already available.
