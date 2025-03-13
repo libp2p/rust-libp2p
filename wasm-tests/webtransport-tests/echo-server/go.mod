@@ -1,6 +1,6 @@
 module echo-server
 
-go 1.22
+go 1.24
 
 require (
 	github.com/libp2p/go-libp2p v0.33.1
