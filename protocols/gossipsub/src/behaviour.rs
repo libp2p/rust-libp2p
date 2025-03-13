@@ -732,6 +732,9 @@ where
         self.duplicate_cache.insert(msg_id.clone());
         self.mcache.put(&msg_id, raw_message.clone());
 
+        // Consider the message as delivered for gossip promises.
+        self.gossip_promises.message_delivered(&msg_id);
+
         // If the message is anonymous or has a random author add it to the published message ids
         // cache.
         if let PublishConfig::RandomAuthor | PublishConfig::Anonymous = self.publish_config {
