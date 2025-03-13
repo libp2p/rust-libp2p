@@ -408,7 +408,10 @@ async fn registration_on_clients_expire() {
     }
 
     match bob.next_swarm_event().await {
-        SwarmEvent::NewExternalAddrOfPeer { peer_id: discovered_peer_id, .. } => {
+        SwarmEvent::NewExternalAddrOfPeer {
+            peer_id: discovered_peer_id,
+            ..
+        } => {
             assert_eq!(discovered_peer_id, alice_peer_id);
         }
         event => panic!("Unexpected event: {event:?}"),
