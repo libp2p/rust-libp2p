@@ -2,6 +2,9 @@
 - Rename types to match naming convention in [discussion 2174](https://github.com/libp2p/rust-libp2p/discussions/2174).
   See [PR 5873](https://github.com/libp2p/rust-libp2p/pull/5873).
 
+- Upgrade `rcgen` to `v0.13`
+  See [PR 5917](https://github.com/libp2p/rust-libp2p/pull/5917).
+
 ## 0.45.0
 
 - fix: Return `Error::InvalidMultiaddr` when dialed to a `/dnsaddr` address

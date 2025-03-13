@@ -1,0 +1,25 @@
+[package]
+name = "libp2p-peer-store"
+edition = "2021"
+version = "0.1.0"
+authors = ["drHuangMHT <DrHuangMHT@outlook.com>"]
+license = "MIT"
+repository = "https://github.com/libp2p/rust-libp2p"
+publish = false
+rust-version.workspace = true
+
+[dependencies]
+libp2p-core = { workspace = true }
+libp2p-swarm = { workspace = true }
+lru = "0.12.3"
+libp2p-identity = { workspace = true, optional = true }
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
+libp2p-identity = { workspace = true, features = ["rand", "serde"] }
+libp2p = { workspace = true, features = ["macros", "identify"] }
+libp2p-swarm-test = { path = "../../swarm-test", features = ["tokio"] }
+serde_json = { version = "1.0.134" }
+
+[lints]
+workspace = true
