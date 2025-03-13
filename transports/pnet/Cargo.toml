@@ -1,6 +1,6 @@
 [package]
 name = "libp2p-pnet"
-edition = "2021"
+edition.workspace = true
 rust-version = { workspace = true }
 description = "Private swarm support for libp2p"
 version = "0.26.0"

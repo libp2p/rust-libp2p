@@ -95,13 +95,12 @@ impl Default for PeerAddresses {
 
 #[cfg(test)]
 mod tests {
-    use std::io;
+    use std::{io, sync::LazyLock};
 
     use libp2p_core::{
         multiaddr::Protocol,
         transport::{memory::MemoryTransportError, TransportError},
     };
-    use once_cell::sync::Lazy;
 
     use super::*;
     use crate::ConnectionId;
@@ -328,8 +327,8 @@ mod tests {
         errors
     }
 
-    static MEMORY_ADDR_1000: Lazy<Multiaddr> =
-        Lazy::new(|| Multiaddr::empty().with(Protocol::Memory(1000)));
-    static MEMORY_ADDR_2000: Lazy<Multiaddr> =
-        Lazy::new(|| Multiaddr::empty().with(Protocol::Memory(2000)));
+    static MEMORY_ADDR_1000: LazyLock<Multiaddr> =
+        LazyLock::new(|| Multiaddr::empty().with(Protocol::Memory(1000)));
+    static MEMORY_ADDR_2000: LazyLock<Multiaddr> =
+        LazyLock::new(|| Multiaddr::empty().with(Protocol::Memory(2000)));
 }
