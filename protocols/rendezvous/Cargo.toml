@@ -1,6 +1,6 @@
 [package]
 name = "libp2p-rendezvous"
-edition = "2021"
+edition.workspace = true
 rust-version = { workspace = true }
 description = "Rendezvous protocol for libp2p"
 version = "0.16.0"

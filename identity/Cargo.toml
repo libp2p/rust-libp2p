@@ -1,7 +1,7 @@
 [package]
 name = "libp2p-identity"
 version = "0.2.10"
-edition = "2021"
+edition = "2021" # MUST NOT inherit from workspace because we don't want to publish breaking changes to `libp2p-identity`.
 description = "Data structures and algorithms for identifying peers in libp2p."
 rust-version = "1.73.0" # MUST NOT inherit from workspace because we don't want to publish breaking changes to `libp2p-identity`.
 license = "MIT"
