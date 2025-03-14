@@ -1,3 +1,10 @@
+## 0.12.7
+
+### Changed
+
+- Deprecated #[clap] attributes with #[arg] and #[command].
+  See [PR 5932](https://github.com/libp2p/rust-libp2p/pull/5932)
+
 ## 0.12.6
 
 ### Changed
