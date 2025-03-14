@@ -21,6 +21,15 @@
 /// A request-response behaviour using [`cbor4ii::serde`] for serializing and
 /// deserializing the messages.
 ///
+/// # Default Size Limits
+///
+/// The codec uses the following default size limits:
+/// - Maximum request size: 1,048,576 bytes (1 MiB)
+/// - Maximum response size: 10,485,760 bytes (10 MiB)
+///
+/// These limits can be customized with [`codec::Codec::set_request_size_maximum`]
+/// and [`codec::Codec::set_response_size_maximum`].
+///
 /// # Example
 ///
 /// ```

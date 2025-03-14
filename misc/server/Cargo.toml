@@ -1,8 +1,8 @@
 [package]
 name = "libp2p-server"
-version = "0.12.6"
+version = "0.12.7"
 authors = ["Max Inden <mail@max-inden.de>"]
-edition = "2021"
+edition.workspace = true
 repository = "https://github.com/libp2p/rust-libp2p"
 rust-version = { workspace = true }
 description = "A rust-libp2p server binary."

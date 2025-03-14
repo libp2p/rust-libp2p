@@ -1,6 +1,6 @@
 [package]
 name = "quick-protobuf-codec"
-edition = "2021"
+edition.workspace = true
 rust-version = { workspace = true }
 description = "Asynchronous de-/encoding of Protobuf structs using asynchronous-codec, unsigned-varint and quick-protobuf."
 version = "0.3.1"
