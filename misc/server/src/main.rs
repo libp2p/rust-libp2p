@@ -21,22 +21,22 @@ mod config;
 mod http_service;
 
 #[derive(Debug, Parser)]
-#[clap(name = "libp2p server", about = "A rust-libp2p server binary.")]
+#[command(name = "libp2p server", about = "A rust-libp2p server binary.")]
 struct Opts {
     /// Path to IPFS config file.
-    #[clap(long)]
+    #[arg(long)]
     config: PathBuf,
 
     /// Metric endpoint path.
-    #[clap(long, default_value = "/metrics")]
+    #[arg(long, default_value = "/metrics")]
     metrics_path: String,
 
     /// Whether to run the libp2p Kademlia protocol and join the IPFS DHT.
-    #[clap(long)]
+    #[arg(long)]
     enable_kademlia: bool,
 
     /// Whether to run the libp2p Autonat protocol.
-    #[clap(long)]
+    #[arg(long)]
     enable_autonat: bool,
 }
 

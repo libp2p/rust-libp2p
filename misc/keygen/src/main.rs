@@ -16,13 +16,13 @@ use libp2p_identity::PeerId;
 use zeroize::Zeroizing;
 
 #[derive(Debug, Parser)]
-#[clap(name = "libp2p key material generator")]
+#[command(name = "libp2p key material generator")]
 struct Args {
     /// JSON formatted output
-    #[clap(long, global = true)]
+    #[arg(long, global = true)]
     json: bool,
 
-    #[clap(subcommand)]
+    #[command(subcommand)]
     cmd: Command,
 }
 
@@ -31,13 +31,13 @@ enum Command {
     /// Read from config file
     From {
         /// Provide a IPFS config file
-        #[clap(value_parser)]
+        #[arg(value_parser)]
         config: PathBuf,
     },
     /// Generate random
     Rand {
         /// The keypair prefix
-        #[clap(long)]
+        #[arg(long)]
         prefix: Option<String>,
     },
 }
