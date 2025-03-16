@@ -857,7 +857,7 @@ mod tests {
 
             // This address requires DNS resolution, yielding two IP addresses,
             // forcing two dial attempts. Both fail.
-            let addr: Multiaddr = "/dns/youtube-ui.l.google.com/tcp/1234".parse().unwrap();
+            let addr: Multiaddr = "/dnsaddr/bootstrap.libp2p.io".parse().unwrap();
             let dial_future = transport.dial(addr, dial_opts).unwrap();
             let result = dial_future.await;
 
