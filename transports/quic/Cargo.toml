@@ -24,13 +24,16 @@ tokio = { workspace = true, default-features = false, features = ["net", "rt", "
 tracing = { workspace = true }
 socket2 = "0.5.7"
 ring = { workspace = true }
+
 libp2p-noise = { workspace = true }
 sha2 = "0.10.8"
 time = "0.3"
-http = "1.1.0"
-h3 = { git = "https://github.com/hyperium/h3" }
-h3-quinn = { git = "https://github.com/hyperium/h3" }
-h3-webtransport = { git = "https://github.com/hyperium/h3" }
+http = "1.3.1"
+bytes = "1.10.1"
+h3 = "0.0.7"
+h3-quinn = {  version = "0.0.8", features = ["datagram"] }
+h3-datagram = "0.0.1"
+h3-webtransport = "0.1.1"
 
 [features]
 tokio = ["dep:tokio", "if-watch/tokio", "quinn/runtime-tokio"]

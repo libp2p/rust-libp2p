@@ -33,8 +33,8 @@ use std::sync::Arc;
 
 use certificate::AlwaysResolvesCert;
 pub use futures_rustls::TlsStream;
-use rustls::pki_types::{CertificateDer, PrivateKeyDer};
 use libp2p_identity::{Keypair, PeerId};
+use rustls::pki_types::{CertificateDer, PrivateKeyDer};
 pub use upgrade::{Config, UpgradeError};
 
 const P2P_ALPN: [u8; 6] = *b"libp2p";

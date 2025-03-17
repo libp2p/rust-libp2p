@@ -1,14 +1,13 @@
-use std::fmt::{Debug, Display, Formatter};
-use std::io;
-use std::io::ErrorKind;
+use std::{
+    fmt::{Debug, Display, Formatter},
+    io,
+    io::ErrorKind,
+};
 
+pub(crate) use certificates::{alpn_protocols, Certificate};
+pub(crate) use connection::{accept_webtransport_stream, Connection};
 use h3::ext::Protocol;
 use http::Method;
-
-pub(crate) use certificates::alpn_protocols;
-pub(crate) use certificates::Certificate;
-pub(crate) use connection::accept_webtransport_stream;
-pub(crate) use connection::Connection;
 
 use crate::Error;
 

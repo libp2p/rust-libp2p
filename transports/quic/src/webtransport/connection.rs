@@ -1,19 +1,20 @@
-use std::fmt::{Display, Formatter};
-use std::io;
-use std::io::ErrorKind;
-use std::pin::Pin;
-use std::sync::Arc;
-use std::task::{Context, Poll};
+use std::{
+    fmt::{Display, Formatter},
+    io,
+    io::ErrorKind,
+    pin::Pin,
+    sync::Arc,
+    task::{Context, Poll},
+};
 
 use bytes::Bytes;
-use futures::future::BoxFuture;
-use futures::{AsyncRead, AsyncWrite, FutureExt};
+use futures::{future::BoxFuture, AsyncRead, AsyncWrite, FutureExt};
 use h3::quic;
-use h3_webtransport::server::{AcceptedBi, WebTransportSession};
-use h3_webtransport::stream::{RecvStream, SendStream};
-
-use libp2p_core::muxing::StreamMuxerEvent;
-use libp2p_core::StreamMuxer;
+use h3_webtransport::{
+    server::{AcceptedBi, WebTransportSession},
+    stream::{RecvStream, SendStream},
+};
+use libp2p_core::{muxing::StreamMuxerEvent, StreamMuxer};
 
 use crate::{ConnectionError, Error};
 

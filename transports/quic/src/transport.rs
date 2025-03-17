@@ -40,11 +40,10 @@ use futures::{
     stream::{SelectAll, StreamExt},
 };
 use if_watch::IfEvent;
-
-use libp2p_core::multihash::Multihash;
-use libp2p_core::muxing::StreamMuxerBox;
 use libp2p_core::{
     multiaddr::{Multiaddr, Protocol},
+    multihash::Multihash,
+    muxing::StreamMuxerBox,
     transport::{DialOpts, ListenerId, PortUse, TransportError, TransportEvent},
     Endpoint, Transport,
 };
@@ -55,7 +54,7 @@ use crate::{
     config::{Config, QuinnConfig},
     hole_punching::hole_puncher,
     provider::Provider,
-    ConnectError, Connecting, Connection, Error,
+    ConnectError, Connecting, Error,
 };
 /// Implementation of the [`Transport`] trait for QUIC.
 ///
@@ -762,8 +761,8 @@ impl ConnectingMode {
     }
 }
 
-impl Debug for ConnectingMode {
-    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+impl fmt::Debug for ConnectingMode {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             ConnectingMode::QUIC => write!(f, "ConnectingMode::QUIC"),
             ConnectingMode::WebTransport(certs, _) => {
@@ -881,10 +880,10 @@ fn socketaddr_to_multiaddr(socket_addr: &SocketAddr, version: ProtocolVersion) -
 #[cfg(any(feature = "async-std", feature = "tokio"))]
 mod tests {
     use futures::future::poll_fn;
+    use time::OffsetDateTime;
 
     use super::*;
     use crate::webtransport;
-    use time::OffsetDateTime;
 
     #[test]
     fn multiaddr_to_udp_conversion() {
@@ -977,7 +976,7 @@ mod tests {
                 true
             ),
             Some((
-                SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 1234,),
+                SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 1234),
                 ProtocolVersion::Draft29,
                 None,
                 false

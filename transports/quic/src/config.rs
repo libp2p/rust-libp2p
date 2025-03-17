@@ -20,15 +20,13 @@
 
 use std::{sync::Arc, time::Duration};
 
+use libp2p_core::multihash::Multihash;
 use quinn::{
     crypto::rustls::{QuicClientConfig, QuicServerConfig},
     MtuDiscoveryConfig, VarInt,
 };
 
-use libp2p_core::multihash::Multihash;
-
-use crate::webtransport;
-use crate::webtransport::Certificate;
+use crate::{webtransport, webtransport::Certificate};
 
 /// Config for the transport.
 #[derive(Clone)]

@@ -20,36 +20,32 @@
 
 //! Future that drives a QUIC connection until is has performed its TLS handshake.
 
-use std::collections::HashSet;
-use std::sync::Arc;
 use std::{
+    collections::HashSet,
     pin::Pin,
+    sync::Arc,
     task::{Context, Poll},
     time::Duration,
 };
 
-use futures::future::BoxFuture;
 use futures::{
-    future::{select, Either, FutureExt, Select},
+    future::{select, BoxFuture, Either, FutureExt, Select},
     prelude::*,
 };
 use futures_timer::Delay;
-use h3::error::ErrorLevel;
-use h3::ext::Protocol;
+use h3::{error::ErrorLevel, ext::Protocol};
 use h3_webtransport::server::WebTransportSession;
 use http::Method;
+use libp2p_core::{
+    multihash::Multihash, muxing::StreamMuxerBox, upgrade::InboundConnectionUpgrade,
+};
+use libp2p_identity::PeerId;
 use quinn::rustls::pki_types::CertificateDer;
 
-use libp2p_core::multihash::Multihash;
-use libp2p_core::muxing::StreamMuxerBox;
-use libp2p_core::upgrade::InboundConnectionUpgrade;
-use libp2p_identity::PeerId;
-
-use crate::transport::ConnectingMode;
-use crate::webtransport::WebtransportConnectingError;
-use crate::{webtransport, Connection, ConnectionError, Error};
-
-use crate::{Connection, ConnectionError, Error};
+use crate::{
+    transport::ConnectingMode, webtransport, webtransport::WebtransportConnectingError, Connection,
+    ConnectionError, Error,
+};
 
 /// A QUIC connection currently being negotiated.
 pub struct Connecting {
@@ -58,12 +54,12 @@ pub struct Connecting {
 
 impl Connecting {
     pub(crate) fn new(
-        connection: quinn::Connecting,
+        connecting: quinn::Connecting,
         mode: ConnectingMode,
         timeout: Duration,
     ) -> Self {
         Connecting {
-            connecting: select(handshake(connection, mode).boxed(), Delay::new(timeout)),
+            connecting: select(handshake(connecting, mode).boxed(), Delay::new(timeout)),
         }
     }
 }
@@ -99,13 +95,9 @@ async fn handshake(
                     return Ok((peer_id, StreamMuxerBox::new(muxer)));
                 }
                 ConnectingMode::WebTransport(certhashes, noise_config) => {
-                    let (peer_id, muxer) = webtransport_connecting(
-                        peer_id,
-                        connection.clone(),
-                        certhashes,
-                        noise_config,
-                    )
-                    .await?;
+                    let (peer_id, muxer) =
+                        webtransport_connecting(peer_id, connection, certhashes, noise_config)
+                            .await?;
                     Ok((peer_id, StreamMuxerBox::new(muxer)))
                 }
                 ConnectingMode::Mixed(certhashes, noise_config) => {
@@ -140,13 +132,14 @@ async fn webtransport_connecting(
     noise_config: libp2p_noise::Config,
 ) -> Result<(PeerId, StreamMuxerBox), WebtransportConnectingError> {
     loop {
+        let c_conn = connection.clone();
         let mut h3_conn = h3::server::builder()
             .enable_webtransport(true)
-            .enable_connect(true)
+            .enable_extended_connect(true)
             .enable_datagram(false)
             .max_webtransport_sessions(1)
             .send_grease(true)
-            .build(h3_quinn::Connection::new(connection.clone()))
+            .build(h3_quinn::Connection::new(c_conn))
             .await?;
 
         match h3_conn.accept().await {

@@ -1,8 +1,8 @@
 use std::time::Duration;
-use libp2p_core::muxing::StreamMuxerBox;
 
 use futures::{channel::oneshot, StreamExt};
 use libp2p_core::{
+    muxing::StreamMuxerBox,
     transport::{DialOpts, ListenerId, PortUse},
     Endpoint, Transport,
 };
