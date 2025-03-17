@@ -201,15 +201,14 @@ impl PublicKey {
     /// Verify the Secp256k1 DER-encoded signature on a raw 256-bit message using the public key.  
     /// Will panic if the hash is not 32 bytes long.
     pub fn verify_hash(&self, msg: &[u8], sig: &[u8]) -> bool {
-        Signature::from_der(sig)
-            .is_ok_and(|s| {
-                k256::ecdsa::hazmat::verify_prehashed(
-                    &ProjectivePoint::from(self.0.as_affine()),
-                    GenericArray::from_slice(msg),
-                    &s,
-                )
-                .is_ok()
-            })
+        Signature::from_der(sig).is_ok_and(|s| {
+            k256::ecdsa::hazmat::verify_prehashed(
+                &ProjectivePoint::from(self.0.as_affine()),
+                GenericArray::from_slice(msg),
+                &s,
+            )
+            .is_ok()
+        })
     }
 
     /// Convert the public key to a byte buffer in compressed form, i.e. with one coordinate
