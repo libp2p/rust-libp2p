@@ -2,7 +2,7 @@
 name = "libp2p-quic"
 version = "0.12.1"
 authors = ["Parity Technologies <admin@parity.io>"]
-edition = "2021"
+edition.workspace = true
 rust-version = { workspace = true }
 description = "TLS based QUIC transport implementation for libp2p"
 repository = "https://github.com/libp2p/rust-libp2p"

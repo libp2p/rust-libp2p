@@ -632,7 +632,7 @@ where
             .peekable();
 
         if peers_on_topic.peek().is_none() {
-            return Err(PublishError::InsufficientPeers);
+            return Err(PublishError::NoPeersSubscribedToTopic);
         }
 
         let mut recipient_peers = HashSet::new();
@@ -717,6 +717,7 @@ where
             // Floodsub peers
             for (peer, connections) in &self.connected_peers {
                 if connections.kind == PeerKind::Floodsub
+                    && connections.topics.contains(&topic_hash)
                     && !self
                         .score_below_threshold(peer, |ts| ts.publish_threshold)
                         .0
@@ -730,6 +731,9 @@ where
         // duplicate cache and memcache.
         self.duplicate_cache.insert(msg_id.clone());
         self.mcache.put(&msg_id, raw_message.clone());
+
+        // Consider the message as delivered for gossip promises.
+        self.gossip_promises.message_delivered(&msg_id);
 
         // If the message is anonymous or has a random author add it to the published message ids
         // cache.
@@ -755,7 +759,7 @@ where
         }
 
         if recipient_peers.is_empty() {
-            return Err(PublishError::InsufficientPeers);
+            return Err(PublishError::NoPeersSubscribedToTopic);
         }
 
         if publish_failed {
@@ -1344,6 +1348,13 @@ where
                         "IWANT: Peer has asked for message too many times; ignoring request"
                     );
                 } else {
+                    if let Some(peer) = self.connected_peers.get_mut(peer_id) {
+                        if peer.dont_send.contains_key(&id) {
+                            tracing::debug!(%peer_id, message=%id, "Peer already sent IDONTWANT for this message");
+                            continue;
+                        }
+                    }
+
                     tracing::debug!(peer=%peer_id, "IWANT: Sending cached messages to peer");
                     self.send_message(
                         *peer_id,
@@ -2666,15 +2677,17 @@ where
 
         // Populate the recipient peers mapping
 
-        // Add explicit peers
-        for peer_id in &self.explicit_peers {
-            let Some(peer) = self.connected_peers.get(peer_id) else {
-                continue;
-            };
+        // Add explicit peers and floodsub peers
+        for (peer_id, peer) in &self.connected_peers {
             if Some(peer_id) != propagation_source
                 && !originating_peers.contains(peer_id)
                 && Some(peer_id) != message.source.as_ref()
                 && peer.topics.contains(&message.topic)
+                && (self.explicit_peers.contains(peer_id)
+                    || (peer.kind == PeerKind::Floodsub
+                        && !self
+                            .score_below_threshold(peer_id, |ts| ts.publish_threshold)
+                            .0))
             {
                 recipient_peers.insert(*peer_id);
             }
