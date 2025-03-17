@@ -23,7 +23,8 @@
 use core::{cmp, fmt, hash};
 
 use asn1_der::typed::{DerDecodable, Sequence};
-use k256::ecdsa::Signature;
+use generic_array::GenericArray;
+use k256::{ecdsa::Signature, ProjectivePoint};
 use sha2::{Digest as ShaDigestTrait, Sha256};
 use zeroize::Zeroize;
 
@@ -65,7 +66,7 @@ impl fmt::Debug for Keypair {
 /// Promote a Secp256k1 secret key into a keypair.
 impl From<SecretKey> for Keypair {
     fn from(secret: SecretKey) -> Keypair {
-        let public = PublicKey(secret.0.verifying_key().clone());
+        let public = PublicKey(*secret.0.verifying_key());
         Keypair { secret, public }
     }
 }
@@ -101,7 +102,7 @@ impl SecretKey {
     /// Note that the expected binary format is the same as `libsecp256k1`'s.
     pub fn try_from_bytes(mut sk: impl AsMut<[u8]>) -> Result<SecretKey, DecodingError> {
         let sk_bytes = sk.as_mut();
-        let secret = k256::ecdsa::SigningKey::from_slice(&sk_bytes)
+        let secret = k256::ecdsa::SigningKey::from_slice(sk_bytes)
             .map_err(|e| DecodingError::failed_to_parse("parse secp256k1 secret key", e))?;
         sk_bytes.zeroize();
         Ok(SecretKey(secret))
@@ -193,17 +194,22 @@ impl cmp::Ord for PublicKey {
 impl PublicKey {
     /// Verify the Secp256k1 signature on a message using the public key.
     pub fn verify(&self, msg: &[u8], sig: &[u8]) -> bool {
-        self.verify_hash(Sha256::digest(msg).as_ref(), sig)
+        let digest = Sha256::new_with_prefix(msg);
+        self.verify_hash(digest.finalize().as_slice(), sig)
     }
 
-    /// Verify the Secp256k1 DER-encoded signature on a raw 256-bit message using the public key.
+    /// Verify the Secp256k1 DER-encoded signature on a raw 256-bit message using the public key.  
+    /// Will panic if the hash is not 32 bytes long.
     pub fn verify_hash(&self, msg: &[u8], sig: &[u8]) -> bool {
-        // Cannot verify raw hash because `verify_digest` needs a fixed-size input
-        use k256::ecdsa::hazmat::VerifyPrimitive;
-        let digest = Sha256::new_with_prefix(msg);
         Signature::from_der(sig)
-            .map(|s| self.0.as_affine().verify_digest(digest, &s).is_ok())
-            .unwrap_or(false)
+            .is_ok_and(|s| {
+                k256::ecdsa::hazmat::verify_prehashed(
+                    &ProjectivePoint::from(self.0.as_affine()),
+                    GenericArray::from_slice(msg),
+                    &s,
+                )
+                .is_ok()
+            })
     }
 
     /// Convert the public key to a byte buffer in compressed form, i.e. with one coordinate
@@ -247,21 +253,5 @@ mod tests {
         let sk2 = SecretKey::try_from_bytes(&mut sk_bytes).unwrap();
         assert_eq!(sk1.to_bytes(), sk2.to_bytes());
         assert_eq!(sk_bytes, [0; 32]);
-    }
-
-    #[test]
-    fn compatibility() {
-        // Showcases compatibility between the two library.
-        // Will not be included when merging.
-        let libsecp256k1_key = libsecp256k1::SecretKey::random(&mut rand::thread_rng());
-        let k256_key = SecretKey::try_from_bytes(libsecp256k1_key.serialize()).expect("keys to be interchangable on both lib");
-        assert_eq!(libsecp256k1_key.serialize(), k256_key.to_bytes());
-        
-        let k256_pubkey = Keypair::from(k256_key.clone()).public().clone();
-        let libsecp256k1_pubkey = libsecp256k1::PublicKey::from_secret_key(&libsecp256k1_key);
-        PublicKey::try_from_bytes(&libsecp256k1_pubkey.serialize()).expect("parsing to succeed");
-        PublicKey::try_from_bytes(&libsecp256k1_pubkey.serialize_compressed()).expect("parsing to succeed");
-        assert_eq!(libsecp256k1_pubkey.serialize_compressed(), k256_pubkey.to_bytes());
-        assert_eq!(libsecp256k1_pubkey.serialize(), k256_pubkey.to_bytes_uncompressed());
     }
 }

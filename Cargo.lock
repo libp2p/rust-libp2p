@@ -2961,6 +2961,7 @@ dependencies = [
  "bs58",
  "criterion",
  "ed25519-dalek",
+ "generic-array",
  "hex-literal",
  "hkdf",
  "k256",
