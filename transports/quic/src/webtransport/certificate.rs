@@ -12,16 +12,7 @@ use time::{Duration, OffsetDateTime};
 const MULTIHASH_SHA256_CODE: u64 = 0x12;
 const CERT_VALID_PERIOD: Duration = Duration::days(14);
 
-pub(crate) fn alpn_protocols() -> Vec<Vec<u8>> {
-    vec![
-        b"libp2p".to_vec(),
-        b"h3".to_vec(),
-        b"h3-32".to_vec(),
-        b"h3-31".to_vec(),
-        b"h3-30".to_vec(),
-        b"h3-29".to_vec(),
-    ]
-}
+pub type CertHash = Multihash<64>;
 
 // I would like to avoid interacting with the file system as much as possible.
 // My suggestion would be:
@@ -33,10 +24,10 @@ pub(crate) fn alpn_protocols() -> Vec<Vec<u8>> {
 //   certificates
 #[derive(Debug, PartialEq, Eq)]
 pub struct Certificate {
-    pub cert: CertificateDer<'static>,
-    pub private_key: PrivateKeyDer<'static>,
-    pub not_before: OffsetDateTime,
-    pub not_after: OffsetDateTime,
+    der: CertificateDer<'static>,
+    private_key_der: PrivateKeyDer<'static>,
+    not_before: OffsetDateTime,
+    not_after: OffsetDateTime,
 }
 
 #[derive(Debug)]
@@ -60,10 +51,10 @@ impl From<io::Error> for Error {
 impl Clone for Certificate {
     fn clone(&self) -> Self {
         Self {
-            cert: self.cert.clone(),
-            private_key: self.private_key.clone_key(),
-            not_before: self.not_before.clone(),
-            not_after: self.not_after.clone(),
+            der: self.der.clone(),
+            private_key_der: self.private_key_der.clone_key(),
+            not_before: self.not_before,
+            not_after: self.not_after,
         }
     }
 }
@@ -74,27 +65,31 @@ impl Certificate {
         not_before: OffsetDateTime,
     ) -> Result<Self, Error> {
         let not_after = not_before
-            .clone()
             .checked_add(CERT_VALID_PERIOD)
             .expect("Addition does not overflow");
-        let (cert, private_key) = certificate::generate_with_validity_period(
-            identity_keypair,
-            not_before.clone(),
-            not_after.clone(),
-        )?;
+        let (cert, private_key) =
+            certificate::generate_with_validity_period(identity_keypair, not_before, not_after)?;
 
         Ok(Self {
-            cert,
-            private_key,
+            der: cert,
+            private_key_der: private_key,
             not_before,
             not_after,
         })
     }
 
-    pub(crate) fn cert_hash(&self) -> Multihash<64> {
+    pub fn get_certificate_der(&self) -> CertificateDer<'static> {
+        self.der.clone()
+    }
+
+    pub fn get_private_key_der(&self) -> &PrivateKeyDer {
+        &self.private_key_der
+    }
+
+    pub fn cert_hash(&self) -> CertHash {
         Multihash::wrap(
             MULTIHASH_SHA256_CODE,
-            sha2::Sha256::digest(&self.cert.as_ref().as_ref()).as_ref(),
+            sha2::Sha256::digest(self.der.as_ref()).as_ref(),
         )
         .expect("fingerprint's len to be 32 bytes")
     }
@@ -102,8 +97,8 @@ impl Certificate {
     pub fn to_bytes(&self) -> Vec<u8> {
         let mut bytes = Vec::new();
 
-        Self::write_data(&mut bytes, self.cert.as_ref()).expect("Write cert data");
-        Self::write_data(&mut bytes, self.private_key.secret_der())
+        Self::write_data(&mut bytes, self.der.as_ref()).expect("Write cert data");
+        Self::write_data(&mut bytes, self.private_key_der.secret_der())
             .expect("Write private_key data");
 
         let nb_buff = self.not_before.unix_timestamp().to_be_bytes();
@@ -128,8 +123,8 @@ impl Certificate {
         let not_after = OffsetDateTime::from_unix_timestamp(na).unwrap();
 
         Ok(Self {
-            cert,
-            private_key,
+            der: cert,
+            private_key_der: private_key,
             not_before,
             not_after,
         })
@@ -137,9 +132,9 @@ impl Certificate {
 
     fn write_data<W: Write>(w: &mut W, data: &[u8]) -> Result<(), io::Error> {
         let size = data.len() as u64;
-        let mut size_buf = size.to_be_bytes();
+        let size_buf = size.to_be_bytes();
 
-        w.write_all(&mut size_buf)?;
+        w.write_all(&size_buf)?;
         w.write_all(data)?;
 
         Ok(())
@@ -149,14 +144,14 @@ impl Certificate {
         let size = Self::read_i64(r)? as usize;
         let mut res = vec![0u8; size];
 
-        r.read(res.as_mut_slice())?;
+        r.read_exact(res.as_mut_slice())?;
 
         Ok(res)
     }
 
     fn read_i64<R: Read>(r: &mut R) -> Result<i64, io::Error> {
         let mut buffer = [0u8; 8];
-        r.read(&mut buffer)?;
+        r.read_exact(&mut buffer)?;
 
         Ok(i64::from_be_bytes(buffer))
     }

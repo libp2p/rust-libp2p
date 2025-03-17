@@ -27,6 +27,7 @@ use std::sync::Arc;
 use ::time::OffsetDateTime;
 use libp2p_identity as identity;
 use libp2p_identity::PeerId;
+use rustls::pki_types::{CertificateDer, PrivateKeyDer};
 use x509_parser::{prelude::*, signature_algorithm::SignatureAlgorithm};
 
 /// The libp2p Public Key Extension is a X.509 extension
@@ -50,8 +51,8 @@ pub(crate) struct AlwaysResolvesCert(Arc<rustls::sign::CertifiedKey>);
 
 impl AlwaysResolvesCert {
     pub(crate) fn new(
-        cert: rustls::pki_types::CertificateDer<'static>,
-        key: &rustls::pki_types::PrivateKeyDer<'_>,
+        cert: CertificateDer<'static>,
+        key: &PrivateKeyDer<'_>,
     ) -> Result<Self, rustls::Error> {
         let certified_key = rustls::sign::CertifiedKey::new(
             vec![cert],
@@ -88,13 +89,7 @@ impl rustls::server::ResolvesServerCert for AlwaysResolvesCert {
 /// certificate extension containing the public key of the given keypair.
 pub fn generate(
     identity_keypair: &identity::Keypair,
-) -> Result<
-    (
-        rustls::pki_types::CertificateDer<'static>,
-        rustls::pki_types::PrivateKeyDer<'static>,
-    ),
-    GenError,
-> {
+) -> Result<(CertificateDer<'static>, PrivateKeyDer<'static>), GenError> {
     // Keypair used to sign the certificate.
     // SHOULD NOT be related to the host's key.
     // Endpoints MAY generate a new key and certificate
@@ -122,50 +117,46 @@ pub fn generate_with_validity_period(
     identity_keypair: &identity::Keypair,
     not_before: OffsetDateTime,
     not_after: OffsetDateTime,
-) -> Result<
-    (
-        rustls::pki_types::CertificateDer<'static>,
-        rustls::pki_types::PrivateKeyDer<'static>,
-    ),
-    GenError,
-> {
+) -> Result<(CertificateDer<'static>, PrivateKeyDer<'static>), GenError> {
     // Keypair used to sign the certificate.
     // SHOULD NOT be related to the host's key.
     // Endpoints MAY generate a new key and certificate
     // for every connection attempt, or they MAY reuse the same key
     // and certificate for multiple connections.
-    let certificate_keypair = rcgen::KeyPair::generate(P2P_SIGNATURE_ALGORITHM)?;
+    let certificate_keypair = rcgen::KeyPair::generate_for(P2P_SIGNATURE_ALGORITHM)?;
     let rustls_key = rustls::pki_types::PrivateKeyDer::from(
         rustls::pki_types::PrivatePkcs8KeyDer::from(certificate_keypair.serialize_der()),
     );
 
     let certificate = {
-        let mut params = rcgen::CertificateParams::new(vec![]);
+        let mut params = rcgen::CertificateParams::new(vec![])?;
         params.distinguished_name = rcgen::DistinguishedName::new();
         params.custom_extensions.push(make_libp2p_extension(
             identity_keypair,
             &certificate_keypair,
         )?);
-        params.alg = P2P_SIGNATURE_ALGORITHM;
-        params.key_pair = Some(certificate_keypair);
         params.not_before = not_before;
         params.not_after = not_after;
-        rcgen::Certificate::from_params(params)?
+        params.self_signed(&certificate_keypair)?
     };
 
-    let rustls_certificate = rustls::pki_types::CertificateDer::from(certificate.serialize_der()?);
-
-    Ok((rustls_certificate, rustls_key))
+    Ok((certificate.into(), rustls_key))
 }
 
 /// Attempts to parse the provided bytes as a [`P2pCertificate`].
 ///
 /// For this to succeed, the certificate must contain the specified extension and the signature must
 /// match the embedded public key.
-pub fn parse<'a>(
-    certificate: &'a rustls::pki_types::CertificateDer<'a>,
-) -> Result<P2pCertificate<'a>, ParseError> {
-    let certificate = parse_unverified(certificate.as_ref())?;
+pub fn parse<'a>(certificate: &'a CertificateDer<'a>) -> Result<P2pCertificate<'a>, ParseError> {
+    parse_binary(certificate.as_ref())
+}
+
+/// Attempts to parse the provided bytes as a [`P2pCertificate`].
+///
+/// For this to succeed, the certificate must contain the specified extension and the signature must
+/// match the embedded public key.
+pub fn parse_binary(der_input: &[u8]) -> Result<P2pCertificate, ParseError> {
+    let certificate = parse_unverified(der_input)?;
 
     certificate.verify()?;
 

@@ -37,7 +37,7 @@ use libp2p_identity::{Keypair, PeerId};
 use rustls::pki_types::{CertificateDer, PrivateKeyDer};
 pub use upgrade::{Config, UpgradeError};
 
-const P2P_ALPN: [u8; 6] = *b"libp2p";
+pub const P2P_ALPN: [u8; 6] = *b"libp2p";
 
 /// Create a TLS client configuration for libp2p.
 pub fn make_client_config(
@@ -93,24 +93,35 @@ pub fn make_server_config(
 
 /// Create a TLS server configuration for libp2p.
 pub fn make_webtransport_server_config(
-    certificate: &CertificateDer<'static>,
+    certificate: CertificateDer<'static>,
     private_key: &PrivateKeyDer,
     protocols: Vec<Vec<u8>>,
-) -> Result<rustls::ServerConfig, certificate::GenError> {
-    let mut provider = rustls::crypto::ring::default_provider();
-    provider.cipher_suites = verifier::CIPHERSUITES.to_vec();
-
+) -> rustls::ServerConfig {
     let cert_resolver = Arc::new(
-        AlwaysResolvesCert::new(certificate.clone(), private_key)
+        AlwaysResolvesCert::new(certificate, private_key)
             .expect("Server cert key DER is valid; qed"),
     );
-
-    let mut crypto = rustls::ServerConfig::builder_with_provider(provider.into())
-        .with_protocol_versions(verifier::PROTOCOL_VERSIONS)
-        .expect("Cipher suites and kx groups are configured; qed")
-        .with_client_cert_verifier(Arc::new(verifier::Libp2pCertificateVerifier::new()))
+    let mut crypto = rustls::ServerConfig::builder()
+        .with_no_client_auth()
         .with_cert_resolver(cert_resolver);
-    crypto.alpn_protocols = protocols.to_vec();
 
-    Ok(crypto)
+    crypto.alpn_protocols = protocols;
+
+    crypto
+}
+
+pub fn make_webtransport_client_config(
+    remote_peer_id: Option<PeerId>,
+    protocols: Vec<Vec<u8>>,
+) -> rustls::ClientConfig {
+    let mut config = rustls::ClientConfig::builder()
+        .dangerous()
+        .with_custom_certificate_verifier(Arc::new(
+            verifier::Libp2pCertificateVerifier::with_remote_peer_id(remote_peer_id),
+        ))
+        .with_no_client_auth();
+
+    config.alpn_protocols = protocols;
+
+    config
 }

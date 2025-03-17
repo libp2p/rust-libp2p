@@ -4,14 +4,14 @@ use std::{
     io::ErrorKind,
 };
 
-pub(crate) use certificates::{alpn_protocols, Certificate};
+pub(crate) use certificate::Certificate;
 pub(crate) use connection::{accept_webtransport_stream, Connection};
 use h3::ext::Protocol;
 use http::Method;
 
 use crate::Error;
 
-mod certificates;
+mod certificate;
 mod connection;
 
 pub(crate) const WEBTRANSPORT_PATH: &str = "/.well-known/libp2p-webtransport";

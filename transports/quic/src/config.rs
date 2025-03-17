@@ -89,11 +89,10 @@ impl Config {
         let server_config = match &webtransport_cert {
             None => libp2p_tls::make_server_config(keypair).unwrap(),
             Some(c) => libp2p_tls::make_webtransport_server_config(
-                &c.cert,
-                &c.private_key,
-                webtransport::alpn_protocols(),
-            )
-            .unwrap(),
+                c.get_certificate_der(),
+                c.get_private_key_der(),
+                alpn_protocols(),
+            ),
         };
         let server_tls_config = Arc::new(QuicServerConfig::try_from(server_config).unwrap());
 
@@ -133,6 +132,10 @@ impl Config {
         self.mtu_discovery_config = None;
         self
     }
+}
+
+fn alpn_protocols() -> Vec<Vec<u8>> {
+    vec![libp2p_tls::P2P_ALPN.to_vec(), b"h3".to_vec()]
 }
 
 /// Represents the inner configuration for [`quinn`].
