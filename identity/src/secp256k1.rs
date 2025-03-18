@@ -24,8 +24,11 @@ use core::{cmp, fmt, hash};
 
 use asn1_der::typed::{DerDecodable, Sequence};
 use generic_array::GenericArray;
-use k256::{ecdsa::Signature, ProjectivePoint};
-use sha2::{Digest as ShaDigestTrait, Sha256};
+use k256::{
+    ecdsa::Signature,
+    sha2::{Digest as ShaDigestTrait, Sha256},
+    ProjectivePoint,
+};
 use zeroize::Zeroize;
 
 use super::error::DecodingError;

@@ -33,7 +33,7 @@ generic-array = {version = "0.14.7", optional = true}
 ring = { workspace = true, features = ["alloc", "std"], optional = true }
 
 [features]
-secp256k1 = ["dep:k256", "dep:sec1", "dep:asn1_der", "dep:sha2", "dep:hkdf", "dep:zeroize", "dep:generic-array"]
+secp256k1 = ["dep:k256", "dep:asn1_der", "dep:hkdf", "dep:zeroize", "dep:generic-array"]
 ecdsa = ["dep:p256", "dep:zeroize", "dep:sec1", "dep:sha2", "dep:hkdf"]
 rsa = ["dep:ring", "dep:asn1_der", "dep:rand", "dep:zeroize"]
 ed25519 = ["dep:ed25519-dalek", "dep:zeroize", "dep:sha2", "dep:hkdf"]
