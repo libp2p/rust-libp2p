@@ -143,16 +143,12 @@ impl SecretKey {
             .0
             .to_der()
             .to_bytes()
-            .to_vec()
+            .into_vec()
     }
 
     /// Returns the raw bytes of the secret key.
     pub fn to_bytes(&self) -> [u8; 32] {
-        let encoded_point = self.0.to_bytes().to_vec();
-        debug_assert!(encoded_point.len() == 32);
-        let mut array: [u8; 32] = [0u8; 32];
-        array.copy_from_slice(&encoded_point);
-        array
+        self.0.to_bytes().into()
     }
 }
 
