@@ -211,8 +211,6 @@ impl Handler {
                     "ping protocol negotiation timed out",
                 )),
             },
-            // TODO: remove when Rust 1.82 is MSRV
-            #[allow(unreachable_patterns)]
             StreamUpgradeError::Apply(e) => libp2p_core::util::unreachable(e),
             StreamUpgradeError::Io(e) => Failure::Other { error: Box::new(e) },
         };

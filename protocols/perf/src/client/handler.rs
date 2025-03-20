@@ -109,8 +109,6 @@ impl ConnectionHandler for Handler {
         event: ConnectionEvent<Self::InboundProtocol, Self::OutboundProtocol>,
     ) {
         match event {
-            // TODO: remove when Rust 1.82 is MSRV
-            #[allow(unreachable_patterns)]
             ConnectionEvent::FullyNegotiatedInbound(FullyNegotiatedInbound {
                 protocol, ..
             }) => libp2p_core::util::unreachable(protocol),
@@ -143,8 +141,6 @@ impl ConnectionHandler for Handler {
                         result: Err(error.into()),
                     }));
             }
-            // TODO: remove when Rust 1.82 is MSRV
-            #[allow(unreachable_patterns)]
             ConnectionEvent::ListenUpgradeError(ListenUpgradeError { info: (), error }) => {
                 libp2p_core::util::unreachable(error)
             }
