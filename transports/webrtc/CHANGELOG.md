@@ -1,3 +1,8 @@
+## 0.10-alpha
+
+- Bump `webrtc` dependency to `0.12.0`.
+  See [PR 5448](https://github.com/libp2p/rust-libp2p/pull/5448).
+
 ## 0.9.0-alpha
 
 <!-- Update to libp2p-core v0.43.0 -->
