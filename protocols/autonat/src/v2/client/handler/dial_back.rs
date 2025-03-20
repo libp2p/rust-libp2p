@@ -76,8 +76,6 @@ impl ConnectionHandler for Handler {
                     tracing::warn!("Dial back request dropped, too many requests in flight");
                 }
             }
-            // TODO: remove when Rust 1.82 is MSRV
-            #[allow(unreachable_patterns)]
             ConnectionEvent::ListenUpgradeError(ListenUpgradeError { error, .. }) => {
                 libp2p_core::util::unreachable(error);
             }

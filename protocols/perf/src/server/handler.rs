@@ -75,8 +75,6 @@ impl ConnectionHandler for Handler {
     }
 
     fn on_behaviour_event(&mut self, v: Self::FromBehaviour) {
-        // TODO: remove when Rust 1.82 is MSRV
-        #[allow(unreachable_patterns)]
         libp2p_core::util::unreachable(v)
     }
 
@@ -97,22 +95,16 @@ impl ConnectionHandler for Handler {
                     tracing::warn!("Dropping inbound stream because we are at capacity");
                 }
             }
-            // TODO: remove when Rust 1.82 is MSRV
-            #[allow(unreachable_patterns)]
             ConnectionEvent::FullyNegotiatedOutbound(FullyNegotiatedOutbound { info, .. }) => {
                 libp2p_core::util::unreachable(info)
             }
 
-            // TODO: remove when Rust 1.82 is MSRV
-            #[allow(unreachable_patterns)]
             ConnectionEvent::DialUpgradeError(DialUpgradeError { info, .. }) => {
                 libp2p_core::util::unreachable(info)
             }
             ConnectionEvent::AddressChange(_)
             | ConnectionEvent::LocalProtocolsChange(_)
             | ConnectionEvent::RemoteProtocolsChange(_) => {}
-            // TODO: remove when Rust 1.82 is MSRV
-            #[allow(unreachable_patterns)]
             ConnectionEvent::ListenUpgradeError(ListenUpgradeError { info: (), error }) => {
                 libp2p_core::util::unreachable(error)
             }
