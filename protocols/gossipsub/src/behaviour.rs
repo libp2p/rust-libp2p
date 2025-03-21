@@ -2742,7 +2742,7 @@ where
     ) -> Result<RawMessage, PublishError> {
         match &mut self.publish_config {
             PublishConfig::Signing {
-                ref keypair,
+                keypair,
                 author,
                 inline_key,
                 last_seq_no,

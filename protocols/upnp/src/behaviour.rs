@@ -298,7 +298,7 @@ impl NetworkBehaviour for Behaviour {
                             MappingState::Inactive,
                         );
                     }
-                    GatewayState::Available(ref mut gateway) => {
+                    GatewayState::Available(gateway) => {
                         let mapping = Mapping {
                             listener_id,
                             protocol,
@@ -340,7 +340,7 @@ impl NetworkBehaviour for Behaviour {
                 listener_id,
                 addr: _addr,
             }) => {
-                if let GatewayState::Available(ref mut gateway) = &mut self.state {
+                if let GatewayState::Available(gateway) = &mut self.state {
                     if let Some((mapping, _state)) = self.mappings.remove_entry(&listener_id) {
                         if let Err(err) = gateway
                             .sender
