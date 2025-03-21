@@ -237,8 +237,6 @@ impl NetworkBehaviour for Behaviour {
     ) {
         let handler_event = match handler_event {
             Either::Left(e) => e,
-            // TODO: remove when Rust 1.82 is MSRV
-            #[allow(unreachable_patterns)]
             Either::Right(v) => libp2p_core::util::unreachable(v),
         };
 
