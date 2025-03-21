@@ -32,7 +32,7 @@ use rand::Rng;
 use serde::{Deserialize, Serialize};
 use tracing_subscriber::EnvFilter;
 
-#[async_std::test]
+#[tokio::test]
 #[cfg(feature = "cbor")]
 async fn is_response_outbound() {
     let _ = tracing_subscriber::fmt()
@@ -84,7 +84,7 @@ async fn is_response_outbound() {
 }
 
 /// Exercises a simple ping protocol.
-#[async_std::test]
+#[tokio::test]
 #[cfg(feature = "cbor")]
 async fn ping_protocol() {
     let ping = Ping("ping".to_string().into_bytes());
@@ -176,11 +176,11 @@ async fn ping_protocol() {
         }
     };
 
-    async_std::task::spawn(Box::pin(peer1));
+    tokio::spawn(Box::pin(peer1));
     peer2.await;
 }
 
-#[async_std::test]
+#[tokio::test]
 #[cfg(feature = "cbor")]
 async fn emits_inbound_connection_closed_failure() {
     let ping = Ping("ping".to_string().into_bytes());
@@ -246,7 +246,7 @@ async fn emits_inbound_connection_closed_failure() {
 /// early close as a protocol violation which results in the connection being closed.
 /// If the substream were not properly closed when dropped, the sender would instead
 /// run into a timeout waiting for the response.
-#[async_std::test]
+#[tokio::test]
 #[cfg(feature = "cbor")]
 async fn emits_inbound_connection_closed_if_channel_is_dropped() {
     let ping = Ping("ping".to_string().into_bytes());
