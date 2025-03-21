@@ -716,6 +716,10 @@ impl ConfigBuilder {
             .entry(topic_hash)
             .and_modify(|existing_config| {
                 existing_config.mesh_n = mesh_n;
+            })
+            .or_insert_with(|| TopicMeshConfig {
+                mesh_n,
+                ..TopicMeshConfig::default()
             });
         self
     }
@@ -743,6 +747,10 @@ impl ConfigBuilder {
             .entry(topic_hash)
             .and_modify(|existing_config| {
                 existing_config.mesh_n_high = mesh_n_high;
+            })
+            .or_insert_with(|| TopicMeshConfig {
+                mesh_n_high,
+                ..TopicMeshConfig::default()
             });
         self
     }
@@ -765,6 +773,10 @@ impl ConfigBuilder {
             .entry(topic_hash)
             .and_modify(|existing_config| {
                 existing_config.mesh_n_low = mesh_n_low;
+            })
+            .or_insert_with(|| TopicMeshConfig {
+                mesh_n_low,
+                ..TopicMeshConfig::default()
             });
         self
     }
@@ -972,6 +984,10 @@ impl ConfigBuilder {
             .entry(topic_hash)
             .and_modify(|existing_config| {
                 existing_config.mesh_outbound_min = mesh_outbound_min;
+            })
+            .or_insert_with(|| TopicMeshConfig {
+                mesh_outbound_min,
+                ..TopicMeshConfig::default()
             });
         self
     }

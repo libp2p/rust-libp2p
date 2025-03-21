@@ -18,7 +18,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use std::{collections::HashMap, convert::Infallible, pin::Pin};
+use std::{convert::Infallible, pin::Pin};
 
 use asynchronous_codec::{Decoder, Encoder, Framed};
 use byteorder::{BigEndian, ByteOrder};
@@ -30,10 +30,15 @@ use libp2p_swarm::StreamProtocol;
 use quick_protobuf::{MessageWrite, Writer};
 
 use crate::{
-    config::{TopicConfigs, ValidationMode}, handler::HandlerEvent, rpc_proto::proto, topic::TopicHash, types::{
+    config::{TopicConfigs, ValidationMode},
+    handler::HandlerEvent,
+    rpc_proto::proto,
+    topic::TopicHash,
+    types::{
         ControlAction, Graft, IDontWant, IHave, IWant, MessageId, PeerInfo, PeerKind, Prune,
         RawMessage, Rpc, Subscription, SubscriptionAction,
-    }, Config, ValidationError
+    },
+    Config, ValidationError,
 };
 
 pub(crate) const SIGNING_PREFIX: &[u8] = b"libp2p-pubsub:";
@@ -62,7 +67,7 @@ pub struct ProtocolConfig {
     /// The Gossipsub protocol id to listen on.
     pub(crate) protocol_ids: Vec<ProtocolId>,
     /// Determines the level of validation to be done on incoming messages.
-    pub(crate) validation_mode: ValidationMode
+    pub(crate) validation_mode: ValidationMode,
 }
 
 impl Default for ProtocolConfig {
@@ -117,7 +122,7 @@ where
                 GossipsubCodec::new(
                     Config::default_max_transmit_size(),
                     self.validation_mode,
-                    TopicConfigs::default()
+                    TopicConfigs::default(),
                 ),
             ),
             protocol_id.kind,
@@ -140,7 +145,7 @@ where
                 GossipsubCodec::new(
                     Config::default_max_transmit_size(),
                     self.validation_mode,
-                    TopicConfigs::default()
+                    TopicConfigs::default(),
                 ),
             ),
             protocol_id.kind,
@@ -156,20 +161,20 @@ pub struct GossipsubCodec {
     /// The codec to handle common encoding/decoding of protobuf messages
     codec: quick_protobuf_codec::Codec<proto::RPC>,
     /// Configurations for topics including max transmit size and mesh parameters
-    config: TopicConfigs
+    config: TopicConfigs,
 }
 
 impl GossipsubCodec {
     pub fn new(
         max_length: usize,
         validation_mode: ValidationMode,
-        config: TopicConfigs
+        config: TopicConfigs,
     ) -> GossipsubCodec {
         let codec = quick_protobuf_codec::Codec::new(max_length);
         GossipsubCodec {
             validation_mode,
             codec,
-            config
+            config,
         }
     }
 

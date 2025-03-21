@@ -603,7 +603,6 @@ where
 
         let mesh_n = self.config.mesh_n_for_topic(&topic);
         let raw_message = self.build_raw_message(topic, transformed_data)?;
-    
 
         // calculate the message id from the un-transformed data
         let msg_id = self.config.message_id(&Message {
@@ -971,7 +970,6 @@ where
 
         let mut added_peers = HashSet::new();
         let mesh_n = self.config.mesh_n_for_topic(topic_hash);
-
         if let Some(m) = self.metrics.as_mut() {
             m.joined(topic_hash)
         }
@@ -1029,6 +1027,7 @@ where
                         && !self.backoffs.is_backoff_with_slack(topic_hash, peer)
                 },
             );
+
             added_peers.extend(new_peers.clone());
             // add them to the mesh
             tracing::debug!(
@@ -2247,6 +2246,7 @@ where
                                 && *scores.get(peer).unwrap_or(&0.0) >= 0.0
                                 && outbound_peers.contains(peer)
                         });
+
                     for peer in &peer_list {
                         let current_topic = to_graft.entry(*peer).or_insert_with(Vec::new);
                         current_topic.push(topic_hash.clone());

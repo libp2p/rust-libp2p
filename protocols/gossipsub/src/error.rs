@@ -110,7 +110,7 @@ pub enum ValidationError {
     /// The data transformation failed.
     TransformFailed,
     /// Message size was too large for topic
-    MessageSizeTooLargeForTopic
+    MessageSizeTooLargeForTopic,
 }
 
 impl std::fmt::Display for ValidationError {
