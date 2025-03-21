@@ -136,7 +136,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         .with_dns()?
         .with_behaviour(|key| {
             let gossipsub_config = gossipsub::ConfigBuilder::default()
-                .max_transmit_size_for_topic(262144, gossipsub_topic.hash())
+                .max_transmit_size(262144)
                 .build()
                 .map_err(|msg| io::Error::new(io::ErrorKind::Other, msg))?; // Temporary hack because `build` does not return a proper `std::error::Error`.
             Ok(MyBehaviour {

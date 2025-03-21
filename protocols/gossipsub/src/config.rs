@@ -82,7 +82,7 @@ impl Default for TopicConfigs {
 }
 
 /// Defines the mesh network parameters for a given topic.
-#[derive(Clone, PartialEq, Eq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct TopicMeshConfig {
     pub mesh_n: usize,
     pub mesh_n_low: usize,
@@ -98,17 +98,6 @@ impl Default for TopicMeshConfig {
             mesh_n_high: 12,
             mesh_outbound_min: 2,
         }
-    }
-}
-
-impl std::fmt::Debug for TopicMeshConfig {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let mut builder = f.debug_struct("TopicMeshConfig");
-        let _ = builder.field("mesh_n", &self.mesh_n);
-        let _ = builder.field("mesh_n_low", &self.mesh_n_low);
-        let _ = builder.field("mesh_n_high", &self.mesh_n_high);
-        let _ = builder.field("mesh_outbound_min", &self.mesh_outbound_min);
-        builder.finish()
     }
 }
 
@@ -233,6 +222,18 @@ impl Config {
         self.topic_configuration.default_mesh_params.mesh_n
     }
 
+    /// Minimum number of peers in mesh network before adding more (D_lo in the spec, default is 5).
+    pub fn mesh_n_low(&self) -> usize {
+        self.topic_configuration.default_mesh_params.mesh_n_low
+    }
+
+    /// Maximum number of peers in mesh network before removing some (D_high in the spec, default
+    /// is 12).
+    pub fn mesh_n_high(&self) -> usize {
+        self.topic_configuration.default_mesh_params.mesh_n_high
+    }
+
+    /// Target number of peers for the mesh network for a given topic (D in the spec, default is 6).
     pub fn mesh_n_for_topic(&self, topic_hash: &TopicHash) -> usize {
         self.topic_configuration
             .topic_mesh_params
@@ -241,23 +242,13 @@ impl Config {
             .mesh_n
     }
 
-    /// Minimum number of peers in mesh network before adding more (D_lo in the spec, default is 5).
-    pub fn mesh_n_low(&self) -> usize {
-        self.topic_configuration.default_mesh_params.mesh_n_low
-    }
-
+    /// Minimum number of peers in mesh network for a given topic before adding more (D_lo in the spec, default is 5).
     pub fn mesh_n_low_for_topic(&self, topic_hash: &TopicHash) -> usize {
         self.topic_configuration
             .topic_mesh_params
             .get(topic_hash)
             .unwrap_or(&self.topic_configuration.default_mesh_params)
             .mesh_n_low
-    }
-
-    /// Maximum number of peers in mesh network before removing some (D_high in the spec, default
-    /// is 12).
-    pub fn mesh_n_high(&self) -> usize {
-        self.topic_configuration.default_mesh_params.mesh_n_high
     }
 
     /// Maximum number of peers in mesh network before removing some (D_high in the spec, default
@@ -313,6 +304,10 @@ impl Config {
         self.check_explicit_peers_ticks
     }
 
+    pub fn default_max_transmit_size() -> usize {
+        65536
+    }
+
     /// The maximum byte size for each gossipsub RPC (default is 65536 bytes).
     ///
     /// This represents the maximum size of the published message. It is additionally wrapped
@@ -321,7 +316,7 @@ impl Config {
     /// must be large enough to transmit the desired peer information on pruning. It must be at
     /// least 100 bytes. Default is 65536 bytes.
     pub fn max_transmit_size(&self) -> usize {
-        self.protocol.config.default_max_transmit_size
+        self.topic_configuration.default_max_transmit_size
     }
 
     /// The maximum byte size for each gossipsub RPC for a given topic (default is 65536 bytes).
@@ -332,7 +327,7 @@ impl Config {
     /// must be large enough to transmit the desired peer information on pruning. It must be at
     /// least 100 bytes. Default is 65536 bytes.
     pub fn max_transmit_size_for_topic(&self, topic: &TopicHash) -> usize {
-        self.protocol.config.max_transmit_size_for_topic(topic)
+        self.topic_configuration.max_transmit_size_for_topic(topic)
     }
 
     /// Duplicates are prevented by storing message id's of known messages in an LRU time cache.
@@ -826,7 +821,7 @@ impl ConfigBuilder {
 
     /// The maximum byte size for each gossip (default is 2048 bytes).
     pub fn max_transmit_size(&mut self, max_transmit_size: usize) -> &mut Self {
-        self.config.protocol.config.default_max_transmit_size = max_transmit_size;
+        self.config.topic_configuration.default_max_transmit_size = max_transmit_size;
         self
     }
 

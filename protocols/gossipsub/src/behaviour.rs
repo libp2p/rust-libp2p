@@ -601,8 +601,9 @@ where
             return Err(PublishError::MessageTooLarge);
         }
 
-        let raw_message = self.build_raw_message(topic.clone(), transformed_data)?;
         let mesh_n = self.config.mesh_n_for_topic(&topic);
+        let raw_message = self.build_raw_message(topic, transformed_data)?;
+    
 
         // calculate the message id from the un-transformed data
         let msg_id = self.config.message_id(&Message {
