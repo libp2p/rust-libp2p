@@ -279,7 +279,7 @@ where
     }
 
     fn poll_close(&mut self, cx: &mut Context<'_>) -> Poll<Option<Self::ToBehaviour>> {
-        for (k, h) in self.handlers.iter_mut() {
+        for (k, h) in &mut self.handlers {
             let Some(e) = ready!(h.poll_close(cx)) else {
                 continue;
             };

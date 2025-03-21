@@ -189,7 +189,7 @@ impl QueryPool {
         let mut timeout = None;
         let mut waiting = None;
 
-        for (&query_id, query) in self.queries.iter_mut() {
+        for (&query_id, query) in &mut self.queries {
             query.stats.start = query.stats.start.or(Some(now));
             match query.next(now) {
                 PeersIterState::Finished => {

@@ -462,7 +462,7 @@ async fn test_local_listener_reuse() {
     let a_listen_addr = 'outer: loop {
         let ev = a_transport.next().await.unwrap();
         let listen_addr = ev.into_new_address().unwrap();
-        for proto in listen_addr.iter() {
+        for proto in &listen_addr {
             if let Protocol::Ip4(ip4) = proto {
                 if ip4.is_loopback() {
                     break 'outer listen_addr;

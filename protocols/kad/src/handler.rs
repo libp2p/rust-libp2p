@@ -849,7 +849,7 @@ fn compute_new_protocol_status(
 
 impl Handler {
     fn answer_pending_request(&mut self, request_id: RequestId, mut msg: KadResponseMsg) {
-        for state in self.inbound_substreams.iter_mut() {
+        for state in &mut self.inbound_substreams {
             match state.try_answer_with(request_id, msg) {
                 Ok(()) => return,
                 Err(m) => {

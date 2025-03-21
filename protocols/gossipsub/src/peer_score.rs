@@ -237,7 +237,7 @@ impl PeerScore {
         let mut score = 0.0;
 
         // topic scores
-        for (topic, topic_stats) in peer_stats.topics.iter() {
+        for (topic, topic_stats) in &peer_stats.topics {
             // topic parameters
             if let Some(topic_params) = self.params.topics.get(topic) {
                 // we are tracking the topic
@@ -319,7 +319,7 @@ impl PeerScore {
         score += p5 * self.params.app_specific_weight;
 
         // P6: IP collocation factor
-        for ip in peer_stats.known_ips.iter() {
+        for ip in &peer_stats.known_ips {
             if self.params.ip_colocation_factor_whitelist.contains(ip) {
                 continue;
             }
@@ -378,7 +378,7 @@ impl PeerScore {
         peer_ips: &mut HashMap<IpAddr, HashSet<PeerId>>,
         peer_id: &PeerId,
     ) {
-        for ip in peer_stats.known_ips.iter() {
+        for ip in &peer_stats.known_ips {
             if let Some(peer_set) = peer_ips.get_mut(ip) {
                 peer_set.remove(peer_id);
             }
@@ -406,7 +406,7 @@ impl PeerScore {
                 return true;
             }
 
-            for (topic, topic_stats) in peer_stats.topics.iter_mut() {
+            for (topic, topic_stats) in &mut peer_stats.topics {
                 // the topic parameters
                 if let Some(topic_params) = params_ref.topics.get(topic) {
                     // decay counters
@@ -528,7 +528,7 @@ impl PeerScore {
         // if the peer is retained (including it's score) the `first_message_delivery` counters
         // are reset to 0 and mesh delivery penalties applied.
         if let Some(peer_stats) = self.peer_stats.get_mut(peer_id) {
-            for (topic, topic_stats) in peer_stats.topics.iter_mut() {
+            for (topic, topic_stats) in &mut peer_stats.topics {
                 topic_stats.first_message_deliveries = 0f64;
 
                 if let Some(threshold) = self
@@ -703,7 +703,7 @@ impl PeerScore {
         };
 
         self.mark_invalid_message_delivery(from, topic_hash);
-        for peer_id in peers.iter() {
+        for peer_id in &peers {
             self.mark_invalid_message_delivery(peer_id, topic_hash)
         }
     }

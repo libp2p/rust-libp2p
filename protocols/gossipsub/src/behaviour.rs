@@ -745,7 +745,7 @@ where
 
         // Send to peers we know are subscribed to the topic.
         let mut publish_failed = true;
-        for peer_id in recipient_peers.iter() {
+        for peer_id in &recipient_peers {
             tracing::trace!(peer=%peer_id, "Sending message to peer");
             if self.send_message(
                 *peer_id,
@@ -855,7 +855,7 @@ where
                     &raw_message.topic,
                     reject_reason,
                 );
-                for peer in originating_peers.iter() {
+                for peer in &originating_peers {
                     peer_score.reject_message(peer, msg_id, &raw_message.topic, reject_reason);
                 }
             }
@@ -2097,7 +2097,7 @@ where
         }
 
         // maintain the mesh for each topic
-        for (topic_hash, peers) in self.mesh.iter_mut() {
+        for (topic_hash, peers) in &mut self.mesh {
             let explicit_peers = &self.explicit_peers;
             let backoffs = &self.backoffs;
             let outbound_peers = &self.outbound_peers;
@@ -2350,7 +2350,7 @@ where
 
         // maintain fanout
         // check if our peers are still a part of the topic
-        for (topic_hash, peers) in self.fanout.iter_mut() {
+        for (topic_hash, peers) in &mut self.fanout {
             let mut to_remove_peers = Vec::new();
             let publish_threshold = match &self.peer_score {
                 Some((_, thresholds, _)) => thresholds.publish_threshold,
@@ -2590,7 +2590,7 @@ where
 
         // handle the remaining prunes
         // The following prunes are not due to unsubscribing.
-        for (peer_id, topics) in to_prune.iter() {
+        for (peer_id, topics) in &to_prune {
             for topic_hash in topics {
                 let prune = self.make_prune(
                     topic_hash,
@@ -2712,7 +2712,7 @@ where
         }
 
         // forward the message to peers
-        for peer_id in recipient_peers.iter() {
+        for peer_id in &recipient_peers {
             if let Some(peer) = self.connected_peers.get_mut(peer_id) {
                 if peer.dont_send.contains_key(msg_id) {
                     tracing::debug!(%peer_id, message=%msg_id, "Peer doesn't want message");

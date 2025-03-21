@@ -162,6 +162,7 @@ clippy.type_complexity = "allow"
 clippy.unnecessary_wraps = "warn"
 clippy.manual_let_else = "warn"
 clippy.dbg_macro = "warn"
+clippy.explicit_iter_loop = "warn"
 
 [workspace.metadata.release]
 pre-release-hook = [

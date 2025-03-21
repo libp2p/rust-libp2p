@@ -624,7 +624,7 @@ mod tests {
                 }
 
                 // Advance for maximum parallelism.
-                for k in expected.iter() {
+                for k in &expected {
                     match iter.next(now) {
                         PeersIterState::Finished => break 'finished,
                         PeersIterState::Waiting(Some(p)) => assert_eq!(&*p, k.preimage()),
