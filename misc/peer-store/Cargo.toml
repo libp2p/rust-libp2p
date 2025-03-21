@@ -1,6 +1,6 @@
 [package]
 name = "libp2p-peer-store"
-edition = "2021"
+edition.workspace = true
 version = "0.1.0"
 authors = ["drHuangMHT <DrHuangMHT@outlook.com>"]
 license = "MIT"
