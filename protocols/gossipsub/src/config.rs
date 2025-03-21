@@ -242,7 +242,8 @@ impl Config {
             .mesh_n
     }
 
-    /// Minimum number of peers in mesh network for a given topic before adding more (D_lo in the spec, default is 5).
+    /// Minimum number of peers in mesh network for a given topic before adding more (D_lo in the
+    /// spec, default is 5).
     pub fn mesh_n_low_for_topic(&self, topic_hash: &TopicHash) -> usize {
         self.topic_configuration
             .topic_mesh_params

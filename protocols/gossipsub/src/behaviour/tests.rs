@@ -6336,8 +6336,8 @@ fn test_multiple_topics_with_different_configs() {
     // run a heartbeat
     gs.heartbeat();
 
-    // Verify mesh sizes remain correct after maintenance. The mesh parameters are > mesh_n_low and < mesh_n_high so
-    // the implementation will maintain the mesh at mesh_n_low.
+    // Verify mesh sizes remain correct after maintenance. The mesh parameters are > mesh_n_low and
+    // < mesh_n_high so the implementation will maintain the mesh at mesh_n_low.
     assert_eq!(
         gs.mesh.get(&topic_hashes[0]).unwrap().len(),
         3,
