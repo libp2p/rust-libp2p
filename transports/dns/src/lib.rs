@@ -367,9 +367,7 @@ where
                             tracing::debug!("Dial error: {:?}.", err);
                             dial_errors.push(err);
 
-                            if unresolved.is_empty(){
-                                // If there are no further addresses to try—or we've hit the limit—
-                                // break out of the loop.
+                            if unresolved.is_empty() {
                                 break;
                             }
 
@@ -380,17 +378,20 @@ where
                                 );
                                 break;
                             }
-
                         }
                     }
                 }
             }
-            // If we have any dial errors, aggregate them. Otherwise, report that no valid
-            // DNS records were found for the address.
+
+            // If we have any dial errors, aggregate them.
+            // Otherwise there were no valid DNS records for the given address to begin with
+            // (i.e. DNS lookups succeeded but produced no records relevant for the given `addr`).
             if !dial_errors.is_empty() {
                 Err(Error::Dial(dial_errors))
             } else {
-                Err(Error::ResolveError(ResolveErrorKind::Message("No Matching Records Found").into()))
+                Err(Error::ResolveError(
+                    ResolveErrorKind::Message("No Matching Records Found").into(),
+                ))
             }
         }
         .boxed()
@@ -431,9 +432,9 @@ where
             Error::MultiaddrNotSupported(a) => write!(f, "Unsupported resolved address: {a}"),
             Error::TooManyLookups => write!(f, "Too many DNS lookups"),
             Error::Dial(errs) => {
-                write!(f, "Multiple dial errors occured:")?;
+                write!(f, "Multiple dial errors occurred:")?;
                 for err in errs {
-                    write!(f, "/n - {err}")?;
+                    write!(f, "\n - {err}")?;
                 }
                 Ok(())
             }
@@ -627,7 +628,6 @@ where
 #[cfg(all(test, any(feature = "tokio", feature = "async-std")))]
 mod tests {
     use futures::future::BoxFuture;
-    use hickory_resolver::proto::{ProtoError, ProtoErrorKind};
     use libp2p_core::{
         multiaddr::{Multiaddr, Protocol},
         transport::{PortUse, TransportError, TransportEvent},
@@ -636,6 +636,45 @@ mod tests {
     use libp2p_identity::PeerId;
 
     use super::*;
+
+    // These helpers will be compiled conditionally, depending on the async runtime in use.
+
+    // For async-std:
+    #[cfg(feature = "async-std")]
+    fn test_async_std<T, R, F>(
+        transport: super::Transport<T, R>,
+        test_fn: impl FnOnce(super::Transport<T, R>) -> F,
+    )
+    where
+        T: Transport + Clone + Send + Unpin + 'static,
+        T::Error: Send,
+        T::Dial: Send,
+        R: Clone + Send + Sync + Resolver + 'static,
+        F: std::future::Future<Output = ()> + 'static,
+    {
+        async_std_crate::task::block_on(test_fn(transport));
+    }
+
+    #[cfg(feature = "tokio")]
+    fn test_tokio<T, R, F>(
+        transport: super::Transport<T, R>,
+        test_fn: impl FnOnce(super::Transport<T, R>) -> F,
+    )
+    where
+        T: Transport + Clone + Send + Unpin + 'static,
+        T::Error: Send,
+        T::Dial: Send,
+        R: Clone + Send + Sync + Resolver + 'static,
+        F: std::future::Future<Output = ()> + 'static,
+    {
+        let rt = ::tokio::runtime::Builder::new_current_thread()
+            .enable_io()
+            .enable_time()
+            .build()
+            .unwrap();
+
+        rt.block_on(test_fn(transport));
+    }
 
     #[test]
     fn basic_resolve() {
@@ -696,6 +735,7 @@ mod tests {
                 role: Endpoint::Dialer,
                 port_use: PortUse::Reuse,
             };
+    
             // Success due to existing A record for example.com.
             let _ = transport
                 .dial("/dns4/example.com/tcp/20000".parse().unwrap(), dial_opts)
@@ -759,40 +799,43 @@ mod tests {
                 .unwrap()
                 .await
             {
-                Err(Error::ResolveError(e)) => match e.kind() {
-                    ResolveErrorKind::Proto(ProtoError { kind, .. })
-                        if matches!(kind.as_ref(), ProtoErrorKind::NoRecordsFound { .. }) => {}
-                    _ => panic!("Unexpected DNS error: {e:?}"),
-                },
+                Err(Error::Dial(dial_errs)) => {
+                    if dial_errs
+                        .iter()
+                        .any(|sub| matches!(sub, Error::ResolveError(_)))
+                    {
+                        // We found a ResolveError in the aggregator’s dial array
+                    } else {
+                        panic!(
+                            "Expected at least one ResolveError(...) sub-error, got {dial_errs:?}"
+                        )
+                    }
+                }
                 Err(e) => panic!("Unexpected error: {e:?}"),
                 Ok(_) => panic!("Unexpected success."),
             }
         }
-
+    
+        // Common DNS config.
+        let config = ResolverConfig::quad9();
+        let opts = ResolverOpts::default();
+    
         #[cfg(feature = "async-std")]
         {
             // Be explicit about the resolver used. At least on github CI, TXT
             // type record lookups may not work with the system DNS resolver.
-            let config = ResolverConfig::quad9();
-            let opts = ResolverOpts::default();
-            async_std_crate::task::block_on(
-                async_std::Transport::custom(CustomTransport, config, opts).then(run),
+            let transport = async_std_crate::task::block_on(
+                async_std::Transport::custom(CustomTransport, config.clone(), opts.clone()),
             );
+            test_async_std(transport, run);
         }
 
         #[cfg(feature = "tokio")]
         {
             // Be explicit about the resolver used. At least on github CI, TXT
             // type record lookups may not work with the system DNS resolver.
-            let config = ResolverConfig::quad9();
-            let opts = ResolverOpts::default();
-            let rt = ::tokio::runtime::Builder::new_current_thread()
-                .enable_io()
-                .enable_time()
-                .build()
-                .unwrap();
-
-            rt.block_on(run(tokio::Transport::custom(CustomTransport, config, opts)));
+            let transport = tokio::Transport::custom(CustomTransport, config, opts);
+            test_tokio(transport, run);
         }
     }
 
@@ -830,8 +873,8 @@ mod tests {
             ) -> Result<Self::Dial, TransportError<Self::Error>> {
                 // Every dial attempt fails with an error that includes the address.
                 Ok(Box::pin(future::ready(Err(io::Error::new(
-                    io::ErrorKind::Other,
-                    format!("dial error for {}", addr),
+                    io::ErrorKind::Unsupported,
+                    format!("No support for dialing {}", addr),
                 )))))
             }
 
@@ -845,7 +888,7 @@ mod tests {
 
         async fn run_test<T, R>(mut transport: super::Transport<T, R>)
         where
-            T: Transport + Clone + Send + Unpin + 'static,
+            T: Transport<Error = std::io::Error> + Clone + Send + Unpin + 'static,
             T::Error: Send,
             T::Dial: Send,
             R: Clone + Send + Sync + Resolver + 'static,
@@ -870,51 +913,41 @@ mod tests {
                         errs.len()
                     );
                     for e in errs {
-                        let msg = format!("{}", e);
-                        // Check for the string "dial error" to confirm each attempt failed.
-                        assert!(
-                            msg.contains("dial error"),
-                            "Error message does not contain 'dial error': {}",
-                            msg
-                        );
+                        match e {
+                            Error::Transport(io_err) => {
+                                assert_eq!(
+                                    io_err.kind(),
+                                    io::ErrorKind::Unsupported,
+                                    "Expected Unsupported dial error, got: {io_err:?}"
+                                );
+                            }
+                            _ => panic!("Expected Error::Transport(Unsupported), got: {e:?}"),
+                        }
                     }
                 }
                 Err(e) => panic!("Expected aggregated dial errors, got {e:?}"),
                 Ok(_) => panic!("Dial unexpectedly succeeded"),
             }
         }
-
-        // Now call run_test for either async-std or tokio,
-        // matching the pattern in the existing test.
-
+    
+        // Common DNS config.
+        let config = ResolverConfig::quad9();
+        let opts = ResolverOpts::default();
+    
         #[cfg(feature = "async-std")]
         {
             // Be explicit about the resolver used. At least on github CI, TXT
             // type record lookups may not work with the system DNS resolver.
-            let config = ResolverConfig::quad9();
-            let opts = ResolverOpts::default();
-            async_std_crate::task::block_on(
-                async_std::Transport::custom(AlwaysFailTransport, config, opts).then(run_test),
+            let transport = async_std_crate::task::block_on(
+                async_std::Transport::custom(AlwaysFailTransport, config.clone(), opts.clone()),
             );
+            test_async_std(transport, run_test);
         }
-
+    
         #[cfg(feature = "tokio")]
         {
-            // Be explicit about the resolver used. At least on github CI, TXT
-            // type record lookups may not work with the system DNS resolver.
-            let config = ResolverConfig::quad9();
-            let opts = ResolverOpts::default();
-            let rt = ::tokio::runtime::Builder::new_current_thread()
-                .enable_io()
-                .enable_time()
-                .build()
-                .unwrap();
-
-            rt.block_on(run_test(tokio::Transport::custom(
-                AlwaysFailTransport,
-                config,
-                opts,
-            )));
+            let transport = tokio::Transport::custom(AlwaysFailTransport, config, opts);
+            test_tokio(transport, run_test);
         }
     }
 }
