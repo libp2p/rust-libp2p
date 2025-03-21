@@ -202,7 +202,7 @@ impl Keypair {
             },
             #[cfg(feature = "secp256k1")]
             KeyPairInner::Secp256k1(ref pair) => PublicKey {
-                publickey: PublicKeyInner::Secp256k1(pair.public().clone()),
+                publickey: PublicKeyInner::Secp256k1(*pair.public()),
             },
             #[cfg(feature = "ecdsa")]
             KeyPairInner::Ecdsa(ref pair) => PublicKey {
