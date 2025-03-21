@@ -56,6 +56,7 @@ use crate::{
     provider::Provider,
     ConnectError, Connecting, Error,
 };
+
 /// Implementation of the [`Transport`] trait for QUIC.
 ///
 /// By default, only QUIC Version 1 (RFC 9000) is supported. In the [`Multiaddr`] this maps to
@@ -643,11 +644,6 @@ impl<P: Provider> Listener<P> {
             }
         }
     }
-
-    fn socketaddr_to_multiaddr(&self, socket_addr: &SocketAddr) -> Multiaddr {
-        let res = socketaddr_to_multiaddr(socket_addr, self.version);
-        self.mode.update_multiaddr(res)
-    }
 }
 
 impl<P: Provider> Stream for Listener<P> {
@@ -679,9 +675,12 @@ impl<P: Provider> Stream for Listener<P> {
                         }
                     };
 
-                    let local_addr = self.socketaddr_to_multiaddr(&self.socket_addr());
+                    let local_addr = self.mode.update_multiaddr(socketaddr_to_multiaddr(
+                        &self.socket_addr(),
+                        self.version,
+                    ));
                     let remote_addr = connecting.remote_address();
-                    let send_back_addr = self.socketaddr_to_multiaddr(&remote_addr);
+                    let send_back_addr = socketaddr_to_multiaddr(&remote_addr, self.version);
 
                     let mode = self.mode.clone();
                     let event = TransportEvent::Incoming {
@@ -836,7 +835,10 @@ fn multiaddr_to_socketaddr(
                 is_webtransport = true;
             }
             Protocol::Certhash(_) => {
-                panic!("Cannot listen on a specific certhash for WebTransport addr {addr}");
+                tracing::error!(
+                    "Cannot listen on a specific certhash for WebTransport address {addr}"
+                );
+                return None;
             }
             _ => return None,
         }

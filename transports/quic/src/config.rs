@@ -26,7 +26,7 @@ use quinn::{
     MtuDiscoveryConfig, VarInt,
 };
 
-use crate::{webtransport, webtransport::Certificate};
+use crate::webtransport::Certificate;
 
 /// Config for the transport.
 #[derive(Clone)]

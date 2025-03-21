@@ -78,6 +78,8 @@ pub use provider::tokio;
 pub use provider::Provider;
 pub use transport::GenTransport;
 
+pub use crate::webtransport::{CertHash, Certificate};
+
 /// Errors that may happen on the [`GenTransport`] or a single [`Connection`].
 #[derive(Debug, thiserror::Error)]
 pub enum Error {

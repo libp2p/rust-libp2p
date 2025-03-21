@@ -4,7 +4,7 @@ use std::{
     io::ErrorKind,
 };
 
-pub(crate) use certificate::Certificate;
+pub use certificate::{CertHash, Certificate};
 pub(crate) use connection::{accept_webtransport_stream, Connection};
 use h3::ext::Protocol;
 use http::Method;
