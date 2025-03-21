@@ -20,7 +20,7 @@
 
 //! Secp256k1 keys.
 
-use core::{cmp, fmt, hash};
+use core::{fmt, hash};
 
 use asn1_der::typed::{DerDecodable, Sequence};
 use generic_array::GenericArray;
@@ -153,7 +153,7 @@ impl SecretKey {
 }
 
 /// A Secp256k1 public key.
-#[derive(Eq, Clone)]
+#[derive(Eq, Clone, Copy, PartialEq, PartialOrd, Ord)]
 pub struct PublicKey(k256::ecdsa::VerifyingKey);
 
 impl fmt::Debug for PublicKey {
@@ -166,27 +166,9 @@ impl fmt::Debug for PublicKey {
     }
 }
 
-impl cmp::PartialEq for PublicKey {
-    fn eq(&self, other: &Self) -> bool {
-        self.to_bytes().eq(&other.to_bytes())
-    }
-}
-
 impl hash::Hash for PublicKey {
     fn hash<H: hash::Hasher>(&self, state: &mut H) {
         self.to_bytes().hash(state);
-    }
-}
-
-impl cmp::PartialOrd for PublicKey {
-    fn partial_cmp(&self, other: &Self) -> Option<cmp::Ordering> {
-        Some(self.cmp(other))
-    }
-}
-
-impl cmp::Ord for PublicKey {
-    fn cmp(&self, other: &Self) -> cmp::Ordering {
-        self.to_bytes().cmp(&other.to_bytes())
     }
 }
 
@@ -212,7 +194,7 @@ impl PublicKey {
 
     /// Convert the public key to a byte buffer in compressed form, i.e. with one coordinate
     /// represented by a single bit.
-    pub fn to_bytes(&self) -> [u8; 33] {
+    pub fn to_bytes(self) -> [u8; 33] {
         let encoded_point = self.0.to_encoded_point(true);
         debug_assert!(encoded_point.as_bytes().len() == 33);
         let mut array: [u8; 33] = [0u8; 33];
@@ -221,7 +203,7 @@ impl PublicKey {
     }
 
     /// Convert the public key to a byte buffer in uncompressed form.
-    pub fn to_bytes_uncompressed(&self) -> [u8; 65] {
+    pub fn to_bytes_uncompressed(self) -> [u8; 65] {
         let encoded_point = self.0.to_encoded_point(false);
         debug_assert!(encoded_point.as_bytes().len() == 65);
         let mut array: [u8; 65] = [0u8; 65];
