@@ -719,6 +719,7 @@ where
             // Floodsub peers
             for (peer, connections) in &self.connected_peers {
                 if connections.kind == PeerKind::Floodsub
+                    && connections.topics.contains(&topic_hash)
                     && !self
                         .score_below_threshold(peer, |ts| ts.publish_threshold)
                         .0
@@ -732,6 +733,9 @@ where
         // duplicate cache and memcache.
         self.duplicate_cache.insert(msg_id.clone());
         self.mcache.put(&msg_id, raw_message.clone());
+
+        // Consider the message as delivered for gossip promises.
+        self.gossip_promises.message_delivered(&msg_id);
 
         // If the message is anonymous or has a random author add it to the published message ids
         // cache.
