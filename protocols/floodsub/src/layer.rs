@@ -254,7 +254,7 @@ impl Behaviour {
         }
 
         // Send to peers we know are subscribed to the topic.
-        for (peer_id, sub_topic) in self.connected_peers.iter() {
+        for (peer_id, sub_topic) in &self.connected_peers {
             // Peer must be in a communication list.
             if !self.target_peers.contains(peer_id) {
                 continue;
@@ -445,7 +445,7 @@ impl NetworkBehaviour for Behaviour {
             }
 
             // Propagate the message to everyone else who is subscribed to any of the topics.
-            for (peer_id, subscr_topics) in self.connected_peers.iter() {
+            for (peer_id, subscr_topics) in &self.connected_peers {
                 if peer_id == &propagation_source {
                     continue;
                 }

@@ -301,7 +301,7 @@ fn append_qname(out: &mut Vec<u8>, name: &[u8]) {
         assert!(element.len() < 64, "Service name has a label too long");
         assert_ne!(element.len(), 0, "Service name contains zero length label");
         out.push(element.len() as u8);
-        for chr in element.iter() {
+        for chr in element {
             out.push(*chr);
         }
     }

@@ -105,7 +105,7 @@ mod tests {
             },
         ];
 
-        for test in tests.iter() {
+        for test in &tests {
             assert_eq!(
                 _address_translation(&test.original, &test.observed),
                 Some(test.expected.clone())

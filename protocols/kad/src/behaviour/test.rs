@@ -127,7 +127,7 @@ fn build_fully_connected_nodes_with_config(
         .map(|(addr, swarm)| (addr.clone(), *swarm.local_peer_id()))
         .collect();
 
-    for (_addr, swarm) in swarms.iter_mut() {
+    for (_addr, swarm) in &mut swarms {
         for (addr, peer) in &swarm_addr_and_peer_id {
             swarm.behaviour_mut().add_address(peer, addr.clone());
         }
@@ -1338,7 +1338,7 @@ fn manual_bucket_inserts() {
         .behaviour_mut()
         .get_closest_peers(PeerId::random());
     block_on(poll_fn(move |ctx| {
-        for (_, swarm) in swarms.iter_mut() {
+        for (_, swarm) in &mut swarms {
             loop {
                 match swarm.poll_next_unpin(ctx) {
                     Poll::Ready(Some(SwarmEvent::Behaviour(Event::RoutablePeer {
@@ -1348,7 +1348,7 @@ fn manual_bucket_inserts() {
                         assert_eq!(peer, expected.remove(&address).expect("Missing address"));
                         routable.push(peer);
                         if expected.is_empty() {
-                            for peer in routable.iter() {
+                            for peer in &routable {
                                 let bucket = swarm.behaviour_mut().kbucket(*peer).unwrap();
                                 assert!(bucket.iter().all(|e| e.node.key.preimage() != peer));
                             }

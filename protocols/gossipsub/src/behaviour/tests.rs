@@ -954,7 +954,7 @@ fn test_handle_received_subscriptions() {
         "Unknown peer should not have been added"
     );
 
-    for topic_hash in topic_hashes[..3].iter() {
+    for topic_hash in &topic_hashes[..3] {
         let topic_peers = gs
             .connected_peers
             .iter()
@@ -4632,7 +4632,7 @@ fn test_ignore_too_many_ihaves() {
     // after a heartbeat everything is forgotten
     gs.heartbeat();
 
-    for raw_message in messages[10..].iter() {
+    for raw_message in &messages[10..] {
         // Transform the inbound message
         let message = &gs
             .data_transform

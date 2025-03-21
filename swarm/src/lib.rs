@@ -1052,7 +1052,7 @@ where
                     "Listener closed"
                 );
                 let addrs = self.listened_addrs.remove(&listener_id).unwrap_or_default();
-                for addr in addrs.iter() {
+                for addr in &addrs {
                     self.behaviour.on_swarm_event(FromSwarm::ExpiredListenAddr(
                         ExpiredListenAddr { listener_id, addr },
                     ));

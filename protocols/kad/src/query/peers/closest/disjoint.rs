@@ -741,7 +741,7 @@ mod tests {
                 .collect::<HashMap<_, _>>();
 
             // Make each peer aware of a random set of other peers within the graph.
-            for (peer_id, peer) in peers.iter_mut() {
+            for (peer_id, peer) in &mut peers {
                 g.shuffle(&mut peer_ids);
 
                 let num_peers = g.gen_range(K_VALUE.get()..peer_ids.len() + 1);

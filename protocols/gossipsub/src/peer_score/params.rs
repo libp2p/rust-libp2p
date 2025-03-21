@@ -186,7 +186,7 @@ impl Default for PeerScoreParams {
 /// Peer score parameter validation
 impl PeerScoreParams {
     pub fn validate(&self) -> Result<(), String> {
-        for (topic, params) in self.topics.iter() {
+        for (topic, params) in &self.topics {
             if let Err(e) = params.validate() {
                 return Err(format!("Invalid score parameters for topic {topic}: {e}"));
             }

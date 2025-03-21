@@ -28,7 +28,7 @@ impl Endpoint {
         let mut remote_peer = None;
         let mut is_ipv6 = false;
 
-        for proto in addr.iter() {
+        for proto in addr {
             match proto {
                 Protocol::Ip4(addr) => {
                     if host.is_some() {

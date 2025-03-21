@@ -257,7 +257,7 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> syn::Result<Toke
     // The [`ConnectionHandler`] associated type.
     let connection_handler_ty = {
         let mut ph_ty = None;
-        for field in data_struct.fields.iter() {
+        for field in &data_struct.fields {
             let ty = &field.ty;
             let field_info = quote! { #t_handler<#ty> };
             match ph_ty {

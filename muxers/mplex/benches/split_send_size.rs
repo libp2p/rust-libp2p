@@ -63,7 +63,7 @@ fn prepare(c: &mut Criterion) {
 
     let mut tcp = c.benchmark_group("tcp");
     let tcp_addr = multiaddr![Ip4(std::net::Ipv4Addr::new(127, 0, 0, 1)), Tcp(0u16)];
-    for &size in BENCH_SIZES.iter() {
+    for &size in &BENCH_SIZES {
         tcp.throughput(Throughput::Bytes(payload.len() as u64));
         let mut receiver_transport = tcp_transport(size);
         let mut sender_transport = tcp_transport(size);
@@ -82,7 +82,7 @@ fn prepare(c: &mut Criterion) {
 
     let mut mem = c.benchmark_group("memory");
     let mem_addr = multiaddr![Memory(0u64)];
-    for &size in BENCH_SIZES.iter() {
+    for &size in &BENCH_SIZES {
         mem.throughput(Throughput::Bytes(payload.len() as u64));
         let mut receiver_transport = mem_transport(size);
         let mut sender_transport = mem_transport(size);
