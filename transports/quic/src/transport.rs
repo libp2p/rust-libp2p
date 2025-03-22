@@ -84,6 +84,7 @@ pub struct GenTransport<P: Provider> {
     hole_punch_attempts: HashMap<SocketAddr, oneshot::Sender<Connecting>>,
 }
 
+#[expect(deprecated)]
 impl<P: Provider> GenTransport<P> {
     /// Create a new [`GenTransport`] with the given [`Config`].
     pub fn new(config: Config) -> Self {

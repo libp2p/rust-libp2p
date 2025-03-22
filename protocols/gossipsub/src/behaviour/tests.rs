@@ -28,8 +28,8 @@ use rand::Rng;
 
 use super::*;
 use crate::{
-    config::ConfigBuilder, rpc::Receiver, subscription_filter::WhitelistSubscriptionFilter,
-    types::Rpc, IdentTopic as Topic,
+    IdentTopic as Topic, config::ConfigBuilder, rpc::Receiver,
+    subscription_filter::WhitelistSubscriptionFilter, types::Rpc,
 };
 
 #[derive(Default, Debug)]
@@ -289,7 +289,7 @@ where
             role_override: Endpoint::Dialer,
             port_use: PortUse::Reuse,
         }; // this is not relevant
-           // peer_connections.connections should never be empty.
+        // peer_connections.connections should never be empty.
 
         let mut active_connections = peer_connections.connections.len();
         for connection_id in peer_connections.connections.clone() {
@@ -1199,6 +1199,59 @@ fn test_handle_iwant_msg_not_cached() {
     );
 }
 
+#[test]
+fn test_handle_iwant_msg_but_already_sent_idontwant() {
+    let (mut gs, peers, receivers, _) = inject_nodes1()
+        .peer_no(20)
+        .topics(Vec::new())
+        .to_subscribe(true)
+        .create_network();
+
+    let raw_message = RawMessage {
+        source: Some(peers[11]),
+        data: vec![1, 2, 3, 4],
+        sequence_number: Some(1u64),
+        topic: TopicHash::from_raw("topic"),
+        signature: None,
+        key: None,
+        validated: true,
+    };
+
+    // Transform the inbound message
+    let message = &gs
+        .data_transform
+        .inbound_transform(raw_message.clone())
+        .unwrap();
+
+    let msg_id = gs.config.message_id(message);
+    gs.mcache.put(&msg_id, raw_message);
+
+    // Receive IDONTWANT from Peer 1.
+    let rpc = Rpc {
+        messages: vec![],
+        subscriptions: vec![],
+        control_msgs: vec![ControlAction::IDontWant(IDontWant {
+            message_ids: vec![msg_id.clone()],
+        })],
+    };
+    gs.on_connection_handler_event(
+        peers[1],
+        ConnectionId::new_unchecked(0),
+        HandlerEvent::Message {
+            rpc,
+            invalid_messages: vec![],
+        },
+    );
+
+    // Receive IWANT from Peer 1.
+    gs.handle_iwant(&peers[1], vec![msg_id.clone()]);
+
+    // Check that no messages are sent.
+    receivers.iter().for_each(|(_, receiver)| {
+        assert!(receiver.non_priority.get_ref().is_empty());
+    });
+}
+
 /// tests that an event is created when a peer shares that it has a message we want
 #[test]
 fn test_handle_ihave_subscribed_and_msg_not_cached() {
@@ -1911,11 +1964,13 @@ fn test_connect_to_px_peers_on_handle_prune() {
     assert_eq!(dials_set.len(), config.prune_peers());
 
     // all dial peers must be in px
-    assert!(dials_set.is_subset(
-        &px.iter()
-            .map(|i| *i.peer_id.as_ref().unwrap())
-            .collect::<HashSet<_>>()
-    ));
+    assert!(
+        dials_set.is_subset(
+            &px.iter()
+                .map(|i| *i.peer_id.as_ref().unwrap())
+                .collect::<HashSet<_>>()
+        )
+    );
 }
 
 #[test]
@@ -2768,21 +2823,25 @@ fn test_iwant_msg_from_peer_below_gossip_threshold_gets_ignored() {
             });
 
     // the message got sent to p2
-    assert!(sent_messages
-        .iter()
-        .map(|(peer_id, msg)| (
-            peer_id,
-            gs.data_transform.inbound_transform(msg.clone()).unwrap()
-        ))
-        .any(|(peer_id, msg)| peer_id == &p2 && gs.config.message_id(&msg) == msg_id));
+    assert!(
+        sent_messages
+            .iter()
+            .map(|(peer_id, msg)| (
+                peer_id,
+                gs.data_transform.inbound_transform(msg.clone()).unwrap()
+            ))
+            .any(|(peer_id, msg)| peer_id == &p2 && gs.config.message_id(&msg) == msg_id)
+    );
     // the message got not sent to p1
-    assert!(sent_messages
-        .iter()
-        .map(|(peer_id, msg)| (
-            peer_id,
-            gs.data_transform.inbound_transform(msg.clone()).unwrap()
-        ))
-        .all(|(peer_id, msg)| !(peer_id == &p1 && gs.config.message_id(&msg) == msg_id)));
+    assert!(
+        sent_messages
+            .iter()
+            .map(|(peer_id, msg)| (
+                peer_id,
+                gs.data_transform.inbound_transform(msg.clone()).unwrap()
+            ))
+            .all(|(peer_id, msg)| !(peer_id == &p1 && gs.config.message_id(&msg) == msg_id))
+    );
 }
 
 #[test]
@@ -3220,12 +3279,14 @@ fn test_keep_best_scoring_peers_on_oversubscription() {
     assert_eq!(gs.mesh[&topics[0]].len(), config.mesh_n());
 
     // mesh contains retain_scores best peers
-    assert!(gs.mesh[&topics[0]].is_superset(
-        &peers[(n - config.retain_scores())..]
-            .iter()
-            .cloned()
-            .collect()
-    ));
+    assert!(
+        gs.mesh[&topics[0]].is_superset(
+            &peers[(n - config.retain_scores())..]
+                .iter()
+                .cloned()
+                .collect()
+        )
+    );
 }
 
 #[test]
@@ -5992,11 +6053,15 @@ fn test_priority_messages_are_always_sent() {
     let sender = Sender::new(2);
     let topic_hash = Topic::new("Test").hash();
     // Fill the buffer with the first message.
-    assert!(sender
-        .send_message(RpcOut::Subscribe(topic_hash.clone()))
-        .is_ok());
-    assert!(sender
-        .send_message(RpcOut::Subscribe(topic_hash.clone()))
-        .is_ok());
+    assert!(
+        sender
+            .send_message(RpcOut::Subscribe(topic_hash.clone()))
+            .is_ok()
+    );
+    assert!(
+        sender
+            .send_message(RpcOut::Subscribe(topic_hash.clone()))
+            .is_ok()
+    );
     assert!(sender.send_message(RpcOut::Unsubscribe(topic_hash)).is_ok());
 }

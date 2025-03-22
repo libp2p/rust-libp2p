@@ -34,9 +34,9 @@ use libp2p::{
 use tracing_subscriber::EnvFilter;
 
 #[derive(Debug, Parser)]
-#[clap(name = "libp2p autonat")]
+#[command(name = "libp2p autonat")]
 struct Opt {
-    #[clap(long)]
+    #[arg(long)]
     listen_port: Option<u16>,
 }
 

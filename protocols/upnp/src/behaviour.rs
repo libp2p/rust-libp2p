@@ -264,12 +264,10 @@ impl NetworkBehaviour for Behaviour {
                 listener_id,
                 addr: multiaddr,
             }) => {
-                let (addr, protocol) = match multiaddr_to_socketaddr_protocol(multiaddr.clone()) {
-                    Ok(addr_port) => addr_port,
-                    Err(()) => {
-                        tracing::debug!("multiaddress not supported for UPnP {multiaddr}");
-                        return;
-                    }
+                let Ok((addr, protocol)) = multiaddr_to_socketaddr_protocol(multiaddr.clone())
+                else {
+                    tracing::debug!("multiaddress not supported for UPnP {multiaddr}");
+                    return;
                 };
 
                 if let Some((mapping, _state)) = self

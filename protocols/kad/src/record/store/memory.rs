@@ -19,7 +19,7 @@
 // DEALINGS IN THE SOFTWARE.
 
 use std::{
-    collections::{hash_map, hash_set, HashMap, HashSet},
+    collections::{HashMap, HashSet, hash_map, hash_set},
     iter,
 };
 

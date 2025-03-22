@@ -36,9 +36,7 @@ use std::{
 };
 
 pub use error::ConnectionError;
-pub(crate) use error::{
-    PendingConnectionError, PendingInboundConnectionError, PendingOutboundConnectionError,
-};
+pub(crate) use error::{PendingInboundConnectionError, PendingOutboundConnectionError};
 use futures::{future::BoxFuture, stream, stream::FuturesUnordered, FutureExt, StreamExt};
 use futures_timer::Delay;
 use libp2p_core::{
@@ -1205,14 +1203,10 @@ mod tests {
             event: ConnectionEvent<Self::InboundProtocol, Self::OutboundProtocol>,
         ) {
             match event {
-                // TODO: remove when Rust 1.82 is MSRV
-                #[allow(unreachable_patterns)]
                 ConnectionEvent::FullyNegotiatedInbound(FullyNegotiatedInbound {
                     protocol,
                     ..
                 }) => libp2p_core::util::unreachable(protocol),
-                // TODO: remove when Rust 1.82 is MSRV
-                #[allow(unreachable_patterns)]
                 ConnectionEvent::FullyNegotiatedOutbound(FullyNegotiatedOutbound {
                     protocol,
                     ..
@@ -1220,8 +1214,6 @@ mod tests {
                 ConnectionEvent::DialUpgradeError(DialUpgradeError { error, .. }) => {
                     self.error = Some(error)
                 }
-                // TODO: remove when Rust 1.82 is MSRV
-                #[allow(unreachable_patterns)]
                 ConnectionEvent::AddressChange(_)
                 | ConnectionEvent::ListenUpgradeError(_)
                 | ConnectionEvent::LocalProtocolsChange(_)
@@ -1230,8 +1222,6 @@ mod tests {
         }
 
         fn on_behaviour_event(&mut self, event: Self::FromBehaviour) {
-            // TODO: remove when Rust 1.82 is MSRV
-            #[allow(unreachable_patterns)]
             libp2p_core::util::unreachable(event)
         }
 
@@ -1294,8 +1284,6 @@ mod tests {
         }
 
         fn on_behaviour_event(&mut self, event: Self::FromBehaviour) {
-            // TODO: remove when Rust 1.82 is MSRV
-            #[allow(unreachable_patterns)]
             libp2p_core::util::unreachable(event)
         }
 
