@@ -25,7 +25,7 @@ use std::time::Duration;
 use libp2p_core::Multiaddr;
 use libp2p_identity::PeerId;
 use libp2p_memory_connection_limits::*;
-use libp2p_swarm::{dial_opts::DialOpts, DialError, Swarm};
+use libp2p_swarm::{DialError, Swarm, dial_opts::DialOpts};
 use libp2p_swarm_test::SwarmExt;
 use util::*;
 
@@ -70,7 +70,7 @@ fn max_bytes() {
     }
 
     std::thread::sleep(Duration::from_millis(100)); // Memory stats are only updated every 100ms internally, ensure they are up-to-date when we try
-                                                    // to exceed it.
+    // to exceed it.
 
     match network
         .dial(

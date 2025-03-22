@@ -37,22 +37,23 @@ use std::{
 
 pub use error::ConnectionError;
 pub(crate) use error::{PendingInboundConnectionError, PendingOutboundConnectionError};
-use futures::{future::BoxFuture, stream, stream::FuturesUnordered, FutureExt, StreamExt};
+use futures::{FutureExt, StreamExt, future::BoxFuture, stream, stream::FuturesUnordered};
 use futures_timer::Delay;
 use libp2p_core::{
+    Endpoint,
     connection::ConnectedPoint,
     multiaddr::Multiaddr,
     muxing::{StreamMuxerBox, StreamMuxerEvent, StreamMuxerExt, SubstreamBox},
     transport::PortUse,
     upgrade,
     upgrade::{NegotiationError, ProtocolError},
-    Endpoint,
 };
 use libp2p_identity::PeerId;
 pub use supported_protocols::SupportedProtocols;
 use web_time::Instant;
 
 use crate::{
+    ConnectionHandlerEvent, Stream, StreamProtocol, StreamUpgradeError, SubstreamProtocol,
     handler::{
         AddressChange, ConnectionEvent, ConnectionHandler, DialUpgradeError,
         FullyNegotiatedInbound, FullyNegotiatedOutbound, ListenUpgradeError, ProtocolSupport,
@@ -60,7 +61,6 @@ use crate::{
     },
     stream::ActiveStreamCounter,
     upgrade::{InboundUpgradeSend, OutboundUpgradeSend},
-    ConnectionHandlerEvent, Stream, StreamProtocol, StreamUpgradeError, SubstreamProtocol,
 };
 
 static NEXT_CONNECTION_ID: AtomicUsize = AtomicUsize::new(1);
@@ -392,7 +392,7 @@ where
                     Shutdown::Asap => return Poll::Ready(Err(ConnectionError::KeepAliveTimeout)),
                     Shutdown::Later(delay) => match Future::poll(Pin::new(delay), cx) {
                         Poll::Ready(_) => {
-                            return Poll::Ready(Err(ConnectionError::KeepAliveTimeout))
+                            return Poll::Ready(Err(ConnectionError::KeepAliveTimeout));
                         }
                         Poll::Pending => {}
                     },
@@ -653,7 +653,7 @@ impl<UserData, TOk, TErr> Future for StreamUpgrade<UserData, TOk, TErr> {
                         .take()
                         .expect("Future not to be polled again once ready."),
                     Err(StreamUpgradeError::Timeout),
-                ))
+                ));
             }
 
             Poll::Pending => {}
@@ -789,10 +789,10 @@ mod tests {
         time::Instant,
     };
 
-    use futures::{future, AsyncRead, AsyncWrite};
+    use futures::{AsyncRead, AsyncWrite, future};
     use libp2p_core::{
-        upgrade::{DeniedUpgrade, InboundUpgrade, OutboundUpgrade, UpgradeInfo},
         StreamMuxer,
+        upgrade::{DeniedUpgrade, InboundUpgrade, OutboundUpgrade, UpgradeInfo},
     };
     use quickcheck::*;
     use tracing_subscriber::EnvFilter;

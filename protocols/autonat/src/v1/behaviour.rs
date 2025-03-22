@@ -33,21 +33,21 @@ pub use as_client::{OutboundProbeError, OutboundProbeEvent};
 use as_server::AsServer;
 pub use as_server::{InboundProbeError, InboundProbeEvent};
 use futures_timer::Delay;
-use libp2p_core::{multiaddr::Protocol, transport::PortUse, ConnectedPoint, Endpoint, Multiaddr};
+use libp2p_core::{ConnectedPoint, Endpoint, Multiaddr, multiaddr::Protocol, transport::PortUse};
 use libp2p_identity::PeerId;
 use libp2p_request_response::{
     self as request_response, InboundRequestId, OutboundRequestId, ProtocolSupport, ResponseChannel,
 };
 use libp2p_swarm::{
-    behaviour::{AddressChange, ConnectionClosed, ConnectionEstablished, DialFailure, FromSwarm},
     ConnectionDenied, ConnectionId, ListenAddresses, NetworkBehaviour, THandler, THandlerInEvent,
     THandlerOutEvent, ToSwarm,
+    behaviour::{AddressChange, ConnectionClosed, ConnectionEstablished, DialFailure, FromSwarm},
 };
 use web_time::Instant;
 
 use crate::{
-    protocol::{AutoNatCodec, DialRequest, DialResponse, ResponseError},
     DEFAULT_PROTOCOL_NAME,
+    protocol::{AutoNatCodec, DialRequest, DialResponse, ResponseError},
 };
 
 /// Config for the [`Behaviour`].

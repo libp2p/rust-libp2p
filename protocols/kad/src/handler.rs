@@ -29,21 +29,21 @@ use std::{
 
 use either::Either;
 use futures::{channel::oneshot, prelude::*, stream::SelectAll};
-use libp2p_core::{upgrade, ConnectedPoint};
+use libp2p_core::{ConnectedPoint, upgrade};
 use libp2p_identity::PeerId;
 use libp2p_swarm::{
-    handler::{ConnectionEvent, FullyNegotiatedInbound, FullyNegotiatedOutbound},
     ConnectionHandler, ConnectionHandlerEvent, Stream, StreamUpgradeError, SubstreamProtocol,
     SupportedProtocols,
+    handler::{ConnectionEvent, FullyNegotiatedInbound, FullyNegotiatedOutbound},
 };
 
 use crate::{
+    QueryId,
     behaviour::Mode,
     protocol::{
         KadInStreamSink, KadOutStreamSink, KadPeer, KadRequestMsg, KadResponseMsg, ProtocolConfig,
     },
     record::{self, Record},
-    QueryId,
 };
 
 const MAX_NUM_STREAMS: usize = 32;
@@ -737,7 +737,7 @@ impl ConnectionHandler for Handler {
                 Poll::Ready((Ok(Ok(Some(response))), query_id)) => {
                     return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(
                         process_kad_response(response, query_id),
-                    ))
+                    ));
                 }
                 Poll::Ready((Ok(Ok(None)), _)) => {
                     continue;
@@ -748,7 +748,7 @@ impl ConnectionHandler for Handler {
                             error: HandlerQueryErr::Io(e),
                             query_id,
                         },
-                    ))
+                    ));
                 }
                 Poll::Ready((Err(_timeout), query_id)) => {
                     return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(
@@ -756,7 +756,7 @@ impl ConnectionHandler for Handler {
                             error: HandlerQueryErr::Io(io::ErrorKind::TimedOut.into()),
                             query_id,
                         },
-                    ))
+                    ));
                 }
                 Poll::Pending => {}
             }
@@ -823,7 +823,7 @@ fn compute_new_protocol_status(
             return ProtocolStatus {
                 supported: now_supported,
                 reported: false,
-            }
+            };
         }
         Some(current) => current,
     };

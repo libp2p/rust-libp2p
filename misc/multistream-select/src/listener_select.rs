@@ -32,8 +32,8 @@ use futures::prelude::*;
 use smallvec::SmallVec;
 
 use crate::{
-    protocol::{HeaderLine, Message, MessageIO, Protocol, ProtocolError},
     Negotiated, NegotiationError,
+    protocol::{HeaderLine, Message, MessageIO, Protocol, ProtocolError},
 };
 
 /// Returns a `Future` that negotiates a protocol on the given I/O stream
@@ -132,7 +132,7 @@ where
                             *this.state = State::SendHeader { io }
                         }
                         Poll::Ready(Some(Ok(_))) => {
-                            return Poll::Ready(Err(ProtocolError::InvalidMessage.into()))
+                            return Poll::Ready(Err(ProtocolError::InvalidMessage.into()));
                         }
                         Poll::Ready(Some(Err(err))) => return Poll::Ready(Err(From::from(err))),
                         // Treat EOF error as [`NegotiationError::Failed`], not as

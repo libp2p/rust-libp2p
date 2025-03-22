@@ -28,8 +28,8 @@ use web_time::Instant;
 
 use super::*;
 use crate::{
-    kbucket::{Distance, Key, KeyBytes},
     ALPHA_VALUE, K_VALUE,
+    kbucket::{Distance, Key, KeyBytes},
 };
 
 pub(crate) mod disjoint;
@@ -504,7 +504,7 @@ mod tests {
 
     use libp2p_core::multihash::Multihash;
     use quickcheck::*;
-    use rand::{rngs::StdRng, Rng, SeedableRng};
+    use rand::{Rng, SeedableRng, rngs::StdRng};
 
     use super::*;
     use crate::SHA_256_MH;
@@ -512,7 +512,7 @@ mod tests {
     fn random_peers<R: Rng>(n: usize, g: &mut R) -> Vec<PeerId> {
         (0..n)
             .map(|_| {
-                PeerId::from_multihash(Multihash::wrap(SHA_256_MH, &g.gen::<[u8; 32]>()).unwrap())
+                PeerId::from_multihash(Multihash::wrap(SHA_256_MH, &g.r#gen::<[u8; 32]>()).unwrap())
                     .unwrap()
             })
             .collect()

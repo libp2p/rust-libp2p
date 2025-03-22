@@ -21,7 +21,7 @@
 //! Manages and stores the Scoring logic of a particular peer on the gossipsub behaviour.
 
 use std::{
-    collections::{hash_map, HashMap, HashSet},
+    collections::{HashMap, HashSet, hash_map},
     net::IpAddr,
     time::Duration,
 };
@@ -30,15 +30,15 @@ use libp2p_identity::PeerId;
 use web_time::Instant;
 
 use crate::{
+    MessageId, TopicHash,
     metrics::{Metrics, Penalty},
     time_cache::TimeCache,
-    MessageId, TopicHash,
 };
 
 mod params;
 pub use params::{
-    score_parameter_decay, score_parameter_decay_with_base, PeerScoreParams, PeerScoreThresholds,
-    TopicScoreParams,
+    PeerScoreParams, PeerScoreThresholds, TopicScoreParams, score_parameter_decay,
+    score_parameter_decay_with_base,
 };
 
 use crate::ValidationError;

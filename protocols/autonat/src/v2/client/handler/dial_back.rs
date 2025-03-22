@@ -9,11 +9,11 @@ use futures::channel::oneshot;
 use futures_bounded::StreamSet;
 use libp2p_core::upgrade::{DeniedUpgrade, ReadyUpgrade};
 use libp2p_swarm::{
-    handler::{ConnectionEvent, FullyNegotiatedInbound, ListenUpgradeError},
     ConnectionHandler, ConnectionHandlerEvent, StreamProtocol, SubstreamProtocol,
+    handler::{ConnectionEvent, FullyNegotiatedInbound, ListenUpgradeError},
 };
 
-use crate::v2::{protocol, Nonce, DIAL_BACK_PROTOCOL};
+use crate::v2::{DIAL_BACK_PROTOCOL, Nonce, protocol};
 
 pub struct Handler {
     inbound: StreamSet<io::Result<IncomingNonce>>,

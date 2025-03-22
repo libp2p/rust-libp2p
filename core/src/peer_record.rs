@@ -2,7 +2,7 @@ use libp2p_identity::{Keypair, PeerId, SigningError};
 use quick_protobuf::{BytesReader, Writer};
 use web_time::SystemTime;
 
-use crate::{proto, signed_envelope, signed_envelope::SignedEnvelope, DecodeError, Multiaddr};
+use crate::{DecodeError, Multiaddr, proto, signed_envelope, signed_envelope::SignedEnvelope};
 
 const PAYLOAD_TYPE: &str = "/libp2p/routing-state-record";
 const DOMAIN_SEP: &str = "libp2p-routing-state";

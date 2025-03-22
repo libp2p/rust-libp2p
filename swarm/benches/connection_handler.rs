@@ -1,9 +1,9 @@
 use std::{convert::Infallible, sync::atomic::AtomicUsize};
 
 use async_std::stream::StreamExt;
-use criterion::{criterion_group, criterion_main, Criterion};
+use criterion::{Criterion, criterion_group, criterion_main};
 use libp2p_core::{
-    transport::MemoryTransport, InboundUpgrade, Multiaddr, OutboundUpgrade, Transport, UpgradeInfo,
+    InboundUpgrade, Multiaddr, OutboundUpgrade, Transport, UpgradeInfo, transport::MemoryTransport,
 };
 use libp2p_identity::PeerId;
 use libp2p_swarm::{ConnectionHandler, NetworkBehaviour, StreamProtocol};

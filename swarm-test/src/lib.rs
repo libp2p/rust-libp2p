@@ -22,14 +22,14 @@ use std::{fmt::Debug, future::IntoFuture, time::Duration};
 
 use async_trait::async_trait;
 use futures::{
-    future::{BoxFuture, Either},
     FutureExt, StreamExt,
+    future::{BoxFuture, Either},
 };
-use libp2p_core::{multiaddr::Protocol, Multiaddr};
+use libp2p_core::{Multiaddr, multiaddr::Protocol};
 use libp2p_identity::PeerId;
 use libp2p_swarm::{
-    dial_opts::{DialOpts, PeerCondition},
     NetworkBehaviour, Swarm, SwarmEvent,
+    dial_opts::{DialOpts, PeerCondition},
 };
 
 /// An extension trait for [`Swarm`] that makes it
@@ -228,7 +228,7 @@ where
     where
         Self: Sized,
     {
-        use libp2p_core::{transport::MemoryTransport, upgrade::Version, Transport as _};
+        use libp2p_core::{Transport as _, transport::MemoryTransport, upgrade::Version};
         use libp2p_identity::Keypair;
 
         let identity = Keypair::generate_ed25519();
@@ -255,7 +255,7 @@ where
     where
         Self: Sized,
     {
-        use libp2p_core::{transport::MemoryTransport, upgrade::Version, Transport as _};
+        use libp2p_core::{Transport as _, transport::MemoryTransport, upgrade::Version};
         use libp2p_identity::Keypair;
 
         let identity = Keypair::generate_ed25519();

@@ -257,7 +257,7 @@ impl State {
                     write_closed: true, ..
                 }
                 | State::BothClosed { reset: false } => {
-                    return Err(io::ErrorKind::BrokenPipe.into())
+                    return Err(io::ErrorKind::BrokenPipe.into());
                 }
 
                 State::ClosingRead {
@@ -267,11 +267,11 @@ impl State {
                     return Err(io::Error::new(
                         io::ErrorKind::Other,
                         "cannot close read half while closing write half",
-                    ))
+                    ));
                 }
 
                 State::BothClosed { reset: true } => {
-                    return Err(io::ErrorKind::ConnectionReset.into())
+                    return Err(io::ErrorKind::ConnectionReset.into());
                 }
             }
         }
@@ -302,7 +302,7 @@ impl State {
                     read_closed: true, ..
                 }
                 | State::BothClosed { reset: false } => {
-                    return Err(io::ErrorKind::BrokenPipe.into())
+                    return Err(io::ErrorKind::BrokenPipe.into());
                 }
 
                 State::ClosingWrite {
@@ -311,11 +311,11 @@ impl State {
                     return Err(io::Error::new(
                         io::ErrorKind::Other,
                         "cannot close write half while closing read half",
-                    ))
+                    ));
                 }
 
                 State::BothClosed { reset: true } => {
-                    return Err(io::ErrorKind::ConnectionReset.into())
+                    return Err(io::ErrorKind::ConnectionReset.into());
                 }
             }
         }

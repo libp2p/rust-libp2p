@@ -76,7 +76,7 @@ pub mod json;
 use std::{
     collections::{HashMap, HashSet, VecDeque},
     fmt, io,
-    sync::{atomic::AtomicU64, Arc},
+    sync::{Arc, atomic::AtomicU64},
     task::{Context, Poll},
     time::Duration,
 };
@@ -85,13 +85,13 @@ pub use codec::Codec;
 use futures::channel::oneshot;
 use handler::Handler;
 pub use handler::ProtocolSupport;
-use libp2p_core::{transport::PortUse, ConnectedPoint, Endpoint, Multiaddr};
+use libp2p_core::{ConnectedPoint, Endpoint, Multiaddr, transport::PortUse};
 use libp2p_identity::PeerId;
 use libp2p_swarm::{
-    behaviour::{AddressChange, ConnectionClosed, DialFailure, FromSwarm},
-    dial_opts::DialOpts,
     ConnectionDenied, ConnectionHandler, ConnectionId, NetworkBehaviour, NotifyHandler,
     PeerAddresses, THandler, THandlerInEvent, THandlerOutEvent, ToSwarm,
+    behaviour::{AddressChange, ConnectionClosed, DialFailure, FromSwarm},
+    dial_opts::DialOpts,
 };
 use smallvec::SmallVec;
 
@@ -879,7 +879,9 @@ where
                         }));
                 }
                 None => {
-                    tracing::debug!("Connection ({connection_id}) closed after `Event::Request` ({request_id}) has been emitted.");
+                    tracing::debug!(
+                        "Connection ({connection_id}) closed after `Event::Request` ({request_id}) has been emitted."
+                    );
                 }
             },
             handler::Event::ResponseSent(request_id) => {
@@ -991,7 +993,9 @@ where
                         }));
                 } else {
                     // This happens when `read_request` fails.
-                    tracing::debug!("Inbound failure is reported for an unknown request_id ({request_id}): {error}");
+                    tracing::debug!(
+                        "Inbound failure is reported for an unknown request_id ({request_id}): {error}"
+                    );
                 }
             }
         }

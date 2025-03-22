@@ -22,13 +22,13 @@ use std::{
     future::Future,
     pin::Pin,
     sync::{
-        atomic::{AtomicUsize, Ordering},
         Arc,
+        atomic::{AtomicUsize, Ordering},
     },
     task::{Context, Poll},
 };
 
-use futures::{stream::Peekable, Stream, StreamExt};
+use futures::{Stream, StreamExt, stream::Peekable};
 
 use crate::types::RpcOut;
 
@@ -126,7 +126,7 @@ impl Receiver {
         let priority = match self.priority.as_mut().poll_peek_mut(cx) {
             Poll::Ready(Some(RpcOut::Publish {
                 message: _,
-                ref mut timeout,
+                timeout,
             })) => {
                 if Pin::new(timeout).poll(cx).is_ready() {
                     // Return the message.
@@ -142,7 +142,7 @@ impl Receiver {
         let non_priority = match self.non_priority.as_mut().poll_peek_mut(cx) {
             Poll::Ready(Some(RpcOut::Forward {
                 message: _,
-                ref mut timeout,
+                timeout,
             })) => {
                 if Pin::new(timeout).poll(cx).is_ready() {
                     // Return the message.

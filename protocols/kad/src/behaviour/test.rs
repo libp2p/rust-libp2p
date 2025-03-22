@@ -23,22 +23,23 @@
 use futures::{executor::block_on, future::poll_fn, prelude::*};
 use futures_timer::Delay;
 use libp2p_core::{
-    multiaddr::{multiaddr, Protocol},
+    Transport,
+    multiaddr::{Protocol, multiaddr},
     multihash::Multihash,
     transport::MemoryTransport,
-    upgrade, Transport,
+    upgrade,
 };
 use libp2p_identity as identity;
 use libp2p_noise as noise;
 use libp2p_swarm::{self as swarm, Swarm, SwarmEvent};
 use libp2p_yamux as yamux;
 use quickcheck::*;
-use rand::{random, rngs::StdRng, thread_rng, Rng, SeedableRng};
+use rand::{Rng, SeedableRng, random, rngs::StdRng, thread_rng};
 
 use super::*;
 use crate::{
-    record::{store::MemoryStore, Key},
     K_VALUE, PROTOCOL_NAME, SHA_256_MH,
+    record::{Key, store::MemoryStore},
 };
 
 type TestSwarm = Swarm<Behaviour<MemoryStore>>;
@@ -137,7 +138,7 @@ fn build_fully_connected_nodes_with_config(
 }
 
 fn random_multihash() -> Multihash<64> {
-    Multihash::wrap(SHA_256_MH, &thread_rng().gen::<[u8; 32]>()).unwrap()
+    Multihash::wrap(SHA_256_MH, &thread_rng().r#gen::<[u8; 32]>()).unwrap()
 }
 
 #[derive(Clone, Debug)]
@@ -169,7 +170,7 @@ fn bootstrap() {
         // triggering automatically.
         cfg.set_periodic_bootstrap_interval(None);
         cfg.set_automatic_bootstrap_throttle(None);
-        if rng.gen() {
+        if rng.r#gen() {
             cfg.disjoint_query_paths(true);
         }
 
@@ -471,9 +472,17 @@ fn get_closest_with_different_num_results_inner(num_results: usize, replication_
                     }))) => {
                         assert_eq!(&ok.key[..], search_target.to_bytes().as_slice());
                         if num_results > k_value {
-                            assert_eq!(ok.peers.len(), k_value, "Failed with replication_factor: {replication_factor}, num_results: {num_results}");
+                            assert_eq!(
+                                ok.peers.len(),
+                                k_value,
+                                "Failed with replication_factor: {replication_factor}, num_results: {num_results}"
+                            );
                         } else {
-                            assert_eq!(ok.peers.len(), num_results, "Failed with replication_factor: {replication_factor}, num_results: {num_results}");
+                            assert_eq!(
+                                ok.peers.len(),
+                                num_results,
+                                "Failed with replication_factor: {replication_factor}, num_results: {num_results}"
+                            );
                         }
 
                         return Poll::Ready(());
@@ -568,7 +577,7 @@ fn put_record() {
         // triggering automatically.
         config.set_periodic_bootstrap_interval(None);
         config.set_automatic_bootstrap_throttle(None);
-        if rng.gen() {
+        if rng.r#gen() {
             config.disjoint_query_paths(true);
         }
 
@@ -639,165 +648,168 @@ fn put_record() {
         // The accumulated results for one round of publishing.
         let mut results = Vec::new();
 
-        block_on(poll_fn(move |ctx| loop {
-            // Poll all swarms until they are "Pending".
-            for swarm in &mut swarms {
-                loop {
-                    match swarm.poll_next_unpin(ctx) {
-                        Poll::Ready(Some(SwarmEvent::Behaviour(
-                            Event::OutboundQueryProgressed {
-                                id,
-                                result: QueryResult::PutRecord(res),
-                                stats,
-                                step: index,
-                            },
-                        )))
-                        | Poll::Ready(Some(SwarmEvent::Behaviour(
-                            Event::OutboundQueryProgressed {
-                                id,
-                                result: QueryResult::RepublishRecord(res),
-                                stats,
-                                step: index,
-                            },
-                        ))) => {
-                            assert!(qids.is_empty() || qids.remove(&id));
-                            assert!(stats.duration().is_some());
-                            assert!(stats.num_successes() >= replication_factor.get() as u32);
-                            assert!(stats.num_requests() >= stats.num_successes());
-                            assert_eq!(stats.num_failures(), 0);
-                            assert_eq!(usize::from(index.count), 1);
-                            assert!(index.last);
-                            match res {
-                                Err(e) => panic!("{e:?}"),
-                                Ok(ok) => {
-                                    assert!(records.contains_key(&ok.key));
-                                    let record = swarm.behaviour_mut().store.get(&ok.key).unwrap();
-                                    results.push(record.into_owned());
+        block_on(poll_fn(move |ctx| {
+            loop {
+                // Poll all swarms until they are "Pending".
+                for swarm in &mut swarms {
+                    loop {
+                        match swarm.poll_next_unpin(ctx) {
+                            Poll::Ready(Some(SwarmEvent::Behaviour(
+                                Event::OutboundQueryProgressed {
+                                    id,
+                                    result: QueryResult::PutRecord(res),
+                                    stats,
+                                    step: index,
+                                },
+                            )))
+                            | Poll::Ready(Some(SwarmEvent::Behaviour(
+                                Event::OutboundQueryProgressed {
+                                    id,
+                                    result: QueryResult::RepublishRecord(res),
+                                    stats,
+                                    step: index,
+                                },
+                            ))) => {
+                                assert!(qids.is_empty() || qids.remove(&id));
+                                assert!(stats.duration().is_some());
+                                assert!(stats.num_successes() >= replication_factor.get() as u32);
+                                assert!(stats.num_requests() >= stats.num_successes());
+                                assert_eq!(stats.num_failures(), 0);
+                                assert_eq!(usize::from(index.count), 1);
+                                assert!(index.last);
+                                match res {
+                                    Err(e) => panic!("{e:?}"),
+                                    Ok(ok) => {
+                                        assert!(records.contains_key(&ok.key));
+                                        let record =
+                                            swarm.behaviour_mut().store.get(&ok.key).unwrap();
+                                        results.push(record.into_owned());
+                                    }
                                 }
                             }
-                        }
-                        Poll::Ready(Some(SwarmEvent::Behaviour(Event::InboundRequest {
-                            request: InboundRequest::PutRecord { record, .. },
-                        }))) => {
-                            if !drop_records {
-                                if let Some(record) = record {
-                                    assert_eq!(
-                                        swarm.behaviour().record_filtering,
-                                        StoreInserts::FilterBoth
-                                    );
-                                    // Accept the record
-                                    swarm
-                                        .behaviour_mut()
-                                        .store_mut()
-                                        .put(record)
-                                        .expect("record is stored");
-                                } else {
-                                    assert_eq!(
-                                        swarm.behaviour().record_filtering,
-                                        StoreInserts::Unfiltered
-                                    );
+                            Poll::Ready(Some(SwarmEvent::Behaviour(Event::InboundRequest {
+                                request: InboundRequest::PutRecord { record, .. },
+                            }))) => {
+                                if !drop_records {
+                                    if let Some(record) = record {
+                                        assert_eq!(
+                                            swarm.behaviour().record_filtering,
+                                            StoreInserts::FilterBoth
+                                        );
+                                        // Accept the record
+                                        swarm
+                                            .behaviour_mut()
+                                            .store_mut()
+                                            .put(record)
+                                            .expect("record is stored");
+                                    } else {
+                                        assert_eq!(
+                                            swarm.behaviour().record_filtering,
+                                            StoreInserts::Unfiltered
+                                        );
+                                    }
                                 }
                             }
+                            // Ignore any other event.
+                            Poll::Ready(Some(_)) => (),
+                            e @ Poll::Ready(_) => panic!("Unexpected return value: {e:?}"),
+                            Poll::Pending => break,
                         }
-                        // Ignore any other event.
-                        Poll::Ready(Some(_)) => (),
-                        e @ Poll::Ready(_) => panic!("Unexpected return value: {e:?}"),
-                        Poll::Pending => break,
                     }
                 }
-            }
 
-            // All swarms are Pending and not enough results have been collected
-            // so far, thus wait to be polled again for further progress.
-            if results.len() != records.len() {
-                return Poll::Pending;
-            }
-
-            // Consume the results, checking that each record was replicated
-            // correctly to the closest peers to the key.
-            while let Some(r) = results.pop() {
-                let expected = records.get(&r.key).unwrap();
-
-                assert_eq!(r.key, expected.key);
-                assert_eq!(r.value, expected.value);
-                assert_eq!(r.expires, expected.expires);
-                assert_eq!(r.publisher, Some(*swarms[0].local_peer_id()));
-
-                let key = kbucket::Key::new(r.key.clone());
-                let mut expected = swarms
-                    .iter()
-                    .skip(1)
-                    .map(Swarm::local_peer_id)
-                    .cloned()
-                    .collect::<Vec<_>>();
-                expected.sort_by(|id1, id2| {
-                    kbucket::Key::from(*id1)
-                        .distance(&key)
-                        .cmp(&kbucket::Key::from(*id2).distance(&key))
-                });
-
-                let expected = expected
-                    .into_iter()
-                    .take(replication_factor.get())
-                    .collect::<HashSet<_>>();
-
-                let actual = swarms
-                    .iter()
-                    .skip(1)
-                    .filter_map(|swarm| {
-                        if swarm.behaviour().store.get(key.preimage()).is_some() {
-                            Some(*swarm.local_peer_id())
-                        } else {
-                            None
-                        }
-                    })
-                    .collect::<HashSet<_>>();
-
-                if swarms[0].behaviour().record_filtering != StoreInserts::Unfiltered
-                    && drop_records
-                {
-                    assert_eq!(actual.len(), 0);
-                } else {
-                    assert_eq!(actual.len(), replication_factor.get());
-
-                    let actual_not_expected =
-                        actual.difference(&expected).collect::<Vec<&PeerId>>();
-                    assert!(
-                        actual_not_expected.is_empty(),
-                        "Did not expect records to be stored on nodes {actual_not_expected:?}.",
-                    );
-
-                    let expected_not_actual =
-                        expected.difference(&actual).collect::<Vec<&PeerId>>();
-                    assert!(
-                        expected_not_actual.is_empty(),
-                        "Expected record to be stored on nodes {expected_not_actual:?}.",
-                    );
+                // All swarms are Pending and not enough results have been collected
+                // so far, thus wait to be polled again for further progress.
+                if results.len() != records.len() {
+                    return Poll::Pending;
                 }
-            }
 
-            if republished {
-                assert_eq!(
-                    swarms[0].behaviour_mut().store.records().count(),
-                    records.len()
-                );
-                assert_eq!(swarms[0].behaviour_mut().queries.size(), 0);
-                for k in records.keys() {
-                    swarms[0].behaviour_mut().store.remove(k);
+                // Consume the results, checking that each record was replicated
+                // correctly to the closest peers to the key.
+                while let Some(r) = results.pop() {
+                    let expected = records.get(&r.key).unwrap();
+
+                    assert_eq!(r.key, expected.key);
+                    assert_eq!(r.value, expected.value);
+                    assert_eq!(r.expires, expected.expires);
+                    assert_eq!(r.publisher, Some(*swarms[0].local_peer_id()));
+
+                    let key = kbucket::Key::new(r.key.clone());
+                    let mut expected = swarms
+                        .iter()
+                        .skip(1)
+                        .map(Swarm::local_peer_id)
+                        .cloned()
+                        .collect::<Vec<_>>();
+                    expected.sort_by(|id1, id2| {
+                        kbucket::Key::from(*id1)
+                            .distance(&key)
+                            .cmp(&kbucket::Key::from(*id2).distance(&key))
+                    });
+
+                    let expected = expected
+                        .into_iter()
+                        .take(replication_factor.get())
+                        .collect::<HashSet<_>>();
+
+                    let actual = swarms
+                        .iter()
+                        .skip(1)
+                        .filter_map(|swarm| {
+                            if swarm.behaviour().store.get(key.preimage()).is_some() {
+                                Some(*swarm.local_peer_id())
+                            } else {
+                                None
+                            }
+                        })
+                        .collect::<HashSet<_>>();
+
+                    if swarms[0].behaviour().record_filtering != StoreInserts::Unfiltered
+                        && drop_records
+                    {
+                        assert_eq!(actual.len(), 0);
+                    } else {
+                        assert_eq!(actual.len(), replication_factor.get());
+
+                        let actual_not_expected =
+                            actual.difference(&expected).collect::<Vec<&PeerId>>();
+                        assert!(
+                            actual_not_expected.is_empty(),
+                            "Did not expect records to be stored on nodes {actual_not_expected:?}.",
+                        );
+
+                        let expected_not_actual =
+                            expected.difference(&actual).collect::<Vec<&PeerId>>();
+                        assert!(
+                            expected_not_actual.is_empty(),
+                            "Expected record to be stored on nodes {expected_not_actual:?}.",
+                        );
+                    }
                 }
-                assert_eq!(swarms[0].behaviour_mut().store.records().count(), 0);
-                // All records have been republished, thus the test is complete.
-                return Poll::Ready(());
-            }
 
-            // Tell the replication job to republish asap.
-            swarms[0]
-                .behaviour_mut()
-                .put_record_job
-                .as_mut()
-                .unwrap()
-                .asap(true);
-            republished = true;
+                if republished {
+                    assert_eq!(
+                        swarms[0].behaviour_mut().store.records().count(),
+                        records.len()
+                    );
+                    assert_eq!(swarms[0].behaviour_mut().queries.size(), 0);
+                    for k in records.keys() {
+                        swarms[0].behaviour_mut().store.remove(k);
+                    }
+                    assert_eq!(swarms[0].behaviour_mut().store.records().count(), 0);
+                    // All records have been republished, thus the test is complete.
+                    return Poll::Ready(());
+                }
+
+                // Tell the replication job to republish asap.
+                swarms[0]
+                    .behaviour_mut()
+                    .put_record_job
+                    .as_mut()
+                    .unwrap()
+                    .asap(true);
+                republished = true;
+            }
         }))
     }
 
@@ -941,7 +953,7 @@ fn add_provider() {
         // triggering automatically.
         config.set_periodic_bootstrap_interval(None);
         config.set_automatic_bootstrap_throttle(None);
-        if rng.gen() {
+        if rng.r#gen() {
             config.disjoint_query_paths(true);
         }
 
@@ -987,125 +999,127 @@ fn add_provider() {
             qids.insert(qid);
         }
 
-        block_on(poll_fn(move |ctx| loop {
-            // Poll all swarms until they are "Pending".
-            for swarm in &mut swarms {
-                loop {
-                    match swarm.poll_next_unpin(ctx) {
-                        Poll::Ready(Some(SwarmEvent::Behaviour(
-                            Event::OutboundQueryProgressed {
-                                id,
-                                result: QueryResult::StartProviding(res),
-                                ..
-                            },
-                        )))
-                        | Poll::Ready(Some(SwarmEvent::Behaviour(
-                            Event::OutboundQueryProgressed {
-                                id,
-                                result: QueryResult::RepublishProvider(res),
-                                ..
-                            },
-                        ))) => {
-                            assert!(qids.is_empty() || qids.remove(&id));
-                            match res {
-                                Err(e) => panic!("{e:?}"),
-                                Ok(ok) => {
-                                    assert!(keys.contains(&ok.key));
-                                    results.push(ok.key);
+        block_on(poll_fn(move |ctx| {
+            loop {
+                // Poll all swarms until they are "Pending".
+                for swarm in &mut swarms {
+                    loop {
+                        match swarm.poll_next_unpin(ctx) {
+                            Poll::Ready(Some(SwarmEvent::Behaviour(
+                                Event::OutboundQueryProgressed {
+                                    id,
+                                    result: QueryResult::StartProviding(res),
+                                    ..
+                                },
+                            )))
+                            | Poll::Ready(Some(SwarmEvent::Behaviour(
+                                Event::OutboundQueryProgressed {
+                                    id,
+                                    result: QueryResult::RepublishProvider(res),
+                                    ..
+                                },
+                            ))) => {
+                                assert!(qids.is_empty() || qids.remove(&id));
+                                match res {
+                                    Err(e) => panic!("{e:?}"),
+                                    Ok(ok) => {
+                                        assert!(keys.contains(&ok.key));
+                                        results.push(ok.key);
+                                    }
                                 }
                             }
+                            // Ignore any other event.
+                            Poll::Ready(Some(_)) => (),
+                            e @ Poll::Ready(_) => panic!("Unexpected return value: {e:?}"),
+                            Poll::Pending => break,
                         }
-                        // Ignore any other event.
-                        Poll::Ready(Some(_)) => (),
-                        e @ Poll::Ready(_) => panic!("Unexpected return value: {e:?}"),
-                        Poll::Pending => break,
                     }
                 }
-            }
 
-            if results.len() == keys.len() {
-                // All requests have been sent for one round of publishing.
-                published = true
-            }
+                if results.len() == keys.len() {
+                    // All requests have been sent for one round of publishing.
+                    published = true
+                }
 
-            if !published {
-                // Still waiting for all requests to be sent for one round
-                // of publishing.
-                return Poll::Pending;
-            }
-
-            // A round of publishing is complete. Consume the results, checking that
-            // each key was published to the `replication_factor` closest peers.
-            while let Some(key) = results.pop() {
-                // Collect the nodes that have a provider record for `key`.
-                let actual = swarms
-                    .iter()
-                    .skip(1)
-                    .filter_map(|swarm| {
-                        if swarm.behaviour().store.providers(&key).len() == 1 {
-                            Some(*Swarm::local_peer_id(swarm))
-                        } else {
-                            None
-                        }
-                    })
-                    .collect::<HashSet<_>>();
-
-                if actual.len() != replication_factor.get() {
-                    // Still waiting for some nodes to process the request.
-                    results.push(key);
+                if !published {
+                    // Still waiting for all requests to be sent for one round
+                    // of publishing.
                     return Poll::Pending;
                 }
 
-                let mut expected = swarms
-                    .iter()
-                    .skip(1)
-                    .map(Swarm::local_peer_id)
-                    .cloned()
-                    .collect::<Vec<_>>();
-                let kbucket_key = kbucket::Key::new(key);
-                expected.sort_by(|id1, id2| {
-                    kbucket::Key::from(*id1)
-                        .distance(&kbucket_key)
-                        .cmp(&kbucket::Key::from(*id2).distance(&kbucket_key))
-                });
+                // A round of publishing is complete. Consume the results, checking that
+                // each key was published to the `replication_factor` closest peers.
+                while let Some(key) = results.pop() {
+                    // Collect the nodes that have a provider record for `key`.
+                    let actual = swarms
+                        .iter()
+                        .skip(1)
+                        .filter_map(|swarm| {
+                            if swarm.behaviour().store.providers(&key).len() == 1 {
+                                Some(*Swarm::local_peer_id(swarm))
+                            } else {
+                                None
+                            }
+                        })
+                        .collect::<HashSet<_>>();
 
-                let expected = expected
-                    .into_iter()
-                    .take(replication_factor.get())
-                    .collect::<HashSet<_>>();
+                    if actual.len() != replication_factor.get() {
+                        // Still waiting for some nodes to process the request.
+                        results.push(key);
+                        return Poll::Pending;
+                    }
 
-                assert_eq!(actual, expected);
-            }
+                    let mut expected = swarms
+                        .iter()
+                        .skip(1)
+                        .map(Swarm::local_peer_id)
+                        .cloned()
+                        .collect::<Vec<_>>();
+                    let kbucket_key = kbucket::Key::new(key);
+                    expected.sort_by(|id1, id2| {
+                        kbucket::Key::from(*id1)
+                            .distance(&kbucket_key)
+                            .cmp(&kbucket::Key::from(*id2).distance(&kbucket_key))
+                    });
 
-            // One round of publishing is complete.
-            assert!(results.is_empty());
-            for swarm in &swarms {
-                assert_eq!(swarm.behaviour().queries.size(), 0);
-            }
+                    let expected = expected
+                        .into_iter()
+                        .take(replication_factor.get())
+                        .collect::<HashSet<_>>();
 
-            if republished {
-                assert_eq!(
-                    swarms[0].behaviour_mut().store.provided().count(),
-                    keys.len()
-                );
-                for k in &keys {
-                    swarms[0].behaviour_mut().stop_providing(k);
+                    assert_eq!(actual, expected);
                 }
-                assert_eq!(swarms[0].behaviour_mut().store.provided().count(), 0);
-                // All records have been republished, thus the test is complete.
-                return Poll::Ready(());
-            }
 
-            // Initiate the second round of publishing by telling the
-            // periodic provider job to run asap.
-            swarms[0]
-                .behaviour_mut()
-                .add_provider_job
-                .as_mut()
-                .unwrap()
-                .asap();
-            published = false;
-            republished = true;
+                // One round of publishing is complete.
+                assert!(results.is_empty());
+                for swarm in &swarms {
+                    assert_eq!(swarm.behaviour().queries.size(), 0);
+                }
+
+                if republished {
+                    assert_eq!(
+                        swarms[0].behaviour_mut().store.provided().count(),
+                        keys.len()
+                    );
+                    for k in &keys {
+                        swarms[0].behaviour_mut().stop_providing(k);
+                    }
+                    assert_eq!(swarms[0].behaviour_mut().store.provided().count(), 0);
+                    // All records have been republished, thus the test is complete.
+                    return Poll::Ready(());
+                }
+
+                // Initiate the second round of publishing by telling the
+                // periodic provider job to run asap.
+                swarms[0]
+                    .behaviour_mut()
+                    .add_provider_job
+                    .as_mut()
+                    .unwrap()
+                    .asap();
+                published = false;
+                republished = true;
+            }
         }))
     }
 
@@ -1176,7 +1190,7 @@ fn disjoint_query_does_not_finish_before_all_paths_did() {
     let mut bob = build_node();
 
     let key = Key::from(
-        Multihash::<64>::wrap(SHA_256_MH, &thread_rng().gen::<[u8; 32]>())
+        Multihash::<64>::wrap(SHA_256_MH, &thread_rng().r#gen::<[u8; 32]>())
             .expect("32 array to fit into 64 byte multihash"),
     );
     let record_bob = Record::new(key.clone(), b"bob".to_vec());
@@ -1393,15 +1407,17 @@ fn network_behaviour_on_address_change() {
     // At this point the remote is not yet known to support the
     // configured protocol name, so the peer is not yet in the
     // local routing table and hence no addresses are known.
-    assert!(kademlia
-        .handle_pending_outbound_connection(
-            connection_id,
-            Some(remote_peer_id),
-            &[],
-            Endpoint::Dialer
-        )
-        .unwrap()
-        .is_empty());
+    assert!(
+        kademlia
+            .handle_pending_outbound_connection(
+                connection_id,
+                Some(remote_peer_id),
+                &[],
+                Endpoint::Dialer
+            )
+            .unwrap()
+            .is_empty()
+    );
 
     // Mimic the connection handler confirming the protocol for
     // the test connection, so that the peer is added to the routing table.

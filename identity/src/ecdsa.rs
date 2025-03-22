@@ -24,11 +24,11 @@ use core::{cmp, fmt, hash};
 use std::convert::Infallible;
 
 use p256::{
-    ecdsa::{
-        signature::{Signer, Verifier},
-        Signature, SigningKey, VerifyingKey,
-    },
     EncodedPoint,
+    ecdsa::{
+        Signature, SigningKey, VerifyingKey,
+        signature::{Signer, Verifier},
+    },
 };
 use sec1::{DecodeEcPrivateKey, EncodeEcPrivateKey};
 use zeroize::Zeroize;

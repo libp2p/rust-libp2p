@@ -34,12 +34,12 @@ mod proto {
     include!("generated/mod.rs");
     pub use self::message_v2::pb::mod_StopMessage::Type as StopMessageType;
     pub(crate) use self::message_v2::pb::{
-        mod_HopMessage::Type as HopMessageType, HopMessage, Limit, Peer, Reservation, Status,
-        StopMessage,
+        HopMessage, Limit, Peer, Reservation, Status, StopMessage,
+        mod_HopMessage::Type as HopMessageType,
     };
 }
 
-pub use behaviour::{rate_limiter::RateLimiter, Behaviour, CircuitId, Config, Event};
+pub use behaviour::{Behaviour, CircuitId, Config, Event, rate_limiter::RateLimiter};
 pub use protocol::{HOP_PROTOCOL_NAME, STOP_PROTOCOL_NAME};
 
 /// Types related to the relay protocol inbound.
@@ -64,7 +64,7 @@ pub mod outbound {
 
 /// Everything related to the relay protocol from a client's perspective.
 pub mod client {
-    pub use crate::priv_client::{new, transport::Transport, Behaviour, Connection, Event};
+    pub use crate::priv_client::{Behaviour, Connection, Event, new, transport::Transport};
 
     pub mod transport {
         pub use crate::priv_client::transport::Error;

@@ -25,7 +25,7 @@ mod network;
 use std::{error::Error, io::Write, path::PathBuf};
 
 use clap::Parser;
-use futures::{prelude::*, StreamExt};
+use futures::{StreamExt, prelude::*};
 use libp2p::{core::Multiaddr, multiaddr::Protocol};
 use tokio::task::spawn;
 use tracing_subscriber::EnvFilter;

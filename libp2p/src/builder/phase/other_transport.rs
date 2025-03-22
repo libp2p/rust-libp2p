@@ -1,18 +1,18 @@
 use std::{convert::Infallible, marker::PhantomData, sync::Arc};
 
-use libp2p_core::{
-    upgrade::{InboundConnectionUpgrade, OutboundConnectionUpgrade},
-    Transport,
-};
 #[cfg(feature = "relay")]
 use libp2p_core::{Negotiated, UpgradeInfo};
+use libp2p_core::{
+    Transport,
+    upgrade::{InboundConnectionUpgrade, OutboundConnectionUpgrade},
+};
 #[cfg(feature = "relay")]
 use libp2p_identity::PeerId;
 
 use super::*;
+use crate::SwarmBuilder;
 #[allow(deprecated)]
 use crate::bandwidth::BandwidthSinks;
-use crate::SwarmBuilder;
 
 pub struct OtherTransportPhase<T> {
     pub(crate) transport: T,

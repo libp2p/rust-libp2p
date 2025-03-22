@@ -20,7 +20,7 @@ pub use behaviour::BehaviourError;
 use behaviour::*;
 use build::*;
 use dns::*;
-use libp2p_core::{muxing::StreamMuxerBox, Transport};
+use libp2p_core::{Transport, muxing::StreamMuxerBox};
 use libp2p_identity::Keypair;
 pub use other_transport::TransportError;
 use other_transport::*;
@@ -34,7 +34,7 @@ pub use websocket::WebsocketError;
 use websocket::*;
 
 use super::{
-    select_muxer::SelectMuxerUpgrade, select_security::SelectSecurityUpgrade, SwarmBuilder,
+    SwarmBuilder, select_muxer::SelectMuxerUpgrade, select_security::SelectSecurityUpgrade,
 };
 
 #[allow(unreachable_pub)]

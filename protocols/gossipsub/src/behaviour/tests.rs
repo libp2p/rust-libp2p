@@ -28,8 +28,8 @@ use rand::Rng;
 
 use super::*;
 use crate::{
-    config::ConfigBuilder, rpc::Receiver, subscription_filter::WhitelistSubscriptionFilter,
-    types::Rpc, IdentTopic as Topic,
+    IdentTopic as Topic, config::ConfigBuilder, rpc::Receiver,
+    subscription_filter::WhitelistSubscriptionFilter, types::Rpc,
 };
 
 #[derive(Default, Debug)]
@@ -289,7 +289,7 @@ where
             role_override: Endpoint::Dialer,
             port_use: PortUse::Reuse,
         }; // this is not relevant
-           // peer_connections.connections should never be empty.
+        // peer_connections.connections should never be empty.
 
         let mut active_connections = peer_connections.connections.len();
         for connection_id in peer_connections.connections.clone() {
@@ -1964,11 +1964,13 @@ fn test_connect_to_px_peers_on_handle_prune() {
     assert_eq!(dials_set.len(), config.prune_peers());
 
     // all dial peers must be in px
-    assert!(dials_set.is_subset(
-        &px.iter()
-            .map(|i| *i.peer_id.as_ref().unwrap())
-            .collect::<HashSet<_>>()
-    ));
+    assert!(
+        dials_set.is_subset(
+            &px.iter()
+                .map(|i| *i.peer_id.as_ref().unwrap())
+                .collect::<HashSet<_>>()
+        )
+    );
 }
 
 #[test]
@@ -2821,21 +2823,25 @@ fn test_iwant_msg_from_peer_below_gossip_threshold_gets_ignored() {
             });
 
     // the message got sent to p2
-    assert!(sent_messages
-        .iter()
-        .map(|(peer_id, msg)| (
-            peer_id,
-            gs.data_transform.inbound_transform(msg.clone()).unwrap()
-        ))
-        .any(|(peer_id, msg)| peer_id == &p2 && gs.config.message_id(&msg) == msg_id));
+    assert!(
+        sent_messages
+            .iter()
+            .map(|(peer_id, msg)| (
+                peer_id,
+                gs.data_transform.inbound_transform(msg.clone()).unwrap()
+            ))
+            .any(|(peer_id, msg)| peer_id == &p2 && gs.config.message_id(&msg) == msg_id)
+    );
     // the message got not sent to p1
-    assert!(sent_messages
-        .iter()
-        .map(|(peer_id, msg)| (
-            peer_id,
-            gs.data_transform.inbound_transform(msg.clone()).unwrap()
-        ))
-        .all(|(peer_id, msg)| !(peer_id == &p1 && gs.config.message_id(&msg) == msg_id)));
+    assert!(
+        sent_messages
+            .iter()
+            .map(|(peer_id, msg)| (
+                peer_id,
+                gs.data_transform.inbound_transform(msg.clone()).unwrap()
+            ))
+            .all(|(peer_id, msg)| !(peer_id == &p1 && gs.config.message_id(&msg) == msg_id))
+    );
 }
 
 #[test]
@@ -3273,12 +3279,14 @@ fn test_keep_best_scoring_peers_on_oversubscription() {
     assert_eq!(gs.mesh[&topics[0]].len(), config.mesh_n());
 
     // mesh contains retain_scores best peers
-    assert!(gs.mesh[&topics[0]].is_superset(
-        &peers[(n - config.retain_scores())..]
-            .iter()
-            .cloned()
-            .collect()
-    ));
+    assert!(
+        gs.mesh[&topics[0]].is_superset(
+            &peers[(n - config.retain_scores())..]
+                .iter()
+                .cloned()
+                .collect()
+        )
+    );
 }
 
 #[test]
@@ -3353,7 +3361,7 @@ fn random_message(seq: &mut u64, topics: &[TopicHash]) -> RawMessage {
     *seq += 1;
     RawMessage {
         source: Some(PeerId::random()),
-        data: (0..rng.gen_range(10..30)).map(|_| rng.gen()).collect(),
+        data: (0..rng.gen_range(10..30)).map(|_| rng.r#gen()).collect(),
         sequence_number: Some(*seq),
         topic: topics[rng.gen_range(0..topics.len())].clone(),
         signature: None,
@@ -6045,11 +6053,15 @@ fn test_priority_messages_are_always_sent() {
     let sender = Sender::new(2);
     let topic_hash = Topic::new("Test").hash();
     // Fill the buffer with the first message.
-    assert!(sender
-        .send_message(RpcOut::Subscribe(topic_hash.clone()))
-        .is_ok());
-    assert!(sender
-        .send_message(RpcOut::Subscribe(topic_hash.clone()))
-        .is_ok());
+    assert!(
+        sender
+            .send_message(RpcOut::Subscribe(topic_hash.clone()))
+            .is_ok()
+    );
+    assert!(
+        sender
+            .send_message(RpcOut::Subscribe(topic_hash.clone()))
+            .is_ok()
+    );
     assert!(sender.send_message(RpcOut::Unsubscribe(topic_hash)).is_ok());
 }

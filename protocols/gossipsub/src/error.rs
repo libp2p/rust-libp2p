@@ -150,9 +150,17 @@ impl std::fmt::Display for ConfigBuilderError {
             Self::MaxTransmissionSizeTooSmall => {
                 write!(f, "Maximum transmission size is too small")
             }
-            Self::HistoryLengthTooSmall => write!(f, "History length less than history gossip length"),
-            Self::MeshParametersInvalid => write!(f, "The ineauality doesn't hold mesh_outbound_min <= mesh_n_low <= mesh_n <= mesh_n_high"),
-            Self::MeshOutboundInvalid => write!(f, "The inequality doesn't hold mesh_outbound_min <= self.config.mesh_n / 2"),
+            Self::HistoryLengthTooSmall => {
+                write!(f, "History length less than history gossip length")
+            }
+            Self::MeshParametersInvalid => write!(
+                f,
+                "The ineauality doesn't hold mesh_outbound_min <= mesh_n_low <= mesh_n <= mesh_n_high"
+            ),
+            Self::MeshOutboundInvalid => write!(
+                f,
+                "The inequality doesn't hold mesh_outbound_min <= self.config.mesh_n / 2"
+            ),
             Self::UnsubscribeBackoffIsZero => write!(f, "unsubscribe_backoff is zero"),
             Self::InvalidProtocol => write!(f, "Invalid protocol"),
         }

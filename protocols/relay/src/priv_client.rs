@@ -24,7 +24,7 @@ pub(crate) mod handler;
 pub(crate) mod transport;
 
 use std::{
-    collections::{hash_map, HashMap, VecDeque},
+    collections::{HashMap, VecDeque, hash_map},
     convert::Infallible,
     io::{Error, ErrorKind, IoSlice},
     pin::Pin,
@@ -40,13 +40,14 @@ use futures::{
     ready,
     stream::StreamExt,
 };
-use libp2p_core::{multiaddr::Protocol, transport::PortUse, Endpoint, Multiaddr};
+use libp2p_core::{Endpoint, Multiaddr, multiaddr::Protocol, transport::PortUse};
 use libp2p_identity::PeerId;
 use libp2p_swarm::{
+    ConnectionDenied, ConnectionHandler, ConnectionId, DialFailure, NetworkBehaviour,
+    NotifyHandler, Stream, THandler, THandlerInEvent, THandlerOutEvent, ToSwarm,
     behaviour::{ConnectionClosed, ConnectionEstablished, FromSwarm},
     dial_opts::DialOpts,
-    dummy, ConnectionDenied, ConnectionHandler, ConnectionId, DialFailure, NetworkBehaviour,
-    NotifyHandler, Stream, THandler, THandlerInEvent, THandlerOutEvent, ToSwarm,
+    dummy,
 };
 use transport::Transport;
 

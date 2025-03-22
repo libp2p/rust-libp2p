@@ -21,8 +21,8 @@
 //! Data structure for efficiently storing known back-off's when pruning peers.
 use std::{
     collections::{
-        hash_map::{Entry, HashMap},
         HashSet,
+        hash_map::{Entry, HashMap},
     },
     time::Duration,
 };

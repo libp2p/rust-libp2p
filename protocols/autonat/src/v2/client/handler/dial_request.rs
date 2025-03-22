@@ -7,28 +7,28 @@ use std::{
     time::Duration,
 };
 
-use futures::{channel::oneshot, AsyncWrite};
+use futures::{AsyncWrite, channel::oneshot};
 use futures_bounded::FuturesMap;
 use libp2p_core::{
-    upgrade::{DeniedUpgrade, ReadyUpgrade},
     Multiaddr,
+    upgrade::{DeniedUpgrade, ReadyUpgrade},
 };
 use libp2p_swarm::{
+    ConnectionHandler, ConnectionHandlerEvent, Stream, StreamProtocol, StreamUpgradeError,
+    SubstreamProtocol,
     handler::{
         ConnectionEvent, DialUpgradeError, FullyNegotiatedOutbound, OutboundUpgradeSend,
         ProtocolsChange,
     },
-    ConnectionHandler, ConnectionHandlerEvent, Stream, StreamProtocol, StreamUpgradeError,
-    SubstreamProtocol,
 };
 
 use crate::v2::{
-    generated::structs::{mod_DialResponse::ResponseStatus, DialStatus},
+    DIAL_REQUEST_PROTOCOL, Nonce,
+    generated::structs::{DialStatus, mod_DialResponse::ResponseStatus},
     protocol::{
-        Coder, DialDataRequest, DialDataResponse, DialRequest, Response,
-        DATA_FIELD_LEN_UPPER_BOUND, DATA_LEN_LOWER_BOUND, DATA_LEN_UPPER_BOUND,
+        Coder, DATA_FIELD_LEN_UPPER_BOUND, DATA_LEN_LOWER_BOUND, DATA_LEN_UPPER_BOUND,
+        DialDataRequest, DialDataResponse, DialRequest, Response,
     },
-    Nonce, DIAL_REQUEST_PROTOCOL,
 };
 
 #[derive(Debug)]
@@ -137,7 +137,7 @@ impl ConnectionHandler for Handler {
             Poll::Ready((nonce, Ok(outcome))) => {
                 return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(
                     ToBehaviour::TestOutcome { nonce, outcome },
-                ))
+                ));
             }
             Poll::Ready((nonce, Err(_))) => {
                 return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(
@@ -268,19 +268,19 @@ async fn start_stream_handle(
             return Err(Error::Io(io::Error::new(
                 io::ErrorKind::Other,
                 "server rejected request",
-            )))
+            )));
         }
         ResponseStatus::E_DIAL_REFUSED => {
             return Err(Error::Io(io::Error::new(
                 io::ErrorKind::Other,
                 "server refused dial",
-            )))
+            )));
         }
         ResponseStatus::E_INTERNAL_ERROR => {
             return Err(Error::Io(io::Error::new(
                 io::ErrorKind::Other,
                 "server encountered internal error",
-            )))
+            )));
         }
         ResponseStatus::OK => {}
     }
@@ -296,21 +296,21 @@ async fn start_stream_handle(
             return Err(Error::Io(io::Error::new(
                 io::ErrorKind::InvalidInput,
                 "unexpected message",
-            )))
+            )));
         }
         DialStatus::E_DIAL_ERROR => {
             return Err(Error::AddressNotReachable {
                 address: tested_address,
                 bytes_sent,
                 error: DialBackError::NoConnection,
-            })
+            });
         }
         DialStatus::E_DIAL_BACK_ERROR => {
             return Err(Error::AddressNotReachable {
                 address: tested_address,
                 bytes_sent,
                 error: DialBackError::StreamFailed,
-            })
+            });
         }
         DialStatus::OK => {}
     }

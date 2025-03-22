@@ -25,8 +25,8 @@ mod timer;
 use std::{
     cmp,
     collections::{
-        hash_map::{Entry, HashMap},
         VecDeque,
+        hash_map::{Entry, HashMap},
     },
     convert::Infallible,
     fmt,
@@ -39,20 +39,20 @@ use std::{
     time::Instant,
 };
 
-use futures::{channel::mpsc, Stream, StreamExt};
+use futures::{Stream, StreamExt, channel::mpsc};
 use if_watch::IfEvent;
-use libp2p_core::{transport::PortUse, Endpoint, Multiaddr};
+use libp2p_core::{Endpoint, Multiaddr, transport::PortUse};
 use libp2p_identity::PeerId;
 use libp2p_swarm::{
-    behaviour::FromSwarm, dummy, ConnectionDenied, ConnectionId, ListenAddresses, NetworkBehaviour,
-    THandler, THandlerInEvent, THandlerOutEvent, ToSwarm,
+    ConnectionDenied, ConnectionId, ListenAddresses, NetworkBehaviour, THandler, THandlerInEvent,
+    THandlerOutEvent, ToSwarm, behaviour::FromSwarm, dummy,
 };
 use smallvec::SmallVec;
 
 use self::iface::InterfaceState;
 use crate::{
-    behaviour::{socket::AsyncSocket, timer::Builder},
     Config,
+    behaviour::{socket::AsyncSocket, timer::Builder},
 };
 
 /// An abstraction to allow for compatibility with various async runtimes.
@@ -87,7 +87,7 @@ pub mod async_io {
     use if_watch::smol::IfWatcher;
 
     use super::Provider;
-    use crate::behaviour::{socket::asio::AsyncUdpSocket, timer::asio::AsyncTimer, Abort};
+    use crate::behaviour::{Abort, socket::asio::AsyncUdpSocket, timer::asio::AsyncTimer};
 
     #[doc(hidden)]
     pub enum AsyncIo {}
@@ -125,7 +125,7 @@ pub mod tokio {
     use tokio::task::JoinHandle;
 
     use super::Provider;
-    use crate::behaviour::{socket::tokio::TokioUdpSocket, timer::tokio::TokioTimer, Abort};
+    use crate::behaviour::{Abort, socket::tokio::TokioUdpSocket, timer::tokio::TokioTimer};
 
     #[doc(hidden)]
     pub enum Tokio {}

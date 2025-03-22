@@ -31,7 +31,7 @@ use concurrent_dial::ConcurrentDial;
 use fnv::FnvHashMap;
 use futures::{
     channel::{mpsc, oneshot},
-    future::{poll_fn, BoxFuture, Either},
+    future::{BoxFuture, Either, poll_fn},
     prelude::*,
     ready,
     stream::{FuturesUnordered, SelectAll},
@@ -45,12 +45,12 @@ use tracing::Instrument;
 use web_time::{Duration, Instant};
 
 use crate::{
+    ConnectedPoint, ConnectionHandler, Executor, Multiaddr, PeerId,
     connection::{
         Connected, Connection, ConnectionError, ConnectionId, IncomingInfo,
         PendingInboundConnectionError, PendingOutboundConnectionError, PendingPoint,
     },
     transport::TransportError,
-    ConnectedPoint, ConnectionHandler, Executor, Multiaddr, PeerId,
 };
 
 mod concurrent_dial;
@@ -703,7 +703,9 @@ where
                                             peer: Some(peer),
                                         })
                                     }
-                                    ConnectedPoint::Listener {.. } => unreachable!("There shouldn't be an expected PeerId on inbound connections."),
+                                    ConnectedPoint::Listener { .. } => unreachable!(
+                                        "There shouldn't be an expected PeerId on inbound connections."
+                                    ),
                                 };
                             }
                         }

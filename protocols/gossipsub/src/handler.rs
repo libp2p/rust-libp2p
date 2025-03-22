@@ -24,23 +24,23 @@ use std::{
 };
 
 use asynchronous_codec::Framed;
-use futures::{future::Either, prelude::*, StreamExt};
+use futures::{StreamExt, future::Either, prelude::*};
 use libp2p_core::upgrade::DeniedUpgrade;
 use libp2p_swarm::{
+    Stream,
     handler::{
         ConnectionEvent, ConnectionHandler, ConnectionHandlerEvent, DialUpgradeError,
         FullyNegotiatedInbound, FullyNegotiatedOutbound, StreamUpgradeError, SubstreamProtocol,
     },
-    Stream,
 };
 use web_time::Instant;
 
 use crate::{
+    ValidationError,
     protocol::{GossipsubCodec, ProtocolConfig},
     rpc::Receiver,
     rpc_proto::proto,
     types::{PeerKind, RawMessage, Rpc, RpcOut},
-    ValidationError,
 };
 
 /// The event emitted by the Handler. This informs the behaviour of various events created

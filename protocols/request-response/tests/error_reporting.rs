@@ -1,6 +1,6 @@
 use std::{io, iter, pin::pin, time::Duration};
 
-use anyhow::{bail, Result};
+use anyhow::{Result, bail};
 use async_std::task::sleep;
 use async_trait::async_trait;
 use futures::prelude::*;

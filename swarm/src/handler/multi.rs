@@ -36,13 +36,13 @@ use futures::{future::BoxFuture, prelude::*, ready};
 use rand::Rng;
 
 use crate::{
+    Stream,
     handler::{
         AddressChange, ConnectionEvent, ConnectionHandler, ConnectionHandlerEvent,
         DialUpgradeError, FullyNegotiatedInbound, FullyNegotiatedOutbound, ListenUpgradeError,
         SubstreamProtocol,
     },
     upgrade::{InboundUpgradeSend, OutboundUpgradeSend, UpgradeInfoSend},
-    Stream,
 };
 
 /// A [`ConnectionHandler`] for multiple [`ConnectionHandler`]s of the same type.

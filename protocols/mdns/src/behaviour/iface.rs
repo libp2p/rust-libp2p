@@ -32,7 +32,7 @@ use std::{
     time::{Duration, Instant},
 };
 
-use futures::{channel::mpsc, SinkExt, StreamExt};
+use futures::{SinkExt, StreamExt, channel::mpsc};
 use libp2p_core::Multiaddr;
 use libp2p_identity::PeerId;
 use libp2p_swarm::ListenAddresses;
@@ -43,8 +43,8 @@ use self::{
     query::MdnsPacket,
 };
 use crate::{
-    behaviour::{socket::AsyncSocket, timer::Builder},
     Config,
+    behaviour::{socket::AsyncSocket, timer::Builder},
 };
 
 /// Initial interval for starting probe

@@ -74,12 +74,14 @@ pub mod derive_prelude {
     pub use either::Either;
     pub use futures::prelude as futures;
     pub use libp2p_core::{
-        transport::{ListenerId, PortUse},
         ConnectedPoint, Endpoint, Multiaddr,
+        transport::{ListenerId, PortUse},
     };
     pub use libp2p_identity::PeerId;
 
     pub use crate::{
+        ConnectionDenied, ConnectionHandler, ConnectionHandlerSelect, DialError, NetworkBehaviour,
+        THandler, THandlerInEvent, THandlerOutEvent, ToSwarm,
         behaviour::{
             AddressChange, ConnectionClosed, ConnectionEstablished, DialFailure, ExpiredListenAddr,
             ExternalAddrConfirmed, ExternalAddrExpired, FromSwarm, ListenFailure, ListenerClosed,
@@ -87,15 +89,13 @@ pub mod derive_prelude {
             NewListener,
         },
         connection::ConnectionId,
-        ConnectionDenied, ConnectionHandler, ConnectionHandlerSelect, DialError, NetworkBehaviour,
-        THandler, THandlerInEvent, THandlerOutEvent, ToSwarm,
     };
 }
 
 use std::{
     collections::{HashMap, HashSet, VecDeque},
     error, fmt, io,
-    num::{NonZeroU32, NonZeroU8, NonZeroUsize},
+    num::{NonZeroU8, NonZeroU32, NonZeroUsize},
     pin::Pin,
     task::{Context, Poll},
     time::Duration,
@@ -107,10 +107,10 @@ pub use behaviour::{
     ListenerClosed, ListenerError, NetworkBehaviour, NewExternalAddrCandidate,
     NewExternalAddrOfPeer, NewListenAddr, NotifyHandler, PeerAddresses, ToSwarm,
 };
-pub use connection::{pool::ConnectionCounters, ConnectionError, ConnectionId, SupportedProtocols};
+pub use connection::{ConnectionError, ConnectionId, SupportedProtocols, pool::ConnectionCounters};
 use connection::{
-    pool::{EstablishedConnection, Pool, PoolConfig, PoolEvent},
     IncomingInfo, PendingInboundConnectionError, PendingOutboundConnectionError,
+    pool::{EstablishedConnection, Pool, PoolConfig, PoolEvent},
 };
 use dial_opts::{DialOpts, PeerCondition};
 pub use executor::Executor;
@@ -120,10 +120,10 @@ pub use handler::{
     OneShotHandlerConfig, StreamUpgradeError, SubstreamProtocol,
 };
 use libp2p_core::{
+    Multiaddr, Transport,
     connection::ConnectedPoint,
     muxing::StreamMuxerBox,
     transport::{self, ListenerId, TransportError, TransportEvent},
-    Multiaddr, Transport,
 };
 use libp2p_identity::PeerId;
 #[cfg(feature = "macros")]
@@ -636,11 +636,7 @@ where
         let was_connected = self.pool.is_connected(peer_id);
         self.pool.disconnect(peer_id);
 
-        if was_connected {
-            Ok(())
-        } else {
-            Err(())
-        }
+        if was_connected { Ok(()) } else { Err(()) }
     }
 
     /// Attempt to gracefully close a connection.
@@ -1311,9 +1307,9 @@ fn notify_any<THandler, TBehaviour>(
 where
     TBehaviour: NetworkBehaviour,
     THandler: ConnectionHandler<
-        FromBehaviour = THandlerInEvent<TBehaviour>,
-        ToBehaviour = THandlerOutEvent<TBehaviour>,
-    >,
+            FromBehaviour = THandlerInEvent<TBehaviour>,
+            ToBehaviour = THandlerOutEvent<TBehaviour>,
+        >,
 {
     let mut pending = SmallVec::new();
     let mut event = Some(event); // (1)
@@ -1560,14 +1556,24 @@ impl fmt::Display for DialError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             DialError::NoAddresses => write!(f, "Dial error: no addresses for peer."),
-            DialError::LocalPeerId { address } => write!(
+            DialError::LocalPeerId { address } => {
+                write!(f, "Dial error: tried to dial local peer id at {address:?}.")
+            }
+            DialError::DialPeerConditionFalse(PeerCondition::Disconnected) => write!(
                 f,
-                "Dial error: tried to dial local peer id at {address:?}."
+                "Dial error: dial condition was configured to only happen when disconnected (`PeerCondition::Disconnected`), but node is already connected, thus cancelling new dial."
             ),
-            DialError::DialPeerConditionFalse(PeerCondition::Disconnected) => write!(f, "Dial error: dial condition was configured to only happen when disconnected (`PeerCondition::Disconnected`), but node is already connected, thus cancelling new dial."),
-            DialError::DialPeerConditionFalse(PeerCondition::NotDialing) => write!(f, "Dial error: dial condition was configured to only happen if there is currently no ongoing dialing attempt (`PeerCondition::NotDialing`), but a dial is in progress, thus cancelling new dial."),
-            DialError::DialPeerConditionFalse(PeerCondition::DisconnectedAndNotDialing) => write!(f, "Dial error: dial condition was configured to only happen when both disconnected (`PeerCondition::Disconnected`) and there is currently no ongoing dialing attempt (`PeerCondition::NotDialing`), but node is already connected or dial is in progress, thus cancelling new dial."),
-            DialError::DialPeerConditionFalse(PeerCondition::Always) => unreachable!("Dial peer condition is by definition true."),
+            DialError::DialPeerConditionFalse(PeerCondition::NotDialing) => write!(
+                f,
+                "Dial error: dial condition was configured to only happen if there is currently no ongoing dialing attempt (`PeerCondition::NotDialing`), but a dial is in progress, thus cancelling new dial."
+            ),
+            DialError::DialPeerConditionFalse(PeerCondition::DisconnectedAndNotDialing) => write!(
+                f,
+                "Dial error: dial condition was configured to only happen when both disconnected (`PeerCondition::Disconnected`) and there is currently no ongoing dialing attempt (`PeerCondition::NotDialing`), but node is already connected or dial is in progress, thus cancelling new dial."
+            ),
+            DialError::DialPeerConditionFalse(PeerCondition::Always) => {
+                unreachable!("Dial peer condition is by definition true.")
+            }
             DialError::Aborted => write!(
                 f,
                 "Dial error: Pending connection attempt has been aborted."
@@ -1766,7 +1772,7 @@ mod tests {
         multiaddr,
         multiaddr::multiaddr,
         transport,
-        transport::{memory::MemoryTransportError, TransportEvent},
+        transport::{TransportEvent, memory::MemoryTransportError},
         upgrade,
     };
     use libp2p_identity as identity;
@@ -1867,37 +1873,39 @@ mod tests {
         }
         let mut state = State::Connecting;
 
-        future::poll_fn(move |cx| loop {
-            let poll1 = Swarm::poll_next_event(Pin::new(&mut swarm1), cx);
-            let poll2 = Swarm::poll_next_event(Pin::new(&mut swarm2), cx);
-            match state {
-                State::Connecting => {
-                    if swarms_connected(&swarm1, &swarm2, num_connections) {
-                        if reconnected {
-                            return Poll::Ready(());
+        future::poll_fn(move |cx| {
+            loop {
+                let poll1 = Swarm::poll_next_event(Pin::new(&mut swarm1), cx);
+                let poll2 = Swarm::poll_next_event(Pin::new(&mut swarm2), cx);
+                match state {
+                    State::Connecting => {
+                        if swarms_connected(&swarm1, &swarm2, num_connections) {
+                            if reconnected {
+                                return Poll::Ready(());
+                            }
+                            swarm2
+                                .disconnect_peer_id(swarm1_id)
+                                .expect("Error disconnecting");
+                            state = State::Disconnecting;
                         }
-                        swarm2
-                            .disconnect_peer_id(swarm1_id)
-                            .expect("Error disconnecting");
-                        state = State::Disconnecting;
+                    }
+                    State::Disconnecting => {
+                        if swarms_disconnected(&swarm1, &swarm2) {
+                            if reconnected {
+                                return Poll::Ready(());
+                            }
+                            reconnected = true;
+                            for _ in 0..num_connections {
+                                swarm2.dial(addr1.clone()).unwrap();
+                            }
+                            state = State::Connecting;
+                        }
                     }
                 }
-                State::Disconnecting => {
-                    if swarms_disconnected(&swarm1, &swarm2) {
-                        if reconnected {
-                            return Poll::Ready(());
-                        }
-                        reconnected = true;
-                        for _ in 0..num_connections {
-                            swarm2.dial(addr1.clone()).unwrap();
-                        }
-                        state = State::Connecting;
-                    }
-                }
-            }
 
-            if poll1.is_pending() && poll2.is_pending() {
-                return Poll::Pending;
+                if poll1.is_pending() && poll2.is_pending() {
+                    return Poll::Pending;
+                }
             }
         })
         .await
@@ -1931,41 +1939,41 @@ mod tests {
         }
         let mut state = State::Connecting;
 
-        future::poll_fn(move |cx| loop {
-            let poll1 = Swarm::poll_next_event(Pin::new(&mut swarm1), cx);
-            let poll2 = Swarm::poll_next_event(Pin::new(&mut swarm2), cx);
-            match state {
-                State::Connecting => {
-                    if swarms_connected(&swarm1, &swarm2, num_connections) {
-                        if reconnected {
-                            return Poll::Ready(());
+        future::poll_fn(move |cx| {
+            loop {
+                let poll1 = Swarm::poll_next_event(Pin::new(&mut swarm1), cx);
+                let poll2 = Swarm::poll_next_event(Pin::new(&mut swarm2), cx);
+                match state {
+                    State::Connecting => {
+                        if swarms_connected(&swarm1, &swarm2, num_connections) {
+                            if reconnected {
+                                return Poll::Ready(());
+                            }
+                            swarm2.behaviour.inner().next_action.replace(
+                                ToSwarm::CloseConnection {
+                                    peer_id: swarm1_id,
+                                    connection: CloseConnection::All,
+                                },
+                            );
+                            state = State::Disconnecting;
+                            continue;
                         }
-                        swarm2
-                            .behaviour
-                            .inner()
-                            .next_action
-                            .replace(ToSwarm::CloseConnection {
-                                peer_id: swarm1_id,
-                                connection: CloseConnection::All,
-                            });
-                        state = State::Disconnecting;
-                        continue;
+                    }
+                    State::Disconnecting => {
+                        if swarms_disconnected(&swarm1, &swarm2) {
+                            reconnected = true;
+                            for _ in 0..num_connections {
+                                swarm2.dial(addr1.clone()).unwrap();
+                            }
+                            state = State::Connecting;
+                            continue;
+                        }
                     }
                 }
-                State::Disconnecting => {
-                    if swarms_disconnected(&swarm1, &swarm2) {
-                        reconnected = true;
-                        for _ in 0..num_connections {
-                            swarm2.dial(addr1.clone()).unwrap();
-                        }
-                        state = State::Connecting;
-                        continue;
-                    }
-                }
-            }
 
-            if poll1.is_pending() && poll2.is_pending() {
-                return Poll::Pending;
+                if poll1.is_pending() && poll2.is_pending() {
+                    return Poll::Pending;
+                }
             }
         })
         .await
@@ -1999,49 +2007,56 @@ mod tests {
         let mut state = State::Connecting;
         let mut disconnected_conn_id = None;
 
-        future::poll_fn(move |cx| loop {
-            let poll1 = Swarm::poll_next_event(Pin::new(&mut swarm1), cx);
-            let poll2 = Swarm::poll_next_event(Pin::new(&mut swarm2), cx);
-            match state {
-                State::Connecting => {
-                    if swarms_connected(&swarm1, &swarm2, num_connections) {
-                        disconnected_conn_id = {
-                            let conn_id =
-                                swarm2.behaviour.on_connection_established[num_connections / 2].1;
-                            swarm2.behaviour.inner().next_action.replace(
-                                ToSwarm::CloseConnection {
-                                    peer_id: swarm1_id,
-                                    connection: CloseConnection::One(conn_id),
-                                },
+        future::poll_fn(move |cx| {
+            loop {
+                let poll1 = Swarm::poll_next_event(Pin::new(&mut swarm1), cx);
+                let poll2 = Swarm::poll_next_event(Pin::new(&mut swarm2), cx);
+                match state {
+                    State::Connecting => {
+                        if swarms_connected(&swarm1, &swarm2, num_connections) {
+                            disconnected_conn_id = {
+                                let conn_id = swarm2.behaviour.on_connection_established
+                                    [num_connections / 2]
+                                    .1;
+                                swarm2.behaviour.inner().next_action.replace(
+                                    ToSwarm::CloseConnection {
+                                        peer_id: swarm1_id,
+                                        connection: CloseConnection::One(conn_id),
+                                    },
+                                );
+                                Some(conn_id)
+                            };
+                            state = State::Disconnecting;
+                        }
+                    }
+                    State::Disconnecting => {
+                        for s in &[&swarm1, &swarm2] {
+                            assert!(
+                                s.behaviour
+                                    .on_connection_closed
+                                    .iter()
+                                    .all(|(.., remaining_conns)| *remaining_conns > 0)
                             );
-                            Some(conn_id)
-                        };
-                        state = State::Disconnecting;
-                    }
-                }
-                State::Disconnecting => {
-                    for s in &[&swarm1, &swarm2] {
-                        assert!(s
-                            .behaviour
-                            .on_connection_closed
+                            assert_eq!(
+                                s.behaviour.on_connection_established.len(),
+                                num_connections
+                            );
+                            s.behaviour.assert_connected(num_connections, 1);
+                        }
+                        if [&swarm1, &swarm2]
                             .iter()
-                            .all(|(.., remaining_conns)| *remaining_conns > 0));
-                        assert_eq!(s.behaviour.on_connection_established.len(), num_connections);
-                        s.behaviour.assert_connected(num_connections, 1);
-                    }
-                    if [&swarm1, &swarm2]
-                        .iter()
-                        .all(|s| s.behaviour.on_connection_closed.len() == 1)
-                    {
-                        let conn_id = swarm2.behaviour.on_connection_closed[0].1;
-                        assert_eq!(Some(conn_id), disconnected_conn_id);
-                        return Poll::Ready(());
+                            .all(|s| s.behaviour.on_connection_closed.len() == 1)
+                        {
+                            let conn_id = swarm2.behaviour.on_connection_closed[0].1;
+                            assert_eq!(Some(conn_id), disconnected_conn_id);
+                            return Poll::Ready(());
+                        }
                     }
                 }
-            }
 
-            if poll1.is_pending() && poll2.is_pending() {
-                return Poll::Pending;
+                if poll1.is_pending() && poll2.is_pending() {
+                    return Poll::Pending;
+                }
             }
         })
         .await
@@ -2344,6 +2359,9 @@ mod tests {
 
         // Unfortunately, we have some "empty" errors
         // that lead to multiple colons without text but that is the best we can do.
-        assert_eq!("Failed to negotiate transport protocol(s): [(/ip4/127.0.0.1/tcp/80: : No listener on the given port.)]", string)
+        assert_eq!(
+            "Failed to negotiate transport protocol(s): [(/ip4/127.0.0.1/tcp/80: : No listener on the given port.)]",
+            string
+        )
     }
 }
