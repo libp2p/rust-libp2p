@@ -1,3 +1,8 @@
+## 0.4.1
+
+- update igd-next to 0.16.1
+  See [PR XXXX](https://github.com/libp2p/rust-libp2p/pull/XXXX).
+
 ## 0.4.0
 
 - update igd-next to 0.15.1.
