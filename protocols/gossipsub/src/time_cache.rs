@@ -22,11 +22,11 @@
 
 use std::{
     collections::{
+        VecDeque,
         hash_map::{
             self,
             Entry::{Occupied, Vacant},
         },
-        VecDeque,
     },
     time::Duration,
 };

@@ -385,7 +385,8 @@ mod tests {
             "Expect `forward_data` to forward one read from the source to the wrapped destination."
         );
         assert_eq!(
-            destination.get_ref().method_calls.as_slice(), &[],
+            destination.get_ref().method_calls.as_slice(),
+            &[],
             "Given that destination is wrapped with a `BufWrite`, the write doesn't (yet) make it to \
             the destination. The source might have more data available, thus `forward_data` has not \
             yet flushed.",
@@ -399,7 +400,8 @@ mod tests {
             "Expect `forward_data` to forward one read from the source to the wrapped destination."
         );
         assert_eq!(
-            destination.get_ref().method_calls.as_slice(), &[],
+            destination.get_ref().method_calls.as_slice(),
+            &[],
             "Given that destination is wrapped with a `BufWrite`, the write doesn't (yet) make it to \
             the destination. The source might have more data available, thus `forward_data` has not \
             yet flushed.",

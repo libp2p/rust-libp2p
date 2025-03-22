@@ -72,7 +72,7 @@ use futures_timer::Delay;
 use libp2p_identity::PeerId;
 use web_time::Instant;
 
-use crate::record::{self, store::RecordStore, ProviderRecord, Record};
+use crate::record::{self, ProviderRecord, Record, store::RecordStore};
 
 /// The maximum number of queries towards which background jobs
 /// are allowed to start new queries on an invocation of

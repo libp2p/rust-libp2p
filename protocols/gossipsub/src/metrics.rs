@@ -29,7 +29,7 @@ use prometheus_client::{
         counter::Counter,
         family::{Family, MetricConstructor},
         gauge::Gauge,
-        histogram::{linear_buckets, Histogram},
+        histogram::{Histogram, linear_buckets},
     },
     registry::Registry,
 };

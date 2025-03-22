@@ -21,7 +21,7 @@
 use std::time::Duration;
 
 use futures::future::Either;
-use libp2p_mdns::{async_io::Behaviour, Config, Event};
+use libp2p_mdns::{Config, Event, async_io::Behaviour};
 use libp2p_swarm::{Swarm, SwarmEvent};
 use libp2p_swarm_test::SwarmExt as _;
 use tracing_subscriber::EnvFilter;

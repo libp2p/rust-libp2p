@@ -23,8 +23,8 @@ use std::io;
 use async_trait::async_trait;
 use asynchronous_codec::{FramedRead, FramedWrite};
 use futures::{
-    io::{AsyncRead, AsyncWrite},
     SinkExt, StreamExt,
+    io::{AsyncRead, AsyncWrite},
 };
 use libp2p_core::Multiaddr;
 use libp2p_identity::PeerId;

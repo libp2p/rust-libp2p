@@ -8,7 +8,7 @@ use libp2p_core::Multiaddr;
 use quick_protobuf_codec::Codec;
 use rand::Rng;
 
-use crate::v2::{generated::structs as proto, Nonce};
+use crate::v2::{Nonce, generated::structs as proto};
 
 const REQUEST_MAX_SIZE: usize = 4104;
 pub(super) const DATA_LEN_LOWER_BOUND: usize = 30_000u32 as usize;
@@ -310,7 +310,7 @@ pub(crate) async fn recv_dial_back_response(
 #[cfg(test)]
 mod tests {
     use crate::v2::generated::structs::{
-        mod_Message::OneOfmsg, DialDataResponse as GenDialDataResponse, Message,
+        DialDataResponse as GenDialDataResponse, Message, mod_Message::OneOfmsg,
     };
 
     #[test]

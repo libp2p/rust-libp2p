@@ -128,7 +128,7 @@ impl<R> LengthDelimited<R> {
                     return Poll::Ready(Err(io::Error::new(
                         io::ErrorKind::WriteZero,
                         "Failed to write buffered frame.",
-                    )))
+                    )));
                 }
                 Poll::Ready(Ok(n)) => this.write_buffer.advance(n),
                 Poll::Ready(Err(err)) => return Poll::Ready(Err(err)),
@@ -198,7 +198,7 @@ where
                         .poll_read(cx, &mut this.read_buffer[*pos..])
                     {
                         Poll::Ready(Ok(0)) => {
-                            return Poll::Ready(Some(Err(io::ErrorKind::UnexpectedEof.into())))
+                            return Poll::Ready(Some(Err(io::ErrorKind::UnexpectedEof.into())));
                         }
                         Poll::Ready(Ok(n)) => *pos += n,
                         Poll::Pending => return Poll::Pending,
@@ -249,7 +249,7 @@ where
                 return Err(io::Error::new(
                     io::ErrorKind::InvalidData,
                     "Maximum frame size exceeded.",
-                ))
+                ));
             }
         };
 

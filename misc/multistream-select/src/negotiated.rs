@@ -309,10 +309,11 @@ where
 
     fn poll_close(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), io::Error>> {
         // Ensure all data has been flushed, including optimistic multistream-select messages.
-        ready!(self
-            .as_mut()
-            .poll_flush(cx)
-            .map_err(Into::<io::Error>::into)?);
+        ready!(
+            self.as_mut()
+                .poll_flush(cx)
+                .map_err(Into::<io::Error>::into)?
+        );
 
         // Continue with the shutdown of the underlying I/O stream.
         match self.project().state.project() {
@@ -320,7 +321,9 @@ where
             StateProj::Expecting { io, .. } => {
                 let close_poll = io.poll_close(cx);
                 if let Poll::Ready(Ok(())) = close_poll {
-                    tracing::debug!("Stream closed. Confirmation from remote for optimstic protocol negotiation still pending")
+                    tracing::debug!(
+                        "Stream closed. Confirmation from remote for optimstic protocol negotiation still pending"
+                    )
                 }
                 close_poll
             }

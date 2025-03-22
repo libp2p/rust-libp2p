@@ -1,10 +1,10 @@
 use std::marker::PhantomData;
 
 #[cfg(all(not(target_arch = "wasm32"), feature = "websocket"))]
+use libp2p_core::Transport;
+#[cfg(all(not(target_arch = "wasm32"), feature = "websocket"))]
 use libp2p_core::muxing::{StreamMuxer, StreamMuxerBox};
 use libp2p_core::upgrade::{InboundConnectionUpgrade, OutboundConnectionUpgrade};
-#[cfg(all(not(target_arch = "wasm32"), feature = "websocket"))]
-use libp2p_core::Transport;
 #[cfg(any(
     all(not(target_arch = "wasm32"), feature = "websocket"),
     feature = "relay"

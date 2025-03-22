@@ -23,7 +23,7 @@ use std::collections::HashMap;
 use libp2p_identity::PeerId;
 use web_time::Instant;
 
-use crate::{peer_score::RejectReason, MessageId, ValidationError};
+use crate::{MessageId, ValidationError, peer_score::RejectReason};
 
 /// Tracks recently sent `IWANT` messages and checks if peers respond to them.
 #[derive(Default)]

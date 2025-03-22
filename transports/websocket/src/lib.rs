@@ -37,10 +37,10 @@ use error::Error;
 use framed::{Connection, Incoming};
 use futures::{future::BoxFuture, prelude::*, ready};
 use libp2p_core::{
+    Transport,
     connection::ConnectedPoint,
     multiaddr::Multiaddr,
-    transport::{map::MapFuture, DialOpts, ListenerId, TransportError, TransportEvent},
-    Transport,
+    transport::{DialOpts, ListenerId, TransportError, TransportEvent, map::MapFuture},
 };
 use rw_stream_sink::RwStreamSink;
 
@@ -307,9 +307,9 @@ where
 mod tests {
     use futures::prelude::*;
     use libp2p_core::{
+        Endpoint, Multiaddr, Transport,
         multiaddr::Protocol,
         transport::{DialOpts, ListenerId, PortUse},
-        Endpoint, Multiaddr, Transport,
     };
     use libp2p_identity::PeerId;
     use libp2p_tcp as tcp;

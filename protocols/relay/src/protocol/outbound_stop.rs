@@ -27,7 +27,7 @@ use libp2p_identity::PeerId;
 use libp2p_swarm::Stream;
 use thiserror::Error;
 
-use crate::{proto, protocol::MAX_MESSAGE_SIZE, STOP_PROTOCOL_NAME};
+use crate::{STOP_PROTOCOL_NAME, proto, protocol::MAX_MESSAGE_SIZE};
 
 #[derive(Debug, Error)]
 pub enum Error {
@@ -118,7 +118,7 @@ pub(crate) async fn connect(
 
     match type_pb {
         proto::StopMessageType::CONNECT => {
-            return Err(Error::Protocol(ProtocolViolation::UnexpectedTypeConnect))
+            return Err(Error::Protocol(ProtocolViolation::UnexpectedTypeConnect));
         }
         proto::StopMessageType::STATUS => {}
     }

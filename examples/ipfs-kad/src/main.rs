@@ -26,14 +26,15 @@ use std::{
     time::{Duration, Instant},
 };
 
-use anyhow::{bail, Result};
+use anyhow::{Result, bail};
 use clap::Parser;
 use futures::StreamExt;
 use libp2p::{
+    PeerId,
     bytes::BufMut,
     identity, kad, noise,
     swarm::{StreamProtocol, SwarmEvent},
-    tcp, yamux, PeerId,
+    tcp, yamux,
 };
 use tracing_subscriber::EnvFilter;
 

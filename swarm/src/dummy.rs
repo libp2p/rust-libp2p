@@ -3,15 +3,15 @@ use std::{
     task::{Context, Poll},
 };
 
-use libp2p_core::{transport::PortUse, upgrade::DeniedUpgrade, Endpoint, Multiaddr};
+use libp2p_core::{Endpoint, Multiaddr, transport::PortUse, upgrade::DeniedUpgrade};
 use libp2p_identity::PeerId;
 
 use crate::{
+    ConnectionDenied, ConnectionHandlerEvent, StreamUpgradeError, SubstreamProtocol, THandler,
+    THandlerInEvent, THandlerOutEvent,
     behaviour::{FromSwarm, NetworkBehaviour, ToSwarm},
     connection::ConnectionId,
     handler::{ConnectionEvent, DialUpgradeError, FullyNegotiatedInbound, FullyNegotiatedOutbound},
-    ConnectionDenied, ConnectionHandlerEvent, StreamUpgradeError, SubstreamProtocol, THandler,
-    THandlerInEvent, THandlerOutEvent,
 };
 
 /// Implementation of [`NetworkBehaviour`] that doesn't do anything.

@@ -22,10 +22,11 @@ use std::task::{Context, Poll};
 
 use either::Either;
 use futures::future;
-use libp2p_core::{transport::PortUse, upgrade::DeniedUpgrade, Endpoint, Multiaddr};
+use libp2p_core::{Endpoint, Multiaddr, transport::PortUse, upgrade::DeniedUpgrade};
 use libp2p_identity::PeerId;
 
 use crate::{
+    ConnectionDenied, NetworkBehaviour, THandler, THandlerInEvent, THandlerOutEvent, ToSwarm,
     behaviour::FromSwarm,
     connection::ConnectionId,
     handler::{
@@ -34,7 +35,6 @@ use crate::{
         SubstreamProtocol,
     },
     upgrade::SendWrapper,
-    ConnectionDenied, NetworkBehaviour, THandler, THandlerInEvent, THandlerOutEvent, ToSwarm,
 };
 
 /// Implementation of `NetworkBehaviour` that can be either in the disabled or enabled state.

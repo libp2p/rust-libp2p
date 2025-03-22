@@ -25,11 +25,11 @@ use std::{
     time::{Duration, Instant},
 };
 
-use libp2p_core::{transport::PortUse, Endpoint, Multiaddr};
+use libp2p_core::{Endpoint, Multiaddr, transport::PortUse};
 use libp2p_identity::PeerId;
 use libp2p_swarm::{
-    dummy, ConnectionDenied, ConnectionId, FromSwarm, NetworkBehaviour, THandler, THandlerInEvent,
-    THandlerOutEvent, ToSwarm,
+    ConnectionDenied, ConnectionId, FromSwarm, NetworkBehaviour, THandler, THandlerInEvent,
+    THandlerOutEvent, ToSwarm, dummy,
 };
 use sysinfo::MemoryRefreshKind;
 
@@ -228,8 +228,7 @@ impl fmt::Display for MemoryUsageLimitExceeded {
         write!(
             f,
             "process physical memory usage limit exceeded: process memory: {} bytes, max allowed: {} bytes",
-            self.process_physical_memory_bytes,
-            self.max_allowed_bytes,
+            self.process_physical_memory_bytes, self.max_allowed_bytes,
         )
     }
 }

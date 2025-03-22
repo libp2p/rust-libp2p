@@ -5,19 +5,19 @@ use std::{
 };
 
 use either::Either;
-use libp2p_core::{transport::PortUse, Endpoint, Multiaddr};
+use libp2p_core::{Endpoint, Multiaddr, transport::PortUse};
 use libp2p_identity::PeerId;
 use libp2p_swarm::{
+    ConnectionDenied, ConnectionHandler, ConnectionId, DialFailure, FromSwarm, NetworkBehaviour,
+    ToSwarm,
     dial_opts::{DialOpts, PeerCondition},
-    dummy, ConnectionDenied, ConnectionHandler, ConnectionId, DialFailure, FromSwarm,
-    NetworkBehaviour, ToSwarm,
+    dummy,
 };
 use rand_core::{OsRng, RngCore};
 
 use crate::v2::server::handler::{
-    dial_back,
+    Handler, dial_back,
     dial_request::{self, DialBackCommand, DialBackStatus},
-    Handler,
 };
 
 pub struct Behaviour<R = OsRng>

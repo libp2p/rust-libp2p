@@ -23,7 +23,7 @@
 pub(crate) mod handler;
 pub(crate) mod rate_limiter;
 use std::{
-    collections::{hash_map, HashMap, HashSet, VecDeque},
+    collections::{HashMap, HashSet, VecDeque, hash_map},
     num::NonZeroU32,
     ops::Add,
     task::{Context, Poll},
@@ -31,12 +31,13 @@ use std::{
 };
 
 use either::Either;
-use libp2p_core::{multiaddr::Protocol, transport::PortUse, ConnectedPoint, Endpoint, Multiaddr};
+use libp2p_core::{ConnectedPoint, Endpoint, Multiaddr, multiaddr::Protocol, transport::PortUse};
 use libp2p_identity::PeerId;
 use libp2p_swarm::{
+    ConnectionDenied, ConnectionId, ExternalAddresses, NetworkBehaviour, NotifyHandler, THandler,
+    THandlerInEvent, THandlerOutEvent, ToSwarm,
     behaviour::{ConnectionClosed, FromSwarm},
-    dummy, ConnectionDenied, ConnectionId, ExternalAddresses, NetworkBehaviour, NotifyHandler,
-    THandler, THandlerInEvent, THandlerOutEvent, ToSwarm,
+    dummy,
 };
 use web_time::Instant;
 
@@ -508,8 +509,7 @@ impl NetworkBehaviour for Behaviour {
                     hash_map::Entry::Vacant(_) => {
                         unreachable!(
                             "Expect to track timed out reservation with peer {:?} on connection {:?}",
-                            event_source,
-                            connection,
+                            event_source, connection,
                         );
                     }
                 }

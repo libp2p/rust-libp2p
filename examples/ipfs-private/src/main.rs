@@ -25,13 +25,14 @@ use std::{env, error::Error, fs, path::Path, str::FromStr};
 use either::Either;
 use futures::prelude::*;
 use libp2p::{
+    Multiaddr, Transport,
     core::transport::upgrade::Version,
     gossipsub, identify,
     multiaddr::Protocol,
     noise, ping,
     pnet::{PnetConfig, PreSharedKey},
     swarm::{NetworkBehaviour, SwarmEvent},
-    tcp, yamux, Multiaddr, Transport,
+    tcp, yamux,
 };
 use tokio::{io, io::AsyncBufReadExt, select};
 use tracing_subscriber::EnvFilter;

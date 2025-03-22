@@ -32,7 +32,7 @@ use futures::{
 use libp2p_core::muxing::StreamMuxerBox;
 use libp2p_identity::PeerId;
 
-use crate::{transport::TransportError, Multiaddr};
+use crate::{Multiaddr, transport::TransportError};
 
 type Dial = BoxFuture<
     'static,

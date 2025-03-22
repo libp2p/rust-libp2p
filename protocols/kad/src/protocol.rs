@@ -32,8 +32,8 @@ use asynchronous_codec::{Decoder, Encoder, Framed};
 use bytes::BytesMut;
 use futures::prelude::*;
 use libp2p_core::{
-    upgrade::{InboundUpgrade, OutboundUpgrade, UpgradeInfo},
     Multiaddr,
+    upgrade::{InboundUpgrade, OutboundUpgrade, UpgradeInfo},
 };
 use libp2p_identity::PeerId;
 use libp2p_swarm::StreamProtocol;

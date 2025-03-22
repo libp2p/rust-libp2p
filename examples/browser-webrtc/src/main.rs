@@ -4,15 +4,15 @@ use std::net::{Ipv4Addr, SocketAddr};
 
 use anyhow::Result;
 use axum::{
+    Router,
     extract::{Path, State},
-    http::{header::CONTENT_TYPE, Method, StatusCode},
+    http::{Method, StatusCode, header::CONTENT_TYPE},
     response::{Html, IntoResponse},
     routing::get,
-    Router,
 };
 use futures::StreamExt;
 use libp2p::{
-    core::{muxing::StreamMuxerBox, Transport},
+    core::{Transport, muxing::StreamMuxerBox},
     multiaddr::{Multiaddr, Protocol},
     ping,
     swarm::SwarmEvent,

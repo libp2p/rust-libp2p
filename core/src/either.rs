@@ -28,9 +28,9 @@ use futures::prelude::*;
 use pin_project::pin_project;
 
 use crate::{
+    Multiaddr,
     muxing::{StreamMuxer, StreamMuxerEvent},
     transport::{DialOpts, ListenerId, Transport, TransportError, TransportEvent},
-    Multiaddr,
 };
 
 impl<A, B> StreamMuxer for future::Either<A, B>

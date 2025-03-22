@@ -32,20 +32,19 @@ use std::{
     time::Duration,
 };
 
-use futures::{channel::oneshot, Future, StreamExt};
+use futures::{Future, StreamExt, channel::oneshot};
 use futures_timer::Delay;
 use igd_next::PortMappingProtocol;
 use libp2p_core::{
-    multiaddr,
+    Endpoint, Multiaddr, multiaddr,
     transport::{ListenerId, PortUse},
-    Endpoint, Multiaddr,
 };
 use libp2p_swarm::{
-    derive_prelude::PeerId, dummy, ConnectionDenied, ConnectionId, ExpiredListenAddr, FromSwarm,
-    NetworkBehaviour, NewListenAddr, ToSwarm,
+    ConnectionDenied, ConnectionId, ExpiredListenAddr, FromSwarm, NetworkBehaviour, NewListenAddr,
+    ToSwarm, derive_prelude::PeerId, dummy,
 };
 
-use crate::tokio::{is_addr_global, Gateway};
+use crate::tokio::{Gateway, is_addr_global};
 
 /// The duration in seconds of a port mapping on the gateway.
 const MAPPING_DURATION: u32 = 3600;

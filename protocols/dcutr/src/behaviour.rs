@@ -29,14 +29,15 @@ use std::{
 
 use either::Either;
 use libp2p_core::{
-    connection::ConnectedPoint, multiaddr::Protocol, transport::PortUse, Endpoint, Multiaddr,
+    Endpoint, Multiaddr, connection::ConnectedPoint, multiaddr::Protocol, transport::PortUse,
 };
 use libp2p_identity::PeerId;
 use libp2p_swarm::{
+    ConnectionDenied, ConnectionHandler, ConnectionId, NetworkBehaviour, NewExternalAddrCandidate,
+    NotifyHandler, THandler, THandlerInEvent, THandlerOutEvent, ToSwarm,
     behaviour::{ConnectionClosed, DialFailure, FromSwarm},
     dial_opts::{self, DialOpts},
-    dummy, ConnectionDenied, ConnectionHandler, ConnectionId, NetworkBehaviour,
-    NewExternalAddrCandidate, NotifyHandler, THandler, THandlerInEvent, THandlerOutEvent, ToSwarm,
+    dummy,
 };
 use lru::LruCache;
 use thiserror::Error;
@@ -221,7 +222,7 @@ impl NetworkBehaviour for Behaviour {
                 },
                 self.observed_addresses(),
             ))); // TODO: We could make two `handler::relayed::Handler` here, one inbound one
-                 // outbound.
+            // outbound.
         }
 
         self.direct_connections

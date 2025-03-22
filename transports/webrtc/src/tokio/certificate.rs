@@ -18,7 +18,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use rand::{distributions::DistString, CryptoRng, Rng};
+use rand::{CryptoRng, Rng, distributions::DistString};
 use webrtc::peer_connection::certificate::RTCCertificate;
 
 use crate::tokio::fingerprint::Fingerprint;
@@ -38,7 +38,7 @@ impl Certificate {
         R: CryptoRng + Rng,
     {
         let mut params = rcgen::CertificateParams::new(vec![
-            rand::distributions::Alphanumeric.sample_string(&mut rand::thread_rng(), 16)
+            rand::distributions::Alphanumeric.sample_string(&mut rand::thread_rng(), 16),
         ]);
         params.alg = &rcgen::PKCS_ECDSA_P256_SHA256;
         Ok(Self {

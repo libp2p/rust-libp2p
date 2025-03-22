@@ -2,14 +2,14 @@ use std::{
     collections::HashSet,
     future::poll_fn,
     pin::Pin,
-    task::{ready, Context, Poll},
+    task::{Context, Poll, ready},
 };
 
 use futures::FutureExt;
 use libp2p_core::{
+    UpgradeInfo,
     muxing::{StreamMuxer, StreamMuxerEvent},
     upgrade::OutboundConnectionUpgrade,
-    UpgradeInfo,
 };
 use libp2p_identity::{Keypair, PeerId};
 use multihash::Multihash;
@@ -18,11 +18,11 @@ use wasm_bindgen_futures::JsFuture;
 use web_sys::ReadableStreamDefaultReader;
 
 use crate::{
+    Error, Stream,
     bindings::{WebTransport, WebTransportBidirectionalStream},
     endpoint::Endpoint,
     fused_js_promise::FusedJsPromise,
     utils::{detach_promise, parse_reader_response, to_js_type},
-    Error, Stream,
 };
 
 /// An opened WebTransport connection.
@@ -133,10 +133,11 @@ impl ConnectionInner {
         cx: &mut Context,
     ) -> Poll<Result<Stream, Error>> {
         // Create bidirectional stream
-        let val = ready!(self
-            .create_stream_promise
-            .maybe_init(|| self.session.create_bidirectional_stream())
-            .poll_unpin(cx))
+        let val = ready!(
+            self.create_stream_promise
+                .maybe_init(|| self.session.create_bidirectional_stream())
+                .poll_unpin(cx)
+        )
         .map_err(Error::from_js_value)?;
 
         let bidi_stream = to_js_type::<WebTransportBidirectionalStream>(val)?;
@@ -151,10 +152,11 @@ impl ConnectionInner {
         cx: &mut Context,
     ) -> Poll<Result<Stream, Error>> {
         // Read the next incoming stream from the JS channel
-        let val = ready!(self
-            .incoming_stream_promise
-            .maybe_init(|| self.incoming_streams_reader.read())
-            .poll_unpin(cx))
+        let val = ready!(
+            self.incoming_stream_promise
+                .maybe_init(|| self.incoming_streams_reader.read())
+                .poll_unpin(cx)
+        )
         .map_err(Error::from_js_value)?;
 
         let val = parse_reader_response(&val)

@@ -21,15 +21,15 @@
 use std::{task::Poll, time::Duration};
 
 use futures::{
-    stream::{FuturesUnordered, SelectAll},
     StreamExt,
+    stream::{FuturesUnordered, SelectAll},
 };
 use libp2p_gossipsub as gossipsub;
 use libp2p_gossipsub::{MessageAuthenticity, ValidationMode};
 use libp2p_swarm::Swarm;
 use libp2p_swarm_test::SwarmExt as _;
 use quickcheck::{QuickCheck, TestResult};
-use rand::{seq::SliceRandom, SeedableRng};
+use rand::{SeedableRng, seq::SliceRandom};
 use tokio::{runtime::Runtime, time};
 use tracing_subscriber::EnvFilter;
 
@@ -96,10 +96,12 @@ impl Graph {
 
     /// Polls the graph until Poll::Pending is obtained, completing the underlying polls.
     async fn drain_events(&mut self) {
-        let fut = futures::future::poll_fn(|cx| loop {
-            match self.nodes.poll_next_unpin(cx) {
-                Poll::Ready(_) => {}
-                Poll::Pending => return Poll::Ready(()),
+        let fut = futures::future::poll_fn(|cx| {
+            loop {
+                match self.nodes.poll_next_unpin(cx) {
+                    Poll::Ready(_) => {}
+                    Poll::Pending => return Poll::Ready(()),
+                }
             }
         });
         time::timeout(Duration::from_secs(10), fut).await.unwrap();

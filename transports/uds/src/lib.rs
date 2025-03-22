@@ -52,9 +52,9 @@ use futures::{
     stream::BoxStream,
 };
 use libp2p_core::{
+    Transport,
     multiaddr::{Multiaddr, Protocol},
     transport::{DialOpts, ListenerId, TransportError, TransportEvent},
-    Transport,
 };
 
 pub type Listener<T> = BoxStream<
@@ -248,12 +248,12 @@ mod tests {
 
     use futures::{channel::oneshot, prelude::*};
     use libp2p_core::{
+        Endpoint, Transport,
         multiaddr::{Multiaddr, Protocol},
         transport::{DialOpts, ListenerId, PortUse},
-        Endpoint, Transport,
     };
 
-    use super::{multiaddr_to_path, UdsConfig};
+    use super::{UdsConfig, multiaddr_to_path};
 
     #[test]
     fn multiaddr_to_path_conversion() {

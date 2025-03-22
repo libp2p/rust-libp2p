@@ -1,18 +1,18 @@
 use std::marker::PhantomData;
 
-#[cfg(all(
-    not(target_arch = "wasm32"),
-    any(feature = "tcp", feature = "websocket")
-))]
-use libp2p_core::muxing::{StreamMuxer, StreamMuxerBox};
 #[cfg(all(feature = "websocket", not(target_arch = "wasm32")))]
 use libp2p_core::Transport;
 #[cfg(all(
     not(target_arch = "wasm32"),
     any(feature = "tcp", feature = "websocket")
 ))]
+use libp2p_core::muxing::{StreamMuxer, StreamMuxerBox};
+#[cfg(all(
+    not(target_arch = "wasm32"),
+    any(feature = "tcp", feature = "websocket")
+))]
 use libp2p_core::{
-    upgrade::InboundConnectionUpgrade, upgrade::OutboundConnectionUpgrade, Negotiated, UpgradeInfo,
+    Negotiated, UpgradeInfo, upgrade::InboundConnectionUpgrade, upgrade::OutboundConnectionUpgrade,
 };
 
 use super::*;

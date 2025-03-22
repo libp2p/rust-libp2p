@@ -30,7 +30,7 @@ use futures::{
 use libp2p_core::{
     multiaddr::{Multiaddr, Protocol},
     muxing::StreamMuxerBox,
-    transport::{choice::OrTransport, Boxed, MemoryTransport, Transport},
+    transport::{Boxed, MemoryTransport, Transport, choice::OrTransport},
     upgrade,
 };
 use libp2p_identity as identity;
@@ -38,7 +38,7 @@ use libp2p_identity::PeerId;
 use libp2p_ping as ping;
 use libp2p_plaintext as plaintext;
 use libp2p_relay as relay;
-use libp2p_swarm::{dial_opts::DialOpts, Config, DialError, NetworkBehaviour, Swarm, SwarmEvent};
+use libp2p_swarm::{Config, DialError, NetworkBehaviour, Swarm, SwarmEvent, dial_opts::DialOpts};
 use libp2p_swarm_test::SwarmExt;
 use tracing_subscriber::EnvFilter;
 
@@ -241,7 +241,7 @@ async fn connection_established_to(
             } if peer_id == relay_peer_id => {}
             SwarmEvent::ConnectionEstablished { peer_id, .. } if peer_id == relay_peer_id => {}
             SwarmEvent::Behaviour(ClientEvent::Ping(ping::Event { peer, .. })) if peer == other => {
-                break
+                break;
             }
             SwarmEvent::Behaviour(ClientEvent::Relay(
                 relay::client::Event::OutboundCircuitEstablished { .. },
@@ -562,7 +562,7 @@ async fn wait_for_dial(client: &mut Swarm<Client>, remote: PeerId) -> bool {
             } if peer_id == remote => {}
             SwarmEvent::ConnectionEstablished { peer_id, .. } if peer_id == remote => return true,
             SwarmEvent::OutgoingConnectionError { peer_id, .. } if peer_id == Some(remote) => {
-                return false
+                return false;
             }
             SwarmEvent::Behaviour(ClientEvent::Ping(_)) => {}
             e => panic!("{e:?}"),

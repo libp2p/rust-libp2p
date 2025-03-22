@@ -117,7 +117,7 @@ pub mod async_std {
 pub mod tokio {
     use std::sync::Arc;
 
-    use hickory_resolver::{system_conf, TokioResolver};
+    use hickory_resolver::{TokioResolver, system_conf};
     use parking_lot::Mutex;
 
     /// A `Transport` wrapper for performing DNS lookups when dialing `Multiaddr`esses
@@ -159,8 +159,8 @@ use std::{
 use async_trait::async_trait;
 use futures::{future::BoxFuture, prelude::*};
 pub use hickory_resolver::{
-    config::{ResolverConfig, ResolverOpts},
     ResolveError, ResolveErrorKind,
+    config::{ResolverConfig, ResolverOpts},
 };
 use hickory_resolver::{
     lookup::{Ipv4Lookup, Ipv6Lookup, TxtLookup},
@@ -619,9 +619,9 @@ mod tests {
     use futures::future::BoxFuture;
     use hickory_resolver::proto::{ProtoError, ProtoErrorKind};
     use libp2p_core::{
+        Endpoint, Transport,
         multiaddr::{Multiaddr, Protocol},
         transport::{PortUse, TransportError, TransportEvent},
-        Endpoint, Transport,
     };
     use libp2p_identity::PeerId;
 
