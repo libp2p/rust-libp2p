@@ -25,10 +25,6 @@
 //! Example:
 //!
 //! ```
-//! # #[cfg(not(feature = "async-std"))]
-//! # fn main() {}
-//! #
-//! # #[cfg(feature = "async-std")]
 //! # fn main() -> std::io::Result<()> {
 //! #
 //! use libp2p_core::{transport::ListenerId, Multiaddr, Transport};
@@ -37,7 +33,7 @@
 //! let keypair = libp2p_identity::Keypair::generate_ed25519();
 //! let quic_config = quic::Config::new(&keypair);
 //!
-//! let mut quic_transport = quic::async_std::Transport::new(quic_config);
+//! let mut quic_transport = quic::tokio::Transport::new(quic_config);
 //!
 //! let addr = "/ip4/127.0.0.1/udp/12345/quic-v1"
 //!     .parse()
@@ -70,8 +66,6 @@ use std::net::SocketAddr;
 
 pub use config::Config;
 pub use connection::{Connecting, Connection, Stream};
-#[cfg(feature = "async-std")]
-pub use provider::async_std;
 #[cfg(feature = "tokio")]
 pub use provider::tokio;
 pub use provider::Provider;
