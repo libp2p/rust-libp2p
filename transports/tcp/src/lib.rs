@@ -22,9 +22,8 @@
 //!
 //! # Usage
 //!
-//! This crate provides a [`async_io::Transport`] and [`tokio::Transport`], depending on
-//! the enabled features, which implement the [`libp2p_core::Transport`] trait for use as a
-//! transport with `libp2p-core` or `libp2p-swarm`.
+//! This crate provides a [`tokio::Transport`] which implements the [`libp2p_core::Transport`] trait
+//! for use as a transport with `libp2p-core` or `libp2p-swarm`.
 
 #![cfg_attr(docsrs, feature(doc_cfg, doc_auto_cfg))]
 
@@ -47,8 +46,6 @@ use libp2p_core::{
     multiaddr::{Multiaddr, Protocol},
     transport::{DialOpts, ListenerId, PortUse, TransportError, TransportEvent},
 };
-#[cfg(feature = "async-io")]
-pub use provider::async_io;
 #[cfg(feature = "tokio")]
 pub use provider::tokio;
 use provider::{Incoming, Provider};
@@ -222,10 +219,7 @@ impl Default for Config {
 
 /// An abstract [`libp2p_core::Transport`] implementation.
 ///
-/// You shouldn't need to use this type directly. Use one of the following instead:
-///
-/// - [`tokio::Transport`]
-/// - [`async_io::Transport`]
+/// You shouldn't need to use this type directly. Use [`tokio::Transport`] instead:
 pub struct Transport<T>
 where
     T: Provider + Send,
@@ -809,15 +803,6 @@ mod tests {
         }
 
         fn test(addr: Multiaddr) {
-            #[cfg(feature = "async-io")]
-            {
-                let (ready_tx, ready_rx) = mpsc::channel(1);
-                let listener = listener::<async_io::Tcp>(addr.clone(), ready_tx);
-                let dialer = dialer::<async_io::Tcp>(ready_rx);
-                let listener = async_std::task::spawn(listener);
-                async_std::task::block_on(dialer);
-                async_std::task::block_on(listener);
-            }
 
             #[cfg(feature = "tokio")]
             {
@@ -889,15 +874,6 @@ mod tests {
         }
 
         fn test(addr: Multiaddr) {
-            #[cfg(feature = "async-io")]
-            {
-                let (ready_tx, ready_rx) = mpsc::channel(1);
-                let listener = listener::<async_io::Tcp>(addr.clone(), ready_tx);
-                let dialer = dialer::<async_io::Tcp>(ready_rx);
-                let listener = async_std::task::spawn(listener);
-                async_std::task::block_on(dialer);
-                async_std::task::block_on(listener);
-            }
 
             #[cfg(feature = "tokio")]
             {
@@ -1006,16 +982,6 @@ mod tests {
         }
 
         fn test(addr: Multiaddr) {
-            #[cfg(feature = "async-io")]
-            {
-                let (ready_tx, ready_rx) = mpsc::channel(1);
-                let (port_reuse_tx, port_reuse_rx) = oneshot::channel();
-                let listener = listener::<async_io::Tcp>(addr.clone(), ready_tx, port_reuse_rx);
-                let dialer = dialer::<async_io::Tcp>(addr.clone(), ready_rx, port_reuse_tx);
-                let listener = async_std::task::spawn(listener);
-                async_std::task::block_on(dialer);
-                async_std::task::block_on(listener);
-            }
 
             #[cfg(feature = "tokio")]
             {
@@ -1074,11 +1040,6 @@ mod tests {
         }
 
         fn test(addr: Multiaddr) {
-            #[cfg(feature = "async-io")]
-            {
-                let listener = listen_twice::<async_io::Tcp>(addr.clone());
-                async_std::task::block_on(listener);
-            }
 
             #[cfg(feature = "tokio")]
             {
@@ -1110,11 +1071,6 @@ mod tests {
         }
 
         fn test(addr: Multiaddr) {
-            #[cfg(feature = "async-io")]
-            {
-                let new_addr = async_std::task::block_on(listen::<async_io::Tcp>(addr.clone()));
-                assert!(!new_addr.to_string().contains("tcp/0"));
-            }
 
             #[cfg(feature = "tokio")]
             {
@@ -1138,11 +1094,6 @@ mod tests {
             .try_init();
 
         fn test(addr: Multiaddr) {
-            #[cfg(feature = "async-io")]
-            {
-                let mut tcp = async_io::Transport::default();
-                assert!(tcp.listen_on(ListenerId::next(), addr.clone()).is_err());
-            }
 
             #[cfg(feature = "tokio")]
             {
@@ -1168,10 +1119,6 @@ mod tests {
             tcp.remove_listener(listener_id)
         }
 
-        #[cfg(feature = "async-io")]
-        {
-            assert!(async_std::task::block_on(cycle_listeners::<async_io::Tcp>()));
-        }
 
         #[cfg(feature = "tokio")]
         {
@@ -1202,12 +1149,6 @@ mod tests {
                 format!("/ip6/::/tcp/{port}").parse().unwrap(),
             )
             .unwrap();
-        }
-        #[cfg(feature = "async-io")]
-        {
-            async_std::task::block_on(async {
-                test::<async_io::Tcp>();
-            })
         }
         #[cfg(feature = "tokio")]
         {
