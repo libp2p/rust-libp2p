@@ -109,10 +109,10 @@ where
 
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         match self.project() {
-            EitherFutureProj::First(a) => TryFuture::try_poll(a, cx)
+            EitherFutureProj::First(a) => a.try_poll(cx)
                 .map_ok(future::Either::Left)
                 .map_err(Either::Left),
-            EitherFutureProj::Second(a) => TryFuture::try_poll(a, cx)
+            EitherFutureProj::Second(a) => a.try_poll(cx)
                 .map_ok(future::Either::Right)
                 .map_err(Either::Right),
         }
