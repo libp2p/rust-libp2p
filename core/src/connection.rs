@@ -89,7 +89,7 @@ pub enum ConnectedPoint {
         /// where there is no listener available to reuse a port from.
         port_use: PortUse,
     },
-    /// We received the node.
+    /// We accepted an incoming connection from the remote node.
     Listener {
         /// Local connection address.
         local_addr: Multiaddr,
@@ -131,10 +131,10 @@ impl ConnectedPoint {
 
     /// Returns true if the connection is relayed.
     pub fn is_relayed(&self) -> bool {
-        match self {
+        (match self {
             ConnectedPoint::Dialer { address, .. } => address,
             ConnectedPoint::Listener { local_addr, .. } => local_addr,
-        }
+        })
         .iter()
         .any(|p| p == Protocol::P2pCircuit)
     }
