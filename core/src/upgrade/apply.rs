@@ -34,7 +34,6 @@ use crate::{
     Negotiated,
 };
 
-// TODO: Still needed?
 /// Applies an upgrade to the inbound and outbound direction of a connection or substream.
 pub(crate) fn apply<C, U>(
     conn: C,
@@ -122,7 +121,7 @@ where
 {
     type Output = Result<U::Output, UpgradeError<U::Error>>;
 
-    fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+    fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<<Self as Future>::Output> {
         loop {
             match mem::replace(&mut self.inner, InboundUpgradeApplyState::Undefined) {
                 InboundUpgradeApplyState::Init {
@@ -230,7 +229,7 @@ where
                             return Poll::Pending;
                         }
                         Poll::Ready(Ok(x)) => {
-                            tracing::trace!(upgrade=%name, "Upgraded outbound stream");
+                            tracing::trace!(target: "libp2p::upgrade", upgrade=%name, "Upgraded outbound stream");
                             return Poll::Ready(Ok(x));
                         }
                         Poll::Ready(Err(e)) => {
