@@ -20,7 +20,7 @@ By specifying a peer ID as a parameter, the code will search for the closest pee
 Run the example code:
 
 ```sh
-cargo run -- get-peers [PEER_ID]
+cargo run -- get-peers --peer-id [PEER_ID]
 ```
 
 Replace `[PEER_ID]` with the base58-encoded peer ID you want to search for.
