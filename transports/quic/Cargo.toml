@@ -28,7 +28,6 @@ ring = { workspace = true }
 [features]
 tokio = ["dep:tokio", "if-watch/tokio", "quinn/runtime-tokio"]
 async-std = ["dep:async-std", "if-watch/smol", "quinn/runtime-async-std"]
-default = ["tokio"]
 
 # Passing arguments to the docsrs builder in order to properly document cfg's.
 # More information: https://docs.rs/about/builds#cross-compiling
