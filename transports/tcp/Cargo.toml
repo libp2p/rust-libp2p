@@ -23,7 +23,9 @@ tracing = { workspace = true }
 
 [features]
 tokio = ["dep:tokio", "if-watch/tokio"]
+# async-io feature is deprecated and will be removed in a future release
 async-io = ["dep:async-io", "if-watch/smol"]
+default = ["tokio"]
 
 [dev-dependencies]
 async-std = { version = "1.6.5", features = ["attributes"] }
