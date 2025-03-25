@@ -118,6 +118,10 @@ impl<P: Provider> GenTransport<P> {
                 Ok(endpoint)
             }
             #[cfg(feature = "async-std")]
+            #[deprecated(
+                since = "0.12.1",
+                note = "async_std has been discontinued. Please use tokio instead."
+            )]
             Runtime::AsyncStd => {
                 let runtime = std::sync::Arc::new(quinn::AsyncStdRuntime);
                 let endpoint =

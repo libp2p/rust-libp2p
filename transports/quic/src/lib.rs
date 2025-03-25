@@ -71,6 +71,10 @@ use std::net::SocketAddr;
 pub use config::Config;
 pub use connection::{Connecting, Connection, Stream};
 #[cfg(feature = "async-std")]
+#[deprecated(
+    since = "0.43.0",
+    note = "async_std has been discontinued. Please use the tokio feature instead."
+)]
 pub use provider::async_std;
 #[cfg(feature = "tokio")]
 pub use provider::tokio;
