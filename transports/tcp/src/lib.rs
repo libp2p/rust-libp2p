@@ -30,8 +30,6 @@
 //! which implement the [`libp2p_core::Transport`] trait for use as a
 //! transport with `libp2p-core` or `libp2p-swarm`.
 //!
-//! Note: The async_std/async_io support is deprecated and will be removed in a future release.
-//! Please use tokio instead.
 
 #![cfg_attr(docsrs, feature(doc_cfg, doc_auto_cfg))]
 
