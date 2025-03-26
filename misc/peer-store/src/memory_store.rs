@@ -159,8 +159,10 @@ impl<T> Store for MemoryStore<T> {
             }
             FromSwarm::ConnectionEstablished(info) => {
                 let mut is_record_updated = false;
-                for failed_addr in info.failed_addresses {
-                    is_record_updated |= self.remove_address_silent(&info.peer_id, failed_addr);
+                if self.config.remove_addr_on_dial_error {
+                    for failed_addr in info.failed_addresses {
+                        is_record_updated |= self.remove_address_silent(&info.peer_id, failed_addr);
+                    }
                 }
                 is_record_updated |=
                     self.update_address_silent(&info.peer_id, info.endpoint.get_remote_address());
@@ -169,6 +171,10 @@ impl<T> Store for MemoryStore<T> {
                 }
             }
             FromSwarm::DialFailure(info) => {
+                if !self.config.remove_addr_on_dial_error {
+                    return;
+                }
+
                 let Some(peer) = info.peer_id else {
                     // We don't know which peer we are talking about here.
                     return;
@@ -224,12 +230,14 @@ pub struct Config {
     /// The capacaity of an address store.  
     /// The least active address will be discarded to make room for new address.
     record_capacity: NonZeroUsize,
+    remove_addr_on_dial_error: bool,
 }
 
 impl Default for Config {
     fn default() -> Self {
         Self {
             record_capacity: NonZeroUsize::try_from(8).expect("8 > 0"),
+            remove_addr_on_dial_error: true,
         }
     }
 }
@@ -243,6 +251,16 @@ impl Config {
     /// Set the capacity for address records.
     pub fn set_record_capacity(mut self, capacity: NonZeroUsize) -> Self {
         self.record_capacity = capacity;
+        self
+    }
+    pub fn is_remove_addr_on_dial_error(&self) -> bool {
+        self.remove_addr_on_dial_error
+    }
+    /// If set to true, the `MemoryStore` will remove addresses on the first dial failure.
+    ///
+    /// `true` by default.
+    pub fn set_remove_addr_on_dial_error(mut self, value: bool) -> Self {
+        self.remove_addr_on_dial_error = value;
         self
     }
 }
