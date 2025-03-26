@@ -29,6 +29,8 @@ pub enum Event {
 
 /// A in-memory store that uses LRU cache for bounded storage of addresses
 /// and a frequency-based ordering of addresses.
+///
+///
 #[derive(Default)]
 pub struct MemoryStore<T = ()> {
     /// The internal store.
@@ -53,8 +55,9 @@ impl<T> MemoryStore<T> {
     }
 
     /// Update an address record and notify swarm when the address is new.
-    /// If `permanent` is true, and the address is not yet present, calls to `remove_address` will
-    /// only succeed if `force` is true.
+    ///
+    /// The added address will NOT be removed from the store on dial failure.
+    ///
     /// Returns `true` when the address is new.
     pub fn update_address(&mut self, peer: &PeerId, address: &Multiaddr) -> bool {
         let is_updated = self.update_address_silent(peer, address, true);
@@ -82,8 +85,7 @@ impl<T> MemoryStore<T> {
     }
 
     /// Remove an address record.
-    /// If `force` is false, addresses that have been marked `permanent` on insertion will not be
-    /// removed.
+    ///
     /// Returns `true` when the address is removed.
     pub fn remove_address(&mut self, peer: &PeerId, address: &Multiaddr) -> bool {
         let is_updated = self.remove_address_silent(peer, address, true);
@@ -314,7 +316,10 @@ impl<T> PeerRecord<T> {
     /// insert it to the front if not.
     /// Returns true when the address is new.
     pub fn update_address(&mut self, address: &Multiaddr, permanent: bool) -> bool {
-        if self.addresses.get(address).is_some() {
+        if let Some(was_permanent) = self.addresses.get(address) {
+            if !*was_permanent && permanent {
+                self.addresses.get_or_insert(address.clone(), || permanent);
+            }
             return false;
         }
         self.addresses.get_or_insert(address.clone(), || permanent);
