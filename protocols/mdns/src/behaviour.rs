@@ -81,7 +81,7 @@ pub trait Abort {
 /// The type of a [`Behaviour`] using the `async-io` implementation.
 #[cfg(feature = "async-io")]#[deprecated(
     since = "0.47.0",
-    note = "async_io has been discontinued. Please use the tokio feature instead."
+    note = "async-io has been discontinued. Please use the tokio feature instead."
 )]
 pub mod async_io {
     use std::future::Future;
