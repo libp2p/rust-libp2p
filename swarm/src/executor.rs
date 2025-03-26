@@ -49,7 +49,7 @@ impl Executor for TokioExecutor {
     not(any(target_os = "emscripten", target_os = "wasi", target_os = "unknown"))
 ))]
 #[deprecated(
-    since = "0.43.0",
+    since = "0.47.0",
     note = "async_std has been discontinued. Please use the tokio feature instead."
 )]
 #[derive(Default, Debug, Clone, Copy)]
@@ -59,7 +59,7 @@ pub(crate) struct AsyncStdExecutor;
     not(any(target_os = "emscripten", target_os = "wasi", target_os = "unknown"))
 ))]
 #[deprecated(
-    since = "0.43.0",
+    since = "0.47.0",
     note = "async_std has been discontinued. Please use the tokio feature instead."
 )]
 impl Executor for AsyncStdExecutor {

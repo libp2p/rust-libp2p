@@ -1421,7 +1421,7 @@ impl Config {
         not(any(target_os = "emscripten", target_os = "wasi", target_os = "unknown"))
     ))]
     #[deprecated(
-        since = "0.43.0",
+        since = "0.47.0",
         note = "async_std has been discontinued. Please use the tokio feature instead."
     )]
     pub fn with_async_std_executor() -> Self {
