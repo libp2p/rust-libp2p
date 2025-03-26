@@ -72,7 +72,7 @@ pub use config::Config;
 pub use connection::{Connecting, Connection, Stream};
 #[cfg(feature = "async-std")]
 #[deprecated(
-    since = "0.43.0",
+    since = "0.12.1",
     note = "async_std has been discontinued. Please use the tokio feature instead."
 )]
 pub use provider::async_std;
