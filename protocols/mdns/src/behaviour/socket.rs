@@ -53,7 +53,7 @@ pub trait AsyncSocket: Unpin + Send + 'static {
 #[cfg(feature = "async-io")]
 #[deprecated(
     since = "0.47.0",
-    note = "async_io has been discontinued. Please use the tokio feature instead."
+    note = "async-io has been discontinued. Please use the tokio feature instead."
 )]
 pub(crate) mod asio {
     use async_io::Async;
