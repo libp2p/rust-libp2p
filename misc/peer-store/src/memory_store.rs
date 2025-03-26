@@ -87,9 +87,15 @@ impl<T> MemoryStore<T> {
     /// Remove an address record without notifying swarm.
     /// Returns `true` when the address is removed.
     fn remove_address_silent(&mut self, peer: &PeerId, address: &Multiaddr) -> bool {
-        self.records
-            .get_mut(peer)
-            .is_some_and(|r| r.remove_address(address))
+        if let Some(record) = self.records.get_mut(peer) {
+            if record.remove_address(address) {
+                if record.addresses.is_empty() && record.custom_data.is_none() {
+                    self.records.remove(peer);
+                }
+                return true;
+            }
+        }
+        false
     }
 
     pub fn get_custom_data(&self, peer: &PeerId) -> Option<&T> {
@@ -98,9 +104,14 @@ impl<T> MemoryStore<T> {
 
     /// Take ownership of the internal data, leaving `None` in its place.
     pub fn take_custom_data(&mut self, peer: &PeerId) -> Option<T> {
-        self.records
-            .get_mut(peer)
-            .and_then(|r| r.take_custom_data())
+        if let Some(record) = self.records.get_mut(peer) {
+            let data = record.take_custom_data();
+            if record.addresses.is_empty() {
+                self.records.remove(peer);
+            }
+            return data;
+        }
+        None
     }
 
     /// Insert the data and notify the swarm about the update, dropping the old data if it exists.
