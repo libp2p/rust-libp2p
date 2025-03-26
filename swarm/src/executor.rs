@@ -48,12 +48,20 @@ impl Executor for TokioExecutor {
     feature = "async-std",
     not(any(target_os = "emscripten", target_os = "wasi", target_os = "unknown"))
 ))]
+#[deprecated(
+    since = "0.43.0",
+    note = "async_std has been discontinued. Please use the tokio feature instead."
+)]
 #[derive(Default, Debug, Clone, Copy)]
 pub(crate) struct AsyncStdExecutor;
 #[cfg(all(
     feature = "async-std",
     not(any(target_os = "emscripten", target_os = "wasi", target_os = "unknown"))
 ))]
+#[deprecated(
+    since = "0.43.0",
+    note = "async_std has been discontinued. Please use the tokio feature instead."
+)]
 impl Executor for AsyncStdExecutor {
     fn exec(&self, future: Pin<Box<dyn Future<Output = ()> + Send>>) {
         async_std::task::spawn(future);
