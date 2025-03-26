@@ -41,6 +41,10 @@ use std::{
 
 mod behaviour;
 #[cfg(feature = "async-io")]
+#[deprecated(
+    since = "0.47.0",
+    note = "async_io has been discontinued. Please use the tokio feature instead."
+)]
 pub use crate::behaviour::async_io;
 #[cfg(feature = "tokio")]
 pub use crate::behaviour::tokio;
