@@ -29,6 +29,7 @@ tracing-subscriber = { workspace = true, features = ["env-filter"] }
 
 [features]
 async-std = ["async-std-resolver"]
+# async-std has been discontinued and will be removed in a future release
 tokio = ["hickory-resolver/tokio-runtime"]
 
 # Passing arguments to the docsrs builder in order to properly document cfg's.
