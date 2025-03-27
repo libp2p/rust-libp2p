@@ -282,13 +282,10 @@ impl Decoder for GossipsubCodec {
         let mut invalid_messages = Vec::new();
 
         for message in rpc.publish.into_iter() {
-            println!("@@@!!!!!!!!!!");
             let topic = TopicHash::from_raw(&message.topic);
-            println!("{}", message.get_size());
-            println!("{}", self.max_transmit_size_for_topic(&topic));
+
             // Check the message size to ensure it doesn't bypass the configured max.
             if message.get_size() > self.max_transmit_size_for_topic(&topic) {
-                println!("@@@222222222");
                 let message = RawMessage {
                     source: None, // don't bother inform the application
                     data: message.data.unwrap_or_default(),
@@ -298,7 +295,7 @@ impl Decoder for GossipsubCodec {
                     key: message.key,
                     validated: false,
                 };
-                println!("33333333");
+
                 invalid_messages.push((message, ValidationError::MessageSizeTooLargeForTopic));
                 continue;
             }
@@ -366,7 +363,6 @@ impl Decoder for GossipsubCodec {
 
             // verify message signatures if required
             if verify_signature && !GossipsubCodec::verify_signature(&message) {
-                println!("invalid sig");
                 tracing::warn!("Invalid signature for received message");
 
                 // Build the invalid message (ignoring further validation of sequence number
@@ -596,8 +592,7 @@ mod tests {
 
     use super::*;
     use crate::{
-        config::Config, Behaviour, ConfigBuilder, IdentTopic as Topic, MessageAuthenticity,
-        Version,
+        config::Config, Behaviour, ConfigBuilder, IdentTopic as Topic, MessageAuthenticity, Version,
     };
 
     #[derive(Clone, Debug)]

@@ -6456,7 +6456,7 @@ fn test_publish_message_with_default_transmit_size_config() {
         .unwrap();
 
     let (mut gs, _, _, _) = inject_nodes1()
-        .peer_no(10) // More than mesh_n
+        .peer_no(10)
         .topics(vec!["test".to_string()])
         .to_subscribe(true)
         .gs_config(config)
@@ -6488,7 +6488,7 @@ fn test_publish_large_message_with_default_transmit_size_config() {
         .unwrap();
 
     let (mut gs, _, _, _) = inject_nodes1()
-        .peer_no(10) // More than mesh_n
+        .peer_no(10)
         .topics(vec!["test".to_string()])
         .to_subscribe(true)
         .gs_config(config)
@@ -6516,7 +6516,7 @@ fn test_publish_message_with_specific_transmit_size_config() {
         .unwrap();
 
     let (mut gs, _, _, _) = inject_nodes1()
-        .peer_no(10) // More than mesh_n
+        .peer_no(10)
         .topics(vec!["test".to_string()])
         .to_subscribe(true)
         .gs_config(config)
@@ -6549,7 +6549,7 @@ fn test_publish_large_message_with_specific_transmit_size_config() {
         .unwrap();
 
     let (mut gs, _, _, _) = inject_nodes1()
-        .peer_no(10) // More than mesh_n
+        .peer_no(10)
         .topics(vec!["test".to_string()])
         .to_subscribe(true)
         .gs_config(config)

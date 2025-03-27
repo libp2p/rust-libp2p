@@ -600,9 +600,7 @@ where
             .max_transmit_size_for_topic(&topic);
 
         // check that the size doesn't exceed the max transmission size.
-        println!("TESTING DATA NOW");
         if transformed_data.len() > max_transmit_size_for_topic {
-            println!("MESSAFE TOO LRAGE");
             return Err(PublishError::MessageTooLarge);
         }
 
