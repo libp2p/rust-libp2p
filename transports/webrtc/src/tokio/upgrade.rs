@@ -18,7 +18,14 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use std::{net::SocketAddr, sync::Arc, time::Duration};
+use std::{
+    net::SocketAddr,
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        Arc,
+    },
+    time::Duration,
+};
 
 use futures::{channel::oneshot, future::Either};
 use futures_timer::Delay;
@@ -171,6 +178,20 @@ fn setting_engine(
         SocketAddr::V6(_) => NetworkType::Udp6,
     };
     se.set_network_types(vec![network_type]);
+
+    // Select only the first address of the local candidates.
+    // See https://github.com/libp2p/rust-libp2p/pull/5448#discussion_r2017418520.
+    // TODO: remove when https://github.com/webrtc-rs/webrtc/issues/662 get's addressed.
+    se.set_ip_filter(Box::new({
+        let once = AtomicBool::new(true);
+        move |_ip| {
+            if once.load(Ordering::Relaxed) {
+                once.store(false, Ordering::Relaxed);
+                return true;
+            }
+            false
+        }
+    }));
 
     se
 }
