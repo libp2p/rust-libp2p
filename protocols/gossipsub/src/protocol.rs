@@ -18,7 +18,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use std::{convert::Infallible, pin::Pin};
+use std::{collections::HashMap, convert::Infallible, pin::Pin};
 
 use asynchronous_codec::{Decoder, Encoder, Framed};
 use byteorder::{BigEndian, ByteOrder};
@@ -30,7 +30,7 @@ use libp2p_swarm::StreamProtocol;
 use quick_protobuf::{MessageWrite, Writer};
 
 use crate::{
-    config::{TopicConfigs, ValidationMode},
+    config::ValidationMode,
     handler::HandlerEvent,
     rpc_proto::proto,
     topic::TopicHash,
@@ -68,6 +68,10 @@ pub struct ProtocolConfig {
     pub(crate) protocol_ids: Vec<ProtocolId>,
     /// Determines the level of validation to be done on incoming messages.
     pub(crate) validation_mode: ValidationMode,
+    /// The default max transmit size.
+    pub(crate) default_max_transmit_size: usize,
+    /// The max transmit sizes for a topic.
+    pub(crate) max_transmit_sizes: HashMap<TopicHash, usize>,
 }
 
 impl Default for ProtocolConfig {
@@ -79,7 +83,19 @@ impl Default for ProtocolConfig {
                 GOSSIPSUB_1_1_0_PROTOCOL,
                 GOSSIPSUB_1_0_0_PROTOCOL,
             ],
+            default_max_transmit_size: 65536,
+            max_transmit_sizes: HashMap::new(),
         }
+    }
+}
+
+impl ProtocolConfig {
+    /// Get the max transmit size for a given topic, falling back to the default.
+    pub fn max_transmit_size_for_topic(&self, topic: &TopicHash) -> usize {
+        self.max_transmit_sizes
+            .get(topic)
+            .copied()
+            .unwrap_or(self.default_max_transmit_size)
     }
 }
 
@@ -120,9 +136,9 @@ where
             Framed::new(
                 socket,
                 GossipsubCodec::new(
-                    Config::default_max_transmit_size(),
+                    self.default_max_transmit_size,
                     self.validation_mode,
-                    TopicConfigs::default(),
+                    self.max_transmit_sizes,
                 ),
             ),
             protocol_id.kind,
@@ -143,9 +159,9 @@ where
             Framed::new(
                 socket,
                 GossipsubCodec::new(
-                    Config::default_max_transmit_size(),
+                    self.default_max_transmit_size,
                     self.validation_mode,
-                    TopicConfigs::default(),
+                    self.max_transmit_sizes,
                 ),
             ),
             protocol_id.kind,
@@ -160,22 +176,30 @@ pub struct GossipsubCodec {
     validation_mode: ValidationMode,
     /// The codec to handle common encoding/decoding of protobuf messages
     codec: quick_protobuf_codec::Codec<proto::RPC>,
-    /// Configurations for topics including max transmit size and mesh parameters
-    config: TopicConfigs,
+    /// Maximum transmit sizes per topic, with a default if not specified.
+    max_transmit_sizes: HashMap<TopicHash, usize>,
 }
 
 impl GossipsubCodec {
     pub fn new(
         max_length: usize,
         validation_mode: ValidationMode,
-        config: TopicConfigs,
+        max_transmit_sizes: HashMap<TopicHash, usize>,
     ) -> GossipsubCodec {
         let codec = quick_protobuf_codec::Codec::new(max_length);
         GossipsubCodec {
             validation_mode,
             codec,
-            config,
+            max_transmit_sizes,
         }
+    }
+
+    /// Get the max transmit size for a given topic, falling back to the default.
+    fn max_transmit_size_for_topic(&self, topic: &TopicHash) -> usize {
+        self.max_transmit_sizes
+            .get(topic)
+            .copied()
+            .unwrap_or(Config::default_max_transmit_size())
     }
 
     /// Verifies a gossipsub message. This returns either a success or failure. All errors
@@ -258,10 +282,13 @@ impl Decoder for GossipsubCodec {
         let mut invalid_messages = Vec::new();
 
         for message in rpc.publish.into_iter() {
+            println!("@@@!!!!!!!!!!");
             let topic = TopicHash::from_raw(&message.topic);
-
+            println!("{}", message.get_size());
+            println!("{}", self.max_transmit_size_for_topic(&topic));
             // Check the message size to ensure it doesn't bypass the configured max.
-            if message.get_size() > self.config.max_transmit_size_for_topic(&topic) {
+            if message.get_size() > self.max_transmit_size_for_topic(&topic) {
+                println!("@@@222222222");
                 let message = RawMessage {
                     source: None, // don't bother inform the application
                     data: message.data.unwrap_or_default(),
@@ -271,7 +298,7 @@ impl Decoder for GossipsubCodec {
                     key: message.key,
                     validated: false,
                 };
-
+                println!("33333333");
                 invalid_messages.push((message, ValidationError::MessageSizeTooLargeForTopic));
                 continue;
             }
@@ -339,6 +366,7 @@ impl Decoder for GossipsubCodec {
 
             // verify message signatures if required
             if verify_signature && !GossipsubCodec::verify_signature(&message) {
+                println!("invalid sig");
                 tracing::warn!("Invalid signature for received message");
 
                 // Build the invalid message (ignoring further validation of sequence number
@@ -568,7 +596,8 @@ mod tests {
 
     use super::*;
     use crate::{
-        config::Config, Behaviour, ConfigBuilder, IdentTopic as Topic, MessageAuthenticity, Version,
+        config::Config, Behaviour, ConfigBuilder, IdentTopic as Topic, MessageAuthenticity,
+        Version,
     };
 
     #[derive(Clone, Debug)]
@@ -634,11 +663,8 @@ mod tests {
                 control_msgs: vec![],
             };
 
-            let mut codec = GossipsubCodec::new(
-                u32::MAX as usize,
-                ValidationMode::Strict,
-                TopicConfigs::default(),
-            );
+            let mut codec =
+                GossipsubCodec::new(u32::MAX as usize, ValidationMode::Strict, HashMap::new());
             let mut buf = BytesMut::new();
             codec.encode(rpc.into_protobuf(), &mut buf).unwrap();
             let decoded_rpc = codec.decode(&mut buf).unwrap().unwrap();
@@ -667,5 +693,242 @@ mod tests {
 
         assert_eq!(protocol_config.protocol_ids[0].protocol, "/foosub");
         assert_eq!(protocol_config.protocol_ids[1].protocol, "/floodsub/1.0.0");
+    }
+
+    #[test]
+    fn decode_message_with_specific_topic_transmit_size_success() {
+        let topic = Topic::new("test");
+        let mut size_config = HashMap::new();
+        size_config.insert(topic.hash(), 2000);
+
+        let mut codec = GossipsubCodec::new(
+            Config::default_max_transmit_size(),
+            ValidationMode::Strict,
+            size_config,
+        );
+        assert_eq!(codec.max_transmit_size_for_topic(&topic.hash()), 2000);
+
+        let data = vec![0; 1024];
+        let keypair = Keypair::generate_ed25519();
+        let peer_id = keypair.public().to_peer_id();
+        let mut message = proto::Message {
+            from: Some(peer_id.to_bytes()),
+            data: Some(data),
+            seqno: Some(rand::random::<u64>().to_be_bytes().to_vec()),
+            topic: topic.to_string(),
+            signature: None,
+            key: None,
+        };
+
+        let mut buf = Vec::new();
+        let mut writer = Writer::new(&mut buf);
+        message.write_message(&mut writer).expect("test_encoding");
+        let mut signature_bytes = SIGNING_PREFIX.to_vec();
+        signature_bytes.extend_from_slice(&buf);
+        message.signature = Some(keypair.sign(&signature_bytes).unwrap());
+
+        let mut encoded = BytesMut::new();
+        let rpc = proto::RPC {
+            subscriptions: vec![],
+            publish: vec![message],
+            control: None,
+        };
+        codec.encode(rpc, &mut encoded).unwrap();
+
+        let result = codec.decode(&mut encoded).unwrap();
+        assert!(
+            result.is_some(),
+            "Expected successful decode within size limit"
+        );
+        if let Some(HandlerEvent::Message {
+            rpc,
+            invalid_messages,
+        }) = result
+        {
+            assert_eq!(rpc.messages.len(), 1, "Expected one valid message");
+            assert!(invalid_messages.is_empty(), "Expected no invalid messages");
+        } else {
+            panic!("Unexpected event type");
+        }
+    }
+
+    #[test]
+    fn decode_message_with_specific_topic_transmit_size_failure() {
+        let topic = Topic::new("test");
+        let mut size_config = HashMap::new();
+        size_config.insert(topic.hash(), 2000);
+
+        let mut codec = GossipsubCodec::new(
+            Config::default_max_transmit_size(),
+            ValidationMode::Strict,
+            size_config,
+        );
+        assert_eq!(codec.max_transmit_size_for_topic(&topic.hash()), 2000);
+
+        let data = vec![0; 2001];
+        let keypair = Keypair::generate_ed25519();
+        let peer_id = keypair.public().to_peer_id();
+        let mut message = proto::Message {
+            from: Some(peer_id.to_bytes()),
+            data: Some(data),
+            seqno: Some(rand::random::<u64>().to_be_bytes().to_vec()),
+            topic: topic.to_string(),
+            signature: None,
+            key: None,
+        };
+
+        let mut buf = Vec::new();
+        let mut writer = Writer::new(&mut buf);
+        message.write_message(&mut writer).expect("test_encoding");
+        let mut signature_bytes = SIGNING_PREFIX.to_vec();
+        signature_bytes.extend_from_slice(&buf);
+        message.signature = Some(keypair.sign(&signature_bytes).unwrap());
+
+        let mut encoded = BytesMut::new();
+        let rpc = proto::RPC {
+            subscriptions: vec![],
+            publish: vec![message],
+            control: None,
+        };
+        codec.encode(rpc, &mut encoded).unwrap();
+
+        let result = codec.decode(&mut encoded).unwrap();
+        assert!(result.is_some(), "Expected successful decode");
+        if let Some(HandlerEvent::Message {
+            rpc,
+            invalid_messages,
+        }) = result
+        {
+            assert_eq!(rpc.messages.len(), 0, "Expected no valid messages");
+            assert!(invalid_messages.len() == 1, "Expected one invalid message");
+            assert!(
+                matches!(
+                    invalid_messages[0].1,
+                    ValidationError::MessageSizeTooLargeForTopic
+                ),
+                "Expected MessageSizeTooLargeForTopic error, got {:?}",
+                invalid_messages[0].1
+            );
+        } else {
+            panic!("Unexpected event type");
+        }
+    }
+
+    #[test]
+    fn decode_message_with_default_topic_transmit_size_success() {
+        let topic = Topic::new("test");
+        let mut codec = GossipsubCodec::new(
+            Config::default_max_transmit_size(),
+            ValidationMode::Strict,
+            HashMap::new(),
+        );
+
+        assert_eq!(
+            codec.max_transmit_size_for_topic(&topic.hash()),
+            Config::default_max_transmit_size()
+        );
+        let data = vec![0; 1024];
+
+        let keypair = Keypair::generate_ed25519();
+        let peer_id = keypair.public().to_peer_id();
+        let mut message = proto::Message {
+            from: Some(peer_id.to_bytes()),
+            data: Some(data),
+            seqno: Some(rand::random::<u64>().to_be_bytes().to_vec()),
+            topic: topic.to_string(),
+            signature: None,
+            key: None,
+        };
+
+        let mut buf = Vec::new();
+        let mut writer = Writer::new(&mut buf);
+        message.write_message(&mut writer).expect("test_encoding");
+        let mut signature_bytes = SIGNING_PREFIX.to_vec();
+        signature_bytes.extend_from_slice(&buf);
+        message.signature = Some(keypair.sign(&signature_bytes).unwrap());
+
+        let mut encoded = BytesMut::new();
+        let rpc = proto::RPC {
+            subscriptions: vec![],
+            publish: vec![message],
+            control: None,
+        };
+        codec.encode(rpc, &mut encoded).unwrap();
+
+        let result = codec.decode(&mut encoded).unwrap();
+        assert!(
+            result.is_some(),
+            "Expected successful decode within size limit"
+        );
+        if let Some(HandlerEvent::Message {
+            rpc,
+            invalid_messages,
+        }) = result
+        {
+            assert_eq!(rpc.messages.len(), 1, "Expected one valid message");
+            assert!(invalid_messages.is_empty(), "Expected no invalid messages");
+        } else {
+            panic!("Unexpected event type");
+        }
+    }
+
+    #[test]
+    fn decode_message_with_default_topic_transmit_size_failure() {
+        let topic = Topic::new("test");
+        // Sufficient max length to pass protobuf decoding
+        let mut codec = GossipsubCodec::new(70000, ValidationMode::Strict, HashMap::new());
+
+        assert_eq!(
+            codec.max_transmit_size_for_topic(&topic.hash()),
+            Config::default_max_transmit_size()
+        );
+
+        let data = vec![0; 65537];
+        let keypair = Keypair::generate_ed25519();
+        let peer_id = keypair.public().to_peer_id();
+        let mut message = proto::Message {
+            from: Some(peer_id.to_bytes()),
+            data: Some(data),
+            seqno: Some(rand::random::<u64>().to_be_bytes().to_vec()),
+            topic: topic.to_string(),
+            signature: None,
+            key: None,
+        };
+
+        let mut buf = Vec::new();
+        let mut writer = Writer::new(&mut buf);
+        message.write_message(&mut writer).expect("test_encoding");
+        let mut signature_bytes = SIGNING_PREFIX.to_vec();
+        signature_bytes.extend_from_slice(&buf);
+        message.signature = Some(keypair.sign(&signature_bytes).unwrap());
+
+        let mut encoded = BytesMut::new();
+        let rpc = proto::RPC {
+            subscriptions: vec![],
+            publish: vec![message],
+            control: None,
+        };
+        codec.encode(rpc, &mut encoded).unwrap();
+
+        let result = codec.decode(&mut encoded).unwrap();
+        assert!(result.is_some(), "Expected successful decode");
+        if let Some(HandlerEvent::Message {
+            rpc,
+            invalid_messages,
+        }) = result
+        {
+            assert_eq!(rpc.messages.len(), 0, "Expected no valid messages");
+            assert_eq!(invalid_messages.len(), 1, "Expected one invalid message");
+            assert!(
+                matches!(
+                    invalid_messages[0].1,
+                    ValidationError::MessageSizeTooLargeForTopic
+                ),
+                "Expected MessageSizeTooLargeForTopic error, got {:?}",
+                invalid_messages[0].1
+            );
+        } else {
+            panic!("Unexpected event type");
+        }
     }
 }

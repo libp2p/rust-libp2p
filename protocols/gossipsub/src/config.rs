@@ -63,20 +63,16 @@ pub enum Version {
 /// Defines the overall configuration for mesh parameters and max transmit sizes
 /// for topics.
 #[derive(Clone, PartialEq, Eq)]
-pub struct TopicConfigs {
+pub(crate) struct TopicConfigs {
     pub(crate) topic_mesh_params: HashMap<TopicHash, TopicMeshConfig>,
-    pub(crate) topic_max_transmit_sizes: HashMap<TopicHash, usize>,
     pub(crate) default_mesh_params: TopicMeshConfig,
-    pub(crate) default_max_transmit_size: usize,
 }
 
 impl Default for TopicConfigs {
     fn default() -> Self {
         Self {
             topic_mesh_params: HashMap::new(),
-            topic_max_transmit_sizes: HashMap::new(),
             default_mesh_params: Default::default(),
-            default_max_transmit_size: 65536,
         }
     }
 }
@@ -101,62 +97,10 @@ impl Default for TopicMeshConfig {
     }
 }
 
-impl TopicConfigs {
-    /// The maximum transmit size for a given topic.
-    pub fn max_transmit_size_for_topic(&self, topic: &TopicHash) -> usize {
-        self.topic_max_transmit_sizes
-            .get(topic)
-            .copied()
-            .unwrap_or(self.default_max_transmit_size)
-    }
-
-    /// Returns the mesh configuration for a given topic.
-    pub fn mesh_config_for_topic(&self, topic: &TopicHash) -> Option<&TopicMeshConfig> {
-        self.topic_mesh_params.get(topic)
-    }
-
-    /// Minimum number of outbound peers in the mesh network before adding more (D_out in the spec).
-    /// This value must be smaller or equal than `mesh_n / 2` and smaller than `mesh_n_low`.
-    /// The default is 2.
-    pub fn mesh_outbound_min(&self, topic: &TopicHash) -> usize {
-        self.mesh_config_for_topic(topic)
-            .cloned()
-            .unwrap_or_default()
-            .mesh_outbound_min
-    }
-
-    /// Target number of peers for the mesh network (D in the spec, default is 6).
-    pub fn mesh_n(&self, topic: &TopicHash) -> usize {
-        self.mesh_config_for_topic(topic)
-            .cloned()
-            .unwrap_or_default()
-            .mesh_n
-    }
-
-    /// Minimum number of peers in mesh network before adding more (D_lo in the spec, default is 5).
-    pub fn mesh_n_low(&self, topic: &TopicHash) -> usize {
-        self.mesh_config_for_topic(topic)
-            .cloned()
-            .unwrap_or_default()
-            .mesh_n_low
-    }
-
-    /// Maximum number of peers in mesh network before removing some (D_high in the spec, default
-    /// is 12).
-    pub fn mesh_n_high(&self, topic: &TopicHash) -> usize {
-        self.mesh_config_for_topic(topic)
-            .cloned()
-            .unwrap_or_default()
-            .mesh_n_high
-    }
-}
-
 impl std::fmt::Debug for TopicConfigs {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let mut builder = f.debug_struct("TopicConfigs");
         let _ = builder.field("topic_mesh_params", &self.topic_mesh_params);
-        let _ = builder.field("default_max_size", &self.default_max_transmit_size);
-        let _ = builder.field("topic_max_sizes", &self.topic_max_transmit_sizes);
         builder.finish()
     }
 }
@@ -305,6 +249,7 @@ impl Config {
         self.check_explicit_peers_ticks
     }
 
+    /// The default global max transmit size for topics.
     pub fn default_max_transmit_size() -> usize {
         65536
     }
@@ -317,7 +262,7 @@ impl Config {
     /// must be large enough to transmit the desired peer information on pruning. It must be at
     /// least 100 bytes. Default is 65536 bytes.
     pub fn max_transmit_size(&self) -> usize {
-        self.topic_configuration.default_max_transmit_size
+        self.protocol.default_max_transmit_size
     }
 
     /// The maximum byte size for each gossipsub RPC for a given topic (default is 65536 bytes).
@@ -328,7 +273,7 @@ impl Config {
     /// must be large enough to transmit the desired peer information on pruning. It must be at
     /// least 100 bytes. Default is 65536 bytes.
     pub fn max_transmit_size_for_topic(&self, topic: &TopicHash) -> usize {
-        self.topic_configuration.max_transmit_size_for_topic(topic)
+        self.protocol_config().max_transmit_size_for_topic(topic)
     }
 
     /// Duplicates are prevented by storing message id's of known messages in an LRU time cache.
@@ -834,7 +779,7 @@ impl ConfigBuilder {
 
     /// The maximum byte size for each gossip (default is 2048 bytes).
     pub fn max_transmit_size(&mut self, max_transmit_size: usize) -> &mut Self {
-        self.config.topic_configuration.default_max_transmit_size = max_transmit_size;
+        self.config.protocol.default_max_transmit_size = max_transmit_size;
         self
     }
 
@@ -845,8 +790,8 @@ impl ConfigBuilder {
         topic: TopicHash,
     ) -> &mut Self {
         self.config
-            .topic_configuration
-            .topic_max_transmit_sizes
+            .protocol
+            .max_transmit_sizes
             .insert(topic, max_transmit_size);
         self
     }
@@ -1149,8 +1094,8 @@ impl ConfigBuilder {
     /// The topic max size sets message sizes for a given topic.
     pub fn set_topic_max_transmit_size(&mut self, topic: TopicHash, max_size: usize) -> &mut Self {
         self.config
-            .topic_configuration
-            .topic_max_transmit_sizes
+            .protocol
+            .max_transmit_sizes
             .insert(topic, max_size);
         self
     }
@@ -1159,18 +1104,9 @@ impl ConfigBuilder {
     pub fn build(&self) -> Result<Config, ConfigBuilderError> {
         // check all constraints on config
 
-        let pre_configured_topics = self
-            .config
-            .topic_configuration
-            .topic_max_transmit_sizes
-            .keys();
+        let pre_configured_topics = self.config.protocol.max_transmit_sizes.keys();
         for topic in pre_configured_topics {
-            if self
-                .config
-                .topic_configuration
-                .max_transmit_size_for_topic(topic)
-                < 100
-            {
+            if self.config.protocol.max_transmit_size_for_topic(topic) < 100 {
                 return Err(ConfigBuilderError::MaxTransmissionSizeTooSmall);
             }
 

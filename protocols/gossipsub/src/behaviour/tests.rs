@@ -6443,3 +6443,123 @@ fn test_fanout_with_topic_config() {
         "Should send a publish message to topic-specific mesh_n 4 fanout peers"
     );
 }
+
+#[test]
+fn test_publish_message_with_default_transmit_size_config() {
+    let topic = Topic::new("test");
+    let topic_hash = topic.hash();
+
+    let config = ConfigBuilder::default()
+        .set_topic_max_transmit_size(topic_hash.clone(), Config::default_max_transmit_size())
+        .validation_mode(ValidationMode::Strict)
+        .build()
+        .unwrap();
+
+    let (mut gs, _, _, _) = inject_nodes1()
+        .peer_no(10) // More than mesh_n
+        .topics(vec!["test".to_string()])
+        .to_subscribe(true)
+        .gs_config(config)
+        .create_network();
+
+    let data = vec![0; 1024];
+
+    let result = gs.publish(topic.clone(), data);
+    assert!(
+        result.is_ok(),
+        "Expected successful publish within size limit"
+    );
+    let msg_id = result.unwrap();
+    assert!(
+        gs.mcache.get(&msg_id).is_some(),
+        "Message should be in cache"
+    );
+}
+
+#[test]
+fn test_publish_large_message_with_default_transmit_size_config() {
+    let topic = Topic::new("test");
+    let topic_hash = topic.hash();
+
+    let config = ConfigBuilder::default()
+        .set_topic_max_transmit_size(topic_hash.clone(), Config::default_max_transmit_size())
+        .validation_mode(ValidationMode::Strict)
+        .build()
+        .unwrap();
+
+    let (mut gs, _, _, _) = inject_nodes1()
+        .peer_no(10) // More than mesh_n
+        .topics(vec!["test".to_string()])
+        .to_subscribe(true)
+        .gs_config(config)
+        .create_network();
+
+    let data = vec![0; Config::default_max_transmit_size() + 1];
+
+    let result = gs.publish(topic.clone(), data);
+    assert!(
+        matches!(result, Err(PublishError::MessageTooLarge)),
+        "Expected MessageTooLarge error for oversized message"
+    );
+}
+
+#[test]
+fn test_publish_message_with_specific_transmit_size_config() {
+    let topic = Topic::new("test");
+    let topic_hash = topic.hash();
+
+    let max_topic_transmit_size = 2000;
+    let config = ConfigBuilder::default()
+        .set_topic_max_transmit_size(topic_hash.clone(), max_topic_transmit_size)
+        .validation_mode(ValidationMode::Strict)
+        .build()
+        .unwrap();
+
+    let (mut gs, _, _, _) = inject_nodes1()
+        .peer_no(10) // More than mesh_n
+        .topics(vec!["test".to_string()])
+        .to_subscribe(true)
+        .gs_config(config)
+        .create_network();
+
+    let data = vec![0; 1024];
+
+    let result = gs.publish(topic.clone(), data);
+    assert!(
+        result.is_ok(),
+        "Expected successful publish within topic-specific size limit"
+    );
+    let msg_id = result.unwrap();
+    assert!(
+        gs.mcache.get(&msg_id).is_some(),
+        "Message should be in cache"
+    );
+}
+
+#[test]
+fn test_publish_large_message_with_specific_transmit_size_config() {
+    let topic = Topic::new("test");
+    let topic_hash = topic.hash();
+
+    let max_topic_transmit_size = 2048;
+    let config = ConfigBuilder::default()
+        .set_topic_max_transmit_size(topic_hash.clone(), max_topic_transmit_size)
+        .validation_mode(ValidationMode::Strict)
+        .build()
+        .unwrap();
+
+    let (mut gs, _, _, _) = inject_nodes1()
+        .peer_no(10) // More than mesh_n
+        .topics(vec!["test".to_string()])
+        .to_subscribe(true)
+        .gs_config(config)
+        .create_network();
+
+    let data = vec![0; 2049];
+
+    let result = gs.publish(topic.clone(), data);
+    assert!(
+        matches!(result, Err(PublishError::MessageTooLarge)),
+        "Expected MessageTooLarge error for oversized message with topic-specific config"
+    );
+}

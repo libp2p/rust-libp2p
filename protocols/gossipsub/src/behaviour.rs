@@ -594,10 +594,15 @@ where
             .data_transform
             .outbound_transform(&topic.clone(), data.clone())?;
 
-        let max_transmit_size_for_topic = self.config.max_transmit_size_for_topic(&topic);
+        let max_transmit_size_for_topic = self
+            .config
+            .protocol_config()
+            .max_transmit_size_for_topic(&topic);
 
         // check that the size doesn't exceed the max transmission size.
+        println!("TESTING DATA NOW");
         if transformed_data.len() > max_transmit_size_for_topic {
+            println!("MESSAFE TOO LRAGE");
             return Err(PublishError::MessageTooLarge);
         }
 
