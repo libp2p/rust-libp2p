@@ -33,22 +33,22 @@ use libp2p::{
 use tracing_subscriber::EnvFilter;
 
 #[derive(Debug, Parser)]
-#[clap(name = "libp2p DCUtR client")]
+#[command(name = "libp2p DCUtR client")]
 struct Opts {
     /// The mode (client-listen, client-dial).
-    #[clap(long)]
+    #[arg(long)]
     mode: Mode,
 
     /// Fixed value to generate deterministic peer id.
-    #[clap(long)]
+    #[arg(long)]
     secret_key_seed: u8,
 
     /// The listening address
-    #[clap(long)]
+    #[arg(long)]
     relay_address: Multiaddr,
 
     /// Peer ID of the remote peer to hole punch to.
-    #[clap(long)]
+    #[arg(long)]
     remote_peer_id: Option<PeerId>,
 }
 
