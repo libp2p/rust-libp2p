@@ -516,8 +516,6 @@ impl ConnectionHandler for Handler {
                         ..
                     }) => match protocol {
                         Either::Left(protocol) => handler.on_fully_negotiated_inbound(protocol),
-                        // TODO: remove when Rust 1.82 is MSRV
-                        #[allow(unreachable_patterns)]
                         Either::Right(v) => libp2p_core::util::unreachable(v),
                     },
                     ConnectionEvent::FullyNegotiatedOutbound(fully_negotiated_outbound) => {
@@ -529,8 +527,6 @@ impl ConnectionHandler for Handler {
                     }) => {
                         tracing::debug!("Dial upgrade error: Protocol negotiation timeout");
                     }
-                    // TODO: remove when Rust 1.82 is MSRV
-                    #[allow(unreachable_patterns)]
                     ConnectionEvent::DialUpgradeError(DialUpgradeError {
                         error: StreamUpgradeError::Apply(e),
                         ..

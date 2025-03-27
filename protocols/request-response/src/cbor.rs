@@ -21,6 +21,15 @@
 /// A request-response behaviour using [`cbor4ii::serde`] for serializing and
 /// deserializing the messages.
 ///
+/// # Default Size Limits
+///
+/// The codec uses the following default size limits:
+/// - Maximum request size: 1,048,576 bytes (1 MiB)
+/// - Maximum response size: 10,485,760 bytes (10 MiB)
+///
+/// These limits can be customized with [`codec::Codec::set_request_size_maximum`]
+/// and [`codec::Codec::set_response_size_maximum`].
+///
 /// # Example
 ///
 /// ```
@@ -170,8 +179,6 @@ pub mod codec {
 
     fn decode_into_io_error(err: cbor4ii::serde::DecodeError<Infallible>) -> io::Error {
         match err {
-            // TODO: remove when Rust 1.82 is MSRV
-            #[allow(unreachable_patterns)]
             cbor4ii::serde::DecodeError::Core(DecodeError::Read(e)) => {
                 io::Error::new(io::ErrorKind::Other, e)
             }

@@ -384,6 +384,7 @@ async fn registration_on_clients_expire() {
         new_server_with_connected_clients(rendezvous::server::Config::default().with_min_ttl(1))
             .await;
 
+    let alice_peer_id = *alice.local_peer_id();
     let roberts_peer_id = *robert.local_peer_id();
     tokio::spawn(robert.loop_on_next());
 
@@ -402,6 +403,16 @@ async fn registration_on_clients_expire() {
     match bob.next_behaviour_event().await {
         rendezvous::client::Event::Discovered { registrations, .. } => {
             assert!(!registrations.is_empty());
+        }
+        event => panic!("Unexpected event: {event:?}"),
+    }
+
+    match bob.next_swarm_event().await {
+        SwarmEvent::NewExternalAddrOfPeer {
+            peer_id: discovered_peer_id,
+            ..
+        } => {
+            assert_eq!(discovered_peer_id, alice_peer_id);
         }
         event => panic!("Unexpected event: {event:?}"),
     }
