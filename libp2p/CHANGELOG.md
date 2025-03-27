@@ -6,7 +6,7 @@
   See [PR 5724](https://github.com/libp2p/rust-libp2p/pull/5724).
 
 - Make the `*-websys` variants (`libp2p-webrtc-websys`, `libp2p-websocket-websys`, `libp2p-webtransport-websys`) only available on wasm32 target architecture.
-  See [PR 5891](https://github.com/libp2p/rust-libp2p/pull/5891).. 
+  See [PR 5891](https://github.com/libp2p/rust-libp2p/pull/5891).
 
 ## 0.55.0
 

@@ -62,19 +62,10 @@ pub enum Version {
 
 /// Defines the overall configuration for mesh parameters and max transmit sizes
 /// for topics.
-#[derive(Clone, PartialEq, Eq)]
+#[derive(Default, Clone, PartialEq, Eq)]
 pub(crate) struct TopicConfigs {
     pub(crate) topic_mesh_params: HashMap<TopicHash, TopicMeshConfig>,
     pub(crate) default_mesh_params: TopicMeshConfig,
-}
-
-impl Default for TopicConfigs {
-    fn default() -> Self {
-        Self {
-            topic_mesh_params: HashMap::new(),
-            default_mesh_params: Default::default(),
-        }
-    }
 }
 
 /// Defines the mesh network parameters for a given topic.
