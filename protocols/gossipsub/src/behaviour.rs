@@ -592,13 +592,19 @@ where
         // Transform the data before building a raw_message.
         let transformed_data = self
             .data_transform
-            .outbound_transform(&topic, data.clone())?;
+            .outbound_transform(&topic.clone(), data.clone())?;
+
+        let max_transmit_size_for_topic = self
+            .config
+            .protocol_config()
+            .max_transmit_size_for_topic(&topic);
 
         // check that the size doesn't exceed the max transmission size.
-        if transformed_data.len() > self.config.max_transmit_size() {
+        if transformed_data.len() > max_transmit_size_for_topic {
             return Err(PublishError::MessageTooLarge);
         }
 
+        let mesh_n = self.config.mesh_n_for_topic(&topic);
         let raw_message = self.build_raw_message(topic, transformed_data)?;
 
         // calculate the message id from the un-transformed data
@@ -648,7 +654,7 @@ where
                 Some(mesh_peers) => {
                     // We have a mesh set. We want to make sure to publish to at least `mesh_n`
                     // peers (if possible).
-                    let needed_extra_peers = self.config.mesh_n().saturating_sub(mesh_peers.len());
+                    let needed_extra_peers = mesh_n.saturating_sub(mesh_peers.len());
 
                     if needed_extra_peers > 0 {
                         // We don't have `mesh_n` peers in our mesh, we will randomly select extras
@@ -687,7 +693,6 @@ where
                         }
                     } else {
                         // We have no fanout peers, select mesh_n of them and add them to the fanout
-                        let mesh_n = self.config.mesh_n();
                         let new_peers =
                             get_random_peers(&self.connected_peers, &topic_hash, mesh_n, {
                                 |p| {
@@ -971,7 +976,7 @@ where
         }
 
         let mut added_peers = HashSet::new();
-
+        let mesh_n = self.config.mesh_n_for_topic(topic_hash);
         if let Some(m) = self.metrics.as_mut() {
             m.joined(topic_hash)
         }
@@ -993,7 +998,7 @@ where
 
             // Add up to mesh_n of them to the mesh
             // NOTE: These aren't randomly added, currently FIFO
-            let add_peers = std::cmp::min(peers.len(), self.config.mesh_n());
+            let add_peers = std::cmp::min(peers.len(), mesh_n);
             tracing::debug!(
                 topic=%topic_hash,
                 "JOIN: Adding {:?} peers from the fanout for topic",
@@ -1016,12 +1021,12 @@ where
         }
 
         // check if we need to get more peers, which we randomly select
-        if added_peers.len() < self.config.mesh_n() {
+        if added_peers.len() < mesh_n {
             // get the peers
             let new_peers = get_random_peers(
                 &self.connected_peers,
                 topic_hash,
-                self.config.mesh_n() - added_peers.len(),
+                mesh_n - added_peers.len(),
                 |peer| {
                     !added_peers.contains(peer)
                         && !self.explicit_peers.contains(peer)
@@ -1029,6 +1034,7 @@ where
                         && !self.backoffs.is_backoff_with_slack(topic_hash, peer)
                 },
             );
+
             added_peers.extend(new_peers.clone());
             // add them to the mesh
             tracing::debug!(
@@ -1468,9 +1474,9 @@ where
 
                     // check mesh upper bound and only allow graft if the upper bound is not reached
                     // or if it is an outbound peer
-                    if peers.len() >= self.config.mesh_n_high()
-                        && !self.outbound_peers.contains(peer_id)
-                    {
+                    let mesh_n_high = self.config.mesh_n_high_for_topic(&topic_hash);
+
+                    if peers.len() >= mesh_n_high && !self.outbound_peers.contains(peer_id) {
                         to_prune_topics.insert(topic_hash.clone());
                         continue;
                     }
@@ -1946,9 +1952,9 @@ where
                             .is_backoff_with_slack(topic_hash, propagation_source)
                     {
                         if let Some(peers) = self.mesh.get_mut(topic_hash) {
-                            if peers.len() < self.config.mesh_n_low()
-                                && peers.insert(*propagation_source)
-                            {
+                            let mesh_n_low = self.config.mesh_n_low_for_topic(topic_hash);
+
+                            if peers.len() < mesh_n_low && peers.insert(*propagation_source) {
                                 tracing::debug!(
                                     peer=%propagation_source,
                                     topic=%topic_hash,
@@ -2102,6 +2108,11 @@ where
             let backoffs = &self.backoffs;
             let outbound_peers = &self.outbound_peers;
 
+            let mesh_n = self.config.mesh_n_for_topic(topic_hash);
+            let mesh_n_low = self.config.mesh_n_low_for_topic(topic_hash);
+            let mesh_n_high = self.config.mesh_n_high_for_topic(topic_hash);
+            let mesh_outbound_min = self.config.mesh_outbound_min_for_topic(topic_hash);
+
             // drop all peers with negative score, without PX
             // if there is at some point a stable retain method for BTreeSet the following can be
             // written more efficiently with retain.
@@ -2138,15 +2149,15 @@ where
             }
 
             // too little peers - add some
-            if peers.len() < self.config.mesh_n_low() {
+            if peers.len() < mesh_n_low {
                 tracing::debug!(
                     topic=%topic_hash,
                     "HEARTBEAT: Mesh low. Topic contains: {} needs: {}",
                     peers.len(),
-                    self.config.mesh_n_low()
+                    mesh_n_low
                 );
                 // not enough peers - get mesh_n - current_length more
-                let desired_peers = self.config.mesh_n() - peers.len();
+                let desired_peers = mesh_n - peers.len();
                 let peer_list =
                     get_random_peers(&self.connected_peers, topic_hash, desired_peers, |peer| {
                         !peers.contains(peer)
@@ -2167,14 +2178,14 @@ where
             }
 
             // too many peers - remove some
-            if peers.len() > self.config.mesh_n_high() {
+            if peers.len() > mesh_n_high {
                 tracing::debug!(
                     topic=%topic_hash,
                     "HEARTBEAT: Mesh high. Topic contains: {} needs: {}",
                     peers.len(),
-                    self.config.mesh_n_high()
+                    mesh_n_high
                 );
-                let excess_peer_no = peers.len() - self.config.mesh_n();
+                let excess_peer_no = peers.len() - mesh_n;
 
                 // shuffle the peers and then sort by score ascending beginning with the worst
                 let mut rng = thread_rng();
@@ -2206,7 +2217,7 @@ where
                         break;
                     }
                     if self.outbound_peers.contains(&peer) {
-                        if outbound <= self.config.mesh_outbound_min() {
+                        if outbound <= mesh_outbound_min {
                             // do not remove anymore outbound peers
                             continue;
                         }
@@ -2227,13 +2238,13 @@ where
             }
 
             // do we have enough outbound peers?
-            if peers.len() >= self.config.mesh_n_low() {
+            if peers.len() >= mesh_n_low {
                 // count number of outbound peers we have
                 let outbound = { peers.iter().filter(|p| outbound_peers.contains(*p)).count() };
 
                 // if we have not enough outbound peers, graft to some new outbound peers
-                if outbound < self.config.mesh_outbound_min() {
-                    let needed = self.config.mesh_outbound_min() - outbound;
+                if outbound < mesh_outbound_min {
+                    let needed = mesh_outbound_min - outbound;
                     let peer_list =
                         get_random_peers(&self.connected_peers, topic_hash, needed, |peer| {
                             !peers.contains(peer)
@@ -2242,6 +2253,7 @@ where
                                 && *scores.get(peer).unwrap_or(&0.0) >= 0.0
                                 && outbound_peers.contains(peer)
                         });
+
                     for peer in &peer_list {
                         let current_topic = to_graft.entry(*peer).or_insert_with(Vec::new);
                         current_topic.push(topic_hash.clone());
@@ -2356,6 +2368,8 @@ where
                 Some((_, thresholds, _)) => thresholds.publish_threshold,
                 _ => 0.0,
             };
+            let mesh_n = self.config.mesh_n_for_topic(topic_hash);
+
             for peer_id in peers.iter() {
                 // is the peer still subscribed to the topic?
                 let peer_score = *scores.get(peer_id).unwrap_or(&0.0);
@@ -2380,13 +2394,13 @@ where
             }
 
             // not enough peers
-            if peers.len() < self.config.mesh_n() {
+            if peers.len() < mesh_n {
                 tracing::debug!(
                     "HEARTBEAT: Fanout low. Contains: {:?} needs: {:?}",
                     peers.len(),
-                    self.config.mesh_n()
+                    mesh_n
                 );
-                let needed_peers = self.config.mesh_n() - peers.len();
+                let needed_peers = mesh_n - peers.len();
                 let explicit_peers = &self.explicit_peers;
                 let new_peers =
                     get_random_peers(&self.connected_peers, topic_hash, needed_peers, |peer_id| {
