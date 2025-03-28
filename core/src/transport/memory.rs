@@ -23,6 +23,7 @@ use std::{
     error, fmt, io,
     num::NonZeroU64,
     pin::Pin,
+    sync::LazyLock,
 };
 
 use fnv::FnvHashMap;
@@ -33,13 +34,12 @@ use futures::{
     task::{Context, Poll},
 };
 use multiaddr::{Multiaddr, Protocol};
-use once_cell::sync::Lazy;
 use parking_lot::Mutex;
 use rw_stream_sink::RwStreamSink;
 
 use crate::transport::{DialOpts, ListenerId, Transport, TransportError, TransportEvent};
 
-static HUB: Lazy<Hub> = Lazy::new(|| Hub(Mutex::new(FnvHashMap::default())));
+static HUB: LazyLock<Hub> = LazyLock::new(|| Hub(Mutex::new(FnvHashMap::default())));
 
 struct Hub(Mutex<FnvHashMap<NonZeroU64, ChannelSender>>);
 
