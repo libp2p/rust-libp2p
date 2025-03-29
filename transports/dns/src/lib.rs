@@ -21,7 +21,7 @@
 //! # [DNS name resolution](https://github.com/libp2p/specs/blob/master/addressing/README.md#ip-and-name-resolution)
 //! [`Transport`] for libp2p.
 //!
-//! This crate provides the type [`async_std::Transport`] and [`tokio::Transport`]
+//! This crate provides the type [`async_std::Transport`] (deprecated) and [`tokio::Transport`]
 //! for use with `async-std` and `tokio`,
 //! respectively.
 //!
@@ -57,6 +57,10 @@
 #![cfg_attr(docsrs, feature(doc_cfg, doc_auto_cfg))]
 
 #[cfg(feature = "async-std")]
+#[deprecated(
+    since = "0.43.0",
+    note = "async_std has been discontinued. Please use the tokio feature instead."
+)]
 pub mod async_std {
     use std::{io, sync::Arc};
 
@@ -760,6 +764,10 @@ mod tests {
         }
 
         #[cfg(feature = "async-std")]
+        #[deprecated(
+            since = "0.43.0",
+            note = "async_std has been discontinued. Please use the tokio feature instead."
+        )]
         {
             // Be explicit about the resolver used. At least on github CI, TXT
             // type record lookups may not work with the system DNS resolver.
