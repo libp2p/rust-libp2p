@@ -27,11 +27,11 @@ use libp2p_identity::PeerId;
 #[allow(deprecated)]
 use crate::bandwidth::{BandwidthLogging, BandwidthSinks};
 use crate::{
+    Transport,
     core::{
         muxing::{StreamMuxer, StreamMuxerBox},
         transport::Boxed,
     },
-    Transport,
 };
 
 /// Trait automatically implemented on all objects that implement `Transport`. Provides some
@@ -46,7 +46,7 @@ pub trait TransportExt: Transport {
     /// # Example
     ///
     /// ```
-    /// use libp2p::{core::upgrade, identity, Transport, TransportExt};
+    /// use libp2p::{Transport, TransportExt, core::upgrade, identity};
     /// use libp2p_noise as noise;
     /// use libp2p_tcp as tcp;
     /// use libp2p_yamux as yamux;

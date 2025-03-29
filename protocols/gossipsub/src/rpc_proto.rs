@@ -30,7 +30,7 @@ mod test {
     use quick_protobuf::{BytesReader, MessageRead, MessageWrite, Writer};
     use rand::Rng;
 
-    use crate::{rpc_proto::proto::compat, IdentTopic as Topic};
+    use crate::{IdentTopic as Topic, rpc_proto::proto::compat};
 
     #[test]
     fn test_multi_topic_message_compatibility() {
@@ -39,27 +39,27 @@ mod test {
 
         let new_message1 = super::proto::Message {
             from: Some(PeerId::random().to_bytes()),
-            data: Some(rand::thread_rng().gen::<[u8; 32]>().to_vec()),
-            seqno: Some(rand::thread_rng().gen::<[u8; 8]>().to_vec()),
+            data: Some(rand::thread_rng().r#gen::<[u8; 32]>().to_vec()),
+            seqno: Some(rand::thread_rng().r#gen::<[u8; 8]>().to_vec()),
             topic: topic1.clone().into_string(),
-            signature: Some(rand::thread_rng().gen::<[u8; 32]>().to_vec()),
-            key: Some(rand::thread_rng().gen::<[u8; 32]>().to_vec()),
+            signature: Some(rand::thread_rng().r#gen::<[u8; 32]>().to_vec()),
+            key: Some(rand::thread_rng().r#gen::<[u8; 32]>().to_vec()),
         };
         let old_message1 = compat::pb::Message {
             from: Some(PeerId::random().to_bytes()),
-            data: Some(rand::thread_rng().gen::<[u8; 32]>().to_vec()),
-            seqno: Some(rand::thread_rng().gen::<[u8; 8]>().to_vec()),
+            data: Some(rand::thread_rng().r#gen::<[u8; 32]>().to_vec()),
+            seqno: Some(rand::thread_rng().r#gen::<[u8; 8]>().to_vec()),
             topic_ids: vec![topic1.clone().into_string()],
-            signature: Some(rand::thread_rng().gen::<[u8; 32]>().to_vec()),
-            key: Some(rand::thread_rng().gen::<[u8; 32]>().to_vec()),
+            signature: Some(rand::thread_rng().r#gen::<[u8; 32]>().to_vec()),
+            key: Some(rand::thread_rng().r#gen::<[u8; 32]>().to_vec()),
         };
         let old_message2 = compat::pb::Message {
             from: Some(PeerId::random().to_bytes()),
-            data: Some(rand::thread_rng().gen::<[u8; 32]>().to_vec()),
-            seqno: Some(rand::thread_rng().gen::<[u8; 8]>().to_vec()),
+            data: Some(rand::thread_rng().r#gen::<[u8; 32]>().to_vec()),
+            seqno: Some(rand::thread_rng().r#gen::<[u8; 8]>().to_vec()),
             topic_ids: vec![topic1.clone().into_string(), topic2.clone().into_string()],
-            signature: Some(rand::thread_rng().gen::<[u8; 32]>().to_vec()),
-            key: Some(rand::thread_rng().gen::<[u8; 32]>().to_vec()),
+            signature: Some(rand::thread_rng().r#gen::<[u8; 32]>().to_vec()),
+            key: Some(rand::thread_rng().r#gen::<[u8; 32]>().to_vec()),
         };
 
         let mut new_message1b = Vec::with_capacity(new_message1.get_size());

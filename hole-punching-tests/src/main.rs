@@ -30,13 +30,14 @@ use anyhow::{Context, Result};
 use either::Either;
 use futures::stream::StreamExt;
 use libp2p::{
+    Swarm,
     core::{
         multiaddr::{Multiaddr, Protocol},
         transport::ListenerId,
     },
     dcutr, identify, noise, ping, relay,
-    swarm::{dial_opts::DialOpts, ConnectionId, NetworkBehaviour, SwarmEvent},
-    tcp, yamux, Swarm,
+    swarm::{ConnectionId, NetworkBehaviour, SwarmEvent, dial_opts::DialOpts},
+    tcp, yamux,
 };
 use redis::AsyncCommands;
 

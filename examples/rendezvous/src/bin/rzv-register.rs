@@ -22,9 +22,9 @@ use std::time::Duration;
 
 use futures::StreamExt;
 use libp2p::{
-    noise, ping, rendezvous,
+    Multiaddr, noise, ping, rendezvous,
     swarm::{NetworkBehaviour, SwarmEvent},
-    tcp, yamux, Multiaddr,
+    tcp, yamux,
 };
 use tracing_subscriber::EnvFilter;
 

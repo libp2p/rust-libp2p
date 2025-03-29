@@ -21,23 +21,23 @@
 use std::{
     collections::{HashMap, HashSet},
     iter,
-    task::{ready, Context, Poll},
+    task::{Context, Poll, ready},
     time::Duration,
 };
 
 use bimap::BiMap;
-use futures::{future::BoxFuture, stream::FuturesUnordered, FutureExt, StreamExt};
-use libp2p_core::{transport::PortUse, Endpoint, Multiaddr};
+use futures::{FutureExt, StreamExt, future::BoxFuture, stream::FuturesUnordered};
+use libp2p_core::{Endpoint, Multiaddr, transport::PortUse};
 use libp2p_identity::PeerId;
 use libp2p_request_response::ProtocolSupport;
 use libp2p_swarm::{
-    behaviour::FromSwarm, ConnectionDenied, ConnectionId, NetworkBehaviour, THandler,
-    THandlerInEvent, THandlerOutEvent, ToSwarm,
+    ConnectionDenied, ConnectionId, NetworkBehaviour, THandler, THandlerInEvent, THandlerOutEvent,
+    ToSwarm, behaviour::FromSwarm,
 };
 
 use crate::{
-    codec::{Cookie, ErrorCode, Message, Namespace, NewRegistration, Registration, Ttl},
     MAX_TTL, MIN_TTL,
+    codec::{Cookie, ErrorCode, Message, Namespace, NewRegistration, Registration, Ttl},
 };
 
 pub struct Behaviour {
@@ -456,7 +456,7 @@ impl Registrations {
             (None, Some(_)) => return Err(CookieNamespaceMismatch),
             // discover for a namespace but cookie is for a different namespace? => bad
             (Some(namespace), Some(cookie_namespace)) if namespace != cookie_namespace => {
-                return Err(CookieNamespaceMismatch)
+                return Err(CookieNamespaceMismatch);
             }
             // every other combination is fine
             _ => {}

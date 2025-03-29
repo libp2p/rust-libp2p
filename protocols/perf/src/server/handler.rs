@@ -26,11 +26,11 @@ use std::{
 use futures::FutureExt;
 use libp2p_core::upgrade::{DeniedUpgrade, ReadyUpgrade};
 use libp2p_swarm::{
+    ConnectionHandler, ConnectionHandlerEvent, StreamProtocol, SubstreamProtocol,
     handler::{
         ConnectionEvent, DialUpgradeError, FullyNegotiatedInbound, FullyNegotiatedOutbound,
         ListenUpgradeError,
     },
-    ConnectionHandler, ConnectionHandlerEvent, StreamProtocol, SubstreamProtocol,
 };
 use tracing::error;
 
@@ -120,7 +120,7 @@ impl ConnectionHandler for Handler {
         loop {
             match self.inbound.poll_unpin(cx) {
                 Poll::Ready(Ok(Ok(stats))) => {
-                    return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(Event { stats }))
+                    return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(Event { stats }));
                 }
                 Poll::Ready(Ok(Err(e))) => {
                     error!("{e:?}");

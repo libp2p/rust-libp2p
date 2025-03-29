@@ -22,7 +22,7 @@ use std::time::Duration;
 
 use libp2p_core::{
     multiaddr::{Multiaddr, Protocol},
-    transport::{upgrade::Version, MemoryTransport, Transport},
+    transport::{MemoryTransport, Transport, upgrade::Version},
 };
 use libp2p_dcutr as dcutr;
 use libp2p_identify as identify;

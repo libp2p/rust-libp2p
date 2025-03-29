@@ -3,7 +3,7 @@ use std::{marker::PhantomData, sync::Arc};
 use super::*;
 #[allow(deprecated)]
 use crate::bandwidth::BandwidthSinks;
-use crate::{transport_ext::TransportExt, SwarmBuilder};
+use crate::{SwarmBuilder, transport_ext::TransportExt};
 
 pub struct BandwidthLoggingPhase<T, R> {
     pub(crate) relay_behaviour: R,

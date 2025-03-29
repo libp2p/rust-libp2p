@@ -28,7 +28,7 @@ use libp2p_swarm::StreamProtocol;
 use prometheus_client::{
     collector::Collector,
     encoding::{DescriptorEncoder, EncodeMetric},
-    metrics::{counter::Counter, gauge::ConstGauge, MetricType},
+    metrics::{MetricType, counter::Counter, gauge::ConstGauge},
     registry::Registry,
 };
 

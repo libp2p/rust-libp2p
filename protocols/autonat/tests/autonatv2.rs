@@ -4,7 +4,7 @@ use libp2p_autonat::v2::{
     client::{self, Config},
     server,
 };
-use libp2p_core::{multiaddr::Protocol, transport::TransportError, Multiaddr};
+use libp2p_core::{Multiaddr, multiaddr::Protocol, transport::TransportError};
 use libp2p_swarm::{
     DialError, FromSwarm, NetworkBehaviour, NewExternalAddrCandidate, Swarm, SwarmEvent,
 };

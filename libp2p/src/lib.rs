@@ -166,11 +166,11 @@ pub use self::{
         TransportError as TransportBuilderError,
     },
     core::{
+        Transport,
         transport::TransportError,
         upgrade::{InboundUpgrade, OutboundUpgrade},
-        Transport,
     },
-    multiaddr::{multiaddr as build_multiaddr, Multiaddr},
+    multiaddr::{Multiaddr, multiaddr as build_multiaddr},
     swarm::Swarm,
     transport_ext::TransportExt,
 };

@@ -4,7 +4,7 @@ use libp2p_core::Multiaddr;
 use libp2p_identity::PeerId;
 use lru::LruCache;
 
-use crate::{behaviour::FromSwarm, DialError, DialFailure, NewExternalAddrOfPeer};
+use crate::{DialError, DialFailure, NewExternalAddrOfPeer, behaviour::FromSwarm};
 
 /// Struct for tracking peers' external addresses of the [`Swarm`](crate::Swarm).
 #[derive(Debug)]
@@ -99,7 +99,7 @@ mod tests {
 
     use libp2p_core::{
         multiaddr::Protocol,
-        transport::{memory::MemoryTransportError, TransportError},
+        transport::{TransportError, memory::MemoryTransportError},
     };
 
     use super::*;

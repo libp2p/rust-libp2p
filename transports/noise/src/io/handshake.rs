@@ -36,9 +36,9 @@ use quick_protobuf::MessageWrite;
 
 use super::framed::Codec;
 use crate::{
+    Error,
     io::Output,
     protocol::{KeypairIdentity, PublicKey, STATIC_KEY_DOMAIN},
-    Error,
 };
 
 //////////////////////////////////////////////////////////////////////////////

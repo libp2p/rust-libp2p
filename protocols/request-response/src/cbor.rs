@@ -62,7 +62,7 @@ pub mod codec {
     use cbor4ii::core::error::DecodeError;
     use futures::prelude::*;
     use libp2p_swarm::StreamProtocol;
-    use serde::{de::DeserializeOwned, Serialize};
+    use serde::{Serialize, de::DeserializeOwned};
 
     pub struct Codec<Req, Resp> {
         /// Max request size in bytes.
@@ -207,7 +207,7 @@ mod tests {
     use libp2p_swarm::StreamProtocol;
     use serde::{Deserialize, Serialize};
 
-    use crate::{cbor::codec::Codec, Codec as _};
+    use crate::{Codec as _, cbor::codec::Codec};
 
     #[async_std::test]
     async fn test_codec() {

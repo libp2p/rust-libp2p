@@ -23,12 +23,12 @@ use std::io;
 use asynchronous_codec::Framed;
 use futures::prelude::*;
 use futures_timer::Delay;
-use libp2p_core::{multiaddr::Protocol, Multiaddr};
+use libp2p_core::{Multiaddr, multiaddr::Protocol};
 use libp2p_swarm::Stream;
 use thiserror::Error;
 use web_time::Instant;
 
-use crate::{proto, PROTOCOL_NAME};
+use crate::{PROTOCOL_NAME, proto};
 
 pub(crate) async fn handshake(
     stream: Stream,

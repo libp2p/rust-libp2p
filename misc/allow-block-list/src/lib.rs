@@ -68,11 +68,11 @@ use std::{
     task::{Context, Poll, Waker},
 };
 
-use libp2p_core::{transport::PortUse, Endpoint, Multiaddr};
+use libp2p_core::{Endpoint, Multiaddr, transport::PortUse};
 use libp2p_identity::PeerId;
 use libp2p_swarm::{
-    dummy, CloseConnection, ConnectionDenied, ConnectionId, FromSwarm, NetworkBehaviour, THandler,
-    THandlerInEvent, THandlerOutEvent, ToSwarm,
+    CloseConnection, ConnectionDenied, ConnectionId, FromSwarm, NetworkBehaviour, THandler,
+    THandlerInEvent, THandlerOutEvent, ToSwarm, dummy,
 };
 
 /// A [`NetworkBehaviour`] that can act as an allow or block list.
@@ -298,7 +298,7 @@ where
 
 #[cfg(test)]
 mod tests {
-    use libp2p_swarm::{dial_opts::DialOpts, DialError, ListenError, Swarm, SwarmEvent};
+    use libp2p_swarm::{DialError, ListenError, Swarm, SwarmEvent, dial_opts::DialOpts};
     use libp2p_swarm_test::SwarmExt;
 
     use super::*;
@@ -363,14 +363,18 @@ mod tests {
         dialer.behaviour_mut().block_peer(*listener.local_peer_id());
 
         let (
-            [SwarmEvent::ConnectionClosed {
-                peer_id: closed_dialer_peer,
-                ..
-            }],
-            [SwarmEvent::ConnectionClosed {
-                peer_id: closed_listener_peer,
-                ..
-            }],
+            [
+                SwarmEvent::ConnectionClosed {
+                    peer_id: closed_dialer_peer,
+                    ..
+                },
+            ],
+            [
+                SwarmEvent::ConnectionClosed {
+                    peer_id: closed_listener_peer,
+                    ..
+                },
+            ],
         ) = libp2p_swarm_test::drive(&mut dialer, &mut listener).await
         else {
             panic!("unexpected events")
@@ -426,20 +430,25 @@ mod tests {
             .unwrap();
 
         let (
-            [SwarmEvent::OutgoingConnectionError {
-                error:
-                    DialError::Denied {
-                        cause: outgoing_cause,
-                    },
-                ..
-            }],
-            [_, SwarmEvent::IncomingConnectionError {
-                error:
-                    ListenError::Denied {
-                        cause: incoming_cause,
-                    },
-                ..
-            }],
+            [
+                SwarmEvent::OutgoingConnectionError {
+                    error:
+                        DialError::Denied {
+                            cause: outgoing_cause,
+                        },
+                    ..
+                },
+            ],
+            [
+                _,
+                SwarmEvent::IncomingConnectionError {
+                    error:
+                        ListenError::Denied {
+                            cause: incoming_cause,
+                        },
+                    ..
+                },
+            ],
         ) = libp2p_swarm_test::drive(&mut dialer, &mut listener).await
         else {
             panic!("unexpected events")
@@ -462,14 +471,18 @@ mod tests {
             .behaviour_mut()
             .disallow_peer(*listener.local_peer_id());
         let (
-            [SwarmEvent::ConnectionClosed {
-                peer_id: closed_dialer_peer,
-                ..
-            }],
-            [SwarmEvent::ConnectionClosed {
-                peer_id: closed_listener_peer,
-                ..
-            }],
+            [
+                SwarmEvent::ConnectionClosed {
+                    peer_id: closed_dialer_peer,
+                    ..
+                },
+            ],
+            [
+                SwarmEvent::ConnectionClosed {
+                    peer_id: closed_listener_peer,
+                    ..
+                },
+            ],
         ) = libp2p_swarm_test::drive(&mut dialer, &mut listener).await
         else {
             panic!("unexpected events")

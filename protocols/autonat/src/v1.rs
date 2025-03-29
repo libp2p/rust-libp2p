@@ -36,11 +36,11 @@ pub use self::{
         Behaviour, Config, Event, InboundProbeError, InboundProbeEvent, NatStatus,
         OutboundProbeError, OutboundProbeEvent, ProbeId,
     },
-    protocol::{ResponseError, DEFAULT_PROTOCOL_NAME},
+    protocol::{DEFAULT_PROTOCOL_NAME, ResponseError},
 };
 
 pub(crate) mod proto {
     #![allow(unreachable_pub)]
     include!("v1/generated/mod.rs");
-    pub(crate) use self::structs::{mod_Message::*, Message};
+    pub(crate) use self::structs::{Message, mod_Message::*};
 }

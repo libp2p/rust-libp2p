@@ -71,7 +71,7 @@
 //! ```no_run
 //! use async_std::net::TcpStream;
 //! use futures::prelude::*;
-//! use multistream_select::{dialer_select_proto, Version};
+//! use multistream_select::{Version, dialer_select_proto};
 //!
 //! async_std::task::block_on(async move {
 //!     let socket = TcpStream::connect("127.0.0.1:10333").await.unwrap();
@@ -95,8 +95,8 @@ mod negotiated;
 mod protocol;
 
 pub use self::{
-    dialer_select::{dialer_select_proto, DialerSelectFuture},
-    listener_select::{listener_select_proto, ListenerSelectFuture},
+    dialer_select::{DialerSelectFuture, dialer_select_proto},
+    listener_select::{ListenerSelectFuture, listener_select_proto},
     negotiated::{Negotiated, NegotiatedComplete, NegotiationError},
     protocol::ProtocolError,
 };

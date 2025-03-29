@@ -25,7 +25,7 @@ use libp2p_swarm::StreamProtocol;
 
 use crate::{
     error::ConfigBuilderError,
-    protocol::{ProtocolConfig, ProtocolId, FLOODSUB_PROTOCOL},
+    protocol::{FLOODSUB_PROTOCOL, ProtocolConfig, ProtocolId},
     types::{Message, MessageId, PeerKind},
 };
 
@@ -958,7 +958,7 @@ mod test {
     use libp2p_core::UpgradeInfo;
 
     use super::*;
-    use crate::{topic::IdentityHash, Topic};
+    use crate::{Topic, topic::IdentityHash};
 
     #[test]
     fn create_config_with_message_id_as_plain_function() {

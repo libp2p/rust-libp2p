@@ -1,10 +1,10 @@
 use std::marker::PhantomData;
 
 #[cfg(feature = "relay")]
+use libp2p_core::Transport;
+#[cfg(feature = "relay")]
 use libp2p_core::muxing::StreamMuxerBox;
 use libp2p_core::upgrade::{InboundConnectionUpgrade, OutboundConnectionUpgrade};
-#[cfg(feature = "relay")]
-use libp2p_core::Transport;
 #[cfg(any(feature = "relay", feature = "websocket"))]
 use libp2p_core::{InboundUpgrade, Negotiated, OutboundUpgrade, StreamMuxer, UpgradeInfo};
 #[cfg(feature = "relay")]

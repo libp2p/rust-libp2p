@@ -52,7 +52,7 @@
 //!    [package]
 //!        name = "rust-libp2p-tutorial"
 //!        version = "0.1.0"
-//!        edition = "2021"
+//!        edition = "2024"
 //!
 //!    [dependencies]
 //!        libp2p = { version = "0.54", features = ["noise", "ping", "tcp", "tokio", "yamux"] }
@@ -270,7 +270,7 @@
 //! ```rust
 //! use std::{error::Error, time::Duration};
 //!
-//! use libp2p::{noise, ping, tcp, yamux, Multiaddr};
+//! use libp2p::{Multiaddr, noise, ping, tcp, yamux};
 //! use tracing_subscriber::EnvFilter;
 //!
 //! #[tokio::main]
@@ -318,7 +318,7 @@
 //! use std::{error::Error, time::Duration};
 //!
 //! use futures::prelude::*;
-//! use libp2p::{noise, ping, swarm::SwarmEvent, tcp, yamux, Multiaddr};
+//! use libp2p::{Multiaddr, noise, ping, swarm::SwarmEvent, tcp, yamux};
 //! use tracing_subscriber::EnvFilter;
 //!
 //! #[tokio::main]

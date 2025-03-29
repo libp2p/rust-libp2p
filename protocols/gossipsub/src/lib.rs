@@ -118,8 +118,8 @@ pub use self::{
     error::{ConfigBuilderError, PublishError, SubscriptionError, ValidationError},
     metrics::Config as MetricsConfig,
     peer_score::{
-        score_parameter_decay, score_parameter_decay_with_base, PeerScoreParams,
-        PeerScoreThresholds, TopicScoreParams,
+        PeerScoreParams, PeerScoreThresholds, TopicScoreParams, score_parameter_decay,
+        score_parameter_decay_with_base,
     },
     subscription_filter::{
         AllowAllSubscriptionFilter, CallbackSubscriptionFilter, CombinedSubscriptionFilters,

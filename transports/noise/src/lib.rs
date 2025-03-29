@@ -39,7 +39,7 @@
 //! Example:
 //!
 //! ```
-//! use libp2p_core::{transport::MemoryTransport, upgrade, Transport};
+//! use libp2p_core::{Transport, transport::MemoryTransport, upgrade};
 //! use libp2p_identity as identity;
 //! use libp2p_noise as noise;
 //!
@@ -65,8 +65,8 @@ use std::{collections::HashSet, fmt::Write, pin::Pin};
 use futures::prelude::*;
 pub use io::Output;
 use libp2p_core::{
-    upgrade::{InboundConnectionUpgrade, OutboundConnectionUpgrade},
     UpgradeInfo,
+    upgrade::{InboundConnectionUpgrade, OutboundConnectionUpgrade},
 };
 use libp2p_identity as identity;
 use libp2p_identity::PeerId;
@@ -77,7 +77,7 @@ use snow::params::NoiseParams;
 use crate::{
     handshake::State,
     io::handshake,
-    protocol::{noise_params_into_builder, AuthenticKeypair, Keypair, PARAMS_XX},
+    protocol::{AuthenticKeypair, Keypair, PARAMS_XX, noise_params_into_builder},
 };
 
 /// The configuration for the noise handshake.

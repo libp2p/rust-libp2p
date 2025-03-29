@@ -27,8 +27,8 @@ use std::{
 use libp2p_core::multihash::Multihash;
 use libp2p_identity::PeerId;
 use sha2::{
-    digest::generic_array::{typenum::U32, GenericArray},
     Digest, Sha256,
+    digest::generic_array::{GenericArray, typenum::U32},
 };
 use uint::*;
 

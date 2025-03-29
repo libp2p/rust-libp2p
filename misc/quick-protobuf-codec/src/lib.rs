@@ -185,7 +185,7 @@ mod tests {
     use std::error::Error;
 
     use asynchronous_codec::FramedRead;
-    use futures::{io::Cursor, FutureExt, StreamExt};
+    use futures::{FutureExt, StreamExt, io::Cursor};
     use quickcheck::{Arbitrary, Gen, QuickCheck};
 
     use super::*;

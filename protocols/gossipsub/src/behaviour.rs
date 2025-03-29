@@ -19,7 +19,7 @@
 // DEALINGS IN THE SOFTWARE.
 
 use std::{
-    cmp::{max, Ordering, Ordering::Equal},
+    cmp::{Ordering, Ordering::Equal, max},
     collections::{BTreeSet, HashMap, HashSet, VecDeque},
     fmt,
     fmt::Debug,
@@ -32,16 +32,16 @@ use futures::FutureExt;
 use futures_timer::Delay;
 use hashlink::LinkedHashMap;
 use libp2p_core::{
+    Endpoint, Multiaddr,
     multiaddr::Protocol::{Ip4, Ip6},
     transport::PortUse,
-    Endpoint, Multiaddr,
 };
 use libp2p_identity::{Keypair, PeerId};
 use libp2p_swarm::{
-    behaviour::{AddressChange, ConnectionClosed, ConnectionEstablished, FromSwarm},
-    dial_opts::DialOpts,
     ConnectionDenied, ConnectionId, NetworkBehaviour, NotifyHandler, THandler, THandlerInEvent,
     THandlerOutEvent, ToSwarm,
+    behaviour::{AddressChange, ConnectionClosed, ConnectionEstablished, FromSwarm},
+    dial_opts::DialOpts,
 };
 use prometheus_client::registry::Registry;
 use quick_protobuf::{MessageWrite, Writer};
@@ -49,6 +49,7 @@ use rand::{seq::SliceRandom, thread_rng};
 use web_time::{Instant, SystemTime};
 
 use crate::{
+    FailedMessages, PublishError, SubscriptionError, TopicScoreParams, ValidationError,
     backoff::BackoffStorage,
     config::{Config, ValidationMode},
     gossip_promises::GossipPromises,
@@ -68,7 +69,6 @@ use crate::{
         PeerConnections, PeerInfo, PeerKind, Prune, RawMessage, RpcOut, Subscription,
         SubscriptionAction,
     },
-    FailedMessages, PublishError, SubscriptionError, TopicScoreParams, ValidationError,
 };
 
 #[cfg(test)]
@@ -2742,7 +2742,7 @@ where
     ) -> Result<RawMessage, PublishError> {
         match &mut self.publish_config {
             PublishConfig::Signing {
-                ref keypair,
+                keypair,
                 author,
                 inline_key,
                 last_seq_no,
@@ -2871,7 +2871,9 @@ where
                     | RpcOut::Prune(_)
                     | RpcOut::Subscribe(_)
                     | RpcOut::Unsubscribe(_) => {
-                        unreachable!("Channel for highpriority control messages is unbounded and should always be open.")
+                        unreachable!(
+                            "Channel for highpriority control messages is unbounded and should always be open."
+                        )
                     }
                 }
 
@@ -3270,7 +3272,10 @@ where
                         .max_messages_per_rpc()
                         .is_some_and(|max_msg| count >= max_msg)
                     {
-                        tracing::warn!("Received more messages than permitted. Ignoring further messages. Processed: {}", count);
+                        tracing::warn!(
+                            "Received more messages than permitted. Ignoring further messages. Processed: {}",
+                            count
+                        );
                         break;
                     }
                     self.handle_received_message(raw_message, &propagation_source);
@@ -3289,7 +3294,10 @@ where
                         .max_messages_per_rpc()
                         .is_some_and(|max_msg| count >= max_msg)
                     {
-                        tracing::warn!("Received more control messages than permitted. Ignoring further messages. Processed: {}", count);
+                        tracing::warn!(
+                            "Received more control messages than permitted. Ignoring further messages. Processed: {}",
+                            count
+                        );
                         break;
                     }
 
@@ -3519,11 +3527,15 @@ fn validate_config(
     match validation_mode {
         ValidationMode::Anonymous => {
             if authenticity.is_signing() {
-                return Err("Cannot enable message signing with an Anonymous validation mode. Consider changing either the ValidationMode or MessageAuthenticity");
+                return Err(
+                    "Cannot enable message signing with an Anonymous validation mode. Consider changing either the ValidationMode or MessageAuthenticity",
+                );
             }
 
             if !authenticity.is_anonymous() {
-                return Err("Published messages contain an author but incoming messages with an author will be rejected. Consider adjusting the validation or privacy settings in the config");
+                return Err(
+                    "Published messages contain an author but incoming messages with an author will be rejected. Consider adjusting the validation or privacy settings in the config",
+                );
             }
         }
         ValidationMode::Strict => {

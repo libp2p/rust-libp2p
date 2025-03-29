@@ -70,8 +70,8 @@ members = [
 resolver = "2"
 
 [workspace.package]
-rust-version = "1.83.0"
-edition = "2021"
+rust-version = "1.85.0"
+edition = "2024"
 
 [workspace.dependencies]
 libp2p = { version = "0.55.1", path = "libp2p" }

@@ -31,9 +31,8 @@ use thiserror::Error;
 use web_time::SystemTime;
 
 use crate::{
-    proto,
+    HOP_PROTOCOL_NAME, proto,
     protocol::{Limit, MAX_MESSAGE_SIZE},
-    HOP_PROTOCOL_NAME,
 };
 
 #[derive(Debug, Error)]
@@ -166,7 +165,7 @@ pub(crate) async fn make_reservation(stream: Stream) -> Result<Reservation, Rese
         s => {
             return Err(ReserveError::Protocol(ProtocolViolation::UnexpectedStatus(
                 s,
-            )))
+            )));
         }
     }
 

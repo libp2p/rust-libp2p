@@ -32,20 +32,19 @@ use std::{
     time::Duration,
 };
 
-use futures::{channel::oneshot, Future, StreamExt};
+use futures::{Future, StreamExt, channel::oneshot};
 use futures_timer::Delay;
 use igd_next::PortMappingProtocol;
 use libp2p_core::{
-    multiaddr,
+    Endpoint, Multiaddr, multiaddr,
     transport::{ListenerId, PortUse},
-    Endpoint, Multiaddr,
 };
 use libp2p_swarm::{
-    derive_prelude::PeerId, dummy, ConnectionDenied, ConnectionId, ExpiredListenAddr, FromSwarm,
-    NetworkBehaviour, NewListenAddr, ToSwarm,
+    ConnectionDenied, ConnectionId, ExpiredListenAddr, FromSwarm, NetworkBehaviour, NewListenAddr,
+    ToSwarm, derive_prelude::PeerId, dummy,
 };
 
-use crate::tokio::{is_addr_global, Gateway};
+use crate::tokio::{Gateway, is_addr_global};
 
 /// The duration in seconds of a port mapping on the gateway.
 const MAPPING_DURATION: u32 = 3600;
@@ -298,7 +297,7 @@ impl NetworkBehaviour for Behaviour {
                             MappingState::Inactive,
                         );
                     }
-                    GatewayState::Available(ref mut gateway) => {
+                    GatewayState::Available(gateway) => {
                         let mapping = Mapping {
                             listener_id,
                             protocol,
@@ -340,7 +339,7 @@ impl NetworkBehaviour for Behaviour {
                 listener_id,
                 addr: _addr,
             }) => {
-                if let GatewayState::Available(ref mut gateway) = &mut self.state {
+                if let GatewayState::Available(gateway) = &mut self.state {
                     if let Some((mapping, _state)) = self.mappings.remove_entry(&listener_id) {
                         if let Err(err) = gateway
                             .sender

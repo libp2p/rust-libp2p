@@ -296,7 +296,7 @@ mod tests {
     use async_std::{io, task};
     use futures::{channel::mpsc, prelude::*};
 
-    use crate::quicksink::{make_sink, Action};
+    use crate::quicksink::{Action, make_sink};
 
     #[test]
     fn smoke_test() {

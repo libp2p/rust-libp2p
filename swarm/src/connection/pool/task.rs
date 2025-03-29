@@ -24,20 +24,20 @@
 use std::{convert::Infallible, pin::Pin};
 
 use futures::{
-    channel::{mpsc, oneshot},
-    future::{poll_fn, Either, Future},
     SinkExt, StreamExt,
+    channel::{mpsc, oneshot},
+    future::{Either, Future, poll_fn},
 };
 use libp2p_core::muxing::StreamMuxerBox;
 
 use super::concurrent_dial::ConcurrentDial;
 use crate::{
+    ConnectionHandler, Multiaddr, PeerId,
     connection::{
         self, ConnectionError, ConnectionId, PendingInboundConnectionError,
         PendingOutboundConnectionError,
     },
     transport::TransportError,
-    ConnectionHandler, Multiaddr, PeerId,
 };
 
 /// Commands that can be sent to a task driving an established connection.

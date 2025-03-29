@@ -29,9 +29,9 @@ pub(crate) use multistream_select::Version;
 use multistream_select::{DialerSelectFuture, ListenerSelectFuture};
 
 use crate::{
+    Negotiated,
     connection::ConnectedPoint,
     upgrade::{InboundConnectionUpgrade, OutboundConnectionUpgrade, UpgradeError},
-    Negotiated,
 };
 
 // TODO: Still needed?

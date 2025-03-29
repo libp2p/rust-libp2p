@@ -1,7 +1,7 @@
 use std::{
     io,
     pin::Pin,
-    task::{ready, Context, Poll},
+    task::{Context, Poll, ready},
 };
 
 use futures::{AsyncRead, AsyncWrite, FutureExt};
@@ -10,10 +10,10 @@ use send_wrapper::SendWrapper;
 use web_sys::{ReadableStreamDefaultReader, WritableStreamDefaultWriter};
 
 use crate::{
+    Error,
     bindings::WebTransportBidirectionalStream,
     fused_js_promise::FusedJsPromise,
     utils::{detach_promise, parse_reader_response, to_io_error, to_js_type},
-    Error,
 };
 
 /// A stream on a connection.
@@ -66,10 +66,11 @@ impl Stream {
 
 impl StreamInner {
     fn poll_reader_read(&mut self, cx: &mut Context) -> Poll<io::Result<Option<Uint8Array>>> {
-        let val = ready!(self
-            .reader_read_promise
-            .maybe_init(|| self.reader.read())
-            .poll_unpin(cx))
+        let val = ready!(
+            self.reader_read_promise
+                .maybe_init(|| self.reader.read())
+                .poll_unpin(cx)
+        )
         .map_err(to_io_error)?;
 
         let val = parse_reader_response(&val)
@@ -125,10 +126,11 @@ impl StreamInner {
         //
         // NOTE: `desired_size` can be negative if we overcommit messages to the queue.
         if desired_size <= 0 || self.writer_ready_promise.is_active() {
-            ready!(self
-                .writer_ready_promise
-                .maybe_init(|| self.writer.ready())
-                .poll_unpin(cx))
+            ready!(
+                self.writer_ready_promise
+                    .maybe_init(|| self.writer.ready())
+                    .poll_unpin(cx)
+            )
             .map_err(to_io_error)?;
         }
 
@@ -170,10 +172,11 @@ impl StreamInner {
                 detach_promise(self.writer.close());
 
                 // Assume closed on error
-                let _ = ready!(self
-                    .writer_closed_promise
-                    .maybe_init(|| self.writer.closed())
-                    .poll_unpin(cx));
+                let _ = ready!(
+                    self.writer_closed_promise
+                        .maybe_init(|| self.writer.closed())
+                        .poll_unpin(cx)
+                );
 
                 self.writer_state = StreamState::Closed;
             }

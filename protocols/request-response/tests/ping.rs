@@ -75,12 +75,16 @@ async fn is_response_outbound() {
 
     let request_id2 = swarm1.behaviour_mut().send_request(&offline_peer, ping);
 
-    assert!(!swarm1
-        .behaviour()
-        .is_pending_outbound(&offline_peer, &request_id1));
-    assert!(swarm1
-        .behaviour()
-        .is_pending_outbound(&offline_peer, &request_id2));
+    assert!(
+        !swarm1
+            .behaviour()
+            .is_pending_outbound(&offline_peer, &request_id1)
+    );
+    assert!(
+        swarm1
+            .behaviour()
+            .is_pending_outbound(&offline_peer, &request_id2)
+    );
 }
 
 /// Exercises a simple ping protocol.
