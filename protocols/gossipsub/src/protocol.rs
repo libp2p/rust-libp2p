@@ -364,7 +364,6 @@ impl Decoder for GossipsubCodec {
             // verify message signatures if required
             if verify_signature && !GossipsubCodec::verify_signature(&message) {
                 tracing::warn!("Invalid signature for received message");
-
                 // Build the invalid message (ignoring further validation of sequence number
                 // and source)
                 let message = RawMessage {
@@ -392,6 +391,7 @@ impl Decoder for GossipsubCodec {
                             sequence_length=%seq_no.len(),
                             "Invalid sequence number length for received message"
                         );
+
                         let message = RawMessage {
                             source: None, // don't bother inform the application
                             data: message.data.unwrap_or_default(),

@@ -88,7 +88,7 @@ impl From<SigningError> for PublishError {
     }
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub enum ValidationError {
     /// The message has an invalid signature,
     InvalidSignature,
