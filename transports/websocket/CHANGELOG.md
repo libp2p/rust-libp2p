@@ -5,6 +5,9 @@
 - Upgrade `rcgen` to `v0.13`
   See [PR 5917](https://github.com/libp2p/rust-libp2p/pull/5917).
 
+- Upgrade `webpki-roots` to `v0.26`
+  See [PR 5961](https://github.com/libp2p/rust-libp2p/pull/5961).
+
 ## 0.45.0
 
 - fix: Return `Error::InvalidMultiaddr` when dialed to a `/dnsaddr` address

@@ -24,6 +24,9 @@
 - Fix messages were published to all floodsub peers regardless of their topic.
   See [PR 5904](https://github.com/libp2p/rust-libp2p/pull/5904)
 
+- Upgrade `prometheus-client` to `v0.23`
+  See [PR 5960](https://github.com/libp2p/rust-libp2p/pull/5960).
+
 ## 0.48.0
 
 - Allow broadcasting `IDONTWANT` messages when publishing to avoid downloading data that is already available.
