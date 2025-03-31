@@ -55,7 +55,7 @@ pub struct Behaviour {
     ///
     /// Storing these internally allows us to assist the [`libp2p_swarm::Swarm`] in dialing by
     /// returning addresses from [`NetworkBehaviour::handle_pending_outbound_connection`].
-    discovered_peers: HashMap<(PeerId, Namespace), Vec<Multiaddr>>,
+    discovered_peers: HashMap<PeerId, HashMap<Namespace, Vec<Multiaddr>>>,
 
     registered_namespaces: HashMap<(PeerId, Namespace), Ttl>,
 
@@ -310,13 +310,17 @@ impl NetworkBehaviour for Behaviour {
                 Poll::Pending => {}
             }
 
-            if let Poll::Ready(Some(expired_registration)) =
+            if let Poll::Ready(Some((peer, expired_registration))) =
                 self.expiring_registrations.poll_next_unpin(cx)
             {
-                self.discovered_peers.remove(&expired_registration);
-                return Poll::Ready(ToSwarm::GenerateEvent(Event::Expired {
-                    peer: expired_registration.0,
-                }));
+                let Some(registrations) = self.discovered_peers.get_mut(&peer) else {
+                    continue;
+                };
+                registrations.remove(&expired_registration);
+                if registrations.is_empty() {
+                    self.discovered_peers.remove(&peer);
+                }
+                return Poll::Ready(ToSwarm::GenerateEvent(Event::Expired { peer }));
             }
 
             return Poll::Pending;
@@ -330,20 +334,10 @@ impl NetworkBehaviour for Behaviour {
         _addresses: &[Multiaddr],
         _effective_role: Endpoint,
     ) -> Result<Vec<Multiaddr>, ConnectionDenied> {
-        let peer = match maybe_peer {
-            None => return Ok(vec![]),
-            Some(peer) => peer,
-        };
-
-        let addresses = self
-            .discovered_peers
-            .iter()
-            .filter_map(|((candidate, _), addresses)| (candidate == &peer).then_some(addresses))
-            .flatten()
-            .cloned()
-            .collect();
-
-        Ok(addresses)
+        let addrs = maybe_peer
+            .map(|peer| self.discovered_peer_addrs(&peer).cloned().collect())
+            .unwrap_or_default();
+        Ok(addrs)
     }
 }
 
@@ -375,101 +369,86 @@ impl Behaviour {
     ) -> Option<Event> {
         match response {
             RegisterResponse(Ok(ttl)) => {
-                if let Some((rendezvous_node, namespace)) =
-                    self.waiting_for_register.remove(request_id)
-                {
-                    self.registered_namespaces
-                        .insert((rendezvous_node, namespace.clone()), ttl);
+                let (rendezvous_node, namespace) = self.waiting_for_register.remove(request_id)?;
+                self.registered_namespaces
+                    .insert((rendezvous_node, namespace.clone()), ttl);
 
-                    return Some(Event::Registered {
-                        rendezvous_node,
-                        ttl,
-                        namespace,
-                    });
-                }
-
-                None
+                Some(Event::Registered {
+                    rendezvous_node,
+                    ttl,
+                    namespace,
+                })
             }
             RegisterResponse(Err(error_code)) => {
-                if let Some((rendezvous_node, namespace)) =
-                    self.waiting_for_register.remove(request_id)
-                {
-                    return Some(Event::RegisterFailed {
-                        rendezvous_node,
-                        namespace,
-                        error: error_code,
-                    });
-                }
-
-                None
+                let (rendezvous_node, namespace) = self.waiting_for_register.remove(request_id)?;
+                Some(Event::RegisterFailed {
+                    rendezvous_node,
+                    namespace,
+                    error: error_code,
+                })
             }
             DiscoverResponse(Ok((registrations, cookie))) => {
-                if let Some((rendezvous_node, _ns)) = self.waiting_for_discovery.remove(request_id)
-                {
-                    self.events
-                        .extend(registrations.iter().flat_map(|registration| {
-                            let peer_id = registration.record.peer_id();
-                            registration
-                                .record
-                                .addresses()
-                                .iter()
-                                .filter(|addr| {
-                                    !self.discovered_peers.iter().any(
-                                        |((discovered_peer_id, _), addrs)| {
-                                            *discovered_peer_id == peer_id && addrs.contains(addr)
-                                        },
-                                    )
-                                })
-                                .map(|address| ToSwarm::NewExternalAddrOfPeer {
-                                    peer_id,
-                                    address: address.clone(),
-                                })
-                                .collect::<Vec<_>>()
-                        }));
+                let (rendezvous_node, _ns) = self.waiting_for_discovery.remove(request_id)?;
+                registrations.iter().for_each(|registration| {
+                    let peer_id = registration.record.peer_id();
+                    let addresses = registration.record.addresses();
+                    let namespace = registration.namespace.clone();
+                    let ttl = registration.ttl;
 
-                    self.discovered_peers
-                        .extend(registrations.iter().map(|registration| {
-                            let peer_id = registration.record.peer_id();
-                            let namespace = registration.namespace.clone();
-
-                            let addresses = registration.record.addresses().to_vec();
-
-                            ((peer_id, namespace), addresses)
-                        }));
-
-                    self.expiring_registrations
-                        .extend(registrations.iter().cloned().map(|registration| {
-                            async move {
-                                // if the timer errors we consider it expired
-                                futures_timer::Delay::new(Duration::from_secs(registration.ttl))
-                                    .await;
-
-                                (registration.record.peer_id(), registration.namespace)
+                    // Emit events for all newly discovered addresses.
+                    let new_addr_events = addresses
+                        .iter()
+                        .filter_map(|address| {
+                            if self.discovered_peer_addrs(&peer_id).any(|a| a == address) {
+                                return None;
                             }
-                            .boxed()
-                        }));
+                            Some(ToSwarm::NewExternalAddrOfPeer {
+                                peer_id,
+                                address: address.clone(),
+                            })
+                        })
+                        .collect::<Vec<_>>();
+                    self.events.extend(new_addr_events);
 
-                    return Some(Event::Discovered {
-                        rendezvous_node,
-                        registrations,
-                        cookie,
-                    });
-                }
+                    // Update list of discovered peers.
+                    self.discovered_peers
+                        .entry(peer_id)
+                        .or_default()
+                        .insert(namespace.clone(), addresses.to_owned());
 
-                None
+                    // Push registration expiry future.
+                    self.expiring_registrations.push(
+                        async move {
+                            // if the timer errors we consider it expired
+                            futures_timer::Delay::new(Duration::from_secs(ttl)).await;
+                            (peer_id, namespace)
+                        }
+                        .boxed(),
+                    );
+                });
+
+                Some(Event::Discovered {
+                    rendezvous_node,
+                    registrations,
+                    cookie,
+                })
             }
             DiscoverResponse(Err(error_code)) => {
-                if let Some((rendezvous_node, ns)) = self.waiting_for_discovery.remove(request_id) {
-                    return Some(Event::DiscoverFailed {
-                        rendezvous_node,
-                        namespace: ns,
-                        error: error_code,
-                    });
-                }
-
-                None
+                let (rendezvous_node, ns) = self.waiting_for_discovery.remove(request_id)?;
+                Some(Event::DiscoverFailed {
+                    rendezvous_node,
+                    namespace: ns,
+                    error: error_code,
+                })
             }
             _ => unreachable!("rendezvous clients never receive requests"),
         }
+    }
+
+    fn discovered_peer_addrs(&self, peer: &PeerId) -> impl Iterator<Item = &Multiaddr> {
+        self.discovered_peers
+            .get(peer)
+            .map(|addrs| addrs.values().flatten())
+            .unwrap_or_default()
     }
 }
