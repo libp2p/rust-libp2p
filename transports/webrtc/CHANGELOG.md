@@ -1,6 +1,8 @@
 ## 0.9.0-alpha
 
 <!-- Update to libp2p-core v0.43.0 -->
+- Turn down the log spam slightly.
+  See [PR 5966](https://github.com/libp2p/rust-libp2p/pull/5966)
 
 ## 0.8.0-alpha
 
