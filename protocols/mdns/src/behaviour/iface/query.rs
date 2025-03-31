@@ -179,6 +179,7 @@ impl MdnsResponse {
     ) -> impl Iterator<Item = (PeerId, Multiaddr, Instant)> + '_ {
         self.discovered_peers()
             .filter(move |peer| peer.id() != &local_peer_id)
+            .filter(move |peer| now.checked_add(peer.ttl()).is_some())
             .flat_map(move |peer| {
                 let observed = self.observed_address();
                 let new_expiration = now + peer.ttl();
@@ -313,6 +314,8 @@ impl fmt::Debug for MdnsPeer {
 
 #[cfg(test)]
 mod tests {
+    use std::net::{IpAddr, Ipv4Addr};
+
     use super::{super::dns::build_query_response, *};
 
     #[test]
@@ -352,5 +355,86 @@ mod tests {
             let peer = MdnsPeer::new(&packet, record_value, ttl).expect("fail to create peer");
             assert_eq!(peer.peer_id, peer_id);
         }
+    }
+
+    #[test]
+    fn test_extract_discovered_ttl_overflow() {
+        // Create a mock MdnsResponse with peers that have various TTLs
+        let socket_addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(192, 168, 1, 1)), 5353);
+        let mut response = MdnsResponse {
+            peers: Vec::new(),
+            from: socket_addr,
+        };
+
+        // Create local peer ID (to be filtered out)
+        let local_peer_id = PeerId::random();
+
+        // Create remote peer IDs
+        let normal_peer_id = PeerId::random();
+        let huge_ttl_peer_id = PeerId::random();
+
+        // Setup addresses
+        let addr1 = "/ip4/192.168.1.2/tcp/1234".parse::<Multiaddr>().unwrap();
+        let addr2 = "/ip4/192.168.1.3/tcp/5678".parse::<Multiaddr>().unwrap();
+
+        // Add a peer with normal TTL
+        response.peers.push(MdnsPeer {
+            addrs: vec![addr1],
+            peer_id: normal_peer_id,
+            ttl: 120, // 2 minutes
+        });
+
+        // Add a peer with extremely large TTL
+        response.peers.push(MdnsPeer {
+            addrs: vec![addr2],
+            peer_id: huge_ttl_peer_id,
+            ttl: u32::MAX, // Maximum possible TTL
+        });
+
+        // Add the local peer (should be filtered out)
+        response.peers.push(MdnsPeer {
+            addrs: vec!["/ip4/127.0.0.1/tcp/9000".parse::<Multiaddr>().unwrap()],
+            peer_id: local_peer_id,
+            ttl: 120,
+        });
+
+        // Current time
+        let now = Instant::now();
+
+        // Call the method under test
+        let result: Vec<(PeerId, Multiaddr, Instant)> =
+            response.extract_discovered(now, local_peer_id).collect();
+
+        // Verify results
+
+        // Local peer should be filtered out
+        assert!(!result.iter().any(|(id, _, _)| id == &local_peer_id));
+
+        // The normal TTL peer should be included
+        assert!(result.iter().any(|(id, _, _)| id == &normal_peer_id));
+
+        // Verify the behavior for the huge TTL peer
+        // First, check if huge TTL causes overflow with checked_add
+        let huge_ttl_duration = Duration::from_secs(u64::from(u32::MAX));
+        let overflow_check = now.checked_add(huge_ttl_duration);
+
+        if overflow_check.is_some() {
+            // If checked_add doesn't detect overflow, huge TTL peer should be included
+            assert!(result.iter().any(|(id, _, _)| id == &huge_ttl_peer_id));
+        } else {
+            // If checked_add detects overflow, huge TTL peer should be excluded
+            assert!(!result.iter().any(|(id, _, _)| id == &huge_ttl_peer_id));
+        }
+
+        // For normal peer, verify expiration time calculation
+        let normal_peer_result = result.iter().find(|(id, _, _)| id == &normal_peer_id);
+        assert!(normal_peer_result.is_some());
+
+        let (_, _, expiration) = normal_peer_result.unwrap();
+        let expected_expiration = now + Duration::from_secs(120);
+
+        // Allow small tolerance for timing differences
+        assert!(*expiration >= expected_expiration - Duration::from_millis(10));
+        assert!(*expiration <= expected_expiration + Duration::from_millis(10));
     }
 }

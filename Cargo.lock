@@ -2725,7 +2725,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-mdns"
-version = "0.48.0"
+version = "0.48.1"
 dependencies = [
  "futures",
  "hickory-proto",
