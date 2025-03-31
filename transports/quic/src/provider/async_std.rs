@@ -30,6 +30,10 @@ use futures::{future::BoxFuture, FutureExt};
 use crate::GenTransport;
 
 /// Transport with [`async-std`] runtime.
+#[deprecated(
+    since = "0.12.1",
+    note = "async_std has been discontinued. Please use tokio instead."
+)]
 pub type Transport = GenTransport<Provider>;
 
 /// Provider for quinn runtime and spawning tasks using [`async-std`].
