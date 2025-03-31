@@ -29,8 +29,6 @@ pub enum Event {
 
 /// A in-memory store that uses LRU cache for bounded storage of addresses
 /// and a frequency-based ordering of addresses.
-///
-///
 #[derive(Default)]
 pub struct MemoryStore<T = ()> {
     /// The internal store.
@@ -67,7 +65,8 @@ impl<T> MemoryStore<T> {
         is_updated
     }
 
-    /// Update an address record without notifying swarm.  
+    /// Update an address record without notifying swarm.
+    ///
     /// Returns `true` when the address is new.  
     fn update_address_silent(
         &mut self,
@@ -86,7 +85,7 @@ impl<T> MemoryStore<T> {
 
     /// Remove an address record.
     ///
-    /// Returns `true` when the address is removed.
+    /// Returns `true` when the address existed.
     pub fn remove_address(&mut self, peer: &PeerId, address: &Multiaddr) -> bool {
         let is_updated = self.remove_address_silent(peer, address, true);
         if is_updated {
@@ -96,7 +95,9 @@ impl<T> MemoryStore<T> {
     }
 
     /// Remove an address record without notifying swarm.
-    /// Returns `true` when the address is removed.
+    ///
+    /// Returns `true` when the address is removed, `false` if the address didn't exist
+    /// or the address is permanent and `force` false.
     fn remove_address_silent(&mut self, peer: &PeerId, address: &Multiaddr, force: bool) -> bool {
         if let Some(record) = self.records.get_mut(peer) {
             if record.remove_address(address, force) {
@@ -293,7 +294,7 @@ impl Config {
 pub struct PeerRecord<T> {
     /// A LRU(Least Recently Used) cache for addresses.  
     /// Will delete the least-recently-used record when full.
-    /// If the associated `bool` is true, the address can only be force-removed
+    /// If the associated `bool` is true, the address can only be force-removed.
     addresses: LruCache<Multiaddr, bool>,
     /// Custom data attached to the peer.
     custom_data: Option<T>,
@@ -314,6 +315,7 @@ impl<T> PeerRecord<T> {
 
     /// Update the address in the LRU cache, promote it to the front if it exists,
     /// insert it to the front if not.
+    ///
     /// Returns true when the address is new.
     pub fn update_address(&mut self, address: &Multiaddr, permanent: bool) -> bool {
         if let Some(was_permanent) = self.addresses.get(address) {
@@ -327,7 +329,9 @@ impl<T> PeerRecord<T> {
     }
 
     /// Remove the address in the LRU cache regardless of its position.
-    /// Returns true when the address is removed, false when not exist.
+    ///
+    /// Returns true when the address is removed, false when it didn't exist
+    /// or it is permanent and `force` is false.
     pub fn remove_address(&mut self, address: &Multiaddr, force: bool) -> bool {
         if !force && self.addresses.peek(address) == Some(&true) {
             return false;
