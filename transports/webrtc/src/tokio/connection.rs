@@ -119,7 +119,7 @@ impl Connection {
                                 Ok(detached) => {
                                     let mut tx = tx.lock().await;
                                     if let Err(e) = tx.try_send(detached.clone()) {
-                                        tracing::error!(channel=%id, "Can't send data channel: {}", e);
+                                        tracing::warn!(channel=%id, "Can't send data channel: {}", e);
                                         // We're not accepting data channels fast enough =>
                                         // close this channel.
                                         //
@@ -286,7 +286,7 @@ pub(crate) async fn register_data_channel_open_handler(
                 match data_channel.detach().await {
                     Ok(detached) => {
                         if let Err(e) = data_channel_tx.send(detached.clone()) {
-                            tracing::error!(channel=%id, "Can't send data channel: {:?}", e);
+                            tracing::warn!(channel=%id, "Can't send data channel: {:?}", e);
                             if let Err(e) = detached.close().await {
                                 tracing::error!(channel=%id, "Failed to close data channel: {}", e);
                             }
