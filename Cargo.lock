@@ -2546,6 +2546,7 @@ dependencies = [
  "libp2p",
  "tokio",
  "tracing-subscriber",
+ "web-time 1.1.0",
 ]
 
 [[package]]
