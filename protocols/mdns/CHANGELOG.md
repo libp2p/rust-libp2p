@@ -1,4 +1,4 @@
-## 0.47.1
+## 0.48.1
 
 - Fixed a Arithmetic overflow bug in the mDNS implementation method processing response packets with extremely large TTL values.
   See [PR 5967](https://github.com/libp2p/rust-libp2p/pull/5967)
