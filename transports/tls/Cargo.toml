@@ -1,6 +1,6 @@
 [package]
 name = "libp2p-tls"
-version = "0.6.1"
+version = "0.6.2"
 edition.workspace = true
 rust-version = { workspace = true }
 description = "TLS configuration based on libp2p TLS specs."
@@ -16,8 +16,8 @@ libp2p-identity = { workspace = true }
 rcgen = { workspace = true }
 ring = { workspace = true }
 thiserror = { workspace = true }
-webpki = { version = "0.101.4", package = "rustls-webpki", features = ["std"] }
-x509-parser = "0.16.0"
+webpki = { version = "0.103", package = "rustls-webpki", features = ["std"] }
+x509-parser = "0.17.0"
 yasna = "0.5.2"
 
 # Exposed dependencies. Breaking changes to these are breaking changes to us.
