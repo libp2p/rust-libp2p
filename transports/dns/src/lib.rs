@@ -117,7 +117,7 @@ pub mod async_std {
 pub mod tokio {
     use std::sync::Arc;
 
-    use hickory_resolver::{system_conf, TokioResolver};
+    use hickory_resolver::{name_server::TokioConnectionProvider, system_conf, TokioResolver};
     use parking_lot::Mutex;
 
     /// A `Transport` wrapper for performing DNS lookups when dialing `Multiaddr`esses
@@ -138,9 +138,12 @@ pub mod tokio {
             cfg: hickory_resolver::config::ResolverConfig,
             opts: hickory_resolver::config::ResolverOpts,
         ) -> Transport<T> {
+            let mut resolver_builder =
+                TokioResolver::builder_with_config(cfg, TokioConnectionProvider::default());
+            *resolver_builder.options_mut() = opts;
             Transport {
                 inner: Arc::new(Mutex::new(inner)),
-                resolver: TokioResolver::tokio(cfg, opts),
+                resolver: resolver_builder.build(),
             }
         }
     }
