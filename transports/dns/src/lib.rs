@@ -649,7 +649,7 @@ mod tests {
         let config = ResolverConfig::quad9();
         let opts = ResolverOpts::default();
         let transport = async_std_crate::task::block_on(
-            async_std::Transport::custom(T, config, opts),
+            async_std::Transport::custom(transport, config, opts),
         );
         async_std_crate::task::block_on(test_fn(transport));
     }
@@ -661,13 +661,13 @@ mod tests {
     ) {
         let config = ResolverConfig::quad9();
         let opts = ResolverOpts::default();
-        let transport =  tokio::Transport::custom(T, config, opts);
+        let transport =  tokio::Transport::custom(transport, config, opts);
         let rt = ::tokio::runtime::Builder::new_current_thread()
             .enable_io()
             .enable_time()
             .build()
             .unwrap();
-        rt.task::block_on(test_fn(transport));
+        rt.block_on(test_fn(transport));
     }
 
     #[test]
@@ -817,26 +817,14 @@ mod tests {
             }
         }      
     
-        // Common DNS config.
-        let config = ResolverConfig::quad9();
-        let opts = ResolverOpts::default();
-    
         #[cfg(feature = "async-std")]
         {
-            // Be explicit about the resolver used. At least on github CI, TXT
-            // type record lookups may not work with the system DNS resolver.
-            let transport = async_std_crate::task::block_on(
-                async_std::Transport::custom(CustomTransport, config.clone(), opts.clone()),
-            );
-            test_async_std(transport, run);
+            test_async_std(CustomTransport, run);
         }
 
         #[cfg(feature = "tokio")]
         {
-            // Be explicit about the resolver used. At least on github CI, TXT
-            // type record lookups may not work with the system DNS resolver.
-            let transport = tokio::Transport::custom(CustomTransport, config, opts);
-            test_tokio(transport, run);
+           test_tokio(CustomTransport, run);
         }
     }
 
@@ -931,24 +919,14 @@ mod tests {
             }
         }
     
-        // Common DNS config.
-        let config = ResolverConfig::quad9();
-        let opts = ResolverOpts::default();
-    
         #[cfg(feature = "async-std")]
         {
-            // Be explicit about the resolver used. At least on github CI, TXT
-            // type record lookups may not work with the system DNS resolver.
-            let transport = async_std_crate::task::block_on(
-                async_std::Transport::custom(AlwaysFailTransport, config.clone(), opts.clone()),
-            );
-            test_async_std(transport, run_test);
+            test_async_std(AlwaysFailTransport, run_test);
         }
     
         #[cfg(feature = "tokio")]
         {
-            let transport = tokio::Transport::custom(AlwaysFailTransport, config, opts);
-            test_tokio(transport, run_test);
+            test_tokio(AlwaysFailTransport, run_test);
         }
     }
 }
