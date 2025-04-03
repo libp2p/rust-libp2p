@@ -655,24 +655,19 @@ mod tests {
     }
 
     #[cfg(feature = "tokio")]
-    fn test_tokio<T, R, F>(
-        transport: super::Transport<T, R>,
-        test_fn: impl FnOnce(super::Transport<T, R>) -> F,
-    )
-    where
-        T: Transport + Clone + Send + Unpin + 'static,
-        T::Error: Send,
-        T::Dial: Send,
-        R: Clone + Send + Sync + Resolver + 'static,
-        F: std::future::Future<Output = ()> + 'static,
-    {
+    fn test_tokio<T, F: Future<Output = ()> >(
+        transport: T,
+        test_fn: impl FnOnce(tokio::Transport<T>) -> F,
+    ) {
+        let config = ResolverConfig::quad9();
+        let opts = ResolverOpts::default();
+        let transport =  tokio::Transport::custom(T, config, opts);
         let rt = ::tokio::runtime::Builder::new_current_thread()
             .enable_io()
             .enable_time()
             .build()
             .unwrap();
-
-        rt.block_on(test_fn(transport));
+        rt.task::block_on(test_fn(transport));
     }
 
     #[test]
