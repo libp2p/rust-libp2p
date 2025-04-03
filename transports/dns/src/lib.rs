@@ -642,17 +642,15 @@ mod tests {
 
     // For async-std:
     #[cfg(feature = "async-std")]
-    fn test_async_std<T, R, F>(
-        transport: super::Transport<T, R>,
-        test_fn: impl FnOnce(super::Transport<T, R>) -> F,
-    )
-    where
-        T: Transport + Clone + Send + Unpin + 'static,
-        T::Error: Send,
-        T::Dial: Send,
-        R: Clone + Send + Sync + Resolver + 'static,
-        F: std::future::Future<Output = ()> + 'static,
-    {
+    fn test_async_std<T, F: Future<Output = ()> >(
+        transport: T,
+        test_fn: impl FnOnce(async_std::Transport<T>) -> F,
+    ) {
+        let config = ResolverConfig::quad9();
+        let opts = ResolverOpts::default();
+        let transport = async_std_crate::task::block_on(
+            async_std::Transport::custom(T, config, opts),
+        );
         async_std_crate::task::block_on(test_fn(transport));
     }
 
