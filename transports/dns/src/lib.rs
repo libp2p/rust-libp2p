@@ -452,7 +452,7 @@ where
             Error::ResolveError(err) => Some(err),
             Error::MultiaddrNotSupported(_) => None,
             Error::TooManyLookups => None,
-            Error::Dial(errs) => errs.first().and_then(|e| e.source()),
+            Error::Dial(errs) => errs.last().and_then(|e| e.source()),
         }
     }
 }
@@ -628,6 +628,7 @@ where
 #[cfg(all(test, any(feature = "tokio", feature = "async-std")))]
 mod tests {
     use futures::future::BoxFuture;
+    use hickory_resolver::proto::{ProtoError, ProtoErrorKind};
     use libp2p_core::{
         multiaddr::{Multiaddr, Protocol},
         transport::{PortUse, TransportError, TransportEvent},
@@ -800,21 +801,28 @@ mod tests {
                 .await
             {
                 Err(Error::Dial(dial_errs)) => {
-                    if dial_errs
-                        .iter()
-                        .any(|sub| matches!(sub, Error::ResolveError(_)))
-                    {
-                        // We found a ResolveError in the aggregator’s dial array
-                    } else {
-                        panic!(
-                            "Expected at least one ResolveError(...) sub-error, got {dial_errs:?}"
-                        )
+                    assert_eq!(
+                        dial_errs.len(),
+                        1,
+                        "Expected exactly 1 error for 'no records' scenario, got {dial_errs:?}"
+                    );
+            
+                    match &dial_errs[0] {
+                        Error::ResolveError(e) => {
+                            match e.kind() {
+                                ResolveErrorKind::Proto(ProtoError { kind, .. })
+                                    if matches!(kind.as_ref(), ProtoErrorKind::NoRecordsFound { .. }) => {}
+                                _ => panic!("Unexpected DNS error: {e:?}"),
+                            }
+                        }
+                        other => panic!("Expected a single ResolveError(...) sub-error, got {other:?}"),
                     }
                 }
+            
                 Err(e) => panic!("Unexpected error: {e:?}"),
                 Ok(_) => panic!("Unexpected success."),
             }
-        }
+        }      
     
         // Common DNS config.
         let config = ResolverConfig::quad9();
