@@ -778,7 +778,7 @@ where
         self.kbuckets
             .closest(key)
             .filter(move |e| e.node.key.preimage() != source)
-            .take(self.queries.config().replication_factor.get())
+            .take(K_VALUE.get())
             .map(KadPeer::from)
     }
 
