@@ -54,8 +54,16 @@ use super::{Incoming, Provider};
 /// println!("Listening on {addr}");
 /// # }
 /// ```
+#[deprecated(
+    since = "0.43.0",
+    note = "async_std has been discontinued. Please use the tokio feature instead."
+)]
 pub type Transport = crate::Transport<Tcp>;
 
+#[deprecated(
+    since = "0.43.0",
+    note = "async_std has been discontinued. Please use the tokio feature instead."
+)]
 #[derive(Copy, Clone)]
 #[doc(hidden)]
 pub enum Tcp {}
