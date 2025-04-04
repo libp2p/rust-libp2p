@@ -47,6 +47,9 @@ pub(crate) enum MdnsPacket {
     ServiceDiscovery(MdnsServiceDiscovery),
 }
 
+// Use a reasonable maximum - 1 day should be sufficient for most scenarios
+const MAX_TTL: Duration = Duration::from_secs(60 * 60 * 24);
+
 impl MdnsPacket {
     pub(crate) fn new_from_bytes(
         buf: &[u8],
@@ -179,15 +182,19 @@ impl MdnsResponse {
     ) -> impl Iterator<Item = (PeerId, Multiaddr, Instant)> + '_ {
         self.discovered_peers()
             .filter(move |peer| peer.id() != &local_peer_id)
-            .filter(move |peer| now.checked_add(peer.ttl()).is_some())
             .flat_map(move |peer| {
                 let observed = self.observed_address();
-                let new_expiration = now + peer.ttl();
+                // Cap expiration time to avoid overflow
+                let new_expiration = match now.checked_add(peer.ttl()) {
+                    Some(expiration) => expiration,
+                    None => {
+                        now.checked_add(MAX_TTL).unwrap_or(now) // Fallback to now if even that overflows (extremely unlikely)
+                    }
+                };
 
                 peer.addresses().iter().filter_map(move |address| {
                     let new_addr = _address_translation(address, &observed)?;
                     let new_addr = new_addr.with_p2p(*peer.id()).ok()?;
-
                     Some((*peer.id(), new_addr, new_expiration))
                 })
             })
@@ -406,25 +413,14 @@ mod tests {
             response.extract_discovered(now, local_peer_id).collect();
 
         // Verify results
-
         // Local peer should be filtered out
         assert!(!result.iter().any(|(id, _, _)| id == &local_peer_id));
 
         // The normal TTL peer should be included
         assert!(result.iter().any(|(id, _, _)| id == &normal_peer_id));
 
-        // Verify the behavior for the huge TTL peer
-        // First, check if huge TTL causes overflow with checked_add
-        let huge_ttl_duration = Duration::from_secs(u64::from(u32::MAX));
-        let overflow_check = now.checked_add(huge_ttl_duration);
-
-        if overflow_check.is_some() {
-            // If checked_add doesn't detect overflow, huge TTL peer should be included
-            assert!(result.iter().any(|(id, _, _)| id == &huge_ttl_peer_id));
-        } else {
-            // If checked_add detects overflow, huge TTL peer should be excluded
-            assert!(!result.iter().any(|(id, _, _)| id == &huge_ttl_peer_id));
-        }
+        // The huge TTL peer should now ALWAYS be included
+        assert!(result.iter().any(|(id, _, _)| id == &huge_ttl_peer_id));
 
         // For normal peer, verify expiration time calculation
         let normal_peer_result = result.iter().find(|(id, _, _)| id == &normal_peer_id);
@@ -432,9 +428,36 @@ mod tests {
 
         let (_, _, expiration) = normal_peer_result.unwrap();
         let expected_expiration = now + Duration::from_secs(120);
+        assert_eq!(*expiration, expected_expiration);
 
-        // Allow small tolerance for timing differences
-        assert!(*expiration >= expected_expiration - Duration::from_millis(10));
-        assert!(*expiration <= expected_expiration + Duration::from_millis(10));
+        // For huge TTL peer, verify expiration time is properly capped
+        let huge_ttl_peer_result = result.iter().find(|(id, _, _)| id == &huge_ttl_peer_id);
+        assert!(huge_ttl_peer_result.is_some());
+        let (_, _, huge_expiration) = huge_ttl_peer_result.unwrap();
+
+        // Check if the TTL would cause overflow
+        let huge_ttl_duration = Duration::from_secs(u64::from(u32::MAX));
+        let overflow_check = now.checked_add(huge_ttl_duration);
+
+        if overflow_check.is_some() {
+            // If no overflow, should be exact expiration
+            assert_eq!(*huge_expiration, overflow_check.unwrap());
+        } else {
+            // If overflow would occur, should be capped
+            let one_day = Duration::from_secs(24 * 60 * 60);
+            let capped_expiration = now.checked_add(one_day).unwrap_or(now);
+
+            // The expiration should be capped at max 1 day
+            assert!(
+                *huge_expiration <= capped_expiration,
+                "Huge TTL expiration should be capped to prevent overflow"
+            );
+
+            // And it should be greater than now (not reset to current time)
+            assert!(
+                *huge_expiration > now,
+                "Capped expiration should be greater than current time"
+            );
+        }
     }
 }
