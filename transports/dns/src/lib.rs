@@ -640,7 +640,6 @@ mod tests {
 
     // These helpers will be compiled conditionally, depending on the async runtime in use.
 
-    // For async-std:
     #[cfg(feature = "async-std")]
     fn test_async_std<T, F: Future<Output = ()> >(
         transport: T,
