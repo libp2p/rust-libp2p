@@ -919,13 +919,9 @@ mod tests {
         }
     
         #[cfg(feature = "async-std")]
-        {
-            test_async_std(AlwaysFailTransport, run_test);
-        }
+        test_async_std(AlwaysFailTransport, run_test);
     
         #[cfg(feature = "tokio")]
-        {
-            test_tokio(AlwaysFailTransport, run_test);
-        }
+        test_tokio(AlwaysFailTransport, run_test);
     }
 }
