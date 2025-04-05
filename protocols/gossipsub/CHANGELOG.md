@@ -1,4 +1,7 @@
 ## 0.49.0
+- Improve log messaging by renaming `message` to `message_id`. This change makes it log coherent to
+  the field and also improve duplication of `message` field.
+  See [PR 5972](https://github.com/libp2p/rust-libp2p/pull/5972)
 
 - Fix a race condition for messages published which are already in the network.
   See [PR 5928](https://github.com/libp2p/rust-libp2p/pull/5928)
