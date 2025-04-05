@@ -110,7 +110,7 @@ impl PeerStats {
         topic_hash: TopicHash,
         params: &PeerScoreParams,
     ) -> Option<&mut TopicStats> {
-        #[expect(
+        #[allow(
             clippy::map_entry,
             reason = "False positive, see rust-lang/rust-clippy#14449."
         )]

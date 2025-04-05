@@ -1813,7 +1813,7 @@ where
         self.mcache.put(&msg_id, raw_message.clone());
 
         // Dispatch the message to the user if we are subscribed to any of the topics
-        #[expect(
+        #[allow(
             clippy::map_entry,
             reason = "False positive, see rust-lang/rust-clippy#14449."
         )]
