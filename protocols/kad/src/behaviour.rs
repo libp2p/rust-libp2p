@@ -2915,6 +2915,7 @@ pub type GetRecordResult = Result<GetRecordOk, GetRecordError>;
 
 /// The successful result of [`Behaviour::get_record`].
 #[derive(Debug, Clone)]
+#[allow(clippy::large_enum_variant)]
 pub enum GetRecordOk {
     FoundRecord(PeerRecord),
     FinishedWithNoAdditionalRecord {
