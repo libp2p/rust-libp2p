@@ -614,13 +614,13 @@ where
             // This message has already been seen. We don't re-publish messages that have already
             // been published on the network.
             tracing::warn!(
-                message=%msg_id,
+                message_id=%msg_id,
                 "Not publishing a message that has already been published"
             );
             return Err(PublishError::Duplicate);
         }
 
-        tracing::trace!(message=%msg_id, "Publishing message");
+        tracing::trace!(message_id=%msg_id, "Publishing message");
 
         let topic_hash = raw_message.topic.clone();
 
@@ -773,7 +773,7 @@ where
             self.send_idontwant(&raw_message, &msg_id, raw_message.source.as_ref());
         }
 
-        tracing::debug!(message=%msg_id, "Published message");
+        tracing::debug!(message_id=%msg_id, "Published message");
 
         if let Some(metrics) = self.metrics.as_mut() {
             metrics.register_published_message(&topic_hash);
@@ -815,7 +815,7 @@ where
                     }
                     None => {
                         tracing::warn!(
-                            message=%msg_id,
+                            message_id=%msg_id,
                             "Message not in cache. Ignoring forwarding"
                         );
                         if let Some(metrics) = self.metrics.as_mut() {
@@ -861,7 +861,7 @@ where
             }
             true
         } else {
-            tracing::warn!(message=%msg_id, "Rejected message not in cache");
+            tracing::warn!(message_id=%msg_id, "Rejected message not in cache");
             false
         }
     }
@@ -1344,13 +1344,13 @@ where
                 if count > self.config.gossip_retransimission() {
                     tracing::debug!(
                         peer=%peer_id,
-                        message=%id,
+                        message_id=%id,
                         "IWANT: Peer has asked for message too many times; ignoring request"
                     );
                 } else {
                     if let Some(peer) = self.connected_peers.get_mut(peer_id) {
                         if peer.dont_send.contains_key(&id) {
-                            tracing::debug!(%peer_id, message=%id, "Peer already sent IDONTWANT for this message");
+                            tracing::debug!(%peer_id, message_id=%id, "Peer already sent IDONTWANT for this message");
                             continue;
                         }
                     }
@@ -1662,7 +1662,7 @@ where
     ) -> bool {
         tracing::debug!(
             peer=%propagation_source,
-            message=%msg_id,
+            message_id=%msg_id,
             "Handling message from peer"
         );
 
@@ -1721,7 +1721,7 @@ where
 
         if self_published {
             tracing::debug!(
-                message=%msg_id,
+                message_id=%msg_id,
                 source=%propagation_source,
                 "Dropping message claiming to be from self but forwarded from source"
             );
@@ -1782,7 +1782,7 @@ where
         }
 
         if !self.duplicate_cache.insert(msg_id.clone()) {
-            tracing::debug!(message=%msg_id, "Message already received, ignoring");
+            tracing::debug!(message_id=%msg_id, "Message already received, ignoring");
             if let Some((peer_score, ..)) = &mut self.peer_score {
                 peer_score.duplicated_message(propagation_source, &msg_id, &message.topic);
             }
@@ -1791,7 +1791,7 @@ where
         }
 
         tracing::debug!(
-            message=%msg_id,
+            message_id=%msg_id,
             "Put message in duplicate_cache and resolve promises"
         );
 
@@ -1837,7 +1837,7 @@ where
                 Some(propagation_source),
                 HashSet::new(),
             );
-            tracing::debug!(message=%msg_id, "Completed message handling for message");
+            tracing::debug!(message_id=%msg_id, "Completed message handling for message");
         }
     }
 
@@ -2672,7 +2672,7 @@ where
             }
         }
 
-        tracing::debug!(message=%msg_id, "Forwarding message");
+        tracing::debug!(message_id=%msg_id, "Forwarding message");
         let mut recipient_peers = HashSet::new();
 
         // Populate the recipient peers mapping
@@ -2715,11 +2715,11 @@ where
         for peer_id in recipient_peers.iter() {
             if let Some(peer) = self.connected_peers.get_mut(peer_id) {
                 if peer.dont_send.contains_key(msg_id) {
-                    tracing::debug!(%peer_id, message=%msg_id, "Peer doesn't want message");
+                    tracing::debug!(%peer_id, message_id=%msg_id, "Peer doesn't want message");
                     continue;
                 }
 
-                tracing::debug!(%peer_id, message=%msg_id, "Sending message to peer");
+                tracing::debug!(%peer_id, message_id=%msg_id, "Sending message to peer");
 
                 self.send_message(
                     *peer_id,
