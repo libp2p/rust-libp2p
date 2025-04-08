@@ -11,21 +11,64 @@ rust-version = { workspace = true }
 version = "0.4.0"
 publish = true
 
+[build-dependencies]
+prost-build = "0.13.5"
+
 [dependencies]
+async-trait = "0.1"
 bytes = "1"
 futures = { workspace = true }
+futures-timer = "3"
 getrandom = { workspace = true, features = ["js"] }
 hex = "0.4.3"
 js-sys = { version = "0.3" }
 libp2p-core = { workspace = true }
 libp2p-identity = { workspace = true }
 libp2p-webrtc-utils = { workspace = true }
+libp2p-tcp = { path = "../../transports/tcp" }
+libp2p-relay = { workspace = true }
+libp2p-gossipsub = { workspace = true }
+serde_json = "1.0"
+serde = { version = "1.0", features = ["derive"] }
 send_wrapper = { version = "0.6.0", features = ["futures"] }
 thiserror = { workspace = true }
+tokio = { workspace = true, features = ["full"] }
 tracing = { workspace = true }
 wasm-bindgen = { version = "0.2.90" }
 wasm-bindgen-futures = { version = "0.4.42" }
-web-sys = { version = "0.3.70", features = ["Document", "Location", "MessageEvent", "Navigator", "RtcCertificate", "RtcConfiguration", "RtcDataChannel", "RtcDataChannelEvent", "RtcDataChannelInit", "RtcDataChannelState", "RtcDataChannelType", "RtcPeerConnection", "RtcSdpType", "RtcSessionDescription", "RtcSessionDescriptionInit", "Window"] }
+web-sys = { version = "0.3.70", features = [
+  "RtcPeerConnection",
+  "RtcConfiguration",
+  "RtcSessionDescription",
+  "RtcSessionDescriptionInit", 
+  "RtcSdpType",
+  "RtcDataChannel",
+  "RtcDataChannelEvent",
+  "RtcDataChannelInit",
+  "RtcDataChannelState",
+  "RtcDataChannelType",
+  "RtcIceConnectionState",
+  "RtcIceGatheringState",
+  "RtcIceCandidate",
+  "RtcIceCandidateInit",
+  "RtcPeerConnectionIceEvent",
+  "Event",
+  "EventTarget",
+  "MessageEvent",
+  "Window",
+  "Document",
+  "Navigator",
+  "RtcCertificate",
+  "RtcPeerConnectionState",
+  "RtcSignalingState",
+  "Location",
+  "HtmlDocument",
+  "WebSocket"
+]}
+libp2p-swarm = { workspace = true }
+quick-protobuf = "0.8"
+quick-protobuf-codec = { workspace = true }
+prost = "0.13.5"
 
 [lints]
 workspace = true

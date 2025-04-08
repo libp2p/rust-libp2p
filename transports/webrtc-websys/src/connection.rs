@@ -77,7 +77,7 @@ impl Connection {
         }
     }
 
-    fn new_stream_from_data_channel(&mut self, data_channel: RtcDataChannel) -> Stream {
+    pub fn new_stream_from_data_channel(&mut self, data_channel: RtcDataChannel) -> Stream {
         let (stream, drop_listener) = Stream::new(data_channel);
 
         self.drop_listeners.push(drop_listener);
@@ -85,6 +85,10 @@ impl Connection {
             waker.wake()
         }
         stream
+    }
+
+    pub fn rtc_connection(&self) -> web_sys::RtcPeerConnection {
+        self.inner.inner.clone()
     }
 
     /// Closes the Peer Connection.

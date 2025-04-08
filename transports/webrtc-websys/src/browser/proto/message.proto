@@ -1,0 +1,13 @@
+syntax = "proto3";
+package signaling;
+
+message SignalingMessage {
+  enum Type {
+    SDP_OFFER = 0;
+    SDP_ANSWER = 1;
+    ICE_CANDIDATE = 2;
+  }
+  
+  Type type = 1;
+  string data = 2;  
+}
