@@ -15,12 +15,12 @@ use std::{
 };
 
 use libp2p_core::{Multiaddr, PeerId};
-use libp2p_swarm::{DialError, FromSwarm};
+use libp2p_swarm::{DialError, FromSwarm, Swarm};
 use lru::LruCache;
 
 use super::Store;
 
-/// Event from the store and emitted to [`Swarm`](libp2p_swarm::Swarm).
+/// Event from the store and emitted to [`Swarm`].
 #[derive(Debug, Clone)]
 pub enum Event {
     /// Custom data of the peer has been updated.
@@ -33,7 +33,7 @@ pub enum Event {
 pub struct MemoryStore<T = ()> {
     /// The internal store.
     records: HashMap<PeerId, PeerRecord<T>>,
-    /// Events to emit to [`Behaviour`](crate::Behaviour) and [`Swarm`](libp2p_swarm::Swarm)
+    /// Events to emit to [`Behaviour`](crate::Behaviour) and [`Swarm`].
     pending_events: VecDeque<crate::store::Event<Event>>,
     /// Config of the store.
     config: Config,
@@ -52,11 +52,13 @@ impl<T> MemoryStore<T> {
         }
     }
 
-    /// Update an address record and notify swarm when the address is new.
+    /// Update an address record and notify swarm if the address is new.
     ///
-    /// The added address will NOT be removed from the store on dial failure.
+    /// The added address will NOT be removed from the store on dial failure. If the added address
+    /// is supposed to be cleared from the store on dial failure, add it by emitting
+    /// [`FromSwarm::NewExternalAddrOfPeer`] to the swarm, e.g. via [`Swarm::add_peer_address`].
     ///
-    /// Returns `true` when the address is new.
+    /// Returns `true` if the address is new.
     pub fn update_address(&mut self, peer: &PeerId, address: &Multiaddr) -> bool {
         let is_updated = self.update_address_silent(peer, address, true);
         if is_updated {
@@ -67,7 +69,7 @@ impl<T> MemoryStore<T> {
 
     /// Update an address record without notifying swarm.
     ///
-    /// Returns `true` when the address is new.  
+    /// Returns `true` if the address is new.
     fn update_address_silent(
         &mut self,
         peer: &PeerId,
@@ -251,7 +253,7 @@ impl<T> Store for MemoryStore<T> {
 /// Config for [`MemoryStore`].
 #[derive(Debug, Clone)]
 pub struct Config {
-    /// The capacaity of an address store.  
+    /// The capacity of an address store.
     /// The least active address will be discarded to make room for new address.
     record_capacity: NonZeroUsize,
     remove_addr_on_dial_error: bool,
@@ -280,7 +282,17 @@ impl Config {
     pub fn is_remove_addr_on_dial_error(&self) -> bool {
         self.remove_addr_on_dial_error
     }
-    /// If set to true, the `MemoryStore` will remove addresses on the first dial failure.
+    /// If set to `true`, the store will remove addresses if the swarm indicates a dial failure.
+    /// More specifically:
+    /// - Failed dials indicated in [`ConnectionEstablished`](libp2p_swarm::behaviour::ConnectionEstablished)'s
+    /// `failed_addresses` will be removed.
+    /// - [`DialError::LocalPeerId`] causes the full peer entry to be removed.
+    /// - On [`DialError::WrongPeerId`], the address will be removed from the incorrect peer's
+    /// record and re-added to the correct peer's record.
+    /// - On [`DialError::Transport`], all failed addresses will be removed.
+    ///
+    /// If set to `false`, the logic above is not applied and the store only removes addresses
+    /// through calls to [`MemoryStore::remove_address`].
     ///
     /// `true` by default.
     pub fn set_remove_addr_on_dial_error(mut self, value: bool) -> Self {
