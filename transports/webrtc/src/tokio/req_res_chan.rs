@@ -52,10 +52,8 @@ impl<Req, Res> Sender<Req, Res> {
             .await
             .send((req, sender))
             .await
-            .map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
-        let res = receiver
-            .await
-            .map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
+            .map_err(io::Error::other)?;
+        let res = receiver.await.map_err(io::Error::other)?;
 
         Ok(res)
     }

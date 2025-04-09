@@ -129,6 +129,7 @@ enum InboundSubstreamState {
 }
 
 impl InboundSubstreamState {
+    #[allow(clippy::result_large_err)]
     fn try_answer_with(
         &mut self,
         id: RequestId,

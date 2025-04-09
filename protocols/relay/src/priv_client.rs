@@ -26,7 +26,7 @@ pub(crate) mod transport;
 use std::{
     collections::{hash_map, HashMap, VecDeque},
     convert::Infallible,
-    io::{Error, ErrorKind, IoSlice},
+    io::{Error, IoSlice},
     pin::Pin,
     task::{Context, Poll},
 };
@@ -409,10 +409,7 @@ impl ConnectionState {
     pub(crate) fn new_inbound(circuit: inbound_stop::Circuit) -> Self {
         ConnectionState::InboundAccepting {
             accept: async {
-                let (substream, read_buffer) = circuit
-                    .accept()
-                    .await
-                    .map_err(|e| Error::new(ErrorKind::Other, e))?;
+                let (substream, read_buffer) = circuit.accept().await.map_err(Error::other)?;
                 Ok(ConnectionState::Operational {
                     read_buffer,
                     substream,
