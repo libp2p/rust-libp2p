@@ -105,7 +105,7 @@ pub fn generate(
     );
 
     let certificate = {
-        let mut params = rcgen::CertificateParams::new(vec![])?;
+        let mut params = rcgen::CertificateParams::default();
         params.distinguished_name = rcgen::DistinguishedName::new();
         params.custom_extensions.push(make_libp2p_extension(
             identity_keypair,
