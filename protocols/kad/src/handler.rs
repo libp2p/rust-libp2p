@@ -109,12 +109,12 @@ struct ProtocolStatus {
 enum InboundSubstreamState {
     /// Waiting for a request from the remote.
     WaitingMessage {
-        /// Whether it is the first message to be awaited on this stream.
-        first: bool,
+        /// How long before we give up on waiting for the first request on this stream.
+        /// `None` if there has already been a request on this stream, or it has timed out and can
+        /// be re-used.
+        first_request_timeout: Option<Delay>,
         connection_id: UniqueConnecId,
         substream: KadInStreamSink<Stream>,
-        /// How long before we give up on waiting for a request.
-        request_timeout: Delay,
     },
     /// Waiting for the behaviour to send a [`HandlerIn`] event containing the response.
     WaitingBehaviour(
@@ -198,10 +198,9 @@ impl InboundSubstreamState {
             },
         ) {
             InboundSubstreamState::WaitingMessage {
+                first_request_timeout: _,
                 substream,
-                first: _,
                 connection_id: _,
-                request_timeout: _,
             }
             | InboundSubstreamState::WaitingBehaviour(_, substream, _, _)
             | InboundSubstreamState::PendingSend(_, substream, _, _)
@@ -560,7 +559,10 @@ impl Handler {
                 matches!(
                     s,
                     // An inbound substream waiting to be reused.
-                    InboundSubstreamState::WaitingMessage { first: false, .. }
+                    InboundSubstreamState::WaitingMessage {
+                        first_request_timeout: None,
+                        ..
+                    }
                 )
             }) {
                 *s = InboundSubstreamState::Cancelled;
@@ -583,10 +585,9 @@ impl Handler {
         self.next_connec_unique_id.0 += 1;
         self.inbound_substreams
             .push(InboundSubstreamState::WaitingMessage {
-                first: true,
+                first_request_timeout: Some(Delay::new(SUBSTREAM_TIMEOUT)),
                 connection_id: connec_unique_id,
                 substream: protocol,
-                request_timeout: Delay::new(SUBSTREAM_TIMEOUT),
             });
     }
 
@@ -916,13 +917,12 @@ impl futures::Stream for InboundSubstreamState {
                 },
             ) {
                 InboundSubstreamState::WaitingMessage {
-                    first,
+                    mut first_request_timeout,
                     connection_id,
                     mut substream,
-                    mut request_timeout,
                 } => match (
                     substream.poll_next_unpin(cx),
-                    request_timeout.poll_unpin(cx),
+                    first_request_timeout.as_mut().map(|t| t.poll_unpin(cx)),
                 ) {
                     // Prefer ready requests over ready timeouts
                     (Poll::Ready(Some(Ok(KadRequestMsg::Ping))), _) => {
@@ -966,13 +966,11 @@ impl futures::Stream for InboundSubstreamState {
                         )));
                     }
                     (Poll::Ready(Some(Ok(KadRequestMsg::AddProvider { key, provider }))), _) => {
-                        // The request has finished, so renew the request timeout
-                        let request_timeout = Delay::new(SUBSTREAM_TIMEOUT);
+                        // This request type requires no response
                         *this = InboundSubstreamState::WaitingMessage {
-                            first: false,
+                            first_request_timeout: None,
                             connection_id,
                             substream,
-                            request_timeout,
                         };
                         return Poll::Ready(Some(ConnectionHandlerEvent::NotifyBehaviour(
                             HandlerEvent::AddProvider { key, provider },
@@ -1012,30 +1010,28 @@ impl futures::Stream for InboundSubstreamState {
                             },
                         )));
                     }
-                    (Poll::Pending, Poll::Pending) => {
+                    (Poll::Pending, Some(Poll::Pending)) | (Poll::Pending, None) => {
                         // Keep the original request timeout
                         *this = InboundSubstreamState::WaitingMessage {
-                            first,
+                            first_request_timeout,
                             connection_id,
                             substream,
-                            request_timeout,
                         };
                         return Poll::Pending;
                     }
-                    (Poll::Pending, Poll::Ready(())) => {
+                    (Poll::Pending, Some(Poll::Ready(()))) => {
                         tracing::debug!(
-                            ?first,
+                            first = ?first_request_timeout.is_some(),
                             ?connection_id,
                             "Inbound substream timed out waiting for request",
                         );
 
-                        // Renew the request timeout, but mark this substream as available for re-use
-                        let request_timeout = Delay::new(SUBSTREAM_TIMEOUT);
+                        // Drop the first request timeout, and mark this substream as available for
+                        // re-use
                         *this = InboundSubstreamState::WaitingMessage {
-                            first: false,
+                            first_request_timeout: None,
                             connection_id,
                             substream,
-                            request_timeout,
                         };
                         return Poll::Pending;
                     }
@@ -1130,10 +1126,9 @@ impl futures::Stream for InboundSubstreamState {
                     ) {
                         (Poll::Ready(Ok(())), _) => {
                             *this = InboundSubstreamState::WaitingMessage {
-                                first: false,
+                                first_request_timeout: None,
                                 connection_id: id,
                                 substream,
-                                request_timeout: Delay::new(SUBSTREAM_TIMEOUT),
                             };
                         }
                         (Poll::Pending, Poll::Pending) => {
