@@ -3,7 +3,7 @@ name = "libp2p-metrics"
 edition.workspace = true
 rust-version = { workspace = true }
 description = "Metrics for libp2p"
-version = "0.16.1"
+version = "0.17.0"
 authors = ["Max Inden <mail@max-inden.de>"]
 license = "MIT"
 repository = "https://github.com/libp2p/rust-libp2p"
@@ -22,13 +22,13 @@ relay = ["libp2p-relay"]
 futures = { workspace = true }
 web-time = { workspace = true }
 libp2p-core = { workspace = true }
-libp2p-dcutr =  { workspace = true, optional = true }
-libp2p-gossipsub =  { workspace = true, optional = true }
+libp2p-dcutr = { workspace = true, optional = true }
+libp2p-gossipsub = { workspace = true, optional = true }
 libp2p-identify = { workspace = true, optional = true }
 libp2p-identity = { workspace = true }
 libp2p-kad = { workspace = true, optional = true }
 libp2p-ping = { workspace = true, optional = true }
-libp2p-relay =  { workspace = true, optional = true }
+libp2p-relay = { workspace = true, optional = true }
 libp2p-swarm = { workspace = true }
 pin-project = "1.1.5"
 prometheus-client = { workspace = true }

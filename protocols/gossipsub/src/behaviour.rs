@@ -1819,6 +1819,10 @@ where
         self.mcache.put(&msg_id, raw_message.clone());
 
         // Dispatch the message to the user if we are subscribed to any of the topics
+        #[allow(
+            clippy::map_entry,
+            reason = "False positive, see rust-lang/rust-clippy#14449."
+        )]
         if self.mesh.contains_key(&message.topic) {
             tracing::debug!("Sending received message to user");
             self.events

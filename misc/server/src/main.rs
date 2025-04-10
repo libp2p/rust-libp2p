@@ -141,7 +141,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
                     ..
                 } = e
                 {
-                    if protocols.iter().any(|p| *p == kad::PROTOCOL_NAME) {
+                    if protocols.contains(&kad::PROTOCOL_NAME) {
                         for addr in listen_addrs {
                             swarm
                                 .behaviour_mut()
