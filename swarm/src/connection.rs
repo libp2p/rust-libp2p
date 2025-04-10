@@ -634,9 +634,7 @@ fn to_stream_upgrade_error<T>(e: NegotiationError) -> StreamUpgradeError<T> {
     match e {
         NegotiationError::Failed => StreamUpgradeError::NegotiationFailed,
         NegotiationError::ProtocolError(ProtocolError::IoError(e)) => StreamUpgradeError::Io(e),
-        NegotiationError::ProtocolError(other) => {
-            StreamUpgradeError::Io(io::Error::new(io::ErrorKind::Other, other))
-        }
+        NegotiationError::ProtocolError(other) => StreamUpgradeError::Io(io::Error::other(other)),
     }
 }
 
