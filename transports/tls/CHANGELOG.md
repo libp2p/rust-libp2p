@@ -1,3 +1,11 @@
+## 0.6.2
+
+- Upgrade `rustls-webpki` to `v0.103`
+  See [PR 5961](https://github.com/libp2p/rust-libp2p/pull/5961).
+
+- Upgrade `x509-parser` to `v0.17`
+  See [PR 5961](https://github.com/libp2p/rust-libp2p/pull/5961).
+
 ## 0.6.1
 
 - Upgrade `rcgen` to `v0.13`

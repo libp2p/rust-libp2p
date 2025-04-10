@@ -210,8 +210,6 @@ async fn start_stream_handle(
         .map_err(|e| match e {
             StreamUpgradeError::NegotiationFailed => Error::UnsupportedProtocol,
             StreamUpgradeError::Timeout => Error::Io(io::ErrorKind::TimedOut.into()),
-            // TODO: remove when Rust 1.82 is MSRV
-            #[allow(unreachable_patterns)]
             StreamUpgradeError::Apply(v) => libp2p_core::util::unreachable(v),
             StreamUpgradeError::Io(e) => Error::Io(e),
         })?;
@@ -267,20 +265,13 @@ async fn start_stream_handle(
 
     match res.status {
         ResponseStatus::E_REQUEST_REJECTED => {
-            return Err(Error::Io(io::Error::new(
-                io::ErrorKind::Other,
-                "server rejected request",
-            )))
+            return Err(Error::Io(io::Error::other("server rejected request")))
         }
         ResponseStatus::E_DIAL_REFUSED => {
-            return Err(Error::Io(io::Error::new(
-                io::ErrorKind::Other,
-                "server refused dial",
-            )))
+            return Err(Error::Io(io::Error::other("server refused dial")))
         }
         ResponseStatus::E_INTERNAL_ERROR => {
-            return Err(Error::Io(io::Error::new(
-                io::ErrorKind::Other,
+            return Err(Error::Io(io::Error::other(
                 "server encountered internal error",
             )))
         }

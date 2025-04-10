@@ -110,6 +110,10 @@ impl PeerStats {
         topic_hash: TopicHash,
         params: &PeerScoreParams,
     ) -> Option<&mut TopicStats> {
+        #[allow(
+            clippy::map_entry,
+            reason = "False positive, see rust-lang/rust-clippy#14449."
+        )]
         if params.topics.contains_key(&topic_hash) {
             Some(self.topics.entry(topic_hash).or_default())
         } else {

@@ -129,6 +129,7 @@ enum InboundSubstreamState {
 }
 
 impl InboundSubstreamState {
+    #[allow(clippy::result_large_err)]
     fn try_answer_with(
         &mut self,
         id: RequestId,
@@ -503,8 +504,6 @@ impl Handler {
         // is a `Infallible`.
         let protocol = match protocol {
             future::Either::Left(p) => p,
-            // TODO: remove when Rust 1.82 is MSRV
-            #[allow(unreachable_patterns)]
             future::Either::Right(p) => libp2p_core::util::unreachable(p),
         };
 
