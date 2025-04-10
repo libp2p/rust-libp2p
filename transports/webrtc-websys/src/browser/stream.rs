@@ -1,8 +1,9 @@
+use std::marker::PhantomData;
+
 use futures::{AsyncReadExt, AsyncWriteExt};
 use prost::Message;
-use std::marker::PhantomData;
-use crate::error::Error;
-use crate::stream::Stream;
+
+use crate::{error::Error, stream::Stream};
 
 /// A wrapper around a [`Stream`] enabling reads and writes for protobuf messages.
 pub struct ProtobufStream<M> {
@@ -29,7 +30,7 @@ where
 
         let mut buf = vec![0u8; len];
         self.stream.read_exact(&mut buf).await?;
-        
+
         M::decode(&buf[..]).map_err(|e| Error::ProtoSerialization(e.to_string()))
     }
 
@@ -39,12 +40,14 @@ where
         let len_bytes = (len as u32).to_be_bytes();
 
         let mut buf = Vec::with_capacity(len);
-        message.encode(&mut buf).map_err(|e| Error::ProtoSerialization(e.to_string()))?;
-        
+        message
+            .encode(&mut buf)
+            .map_err(|e| Error::ProtoSerialization(e.to_string()))?;
+
         self.stream.write_all(&len_bytes).await?;
         self.stream.write_all(&buf).await?;
         self.stream.flush().await?;
-        
+
         Ok(())
     }
 }

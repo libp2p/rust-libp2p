@@ -37,11 +37,11 @@ pub fn parse_webrtc_dial_addr(addr: &Multiaddr) -> Option<(SocketAddr, Fingerpri
             let fingerprint = Fingerprint::try_from_multihash(cert_hash)?;
 
             (port, fingerprint)
-        },
+        }
         (Protocol::Udp(port), Protocol::WebRTC, Protocol::Certhash(cert_hash)) => {
             let fingerprint = Fingerprint::try_from_multihash(cert_hash)?;
             (port, fingerprint)
-        },
+        }
         _ => return None,
     };
 

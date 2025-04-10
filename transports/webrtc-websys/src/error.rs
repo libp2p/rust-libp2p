@@ -29,7 +29,7 @@ pub enum Error {
     Signaling(#[from] SignalingError),
 
     #[error("Serialization error: {0}")]
-    ProtoSerialization(String)
+    ProtoSerialization(String),
 }
 
 /// New-type wrapper to hide `libp2p_noise` from the public API.

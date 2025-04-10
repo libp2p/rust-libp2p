@@ -50,7 +50,6 @@ impl Config {
 pub struct BrowserTransport {
     config: Config,
     pending_events: VecDeque<TransportEvent<<Self as Transport>::ListenerUpgrade, Error>>,
-    signaling: SignalingProtocol,
 }
 
 impl BrowserTransport {
@@ -58,7 +57,6 @@ impl BrowserTransport {
         Self {
             config,
             pending_events: VecDeque::new(),
-            signaling: SignalingProtocol,
         }
     }
 }
@@ -89,7 +87,7 @@ async fn dial_relay(relay_addr: Multiaddr, config: &Config) -> Result<Connection
     spawn_local(async move {
         while let Some(message) = ws_rx.next().await {
             let message_str = String::from_utf8(message).unwrap();
-            ws.send_with_str(&message_str);
+            ws.send_with_str(&message_str).unwrap();
         }
     });
 
@@ -146,11 +144,8 @@ impl Transport for BrowserTransport {
             .ok_or_else(|| TransportError::MultiaddrNotSupported(addr.clone()))?;
 
         let config = self.config.clone();
-        let signaling = self.signaling.clone();
         let addr = addr.clone();
 
-        // let (socket_addr, remote_fingerprint) = libp2p_webrtc_utils::parse_webrtc_dial_addr(&addr)
-        //     .ok_or_else(|| TransportError::MultiaddrNotSupported(addr.clone()))?;
         let socket_addr = extract_socket_addr(&relay_addr).unwrap();
         let remote_fingerprint = extract_fingerprint(&addr).unwrap();
 
@@ -167,7 +162,8 @@ impl Transport for BrowserTransport {
                     &JsValue::from_str("urls"),
                     &JsValue::from_str(&server),
                 )
-                .map_err(|err| TransportError::Other(err));
+                .map_err(|err| TransportError::Other(err))
+                .unwrap();
                 ice_servers.push(&ice_server);
             }
 
@@ -178,14 +174,18 @@ impl Transport for BrowserTransport {
             // Setup a relay connection and establish a new stream for WebRTC signaling
             let mut relay_connection = dial_relay(relay_addr.clone(), &config).await?;
 
-            let rtc_data_channel = relay_connection.rtc_connection().create_data_channel(SIGNALING_PROTOCOL_ID);
+            let rtc_data_channel = relay_connection
+                .rtc_connection()
+                .create_data_channel(SIGNALING_PROTOCOL_ID);
 
             let stream = relay_connection.new_stream_from_data_channel(rtc_data_channel);
 
             // Perform signaling over the WebSocket relay connection
-            signaling
+            let signaling_protocol = SignalingProtocol::new();
+            signaling_protocol
                 .perform_signaling(relay_connection.rtc_connection(), stream, true)
-                .await;
+                .await
+                .unwrap();
 
             let (peer_id, connection) =
                 upgrade::outbound(socket_addr, remote_fingerprint, config.keypair.clone()).await?;
