@@ -135,12 +135,9 @@ impl SecretKey {
     ///
     /// [RFC3278]: https://tools.ietf.org/html/rfc3278#section-8.2
     pub fn sign(&self, msg: &[u8]) -> Vec<u8> {
-        let digest = Sha256::new_with_prefix(msg);
+        use k256::ecdsa::signature::Signer;
 
-        self.0
-            .sign_digest_recoverable(digest)
-            .unwrap()
-            .0
+        Signer::<k256::ecdsa::Signature>::sign(&self.0, msg)
             .to_der()
             .to_bytes()
             .into_vec()
