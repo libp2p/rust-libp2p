@@ -431,9 +431,24 @@ where
     /// > in another `NetworkBehaviour` that provides peer and
     /// > address discovery, or known addresses of peers must be
     /// > managed via [`libp2p_swarm::Swarm::add_peer_address`].
-    /// > Addresses are automatically removed when dial attempts
-    /// > to them fail.
+    /// > Alternatively, [`Behaviour::send_request_with_addresses`]
+    /// > can be used. Addresses are automatically removed when
+    /// > dial attempts to them fail.
     pub fn send_request(&mut self, peer: &PeerId, request: TCodec::Request) -> OutboundRequestId {
+        self.send_request_with_addresses(peer, request, Vec::new())
+    }
+
+    /// Initiates sending a request, using provided addresses if a connection needs to be
+    /// established.
+    ///
+    /// This is very similar to [`Behaviour::send_request`], but uses provided addresses when
+    /// dialing currently not connected peer.
+    pub fn send_request_with_addresses(
+        &mut self,
+        peer: &PeerId,
+        request: TCodec::Request,
+        addresses: Vec<Multiaddr>,
+    ) -> OutboundRequestId {
         let request_id = self.next_outbound_request_id();
         let request = OutboundMessage {
             request_id,
@@ -443,7 +458,10 @@ where
 
         if let Some(request) = self.try_send_request(peer, request) {
             self.pending_events.push_back(ToSwarm::Dial {
-                opts: DialOpts::peer_id(*peer).build(),
+                opts: DialOpts::peer_id(*peer)
+                    .addresses(addresses)
+                    .extend_addresses_through_behaviour()
+                    .build(),
             });
             self.pending_outbound_requests
                 .entry(*peer)
