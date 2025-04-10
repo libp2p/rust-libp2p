@@ -10,8 +10,6 @@ use libp2p_core::{Negotiated, UpgradeInfo};
 use libp2p_identity::PeerId;
 
 use super::*;
-#[allow(deprecated)]
-use crate::bandwidth::BandwidthSinks;
 use crate::SwarmBuilder;
 
 pub struct OtherTransportPhase<T> {
@@ -171,28 +169,6 @@ impl<T: AuthenticatedMultiplexedTransport, Provider>
             .without_dns()
             .without_websocket()
             .with_relay_client(security_upgrade, multiplexer_upgrade)
-    }
-}
-impl<Provider, T: AuthenticatedMultiplexedTransport>
-    SwarmBuilder<Provider, OtherTransportPhase<T>>
-{
-    #[allow(deprecated)]
-    #[deprecated(note = "Use `with_bandwidth_metrics` instead.")]
-    pub fn with_bandwidth_logging(
-        self,
-    ) -> (
-        SwarmBuilder<
-            Provider,
-            BandwidthMetricsPhase<impl AuthenticatedMultiplexedTransport, NoRelayBehaviour>,
-        >,
-        Arc<BandwidthSinks>,
-    ) {
-        #[allow(deprecated)]
-        self.without_any_other_transports()
-            .without_dns()
-            .without_websocket()
-            .without_relay()
-            .with_bandwidth_logging()
     }
 }
 #[cfg(feature = "metrics")]
