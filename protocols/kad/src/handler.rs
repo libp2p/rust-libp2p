@@ -47,6 +47,7 @@ use crate::{
 };
 
 const MAX_NUM_STREAMS: usize = 32;
+const SUBSTREAM_TIMEOUT: Duration = Duration::from_secs(10);
 
 /// Protocol handler that manages substreams for the Kademlia protocol
 /// on a single connection with a peer.
@@ -462,7 +463,7 @@ impl Handler {
             next_connec_unique_id: UniqueConnecId(0),
             inbound_substreams: Default::default(),
             outbound_substreams: futures_bounded::FuturesTupleSet::new(
-                Duration::from_secs(10),
+                SUBSTREAM_TIMEOUT,
                 MAX_NUM_STREAMS,
             ),
             pending_streams: Default::default(),
