@@ -15,12 +15,12 @@ use std::{
 };
 
 use libp2p_core::{Multiaddr, PeerId};
-use libp2p_swarm::{DialError, FromSwarm, Swarm};
+use libp2p_swarm::{DialError, FromSwarm};
 use lru::LruCache;
 
 use super::Store;
 
-/// Event from the store and emitted to [`Swarm`].
+/// Event from the store and emitted to [`Swarm`](libp2p_swarm::Swarm).
 #[derive(Debug, Clone)]
 pub enum Event {
     /// Custom data of the peer has been updated.
@@ -33,7 +33,7 @@ pub enum Event {
 pub struct MemoryStore<T = ()> {
     /// The internal store.
     records: HashMap<PeerId, PeerRecord<T>>,
-    /// Events to emit to [`Behaviour`](crate::Behaviour) and [`Swarm`].
+    /// Events to emit to [`Behaviour`](crate::Behaviour) and [`Swarm`](libp2p_swarm::Swarm).
     pending_events: VecDeque<crate::store::Event<Event>>,
     /// Config of the store.
     config: Config,
@@ -56,7 +56,8 @@ impl<T> MemoryStore<T> {
     ///
     /// The added address will NOT be removed from the store on dial failure. If the added address
     /// is supposed to be cleared from the store on dial failure, add it by emitting
-    /// [`FromSwarm::NewExternalAddrOfPeer`] to the swarm, e.g. via [`Swarm::add_peer_address`].
+    /// [`FromSwarm::NewExternalAddrOfPeer`] to the swarm, e.g. via
+    /// [`Swarm::add_peer_address`](libp2p_swarm::Swarm::add_peer_address).
     ///
     /// Returns `true` if the address is new.
     pub fn update_address(&mut self, peer: &PeerId, address: &Multiaddr) -> bool {
