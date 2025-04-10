@@ -28,6 +28,7 @@ hickory-proto = { workspace = true, features = ["mdns"] }
 [features]
 tokio = ["dep:tokio", "if-watch/tokio"]
 async-io = ["dep:async-io", "dep:async-std", "if-watch/smol"]
+# async-io feature is deprecated and will be removed in a future release
 
 [dev-dependencies]
 async-std = { version = "1.9.0", features = ["attributes"] }
