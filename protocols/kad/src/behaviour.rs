@@ -2481,11 +2481,7 @@ where
                                 let distance = source_key.distance(&target_key);
                                 cache_candidates.insert(distance, source);
                                 if cache_candidates.len() > max_peers as usize {
-                                    // TODO: `pop_last()` would be nice once stabilised.
-                                    // See https://github.com/rust-lang/rust/issues/62924.
-                                    let last =
-                                        *cache_candidates.keys().next_back().expect("len > 0");
-                                    cache_candidates.remove(&last);
+                                    cache_candidates.pop_last();
                                 }
                             }
                         }
