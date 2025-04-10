@@ -145,6 +145,23 @@ impl<T> MemoryStore<T> {
         self.records.insert(*peer, new_record);
     }
 
+    /// Get a mutable reference to a peer's custom data. If it exists, the swarm is notified about
+    /// its modification, regardless of whether it will actually be modified.
+    pub fn get_custom_data_mut(&mut self, peer: &PeerId) -> Option<&mut T> {
+        // We have to do this separately to avoid a double borrow.
+        if self
+            .records
+            .get(peer)
+            .is_some_and(|r| r.get_custom_data().is_some())
+        {
+            self.push_event_and_wake(crate::store::Event::Store(Event::CustomDataUpdated(*peer)));
+        };
+
+        self.records
+            .get_mut(peer)
+            .and_then(|r| r.get_custom_data_mut())
+    }
+
     /// Iterate over all internal records.
     pub fn record_iter(&self) -> impl Iterator<Item = (&PeerId, &PeerRecord<T>)> {
         self.records.iter()
@@ -286,10 +303,10 @@ impl Config {
     /// If set to `true`, the store will remove addresses if the swarm indicates a dial failure.
     /// More specifically:
     /// - Failed dials indicated in [`ConnectionEstablished`](libp2p_swarm::behaviour::ConnectionEstablished)'s
-    /// `failed_addresses` will be removed.
+    ///   `failed_addresses` will be removed.
     /// - [`DialError::LocalPeerId`] causes the full peer entry to be removed.
     /// - On [`DialError::WrongPeerId`], the address will be removed from the incorrect peer's
-    /// record and re-added to the correct peer's record.
+    ///   record and re-added to the correct peer's record.
     /// - On [`DialError::Transport`], all failed addresses will be removed.
     ///
     /// If set to `false`, the logic above is not applied and the store only removes addresses
@@ -354,6 +371,10 @@ impl<T> PeerRecord<T> {
 
     pub fn get_custom_data(&self) -> Option<&T> {
         self.custom_data.as_ref()
+    }
+
+    pub fn get_custom_data_mut(&mut self) -> Option<&mut T> {
+        self.custom_data.as_mut()
     }
 
     pub fn take_custom_data(&mut self) -> Option<T> {
