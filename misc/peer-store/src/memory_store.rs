@@ -250,11 +250,9 @@ impl<T> Store for MemoryStore<T> {
     }
 }
 
-/// Config for [`MemoryStore`].
+/// Config for [`MemoryStore`]. The available options are documented via their setters.
 #[derive(Debug, Clone)]
 pub struct Config {
-    /// The capacity of an address store.
-    /// The least active address will be discarded to make room for new address.
     record_capacity: NonZeroUsize,
     remove_addr_on_dial_error: bool,
 }
@@ -269,12 +267,14 @@ impl Default for Config {
 }
 
 impl Config {
-    /// Capacity for address records.
-    /// The least active address will be dropped to make room for new address.
     pub fn record_capacity(&self) -> &NonZeroUsize {
         &self.record_capacity
     }
-    /// Set the capacity for address records.
+    /// The capacity of an address store.
+    ///
+    /// The least active address will be discarded to make room for new address.
+    ///
+    /// `8` by default.
     pub fn set_record_capacity(mut self, capacity: NonZeroUsize) -> Self {
         self.record_capacity = capacity;
         self
