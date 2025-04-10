@@ -264,8 +264,7 @@ impl State {
                     write_closed: false,
                     ..
                 } => {
-                    return Err(io::Error::new(
-                        io::ErrorKind::Other,
+                    return Err(io::Error::other(
                         "cannot close read half while closing write half",
                     ))
                 }
@@ -308,8 +307,7 @@ impl State {
                 State::ClosingWrite {
                     read_closed: false, ..
                 } => {
-                    return Err(io::Error::new(
-                        io::ErrorKind::Other,
+                    return Err(io::Error::other(
                         "cannot close write half while closing read half",
                     ))
                 }
