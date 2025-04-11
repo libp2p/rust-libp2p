@@ -1053,7 +1053,14 @@ where
             .store
             .providers(&key)
             .into_iter()
-            .filter(|p| !p.is_expired(Instant::now()))
+            .filter(|p| {
+                if p.is_expired(Instant::now()) {
+                    self.store.remove_provider(&key, &p.provider);
+                    false
+                } else {
+                    true
+                }
+            })
             .map(|p| p.provider)
             .collect();
 
