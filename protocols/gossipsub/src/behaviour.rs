@@ -1004,9 +1004,9 @@ where
             self.fanout_last_pub.remove(topic_hash);
         }
 
-        let fanaout_added = added_peers.len();
+        let fanout_added = added_peers.len();
         if let Some(m) = self.metrics.as_mut() {
-            m.peers_included(topic_hash, Inclusion::Fanout, fanaout_added)
+            m.peers_included(topic_hash, Inclusion::Fanout, fanout_added)
         }
 
         // check if we need to get more peers, which we randomly select
@@ -1033,7 +1033,7 @@ where
             mesh_peers.extend(new_peers);
         }
 
-        let random_added = added_peers.len() - fanaout_added;
+        let random_added = added_peers.len() - fanout_added;
         if let Some(m) = self.metrics.as_mut() {
             m.peers_included(topic_hash, Inclusion::Random, random_added)
         }
