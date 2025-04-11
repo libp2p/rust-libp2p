@@ -964,12 +964,6 @@ where
     fn join(&mut self, topic_hash: &TopicHash) {
         tracing::debug!(topic=%topic_hash, "Running JOIN for topic");
 
-        // if we are already in the mesh, return
-        if self.mesh.contains_key(topic_hash) {
-            tracing::debug!(topic=%topic_hash, "JOIN: The topic is already in the mesh, ignoring JOIN");
-            return;
-        }
-
         let mut added_peers = HashSet::new();
 
         if let Some(m) = self.metrics.as_mut() {
