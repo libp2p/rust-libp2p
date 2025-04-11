@@ -720,7 +720,7 @@ where
     where
         K: Into<kbucket::Key<K>> + Into<Vec<u8>> + Clone,
     {
-        self.get_closest_peers_inner(key, None)
+        self.get_closest_peers_inner(key, K_VALUE)
     }
 
     /// Initiates an iterative query for the closest peers to the given key.
@@ -738,10 +738,10 @@ where
         // since it would involve forging a new key and additional requests.
         // Hence bound to K_VALUE here to set clear expectation and prevent unexpected behaviour.
         let capped_num_results = std::cmp::min(num_results, K_VALUE);
-        self.get_closest_peers_inner(key, Some(capped_num_results))
+        self.get_closest_peers_inner(key, capped_num_results)
     }
 
-    fn get_closest_peers_inner<K>(&mut self, key: K, num_results: Option<NonZeroUsize>) -> QueryId
+    fn get_closest_peers_inner<K>(&mut self, key: K, num_results: NonZeroUsize) -> QueryId
     where
         K: Into<kbucket::Key<K>> + Into<Vec<u8>> + Clone,
     {
@@ -778,7 +778,7 @@ where
         self.kbuckets
             .closest(key)
             .filter(move |e| e.node.key.preimage() != source)
-            .take(self.queries.config().replication_factor.get())
+            .take(K_VALUE.get())
             .map(KadPeer::from)
     }
 
@@ -3205,8 +3205,8 @@ pub enum QueryInfo {
         key: Vec<u8>,
         /// Current index of events.
         step: ProgressStep,
-        /// If required, `num_results` specifies expected responding peers
-        num_results: Option<NonZeroUsize>,
+        /// Specifies expected number of responding peers
+        num_results: NonZeroUsize,
     },
 
     /// A (repeated) query initiated by [`Behaviour::get_providers`].
