@@ -302,7 +302,8 @@ impl Config {
     }
     /// If set to `true`, the store will remove addresses if the swarm indicates a dial failure.
     /// More specifically:
-    /// - Failed dials indicated in [`ConnectionEstablished`](libp2p_swarm::behaviour::ConnectionEstablished)'s
+    /// - Failed dials indicated in
+    ///   [`ConnectionEstablished`](libp2p_swarm::behaviour::ConnectionEstablished)'s
     ///   `failed_addresses` will be removed.
     /// - [`DialError::LocalPeerId`] causes the full peer entry to be removed.
     /// - On [`DialError::WrongPeerId`], the address will be removed from the incorrect peer's
