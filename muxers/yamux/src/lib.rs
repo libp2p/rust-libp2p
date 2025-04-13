@@ -437,11 +437,11 @@ impl From<Error> for io::Error {
         match err.0 {
             Either::Left(err) => match err {
                 yamux012::ConnectionError::Io(e) => e,
-                e => io::Error::new(io::ErrorKind::Other, e),
+                e => io::Error::other(e),
             },
             Either::Right(err) => match err {
                 yamux013::ConnectionError::Io(e) => e,
-                e => io::Error::new(io::ErrorKind::Other, e),
+                e => io::Error::other(e),
             },
         }
     }
