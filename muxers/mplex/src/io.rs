@@ -713,8 +713,7 @@ where
                 substream=%id,
                 "Received unexpected `Open` frame for open substream",
             );
-            return self.on_error(io::Error::new(
-                io::ErrorKind::Other,
+            return self.on_error(io::Error::other(
                 "Protocol error: Received `Open` frame for open substream.",
             ));
         }
@@ -890,7 +889,7 @@ where
     /// i.e. is not closed and did not encounter a fatal error.
     fn guard_open(&self) -> io::Result<()> {
         match &self.status {
-            Status::Closed => Err(io::Error::new(io::ErrorKind::Other, "Connection is closed")),
+            Status::Closed => Err(io::Error::other("Connection is closed")),
             Status::Err(e) => Err(io::Error::new(e.kind(), e.to_string())),
             Status::Open => Ok(()),
         }
@@ -900,10 +899,7 @@ where
     /// has not been reached.
     fn check_max_pending_frames(&mut self) -> io::Result<()> {
         if self.pending_frames.len() >= self.config.max_substreams + EXTRA_PENDING_FRAMES {
-            return self.on_error(io::Error::new(
-                io::ErrorKind::Other,
-                "Too many pending frames.",
-            ));
+            return self.on_error(io::Error::other("Too many pending frames."));
         }
         Ok(())
     }

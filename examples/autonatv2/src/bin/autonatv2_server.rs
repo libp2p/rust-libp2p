@@ -14,9 +14,9 @@ use libp2p::{
 use rand::rngs::OsRng;
 
 #[derive(Debug, Parser)]
-#[clap(name = "libp2p autonatv2 server")]
+#[command(name = "libp2p autonatv2 server")]
 struct Opt {
-    #[clap(short, long, default_value_t = 0)]
+    #[arg(short, long, default_value_t = 0)]
     listen_port: u16,
 }
 

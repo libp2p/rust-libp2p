@@ -412,7 +412,7 @@ impl TryFrom<u8> for Action {
             4 => Ok(Action::FailOnWriteResponse),
             5 => Ok(Action::TimeoutOnWriteResponse),
             6 => Ok(Action::FailOnMaxStreams),
-            _ => Err(io::Error::new(io::ErrorKind::Other, "invalid action")),
+            _ => Err(io::Error::other("invalid action")),
         }
     }
 }
@@ -441,9 +441,7 @@ impl Codec for TestCodec {
         assert_eq!(buf.len(), 1);
 
         match buf[0].try_into()? {
-            Action::FailOnReadRequest => {
-                Err(io::Error::new(io::ErrorKind::Other, "FailOnReadRequest"))
-            }
+            Action::FailOnReadRequest => Err(io::Error::other("FailOnReadRequest")),
             action => Ok(action),
         }
     }
@@ -466,9 +464,7 @@ impl Codec for TestCodec {
         assert_eq!(buf.len(), 1);
 
         match buf[0].try_into()? {
-            Action::FailOnReadResponse => {
-                Err(io::Error::new(io::ErrorKind::Other, "FailOnReadResponse"))
-            }
+            Action::FailOnReadResponse => Err(io::Error::other("FailOnReadResponse")),
             Action::TimeoutOnReadResponse => loop {
                 sleep(Duration::MAX).await;
             },
@@ -486,9 +482,7 @@ impl Codec for TestCodec {
         T: AsyncWrite + Unpin + Send,
     {
         match req {
-            Action::FailOnWriteRequest => {
-                Err(io::Error::new(io::ErrorKind::Other, "FailOnWriteRequest"))
-            }
+            Action::FailOnWriteRequest => Err(io::Error::other("FailOnWriteRequest")),
             action => {
                 let bytes = [action.into()];
                 io.write_all(&bytes).await?;
@@ -507,9 +501,7 @@ impl Codec for TestCodec {
         T: AsyncWrite + Unpin + Send,
     {
         match res {
-            Action::FailOnWriteResponse => {
-                Err(io::Error::new(io::ErrorKind::Other, "FailOnWriteResponse"))
-            }
+            Action::FailOnWriteResponse => Err(io::Error::other("FailOnWriteResponse")),
             Action::TimeoutOnWriteResponse => loop {
                 sleep(Duration::MAX).await;
             },

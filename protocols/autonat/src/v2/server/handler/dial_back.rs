@@ -127,6 +127,6 @@ async fn perform_dial_back(
     };
     back_channel
         .send(res)
-        .map_err(|_| io::Error::new(io::ErrorKind::Other, "send error"))?;
+        .map_err(|_| io::Error::other("send error"))?;
     Ok(())
 }

@@ -317,10 +317,7 @@ mod tests {
             .map(|addr| {
                 (
                     addr.clone(),
-                    TransportError::Other(io::Error::new(
-                        io::ErrorKind::Other,
-                        MemoryTransportError::Unreachable,
-                    )),
+                    TransportError::Other(io::Error::other(MemoryTransportError::Unreachable)),
                 )
             })
             .collect();

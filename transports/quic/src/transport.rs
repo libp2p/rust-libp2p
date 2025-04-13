@@ -128,7 +128,7 @@ impl<P: Provider> GenTransport<P> {
                 let _ = endpoint_config;
                 let _ = server_config;
                 let _ = socket;
-                let err = std::io::Error::new(std::io::ErrorKind::Other, "no async runtime found");
+                let err = std::io::Error::other("no async runtime found");
                 Err(Error::Io(err))
             }
         }

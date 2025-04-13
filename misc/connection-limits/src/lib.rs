@@ -692,8 +692,7 @@ mod tests {
             _local_addr: &Multiaddr,
             _remote_addr: &Multiaddr,
         ) -> Result<THandler<Self>, ConnectionDenied> {
-            Err(ConnectionDenied::new(std::io::Error::new(
-                std::io::ErrorKind::Other,
+            Err(ConnectionDenied::new(std::io::Error::other(
                 "ConnectionDenier",
             )))
         }
@@ -706,8 +705,7 @@ mod tests {
             _role_override: Endpoint,
             _port_use: PortUse,
         ) -> Result<THandler<Self>, ConnectionDenied> {
-            Err(ConnectionDenied::new(std::io::Error::new(
-                std::io::ErrorKind::Other,
+            Err(ConnectionDenied::new(std::io::Error::other(
                 "ConnectionDenier",
             )))
         }

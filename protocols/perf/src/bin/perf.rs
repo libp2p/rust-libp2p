@@ -35,7 +35,7 @@ use tracing_subscriber::EnvFilter;
 use web_time::{Duration, Instant};
 
 #[derive(Debug, Parser)]
-#[clap(name = "libp2p perf client")]
+#[command(name = "libp2p perf client")]
 struct Opts {
     #[arg(long)]
     server_address: Option<SocketAddr>,
@@ -47,7 +47,7 @@ struct Opts {
     download_bytes: Option<usize>,
 
     /// Run in server mode.
-    #[clap(long)]
+    #[arg(long)]
     run_server: bool,
 }
 

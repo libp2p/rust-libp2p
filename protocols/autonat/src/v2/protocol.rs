@@ -252,10 +252,7 @@ pub(crate) async fn dial_back(stream: impl AsyncWrite + Unpin, nonce: Nonce) -> 
     let msg = proto::DialBack { nonce };
     let mut framed = FramedWrite::new(stream, Codec::<proto::DialBack>::new(DIAL_BACK_MAX_SIZE));
 
-    framed
-        .send(msg)
-        .await
-        .map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
+    framed.send(msg).await.map_err(io::Error::other)?;
 
     Ok(())
 }
@@ -277,10 +274,7 @@ pub(crate) async fn dial_back_response(stream: impl AsyncWrite + Unpin) -> io::R
         stream,
         Codec::<proto::DialBackResponse>::new(DIAL_BACK_MAX_SIZE),
     );
-    framed
-        .send(msg)
-        .await
-        .map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
+    framed.send(msg).await.map_err(io::Error::other)?;
 
     Ok(())
 }

@@ -354,7 +354,7 @@ mod tests {
     fn error_does_not_panic() {
         task::block_on(async {
             let sink = make_sink(io::stdout(), |mut _stdout, _action| async move {
-                Err(io::Error::new(io::ErrorKind::Other, "oh no"))
+                Err(io::Error::other("oh no"))
             });
 
             futures::pin_mut!(sink);

@@ -1606,3 +1606,60 @@ fn get_providers_limit_n_2() {
 fn get_providers_limit_n_5() {
     get_providers_limit::<5>();
 }
+
+// Test that nodes respond with K amount of peers even when replication factor is set lower than K.
+#[test]
+fn get_closest_peers_should_return_up_to_k_peers() {
+    let k_value = K_VALUE.get();
+
+    // Rplication factor should not influence the amount of peers returned in `GetClosestPeers`.
+    for replication_factor in 5..k_value + 1 {
+        // Should be enough nodes for every node to have >= K nodes in their RT.
+        let num_of_nodes = 3 * k_value;
+
+        let mut cfg = Config::new(PROTOCOL_NAME);
+        cfg.set_replication_factor(NonZeroUsize::new(replication_factor).unwrap());
+
+        let swarms = build_connected_nodes_with_config(num_of_nodes, replication_factor - 1, cfg);
+        let mut swarms = swarms
+            .into_iter()
+            .map(|(_addr, swarm)| swarm)
+            .collect::<Vec<_>>();
+
+        // Ask first node to search for a random peer.
+        let search_target = PeerId::random();
+        swarms[0].behaviour_mut().get_closest_peers(search_target);
+
+        block_on(poll_fn(move |ctx| {
+            for swarm in &mut swarms {
+                loop {
+                    match swarm.poll_next_unpin(ctx) {
+                        Poll::Ready(Some(SwarmEvent::Behaviour(
+                            Event::OutboundQueryProgressed {
+                                result: QueryResult::GetClosestPeers(Ok(ok)),
+                                ..
+                            },
+                        ))) => {
+                            assert_eq!(&ok.key[..], search_target.to_bytes().as_slice());
+                            // Verify that we get K_VALUE amount of peers even with lower
+                            // replication factor.
+                            assert_eq!(
+                                ok.peers.len(),
+                                k_value,
+                                "Expected K_VALUE ({}) peers but got {}",
+                                k_value,
+                                ok.peers.len()
+                            );
+                            return Poll::Ready(());
+                        }
+                        // Ignore any other event.
+                        Poll::Ready(Some(_)) => (),
+                        e @ Poll::Ready(_) => panic!("Unexpected return value: {e:?}"),
+                        Poll::Pending => break,
+                    }
+                }
+            }
+            Poll::Pending
+        }))
+    }
+}

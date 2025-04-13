@@ -1,4 +1,8 @@
-## 0.16.1
+## 0.17.0
+
+- Update `prometheus-client` to `0.23.0`.
+  See [PR 5960](https://github.com/libp2p/rust-libp2p/pull/5960).
+
 - Add `ReservationClosed` as a relay metric.
   See [PR 5869](https://github.com/libp2p/rust-libp2p/pull/5869).
 

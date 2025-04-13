@@ -171,5 +171,5 @@ impl<O> FusedStream for Boxed<O> {
 }
 
 fn box_err<E: Error + Send + Sync + 'static>(e: E) -> io::Error {
-    io::Error::new(io::ErrorKind::Other, e)
+    io::Error::other(e)
 }

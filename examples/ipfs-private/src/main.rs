@@ -138,7 +138,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
             let gossipsub_config = gossipsub::ConfigBuilder::default()
                 .max_transmit_size(262144)
                 .build()
-                .map_err(|msg| io::Error::new(io::ErrorKind::Other, msg))?; // Temporary hack because `build` does not return a proper `std::error::Error`.
+                .map_err(io::Error::other)?; // Temporary hack because `build` does not return a proper `std::error::Error`.
             Ok(MyBehaviour {
                 gossipsub: gossipsub::Behaviour::new(
                     gossipsub::MessageAuthenticity::Signed(key.clone()),
