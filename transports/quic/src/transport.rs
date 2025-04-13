@@ -117,17 +117,6 @@ impl<P: Provider> GenTransport<P> {
                     quinn::Endpoint::new(endpoint_config, server_config, socket, runtime)?;
                 Ok(endpoint)
             }
-            #[cfg(feature = "async-std")]
-            #[deprecated(
-                since = "0.12.1",
-                note = "async_std has been discontinued. Please use tokio instead."
-            )]
-            Runtime::AsyncStd => {
-                let runtime = std::sync::Arc::new(quinn::AsyncStdRuntime);
-                let endpoint =
-                    quinn::Endpoint::new(endpoint_config, server_config, socket, runtime)?;
-                Ok(endpoint)
-            }
             Runtime::Dummy => {
                 let _ = endpoint_config;
                 let _ = server_config;
@@ -751,7 +740,7 @@ fn socketaddr_to_multiaddr(socket_addr: &SocketAddr, version: ProtocolVersion) -
 }
 
 #[cfg(test)]
-#[cfg(any(feature = "async-std", feature = "tokio"))]
+#[cfg(any(feature = "tokio"))]
 mod tests {
     use futures::future::poll_fn;
 
