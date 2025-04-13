@@ -102,13 +102,7 @@ impl Config {
 /// Setup the rustls client configuration.
 fn client_root_store() -> rustls::RootCertStore {
     let mut client_root_store = rustls::RootCertStore::empty();
-    client_root_store.extend(webpki_roots::TLS_SERVER_ROOTS.iter().map(|ta| {
-        rustls::pki_types::TrustAnchor {
-            subject: ta.subject.into(),
-            subject_public_key_info: ta.spki.into(),
-            name_constraints: ta.name_constraints.map(|v| v.into()),
-        }
-    }));
+    client_root_store.extend(webpki_roots::TLS_SERVER_ROOTS.iter().cloned());
     client_root_store
 }
 
