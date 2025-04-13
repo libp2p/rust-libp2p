@@ -78,47 +78,6 @@ pub trait Abort {
     fn abort(self);
 }
 
-/// The type of a [`Behaviour`] using the `async-io` implementation.
-#[cfg(feature = "async-io")]#[deprecated(
-    since = "0.47.0",
-    note = "async-io has been discontinued. Please use the tokio feature instead."
-)]
-pub mod async_io {
-    use std::future::Future;
-
-    use async_std::task::JoinHandle;
-    use if_watch::smol::IfWatcher;
-
-    use super::Provider;
-    use crate::behaviour::{socket::asio::AsyncUdpSocket, timer::asio::AsyncTimer, Abort};
-
-    #[doc(hidden)]
-    pub enum AsyncIo {}
-
-    impl Provider for AsyncIo {
-        type Socket = AsyncUdpSocket;
-        type Timer = AsyncTimer;
-        type Watcher = IfWatcher;
-        type TaskHandle = JoinHandle<()>;
-
-        fn new_watcher() -> Result<Self::Watcher, std::io::Error> {
-            IfWatcher::new()
-        }
-
-        fn spawn(task: impl Future<Output = ()> + Send + 'static) -> JoinHandle<()> {
-            async_std::task::spawn(task)
-        }
-    }
-
-    impl Abort for JoinHandle<()> {
-        fn abort(self) {
-            async_std::task::spawn(self.cancel());
-        }
-    }
-
-    pub type Behaviour = super::Behaviour<AsyncIo>;
-}
-
 /// The type of a [`Behaviour`] using the `tokio` implementation.
 #[cfg(feature = "tokio")]
 pub mod tokio {
