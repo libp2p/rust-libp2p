@@ -25,11 +25,6 @@
 //! This crate provides [`tokio::Transport`], depending on
 //! the enabled features, which implement the [`libp2p_core::Transport`] trait for use as a
 //! transport with `libp2p-core` or `libp2p-swarm`.
-//!
-//! This crate provides [`tokio::Transport`],
-//! which implement the [`libp2p_core::Transport`] trait for use as a
-//! transport with `libp2p-core` or `libp2p-swarm`.
-//!
 
 #![cfg_attr(docsrs, feature(doc_cfg, doc_auto_cfg))]
 
