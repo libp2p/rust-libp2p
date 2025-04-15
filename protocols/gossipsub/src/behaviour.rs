@@ -2164,9 +2164,9 @@ where
             if peers.len() > self.config.mesh_n_high() {
                 tracing::debug!(
                     topic=%topic_hash,
-                    "HEARTBEAT: Mesh high. Topic contains: {} needs: {}",
+                    "HEARTBEAT: Mesh high. Topic contains: {} will reduce to: {}",
                     peers.len(),
-                    self.config.mesh_n_high()
+                    self.config.mesh_n()
                 );
                 let excess_peer_no = peers.len() - self.config.mesh_n();
 
