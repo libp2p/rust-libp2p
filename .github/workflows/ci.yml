@@ -338,7 +338,7 @@ jobs:
 
       - name: Ensure `full` feature contains all features
         run: |
-          ALL_FEATURES=$(cargo metadata --format-version=1 --no-deps | jq -r '.packages[] | select(.name == "libp2p") | .features | keys | map(select(. != "full")) | sort | join(" ")')
+          ALL_FEATURES=$(cargo metadata --format-version=1 --no-deps | jq -r '.packages[] | select(.name == "libp2p") | .features | keys | map(select(. != "full" and . != "k-4" and . != "k-8" and . != "k-12" and . != "k-16")) | sort | join(" ")')
           FULL_FEATURE=$(cargo metadata --format-version=1 --no-deps | jq -r '.packages[] | select(.name == "libp2p") | .features["full"] | sort | join(" ")')
 
           echo "$ALL_FEATURES";
