@@ -2137,7 +2137,7 @@ where
                     topic=%topic_hash,
                     "HEARTBEAT: Mesh low. Topic contains: {} needs: {}",
                     peers.len(),
-                    self.config.mesh_n_low()
+                    self.config.mesh_n()
                 );
                 // not enough peers - get mesh_n - current_length more
                 let desired_peers = self.config.mesh_n() - peers.len();
