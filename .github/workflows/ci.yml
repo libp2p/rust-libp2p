@@ -20,9 +20,9 @@ jobs:
     name: Test ${{ matrix.crate }}
     runs-on: ${{ fromJSON(
       github.repository == 'libp2p/rust-libp2p' && (
-        (contains(fromJSON('["libp2p-webrtc", "libp2p"]'), matrix.crate) && '["self-hosted", "linux", "x64", "2xlarge"]') ||
-        (contains(fromJSON('["libp2p-quic", "libp2p-perf"]'), matrix.crate) && '["self-hosted", "linux", "x64", "xlarge"]') ||
-        '["self-hosted", "linux", "x64", "large"]'
+      (contains(fromJSON('["libp2p-webrtc", "libp2p"]'), matrix.crate) && '["self-hosted", "linux", "x64", "2xlarge"]') ||
+      (contains(fromJSON('["libp2p-quic", "libp2p-perf"]'), matrix.crate) && '["self-hosted", "linux", "x64", "xlarge"]') ||
+      '["self-hosted", "linux", "x64", "large"]'
       ) || '"ubuntu-latest"') }}
     timeout-minutes: 10
     needs: gather_published_crates
@@ -47,7 +47,25 @@ jobs:
           save-if: false
 
       - name: Run all tests
-        run: cargo test --package "$CRATE" --all-features
+        run: |
+          if [ "$CRATE" = "libp2p-kad" ]; then
+            echo "Running tests for libp2p-kad with k-20 (default)"
+            cargo test --package libp2p-kad --all-features
+          
+            echo "Running tests for libp2p-kad with k-4"
+            cargo test --package libp2p-kad --features serde,k-4
+          
+            echo "Running tests for libp2p-kad with k-8"
+            cargo test --package libp2p-kad --features serde,k-8
+          
+            echo "Running tests for libp2p-kad with k-12"
+            cargo test --package libp2p-kad --features serde,k-12
+          
+            echo "Running tests for libp2p-kad with k-16"
+            cargo test --package libp2p-kad --features serde,k-16
+          else
+            cargo test --package "$CRATE" --all-features
+          fi
 
       - name: Check if we compile without any features activated
         run: cargo build --package "$CRATE" --no-default-features
@@ -382,10 +400,10 @@ jobs:
 
       - name: Ensure generated files are unmodified # https://stackoverflow.com/a/5737794
         run: |
-            git_status=$(git status --porcelain)
-
-            echo $git_status
-            test -z "$git_status"
+          git_status=$(git status --porcelain)
+          
+          echo $git_status
+          test -z "$git_status"
 
   ensure-lockfile-uptodate:
     name: Ensure that `Cargo.lock` is up-to-date
@@ -398,7 +416,7 @@ jobs:
   cargo-deny:
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v4
-    - uses: EmbarkStudios/cargo-deny-action@v2
-      with:
-        command: check advisories bans licenses sources
+      - uses: actions/checkout@v4
+      - uses: EmbarkStudios/cargo-deny-action@v2
+        with:
+          command: check advisories bans licenses sources
