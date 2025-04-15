@@ -30,19 +30,19 @@ struct ConnectionState {
 pub trait Signaling {
     async fn perform_signaling(
         &self,
-        connection: web_sys::RtcPeerConnection,
+        connection: &web_sys::RtcPeerConnection,
         stream: Stream,
         is_initiator: bool,
     ) -> Result<(), Error>;
 }
 
 /// Implementation of the WebRTC signaling protocol.
-pub(crate) struct SignalingProtocol {
+pub struct SignalingProtocol {
     states: Rc<RefCell<ConnectionState>>,
 }
 
 impl SignalingProtocol {
-    pub(crate) fn new() -> Self {
+    pub fn new() -> Self {
         Self {
             states: Rc::new(RefCell::new(ConnectionState {
                 ice_connection: RtcIceConnectionState::New,
@@ -57,7 +57,7 @@ impl SignalingProtocol {
 impl Signaling for SignalingProtocol {
     async fn perform_signaling(
         &self,
-        connection: web_sys::RtcPeerConnection,
+        connection: &web_sys::RtcPeerConnection,
         stream: Stream,
         is_initiator: bool,
     ) -> Result<(), Error> {
@@ -204,7 +204,7 @@ impl Signaling for SignalingProtocol {
                 )
             })?;
 
-            // Set remote description
+            // Set remote description with remote offer
             let offer_init = RtcSessionDescriptionInit::new(RtcSdpType::Offer);
             offer_init.set_sdp(&offer_message.data);
 
@@ -212,7 +212,7 @@ impl Signaling for SignalingProtocol {
                 .await
                 .map_err(|_| Error::Js("Could not set remote description".to_string()))?;
 
-            // Create and set local description
+            // Create answer and set local description
             let answer = JsFuture::from(connection.create_answer()).await?;
             let answer_sdp = js_sys::Reflect::get(&answer, &JsValue::from_str("sdp"))?
                 .as_string()

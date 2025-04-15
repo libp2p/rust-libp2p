@@ -87,6 +87,16 @@ impl Connection {
         stream
     }
 
+    /// Open a new stream over a [`RtcDataChannel`].
+    pub fn new_stream(&mut self, stream_id: &str) -> Result<Stream, Error> {
+        let data_channel = self.inner.inner.create_data_channel(stream_id);
+        data_channel.set_binary_type(RtcDataChannelType::Arraybuffer);
+
+        let stream = self.new_stream_from_data_channel(data_channel);
+
+        Ok(stream)
+    }
+
     pub fn rtc_connection(&self) -> web_sys::RtcPeerConnection {
         self.inner.inner.clone()
     }

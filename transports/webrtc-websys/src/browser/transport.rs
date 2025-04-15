@@ -1,7 +1,9 @@
 use std::{
-    collections::VecDeque,
+    cell::RefCell,
+    collections::{HashMap, VecDeque},
     net::SocketAddr,
     pin::Pin,
+    rc::Rc,
     task::{Context, Poll},
 };
 
@@ -14,7 +16,7 @@ use libp2p_identity::{Keypair, PeerId};
 use libp2p_webrtc_utils::Fingerprint;
 use wasm_bindgen::{prelude::*, JsValue};
 use wasm_bindgen_futures::spawn_local;
-use web_sys::{RtcConfiguration, WebSocket};
+use web_sys::{RtcConfiguration, RtcDataChannelInit, WebSocket};
 
 use crate::{
     connection::Connection,
@@ -24,7 +26,7 @@ use crate::{
 
 use super::{Signaling, SignalingProtocol, SIGNALING_PROTOCOL_ID};
 
-/// Configuration for WebRTC browser-to-browser transport
+/// Configuration for WebRTC browser transport
 #[derive(Debug, Clone)]
 pub struct Config {
     pub keypair: Keypair,
@@ -50,6 +52,7 @@ impl Config {
 pub struct BrowserTransport {
     config: Config,
     pending_events: VecDeque<TransportEvent<<Self as Transport>::ListenerUpgrade, Error>>,
+    active_relay_connections: HashMap<Multiaddr, Rc<RefCell<Connection>>>,
 }
 
 impl BrowserTransport {
@@ -57,7 +60,13 @@ impl BrowserTransport {
         Self {
             config,
             pending_events: VecDeque::new(),
+            active_relay_connections: HashMap::new(),
         }
+    }
+
+    /// Reserve a spot on the circuit relay.
+    pub async fn reserve_relay(&mut self, relay_addr: &Multiaddr) {
+        let mut relay_connection = dial_relay(relay_addr.clone(), &self.config).await.unwrap();
     }
 }
 
@@ -132,67 +141,7 @@ impl Transport for BrowserTransport {
         dial_opts: libp2p_core::transport::DialOpts,
     ) -> std::result::Result<Self::Dial, TransportError<Self::Error>> {
         // Check if the browser WebRTC addr is valid
-        if !libp2p_webrtc_utils::is_valid_browser_webrtc_addr(&addr) {
-            return Err(TransportError::MultiaddrNotSupported(addr));
-        }
-
-        if dial_opts.role.is_listener() {
-            return Err(TransportError::MultiaddrNotSupported(addr));
-        }
-
-        let (relay_addr, target_peer) = extract_relay_and_target(&addr)
-            .ok_or_else(|| TransportError::MultiaddrNotSupported(addr.clone()))?;
-
-        let config = self.config.clone();
-        let addr = addr.clone();
-
-        let socket_addr = extract_socket_addr(&relay_addr).unwrap();
-        let remote_fingerprint = extract_fingerprint(&addr).unwrap();
-
-        // Prepare the RtcConfiguration
-        let rtc_config = RtcConfiguration::new();
-
-        if !&config.stun_servers.is_empty() {
-            let ice_servers = js_sys::Array::new();
-
-            for server in &config.stun_servers {
-                let ice_server = js_sys::Object::new();
-                js_sys::Reflect::set(
-                    &ice_server,
-                    &JsValue::from_str("urls"),
-                    &JsValue::from_str(&server),
-                )
-                .map_err(|err| TransportError::Other(err))
-                .unwrap();
-                ice_servers.push(&ice_server);
-            }
-
-            rtc_config.set_ice_servers(&ice_servers);
-        }
-
-        Ok(async move {
-            // Setup a relay connection and establish a new stream for WebRTC signaling
-            let mut relay_connection = dial_relay(relay_addr.clone(), &config).await?;
-
-            let rtc_data_channel = relay_connection
-                .rtc_connection()
-                .create_data_channel(SIGNALING_PROTOCOL_ID);
-
-            let stream = relay_connection.new_stream_from_data_channel(rtc_data_channel);
-
-            // Perform signaling over the WebSocket relay connection
-            let signaling_protocol = SignalingProtocol::new();
-            signaling_protocol
-                .perform_signaling(relay_connection.rtc_connection(), stream, true)
-                .await
-                .unwrap();
-
-            let (peer_id, connection) =
-                upgrade::outbound(socket_addr, remote_fingerprint, config.keypair.clone()).await?;
-
-            Ok((peer_id, connection))
-        }
-        .boxed_local())
+        return Err(TransportError::MultiaddrNotSupported(addr));
     }
 
     fn poll(
@@ -227,27 +176,6 @@ fn extract_relay_and_target(addr: &Multiaddr) -> Option<(Multiaddr, PeerId)> {
     None
 }
 
-/// Extracts the socket address from a [`Multiaddr`].
-fn extract_socket_addr(addr: &Multiaddr) -> Result<SocketAddr, Error> {
-    let mut ip = None;
-    let mut port = None;
-
-    for proto in addr.iter() {
-        match proto {
-            Protocol::Ip4(ip_addr) => ip = Some(std::net::IpAddr::V4(ip_addr)),
-            Protocol::Ip6(ip_addr) => ip = Some(std::net::IpAddr::V6(ip_addr)),
-            Protocol::Tcp(p) | Protocol::Udp(p) => port = Some(p),
-            _ => {}
-        }
-    }
-
-    if let (Some(ip_addr), Some(port_num)) = (ip, port) {
-        Ok(SocketAddr::new(ip_addr, port_num))
-    } else {
-        Err(Error::InvalidMultiaddr("Missing IP address or port".into()))
-    }
-}
-
 /// Extracts fingerprint from a [`Multiaddr`].
 fn extract_fingerprint(addr: &Multiaddr) -> Result<Fingerprint, Error> {
     for proto in addr.iter() {
@@ -267,4 +195,25 @@ fn extract_fingerprint(addr: &Multiaddr) -> Result<Fingerprint, Error> {
     Err(Error::InvalidMultiaddr(
         "No certificate fingerprint found in multiaddr".into(),
     ))
+}
+
+/// Extracts the socket address from a [`Multiaddr`].
+fn extract_socket_addr(addr: &Multiaddr) -> Result<SocketAddr, Error> {
+    let mut ip = None;
+    let mut port = None;
+
+    for proto in addr.iter() {
+        match proto {
+            Protocol::Ip4(ip_addr) => ip = Some(std::net::IpAddr::V4(ip_addr)),
+            Protocol::Ip6(ip_addr) => ip = Some(std::net::IpAddr::V6(ip_addr)),
+            Protocol::Tcp(p) | Protocol::Udp(p) => port = Some(p),
+            _ => {}
+        }
+    }
+
+    if let (Some(ip_addr), Some(port_num)) = (ip, port) {
+        Ok(SocketAddr::new(ip_addr, port_num))
+    } else {
+        Err(Error::InvalidMultiaddr("Missing IP address or port".into()))
+    }
 }

@@ -6,10 +6,15 @@ mod error;
 mod sdp;
 mod stream;
 mod transport;
-mod upgrade;
+pub mod upgrade;
+
+pub(crate) use crate::browser::SignalingProtocol;
 
 pub use self::{
-    browser::{BrowserTransport, ProtobufStream, Signaling},
+    browser::{
+        BrowserTransport, Config as BrowserConfig, ProtobufStream, Signaling,
+        SIGNALING_PROTOCOL_ID,
+    },
     connection::Connection,
     error::Error,
     stream::Stream,
