@@ -205,7 +205,7 @@ where
         {
             self.pending_events.push_back(Event::OutboundStreamFailed {
                 request_id: message.request_id,
-                error: io::Error::new(io::ErrorKind::Other, "max sub-streams reached"),
+                error: io::Error::other("max sub-streams reached"),
             });
         }
     }

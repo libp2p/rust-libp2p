@@ -265,20 +265,13 @@ async fn start_stream_handle(
 
     match res.status {
         ResponseStatus::E_REQUEST_REJECTED => {
-            return Err(Error::Io(io::Error::new(
-                io::ErrorKind::Other,
-                "server rejected request",
-            )))
+            return Err(Error::Io(io::Error::other("server rejected request")))
         }
         ResponseStatus::E_DIAL_REFUSED => {
-            return Err(Error::Io(io::Error::new(
-                io::ErrorKind::Other,
-                "server refused dial",
-            )))
+            return Err(Error::Io(io::Error::other("server refused dial")))
         }
         ResponseStatus::E_INTERNAL_ERROR => {
-            return Err(Error::Io(io::Error::new(
-                io::ErrorKind::Other,
+            return Err(Error::Io(io::Error::other(
                 "server encountered internal error",
             )))
         }
