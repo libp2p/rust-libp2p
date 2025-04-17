@@ -143,9 +143,9 @@ impl QueryPool {
     {
         let num_results = match info {
             QueryInfo::GetClosestPeers {
-                num_results: Some(val),
-                ..
+                num_results: val, ..
             } => val,
+            QueryInfo::Bootstrap { .. } => K_VALUE,
             _ => self.config.replication_factor,
         };
 

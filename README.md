@@ -94,6 +94,7 @@ Conduct](https://github.com/ipfs/community/blob/master/code-of-conduct.md).
 - [Lighthouse](https://github.com/sigp/lighthouse) - Ethereum consensus client in Rust.
 - [Locutus](https://github.com/freenet/locutus) - Global, observable, decentralized key-value store.
 - [OpenMina](https://github.com/openmina/openmina) - In-browser Mina Rust implementation.
+- [qaul قول](https://github.com/qaul/qaul.net) - Internet Independent Wireless Mesh Communication App
 - [rust-ipfs](https://github.com/rs-ipfs/rust-ipfs) - IPFS implementation in Rust.
 - [Safe Network](https://github.com/maidsafe/safe_network) - Safe Network implementation in Rust.
 - [SQD Network](https://github.com/subsquid/sqd-network) - A decentralized storage for Web3 data.
