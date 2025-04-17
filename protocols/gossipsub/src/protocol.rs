@@ -38,7 +38,7 @@ use crate::{
         ControlAction, Graft, IDontWant, IHave, IWant, MessageId, PeerInfo, PeerKind, Prune,
         RawMessage, Rpc, Subscription, SubscriptionAction,
     },
-    Config, ValidationError,
+    ValidationError,
 };
 
 pub(crate) const SIGNING_PREFIX: &[u8] = b"libp2p-pubsub:";
@@ -194,12 +194,9 @@ impl GossipsubCodec {
         }
     }
 
-    /// Get the max transmit size for a given topic, falling back to the default.
-    fn max_transmit_size_for_topic(&self, topic: &TopicHash) -> usize {
-        self.max_transmit_sizes
-            .get(topic)
-            .copied()
-            .unwrap_or(Config::default_max_transmit_size())
+    /// Get the max transmit size for a given topic if it exists.
+    fn max_transmit_size_for_topic(&self, topic: &TopicHash) -> Option<usize> {
+        self.max_transmit_sizes.get(topic).copied()
     }
 
     /// Verifies a gossipsub message. This returns either a success or failure. All errors
@@ -285,7 +282,10 @@ impl Decoder for GossipsubCodec {
             let topic = TopicHash::from_raw(&message.topic);
 
             // Check the message size to ensure it doesn't bypass the configured max.
-            if message.get_size() > self.max_transmit_size_for_topic(&topic) {
+            if self
+                .max_transmit_size_for_topic(&topic)
+                .is_some_and(|max| message.get_size() > max)
+            {
                 let message = RawMessage {
                     source: None, // don't bother inform the application
                     data: message.data.unwrap_or_default(),
