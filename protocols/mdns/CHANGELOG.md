@@ -1,3 +1,8 @@
+## 0.47.1
+
+- Downgrade `hickory-proto` from `0.25.0-alpha` to `0.24` stable.
+  See [PR 5968](https://github.com/libp2p/rust-libp2p/pull/5968)
+
 ## 0.47.0
 
 - Emit `ToSwarm::NewExternalAddrOfPeer` on discovery.
