@@ -1,3 +1,10 @@
+## 0.12.8
+
+### Changed
+
+- Replace the zero-second TTL hack with proper record filtering in Kademlia.
+  See [PR 5987](https://github.com/libp2p/rust-libp2p/pull/5987)
+
 ## 0.12.7
 
 ### Changed
