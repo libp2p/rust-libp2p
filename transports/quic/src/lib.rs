@@ -31,11 +31,8 @@
 //! # #[cfg(feature = "tokio")]
 //! # fn main() -> std::io::Result<()> {
 //! #
-//! use libp2p_core::{transport::ListenerId, Multiaddr, Transport};
-//! use libp2p_quic as quic;
-//!
-//! #[tokio::main]
-//! async fn main() -> std::io::Result<()> {
+//!     use libp2p_core::{transport::ListenerId, Multiaddr, Transport};
+//!     use libp2p_quic as quic;
 //!     let keypair = libp2p_identity::Keypair::generate_ed25519();
 //!     let quic_config = quic::Config::new(&keypair);
 //!
