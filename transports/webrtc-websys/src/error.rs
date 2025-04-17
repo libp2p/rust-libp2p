@@ -1,8 +1,5 @@
 use wasm_bindgen::{JsCast, JsValue};
 
-#[derive(thiserror::Error, Debug)]
-pub enum SignalingError {}
-
 /// Errors that may happen on the [`Transport`](crate::Transport) or the
 /// [`Connection`](crate::Connection).
 #[derive(thiserror::Error, Debug)]
@@ -24,9 +21,6 @@ pub enum Error {
 
     #[error("Authentication error")]
     Authentication(#[from] AuthenticationError),
-
-    #[error("Signaling error")]
-    Signaling(#[from] SignalingError),
 
     #[error("Serialization error: {0}")]
     ProtoSerialization(String),
