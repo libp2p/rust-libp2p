@@ -1239,14 +1239,6 @@ where
 
         let mut iwant_ids = HashSet::new();
 
-        let want_message = |id: &MessageId| {
-            if self.duplicate_cache.contains(id) {
-                return false;
-            }
-
-            !self.gossip_promises.contains(id)
-        };
-
         for (topic, ids) in ihave_msgs {
             // only process the message if we are subscribed
             if !self.mesh.contains_key(&topic) {
@@ -1257,7 +1249,13 @@ where
                 continue;
             }
 
-            for id in ids.into_iter().filter(want_message) {
+            for id in ids.into_iter().filter(|id| {
+                if self.duplicate_cache.contains(id) {
+                    return false;
+                }
+
+                !self.gossip_promises.contains(id)
+            }) {
                 // have not seen this message and are not currently requesting it
                 if iwant_ids.insert(id) {
                     // Register the IWANT metric
