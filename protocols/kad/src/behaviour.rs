@@ -43,7 +43,7 @@ use libp2p_swarm::{
 };
 use thiserror::Error;
 use tracing::Level;
-use web_time::Instant;
+use web_time::SystemTime;
 
 pub use crate::query::QueryStats;
 use crate::{
@@ -788,7 +788,7 @@ where
     /// [`Event::OutboundQueryProgressed{QueryResult::GetRecord}`].
     pub fn get_record(&mut self, key: record::Key) -> QueryId {
         let record = if let Some(record) = self.store.get(&key) {
-            if record.is_expired(Instant::now()) {
+            if record.is_expired(SystemTime::now()) {
                 self.store.remove(&key);
                 None
             } else {
@@ -865,7 +865,7 @@ where
         self.store.put(record.clone())?;
         record.expires = record
             .expires
-            .or_else(|| self.record_ttl.map(|ttl| Instant::now() + ttl));
+            .or_else(|| self.record_ttl.map(|ttl| SystemTime::now() + ttl));
         let quorum = quorum.eval(self.queries.config().replication_factor);
         let target = kbucket::Key::new(record.key.clone());
         let peers = self.kbuckets.closest_keys(&target);
@@ -910,7 +910,7 @@ where
         };
         record.expires = record
             .expires
-            .or_else(|| self.record_ttl.map(|ttl| Instant::now() + ttl));
+            .or_else(|| self.record_ttl.map(|ttl| SystemTime::now() + ttl));
         let context = PutRecordContext::Custom;
         let info = QueryInfo::PutRecord {
             context,
@@ -1053,7 +1053,7 @@ where
             .store
             .providers(&key)
             .into_iter()
-            .filter(|p| !p.is_expired(Instant::now()))
+            .filter(|p| !p.is_expired(SystemTime::now()))
             .map(|p| p.provider)
             .collect();
 
@@ -1832,7 +1832,7 @@ where
             return;
         }
 
-        let now = Instant::now();
+        let now = SystemTime::now();
 
         // Calculate the expiration exponentially inversely proportional to the
         // number of nodes between the local node and the closest node to the key
@@ -1937,7 +1937,7 @@ where
             let record = ProviderRecord {
                 key,
                 provider: provider.node_id,
-                expires: self.provider_record_ttl.map(|ttl| Instant::now() + ttl),
+                expires: self.provider_record_ttl.map(|ttl| SystemTime::now() + ttl),
                 addresses: provider.multiaddrs,
             };
             match self.record_filtering {
@@ -2407,7 +2407,7 @@ where
                 // Lookup the record locally.
                 let record = match self.store.get(&key) {
                     Some(record) => {
-                        if record.is_expired(Instant::now()) {
+                        if record.is_expired(SystemTime::now()) {
                             self.store.remove(&key);
                             None
                         } else {
@@ -2532,7 +2532,7 @@ where
         &mut self,
         cx: &mut Context<'_>,
     ) -> Poll<ToSwarm<Self::ToSwarm, THandlerInEvent<Self>>> {
-        let now = Instant::now();
+        let now = SystemTime::now();
 
         // Calculate the available capacity for queries triggered by background jobs.
         let mut jobs_query_capacity = JOBS_MAX_QUERIES.saturating_sub(self.queries.size());

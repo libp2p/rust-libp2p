@@ -20,11 +20,7 @@
 
 #![doc = include_str!("../README.md")]
 
-use std::{
-    num::NonZeroUsize,
-    ops::Add,
-    time::{Duration, Instant},
-};
+use std::{num::NonZeroUsize, ops::Add, time::Duration};
 
 use anyhow::{bail, Result};
 use clap::Parser;
@@ -36,6 +32,7 @@ use libp2p::{
     tcp, yamux, PeerId,
 };
 use tracing_subscriber::EnvFilter;
+use web_time::SystemTime;
 
 const BOOTNODES: [&str; 4] = [
     "QmNnooDu7bfjPFoTZYxMNLWUQJyrVwtbZg5gBMjTezGAJN",
@@ -99,7 +96,7 @@ async fn main() -> Result<()> {
             let mut pk_record =
                 kad::Record::new(pk_record_key, local_key.public().encode_protobuf());
             pk_record.publisher = Some(*swarm.local_peer_id());
-            pk_record.expires = Some(Instant::now().add(Duration::from_secs(60)));
+            pk_record.expires = Some(SystemTime::now().add(Duration::from_secs(60)));
 
             swarm
                 .behaviour_mut()

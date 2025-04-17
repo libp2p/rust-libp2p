@@ -32,7 +32,7 @@ use peers::{
     PeersIterState,
 };
 use smallvec::SmallVec;
-use web_time::Instant;
+use web_time::SystemTime;
 
 use crate::{
     behaviour::PeerInfo,
@@ -184,7 +184,7 @@ impl QueryPool {
     }
 
     /// Polls the pool to advance the queries.
-    pub(crate) fn poll(&mut self, now: Instant) -> QueryPoolState<'_> {
+    pub(crate) fn poll(&mut self, now: SystemTime) -> QueryPoolState<'_> {
         let mut finished = None;
         let mut timeout = None;
         let mut waiting = None;
@@ -202,7 +202,9 @@ impl QueryPool {
                     break;
                 }
                 PeersIterState::Waiting(None) | PeersIterState::WaitingAtCapacity => {
-                    let elapsed = now - query.stats.start.unwrap_or(now);
+                    let elapsed = now
+                        .duration_since(query.stats.start.unwrap_or(now))
+                        .unwrap_or_default();
                     if elapsed >= self.config.timeout {
                         timeout = Some(query_id);
                         break;
@@ -390,7 +392,7 @@ impl Query {
     }
 
     /// Advances the state of the underlying peer iterator.
-    fn next(&mut self, now: Instant) -> PeersIterState<'_> {
+    fn next(&mut self, now: SystemTime) -> PeersIterState<'_> {
         let state = match &mut self.peers.peer_iter {
             QueryPeerIter::Closest(iter) => iter.next(now),
             QueryPeerIter::ClosestDisjoint(iter) => iter.next(now),
@@ -469,8 +471,8 @@ pub struct QueryStats {
     requests: u32,
     success: u32,
     failure: u32,
-    start: Option<Instant>,
-    end: Option<Instant>,
+    start: Option<SystemTime>,
+    end: Option<SystemTime>,
 }
 
 impl QueryStats {
@@ -517,9 +519,9 @@ impl QueryStats {
     pub fn duration(&self) -> Option<Duration> {
         if let Some(s) = self.start {
             if let Some(e) = self.end {
-                Some(e - s)
+                e.duration_since(s).ok()
             } else {
-                Some(Instant::now() - s)
+                SystemTime::now().duration_since(s).ok()
             }
         } else {
             None
