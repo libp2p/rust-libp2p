@@ -85,7 +85,7 @@ fn into_io_error<E>(err: E) -> io::Error
 where
     E: Error + Send + Sync + 'static,
 {
-    io::Error::new(io::ErrorKind::Other, err)
+    io::Error::other(err)
 }
 
 impl StreamMuxerBox {

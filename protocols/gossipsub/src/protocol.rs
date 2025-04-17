@@ -18,7 +18,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use std::{convert::Infallible, pin::Pin};
+use std::{collections::HashMap, convert::Infallible, pin::Pin};
 
 use asynchronous_codec::{Decoder, Encoder, Framed};
 use byteorder::{BigEndian, ByteOrder};
@@ -27,7 +27,7 @@ use futures::prelude::*;
 use libp2p_core::{InboundUpgrade, OutboundUpgrade, UpgradeInfo};
 use libp2p_identity::{PeerId, PublicKey};
 use libp2p_swarm::StreamProtocol;
-use quick_protobuf::Writer;
+use quick_protobuf::{MessageWrite, Writer};
 
 use crate::{
     config::ValidationMode,
@@ -38,7 +38,7 @@ use crate::{
         ControlAction, Graft, IDontWant, IHave, IWant, MessageId, PeerInfo, PeerKind, Prune,
         RawMessage, Rpc, Subscription, SubscriptionAction,
     },
-    ValidationError,
+    Config, ValidationError,
 };
 
 pub(crate) const SIGNING_PREFIX: &[u8] = b"libp2p-pubsub:";
@@ -66,23 +66,36 @@ pub(crate) const FLOODSUB_PROTOCOL: ProtocolId = ProtocolId {
 pub struct ProtocolConfig {
     /// The Gossipsub protocol id to listen on.
     pub(crate) protocol_ids: Vec<ProtocolId>,
-    /// The maximum transmit size for a packet.
-    pub(crate) max_transmit_size: usize,
     /// Determines the level of validation to be done on incoming messages.
     pub(crate) validation_mode: ValidationMode,
+    /// The default max transmit size.
+    pub(crate) default_max_transmit_size: usize,
+    /// The max transmit sizes for a topic.
+    pub(crate) max_transmit_sizes: HashMap<TopicHash, usize>,
 }
 
 impl Default for ProtocolConfig {
     fn default() -> Self {
         Self {
-            max_transmit_size: 65536,
             validation_mode: ValidationMode::Strict,
             protocol_ids: vec![
                 GOSSIPSUB_1_2_0_PROTOCOL,
                 GOSSIPSUB_1_1_0_PROTOCOL,
                 GOSSIPSUB_1_0_0_PROTOCOL,
             ],
+            default_max_transmit_size: 65536,
+            max_transmit_sizes: HashMap::new(),
         }
+    }
+}
+
+impl ProtocolConfig {
+    /// Get the max transmit size for a given topic, falling back to the default.
+    pub fn max_transmit_size_for_topic(&self, topic: &TopicHash) -> usize {
+        self.max_transmit_sizes
+            .get(topic)
+            .copied()
+            .unwrap_or(self.default_max_transmit_size)
     }
 }
 
@@ -122,7 +135,11 @@ where
         Box::pin(future::ok((
             Framed::new(
                 socket,
-                GossipsubCodec::new(self.max_transmit_size, self.validation_mode),
+                GossipsubCodec::new(
+                    self.default_max_transmit_size,
+                    self.validation_mode,
+                    self.max_transmit_sizes,
+                ),
             ),
             protocol_id.kind,
         )))
@@ -141,7 +158,11 @@ where
         Box::pin(future::ok((
             Framed::new(
                 socket,
-                GossipsubCodec::new(self.max_transmit_size, self.validation_mode),
+                GossipsubCodec::new(
+                    self.default_max_transmit_size,
+                    self.validation_mode,
+                    self.max_transmit_sizes,
+                ),
             ),
             protocol_id.kind,
         )))
@@ -155,15 +176,30 @@ pub struct GossipsubCodec {
     validation_mode: ValidationMode,
     /// The codec to handle common encoding/decoding of protobuf messages
     codec: quick_protobuf_codec::Codec<proto::RPC>,
+    /// Maximum transmit sizes per topic, with a default if not specified.
+    max_transmit_sizes: HashMap<TopicHash, usize>,
 }
 
 impl GossipsubCodec {
-    pub fn new(max_length: usize, validation_mode: ValidationMode) -> GossipsubCodec {
+    pub fn new(
+        max_length: usize,
+        validation_mode: ValidationMode,
+        max_transmit_sizes: HashMap<TopicHash, usize>,
+    ) -> GossipsubCodec {
         let codec = quick_protobuf_codec::Codec::new(max_length);
         GossipsubCodec {
             validation_mode,
             codec,
+            max_transmit_sizes,
         }
+    }
+
+    /// Get the max transmit size for a given topic, falling back to the default.
+    fn max_transmit_size_for_topic(&self, topic: &TopicHash) -> usize {
+        self.max_transmit_sizes
+            .get(topic)
+            .copied()
+            .unwrap_or(Config::default_max_transmit_size())
     }
 
     /// Verifies a gossipsub message. This returns either a success or failure. All errors
@@ -246,6 +282,24 @@ impl Decoder for GossipsubCodec {
         let mut invalid_messages = Vec::new();
 
         for message in rpc.publish.into_iter() {
+            let topic = TopicHash::from_raw(&message.topic);
+
+            // Check the message size to ensure it doesn't bypass the configured max.
+            if message.get_size() > self.max_transmit_size_for_topic(&topic) {
+                let message = RawMessage {
+                    source: None, // don't bother inform the application
+                    data: message.data.unwrap_or_default(),
+                    sequence_number: None, // don't inform the application
+                    topic: TopicHash::from_raw(message.topic),
+                    signature: None, // don't inform the application
+                    key: message.key,
+                    validated: false,
+                };
+
+                invalid_messages.push((message, ValidationError::MessageSizeTooLargeForTopic));
+                continue;
+            }
+
             // Keep track of the type of invalid message.
             let mut invalid_kind = None;
             let mut verify_signature = false;
@@ -310,7 +364,6 @@ impl Decoder for GossipsubCodec {
             // verify message signatures if required
             if verify_signature && !GossipsubCodec::verify_signature(&message) {
                 tracing::warn!("Invalid signature for received message");
-
                 // Build the invalid message (ignoring further validation of sequence number
                 // and source)
                 let message = RawMessage {
@@ -338,6 +391,7 @@ impl Decoder for GossipsubCodec {
                             sequence_length=%seq_no.len(),
                             "Invalid sequence number length for received message"
                         );
+
                         let message = RawMessage {
                             source: None, // don't bother inform the application
                             data: message.data.unwrap_or_default(),
@@ -604,7 +658,8 @@ mod tests {
                 control_msgs: vec![],
             };
 
-            let mut codec = GossipsubCodec::new(u32::MAX as usize, ValidationMode::Strict);
+            let mut codec =
+                GossipsubCodec::new(u32::MAX as usize, ValidationMode::Strict, HashMap::new());
             let mut buf = BytesMut::new();
             codec.encode(rpc.into_protobuf(), &mut buf).unwrap();
             let decoded_rpc = codec.decode(&mut buf).unwrap().unwrap();
