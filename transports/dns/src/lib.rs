@@ -55,7 +55,7 @@
 
 #![cfg_attr(docsrs, feature(doc_cfg, doc_auto_cfg))]
 
-#[cfg(feature = "tokio")]
+
 pub mod tokio {
     use std::sync::Arc;
 
@@ -555,7 +555,7 @@ where
     }
 }
 
-#[cfg(all(test, any(feature = "tokio")))]
+#[cfg(all(test, feature = "tokio"))]
 mod tests {
     use futures::future::BoxFuture;
     use hickory_resolver::proto::{ProtoError, ProtoErrorKind};
@@ -700,19 +700,18 @@ mod tests {
             }
         }
 
-        #[cfg(feature = "tokio")]
-        {
-            // Be explicit about the resolver used. At least on github CI, TXT
-            // type record lookups may not work with the system DNS resolver.
-            let config = ResolverConfig::quad9();
-            let opts = ResolverOpts::default();
-            let rt = ::tokio::runtime::Builder::new_current_thread()
-                .enable_io()
-                .enable_time()
-                .build()
-                .unwrap();
 
-            rt.block_on(run(tokio::Transport::custom(CustomTransport, config, opts)));
-        }
+        // Be explicit about the resolver used. At least on github CI, TXT
+        // type record lookups may not work with the system DNS resolver.
+        let config = ResolverConfig::quad9();
+        let opts = ResolverOpts::default();
+        let rt = ::tokio::runtime::Builder::new_current_thread()
+            .enable_io()
+            .enable_time()
+            .build()
+            .unwrap();
+
+        rt.block_on(run(tokio::Transport::custom(CustomTransport, config, opts)));
+        
     }
 }
