@@ -15,7 +15,7 @@ use std::{
 };
 
 use libp2p_core::{Multiaddr, PeerId};
-use libp2p_swarm::FromSwarm;
+use libp2p_swarm::{DialError, FromSwarm};
 use lru::LruCache;
 
 use super::Store;
@@ -33,7 +33,7 @@ pub enum Event {
 pub struct MemoryStore<T = ()> {
     /// The internal store.
     records: HashMap<PeerId, PeerRecord<T>>,
-    /// Events to emit to [`Behaviour`](crate::Behaviour) and [`Swarm`](libp2p_swarm::Swarm)
+    /// Events to emit to [`Behaviour`](crate::Behaviour) and [`Swarm`](libp2p_swarm::Swarm).
     pending_events: VecDeque<crate::store::Event<Event>>,
     /// Config of the store.
     config: Config,
@@ -52,38 +52,65 @@ impl<T> MemoryStore<T> {
         }
     }
 
-    /// Update an address record and notify swarm when the address is new.  
-    /// Returns `true` when the address is new.  
+    /// Update an address record and notify swarm if the address is new.
+    ///
+    /// The added address will NOT be removed from the store on dial failure. If the added address
+    /// is supposed to be cleared from the store on dial failure, add it by emitting
+    /// [`FromSwarm::NewExternalAddrOfPeer`] to the swarm, e.g. via
+    /// [`Swarm::add_peer_address`](libp2p_swarm::Swarm::add_peer_address).
+    ///
+    /// Returns `true` if the address is new.
     pub fn update_address(&mut self, peer: &PeerId, address: &Multiaddr) -> bool {
-        let is_updated = self.update_address_silent(peer, address);
+        let is_updated = self.update_address_silent(peer, address, true);
         if is_updated {
-            self.pending_events
-                .push_back(crate::store::Event::RecordUpdated(*peer));
-            if let Some(waker) = self.waker.take() {
-                waker.wake();
-            }
+            self.push_event_and_wake(crate::store::Event::RecordUpdated(*peer));
         }
         is_updated
     }
 
-    /// Update an address record without notifying swarm.  
-    /// Returns `true` when the address is new.  
-    pub fn update_address_silent(&mut self, peer: &PeerId, address: &Multiaddr) -> bool {
+    /// Update an address record without notifying swarm.
+    ///
+    /// Returns `true` if the address is new.
+    fn update_address_silent(
+        &mut self,
+        peer: &PeerId,
+        address: &Multiaddr,
+        permanent: bool,
+    ) -> bool {
         if let Some(record) = self.records.get_mut(peer) {
-            return record.update_address(address);
+            return record.update_address(address, permanent);
         }
         let mut new_record = PeerRecord::new(self.config.record_capacity);
-        new_record.update_address(address);
+        new_record.update_address(address, permanent);
         self.records.insert(*peer, new_record);
         true
     }
 
     /// Remove an address record.
-    /// Returns `true` when the address is removed.
+    ///
+    /// Returns `true` when the address existed.
     pub fn remove_address(&mut self, peer: &PeerId, address: &Multiaddr) -> bool {
-        self.records
-            .get_mut(peer)
-            .is_some_and(|r| r.remove_address(address))
+        let is_updated = self.remove_address_silent(peer, address, true);
+        if is_updated {
+            self.push_event_and_wake(crate::store::Event::RecordUpdated(*peer));
+        }
+        is_updated
+    }
+
+    /// Remove an address record without notifying swarm.
+    ///
+    /// Returns `true` when the address is removed, `false` if the address didn't exist
+    /// or the address is permanent and `force` false.
+    fn remove_address_silent(&mut self, peer: &PeerId, address: &Multiaddr, force: bool) -> bool {
+        if let Some(record) = self.records.get_mut(peer) {
+            if record.remove_address(address, force) {
+                if record.addresses.is_empty() && record.custom_data.is_none() {
+                    self.records.remove(peer);
+                }
+                return true;
+            }
+        }
+        false
     }
 
     pub fn get_custom_data(&self, peer: &PeerId) -> Option<&T> {
@@ -92,29 +119,47 @@ impl<T> MemoryStore<T> {
 
     /// Take ownership of the internal data, leaving `None` in its place.
     pub fn take_custom_data(&mut self, peer: &PeerId) -> Option<T> {
-        self.records
-            .get_mut(peer)
-            .and_then(|r| r.take_custom_data())
+        if let Some(record) = self.records.get_mut(peer) {
+            let data = record.take_custom_data();
+            if record.addresses.is_empty() {
+                self.records.remove(peer);
+            }
+            return data;
+        }
+        None
     }
 
     /// Insert the data and notify the swarm about the update, dropping the old data if it exists.
     pub fn insert_custom_data(&mut self, peer: &PeerId, custom_data: T) {
         self.insert_custom_data_silent(peer, custom_data);
-        self.pending_events
-            .push_back(crate::store::Event::Store(Event::CustomDataUpdated(*peer)));
-        if let Some(waker) = self.waker.take() {
-            waker.wake();
-        }
+        self.push_event_and_wake(crate::store::Event::Store(Event::CustomDataUpdated(*peer)));
     }
 
     /// Insert the data without notifying the swarm. Old data will be dropped if it exists.
-    pub fn insert_custom_data_silent(&mut self, peer: &PeerId, custom_data: T) {
+    fn insert_custom_data_silent(&mut self, peer: &PeerId, custom_data: T) {
         if let Some(r) = self.records.get_mut(peer) {
             return r.insert_custom_data(custom_data);
         }
         let mut new_record = PeerRecord::new(self.config.record_capacity);
         new_record.insert_custom_data(custom_data);
         self.records.insert(*peer, new_record);
+    }
+
+    /// Get a mutable reference to a peer's custom data. If it exists, the swarm is notified about
+    /// its modification, regardless of whether it will actually be modified.
+    pub fn get_custom_data_mut(&mut self, peer: &PeerId) -> Option<&mut T> {
+        // We have to do this separately to avoid a double borrow.
+        if self
+            .records
+            .get(peer)
+            .is_some_and(|r| r.get_custom_data().is_some())
+        {
+            self.push_event_and_wake(crate::store::Event::Store(Event::CustomDataUpdated(*peer)));
+        };
+
+        self.records
+            .get_mut(peer)
+            .and_then(|r| r.get_custom_data_mut())
     }
 
     /// Iterate over all internal records.
@@ -127,6 +172,13 @@ impl<T> MemoryStore<T> {
     pub fn record_iter_mut(&mut self) -> impl Iterator<Item = (&PeerId, &mut PeerRecord<T>)> {
         self.records.iter_mut()
     }
+
+    fn push_event_and_wake(&mut self, event: crate::store::Event<Event>) {
+        self.pending_events.push_back(event);
+        if let Some(waker) = self.waker.take() {
+            waker.wake(); // wake up because of update
+        }
+    }
 }
 
 impl<T> Store for MemoryStore<T> {
@@ -135,21 +187,66 @@ impl<T> Store for MemoryStore<T> {
     fn on_swarm_event(&mut self, swarm_event: &FromSwarm) {
         match swarm_event {
             FromSwarm::NewExternalAddrOfPeer(info) => {
-                self.update_address(&info.peer_id, info.addr);
+                if self.update_address_silent(&info.peer_id, info.addr, false) {
+                    self.push_event_and_wake(crate::store::Event::RecordUpdated(info.peer_id));
+                }
             }
             FromSwarm::ConnectionEstablished(info) => {
                 let mut is_record_updated = false;
-                for failed_addr in info.failed_addresses {
-                    is_record_updated |= self.remove_address(&info.peer_id, failed_addr);
-                }
-                is_record_updated |=
-                    self.update_address_silent(&info.peer_id, info.endpoint.get_remote_address());
-                if is_record_updated {
-                    self.pending_events
-                        .push_back(crate::store::Event::RecordUpdated(info.peer_id));
-                    if let Some(waker) = self.waker.take() {
-                        waker.wake(); // wake up because of update
+                if self.config.remove_addr_on_dial_error {
+                    for failed_addr in info.failed_addresses {
+                        is_record_updated |=
+                            self.remove_address_silent(&info.peer_id, failed_addr, false);
                     }
+                }
+                is_record_updated |= self.update_address_silent(
+                    &info.peer_id,
+                    info.endpoint.get_remote_address(),
+                    false,
+                );
+                if is_record_updated {
+                    self.push_event_and_wake(crate::store::Event::RecordUpdated(info.peer_id));
+                }
+            }
+            FromSwarm::DialFailure(info) => {
+                if !self.config.remove_addr_on_dial_error {
+                    return;
+                }
+
+                let Some(peer) = info.peer_id else {
+                    // We don't know which peer we are talking about here.
+                    return;
+                };
+
+                match info.error {
+                    DialError::LocalPeerId { .. } => {
+                        // The stored peer is the local peer. Remove peer fully.
+                        if self.records.remove(&peer).is_some() {
+                            self.push_event_and_wake(crate::store::Event::RecordUpdated(peer));
+                        }
+                    }
+                    DialError::WrongPeerId { obtained, address } => {
+                        // The stored peer id is incorrect, remove incorrect and add correct one.
+                        if self.remove_address_silent(&peer, address, false) {
+                            self.push_event_and_wake(crate::store::Event::RecordUpdated(peer));
+                            if self.update_address_silent(obtained, address, false) {
+                                self.push_event_and_wake(crate::store::Event::RecordUpdated(
+                                    *obtained,
+                                ));
+                            }
+                        }
+                    }
+                    DialError::Transport(errors) => {
+                        // Remove all attempted addresses.
+                        let mut is_record_updated = false;
+                        for (addr, _) in errors {
+                            is_record_updated |= self.remove_address_silent(&peer, addr, false);
+                        }
+                        if is_record_updated {
+                            self.push_event_and_wake(crate::store::Event::RecordUpdated(peer));
+                        }
+                    }
+                    _ => {}
                 }
             }
             _ => {}
@@ -171,31 +268,54 @@ impl<T> Store for MemoryStore<T> {
     }
 }
 
-/// Config for [`MemoryStore`].
+/// Config for [`MemoryStore`]. The available options are documented via their setters.
 #[derive(Debug, Clone)]
 pub struct Config {
-    /// The capacaity of an address store.  
-    /// The least active address will be discarded to make room for new address.
     record_capacity: NonZeroUsize,
+    remove_addr_on_dial_error: bool,
 }
 
 impl Default for Config {
     fn default() -> Self {
         Self {
             record_capacity: NonZeroUsize::try_from(8).expect("8 > 0"),
+            remove_addr_on_dial_error: true,
         }
     }
 }
 
 impl Config {
-    /// Capacity for address records.
-    /// The least active address will be dropped to make room for new address.
     pub fn record_capacity(&self) -> &NonZeroUsize {
         &self.record_capacity
     }
-    /// Set the capacity for address records.
+    /// The capacity of an address store.
+    ///
+    /// The least active address will be discarded to make room for new address.
+    ///
+    /// `8` by default.
     pub fn set_record_capacity(mut self, capacity: NonZeroUsize) -> Self {
         self.record_capacity = capacity;
+        self
+    }
+    pub fn is_remove_addr_on_dial_error(&self) -> bool {
+        self.remove_addr_on_dial_error
+    }
+    /// If set to `true`, the store will remove addresses if the swarm indicates a dial failure.
+    /// More specifically:
+    /// - Failed dials indicated in
+    ///   [`ConnectionEstablished`](libp2p_swarm::behaviour::ConnectionEstablished)'s
+    ///   `failed_addresses` will be removed.
+    /// - [`DialError::LocalPeerId`] causes the full peer entry to be removed.
+    /// - On [`DialError::WrongPeerId`], the address will be removed from the incorrect peer's
+    ///   record and re-added to the correct peer's record.
+    /// - On [`DialError::Transport`], all failed addresses will be removed.
+    ///
+    /// If set to `false`, the logic above is not applied and the store only removes addresses
+    /// through calls to [`MemoryStore::remove_address`].
+    ///
+    /// `true` by default.
+    pub fn set_remove_addr_on_dial_error(mut self, value: bool) -> Self {
+        self.remove_addr_on_dial_error = value;
         self
     }
 }
@@ -205,7 +325,8 @@ impl Config {
 pub struct PeerRecord<T> {
     /// A LRU(Least Recently Used) cache for addresses.  
     /// Will delete the least-recently-used record when full.
-    addresses: LruCache<Multiaddr, ()>,
+    /// If the associated `bool` is true, the address can only be force-removed.
+    addresses: LruCache<Multiaddr, bool>,
     /// Custom data attached to the peer.
     custom_data: Option<T>,
 }
@@ -225,23 +346,36 @@ impl<T> PeerRecord<T> {
 
     /// Update the address in the LRU cache, promote it to the front if it exists,
     /// insert it to the front if not.
+    ///
     /// Returns true when the address is new.
-    pub fn update_address(&mut self, address: &Multiaddr) -> bool {
-        if self.addresses.get(address).is_some() {
+    pub fn update_address(&mut self, address: &Multiaddr, permanent: bool) -> bool {
+        if let Some(was_permanent) = self.addresses.get(address) {
+            if !*was_permanent && permanent {
+                self.addresses.get_or_insert(address.clone(), || permanent);
+            }
             return false;
         }
-        self.addresses.get_or_insert(address.clone(), || ());
+        self.addresses.get_or_insert(address.clone(), || permanent);
         true
     }
 
     /// Remove the address in the LRU cache regardless of its position.
-    /// Returns true when the address is removed, false when not exist.
-    pub fn remove_address(&mut self, address: &Multiaddr) -> bool {
+    ///
+    /// Returns true when the address is removed, false when it didn't exist
+    /// or it is permanent and `force` is false.
+    pub fn remove_address(&mut self, address: &Multiaddr, force: bool) -> bool {
+        if !force && self.addresses.peek(address) == Some(&true) {
+            return false;
+        }
         self.addresses.pop(address).is_some()
     }
 
     pub fn get_custom_data(&self) -> Option<&T> {
         self.custom_data.as_ref()
+    }
+
+    pub fn get_custom_data_mut(&mut self) -> Option<&mut T> {
+        self.custom_data.as_mut()
     }
 
     pub fn take_custom_data(&mut self) -> Option<T> {
