@@ -420,6 +420,127 @@ async fn emits_inbound_connection_closed_if_channel_is_dropped() {
     ));
 }
 
+/// Send multiple requests concurrently.
+#[async_std::test]
+#[cfg(feature = "cbor")]
+async fn concurrent_ping_protocol() {
+    use std::{collections::HashMap, num::NonZero};
+
+    use libp2p_core::ConnectedPoint;
+    use libp2p_swarm::{dial_opts::PeerCondition, DialError};
+
+    let protocols = iter::once((StreamProtocol::new("/ping/1"), ProtocolSupport::Full));
+    let cfg = request_response::Config::default();
+
+    let mut swarm1 = Swarm::new_ephemeral(|_| {
+        request_response::cbor::Behaviour::<Ping, Pong>::new(protocols.clone(), cfg.clone())
+    });
+    let peer1_id = *swarm1.local_peer_id();
+    let mut swarm2 = Swarm::new_ephemeral(|_| {
+        request_response::cbor::Behaviour::<Ping, Pong>::new(protocols, cfg)
+    });
+    let peer2_id = *swarm2.local_peer_id();
+
+    let (peer1_listen_addr, _) = swarm1.listen().with_memory_addr_external().await;
+    swarm2.add_peer_address(peer1_id, peer1_listen_addr);
+
+    let peer1 = async move {
+        loop {
+            match swarm1.next_swarm_event().await.try_into_behaviour_event() {
+                Ok(request_response::Event::Message {
+                    peer,
+                    message:
+                        request_response::Message::Request {
+                            request, channel, ..
+                        },
+                    ..
+                }) => {
+                    assert_eq!(&peer, &peer2_id);
+                    swarm1
+                        .behaviour_mut()
+                        .send_response(channel, Pong(request.0))
+                        .unwrap();
+                }
+                Ok(request_response::Event::ResponseSent { peer, .. }) => {
+                    assert_eq!(&peer, &peer2_id);
+                }
+                Ok(e) => {
+                    panic!("Peer1: Unexpected event: {e:?}")
+                }
+                Err(..) => {}
+            }
+        }
+    };
+
+    let peer2 = async {
+        let mut count = 0;
+        let num_pings: u8 = rand::thread_rng().gen_range(1..100);
+        let mut expected_pongs = HashMap::new();
+        for i in 0..num_pings {
+            let ping_bytes = vec![i];
+            let req_id = swarm2
+                .behaviour_mut()
+                .send_request(&peer1_id, Ping(ping_bytes.clone()));
+            assert!(swarm2.behaviour().is_pending_outbound(&peer1_id, &req_id));
+            assert!(expected_pongs.insert(req_id, ping_bytes).is_none());
+        }
+
+        let mut started_dialing = false;
+        let mut is_connected = false;
+
+        loop {
+            match swarm2.next_swarm_event().await {
+                SwarmEvent::Behaviour(request_response::Event::Message {
+                    peer,
+                    message:
+                        request_response::Message::Response {
+                            request_id,
+                            response,
+                        },
+                    ..
+                }) => {
+                    count += 1;
+                    let expected_pong = expected_pongs.remove(&request_id).unwrap();
+                    assert_eq!(response, Pong(expected_pong));
+                    assert_eq!(&peer, &peer1_id);
+                    if count >= num_pings {
+                        break;
+                    }
+                }
+                SwarmEvent::Dialing { peer_id, .. } => {
+                    assert_eq!(&peer_id.unwrap(), &peer1_id);
+                    assert!(!started_dialing);
+                    started_dialing = true;
+                }
+                SwarmEvent::ConnectionEstablished {
+                    peer_id,
+                    endpoint: ConnectedPoint::Dialer { .. },
+                    num_established,
+                    ..
+                } => {
+                    assert_eq!(&peer_id, &peer1_id);
+                    assert_eq!(num_established, NonZero::new(1).unwrap());
+                    assert!(!is_connected);
+                    is_connected = true;
+                }
+                SwarmEvent::OutgoingConnectionError { peer_id, error, .. } if started_dialing => {
+                    assert_eq!(&peer_id.unwrap(), &peer1_id);
+                    assert!(started_dialing);
+                    assert!(matches!(
+                        error,
+                        DialError::DialPeerConditionFalse(PeerCondition::DisconnectedAndNotDialing)
+                    ));
+                }
+                e => panic!("Peer2: Unexpected event: {e:?}"),
+            }
+        }
+        assert_eq!(count, num_pings);
+    };
+
+    async_std::task::spawn(Box::pin(peer1));
+    peer2.await;
+}
+
 // Simple Ping-Pong Protocol
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 struct Ping(Vec<u8>);
