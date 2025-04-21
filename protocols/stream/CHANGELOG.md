@@ -1,6 +1,6 @@
 ## 0.3.0-alpha.1
 
-- `IncomingStreams` now deregister inbound protocol
+- Garbage-collect deregistered streams in `Stream::accept`.
   See [PR 5999](https://github.com/libp2p/rust-libp2p/pull/5999).
 
 
