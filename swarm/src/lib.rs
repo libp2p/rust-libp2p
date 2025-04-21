@@ -1415,19 +1415,6 @@ impl Config {
         Self::with_executor(crate::executor::TokioExecutor)
     }
 
-    /// Builds a new [`Config`] from the given `async-std` executor.
-    #[cfg(all(
-        feature = "async-std",
-        not(any(target_os = "emscripten", target_os = "wasi", target_os = "unknown"))
-    ))]
-    #[deprecated(
-        since = "0.47.0",
-        note = "async_std has been discontinued. Please use the tokio feature instead."
-    )]
-    pub fn with_async_std_executor() -> Self {
-        Self::with_executor(crate::executor::AsyncStdExecutor)
-    }
-
     /// Configures the number of events from the [`NetworkBehaviour`] in
     /// destination to the [`ConnectionHandler`] that can be buffered before
     /// the [`Swarm`] has to wait. An individual buffer with this number of
