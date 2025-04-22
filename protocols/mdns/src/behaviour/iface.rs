@@ -27,7 +27,6 @@ use std::{
     io,
     net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr, UdpSocket},
     pin::Pin,
-    sync::{Arc, RwLock},
     task::{Context, Poll},
     time::{Duration, Instant},
 };
@@ -35,7 +34,7 @@ use std::{
 use futures::{channel::mpsc, SinkExt, StreamExt};
 use libp2p_core::Multiaddr;
 use libp2p_identity::PeerId;
-use libp2p_swarm::ListenAddresses;
+use libp2p_swarm::{ExpiredListenAddr, FromSwarm, NewListenAddr};
 use socket2::{Domain, Socket, Type};
 
 use self::{
@@ -71,6 +70,27 @@ impl ProbeState {
     }
 }
 
+/// Event to inform the [`InterfaceState`] of a change in listening addresses.
+#[derive(Debug, Clone)]
+pub(crate) enum ListenAddressUpdate {
+    New(Multiaddr),
+    Expired(Multiaddr),
+}
+
+impl ListenAddressUpdate {
+    pub(crate) fn from_swarm(event: FromSwarm) -> Option<Self> {
+        match event {
+            FromSwarm::NewListenAddr(NewListenAddr { addr, .. }) => {
+                Some(ListenAddressUpdate::New(addr.clone()))
+            }
+            FromSwarm::ExpiredListenAddr(ExpiredListenAddr { addr, .. }) => {
+                Some(ListenAddressUpdate::Expired(addr.clone()))
+            }
+            _ => None,
+        }
+    }
+}
+
 /// An mDNS instance for a networking interface. To discover all peers when having multiple
 /// interfaces an [`InterfaceState`] is required for each interface.
 #[derive(Debug)]
@@ -81,8 +101,10 @@ pub(crate) struct InterfaceState<U, T> {
     recv_socket: U,
     /// Send socket.
     send_socket: U,
-
-    listen_addresses: Arc<RwLock<ListenAddresses>>,
+    /// Current listening addresses.
+    listen_addresses: Vec<Multiaddr>,
+    /// Receiver for listening-address updates from the swarm.
+    listen_addresses_rx: mpsc::UnboundedReceiver<ListenAddressUpdate>,
 
     query_response_sender: mpsc::Sender<(PeerId, Multiaddr, Instant)>,
 
@@ -119,7 +141,8 @@ where
         addr: IpAddr,
         config: Config,
         local_peer_id: PeerId,
-        listen_addresses: Arc<RwLock<ListenAddresses>>,
+        listen_addresses: Vec<Multiaddr>,
+        listen_addresses_rx: mpsc::UnboundedReceiver<ListenAddressUpdate>,
         query_response_sender: mpsc::Sender<(PeerId, Multiaddr, Instant)>,
     ) -> io::Result<Self> {
         tracing::info!(address=%addr, "creating instance on iface address");
@@ -175,6 +198,7 @@ where
             recv_socket,
             send_socket,
             listen_addresses,
+            listen_addresses_rx,
             query_response_sender,
             recv_buffer: [0; 4096],
             send_buffer: Default::default(),
@@ -210,7 +234,21 @@ where
         let this = self.get_mut();
 
         loop {
-            // 1st priority: Low latency: Create packet ASAP after timeout.
+            // 1st priority: Poll for a change in listen addresses.
+            match this.listen_addresses_rx.poll_next_unpin(cx) {
+                Poll::Ready(Some(ListenAddressUpdate::New(addr))) => {
+                    this.listen_addresses.push(addr);
+                    continue;
+                }
+                Poll::Ready(Some(ListenAddressUpdate::Expired(addr))) => {
+                    this.listen_addresses.retain(|a| a != &addr);
+                    continue;
+                }
+                Poll::Ready(None) => return Poll::Ready(()),
+                Poll::Pending => {}
+            }
+
+            // 2nd priority: Low latency: Create packet ASAP after timeout.
             if this.timeout.poll_next_unpin(cx).is_ready() {
                 tracing::trace!(address=%this.addr, "sending query on iface");
                 this.send_buffer.push_back(build_query());
@@ -229,7 +267,7 @@ where
                 this.reset_timer();
             }
 
-            // 2nd priority: Keep local buffers small: Send packets to remote.
+            // 3d priority: Keep local buffers small: Send packets to remote.
             if let Some(packet) = this.send_buffer.pop_front() {
                 match this.send_socket.poll_write(cx, &packet, this.mdns_socket()) {
                     Poll::Ready(Ok(_)) => {
@@ -246,7 +284,7 @@ where
                 }
             }
 
-            // 3rd priority: Keep local buffers small: Return discovered addresses.
+            // 4th priority: Keep local buffers small: Return discovered addresses.
             if this.query_response_sender.poll_ready_unpin(cx).is_ready() {
                 if let Some(discovered) = this.discovered.pop_front() {
                     match this.query_response_sender.try_send(discovered) {
@@ -263,7 +301,7 @@ where
                 }
             }
 
-            // 4th priority: Remote work: Answer incoming requests.
+            // 5th priority: Remote work: Answer incoming requests.
             match this
                 .recv_socket
                 .poll_read(cx, &mut this.recv_buffer)
@@ -279,10 +317,7 @@ where
                     this.send_buffer.extend(build_query_response(
                         query.query_id(),
                         this.local_peer_id,
-                        this.listen_addresses
-                            .read()
-                            .unwrap_or_else(|e| e.into_inner())
-                            .iter(),
+                        this.listen_addresses.iter(),
                         this.ttl,
                     ));
                     continue;

@@ -34,13 +34,13 @@ use std::{
     io,
     net::IpAddr,
     pin::Pin,
-    sync::{Arc, RwLock},
     task::{Context, Poll},
     time::Instant,
 };
 
 use futures::{channel::mpsc, Stream, StreamExt};
 use if_watch::IfEvent;
+use iface::ListenAddressUpdate;
 use libp2p_core::{transport::PortUse, Endpoint, Multiaddr};
 use libp2p_identity::PeerId;
 use libp2p_swarm::{
@@ -64,18 +64,11 @@ pub trait Provider: 'static {
     /// The IfWatcher type.
     type Watcher: Stream<Item = std::io::Result<IfEvent>> + fmt::Debug + Unpin;
 
-    type TaskHandle: Abort;
-
     /// Create a new instance of the `IfWatcher` type.
     fn new_watcher() -> Result<Self::Watcher, std::io::Error>;
 
     #[track_caller]
-    fn spawn(task: impl Future<Output = ()> + Send + 'static) -> Self::TaskHandle;
-}
-
-#[allow(unreachable_pub)] // Not re-exported.
-pub trait Abort {
-    fn abort(self);
+    fn spawn(task: impl Future<Output = ()> + Send + 'static);
 }
 
 /// The type of a [`Behaviour`] using the `async-io` implementation.
@@ -83,11 +76,10 @@ pub trait Abort {
 pub mod async_io {
     use std::future::Future;
 
-    use async_std::task::JoinHandle;
     use if_watch::smol::IfWatcher;
 
     use super::Provider;
-    use crate::behaviour::{socket::asio::AsyncUdpSocket, timer::asio::AsyncTimer, Abort};
+    use crate::behaviour::{socket::asio::AsyncUdpSocket, timer::asio::AsyncTimer};
 
     #[doc(hidden)]
     pub enum AsyncIo {}
@@ -96,20 +88,13 @@ pub mod async_io {
         type Socket = AsyncUdpSocket;
         type Timer = AsyncTimer;
         type Watcher = IfWatcher;
-        type TaskHandle = JoinHandle<()>;
 
         fn new_watcher() -> Result<Self::Watcher, std::io::Error> {
             IfWatcher::new()
         }
 
-        fn spawn(task: impl Future<Output = ()> + Send + 'static) -> JoinHandle<()> {
-            async_std::task::spawn(task)
-        }
-    }
-
-    impl Abort for JoinHandle<()> {
-        fn abort(self) {
-            async_std::task::spawn(self.cancel());
+        fn spawn(task: impl Future<Output = ()> + Send + 'static) {
+            async_std::task::spawn(task);
         }
     }
 
@@ -122,10 +107,9 @@ pub mod tokio {
     use std::future::Future;
 
     use if_watch::tokio::IfWatcher;
-    use tokio::task::JoinHandle;
 
     use super::Provider;
-    use crate::behaviour::{socket::tokio::TokioUdpSocket, timer::tokio::TokioTimer, Abort};
+    use crate::behaviour::{socket::tokio::TokioUdpSocket, timer::tokio::TokioTimer};
 
     #[doc(hidden)]
     pub enum Tokio {}
@@ -134,20 +118,13 @@ pub mod tokio {
         type Socket = TokioUdpSocket;
         type Timer = TokioTimer;
         type Watcher = IfWatcher;
-        type TaskHandle = JoinHandle<()>;
 
         fn new_watcher() -> Result<Self::Watcher, std::io::Error> {
             IfWatcher::new()
         }
 
-        fn spawn(task: impl Future<Output = ()> + Send + 'static) -> Self::TaskHandle {
-            tokio::spawn(task)
-        }
-    }
-
-    impl Abort for JoinHandle<()> {
-        fn abort(self) {
-            JoinHandle::abort(&self)
+        fn spawn(task: impl Future<Output = ()> + Send + 'static) {
+            tokio::spawn(task);
         }
     }
 
@@ -168,7 +145,7 @@ where
     if_watch: P::Watcher,
 
     /// Handles to tasks running the mDNS queries.
-    if_tasks: HashMap<IpAddr, P::TaskHandle>,
+    if_tasks: HashMap<IpAddr, mpsc::UnboundedSender<ListenAddressUpdate>>,
 
     query_response_receiver: mpsc::Receiver<(PeerId, Multiaddr, Instant)>,
     query_response_sender: mpsc::Sender<(PeerId, Multiaddr, Instant)>,
@@ -189,7 +166,7 @@ where
     /// This is shared across all interface tasks using an [`RwLock`].
     /// The [`Behaviour`] updates this upon new [`FromSwarm`]
     /// events where as [`InterfaceState`]s read from it to answer inbound mDNS queries.
-    listen_addresses: Arc<RwLock<ListenAddresses>>,
+    listen_addresses: ListenAddresses,
 
     local_peer_id: PeerId,
 
@@ -301,10 +278,17 @@ where
     }
 
     fn on_swarm_event(&mut self, event: FromSwarm) {
-        self.listen_addresses
-            .write()
-            .unwrap_or_else(|e| e.into_inner())
-            .on_swarm_event(&event);
+        if !self.listen_addresses.on_swarm_event(&event) {
+            return;
+        }
+        if let Some(update) = ListenAddressUpdate::from_swarm(event) {
+            // Send address update to each interface task.
+            for (ip, sender) in self.if_tasks.iter_mut() {
+                if sender.unbounded_send(update.clone()).is_err() {
+                    tracing::error!("`InterfaceState` for ip {ip} dropped");
+                }
+            }
+        }
     }
 
     #[tracing::instrument(level = "trace", name = "NetworkBehaviour::poll", skip(self, cx))]
@@ -332,15 +316,18 @@ where
                             continue;
                         }
                         if let Entry::Vacant(e) = self.if_tasks.entry(addr) {
+                            let (addr_tx, addr_rx) = mpsc::unbounded();
                             match InterfaceState::<P::Socket, P::Timer>::new(
                                 addr,
                                 self.config.clone(),
                                 self.local_peer_id,
-                                self.listen_addresses.clone(),
+                                self.listen_addresses.iter().cloned().collect(),
+                                addr_rx,
                                 self.query_response_sender.clone(),
                             ) {
                                 Ok(iface_state) => {
-                                    e.insert(P::spawn(iface_state));
+                                    P::spawn(iface_state);
+                                    e.insert(addr_tx);
                                 }
                                 Err(err) => {
                                     tracing::error!("failed to create `InterfaceState`: {}", err)
@@ -349,10 +336,8 @@ where
                         }
                     }
                     Ok(IfEvent::Down(inet)) => {
-                        if let Some(handle) = self.if_tasks.remove(&inet.addr()) {
+                        if self.if_tasks.remove(&inet.addr()).is_some() {
                             tracing::info!(instance=%inet.addr(), "dropping instance");
-
-                            handle.abort();
                         }
                     }
                     Err(err) => tracing::error!("if watch returned an error: {}", err),
