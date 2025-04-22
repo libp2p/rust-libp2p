@@ -242,8 +242,9 @@ where
     let connection_id = ConnectionId::new_unchecked(0);
     gs.connected_peers.insert(
         peer,
-        PeerConnections {
+        PeerDetails {
             kind: kind.unwrap_or(PeerKind::Floodsub),
+            outbound,
             connections: vec![connection_id],
             topics: Default::default(),
             sender,
@@ -629,8 +630,9 @@ fn test_join() {
         let connection_id = ConnectionId::new_unchecked(0);
         gs.connected_peers.insert(
             random_peer,
-            PeerConnections {
+            PeerDetails {
                 kind: PeerKind::Floodsub,
+                outbound: false,
                 connections: vec![connection_id],
                 topics: Default::default(),
                 sender,
@@ -1025,9 +1027,10 @@ fn test_get_random_peers() {
         peers.push(peer_id);
         gs.connected_peers.insert(
             peer_id,
-            PeerConnections {
+            PeerDetails {
                 kind: PeerKind::Gossipsubv1_1,
                 connections: vec![ConnectionId::new_unchecked(0)],
+                outbound: false,
                 topics: topics.clone(),
                 sender: Sender::new(gs.config.connection_handler_queue_len()),
                 dont_send: LinkedHashMap::new(),
@@ -5581,9 +5584,10 @@ fn test_all_queues_full() {
     peers.push(peer_id);
     gs.connected_peers.insert(
         peer_id,
-        PeerConnections {
+        PeerDetails {
             kind: PeerKind::Gossipsubv1_1,
             connections: vec![ConnectionId::new_unchecked(0)],
+            outbound: false,
             topics: topics.clone(),
             sender: Sender::new(2),
             dont_send: LinkedHashMap::new(),
@@ -5616,9 +5620,10 @@ fn test_slow_peer_returns_failed_publish() {
     peers.push(slow_peer_id);
     gs.connected_peers.insert(
         slow_peer_id,
-        PeerConnections {
+        PeerDetails {
             kind: PeerKind::Gossipsubv1_1,
             connections: vec![ConnectionId::new_unchecked(0)],
+            outbound: false,
             topics: topics.clone(),
             sender: Sender::new(2),
             dont_send: LinkedHashMap::new(),
@@ -5628,9 +5633,10 @@ fn test_slow_peer_returns_failed_publish() {
     peers.push(peer_id);
     gs.connected_peers.insert(
         peer_id,
-        PeerConnections {
+        PeerDetails {
             kind: PeerKind::Gossipsubv1_1,
             connections: vec![ConnectionId::new_unchecked(0)],
+            outbound: false,
             topics: topics.clone(),
             sender: Sender::new(gs.config.connection_handler_queue_len()),
             dont_send: LinkedHashMap::new(),
@@ -5688,9 +5694,10 @@ fn test_slow_peer_returns_failed_ihave_handling() {
     let slow_peer_id = PeerId::random();
     gs.connected_peers.insert(
         slow_peer_id,
-        PeerConnections {
+        PeerDetails {
             kind: PeerKind::Gossipsubv1_1,
             connections: vec![ConnectionId::new_unchecked(0)],
+            outbound: false,
             topics: topics.clone(),
             sender: Sender::new(2),
             dont_send: LinkedHashMap::new(),
@@ -5704,9 +5711,10 @@ fn test_slow_peer_returns_failed_ihave_handling() {
     peers.push(peer_id);
     gs.connected_peers.insert(
         peer_id,
-        PeerConnections {
+        PeerDetails {
             kind: PeerKind::Gossipsubv1_1,
             connections: vec![ConnectionId::new_unchecked(0)],
+            outbound: false,
             topics: topics.clone(),
             sender: Sender::new(gs.config.connection_handler_queue_len()),
             dont_send: LinkedHashMap::new(),
@@ -5800,9 +5808,10 @@ fn test_slow_peer_returns_failed_iwant_handling() {
     peers.push(slow_peer_id);
     gs.connected_peers.insert(
         slow_peer_id,
-        PeerConnections {
+        PeerDetails {
             kind: PeerKind::Gossipsubv1_1,
             connections: vec![ConnectionId::new_unchecked(0)],
+            outbound: false,
             topics: topics.clone(),
             sender: Sender::new(2),
             dont_send: LinkedHashMap::new(),
@@ -5816,9 +5825,10 @@ fn test_slow_peer_returns_failed_iwant_handling() {
     peers.push(peer_id);
     gs.connected_peers.insert(
         peer_id,
-        PeerConnections {
+        PeerDetails {
             kind: PeerKind::Gossipsubv1_1,
             connections: vec![ConnectionId::new_unchecked(0)],
+            outbound: false,
             topics: topics.clone(),
             sender: Sender::new(gs.config.connection_handler_queue_len()),
             dont_send: LinkedHashMap::new(),
@@ -5892,9 +5902,10 @@ fn test_slow_peer_returns_failed_forward() {
     peers.push(slow_peer_id);
     gs.connected_peers.insert(
         slow_peer_id,
-        PeerConnections {
+        PeerDetails {
             kind: PeerKind::Gossipsubv1_1,
             connections: vec![ConnectionId::new_unchecked(0)],
+            outbound: false,
             topics: topics.clone(),
             sender: Sender::new(2),
             dont_send: LinkedHashMap::new(),
@@ -5908,9 +5919,10 @@ fn test_slow_peer_returns_failed_forward() {
     peers.push(peer_id);
     gs.connected_peers.insert(
         peer_id,
-        PeerConnections {
+        PeerDetails {
             kind: PeerKind::Gossipsubv1_1,
             connections: vec![ConnectionId::new_unchecked(0)],
+            outbound: false,
             topics: topics.clone(),
             sender: Sender::new(gs.config.connection_handler_queue_len()),
             dont_send: LinkedHashMap::new(),
@@ -5989,9 +6001,10 @@ fn test_slow_peer_is_downscored_on_publish() {
     mesh.insert(slow_peer_id);
     gs.connected_peers.insert(
         slow_peer_id,
-        PeerConnections {
+        PeerDetails {
             kind: PeerKind::Gossipsubv1_1,
             connections: vec![ConnectionId::new_unchecked(0)],
+            outbound: false,
             topics: topics.clone(),
             sender: Sender::new(2),
             dont_send: LinkedHashMap::new(),
@@ -6002,9 +6015,10 @@ fn test_slow_peer_is_downscored_on_publish() {
     peers.push(peer_id);
     gs.connected_peers.insert(
         peer_id,
-        PeerConnections {
+        PeerDetails {
             kind: PeerKind::Gossipsubv1_1,
             connections: vec![ConnectionId::new_unchecked(0)],
+            outbound: false,
             topics: topics.clone(),
             sender: Sender::new(gs.config.connection_handler_queue_len()),
             dont_send: LinkedHashMap::new(),
