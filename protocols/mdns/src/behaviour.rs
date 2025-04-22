@@ -41,7 +41,7 @@ use std::{
 use futures::{channel::mpsc, Stream, StreamExt};
 use if_watch::IfEvent;
 use iface::ListenAddressUpdate;
-use libp2p_core::{transport::PortUse, Endpoint, Multiaddr};
+use libp2p_core::{multiaddr::Protocol, transport::PortUse, Endpoint, Multiaddr};
 use libp2p_identity::PeerId;
 use libp2p_swarm::{
     behaviour::FromSwarm, dummy, ConnectionDenied, ConnectionId, ListenAddresses, NetworkBehaviour,
@@ -282,10 +282,13 @@ where
             return;
         }
         if let Some(update) = ListenAddressUpdate::from_swarm(event) {
-            // Send address update to each interface task.
-            for (ip, sender) in self.if_tasks.iter_mut() {
-                if sender.unbounded_send(update.clone()).is_err() {
-                    tracing::error!("`InterfaceState` for ip {ip} dropped");
+            // Send address update to matching interface task.
+            if let Some(ip) = update.ip_addr() {
+                if let Some(tx) = self.if_tasks.get_mut(&ip) {
+                    if tx.unbounded_send(update).is_err() {
+                        tracing::error!("`InterfaceState` for ip {ip} dropped");
+                        self.if_tasks.remove(&ip);
+                    }
                 }
             }
         }
@@ -306,22 +309,28 @@ where
             while let Poll::Ready(Some(event)) = Pin::new(&mut self.if_watch).poll_next(cx) {
                 match event {
                     Ok(IfEvent::Up(inet)) => {
-                        let addr = inet.addr();
-                        if addr.is_loopback() {
+                        let ip_addr = inet.addr();
+                        if ip_addr.is_loopback() {
                             continue;
                         }
-                        if addr.is_ipv4() && self.config.enable_ipv6
-                            || addr.is_ipv6() && !self.config.enable_ipv6
+                        if ip_addr.is_ipv4() && self.config.enable_ipv6
+                            || ip_addr.is_ipv6() && !self.config.enable_ipv6
                         {
                             continue;
                         }
-                        if let Entry::Vacant(e) = self.if_tasks.entry(addr) {
+                        if let Entry::Vacant(e) = self.if_tasks.entry(ip_addr) {
                             let (addr_tx, addr_rx) = mpsc::unbounded();
+                            let listen_addresses = self
+                                .listen_addresses
+                                .iter()
+                                .filter(|multiaddr| multiaddr_matches_ip(multiaddr, &ip_addr))
+                                .cloned()
+                                .collect();
                             match InterfaceState::<P::Socket, P::Timer>::new(
-                                addr,
+                                ip_addr,
                                 self.config.clone(),
                                 self.local_peer_id,
-                                self.listen_addresses.iter().cloned().collect(),
+                                listen_addresses,
                                 addr_rx,
                                 self.query_response_sender.clone(),
                             ) {
@@ -404,6 +413,14 @@ where
 
             return Poll::Pending;
         }
+    }
+}
+
+fn multiaddr_matches_ip(addr: &Multiaddr, ip: &IpAddr) -> bool {
+    match addr.iter().next() {
+        Some(Protocol::Ip4(ipv4)) => &IpAddr::V4(ipv4) == ip,
+        Some(Protocol::Ip6(ipv6)) => &IpAddr::V6(ipv6) == ip,
+        _ => false,
     }
 }
 

@@ -32,7 +32,7 @@ use std::{
 };
 
 use futures::{channel::mpsc, SinkExt, StreamExt};
-use libp2p_core::Multiaddr;
+use libp2p_core::{multiaddr::Protocol, Multiaddr};
 use libp2p_identity::PeerId;
 use libp2p_swarm::{ExpiredListenAddr, FromSwarm, NewListenAddr};
 use socket2::{Domain, Socket, Type};
@@ -86,6 +86,17 @@ impl ListenAddressUpdate {
             FromSwarm::ExpiredListenAddr(ExpiredListenAddr { addr, .. }) => {
                 Some(ListenAddressUpdate::Expired(addr.clone()))
             }
+            _ => None,
+        }
+    }
+
+    pub(crate) fn ip_addr(&self) -> Option<IpAddr> {
+        let addr = match self {
+            ListenAddressUpdate::New(a) | ListenAddressUpdate::Expired(a) => a,
+        };
+        match addr.iter().next()? {
+            Protocol::Ip4(a) => Some(IpAddr::V4(a)),
+            Protocol::Ip6(a) => Some(IpAddr::V6(a)),
             _ => None,
         }
     }
