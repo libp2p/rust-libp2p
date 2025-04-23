@@ -27,13 +27,12 @@ serde = { version = "1", optional = true, features = ["derive"] }
 sha2 = { version = "0.10.8", optional = true }
 thiserror = { workspace = true, optional = true }
 zeroize = { version = "1.8", optional = true }
-generic-array = { version = "0.14.7", optional = true }
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 ring = { workspace = true, features = ["alloc", "std"], optional = true }
 
 [features]
-secp256k1 = ["dep:k256", "dep:asn1_der", "dep:sha2", "dep:hkdf", "dep:zeroize", "dep:generic-array"]
+secp256k1 = ["dep:k256", "dep:asn1_der", "dep:sha2", "dep:hkdf", "dep:zeroize"]
 ecdsa = ["dep:p256", "dep:zeroize", "dep:sec1", "dep:sha2", "dep:hkdf"]
 rsa = ["dep:ring", "dep:asn1_der", "dep:rand", "dep:zeroize"]
 ed25519 = ["dep:ed25519-dalek", "dep:zeroize", "dep:sha2", "dep:hkdf"]

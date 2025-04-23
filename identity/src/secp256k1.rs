@@ -23,7 +23,6 @@
 use core::{cmp, fmt, hash};
 
 use asn1_der::typed::{DerDecodable, Sequence};
-use generic_array::GenericArray;
 use k256::{
     ecdsa::Signature,
     sha2::{Digest as ShaDigestTrait, Sha256},
@@ -200,7 +199,7 @@ impl PublicKey {
         Signature::from_der(sig).is_ok_and(|s| {
             k256::ecdsa::hazmat::verify_prehashed(
                 &ProjectivePoint::from(self.0.as_affine()),
-                GenericArray::from_slice(msg),
+                msg.into(),
                 &s,
             )
             .is_ok()
