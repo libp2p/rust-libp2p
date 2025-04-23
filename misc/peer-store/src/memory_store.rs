@@ -11,7 +11,7 @@
 use std::{
     collections::{HashMap, VecDeque},
     num::NonZeroUsize,
-    task::Waker,
+    task::{Poll, Waker},
 };
 
 use libp2p_core::{Multiaddr, PeerId};
@@ -25,6 +25,8 @@ use super::Store;
 pub enum Event {
     /// Custom data of the peer has been updated.
     CustomDataUpdated(PeerId),
+    /// An address record has been updated.
+    RecordUpdated(PeerId),
 }
 
 /// A in-memory store that uses LRU cache for bounded storage of addresses
@@ -34,7 +36,7 @@ pub struct MemoryStore<T = ()> {
     /// The internal store.
     records: HashMap<PeerId, PeerRecord<T>>,
     /// Events to emit to [`Behaviour`](crate::Behaviour) and [`Swarm`](libp2p_swarm::Swarm).
-    pending_events: VecDeque<crate::store::Event<Event>>,
+    pending_events: VecDeque<Event>,
     /// Config of the store.
     config: Config,
     /// Waker for store events.
@@ -63,7 +65,7 @@ impl<T> MemoryStore<T> {
     pub fn update_address(&mut self, peer: &PeerId, address: &Multiaddr) -> bool {
         let is_updated = self.update_address_silent(peer, address, true);
         if is_updated {
-            self.push_event_and_wake(crate::store::Event::RecordUpdated(*peer));
+            self.push_event_and_wake(Event::RecordUpdated(*peer));
         }
         is_updated
     }
@@ -92,7 +94,7 @@ impl<T> MemoryStore<T> {
     pub fn remove_address(&mut self, peer: &PeerId, address: &Multiaddr) -> bool {
         let is_updated = self.remove_address_silent(peer, address, true);
         if is_updated {
-            self.push_event_and_wake(crate::store::Event::RecordUpdated(*peer));
+            self.push_event_and_wake(Event::RecordUpdated(*peer));
         }
         is_updated
     }
@@ -132,7 +134,7 @@ impl<T> MemoryStore<T> {
     /// Insert the data and notify the swarm about the update, dropping the old data if it exists.
     pub fn insert_custom_data(&mut self, peer: &PeerId, custom_data: T) {
         self.insert_custom_data_silent(peer, custom_data);
-        self.push_event_and_wake(crate::store::Event::Store(Event::CustomDataUpdated(*peer)));
+        self.push_event_and_wake(Event::CustomDataUpdated(*peer));
     }
 
     /// Insert the data without notifying the swarm. Old data will be dropped if it exists.
@@ -154,7 +156,7 @@ impl<T> MemoryStore<T> {
             .get(peer)
             .is_some_and(|r| r.get_custom_data().is_some())
         {
-            self.push_event_and_wake(crate::store::Event::Store(Event::CustomDataUpdated(*peer)));
+            self.push_event_and_wake(Event::CustomDataUpdated(*peer));
         };
 
         self.records
@@ -173,7 +175,7 @@ impl<T> MemoryStore<T> {
         self.records.iter_mut()
     }
 
-    fn push_event_and_wake(&mut self, event: crate::store::Event<Event>) {
+    fn push_event_and_wake(&mut self, event: Event) {
         self.pending_events.push_back(event);
         if let Some(waker) = self.waker.take() {
             waker.wake(); // wake up because of update
@@ -182,13 +184,13 @@ impl<T> MemoryStore<T> {
 }
 
 impl<T> Store for MemoryStore<T> {
-    type FromStore = Event;
+    type Event = Event;
 
     fn on_swarm_event(&mut self, swarm_event: &FromSwarm) {
         match swarm_event {
             FromSwarm::NewExternalAddrOfPeer(info) => {
                 if self.update_address_silent(&info.peer_id, info.addr, false) {
-                    self.push_event_and_wake(crate::store::Event::RecordUpdated(info.peer_id));
+                    self.push_event_and_wake(Event::RecordUpdated(info.peer_id));
                 }
             }
             FromSwarm::ConnectionEstablished(ConnectionEstablished {
@@ -207,7 +209,7 @@ impl<T> Store for MemoryStore<T> {
                 is_record_updated |=
                     self.update_address_silent(peer_id, endpoint.get_remote_address(), false);
                 if is_record_updated {
-                    self.push_event_and_wake(crate::store::Event::RecordUpdated(*peer_id));
+                    self.push_event_and_wake(Event::RecordUpdated(*peer_id));
                 }
             }
             FromSwarm::DialFailure(info) => {
@@ -224,17 +226,15 @@ impl<T> Store for MemoryStore<T> {
                     DialError::LocalPeerId { .. } => {
                         // The stored peer is the local peer. Remove peer fully.
                         if self.records.remove(&peer).is_some() {
-                            self.push_event_and_wake(crate::store::Event::RecordUpdated(peer));
+                            self.push_event_and_wake(Event::RecordUpdated(peer));
                         }
                     }
                     DialError::WrongPeerId { obtained, address } => {
                         // The stored peer id is incorrect, remove incorrect and add correct one.
                         if self.remove_address_silent(&peer, address, false) {
-                            self.push_event_and_wake(crate::store::Event::RecordUpdated(peer));
+                            self.push_event_and_wake(Event::RecordUpdated(peer));
                             if self.update_address_silent(obtained, address, false) {
-                                self.push_event_and_wake(crate::store::Event::RecordUpdated(
-                                    *obtained,
-                                ));
+                                self.push_event_and_wake(Event::RecordUpdated(*obtained));
                             }
                         }
                     }
@@ -245,7 +245,7 @@ impl<T> Store for MemoryStore<T> {
                             is_record_updated |= self.remove_address_silent(&peer, addr, false);
                         }
                         if is_record_updated {
-                            self.push_event_and_wake(crate::store::Event::RecordUpdated(peer));
+                            self.push_event_and_wake(Event::RecordUpdated(peer));
                         }
                     }
                     _ => {}
@@ -259,14 +259,14 @@ impl<T> Store for MemoryStore<T> {
         self.records.get(peer).map(|record| record.addresses())
     }
 
-    fn poll(
-        &mut self,
-        cx: &mut std::task::Context<'_>,
-    ) -> Option<crate::store::Event<Self::FromStore>> {
-        if self.pending_events.is_empty() {
-            self.waker = Some(cx.waker().clone());
+    fn poll(&mut self, cx: &mut std::task::Context<'_>) -> Poll<Self::Event> {
+        match self.pending_events.pop_front() {
+            Some(ev) => Poll::Ready(ev),
+            None => {
+                self.waker = Some(cx.waker().clone());
+                Poll::Pending
+            }
         }
-        self.pending_events.pop_front()
     }
 }
 
@@ -396,7 +396,7 @@ mod test {
     use libp2p_swarm::{NetworkBehaviour, SwarmEvent};
     use libp2p_swarm_test::SwarmExt;
 
-    use super::MemoryStore;
+    use super::{Event, MemoryStore};
     use crate::Store;
 
     #[test]
@@ -475,7 +475,7 @@ mod test {
         ) {
             swarm
                 .wait(|ev| match ev {
-                    SwarmEvent::Behaviour(crate::Event::RecordUpdated { peer }) => {
+                    SwarmEvent::Behaviour(Event::RecordUpdated(peer)) => {
                         (peer == expected_peer).then_some(())
                     }
                     _ => None,
@@ -563,9 +563,9 @@ mod test {
         async fn expect_record_update(swarm: &mut Swarm<Behaviour>, expected_peer: PeerId) {
             swarm
                 .wait(|ev| match ev {
-                    SwarmEvent::Behaviour(BehaviourEvent::PeerStore(
-                        crate::Event::RecordUpdated { peer },
-                    )) => (peer == expected_peer).then_some(()),
+                    SwarmEvent::Behaviour(BehaviourEvent::PeerStore(Event::RecordUpdated(
+                        peer,
+                    ))) => (peer == expected_peer).then_some(()),
                     _ => None,
                 })
                 .await
