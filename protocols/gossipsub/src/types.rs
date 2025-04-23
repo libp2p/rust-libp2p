@@ -102,9 +102,12 @@ impl std::fmt::Debug for MessageId {
 }
 
 #[derive(Debug)]
-pub(crate) struct PeerConnections {
+/// Connected peer details.
+pub(crate) struct PeerDetails {
     /// The kind of protocol the peer supports.
     pub(crate) kind: PeerKind,
+    /// If the peer is an outbound connection.
+    pub(crate) outbound: bool,
     /// Its current connections.
     pub(crate) connections: Vec<ConnectionId>,
     /// Subscribed topics.
