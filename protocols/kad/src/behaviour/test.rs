@@ -1507,8 +1507,11 @@ fn get_providers_single() {
 }
 
 fn get_providers_limit<const N: usize>() {
-    fn prop<const N: usize>(key: record::Key) {
-        let mut swarms = build_nodes(3);
+    fn prop<const N: usize>(key: record::Key, seed: Seed) {
+        let mut rng = StdRng::from_seed(seed.0);
+        // Randomize the number of nodes (minimum 3 since the test requires at least 3 nodes)
+        let num_nodes = rng.gen_range(3..20);
+        let mut swarms = build_nodes(num_nodes);
 
         // Let first peer know of second peer and second peer know of third peer.
         for i in 0..2 {
@@ -1589,7 +1592,7 @@ fn get_providers_limit<const N: usize>() {
         }));
     }
 
-    QuickCheck::new().tests(10).quickcheck(prop::<N> as fn(_))
+    QuickCheck::new().tests(10).quickcheck(prop::<N> as fn(_, _))
 }
 
 #[test]
