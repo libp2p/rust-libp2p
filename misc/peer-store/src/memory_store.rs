@@ -201,11 +201,11 @@ impl<T> Store for MemoryStore<T> {
                 if self.config.remove_addr_on_dial_error {
                     for failed_addr in *failed_addresses {
                         is_record_updated |=
-                            self.remove_address_silent(&peer_id, failed_addr, false);
+                            self.remove_address_silent(peer_id, failed_addr, false);
                     }
                 }
                 is_record_updated |=
-                    self.update_address_silent(&peer_id, endpoint.get_remote_address(), false);
+                    self.update_address_silent(peer_id, endpoint.get_remote_address(), false);
                 if is_record_updated {
                     self.push_event_and_wake(crate::store::Event::RecordUpdated(*peer_id));
                 }
@@ -305,7 +305,7 @@ impl Config {
     /// If set to `true`, the store will remove addresses if the swarm indicates a dial failure.
     /// More specifically:
     /// - Failed dials indicated in
-    ///   [`ConnectionEstablished`](libp2p_swarm::behaviour::ConnectionEstablished)'s
+    ///   [`ConnectionEstablished`]'s
     ///   `failed_addresses` will be removed.
     /// - [`DialError::LocalPeerId`] causes the full peer entry to be removed.
     /// - On [`DialError::WrongPeerId`], the address will be removed from the incorrect peer's
