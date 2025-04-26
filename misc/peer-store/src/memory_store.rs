@@ -23,8 +23,6 @@ use super::Store;
 /// Event from the store and emitted to [`Swarm`](libp2p_swarm::Swarm).
 #[derive(Debug, Clone)]
 pub enum Event {
-    /// Custom data of the peer has been updated.
-    CustomDataUpdated(PeerId),
     /// An address record has been updated.
     RecordUpdated(PeerId),
 }
@@ -131,14 +129,8 @@ impl<T> MemoryStore<T> {
         None
     }
 
-    /// Insert the data and notify the swarm about the update, dropping the old data if it exists.
+    /// Insert the data, dropping the old data if it exists.
     pub fn insert_custom_data(&mut self, peer: &PeerId, custom_data: T) {
-        self.insert_custom_data_silent(peer, custom_data);
-        self.push_event_and_wake(Event::CustomDataUpdated(*peer));
-    }
-
-    /// Insert the data without notifying the swarm. Old data will be dropped if it exists.
-    fn insert_custom_data_silent(&mut self, peer: &PeerId, custom_data: T) {
         if let Some(r) = self.records.get_mut(peer) {
             return r.insert_custom_data(custom_data);
         }
@@ -147,18 +139,8 @@ impl<T> MemoryStore<T> {
         self.records.insert(*peer, new_record);
     }
 
-    /// Get a mutable reference to a peer's custom data. If it exists, the swarm is notified about
-    /// its modification, regardless of whether it will actually be modified.
+    /// Get a mutable reference to a peer's custom data.
     pub fn get_custom_data_mut(&mut self, peer: &PeerId) -> Option<&mut T> {
-        // We have to do this separately to avoid a double borrow.
-        if self
-            .records
-            .get(peer)
-            .is_some_and(|r| r.get_custom_data().is_some())
-        {
-            self.push_event_and_wake(Event::CustomDataUpdated(*peer));
-        };
-
         self.records
             .get_mut(peer)
             .and_then(|r| r.get_custom_data_mut())
