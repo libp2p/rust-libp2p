@@ -501,6 +501,7 @@ mod test {
         rt.block_on(async {
             let (listen_addr, _) = swarm1.listen().with_memory_addr_external().await;
             let swarm1_peer_id = *swarm1.local_peer_id();
+            let swarm2_peer_id = *swarm2.local_peer_id();
             swarm2.dial(listen_addr.clone()).expect("dial to succeed");
             let handle = spawn_wait_conn_established(swarm1);
             swarm2
@@ -510,12 +511,17 @@ mod test {
                 })
                 .await;
             let mut swarm1 = handle.await.expect("future to complete");
+            expect_record_update(&mut swarm2, swarm1_peer_id).await;
             assert!(swarm2
                 .behaviour()
                 .address_of_peer(&swarm1_peer_id)
                 .expect("swarm should be connected and record about it should be created")
                 .any(|addr| *addr == listen_addr));
-            expect_record_update(&mut swarm1, *swarm2.local_peer_id()).await;
+            // Address from connection is not stored on the listener side.
+            assert!(swarm1
+                .behaviour()
+                .address_of_peer(&swarm2_peer_id)
+                .is_none());
             let (new_listen_addr, _) = swarm1.listen().with_memory_addr_external().await;
             let handle = spawn_wait_conn_established(swarm1);
             swarm2
@@ -592,7 +598,6 @@ mod test {
                 .await
                 .expect("future to complete");
             let mut swarm1 = handle.await.expect("future to complete");
-            // expexting update from direct connection.
             expect_record_update(&mut swarm2, swarm1_peer_id).await;
             assert!(swarm2
                 .behaviour()
@@ -600,7 +605,11 @@ mod test {
                 .address_of_peer(&swarm1_peer_id)
                 .expect("swarm should be connected and record about it should be created")
                 .any(|addr| *addr == listen_addr));
-            expect_record_update(&mut swarm1, *swarm2.local_peer_id()).await;
+            assert!(swarm1
+                .behaviour()
+                .peer_store
+                .address_of_peer(&swarm2_peer_id)
+                .is_none());
             swarm1.next_swarm_event().await; // skip `identify::Event::Sent`
             swarm1.next_swarm_event().await; // skip `identify::Event::Received`
             let (new_listen_addr, _) = swarm1.listen().with_memory_addr_external().await;
