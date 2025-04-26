@@ -304,9 +304,7 @@ impl Config {
     }
     /// If set to `true`, the store will remove addresses if the swarm indicates a dial failure.
     /// More specifically:
-    /// - Failed dials indicated in
-    ///   [`ConnectionEstablished`]'s
-    ///   `failed_addresses` will be removed.
+    /// - Failed dials indicated in [`ConnectionEstablished`]'s `failed_addresses` will be removed.
     /// - [`DialError::LocalPeerId`] causes the full peer entry to be removed.
     /// - On [`DialError::WrongPeerId`], the address will be removed from the incorrect peer's
     ///   record and re-added to the correct peer's record.
