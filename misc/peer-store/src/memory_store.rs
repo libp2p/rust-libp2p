@@ -23,8 +23,10 @@ use super::Store;
 /// Event from the store and emitted to [`Swarm`](libp2p_swarm::Swarm).
 #[derive(Debug, Clone)]
 pub enum Event {
-    /// An address record has been updated.
-    RecordUpdated(PeerId),
+    /// A new peer address has been added to the store.
+    PeerAddressAdded { peer_id: PeerId, address: Multiaddr },
+    /// A peer address has been removed from the store.
+    PeerAddressRemoved { peer_id: PeerId, address: Multiaddr },
 }
 
 /// A in-memory store that uses LRU cache for bounded storage of addresses
@@ -52,7 +54,7 @@ impl<T> MemoryStore<T> {
         }
     }
 
-    /// Update an address record and notify swarm if the address is new.
+    /// Add an address for a peer.
     ///
     /// The added address will NOT be removed from the store on dial failure. If the added address
     /// is supposed to be cleared from the store on dial failure, add it by emitting
@@ -60,53 +62,49 @@ impl<T> MemoryStore<T> {
     /// [`Swarm::add_peer_address`](libp2p_swarm::Swarm::add_peer_address).
     ///
     /// Returns `true` if the address is new.
-    pub fn update_address(&mut self, peer: &PeerId, address: &Multiaddr) -> bool {
-        let is_updated = self.update_address_silent(peer, address, true);
-        if is_updated {
-            self.push_event_and_wake(Event::RecordUpdated(*peer));
-        }
-        is_updated
+    pub fn add_address(&mut self, peer: &PeerId, address: &Multiaddr) -> bool {
+        self.add_address_inner(peer, address, true)
     }
 
     /// Update an address record without notifying swarm.
     ///
     /// Returns `true` if the address is new.
-    fn update_address_silent(
-        &mut self,
-        peer: &PeerId,
-        address: &Multiaddr,
-        permanent: bool,
-    ) -> bool {
-        if let Some(record) = self.records.get_mut(peer) {
-            return record.update_address(address, permanent);
+    fn add_address_inner(&mut self, peer: &PeerId, address: &Multiaddr, permanent: bool) -> bool {
+        let record = self
+            .records
+            .entry(*peer)
+            .or_insert(PeerRecord::new(self.config.record_capacity));
+        let is_new = record.add_address(address, permanent);
+        if is_new {
+            self.push_event_and_wake(Event::PeerAddressAdded {
+                peer_id: *peer,
+                address: address.clone(),
+            });
         }
-        let mut new_record = PeerRecord::new(self.config.record_capacity);
-        new_record.update_address(address, permanent);
-        self.records.insert(*peer, new_record);
-        true
+        is_new
     }
 
     /// Remove an address record.
     ///
     /// Returns `true` when the address existed.
     pub fn remove_address(&mut self, peer: &PeerId, address: &Multiaddr) -> bool {
-        let is_updated = self.remove_address_silent(peer, address, true);
-        if is_updated {
-            self.push_event_and_wake(Event::RecordUpdated(*peer));
-        }
-        is_updated
+        self.remove_address_inner(peer, address, true)
     }
 
     /// Remove an address record without notifying swarm.
     ///
     /// Returns `true` when the address is removed, `false` if the address didn't exist
     /// or the address is permanent and `force` false.
-    fn remove_address_silent(&mut self, peer: &PeerId, address: &Multiaddr, force: bool) -> bool {
+    fn remove_address_inner(&mut self, peer: &PeerId, address: &Multiaddr, force: bool) -> bool {
         if let Some(record) = self.records.get_mut(peer) {
             if record.remove_address(address, force) {
-                if record.addresses.is_empty() && record.custom_data.is_none() {
+                if record.addresses.is_empty() {
                     self.records.remove(peer);
                 }
+                self.push_event_and_wake(Event::PeerAddressRemoved {
+                    peer_id: *peer,
+                    address: address.clone(),
+                });
                 return true;
             }
         }
@@ -152,7 +150,6 @@ impl<T> MemoryStore<T> {
     }
 
     /// Iterate over all internal records mutably.  
-    /// Will not wake up the task.
     pub fn record_iter_mut(&mut self) -> impl Iterator<Item = (&PeerId, &mut PeerRecord<T>)> {
         self.records.iter_mut()
     }
@@ -171,9 +168,7 @@ impl<T> Store for MemoryStore<T> {
     fn on_swarm_event(&mut self, swarm_event: &FromSwarm) {
         match swarm_event {
             FromSwarm::NewExternalAddrOfPeer(info) => {
-                if self.update_address_silent(&info.peer_id, info.addr, false) {
-                    self.push_event_and_wake(Event::RecordUpdated(info.peer_id));
-                }
+                self.add_address_inner(&info.peer_id, info.addr, false);
             }
             FromSwarm::ConnectionEstablished(ConnectionEstablished {
                 peer_id,
@@ -181,18 +176,12 @@ impl<T> Store for MemoryStore<T> {
                 endpoint,
                 ..
             }) if endpoint.is_dialer() => {
-                let mut is_record_updated = false;
                 if self.config.remove_addr_on_dial_error {
                     for failed_addr in *failed_addresses {
-                        is_record_updated |=
-                            self.remove_address_silent(peer_id, failed_addr, false);
+                        self.remove_address_inner(peer_id, failed_addr, false);
                     }
                 }
-                is_record_updated |=
-                    self.update_address_silent(peer_id, endpoint.get_remote_address(), false);
-                if is_record_updated {
-                    self.push_event_and_wake(Event::RecordUpdated(*peer_id));
-                }
+                self.add_address_inner(peer_id, endpoint.get_remote_address(), false);
             }
             FromSwarm::DialFailure(info) => {
                 if !self.config.remove_addr_on_dial_error {
@@ -205,29 +194,15 @@ impl<T> Store for MemoryStore<T> {
                 };
 
                 match info.error {
-                    DialError::LocalPeerId { .. } => {
-                        // The stored peer is the local peer. Remove peer fully.
-                        if self.records.remove(&peer).is_some() {
-                            self.push_event_and_wake(Event::RecordUpdated(peer));
-                        }
-                    }
                     DialError::WrongPeerId { obtained, address } => {
                         // The stored peer id is incorrect, remove incorrect and add correct one.
-                        if self.remove_address_silent(&peer, address, false) {
-                            self.push_event_and_wake(Event::RecordUpdated(peer));
-                            if self.update_address_silent(obtained, address, false) {
-                                self.push_event_and_wake(Event::RecordUpdated(*obtained));
-                            }
+                        if self.remove_address_inner(&peer, address, false) {
+                            self.add_address_inner(obtained, address, false);
                         }
                     }
                     DialError::Transport(errors) => {
-                        // Remove all attempted addresses.
-                        let mut is_record_updated = false;
                         for (addr, _) in errors {
-                            is_record_updated |= self.remove_address_silent(&peer, addr, false);
-                        }
-                        if is_record_updated {
-                            self.push_event_and_wake(Event::RecordUpdated(peer));
+                            self.remove_address_inner(&peer, addr, false);
                         }
                     }
                     _ => {}
@@ -330,7 +305,7 @@ impl<T> PeerRecord<T> {
     /// insert it to the front if not.
     ///
     /// Returns true when the address is new.
-    pub fn update_address(&mut self, address: &Multiaddr, permanent: bool) -> bool {
+    pub fn add_address(&mut self, address: &Multiaddr, permanent: bool) -> bool {
         if let Some(was_permanent) = self.addresses.get(address) {
             if !*was_permanent && permanent {
                 self.addresses.get_or_insert(address.clone(), || permanent);
@@ -367,6 +342,10 @@ impl<T> PeerRecord<T> {
     pub fn insert_custom_data(&mut self, custom_data: T) {
         let _ = self.custom_data.insert(custom_data);
     }
+
+    pub fn is_empty(&self) -> bool {
+        self.addresses.is_empty() && self.custom_data.is_none()
+    }
 }
 
 #[cfg(test)]
@@ -388,9 +367,9 @@ mod test {
         let addr1 = Multiaddr::from_str("/ip4/127.0.0.1").expect("parsing to succeed");
         let addr2 = Multiaddr::from_str("/ip4/127.0.0.2").expect("parsing to succeed");
         let addr3 = Multiaddr::from_str("/ip4/127.0.0.3").expect("parsing to succeed");
-        store.update_address(&peer, &addr1);
-        store.update_address(&peer, &addr2);
-        store.update_address(&peer, &addr3);
+        store.add_address(&peer, &addr1);
+        store.add_address(&peer, &addr2);
+        store.add_address(&peer, &addr3);
         assert!(
             store
                 .records
@@ -400,7 +379,7 @@ mod test {
                 .collect::<Vec<_>>()
                 == vec![&addr3, &addr2, &addr1]
         );
-        store.update_address(&peer, &addr1);
+        store.add_address(&peer, &addr1);
         assert!(
             store
                 .records
@@ -410,7 +389,7 @@ mod test {
                 .collect::<Vec<_>>()
                 == vec![&addr1, &addr3, &addr2]
         );
-        store.update_address(&peer, &addr3);
+        store.add_address(&peer, &addr3);
         assert!(
             store
                 .records
@@ -428,7 +407,7 @@ mod test {
         let peer = PeerId::random();
         for i in 1..10 {
             let addr_string = format!("/ip4/127.0.0.{}", i);
-            store.update_address(
+            store.add_address(
                 &peer,
                 &Multiaddr::from_str(&addr_string).expect("parsing to succeed"),
             );
