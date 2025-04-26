@@ -352,9 +352,9 @@ impl<T> PeerRecord<T> {
 mod test {
     use std::{num::NonZero, str::FromStr};
 
-    use libp2p::Swarm;
-    use libp2p_core::{Multiaddr, PeerId};
-    use libp2p_swarm::{NetworkBehaviour, SwarmEvent};
+    use libp2p::identify;
+    use libp2p_core::{multiaddr::Protocol, Multiaddr, PeerId};
+    use libp2p_swarm::{NetworkBehaviour, Swarm, SwarmEvent};
     use libp2p_swarm_test::SwarmExt;
 
     use super::{Event, MemoryStore};
@@ -433,15 +433,15 @@ mod test {
         async fn expect_record_update(
             swarm: &mut Swarm<crate::Behaviour<MemoryStore>>,
             expected_peer: PeerId,
+            expected_address: Option<&Multiaddr>,
         ) {
-            swarm
-                .wait(|ev| match ev {
-                    SwarmEvent::Behaviour(Event::RecordUpdated(peer)) => {
-                        (peer == expected_peer).then_some(())
-                    }
-                    _ => None,
-                })
-                .await
+            match swarm.next_behaviour_event().await {
+                Event::PeerAddressAdded { peer_id, address } => {
+                    assert_eq!(peer_id, expected_peer);
+                    assert!(expected_address.is_none_or(|a| *a == address));
+                }
+                ev => panic!("Unexpected event {:?}.", ev),
+            }
         }
 
         let store1: MemoryStore<()> = MemoryStore::new(
@@ -458,19 +458,13 @@ mod test {
         let rt = tokio::runtime::Runtime::new().unwrap();
 
         rt.block_on(async {
-            let (listen_addr, _) = swarm1.listen().with_memory_addr_external().await;
+            let (mut listen_addr, _) = swarm1.listen().with_memory_addr_external().await;
             let swarm1_peer_id = *swarm1.local_peer_id();
             let swarm2_peer_id = *swarm2.local_peer_id();
-            swarm2.dial(listen_addr.clone()).expect("dial to succeed");
-            let handle = spawn_wait_conn_established(swarm1);
-            swarm2
-                .wait(|ev| match ev {
-                    SwarmEvent::ConnectionEstablished { .. } => Some(()),
-                    _ => None,
-                })
-                .await;
-            let mut swarm1 = handle.await.expect("future to complete");
-            expect_record_update(&mut swarm2, swarm1_peer_id).await;
+            swarm2.connect(&mut swarm1).await;
+
+            listen_addr.push(Protocol::P2p(swarm1_peer_id.into()));
+            expect_record_update(&mut swarm2, swarm1_peer_id, Some(&listen_addr)).await;
             assert!(swarm2
                 .behaviour()
                 .address_of_peer(&swarm1_peer_id)
@@ -481,8 +475,8 @@ mod test {
                 .behaviour()
                 .address_of_peer(&swarm2_peer_id)
                 .is_none());
-            let (new_listen_addr, _) = swarm1.listen().with_memory_addr_external().await;
-            let handle = spawn_wait_conn_established(swarm1);
+            let (mut new_listen_addr, _) = swarm1.listen().with_memory_addr_external().await;
+            tokio::spawn(swarm1.loop_on_next());
             swarm2
                 .dial(
                     libp2p_swarm::dial_opts::DialOpts::peer_id(swarm1_peer_id)
@@ -497,19 +491,19 @@ mod test {
                     _ => None,
                 })
                 .await;
-            handle.await.expect("future to complete");
-            expect_record_update(&mut swarm2, swarm1_peer_id).await;
+            new_listen_addr.push(Protocol::P2p(swarm1_peer_id.into()));
+            expect_record_update(&mut swarm2, swarm1_peer_id, Some(&new_listen_addr)).await;
             // The address in store will contain peer ID.
             let new_listen_addr = new_listen_addr
                 .with_p2p(swarm1_peer_id)
                 .expect("extend to succeed");
-            assert!(
+            assert_eq!(
                 swarm2
                     .behaviour()
                     .address_of_peer(&swarm1_peer_id)
                     .expect("peer to exist")
-                    .collect::<Vec<_>>()
-                    == vec![&new_listen_addr, &listen_addr]
+                    .collect::<Vec<_>>(),
+                vec![&new_listen_addr, &listen_addr]
             );
         })
     }
@@ -519,17 +513,24 @@ mod test {
         #[derive(NetworkBehaviour)]
         struct Behaviour {
             peer_store: crate::Behaviour<MemoryStore>,
-            identify: libp2p::identify::Behaviour,
+            identify: identify::Behaviour,
         }
-        async fn expect_record_update(swarm: &mut Swarm<Behaviour>, expected_peer: PeerId) {
-            swarm
-                .wait(|ev| match ev {
-                    SwarmEvent::Behaviour(BehaviourEvent::PeerStore(Event::RecordUpdated(
-                        peer,
-                    ))) => (peer == expected_peer).then_some(()),
-                    _ => None,
-                })
-                .await
+        async fn expect_record_update(
+            swarm: &mut Swarm<Behaviour>,
+            expected_peer: PeerId,
+            expected_address: Option<&Multiaddr>,
+        ) {
+            loop {
+                match swarm.next_behaviour_event().await {
+                    BehaviourEvent::PeerStore(Event::PeerAddressAdded { peer_id, address }) => {
+                        assert_eq!(peer_id, expected_peer);
+                        assert!(expected_address.is_none_or(|a| *a == address));
+                        break;
+                    }
+                    ev @ BehaviourEvent::PeerStore(_) => panic!("Unexpected event {:?}.", ev),
+                    _ => {}
+                }
+            }
         }
         fn build_swarm() -> Swarm<Behaviour> {
             Swarm::new_ephemeral_tokio(|kp| Behaviour {
@@ -537,7 +538,7 @@ mod test {
                     crate::memory_store::Config::default()
                         .set_record_capacity(NonZero::new(4).expect("4 > 0")),
                 )),
-                identify: libp2p::identify::Behaviour::new(libp2p::identify::Config::new(
+                identify: identify::Behaviour::new(identify::Config::new(
                     "/TODO/0.0.1".to_string(),
                     kp.public(),
                 )),
@@ -548,29 +549,32 @@ mod test {
         let rt = tokio::runtime::Runtime::new().unwrap();
 
         rt.block_on(async {
-            let (listen_addr, _) = swarm1.listen().with_memory_addr_external().await;
+            let (mut listen_addr, _) = swarm1.listen().with_memory_addr_external().await;
             let swarm1_peer_id = *swarm1.local_peer_id();
             let swarm2_peer_id = *swarm2.local_peer_id();
-            swarm2.dial(listen_addr.clone()).expect("dial to succeed");
-            let handle = spawn_wait_conn_established(swarm1);
-            let mut swarm2 = spawn_wait_conn_established(swarm2)
-                .await
-                .expect("future to complete");
-            let mut swarm1 = handle.await.expect("future to complete");
-            expect_record_update(&mut swarm2, swarm1_peer_id).await;
-            assert!(swarm2
-                .behaviour()
-                .peer_store
-                .address_of_peer(&swarm1_peer_id)
-                .expect("swarm should be connected and record about it should be created")
-                .any(|addr| *addr == listen_addr));
-            assert!(swarm1
-                .behaviour()
-                .peer_store
-                .address_of_peer(&swarm2_peer_id)
-                .is_none());
-            swarm1.next_swarm_event().await; // skip `identify::Event::Sent`
-            swarm1.next_swarm_event().await; // skip `identify::Event::Received`
+            swarm2.connect(&mut swarm1).await;
+
+            listen_addr.push(Protocol::P2p(swarm1_peer_id.into()));
+            expect_record_update(&mut swarm2, swarm1_peer_id, Some(&listen_addr)).await;
+
+            assert_eq!(
+                swarm2
+                    .behaviour()
+                    .peer_store
+                    .address_of_peer(&swarm1_peer_id)
+                    .expect("swarm should be connected and record about it should be created")
+                    .collect::<Vec<_>>(),
+                vec![&listen_addr]
+            );
+
+            assert!(matches!(
+                swarm1.next_behaviour_event().await,
+                BehaviourEvent::Identify(identify::Event::Sent { .. })
+            ));
+            assert!(matches!(
+                swarm1.next_behaviour_event().await,
+                BehaviourEvent::Identify(identify::Event::Received { .. })
+            ));
             let (new_listen_addr, _) = swarm1.listen().with_memory_addr_external().await;
             swarm1.behaviour_mut().identify.push([swarm2_peer_id]);
             tokio::spawn(swarm1.loop_on_next());
@@ -578,32 +582,18 @@ mod test {
             // 2 pair of mem and tcp address for two calls to `<Swarm as SwarmExt>::listen()`
             // with one address already present through direct connection.
             // FLAKY: tcp addresses are not explicitly marked as external addresses.
-            expect_record_update(&mut swarm2, swarm1_peer_id).await;
-            expect_record_update(&mut swarm2, swarm1_peer_id).await;
-            expect_record_update(&mut swarm2, swarm1_peer_id).await;
+            expect_record_update(&mut swarm2, swarm1_peer_id, None).await;
+            expect_record_update(&mut swarm2, swarm1_peer_id, None).await;
+            expect_record_update(&mut swarm2, swarm1_peer_id, None).await;
             // The address in store won't contain peer ID because it is from Identify.
-            assert!(swarm2
+            let known_listen_addresses = swarm2
                 .behaviour()
                 .peer_store
                 .address_of_peer(&swarm1_peer_id)
                 .expect("peer to exist")
-                .any(|addr| *addr == new_listen_addr));
-        })
-    }
-
-    fn spawn_wait_conn_established<T>(mut swarm: Swarm<T>) -> tokio::task::JoinHandle<Swarm<T>>
-    where
-        T: NetworkBehaviour + Send + Sync,
-        Swarm<T>: SwarmExt,
-    {
-        tokio::spawn(async move {
-            swarm
-                .wait(|ev| match ev {
-                    SwarmEvent::ConnectionEstablished { .. } => Some(()),
-                    _ => None,
-                })
-                .await;
-            swarm
+                .collect::<Vec<_>>();
+            assert!(known_listen_addresses.contains(&&new_listen_addr));
+            assert_eq!(known_listen_addresses.len(), 4)
         })
     }
 }
