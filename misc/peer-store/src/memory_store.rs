@@ -15,7 +15,7 @@ use std::{
 };
 
 use libp2p_core::{Multiaddr, PeerId};
-use libp2p_swarm::{DialError, FromSwarm};
+use libp2p_swarm::{behaviour::ConnectionEstablished, DialError, FromSwarm};
 use lru::LruCache;
 
 use super::Store;
@@ -191,21 +191,23 @@ impl<T> Store for MemoryStore<T> {
                     self.push_event_and_wake(crate::store::Event::RecordUpdated(info.peer_id));
                 }
             }
-            FromSwarm::ConnectionEstablished(info) => {
+            FromSwarm::ConnectionEstablished(ConnectionEstablished {
+                peer_id,
+                failed_addresses,
+                endpoint,
+                ..
+            }) if endpoint.is_dialer() => {
                 let mut is_record_updated = false;
                 if self.config.remove_addr_on_dial_error {
-                    for failed_addr in info.failed_addresses {
+                    for failed_addr in *failed_addresses {
                         is_record_updated |=
-                            self.remove_address_silent(&info.peer_id, failed_addr, false);
+                            self.remove_address_silent(&peer_id, failed_addr, false);
                     }
                 }
-                is_record_updated |= self.update_address_silent(
-                    &info.peer_id,
-                    info.endpoint.get_remote_address(),
-                    false,
-                );
+                is_record_updated |=
+                    self.update_address_silent(&peer_id, endpoint.get_remote_address(), false);
                 if is_record_updated {
-                    self.push_event_and_wake(crate::store::Event::RecordUpdated(info.peer_id));
+                    self.push_event_and_wake(crate::store::Event::RecordUpdated(*peer_id));
                 }
             }
             FromSwarm::DialFailure(info) => {
