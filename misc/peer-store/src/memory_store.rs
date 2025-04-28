@@ -463,7 +463,7 @@ mod test {
             let swarm2_peer_id = *swarm2.local_peer_id();
             swarm2.connect(&mut swarm1).await;
 
-            listen_addr.push(Protocol::P2p(swarm1_peer_id.into()));
+            listen_addr.push(Protocol::P2p(swarm1_peer_id));
             expect_record_update(&mut swarm2, swarm1_peer_id, Some(&listen_addr)).await;
             assert!(swarm2
                 .behaviour()
@@ -491,7 +491,7 @@ mod test {
                     _ => None,
                 })
                 .await;
-            new_listen_addr.push(Protocol::P2p(swarm1_peer_id.into()));
+            new_listen_addr.push(Protocol::P2p(swarm1_peer_id));
             expect_record_update(&mut swarm2, swarm1_peer_id, Some(&new_listen_addr)).await;
             // The address in store will contain peer ID.
             let new_listen_addr = new_listen_addr
@@ -554,7 +554,7 @@ mod test {
             let swarm2_peer_id = *swarm2.local_peer_id();
             swarm2.connect(&mut swarm1).await;
 
-            listen_addr.push(Protocol::P2p(swarm1_peer_id.into()));
+            listen_addr.push(Protocol::P2p(swarm1_peer_id));
             expect_record_update(&mut swarm2, swarm1_peer_id, Some(&listen_addr)).await;
 
             assert_eq!(
