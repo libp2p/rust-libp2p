@@ -2687,7 +2687,6 @@ checksum = "c19937216e9d3aa9956d9bb8dfc0b0c8beb6058fc4f7a4dc4d850edf86a237d6"
 name = "libp2p"
 version = "0.55.1"
 dependencies = [
- "async-std",
  "bytes",
  "either",
  "futures",
@@ -3346,7 +3345,6 @@ dependencies = [
 name = "libp2p-swarm"
 version = "0.47.0"
 dependencies = [
- "async-std",
  "criterion",
  "either",
  "fnv",

@@ -31,7 +31,7 @@ async-io = ["dep:async-io", "dep:async-std", "if-watch/smol"]
 
 [dev-dependencies]
 async-std = { version = "1.9.0", features = ["attributes"] }
-libp2p-swarm = { workspace = true, features = ["tokio", "async-std"] }
+libp2p-swarm = { workspace = true, features = ["tokio"] }
 tokio = { workspace = true, features = ["macros", "rt", "rt-multi-thread", "time"] }
 libp2p-swarm-test = { path = "../../swarm-test" }
 tracing-subscriber = { workspace = true, features = ["env-filter"] }
