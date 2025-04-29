@@ -29,6 +29,14 @@ pub enum Event {
         peer_id: PeerId,
         /// The added address.
         address: Multiaddr,
+        /// Whether the address will be kept in the store after a dial-failure.
+        ///
+        /// Set to `true` when an address was added explicitly through
+        /// [`MemoryStore::add_address`], `false` if the address was discovered through the
+        /// swarm or other behaviors.
+        ///
+        /// Only relevant when [`Config::is_remove_addr_on_dial_error`] is `true`.
+        is_permanent: bool,
     },
     /// A peer address has been removed from the store.
     PeerAddressRemoved {
@@ -79,16 +87,22 @@ impl<T> MemoryStore<T> {
     /// Update an address record and notify the swarm.
     ///
     /// Returns `true` if the address is new.
-    fn add_address_inner(&mut self, peer: &PeerId, address: &Multiaddr, permanent: bool) -> bool {
+    fn add_address_inner(
+        &mut self,
+        peer: &PeerId,
+        address: &Multiaddr,
+        is_permanent: bool,
+    ) -> bool {
         let record = self
             .records
             .entry(*peer)
             .or_insert(PeerRecord::new(self.config.record_capacity));
-        let is_new = record.add_address(address, permanent);
+        let is_new = record.add_address(address, is_permanent);
         if is_new {
             self.push_event_and_wake(Event::PeerAddressAdded {
                 peer_id: *peer,
                 address: address.clone(),
+                is_permanent,
             });
         }
         is_new
@@ -318,14 +332,16 @@ impl<T> PeerRecord<T> {
     /// insert it to the front if not.
     ///
     /// Returns true when the address is new.
-    pub fn add_address(&mut self, address: &Multiaddr, permanent: bool) -> bool {
+    pub fn add_address(&mut self, address: &Multiaddr, is_permanent: bool) -> bool {
         if let Some(was_permanent) = self.addresses.get(address) {
-            if !*was_permanent && permanent {
-                self.addresses.get_or_insert(address.clone(), || permanent);
+            if !*was_permanent && is_permanent {
+                self.addresses
+                    .get_or_insert(address.clone(), || is_permanent);
             }
             return false;
         }
-        self.addresses.get_or_insert(address.clone(), || permanent);
+        self.addresses
+            .get_or_insert(address.clone(), || is_permanent);
         true
     }
 
@@ -449,9 +465,14 @@ mod test {
             expected_address: Option<&Multiaddr>,
         ) {
             match swarm.next_behaviour_event().await {
-                Event::PeerAddressAdded { peer_id, address } => {
+                Event::PeerAddressAdded {
+                    peer_id,
+                    address,
+                    is_permanent,
+                } => {
                     assert_eq!(peer_id, expected_peer);
                     assert!(expected_address.is_none_or(|a| *a == address));
+                    assert!(!is_permanent)
                 }
                 ev => panic!("Unexpected event {:?}.", ev),
             }
@@ -535,9 +556,14 @@ mod test {
         ) {
             loop {
                 match swarm.next_behaviour_event().await {
-                    BehaviourEvent::PeerStore(Event::PeerAddressAdded { peer_id, address }) => {
+                    BehaviourEvent::PeerStore(Event::PeerAddressAdded {
+                        peer_id,
+                        address,
+                        is_permanent,
+                    }) => {
                         assert_eq!(peer_id, expected_peer);
                         assert!(expected_address.is_none_or(|a| *a == address));
+                        assert!(!is_permanent);
                         break;
                     }
                     ev @ BehaviourEvent::PeerStore(_) => panic!("Unexpected event {:?}.", ev),
