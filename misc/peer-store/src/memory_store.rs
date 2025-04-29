@@ -20,13 +20,23 @@ use lru::LruCache;
 
 use super::Store;
 
-/// Event from the store and emitted to [`Swarm`](libp2p_swarm::Swarm).
+/// Event emitted from the [`MemoryStore`] to the [`Swarm`](libp2p_swarm::Swarm).
 #[derive(Debug, Clone)]
 pub enum Event {
     /// A new peer address has been added to the store.
-    PeerAddressAdded { peer_id: PeerId, address: Multiaddr },
+    PeerAddressAdded {
+        /// ID of the peer for which the address was added.
+        peer_id: PeerId,
+        /// The added address.
+        address: Multiaddr,
+    },
     /// A peer address has been removed from the store.
-    PeerAddressRemoved { peer_id: PeerId, address: Multiaddr },
+    PeerAddressRemoved {
+        /// ID of the peer for which the address was removed.
+        peer_id: PeerId,
+        /// The removed address.
+        address: Multiaddr,
+    },
 }
 
 /// A in-memory store that uses LRU cache for bounded storage of addresses
@@ -66,7 +76,7 @@ impl<T> MemoryStore<T> {
         self.add_address_inner(peer, address, true)
     }
 
-    /// Update an address record without notifying swarm.
+    /// Update an address record and notify the swarm.
     ///
     /// Returns `true` if the address is new.
     fn add_address_inner(&mut self, peer: &PeerId, address: &Multiaddr, permanent: bool) -> bool {
@@ -91,7 +101,7 @@ impl<T> MemoryStore<T> {
         self.remove_address_inner(peer, address, true)
     }
 
-    /// Remove an address record without notifying swarm.
+    /// Remove an address record and notify the swarm.
     ///
     /// Returns `true` when the address is removed, `false` if the address didn't exist
     /// or the address is permanent and `force` false.
@@ -111,6 +121,7 @@ impl<T> MemoryStore<T> {
         false
     }
 
+    /// Get a reference to a peer's custom data.
     pub fn get_custom_data(&self, peer: &PeerId) -> Option<&T> {
         self.records.get(peer).and_then(|r| r.get_custom_data())
     }
@@ -149,7 +160,9 @@ impl<T> MemoryStore<T> {
         self.records.iter()
     }
 
-    /// Iterate over all internal records mutably.  
+    /// Iterate over all internal records mutably.
+    ///
+    /// Changes to the records will not generate an event.  
     pub fn record_iter_mut(&mut self) -> impl Iterator<Item = (&PeerId, &mut PeerRecord<T>)> {
         self.records.iter_mut()
     }
