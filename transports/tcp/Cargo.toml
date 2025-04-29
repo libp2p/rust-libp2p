@@ -11,6 +11,7 @@ keywords = ["peer-to-peer", "libp2p", "networking"]
 categories = ["network-programming", "asynchronous"]
 
 [dependencies]
+async-io = { version = "2.3.3", optional = true }
 futures = { workspace = true }
 futures-timer = "3.0"
 if-watch = { workspace = true }
@@ -22,6 +23,7 @@ tracing = { workspace = true }
 
 [features]
 tokio = ["dep:tokio", "if-watch/tokio"]
+async-io = ["dep:async-io", "if-watch/smol"]
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["full"] }
