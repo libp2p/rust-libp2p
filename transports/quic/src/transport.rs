@@ -84,6 +84,7 @@ pub struct GenTransport<P: Provider> {
     hole_punch_attempts: HashMap<SocketAddr, oneshot::Sender<Connecting>>,
 }
 
+#[expect(deprecated)]
 impl<P: Provider> GenTransport<P> {
     /// Create a new [`GenTransport`] with the given [`Config`].
     pub fn new(config: Config) -> Self {
@@ -127,7 +128,7 @@ impl<P: Provider> GenTransport<P> {
                 let _ = endpoint_config;
                 let _ = server_config;
                 let _ = socket;
-                let err = std::io::Error::new(std::io::ErrorKind::Other, "no async runtime found");
+                let err = std::io::Error::other("no async runtime found");
                 Err(Error::Io(err))
             }
         }

@@ -390,8 +390,6 @@ impl NetworkBehaviour for Behaviour {
         _: ConnectionId,
         event: THandlerOutEvent<Self>,
     ) {
-        // TODO: remove when Rust 1.82 is MSRV
-        #[allow(unreachable_patterns)]
         libp2p_core::util::unreachable(event)
     }
 
@@ -694,8 +692,7 @@ mod tests {
             _local_addr: &Multiaddr,
             _remote_addr: &Multiaddr,
         ) -> Result<THandler<Self>, ConnectionDenied> {
-            Err(ConnectionDenied::new(std::io::Error::new(
-                std::io::ErrorKind::Other,
+            Err(ConnectionDenied::new(std::io::Error::other(
                 "ConnectionDenier",
             )))
         }
@@ -708,8 +705,7 @@ mod tests {
             _role_override: Endpoint,
             _port_use: PortUse,
         ) -> Result<THandler<Self>, ConnectionDenied> {
-            Err(ConnectionDenied::new(std::io::Error::new(
-                std::io::ErrorKind::Other,
+            Err(ConnectionDenied::new(std::io::Error::other(
                 "ConnectionDenier",
             )))
         }
@@ -722,8 +718,6 @@ mod tests {
             _connection_id: ConnectionId,
             event: THandlerOutEvent<Self>,
         ) {
-            // TODO: remove when Rust 1.82 is MSRV
-            #[allow(unreachable_patterns)]
             libp2p_core::util::unreachable(event)
         }
 

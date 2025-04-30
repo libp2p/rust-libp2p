@@ -154,16 +154,16 @@ async fn main() -> Result<()> {
 }
 
 #[derive(Parser, Debug)]
-#[clap(name = "libp2p Kademlia DHT example")]
+#[command(name = "libp2p Kademlia DHT example")]
 struct Opt {
-    #[clap(subcommand)]
+    #[command(subcommand)]
     argument: CliArgument,
 }
 
 #[derive(Debug, Parser)]
 enum CliArgument {
     GetPeers {
-        #[clap(long)]
+        #[arg(long)]
         peer_id: Option<PeerId>,
     },
     PutPkRecord {},

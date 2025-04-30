@@ -148,7 +148,7 @@ async fn send(mut stream: Stream) -> io::Result<()> {
     stream.read_exact(&mut buf).await?;
 
     if bytes != buf {
-        return Err(io::Error::new(io::ErrorKind::Other, "incorrect echo"));
+        return Err(io::Error::other("incorrect echo"));
     }
 
     stream.close().await?;

@@ -26,7 +26,7 @@ pub(crate) mod transport;
 use std::{
     collections::{hash_map, HashMap, VecDeque},
     convert::Infallible,
-    io::{Error, ErrorKind, IoSlice},
+    io::{Error, IoSlice},
     pin::Pin,
     task::{Context, Poll},
 };
@@ -237,8 +237,6 @@ impl NetworkBehaviour for Behaviour {
     ) {
         let handler_event = match handler_event {
             Either::Left(e) => e,
-            // TODO: remove when Rust 1.82 is MSRV
-            #[allow(unreachable_patterns)]
             Either::Right(v) => libp2p_core::util::unreachable(v),
         };
 
@@ -411,10 +409,7 @@ impl ConnectionState {
     pub(crate) fn new_inbound(circuit: inbound_stop::Circuit) -> Self {
         ConnectionState::InboundAccepting {
             accept: async {
-                let (substream, read_buffer) = circuit
-                    .accept()
-                    .await
-                    .map_err(|e| Error::new(ErrorKind::Other, e))?;
+                let (substream, read_buffer) = circuit.accept().await.map_err(Error::other)?;
                 Ok(ConnectionState::Operational {
                     read_buffer,
                     substream,

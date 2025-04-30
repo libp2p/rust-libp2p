@@ -1,14 +1,13 @@
-use std::io;
+use std::{io, sync::LazyLock};
 
 use js_sys::{Promise, Reflect};
-use once_cell::sync::Lazy;
 use send_wrapper::SendWrapper;
 use wasm_bindgen::{JsCast, JsValue};
 
 use crate::Error;
 
 type Closure = wasm_bindgen::closure::Closure<dyn FnMut(JsValue)>;
-static DO_NOTHING: Lazy<SendWrapper<Closure>> = Lazy::new(|| {
+static DO_NOTHING: LazyLock<SendWrapper<Closure>> = LazyLock::new(|| {
     let cb = Closure::new(|_| {});
     SendWrapper::new(cb)
 });
@@ -65,5 +64,5 @@ pub(crate) fn parse_reader_response(resp: &JsValue) -> Result<Option<JsValue>, J
 }
 
 pub(crate) fn to_io_error(value: JsValue) -> io::Error {
-    io::Error::new(io::ErrorKind::Other, Error::from_js_value(value))
+    io::Error::other(Error::from_js_value(value))
 }

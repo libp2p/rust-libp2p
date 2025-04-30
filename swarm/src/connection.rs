@@ -36,9 +36,7 @@ use std::{
 };
 
 pub use error::ConnectionError;
-pub(crate) use error::{
-    PendingConnectionError, PendingInboundConnectionError, PendingOutboundConnectionError,
-};
+pub(crate) use error::{PendingInboundConnectionError, PendingOutboundConnectionError};
 use futures::{future::BoxFuture, stream, stream::FuturesUnordered, FutureExt, StreamExt};
 use futures_timer::Delay;
 use libp2p_core::{
@@ -636,9 +634,7 @@ fn to_stream_upgrade_error<T>(e: NegotiationError) -> StreamUpgradeError<T> {
     match e {
         NegotiationError::Failed => StreamUpgradeError::NegotiationFailed,
         NegotiationError::ProtocolError(ProtocolError::IoError(e)) => StreamUpgradeError::Io(e),
-        NegotiationError::ProtocolError(other) => {
-            StreamUpgradeError::Io(io::Error::new(io::ErrorKind::Other, other))
-        }
+        NegotiationError::ProtocolError(other) => StreamUpgradeError::Io(io::Error::other(other)),
     }
 }
 
@@ -1205,14 +1201,10 @@ mod tests {
             event: ConnectionEvent<Self::InboundProtocol, Self::OutboundProtocol>,
         ) {
             match event {
-                // TODO: remove when Rust 1.82 is MSRV
-                #[allow(unreachable_patterns)]
                 ConnectionEvent::FullyNegotiatedInbound(FullyNegotiatedInbound {
                     protocol,
                     ..
                 }) => libp2p_core::util::unreachable(protocol),
-                // TODO: remove when Rust 1.82 is MSRV
-                #[allow(unreachable_patterns)]
                 ConnectionEvent::FullyNegotiatedOutbound(FullyNegotiatedOutbound {
                     protocol,
                     ..
@@ -1220,8 +1212,6 @@ mod tests {
                 ConnectionEvent::DialUpgradeError(DialUpgradeError { error, .. }) => {
                     self.error = Some(error)
                 }
-                // TODO: remove when Rust 1.82 is MSRV
-                #[allow(unreachable_patterns)]
                 ConnectionEvent::AddressChange(_)
                 | ConnectionEvent::ListenUpgradeError(_)
                 | ConnectionEvent::LocalProtocolsChange(_)
@@ -1230,8 +1220,6 @@ mod tests {
         }
 
         fn on_behaviour_event(&mut self, event: Self::FromBehaviour) {
-            // TODO: remove when Rust 1.82 is MSRV
-            #[allow(unreachable_patterns)]
             libp2p_core::util::unreachable(event)
         }
 
@@ -1294,8 +1282,6 @@ mod tests {
         }
 
         fn on_behaviour_event(&mut self, event: Self::FromBehaviour) {
-            // TODO: remove when Rust 1.82 is MSRV
-            #[allow(unreachable_patterns)]
             libp2p_core::util::unreachable(event)
         }
 
