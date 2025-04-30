@@ -222,6 +222,9 @@ where
         self.closest_expiration = Some(P::Timer::at(now));
     }
 
+    /// Try to send an address update to the interface task that matches the address' IP.
+    /// 
+    /// Returns the address if the sending failed due to a full channel.
     fn try_send_address_update(
         &mut self,
         cx: &mut Context<'_>,
@@ -436,6 +439,7 @@ where
                 self.closest_expiration = Some(timer);
             }
 
+            self.waker = cx.waker().clone();
             return Poll::Pending;
         }
     }
