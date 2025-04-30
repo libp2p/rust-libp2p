@@ -162,10 +162,6 @@ where
     closest_expiration: Option<P::Timer>,
 
     /// The current set of listen addresses.
-    ///
-    /// This is shared across all interface tasks using an [`RwLock`].
-    /// The [`Behaviour`] updates this upon new [`FromSwarm`]
-    /// events where as [`InterfaceState`]s read from it to answer inbound mDNS queries.
     listen_addresses: ListenAddresses,
 
     local_peer_id: PeerId,
