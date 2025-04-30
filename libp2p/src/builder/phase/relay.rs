@@ -124,8 +124,7 @@ impl<Provider, T: AuthenticatedMultiplexedTransport> SwarmBuilder<Provider, Rela
         Provider,
         BehaviourPhase<impl AuthenticatedMultiplexedTransport, NoRelayBehaviour>,
     > {
-        self.without_relay()
-            .with_bandwidth_metrics(registry)
+        self.without_relay().with_bandwidth_metrics(registry)
     }
 }
 impl<Provider, T: AuthenticatedMultiplexedTransport> SwarmBuilder<Provider, RelayPhase<T>> {
