@@ -90,7 +90,7 @@ use libp2p_identity::PeerId;
 use libp2p_swarm::{
     behaviour::{AddressChange, ConnectionClosed, DialFailure, FromSwarm},
     dial_opts::DialOpts,
-    ConnectionDenied, ConnectionHandler, ConnectionId, NetworkBehaviour, NotifyHandler,
+    ConnectionDenied, ConnectionHandler, ConnectionId, DialError, NetworkBehaviour, NotifyHandler,
     PeerAddresses, THandler, THandlerInEvent, THandlerOutEvent, ToSwarm,
 };
 use smallvec::SmallVec;
@@ -706,9 +706,13 @@ where
         DialFailure {
             peer_id,
             connection_id,
-            ..
+            error,
         }: DialFailure,
     ) {
+        if let DialError::DialPeerConditionFalse(_) = error {
+            // Dial-condition fails because there is already another ongoing dial.
+            return;
+        }
         if let Some(peer) = peer_id {
             // If there are pending outgoing requests when a dial failure occurs,
             // it is implied that we are not connected to the peer, since pending
