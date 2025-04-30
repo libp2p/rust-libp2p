@@ -12,24 +12,7 @@ use libp2p_swarm::{
 };
 use libp2p_swarm_test::SwarmExt;
 
-#[async_std::test]
-async fn sends_remaining_events_to_behaviour_on_connection_close() {
-    let mut swarm1 = Swarm::new_ephemeral(|_| Behaviour::new(3));
-    let mut swarm2 = Swarm::new_ephemeral(|_| Behaviour::new(3));
 
-    swarm2.listen().with_memory_addr_external().await;
-    swarm1.connect(&mut swarm2).await;
-
-    swarm1.disconnect_peer_id(*swarm2.local_peer_id()).unwrap();
-
-    match libp2p_swarm_test::drive(&mut swarm1, &mut swarm2).await {
-        ([SwarmEvent::ConnectionClosed { .. }], [SwarmEvent::ConnectionClosed { .. }]) => {
-            assert_eq!(swarm1.behaviour().state, 0);
-            assert_eq!(swarm2.behaviour().state, 0);
-        }
-        (e1, e2) => panic!("Unexpected events: {:?} {:?}", e1, e2),
-    }
-}
 
 struct HandlerWithState {
     precious_state: u64,

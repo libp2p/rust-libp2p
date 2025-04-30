@@ -28,17 +28,14 @@ tracing = { workspace = true }
 wasm-bindgen-futures = { version = "0.4.42", optional = true }
 
 [target.'cfg(not(any(target_os = "emscripten", target_os = "wasi", target_os = "unknown")))'.dependencies]
-async-std = { version = "1.6.2", optional = true }
 tokio = { workspace = true, features = ["rt"], optional = true }
 
 [features]
 macros = ["dep:libp2p-swarm-derive"]
 tokio = ["dep:tokio"]
-async-std = ["dep:async-std"]
 wasm-bindgen = ["dep:wasm-bindgen-futures", "dep:getrandom"]
 
 [dev-dependencies]
-async-std = { version = "1.6.2", features = ["attributes"] }
 either = "1.11.0"
 futures = { workspace = true }
 libp2p-identify = { path = "../protocols/identify" }                # Using `path` here because this is a cyclic dev-dependency which otherwise breaks releasing.
