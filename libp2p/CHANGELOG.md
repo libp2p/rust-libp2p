@@ -1,9 +1,9 @@
-## 0.56.0
+## 0.55.1
 
-- Remove deprecated `Transport::with_bandwidth_logging`, `SwarmBuilder::with_bandwidth_logging` and `TransportExt`. 
+- Remove deprecated `Transport::with_bandwidth_logging`,
+  `SwarmBuilder::with_bandwidth_logging` and `TransportExt`. 
   See [PR 5766](https://github.com/libp2p/rust-libp2p/pull/5766).
 
-## 0.55.1
 - Introduce `libp2p-webrtc-websys` behind `webrtc-websys` feature flag.
   See [PR 5819](https://github.com/libp2p/rust-libp2p/pull/5819).
 
