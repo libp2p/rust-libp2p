@@ -115,7 +115,7 @@ pub(crate) struct InterfaceState<U, T> {
     /// Current listening addresses.
     listen_addresses: Vec<Multiaddr>,
     /// Receiver for listening-address updates from the swarm.
-    listen_addresses_rx: mpsc::UnboundedReceiver<ListenAddressUpdate>,
+    listen_addresses_rx: mpsc::Receiver<ListenAddressUpdate>,
 
     query_response_sender: mpsc::Sender<(PeerId, Multiaddr, Instant)>,
 
@@ -153,7 +153,7 @@ where
         config: Config,
         local_peer_id: PeerId,
         listen_addresses: Vec<Multiaddr>,
-        listen_addresses_rx: mpsc::UnboundedReceiver<ListenAddressUpdate>,
+        listen_addresses_rx: mpsc::Receiver<ListenAddressUpdate>,
         query_response_sender: mpsc::Sender<(PeerId, Multiaddr, Instant)>,
     ) -> io::Result<Self> {
         tracing::info!(address=%addr, "creating instance on iface address");

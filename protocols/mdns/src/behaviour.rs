@@ -31,10 +31,10 @@ use std::{
     convert::Infallible,
     fmt,
     future::Future,
-    io,
+    io, mem,
     net::IpAddr,
     pin::Pin,
-    task::{Context, Poll},
+    task::{Context, Poll, Waker},
     time::Instant,
 };
 
@@ -144,8 +144,8 @@ where
     /// Iface watcher.
     if_watch: P::Watcher,
 
-    /// Handles to tasks running the mDNS queries.
-    if_tasks: HashMap<IpAddr, mpsc::UnboundedSender<ListenAddressUpdate>>,
+    /// Channel for sending address updates to interface tasks.
+    if_tasks: HashMap<IpAddr, mpsc::Sender<ListenAddressUpdate>>,
 
     query_response_receiver: mpsc::Receiver<(PeerId, Multiaddr, Instant)>,
     query_response_sender: mpsc::Sender<(PeerId, Multiaddr, Instant)>,
@@ -168,6 +168,11 @@ where
 
     /// Pending behaviour events to be emitted.
     pending_events: VecDeque<ToSwarm<Event, Infallible>>,
+
+    /// Pending address updates to send to interfaces.
+    pending_address_updates: Vec<ListenAddressUpdate>,
+
+    waker: Waker,
 }
 
 impl<P> Behaviour<P>
@@ -189,6 +194,8 @@ where
             listen_addresses: Default::default(),
             local_peer_id,
             pending_events: Default::default(),
+            pending_address_updates: Default::default(),
+            waker: Waker::noop().clone(),
         })
     }
 
@@ -213,6 +220,27 @@ where
             }
         }
         self.closest_expiration = Some(P::Timer::at(now));
+    }
+
+    fn try_send_address_update(
+        &mut self,
+        cx: &mut Context<'_>,
+        update: ListenAddressUpdate,
+    ) -> Option<ListenAddressUpdate> {
+        let ip = update.ip_addr()?;
+        let tx = self.if_tasks.get_mut(&ip)?;
+        match tx.poll_ready(cx) {
+            Poll::Ready(Ok(())) => {
+                tx.start_send(update).expect("Channel is ready.");
+                None
+            }
+            Poll::Ready(Err(e)) if e.is_disconnected() => {
+                tracing::error!("`InterfaceState` for ip {ip} dropped");
+                self.if_tasks.remove(&ip);
+                None
+            }
+            _ => Some(update),
+        }
     }
 }
 
@@ -277,16 +305,10 @@ where
         if !self.listen_addresses.on_swarm_event(&event) {
             return;
         }
-        if let Some(update) = ListenAddressUpdate::from_swarm(event) {
-            // Send address update to matching interface task.
-            if let Some(ip) = update.ip_addr() {
-                if let Some(tx) = self.if_tasks.get_mut(&ip) {
-                    if tx.unbounded_send(update).is_err() {
-                        tracing::error!("`InterfaceState` for ip {ip} dropped");
-                        self.if_tasks.remove(&ip);
-                    }
-                }
-            }
+        if let Some(update) = ListenAddressUpdate::from_swarm(event).and_then(|update| {
+            self.try_send_address_update(&mut Context::from_waker(&self.waker.clone()), update)
+        }) {
+            self.pending_address_updates.push(update);
         }
     }
 
@@ -296,6 +318,13 @@ where
         cx: &mut Context<'_>,
     ) -> Poll<ToSwarm<Self::ToSwarm, THandlerInEvent<Self>>> {
         loop {
+            // Send address updates to interface tasks.
+            for update in mem::take(&mut self.pending_address_updates) {
+                if let Some(update) = self.try_send_address_update(cx, update) {
+                    self.pending_address_updates.push(update);
+                }
+            }
+
             // Check for pending events and emit them.
             if let Some(event) = self.pending_events.pop_front() {
                 return Poll::Ready(event);
@@ -315,7 +344,7 @@ where
                             continue;
                         }
                         if let Entry::Vacant(e) = self.if_tasks.entry(ip_addr) {
-                            let (addr_tx, addr_rx) = mpsc::unbounded();
+                            let (addr_tx, addr_rx) = mpsc::channel(10); // Chosen arbitrarily.
                             let listen_addresses = self
                                 .listen_addresses
                                 .iter()
