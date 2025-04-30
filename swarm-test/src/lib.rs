@@ -45,7 +45,7 @@ pub trait SwarmExt {
     /// multiplexer. However, these details should not be relied
     /// upon by the test and may change at any time.
     #[cfg(feature = "tokio")]
-    fn new_ephemeral_tokio(behaviour_fn: impl FnOnce(libp2p_identity::Keypair) -> Self::NB) -> Self
+    fn new_ephemeral(behaviour_fn: impl FnOnce(libp2p_identity::Keypair) -> Self::NB) -> Self
     where
         Self: Sized;
 
@@ -213,7 +213,7 @@ where
     type NB = B;
 
     #[cfg(feature = "tokio")]
-    fn new_ephemeral_tokio(behaviour_fn: impl FnOnce(libp2p_identity::Keypair) -> Self::NB) -> Self
+    fn new_ephemeral(behaviour_fn: impl FnOnce(libp2p_identity::Keypair) -> Self::NB) -> Self
     where
         Self: Sized,
     {

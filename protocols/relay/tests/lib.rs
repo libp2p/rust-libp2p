@@ -452,12 +452,12 @@ fn build_relay_with_config(config: relay::Config) -> Swarm<Relay> {
             relay: relay::Behaviour::new(local_peer_id, config),
         },
         local_peer_id,
-        Config::with_async_std_executor(),
+        Config::with_tokio_executor(),
     )
 }
 
 fn build_client() -> Swarm<Client> {
-    build_client_with_config(Config::with_async_std_executor())
+    build_client_with_config(Config::with_tokio_executor())
 }
 
 fn build_client_with_config(config: Config) -> Swarm<Client> {

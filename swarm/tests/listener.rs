@@ -17,7 +17,7 @@ use libp2p_swarm::{
 };
 use libp2p_swarm_test::SwarmExt;
 
-#[async_std::test]
+#[tokio::test]
 async fn behaviour_listener() {
     let mut swarm = Swarm::new_ephemeral(|_| Behaviour::default());
     let addr: Multiaddr = Protocol::Memory(0).into();

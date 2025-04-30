@@ -64,7 +64,7 @@ fn build_node_with_config(cfg: Config) -> (Multiaddr, TestSwarm) {
         transport,
         behaviour,
         local_id,
-        swarm::Config::with_async_std_executor(),
+        swarm::Config::with_tokio_executor(),
     );
 
     let address: Multiaddr = Protocol::Memory(random::<u64>()).into();
@@ -152,6 +152,7 @@ impl Arbitrary for Seed {
 
 #[test]
 fn bootstrap() {
+    let rt = tokio::runtime::Runtime::new().unwrap();
     fn prop(seed: Seed) {
         let mut rng = StdRng::from_seed(seed.0);
 

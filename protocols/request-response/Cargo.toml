@@ -30,7 +30,7 @@ cbor = ["dep:serde", "dep:cbor4ii", "libp2p-swarm/macros"]
 
 [dev-dependencies]
 anyhow = "1.0.86"
-async-std = { version = "1.6.2", features = ["attributes"] }
+tokio = { version = "1.37.0", features = ["full"] }
 rand = "0.8"
 libp2p-swarm-test = { path = "../../swarm-test" }
 futures_ringbuf = "0.4.0"

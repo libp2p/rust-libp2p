@@ -487,12 +487,12 @@ mod test {
             crate::memory_store::Config::default()
                 .set_record_capacity(NonZero::new(2).expect("2 > 0")),
         );
-        let mut swarm1 = Swarm::new_ephemeral_tokio(|_| crate::Behaviour::new(store1));
+        let mut swarm1 = Swarm::new_ephemeral(|_| crate::Behaviour::new(store1));
         let store2: MemoryStore<()> = MemoryStore::new(
             crate::memory_store::Config::default()
                 .set_record_capacity(NonZero::new(2).expect("2 > 0")),
         );
-        let mut swarm2 = Swarm::new_ephemeral_tokio(|_| crate::Behaviour::new(store2));
+        let mut swarm2 = Swarm::new_ephemeral(|_| crate::Behaviour::new(store2));
 
         let rt = tokio::runtime::Runtime::new().unwrap();
 
@@ -565,7 +565,7 @@ mod test {
                 .await
         }
         fn build_swarm() -> Swarm<Behaviour> {
-            Swarm::new_ephemeral_tokio(|kp| Behaviour {
+            Swarm::new_ephemeral(|kp| Behaviour {
                 peer_store: crate::Behaviour::new(MemoryStore::new(
                     crate::memory_store::Config::default()
                         .set_record_capacity(NonZero::new(4).expect("4 > 0")),

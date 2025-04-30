@@ -24,6 +24,7 @@ use std::{
     fmt,
     task::{Context, Poll},
 };
+use tokio::runtime::Runtime;
 
 use libp2p_core::{transport::PortUse, ConnectedPoint, Endpoint, Multiaddr};
 use libp2p_identity::PeerId;
@@ -407,7 +408,6 @@ mod tests {
     };
     use libp2p_swarm_test::SwarmExt;
     use quickcheck::*;
-    use tokio::runtime::Runtime;
 
     use super::*;
 
@@ -439,8 +439,8 @@ mod tests {
         (network, addr, outgoing_limit)
     }
 
-    #[test]
-    fn max_outgoing() {
+    #[tokio::test]
+    async fn max_outgoing() {
         let (mut network, addr, outgoing_limit) = fill_outgoing();
         match network
             .dial(
@@ -469,8 +469,8 @@ mod tests {
         );
     }
 
-    #[test]
-    fn outgoing_limit_bypass() {
+    #[tokio::test]
+    async fn outgoing_limit_bypass() {
         let (mut network, addr, _) = fill_outgoing();
         let bypassed_peer = PeerId::random();
         network
@@ -510,9 +510,9 @@ mod tests {
         }
     }
 
-    #[test]
-    fn max_established_incoming() {
-        fn prop(Limit(limit): Limit) {
+    #[tokio::test]
+    async fn max_established_incoming() {
+        async fn prop(limit: u32) -> bool {
             let mut swarm1 = Swarm::new_ephemeral(|_| {
                 Behaviour::new(
                     ConnectionLimits::default().with_max_established_incoming(Some(limit)),
@@ -523,39 +523,38 @@ mod tests {
                     ConnectionLimits::default().with_max_established_incoming(Some(limit)),
                 )
             });
-
-            let rt = Runtime::new().unwrap();
-            rt.block_on(async {
-                let (listen_addr, _) = swarm1.listen().with_memory_addr_external().await;
-
-                for _ in 0..limit {
-                    swarm2.connect(&mut swarm1).await;
-                }
-
-                swarm2.dial(listen_addr).unwrap();
-
-                tokio::spawn(swarm2.loop_on_next());
-
-                let cause = swarm1
-                    .wait(|event| match event {
-                        SwarmEvent::IncomingConnectionError {
-                            error: ListenError::Denied { cause },
-                            ..
-                        } => Some(cause),
-                        _ => None,
-                    })
-                    .await;
-
-                assert_eq!(cause.downcast::<Exceeded>().unwrap().limit, limit);
-            });
+    
+            let (listen_addr, _) = swarm1.listen().with_memory_addr_external().await;
+    
+            for _ in 0..limit {
+                swarm2.connect(&mut swarm1).await;
+            }
+    
+            swarm2.dial(listen_addr).unwrap();
+    
+            tokio::spawn(swarm2.loop_on_next());
+    
+            let cause = swarm1
+                .wait(|event| match event {
+                    SwarmEvent::IncomingConnectionError {
+                        error: ListenError::Denied { cause },
+                        ..
+                    } => Some(cause),
+                    _ => None,
+                })
+                .await;
+    
+            cause.downcast::<Exceeded>().unwrap().limit == limit
         }
-
-        quickcheck(prop as fn(_));
+    
+        for limit in 1..5 {
+            assert!(prop(limit).await);
+        }
     }
 
-    #[test]
-    fn bypass_established_incoming() {
-        fn prop(Limit(limit): Limit) {
+    #[tokio::test]
+    async fn bypass_established_incoming() {
+        for limit in 1..10 {
             let mut swarm1 = Swarm::new_ephemeral(|_| {
                 Behaviour::new(
                     ConnectionLimits::default().with_max_established_incoming(Some(limit)),
@@ -571,47 +570,42 @@ mod tests {
                     ConnectionLimits::default().with_max_established_incoming(Some(limit)),
                 )
             });
-
-            let rt = Runtime::new().unwrap();
+    
             let bypassed_peer_id = *swarm3.local_peer_id();
             swarm1
-                .behaviour_mut()
-                .limits
-                .bypass_peer_id(&bypassed_peer_id);
-
-            rt.block_on(async {
-                let (listen_addr, _) = swarm1.listen().with_memory_addr_external().await;
-
-                for _ in 0..limit {
-                    swarm2.connect(&mut swarm1).await;
-                }
-
-                swarm3.dial(listen_addr.clone()).unwrap();
-
-                tokio::spawn(swarm2.loop_on_next());
-                tokio::spawn(swarm3.loop_on_next());
-
-                swarm1
-                    .wait(|event| match event {
-                        SwarmEvent::ConnectionEstablished { peer_id, .. } => {
-                            (peer_id == bypassed_peer_id).then_some(())
-                        }
-                        SwarmEvent::IncomingConnectionError {
-                            error: ListenError::Denied { cause },
-                            ..
-                        } => {
-                            cause
-                                .downcast::<Exceeded>()
-                                .expect_err("Unexpected connection denied because of limit");
-                            None
-                        }
-                        _ => None,
-                    })
-                    .await;
-            });
+            .behaviour_mut()
+            .limits
+            .bypass_peer_id(&bypassed_peer_id);
+    
+            let (listen_addr, _) = swarm1.listen().with_memory_addr_external().await;
+    
+            for _ in 0..limit {
+                swarm2.connect(&mut swarm1).await;
+            }
+    
+            swarm3.dial(listen_addr.clone()).unwrap();
+    
+            tokio::spawn(swarm2.loop_on_next());
+            tokio::spawn(swarm3.loop_on_next());
+    
+            swarm1
+                .wait(|event| match event {
+                    SwarmEvent::ConnectionEstablished { peer_id, .. } => {
+                        (peer_id == bypassed_peer_id).then_some(())
+                    }
+                    SwarmEvent::IncomingConnectionError {
+                        error: ListenError::Denied { cause },
+                        ..
+                    } => {
+                        cause
+                            .downcast::<Exceeded>()
+                            .expect_err("Unexpected connection denied because of limit");
+                        None
+                    }
+                    _ => None,
+                })
+                .await;
         }
-
-        quickcheck(prop as fn(_));
     }
 
     /// Another sibling [`NetworkBehaviour`] implementation might deny established connections in
