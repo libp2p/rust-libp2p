@@ -122,7 +122,7 @@ impl<T> MemoryStore<T> {
     fn remove_address_inner(&mut self, peer: &PeerId, address: &Multiaddr, force: bool) -> bool {
         if let Some(record) = self.records.get_mut(peer) {
             if record.remove_address(address, force) {
-                if record.addresses.is_empty() {
+                if record.addresses.is_empty() && record.custom_data.is_none() {
                     self.records.remove(peer);
                 }
                 self.push_event_and_wake(Event::PeerAddressRemoved {
