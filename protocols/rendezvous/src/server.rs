@@ -189,9 +189,12 @@ impl NetworkBehaviour for Behaviour {
                             handle_request(peer_id, request, &mut self.registrations)
                         {
                             if let Some(resp) = response {
-                                self.inner
-                                    .send_response(channel, resp)
-                                    .expect("Send response");
+                                if let Err(resp) = self.inner.send_response(channel, resp) {
+                                    tracing::debug!(
+                                        %peer_id,
+                                        "Failed to send response, peer disconnected {resp:?}"
+                                    );
+                                }
                             }
 
                             return Poll::Ready(ToSwarm::GenerateEvent(event));
