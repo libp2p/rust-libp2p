@@ -213,7 +213,7 @@ impl PendingConnection {
 
     /// Aborts the connection attempt, closing the connection.
     fn abort(&mut self) {
-        if let Some(notifier) = self.abort_notifier.take() {
+        if let Some(notifier) = std::option::Option::take(&mut self.abort_notifier) {
             drop(notifier);
         }
     }
@@ -524,8 +524,8 @@ where
             },
         );
         self.established_connection_events.push(event_receiver);
-        if let Some(waker) = self.no_established_connections_waker.take() {
-            waker.wake();
+        if let Some(waker) = std::option::Option::take(&mut self.no_established_connections_waker) {
+                                    waker.wake();
         }
 
         let connection = Connection::new(
@@ -848,8 +848,7 @@ impl NewConnection {
 
 impl Drop for NewConnection {
     fn drop(&mut self) {
-        if let Some(connection) = self.connection.take() {
-            let _ = self
+        if let Some(connection) = std::option::Option::take(&mut self.connection) {            let _ = self
                 .drop_sender
                 .take()
                 .expect("`drop_sender` to always be `Some`")

@@ -31,6 +31,7 @@ wasm-bindgen-futures = { version = "0.4.42", optional = true }
 tokio = { workspace = true, features = ["rt"], optional = true }
 
 [features]
+default = ["macros", "tokio"]
 macros = ["dep:libp2p-swarm-derive"]
 tokio = ["dep:tokio"]
 wasm-bindgen = ["dep:wasm-bindgen-futures", "dep:getrandom"]

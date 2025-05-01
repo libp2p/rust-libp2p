@@ -1323,7 +1323,7 @@ where
                 Poll::Pending => pending.push(id),
                 Poll::Ready(Err(())) => {} // connection is closing
                 Poll::Ready(Ok(())) => {
-                    let e = event.take().expect("by (1),(2)");
+                    let e = std::option::Option::take(&mut event).expect("by (1),(2)");
                     if let Err(e) = conn.notify_handler(e) {
                         event = Some(e) // (2)
                     } else {
