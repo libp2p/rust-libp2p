@@ -31,23 +31,12 @@
 //! # #[cfg(feature = "tokio")]
 //! # fn main() -> std::io::Result<()> {
 //! #
-//!     use libp2p_core::{transport::ListenerId, Multiaddr, Transport};
-//!     use libp2p_quic as quic;
-//!     let keypair = libp2p_identity::Keypair::generate_ed25519();
-//!     let quic_config = quic::Config::new(&keypair);
+//! use libp2p_core::{transport::ListenerId, Multiaddr, Transport};
+//! use libp2p_quic as quic;
 //!
-//!     let mut quic_transport = quic::tokio::Transport::new(quic_config);
-//!
-//!     let addr = "/ip4/127.0.0.1/udp/12345/quic-v1"
-//!         .parse()
-//!         .expect("address should be valid");
-//!     quic_transport
-//!         .listen_on(ListenerId::next(), addr)
-//!         .expect("listen error.");
-//!
-//!     // Pour un exemple plus complet, on pourrait ajouter:
-//!     // tokio::signal::ctrl_c().await?;
-//!     // println!("Shutting down");
+//! let keypair = libp2p_identity::Keypair::generate_ed25519();
+//! let quic_config = quic::Config::new(&keypair);//!
+//! let mut quic_transport = quic::async_std::Transport::new(quic_config);
 //!
 //!     Ok(())
 //! }

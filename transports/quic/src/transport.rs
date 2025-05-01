@@ -740,7 +740,7 @@ fn socketaddr_to_multiaddr(socket_addr: &SocketAddr, version: ProtocolVersion) -
 }
 
 #[cfg(test)]
-#[cfg(any(feature = "tokio"))]
+#[cfg(feature = "tokio")]
 mod tests {
     use futures::future::poll_fn;
 
