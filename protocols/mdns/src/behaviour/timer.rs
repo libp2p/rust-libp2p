@@ -22,7 +22,7 @@ use std::time::{Duration, Instant};
 
 /// Simple wrapper for the different type of timers
 #[derive(Debug)]
-#[cfg(any(feature = "tokio"))]
+#[cfg(feature = "tokio")]
 pub struct Timer<T> {
     inner: T,
 }
