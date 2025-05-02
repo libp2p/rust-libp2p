@@ -1,14 +1,14 @@
 # Generic (stream) protocols
 
-This module provides a generic [`NetworkBehaviour`](libp2p_swarm::NetworkBehaviour) for stream-oriented protocols.
+This module provides a generic [`NetworkBehaviour`](https://docs.rs/libp2p-swarm/latest/libp2p_swarm/trait.NetworkBehaviour.html) for stream-oriented protocols.
 Streams are the fundamental primitive of libp2p and all other protocols are implemented using streams.
-In contrast to other [`NetworkBehaviour`](libp2p_swarm::NetworkBehaviour)s, this module takes a different design approach.
+In contrast to other [`NetworkBehaviour`](https://docs.rs/libp2p-swarm/latest/libp2p_swarm/trait.NetworkBehaviour.html)s, this module takes a different design approach.
 All interaction happens through a [`Control`] that can be obtained via [`Behaviour::new_control`].
 [`Control`]s can be cloned and thus shared across your application.
 
 ## Inbound
 
-To accept streams for a particular [`StreamProtocol`](libp2p_swarm::StreamProtocol) using this module, use [`Control::accept`]:
+To accept streams for a particular [`StreamProtocol`](https://docs.rs/libp2p-swarm/latest/libp2p_swarm/struct.StreamProtocol.html) using this module, use [`Control::accept`]:
 
 ### Example
 
