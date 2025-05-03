@@ -384,28 +384,33 @@ impl NetworkBehaviour for Behaviour {
         loop {
             match self.state {
                 GatewayState::Searching(ref mut fut) => match Pin::new(fut).poll(cx) {
-                    Poll::Ready(result) => {
-                        match result.expect("sender shouldn't have been dropped") {
-                            Ok(gateway) => {
-                                if !is_addr_global(gateway.external_addr) {
-                                    self.state =
-                                        GatewayState::NonRoutableGateway(gateway.external_addr);
-                                    tracing::debug!(
-                                        gateway_address=%gateway.external_addr,
-                                        "the gateway is not routable"
-                                    );
-                                    return Poll::Ready(ToSwarm::GenerateEvent(
-                                        Event::NonRoutableGateway,
-                                    ));
-                                }
-                                self.state = GatewayState::Available(gateway);
+                    Poll::Ready(Ok(result)) => match result {
+                        Ok(gateway) => {
+                            if !is_addr_global(gateway.external_addr) {
+                                self.state =
+                                    GatewayState::NonRoutableGateway(gateway.external_addr);
+                                tracing::debug!(
+                                    gateway_address=%gateway.external_addr,
+                                    "the gateway is not routable"
+                                );
+                                return Poll::Ready(ToSwarm::GenerateEvent(
+                                    Event::NonRoutableGateway,
+                                ));
                             }
-                            Err(err) => {
-                                tracing::debug!("could not find gateway: {err}");
-                                self.state = GatewayState::GatewayNotFound;
-                                return Poll::Ready(ToSwarm::GenerateEvent(Event::GatewayNotFound));
-                            }
+                            self.state = GatewayState::Available(gateway);
                         }
+                        Err(err) => {
+                            tracing::debug!("could not find gateway: {err}");
+                            self.state = GatewayState::GatewayNotFound;
+                            return Poll::Ready(ToSwarm::GenerateEvent(Event::GatewayNotFound));
+                        }
+                    },
+                    Poll::Ready(Err(err)) => {
+                        // The sender channel has been dropped. This typically indicates a shutdown
+                        // process is underway.
+                        tracing::debug!("sender has been dropped: {err}");
+                        self.state = GatewayState::GatewayNotFound;
+                        return Poll::Ready(ToSwarm::GenerateEvent(Event::GatewayNotFound));
                     }
                     Poll::Pending => return Poll::Pending,
                 },

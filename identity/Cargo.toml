@@ -1,6 +1,6 @@
 [package]
 name = "libp2p-identity"
-version = "0.2.10"
+version = "0.2.11"
 edition = "2021" # MUST NOT inherit from workspace because we don't want to publish breaking changes to `libp2p-identity`.
 description = "Data structures and algorithms for identifying peers in libp2p."
 rust-version = "1.73.0" # MUST NOT inherit from workspace because we don't want to publish breaking changes to `libp2p-identity`.
@@ -16,7 +16,7 @@ asn1_der = { version = "0.7.6", optional = true }
 bs58 = { version = "0.5.1", optional = true }
 ed25519-dalek = { version = "2.1", optional = true }
 hkdf = { version = "0.12.4", optional = true }
-libsecp256k1 = { version = "0.7.0", optional = true }
+k256 = { version = "0.13.4", optional = true, features = ["ecdsa", "arithmetic"] }
 tracing = { workspace = true }
 multihash = { version = "0.19.1", optional = true }
 p256 = { version = "0.13", default-features = false, features = ["ecdsa", "std", "pem"], optional = true }
@@ -32,7 +32,7 @@ zeroize = { version = "1.8", optional = true }
 ring = { workspace = true, features = ["alloc", "std"], optional = true }
 
 [features]
-secp256k1 = ["dep:libsecp256k1", "dep:asn1_der", "dep:sha2", "dep:hkdf", "dep:zeroize"]
+secp256k1 = ["dep:k256", "dep:asn1_der", "dep:sha2", "dep:hkdf", "dep:zeroize"]
 ecdsa = ["dep:p256", "dep:zeroize", "dep:sec1", "dep:sha2", "dep:hkdf"]
 rsa = ["dep:ring", "dep:asn1_der", "dep:rand", "dep:zeroize"]
 ed25519 = ["dep:ed25519-dalek", "dep:zeroize", "dep:sha2", "dep:hkdf"]
