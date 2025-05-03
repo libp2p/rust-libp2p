@@ -641,26 +641,25 @@ mod tests {
     // These helpers will be compiled conditionally, depending on the async runtime in use.
 
     #[cfg(feature = "async-std")]
-    fn test_async_std<T, F: Future<Output = ()> >(
+    fn test_async_std<T, F: Future<Output = ()>>(
         transport: T,
         test_fn: impl FnOnce(async_std::Transport<T>) -> F,
     ) {
         let config = ResolverConfig::quad9();
         let opts = ResolverOpts::default();
-        let transport = async_std_crate::task::block_on(
-            async_std::Transport::custom(transport, config, opts),
-        );
+        let transport =
+            async_std_crate::task::block_on(async_std::Transport::custom(transport, config, opts));
         async_std_crate::task::block_on(test_fn(transport));
     }
 
     #[cfg(feature = "tokio")]
-    fn test_tokio<T, F: Future<Output = ()> >(
+    fn test_tokio<T, F: Future<Output = ()>>(
         transport: T,
         test_fn: impl FnOnce(tokio::Transport<T>) -> F,
     ) {
         let config = ResolverConfig::quad9();
         let opts = ResolverOpts::default();
-        let transport =  tokio::Transport::custom(transport, config, opts);
+        let transport = tokio::Transport::custom(transport, config, opts);
         let rt = ::tokio::runtime::Builder::new_current_thread()
             .enable_io()
             .enable_time()
@@ -728,7 +727,7 @@ mod tests {
                 role: Endpoint::Dialer,
                 port_use: PortUse::Reuse,
             };
-    
+
             // Success due to existing A record for example.com.
             let _ = transport
                 .dial("/dns4/example.com/tcp/20000".parse().unwrap(), dial_opts)
@@ -798,24 +797,27 @@ mod tests {
                         1,
                         "Expected exactly 1 error for 'no records' scenario, got {dial_errs:?}"
                     );
-            
+
                     match &dial_errs[0] {
-                        Error::ResolveError(e) => {
-                            match e.kind() {
-                                ResolveErrorKind::Proto(ProtoError { kind, .. })
-                                    if matches!(kind.as_ref(), ProtoErrorKind::NoRecordsFound { .. }) => {}
-                                _ => panic!("Unexpected DNS error: {e:?}"),
-                            }
+                        Error::ResolveError(e) => match e.kind() {
+                            ResolveErrorKind::Proto(ProtoError { kind, .. })
+                                if matches!(
+                                    kind.as_ref(),
+                                    ProtoErrorKind::NoRecordsFound { .. }
+                                ) => {}
+                            _ => panic!("Unexpected DNS error: {e:?}"),
+                        },
+                        other => {
+                            panic!("Expected a single ResolveError(...) sub-error, got {other:?}")
                         }
-                        other => panic!("Expected a single ResolveError(...) sub-error, got {other:?}"),
                     }
                 }
-            
+
                 Err(e) => panic!("Unexpected error: {e:?}"),
                 Ok(_) => panic!("Unexpected success."),
             }
-        }      
-    
+        }
+
         #[cfg(feature = "async-std")]
         {
             test_async_std(CustomTransport, run);
@@ -823,7 +825,7 @@ mod tests {
 
         #[cfg(feature = "tokio")]
         {
-           test_tokio(CustomTransport, run);
+            test_tokio(CustomTransport, run);
         }
     }
 
@@ -917,10 +919,10 @@ mod tests {
                 Ok(_) => panic!("Dial unexpectedly succeeded"),
             }
         }
-    
+
         #[cfg(feature = "async-std")]
         test_async_std(AlwaysFailTransport, run_test);
-    
+
         #[cfg(feature = "tokio")]
         test_tokio(AlwaysFailTransport, run_test);
     }
