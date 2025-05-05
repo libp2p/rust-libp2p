@@ -1,3 +1,8 @@
+## 0.47.1
+
+- Enforce an inbound substream timeout in the kad substream handler.
+  See [PR 6009](https://github.com/libp2p/rust-libp2p/pull/6009).
+
 ## 0.47.0
 
 - Expose a kad query facility allowing specify num_results dynamically.
