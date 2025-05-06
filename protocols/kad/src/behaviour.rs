@@ -382,6 +382,16 @@ impl Config {
         self
     }
 
+    /// Modifies the timeout duration of outbount_substreams.
+    ///
+    /// * Default to `10` seconds.
+    /// * May need to increase this value when sending large records with poor connection.
+    pub fn set_outbound_substreams_timeout(&mut self, timeout: Duration) -> &mut Self {
+        self.protocol_config
+            .set_outbound_substreams_timeout(timeout);
+        self
+    }
+
     /// Sets the k-bucket insertion strategy for the Kademlia routing table.
     pub fn set_kbucket_inserts(&mut self, inserts: BucketInserts) -> &mut Self {
         self.kbucket_inserts = inserts;
