@@ -17,7 +17,13 @@ To accept streams for a particular [`StreamProtocol`](libp2p_swarm::StreamProtoc
 # use libp2p_swarm::{Swarm, StreamProtocol};
 # use libp2p_stream as stream;
 # use futures::StreamExt as _;
-let mut swarm: Swarm<stream::Behaviour> = todo!();
+let mut swarm = libp2p::SwarmBuilder::with_new_identity()
+    .with_tokio()
+    .with_tcp(Default::default(), libp2p_noise::Config::new, libp2p_yamux::Config::default)
+    .unwrap()
+    .with_behaviour(|_| stream::Behaviour::new())
+    .unwrap()
+    .build();
 
 let mut control = swarm.behaviour().new_control();
 let mut incoming = control.accept(StreamProtocol::new("/my-protocol")).unwrap();
@@ -55,8 +61,14 @@ To open a new outbound stream for a particular protocol, use [`Control::open_str
 # use libp2p_swarm::{Swarm, StreamProtocol};
 # use libp2p_stream as stream;
 # use libp2p_identity::PeerId;
-let mut swarm: Swarm<stream::Behaviour> = todo!();
-let peer_id: PeerId = todo!();
+let mut swarm = libp2p::SwarmBuilder::with_new_identity()
+    .with_tokio()
+    .with_tcp(Default::default(), libp2p_noise::Config::new, libp2p_yamux::Config::default)
+    .unwrap()
+    .with_behaviour(|_| stream::Behaviour::new())
+    .unwrap()
+    .build();
+let peer_id = PeerId::random();
 
 let mut control = swarm.behaviour().new_control();
 
