@@ -700,18 +700,105 @@ mod tests {
             }
         }
 
+        #[cfg(feature = "tokio")]
+        {
+            test_tokio(CustomTransport, run);
+        }
+    }
 
-        // Be explicit about the resolver used. At least on github CI, TXT
-        // type record lookups may not work with the system DNS resolver.
-        let config = ResolverConfig::quad9();
-        let opts = ResolverOpts::default();
-        let rt = ::tokio::runtime::Builder::new_current_thread()
-            .enable_io()
-            .enable_time()
-            .build()
-            .unwrap();
+    #[test]
+    fn aggregated_dial_errors() {
+        let _ = tracing_subscriber::fmt()
+            .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
+            .try_init();
 
-        rt.block_on(run(tokio::Transport::custom(CustomTransport, config, opts)));
-        
+        #[derive(Clone)]
+        struct AlwaysFailTransport;
+
+        impl libp2p_core::Transport for AlwaysFailTransport {
+            type Output = ();
+            type Error = std::io::Error;
+            type ListenerUpgrade = BoxFuture<'static, Result<Self::Output, Self::Error>>;
+            type Dial = BoxFuture<'static, Result<Self::Output, Self::Error>>;
+
+            fn listen_on(
+                &mut self,
+                _id: ListenerId,
+                _addr: Multiaddr,
+            ) -> Result<(), TransportError<Self::Error>> {
+                unimplemented!()
+            }
+
+            fn remove_listener(&mut self, _id: ListenerId) -> bool {
+                false
+            }
+
+            fn dial(
+                &mut self,
+                addr: Multiaddr,
+                _: DialOpts,
+            ) -> Result<Self::Dial, TransportError<Self::Error>> {
+                // Every dial attempt fails with an error that includes the address.
+                Ok(Box::pin(future::ready(Err(io::Error::new(
+                    io::ErrorKind::Unsupported,
+                    format!("No support for dialing {}", addr),
+                )))))
+            }
+
+            fn poll(
+                self: Pin<&mut Self>,
+                _cx: &mut Context<'_>,
+            ) -> Poll<TransportEvent<Self::ListenerUpgrade, Self::Error>> {
+                unimplemented!()
+            }
+        }
+
+        async fn run_test<T, R>(mut transport: super::Transport<T, R>)
+        where
+            T: Transport<Error = std::io::Error> + Clone + Send + Unpin + 'static,
+            T::Error: Send,
+            T::Dial: Send,
+            R: Clone + Send + Sync + Resolver + 'static,
+        {
+            let dial_opts = DialOpts {
+                role: Endpoint::Dialer,
+                port_use: PortUse::Reuse,
+            };
+
+            // This address requires DNS resolution, yielding two IP addresses,
+            // forcing two dial attempts. Both fail.
+            let addr: Multiaddr = "/dnsaddr/bootstrap.libp2p.io".parse().unwrap();
+            let dial_future = transport.dial(addr, dial_opts).unwrap();
+            let result = dial_future.await;
+
+            match result {
+                Err(Error::Dial(errs)) => {
+                    // We expect at least 2 errors, one per resolved IP.
+                    assert!(
+                        errs.len() >= 2,
+                        "Expected multiple dial errors, but got {}",
+                        errs.len()
+                    );
+                    for e in errs {
+                        match e {
+                            Error::Transport(io_err) => {
+                                assert_eq!(
+                                    io_err.kind(),
+                                    io::ErrorKind::Unsupported,
+                                    "Expected Unsupported dial error, got: {io_err:?}"
+                                );
+                            }
+                            _ => panic!("Expected Error::Transport(Unsupported), got: {e:?}"),
+                        }
+                    }
+                }
+                Err(e) => panic!("Expected aggregated dial errors, got {e:?}"),
+                Ok(_) => panic!("Dial unexpectedly succeeded"),
+            }
+        }
+
+
+        #[cfg(feature = "tokio")]
+        test_tokio(AlwaysFailTransport, run_test);
     }
 }
