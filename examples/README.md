@@ -4,6 +4,23 @@ A set of examples showcasing how to use rust-libp2p.
 
 ## Getting started
 
+To run any example in this directory, you can use Cargo:
+
+```sh
+# Navigate to the specific example directory
+cd examples/ping
+
+# Run the example
+cargo run
+```
+
+Each example includes its own README.md file with specific instructions on how to use it. Most examples require running multiple instances to demonstrate peer-to-peer communication, so be sure to read the individual example documentation.
+
+### Prerequisites
+
+- Rust and Cargo installed (see [rustup.rs](https://rustup.rs/) for installation)
+- Basic understanding of peer-to-peer networking concepts
+- Some examples may require additional dependencies specific to their functionality
 
 ## Individual libp2p features
 

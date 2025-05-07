@@ -3,6 +3,9 @@
 - update igd-next to 0.16.1
   See [PR 5944](https://github.com/libp2p/rust-libp2p/pull/5944).
 
+- Fix panic during a shutdown process.
+  See [PR 5998](https://github.com/libp2p/rust-libp2p/pull/5998).
+
 ## 0.4.0
 
 - update igd-next to 0.15.1.

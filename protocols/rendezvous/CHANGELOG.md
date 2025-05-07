@@ -1,6 +1,8 @@
-## 0.16.1 
+## 0.16.1
 - Emit `ToSwarm::NewExternalAddrOfPeer` for newly discovered peers.
   See [PR 5138](https://github.com/libp2p/rust-libp2p/pull/5138).
+- Log error instead of panicking when sending response to channel fails
+  See [PR 6002](https://github.com/libp2p/rust-libp2p/pull/6002).
 
 ## 0.16.0
 

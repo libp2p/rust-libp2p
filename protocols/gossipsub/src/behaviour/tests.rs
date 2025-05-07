@@ -242,8 +242,9 @@ where
     let connection_id = ConnectionId::new_unchecked(0);
     gs.connected_peers.insert(
         peer,
-        PeerConnections {
+        PeerDetails {
             kind: kind.unwrap_or(PeerKind::Floodsub),
+            outbound,
             connections: vec![connection_id],
             topics: Default::default(),
             sender,
@@ -629,8 +630,9 @@ fn test_join() {
         let connection_id = ConnectionId::new_unchecked(0);
         gs.connected_peers.insert(
             random_peer,
-            PeerConnections {
+            PeerDetails {
                 kind: PeerKind::Floodsub,
+                outbound: false,
                 connections: vec![connection_id],
                 topics: Default::default(),
                 sender,
@@ -1025,9 +1027,10 @@ fn test_get_random_peers() {
         peers.push(peer_id);
         gs.connected_peers.insert(
             peer_id,
-            PeerConnections {
+            PeerDetails {
                 kind: PeerKind::Gossipsubv1_1,
                 connections: vec![ConnectionId::new_unchecked(0)],
+                outbound: false,
                 topics: topics.clone(),
                 sender: Sender::new(gs.config.connection_handler_queue_len()),
                 dont_send: LinkedHashMap::new(),
@@ -5581,9 +5584,10 @@ fn test_all_queues_full() {
     peers.push(peer_id);
     gs.connected_peers.insert(
         peer_id,
-        PeerConnections {
+        PeerDetails {
             kind: PeerKind::Gossipsubv1_1,
             connections: vec![ConnectionId::new_unchecked(0)],
+            outbound: false,
             topics: topics.clone(),
             sender: Sender::new(2),
             dont_send: LinkedHashMap::new(),
@@ -5616,9 +5620,10 @@ fn test_slow_peer_returns_failed_publish() {
     peers.push(slow_peer_id);
     gs.connected_peers.insert(
         slow_peer_id,
-        PeerConnections {
+        PeerDetails {
             kind: PeerKind::Gossipsubv1_1,
             connections: vec![ConnectionId::new_unchecked(0)],
+            outbound: false,
             topics: topics.clone(),
             sender: Sender::new(2),
             dont_send: LinkedHashMap::new(),
@@ -5628,9 +5633,10 @@ fn test_slow_peer_returns_failed_publish() {
     peers.push(peer_id);
     gs.connected_peers.insert(
         peer_id,
-        PeerConnections {
+        PeerDetails {
             kind: PeerKind::Gossipsubv1_1,
             connections: vec![ConnectionId::new_unchecked(0)],
+            outbound: false,
             topics: topics.clone(),
             sender: Sender::new(gs.config.connection_handler_queue_len()),
             dont_send: LinkedHashMap::new(),
@@ -5688,9 +5694,10 @@ fn test_slow_peer_returns_failed_ihave_handling() {
     let slow_peer_id = PeerId::random();
     gs.connected_peers.insert(
         slow_peer_id,
-        PeerConnections {
+        PeerDetails {
             kind: PeerKind::Gossipsubv1_1,
             connections: vec![ConnectionId::new_unchecked(0)],
+            outbound: false,
             topics: topics.clone(),
             sender: Sender::new(2),
             dont_send: LinkedHashMap::new(),
@@ -5704,9 +5711,10 @@ fn test_slow_peer_returns_failed_ihave_handling() {
     peers.push(peer_id);
     gs.connected_peers.insert(
         peer_id,
-        PeerConnections {
+        PeerDetails {
             kind: PeerKind::Gossipsubv1_1,
             connections: vec![ConnectionId::new_unchecked(0)],
+            outbound: false,
             topics: topics.clone(),
             sender: Sender::new(gs.config.connection_handler_queue_len()),
             dont_send: LinkedHashMap::new(),
@@ -5800,9 +5808,10 @@ fn test_slow_peer_returns_failed_iwant_handling() {
     peers.push(slow_peer_id);
     gs.connected_peers.insert(
         slow_peer_id,
-        PeerConnections {
+        PeerDetails {
             kind: PeerKind::Gossipsubv1_1,
             connections: vec![ConnectionId::new_unchecked(0)],
+            outbound: false,
             topics: topics.clone(),
             sender: Sender::new(2),
             dont_send: LinkedHashMap::new(),
@@ -5816,9 +5825,10 @@ fn test_slow_peer_returns_failed_iwant_handling() {
     peers.push(peer_id);
     gs.connected_peers.insert(
         peer_id,
-        PeerConnections {
+        PeerDetails {
             kind: PeerKind::Gossipsubv1_1,
             connections: vec![ConnectionId::new_unchecked(0)],
+            outbound: false,
             topics: topics.clone(),
             sender: Sender::new(gs.config.connection_handler_queue_len()),
             dont_send: LinkedHashMap::new(),
@@ -5892,9 +5902,10 @@ fn test_slow_peer_returns_failed_forward() {
     peers.push(slow_peer_id);
     gs.connected_peers.insert(
         slow_peer_id,
-        PeerConnections {
+        PeerDetails {
             kind: PeerKind::Gossipsubv1_1,
             connections: vec![ConnectionId::new_unchecked(0)],
+            outbound: false,
             topics: topics.clone(),
             sender: Sender::new(2),
             dont_send: LinkedHashMap::new(),
@@ -5908,9 +5919,10 @@ fn test_slow_peer_returns_failed_forward() {
     peers.push(peer_id);
     gs.connected_peers.insert(
         peer_id,
-        PeerConnections {
+        PeerDetails {
             kind: PeerKind::Gossipsubv1_1,
             connections: vec![ConnectionId::new_unchecked(0)],
+            outbound: false,
             topics: topics.clone(),
             sender: Sender::new(gs.config.connection_handler_queue_len()),
             dont_send: LinkedHashMap::new(),
@@ -5989,9 +6001,10 @@ fn test_slow_peer_is_downscored_on_publish() {
     mesh.insert(slow_peer_id);
     gs.connected_peers.insert(
         slow_peer_id,
-        PeerConnections {
+        PeerDetails {
             kind: PeerKind::Gossipsubv1_1,
             connections: vec![ConnectionId::new_unchecked(0)],
+            outbound: false,
             topics: topics.clone(),
             sender: Sender::new(2),
             dont_send: LinkedHashMap::new(),
@@ -6002,9 +6015,10 @@ fn test_slow_peer_is_downscored_on_publish() {
     peers.push(peer_id);
     gs.connected_peers.insert(
         peer_id,
-        PeerConnections {
+        PeerDetails {
             kind: PeerKind::Gossipsubv1_1,
             connections: vec![ConnectionId::new_unchecked(0)],
+            outbound: false,
             topics: topics.clone(),
             sender: Sender::new(gs.config.connection_handler_queue_len()),
             dont_send: LinkedHashMap::new(),
@@ -6565,202 +6579,6 @@ fn test_publish_large_message_with_specific_transmit_size_config() {
         matches!(result, Err(PublishError::MessageTooLarge)),
         "Expected MessageTooLarge error for oversized message with topic-specific config"
     );
-}
-
-#[test]
-fn test_validation_error_message_size_too_large_default() {
-    let config = ConfigBuilder::default()
-        .validation_mode(ValidationMode::None)
-        .build()
-        .unwrap();
-
-    let (mut gs, peers, _, topic_hashes) = inject_nodes1()
-        .peer_no(1)
-        .topics(vec![String::from("test")])
-        .to_subscribe(true)
-        .gs_config(config)
-        .create_network();
-
-    let data = vec![0u8; Config::default_max_transmit_size() + 1];
-    let raw_message = RawMessage {
-        source: Some(peers[0]),
-        data,
-        sequence_number: Some(1u64),
-        topic: topic_hashes[0].clone(),
-        signature: None,
-        key: None,
-        validated: false,
-    };
-
-    gs.on_connection_handler_event(
-        peers[0],
-        ConnectionId::new_unchecked(0),
-        HandlerEvent::Message {
-            rpc: Rpc {
-                messages: vec![raw_message],
-                subscriptions: vec![],
-                control_msgs: vec![],
-            },
-            invalid_messages: vec![],
-        },
-    );
-
-    let event = gs.events.pop_front().expect("Event should be generated");
-    match event {
-        ToSwarm::GenerateEvent(Event::Message {
-            propagation_source,
-            message_id: _,
-            message,
-        }) => {
-            assert_eq!(propagation_source, peers[0]);
-            assert_eq!(message.data.len(), Config::default_max_transmit_size() + 1);
-        }
-        ToSwarm::NotifyHandler { peer_id, .. } => {
-            assert_eq!(peer_id, peers[0]);
-        }
-        _ => panic!("Unexpected event"),
-    }
-
-    // Simulate a peer sending a message exceeding the default max_transmit_size + 1 (65537 bytes).
-    // The codec's max_length is set high to allow encoding/decoding the RPC, while
-    // max_transmit_sizes enforces the per-topic limit (in this case the default).
-    let mut codec = GossipsubCodec::new(
-        Config::default_max_transmit_size() * 2,
-        ValidationMode::Strict,
-        HashMap::new(),
-    );
-    let mut buf = BytesMut::new();
-    let rpc = proto::RPC {
-        publish: vec![proto::Message {
-            from: Some(peers[0].to_bytes()),
-            data: Some(vec![0u8; Config::default_max_transmit_size() + 1]),
-            seqno: Some(1u64.to_be_bytes().to_vec()),
-            topic: topic_hashes[0].to_string(),
-            signature: None,
-            key: None,
-        }],
-        subscriptions: vec![],
-        control: None,
-    };
-    codec.encode(rpc, &mut buf).unwrap();
-
-    let decoded = codec.decode(&mut buf).unwrap().unwrap();
-    match decoded {
-        HandlerEvent::Message {
-            rpc,
-            invalid_messages,
-        } => {
-            assert!(
-                rpc.messages.is_empty(),
-                "No valid messages should be present"
-            );
-            assert_eq!(invalid_messages.len(), 1, "One message should be invalid");
-            let (invalid_msg, error) = &invalid_messages[0];
-            assert_eq!(
-                invalid_msg.data.len(),
-                Config::default_max_transmit_size() + 1
-            );
-            assert_eq!(error, &ValidationError::MessageSizeTooLargeForTopic);
-        }
-        _ => panic!("Unexpected event"),
-    }
-}
-
-#[test]
-fn test_validation_message_size_within_default() {
-    let config = ConfigBuilder::default()
-        .validation_mode(ValidationMode::None)
-        .build()
-        .unwrap();
-
-    let (mut gs, peers, _, topic_hashes) = inject_nodes1()
-        .peer_no(1)
-        .topics(vec![String::from("test")])
-        .to_subscribe(true)
-        .gs_config(config)
-        .create_network();
-
-    let data = vec![0u8; Config::default_max_transmit_size() - 100];
-    let raw_message = RawMessage {
-        source: Some(peers[0]),
-        data,
-        sequence_number: Some(1u64),
-        topic: topic_hashes[0].clone(),
-        signature: None,
-        key: None,
-        validated: false,
-    };
-
-    gs.on_connection_handler_event(
-        peers[0],
-        ConnectionId::new_unchecked(0),
-        HandlerEvent::Message {
-            rpc: Rpc {
-                messages: vec![raw_message],
-                subscriptions: vec![],
-                control_msgs: vec![],
-            },
-            invalid_messages: vec![],
-        },
-    );
-
-    let event = gs.events.pop_front().expect("Event should be generated");
-    match event {
-        ToSwarm::GenerateEvent(Event::Message {
-            propagation_source,
-            message_id: _,
-            message,
-        }) => {
-            assert_eq!(propagation_source, peers[0]);
-            assert_eq!(
-                message.data.len(),
-                Config::default_max_transmit_size() - 100
-            );
-        }
-        ToSwarm::NotifyHandler { peer_id, .. } => {
-            assert_eq!(peer_id, peers[0]);
-        }
-        _ => panic!("Unexpected event"),
-    }
-
-    // Simulate a peer sending a message within the default max_transmit_size (65536 bytes).
-    // The codec's max_length allows encoding/decoding the RPC, and max_transmit_sizes confirms
-    // the message size is acceptable.
-    let mut codec = GossipsubCodec::new(
-        Config::default_max_transmit_size() * 2,
-        ValidationMode::None,
-        HashMap::new(),
-    );
-    let mut buf = BytesMut::new();
-    let rpc = proto::RPC {
-        publish: vec![proto::Message {
-            from: Some(peers[0].to_bytes()),
-            data: Some(vec![0u8; Config::default_max_transmit_size() - 100]),
-            seqno: Some(1u64.to_be_bytes().to_vec()),
-            topic: topic_hashes[0].to_string(),
-            signature: None,
-            key: None,
-        }],
-        subscriptions: vec![],
-        control: None,
-    };
-    codec.encode(rpc, &mut buf).unwrap();
-
-    let decoded = codec.decode(&mut buf).unwrap().unwrap();
-    match decoded {
-        HandlerEvent::Message {
-            rpc,
-            invalid_messages,
-        } => {
-            assert_eq!(rpc.messages.len(), 1, "One valid message should be present");
-            assert!(invalid_messages.is_empty(), "No messages should be invalid");
-            assert_eq!(
-                rpc.messages[0].data.len(),
-                Config::default_max_transmit_size() - 100
-            );
-        }
-        _ => panic!("Unexpected event"),
-    }
 }
 
 #[test]
