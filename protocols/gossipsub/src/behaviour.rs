@@ -19,10 +19,12 @@
 // DEALINGS IN THE SOFTWARE.
 
 use std::{
-    cmp::{max, Ordering, Ordering::Equal},
+    cmp::{
+        max,
+        Ordering::{self, Equal},
+    },
     collections::{BTreeSet, HashMap, HashSet, VecDeque},
-    fmt,
-    fmt::Debug,
+    fmt::{self, Debug},
     net::IpAddr,
     task::{Context, Poll},
     time::Duration,
@@ -747,6 +749,19 @@ where
         let mut publish_failed = true;
         for peer_id in recipient_peers.iter() {
             tracing::trace!(peer=%peer_id, "Sending message to peer");
+            // If enabled, Send first an IDONTWANT so that if we are slower than forwarders
+            // publishing the original message we don't receive it back.
+            if raw_message.raw_protobuf_len() > self.config.idontwant_message_size_threshold()
+                && self.config.idontwant_on_publish()
+            {
+                self.send_message(
+                    *peer_id,
+                    RpcOut::IDontWant(IDontWant {
+                        message_ids: vec![msg_id.clone()],
+                    }),
+                );
+            }
+
             if self.send_message(
                 *peer_id,
                 RpcOut::Publish {
@@ -764,13 +779,6 @@ where
 
         if publish_failed {
             return Err(PublishError::AllQueuesFull(recipient_peers.len()));
-        }
-
-        // Broadcast IDONTWANT messages
-        if raw_message.raw_protobuf_len() > self.config.idontwant_message_size_threshold()
-            && self.config.idontwant_on_publish()
-        {
-            self.send_idontwant(&raw_message, &msg_id, raw_message.source.as_ref());
         }
 
         tracing::debug!(message_id=%msg_id, "Published message");
@@ -2866,6 +2874,11 @@ where
                     "Could not send rpc to connection handler, peer doesn't exist in connected peer list");
             return false;
         };
+
+        if !matches!(peer.kind, PeerKind::Gossipsubv1_2) && matches!(rpc, RpcOut::IDontWant(..)) {
+            tracing::trace!(peer=%peer_id, "Won't send IDONTWANT message for message to peer as it doesn't support Gossipsub v1.2");
+            return false;
+        }
 
         // Try sending the message to the connection handler.
         match peer.sender.send_message(rpc) {
