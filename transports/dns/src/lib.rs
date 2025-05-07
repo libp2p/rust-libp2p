@@ -213,7 +213,7 @@ where
         // Asynchronously resolve all DNS names in the address before proceeding
         // with dialing on the underlying transport.
         async move {
-            let mut last_err = None;
+            let mut dial_errors: Vec<Error<T::Error>> = Vec::new();
             let mut dns_lookups = 0;
             let mut dial_attempts = 0;
             // We optimise for the common case of a single DNS component
@@ -236,7 +236,7 @@ where
                 }) {
                     if dns_lookups == MAX_DNS_LOOKUPS {
                         tracing::debug!(address=%addr, "Too many DNS lookups, dropping unresolved address");
-                        last_err = Some(Error::TooManyLookups);
+                        dial_errors.push(Error::TooManyLookups);
                         // There may still be fully resolved addresses in `unresolved`,
                         // so keep going until `unresolved` is empty.
                         continue;
@@ -244,12 +244,8 @@ where
                     dns_lookups += 1;
                     match resolve(&name, &resolver).await {
                         Err(e) => {
-                            if unresolved.is_empty() {
-                                return Err(e);
-                            }
-                            // If there are still unresolved addresses, there is
-                            // a chance of success, but we track the last error.
-                            last_err = Some(e);
+                            // Record the resolution error.
+                            dial_errors.push(e);
                         }
                         Ok(Resolved::One(ip)) => {
                             tracing::trace!(protocol=%name, resolved=%ip);
@@ -310,29 +306,34 @@ where
                         Ok(out) => return Ok(out),
                         Err(err) => {
                             tracing::debug!("Dial error: {:?}.", err);
+                            dial_errors.push(err);
+
                             if unresolved.is_empty() {
-                                return Err(err);
+                                break;
                             }
+
                             if dial_attempts == MAX_DIAL_ATTEMPTS {
                                 tracing::debug!(
                                     "Aborting dialing after {} attempts.",
                                     MAX_DIAL_ATTEMPTS
                                 );
-                                return Err(err);
+                                break;
                             }
-                            last_err = Some(err);
                         }
                     }
                 }
             }
 
-            // At this point, if there was at least one failed dialing
-            // attempt, return that error. Otherwise there were no valid DNS records
-            // for the given address to begin with (i.e. DNS lookups succeeded but
-            // produced no records relevant for the given `addr`).
-            Err(last_err.unwrap_or_else(|| {
-                Error::ResolveError(ResolveErrorKind::Message("No matching records found.").into())
-            }))
+            // If we have any dial errors, aggregate them.
+            // Otherwise there were no valid DNS records for the given address to begin with
+            // (i.e. DNS lookups succeeded but produced no records relevant for the given `addr`).
+            if !dial_errors.is_empty() {
+                Err(Error::Dial(dial_errors))
+            } else {
+                Err(Error::ResolveError(
+                    ResolveErrorKind::Message("No Matching Records Found").into(),
+                ))
+            }
         }
         .boxed()
         .right_future()
@@ -357,6 +358,8 @@ pub enum Error<TErr> {
     /// is returned and the DNS records for the domain(s) being dialed
     /// should be investigated.
     TooManyLookups,
+    /// Multiple dial errors were encountered.
+    Dial(Vec<Error<TErr>>),
 }
 
 impl<TErr> fmt::Display for Error<TErr>
@@ -369,6 +372,13 @@ where
             Error::ResolveError(err) => write!(f, "{err}"),
             Error::MultiaddrNotSupported(a) => write!(f, "Unsupported resolved address: {a}"),
             Error::TooManyLookups => write!(f, "Too many DNS lookups"),
+            Error::Dial(errs) => {
+                write!(f, "Multiple dial errors occurred:")?;
+                for err in errs {
+                    write!(f, "\n - {err}")?;
+                }
+                Ok(())
+            }
         }
     }
 }
@@ -383,6 +393,7 @@ where
             Error::ResolveError(err) => Some(err),
             Error::MultiaddrNotSupported(_) => None,
             Error::TooManyLookups => None,
+            Error::Dial(errs) => errs.last().and_then(|e| e.source()),
         }
     }
 }
@@ -555,7 +566,7 @@ where
     }
 }
 
-#[cfg(all(test, feature = "tokio"))]
+#[cfg(all(test,feature = "tokio"))]
 mod tests {
     use futures::future::BoxFuture;
     use hickory_resolver::proto::{ProtoError, ProtoErrorKind};
@@ -567,6 +578,24 @@ mod tests {
     use libp2p_identity::PeerId;
 
     use super::*;
+
+    // These helpers will be compiled conditionally, depending on the async runtime in use.
+
+    #[cfg(feature = "tokio")]
+    fn test_tokio<T, F: Future<Output = ()>>(
+        transport: T,
+        test_fn: impl FnOnce(tokio::Transport<T>) -> F,
+    ) {
+        let config = ResolverConfig::quad9();
+        let opts = ResolverOpts::default();
+        let transport = tokio::Transport::custom(transport, config, opts);
+        let rt = ::tokio::runtime::Builder::new_current_thread()
+            .enable_io()
+            .enable_time()
+            .build()
+            .unwrap();
+        rt.block_on(test_fn(transport));
+    }
 
     #[test]
     fn basic_resolve() {
@@ -627,6 +656,7 @@ mod tests {
                 role: Endpoint::Dialer,
                 port_use: PortUse::Reuse,
             };
+
             // Success due to existing A record for example.com.
             let _ = transport
                 .dial("/dns4/example.com/tcp/20000".parse().unwrap(), dial_opts)
@@ -690,11 +720,28 @@ mod tests {
                 .unwrap()
                 .await
             {
-                Err(Error::ResolveError(e)) => match e.kind() {
-                    ResolveErrorKind::Proto(ProtoError { kind, .. })
-                        if matches!(kind.as_ref(), ProtoErrorKind::NoRecordsFound { .. }) => {}
-                    _ => panic!("Unexpected DNS error: {e:?}"),
-                },
+                Err(Error::Dial(dial_errs)) => {
+                    assert_eq!(
+                        dial_errs.len(),
+                        1,
+                        "Expected exactly 1 error for 'no records' scenario, got {dial_errs:?}"
+                    );
+
+                    match &dial_errs[0] {
+                        Error::ResolveError(e) => match e.kind() {
+                            ResolveErrorKind::Proto(ProtoError { kind, .. })
+                                if matches!(
+                                    kind.as_ref(),
+                                    ProtoErrorKind::NoRecordsFound { .. }
+                                ) => {}
+                            _ => panic!("Unexpected DNS error: {e:?}"),
+                        },
+                        other => {
+                            panic!("Expected a single ResolveError(...) sub-error, got {other:?}")
+                        }
+                    }
+                }
+
                 Err(e) => panic!("Unexpected error: {e:?}"),
                 Ok(_) => panic!("Unexpected success."),
             }
@@ -796,7 +843,6 @@ mod tests {
                 Ok(_) => panic!("Dial unexpectedly succeeded"),
             }
         }
-
 
         #[cfg(feature = "tokio")]
         test_tokio(AlwaysFailTransport, run_test);
