@@ -30,12 +30,12 @@
 //! a DNS, replacing them with the resolved protocols (typically TCP/IP).
 //!
 //! The `tokio` feature and hence the [`tokio::Transport`] are enabled by default.
-//! Tokio users can furthermore opt-in to the `tokio-dns-over-rustls` and 
-//! `tokio-dns-over-https-rustls` features. 
+//! Tokio users can furthermore opt-in to the `tokio-dns-over-rustls` and
+//! `tokio-dns-over-https-rustls` features.
 //! For more information about these features, please refer to the documentation
 //! of [trust-dns-resolver].
 //! Alternative runtimes or resolvers can be used though a manual implementation of [`Resolver`].
-//! 
+//!
 //! On Unix systems, if no custom configuration is given, [trust-dns-resolver]
 //! will try to parse the `/etc/resolv.conf` file. This approach comes with a
 //! few caveats to be aware of:
@@ -566,7 +566,7 @@ where
     }
 }
 
-#[cfg(all(test,feature = "tokio"))]
+#[cfg(all(test, feature = "tokio"))]
 mod tests {
     use futures::future::BoxFuture;
     use hickory_resolver::proto::{ProtoError, ProtoErrorKind};
