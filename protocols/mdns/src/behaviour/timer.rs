@@ -22,7 +22,7 @@ use std::time::{Duration, Instant};
 
 /// Simple wrapper for the different type of timers
 #[derive(Debug)]
-#[cfg(any(feature = "async-io", feature = "tokio"))]
+#[cfg(feature = "tokio")]
 pub struct Timer<T> {
     inner: T,
 }
@@ -38,49 +38,6 @@ pub trait Builder: Send + Unpin + 'static {
 
     /// Creates a timer that emits events periodically, starting at start.
     fn interval_at(start: Instant, duration: Duration) -> Self;
-}
-
-#[cfg(feature = "async-io")]
-pub(crate) mod asio {
-    use std::{
-        pin::Pin,
-        task::{Context, Poll},
-    };
-
-    use async_io::Timer as AsioTimer;
-    use futures::Stream;
-
-    use super::*;
-
-    /// Async Timer
-    pub(crate) type AsyncTimer = Timer<AsioTimer>;
-    impl Builder for AsyncTimer {
-        fn at(instant: Instant) -> Self {
-            Self {
-                inner: AsioTimer::at(instant),
-            }
-        }
-
-        fn interval(duration: Duration) -> Self {
-            Self {
-                inner: AsioTimer::interval(duration),
-            }
-        }
-
-        fn interval_at(start: Instant, duration: Duration) -> Self {
-            Self {
-                inner: AsioTimer::interval_at(start, duration),
-            }
-        }
-    }
-
-    impl Stream for AsyncTimer {
-        type Item = Instant;
-
-        fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
-            Pin::new(&mut self.inner).poll_next(cx)
-        }
-    }
 }
 
 #[cfg(feature = "tokio")]
