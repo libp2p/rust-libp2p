@@ -1774,7 +1774,26 @@ where
 
         // Broadcast IDONTWANT messages
         if raw_message.raw_protobuf_len() > self.config.idontwant_message_size_threshold() {
-            self.send_idontwant(&raw_message, &msg_id, Some(propagation_source));
+            let recipient_peers = self
+                .mesh
+                .get(&message.topic)
+                .map(|mesh| mesh.iter())
+                .unwrap_or_default()
+                .copied()
+                .chain(self.gossip_promises.peers_for_message(&msg_id))
+                .filter(|peer_id| {
+                    peer_id != propagation_source && Some(peer_id) != message.source.as_ref()
+                })
+                .collect::<Vec<PeerId>>();
+
+            for peer_id in recipient_peers {
+                self.send_message(
+                    peer_id,
+                    RpcOut::IDontWant(IDontWant {
+                        message_ids: vec![msg_id.clone()],
+                    }),
+                );
+            }
         }
 
         // Check the validity of the message
@@ -2638,49 +2657,6 @@ where
                     &self.connected_peers,
                 );
             }
-        }
-    }
-
-    /// Helper function which sends an IDONTWANT message to mesh\[topic\] peers.
-    fn send_idontwant(
-        &mut self,
-        message: &RawMessage,
-        msg_id: &MessageId,
-        propagation_source: Option<&PeerId>,
-    ) {
-        let Some(mesh_peers) = self.mesh.get(&message.topic) else {
-            return;
-        };
-
-        let iwant_peers = self.gossip_promises.peers_for_message(msg_id);
-
-        let recipient_peers: Vec<PeerId> = mesh_peers
-            .iter()
-            .chain(iwant_peers.iter())
-            .filter(|&peer_id| {
-                Some(peer_id) != propagation_source && Some(peer_id) != message.source.as_ref()
-            })
-            .cloned()
-            .collect();
-
-        for peer_id in recipient_peers {
-            let Some(peer) = self.connected_peers.get_mut(&peer_id) else {
-                tracing::error!(peer = %peer_id,
-                    "Could not IDONTWANT, peer doesn't exist in connected peer list");
-                continue;
-            };
-
-            // Only gossipsub 1.2 peers support IDONTWANT.
-            if peer.kind != PeerKind::Gossipsubv1_2 {
-                continue;
-            }
-
-            self.send_message(
-                peer_id,
-                RpcOut::IDontWant(IDontWant {
-                    message_ids: vec![msg_id.clone()],
-                }),
-            );
         }
     }
 
