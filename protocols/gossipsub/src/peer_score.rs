@@ -26,6 +26,7 @@ use std::{
     time::Duration,
 };
 
+use futures_timer::Delay;
 use libp2p_identity::PeerId;
 use web_time::Instant;
 
@@ -52,6 +53,10 @@ const TIME_CACHE_DURATION: u64 = 120;
 pub(crate) struct PeerScore {
     /// The score parameters.
     pub(crate) params: PeerScoreParams,
+    /// The score threshold.
+    pub(crate) thresholds: PeerScoreThresholds,
+    /// The peer score decay interval.
+    pub(crate) decay_interval: Delay,
     /// The stats per PeerId.
     peer_stats: HashMap<PeerId, PeerStats>,
     /// Tracking peers per IP.
@@ -210,16 +215,19 @@ impl Default for DeliveryRecord {
 impl PeerScore {
     /// Creates a new [`PeerScore`] using a given set of peer scoring parameters.
     #[allow(dead_code)]
-    pub(crate) fn new(params: PeerScoreParams) -> Self {
-        Self::new_with_message_delivery_time_callback(params, None)
+    pub(crate) fn new(params: PeerScoreParams, thresholds: PeerScoreThresholds) -> Self {
+        Self::new_with_message_delivery_time_callback(params, thresholds, None)
     }
 
     pub(crate) fn new_with_message_delivery_time_callback(
         params: PeerScoreParams,
+        thresholds: PeerScoreThresholds,
         callback: Option<fn(&PeerId, &TopicHash, f64)>,
     ) -> Self {
         PeerScore {
+            decay_interval: Delay::new(params.decay_interval),
             params,
+            thresholds,
             peer_stats: HashMap::new(),
             peer_ips: HashMap::new(),
             deliveries: TimeCache::new(Duration::from_secs(TIME_CACHE_DURATION)),
@@ -328,7 +336,7 @@ impl PeerScore {
                 continue;
             }
 
-            // P6 has a cliff (ip_colocation_factor_threshold); it's only applied iff
+            // P6 has a cliff (ip_colocation_factor_threshold); it's only applied if
             // at least that many peers are connected to us from that source IP
             // addr. It is quadratic, and the weight is negative (validated by
             // peer_score_params.validate()).

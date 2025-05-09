@@ -91,7 +91,7 @@ fn test_score_time_in_mesh() {
 
     let peer_id = PeerId::random();
 
-    let mut peer_score = PeerScore::new(params);
+    let mut peer_score = PeerScore::new(params, PeerScoreThresholds::default());
     // Peer score should start at 0
     peer_score.add_peer(peer_id);
 
@@ -136,7 +136,7 @@ fn test_score_time_in_mesh_cap() {
 
     let peer_id = PeerId::random();
 
-    let mut peer_score = PeerScore::new(params);
+    let mut peer_score = PeerScore::new(params, PeerScoreThresholds::default());
     // Peer score should start at 0
     peer_score.add_peer(peer_id);
 
@@ -186,7 +186,7 @@ fn test_score_first_message_deliveries() {
 
     let peer_id = PeerId::random();
 
-    let mut peer_score = PeerScore::new(params);
+    let mut peer_score = PeerScore::new(params, PeerScoreThresholds::default());
     // Peer score should start at 0
     peer_score.add_peer(peer_id);
     peer_score.graft(&peer_id, topic);
@@ -227,7 +227,7 @@ fn test_score_first_message_deliveries_cap() {
 
     let peer_id = PeerId::random();
 
-    let mut peer_score = PeerScore::new(params);
+    let mut peer_score = PeerScore::new(params, PeerScoreThresholds::default());
     // Peer score should start at 0
     peer_score.add_peer(peer_id);
     peer_score.graft(&peer_id, topic);
@@ -266,7 +266,7 @@ fn test_score_first_message_deliveries_decay() {
 
     params.topics.insert(topic_hash, topic_params.clone());
     let peer_id = PeerId::random();
-    let mut peer_score = PeerScore::new(params);
+    let mut peer_score = PeerScore::new(params, PeerScoreThresholds::default());
     peer_score.add_peer(peer_id);
     peer_score.graft(&peer_id, topic);
 
@@ -318,7 +318,7 @@ fn test_score_mesh_message_deliveries() {
     };
 
     params.topics.insert(topic_hash, topic_params.clone());
-    let mut peer_score = PeerScore::new(params);
+    let mut peer_score = PeerScore::new(params, PeerScoreThresholds::default());
 
     // peer A always delivers the message first.
     // peer B delivers next (within the delivery window).
@@ -415,7 +415,7 @@ fn test_score_mesh_message_deliveries_decay() {
     };
 
     params.topics.insert(topic_hash, topic_params.clone());
-    let mut peer_score = PeerScore::new(params);
+    let mut peer_score = PeerScore::new(params, PeerScoreThresholds::default());
 
     let peer_id_a = PeerId::random();
     peer_score.add_peer(peer_id_a);
@@ -484,7 +484,7 @@ fn test_score_mesh_failure_penalty() {
     };
 
     params.topics.insert(topic_hash, topic_params.clone());
-    let mut peer_score = PeerScore::new(params);
+    let mut peer_score = PeerScore::new(params, PeerScoreThresholds::default());
 
     let peer_id_a = PeerId::random();
     let peer_id_b = PeerId::random();
@@ -561,7 +561,7 @@ fn test_score_invalid_message_deliveries() {
     };
 
     params.topics.insert(topic_hash, topic_params.clone());
-    let mut peer_score = PeerScore::new(params);
+    let mut peer_score = PeerScore::new(params, PeerScoreThresholds::default());
 
     let peer_id_a = PeerId::random();
     peer_score.add_peer(peer_id_a);
@@ -608,7 +608,7 @@ fn test_score_invalid_message_deliveris_decay() {
     };
 
     params.topics.insert(topic_hash, topic_params.clone());
-    let mut peer_score = PeerScore::new(params);
+    let mut peer_score = PeerScore::new(params, PeerScoreThresholds::default());
 
     let peer_id_a = PeerId::random();
     peer_score.add_peer(peer_id_a);
@@ -664,7 +664,7 @@ fn test_score_reject_message_deliveries() {
     };
 
     params.topics.insert(topic_hash, topic_params);
-    let mut peer_score = PeerScore::new(params);
+    let mut peer_score = PeerScore::new(params, PeerScoreThresholds::default());
 
     let peer_id_a = PeerId::random();
     let peer_id_b = PeerId::random();
@@ -781,7 +781,7 @@ fn test_application_score() {
     };
 
     params.topics.insert(topic_hash, topic_params);
-    let mut peer_score = PeerScore::new(params);
+    let mut peer_score = PeerScore::new(params, PeerScoreThresholds::default());
 
     let peer_id_a = PeerId::random();
     peer_score.add_peer(peer_id_a);
@@ -823,7 +823,7 @@ fn test_score_ip_colocation() {
     };
 
     params.topics.insert(topic_hash, topic_params);
-    let mut peer_score = PeerScore::new(params);
+    let mut peer_score = PeerScore::new(params, PeerScoreThresholds::default());
 
     let peer_id_a = PeerId::random();
     let peer_id_b = PeerId::random();
@@ -887,7 +887,7 @@ fn test_score_behaviour_penalty() {
     };
 
     params.topics.insert(topic_hash, topic_params);
-    let mut peer_score = PeerScore::new(params);
+    let mut peer_score = PeerScore::new(params, PeerScoreThresholds::default());
 
     let peer_id_a = PeerId::random();
 
@@ -940,7 +940,7 @@ fn test_score_retention() {
     };
 
     params.topics.insert(topic_hash, topic_params);
-    let mut peer_score = PeerScore::new(params);
+    let mut peer_score = PeerScore::new(params, PeerScoreThresholds::default());
 
     let peer_id_a = PeerId::random();
     peer_score.add_peer(peer_id_a);
