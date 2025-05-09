@@ -50,6 +50,31 @@ mod tests;
 /// The number of seconds delivery messages are stored in the cache.
 const TIME_CACHE_DURATION: u64 = 120;
 
+/// Represents the state of the peer scoring system, which can either be active
+/// with a configured `PeerScore`, or disabled entirely.
+pub(crate) enum PeerScoreState {
+    Active(Box<PeerScore>),
+    Disabled,
+}
+
+impl PeerScoreState {
+    /// Determines if a peer's score is below a given `PeerScoreThreshold` chosen via the
+    /// `threshold` parameter.
+    pub(crate) fn below_threshold(
+        &self,
+        peer_id: &PeerId,
+        threshold: impl Fn(&PeerScoreThresholds) -> f64,
+    ) -> (bool, f64) {
+        match self {
+            PeerScoreState::Active(active) => {
+                let score = active.metric_score(peer_id, None);
+                (score < threshold(&active.thresholds), score)
+            }
+            PeerScoreState::Disabled => (false, 0.0),
+        }
+    }
+}
+
 pub(crate) struct PeerScore {
     /// The score parameters.
     pub(crate) params: PeerScoreParams,
