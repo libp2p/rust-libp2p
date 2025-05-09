@@ -1,4 +1,4 @@
-## 0.55.1
+## 0.56.0
 
 - Remove deprecated `Transport::with_bandwidth_logging`,
   `SwarmBuilder::with_bandwidth_logging` and `TransportExt`. 
