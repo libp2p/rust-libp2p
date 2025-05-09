@@ -1,6 +1,5 @@
 #![allow(unused_imports)]
 
-mod bandwidth_logging;
 mod bandwidth_metrics;
 mod behaviour;
 mod build;
@@ -14,7 +13,6 @@ mod swarm;
 mod tcp;
 mod websocket;
 
-use bandwidth_logging::*;
 use bandwidth_metrics::*;
 pub use behaviour::BehaviourError;
 use behaviour::*;
