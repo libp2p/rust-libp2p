@@ -1,3 +1,8 @@
+## 0.47.1
+
+- Configurable outbound_substreams_timeout.
+  See [PR 6015](https://github.com/libp2p/rust-libp2p/pull/6015).
+
 ## 0.47.0
 
 - Expose a kad query facility allowing specify num_results dynamically.
@@ -15,7 +20,7 @@
 - Remove deprecated default constructor for `ProtocolConfig`.
   See [PR 5774](https://github.com/libp2p/rust-libp2p/pull/5774).
 - Add lazy cleanup for expired provider records in `Behavior::get_providers` and `Behavior::provider_peers`.
-  See [PR 5980](https://github.com/libp2p/rust-libp2p/pull/5980)
+  See [PR 5980](https://github.com/libp2p/rust-libp2p/pull/5980).
 
 <!-- Update to libp2p-core v0.43.0 -->
 
