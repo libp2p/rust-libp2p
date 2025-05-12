@@ -1,4 +1,6 @@
 ## 0.49.0
+- Feature gate metrics related code. This changes some `Behaviour` constructor methods.
+  See [PR XXXX](https://github.com/libp2p/rust-libp2p/pull/XXXX)
 - Send IDONTWANT before Publishing a new message.
   See [PR 6017](https://github.com/libp2p/rust-libp2p/pull/6017)
 

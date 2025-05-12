@@ -30,7 +30,7 @@ use futures_timer::Delay;
 use libp2p_identity::PeerId;
 use web_time::Instant;
 
-use crate::{metrics::Penalty, time_cache::TimeCache, MessageId, TopicHash};
+use crate::{time_cache::TimeCache, MessageId, TopicHash};
 
 mod params;
 pub use params::{
@@ -76,7 +76,8 @@ impl PeerScoreState {
 #[derive(Default)]
 pub(crate) struct PeerScoreReport {
     pub(crate) score: f64,
-    pub(crate) penalties: Vec<Penalty>,
+    #[cfg(feature = "metrics")]
+    pub(crate) penalties: Vec<crate::metrics::Penalty>,
 }
 
 pub(crate) struct PeerScore {
@@ -315,7 +316,10 @@ impl PeerScore {
                         - topic_stats.mesh_message_deliveries;
                     let p3 = deficit * deficit;
                     topic_score += p3 * topic_params.mesh_message_deliveries_weight;
-                    report.penalties.push(Penalty::MessageDeficit);
+                    #[cfg(feature = "metrics")]
+                    report
+                        .penalties
+                        .push(crate::metrics::Penalty::MessageDeficit);
                     tracing::debug!(
                         peer=%peer_id,
                         %topic,
@@ -366,7 +370,8 @@ impl PeerScore {
                 if (peers_in_ip as f64) > self.params.ip_colocation_factor_threshold {
                     let surplus = (peers_in_ip as f64) - self.params.ip_colocation_factor_threshold;
                     let p6 = surplus * surplus;
-                    report.penalties.push(Penalty::IPColocation);
+                    #[cfg(feature = "metrics")]
+                    report.penalties.push(crate::metrics::Penalty::IPColocation);
                     tracing::debug!(
                         peer=%peer_id,
                         surplus_ip=%ip,

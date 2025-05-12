@@ -686,7 +686,7 @@ pub(crate) enum Churn {
 }
 
 /// Kinds of reasons a peer's score has been penalized
-#[derive(PartialEq, Eq, Hash, EncodeLabelValue, Clone, Copy, Debug)]
+#[derive(PartialEq, Eq, Hash, Clone, Copy, Debug, EncodeLabelValue)]
 pub(crate) enum Penalty {
     /// A peer grafted before waiting the back-off time.
     GraftBackoff,
@@ -713,7 +713,11 @@ struct ChurnLabel {
 }
 
 /// Label for the kinds of protocols peers can connect as.
-#[derive(PartialEq, Eq, Hash, EncodeLabelSet, Clone, Debug)]
+#[derive(PartialEq, Eq, Hash, Clone, Debug)]
+#[cfg_attr(
+    feature = "metrics",
+    derive(prometheus_client::encoding::EncodeLabelSet)
+)]
 struct ProtocolLabel {
     protocol: PeerKind,
 }
