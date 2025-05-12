@@ -176,7 +176,7 @@ impl<T> MemoryStore<T> {
 
     /// Iterate over all internal records mutably.
     ///
-    /// Changes to the records will not generate an event.  
+    /// Changes to the records will not generate an event.
     pub fn record_iter_mut(&mut self) -> impl Iterator<Item = (&PeerId, &mut PeerRecord<T>)> {
         self.records.iter_mut()
     }
@@ -307,7 +307,7 @@ impl Config {
 /// Internal record of [`MemoryStore`].
 #[derive(Debug, Clone)]
 pub struct PeerRecord<T> {
-    /// A LRU(Least Recently Used) cache for addresses.  
+    /// A LRU(Least Recently Used) cache for addresses.
     /// Will delete the least-recently-used record when full.
     /// If the associated `bool` is true, the address can only be force-removed.
     addresses: LruCache<Multiaddr, bool>,
@@ -435,7 +435,7 @@ mod test {
         let mut store: MemoryStore = MemoryStore::new(Default::default());
         let peer = PeerId::random();
         for i in 1..10 {
-            let addr_string = format!("/ip4/127.0.0.{}", i);
+            let addr_string = format!("/ip4/127.0.0.{i}");
             store.add_address(
                 &peer,
                 &Multiaddr::from_str(&addr_string).expect("parsing to succeed"),
@@ -474,7 +474,7 @@ mod test {
                     assert!(expected_address.is_none_or(|a| *a == address));
                     assert!(!is_permanent)
                 }
-                ev => panic!("Unexpected event {:?}.", ev),
+                ev => panic!("Unexpected event {ev:?}."),
             }
         }
 
@@ -566,7 +566,7 @@ mod test {
                         assert!(!is_permanent);
                         break;
                     }
-                    ev @ BehaviourEvent::PeerStore(_) => panic!("Unexpected event {:?}.", ev),
+                    ev @ BehaviourEvent::PeerStore(_) => panic!("Unexpected event {ev:?}."),
                     _ => {}
                 }
             }
