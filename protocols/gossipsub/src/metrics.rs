@@ -686,7 +686,7 @@ pub(crate) enum Churn {
 }
 
 /// Kinds of reasons a peer's score has been penalized
-#[derive(PartialEq, Eq, Hash, EncodeLabelValue, Clone, Debug)]
+#[derive(PartialEq, Eq, Hash, EncodeLabelValue, Clone, Copy, Debug)]
 pub(crate) enum Penalty {
     /// A peer grafted before waiting the back-off time.
     GraftBackoff,

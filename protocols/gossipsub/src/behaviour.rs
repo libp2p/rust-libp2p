@@ -2097,9 +2097,14 @@ where
         let mut scores = HashMap::with_capacity(self.connected_peers.len());
         if let PeerScoreState::Active(peer_score) = &self.peer_score {
             for peer_id in self.connected_peers.keys() {
-                scores
+                let report = scores
                     .entry(peer_id)
-                    .or_insert_with(|| peer_score.metric_score(peer_id, self.metrics.as_mut()));
+                    .or_insert_with(|| peer_score.score_report(peer_id));
+                if let Some(metrics) = self.metrics.as_mut() {
+                    for penalty in &report.penalties {
+                        metrics.register_score_penalty(*penalty);
+                    }
+                }
             }
         }
 
@@ -2118,7 +2123,7 @@ where
             // written more efficiently with retain.
             let mut to_remove_peers = Vec::new();
             for peer_id in peers.iter() {
-                let peer_score = *scores.get(peer_id).unwrap_or(&0.0);
+                let peer_score = scores.get(peer_id).map(|r| r.score).unwrap_or_default();
 
                 // Record the score per mesh
                 if let Some(metrics) = self.metrics.as_mut() {
@@ -2163,7 +2168,7 @@ where
                         !peers.contains(peer)
                             && !explicit_peers.contains(peer)
                             && !backoffs.is_backoff_with_slack(topic_hash, peer)
-                            && *scores.get(peer).unwrap_or(&0.0) >= 0.0
+                            && scores.get(peer).map(|r| r.score).unwrap_or_default() >= 0.0
                     });
                 for peer in &peer_list {
                     let current_topic = to_graft.entry(*peer).or_insert_with(Vec::new);
@@ -2192,8 +2197,8 @@ where
                 let mut shuffled = peers.iter().copied().collect::<Vec<_>>();
                 shuffled.shuffle(&mut rng);
                 shuffled.sort_by(|p1, p2| {
-                    let score_p1 = *scores.get(p1).unwrap_or(&0.0);
-                    let score_p2 = *scores.get(p2).unwrap_or(&0.0);
+                    let score_p1 = scores.get(p1).map(|r| r.score).unwrap_or_default();
+                    let score_p2 = scores.get(p2).map(|r| r.score).unwrap_or_default();
 
                     score_p1.partial_cmp(&score_p2).unwrap_or(Ordering::Equal)
                 });
@@ -2262,7 +2267,7 @@ where
                             !peers.contains(peer_id)
                                 && !explicit_peers.contains(peer_id)
                                 && !backoffs.is_backoff_with_slack(topic_hash, peer_id)
-                                && *scores.get(peer_id).unwrap_or(&0.0) >= 0.0
+                                && scores.get(peer_id).map(|r| r.score).unwrap_or_default() >= 0.0
                                 && self
                                     .connected_peers
                                     .get(peer_id)
@@ -2298,8 +2303,8 @@ where
                     // now compute the median peer score in the mesh
                     let mut peers_by_score: Vec<_> = peers.iter().collect();
                     peers_by_score.sort_by(|p1, p2| {
-                        let p1_score = *scores.get(p1).unwrap_or(&0.0);
-                        let p2_score = *scores.get(p2).unwrap_or(&0.0);
+                        let p1_score = scores.get(p1).map(|r| r.score).unwrap_or_default();
+                        let p2_score = scores.get(p2).map(|r| r.score).unwrap_or_default();
                         p1_score.partial_cmp(&p2_score).unwrap_or(Equal)
                     });
 
@@ -2308,16 +2313,21 @@ where
                         let sub_middle_peer = *peers_by_score
                             .get(middle - 1)
                             .expect("middle < vector length and middle > 0 since peers.len() > 0");
-                        let sub_middle_score = *scores.get(sub_middle_peer).unwrap_or(&0.0);
+                        let sub_middle_score = scores
+                            .get(sub_middle_peer)
+                            .map(|r| r.score)
+                            .unwrap_or_default();
                         let middle_peer =
                             *peers_by_score.get(middle).expect("middle < vector length");
-                        let middle_score = *scores.get(middle_peer).unwrap_or(&0.0);
+                        let middle_score =
+                            scores.get(middle_peer).map(|r| r.score).unwrap_or_default();
 
                         (sub_middle_score + middle_score) * 0.5
                     } else {
-                        *scores
+                        scores
                             .get(*peers_by_score.get(middle).expect("middle < vector length"))
-                            .unwrap_or(&0.0)
+                            .map(|r| r.score)
+                            .unwrap_or_default()
                     };
 
                     // if the median score is below the threshold, select a better peer (if any) and
@@ -2331,7 +2341,8 @@ where
                                 !peers.contains(peer_id)
                                     && !explicit_peers.contains(peer_id)
                                     && !backoffs.is_backoff_with_slack(topic_hash, peer_id)
-                                    && *scores.get(peer_id).unwrap_or(&0.0) > median
+                                    && scores.get(peer_id).map(|r| r.score).unwrap_or_default()
+                                        > median
                             },
                         );
                         for peer in &peer_list {
@@ -2386,7 +2397,7 @@ where
 
             for peer_id in peers.iter() {
                 // is the peer still subscribed to the topic?
-                let peer_score = *scores.get(peer_id).unwrap_or(&0.0);
+                let peer_score = scores.get(peer_id).map(|r| r.score).unwrap_or_default();
                 match self.connected_peers.get(peer_id) {
                     Some(peer) => {
                         if !peer.topics.contains(topic_hash) || peer_score < publish_threshold {
@@ -2420,7 +2431,8 @@ where
                     get_random_peers(&self.connected_peers, topic_hash, needed_peers, |peer_id| {
                         !peers.contains(peer_id)
                             && !explicit_peers.contains(peer_id)
-                            && *scores.get(peer_id).unwrap_or(&0.0) < publish_threshold
+                            && scores.get(peer_id).map(|r| r.score).unwrap_or_default()
+                                < publish_threshold
                     });
                 peers.extend(new_peers);
             }
