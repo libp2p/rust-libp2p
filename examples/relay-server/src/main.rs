@@ -29,11 +29,14 @@ use std::{
 use clap::Parser;
 use futures::StreamExt;
 use libp2p::{
-    core::{multiaddr::Protocol, Multiaddr},
+    core::{multiaddr::Protocol, muxing::StreamMuxerBox, Multiaddr, Transport},
     identify, identity, noise, ping, relay,
     swarm::{NetworkBehaviour, SwarmEvent},
-    tcp, yamux,
+    tcp, yamux, PeerId, Swarm,
 };
+use libp2p_webrtc as webrtc;
+use rand::thread_rng;
+use tracing::info;
 use tracing_subscriber::EnvFilter;
 
 #[tokio::main]
@@ -46,6 +49,8 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     // Create a static known PeerId based on given secret
     let local_key: identity::Keypair = generate_ed25519(opt.secret_key_seed);
+    let local_peer_id = PeerId::from(local_key.public());
+    info!(?local_peer_id, "Local peer id");
 
     let mut swarm = libp2p::SwarmBuilder::with_existing_identity(local_key)
         .with_tokio()
@@ -55,6 +60,16 @@ async fn main() -> Result<(), Box<dyn Error>> {
             yamux::Config::default,
         )?
         .with_quic()
+        .with_other_transport(|id_keys| {
+            Ok(webrtc::tokio::Transport::new(
+                id_keys.clone(),
+                webrtc::tokio::Certificate::generate(&mut thread_rng())?,
+            )
+            .map(|(peer_id, conn), _| (peer_id, StreamMuxerBox::new(conn))))
+        })?
+        .with_dns()?
+        .with_websocket(noise::Config::new, yamux::Config::default)
+        .await?
         .with_behaviour(|key| Behaviour {
             relay: relay::Behaviour::new(key.public().to_peer_id(), Default::default()),
             ping: ping::Behaviour::new(ping::Config::new()),
@@ -83,6 +98,9 @@ async fn main() -> Result<(), Box<dyn Error>> {
         .with(Protocol::QuicV1);
     swarm.listen_on(listen_addr_quic)?;
 
+    listen_on_websocket(&mut swarm, &opt)?;
+    listen_on_webrtc(&mut swarm, &opt)?;
+
     loop {
         match swarm.next().await.expect("Infinite Stream.") {
             SwarmEvent::Behaviour(event) => {
@@ -96,12 +114,55 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
                 println!("{event:?}")
             }
-            SwarmEvent::NewListenAddr { address, .. } => {
+            SwarmEvent::NewListenAddr { mut address, .. } => {
+                address.push(Protocol::P2p(local_peer_id.into()));
                 println!("Listening on {address:?}");
             }
             _ => {}
         }
     }
+}
+
+fn listen_on_websocket(swarm: &mut Swarm<Behaviour>, opt: &Opt) -> Result<(), Box<dyn Error>> {
+    match opt.websocket_port {
+        Some(0) => {
+            return Err(Box::new(std::io::Error::new(std::io::ErrorKind::InvalidInput,
+            "Websocket port is 0, which is not supported in this example, since it will use a non-deterministic port. Please use a fixed port for websocket.")));
+        }
+        Some(port) => {
+            let address = Multiaddr::from(Ipv4Addr::UNSPECIFIED)
+                .with(Protocol::Tcp(port))
+                .with(Protocol::Ws(std::borrow::Cow::Borrowed("/")));
+
+            info!(?address, "Listening on webSocket");
+            swarm.listen_on(address.clone())?;
+        }
+        None => {
+            info!("Does not use websocket");
+        }
+    }
+    Ok(())
+}
+
+fn listen_on_webrtc(swarm: &mut Swarm<Behaviour>, opt: &Opt) -> Result<(), Box<dyn Error>> {
+    match opt.webrtc_port {
+        Some(0) => {
+            return Err(Box::new(std::io::Error::new(std::io::ErrorKind::InvalidInput,
+            "Websocket port is 0, which is not supported in this example, since it will use a non-deterministic port. Please use a fixed port for webRTC.")));
+        }
+        Some(port) => {
+            let address = Multiaddr::from(Ipv4Addr::UNSPECIFIED)
+                .with(Protocol::Udp(port))
+                .with(Protocol::WebRTCDirect);
+
+            info!(?address, "Listening on webRTC");
+            swarm.listen_on(address.clone())?;
+        }
+        None => {
+            info!("Does not use webRTC");
+        }
+    }
+    Ok(())
 }
 
 #[derive(NetworkBehaviour)]
@@ -132,4 +193,12 @@ struct Opt {
     /// The port used to listen on all interfaces
     #[arg(long)]
     port: u16,
+
+    /// The websocket port used to listen on all interfaces
+    #[arg(long)]
+    websocket_port: Option<u16>,
+
+    /// The webrtc port used to listen on all interfaces
+    #[arg(long)]
+    webrtc_port: Option<u16>,
 }
