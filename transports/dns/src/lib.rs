@@ -864,7 +864,7 @@ mod tests {
                 // Every dial attempt fails with an error that includes the address.
                 Ok(Box::pin(future::ready(Err(io::Error::new(
                     io::ErrorKind::Unsupported,
-                    format!("No support for dialing {}", addr),
+                    format!("No support for dialing {addr}"),
                 )))))
             }
 
