@@ -713,11 +713,7 @@ struct ChurnLabel {
 }
 
 /// Label for the kinds of protocols peers can connect as.
-#[derive(PartialEq, Eq, Hash, Clone, Debug)]
-#[cfg_attr(
-    feature = "metrics",
-    derive(prometheus_client::encoding::EncodeLabelSet)
-)]
+#[derive(PartialEq, Eq, Hash, Clone, Debug, EncodeLabelSet)]
 struct ProtocolLabel {
     protocol: PeerKind,
 }

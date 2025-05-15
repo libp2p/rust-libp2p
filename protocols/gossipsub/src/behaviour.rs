@@ -506,6 +506,14 @@ where
         self.connected_peers.iter().map(|(k, v)| (k, &v.kind))
     }
 
+    /// Returns the gossipsub score for a given peer, if one exists.
+    pub fn peer_score(&self, peer_id: &PeerId) -> Option<f64> {
+        match &self.peer_score {
+            PeerScoreState::Active(peer_score) => Some(peer_score.score_report(peer_id).score),
+            PeerScoreState::Disabled => None,
+        }
+    }
+
     /// Subscribe to a topic.
     ///
     /// Returns [`Ok(true)`] if the subscription worked. Returns [`Ok(false)`] if we were already
