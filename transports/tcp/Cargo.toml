@@ -26,7 +26,6 @@ tokio = ["dep:tokio", "if-watch/tokio"]
 async-io = ["dep:async-io", "if-watch/smol"]
 
 [dev-dependencies]
-async-std = { version = "1.6.5", features = ["attributes"] }
 tokio = { workspace = true, features = ["full"] }
 tracing-subscriber = { workspace = true, features = ["env-filter"] }
 
