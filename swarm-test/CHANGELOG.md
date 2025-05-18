@@ -1,3 +1,8 @@
+## 0.6.0
+
+- Default to `tokio` runtime.
+  See [PR XXXX](https://github.com/libp2p/rust-libp2p/pull/XXXX).
+
 ## 0.5.0
 
 - Add `tokio` runtime support and make `tokio` and `async-std` runtimes optional behind features.
