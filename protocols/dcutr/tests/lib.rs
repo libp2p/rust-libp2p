@@ -101,7 +101,7 @@ async fn connect() {
 }
 
 fn build_relay() -> Swarm<Relay> {
-    Swarm::new_ephemeral(|identity| {
+    Swarm::new_ephemeral_tokio(|identity| {
         let local_peer_id = identity.public().to_peer_id();
 
         Relay {
