@@ -391,7 +391,7 @@ where
         peer: &PeerId,
     ) -> impl Iterator<Item = ConnectionId> + '_ {
         match self.established.get(peer) {
-            Some(conns) => either::Either::Left(conns.iter().map(|(id, _)| *id)),
+            Some(conns) => either::Either::Left(conns.keys().copied()),
             None => either::Either::Right(std::iter::empty()),
         }
     }

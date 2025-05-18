@@ -39,7 +39,7 @@ pub(crate) fn offer(offer: String, client_ufrag: &str) -> RtcSessionDescriptionI
         }
 
         if !line.is_empty() {
-            munged_sdp_offer.push_str(&format!("{}\r\n", line));
+            munged_sdp_offer.push_str(&format!("{line}\r\n"));
             continue;
         }
     }

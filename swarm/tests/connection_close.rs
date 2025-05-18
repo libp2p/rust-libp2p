@@ -27,7 +27,7 @@ async fn sends_remaining_events_to_behaviour_on_connection_close() {
             assert_eq!(swarm1.behaviour().state, 0);
             assert_eq!(swarm2.behaviour().state, 0);
         }
-        (e1, e2) => panic!("Unexpected events: {:?} {:?}", e1, e2),
+        (e1, e2) => panic!("Unexpected events: {e1:?} {e2:?}"),
     }
 }
 

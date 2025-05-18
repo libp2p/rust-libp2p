@@ -145,7 +145,7 @@ impl TryFrom<proto::Message> for Request {
                     .map(|e| e.to_vec())
                     .map(|e| {
                         Multiaddr::try_from(e).map_err(|err| {
-                            new_io_invalid_data_err(format!("invalid multiaddr: {}", err))
+                            new_io_invalid_data_err(format!("invalid multiaddr: {err}"))
                         })
                     })
                     .collect::<Result<Vec<_>, io::Error>>()?;
