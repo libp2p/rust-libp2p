@@ -1,7 +1,7 @@
 ## 0.6.0
 
 - Default to `tokio` runtime.
-  See [PR XXXX](https://github.com/libp2p/rust-libp2p/pull/XXXX).
+  See [PR 6024](https://github.com/libp2p/rust-libp2p/pull/6024).
 
 ## 0.5.0
 
