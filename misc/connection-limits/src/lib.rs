@@ -713,15 +713,14 @@ mod tests {
                         "PeerId in error should match the connecting peer"
                     );
                 }
-                other => panic!("Expected EstablishedPerPeer kind, got: {:?}", other),
+                other => panic!("Expected EstablishedPerPeer kind, got: {other:?}"),
             }
 
             // verify the display formatting includes the PeerId
             let error_message = exceeded.to_string();
             assert!(
                 error_message.contains(&peer_id.to_string()),
-                "Error message should contain the PeerId: {}",
-                error_message
+                "Error message should contain the PeerId: {error_message}"
             );
         });
     }
