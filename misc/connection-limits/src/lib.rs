@@ -135,6 +135,11 @@ impl Exceeded {
     pub fn limit(&self) -> u32 {
         self.limit
     }
+
+    /// Return the [Kind]
+    pub fn kind(&self) -> Kind {
+        self.kind
+    }
 }
 
 impl fmt::Display for Exceeded {
@@ -147,13 +152,15 @@ impl fmt::Display for Exceeded {
     }
 }
 
+/// The kind of connection limit that was exceeded.
 #[derive(Debug, Clone, Copy)]
-enum Kind {
+pub enum Kind {
     PendingIncoming,
     PendingOutgoing,
     EstablishedIncoming,
     EstablishedOutgoing,
-    EstablishedPerPeer,
+    /// The given [PeerId] has exceeded the limit.
+    EstablishedPerPeer(PeerId),
     EstablishedTotal,
 }
 
@@ -164,7 +171,9 @@ impl fmt::Display for Kind {
             Kind::PendingOutgoing => write!(f, "pending outgoing connections"),
             Kind::EstablishedIncoming => write!(f, "established incoming connections"),
             Kind::EstablishedOutgoing => write!(f, "established outgoing connections"),
-            Kind::EstablishedPerPeer => write!(f, "established connections per peer"),
+            Kind::EstablishedPerPeer(peer_id) => {
+                write!(f, "established connections per peer by {peer_id}")
+            }
             Kind::EstablishedTotal => write!(f, "established connections"),
         }
     }
@@ -271,7 +280,7 @@ impl NetworkBehaviour for Behaviour {
                 .get(&peer)
                 .map(|connections| connections.len())
                 .unwrap_or(0),
-            Kind::EstablishedPerPeer,
+            Kind::EstablishedPerPeer(peer),
         )?;
         check_limit(
             self.limits.max_established_total,
@@ -328,7 +337,7 @@ impl NetworkBehaviour for Behaviour {
                 .get(&peer)
                 .map(|connections| connections.len())
                 .unwrap_or(0),
-            Kind::EstablishedPerPeer,
+            Kind::EstablishedPerPeer(peer),
         )?;
         check_limit(
             self.limits.max_established_total,
