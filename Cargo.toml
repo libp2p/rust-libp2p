@@ -77,7 +77,7 @@ edition = "2021"
 libp2p = { version = "0.56.0", path = "libp2p" }
 libp2p-allow-block-list = { version = "0.5.0", path = "misc/allow-block-list" }
 libp2p-autonat = { version = "0.14.1", path = "protocols/autonat" }
-libp2p-connection-limits = { version = "0.5.2", path = "misc/connection-limits" }
+libp2p-connection-limits = { version = "0.5.1", path = "misc/connection-limits" }
 libp2p-core = { version = "0.43.1", path = "core" }
 libp2p-dcutr = { version = "0.13.0", path = "protocols/dcutr" }
 libp2p-dns = { version = "0.44.0", path = "transports/dns" }
