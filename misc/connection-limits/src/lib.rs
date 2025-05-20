@@ -666,6 +666,66 @@ mod tests {
         )
     }
 
+    #[test]
+    fn max_established_per_peer() {
+        let limit: u32 = 2;
+
+        let mut swarm1 = Swarm::new_ephemeral(|_| {
+            Behaviour::new(ConnectionLimits::default().with_max_established_per_peer(Some(limit)))
+        });
+        let mut swarm2 = Swarm::new_ephemeral(|_| Behaviour::new(ConnectionLimits::default()));
+
+        let rt = Runtime::new().unwrap();
+        rt.block_on(async {
+            let peer_id = *swarm2.local_peer_id();
+            let (listen_addr, _) = swarm1.listen().with_memory_addr_external().await;
+
+            // Establish connections up to the limit
+            for _ in 0..limit {
+                swarm2.connect(&mut swarm1).await;
+            }
+
+            // Try one more connection
+            swarm2.dial(listen_addr).unwrap();
+
+            tokio::spawn(swarm2.loop_on_next());
+
+            // Wait for the expected error
+            let cause = swarm1
+                .wait(|event| match event {
+                    SwarmEvent::IncomingConnectionError {
+                        error: ListenError::Denied { cause },
+                        ..
+                    } => Some(cause),
+                    _ => None,
+                })
+                .await;
+
+            // verify the error contains the correct limit and kind
+            let exceeded = cause.downcast::<Exceeded>().unwrap();
+            assert_eq!(exceeded.limit(), limit);
+
+            // verify the kind is EstablishedPerPeer with the correct PeerId
+            match exceeded.kind() {
+                Kind::EstablishedPerPeer(received_peer_id) => {
+                    assert_eq!(
+                        received_peer_id, peer_id,
+                        "PeerId in error should match the connecting peer"
+                    );
+                }
+                other => panic!("Expected EstablishedPerPeer kind, got: {:?}", other),
+            }
+
+            // verify the display formatting includes the PeerId
+            let error_message = exceeded.to_string();
+            assert!(
+                error_message.contains(&peer_id.to_string()),
+                "Error message should contain the PeerId: {}",
+                error_message
+            );
+        });
+    }
+
     #[derive(libp2p_swarm_derive::NetworkBehaviour)]
     #[behaviour(prelude = "libp2p_swarm::derive_prelude")]
     struct Behaviour {
