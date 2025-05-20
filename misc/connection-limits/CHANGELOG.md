@@ -1,13 +1,10 @@
-## 0.5.2
-
-- Include `PeerId` in the `EstablishedPerPeer` limit error variant to provide better error messages.
-  See [PR 6027](https://github.com/libp2p/rust-libp2p/pull/6027).
-
 ## 0.5.1
 
 - Allow setting Peer IDs for bypassing limit check.
   Connections to the specified peers won't be counted toward limits.
   See [PR 5720](https://github.com/libp2p/rust-libp2p/pull/5720).
+- Include `PeerId` in the `EstablishedPerPeer` limit error variant to provide better error messages.
+  See [PR 6027](https://github.com/libp2p/rust-libp2p/pull/6027).
 
 ## 0.5.0
 
