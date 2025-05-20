@@ -33,14 +33,14 @@ use libp2p_swarm_test::SwarmExt;
 use sysinfo::{MemoryRefreshKind, RefreshKind};
 use util::*;
 
-#[test]
-fn max_percentage() {
+#[tokio::test]
+async fn max_percentage() {
     const CONNECTION_LIMIT: usize = 20;
     let system_info = sysinfo::System::new_with_specifics(
         RefreshKind::default().with_memory(MemoryRefreshKind::default().with_ram()),
     );
 
-    let mut network = Swarm::new_ephemeral(|_| TestBehaviour {
+    let mut network = Swarm::new_ephemeral_tokio(|_| TestBehaviour {
         connection_limits: Behaviour::with_max_percentage(0.1),
         mem_consumer: ConsumeMemoryBehaviour1MBPending0Established::default(),
     });

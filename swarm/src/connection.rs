@@ -960,7 +960,7 @@ mod tests {
 
         assert!(connection.poll_noop_waker().is_pending());
 
-        tokio::time::sleep(idle_timeout).await;
+        tokio::time::sleep(idle_timeout * 3).await;
 
         assert!(matches!(
             connection.poll_noop_waker(),

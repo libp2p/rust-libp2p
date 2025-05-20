@@ -17,7 +17,7 @@ async fn periodic_identify() {
         .with_env_filter(EnvFilter::from_default_env())
         .try_init();
 
-    let mut swarm1 = Swarm::new_ephemeral(|identity| {
+    let mut swarm1 = Swarm::new_ephemeral_tokio(|identity| {
         identify::Behaviour::new(
             identify::Config::new("a".to_string(), identity.public())
                 .with_agent_version("b".to_string()),
@@ -25,7 +25,7 @@ async fn periodic_identify() {
     });
     let swarm1_peer_id = *swarm1.local_peer_id();
 
-    let mut swarm2 = Swarm::new_ephemeral(|identity| {
+    let mut swarm2 = Swarm::new_ephemeral_tokio(|identity| {
         identify::Behaviour::new(
             identify::Config::new("c".to_string(), identity.public())
                 .with_agent_version("d".to_string()),
@@ -88,14 +88,14 @@ async fn only_emits_address_candidate_once_per_connection() {
         .with_env_filter(EnvFilter::from_default_env())
         .try_init();
 
-    let mut swarm1 = Swarm::new_ephemeral(|identity| {
+    let mut swarm1 = Swarm::new_ephemeral_tokio(|identity| {
         identify::Behaviour::new(
             identify::Config::new("a".to_string(), identity.public())
                 .with_agent_version("b".to_string())
                 .with_interval(Duration::from_secs(1)),
         )
     });
-    let mut swarm2 = Swarm::new_ephemeral(|identity| {
+    let mut swarm2 = Swarm::new_ephemeral_tokio(|identity| {
         identify::Behaviour::new(
             identify::Config::new("c".to_string(), identity.public())
                 .with_agent_version("d".to_string()),
@@ -160,7 +160,7 @@ async fn emits_unique_listen_addresses() {
         .with_env_filter(EnvFilter::from_default_env())
         .try_init();
 
-    let mut swarm1 = Swarm::new_ephemeral(|identity| {
+    let mut swarm1 = Swarm::new_ephemeral_tokio(|identity| {
         identify::Behaviour::new(
             identify::Config::new("a".to_string(), identity.public())
                 .with_agent_version("b".to_string())
@@ -168,7 +168,7 @@ async fn emits_unique_listen_addresses() {
                 .with_cache_size(10),
         )
     });
-    let mut swarm2 = Swarm::new_ephemeral(|identity| {
+    let mut swarm2 = Swarm::new_ephemeral_tokio(|identity| {
         identify::Behaviour::new(
             identify::Config::new("c".to_string(), identity.public())
                 .with_agent_version("d".to_string()),
@@ -232,7 +232,7 @@ async fn hides_listen_addresses() {
         .with_env_filter(EnvFilter::from_default_env())
         .try_init();
 
-    let mut swarm1 = Swarm::new_ephemeral(|identity| {
+    let mut swarm1 = Swarm::new_ephemeral_tokio(|identity| {
         identify::Behaviour::new(
             identify::Config::new("a".to_string(), identity.public())
                 .with_agent_version("b".to_string())
@@ -240,7 +240,7 @@ async fn hides_listen_addresses() {
                 .with_cache_size(10),
         )
     });
-    let mut swarm2 = Swarm::new_ephemeral(|identity| {
+    let mut swarm2 = Swarm::new_ephemeral_tokio(|identity| {
         identify::Behaviour::new(
             identify::Config::new("c".to_string(), identity.public())
                 .with_agent_version("d".to_string())
@@ -303,10 +303,10 @@ async fn identify_push() {
         .with_env_filter(EnvFilter::from_default_env())
         .try_init();
 
-    let mut swarm1 = Swarm::new_ephemeral(|identity| {
+    let mut swarm1 = Swarm::new_ephemeral_tokio(|identity| {
         identify::Behaviour::new(identify::Config::new("a".to_string(), identity.public()))
     });
-    let mut swarm2 = Swarm::new_ephemeral(|identity| {
+    let mut swarm2 = Swarm::new_ephemeral_tokio(|identity| {
         identify::Behaviour::new(
             identify::Config::new("a".to_string(), identity.public())
                 .with_agent_version("b".to_string()),
@@ -355,10 +355,10 @@ async fn discover_peer_after_disconnect() {
         .with_env_filter(EnvFilter::from_default_env())
         .try_init();
 
-    let mut swarm1 = Swarm::new_ephemeral(|identity| {
+    let mut swarm1 = Swarm::new_ephemeral_tokio(|identity| {
         identify::Behaviour::new(identify::Config::new("a".to_string(), identity.public()))
     });
-    let mut swarm2 = Swarm::new_ephemeral(|identity| {
+    let mut swarm2 = Swarm::new_ephemeral_tokio(|identity| {
         identify::Behaviour::new(
             identify::Config::new("a".to_string(), identity.public())
                 .with_agent_version("b".to_string()),
@@ -410,13 +410,13 @@ async fn configured_interval_starts_after_first_identify() {
 
     let identify_interval = Duration::from_secs(5);
 
-    let mut swarm1 = Swarm::new_ephemeral(|identity| {
+    let mut swarm1 = Swarm::new_ephemeral_tokio(|identity| {
         identify::Behaviour::new(
             identify::Config::new("a".to_string(), identity.public())
                 .with_interval(identify_interval),
         )
     });
-    let mut swarm2 = Swarm::new_ephemeral(|identity| {
+    let mut swarm2 = Swarm::new_ephemeral_tokio(|identity| {
         identify::Behaviour::new(
             identify::Config::new("a".to_string(), identity.public())
                 .with_agent_version("b".to_string()),
@@ -448,13 +448,13 @@ async fn reject_mismatched_public_key() {
         .with_env_filter(EnvFilter::from_default_env())
         .try_init();
 
-    let mut honest_swarm = Swarm::new_ephemeral(|identity| {
+    let mut honest_swarm = Swarm::new_ephemeral_tokio(|identity| {
         identify::Behaviour::new(
             identify::Config::new("a".to_string(), identity.public())
                 .with_interval(Duration::from_secs(1)),
         )
     });
-    let mut spoofing_swarm = Swarm::new_ephemeral(|_unused_identity| {
+    let mut spoofing_swarm = Swarm::new_ephemeral_tokio(|_unused_identity| {
         let arbitrary_public_key = Keypair::generate_ed25519().public();
         identify::Behaviour::new(
             identify::Config::new("a".to_string(), arbitrary_public_key)
