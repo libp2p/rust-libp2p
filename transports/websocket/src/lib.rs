@@ -72,12 +72,11 @@ use rw_stream_sink::RwStreamSink;
 /// # use libp2p_websocket as websocket;
 /// # use std::pin::Pin;
 /// #
-/// # #[async_std::main]
+/// # #[tokio::main]
 /// # async fn main() {
 ///
 /// let mut transport = websocket::Config::new(
-///     dns::async_std::Transport::system(tcp::async_io::Transport::new(tcp::Config::default()))
-///         .await
+///     dns::tokio::Transport::system(tcp::async_io::Transport::new(tcp::Config::default()))
 ///         .unwrap(),
 /// );
 ///
@@ -115,7 +114,7 @@ use rw_stream_sink::RwStreamSink;
 /// # use libp2p_websocket as websocket;
 /// # use std::pin::Pin;
 /// #
-/// # #[async_std::main]
+/// # #[tokio::main]
 /// # async fn main() {
 ///
 /// let mut transport =

@@ -27,9 +27,9 @@ webpki-roots = "0.26"
 
 [dev-dependencies]
 libp2p-tcp = { workspace = true, features = ["async-io"] }
-libp2p-dns = { workspace = true, features = ["async-std"] }
+libp2p-dns = { workspace = true, features = ["tokio"] }
 libp2p-identity = { workspace = true, features = ["rand"] }
-async-std = { version = "1.6.5", features = ["attributes"] }
+tokio = { workspace = true, features = ["rt", "macros", "io-std", "io-util"] }
 rcgen = { workspace = true }
 
 # Passing arguments to the docsrs builder in order to properly document cfg's.

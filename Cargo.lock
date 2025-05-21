@@ -3499,7 +3499,6 @@ dependencies = [
 name = "libp2p-websocket"
 version = "0.45.1"
 dependencies = [
- "async-std",
  "either",
  "futures",
  "futures-rustls",
@@ -3513,6 +3512,7 @@ dependencies = [
  "rw-stream-sink",
  "soketto",
  "thiserror 2.0.12",
+ "tokio",
  "tracing",
  "url",
  "webpki-roots",
