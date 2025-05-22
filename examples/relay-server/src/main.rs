@@ -115,7 +115,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
                 println!("{event:?}")
             }
             SwarmEvent::NewListenAddr { mut address, .. } => {
-                address.push(Protocol::P2p(local_peer_id.into()));
+                address.push(Protocol::P2p(local_peer_id));
                 println!("Listening on {address:?}");
             }
             _ => {}
