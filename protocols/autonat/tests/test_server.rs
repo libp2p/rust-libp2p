@@ -359,7 +359,8 @@ async fn new_server_swarm(config: Option<Config>) -> (Swarm<Behaviour>, PeerId, 
     // Don't do any outbound probes.
     config.boot_delay = Duration::from_secs(60);
 
-    let mut server = Swarm::new_ephemeral_tokio(|key| Behaviour::new(key.public().to_peer_id(), config));
+    let mut server =
+        Swarm::new_ephemeral_tokio(|key| Behaviour::new(key.public().to_peer_id(), config));
     let peer_id = *server.local_peer_id();
     let (_, addr) = server.listen().await;
 

@@ -626,7 +626,8 @@ mod tests {
         let mut swarm1 = Swarm::new_ephemeral_tokio(|_| {
             Behaviour::new_with_connection_denier(ConnectionLimits::default())
         });
-        let mut swarm2 = Swarm::new_ephemeral_tokio(|_| Behaviour::new(ConnectionLimits::default()));
+        let mut swarm2 =
+            Swarm::new_ephemeral_tokio(|_| Behaviour::new(ConnectionLimits::default()));
 
         // Have swarm2 dial swarm1.
         let (listen_addr, _) = swarm1.listen().await;
