@@ -4913,7 +4913,12 @@ dependencies = [
  "clap",
  "futures",
  "libp2p",
+ "libp2p-noise",
+ "libp2p-tls",
+ "libp2p-webrtc",
+ "rand 0.8.5",
  "tokio",
+ "tracing",
  "tracing-subscriber",
 ]
 
