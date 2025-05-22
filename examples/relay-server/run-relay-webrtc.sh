@@ -1,1 +1,0 @@
-RUST_LOG=info cargo run -- --port 4884 --secret-key-seed 0 --webrtc-port 8081
