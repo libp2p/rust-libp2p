@@ -14,8 +14,6 @@ tokio = { version = "1.37.0", features = ["full"] }
 futures = { workspace = true }
 libp2p = { path = "../../libp2p", features = ["tokio", "noise", "macros", "ping", "tcp", "identify", "yamux", "relay", "quic", "websocket", "dns", "tls"] }
 libp2p-webrtc = { workspace = true, features = ["tokio"] }
-libp2p-noise = { workspace = true }
-libp2p-tls = { workspace = true }
 tracing-subscriber = { workspace = true, features = ["env-filter"] }
 tracing = "0.1"
 rand = "0.8"
