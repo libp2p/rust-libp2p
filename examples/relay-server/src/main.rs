@@ -125,10 +125,6 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
 fn listen_on_websocket(swarm: &mut Swarm<Behaviour>, opt: &Opt) -> Result<(), Box<dyn Error>> {
     match opt.websocket_port {
-        Some(0) => {
-            return Err(Box::new(std::io::Error::new(std::io::ErrorKind::InvalidInput,
-            "Websocket port is 0, which is not supported in this example, since it will use a non-deterministic port. Please use a fixed port for websocket.")));
-        }
         Some(port) => {
             let address = Multiaddr::from(Ipv4Addr::UNSPECIFIED)
                 .with(Protocol::Tcp(port))
@@ -146,10 +142,6 @@ fn listen_on_websocket(swarm: &mut Swarm<Behaviour>, opt: &Opt) -> Result<(), Bo
 
 fn listen_on_webrtc(swarm: &mut Swarm<Behaviour>, opt: &Opt) -> Result<(), Box<dyn Error>> {
     match opt.webrtc_port {
-        Some(0) => {
-            return Err(Box::new(std::io::Error::new(std::io::ErrorKind::InvalidInput,
-            "Websocket port is 0, which is not supported in this example, since it will use a non-deterministic port. Please use a fixed port for webRTC.")));
-        }
         Some(port) => {
             let address = Multiaddr::from(Ipv4Addr::UNSPECIFIED)
                 .with(Protocol::Udp(port))
