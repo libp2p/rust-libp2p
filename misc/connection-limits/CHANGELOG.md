@@ -4,9 +4,6 @@
   Connections to the specified peers won't be counted toward limits.
   See [PR 5720](https://github.com/libp2p/rust-libp2p/pull/5720).
 
-- Added test for newly exposed `Option<PeerId>` in `SwarmEvent::IncomingConnectionError`
-  See [PR 6032](https://github.com/libp2p/rust-libp2p/pull/6032).
-
 ## 0.5.0
 
 - Deprecate `void` crate.
