@@ -9,6 +9,10 @@
   certain upgrade.
   See [PR 5860](https://github.com/libp2p/rust-libp2p/pull/5860).
 
+- Expose `Option<PeerId>` in `SwarmEvent::IncomingConnectionError`.
+  This enables insight to which `PeerId` errored.
+  See [PR 6032](https://github.com/libp2p/rust-libp2p/pull/6032)
+
 ## 0.46.0
 
 - Don't report `NewExternalAddrCandidate` for confirmed external addresses.

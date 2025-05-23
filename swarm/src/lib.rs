@@ -221,6 +221,8 @@ pub enum SwarmEvent<TBehaviourOutEvent> {
         send_back_addr: Multiaddr,
         /// The error that happened.
         error: ListenError,
+        /// If known, [`PeerId`] of the peer that tried to connect to us.
+        peer_id: Option<PeerId>,
     },
     /// An error happened on an outbound connection.
     OutgoingConnectionError {
@@ -756,6 +758,7 @@ where
                                         send_back_addr,
                                         local_addr,
                                         error: listen_error,
+                                        peer_id: Some(peer_id),
                                     },
                                 );
                                 return;
@@ -868,6 +871,7 @@ where
                         local_addr,
                         send_back_addr,
                         error,
+                        peer_id: None,
                     });
             }
             PoolEvent::ConnectionClosed {
@@ -974,6 +978,7 @@ where
                                 local_addr,
                                 send_back_addr,
                                 error: listen_error,
+                                peer_id: None,
                             });
                         return;
                     }
