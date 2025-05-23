@@ -1,7 +1,7 @@
 ## 0.44.1
 
 - Update hickory-dns crate to 0.25.2
-  See [PR 5899](https://github.com/libp2p/rust-libp2p/pull/5899).
+  See [PR 6033](https://github.com/libp2p/rust-libp2p/pull/6033).
 
 ## 0.44.0
 
