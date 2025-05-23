@@ -221,7 +221,7 @@ pub enum SwarmEvent<TBehaviourOutEvent> {
         send_back_addr: Multiaddr,
         /// The error that happened.
         error: ListenError,
-        /// If known, [`PeerId`] of the peer we tried to reach.
+        /// If known, [`PeerId`] of the peer that tried to connect to us.
         peer_id: Option<PeerId>,
     },
     /// An error happened on an outbound connection.
