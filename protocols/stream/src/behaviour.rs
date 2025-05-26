@@ -22,6 +22,7 @@ use crate::{handler::Handler, shared::Shared, Control};
 pub struct Behaviour {
     shared: Arc<Mutex<Shared>>,
     dial_receiver: mpsc::Receiver<PeerId>,
+    dial_opts: Arc<dyn Fn(PeerId) -> DialOpts + Send + Sync + 'static>,
 }
 
 impl Default for Behaviour {
@@ -37,12 +38,27 @@ impl Behaviour {
         Self {
             shared: Arc::new(Mutex::new(Shared::new(dial_sender))),
             dial_receiver,
+            dial_opts: Arc::new(|peer: PeerId| {
+                DialOpts::peer_id(peer)
+                    .condition(PeerCondition::DisconnectedAndNotDialing)
+                    .build()
+            })
         }
     }
 
     /// Obtain a new [`Control`].
     pub fn new_control(&self) -> Control {
         Control::new(self.shared.clone())
+    }
+
+    /// Update the default dialing options
+    pub fn with_dial_opts<F>(mut self, f: F) -> Self
+    where
+        F: Fn(PeerId) -> DialOpts + Send + Sync + 'static,
+    {
+        self.dial_opts = Arc::new(f);
+
+        self
     }
 }
 
@@ -133,9 +149,7 @@ impl NetworkBehaviour for Behaviour {
     ) -> Poll<ToSwarm<Self::ToSwarm, THandlerInEvent<Self>>> {
         if let Poll::Ready(Some(peer)) = self.dial_receiver.poll_next_unpin(cx) {
             return Poll::Ready(ToSwarm::Dial {
-                opts: DialOpts::peer_id(peer)
-                    .condition(PeerCondition::DisconnectedAndNotDialing)
-                    .build(),
+                opts: (self.dial_opts)(peer),
             });
         }
 
