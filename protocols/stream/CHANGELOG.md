@@ -1,3 +1,8 @@
+## 0.3.0-alpha.1
+
+- Add the possibility to configure the default `DialOpts` in the library `Behaviour` object
+  See [PR 6036](https://github.com/libp2p/rust-libp2p/pull/6036).
+
 ## 0.3.0-alpha
 
 - Deprecate `void` crate.
