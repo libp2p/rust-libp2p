@@ -78,7 +78,6 @@ Conduct](https://github.com/ipfs/community/blob/master/code-of-conduct.md).
 
 (In alphabetical order.)
 
-- Guillaume Michel ([@guillaumemichel](https://github.com/guillaumemichel))
 - João Oliveira ([@jxs](https://github.com/jxs))
 
 ## Notable users
@@ -95,6 +94,7 @@ Conduct](https://github.com/ipfs/community/blob/master/code-of-conduct.md).
 - [Lighthouse](https://github.com/sigp/lighthouse) - Ethereum consensus client in Rust.
 - [Locutus](https://github.com/freenet/locutus) - Global, observable, decentralized key-value store.
 - [OpenMina](https://github.com/openmina/openmina) - In-browser Mina Rust implementation.
+- [qaul قول](https://github.com/qaul/qaul.net) - Internet Independent Wireless Mesh Communication App
 - [rust-ipfs](https://github.com/rs-ipfs/rust-ipfs) - IPFS implementation in Rust.
 - [Safe Network](https://github.com/maidsafe/safe_network) - Safe Network implementation in Rust.
 - [SQD Network](https://github.com/subsquid/sqd-network) - A decentralized storage for Web3 data.
@@ -102,5 +102,6 @@ Conduct](https://github.com/ipfs/community/blob/master/code-of-conduct.md).
 - [Subspace](https://github.com/subspace/subspace) - Subspace Network reference implementation
 - [Substrate](https://github.com/paritytech/substrate) - Framework for blockchain innovation,
 used by [Polkadot](https://www.parity.io/technologies/polkadot/).
+- [Swarm NL](https://github.com/algorealmInc/SwarmNL) - A library that makes it easy to configure the networking requirements for any distributed application.
 - [Taple](https://github.com/opencanarias/taple-core) - Sustainable DLT for asset and process traceability by [OpenCanarias](https://www.opencanarias.com/en/).
 - [Ceylon](https://github.com/ceylonai/ceylon) - A Multi-Agent System (MAS) Development Framework.

@@ -21,6 +21,15 @@
 /// A request-response behaviour using [`cbor4ii::serde`] for serializing and
 /// deserializing the messages.
 ///
+/// # Default Size Limits
+///
+/// The codec uses the following default size limits:
+/// - Maximum request size: 1,048,576 bytes (1 MiB)
+/// - Maximum response size: 10,485,760 bytes (10 MiB)
+///
+/// These limits can be customized with [`codec::Codec::set_request_size_maximum`]
+/// and [`codec::Codec::set_response_size_maximum`].
+///
 /// # Example
 ///
 /// ```
@@ -46,7 +55,7 @@
 /// ```
 pub type Behaviour<Req, Resp> = crate::Behaviour<codec::Codec<Req, Resp>>;
 
-mod codec {
+pub mod codec {
     use std::{collections::TryReserveError, convert::Infallible, io, marker::PhantomData};
 
     use async_trait::async_trait;
@@ -170,11 +179,7 @@ mod codec {
 
     fn decode_into_io_error(err: cbor4ii::serde::DecodeError<Infallible>) -> io::Error {
         match err {
-            // TODO: remove when Rust 1.82 is MSRV
-            #[allow(unreachable_patterns)]
-            cbor4ii::serde::DecodeError::Core(DecodeError::Read(e)) => {
-                io::Error::new(io::ErrorKind::Other, e)
-            }
+            cbor4ii::serde::DecodeError::Core(DecodeError::Read(e)) => io::Error::other(e),
             cbor4ii::serde::DecodeError::Core(e @ DecodeError::Unsupported { .. }) => {
                 io::Error::new(io::ErrorKind::Unsupported, e)
             }
@@ -182,14 +187,12 @@ mod codec {
                 io::Error::new(io::ErrorKind::UnexpectedEof, e)
             }
             cbor4ii::serde::DecodeError::Core(e) => io::Error::new(io::ErrorKind::InvalidData, e),
-            cbor4ii::serde::DecodeError::Custom(e) => {
-                io::Error::new(io::ErrorKind::Other, e.to_string())
-            }
+            cbor4ii::serde::DecodeError::Custom(e) => io::Error::other(e.to_string()),
         }
     }
 
     fn encode_into_io_error(err: cbor4ii::serde::EncodeError<TryReserveError>) -> io::Error {
-        io::Error::new(io::ErrorKind::Other, err)
+        io::Error::other(err)
     }
 }
 

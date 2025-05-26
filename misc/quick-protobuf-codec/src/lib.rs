@@ -59,8 +59,7 @@ fn write_length(message: &impl MessageWrite, dst: &mut BytesMut) {
 /// Write the message itself to `dst`.
 fn write_message(item: &impl MessageWrite, dst: &mut BytesMut) -> io::Result<()> {
     let mut writer = Writer::new(BytesMutWriterBackend::new(dst));
-    item.write_message(&mut writer)
-        .map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
+    item.write_message(&mut writer).map_err(io::Error::other)?;
 
     Ok(())
 }
@@ -252,7 +251,7 @@ mod tests {
 
         let mut src = BytesMut::new();
         src.extend_from_slice(encoded_length);
-        src.extend(std::iter::repeat(0).take(length));
+        src.extend(std::iter::repeat_n(0, length));
         src
     }
 

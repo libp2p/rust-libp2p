@@ -76,8 +76,6 @@ impl ConnectionHandler for Handler {
                     tracing::warn!("Dial back request dropped, too many requests in flight");
                 }
             }
-            // TODO: remove when Rust 1.82 is MSRV
-            #[allow(unreachable_patterns)]
             ConnectionEvent::ListenUpgradeError(ListenUpgradeError { error, .. }) => {
                 libp2p_core::util::unreachable(error);
             }
@@ -109,12 +107,7 @@ fn perform_dial_back(
             match receiver.await {
                 Ok(Ok(())) => {}
                 Ok(Err(e)) => return Some((Err(e), state)),
-                Err(_) => {
-                    return Some((
-                        Err(io::Error::new(io::ErrorKind::Other, "Sender got cancelled")),
-                        state,
-                    ));
-                }
+                Err(_) => return None,
             }
             if let Err(e) = protocol::dial_back_response(&mut state.stream).await {
                 return Some((Err(e), state));

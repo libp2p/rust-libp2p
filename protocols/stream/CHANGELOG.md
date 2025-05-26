@@ -2,6 +2,8 @@
 
 - Add the possibility to configure the default `DialOpts` in the library `Behaviour` object
   See [PR 6036](https://github.com/libp2p/rust-libp2p/pull/6036).
+- Garbage-collect deregistered streams when accepting new streams.
+  See [PR 5999](https://github.com/libp2p/rust-libp2p/pull/5999).
 
 ## 0.3.0-alpha
 

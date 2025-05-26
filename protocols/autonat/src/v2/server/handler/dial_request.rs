@@ -137,8 +137,6 @@ where
                     );
                 }
             }
-            // TODO: remove when Rust 1.82 is MSRV
-            #[allow(unreachable_patterns)]
             ConnectionEvent::ListenUpgradeError(ListenUpgradeError { error, .. }) => {
                 tracing::debug!("inbound request failed: {:?}", error);
             }
@@ -216,8 +214,7 @@ async fn handle_request(
             tested_addr: observed_multiaddr,
             client,
             data_amount,
-            result: Err(io::Error::new(
-                io::ErrorKind::Other,
+            result: Err(io::Error::other(
                 "client is not conformint to protocol. the tested address is not the observed address",
             )),
         };

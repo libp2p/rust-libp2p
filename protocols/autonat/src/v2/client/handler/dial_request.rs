@@ -2,7 +2,7 @@ use std::{
     collections::VecDeque,
     convert::Infallible,
     io,
-    iter::{once, repeat},
+    iter::{once, repeat_n},
     task::{Context, Poll},
     time::Duration,
 };
@@ -210,8 +210,6 @@ async fn start_stream_handle(
         .map_err(|e| match e {
             StreamUpgradeError::NegotiationFailed => Error::UnsupportedProtocol,
             StreamUpgradeError::Timeout => Error::Io(io::ErrorKind::TimedOut.into()),
-            // TODO: remove when Rust 1.82 is MSRV
-            #[allow(unreachable_patterns)]
             StreamUpgradeError::Apply(v) => libp2p_core::util::unreachable(v),
             StreamUpgradeError::Io(e) => Error::Io(e),
         })?;
@@ -267,20 +265,13 @@ async fn start_stream_handle(
 
     match res.status {
         ResponseStatus::E_REQUEST_REJECTED => {
-            return Err(Error::Io(io::Error::new(
-                io::ErrorKind::Other,
-                "server rejected request",
-            )))
+            return Err(Error::Io(io::Error::other("server rejected request")))
         }
         ResponseStatus::E_DIAL_REFUSED => {
-            return Err(Error::Io(io::Error::new(
-                io::ErrorKind::Other,
-                "server refused dial",
-            )))
+            return Err(Error::Io(io::Error::other("server refused dial")))
         }
         ResponseStatus::E_INTERNAL_ERROR => {
-            return Err(Error::Io(io::Error::new(
-                io::ErrorKind::Other,
+            return Err(Error::Io(io::Error::other(
                 "server encountered internal error",
             )))
         }
@@ -326,8 +317,7 @@ where
 {
     let count_full = num_bytes / DATA_FIELD_LEN_UPPER_BOUND;
     let partial_len = num_bytes % DATA_FIELD_LEN_UPPER_BOUND;
-    for req in repeat(DATA_FIELD_LEN_UPPER_BOUND)
-        .take(count_full)
+    for req in repeat_n(DATA_FIELD_LEN_UPPER_BOUND, count_full)
         .chain(once(partial_len))
         .filter(|e| *e > 0)
         .map(|data_count| {

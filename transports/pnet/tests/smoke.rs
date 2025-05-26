@@ -30,7 +30,7 @@ async fn can_establish_connection_tcp() {
 #[tokio::test]
 async fn can_establish_connection_websocket() {
     can_establish_connection_inner_with_timeout(
-        || libp2p_websocket::WsConfig::new(libp2p_tcp::tokio::Transport::default()),
+        || libp2p_websocket::Config::new(libp2p_tcp::tokio::Transport::default()),
         "/ip4/127.0.0.1/tcp/0/ws".parse().unwrap(),
     )
     .await

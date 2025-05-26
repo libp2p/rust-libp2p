@@ -648,6 +648,13 @@ impl Metrics {
             metric.set(metric.get() - 1);
         }
     }
+
+    /// Registers a set of topics that we want to store calculate metrics for.
+    pub(crate) fn register_allowed_topics(&mut self, topics: Vec<TopicHash>) {
+        for topic_hash in topics {
+            self.topic_info.insert(topic_hash, true);
+        }
+    }
 }
 
 /// Reasons why a peer was included in the mesh.
@@ -679,7 +686,7 @@ pub(crate) enum Churn {
 }
 
 /// Kinds of reasons a peer's score has been penalized
-#[derive(PartialEq, Eq, Hash, EncodeLabelValue, Clone, Debug)]
+#[derive(PartialEq, Eq, Hash, Clone, Copy, Debug, EncodeLabelValue)]
 pub(crate) enum Penalty {
     /// A peer grafted before waiting the back-off time.
     GraftBackoff,
@@ -706,7 +713,7 @@ struct ChurnLabel {
 }
 
 /// Label for the kinds of protocols peers can connect as.
-#[derive(PartialEq, Eq, Hash, EncodeLabelSet, Clone, Debug)]
+#[derive(PartialEq, Eq, Hash, Clone, Debug, EncodeLabelSet)]
 struct ProtocolLabel {
     protocol: PeerKind,
 }
@@ -724,6 +731,6 @@ struct HistBuilder {
 
 impl MetricConstructor<Histogram> for HistBuilder {
     fn new_metric(&self) -> Histogram {
-        Histogram::new(self.buckets.clone().into_iter())
+        Histogram::new(self.buckets.clone())
     }
 }

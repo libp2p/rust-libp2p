@@ -333,10 +333,7 @@ impl FromStr for TransportProtocol {
         match mode {
             "tcp" => Ok(TransportProtocol::Tcp),
             "quic" => Ok(TransportProtocol::Quic),
-            _ => Err(io::Error::new(
-                io::ErrorKind::Other,
-                "Expected either 'tcp' or 'quic'",
-            )),
+            _ => Err(io::Error::other("Expected either 'tcp' or 'quic'")),
         }
     }
 }
@@ -353,10 +350,7 @@ impl FromStr for Mode {
         match mode {
             "dial" => Ok(Mode::Dial),
             "listen" => Ok(Mode::Listen),
-            _ => Err(io::Error::new(
-                io::ErrorKind::Other,
-                "Expected either 'dial' or 'listen'",
-            )),
+            _ => Err(io::Error::other("Expected either 'dial' or 'listen'")),
         }
     }
 }

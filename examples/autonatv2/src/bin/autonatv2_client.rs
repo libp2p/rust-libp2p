@@ -14,18 +14,18 @@ use rand::rngs::OsRng;
 use tracing_subscriber::EnvFilter;
 
 #[derive(Debug, Parser)]
-#[clap(name = "libp2p autonatv2 client")]
+#[command(name = "libp2p autonatv2 client")]
 struct Opt {
     /// Port where the client will listen for incoming connections.
-    #[clap(short = 'p', long, default_value_t = 0)]
+    #[arg(short = 'p', long, default_value_t = 0)]
     listen_port: u16,
 
     /// Address of the server where want to connect to.
-    #[clap(short = 'a', long)]
+    #[arg(short = 'a', long)]
     server_address: Multiaddr,
 
     /// Probe interval in seconds.
-    #[clap(short = 't', long, default_value = "2")]
+    #[arg(short = 't', long, default_value = "2")]
     probe_interval: u64,
 }
 

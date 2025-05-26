@@ -176,10 +176,7 @@ mod tests {
             .with_tcp(
                 Default::default(),
                 libp2p_tls::Config::new,
-                (
-                    libp2p_yamux::Config::default,
-                    libp2p_mplex::MplexConfig::default,
-                ),
+                (libp2p_yamux::Config::default, libp2p_mplex::Config::default),
             )
             .unwrap()
             .with_behaviour(|_| libp2p_swarm::dummy::Behaviour)
@@ -201,10 +198,7 @@ mod tests {
             .with_tcp(
                 Default::default(),
                 (libp2p_tls::Config::new, libp2p_noise::Config::new),
-                (
-                    libp2p_yamux::Config::default,
-                    libp2p_mplex::MplexConfig::default,
-                ),
+                (libp2p_yamux::Config::default, libp2p_mplex::Config::default),
             )
             .unwrap()
             .with_behaviour(|_| libp2p_swarm::dummy::Behaviour)
