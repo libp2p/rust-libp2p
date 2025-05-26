@@ -42,7 +42,7 @@ impl Behaviour {
                 DialOpts::peer_id(peer)
                     .condition(PeerCondition::DisconnectedAndNotDialing)
                     .build()
-            })
+            }),
         }
     }
 
@@ -51,8 +51,8 @@ impl Behaviour {
         Control::new(self.shared.clone())
     }
 
-    /// Update the default dialing options
-    pub fn with_dial_opts<F>(mut self, f: F) -> Self
+    /// Update the default dial options
+    pub fn with_default_dial_opts<F>(mut self, f: F) -> Self
     where
         F: Fn(PeerId) -> DialOpts + Send + Sync + 'static,
     {
