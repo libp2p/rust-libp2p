@@ -12,7 +12,7 @@ use libp2p_swarm::{
 };
 use libp2p_swarm_test::SwarmExt;
 
-#[async_std::test]
+#[tokio::test]
 async fn sends_remaining_events_to_behaviour_on_connection_close() {
     let mut swarm1 = Swarm::new_ephemeral(|_| Behaviour::new(3));
     let mut swarm2 = Swarm::new_ephemeral(|_| Behaviour::new(3));
