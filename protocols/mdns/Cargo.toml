@@ -38,11 +38,11 @@ tracing-subscriber = { workspace = true, features = ["env-filter"] }
 
 [[test]]
 name = "use-async-std"
-required-features = ["async-io"]
+required-features = ["async-io", "libp2p-swarm-test/async-std"]
 
 [[test]]
 name = "use-tokio"
-required-features = ["tokio"]
+required-features = ["tokio", "libp2p-swarm-test/tokio"]
 
 
 # Passing arguments to the docsrs builder in order to properly document cfg's.
