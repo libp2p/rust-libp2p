@@ -416,7 +416,7 @@ mod tests {
 
         let outgoing_limit = rand::thread_rng().gen_range(1..10);
 
-        let mut network = Swarm::new_ephemeral(|_| {
+        let mut network = Swarm::new_ephemeral_tokio(|_| {
             Behaviour::new(
                 ConnectionLimits::default().with_max_pending_outgoing(Some(outgoing_limit)),
             )
@@ -439,8 +439,8 @@ mod tests {
         (network, addr, outgoing_limit)
     }
 
-    #[test]
-    fn max_outgoing() {
+    #[tokio::test]
+    async fn max_outgoing() {
         let (mut network, addr, outgoing_limit) = fill_outgoing();
         match network
             .dial(
@@ -469,8 +469,8 @@ mod tests {
         );
     }
 
-    #[test]
-    fn outgoing_limit_bypass() {
+    #[tokio::test]
+    async fn outgoing_limit_bypass() {
         let (mut network, addr, _) = fill_outgoing();
         let bypassed_peer = PeerId::random();
         network
@@ -513,12 +513,12 @@ mod tests {
     #[test]
     fn max_established_incoming() {
         fn prop(Limit(limit): Limit) {
-            let mut swarm1 = Swarm::new_ephemeral(|_| {
+            let mut swarm1 = Swarm::new_ephemeral_tokio(|_| {
                 Behaviour::new(
                     ConnectionLimits::default().with_max_established_incoming(Some(limit)),
                 )
             });
-            let mut swarm2 = Swarm::new_ephemeral(|_| {
+            let mut swarm2 = Swarm::new_ephemeral_tokio(|_| {
                 Behaviour::new(
                     ConnectionLimits::default().with_max_established_incoming(Some(limit)),
                 )
@@ -556,17 +556,17 @@ mod tests {
     #[test]
     fn bypass_established_incoming() {
         fn prop(Limit(limit): Limit) {
-            let mut swarm1 = Swarm::new_ephemeral(|_| {
+            let mut swarm1 = Swarm::new_ephemeral_tokio(|_| {
                 Behaviour::new(
                     ConnectionLimits::default().with_max_established_incoming(Some(limit)),
                 )
             });
-            let mut swarm2 = Swarm::new_ephemeral(|_| {
+            let mut swarm2 = Swarm::new_ephemeral_tokio(|_| {
                 Behaviour::new(
                     ConnectionLimits::default().with_max_established_incoming(Some(limit)),
                 )
             });
-            let mut swarm3 = Swarm::new_ephemeral(|_| {
+            let mut swarm3 = Swarm::new_ephemeral_tokio(|_| {
                 Behaviour::new(
                     ConnectionLimits::default().with_max_established_incoming(Some(limit)),
                 )
@@ -623,10 +623,11 @@ mod tests {
     /// ([`SwarmEvent::ConnectionEstablished`]) can the connection be seen as established.
     #[tokio::test]
     async fn support_other_behaviour_denying_connection() {
-        let mut swarm1 = Swarm::new_ephemeral(|_| {
+        let mut swarm1 = Swarm::new_ephemeral_tokio(|_| {
             Behaviour::new_with_connection_denier(ConnectionLimits::default())
         });
-        let mut swarm2 = Swarm::new_ephemeral(|_| Behaviour::new(ConnectionLimits::default()));
+        let mut swarm2 =
+            Swarm::new_ephemeral_tokio(|_| Behaviour::new(ConnectionLimits::default()));
 
         // Have swarm2 dial swarm1.
         let (listen_addr, _) = swarm1.listen().await;

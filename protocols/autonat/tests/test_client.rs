@@ -35,7 +35,7 @@ const TEST_REFRESH_INTERVAL: Duration = Duration::from_secs(2);
 
 #[tokio::test]
 async fn test_auto_probe() {
-    let mut client = Swarm::new_ephemeral(|key| {
+    let mut client = Swarm::new_ephemeral_tokio(|key| {
         Behaviour::new(
             key.public().to_peer_id(),
             Config {
@@ -137,7 +137,7 @@ async fn test_auto_probe() {
 
 #[tokio::test]
 async fn test_confidence() {
-    let mut client = Swarm::new_ephemeral(|key| {
+    let mut client = Swarm::new_ephemeral_tokio(|key| {
         Behaviour::new(
             key.public().to_peer_id(),
             Config {
@@ -221,7 +221,7 @@ async fn test_confidence() {
 
 #[tokio::test]
 async fn test_throttle_server_period() {
-    let mut client = Swarm::new_ephemeral(|key| {
+    let mut client = Swarm::new_ephemeral_tokio(|key| {
         Behaviour::new(
             key.public().to_peer_id(),
             Config {
@@ -272,7 +272,7 @@ async fn test_throttle_server_period() {
 
 #[tokio::test]
 async fn test_use_connected_as_server() {
-    let mut client = Swarm::new_ephemeral(|key| {
+    let mut client = Swarm::new_ephemeral_tokio(|key| {
         Behaviour::new(
             key.public().to_peer_id(),
             Config {
@@ -310,7 +310,7 @@ async fn test_use_connected_as_server() {
 
 #[tokio::test]
 async fn test_outbound_failure() {
-    let mut client = Swarm::new_ephemeral(|key| {
+    let mut client = Swarm::new_ephemeral_tokio(|key| {
         Behaviour::new(
             key.public().to_peer_id(),
             Config {
@@ -379,7 +379,7 @@ async fn test_outbound_failure() {
 
 #[tokio::test]
 async fn test_global_ips_config() {
-    let mut client = Swarm::new_ephemeral(|key| {
+    let mut client = Swarm::new_ephemeral_tokio(|key| {
         Behaviour::new(
             key.public().to_peer_id(),
             Config {
@@ -413,7 +413,7 @@ async fn test_global_ips_config() {
 }
 
 async fn new_server_swarm() -> (PeerId, Multiaddr, JoinHandle<()>) {
-    let mut swarm = Swarm::new_ephemeral(|key| {
+    let mut swarm = Swarm::new_ephemeral_tokio(|key| {
         Behaviour::new(
             key.public().to_peer_id(),
             Config {
