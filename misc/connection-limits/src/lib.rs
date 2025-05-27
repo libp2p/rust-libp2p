@@ -660,11 +660,12 @@ mod tests {
 
     #[tokio::test]
     async fn incoming_connection_error_carries_peer_id() {
-        let mut swarm1 = Swarm::new_ephemeral(|_| {
+        let mut swarm1 = Swarm::new_ephemeral_tokio(|_| {
             // Set max incoming connections to 0 to immediately deny all connections
             Behaviour::new(ConnectionLimits::default().with_max_established_incoming(Some(0)))
         });
-        let mut swarm2 = Swarm::new_ephemeral(|_| Behaviour::new(ConnectionLimits::default()));
+        let mut swarm2 =
+            Swarm::new_ephemeral_tokio(|_| Behaviour::new(ConnectionLimits::default()));
 
         let dialer_peer_id = *swarm2.local_peer_id();
 
