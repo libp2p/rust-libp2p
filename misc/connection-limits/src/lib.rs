@@ -658,6 +658,37 @@ mod tests {
         )
     }
 
+    #[tokio::test]
+    async fn incoming_connection_error_carries_peer_id() {
+        let mut swarm1 = Swarm::new_ephemeral_tokio(|_| {
+            // Set max incoming connections to 0 to immediately deny all connections
+            Behaviour::new(ConnectionLimits::default().with_max_established_incoming(Some(0)))
+        });
+        let mut swarm2 =
+            Swarm::new_ephemeral_tokio(|_| Behaviour::new(ConnectionLimits::default()));
+
+        let dialer_peer_id = *swarm2.local_peer_id();
+
+        let (listen_addr, _) = swarm1.listen().with_memory_addr_external().await;
+
+        swarm2.dial(listen_addr).unwrap();
+
+        tokio::spawn(swarm2.loop_on_next());
+
+        let peer_id = swarm1
+            .wait(|event| match event {
+                SwarmEvent::IncomingConnectionError {
+                    error: ListenError::Denied { .. },
+                    peer_id,
+                    ..
+                } => peer_id,
+                _ => None,
+            })
+            .await;
+
+        assert_eq!(Some(dialer_peer_id), Some(peer_id));
+    }
+
     #[derive(libp2p_swarm_derive::NetworkBehaviour)]
     #[behaviour(prelude = "libp2p_swarm::derive_prelude")]
     struct Behaviour {
