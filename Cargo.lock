@@ -2995,6 +2995,7 @@ dependencies = [
  "libp2p-swarm-test",
  "memory-stats",
  "sysinfo",
+ "tokio",
  "tracing",
 ]
 
@@ -3350,7 +3351,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-swarm-test"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "async-trait",
  "futures",

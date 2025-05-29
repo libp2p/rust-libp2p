@@ -19,6 +19,7 @@ tracing = { workspace = true }
 
 [dev-dependencies]
 tempfile = "3.10"
+tokio = { workspace = true, features = ["rt", "macros", "io-util"] }
 
 # Passing arguments to the docsrs builder in order to properly document cfg's.
 # More information: https://docs.rs/about/builds#cross-compiling
