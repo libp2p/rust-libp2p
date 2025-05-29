@@ -121,7 +121,6 @@ mod tests {
         task::{Context, Poll},
     };
 
-    use async_std::task;
     use futures::{channel::mpsc, prelude::*};
 
     use super::RwStreamSink;
@@ -165,58 +164,52 @@ mod tests {
         }
     }
 
-    #[test]
-    fn basic_reading() {
+    #[tokio::test]
+    async fn basic_reading() {
         let (tx1, _) = mpsc::channel::<Vec<u8>>(10);
         let (mut tx2, rx2) = mpsc::channel(10);
 
         let mut wrapper = RwStreamSink::new(Wrapper(rx2.map(Ok), tx1));
 
-        task::block_on(async move {
-            tx2.send(Vec::from("hel")).await.unwrap();
-            tx2.send(Vec::from("lo wor")).await.unwrap();
-            tx2.send(Vec::from("ld")).await.unwrap();
-            tx2.close().await.unwrap();
+        tx2.send(Vec::from("hel")).await.unwrap();
+        tx2.send(Vec::from("lo wor")).await.unwrap();
+        tx2.send(Vec::from("ld")).await.unwrap();
+        tx2.close().await.unwrap();
 
-            let mut data = Vec::new();
-            wrapper.read_to_end(&mut data).await.unwrap();
-            assert_eq!(data, b"hello world");
-        })
+        let mut data = Vec::new();
+        wrapper.read_to_end(&mut data).await.unwrap();
+        assert_eq!(data, b"hello world");
     }
 
-    #[test]
-    fn skip_empty_stream_items() {
+    #[tokio::test]
+    async fn skip_empty_stream_items() {
         let data: Vec<&[u8]> = vec![b"", b"foo", b"", b"bar", b"", b"baz", b""];
         let mut rws = RwStreamSink::new(stream::iter(data).map(Ok));
         let mut buf = [0; 9];
-        task::block_on(async move {
-            assert_eq!(3, rws.read(&mut buf).await.unwrap());
-            assert_eq!(3, rws.read(&mut buf[3..]).await.unwrap());
-            assert_eq!(3, rws.read(&mut buf[6..]).await.unwrap());
-            assert_eq!(0, rws.read(&mut buf).await.unwrap());
-            assert_eq!(b"foobarbaz", &buf[..])
-        })
+        assert_eq!(3, rws.read(&mut buf).await.unwrap());
+        assert_eq!(3, rws.read(&mut buf[3..]).await.unwrap());
+        assert_eq!(3, rws.read(&mut buf[6..]).await.unwrap());
+        assert_eq!(0, rws.read(&mut buf).await.unwrap());
+        assert_eq!(b"foobarbaz", &buf[..])
     }
 
-    #[test]
-    fn partial_read() {
+    #[tokio::test]
+    async fn partial_read() {
         let data: Vec<&[u8]> = vec![b"hell", b"o world"];
         let mut rws = RwStreamSink::new(stream::iter(data).map(Ok));
         let mut buf = [0; 3];
-        task::block_on(async move {
-            assert_eq!(3, rws.read(&mut buf).await.unwrap());
-            assert_eq!(b"hel", &buf[..3]);
-            assert_eq!(0, rws.read(&mut buf[..0]).await.unwrap());
-            assert_eq!(1, rws.read(&mut buf).await.unwrap());
-            assert_eq!(b"l", &buf[..1]);
-            assert_eq!(3, rws.read(&mut buf).await.unwrap());
-            assert_eq!(b"o w", &buf[..3]);
-            assert_eq!(0, rws.read(&mut buf[..0]).await.unwrap());
-            assert_eq!(3, rws.read(&mut buf).await.unwrap());
-            assert_eq!(b"orl", &buf[..3]);
-            assert_eq!(1, rws.read(&mut buf).await.unwrap());
-            assert_eq!(b"d", &buf[..1]);
-            assert_eq!(0, rws.read(&mut buf).await.unwrap());
-        })
+        assert_eq!(3, rws.read(&mut buf).await.unwrap());
+        assert_eq!(b"hel", &buf[..3]);
+        assert_eq!(0, rws.read(&mut buf[..0]).await.unwrap());
+        assert_eq!(1, rws.read(&mut buf).await.unwrap());
+        assert_eq!(b"l", &buf[..1]);
+        assert_eq!(3, rws.read(&mut buf).await.unwrap());
+        assert_eq!(b"o w", &buf[..3]);
+        assert_eq!(0, rws.read(&mut buf[..0]).await.unwrap());
+        assert_eq!(3, rws.read(&mut buf).await.unwrap());
+        assert_eq!(b"orl", &buf[..3]);
+        assert_eq!(1, rws.read(&mut buf).await.unwrap());
+        assert_eq!(b"d", &buf[..1]);
+        assert_eq!(0, rws.read(&mut buf).await.unwrap());
     }
 }

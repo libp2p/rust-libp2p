@@ -69,8 +69,9 @@ async fn max_bytes() {
             .expect("Unexpected connection limit.");
     }
 
-    std::thread::sleep(Duration::from_millis(100)); // Memory stats are only updated every 100ms internally, ensure they are up-to-date when we try
-                                                    // to exceed it.
+    // Memory stats are only updated every 100ms internally,
+    // ensure they are up-to-date when we try to exceed it.
+    tokio::time::sleep(Duration::from_millis(100)).await;
 
     match network
         .dial(

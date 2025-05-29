@@ -18,6 +18,7 @@ sysinfo = "0.33"
 tracing = { workspace = true }
 
 [dev-dependencies]
+tokio = { workspace = true, features = ["macros", "time"] }
 libp2p-identify = { workspace = true }
 libp2p-swarm-derive = { path = "../../swarm-derive" }
 libp2p-swarm-test = { path = "../../swarm-test" }

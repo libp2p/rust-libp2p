@@ -3441,7 +3441,6 @@ dependencies = [
 name = "libp2p-websocket"
 version = "0.45.1"
 dependencies = [
- "async-std",
  "either",
  "futures",
  "futures-rustls",
@@ -5187,10 +5186,10 @@ checksum = "eded382c5f5f786b989652c49544c4877d9f015cc22e145a5ea8ea66c2921cd2"
 name = "rw-stream-sink"
 version = "0.4.0"
 dependencies = [
- "async-std",
  "futures",
  "pin-project",
  "static_assertions",
+ "tokio",
 ]
 
 [[package]]
