@@ -38,7 +38,6 @@ async-std = ["dep:async-std"]
 wasm-bindgen = ["dep:wasm-bindgen-futures", "dep:getrandom"]
 
 [dev-dependencies]
-async-std = { version = "1.6.2", features = ["attributes"] }
 either = "1.11.0"
 futures = { workspace = true }
 libp2p-identify = { path = "../protocols/identify" }                # Using `path` here because this is a cyclic dev-dependency which otherwise breaks releasing.
@@ -47,7 +46,7 @@ libp2p-kad = { path = "../protocols/kad" }                          # Using `pat
 libp2p-ping = { path = "../protocols/ping" }                        # Using `path` here because this is a cyclic dev-dependency which otherwise breaks releasing.
 libp2p-plaintext = { path = "../transports/plaintext" }             # Using `path` here because this is a cyclic dev-dependency which otherwise breaks releasing.
 libp2p-swarm-derive = { path = "../swarm-derive" }                  # Using `path` here because this is a cyclic dev-dependency which otherwise breaks releasing.
-libp2p-swarm-test = { path = "../swarm-test", features = ["async-std"]}                      # Using `path` here because this is a cyclic dev-dependency which otherwise breaks releasing.
+libp2p-swarm-test = { path = "../swarm-test", features = ["tokio"] }# Using `path` here because this is a cyclic dev-dependency which otherwise breaks releasing.
 libp2p-yamux = { path = "../muxers/yamux" }                         # Using `path` here because this is a cyclic dev-dependency which otherwise breaks releasing.
 quickcheck = { workspace = true }
 criterion = { version = "0.5", features = ["async_tokio"] }
