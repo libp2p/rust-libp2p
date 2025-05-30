@@ -1,3 +1,7 @@
+## 0.45.0
+
+- Removed `async_std` module [PR 5959](https://github.com/libp2p/rust-libp2p/pull/5959)
+
 ## 0.44.0
  
 - Report all transport errors in a dial attempt instead of only returning the last error. 

@@ -110,6 +110,7 @@ async fn run_discovery_test(config: Config) {
 }
 
 async fn create_swarm(config: Config) -> Swarm<Behaviour> {
+
     let mut swarm = Swarm::new_ephemeral_tokio(|key| {
         Behaviour::new(config, key.public().to_peer_id()).unwrap()
     });
