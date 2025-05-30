@@ -1,3 +1,7 @@
+## 0.48.0
+
+- Removed `async_std` module [PR 5958](https://github.com/libp2p/rust-libp2p/pull/5958)
+
 ## 0.47.0
 
 - Emit `ToSwarm::NewExternalAddrOfPeer` on discovery.
