@@ -32,9 +32,8 @@ use std::{
 use either::Either;
 use futures::{future::BoxFuture, prelude::*, ready, stream::BoxStream};
 use futures_rustls::{client, rustls::pki_types::ServerName, server};
-use libp2p_core::multiaddr::Protocol::Sni;
 use libp2p_core::{
-    multiaddr::{Multiaddr, Protocol},
+    multiaddr::{Multiaddr, Protocol, Protocol::Sni},
     transport::{DialOpts, ListenerId, TransportError, TransportEvent},
     Transport,
 };
@@ -1038,7 +1037,7 @@ mod tests {
         assert_eq!(info.server_name, "example.com".try_into().unwrap());
         assert_eq!(info.tcp_addr, "/dns4/example.com/tcp/2222".parse().unwrap());
 
-        // Check `/tls/sni/.../ws` with `/ip4`  
+        // Check `/tls/sni/.../ws` with `/ip4`
         let addr = "/ip4/127.0.0.1/tcp/2222/tls/sni/example.test/ws"
             .parse::<Multiaddr>()
             .unwrap();
