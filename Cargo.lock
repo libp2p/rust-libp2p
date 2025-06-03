@@ -3173,7 +3173,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-quic"
-version = "0.12.1"
+version = "0.13.0"
 dependencies = [
  "futures",
  "futures-timer",
