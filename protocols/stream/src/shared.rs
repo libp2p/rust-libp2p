@@ -53,6 +53,9 @@ impl Shared {
         &mut self,
         protocol: StreamProtocol,
     ) -> Result<IncomingStreams, AlreadyRegistered> {
+        self.supported_inbound_protocols
+            .retain(|_, sender| !sender.is_closed());
+
         if self.supported_inbound_protocols.contains_key(&protocol) {
             return Err(AlreadyRegistered);
         }

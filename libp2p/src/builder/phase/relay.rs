@@ -51,7 +51,7 @@ impl<Provider, T: AuthenticatedMultiplexedTransport> SwarmBuilder<Provider, Rela
     ) -> Result<
         SwarmBuilder<
             Provider,
-            BandwidthLoggingPhase<impl AuthenticatedMultiplexedTransport, libp2p_relay::client::Behaviour>,
+            BandwidthMetricsPhase<impl AuthenticatedMultiplexedTransport, libp2p_relay::client::Behaviour>,
         >,
         SecUpgrade::Error,
         > where
@@ -85,7 +85,7 @@ impl<Provider, T: AuthenticatedMultiplexedTransport> SwarmBuilder<Provider, Rela
             .map(|(p, c), _| (p, StreamMuxerBox::new(c)));
 
         Ok(SwarmBuilder {
-            phase: BandwidthLoggingPhase {
+            phase: BandwidthMetricsPhase {
                 relay_behaviour,
                 transport: relay_transport
                     .or_transport(self.phase.transport)
@@ -102,11 +102,11 @@ pub struct NoRelayBehaviour;
 impl<Provider, T> SwarmBuilder<Provider, RelayPhase<T>> {
     pub(crate) fn without_relay(
         self,
-    ) -> SwarmBuilder<Provider, BandwidthLoggingPhase<T, NoRelayBehaviour>> {
+    ) -> SwarmBuilder<Provider, BandwidthMetricsPhase<T, NoRelayBehaviour>> {
         SwarmBuilder {
             keypair: self.keypair,
             phantom: PhantomData,
-            phase: BandwidthLoggingPhase {
+            phase: BandwidthMetricsPhase {
                 transport: self.phase.transport,
                 relay_behaviour: NoRelayBehaviour,
             },
@@ -124,9 +124,7 @@ impl<Provider, T: AuthenticatedMultiplexedTransport> SwarmBuilder<Provider, Rela
         Provider,
         BehaviourPhase<impl AuthenticatedMultiplexedTransport, NoRelayBehaviour>,
     > {
-        self.without_relay()
-            .without_bandwidth_logging()
-            .with_bandwidth_metrics(registry)
+        self.without_relay().with_bandwidth_metrics(registry)
     }
 }
 impl<Provider, T: AuthenticatedMultiplexedTransport> SwarmBuilder<Provider, RelayPhase<T>> {
@@ -135,7 +133,6 @@ impl<Provider, T: AuthenticatedMultiplexedTransport> SwarmBuilder<Provider, Rela
         constructor: impl FnOnce(&libp2p_identity::Keypair) -> R,
     ) -> Result<SwarmBuilder<Provider, SwarmPhase<T, B>>, R::Error> {
         self.without_relay()
-            .without_bandwidth_logging()
             .without_bandwidth_metrics()
             .with_behaviour(constructor)
     }

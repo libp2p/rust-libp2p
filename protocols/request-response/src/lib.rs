@@ -90,7 +90,7 @@ use libp2p_identity::PeerId;
 use libp2p_swarm::{
     behaviour::{AddressChange, ConnectionClosed, DialFailure, FromSwarm},
     dial_opts::DialOpts,
-    ConnectionDenied, ConnectionHandler, ConnectionId, NetworkBehaviour, NotifyHandler,
+    ConnectionDenied, ConnectionHandler, ConnectionId, DialError, NetworkBehaviour, NotifyHandler,
     PeerAddresses, THandler, THandlerInEvent, THandlerOutEvent, ToSwarm,
 };
 use smallvec::SmallVec;
@@ -433,7 +433,20 @@ where
     /// > managed via [`libp2p_swarm::Swarm::add_peer_address`].
     /// > Addresses are automatically removed when dial attempts
     /// > to them fail.
+    /// > Alternatively, [`Behaviour::send_request_with_addresses`]
+    /// > can be used.
     pub fn send_request(&mut self, peer: &PeerId, request: TCodec::Request) -> OutboundRequestId {
+        self.send_request_with_addresses(peer, request, Vec::new())
+    }
+
+    /// Like [`Behaviour::send_request`], but additionally using the provided addresses
+    /// if a connection needs to be established.
+    pub fn send_request_with_addresses(
+        &mut self,
+        peer: &PeerId,
+        request: TCodec::Request,
+        addresses: Vec<Multiaddr>,
+    ) -> OutboundRequestId {
         let request_id = self.next_outbound_request_id();
         let request = OutboundMessage {
             request_id,
@@ -443,7 +456,10 @@ where
 
         if let Some(request) = self.try_send_request(peer, request) {
             self.pending_events.push_back(ToSwarm::Dial {
-                opts: DialOpts::peer_id(*peer).build(),
+                opts: DialOpts::peer_id(*peer)
+                    .addresses(addresses)
+                    .extend_addresses_through_behaviour()
+                    .build(),
             });
             self.pending_outbound_requests
                 .entry(*peer)
@@ -690,9 +706,13 @@ where
         DialFailure {
             peer_id,
             connection_id,
-            ..
+            error,
         }: DialFailure,
     ) {
+        if let DialError::DialPeerConditionFalse(_) = error {
+            // Dial-condition fails because there is already another ongoing dial.
+            return;
+        }
         if let Some(peer) = peer_id {
             // If there are pending outgoing requests when a dial failure occurs,
             // it is implied that we are not connected to the peer, since pending
