@@ -28,7 +28,6 @@ use std::{
 use futures::future::BoxFuture;
 use if_watch::IfEvent;
 
-
 #[cfg(feature = "tokio")]
 pub mod tokio;
 

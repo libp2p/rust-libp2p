@@ -1,4 +1,4 @@
-#![cfg(any(feature = "tokio"))]
+#![cfg(feature = "tokio")]
 
 use std::{
     future::Future,
