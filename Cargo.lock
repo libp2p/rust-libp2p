@@ -3021,7 +3021,6 @@ dependencies = [
 name = "libp2p-mplex"
 version = "0.43.1"
 dependencies = [
- "async-std",
  "asynchronous-codec",
  "bytes",
  "criterion",
@@ -3036,6 +3035,7 @@ dependencies = [
  "quickcheck-ext",
  "rand 0.8.5",
  "smallvec",
+ "tokio",
  "tracing",
  "tracing-subscriber",
  "unsigned-varint",
