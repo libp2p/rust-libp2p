@@ -45,8 +45,9 @@
 //!     .listen_on(ListenerId::next(), addr)
 //!     .expect("listen error.");
 //!
-//! Ok(())
-//! }
+//! #
+//! # Ok(())
+//! # }
 //! ```
 //!
 //! The [`GenTransport`] struct implements the [`libp2p_core::Transport`]. See the
