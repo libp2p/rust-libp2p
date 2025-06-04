@@ -59,7 +59,6 @@ macro_rules! impl_quic_builder {
     };
 }
 
-impl_quic_builder!("async-std", AsyncStd, async_std);
 impl_quic_builder!("tokio", super::provider::Tokio, tokio);
 
 impl<Provider, T> SwarmBuilder<Provider, QuicPhase<T>> {

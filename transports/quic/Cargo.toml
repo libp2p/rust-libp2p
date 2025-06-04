@@ -1,6 +1,6 @@
 [package]
 name = "libp2p-quic"
-version = "0.12.1"
+version = "0.13.0"
 authors = ["Parity Technologies <admin@parity.io>"]
 edition.workspace = true
 rust-version = { workspace = true }
@@ -9,7 +9,6 @@ repository = "https://github.com/libp2p/rust-libp2p"
 license = "MIT"
 
 [dependencies]
-async-std = { version = "1.12.0", optional = true }
 futures = { workspace = true }
 futures-timer = "3.0.3"
 if-watch = { workspace = true }
@@ -27,7 +26,6 @@ ring = { workspace = true }
 
 [features]
 tokio = ["dep:tokio", "if-watch/tokio", "quinn/runtime-tokio"]
-async-std = ["dep:async-std", "if-watch/smol", "quinn/runtime-async-std"]
 
 # Passing arguments to the docsrs builder in order to properly document cfg's.
 # More information: https://docs.rs/about/builds#cross-compiling
