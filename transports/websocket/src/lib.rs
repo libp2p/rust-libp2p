@@ -76,7 +76,7 @@ use rw_stream_sink::RwStreamSink;
 /// # async fn main() {
 ///
 /// let mut transport = websocket::Config::new(
-///     dns::tokio::Transport::system(tcp::async_io::Transport::new(tcp::Config::default()))
+///     dns::tokio::Transport::system(tcp::tokio::Transport::new(tcp::Config::default()))
 ///         .unwrap(),
 /// );
 ///
@@ -118,7 +118,7 @@ use rw_stream_sink::RwStreamSink;
 /// # async fn main() {
 ///
 /// let mut transport =
-///     websocket::Config::new(tcp::async_io::Transport::new(tcp::Config::default()));
+///     websocket::Config::new(tcp::tokio::Transport::new(tcp::Config::default()));
 ///
 /// let id = transport
 ///     .listen_on(
@@ -318,13 +318,13 @@ mod tests {
     #[tokio::test]
     async fn dialer_connects_to_listener_ipv4() {
         let a = "/ip4/127.0.0.1/tcp/0/ws".parse().unwrap();
-        futures::executor::block_on(connect(a))
+        connect(a).await
     }
 
     #[tokio::test]
     async fn dialer_connects_to_listener_ipv6() {
         let a = "/ip6/::1/tcp/0/ws".parse().unwrap();
-        futures::executor::block_on(connect(a))
+        connect(a).await
     }
 
     fn new_ws_config() -> Config<tcp::tokio::Transport> {
