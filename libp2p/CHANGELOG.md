@@ -1,3 +1,8 @@
+## 0.57.0
+
+- Deprecate `async-std` support.
+  See [PR 5954](https://github.com/libp2p/rust-libp2p/pull/5954)
+
 ## 0.56.0
 
 - Remove deprecated `Transport::with_bandwidth_logging`,
