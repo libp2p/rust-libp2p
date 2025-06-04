@@ -2756,6 +2756,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "libp2p-connection-tracker"
+version = "0.1.0"
+dependencies = [
+ "libp2p-core",
+ "libp2p-swarm",
+ "tracing",
+]
+
+[[package]]
 name = "libp2p-core"
 version = "0.43.1"
 dependencies = [

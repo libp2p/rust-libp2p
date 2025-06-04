@@ -1,0 +1,13 @@
+[package]
+name = "libp2p-connection-tracker"
+version = "0.1.0"
+edition.workspace = true
+description = "A libp2p NetworkBehaviour for tracking peer connection state, disconnections, and bans"
+license = "MIT"
+publish = false
+rust-version.workspace = true
+
+[dependencies]
+libp2p-core = { workspace = true }
+libp2p-swarm = { workspace = true }
+tracing = { workspace = true }
