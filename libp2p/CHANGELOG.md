@@ -1,6 +1,6 @@
 ## 0.57.0
 
-- Deprecate `async-std` support.
+- Remove QUIC from the `async-std` swarm builder, as `async-std` support was removed from `libp2p-quic` transport.
   See [PR 5954](https://github.com/libp2p/rust-libp2p/pull/5954)
 
 ## 0.56.0
