@@ -315,14 +315,14 @@ mod tests {
 
     use super::Config;
 
-    #[test]
-    fn dialer_connects_to_listener_ipv4() {
+    #[tokio::test]
+    async fn dialer_connects_to_listener_ipv4() {
         let a = "/ip4/127.0.0.1/tcp/0/ws".parse().unwrap();
         futures::executor::block_on(connect(a))
     }
 
-    #[test]
-    fn dialer_connects_to_listener_ipv6() {
+    #[tokio::test]
+    async fn dialer_connects_to_listener_ipv6() {
         let a = "/ip6/::1/tcp/0/ws".parse().unwrap();
         futures::executor::block_on(connect(a))
     }
