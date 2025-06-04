@@ -2996,7 +2996,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-mplex"
-version = "0.43.1"
+version = "0.44.0"
 dependencies = [
  "asynchronous-codec",
  "bytes",
@@ -3326,7 +3326,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-swarm-test"
-version = "0.6.0"
+version = "0.7.0"
 dependencies = [
  "async-trait",
  "futures",

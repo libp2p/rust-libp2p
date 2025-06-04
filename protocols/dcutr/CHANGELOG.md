@@ -1,3 +1,8 @@
+## 0.14.0
+
+- Remove `async-std` support.
+  See [PR 5955](https://github.com/libp2p/rust-libp2p/pull/5955)
+
 ## 0.13.0
 
 - Deprecate `void` crate.

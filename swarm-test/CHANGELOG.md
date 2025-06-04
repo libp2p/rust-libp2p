@@ -1,3 +1,8 @@
+## 0.7.0
+
+- Removed `async-std` support from TCP transport.
+  See [PR 5955](https://github.com/libp2p/rust-libp2p/pull/5955).
+
 ## 0.6.0
 
 - Default to `tokio` runtime.

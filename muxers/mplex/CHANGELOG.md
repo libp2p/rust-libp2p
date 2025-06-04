@@ -1,3 +1,8 @@
+## 0.44.0
+
+- Use `tokio` for libp2p-tcp as `async-std` support has been removed.
+  See [PR 5955](https://github.com/libp2p/rust-libp2p/pull/5955).
+
 ## 0.43.1
 
 - Rename `MplexConfig` to `Config` for consistency with other crates (see [discussion 2174](https://github.com/libp2p/rust-libp2p/discussions/2174)).
