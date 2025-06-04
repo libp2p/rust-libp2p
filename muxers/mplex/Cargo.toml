@@ -30,7 +30,7 @@ futures = { workspace = true }
 libp2p-identity = { workspace = true, features = ["rand"] }
 libp2p-muxer-test-harness = { path = "../test-harness" }
 libp2p-plaintext = { workspace = true }
-libp2p-tcp = { workspace = true, features = ["async-io"] }
+libp2p-tcp = { workspace = true, features = ["tokio"] }
 quickcheck = { workspace = true }
 tracing-subscriber = { workspace = true, features = ["env-filter"] }
 

@@ -15,7 +15,7 @@ futures-rustls = { workspace = true, features = ["ring"] }
 either = "1.12.0"
 futures = { workspace = true }
 libp2p-core = { workspace = true }
-libp2p-identity = { workspace = true }
+libp2p-identity = { workspace = true, features = ["rand"] }
 parking_lot = "0.12.3"
 pin-project-lite = "0.2.14"
 rw-stream-sink = { workspace = true }
@@ -25,8 +25,8 @@ thiserror = { workspace = true }
 url = "2.5"
 webpki-roots = "0.26"
 
-
-libp2p-tcp = { workspace = true, features = ["async-io"] }
+[dev-dependencies]
+libp2p-tcp = { workspace = true, features = ["tokio"] }
 libp2p-dns = { workspace = true, features = ["tokio"] }
 libp2p-identity = { workspace = true, features = ["rand"] }
 tokio = { workspace = true, features = ["rt", "macros", "io-std", "io-util"] }
