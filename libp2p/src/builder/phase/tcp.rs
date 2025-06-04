@@ -114,18 +114,6 @@ impl<Provider> SwarmBuilder<Provider, TcpPhase> {
     }
 }
 
-// Shortcuts
-#[cfg(all(not(target_arch = "wasm32"), feature = "quic", feature = "async-std"))]
-impl SwarmBuilder<super::provider::AsyncStd, TcpPhase> {
-    pub fn with_quic(
-        self,
-    ) -> SwarmBuilder<
-        super::provider::AsyncStd,
-        OtherTransportPhase<impl AuthenticatedMultiplexedTransport>,
-    > {
-        self.without_tcp().with_quic()
-    }
-}
 #[cfg(all(not(target_arch = "wasm32"), feature = "quic", feature = "tokio"))]
 impl SwarmBuilder<super::provider::Tokio, TcpPhase> {
     pub fn with_quic(
@@ -135,18 +123,6 @@ impl SwarmBuilder<super::provider::Tokio, TcpPhase> {
         OtherTransportPhase<impl AuthenticatedMultiplexedTransport>,
     > {
         self.without_tcp().with_quic()
-    }
-}
-#[cfg(all(not(target_arch = "wasm32"), feature = "quic", feature = "async-std"))]
-impl SwarmBuilder<super::provider::AsyncStd, TcpPhase> {
-    pub fn with_quic_config(
-        self,
-        constructor: impl FnOnce(libp2p_quic::Config) -> libp2p_quic::Config,
-    ) -> SwarmBuilder<
-        super::provider::AsyncStd,
-        OtherTransportPhase<impl AuthenticatedMultiplexedTransport>,
-    > {
-        self.without_tcp().with_quic_config(constructor)
     }
 }
 #[cfg(all(not(target_arch = "wasm32"), feature = "quic", feature = "tokio"))]
