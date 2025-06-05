@@ -1,6 +1,23 @@
-use libp2p_core::PeerId;
-use libp2p_swarm::ConnectionId;
 use std::collections::{HashMap, HashSet};
+use libp2p_core::{ConnectedPoint, PeerId};
+use libp2p_swarm::ConnectionId;
+
+/// Events emitted by the connection tracker behaviour.
+#[derive(Debug, Clone)]
+pub enum Event {
+    /// A peer connected (first connection established).
+    PeerConnected {
+        peer_id: PeerId,
+        connection_id: ConnectionId,
+        endpoint: ConnectedPoint,
+    },
+
+    /// A peer disconnected (last connection closed).
+    PeerDisconnected {
+        peer_id: PeerId,
+        connection_id: ConnectionId,
+    },
+}
 
 /// Simple storage for connected peers.
 #[derive(Debug, Default)]
@@ -19,10 +36,14 @@ impl ConnectionStore {
 
     /// Add a new connection for a peer.
     /// Returns `true` if this is the first connection to the peer.
-    pub fn connection_established(&mut self, peer_id: PeerId, connection_id: ConnectionId) -> bool {
-        let connections = self.connected.entry(peer_id).or_insert_with(HashSet::new);
+    pub fn connection_established(
+        &mut self,
+        peer_id: &PeerId,
+        connection_id: &ConnectionId,
+    ) -> bool {
+        let connections = self.connected.entry(*peer_id).or_insert_with(HashSet::new);
         let is_first_connection = connections.is_empty();
-        connections.insert(connection_id);
+        connections.insert(*connection_id);
         is_first_connection
     }
 
@@ -30,14 +51,14 @@ impl ConnectionStore {
     /// Returns `true` if this was the last connection to the peer.
     pub fn connection_closed(
         &mut self,
-        peer_id: PeerId,
-        connection_id: ConnectionId,
-        remaining_established: usize,
+        peer_id: &PeerId,
+        connection_id: &ConnectionId,
+        remaining_established: &usize,
     ) -> bool {
         if let Some(connections) = self.connected.get_mut(&peer_id) {
             connections.remove(&connection_id);
 
-            if remaining_established == 0 {
+            if *remaining_established == 0 {
                 self.connected.remove(&peer_id);
                 return true;
             }

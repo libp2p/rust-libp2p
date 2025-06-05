@@ -65,7 +65,7 @@ members = [
     "transports/websocket-websys",
     "transports/websocket",
     "transports/webtransport-websys",
-    "wasm-tests/webtransport-tests", "misc/connection-tracker",
+    "wasm-tests/webtransport-tests",
 ]
 resolver = "2"
 

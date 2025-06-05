@@ -13,12 +13,13 @@ use std::{
     num::NonZeroUsize,
     task::{Poll, Waker},
 };
-
+use std::collections::HashSet;
 use libp2p_core::{Multiaddr, PeerId};
-use libp2p_swarm::{behaviour::ConnectionEstablished, DialError, FromSwarm};
+use libp2p_swarm::{behaviour::ConnectionEstablished, ConnectionClosed, ConnectionId, DialError, FromSwarm};
 use lru::LruCache;
-
-use super::Store;
+use tracing::{debug, trace};
+use crate::connection_store::ConnectionStore;
+use super::{connection_store, Store};
 
 /// Event emitted from the [`MemoryStore`] to the [`Swarm`](libp2p_swarm::Swarm).
 #[derive(Debug, Clone)]
@@ -59,6 +60,8 @@ pub struct MemoryStore<T = ()> {
     config: Config,
     /// Waker for store events.
     waker: Option<Waker>,
+    /// Connection store to track connected peers.
+    connection_store: ConnectionStore,
 }
 
 impl<T> MemoryStore<T> {
@@ -69,6 +72,7 @@ impl<T> MemoryStore<T> {
             records: HashMap::new(),
             pending_events: VecDeque::default(),
             waker: None,
+            connection_store: ConnectionStore::new(),
         }
     }
 
@@ -187,6 +191,26 @@ impl<T> MemoryStore<T> {
             waker.wake(); // wake up because of update
         }
     }
+
+    /// Check if a peer is currently connected.
+    pub fn is_connected(&self, peer_id: &PeerId) -> bool {
+        self.connection_store.is_connected(peer_id)
+    }
+
+    /// Get all currently connected peer IDs.
+    pub fn connected_peers(&self) -> impl Iterator<Item = &PeerId> {
+        self.connection_store.connected_peers()
+    }
+
+    /// Get the number of currently connected peers.
+    pub fn connected_count(&self) -> usize {
+        self.connection_store.connected_count()
+    }
+
+    /// Get the number of connections to a specific peer.
+    pub fn connection_count(&self, peer_id: &PeerId) -> usize {
+        self.connection_store.connection_count(peer_id)
+    }
 }
 
 impl<T> Store for MemoryStore<T> {
@@ -198,17 +222,53 @@ impl<T> Store for MemoryStore<T> {
                 self.add_address_inner(&info.peer_id, info.addr, false);
             }
             FromSwarm::ConnectionEstablished(ConnectionEstablished {
-                peer_id,
+                peer_id, 
+                connection_id,
                 failed_addresses,
                 endpoint,
                 ..
-            }) if endpoint.is_dialer() => {
-                if self.config.remove_addr_on_dial_error {
-                    for failed_addr in *failed_addresses {
-                        self.remove_address_inner(peer_id, failed_addr, false);
+            })  => {
+                if endpoint.is_dialer() {
+                    if self.config.remove_addr_on_dial_error {
+                        for failed_addr in *failed_addresses {
+                            self.remove_address_inner(peer_id, failed_addr, false);
+                        }
                     }
+                    self.add_address_inner(peer_id, endpoint.get_remote_address(), false);
                 }
-                self.add_address_inner(peer_id, endpoint.get_remote_address(), false);
+
+                trace!(%peer_id, ?connection_id, "Connection established");
+
+                let is_first_connection = self.connection_store.connection_established(peer_id, connection_id);
+
+                if is_first_connection {
+                    debug!(?peer_id, "Peer connected");
+                    // self.pending_events.push_back(connection_store::Event::PeerConnected {
+                    //     peer_id: *peer_id,
+                    //     connection_id: *connection_id,
+                    //     endpoint: endpoint.clone(),
+                    // });
+                }
+            }
+            FromSwarm::ConnectionClosed(ConnectionClosed {
+                                            peer_id,
+                                            connection_id,
+                                            remaining_established,
+                                            ..
+                                        }) => {
+                trace!(%peer_id, ?connection_id, remaining_established, "Connection closed");
+
+                let is_last_connection =
+                    self.connection_store
+                        .connection_closed(peer_id, connection_id, remaining_established);
+
+                if is_last_connection {
+                    debug!(%peer_id, "Peer disconnected");
+                    // self.pending_events.push_back(connection_store::Event::PeerDisconnected {
+                    //     peer_id: *peer_id,
+                    //     connection_id: *connection_id,
+                    // });
+                }
             }
             FromSwarm::DialFailure(info) => {
                 if !self.config.remove_addr_on_dial_error {
