@@ -8,18 +8,17 @@
 //! let behaviour = Behaviour::new(store);
 //! ```
 
+use super::Store;
+use crate::connection_store::ConnectionStore;
+use libp2p_core::{Multiaddr, PeerId};
+use libp2p_swarm::{behaviour::ConnectionEstablished, ConnectionClosed, DialError, FromSwarm};
+use lru::LruCache;
 use std::{
     collections::{HashMap, VecDeque},
     num::NonZeroUsize,
     task::{Poll, Waker},
 };
-use std::collections::HashSet;
-use libp2p_core::{Multiaddr, PeerId};
-use libp2p_swarm::{behaviour::ConnectionEstablished, ConnectionClosed, ConnectionId, DialError, FromSwarm};
-use lru::LruCache;
 use tracing::{debug, trace};
-use crate::connection_store::ConnectionStore;
-use super::{connection_store, Store};
 
 /// Event emitted from the [`MemoryStore`] to the [`Swarm`](libp2p_swarm::Swarm).
 #[derive(Debug, Clone)]
@@ -222,12 +221,12 @@ impl<T> Store for MemoryStore<T> {
                 self.add_address_inner(&info.peer_id, info.addr, false);
             }
             FromSwarm::ConnectionEstablished(ConnectionEstablished {
-                peer_id, 
+                peer_id,
                 connection_id,
                 failed_addresses,
                 endpoint,
                 ..
-            })  => {
+            }) => {
                 if endpoint.is_dialer() {
                     if self.config.remove_addr_on_dial_error {
                         for failed_addr in *failed_addresses {
@@ -239,7 +238,9 @@ impl<T> Store for MemoryStore<T> {
 
                 trace!(%peer_id, ?connection_id, "Connection established");
 
-                let is_first_connection = self.connection_store.connection_established(peer_id, connection_id);
+                let is_first_connection = self
+                    .connection_store
+                    .connection_established(peer_id, connection_id);
 
                 if is_first_connection {
                     debug!(?peer_id, "Peer connected");
@@ -251,16 +252,18 @@ impl<T> Store for MemoryStore<T> {
                 }
             }
             FromSwarm::ConnectionClosed(ConnectionClosed {
-                                            peer_id,
-                                            connection_id,
-                                            remaining_established,
-                                            ..
-                                        }) => {
+                peer_id,
+                connection_id,
+                remaining_established,
+                ..
+            }) => {
                 trace!(%peer_id, ?connection_id, remaining_established, "Connection closed");
 
-                let is_last_connection =
-                    self.connection_store
-                        .connection_closed(peer_id, connection_id, remaining_established);
+                let is_last_connection = self.connection_store.connection_closed(
+                    peer_id,
+                    connection_id,
+                    remaining_established,
+                );
 
                 if is_last_connection {
                     debug!(%peer_id, "Peer disconnected");

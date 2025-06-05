@@ -1,6 +1,6 @@
-use std::collections::{HashMap, HashSet};
 use libp2p_core::{ConnectedPoint, PeerId};
 use libp2p_swarm::ConnectionId;
+use std::collections::{HashMap, HashSet};
 
 /// Events emitted by the connection tracker behaviour.
 #[derive(Debug, Clone)]
@@ -41,7 +41,7 @@ impl ConnectionStore {
         peer_id: &PeerId,
         connection_id: &ConnectionId,
     ) -> bool {
-        let connections = self.connected.entry(*peer_id).or_insert_with(HashSet::new);
+        let connections = self.connected.entry(*peer_id).or_default();
         let is_first_connection = connections.is_empty();
         connections.insert(*connection_id);
         is_first_connection
@@ -55,11 +55,11 @@ impl ConnectionStore {
         connection_id: &ConnectionId,
         remaining_established: &usize,
     ) -> bool {
-        if let Some(connections) = self.connected.get_mut(&peer_id) {
-            connections.remove(&connection_id);
+        if let Some(connections) = self.connected.get_mut(peer_id) {
+            connections.remove(connection_id);
 
             if *remaining_established == 0 {
-                self.connected.remove(&peer_id);
+                self.connected.remove(peer_id);
                 return true;
             }
         }

@@ -18,9 +18,9 @@
 //! or provide information to PeerStore.
 
 mod behaviour;
+pub mod connection_store;
 pub mod memory_store;
 mod store;
-pub mod connection_store;
 
 pub use behaviour::Behaviour;
 pub use store::Store;
