@@ -1,7 +1,6 @@
 use std::{io, iter, pin::pin, time::Duration};
 
 use anyhow::{bail, Result};
-use tokio::time::sleep;
 use async_trait::async_trait;
 use futures::prelude::*;
 use libp2p_identity::PeerId;
@@ -12,6 +11,7 @@ use libp2p_swarm_test::SwarmExt;
 use request_response::{
     Codec, InboundFailure, InboundRequestId, OutboundFailure, OutboundRequestId, ResponseChannel,
 };
+use tokio::time::sleep;
 use tracing_subscriber::EnvFilter;
 
 #[tokio::test]
@@ -519,8 +519,9 @@ fn new_swarm_with_config(
 ) -> (PeerId, Swarm<request_response::Behaviour<TestCodec>>) {
     let protocols = iter::once((StreamProtocol::new("/test/1"), ProtocolSupport::Full));
 
-    let swarm =
-        Swarm::new_ephemeral_tokio(|_| request_response::Behaviour::<TestCodec>::new(protocols, cfg));
+    let swarm = Swarm::new_ephemeral_tokio(|_| {
+        request_response::Behaviour::<TestCodec>::new(protocols, cfg)
+    });
     let peed_id = *swarm.local_peer_id();
 
     (peed_id, swarm)
