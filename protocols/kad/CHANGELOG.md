@@ -2,6 +2,8 @@
 
 - Configurable outbound_substreams_timeout.
   See [PR 6015](https://github.com/libp2p/rust-libp2p/pull/6015).
+- Add `Key` to `InboundRequest::{AddProvider, PutRecord}`.
+  See [PR XXXX](https://github.com/libp2p/rust-libp2p/pull/XXXX).
 
 ## 0.47.0
 
