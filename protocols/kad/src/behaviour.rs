@@ -1885,7 +1885,6 @@ where
         // first place.
 
         if !record.is_expired(now) {
-            
             let record_key = record.key.clone();
 
             // The record is cloned because of the weird libp2p protocol
@@ -1971,7 +1970,10 @@ where
 
                     self.queued_events
                         .push_back(ToSwarm::GenerateEvent(Event::InboundRequest {
-                            request: InboundRequest::AddProvider { record_key: key, record: None },
+                            request: InboundRequest::AddProvider {
+                                record_key: key,
+                                record: None,
+                            },
                         }));
                 }
                 StoreInserts::FilterBoth => {
