@@ -1,4 +1,4 @@
-## 0.47.1
+## 0.48.0
 
 - Configurable outbound_substreams_timeout.
   See [PR 6015](https://github.com/libp2p/rust-libp2p/pull/6015).
