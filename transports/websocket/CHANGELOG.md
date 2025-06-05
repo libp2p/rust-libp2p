@@ -1,4 +1,10 @@
+## 0.46.0
+
+- Use `tokio` for TCP as `async-std` support has been removed.
+  See [PR 5955](https://github.com/libp2p/rust-libp2p/pull/5955).
+
 ## 0.45.1
+
 - Rename types to match naming convention in [discussion 2174](https://github.com/libp2p/rust-libp2p/discussions/2174).
   See [PR 5873](https://github.com/libp2p/rust-libp2p/pull/5873).
 

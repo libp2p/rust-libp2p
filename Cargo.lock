@@ -2996,7 +2996,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-mplex"
-version = "0.44.0"
+version = "0.43.1"
 dependencies = [
  "asynchronous-codec",
  "bytes",
@@ -3228,10 +3228,9 @@ dependencies = [
 
 [[package]]
 name = "libp2p-request-response"
-version = "0.29.0"
+version = "0.28.1"
 dependencies = [
  "anyhow",
- "async-std",
  "async-trait",
  "cbor4ii",
  "futures",
@@ -3245,6 +3244,7 @@ dependencies = [
  "serde",
  "serde_json",
  "smallvec",
+ "tokio",
  "tracing",
  "tracing-subscriber",
 ]

@@ -695,7 +695,7 @@ fn ip_to_multiaddr(ip: IpAddr, port: u16) -> Multiaddr {
     Multiaddr::empty().with(ip.into()).with(Protocol::Tcp(port))
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "tokio"))]
 mod tests {
     use futures::{
         channel::{mpsc, oneshot},
@@ -805,7 +805,6 @@ mod tests {
         }
 
         fn test(addr: Multiaddr) {
-            #[cfg(feature = "tokio")]
             {
                 let (ready_tx, ready_rx) = mpsc::channel(1);
                 let listener = listener::<tokio::Tcp>(addr, ready_tx);
@@ -875,7 +874,6 @@ mod tests {
         }
 
         fn test(addr: Multiaddr) {
-            #[cfg(feature = "tokio")]
             {
                 let (ready_tx, ready_rx) = mpsc::channel(1);
                 let listener = listener::<tokio::Tcp>(addr, ready_tx);
@@ -982,7 +980,6 @@ mod tests {
         }
 
         fn test(addr: Multiaddr) {
-            #[cfg(feature = "tokio")]
             {
                 let (ready_tx, ready_rx) = mpsc::channel(1);
                 let (port_reuse_tx, port_reuse_rx) = oneshot::channel();
@@ -1039,7 +1036,6 @@ mod tests {
         }
 
         fn test(addr: Multiaddr) {
-            #[cfg(feature = "tokio")]
             {
                 let listener = listen_twice::<tokio::Tcp>(addr);
                 let rt = ::tokio::runtime::Builder::new_current_thread()
@@ -1069,7 +1065,6 @@ mod tests {
         }
 
         fn test(addr: Multiaddr) {
-            #[cfg(feature = "tokio")]
             {
                 let rt = ::tokio::runtime::Builder::new_current_thread()
                     .enable_io()
@@ -1091,7 +1086,6 @@ mod tests {
             .try_init();
 
         fn test(addr: Multiaddr) {
-            #[cfg(feature = "tokio")]
             {
                 let mut tcp = tokio::Transport::default();
                 assert!(tcp.listen_on(ListenerId::next(), addr).is_err());
