@@ -11,7 +11,7 @@ use libp2p_swarm_test::SwarmExt;
 use request_response::{
     Codec, InboundFailure, InboundRequestId, OutboundFailure, OutboundRequestId, ResponseChannel,
 };
-use tokio::time::sleep;
+use futures::future::pending;
 use tracing_subscriber::EnvFilter;
 
 #[tokio::test]
@@ -469,8 +469,9 @@ impl Codec for TestCodec {
             Action::FailOnReadResponse => {
                 Err(io::Error::new(io::ErrorKind::Other, "FailOnReadResponse"))
             }
-            Action::TimeoutOnReadResponse => loop {
-                sleep(Duration::MAX).await;
+            Action::TimeoutOnReadResponse => {
+                pending::<()>().await;
+                Err(io::Error::new(io::ErrorKind::Other, "TimeoutOnReadResponse"))
             },
             action => Ok(action),
         }
@@ -510,8 +511,9 @@ impl Codec for TestCodec {
             Action::FailOnWriteResponse => {
                 Err(io::Error::new(io::ErrorKind::Other, "FailOnWriteResponse"))
             }
-            Action::TimeoutOnWriteResponse => loop {
-                sleep(Duration::MAX).await;
+            Action::TimeoutOnWriteResponse =>  {
+                pending::<()>().await;
+                Err(io::Error::new(io::ErrorKind::Other, "TimeoutOnWriteResponse"))
             },
             action => {
                 let bytes = [action.into()];
