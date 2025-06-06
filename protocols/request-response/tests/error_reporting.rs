@@ -2,6 +2,7 @@ use std::{io, iter, pin::pin, time::Duration};
 
 use anyhow::{bail, Result};
 use async_trait::async_trait;
+use futures::future::pending;
 use futures::prelude::*;
 use libp2p_identity::PeerId;
 use libp2p_request_response as request_response;
@@ -11,7 +12,6 @@ use libp2p_swarm_test::SwarmExt;
 use request_response::{
     Codec, InboundFailure, InboundRequestId, OutboundFailure, OutboundRequestId, ResponseChannel,
 };
-use futures::future::pending;
 use tracing_subscriber::EnvFilter;
 
 #[tokio::test]
@@ -464,13 +464,11 @@ impl Codec for TestCodec {
         assert_eq!(buf.len(), 1);
 
         match buf[0].try_into()? {
-            Action::FailOnReadResponse => {
-                Err(io::Error::new(io::ErrorKind::Other, "FailOnReadResponse"))
-            }
+            Action::FailOnReadResponse => Err(io::Error::other("FailOnReadResponse")),
             Action::TimeoutOnReadResponse => {
                 pending::<()>().await;
-                Err(io::Error::new(io::ErrorKind::Other, "TimeoutOnReadResponse"))
-            },
+                Err(io::Error::other("FailOnReadResponse"))
+            }
             action => Ok(action),
         }
     }
@@ -504,13 +502,11 @@ impl Codec for TestCodec {
         T: AsyncWrite + Unpin + Send,
     {
         match res {
-            Action::FailOnWriteResponse => {
-                Err(io::Error::new(io::ErrorKind::Other, "FailOnWriteResponse"))
-            }
-            Action::TimeoutOnWriteResponse =>  {
+            Action::FailOnWriteResponse => Err(io::Error::other("FailOnWriteResponse")),
+            Action::TimeoutOnWriteResponse => {
                 pending::<()>().await;
-                Err(io::Error::new(io::ErrorKind::Other, "TimeoutOnWriteResponse"))
-            },
+                Err(io::Error::other("FailOnWriteResponse"))
+            }
             action => {
                 let bytes = [action.into()];
                 io.write_all(&bytes).await?;
