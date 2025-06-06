@@ -32,9 +32,9 @@ async fn perf() {
         .with_env_filter(EnvFilter::from_default_env())
         .try_init();
 
-    let mut server = Swarm::new_ephemeral(|_| server::Behaviour::new());
+    let mut server = Swarm::new_ephemeral_tokio(|_| server::Behaviour::new());
     let server_peer_id = *server.local_peer_id();
-    let mut client = Swarm::new_ephemeral(|_| client::Behaviour::new());
+    let mut client = Swarm::new_ephemeral_tokio(|_| client::Behaviour::new());
 
     server.listen().with_memory_addr_external().await;
     client.connect(&mut server).await;

@@ -24,7 +24,6 @@ use std::{
     marker::PhantomData,
     pin::Pin,
     task::{Context, Poll, Waker},
-    time::Duration,
 };
 
 use either::Either;
@@ -129,6 +128,7 @@ enum InboundSubstreamState {
 }
 
 impl InboundSubstreamState {
+    #[allow(clippy::result_large_err)]
     fn try_answer_with(
         &mut self,
         id: RequestId,
@@ -453,6 +453,8 @@ impl Handler {
             }
         }
 
+        let outbound_substreams_timeout = protocol_config.outbound_substreams_timeout_s();
+
         Handler {
             protocol_config,
             mode,
@@ -461,7 +463,7 @@ impl Handler {
             next_connec_unique_id: UniqueConnecId(0),
             inbound_substreams: Default::default(),
             outbound_substreams: futures_bounded::FuturesTupleSet::new(
-                Duration::from_secs(10),
+                outbound_substreams_timeout,
                 MAX_NUM_STREAMS,
             ),
             pending_streams: Default::default(),

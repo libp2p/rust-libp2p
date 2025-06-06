@@ -412,7 +412,7 @@ impl TryFrom<u8> for Action {
             4 => Ok(Action::FailOnWriteResponse),
             5 => Ok(Action::TimeoutOnWriteResponse),
             6 => Ok(Action::FailOnMaxStreams),
-            _ => Err(io::Error::new(io::ErrorKind::Other, "invalid action")),
+            _ => Err(io::Error::other("invalid action")),
         }
     }
 }
@@ -441,9 +441,7 @@ impl Codec for TestCodec {
         assert_eq!(buf.len(), 1);
 
         match buf[0].try_into()? {
-            Action::FailOnReadRequest => {
-                Err(io::Error::new(io::ErrorKind::Other, "FailOnReadRequest"))
-            }
+            Action::FailOnReadRequest => Err(io::Error::other("FailOnReadRequest")),
             action => Ok(action),
         }
     }
@@ -487,9 +485,7 @@ impl Codec for TestCodec {
         T: AsyncWrite + Unpin + Send,
     {
         match req {
-            Action::FailOnWriteRequest => {
-                Err(io::Error::new(io::ErrorKind::Other, "FailOnWriteRequest"))
-            }
+            Action::FailOnWriteRequest => Err(io::Error::other("FailOnWriteRequest")),
             action => {
                 let bytes = [action.into()];
                 io.write_all(&bytes).await?;

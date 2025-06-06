@@ -1,4 +1,12 @@
 ## 0.49.0
+- Feature gate metrics related code. This changes some `Behaviour` constructor methods.
+  See [PR 6020](https://github.com/libp2p/rust-libp2p/pull/6020)
+- Send IDONTWANT before Publishing a new message.
+  See [PR 6017](https://github.com/libp2p/rust-libp2p/pull/6017)
+
+- Improve log messaging by renaming `message` to `message_id`. This change makes it log coherent to
+  the field and also improve duplication of `message` field.
+  See [PR 5972](https://github.com/libp2p/rust-libp2p/pull/5972)
 
 - Fix a race condition for messages published which are already in the network.
   See [PR 5928](https://github.com/libp2p/rust-libp2p/pull/5928)
@@ -26,6 +34,9 @@
 
 - Upgrade `prometheus-client` to `v0.23`
   See [PR 5960](https://github.com/libp2p/rust-libp2p/pull/5960).
+
+- Allow customizing max transmit size and mesh-n-* parameters per topic.
+  See [PR 5868](https://github.com/libp2p/rust-libp2p/pull/5868)
 
 ## 0.48.0
 

@@ -1,6 +1,6 @@
 [package]
 name = "libp2p-swarm-test"
-version = "0.5.0"
+version = "0.6.0"
 edition.workspace = true
 rust-version = { workspace = true }
 license = "MIT"
@@ -24,7 +24,7 @@ tracing = { workspace = true }
 futures-timer = "3.0.3"
 
 [features]
-default = ["async-std"]
+default = ["tokio"]
 
 async-std = ["libp2p-swarm/async-std", "libp2p-tcp/async-io"]
 tokio = ["libp2p-swarm/tokio", "libp2p-tcp/tokio"]
