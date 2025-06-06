@@ -2,8 +2,7 @@ use std::{io, iter, pin::pin, time::Duration};
 
 use anyhow::{bail, Result};
 use async_trait::async_trait;
-use futures::future::pending;
-use futures::prelude::*;
+use futures::{future::pending, prelude::*};
 use libp2p_identity::PeerId;
 use libp2p_request_response as request_response;
 use libp2p_request_response::ProtocolSupport;
