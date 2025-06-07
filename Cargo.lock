@@ -2760,7 +2760,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-dcutr"
-version = "0.14.0"
+version = "0.13.0"
 dependencies = [
  "asynchronous-codec",
  "either",

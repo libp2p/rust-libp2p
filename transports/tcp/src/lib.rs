@@ -805,19 +805,17 @@ mod tests {
         }
 
         fn test(addr: Multiaddr) {
-            {
-                let (ready_tx, ready_rx) = mpsc::channel(1);
-                let listener = listener::<tokio::Tcp>(addr, ready_tx);
-                let dialer = dialer::<tokio::Tcp>(ready_rx);
-                let rt = ::tokio::runtime::Builder::new_current_thread()
-                    .enable_io()
-                    .build()
-                    .unwrap();
-                let tasks = ::tokio::task::LocalSet::new();
-                let listener = tasks.spawn_local(listener);
-                tasks.block_on(&rt, dialer);
-                tasks.block_on(&rt, listener).unwrap();
-            }
+            let (ready_tx, ready_rx) = mpsc::channel(1);
+            let listener = listener::<tokio::Tcp>(addr, ready_tx);
+            let dialer = dialer::<tokio::Tcp>(ready_rx);
+            let rt = ::tokio::runtime::Builder::new_current_thread()
+                .enable_io()
+                .build()
+                .unwrap();
+            let tasks = ::tokio::task::LocalSet::new();
+            let listener = tasks.spawn_local(listener);
+            tasks.block_on(&rt, dialer);
+            tasks.block_on(&rt, listener).unwrap();
         }
 
         test("/ip4/127.0.0.1/tcp/0".parse().unwrap());
@@ -874,19 +872,17 @@ mod tests {
         }
 
         fn test(addr: Multiaddr) {
-            {
-                let (ready_tx, ready_rx) = mpsc::channel(1);
-                let listener = listener::<tokio::Tcp>(addr, ready_tx);
-                let dialer = dialer::<tokio::Tcp>(ready_rx);
-                let rt = ::tokio::runtime::Builder::new_current_thread()
-                    .enable_io()
-                    .build()
-                    .unwrap();
-                let tasks = ::tokio::task::LocalSet::new();
-                let listener = tasks.spawn_local(listener);
-                tasks.block_on(&rt, dialer);
-                tasks.block_on(&rt, listener).unwrap();
-            }
+            let (ready_tx, ready_rx) = mpsc::channel(1);
+            let listener = listener::<tokio::Tcp>(addr, ready_tx);
+            let dialer = dialer::<tokio::Tcp>(ready_rx);
+            let rt = ::tokio::runtime::Builder::new_current_thread()
+                .enable_io()
+                .build()
+                .unwrap();
+            let tasks = ::tokio::task::LocalSet::new();
+            let listener = tasks.spawn_local(listener);
+            tasks.block_on(&rt, dialer);
+            tasks.block_on(&rt, listener).unwrap();
         }
 
         test("/ip4/0.0.0.0/tcp/0".parse().unwrap());
@@ -980,20 +976,18 @@ mod tests {
         }
 
         fn test(addr: Multiaddr) {
-            {
-                let (ready_tx, ready_rx) = mpsc::channel(1);
-                let (port_reuse_tx, port_reuse_rx) = oneshot::channel();
-                let listener = listener::<tokio::Tcp>(addr.clone(), ready_tx, port_reuse_rx);
-                let dialer = dialer::<tokio::Tcp>(addr, ready_rx, port_reuse_tx);
-                let rt = ::tokio::runtime::Builder::new_current_thread()
-                    .enable_io()
-                    .build()
-                    .unwrap();
-                let tasks = ::tokio::task::LocalSet::new();
-                let listener = tasks.spawn_local(listener);
-                tasks.block_on(&rt, dialer);
-                tasks.block_on(&rt, listener).unwrap();
-            }
+            let (ready_tx, ready_rx) = mpsc::channel(1);
+            let (port_reuse_tx, port_reuse_rx) = oneshot::channel();
+            let listener = listener::<tokio::Tcp>(addr.clone(), ready_tx, port_reuse_rx);
+            let dialer = dialer::<tokio::Tcp>(addr, ready_rx, port_reuse_tx);
+            let rt = ::tokio::runtime::Builder::new_current_thread()
+                .enable_io()
+                .build()
+                .unwrap();
+            let tasks = ::tokio::task::LocalSet::new();
+            let listener = tasks.spawn_local(listener);
+            tasks.block_on(&rt, dialer);
+            tasks.block_on(&rt, listener).unwrap();
         }
 
         test("/ip4/127.0.0.1/tcp/0".parse().unwrap());
@@ -1036,14 +1030,12 @@ mod tests {
         }
 
         fn test(addr: Multiaddr) {
-            {
-                let listener = listen_twice::<tokio::Tcp>(addr);
-                let rt = ::tokio::runtime::Builder::new_current_thread()
-                    .enable_io()
-                    .build()
-                    .unwrap();
-                rt.block_on(listener);
-            }
+            let listener = listen_twice::<tokio::Tcp>(addr);
+            let rt = ::tokio::runtime::Builder::new_current_thread()
+                .enable_io()
+                .build()
+                .unwrap();
+            rt.block_on(listener);
         }
 
         test("/ip4/127.0.0.1/tcp/0".parse().unwrap());
@@ -1065,14 +1057,12 @@ mod tests {
         }
 
         fn test(addr: Multiaddr) {
-            {
-                let rt = ::tokio::runtime::Builder::new_current_thread()
-                    .enable_io()
-                    .build()
-                    .unwrap();
-                let new_addr = rt.block_on(listen::<tokio::Tcp>(addr));
-                assert!(!new_addr.to_string().contains("tcp/0"));
-            }
+            let rt = ::tokio::runtime::Builder::new_current_thread()
+                .enable_io()
+                .build()
+                .unwrap();
+            let new_addr = rt.block_on(listen::<tokio::Tcp>(addr));
+            assert!(!new_addr.to_string().contains("tcp/0"));
         }
 
         test("/ip6/::1/tcp/0".parse().unwrap());
@@ -1086,10 +1076,8 @@ mod tests {
             .try_init();
 
         fn test(addr: Multiaddr) {
-            {
-                let mut tcp = tokio::Transport::default();
-                assert!(tcp.listen_on(ListenerId::next(), addr).is_err());
-            }
+            let mut tcp = tokio::Transport::default();
+            assert!(tcp.listen_on(ListenerId::next(), addr).is_err());
         }
 
         test("/ip4/127.0.0.1/tcp/12345/tcp/12345".parse().unwrap());
