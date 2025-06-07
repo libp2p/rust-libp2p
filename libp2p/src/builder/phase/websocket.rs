@@ -116,16 +116,6 @@ macro_rules! impl_websocket_builder {
 }
 
 impl_websocket_builder!(
-    "async-std",
-    super::provider::AsyncStd,
-    libp2p_dns::async_std::Transport::system(libp2p_tcp::async_io::Transport::new(
-        libp2p_tcp::Config::default(),
-    )),
-    rw_stream_sink::RwStreamSink<
-        libp2p_websocket::BytesConnection<libp2p_tcp::async_io::TcpStream>,
-    >
-);
-impl_websocket_builder!(
     "tokio",
     super::provider::Tokio,
     // Note this is an unnecessary await for Tokio Websocket (i.e. tokio dns) in order to be
