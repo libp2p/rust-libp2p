@@ -416,7 +416,7 @@ mod tests {
 
         let outgoing_limit = rand::thread_rng().gen_range(1..10);
 
-        let mut network = Swarm::new_ephemeral(|_| {
+        let mut network = Swarm::new_ephemeral_tokio(|_| {
             Behaviour::new(
                 ConnectionLimits::default().with_max_pending_outgoing(Some(outgoing_limit)),
             )
@@ -510,15 +510,15 @@ mod tests {
         }
     }
 
-    #[tokio::test]
-    async fn max_established_incoming() {
-        async fn prop(limit: u32) -> bool {
-            let mut swarm1 = Swarm::new_ephemeral(|_| {
+    #[test]
+    fn max_established_incoming() {
+        fn prop(Limit(limit): Limit) {
+            let mut swarm1 = Swarm::new_ephemeral_tokio(|_| {
                 Behaviour::new(
                     ConnectionLimits::default().with_max_established_incoming(Some(limit)),
                 )
             });
-            let mut swarm2 = Swarm::new_ephemeral(|_| {
+            let mut swarm2 = Swarm::new_ephemeral_tokio(|_| {
                 Behaviour::new(
                     ConnectionLimits::default().with_max_established_incoming(Some(limit)),
                 )
@@ -552,20 +552,20 @@ mod tests {
         }
     }
 
-    #[tokio::test]
-    async fn bypass_established_incoming() {
-        for limit in 1..10 {
-            let mut swarm1 = Swarm::new_ephemeral(|_| {
+    #[test]
+    fn bypass_established_incoming() {
+        fn prop(Limit(limit): Limit) {
+            let mut swarm1 = Swarm::new_ephemeral_tokio(|_| {
                 Behaviour::new(
                     ConnectionLimits::default().with_max_established_incoming(Some(limit)),
                 )
             });
-            let mut swarm2 = Swarm::new_ephemeral(|_| {
+            let mut swarm2 = Swarm::new_ephemeral_tokio(|_| {
                 Behaviour::new(
                     ConnectionLimits::default().with_max_established_incoming(Some(limit)),
                 )
             });
-            let mut swarm3 = Swarm::new_ephemeral(|_| {
+            let mut swarm3 = Swarm::new_ephemeral_tokio(|_| {
                 Behaviour::new(
                     ConnectionLimits::default().with_max_established_incoming(Some(limit)),
                 )
@@ -617,10 +617,11 @@ mod tests {
     /// ([`SwarmEvent::ConnectionEstablished`]) can the connection be seen as established.
     #[tokio::test]
     async fn support_other_behaviour_denying_connection() {
-        let mut swarm1 = Swarm::new_ephemeral(|_| {
+        let mut swarm1 = Swarm::new_ephemeral_tokio(|_| {
             Behaviour::new_with_connection_denier(ConnectionLimits::default())
         });
-        let mut swarm2 = Swarm::new_ephemeral(|_| Behaviour::new(ConnectionLimits::default()));
+        let mut swarm2 =
+            Swarm::new_ephemeral_tokio(|_| Behaviour::new(ConnectionLimits::default()));
 
         // Have swarm2 dial swarm1.
         let (listen_addr, _) = swarm1.listen().await;
@@ -649,6 +650,37 @@ mod tests {
                 .len(),
             "swarm1 connection limit behaviour to not count denied established connection as established connection"
         )
+    }
+
+    #[tokio::test]
+    async fn incoming_connection_error_carries_peer_id() {
+        let mut swarm1 = Swarm::new_ephemeral_tokio(|_| {
+            // Set max incoming connections to 0 to immediately deny all connections
+            Behaviour::new(ConnectionLimits::default().with_max_established_incoming(Some(0)))
+        });
+        let mut swarm2 =
+            Swarm::new_ephemeral_tokio(|_| Behaviour::new(ConnectionLimits::default()));
+
+        let dialer_peer_id = *swarm2.local_peer_id();
+
+        let (listen_addr, _) = swarm1.listen().with_memory_addr_external().await;
+
+        swarm2.dial(listen_addr).unwrap();
+
+        tokio::spawn(swarm2.loop_on_next());
+
+        let peer_id = swarm1
+            .wait(|event| match event {
+                SwarmEvent::IncomingConnectionError {
+                    error: ListenError::Denied { .. },
+                    peer_id,
+                    ..
+                } => peer_id,
+                _ => None,
+            })
+            .await;
+
+        assert_eq!(Some(dialer_peer_id), Some(peer_id));
     }
 
     #[derive(libp2p_swarm_derive::NetworkBehaviour)]

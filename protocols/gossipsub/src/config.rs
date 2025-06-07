@@ -578,8 +578,8 @@ impl ConfigBuilder {
         let cow = protocol_id_prefix.into();
 
         match (
-            StreamProtocol::try_from_owned(format!("{}/1.1.0", cow)),
-            StreamProtocol::try_from_owned(format!("{}/1.0.0", cow)),
+            StreamProtocol::try_from_owned(format!("{cow}/1.1.0")),
+            StreamProtocol::try_from_owned(format!("{cow}/1.0.0")),
         ) {
             (Ok(p1), Ok(p2)) => {
                 self.config.protocol.protocol_ids = vec![

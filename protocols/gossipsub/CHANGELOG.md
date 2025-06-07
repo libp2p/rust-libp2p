@@ -1,4 +1,9 @@
 ## 0.49.0
+- Feature gate metrics related code. This changes some `Behaviour` constructor methods.
+  See [PR 6020](https://github.com/libp2p/rust-libp2p/pull/6020)
+- Send IDONTWANT before Publishing a new message.
+  See [PR 6017](https://github.com/libp2p/rust-libp2p/pull/6017)
+
 - Improve log messaging by renaming `message` to `message_id`. This change makes it log coherent to
   the field and also improve duplication of `message` field.
   See [PR 5972](https://github.com/libp2p/rust-libp2p/pull/5972)

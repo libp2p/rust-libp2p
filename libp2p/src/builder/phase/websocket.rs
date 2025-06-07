@@ -159,7 +159,7 @@ impl<T: AuthenticatedMultiplexedTransport, Provider> SwarmBuilder<Provider, Webs
     ) -> Result<
         SwarmBuilder<
             Provider,
-            BandwidthLoggingPhase<impl AuthenticatedMultiplexedTransport, libp2p_relay::client::Behaviour>,
+            BandwidthMetricsPhase<impl AuthenticatedMultiplexedTransport, libp2p_relay::client::Behaviour>,
         >,
         SecUpgrade::Error,
         > where
@@ -199,7 +199,6 @@ impl<Provider, T: AuthenticatedMultiplexedTransport> SwarmBuilder<Provider, Webs
     > {
         self.without_websocket()
             .without_relay()
-            .without_bandwidth_logging()
             .with_bandwidth_metrics(registry)
     }
 }
@@ -210,7 +209,6 @@ impl<Provider, T: AuthenticatedMultiplexedTransport> SwarmBuilder<Provider, Webs
     ) -> Result<SwarmBuilder<Provider, SwarmPhase<T, B>>, R::Error> {
         self.without_websocket()
             .without_relay()
-            .without_bandwidth_logging()
             .with_behaviour(constructor)
     }
 }

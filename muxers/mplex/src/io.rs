@@ -1150,10 +1150,10 @@ const EXTRA_PENDING_FRAMES: usize = 1000;
 mod tests {
     use std::{collections::HashSet, num::NonZeroU8, ops::DerefMut, pin::Pin};
 
-    use async_std::task;
     use asynchronous_codec::{Decoder, Encoder};
     use bytes::BytesMut;
     use quickcheck::*;
+    use tokio::runtime::Runtime;
 
     use super::*;
 
@@ -1265,7 +1265,8 @@ mod tests {
             };
             let mut m = Multiplexed::new(conn, cfg.clone());
 
-            task::block_on(future::poll_fn(move |cx| {
+            let rt = Runtime::new().unwrap();
+            rt.block_on(future::poll_fn(move |cx| {
                 // Receive all inbound streams.
                 for i in 0..cfg.max_substreams {
                     match m.poll_next_stream(cx) {
@@ -1383,7 +1384,8 @@ mod tests {
 
             // Run the test.
             let mut opened = HashSet::new();
-            task::block_on(future::poll_fn(move |cx| {
+            let rt = Runtime::new().unwrap();
+            rt.block_on(future::poll_fn(move |cx| {
                 // Open a number of streams.
                 for _ in 0..num_streams {
                     let id = ready!(m.poll_open_stream(cx)).unwrap();
