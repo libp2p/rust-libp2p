@@ -1,6 +1,6 @@
 use std::{convert::Infallible, sync::atomic::AtomicUsize};
 
-use async_std::stream::StreamExt;
+use futures::StreamExt;
 use criterion::{criterion_group, criterion_main, Criterion};
 use libp2p_core::{
     transport::MemoryTransport, InboundUpgrade, Multiaddr, OutboundUpgrade, Transport, UpgradeInfo,
@@ -158,7 +158,10 @@ trait BigBehaviour: Sized {
                     init,
                     |(mut swarm_a, mut swarm_b)| async move {
                         while swarm_a.any_beh(|b| !b.finished) || swarm_b.any_beh(|b| !b.finished) {
-                            futures::future::select(swarm_b.next(), swarm_a.next()).await;
+                            tokio::select! {
+                                _ = swarm_a.next() => {},
+                                _ = swarm_b.next() => {},
+                            }                           
                         }
                     },
                     criterion::BatchSize::LargeInput,

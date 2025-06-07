@@ -2652,7 +2652,6 @@ checksum = "c19937216e9d3aa9956d9bb8dfc0b0c8beb6058fc4f7a4dc4d850edf86a237d6"
 name = "libp2p"
 version = "0.56.0"
 dependencies = [
- "async-std",
  "bytes",
  "either",
  "futures",
@@ -3254,7 +3253,6 @@ name = "libp2p-request-response"
 version = "0.28.1"
 dependencies = [
  "anyhow",
- "async-std",
  "async-trait",
  "cbor4ii",
  "futures",
@@ -3268,6 +3266,7 @@ dependencies = [
  "serde",
  "serde_json",
  "smallvec",
+ "tokio",
  "tracing",
  "tracing-subscriber",
 ]
@@ -3309,7 +3308,6 @@ dependencies = [
 name = "libp2p-swarm"
 version = "0.47.0"
 dependencies = [
- "async-std",
  "criterion",
  "either",
  "fnv",

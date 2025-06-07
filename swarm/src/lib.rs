@@ -1328,7 +1328,7 @@ where
                 Poll::Pending => pending.push(id),
                 Poll::Ready(Err(())) => {} // connection is closing
                 Poll::Ready(Ok(())) => {
-                    let e = event.take().expect("by (1),(2)");
+                    let e = std::option::Option::take(&mut event).expect("by (1),(2)");
                     if let Err(e) = conn.notify_handler(e) {
                         event = Some(e) // (2)
                     } else {
@@ -1418,15 +1418,6 @@ impl Config {
     ))]
     pub fn with_tokio_executor() -> Self {
         Self::with_executor(crate::executor::TokioExecutor)
-    }
-
-    /// Builds a new [`Config`] from the given `async-std` executor.
-    #[cfg(all(
-        feature = "async-std",
-        not(any(target_os = "emscripten", target_os = "wasi", target_os = "unknown"))
-    ))]
-    pub fn with_async_std_executor() -> Self {
-        Self::with_executor(crate::executor::AsyncStdExecutor)
     }
 
     /// Configures the number of events from the [`NetworkBehaviour`] in
