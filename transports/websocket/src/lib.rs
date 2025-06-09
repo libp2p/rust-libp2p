@@ -116,8 +116,7 @@ use rw_stream_sink::RwStreamSink;
 /// # #[tokio::main]
 /// # async fn main() {
 ///
-/// let mut transport = websocket::Config::new(
-///     tcp::tokio::Transport::new(tcp::Config::default()));
+/// let mut transport = websocket::Config::new(tcp::tokio::Transport::new(tcp::Config::default()));
 ///
 /// let id = transport
 ///     .listen_on(
