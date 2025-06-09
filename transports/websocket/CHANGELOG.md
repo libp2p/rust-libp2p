@@ -1,4 +1,4 @@
-# 0.46.0
+## 0.46.0
 
 - Use `tokio` as `async-std` support has been removed.
   See [PR 6054](https://github.com/libp2p/rust-libp2p/pull/6054).
